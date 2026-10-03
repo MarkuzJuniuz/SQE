@@ -1,0 +1,7 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    { "name": "SQE: run app", "type": "debugpy", "request": "launch", "module": "sqe", "console": "integratedTerminal", "justMyCode": true },
+    { "name": "SQE: smoke test", "type": "debugpy", "request": "launch", "program": "${workspaceFolder}/tools/smoke_test.py", "console": "integratedTerminal" }
+  ]
+}

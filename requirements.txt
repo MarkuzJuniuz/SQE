@@ -1,0 +1,4 @@
+# The PyPI release of pydcs does NOT contain the F-14B(U). This is the fork Retribution pins (needs Git installed).
+pydcs @ git+https://github.com/dcs-retribution/pydcs@3a79b8edf923042a5b933feb64543da9e6bdfd37
+PySide6>=6.6
+pillow>=10

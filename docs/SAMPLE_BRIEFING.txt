@@ -1,0 +1,52 @@
+1. SITUATION
+Operation IRON TIDE - Day 1. Phase 1 - Stop the Advance and Contest the Air.
+
+The first priority is to halt the armored columns and keep the Federation's fighters off our airfields and the fleet. Close air support, counter-air strikes and a standing combat air patrol over the carrier.
+
+Enemy air arm: 39 of 39 aircraft serviceable (100%).
+Air-defence network: 100% of sites operational.
+Armored advance: columns at 100% strength.
+Enemy command posts: 100% intact.
+Coalition air component: 78 of 78 aircraft serviceable (100%).
+
+Commander's intent: Friendly troops are in contact. Your JTAC is waiting. Find the armor and destroy it.  -- Capt. Reyes (Air Wing)
+
+Threats near the target:
+  - Early-warning radar - 29 nm from target
+  - SA-3 Goa (~13 nm) - 30 nm from target
+  - SA-2 Guideline (~25 nm) - 33 nm from target
+  - Early-warning radar - 57 nm from target
+  - SA-11 Gadfly (~18 nm) - 59 nm from target
+  - SA-6 Gainful (~13 nm) - 60 nm from target
+
+Enemy air: 39 enemy aircraft serviceable (about 100% of strength).
+
+2. MISSION
+Close air support against Armor column C.
+You are Hammer 2-2, 2x F-14B(U) Tomcat, tasked as ESCORT.
+
+3. EXECUTION
+Package:
+  Hog 2-1: 4x A-10C Warthog (CAS)
+  Hammer 2-2: 2x F-14B(U) Tomcat (ESCORT) <- YOU
+
+Timeline (local):
+  Launch        09:05:00
+  Marshal       09:17:10  (hold at MSHL, stack altitudes +1,000 ft per flight)
+  PUSH          09:26:00  (leave MSHL on this time, +/- 30 s)
+  TOT           09:31:10  (+/- 1 min)
+  Egress        09:34:55
+
+Join the package at MSHL. Other flights are already airborne and holding. Push on time, expect no formation forming.
+
+This is a joint Navy / Air Force package. Navy flights recover aboard the carrier; Air Force flights recover at their own fields.
+
+4. ADMINISTRATION AND LOGISTICS
+Fuel: take what you need from the tanker (TKR). AI flights have unlimited fuel; you do not.
+Recovery: carrier Case I, TACAN 74X, ICLS 11
+Divert: Kobuleti / Batumi (land)
+
+5. COMMAND AND SIGNAL
+COMM1 (UHF): CH1 ATC 305.000 | CH2 AWACS 353.500 | CH3 TANKER1 241.500 | CH4 JTAC 383.000 | CH5 TANKER2 227.500
+COMM2 (VHF): CH1 FLIGHT 137.000
+JTAC on COMM1 CH4. Laser code 1688.
