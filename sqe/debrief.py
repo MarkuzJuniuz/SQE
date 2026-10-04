@@ -25,6 +25,8 @@ local DIR = lfs.writedir() .. "SQE"
 lfs.mkdir(DIR)
 local OUT = DIR .. "\\SQE_state.json"
 local DESPAWN = { __DESPAWN__ }
+local PLAYER = "__PLAYER__"
+local pl = { takeoff = nil, landed = nil, ka = 0, kg = 0, ks = 0 }
 local dead, ejected, landed, ended = {}, {}, {}, false
 local function esc(s) return (tostring(s):gsub('[%c"\\]', function(c) return string.format("\\u%04x", string.byte(c)) end)) end
 local function list(t)
@@ -33,11 +35,13 @@ local function list(t)
   table.sort(o)
   return "[" .. table.concat(o, ",") .. "]"
 end
+local function num(x) if x then return string.format("%d", math.floor(x)) end return "null" end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s}',
-    tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed)))
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d}}',
+    tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks))
   f:close()
 end
 local function nameOf(obj)
@@ -52,7 +56,9 @@ function H:onEvent(e)
   local n = nameOf(e.initiator)
   if id == world.event.S_EVENT_LAND or id == world.event.S_EVENT_RUNWAY_TOUCH then
     if n and not dead[n] then
-      landed[n] = true; dump()
+      landed[n] = true
+      if n == PLAYER then pl.landed = timer.getTime() end
+      dump()
       if DESPAWN[n] then
         timer.scheduleFunction(function()
           local u = Unit.getByName(n)
@@ -62,6 +68,16 @@ function H:onEvent(e)
     end
   elseif id == world.event.S_EVENT_DEAD or id == world.event.S_EVENT_CRASH or id == world.event.S_EVENT_PILOT_DEAD then
     if n and not landed[n] then dead[n] = true; dump() end
+  elseif id == world.event.S_EVENT_TAKEOFF then
+    if n == PLAYER and not pl.takeoff then pl.takeoff = timer.getTime(); dump() end
+  elseif id == world.event.S_EVENT_KILL then
+    if n == PLAYER then
+      local ok, cat = pcall(function() return e.target:getDesc().category end)
+      if ok then
+        if cat == 0 or cat == 1 then pl.ka = pl.ka + 1 elseif cat == 3 then pl.ks = pl.ks + 1 else pl.kg = pl.kg + 1 end
+      end
+      dump()
+    end
   elseif id == world.event.S_EVENT_EJECTION then
     if n then ejected[n] = true; dump() end
   elseif id == world.event.S_EVENT_MISSION_END then
@@ -74,17 +90,20 @@ dump()
 '''
 
 
-def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list) -> str:
+def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "") -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     return (LUA_HOOK.replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
-            .replace("__PKG__", package_id).replace("__DESPAWN__", tbl))
+            .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name))
 
 
-def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despawn_names: list) -> None:
+def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "") -> None:
+    """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
+    translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
+    from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(mission.string(lua_hook(campaign_id, sortie, package_id, despawn_names))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name))))
     mission.triggerrules.triggers.append(t)
 
 
@@ -174,6 +193,11 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 w.available = max(0, w.available - len(dead))
                 out["red_air_lost"] += len(dead)
                 out["lines"].append(f"{len(dead)} enemy aircraft from {state.assets[g['ref']].name} destroyed")
+    pdat = data.get("player") or {}
+    t0, t1 = pdat.get("takeoff"), pdat.get("landed")
+    flight_s = (t1 - t0) if (t0 is not None and t1 is not None) else ((data.get("time", 0) - t0) if t0 is not None else 0)
+    out["pilot"] = {"flight_s": max(0, int(flight_s)), "ka": int(pdat.get("ka", 0)), "kg": int(pdat.get("kg", 0)),
+                    "ks": int(pdat.get("ks", 0)), "landed": t1 is not None}
     pu = manifest.player_unit
     if pu in data.get("ejected", []):
         out["player"] = "ejected"

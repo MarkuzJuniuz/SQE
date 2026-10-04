@@ -39,8 +39,8 @@ class Session:
         d = self.campaigns_dir()
         return sorted(d.glob(f"*{CAMPAIGN_EXT}"), key=lambda p: p.stat().st_mtime, reverse=True) if d.exists() else []
 
-    def new(self, name: str, aircraft: str, level: int, seed: int | None = None) -> None:
-        self.state = new_campaign(name, aircraft, level, seed=seed)
+    def new(self, name: str, aircraft: str, level: int, seed: int | None = None, start_date: str = "2004-06-12", night_ops: bool = False) -> None:
+        self.state = new_campaign(name, aircraft, level, seed=seed, start_date=start_date, night_ops=night_ops)
         safe = "".join(c if c.isalnum() or c in "-_ " else "_" for c in name).strip() or "campaign"
         self.path = self.campaigns_dir() / f"{safe}{CAMPAIGN_EXT}"
         self.plan_day()
@@ -71,7 +71,7 @@ class Session:
     def plan_day(self) -> list:
         st = self.state
         objs = ObjectivePlanner().plan(st, self._rng(), limit=6)
-        pb, ledger, pkgs = PackageBuilder(st), Ledger(st), []
+        pb, ledger, pkgs = PackageBuilder(st, self.d), Ledger(st), []
         for i, o in enumerate(objs, 1):
             try:
                 pkg = pb.build(o, i, ledger, for_player=True)
@@ -81,6 +81,9 @@ class Session:
                 except NoPlayerSlot:
                     continue
             pkgs.append(pkg)
+        from .timeofday import ato_times
+        for p, t in zip(pkgs, ato_times(len(pkgs), st.campaign_date(), st.night_ops, self._rng(5))):
+            p.start = t
         st.plan = [p.to_dict() for p in pkgs]
         return pkgs
 
@@ -94,15 +97,18 @@ class Session:
     def fly(self, package_number: int, flight_id: str | None):
         st = self.state
         pkg = next(p for p in self.packages() if p.number == package_number)
-        PackageBuilder(st).assign_player(pkg, flight_id)
+        PackageBuilder(st, self.d).assign_player(pkg, flight_id)
         problems = self.settings.problems()
         if problems:
             raise RuntimeError("; ".join(problems))
-        res = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz)
+        import contextlib, io, logging
+        logging.getLogger("pydcs").setLevel(logging.CRITICAL)
+        with contextlib.redirect_stdout(io.StringIO()):          # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
+            res = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz)
         st.sortie_counter += 1
         st.pending = {"package": package_number, "flight": pkg.player_flight.id, "manifest": res.manifest.to_dict(),
                       "built_at": time.time(), "miz": str(res.miz), "timeline": res.timeline,
-                      "objective": pkg.objective.description, "objective_type": pkg.objective.type.value,
+                      "objective": pkg.objective.description, "objective_type": pkg.objective.type.value, "counts": res.counts, "warnings": res.warnings,
                       "package_dict": pkg.to_dict()}
         self.last_build = res
         # a stale results file from a previous sortie must never be mistaken for this one
@@ -140,6 +146,18 @@ class Session:
         man = self.manifest()
         pend = st.pending
         out = apply_debrief(st, man, data)
+        if out["player"] == "lost":                 # you can't die: a lost jet means you bailed out and were rescued
+            out["player"] = "ejected"
+        pl = st.pilot or {"name": st.player.callsign, "sorties": 0, "flight_s": 0, "kills_air": 0, "kills_ground": 0,
+                          "kills_ship": 0, "landings": 0, "rescues": 0, "airframes_lost": 0, "first_date": str(st.campaign_date())}
+        pi = out["pilot"]
+        pl["sorties"] += 1; pl["flight_s"] += pi["flight_s"]
+        pl["kills_air"] += pi["ka"]; pl["kills_ground"] += pi["kg"]; pl["kills_ship"] += pi["ks"]
+        pl["landings"] += 1 if out["player"] == "recovered" else 0
+        if out["player"] == "ejected":
+            pl["rescues"] += 1; pl["airframes_lost"] += 1
+        pl["last_date"] = str(st.campaign_date())
+        st.pilot = pl
         out["objective"], out["objective_type"] = pend["objective"], pend["objective_type"]
         rng = self._rng(33)
         out["story"] = narrative.debrief_story(out, st, rng)
@@ -151,7 +169,8 @@ class Session:
             r = sim.resolve_abstract(st, Package.from_dict(pd))
             meanwhile.append(r)
         out["meanwhile"] = meanwhile
-        st.history.append({"day": st.day, "sortie": man.sortie, "objective": pend["objective"], "player": out["player"],
+        st.history.append({"day": st.day, "date": str(st.campaign_date()), "sortie": man.sortie, "objective": pend["objective"], "player": out["player"],
+                           "kills": out["pilot"]["ka"] + out["pilot"]["kg"] + out["pilot"]["ks"], "flight_min": out["pilot"]["flight_s"] // 60,
                            "blue_air_lost": out["blue_air_lost"], "red_air_lost": out["red_air_lost"],
                            "target_damage": out["target_damage"]})
         sim.end_day(st)

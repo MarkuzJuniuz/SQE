@@ -3,7 +3,7 @@ import json
 import time
 from pathlib import Path
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
+from PySide6.QtWidgets import (QCheckBox, QSpinBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
                                QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
                                QTextBrowser, QVBoxLayout, QHeaderView)
 from .. import settings as S
@@ -36,6 +36,15 @@ class NewCampaignDialog(QDialog):
             self.lvl.addItem(d.name, n)
         self.lvl.setCurrentIndex(1)
         form.addRow("Difficulty", self.lvl)
+        self.month = QComboBox()
+        for i, mname in enumerate(("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"), 1):
+            self.month.addItem(mname, i)
+        self.month.setCurrentIndex(5)
+        self.day = QSpinBox(); self.day.setRange(1, 28); self.day.setValue(12)
+        row = QHBoxLayout(); row.addWidget(self.month, 1); row.addWidget(self.day); row.addWidget(QLabel("2004"))
+        form.addRow("Campaign starts", row)
+        self.night = QCheckBox("Allow night sorties (otherwise missions are spread through daylight)")
+        form.addRow("", self.night)
         lay.addLayout(form)
         self.blurb = QLabel(); self.blurb.setWordWrap(True); self.blurb.setObjectName("dim"); lay.addWidget(self.blurb)
         self.lvl.currentIndexChanged.connect(self._b); self._b()
@@ -45,8 +54,9 @@ class NewCampaignDialog(QDialog):
     def _b(self):
         self.blurb.setText(LEVELS[self.lvl.currentData()].blurb)
 
-    def values(self):
-        return self.name.text().strip() or "Campaign", self.ac.currentData(), self.lvl.currentData()
+    def values(self) -> dict:
+        return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
+                "start_date": f"2004-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked()}
 
 
 class SettingsDialog(QDialog):
@@ -99,6 +109,10 @@ class WaitingDialog(QDialog):
         il = info.layout()
         il.addWidget(QLabel(f"<b>{p['objective']}</b>"))
         il.addWidget(QLabel(f"Mission file: <b>SQE_Sortie.miz</b> in your DCS Missions folder. Start DCS, open it from the Missions list, and fly."))
+        pd = p.get("package_dict", {}); cn = p.get("counts") or {}
+        il.addWidget(QLabel(f"Mission start <b>{pd.get('start', '')}</b> local   |   {cn.get('groups', '?')} groups, {cn.get('units', '?')} units"))
+        for wmsg in (p.get("warnings") or []):
+            wl = QLabel("Note: " + wmsg); wl.setWordWrap(True); wl.setStyleSheet(f"color:{theme.AMBER};"); il.addWidget(wl)
         il.addWidget(QLabel(f"Launch {tl['launch']}   |   Marshal {tl['marshal']}   |   <b>PUSH {tl['push']}</b>   |   <b>TOT {tl['tot']}</b>   |   Egress {tl['egress']}"))
         self.status = QLabel("Waiting for DCS results..."); self.status.setObjectName("h2"); lay.addWidget(self.status)
         self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["", "Coalition (blue)", "Enemy (red)"])
@@ -177,6 +191,10 @@ class DebriefDialog(QDialog):
         c = card(); lay.addWidget(c)
         story = QLabel(out["story"].replace("\n", "<br>")); story.setWordWrap(True); story.setStyleSheet("font-size:14px;")
         c.layout().addWidget(story)
+        pi = out.get("pilot") or {}
+        if pi:
+            pl = QLabel(f"Your log: {pi['flight_s'] // 60} min airborne, {pi['ka']} air / {pi['kg']} ground / {pi['ks']} ship kills credited to you.")
+            pl.setObjectName("dim"); lay.addWidget(pl)
         h = QLabel("Results of your sortie"); h.setObjectName("h2"); lay.addWidget(h)
         tb = QTextBrowser(); tb.setMaximumHeight(130)
         tb.setHtml("<br>".join(out["lines"]) + (f"<br><span style='color:{theme.DIM}'>(Mission end event not seen: results are from the last checkpoint.)</span>" if not out["ended"] else ""))

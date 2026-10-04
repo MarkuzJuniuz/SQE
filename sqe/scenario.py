@@ -42,12 +42,12 @@ def _terrain(name: str):
 
 
 def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str = "caucasus",
-                 seed: int | None = None) -> CampaignState:
+                 seed: int | None = None, start_date: str = "2004-06-12", night_ops: bool = False) -> CampaignState:
     d: Difficulty = get_difficulty(level)
     rng = random.Random(seed)
     t = _terrain(theatre)
     ap = lambda n: t.airports[n].position
-    st = CampaignState(name=name, theatre=theatre, level=d.level)
+    st = CampaignState(name=name, theatre=theatre, level=d.level, start_date=start_date, night_ops=night_ops)
 
     # ---- friendly bases ---------------------------------------------------------------------
     kb = ap("Kobuleti")
@@ -60,12 +60,12 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     sc = d.friendly_scale
     n = lambda base: max(4, int(round(base * sc / 2) * 2))
     st.squadrons = {s.id: s for s in [
-        Squadron("vf_a", "VF-31 'Hammer'", "F-14BU", "cvn74", n(12), n(12), "Hammer"),
-        Squadron("vfa_b", "VFA-37 'Tiger'", "FA-18C", "cvn74", n(12), n(12), "Tiger"),
+        Squadron("vf_a", "VF-31 'Hammer'", "F-14BU", "cvn74", n(12), n(12), "Springfield"),
+        Squadron("vfa_b", "VFA-37 'Tiger'", "FA-18C", "cvn74", n(12), n(12), "Hornet"),
         Squadron("fs_a", "77th FS 'Viper'", "F-16C", "senaki", n(14), n(14), "Viper"),
-        Squadron("fs_b", "55th FS 'Cobra'", "F-16C", "kutaisi", n(14), n(14), "Cobra"),
-        Squadron("fs_c", "27th FS 'Eagle'", "F-15C", "kutaisi", n(12), n(12), "Eagle"),
-        Squadron("as_a", "354th FS 'Hog'", "A-10C", "kobuleti", n(14), n(14), "Hog"),
+        Squadron("fs_b", "55th FS 'Cobra'", "F-16C", "kutaisi", n(14), n(14), "Cowboy"),
+        Squadron("fs_c", "27th FS 'Eagle'", "F-15C", "kutaisi", n(12), n(12), "Enfield"),
+        Squadron("as_a", "354th FS 'Hog'", "A-10C", "kobuleti", n(14), n(14), "Hawg"),
     ]}
     for s in st.squadrons.values():                       # sanity: land jets on land, carrier jets on the boat
         spec, base = AIRCRAFT[s.aircraft], st.bases[s.base_id]

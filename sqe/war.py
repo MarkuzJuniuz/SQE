@@ -1,6 +1,7 @@
 """The abstracted war: objective planning, AI-resolved packages (percentile roll with shown odds),
 daily replenishment, and victory/defeat. Nothing here touches DCS."""
 from __future__ import annotations
+import math
 import random
 from .difficulty import Difficulty
 from .models import Objective, ObjectiveType, AssetKind, Role
@@ -10,7 +11,15 @@ from .state import CampaignState
 ROLE_WEIGHT = {Role.STRIKE: 1.0, Role.SEAD: 0.9, Role.ESCORT: 0.6, Role.SWEEP: 0.7, Role.CAP: 0.6, Role.CAS: 1.0}
 
 
+NM = 1852.0
+
+
 class ObjectivePlanner:
+    MIN_NM = 100
+
+    def _near(self, state, a) -> bool:
+        return min(math.hypot(a.x - b.x, a.y - b.y) for b in state.bases.values()) / NM < self.MIN_NM
+
     def plan(self, state: CampaignState, rng: random.Random, limit: int = 6) -> list:
         scored: list = []
         alive = lambda aid: not state.assets[aid].destroyed
@@ -20,27 +29,30 @@ class ObjectivePlanner:
             defenders = [x for x in a.defended_by if alive(x)]
             if a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT):
                 pr = a.value * a.health / (1 + 0.5 * len(defenders))
-                scored.append((pr, Objective("", ObjectiveType.STRIKE, a.id, pr, f"Strike {a.name}")))
+                scored.append((pr, Objective("", ObjectiveType.STRIKE, a.id, pr, f"Strike {a.name}"), self._near(state, a)))
             elif a.kind == AssetKind.SAM and a.value >= 5:
                 covered = sum(x.value for x in state.assets.values() if a.id in x.defended_by and not x.destroyed) / 3.0
                 pr = a.value * a.health + covered
-                scored.append((pr, Objective("", ObjectiveType.DEAD, a.id, pr, f"Destroy {a.name}")))
+                scored.append((pr, Objective("", ObjectiveType.DEAD, a.id, pr, f"Destroy {a.name}"), self._near(state, a)))
             elif a.kind == AssetKind.ARMOR:
                 pr = a.value * a.health * 1.4
-                scored.append((pr, Objective("", ObjectiveType.CAS, a.id, pr, f"Close air support against {a.name}")))
+                scored.append((pr, Objective("", ObjectiveType.CAS, a.id, pr, f"Close air support against {a.name}"), False))
             elif a.kind == AssetKind.AIRFIELD:
                 w = state.enemy_air_at(a.id)
                 if w and w.available > 0:
                     pr = a.value * 1.2 * (w.available / max(1, w.authorized))
                     scored.append((pr, Objective("", ObjectiveType.COUNTER_AIR, a.id, pr,
-                                                 f"Counter-air at {a.name} ({w.available} aircraft)")))
+                                                 f"Counter-air at {a.name} ({w.available} aircraft)"), self._near(state, a)))
         fleet = next((b for b in state.bases.values() if b.kind.value == "CARRIER"), None)
         if fleet:
             tot = sum(w.available for w in state.enemy_air)
             auth = sum(w.authorized for w in state.enemy_air) or 1
             pr = 3.0 + 4.0 * tot / auth
-            scored.append((pr, Objective("", ObjectiveType.BARCAP, fleet.id, pr, f"Combat air patrol over {fleet.name}")))
-        scored = [(s * rng.uniform(0.9, 1.1), o) for s, o in scored]
+            scored.append((pr, Objective("", ObjectiveType.BARCAP, fleet.id, pr, f"Combat air patrol over {fleet.name}"), False))
+        pool = [t for t in scored if not t[2]]
+        if len([t for t in pool if t[1].type != ObjectiveType.BARCAP]) < 4:     # front too close for the 100 nm rule: relax it
+            pool = scored
+        scored = [(s * rng.uniform(0.9, 1.1), o) for s, o, _ in pool]
         scored.sort(key=lambda t: t[0], reverse=True)
         picked, seen = [], set()
         for s, o in scored:                    # one of each objective type first, for variety
@@ -139,8 +151,23 @@ class WarSimulator:
         for a in state.assets.values():
             if 0 < a.health < 1.0:
                 a.health = min(1.0, a.health + (d.sam_repair if a.kind == AssetKind.SAM else d.asset_repair))
+        self.counterstrike(state)
         state.day += 1
         update_status(state)
+
+    def counterstrike(self, state: CampaignState) -> None:
+        """The enemy may hit one coalition airfield's air defences; they repair a little every day."""
+        fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
+        ea = sum(w.available for w in state.enemy_air) / max(1, sum(w.authorized for w in state.enemy_air))
+        if fields and self.rng.random() < self.d.counterstrike * ea:
+            enemy = [a for a in state.assets.values() if a.kind == AssetKind.AIRFIELD and not a.destroyed]
+            wts = [1.0 / (1.0 + min(math.hypot(b.x - a.x, b.y - a.y) for a in enemy) / NM / 100.0) if enemy else 1.0 for b in fields]
+            b = self.rng.choices(fields, weights=wts)[0]
+            before = b.defense
+            b.defense = max(0.0, b.defense - self.rng.uniform(0.15, 0.40))
+            state.note(f"Enemy air strike on {b.name}: air defences {before:.0%} -> {b.defense:.0%}.")
+        for b in fields:
+            b.defense = min(1.0, b.defense + 0.10)
 
 
 def totals(state: CampaignState) -> dict:
@@ -151,7 +178,8 @@ def totals(state: CampaignState) -> dict:
     arm = [a for a in state.assets.values() if a.kind == AssetKind.ARMOR]
     armor = sum(a.health for a in arm) / len(arm) if arm else 0.0
     c2 = [a for a in state.assets.values() if a.kind == AssetKind.C2]
-    return {"friendly_air": fa / fz, "enemy_air": ea / ez, "iads": iads, "armor": armor,
+    fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
+    return {"base_defense": (sum(b.defense for b in fields) / len(fields)) if fields else 1.0, "friendly_air": fa / fz, "enemy_air": ea / ez, "iads": iads, "armor": armor,
             "c2": sum(a.health for a in c2) / len(c2) if c2 else 0.0,
             "fa": fa, "fz": fz, "ea": ea, "ez": ez}
 

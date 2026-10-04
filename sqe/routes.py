@@ -67,8 +67,6 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     if is_player:
         wp.append(Wpt("DEP", *offset(bx, by, bearing(bx, by, *g.mshl), min(10 * NM, 0.15 * g.d)),
                       p.depart_alt_ft, p.depart_kts, "Climb out, check in with AWACS"))
-        if tanker_xy:
-            wp.append(Wpt("TKR", *tanker_xy, p.aar_alt_ft, p.aar_kts, "Top off if needed"))
     else:
         tgt_pt = g.cap1 if role == Role.CAP else g.mshl
         dd = dist(bx, by, *tgt_pt)

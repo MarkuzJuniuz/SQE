@@ -22,6 +22,8 @@ QPushButton#nav:checked {{ background: {CARD}; color: {TEXT}; border-left: 3px s
 QPushButton#primary {{ background: {BLUE}; color: #04101c; border: none; font-weight: 700; font-size: 16px; padding: 14px 26px; }}
 QPushButton#primary:hover {{ background: #62b8ff; }}
 QPushButton#primary:disabled {{ background: #26425a; color: #6c8196; }}
+QPushButton#fly {{ background: {BLUE}; color: #04101c; border: none; font-weight: 800; padding: 6px 20px; border-radius: 6px; }}
+QPushButton#fly:hover {{ background: #62b8ff; }}
 QPushButton#danger {{ border-color: {RED}; color: {RED}; }}
 QPushButton#good {{ background: {GREEN}; color: #04140c; border: none; font-weight: 700; }}
 QPushButton#good:disabled {{ background: #1f4a39; color: #5f8a79; }}

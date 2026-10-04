@@ -30,8 +30,15 @@ class CampaignState:
     history: list = field(default_factory=list)    # one dict per debriefed sortie
     log: list = field(default_factory=list)
     status: str = "ACTIVE"                         # ACTIVE | VICTORY | DEFEAT
+    start_date: str = "2004-06-12"                 # campaign day 1 (year 2004: F-14B(U) era)
+    night_ops: bool = False                        # allow night sorties in the daily cycle
+    pilot: dict = field(default_factory=dict)      # your pilot log
 
     # ---- helpers ------------------------------------------------------------------------
+    def campaign_date(self):
+        from datetime import date, timedelta
+        return date.fromisoformat(self.start_date) + timedelta(days=self.day - 1)
+
     def note(self, text: str) -> None:
         self.log.append(f"[day {self.day}] {text}")
 
@@ -47,6 +54,7 @@ class CampaignState:
             "format": FORMAT_VERSION, "saved": datetime.now().isoformat(timespec="seconds"),
             "name": self.name, "theatre": self.theatre, "level": self.level, "campaign_id": self.campaign_id,
             "day": self.day, "sortie_counter": self.sortie_counter, "status": self.status,
+            "start_date": self.start_date, "night_ops": self.night_ops, "pilot": self.pilot,
             "player": asdict(self.player) if self.player else None,
             "bases": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.bases.items()},
             "squadrons": {k: asdict(v) for k, v in self.squadrons.items()},
@@ -61,7 +69,8 @@ class CampaignState:
             raise ValueError("This campaign was saved by a newer version of SQE.")
         s = cls(name=d["name"], theatre=d.get("theatre", "caucasus"), level=d.get("level", 2),
                 campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1),
-                sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"))
+                sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"),
+                start_date=d.get("start_date", "2004-06-12"), night_ops=d.get("night_ops", False), pilot=d.get("pilot", {}))
         s.player = PlayerProfile(**d["player"]) if d.get("player") else None
         s.bases = {k: Base(**{**v, "kind": BaseKind(v["kind"])}) for k, v in d["bases"].items()}
         s.squadrons = {k: Squadron(**v) for k, v in d["squadrons"].items()}

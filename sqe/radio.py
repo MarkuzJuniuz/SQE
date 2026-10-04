@@ -130,9 +130,14 @@ def _free_tacan(used: set, rng: random.Random) -> str:
     raise RuntimeError("no free TACAN")
 
 
-def apply_player_presets(unit, plan: RadioPlan, layout: RadioLayout) -> None:
-    """Write COMM1 presets onto one human aircraft. COMM2 CH1 is set via group.set_frequency()."""
-    if unit.radio is None:
-        unit.set_radio_preset()
-    for ch, e in plan.comm1.items():
-        unit.set_radio_channel_preset(layout.comm1_radio_id, ch, e.mhz)
+def apply_player_presets(unit, plan, layout) -> bool:
+    """Write COMM1 presets onto one human aircraft. COMM2 CH1 is set via group.set_frequency().
+    Returns False when pydcs has no preset table for the jet (e.g. F-15C): set those by hand from the kneeboard."""
+    try:
+        if unit.radio is None:
+            unit.set_radio_preset()
+        for ch, e in plan.comm1.items():
+            unit.set_radio_channel_preset(layout.comm1_radio_id, ch, e.mhz)
+        return True
+    except Exception:
+        return False

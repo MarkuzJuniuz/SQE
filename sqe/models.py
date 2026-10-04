@@ -49,6 +49,7 @@ class Base:
     x: float = 0.0              # DCS coords (x = north, y = east, metres). Carriers use these.
     y: float = 0.0
     airport: str | None = None  # pydcs airport name for AIRFIELD bases
+    defense: float = 1.0        # air-defence strength (Patriot + AAA); the enemy can degrade it, it repairs daily
 
 
 @dataclass

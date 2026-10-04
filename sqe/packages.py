@@ -1,7 +1,9 @@
-"""Objective -> package. Joint Navy/USAF packages happen only when they are sound (see _pick_squadron)."""
+"""Objective -> package. Threat-sized, joint only when sound, real callsigns, flights of 2 or 4."""
 from __future__ import annotations
+import copy
 import math
 from dataclasses import dataclass, field, asdict
+from . import threat
 from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER
 from .models import Objective, ObjectiveType, Role, BaseKind, RefuelMethod
 from .state import CampaignState
@@ -23,6 +25,7 @@ class Slot:
     size: int
     required: bool = True
     only_if_defended: bool = False
+    tag: str = ""                      # "" | HAVCAP | BASECAP (support flights: AI only)
 
 
 TEMPLATES = {
@@ -32,12 +35,15 @@ TEMPLATES = {
     ObjectiveType.BARCAP: [Slot(Role.CAP, 2), Slot(Role.CAP, 2, False)],
     ObjectiveType.CAS: [Slot(Role.CAS, 4), Slot(Role.ESCORT, 2, False), Slot(Role.SEAD, 2, False, True)],
 }
+_TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM", Role.ESCORT: "Escort package",
+         Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
+_TAG_TASK = {"HAVCAP": "HAVCAP (guards tanker and AWACS)", "BASECAP": "Base CAP"}
 
 
 @dataclass
 class FlightPlan:
     id: str
-    callsign: str
+    callsign: str                      # "Springfield 1"; aircraft are Springfield 1-1, 1-2, ...
     role: Role
     squadron_id: str
     aircraft: str
@@ -45,6 +51,7 @@ class FlightPlan:
     base_id: str
     task: str
     is_player: bool = False
+    tag: str = ""
 
 
 @dataclass
@@ -67,6 +74,8 @@ class Package:
     support: list = field(default_factory=list)
     jtac: bool = False
     jtac_laser_code: int = 1688
+    start: str = "09:00"               # mission start (local time of day)
+    n_def: int = 0                     # expected enemy fighters at the target
 
     @property
     def player_flight(self):
@@ -74,7 +83,7 @@ class Package:
 
     def player_options(self, aircraft_key: str) -> list:
         spec = AIRCRAFT[aircraft_key]
-        return [f for f in self.flights if f.aircraft == aircraft_key and f.role in spec.roles]
+        return [f for f in self.flights if f.aircraft == aircraft_key and f.role in spec.roles and not f.tag]
 
     def services(self) -> set:
         return {AIRCRAFT[f.aircraft].service for f in self.flights}
@@ -87,14 +96,15 @@ class Package:
         return {"id": self.id, "number": self.number, "objective": self.objective.to_dict(),
                 "flights": [{**asdict(f), "role": f.role.value} for f in self.flights],
                 "support": [asdict(s) for s in self.support], "jtac": self.jtac,
-                "jtac_laser_code": self.jtac_laser_code}
+                "jtac_laser_code": self.jtac_laser_code, "start": self.start, "n_def": self.n_def}
 
     @classmethod
     def from_dict(cls, d: dict) -> "Package":
         o = d["objective"]
         obj = Objective(o["id"], ObjectiveType(o["type"]), o["target_id"], o["priority"], o.get("description", ""))
         return cls(d["id"], d["number"], obj, [FlightPlan(**{**f, "role": Role(f["role"])}) for f in d["flights"]],
-                   [SupportPlan(**s) for s in d["support"]], d.get("jtac", False), d.get("jtac_laser_code", 1688))
+                   [SupportPlan(**s) for s in d["support"]], d.get("jtac", False), d.get("jtac_laser_code", 1688),
+                   d.get("start", "09:00"), d.get("n_def", 0))
 
 
 class Ledger:
@@ -103,8 +113,8 @@ class Ledger:
 
 
 class PackageBuilder:
-    def __init__(self, state: CampaignState):
-        self.state = state
+    def __init__(self, state: CampaignState, d=None):
+        self.state, self.d = state, d
 
     def target_xy(self, obj: Objective):
         if obj.type == ObjectiveType.BARCAP:
@@ -126,53 +136,90 @@ class PackageBuilder:
         a = self.state.assets[obj.target_id]
         return any(not self.state.assets[d].destroyed for d in a.defended_by)
 
+    # ---- slot list sized to the threat ---------------------------------------------------------------------
+    def _slots(self, obj, defended, n_fl) -> list:
+        slots = [copy.copy(s) for s in TEMPLATES[obj.type] if not (s.only_if_defended and not defended)]
+        if obj.type in (ObjectiveType.STRIKE, ObjectiveType.DEAD, ObjectiveType.CAS):
+            req = threat.fighters_required(n_fl)
+            slots = [s for s in slots if s.role != Role.ESCORT]
+            if req:
+                slots.append(Slot(Role.ESCORT, min(4, req), True))
+                if req > 4:
+                    slots.append(Slot(Role.SWEEP, min(4, req - 4), False))
+        if obj.type != ObjectiveType.BARCAP:
+            slots.append(Slot(Role.CAP, 2, False, tag="HAVCAP"))
+        return slots
+
     def build(self, obj: Objective, number: int, ledger: Ledger, *, for_player: bool) -> Package:
         st = self.state
         tx, ty = self.target_xy(obj)
-        defended = self._defended(obj)
-        pkg = Package(id=f"pkg{number}", number=number, objective=obj)
+        iads = self.d.iads if self.d else 0.5
+        if obj.type == ObjectiveType.BARCAP:       # a fleet patrol meets a probing enemy flight if the enemy still has fighters
+            n_fl = 1 if any(w.available > 0 for w in st.enemy_air) else 0
+        else:
+            n_fl = threat.defender_flights(threat.expected_defenders(st, tx, ty, iads))
+        pkg = Package(id=f"pkg{number}", number=number, objective=obj, n_def=2 * n_fl)
+        slots = self._slots(obj, self._defended(obj), n_fl)
         pp = st.player
-        slots = [s for s in TEMPLATES[obj.type] if not (s.only_if_defended and not defended)]
 
-        player_idx = None
-        lead_service = None
+        player_idx, lead_service, psq = None, None, None
         if for_player and pp:
             psq = st.squadrons[pp.squadron_id]
             spec = AIRCRAFT[psq.aircraft]
-            ok = [i for i, s in enumerate(slots) if s.role in spec.roles and self._in_range(psq.id, tx, ty)
-                  and ledger.free[psq.id] >= 1]
+            ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles
+                  and self._in_range(psq.id, tx, ty) and ledger.free[psq.id] >= 2]
             if not ok:
                 raise NoPlayerSlot(f"{psq.name} cannot fly any role in: {obj.description}")
             player_idx = max(ok, key=lambda i: PLAYER_ROLE_PREFERENCE[slots[i].role])
             lead_service = spec.service
 
-        n = 0
+        chosen = []                      # (slot, squadron, count, is_player)
         for i, slot in enumerate(slots):
-            sq = st.squadrons[pp.squadron_id] if i == player_idx else self._pick_squadron(slot, tx, ty, ledger, lead_service)
+            if slot.tag:
+                continue
+            sq = psq if i == player_idx else self._pick_squadron(slot, tx, ty, ledger, lead_service)
             if sq is None:
                 continue
             count = min(slot.size, MAX_FLIGHT, ledger.free[sq.id])
-            base = st.bases[sq.base_id]
-            if i == player_idx and base.kind == BaseKind.CARRIER:
+            count -= count % 2
+            if i == player_idx and st.bases[sq.base_id].kind == BaseKind.CARRIER:
                 count = min(count, CARRIER_PLAYER_FLIGHT_MAX)
-            if count < 1:
+            if count < 2:
                 continue
             ledger.free[sq.id] -= count
             lead_service = lead_service or AIRCRAFT[sq.aircraft].service
-            n += 1
-            pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", f"{sq.callsign} {number}-{n}", slot.role, sq.id,
-                                          sq.aircraft, count, base.id, _TASK[slot.role], i == player_idx))
-        if not pkg.flights:
+            chosen.append((slot, sq, count, i == player_idx))
+        if not chosen:
             raise NoPlayerSlot("no squadron could fly this objective")
+
+        # support CAP: HAVCAP guards the tanker/AWACS; BASECAP guards the strike/CAS flights' home field
+        prim = st.bases[chosen[0][1].base_id]
+        anchor = next((st.bases[sq.base_id] for _, sq, _, pl in chosen if pl), prim)
+        dnm = math.hypot(tx - prim.x, ty - prim.y) / NM
+        wanted = [("HAVCAP", anchor)] if obj.type != ObjectiveType.BARCAP else []
+        if obj.type == ObjectiveType.CAS or (obj.type != ObjectiveType.BARCAP and dnm < 100):
+            wanted.append(("BASECAP", prim))
+        for tag, base in wanted:
+            sq = self._pick_cap_near(base, ledger, lead_service)
+            if sq:
+                ledger.free[sq.id] -= 2
+                chosen.append((Slot(Role.CAP, 2, False, tag=tag), sq, 2, False))
+
+        used, n = {}, 0
+        for slot, sq, count, is_pl in chosen:
+            n += 1
+            used[sq.callsign] = used.get(sq.callsign, 0) + 1
+            pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", f"{sq.callsign} {used[sq.callsign]}", slot.role, sq.id,
+                                          sq.aircraft, count, sq.base_id,
+                                          _TAG_TASK.get(slot.tag) or _TASK[slot.role], is_pl, slot.tag))
         pkg.support = self._support(pkg)
         pkg.jtac = obj.type in JTAC_OBJECTIVES
         return pkg
 
-    def _pick_squadron(self, slot: Slot, tx, ty, ledger: Ledger, lead_service: str | None):
-        """Prefer the lead's service. Cross over to the other service only when it is sound:
-        the same-service option is missing/busy/out of range, or the other service's base is >=30% closer."""
+    def _pick_squadron(self, slot: Slot, tx, ty, ledger: Ledger, lead_service):
+        """Prefer the lead's service; cross over only when sound (same-service option missing, or the other base is >=30% closer)."""
         cands = [sq for sq in self.state.squadrons.values()
-                 if slot.role in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 1 and self._in_range(sq.id, tx, ty)]
+                 if slot.role in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2 and self._in_range(sq.id, tx, ty)]
         if not cands:
             return None
         key = lambda sq: self._dist_nm(sq.id, tx, ty) - 40 * (ledger.free[sq.id] / max(1, sq.authorized))
@@ -186,14 +233,28 @@ class PackageBuilder:
             return bs
         return bc or bs
 
+    def _pick_cap_near(self, base, ledger: Ledger, lead_service):
+        best, best_s = None, 1e9
+        for sq in self.state.squadrons.values():
+            spec = AIRCRAFT[sq.aircraft]
+            if Role.CAP not in spec.roles or ledger.free[sq.id] < 2:
+                continue
+            b = self.state.bases[sq.base_id]
+            d = math.hypot(b.x - base.x, b.y - base.y) / NM
+            if d > spec.combat_radius_nm:
+                continue
+            s = d + (0 if spec.service == lead_service else 40)
+            if s < best_s:
+                best, best_s = sq, s
+        return best
+
     def _support(self, pkg: Package) -> list:
-        st = self.state
-        lead = pkg.player_flight or pkg.flights[0]
+        lead = pkg.player_flight or next((f for f in pkg.flights if not f.tag), pkg.flights[0])
         lead_home = AIRCRAFT[lead.aircraft].home
-        awacs = AWACS_FOR[lead_home]      # E-2C for Navy leads (F-14 Link-4 expects one), E-3 for USAF leads
+        awacs = AWACS_FOR[lead_home]          # E-2C for Navy leads (F-14 Link-4), E-3 for USAF leads
         out = [SupportPlan("AWACS", awacs.dcs_class, awacs.label, awacs.altitude_ft, awacs.speed_kts)]
         methods: list = []
-        for f in sorted(pkg.flights, key=lambda f: f is not lead):
+        for f in sorted((f for f in pkg.flights if not f.tag), key=lambda f: f is not lead):
             m = AIRCRAFT[f.aircraft].refuel
             if m not in methods:
                 methods.append(m)
@@ -224,7 +285,3 @@ class PackageBuilder:
             chosen.count = min(chosen.count, CARRIER_PLAYER_FLIGHT_MAX)
         pkg.support = self._support(pkg)
         return chosen
-
-
-_TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM", Role.ESCORT: "Escort package",
-         Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
