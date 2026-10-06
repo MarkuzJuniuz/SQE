@@ -112,3 +112,21 @@ def capture_from_miz(miz_path: str, out_path: str = "loadouts.json") -> dict:
                     found[f"{key}:{role}"] = len(pyl)
     p.write_text(json.dumps(lib, indent=2))
     return found
+
+
+# approximate combat radius (nm) of enemy types: used to decide who can escort a raid
+ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, "MiG_23MLD": 200, "MiG_21Bis": 170,
+                   "F_4E": 300, "F_5E_3": 200}
+
+
+def enemy_bomber_loadout(cls_name: str) -> dict:
+    """Anti-ship Kh-22 on every pylon that can take one (Tu-22M3)."""
+    from dcs import planes
+    cls = getattr(planes, cls_name)
+    out = {}
+    for i in sorted(cls.pylons):
+        P = getattr(cls, f"Pylon{i}", None)
+        w = _find(P, "Kh_22") if P is not None else None
+        if w is not None:
+            out[i] = {"CLSID": w[1]["clsid"]}
+    return out

@@ -91,28 +91,32 @@ First launch:
 
 ## 4. Test checklist inside DCS (please report what fails)
 
-I cannot run DCS where I build this. Tick these off, newest fixes first:
+I cannot run DCS where I build this. Always run `python tools/smoke_test.py` first (it is isolated and cleans up after itself).
 
-**Fixed in v0.3. Confirm they are really fixed**
-- [ ] No `DictKey_Translation` Lua error when the mission loads, and `Saved Games\DCS\SQE\SQE_state.json` appears while you fly (the waiting window shows numbers).
-- [ ] Enemy SAM sites fire and show threat rings in the F10 map (they are now single working groups). F10 > enemy-units view if your server allows it.
-- [ ] The A-10s on a CAS mission find and attack the armor column (they get an explicit attack-group order plus a zone search). If they still just fly waypoints, send `dcs.log`.
-- [ ] Aircraft names read like `Springfield 1-2` in the F10 map, radio and Tacview.
-- [ ] Flights are 2 or 4 ships. Tanker + AWACS are well away from enemy airfields and a HAVCAP orbits with them.
-- [ ] Enemy fighters are not up when you launch; they appear near the target around TOT (+/- 1-2 min), coming from the enemy side.
-- [ ] Patriot + AAA sit beside every airfield used by the package, and the carrier has a cruiser and two escorts.
-- [ ] CAS missions have a base-CAP flight over the A-10s' field.
-- [ ] Kneeboard waypoint numbers match your cockpit (F-15C: `B`, then 1, 2...). Tanker and bullseye are the last steerpoints.
-- [ ] Link 16: F-16C and F/A-18C show their package flights as team members/donors (STNs are on page 2 of the kneeboard). A-10C II uses SADL. F-14B(U) and F-15C have no datalink in DCS data. **If you fly a dedicated server, re-save the mission in the Mission Editor first (Retribution warns F-16C datalink data can crash servers otherwise).**
+**Newest (v0.5). Confirm these**
+- [ ] The target area and your route are *live from the first second*: every SAM site on the route exists and is active; no enemy appears out of nowhere.
+- [ ] Enemy CAPs are airborne at mission start on the stations the briefing/kneeboard intelligence line implies; alert fighters sit on a real enemy runway and take off only when your package enters their airfield's detection zone.
+- [ ] Day-1 targets are the front belt (Sukhumi / Gudauta / Sochi area) and CAS; deep targets only appear after the belts in front of them are broken.
+- [ ] Tanker and AWACS orbit well back from enemy bases, with a HAVCAP flight (Springfield 3 / Viper 3 etc.).
+- [ ] Flights push staggered (sweep first, then SEAD, then escorts, then strikers). Your kneeboard times are for YOUR flight only: MSHL arrival, "hold to" time, PUSH (+/-30 s), your TOT (+/-1 min).
+- [ ] Text call-outs with a radio squelch: tanker on station, package push, "Waypoint N, NAME" as you pass each steerpoint in order, five minutes to TOT. (If the squelch is silent but text appears, tell me; the sound path is the part I could not verify.)
+- [ ] CAS: friendly tanks and a JTAC are in contact with the enemy column; the A-10s attack it. Debrief reports friendly losses.
+- [ ] Level 3 only: a bomber raid on the fleet (4x Tu-22M3 with escorts) already en route from their base at mission start.
+- [ ] Kneeboard page 1 = comms + times (no coordinates); page 2 = bingo/joker, IFF Mode 3, laser code, bullseye, package who's-who with STNs, threats, target coordinates (strike/SEAD/CAS roles).
+- [ ] Wingmen follow you on your route; the Options menu has "My flight has unlimited fuel (cheat)" (off by default).
+
+**Fixed earlier, still worth a look**
+- [ ] No `DictKey_Translation` Lua error; `Saved Games\DCS\SQE\SQE_state.json` appears while you fly.
+- [ ] SAM sites fire and show threat rings; callsigns read like `Springfield 1-2`.
+- [ ] Link 16: F-16C and F/A-18C list package flights as team members/donors. A-10C II uses SADL. F-14B(U) and F-15C have no datalink in DCS data. **On a dedicated server re-save the mission in the Mission Editor first.**
+- [ ] Waypoint numbers match your cockpit (F-15C: `B`, then 1, 2...). Tanker and bullseye are the last steerpoints.
 
 **Still unverified**
-- [ ] `SQE_Sortie.miz` loads in the Missions list; your flight is hot on the cat/runway (INS aligned on the F-14B(U)).
-- [ ] Other flights spawn airborne, orbit at MSHL, and leave on the PUSH time (the hold is a timed orbit stop; I am not 100% sure DCS counts that time from mission start).
-- [ ] Radios: COMM1 CH1 ATC, CH2 AWACS, CH3 tanker, CH4 JTAC (CAS only), CH5 second tanker; COMM2 CH1 your flight. **F-15C presets cannot be written by pydcs**: set them by hand from the kneeboard (SQE tells you).
-- [ ] AI flights never run low on fuel and disappear shortly after landing; no Supercarrier deck crew.
-- [ ] Accept -> debrief -> next day; your pilot log (Pilot tab) counts sorties, flight time and kills credited to you.
+- [ ] Other flights spawn airborne, orbit at MSHL and cross PUSH on time (timed orbit stop).
+- [ ] Your flight is hot on the cat/runway (INS aligned on the F-14B(U)); F-15C presets must be set by hand (SQE tells you).
+- [ ] AI flights disappear after landing; no Supercarrier deck crew.
 
-Build size: after FLY the waiting window shows how many groups/units the mission has, so you can watch performance.
+Build size: the waiting window shows how many groups/units each mission has, and the mission seed.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -135,6 +139,9 @@ Manual command, if you prefer it to the .bat:
 pip install pyinstaller
 python -m PyInstaller --noconfirm --clean --windowed --name SQE --collect-all dcs --collect-submodules sqe run_sqe.py
 ```
+(The map data is embedded in the code now, so no extra `--add-data` is needed.)
+```
+```
 
 ---------------------------------------------------------------------------------------------------
 
@@ -155,7 +162,8 @@ python -m PyInstaller --noconfirm --clean --windowed --name SQE --collect-all dc
 | `sqe/threat.py` | how many enemy fighters defend a target and how many friendly fighters answer them |
 | `sqe/callsigns.py` | DCS-native callsign names/ids per aircraft type |
 | `sqe/timeofday.py` | sunrise/sunset and the daily tasking timeline (day only, or night too) |
-| `sqe/data/caucasus_geo.json` | the map's coastline and borders (Natural Earth, public domain) converted to DCS coordinates |
+| `sqe/threatmap.py` | SAM rings, the FLOT/gatekeeper rule, tanker stations, egress steering, corridor sites |
+| `sqe/geo_data.py` | the map's coastline and borders (Natural Earth, public domain) in DCS coordinates, embedded in code |
 
 **Custom loadouts**: in the Mission Editor name an aircraft group like `F-14BU:STRIKE`, `F-14BU:CAP`, `FA-18C:SEAD`, `A-10C:CAS`,
 build the loadout, save, then `python tools/capture_loadouts.py that.miz`. They override the defaults.
@@ -184,7 +192,9 @@ build the loadout, save, then `python tools/capture_loadouts.py that.miz`. They 
 
 * Not yet flown in DCS by me. Items in section 4 are the unknowns.
 * Caucasus only. Syria would be a new scenario function in `scenario.py` plus a theatre switch in `mission_builder.py`.
-* Allied bombers (B-52H / B-1B) are not tasked yet.
+* Allied bombers (B-52H / B-1B) and strategic missions on bomber bases are not tasked yet.
+* Not built yet: the war *tempo* model (day-1 surge, reinforcement waves, per-difficulty pacing), runway-cratering/base-repair windows, and what happens if the carrier is sunk.
+* Radio call-outs are text plus a squelch, not spoken voice.
 * JDAM target data (DTC) and LANTIRN waypoint designation are not generated by pydcs; enter TGT coordinates from the kneeboard.
 * Weather is always clear for now (seasonal temperature only). Procedural/static weather options come later.
 * Special points (IP, ST) are added for the F-14BU as per the F-14 manual; confirm in-game that the BU shows them.

@@ -19,7 +19,8 @@ BLUE_FIELDS = [("senaki", "Senaki-Kolkhi AB", "Senaki-Kolkhi"), ("kutaisi", "Kut
 RED_FIELDS = [("ab_sukhumi", "Sukhumi-Babushara", "Sukhumi-Babushara", 7), ("ab_gudauta", "Gudauta", "Gudauta", 8),
               ("ab_sochi", "Sochi-Adler", "Sochi-Adler", 9), ("ab_gelen", "Gelendzhik", "Gelendzhik", 5),
               ("ab_krymsk", "Krymsk", "Krymsk", 8), ("ab_maykop", "Maykop-Khanskaya", "Maykop-Khanskaya", 9),
-              ("ab_nalchik", "Nalchik", "Nalchik", 6), ("ab_beslan", "Beslan", "Beslan", 6)]
+              ("ab_nalchik", "Nalchik", "Nalchik", 6), ("ab_beslan", "Beslan", "Beslan", 6),
+              ("ab_mozdok", "Mozdok", "Mozdok", 7)]
 WING_WEIGHT = {"ab_sukhumi": 1, "ab_gudauta": 2, "ab_sochi": 3, "ab_krymsk": 3, "ab_maykop": 4, "ab_nalchik": 2,
                "ab_beslan": 2, "ab_gelen": 1}
 SAM_LABEL = {"AAA": "AAA battery", "MANPAD": "MANPADS team", "SA-2": "SA-2 site", "SA-3": "SA-3 site",
@@ -84,6 +85,9 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         cnt = max(2, round(d.enemy_air_total * w / total_w))
         types = rng.sample(d.enemy_types, k=min(len(d.enemy_types), 2))
         st.enemy_air.append(EnemyAirWing(aid, types, cnt, cnt))
+
+    if d.bomber_wing > 0:       # strategic bombers live far to the east, at Mozdok
+        st.enemy_air.append(EnemyAirWing("ab_mozdok", ["Tu_22M3"], d.bomber_wing, d.bomber_wing))
 
     # ---- air defence clusters ----------------------------------------------------------------------
     variants = d.sam_variants

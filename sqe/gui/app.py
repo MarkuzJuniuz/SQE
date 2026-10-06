@@ -93,12 +93,14 @@ class MissionsPage(QWidget):
         self.intent = QLabel(); self.intent.setObjectName("dim"); self.intent.setWordWrap(True); L.addWidget(self.intent)
         self.ft = _tbl(["Flight", "Aircraft", "Qty", "Task", "Based at", ""])
         self.ft.setSelectionMode(QTableWidget.NoSelection); self.ft.setFocusPolicy(Qt.NoFocus)
+        self.ft.setStyleSheet("QTableWidget::item:selected, QTableWidget::item:hover, QTableWidget::item:focus { background: transparent; border: none; }")
         self.ft.verticalHeader().setDefaultSectionSize(42)
         self.ft.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         hh = self.ft.horizontalHeader()
         for c, m in enumerate((QHeaderView.ResizeToContents, QHeaderView.Stretch, QHeaderView.ResizeToContents, QHeaderView.Stretch,
-                               QHeaderView.Stretch, QHeaderView.ResizeToContents)):
+                               QHeaderView.Stretch, QHeaderView.Fixed)):
             hh.setSectionResizeMode(c, m)
+        hh.resizeSection(5, 100)
         L.addWidget(self.ft)
         self.sup = QLabel(); self.sup.setObjectName("dim"); self.sup.setWordWrap(True); L.addWidget(self.sup)
         self.thr = QLabel(); self.thr.setWordWrap(True); self.thr.setStyleSheet(f"color:{theme.AMBER};"); L.addWidget(self.thr)
@@ -149,9 +151,10 @@ class MissionsPage(QWidget):
             for j, v in enumerate(vals):
                 self.ft.setItem(i, j, _item(v, theme.GREEN if (yours and j == 0) else (theme.DIM if f.tag else None), center=(j == 2)))
             if yours:
-                b = QPushButton("FLY"); b.setObjectName("fly"); b.setEnabled(active)
+                b = QPushButton("FLY"); b.setObjectName("fly"); b.setEnabled(active); b.setFixedSize(84, 30)
                 b.clicked.connect(lambda _=0, n=p.number, fid=f.id: self.win.do_fly(n, fid))
-                self.ft.setCellWidget(i, 5, b)
+                cont = QWidget(); cl = QHBoxLayout(cont); cl.setContentsMargins(4, 4, 4, 4); cl.addWidget(b, 0, Qt.AlignCenter)
+                self.ft.setCellWidget(i, 5, cont)
             else:
                 self.ft.removeCellWidget(i, 5)
                 self.ft.setItem(i, 5, _item("AI support" if f.tag else f"AI {spec.service}", theme.DIM))
@@ -288,6 +291,17 @@ class MainWindow(QMainWindow):
         self.recent = f.addMenu("Open &Recent"); self.recent.aboutToShow.connect(self._recent)
         f.addSeparator(); act("&Save", self.save, "Ctrl+S"); act("Save &As...", self.save_as, "Ctrl+Shift+S")
         f.addSeparator(); act("S&ettings...", self.settings, "Ctrl+,"); f.addSeparator(); act("E&xit", self.close, "Alt+F4")
+        opt = mb.addMenu("&Options")
+        self.cheat = QAction("My flight has unlimited fuel (cheat)", self); self.cheat.setCheckable(True)
+        self.cheat.setChecked(self.session.settings.player_unlimited_fuel)
+        self.cheat.toggled.connect(self._cheat); opt.addAction(self.cheat)
+
+    def _cheat(self, on: bool):
+        self.session.settings.player_unlimited_fuel = on
+        try:
+            self.session.settings.save()
+        except OSError:
+            pass
 
     def _recent(self):
         self.recent.clear()

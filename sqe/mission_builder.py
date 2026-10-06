@@ -9,6 +9,7 @@
 from __future__ import annotations
 import copy
 import datetime
+import hashlib
 import math
 import random
 import tempfile
@@ -23,15 +24,17 @@ from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
 from . import briefing as brief, callsigns
+from . import threatmap as tm
 from .aircraft import AIRCRAFT
 from .debrief import Manifest, install_hook
 from .difficulty import Difficulty
 from .kneeboard import latlon, render_pages
-from .loadouts import LoadoutLibrary, enemy_cap_loadout, ENEMY_FIGHTERS
+from .loadouts import LoadoutLibrary, enemy_bomber_loadout, enemy_cap_loadout, ENEMY_FIGHTERS
 from .models import AssetKind, BaseKind, ObjectiveType, Role
+STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -30}      # seconds relative to the strikers' push (BMS-style)
 from .packages import Package
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import NM, FT, Wpt, assign_times, bearing, dist, leg_seconds, make_geometry, offset, plan_route
+from .routes import NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, leg_seconds, make_geometry, offset, plan_route
 from .state import CampaignState
 
 KPH = 1.852
@@ -51,6 +54,7 @@ class MissionOptions:
     enemy_unlimited_fuel: bool = False
     ai_despawn_on_land: bool = True
     base_defenses: bool = True
+    player_unlimited_fuel: bool = False     # cheat toggle: gives YOUR flight (wingmen included) unlimited fuel
     carrier_escorts: bool = True
     player_is_client: bool = False
     carrier_speed_kts: int = 15
@@ -117,6 +121,7 @@ class BuildResult:
     counts: dict = field(default_factory=dict)
     whois: list = field(default_factory=list)
     warnings: list = field(default_factory=list)
+    seed: str = ""
 
 
 class MissionBuilder:
@@ -149,17 +154,26 @@ class MissionBuilder:
         self._weather(m, date)
 
         tx, ty = self._target_xy(package)
+        seed = f"{st.campaign_id}:{st.day}:{st.sortie_counter + 1}:{package.number}"   # every FLY re-rolls the layout
+        self.vrng = random.Random(seed)
+        self.seed_code = hashlib.md5(seed.encode()).hexdigest()[:5].upper()
+        self.site_pos, self.armor_id, self.armor_center = {}, None, None
+        tx, ty = self._jitter_primary(package, tx, ty)
         pbase = st.bases[pf.base_id]
         pspec = AIRCRAFT[pf.aircraft]
+        fleet_obj = package.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
+        tgt_asset = None if fleet_obj else st.assets[package.objective.target_id]
         geom = make_geometry(pbase.x, pbase.y, tx, ty, pspec.profile)
+        if tgt_asset is not None:                      # steer the egress away from SAM rings
+            geom.egr = tm.safe_egress(st, tx, ty, geom.hdg, pspec.profile.egress_nm, tm.cluster_ids(tgt_asset)) or geom.egr
         manifest = Manifest(st.campaign_id, st.sortie_counter + 1, package.id, st.day)
         self.groups_by_asset, self.flight_groups = {}, []
 
         # ---- bases, base defenses, carrier + escorts --------------------------------------------------------
         self.ship, self.apt = {}, {}
-        for b in st.bases.values():
-            if b.kind == BaseKind.AIRFIELD:
-                self.t.airports[b.airport].set_blue()
+        for bs in st.bases.values():
+            if bs.kind == BaseKind.AIRFIELD:
+                self.t.airports[bs.airport].set_blue()
         for a in st.assets.values():
             if a.kind == AssetKind.AIRFIELD and a.airport:
                 self.t.airports[a.airport].set_red()
@@ -167,82 +181,137 @@ class MissionBuilder:
             self._place_base(st.bases[bid], tx, ty)
         atc = (o.carrier_atc_mhz if pbase.kind == BaseKind.CARRIER else self.t.airports[pbase.airport].atc_radio.uhf_hz / 1e6)
 
-        # ---- enemy ground (SAM sites, armor, targets) -----------------------------------------------------------
-        self._spawn_opfor_ground(package, tx, ty, manifest)
+        # ---- enemy ground: everything the route touches is live from the first second ----------------------------------
+        polyline = [(pbase.x, pbase.y), geom.mshl, geom.push, geom.ip, (tx, ty), geom.egr]
+        self._spawn_opfor_ground(package, tx, ty, manifest, polyline)
 
         # ---- radios + support -----------------------------------------------------------------------------------------
         plan = build_radio_plan(package, st, atc, self.rng, o.layout, RadioCfg(o.carrier_tacan, o.carrier_link4_mhz))
         tanker_xy, awacs_unit, hav_xy = self._place_support(package, plan, geom)
 
-        # ---- timeline (the player defines PUSH and TOT) -------------------------------------------------------------
+        # ---- timeline: YOUR times. Roles are staggered around the strikers' push (sweep, SEAD, escorts go first) ---------
         launch_s = o.launch_offset_min * 60.0
         pw = plan_route(pf.role, (pbase.x, pbase.y), geom, pspec.profile, is_player=True, tanker_xy=None)
         assign_times(pw, launch_s)
         mshl = next((w for w in pw if w.action in ("HOLD", "CAPORBIT")), pw[-1])
-        push_s = math.ceil((mshl.eta_s + (0 if pf.role == Role.CAP else o.hold_minutes * 60)) / 60.0) * 60.0
-        assign_times(pw, launch_s, push_s)
+        k = pw.index(mshl)
+        leg_m = leg_seconds(mshl, pw[k + 1]) if (mshl.action == "HOLD" and k + 1 < len(pw)) else 0.0
+        player_push = math.ceil((mshl.eta_s + (0 if pf.role == Role.CAP else o.hold_minutes * 60) + leg_m) / 60.0) * 60.0
+        leave_s = hold_leave_s(pw, player_push)
+        P0 = player_push - STAGGER.get(pf.role, 0)                         # the strikers' push; everyone else is relative to it
+        push_of = lambda f: P0 + (0 if f.tag else STAGGER.get(f.role, 0))
+        assign_times(pw, launch_s, player_push)
         tgt = next((w for w in pw if w.action in ("BOMB", "SEAD", "SWEEP", "CAS") or w.name in ("ESC", "CAP1")), pw[-1])
         egr = next((w for w in pw if w.name == "EGR"), pw[-1])
         rtb_s = egr.eta_s + leg_seconds(egr, Wpt("RTB", pbase.x, pbase.y, 0, 300))
-        tl = {"launch": clock(launch_s), "marshal": clock(mshl.eta_s), "push": clock(push_s), "tot": clock(tgt.eta_s),
-              "egress": clock(egr.eta_s), "rtb": clock(rtb_s), "push_s": push_s, "tot_s": tgt.eta_s, "rtb_s": rtb_s}
+        tl = {"launch": clock(launch_s), "marshal": clock(mshl.eta_s), "push": clock(player_push), "tot": clock(tgt.eta_s),
+              "egress": clock(egr.eta_s), "rtb": clock(rtb_s), "push_s": player_push, "tot_s": tgt.eta_s, "rtb_s": rtb_s}
 
         # ---- friendly flights --------------------------------------------------------------------------------------------
-        despawn, ai_regular = [], 0
+        despawn, pkg_table = [], []
         for idx, f in enumerate(package.flights):
-            self._spawn_flight(package, f, plan, geom, tanker_xy, hav_xy, push_s, tgt.eta_s, rtb_s, idx, manifest, despawn)
+            g, tot_f = self._spawn_flight(package, f, plan, geom, tanker_xy, hav_xy, push_of(f), tgt.eta_s, rtb_s, idx, manifest, despawn)
+            if f.is_player:
+                tot_f = tgt.eta_s
+            pkg_table.append({"callsign": f.callsign, "role": (f.tag or f.role.value), "push": clock(push_of(f)) if not f.tag else "-",
+                              "tot": clock(tot_f) if tot_f else "-", "you": f.is_player})
         whois = self._datalinks(package, awacs_unit)
 
-        # ---- enemy fighters, JTAC, bullseye -----------------------------------------------------------------------------
-        self._spawn_defenders(package, tx, ty, tgt.eta_s, geom, manifest)
-        if package.jtac:
-            self._spawn_jtac(package, plan, geom)
+        # ---- enemy air picture (known CAP airborne from the start + alert aircraft that scramble when detected) ----
+        self._spawn_air_picture(package, tx, ty, tgt.eta_s, geom, manifest, [geom.mshl, tanker_xy, hav_xy])
+        self._spawn_cas_support(package, plan, geom, manifest)
         bx, by = geom.push
         m.coalition["blue"].bullseye = {"x": bx, "y": by}
 
         # ---- waypoint table as the jet numbers it ------------------------------------------------------------------------------
         div = self._divert(pbase)
-        rtb_note = self._rtb_note(pspec)
         rows = [("TAKEOFF", pbase.x, pbase.y, launch_s, "", "", pbase.name)]
         for w in pw:
             rows.append((w.name, w.x, w.y, w.eta_s, f"{w.alt_ft // 1000}K", w.speed_kts, w.note))
-        rows.append(("RTB", pbase.x, pbase.y, rtb_s, "-", 300, rtb_note))
+        rows.append(("RTB", pbase.x, pbase.y, rtb_s, "-", 300, self._rtb_note(pspec)))
+        n_route = len(rows)
         rows.append(("DIVERT", div.x, div.y, 0, "-", "", div.name))
         if tanker_xy:
             rows.append(("TKR", tanker_xy[0], tanker_xy[1], 0, f"{pspec.profile.aar_alt_ft // 1000}K", pspec.profile.aar_kts, "Top off. See COMMS for TACAN"))
         rows.append(("BULLS", bx, by, 0, "", "", "Bullseye reference"))
         player_wps = [Wpt(r[0], r[1], r[2], 0 if r[4] in ("", "-") else int(str(r[4]).rstrip("K")) * 1000,
                           int(r[5]) if str(r[5]).isdigit() else 0, r[6]) for r in rows]
-        self._trailing_steerpoints(package, rows[-3:], pspec)
-        kn_rows = []
+        self._trailing_steerpoints(package, rows[n_route:], pspec)
+        kn_rows, hook_wps = [], []
         for i, r in enumerate(rows, 1):
-            kn_rows.append({"wp": pspec.wp_label(i), "name": r[0], "time": clock(r[3])[:5] if r[3] else "", "alt": r[4], "kts": str(r[5]),
-                            "pos": latlon(r[1], r[2], self.t), "note": r[6] if r[0] in ("TGT", "CAS", "TKR", "RTB") else ""})
+            leg = ""
+            if i < n_route:
+                nx = rows[i]
+                leg = f"{int(bearing(r[1], r[2], nx[1], nx[2])):03d}/{dist(r[1], r[2], nx[1], nx[2]) / NM:.0f}"
+            tstr = ""
+            if r[3]:
+                tstr = clock(r[3]) if r[0] in ("PUSH", "TGT", "CAS", "ESC", "SEAD", "SWP", "CAP1") else clock(r[3])[:5]
+            win = {"PUSH": "+/-30s", "TGT": "+/-1m", "CAS": "+/-1m", "ESC": "+/-1m", "SEAD": "+/-1m", "SWP": "+/-1m"}.get(r[0], "")
+            if r[0] == "MSHL":
+                win = f"hold to {clock(leave_s)[:5]}"
+            kn_rows.append({"wp": pspec.wp_label(i), "name": r[0], "time": tstr, "alt": r[4], "kts": str(r[5]), "leg": leg, "win": win,
+                            "note": r[6] if r[0] in ("TGT", "CAS", "TKR", "RTB", "DIVERT") else ""})
+            if r[0] not in ("TAKEOFF", "DIVERT", "TKR", "BULLS"):
+                hook_wps.append((pspec.wp_label(i), r[0], r[1], r[2]))
 
         # ---- codes, fuel, text, hook, kneeboard -----------------------------------------------------------------------------
         mode3 = self._mode3(package, pf)
         laser = self._laser(package, pf)
         x = {"date": date_str, "mode3": mode3, "laser": laser, "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}",
              "bullseye": latlon(bx, by, self.t), "divert": div.name, "weather": "clear skies, unrestricted visibility",
-             "link16": any(r["stn"] != "-" for r in whois)}
+             "link16": any(r["stn"] != "-" for r in whois), "pkg_table": pkg_table}
         text = brief.build_text(st, package, tl, plan, self.rng, (tx, ty), x)
         m.set_description_text(text["full"])
         m.set_description_bluetask_text(text["blue_task"])
         m.set_sortie_text(f"{date_str}  day {st.day}: {package.objective.description}")
-        install_hook(m, st.campaign_id, manifest.sortie, package.id, despawn if o.ai_despawn_on_land else [], manifest.player_unit)
-        ctx = {"date": date_str, "callsign": f"{pf.callsign}-1", "role": pf.role.value, "objective": package.objective.description,
-               "comm1": plan.comm1, "comm2": plan.comm2, "waypoints": kn_rows, "jet": pspec.display,
-               "numbering": ("B for the start point, then 1, 2, 3..." if pspec.first_wp_label else "waypoint 1 = start point"),
-               "timeline": {k: tl[k] for k in ("launch", "marshal", "push", "tot", "egress", "rtb")},
-               "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": "CLEAR", "mode3": mode3, "laser": laser,
-               "bulls_short": "last WP", "bullseye": latlon(bx, by, self.t), "whois": whois, "threats": text["threats"], "n_def": package.n_def}
+        awl = next((s.label for s in package.support if s.slot == "AWACS"), "AWACS")
+        calls = []
+        t1 = next((s for s in package.support if s.slot == "TANKER1"), None)
+        if t1 is not None:
+            calls.append((25, f"{t1.label} 1-1: on station, TACAN {plan.tacan.get('TANKER1', '')}, COMM1 channel 3."))
+        calls.append((P0, f"{awl} 1-1: package, push, push, push."))
+        if tgt.eta_s - 300 > 60:
+            calls.append((tgt.eta_s - 300, "Five minutes to TOT."))
         with tempfile.TemporaryDirectory(prefix="sqe_kb_") as td:
+            sound = self._squelch(td)
+            install_hook(m, st.campaign_id, manifest.sortie, package.id, despawn if o.ai_despawn_on_land else [], manifest.player_unit,
+                         group=pf.callsign, calls=calls, wps=hook_wps, sound=sound)
+            tdata = ""
+            if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
+                tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
+            ctx = {"date": date_str, "callsign": f"{pf.callsign}-1", "role": pf.role.value, "objective": package.objective.description,
+                   "comm1": plan.comm1, "comm2": plan.comm2, "waypoints": kn_rows, "jet": pspec.display,
+                   "numbering": ("B for the start point, then 1, 2, 3..." if pspec.first_wp_label else "waypoint 1 = start point"),
+                   "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": "CLEAR", "mode3": mode3, "laser": laser,
+                   "bullseye": latlon(bx, by, self.t), "whois": whois, "threats": text["threats"], "n_def": package.n_def, "target_data": tdata}
             for pg in render_pages(td, ctx):
                 m.add_aircraft_kneeboard(pspec.dcs_type, pg)
             warns += list(dict.fromkeys(self.lo.warnings))
             counts = self._counts()
             m.save(str(out_path))
-        return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns)
+        return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns, self.seed_code)
+
+    def _squelch(self, folder) -> str:
+        """A short radio squelch bundled into the mission; played with each call-out. Returns the in-mission file name ('' on failure)."""
+        try:
+            import struct
+            import wave
+            rr = random.Random(7)
+            p = Path(folder) / "sqe_squelch.wav"
+            with wave.open(str(p), "wb") as w:
+                w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050)
+                n = int(22050 * 0.45)
+                frames = bytearray()
+                for i in range(n):
+                    t = i / 22050.0
+                    env = 1.0 if t < 0.10 else (0.12 if t < 0.34 else max(0.0, 1.0 - (t - 0.34) / 0.11))
+                    frames += struct.pack("<h", int(rr.uniform(-1, 1) * 9000 * env))
+                w.writeframes(bytes(frames))
+            self.m.map_resource.add_resource_file(str(p))
+            return "l10n/DEFAULT/sqe_squelch.wav"
+        except Exception:
+            self.warns.append("radio squelch sound could not be bundled; call-outs are text only")
+            return ""
 
     # =====================================================================================================
     def _weather(self, m, date):
@@ -264,6 +333,9 @@ class MissionBuilder:
 
     def _target_xy(self, package):
         o = package.objective
+        if o.type == ObjectiveType.FLEET_DEFENSE:           # CAP station on the bearing the raid will arrive on
+            c = self.state.bases[o.target_id]
+            return offset(c.x, c.y, package.extra.get("brg", 20.0), 85 * NM)
         if o.type == ObjectiveType.BARCAP:
             b = self.state.bases[o.target_id]
             air = [a for a in self.state.assets.values() if a.kind == AssetKind.AIRFIELD and not a.destroyed]
@@ -336,16 +408,63 @@ class MissionBuilder:
                 eg = self.m.ship_group(self.usa, f"{base.name} escort {k + 1}", cls, ep, heading=hdg)
                 eg.add_waypoint(ep.point_from_heading(hdg, 120 * NM), speed=o.carrier_speed_kts * KPH)
 
-    # ---- enemy ground -----------------------------------------------------------------------------------------------------
-    def _spawn_opfor_ground(self, package, tx, ty, manifest):
+    # ---- enemy ground: every mission re-rolls layout, mix and posture (seeded by campaign/day/sortie) ----------
+    def _nearest_airfield(self, x, y):
+        return min((b for b in self.state.bases.values() if b.kind == BaseKind.AIRFIELD), key=lambda b: dist(b.x, b.y, x, y))
+
+    def _site_center(self, a):
+        if a.id in self.site_pos:
+            return self.site_pos[a.id]
+        r = self.vrng
+        if a.kind == AssetKind.AIRFIELD:
+            pos = (a.x, a.y)
+        elif a.kind == AssetKind.ARMOR:       # the column sits somewhere along its axis of advance
+            fb = self._nearest_airfield(a.x, a.y)
+            pos = offset(a.x, a.y, bearing(a.x, a.y, fb.x, fb.y), r.uniform(-1500, 1500))
+        else:
+            pos = offset(a.x, a.y, r.uniform(0, 360), r.uniform(0, 900))
+        self.site_pos[a.id] = pos
+        return pos
+
+    def _jitter_primary(self, package, tx, ty):
+        o = package.objective
+        if o.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
+            return tx, ty
+        return self._site_center(self.state.assets[o.target_id])
+
+    def _vary_comp(self, a, comp):
+        r, out = self.vrng, []
+        for name, n in comp:
+            if a.kind in (AssetKind.SAM, AssetKind.EWR) and n >= 3:
+                n = max(2, n + r.choice([-1, 0, 0, 1]))
+            elif a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.AIRFIELD):
+                n = max(1, n + r.randint(-1, 2))
+            out.append((name, n))
+        if a.kind == AssetKind.SAM and r.random() < 0.45:
+            out.append((r.choice(["ZSU_23_4_Shilka", "SA_18_Igla_manpad", "Ural_375_ZU_23"]), r.randint(1, 2)))
+        if a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT) and r.random() < 0.5:
+            out.append(("Ural_375", r.randint(1, 3)))
+        return out
+
+    def _armor_comp(self):
+        r = self.vrng
+        comp = [(r.choice(["T_72B", "T_72B", "T_80B", "T_80UD"]), r.randint(3, 6)), (r.choice(["BMP_2", "BMP_1", "BMP_3"]), r.randint(2, 5)),
+                (r.choice(["BTR_80", "BTR_70", "BTR_60"]), r.randint(1, 3)), ("ZSU_23_4_Shilka", r.randint(0, 2)), ("Ural_375", r.randint(0, 3))]
+        if r.random() < 0.4:
+            comp.append((r.choice(["Strela_10M3", "Osa_9A33_ln"]), 1))       # mobile air defence travelling with the column
+        return [(n, c) for n, c in comp if c > 0]
+
+    def _spawn_opfor_ground(self, package, tx, ty, manifest, polyline=None):
         st, obj = self.state, package.objective
-        if obj.type == ObjectiveType.BARCAP:
+        if obj.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
             return
         tgt = st.assets[obj.target_id]
         relevant = [tgt] + [st.assets[i] for i in tgt.defended_by]
-        ewrs = [a for a in st.assets.values() if a.kind == AssetKind.EWR and not a.destroyed]
-        if ewrs:
-            relevant.append(min(ewrs, key=lambda a: dist(a.x, a.y, tx, ty)))
+        if polyline:                         # every SAM site whose ring touches the route is live from the start
+            relevant += tm.corridor_sam_sites(st, polyline, tgt)
+        ewrs = sorted((a for a in st.assets.values() if a.kind == AssetKind.EWR and not a.destroyed),
+                      key=lambda a: tm.poly_dist(a.x, a.y, polyline) if polyline else dist(a.x, a.y, tx, ty))
+        relevant += [a for a in ewrs[:2] if (tm.poly_dist(a.x, a.y, polyline) if polyline else 0) < 80 * NM]
         seen = set()
         for a in relevant:
             if a.id in seen or a.destroyed:
@@ -357,10 +476,17 @@ class MissionBuilder:
 
     def _spawn_site(self, a, comp, manifest, primary):
         """ONE group per site: a SAM battery needs its search/track radars, launchers and command post together."""
+        r = self.vrng
         skill = getattr(Skill, self.d.enemy_skill, Skill.High)
+        comp = self._armor_comp() if a.kind == AssetKind.ARMOR else self._vary_comp(a, comp)
+        cx, cy = self._site_center(a)
         base_count = sum(n for vname, n in comp if _vt(vname) is not None)
-        form = F.Line if a.kind == AssetKind.ARMOR else F.Star
-        g = self._platoon(self.red, a.id, comp, a.x, a.y, 90, form, scale=a.health)
+        if a.kind == AssetKind.ARMOR:
+            fb = self._nearest_airfield(cx, cy)
+            heading, form = int(bearing(cx, cy, fb.x, fb.y)), r.choice([F.Line, F.Rectangle, F.Line])
+        else:
+            heading, form = r.randint(0, 359), r.choice([F.Star, F.Scattered, F.Rectangle])
+        g = self._platoon(self.red, a.id, comp, cx, cy, heading, form, scale=a.health)
         if g is None:
             return
         names = []
@@ -372,6 +498,8 @@ class MissionBuilder:
                 pass
             names.append(u.name)
         self.groups_by_asset[a.id] = g
+        if a.kind == AssetKind.ARMOR:
+            self.armor_id, self.armor_center = a.id, (cx, cy)
         manifest.add("asset", a.id, names, base_count=base_count, health_before=a.health, primary=primary)
 
     # ---- support: tanker + AWACS well back from the enemy, with a HAVCAP at the same spot ----------------------------
@@ -390,7 +518,7 @@ class MissionBuilder:
 
     def _place_support(self, package, plan, g):
         pt = lambda x, y: mapping.Point(x, y, self.t)
-        cx, cy = self._safe_station(g)
+        cx, cy = tm.tanker_station(self.state, (g.bx, g.by), g.mshl) or self._safe_station(g)
         tanker_xy, awacs_unit = None, None
         hav_xy = offset(cx, cy, g.hdg + 45, 8 * NM)
         for s in package.support:
@@ -473,6 +601,8 @@ class MissionBuilder:
                 despawn.extend(names)
             if o.ai_unlimited_fuel:
                 g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
+        if f.is_player and o.player_unlimited_fuel:
+            g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))      # cheat: applies to the whole group, you included
         manifest.add("friendly", f.id, names, squadron=f.squadron_id, callsign=f.callsign, player=f.is_player)
         self.flight_groups.append((f, g))
 
@@ -485,7 +615,7 @@ class MissionBuilder:
                 continue
             if w.action == "HOLD":
                 ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
-                ct.stop_after_time(int(push_s)); wp.tasks.append(ct)
+                ct.stop_after_time(int(hold_leave_s(wps, push_s))); wp.tasks.append(ct)
             elif w.action == "CAPORBIT":
                 ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH)))
                 ct.stop_after_time(stop); wp.tasks.append(ct)
@@ -501,14 +631,15 @@ class MissionBuilder:
             rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTB")
             rtb.type, rtb.action = "Land", PointAction.Landing
             rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
-        return g
+        tw = None if f.tag else next((w for w in wps if w.action in ("BOMB", "SEAD", "SWEEP", "CAS") or w.name in ("ESC", "CAP1")), None)
+        return g, (tw.eta_s if tw is not None else None)
 
     def _trailing_steerpoints(self, package, rows, spec):
         """DIVERT, TKR and BULLSEYE come after RTB on the player's group, like Retribution (tanker/bullseye last)."""
         pf = package.player_flight
         g = next(gr for fl, gr in self.flight_groups if fl is pf)
         pt = lambda x, y: mapping.Point(x, y, self.t)
-        for name, x, y, _, alt, kts, _ in rows:
+        for name, x, y, _t, alt, kts, _n in rows:
             a = 20000 * FT if name == "TKR" else 5000 * FT
             g.add_waypoint(pt(x, y), a, (spec.profile.aar_kts if name == "TKR" else 300) * KPH, name)
 
@@ -554,57 +685,145 @@ class MissionBuilder:
                         net.add_member(og.units[0].id)
         return whois
 
-    # ---- JTAC -----------------------------------------------------------------------------------------------------------------
-    def _spawn_jtac(self, package, plan, geom):
-        x, y = offset(geom.tx, geom.ty, geom.hdg + 180, 6 * NM)
-        g = self.m.vehicle_group(self.usa, "Axeman 1", _UN.Hummer, mapping.Point(x, y, self.t), heading=int(geom.hdg), group_size=1)
-        g.units[0].name = f"JTAC-{package.id}"
-        p0 = g.points[0]
+    # ---- CAS: friendly troops in contact, with the JTAC among them --------------------------------------------------------
+    def _spawn_cas_support(self, package, plan, geom, manifest):
+        if not package.jtac:
+            return
+        r = self.vrng
+        cx, cy = self.armor_center or (geom.tx, geom.ty)
+        fb = self._nearest_airfield(cx, cy)
+        brg = bearing(cx, cy, fb.x, fb.y)
+        fx, fy = offset(cx, cy, brg + r.uniform(-12, 12), r.uniform(3600, 5000))
+        comp = [("M_1_Abrams", r.randint(1, 2)), ("M_2_Bradley", r.randint(2, 3)), ("M1043_HMMWV_Armament", r.randint(1, 2))]
+        g = self._platoon(self.usa, "Friendly Task Force", comp, fx, fy, (int(brg) + 180) % 360, F.Rectangle)
+        if g is not None:
+            names = []
+            for k, u in enumerate(g.units, 1):
+                u.name = f"TF|{k}"; names.append(u.name)
+            manifest.add("friendly_ground", self.armor_id or "", names)
+        jx, jy = offset(fx, fy, brg + 90, 60)
+        jt = self.m.vehicle_group(self.usa, "Axeman 1", _UN.Hummer, mapping.Point(jx, jy, self.t), heading=(int(brg) + 180) % 360, group_size=1)
+        jt.units[0].name = f"JTAC-{package.id}"
+        p0 = jt.points[0]
         p0.tasks.append(task.FAC(callsign=1, frequency=int(plan.freq("JTAC") * 1e6), modulation=task.Modulation.AM, number=1))
         p0.tasks.append(task.SetInvisibleCommand(True))
         p0.tasks.append(task.SetImmortalCommand(True))
 
-    # ---- enemy fighters: organised, late-activated, from the enemy side, arriving at TOT +/- 1-2 min ----------------
-    def _spawn_defenders(self, package, tx, ty, tot_s, geom, manifest):
-        st, d = self.state, self.d
+    # ---- late activation helper ------------------------------------------------------------------------------------------------
+    def _late(self, g, seconds):
+        g.late_activation = True
+        trig = triggers.TriggerOnce(comment=f"activate {g.name}")
+        trig.add_condition(condition.TimeAfter(int(seconds)))
+        trig.add_action(action.ActivateGroup(g.id))
+        self.m.triggerrules.triggers.append(trig)
+
+    # ---- enemy air picture: what the intelligence briefing says is there IS there, from the first second ----------------------
+    def _spawn_air_picture(self, package, tx, ty, tot_s, geom, manifest, keepout):
+        """Known CAP flights are airborne from t=0 on briefed stations. The rest of the defenders are alert aircraft sitting on real
+        enemy airfields; they take off (scramble) when the package is detected inside the field's detection zone."""
+        if package.objective.type == ObjectiveType.FLEET_DEFENSE:
+            return self._spawn_raid(package, tx, ty, tot_s, geom, manifest)
+        st, d, r = self.state, self.d, self.vrng
         n_fl = package.n_def // 2
         if n_fl <= 0:
             return
-        wings = [(w, st.assets[w.base_asset_id]) for w in st.enemy_air if w.available > 0 and not st.assets[w.base_asset_id].destroyed]
+        wings = [(w, st.assets[w.base_asset_id]) for w in st.enemy_air if w.available > 0 and not st.assets[w.base_asset_id].destroyed
+                 and any(t in ENEMY_FIGHTERS for t in w.types)]
         wings.sort(key=lambda p: dist(p[1].x, p[1].y, tx, ty))
         if not wings:
             return
         skill = getattr(Skill, d.enemy_skill, Skill.High)
-        speed_ms, pt = 232.0, (lambda x, y: mapping.Point(x, y, self.t))
+        pt = lambda x, y: mapping.Point(x, y, self.t)
+        n_cap = max(1, math.ceil(n_fl / 2))
+        alt, spd = 22000 * FT, 400 * KPH
         for i in range(n_fl):
             w, a = wings[i % len(wings)]
-            fighters = [t for t in w.types if t in ENEMY_FIGHTERS] or ["MiG_29A"]
-            tname = self.rng.choice(fighters)
-            dd = dist(a.x, a.y, tx, ty)
-            if dd < 25 * NM:      # their airfield is at the target: they scramble from beyond it, on the far side from us
-                sx, sy = offset(tx, ty, geom.hdg, 12 * NM)
-            else:
-                sx, sy = offset(a.x, a.y, bearing(a.x, a.y, tx, ty), min(0.85 * dd, 60 * NM))
-            arrive = tot_s + self.rng.uniform(-120, 120)
-            spawn_s = max(30.0, arrive - dist(sx, sy, tx, ty) / speed_ms)
-            g = self.m.flight_group(self.red, f"Bandit {i + 1}", getattr(planes, tname), None, pt(sx, sy), altitude=22000 * FT,
-                                    speed=450 * KPH, maintask=task.CAP, group_size=2)
+            tname = r.choice([t for t in w.types if t in ENEMY_FIGHTERS])
+            cls = getattr(planes, tname)
             load = enemy_cap_loadout(tname)
+            dd = dist(a.x, a.y, tx, ty)
+            if i < n_cap:                                   # known CAP, on station from the start
+                if dd < 25 * NM:
+                    sx, sy = offset(tx, ty, geom.hdg + r.uniform(-30, 30), 15 * NM)
+                else:
+                    sx, sy = offset(tx, ty, bearing(tx, ty, a.x, a.y) + r.uniform(-20, 20), min(0.7 * dd, r.uniform(40, 60) * NM))
+                for kp in keepout:                          # never park a CAP on the marshal point, tanker or AWACS
+                    if kp is not None and dist(sx, sy, kp[0], kp[1]) < 70 * NM:
+                        brg = bearing(kp[0], kp[1], sx, sy)
+                        sx, sy = offset(kp[0], kp[1], brg, 70 * NM)
+                g = self.m.flight_group(self.red, f"Bandit {i + 1}", cls, None, pt(sx, sy), altitude=alt, speed=spd, maintask=task.CAP, group_size=2)
+                ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
+                ct.stop_after_time(int(tot_s + 3600))
+                g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
+                g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + 90, 20 * NM)), alt, spd, "CAP2")
+            else:                                           # alert: on the runway, scrambles when detected
+                ap = self.t.airports.get(a.airport) if a.airport else None
+                if ap is None:
+                    continue
+                g = self.m.flight_group_from_airport(self.red, f"Alert {i + 1}", cls, ap, maintask=task.CAP, start_type=StartType.Runway, group_size=2)
+                g.add_trigger_action(task.StartCommand())
+                g.uncontrolled = True
+                radius = max(20.0, min(70.0, dist(a.x, a.y, *geom.push) / NM - 8.0)) * NM      # never trips before the package pushes
+                zone = self.m.triggers.add_triggerzone(pt(a.x, a.y), radius, True, f"detect {a.id}")
+                trig = triggers.TriggerOnce(comment=f"scramble {g.name}")
+                trig.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
+                trig.add_action(action.AITaskPush(g.id, 1))
+                self.m.triggerrules.triggers.append(trig)
+                ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
+                ct.stop_after_time(int(tot_s + 3600))
+                g.add_waypoint(pt(tx, ty), alt, spd, "INTERCEPT").tasks.append(ct)
             names = []
             for j, u in enumerate(g.units, 1):
                 u.name = f"ENM-{a.id}-{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
             g.set_skill(skill)
-            wp = g.add_waypoint(pt(tx, ty), 22000 * FT, 450 * KPH, "TGT")
-            ct = task.ControlledTask(task.OrbitAction(int(22000 * FT), int(450 * KPH)))
-            ct.stop_after_time(int(tot_s + 1500)); wp.tasks.append(ct)
-            g.add_waypoint(pt(*offset(tx, ty, bearing(tx, ty, a.x, a.y), 25 * NM)), 22000 * FT, 450 * KPH, "EXT")
-            if d.enemy_skill and self.o.enemy_unlimited_fuel:
+            if self.o.enemy_unlimited_fuel:
                 g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
-            g.late_activation = True
-            trig = triggers.TriggerOnce(comment=f"activate {g.name}")
-            trig.add_condition(condition.TimeAfter(int(spawn_s)))
-            trig.add_action(action.ActivateGroup(g.id))
-            self.m.triggerrules.triggers.append(trig)
             if not load:
                 self.warns.append(f"{tname}: no air-to-air loadout found; spawned unarmed")
             manifest.add("enemy_air", w.base_asset_id, names)
+
+    # ---- bomber raid on the fleet: already en route from the first second, along a real path from their base ----------------
+    def _spawn_raid(self, package, sx_, sy_, tot_s, geom, manifest):
+        st, d, r = self.state, self.d, self.vrng
+        ex = package.extra
+        if not ex:
+            return
+        cvb = st.bases[package.objective.target_id]
+        cvg = self.ship.get(cvb.id)
+        ba = st.assets[ex["bomber_wing"]]
+        pt = lambda x, y: mapping.Point(x, y, self.t)
+        station = (sx_, sy_)
+        w1 = offset(cvb.x, cvb.y, ex["brg"], min(220 * NM, 0.9 * dist(ba.x, ba.y, cvb.x, cvb.y)))
+        poly = [(ba.x, ba.y), w1, station]
+        arrive = tot_s + r.uniform(60, 150)
+        path_len = dist(*poly[0], *poly[1]) + dist(*poly[1], *poly[2])
+        (sx, sy), seg_i = tm.point_back_along(poly, min(232.0 * arrive, 0.97 * path_len))
+        remaining = poly[seg_i:] + [(cvb.x, cvb.y)]
+        skill = getattr(Skill, d.enemy_skill, Skill.High)
+        alt = 30000 * FT
+
+        def build_group(name, cls, count, task_cls, pos):
+            g = self.m.flight_group(self.red, name, cls, None, pt(*pos), altitude=alt, speed=450 * KPH, maintask=task_cls, group_size=count)
+            for k, q in enumerate(remaining):
+                wp = g.add_waypoint(pt(*q), alt, 450 * KPH, "STN" if k < len(remaining) - 1 else "FLEET")
+                if k == len(remaining) - 1 and cvg is not None and cls is planes.Tu_22M3:
+                    wp.tasks.append(task.AttackGroup(cvg.id))
+            g.set_skill(skill)
+            return g
+
+        g = build_group("Raid Bomber 1", planes.Tu_22M3, ex["bombers"], task.AntishipStrike, (sx, sy))
+        load = enemy_bomber_loadout("Tu_22M3")
+        names = []
+        for j, u in enumerate(g.units, 1):
+            u.name = f"RAID-B-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
+        if not load:
+            self.warns.append("Tu-22M3: no anti-ship weapon found; the raid has no missiles.")
+        manifest.add("enemy_air", ex["bomber_wing"], names)
+        if ex.get("escorts"):
+            back = offset(sx, sy, bearing(remaining[0][0], remaining[0][1], sx, sy), 3 * NM)
+            eg = build_group("Raid Escort 1", getattr(planes, ex["escort_type"]), ex["escorts"], task.CAP, back)
+            eload = enemy_cap_loadout(ex["escort_type"])
+            en = []
+            for j, u in enumerate(eg.units, 1):
+                u.name = f"RAID-E-{j}"; u.pylons = copy.deepcopy(eload); en.append(u.name)
+            manifest.add("enemy_air", ex["escort_wing"], en)

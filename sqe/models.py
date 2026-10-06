@@ -37,6 +37,7 @@ class ObjectiveType(str, Enum):
     CAS = "CAS"                # close air support on an enemy armor column (JTAC)
     STRIKE = "STRIKE"          # bomb a ground asset
     DEAD = "DEAD"              # destroy an air-defence site
+    FLEET_DEFENSE = "FLEET_DEFENSE"  # intercept an enemy bomber raid on the fleet
     COUNTER_AIR = "COUNTER_AIR"  # sweep / hit an enemy airfield's air wing
     BARCAP = "BARCAP"          # defend a friendly base / the fleet
 

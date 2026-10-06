@@ -60,46 +60,46 @@ def render_pages(outdir, ctx: dict) -> list:
     sub = ctx["objective"][:70]
     pages = []
 
-    # ------------------------------------------------ page 1: comms + waypoints
+    # ------------------------------------------------ page 1: comms + the times YOU must hit
     p = _Page(f"SQE  {head}", sub)
-    p.text("COMMS", 16, color=DIM, bold=True, gap=3)
-    p.cols([(20, "COMM1 UHF")], 16, DIM, True, 3)
+    p.cols([(20, "COMM1 UHF")], 15, DIM, True, 3)
     for ch, e in ctx["comm1"].items():
         p.cols([(20, f"CH{ch}"), (84, e.label), (230, f"{e.mhz:7.3f}"), (340, (e.callsign + " " + e.note).strip()[:36])], 18, bold=True, gap=5)
-    p.cols([(20, "COMM2 VHF")], 16, DIM, True, 3)
+    p.cols([(20, "COMM2 VHF")], 15, DIM, True, 3)
     for ch, e in ctx["comm2"].items():
         p.cols([(20, f"CH{ch}"), (84, e.label), (230, f"{e.mhz:7.3f}"), (340, e.callsign)], 18, bold=True, gap=5)
     p.rule(6)
-    p.cols([(20, "WP"), (62, "NAME"), (170, "TIME"), (262, "ALT"), (326, "KTS"), (386, "POSITION")], 14, DIM, True, 4)
+    p.cols([(20, "WP"), (64, "NAME"), (160, "TIME"), (282, "ALT"), (342, "KTS"), (400, "HDG/NM"), (500, "WINDOW")], 14, DIM, True, 4)
     for r in ctx["waypoints"]:
-        hot = r["name"] in ("PUSH", "TGT", "CAS", "ESC", "SEAD", "SWP", "CAP1")
-        p.cols([(20, r["wp"]), (62, r["name"]), (170, r["time"]), (262, r["alt"]), (326, r["kts"]), (386, r["pos"])], 16, bold=hot, gap=6)
-        if r.get("note"):
-            p.d.text((62, p.y - 4), r["note"][:62], font=_font(12), fill=DIM); p.y += 11
-    p.y += 6
-    p.text(f"Cockpit numbering for {ctx['jet']}: {ctx['numbering']}", 12, color=DIM)
-    pages.append(p.save(outdir / "1_comms_waypoints.png"))
+        hot = r["name"] in ("MSHL", "PUSH", "TGT", "CAS", "ESC", "SEAD", "SWP", "CAP1")
+        y0 = p.y
+        p.cols([(20, r["wp"]), (64, r["name"]), (160, r["time"]), (282, r["alt"]), (342, r["kts"]), (400, r["leg"])], 17, bold=hot, gap=7)
+        last = r["win"] or (r["note"][:34] if r["name"] in ("TKR", "RTB", "DIVERT") else "")
+        if last:
+            p.d.text((492, y0 + 3), last, font=_font(13, bool(r["win"])), fill=INK if r["win"] else DIM)
+    p.y += 4
+    p.text(f"Numbers are as your {ctx['jet']} cockpit shows them: {ctx['numbering']}", 12, color=DIM, gap=3)
+    p.text("PUSH +/-30 s, TOT +/-1 min. Times are YOUR flight's.", 12, color=DIM)
+    pages.append(p.save(outdir / "1_comms_times.png"))
 
-    # ------------------------------------------------ page 2: everything else
-    p = _Page(f"SQE  {head}", "TIMELINE / FUEL / CODES / PACKAGE / THREATS")
-    tl = ctx["timeline"]
-    for (k1, l1), (k2, l2) in ((("launch", "LAUNCH"), ("marshal", "MARSHAL")), (("push", "PUSH"), ("tot", "TOT")), (("egress", "EGRESS"), ("rtb", "RTB"))):
-        p.cols([(20, l1), (190, tl[k1]), (400, l2), (560, tl[k2])], 20, bold=(k1 == "push"), gap=6)
-    p.rule()
+    # ------------------------------------------------ page 2: fuel, codes, package, threats
+    p = _Page(f"SQE  {head}", "FUEL / CODES / PACKAGE / THREATS")
     p.cols([(20, f"BINGO {ctx['bingo']} lb"), (260, f"JOKER {ctx['joker']} lb"), (500, f"WX: {ctx['weather']}")], 18, bold=True, gap=6)
-    p.cols([(20, f"IFF M3 {ctx['mode3']}"), (260, f"LASER {ctx['laser']}"), (500, f"BULLS {ctx['bulls_short']}")], 18, bold=True, gap=6)
-    p.text("BULLSEYE  " + ctx["bullseye"], 14, color=DIM)
+    p.cols([(20, f"IFF M3 {ctx['mode3']}"), (260, f"LASER {ctx['laser']}")], 18, bold=True, gap=6)
+    p.text("BULLSEYE  " + ctx["bullseye"], 14, color=DIM, gap=4)
+    if ctx.get("target_data"):
+        p.text(ctx["target_data"][:78], 14, bold=True, gap=4)
     p.rule()
-    p.text("PACKAGE  (Link 16 / SADL STN shown where the jet is networked)", 14, color=DIM, bold=True, gap=3)
-    p.cols([(20, "CALLSIGN"), (170, "TYPE"), (270, "TASK"), (400, "M3"), (470, "STN")], 13, DIM, True, 3)
+    p.text("PACKAGE  (STN = Link 16 / SADL station number)", 14, color=DIM, bold=True, gap=3)
+    p.cols([(20, "CALLSIGN"), (200, "TYPE"), (300, "TASK"), (430, "M3"), (500, "STN")], 13, DIM, True, 3)
     for r in ctx["whois"]:
-        p.cols([(20, r["cs"]), (170, r["ac"]), (270, r["role"]), (400, r["m3"]), (470, r["stn"])], 14, bold=r["you"], gap=3)
+        p.cols([(20, r["cs"]), (200, r["ac"]), (300, r["role"]), (430, r["m3"]), (500, r["stn"])], 14, bold=r["you"], gap=3)
     p.rule()
     p.text("THREATS NEAR TARGET", 15, bold=True, gap=3)
-    for t in (ctx["threats"][:7] or ["No known SAM or radar sites within 60 nm."]):
+    for t in (ctx["threats"][:8] or ["No known SAM or radar sites within 60 nm."]):
         p.text("- " + t, 13, gap=3)
     p.rule()
-    p.text(f"Expect about {ctx['n_def']} hostile fighters at the target." if ctx["n_def"] else "No organised fighter defence expected.", 14, gap=3)
-    p.text("Hold at MSHL. Leave on PUSH. Stay on time.", 14, color=DIM)
+    p.text(f"Intelligence: about {ctx['n_def']} enemy fighters (CAP and alert aircraft) in the area." if ctx["n_def"]
+           else "No organised fighter defence expected.", 14, gap=3)
     pages.append(p.save(outdir / "2_package_info.png"))
     return pages

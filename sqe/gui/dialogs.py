@@ -110,7 +110,7 @@ class WaitingDialog(QDialog):
         il.addWidget(QLabel(f"<b>{p['objective']}</b>"))
         il.addWidget(QLabel(f"Mission file: <b>SQE_Sortie.miz</b> in your DCS Missions folder. Start DCS, open it from the Missions list, and fly."))
         pd = p.get("package_dict", {}); cn = p.get("counts") or {}
-        il.addWidget(QLabel(f"Mission start <b>{pd.get('start', '')}</b> local   |   {cn.get('groups', '?')} groups, {cn.get('units', '?')} units"))
+        il.addWidget(QLabel(f"Mission start <b>{pd.get('start', '')}</b> local   |   {cn.get('groups', '?')} groups, {cn.get('units', '?')} units   |   seed {p.get('seed', '')}"))
         for wmsg in (p.get("warnings") or []):
             wl = QLabel("Note: " + wmsg); wl.setWordWrap(True); wl.setStyleSheet(f"color:{theme.AMBER};"); il.addWidget(wl)
         il.addWidget(QLabel(f"Launch {tl['launch']}   |   Marshal {tl['marshal']}   |   <b>PUSH {tl['push']}</b>   |   <b>TOT {tl['tot']}</b>   |   Egress {tl['egress']}"))
@@ -130,7 +130,7 @@ class WaitingDialog(QDialog):
 
     def _fill(self, t):
         rows = [("Aircraft lost / total", f"{t['blue_air_lost']} / {t['blue_air_total']}", f"{t['red_air_lost']} / {t['red_air_total']}"),
-                ("Ground units destroyed", "-", f"{t['red_ground_lost']} / {t['red_ground_total']}"),
+                ("Ground units lost / total", f"{t['blue_ground_lost']} / {t['blue_ground_total']}", f"{t['red_ground_lost']} / {t['red_ground_total']}"),
                 ("Landed / recovered", str(t["landed"]), "-")]
         self.tbl.setRowCount(len(rows))
         for i, r in enumerate(rows):

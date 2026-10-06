@@ -52,6 +52,8 @@ class AppSettings:
     dcs_install: str = ""
     dcs_saves: str = ""
     last_campaign: str = ""
+    player_unlimited_fuel: bool = False   # cheat: YOUR flight (wingmen included) never runs out of fuel
+    persist: bool = True          # False in tests: never write %APPDATA%\\SQE\\settings.json
 
     # ---- derived paths ------------------------------------------------------------------
     @property
@@ -93,7 +95,7 @@ class AppSettings:
         s = cls()
         if f.exists():
             try:
-                s = cls(**{k: v for k, v in json.loads(f.read_text()).items() if k in cls.__dataclass_fields__})
+                s = cls(**{k: v for k, v in json.loads(f.read_text()).items() if k in cls.__dataclass_fields__ and k != "persist"})
             except (OSError, ValueError):
                 pass
         s.dcs_install = s.dcs_install or _detect_install()
@@ -101,7 +103,10 @@ class AppSettings:
         return s
 
     def save(self) -> None:
-        (config_dir() / "settings.json").write_text(json.dumps(asdict(self), indent=2))
+        if not self.persist:
+            return
+        d = asdict(self); d.pop("persist", None)
+        (config_dir() / "settings.json").write_text(json.dumps(d, indent=2))
 
 
 # ---- optional MissionScripting.lua helper ------------------------------------------------------

@@ -28,12 +28,8 @@ class StatCard(QFrame):
 
 
 def _load_geo():
-    import json
-    from pathlib import Path
-    try:
-        return json.loads((Path(__file__).resolve().parent.parent / "data" / "caucasus_geo.json").read_text())
-    except Exception:
-        return {"land": [], "lakes": [], "borders": []}
+    from ..geo_data import GEO
+    return GEO
 
 
 _GEO = None

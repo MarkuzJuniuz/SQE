@@ -26,6 +26,10 @@ lfs.mkdir(DIR)
 local OUT = DIR .. "\\SQE_state.json"
 local DESPAWN = { __DESPAWN__ }
 local PLAYER = "__PLAYER__"
+local PGROUP = "__PGROUP__"
+local SOUND = "__SOUND__"
+local CALLS = { __CALLS__ }
+local WPS = { __WPS__ }
 local pl = { takeoff = nil, landed = nil, ka = 0, kg = 0, ks = 0 }
 local dead, ejected, landed, ended = {}, {}, {}, false
 local function esc(s) return (tostring(s):gsub('[%c"\\]', function(c) return string.format("\\u%04x", string.byte(c)) end)) end
@@ -86,24 +90,57 @@ function H:onEvent(e)
 end
 world.addEventHandler(H)
 timer.scheduleFunction(function(_, t) dump(); return t + 30 end, nil, timer.getTime() + 30)
+-- call-outs for the player's flight: scheduled radio calls and "waypoint N" as each steerpoint is reached, in order
+local said, nextwp = {}, 1
+local function say(text)
+  local g = Group.getByName(PGROUP)
+  if not g then return end
+  local id = g:getID()
+  trigger.action.outTextForGroup(id, text, 8, false)
+  if SOUND ~= "" then trigger.action.outSoundForGroup(id, SOUND) end
+end
+timer.scheduleFunction(function(_, t)
+  local now = timer.getTime()
+  for i, c in ipairs(CALLS) do
+    if not said[i] and now >= c.t then said[i] = true; say(c.text) end
+  end
+  local u = Unit.getByName(PLAYER)
+  if u and u:isExist() and u:inAir() and WPS[nextwp] then
+    local p, w = u:getPoint(), WPS[nextwp]
+    local dx, dz = p.x - w.x, p.z - w.z
+    if dx * dx + dz * dz < 5500 * 5500 then
+      say(string.format("Waypoint %s, %s.", w.label, w.name)); nextwp = nextwp + 1
+    end
+  end
+  return t + 2
+end, nil, timer.getTime() + 5)
 dump()
 '''
 
 
-def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "") -> str:
+def _lua_str(s: str) -> str:
+    return str(s).replace("\\", "/").replace('"', "'")
+
+
+def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "", group: str = "",
+             calls: list | None = None, wps: list | None = None, sound: str = "") -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
+    cl = ", ".join(f'{{t={float(t):.0f}, text="{_lua_str(x)}"}}' for t, x in (calls or []))
+    wl = ", ".join(f'{{label="{_lua_str(lb)}", name="{_lua_str(nm)}", x={x:.0f}, z={y:.0f}}}' for lb, nm, x, y in (wps or []))
     return (LUA_HOOK.replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
-            .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name))
+            .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
+            .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__CALLS__", cl).replace("__WPS__", wl))
 
 
-def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "") -> None:
+def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "",
+                 group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "") -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound))))
     mission.triggerrules.triggers.append(t)
 
 
@@ -147,12 +184,14 @@ def read_state_file(path: Path, manifest: Manifest, min_mtime: float | None = No
 def tally(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     """Live casualty counts for the waiting window."""
     lost = set(data.get("dead", [])) | set(data.get("ejected", []))
-    t = {"blue_air_total": 0, "blue_air_lost": 0, "red_air_total": 0, "red_air_lost": 0,
+    t = {"blue_air_total": 0, "blue_air_lost": 0, "blue_ground_total": 0, "blue_ground_lost": 0, "red_air_total": 0, "red_air_lost": 0,
          "red_ground_total": 0, "red_ground_lost": 0, "landed": len(data.get("landed", []))}
     for g in manifest.groups:
         n_dead = sum(1 for u in g["units"] if u in lost)
         if g["kind"] == "friendly":
             t["blue_air_total"] += len(g["units"]); t["blue_air_lost"] += n_dead
+        elif g["kind"] == "friendly_ground":
+            t["blue_ground_total"] += len(g["units"]); t["blue_ground_lost"] += n_dead
         elif g["kind"] == "enemy_air":
             t["red_air_total"] += len(g["units"]); t["red_air_lost"] += n_dead
         elif g["kind"] == "asset":
@@ -176,6 +215,17 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             if dead:
                 out["blue_losses"].append({"callsign": g.get("callsign", g["ref"]), "lost": len(dead), "total": len(g["units"])})
                 out["lines"].append(f"{g.get('callsign', g['ref'])}: lost {len(dead)}/{len(g['units'])} ({sq.name}: {sq.available}/{sq.authorized} left)")
+        elif g["kind"] == "friendly_ground":
+            out["ground_total"] = out.get("ground_total", 0) + len(g["units"]); out["ground_lost"] = out.get("ground_lost", 0) + len(dead)
+            if g["units"]:
+                out["lines"].append(f"Friendly troops: lost {len(dead)} of {len(g['units'])} vehicles")
+                if len(dead) * 2 >= len(g["units"]) and g.get("ref") in state.assets:      # the position is overrun
+                    a0 = state.assets[g["ref"]]
+                    fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
+                    if fields:
+                        nb = min(fields, key=lambda b: (b.x - a0.x) ** 2 + (b.y - a0.y) ** 2)
+                        nb.defense = max(0.0, nb.defense - 0.10)
+                        out["lines"].append(f"The position was overrun; the column presses on toward {nb.name}")
         elif g["kind"] == "asset":
             a = state.assets[g["ref"]]
             frac = (len(g["units"]) - len(dead)) / max(1, g["base_count"])

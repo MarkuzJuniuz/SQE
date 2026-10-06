@@ -29,6 +29,8 @@ class Difficulty:
     friendly_scale: float                # scales squadron sizes
     enemy_cap_per_air: float             # enemy CAP flights ~ this * airframes (1..4)
     armor_columns: int = 3
+    bomber_wing: int = 0                 # strategic bombers (Tu-22M3) at Mozdok
+    bomber_policy: str = "none"          # none | desperate (only when losing badly) | normal
     counterstrike: float = 0.3           # daily chance (x enemy air strength) that the enemy hits a coalition base's defences
 
 
@@ -39,21 +41,21 @@ LEVELS: dict[int, Difficulty] = {
                   sam_variants=["AAA", "MANPAD", "SA-3"], sam_sites_per_cluster=1, iads=0.15,
                   enemy_skill="Average", loss_rate=0.035, base_damage=0.45, variance=0.8,
                   friendly_replenish=0.14, enemy_replenish=0.03, asset_repair=0.03, sam_repair=0.03,
-                  friendly_scale=1.2, enemy_cap_per_air=0.10, counterstrike=0.10),
+                  friendly_scale=1.2, enemy_cap_per_air=0.10, counterstrike=0.10, bomber_wing=0, bomber_policy="none"),
     2: Difficulty(2, "Level 2 - Regional Power", "A real air force and layered SAMs, but not a peer. "
                   "A competent campaign wins; a careless one bleeds.",
                   enemy_air_total=40, enemy_types=["MiG_29A", "MiG_29S", "MiG_23MLD", "Su_24M", "Su_25"],
                   sam_variants=["SA-2", "SA-3", "SA-6", "SA-11", "AAA"], sam_sites_per_cluster=2, iads=0.55,
                   enemy_skill="Good", loss_rate=0.06, base_damage=0.35, variance=0.8,
                   friendly_replenish=0.08, enemy_replenish=0.05, asset_repair=0.04, sam_repair=0.06,
-                  friendly_scale=1.0, enemy_cap_per_air=0.15, counterstrike=0.30),
+                  friendly_scale=1.0, enemy_cap_per_air=0.15, counterstrike=0.30, bomber_wing=4, bomber_policy="desperate"),
     3: Difficulty(3, "Level 3 - Near-Peer", "Modern fighters, long-range SAMs and an integrated air-defence network. "
                   "Every sortie is contested and attrition bites.",
                   enemy_air_total=70, enemy_types=["MiG_29S", "Su_27", "Su_24M", "Su_25", "MiG_29A"],
                   sam_variants=["SA-10", "SA-11", "SA-6", "SA-15", "SA-19"], sam_sites_per_cluster=3, iads=0.9,
                   enemy_skill="High", loss_rate=0.085, base_damage=0.28, variance=0.7,
                   friendly_replenish=0.06, enemy_replenish=0.07, asset_repair=0.05, sam_repair=0.08,
-                  friendly_scale=0.85, enemy_cap_per_air=0.20, counterstrike=0.55),
+                  friendly_scale=0.85, enemy_cap_per_air=0.20, counterstrike=0.55, bomber_wing=10, bomber_policy="normal"),
 }
 
 

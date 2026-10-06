@@ -70,9 +70,15 @@ class Session:
 
     def plan_day(self) -> list:
         st = self.state
-        objs = ObjectivePlanner().plan(st, self._rng(), limit=6)
-        pb, ledger, pkgs = PackageBuilder(st, self.d), Ledger(st), []
+        objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=6)
+        pb, pkgs = PackageBuilder(st, self.d), []
+        # Packages launch at different times of day, so an aircraft can fly more than one sortie: each package sees every
+        # serviceable airframe, but no squadron is asked for more than two sorties per airframe per day.
+        daily = {sid: 2 * s.available for sid, s in st.squadrons.items()}
         for i, o in enumerate(objs, 1):
+            ledger = Ledger(st)
+            for sid in ledger.free:
+                ledger.free[sid] = min(ledger.free[sid], daily[sid])
             try:
                 pkg = pb.build(o, i, ledger, for_player=True)
             except NoPlayerSlot:
@@ -80,6 +86,8 @@ class Session:
                     pkg = pb.build(o, i, ledger, for_player=False)
                 except NoPlayerSlot:
                     continue
+            for f in pkg.flights:
+                daily[f.squadron_id] -= f.count
             pkgs.append(pkg)
         from .timeofday import ato_times
         for p, t in zip(pkgs, ato_times(len(pkgs), st.campaign_date(), st.night_ops, self._rng(5))):
@@ -101,6 +109,7 @@ class Session:
         problems = self.settings.problems()
         if problems:
             raise RuntimeError("; ".join(problems))
+        self.options.player_unlimited_fuel = bool(self.settings.player_unlimited_fuel)
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
         with contextlib.redirect_stdout(io.StringIO()):          # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
@@ -108,7 +117,7 @@ class Session:
         st.sortie_counter += 1
         st.pending = {"package": package_number, "flight": pkg.player_flight.id, "manifest": res.manifest.to_dict(),
                       "built_at": time.time(), "miz": str(res.miz), "timeline": res.timeline,
-                      "objective": pkg.objective.description, "objective_type": pkg.objective.type.value, "counts": res.counts, "warnings": res.warnings,
+                      "objective": pkg.objective.description, "objective_type": pkg.objective.type.value, "counts": res.counts, "warnings": res.warnings, "seed": res.seed,
                       "package_dict": pkg.to_dict()}
         self.last_build = res
         # a stale results file from a previous sortie must never be mistaken for this one

@@ -38,29 +38,36 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
            f"Commander's intent: {narrative.commander_intent(obj.type, rng)}"]
     if threats:
         sit += ["", "Threats near the target:"] + [f"  - {s}" for s in threats]
-    sit += ["", (f"Expect about {pkg.n_def} hostile fighters to contest the target; the package is sized to answer them."
-                 if pkg.n_def else "No organised fighter defence is expected at the target."),
+    if obj.type.value == "FLEET_DEFENSE" and pkg.extra:
+        e = pkg.extra
+        sit += ["", f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
+                    f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier."
+                    + (f" They are escorted by {e['escorts']} fighters." if e.get("escorts") else
+                       " They have no escort: the enemy cannot reach this far with fighters. It is a last throw of the dice.")]
+    sit += ["", (f"Expect about {pkg.n_def} hostile fighters to contest the target; command is committing enough fighters to answer them."
+                 if pkg.n_def and obj.type.value != "FLEET_DEFENSE" else
+                 ("" if obj.type.value == "FLEET_DEFENSE" else "No organised fighter defence is expected at the target.")),
             f"Weather: {x['weather']}."]
     mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {pf.role.value}."]
-    exe = ["Package:"]
-    for f in pkg.flights:
-        exe.append(f"  {f.callsign}: {f.count}x {AIRCRAFT[f.aircraft].display}, {f.task}" + ("   <- YOU" if f.is_player else ""))
-    exe += ["", "Timeline (local):", f"  Launch    {tl['launch']}", f"  Marshal   {tl['marshal']}   hold at MSHL, flights stacked 1,000 ft apart",
-            f"  PUSH      {tl['push']}   other flights leave MSHL on this time whether or not you are there", f"  TOT       {tl['tot']}",
-            f"  Egress    {tl['egress']}", f"  RTB       {tl['rtb']}", "",
-            "Other flights are already airborne and holding at MSHL. There is no radio signal to push: the clock is the signal."]
+    exe = ["Package (push / TOT are staggered: sweep first, then SEAD, escorts, strikers):"]
+    for r in x["pkg_table"]:
+        f = next(ff for ff in pkg.flights if ff.callsign == r["callsign"])
+        exe.append(f"  {f.callsign:<14} {f.count}x {AIRCRAFT[f.aircraft].display:<16} {r['role']:<8} push {r['push']}   TOT {r['tot']}" + ("   <- YOU" if f.is_player else ""))
+    exe += ["", "Your timeline (local):", f"  Launch    {tl['launch']}", f"  Marshal   {tl['marshal']}   hold at MSHL, flights stacked 1,000 ft apart",
+            f"  PUSH      {tl['push']}   +/- 30 s", f"  TOT       {tl['tot']}   +/- 1 min", f"  Egress    {tl['egress']}", f"  RTB       {tl['rtb']}", "",
+            "The rest of the package is airborne and holding at MSHL. Each flight pushes on its own time; be there."]
     if pkg.joint:
         exe += ["", "Joint package. Navy flights recover aboard the carrier; Air Force flights recover at their own fields."]
-    adm = [f"BINGO {x['bingo']} lb   JOKER {x['joker']} lb  (starting estimates, tune in aircraft.py)",
+    adm = [f"BINGO {x['bingo']} lb   JOKER {x['joker']} lb",
            "Recovery: " + ("carrier Case I, TACAN 74X, ICLS 11, ATC COMM1 CH1" if spec.home.value == "CARRIER" else "home field, tower on COMM1 CH1"),
-           f"Divert: {x['divert']}", "AI flights have unlimited fuel; you do not. Tanker is steerpoint TKR."]
+           f"Divert: {x['divert']}", "Tanker track is steerpoint TKR. Bullseye is the last steerpoint."]
     com = ["COMM1 (UHF): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm1.items()),
            "COMM2 (VHF): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm2.items()),
            f"IFF Mode 3: {x['mode3']}    Laser code: {x['laser']}", f"Bullseye: {x['bullseye']}"]
     if x.get("link16"):
-        com.append("Package flights are networked (Link 16 / SADL); the AWACS is a donor where the jet supports it. STNs are on the kneeboard.")
+        com.append("Package aircraft share a datalink; the AWACS feeds it. Station numbers (STN) are on your kneeboard.")
     if pkg.jtac:
-        com.append(f"JTAC on COMM1 CH4. Laser code {pkg.jtac_laser_code}.")
+        com.append(f"JTAC (Axeman) is with our troops in contact, on COMM1 CH4. Laser code {pkg.jtac_laser_code}.")
     text = {"situation": "\n".join(sit), "mission": "\n".join(mis), "execution": "\n".join(exe),
             "admin": "\n".join(adm), "comms": "\n".join(com), "threats": threats}
     text["full"] = (f"1. SITUATION\n{text['situation']}\n\n2. MISSION\n{text['mission']}\n\n3. EXECUTION\n{text['execution']}"

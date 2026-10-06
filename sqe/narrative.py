@@ -63,6 +63,8 @@ _INTENT = {
                                 "Hit the air regiment while it is still on the ground. Air control starts here."],
     ObjectiveType.BARCAP: ["The fleet is the center of gravity. Nothing gets through to the carrier.",
                            "Hold the line over the task force and kill anything that approaches."],
+    ObjectiveType.FLEET_DEFENSE: ["Backfires are inbound with anti-ship missiles. The fleet is counting on you to kill them before they launch.",
+                                  "Intelligence has the bombers in the air. Stop the raid at long range; the missiles are the real threat."],
     ObjectiveType.CAS: ["Ground forces are under pressure. The column must be stopped before it reaches the airbase.",
                         "Friendly troops are in contact. Your JTAC is waiting. Find the armor and destroy it."],
 }
@@ -103,7 +105,7 @@ def debrief_story(outcome: dict, state, rng: random.Random) -> str:
     """outcome: success(bool/None), target_pct (0..1 damage), blue_air_lost, red_air_lost, player ('recovered'|...)."""
     lost = outcome.get("blue_air_lost", 0)
     dmg = outcome.get("target_damage", 0.0)
-    if outcome.get("objective_type") in (ObjectiveType.BARCAP.value,):
+    if outcome.get("objective_type") in (ObjectiveType.BARCAP.value, ObjectiveType.FLEET_DEFENSE.value):
         score = 2 if outcome.get("red_air_lost", 0) >= 1 else 1
     else:
         score = 2 if dmg >= 0.6 else 1 if dmg >= 0.25 else 0
@@ -111,12 +113,12 @@ def debrief_story(outcome: dict, state, rng: random.Random) -> str:
     tone = "great" if score >= 2 and lost == 0 else "good" if score >= 1 and lost <= 1 else "mixed" if score >= 1 or lost == 0 else "bad"
     parts = [rng.choice(_OPEN[tone])]
     obj = outcome.get("objective", "the objective")
-    if outcome.get("objective_type") == ObjectiveType.BARCAP.value:
+    if outcome.get("objective_type") in (ObjectiveType.BARCAP.value, ObjectiveType.FLEET_DEFENSE.value):
         k = outcome.get("red_air_lost", 0)
         parts.append(f"The patrol over the fleet {'splashed ' + str(k) + ' hostile aircraft' if k else 'saw no engagement'}.")
     else:
         parts.append(f"{obj}: damage assessment puts the target at {dmg:.0%} destroyed.")
-    if outcome.get("red_air_lost") and outcome.get("objective_type") != ObjectiveType.BARCAP.value:
+    if outcome.get("red_air_lost") and outcome.get("objective_type") not in (ObjectiveType.BARCAP.value, ObjectiveType.FLEET_DEFENSE.value):
         parts.append(f"{outcome['red_air_lost']} enemy aircraft were also destroyed.")
     parts.append(rng.choice(_LOSS[min(lost, 2)]) if lost < 3 else f"The package lost {lost} aircraft.")
     parts.append(rng.choice(_PLAYER.get(outcome.get("player", "recovered"), _PLAYER["recovered"])))

@@ -107,13 +107,21 @@ def leg_seconds(a: Wpt, b: Wpt, climb: bool = False) -> float:
 
 
 def assign_times(wps: list[Wpt], t0: float, push_s: float | None = None) -> None:
-    """Fill eta_s along the route starting at t0. A HOLD point waits until push_s, then everything after shifts."""
+    """Fill eta_s along the route starting at t0. At a HOLD point the flight waits so that it CROSSES THE NEXT POINT (PUSH)
+    exactly at push_s: it leaves the hold at push_s minus the leg time."""
     t = t0
     for i, w in enumerate(wps):
         if i > 0:
             t += leg_seconds(wps[i - 1], w, climb=(i == 1))
+        w.eta_s = t
         if w.action == "HOLD" and push_s is not None:
-            w.eta_s = t
-            t = max(t, push_s)
-        else:
-            w.eta_s = t
+            leave = push_s - (leg_seconds(w, wps[i + 1]) if i + 1 < len(wps) else 0)
+            t = max(t, leave)
+
+
+def hold_leave_s(wps: list[Wpt], push_s: float) -> float:
+    """When a flight must leave its HOLD point to cross the next point at push_s."""
+    for i, w in enumerate(wps):
+        if w.action == "HOLD":
+            return push_s - (leg_seconds(w, wps[i + 1]) if i + 1 < len(wps) else 0)
+    return push_s
