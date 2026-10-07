@@ -327,6 +327,10 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 out["target_damage"] = 1 - (a.health / before) if before > 0 else 0.0
             if dmg > 0:
                 out["lines"].append(f"{a.name}: {before:.0%} -> {a.health:.0%}")
+            rad = list(g.get("trk") or []) + list(g.get("srch") or [])
+            if a.kind.value == "SAM" and rad and all(u in lost for u in rad) and not a.destroyed:
+                a.suppressed = True               # SEAD worked: the radars are gone, but the launchers are still there
+                out["lines"].append(f"{a.name}: radars destroyed, launchers intact. SUPPRESSED, not dead: it needs a DEAD strike to finish it.")
         elif g["kind"] == "enemy_air":
             w = state.enemy_air_at(g["ref"])
             if w and dead:

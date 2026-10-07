@@ -1,15 +1,15 @@
 """Briefing text (SMEAC) and threat summary."""
 from __future__ import annotations
 import random
-from . import narrative
+from . import narrative, credit_line
 from .aircraft import AIRCRAFT
 from .models import AssetKind
 from .routes import dist, NM
 from .war import totals
 
-_SAM_NAME = {"AAA": "AAA", "MANPAD": "MANPADS", "SA-2": "SA-2 Guideline", "SA-3": "SA-3 Goa", "SA-6": "SA-6 Gainful",
+_SAM_NAME = {"SA-8": "SA-8 Gecko", "AAA": "AAA", "MANPAD": "MANPADS", "SA-2": "SA-2 Guideline", "SA-3": "SA-3 Goa", "SA-6": "SA-6 Gainful",
              "SA-11": "SA-11 Gadfly", "SA-10": "SA-10 Grumble", "SA-15": "SA-15 Gauntlet", "SA-19": "SA-19 Grison"}
-RANGE_NM = {"AAA": 3, "MANPAD": 3, "SA-2": 25, "SA-3": 13, "SA-6": 13, "SA-11": 18, "SA-10": 48, "SA-15": 8, "SA-19": 5}
+RANGE_NM = {"SA-8": 7, "AAA": 3, "MANPAD": 3, "SA-2": 25, "SA-3": 13, "SA-6": 13, "SA-11": 18, "SA-10": 48, "SA-15": 8, "SA-19": 5}
 
 
 def threat_lines(state, tx, ty) -> list:
@@ -48,7 +48,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                  if pkg.n_def and obj.type.value != "FLEET_DEFENSE" else
                  ("" if obj.type.value == "FLEET_DEFENSE" else "No organised fighter defence is expected at the target.")),
             f"Weather: {x['weather']}."]
-    mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {pf.role.value}."]
+    mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {'DEAD' if (pf.role.value == 'STRIKE' and obj.type.value == 'DEAD') else pf.role.value}.", f"Your task: {pf.task}."]
     exe = ["Package (push / TOT are staggered: sweep first, then SEAD, escorts, strikers):"]
     for r in x["pkg_table"]:
         f = next(ff for ff in pkg.flights if ff.callsign == r["callsign"])
@@ -71,6 +71,6 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     text = {"situation": "\n".join(sit), "mission": "\n".join(mis), "execution": "\n".join(exe),
             "admin": "\n".join(adm), "comms": "\n".join(com), "threats": threats}
     text["full"] = (f"1. SITUATION\n{text['situation']}\n\n2. MISSION\n{text['mission']}\n\n3. EXECUTION\n{text['execution']}"
-                    f"\n\n4. ADMINISTRATION AND LOGISTICS\n{text['admin']}\n\n5. COMMAND AND SIGNAL\n{text['comms']}")
+                    f"\n\n4. ADMINISTRATION AND LOGISTICS\n{text['admin']}\n\n5. COMMAND AND SIGNAL\n{text['comms']}\n\n{credit_line()}")
     text["blue_task"] = f"{text['mission']}\n\nPUSH {tl['push']}   TOT {tl['tot']}"
     return text

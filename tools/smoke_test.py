@@ -105,6 +105,66 @@ def main():
     out = ms.apply(got)
     assert out["packages"] and out["packages"][0]["resolved"], out["packages"]
     print("    merged debrief:", [ln for ln in out["lines"] if ln.startswith("Package #")][:2])
+    # ---- v0.8: SEAD/DEAD split, suppression, depth tiers, front, garrisons ------------------------------------------------
+    import random
+    from sqe.models import AssetKind, Role
+    from sqe.war import update_front, WarSimulator, ObjectivePlanner
+    from sqe.state import CampaignState
+    ds = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="off", flight_filter="all"))
+    ds.new("Smoke dead", "F-16C", 3, seed=11)
+    st = ds.state
+    assert any(a.variant == "GARRISON" for a in st.assets.values()), "no SAM garrisons at level 3"
+    assert all(a.tier <= st.front + 2 for p in ds.packages() if p.objective.type.value not in ("BARCAP", "FLEET_DEFENSE")
+               for a in [st.assets[p.objective.target_id]]), "a locked-tier target was offered on day 1"
+    dp = next(p for p in ds.packages() if p.objective.type == ObjectiveType.DEAD and ds.flyable(p))
+    roles = {f.role for f in dp.flights if not f.tag}
+    assert Role.SEAD in roles and Role.STRIKE in roles, f"a DEAD package needs a SEAD flight and a DEAD flight, got {roles}"
+    dres = ds.fly(dp.number, next(f for f in ds.flyable(dp) if f.role == Role.STRIKE).id)
+    dman = ds.manifest()
+    site = next(g for g in dman.groups if g["kind"] == "asset" and g.get("primary"))
+    assert site.get("trk") or site.get("srch"), "SAM site has no radars recorded"
+    rad = list(site.get("trk") or []) + list(site.get("srch") or [])
+    ds.settings.state_file.write_text(json.dumps({"campaign": dman.campaign_id, "sortie": dman.sortie, "package": dman.package_id, "mission_ended": True,
+        "time": 2400, "dead": rad, "ejected": [], "landed": [dman.player_unit], "player": {"takeoff": 300, "landed": 2300, "ka": 0, "kg": 0, "ks": 0}}))
+    tid = dp.objective.target_id
+    st_, got, _ = ds.poll(); assert st_ == "ok"
+    dout = ds.apply(got)
+    assert any("SUPPRESSED" in ln for ln in dout["lines"]), dout["lines"]
+    print("[sead/dead] radars killed, launchers left ->", [ln for ln in dout["lines"] if "SUPPRESSED" in ln][0][:90])
+    # abstract SEAD then DEAD: a blinded site dies, a live one mostly survives
+    sim = WarSimulator(ds.d, random.Random(1))
+    ds2 = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False)); ds2.new("Smoke dead2", "F-16C", 3, seed=11)
+    killed = {True: 0, False: 0}
+    for blind in (True, False):
+        for k in range(40):
+            st2 = CampaignState.from_dict(ds2.state.to_dict())
+            pk2 = next(p for p in ds2.packages() if p.objective.type == ObjectiveType.DEAD)
+            sim2 = WarSimulator(ds2.d, random.Random(k))
+            if not blind:
+                for f in pk2.flights:
+                    if f.role == Role.SEAD: f.count = 0           # no SEAD flight: the site stays active
+            sim2.resolve_abstract(st2, pk2)
+            killed[blind] += st2.assets[pk2.objective.target_id].destroyed
+    print(f"[sead/dead] abstract kills in 40 runs: with SEAD {killed[True]}, without {killed[False]}")
+    assert killed[True] > killed[False], "SEAD should make the DEAD strike more likely to destroy the site"
+    # depth tiers + front: breaking the open tiers opens deeper ones, and nothing gets stuck
+    fs = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False)); fs.new("Smoke front", "F-16C", 2, seed=4)
+    f0 = fs.state
+    for a in f0.assets.values():
+        if a.tier <= 2 and a.kind in (AssetKind.SAM, AssetKind.ARMOR):
+            a.health = 0.0
+    f0.front_days = 5
+    assert update_front(f0) and f0.front == 1, "the front did not advance"
+    f1 = CampaignState.from_dict(fs.state.to_dict()); f1.front, f1.front_days = 0, 13
+    for a in f1.assets.values():
+        a.health = 1.0
+    assert update_front(f1) and f1.front == 1, "a stalled front must buckle"
+    old = fs.state.to_dict(); old["format"] = 3
+    try:
+        CampaignState.from_dict(old); raise AssertionError("an old save must be refused")
+    except ValueError:
+        pass
+    print("[front] advance, anti-stall and old-save refusal OK")
     print("SMOKE TEST PASSED")
 
 

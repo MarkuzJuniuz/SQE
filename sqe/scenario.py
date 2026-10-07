@@ -25,10 +25,15 @@ RED_FIELDS = [("ab_sukhumi", "Sukhumi-Babushara", "Sukhumi-Babushara", 7), ("ab_
 RED_KEEP = {1: {"ab_sukhumi", "ab_sochi"}}
 WING_WEIGHT = {"ab_sukhumi": 1, "ab_gudauta": 2, "ab_sochi": 3, "ab_krymsk": 3, "ab_maykop": 4, "ab_nalchik": 2,
                "ab_beslan": 2, "ab_gelen": 1}
-SAM_LABEL = {"AAA": "AAA battery", "MANPAD": "MANPADS team", "SA-2": "SA-2 site", "SA-3": "SA-3 site",
+# depth tiers: 1 front line, 2 Abkhazia (Sukhumi, Gudauta), 3 coast and north Caucasus, 4 deep. Tiers up to (front + 2) are open for tasking;
+# the front advances as the open tiers are broken (war.update_front).
+FIELD_TIER = {"ab_sukhumi": 2, "ab_gudauta": 2, "ab_sochi": 3, "ab_nalchik": 3, "ab_beslan": 3, "ab_mozdok": 3,
+              "ab_maykop": 4, "ab_gelen": 4, "ab_krymsk": 4}
+SAM_LABEL = {"SA-8": "SA-8 battery", "AAA": "AAA battery", "MANPAD": "MANPADS team", "SA-2": "SA-2 site", "SA-3": "SA-3 site",
              "SA-6": "SA-6 site", "SA-11": "SA-11 site", "SA-10": "SA-10 site", "SA-15": "SA-15 battery",
              "SA-19": "SA-19 battery"}
-SAM_VALUE = {"AAA": 2, "MANPAD": 2, "SA-2": 5, "SA-3": 5, "SA-6": 6, "SA-11": 7, "SA-10": 9, "SA-15": 6, "SA-19": 5}
+LONG_RANGE = {"SA-2", "SA-3", "SA-6", "SA-10", "SA-11"}
+SAM_VALUE = {"SA-8": 4, "AAA": 2, "MANPAD": 2, "SA-2": 5, "SA-3": 5, "SA-6": 6, "SA-11": 7, "SA-10": 9, "SA-15": 6, "SA-19": 5}
 
 
 SQUADRONS = [("vf_31", "VF-31 'Tomcatters'", "F-14BU", "cvn74", 12, "Springfield"),
@@ -92,15 +97,15 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
             raise ValueError(f"{s.name}: {spec.display} cannot be based at {base.name}")
 
     # ---- enemy airfields + air wings -----------------------------------------------------------
-    def add(id_, name_, kind, x, y, value, apt=None, variant=""):
-        st.assets[id_] = EnemyAsset(id_, name_, kind, x, y, 1.0, value, [], apt, variant)
+    def add(id_, name_, kind, x, y, value, apt=None, variant="", tier=1, guards=""):
+        st.assets[id_] = EnemyAsset(id_, name_, kind, x, y, 1.0, value, [], apt, variant, tier, guards)
 
     keep = RED_KEEP.get(d.level)
     fields = [f for f in RED_FIELDS if keep is None or f[0] in keep]
     live = {f[0] for f in fields}
     for aid, nm, apt, val in fields:
         p = ap(apt)
-        add(aid, nm, AssetKind.AIRFIELD, p.x, p.y, val, apt)
+        add(aid, nm, AssetKind.AIRFIELD, p.x, p.y, val, apt, tier=FIELD_TIER.get(aid, 3))
     ww = {k: v for k, v in WING_WEIGHT.items() if k in live}
     total_w = sum(ww.values())
     for aid, w in ww.items():
@@ -121,11 +126,15 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
             v = variants[k % len(variants)]
             k += 1
             x, y = _offset(p.x, p.y, (60 + 130 * i + rng.randint(-20, 20)) % 360, 7000 + 3000 * i)
-            add(f"sam_{aid[3:]}_{i}", f"{nm} {SAM_LABEL[v]}", AssetKind.SAM, x, y, SAM_VALUE[v], variant=v)
+            add(f"sam_{aid[3:]}_{i}", f"{nm} {SAM_LABEL[v]}", AssetKind.SAM, x, y, SAM_VALUE[v], variant=v, tier=FIELD_TIER.get(aid, 3))
+            if v in LONG_RANGE and rng.random() < d.garrison_chance:       # a dug-in garrison: a reason for CAS and armour
+                gx, gy = _offset(x, y, rng.randint(0, 359), rng.randint(1800, 3200))
+                add(f"gar_{aid[3:]}_{i}", f"{nm} {SAM_LABEL[v]} garrison", AssetKind.ARMOR, gx, gy, 5, variant="GARRISON",
+                    tier=FIELD_TIER.get(aid, 3), guards=f"sam_{aid[3:]}_{i}")
         if d.iads > 0.3 and val >= 7:
             x, y = _offset(p.x, p.y, 20 + rng.randint(0, 80), 14000)
             add(f"ewr_{aid[3:]}", f"{nm} early-warning radar", AssetKind.EWR, x, y, 4,
-                variant="EWR55" if d.level >= 3 else "EWR")
+                variant="EWR55" if d.level >= 3 else "EWR", tier=FIELD_TIER.get(aid, 3))
 
     # ---- strategic and logistics targets -------------------------------------------------------------------
     def near(apt, dx, dy):
@@ -139,14 +148,18 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
             ("ab_beslan", "depot_beslan", "Beslan ammunition depot", AssetKind.DEPOT, "Beslan", 9000, 8000, 5),
             ("ab_nalchik", "depot_nalchik", "Nalchik ammunition depot", AssetKind.DEPOT, "Nalchik", -8000, 6000, 4)):
         if parent in live:
-            add(aid, nm, kind, *near(apt, dx, dy), val)
+            add(aid, nm, kind, *near(apt, dx, dy), val, tier=FIELD_TIER.get(parent, 3))
 
     # ---- the ground push toward Senaki (CAS targets) ------------------------------------------------------------
     a, b = ap("Sukhumi-Babushara"), ap("Senaki-Kolkhi")
     for i in range(d.armor_columns):
         f = 0.15 + 0.22 * i
         x, y = a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f
-        add(f"armor_{i+1}", f"Armor column {chr(65 + i)}", AssetKind.ARMOR, x, y, 6 + i, variant="ARMOR")
+        add(f"armor_{i+1}", f"Armor column {chr(65 + i)}", AssetKind.ARMOR, x, y, 6 + i, variant="ARMOR", tier=1)
+        if i < len(d.forward_sams):                                  # short-range air defence travels with the column
+            v = d.forward_sams[i]
+            sx, sy = _offset(x, y, rng.randint(0, 359), rng.randint(2200, 3600))
+            add(f"fsam_{i+1}", f"Column {chr(65 + i)} {SAM_LABEL[v]}", AssetKind.SAM, sx, sy, SAM_VALUE[v], variant=v, tier=1)
 
     sams = [x for x in st.assets.values() if x.kind == AssetKind.SAM]
     for x in st.assets.values():

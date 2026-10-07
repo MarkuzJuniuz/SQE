@@ -1,3 +1,28 @@
+# Changes in v0.8.0
+
+**Old campaigns will not load** (the enemy order of battle changed; the save format is now 4). Start a new campaign.
+
+**Depth tiers replace the flat 87 nm minimum**
+- Every enemy asset belongs to a tier: 1 the front line (armour columns and the SAMs that travel with them), 2 Abkhazia (Sukhumi, Gudauta), 3 the coast and north Caucasus (Sochi, Nalchik, Beslan, Mozdok), 4 deep (Maykop, Krymsk, Gelendzhik). Tiers up to **front + 2** are open for tasking, so a new campaign is fought over Abkhazia and Nalchik is a late-campaign strike, not a day-one target.
+- The **front** advances (stage 1 to 3) when the SAMs and ground forces of the open tiers average 30% or less (after at least 4 days at the stage), or after 14 days of stalemate ("the enemy line buckles"). Destroyed assets stay destroyed, so progress always sticks. The Overview shows the stage; the Forces page shows each asset's depth and whether it is still locked.
+- The old route rule stays: a target whose route crosses an intact SAM belt in front of it is not offered, and the blocking site becomes a DEAD objective instead.
+
+**SEAD and DEAD are different jobs**
+- A DEAD objective is now a package with a dedicated **SEAD flight** (HARM) and a **DEAD flight** (the strikers) behind it. In the mission the SEAD flight pushes 90 seconds ahead and its HARMs are tasked against the site's radars, not the whole site.
+- Killing the radars **blinds** the site; it does not kill it. If all the radars of a site die and the launchers survive, the debrief says SUPPRESSED, not dead, and the site is flagged "radars blinded" until the day ends. A site that is hurt but alive is offered again as a mop-up ("Finish off ..."), with a priority bonus.
+- AI-resolved packages follow the same rule: a SEAD roll blinds the site, then the DEAD roll is far better against a blinded site (and the DEAD flight is more likely to take losses against an active one). A blinded site also weakens the SAM defence of other packages launched later the same day.
+- Kneeboard and briefing label the flights "SEAD" and "DEAD". Short-range SAMs (SA-8/15/19, AAA) are no longer SEAD/DEAD targets; CAS deals with them.
+
+**More SAMs, and ground troops to fight**
+- SAM sites per airfield cluster: Level 1 one, Level 2 three (was two), Level 3 four (was three). Level 2 and 3 also put short-range SAMs (SA-8, SA-15, SA-19) with the front-line armour columns (new SA-8 site).
+- **Garrisons**: long-range SAM sites may have a dug-in ground garrison (about 60% of sites at Level 2, all at Level 3; none at Level 1). Garrisons are CAS targets ("Close air support: dislodge the ... garrison"). In the mission the garrison stays put and your troops advance on it with a JTAC; it is spawned with the SAM site it guards.
+- To keep the frame rate sane the mission spawns the target's cluster (target, its two nearest SAM defenders, its garrison) plus at most two other SAM sites whose rings touch the route. Typical unit counts: about 60 to 80 at Level 2 and 70 to 100 at Level 3 for a single package.
+
+**Other**
+- No single job type may fill more than 40% of the day's packages (DEAD packages are big).
+- A wing whose airfield has been destroyed no longer replenishes and loses a quarter of its aircraft every day; before, a campaign could be stuck with an enemy air arm that never fell below the victory threshold.
+- The Forces page asset table has Type, Depth and Condition columns.
+
 # Changes in v0.7.3
 
 - Shorter transit to the marshal point. DEP is now a short climb-out / turning point about 4 nm from the field (was 8 nm), on the line toward the marshal. The marshal search starts at 15 nm behind the base (was 25 nm) and only moves farther back when the safety rules need it (at least 20 nm outside SAM rings, 90 nm from enemy fighter bases).

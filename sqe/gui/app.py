@@ -67,7 +67,7 @@ class OverviewPage(QWidget):
 
     def refresh(self, st):
         n, name, text = narrative.phase(st)
-        self.phase.setText(name)
+        self.phase.setText(f"{name}   |   front: stage {min(3, st.front + 1)} of 3")
         self.txt.setHtml(f"<p style='font-size:14px;line-height:150%'>{text}</p><hr>" +
                          "".join(f"<p style='color:#b9c6d6;line-height:150%'>{p}</p>" for p in narrative.BACKGROUND.split("\n\n")))
         t = totals(st)
@@ -198,7 +198,7 @@ class ForcesPage(QWidget):
         self.tabs = QTabWidget(); lay.addWidget(self.tabs)
         self.sq = _tbl(["Squadron", "Aircraft", "Service", "Based at", "Serviceable", "Readiness"])
         self.ea = _tbl(["Enemy air wing", "Types", "Serviceable", "Strength"])
-        self.as_ = _tbl(["Enemy asset", "Type", "Condition"])
+        self.as_ = _tbl(["Enemy asset", "Type", "Depth", "Condition"])
         self.bs = _tbl(["Coalition base", "Type", "Air defences (Patriot + AAA)"])
         for t, n in ((self.sq, "Coalition squadrons"), (self.bs, "Coalition bases"), (self.ea, "Enemy air wings"), (self.as_, "Enemy assets")):
             self.tabs.addTab(t, n)
@@ -229,8 +229,13 @@ class ForcesPage(QWidget):
                 self.bs.setItem(i, 2, _item("Cruiser + 2 escorts", theme.DIM))
         al = sorted(st.assets.values(), key=lambda a: (a.kind.value, a.name)); self.as_.setRowCount(len(al))
         for i, a in enumerate(al):
-            self.as_.setItem(i, 0, _item(a.name, theme.DIM if a.destroyed else None)); self.as_.setItem(i, 1, _item(a.kind.value.title()))
-            self.as_.setCellWidget(i, 2, self._bar(a.health, theme.GREEN if a.health > 0.6 else theme.AMBER if a.health > 0.25 else theme.RED))
+            kind = "Garrison" if a.variant == "GARRISON" else (f"SAM {a.variant}" if a.kind.value == "SAM" else a.kind.value.title())
+            if a.suppressed:
+                kind += "  (radars blinded)"
+            tier = ["", "T1 front", "T2 Abkhazia", "T3 coast / north", "T4 deep"][min(4, max(1, a.tier))]
+            self.as_.setItem(i, 0, _item(a.name, theme.DIM if a.destroyed else None)); self.as_.setItem(i, 1, _item(kind))
+            self.as_.setItem(i, 2, _item(tier + ("" if a.tier <= st.front + 2 else "  (locked)"), theme.DIM if a.tier > st.front + 2 else None))
+            self.as_.setCellWidget(i, 3, self._bar(a.health, theme.GREEN if a.health > 0.6 else theme.AMBER if a.health > 0.25 else theme.RED))
 
 
 class PilotPage(QWidget):

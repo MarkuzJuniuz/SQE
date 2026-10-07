@@ -68,7 +68,7 @@ or press **F5** in VS Code and pick **"SQE: run app"** (debugger attached, break
 
 First launch:
 1. It tells you to open **Settings**. Two fields:
-   * **DCS Saves**: `C:\Users\Mark\Saved Games\DCS` (or `...\DCS_Server`). Everything hangs off this folder:
+   * **DCS Saves**: `C:\Users\<you>\Saved Games\DCS` (or `...\DCS_Server`). Everything hangs off this folder:
      missions go to `Missions\SQE_Sortie.miz`, results are read from `SQE\SQE_state.json`, campaigns are saved as `SQE\*.sqe`.
    * **DCS**: your DCS World install folder. Only used by the patch button below.
 2. Leave **Enable DCS scripting access while SQE is open** ticked. SQE patches MissionScripting.lua when it starts and restores it when it closes, like Liberation/Retribution (a backup is saved next to the file). This is required for results to come back from DCS. Keep SQE open until the mission is over.
@@ -176,6 +176,12 @@ build the loadout, save, then `python tools/capture_loadouts.py that.miz`. They 
 ### Squadrons, the Missions filter and package merging (v0.7)
 - New Campaign lets you pick your squadron. Missions shows "My squadron" packages by default; switch to "All packages" to fly any flight of your jet type.
 - Settings > Package merging > "Same area" folds same-area packages that start within 30 minutes after yours into one mission. Compare the unit counts on the waiting window with merging Off to see the performance cost. Lower the unit limit if your VR system struggles.
+
+### Depth tiers, SEAD vs DEAD, garrisons (v0.8)
+- The war opens over Abkhazia (tiers 1 and 2: the armour columns and the Sukhumi/Gudauta belts). The coast and north Caucasus (Sochi, Nalchik, Beslan, Mozdok) open when the front advances, and the deep rear after that. Overview shows "front: stage N of 3"; Forces > Enemy assets shows each asset's depth and whether it is still locked.
+- A DEAD objective is a SEAD flight (HARM, pushes about 90 s ahead) plus a DEAD flight (the strikers). HARMs go for the radars. Radars dead and launchers alive = the site is SUPPRESSED, not destroyed; it is offered again as a mop-up ("Finish off ..."). Fly either flight; the kneeboard labels them SEAD and DEAD.
+- Long-range SAM sites may have a dug-in garrison (CAS target: your troops with a JTAC advance on it). Level 2 and 3 also put short-range SAMs (SA-8/15/19) with the front-line columns.
+- Things to check in DCS: do the AI HARMs actually target the radars (AttackUnit on the first radar of the site)? Does the SEAD flight arrive about 90 s ahead of the DEAD flight? Do the numbers feel right (tier boundaries, 30% advance threshold, 14 stall days: `war.py`, `FRONT_*`; garrison odds and SAM counts: `difficulty.py`; spawn caps: `threatmap.MAX_ROUTE_SITES` and the "two nearest defenders" line in `mission_builder._spawn_opfor_ground`)?
 
 ## 7. Troubleshooting
 

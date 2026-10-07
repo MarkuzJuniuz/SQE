@@ -49,6 +49,7 @@ def sitrep(state) -> list:
     lines = [f"Enemy air arm: {t['ea']} of {t['ez']} aircraft serviceable ({t['enemy_air']:.0%}).",
              f"Air-defence network: {t['iads']:.0%} of sites operational.",
              f"Armored advance: columns at {t['armor']:.0%} strength.",
+             f"The front: {['Abkhazia and the forward belt', 'the coast and the north Caucasus', 'the enemy deep rear'][min(2, state.front)]} (stage {min(3, state.front + 1)} of 3).",
              f"Enemy command posts: {t['c2']:.0%} intact.",
              f"Coalition air component: {t['fa']} of {t['fz']} aircraft serviceable ({t['friendly_air']:.0%})."]
     return lines
@@ -57,8 +58,8 @@ def sitrep(state) -> list:
 _INTENT = {
     ObjectiveType.STRIKE: ["The offensive lives on what this site supplies. Cut it and the front starves.",
                            "Intel puts this target at the heart of the enemy's sustainment. Make it burn."],
-    ObjectiveType.DEAD: ["This site is a thorn in every package's side. Take it out and the corridor opens.",
-                         "Until this battery is silenced, our strikers pay a toll. Remove it."],
+    ObjectiveType.DEAD: ["This site is a thorn in every package's side. SEAD blinds it; the DEAD flight right behind must finish it.",
+                         "Until this battery is dead our strikers pay a toll. Blinding it is not enough: the launchers have to burn."],
     ObjectiveType.COUNTER_AIR: ["Their fighters are sheltered and rested. Make them fight or make them burn on the ramp.",
                                 "Hit the air regiment while it is still on the ground. Air control starts here."],
     ObjectiveType.BARCAP: ["The fleet is the center of gravity. Nothing gets through to the carrier.",

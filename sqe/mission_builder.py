@@ -32,6 +32,13 @@ from .kneeboard import latlon, render_pages
 from .loadouts import LoadoutLibrary, enemy_bomber_loadout, enemy_cap_loadout, ENEMY_FIGHTERS
 from .models import AssetKind, BaseKind, ObjectiveType, Role
 STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -30}      # seconds relative to the strikers' push (BMS-style)
+
+
+def stagger(package, role) -> int:
+    """SEAD leads the strikers by a minute and a half in a DEAD package: the radars must be blind before the DEAD flight commits."""
+    if role == Role.SEAD and package.objective.type == ObjectiveType.DEAD:
+        return -90
+    return STAGGER.get(role, 0)
 from .packages import Package
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
 from .routes import OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, leg_seconds, make_geometry, objective_wp, offset, plan_route
@@ -98,6 +105,7 @@ SITES = {
     "SA-10":  [("S_300PS_5P85C_ln", 2), ("S_300PS_5P85D_ln", 2), ("S_300PS_40B6M_tr", 1), ("S_300PS_64H6E_sr", 1), ("S_300PS_54K6_cp", 1)],
     "SA-15":  [("Tor_9A331", 2), ("ZSU_23_4_Shilka", 1)],
     "SA-19":  [("x_2S6_Tunguska", 2)],
+    "SA-8":   [("Osa_9A33_ln", 2)],
     "EWR":    [("x_1L13_EWR", 1)], "EWR55": [("x_55G6_EWR", 1)],
 }
 TRACK_RADARS = {"SNR_75V", "snr s-125 tr", "Kub 1S91 str", "S-300PS 40B6M tr"}          # fire-control / track radars (unit type names as DCS stores them)
@@ -230,8 +238,8 @@ class MissionBuilder:
         player_push = math.ceil((mshl.eta_s + (0 if pf.role == Role.CAP else o.hold_minutes * 60) + leg_m) / 60.0) * 60.0
         player_push = max(player_push, math.ceil((dep_s + 120) / 60.0) * 60.0)
         leave_s = hold_leave_s(pw, player_push)
-        P0 = player_push - STAGGER.get(pf.role, 0)                         # the strikers' push; everyone else is relative to it
-        push_of = lambda f: P0 + (0 if f.tag else STAGGER.get(f.role, 0))
+        P0 = player_push - stagger(package, pf.role)                         # the strikers' push; everyone else is relative to it
+        push_of = lambda f: P0 + (0 if f.tag else stagger(package, f.role))
         assign_times(pw, dep_s, player_push)
         tgt = objective_wp(pw) or pw[-1]
         egr = next((w for w in pw if w.name == "EGR"), pw[-1])
@@ -247,7 +255,7 @@ class MissionBuilder:
                 tot_f = tgt.eta_s
             if f.role == Role.CAS and tot_f:
                 self.cas_tot = tot_f
-            pkg_table.append({"callsign": f.callsign, "role": (f.tag or f.role.value), "push": clock(push_of(f)) if not f.tag else "-",
+            pkg_table.append({"callsign": f.callsign, "role": (f.tag or ("DEAD" if (f.role == Role.STRIKE and package.objective.type == ObjectiveType.DEAD) else f.role.value)), "push": clock(push_of(f)) if not f.tag else "-",
                               "tot": clock(tot_f) if tot_f else "-", "you": f.is_player})
         whois = self._datalinks(package, awacs_unit)
 
@@ -321,7 +329,7 @@ class MissionBuilder:
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
-            ctx = {"date": date_str, "callsign": f"{pf.callsign}-1", "role": pf.role.value, "objective": package.objective.description,
+            ctx = {"date": date_str, "callsign": f"{pf.callsign}-1", "role": ("DEAD" if (pf.role == Role.STRIKE and package.objective.type == ObjectiveType.DEAD) else pf.role.value), "objective": package.objective.description,
                    "comm1": plan.comm1, "comm2": plan.comm2, "waypoints": kn_rows, "jet": pspec.display,
                    "numbering": ("B for the start point, then 1, 2, 3..." if pspec.first_wp_label else "waypoint 1 = start point"),
                    "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": "CLEAR", "mode3": mode3, "laser": laser,
@@ -367,7 +375,7 @@ class MissionBuilder:
             # timeline: this package pushes (start difference) minutes after yours
             P0x = P0 + max(0, hm(xp) - hm(anchor)) * 60.0
             pw2 = plan_route(lead.role, (base2.x, base2.y), geom2, spec2.profile, is_player=True, tanker_xy=None)
-            assign_times(pw2, 0.0, P0x + STAGGER.get(lead.role, 0))
+            assign_times(pw2, 0.0, P0x + stagger(xp, lead.role))
             tg2 = objective_wp(pw2) or pw2[-1]
             eg2 = next((w for w in pw2 if w.name == "EGR"), pw2[-1])
             rtb2 = eg2.eta_s + leg_seconds(eg2, Wpt("RTB", base2.x, base2.y, 0, 300))
@@ -376,7 +384,7 @@ class MissionBuilder:
             tots = []
             cas_tot = None
             for i, f in enumerate(xp.flights):
-                psh = P0x + STAGGER.get(f.role, 0)
+                psh = P0x + stagger(xp, f.role)
                 g, tot_f = self._spawn_flight(xp, f, plan2, geom2, None, None, psh, tg2.eta_s, rtb2, i, manifest, despawn)
                 if tot_f:
                     tots.append(tot_f)
@@ -558,6 +566,8 @@ class MissionBuilder:
         r = self.vrng
         if a.kind == AssetKind.AIRFIELD:
             pos = (a.x, a.y)
+        elif a.kind == AssetKind.ARMOR and a.variant == "GARRISON":
+            pos = offset(a.x, a.y, r.uniform(0, 360), r.uniform(0, 400))
         elif a.kind == AssetKind.ARMOR:       # the column sits somewhere along its axis of advance
             fb = self._nearest_airfield(a.x, a.y)
             pos = offset(a.x, a.y, bearing(a.x, a.y, fb.x, fb.y), r.uniform(-1500, 1500))
@@ -586,6 +596,15 @@ class MissionBuilder:
             out.append(("Ural_375", r.randint(1, 3)))
         return out
 
+    def _garrison_comp(self):
+        """A dug-in garrison: fewer vehicles than a column, no one is advancing. Bigger at higher difficulty."""
+        r, k = self.vrng, self.d.garrison_size
+        comp = [(r.choice(["T_72B", "T_80B"]), max(1, round(r.randint(2, 3) * k))), (r.choice(["BMP_2", "BMP_1"]), max(1, round(r.randint(1, 2) * k))),
+                ("ZSU_23_4_Shilka", 1), ("Ural_375", r.randint(0, 1))]
+        if self.d.level >= 3:
+            comp.append(("Strela_10M3", 1))
+        return comp
+
     def _armor_comp(self):
         r = self.vrng
         comp = [(r.choice(["T_72B", "T_72B", "T_80B", "T_80UD"]), r.randint(3, 6)), (r.choice(["BMP_2", "BMP_1", "BMP_3"]), r.randint(2, 5)),
@@ -600,7 +619,9 @@ class MissionBuilder:
             tgt, relevant = None, []            # no ground target, but enemy SAMs whose rings touch the route / station stay live
         else:
             tgt = st.assets[obj.target_id]
-            relevant = [tgt] + [st.assets[i] for i in tgt.defended_by]
+            dfn = sorted((st.assets[i] for i in tgt.defended_by if not st.assets[i].destroyed), key=lambda x: dist(x.x, x.y, tgt.x, tgt.y))
+            relevant = [tgt] + dfn[:2]                                                   # the two nearest defenders; more only costs VR frame rate
+            relevant += [g for g in st.assets.values() if g.guards == tgt.id]            # a SAM site's dug-in garrison is part of its cluster
         if polyline:                         # every SAM site whose ring touches the route is live from the start
             relevant += tm.corridor_sam_sites(st, polyline, tgt)
         ewrs = sorted((a for a in st.assets.values() if a.kind == AssetKind.EWR and not a.destroyed),
@@ -624,10 +645,14 @@ class MissionBuilder:
         """ONE group per site: a SAM battery needs its search/track radars, launchers and command post together."""
         r = self.vrng
         skill = getattr(Skill, self.d.enemy_skill, Skill.High)
-        comp = self._armor_comp() if a.kind == AssetKind.ARMOR else self._vary_comp(a, comp)
+        garrison = a.kind == AssetKind.ARMOR and a.variant == "GARRISON"
+        comp = (self._garrison_comp() if garrison else self._armor_comp()) if a.kind == AssetKind.ARMOR else self._vary_comp(a, comp)
         cx, cy = self._site_center(a)
         base_count = sum(n for vname, n in comp if _vt(vname) is not None)
-        if a.kind == AssetKind.ARMOR:
+        if garrison:
+            fb = self._nearest_airfield(cx, cy)
+            heading, form = int(bearing(cx, cy, fb.x, fb.y)), r.choice([F.Rectangle, F.Scattered, F.Star])
+        elif a.kind == AssetKind.ARMOR:
             fb = self._nearest_airfield(cx, cy)
             heading, form = int(bearing(cx, cy, fb.x, fb.y)), r.choice([F.Line, F.Rectangle, F.Line])
         else:
@@ -814,7 +839,12 @@ class MissionBuilder:
             elif w.action == "CAS":
                 self._cas_tasks(wp, w, armor, tot_s)
             elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
-                ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.Auto, group_attack=True))
+                radars = [u for u in armor.units if str(getattr(u, "type", "")) in TRACK_RADARS | SEARCH_RADARS]
+                if package.objective.type == ObjectiveType.DEAD and radars:
+                    # SEAD blinds the site: HARMs go for the radars; the launchers are the DEAD flight's job
+                    ct = task.ControlledTask(task.AttackUnit(radars[0].id, weapon_type=task.WeaponType.Auto, group_attack=True))
+                else:
+                    ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.Auto, group_attack=True))
                 ct.stop_after_time(int(w.eta_s) + 600)
                 wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree)); wp.tasks.append(ct)
         if base.kind == BaseKind.AIRFIELD:
@@ -952,7 +982,8 @@ class MissionBuilder:
         v = max(2.5, min(8.0, 9000.0 / t_contact))                # m/s, a believable advance
         dist_run = v * t_contact + 1500.0                         # each side starts this far from the contact point
         enemy = self.groups_by_asset.get(self.armor_id) if self.armor_id else None
-        if enemy is not None:
+        static = bool(self.armor_id) and self.state.assets[self.armor_id].variant == "GARRISON"      # dug in: our troops come to it
+        if enemy is not None and not static:
             ex, ey = offset(cx, cy, brg + 180, dist_run)
             self._translate(enemy, ex - cx, ey - cy)
             self._drive(enemy, [offset(cx, cy, brg, 2500)], v)
@@ -963,7 +994,7 @@ class MissionBuilder:
             names = []
             for k, u in enumerate(g.units, 1):
                 u.name = f"TF{package.number}|{k}"; names.append(u.name)
-            self._drive(g, [offset(cx, cy, brg + 180, 2500)], v)
+            self._drive(g, [offset(cx, cy, brg + (0 if static else 180), 2000 if static else 2500)], v)
             manifest.add("friendly_ground", self.armor_id or "", names)
         jx, jy = offset(fx, fy, brg + 90, 120)
         jt = self.m.vehicle_group(self.usa, f"Axeman {package.number}-1", _UN.Hummer, mapping.Point(jx, jy, self.t), heading=(int(brg) + 180) % 360, group_size=1)

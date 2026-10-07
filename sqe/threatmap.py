@@ -9,7 +9,7 @@ import math
 from .models import AssetKind
 
 NM = 1852.0
-RANGE_NM = {"AAA": 3, "MANPAD": 3, "SA-2": 25, "SA-3": 13, "SA-6": 13, "SA-11": 18, "SA-10": 48, "SA-15": 8, "SA-19": 5}
+RANGE_NM = {"SA-8": 7, "AAA": 3, "MANPAD": 3, "SA-2": 25, "SA-3": 13, "SA-6": 13, "SA-11": 18, "SA-10": 48, "SA-15": 8, "SA-19": 5}
 SERIOUS_NM = 8          # shorter-ranged systems do not block routes (they only matter at the target)
 
 
@@ -91,18 +91,24 @@ def safe_egress(state, tx, ty, hdg, egr_nm, skip_ids=()):
     return best
 
 
-def corridor_sam_sites(state, polyline, target_asset, margin_nm: float = 10) -> list:
-    """Every live SAM site whose ring touches the route corridor (plus the target's own cluster)."""
+MAX_ROUTE_SITES = 2     # SAM sites that merely touch the route (not the target's own cluster) that are spawned: keeps VR frame rate sane
+
+
+def corridor_sam_sites(state, polyline, target_asset, margin_nm: float = 10, max_route: int = MAX_ROUTE_SITES) -> list:
+    """The target's own SAM cluster, plus the few live sites whose ring reaches deepest into the route corridor."""
     skip = cluster_ids(target_asset)
-    out = []
+    out, route = [], []
     for a in state.assets.values():
         if a.kind != AssetKind.SAM or a.destroyed:
             continue
         r = RANGE_NM.get(a.variant, 0) * NM
         near_target = target_asset is not None and math.hypot(a.x - target_asset.x, a.y - target_asset.y) < 12_000
-        if a.id in skip or near_target or (r >= SERIOUS_NM * NM and poly_dist(a.x, a.y, polyline) < r + margin_nm * NM):
+        if a.id in skip or near_target:
             out.append(a)
-    return out
+        elif r >= SERIOUS_NM * NM and poly_dist(a.x, a.y, polyline) < r + margin_nm * NM:
+            route.append((r - poly_dist(a.x, a.y, polyline), a))
+    route.sort(key=lambda t: t[0], reverse=True)
+    return out + [a for _, a in route[:max_route]]
 
 
 def point_back_along(poly, d_back: float):

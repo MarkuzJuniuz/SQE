@@ -18,13 +18,13 @@ NM = 1852.0
 class ObjectivePlanner:
     """Looks at the war and decides what matters today, with the FLOT rule: a target is only offered when the route to it
     does not cross an intact SAM belt in front of it; the blocking sites become DEAD objectives instead."""
-    MIN_NM = 87        # about 100 statute miles; CAS is exempt (it has no near-ness test)
-
     def __init__(self, d=None):
         self.d = d
 
-    def _near(self, state, a) -> bool:
-        return min(math.hypot(a.x - b.x, a.y - b.y) for b in state.bases.values()) / NM < self.MIN_NM
+    @staticmethod
+    def _open(state, a) -> bool:
+        """Depth tiers: tiers up to (front + 2) are open for tasking, so Nalchik and the north Caucasus come late in a campaign."""
+        return a.tier <= state.front + 2
 
     def _blockers(self, state, a) -> list:
         best = None
@@ -35,38 +35,43 @@ class ObjectivePlanner:
         return best or []
 
     def plan(self, state: CampaignState, rng: random.Random, limit: int = 6) -> list:
-        cand = []                                  # (priority, objective, blockers, too_near)
+        cand = []                                  # (priority, objective, blockers, locked)
         alive = lambda aid: not state.assets[aid].destroyed
         for a in state.assets.values():
             if a.destroyed:
                 continue
+            locked = not self._open(state, a)
             defenders = [x for x in a.defended_by if alive(x)]
             if a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT):
                 pr = a.value * a.health / (1 + 0.5 * len(defenders))
-                cand.append((pr, Objective("", ObjectiveType.STRIKE, a.id, pr, f"Strike {a.name}"), self._blockers(state, a), self._near(state, a)))
-            elif a.kind == AssetKind.SAM and a.value >= 5:
+                cand.append((pr, Objective("", ObjectiveType.STRIKE, a.id, pr, f"Strike {a.name}"), self._blockers(state, a), locked))
+            elif a.kind == AssetKind.SAM and a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10:      # short-range SAMs are CAS's problem, not a SEAD/DEAD package's
                 covered = sum(x.value for x in state.assets.values() if a.id in x.defended_by and not x.destroyed) / 3.0
                 pr = a.value * a.health + covered
-                cand.append((pr, Objective("", ObjectiveType.DEAD, a.id, pr, f"Destroy {a.name}"), self._blockers(state, a), self._near(state, a)))
+                if a.health < 0.85:                                    # SEAD blinded it or CAS thinned it, but it still stands: mop up
+                    pr *= 1.5
+                    desc = f"Finish off {a.name} ({a.health:.0%} left)"
+                else:
+                    desc = f"SEAD and DEAD: {a.name}"
+                cand.append((pr, Objective("", ObjectiveType.DEAD, a.id, pr, desc), self._blockers(state, a), locked))
             elif a.kind == AssetKind.ARMOR:
                 pr = a.value * a.health * 1.4
-                cand.append((pr, Objective("", ObjectiveType.CAS, a.id, pr, f"Close air support against {a.name}"), [], False))
+                what = f"Close air support: dislodge the {a.name}" if a.variant == "GARRISON" else f"Close air support against {a.name}"
+                cand.append((pr, Objective("", ObjectiveType.CAS, a.id, pr, what), [], locked))
             elif a.kind == AssetKind.AIRFIELD:
                 w = state.enemy_air_at(a.id)
                 if w and w.available > 0:
                     pr = a.value * 1.2 * (w.available / max(1, w.authorized))
                     cand.append((pr, Objective("", ObjectiveType.COUNTER_AIR, a.id, pr, f"Counter-air at {a.name} ({w.available} aircraft)"),
-                                 self._blockers(state, a), self._near(state, a)))
+                                 self._blockers(state, a), locked))
         blocking = {x.id for c in cand for x in c[2]}                  # sites that stand in front of something else
         pool = []
-        for pr, o, bl, near in cand:
-            if bl or near:
+        for pr, o, bl, locked in cand:
+            if bl or locked:
                 continue
             if o.type == ObjectiveType.DEAD and o.target_id in blocking:
                 pr *= 1.8                                              # clear the belt first
             pool.append((pr, o))
-        if len([1 for _, o in pool if o.type != ObjectiveType.BARCAP]) < 4:      # nothing left but close-in targets: allow them
-            pool += [(pr * (1.8 if (o.type == ObjectiveType.DEAD and o.target_id in blocking) else 1.0), o) for pr, o, bl, near in cand if near and not bl]
         fleet = next((b for b in state.bases.values() if b.kind.value == "CARRIER"), None)
         bw = next((x for x in state.enemy_air if "Tu_22M3" in x.types and x.available >= 2 and not state.assets[x.base_asset_id].destroyed), None)
         if fleet and bw and self.d is not None and self.d.bomber_policy != "none":
@@ -84,11 +89,15 @@ class ObjectivePlanner:
         for s, o in scored:                    # one of each objective type first, for variety
             if o.type not in seen and len(picked) < limit:
                 picked.append((s, o)); seen.add(o.type)
+        cap = max(2, math.ceil(0.4 * limit))                   # no single job type may swamp the day (DEAD packages are big)
+        per = {}
+        for _, o in picked:
+            per[o.type] = per.get(o.type, 0) + 1
         for s, o in scored:
             if len(picked) >= limit:
                 break
-            if (s, o) not in picked:
-                picked.append((s, o))
+            if (s, o) not in picked and per.get(o.type, 0) < cap:
+                picked.append((s, o)); per[o.type] = per.get(o.type, 0) + 1
         picked.sort(key=lambda t: t[0], reverse=True)
         out = []
         for i, (_, o) in enumerate(picked, 1):
@@ -120,9 +129,11 @@ class WarSimulator:
         sam = 0.0
         if obj.type not in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
             t = state.assets[obj.target_id]
-            sam = sum(1.5 * state.assets[x].health for x in t.defended_by if not state.assets[x].destroyed)
+            sam = sum(1.5 * state.assets[x].health * (0.4 if state.assets[x].suppressed else 1.0)
+                      for x in t.defended_by if not state.assets[x].destroyed)
             if t.kind == AssetKind.SAM and not t.destroyed:
                 sam += 1.5 * t.health
+                sam += 0.8 * sum(g.health for g in state.assets.values() if g.guards == t.id)     # a dug-in garrison makes the site harder
             sam *= 0.6 + 0.8 * self.d.iads
             if has_sead:
                 sam *= 0.5
@@ -151,10 +162,63 @@ class WarSimulator:
             state.note(ln.strip())
         return {"success": ok, "odds": p, "lines": lines, "objective": pkg.objective.description}
 
+    def _resolve_dead(self, state: CampaignState, pkg: Package) -> dict:
+        """SEAD and DEAD are two different jobs. The SEAD flight blinds the radars (the site is 'suppressed', not dead). The DEAD flight
+        then goes in: against a blinded site it usually destroys it; against an active one it takes losses and rarely finishes it."""
+        d, rng = self.d, self.rng
+        t = state.assets[pkg.objective.target_id]
+        sead = [f for f in pkg.flights if f.role == Role.SEAD]
+        dead = [f for f in pkg.flights if f.role == Role.STRIKE]
+        garrison = sum(g.health for g in state.assets.values() if g.guards == t.id and not g.destroyed)
+        site = (1.0 + 0.8 * d.iads) * t.health + 0.4 * garrison
+        s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in sead)
+        p_sead = s_sead / (s_sead + site) if s_sead else 0.0
+        blinded = chance(rng, p_sead, d.variance)
+        lines = [f"{pkg.objective.description}:"]
+        if sead:
+            lines.append(f"   SEAD: {'radars blinded' if blinded else 'radars still emitting'} (odds {p_sead:.0%})")
+        if blinded:
+            t.suppressed = True
+            t.health = max(0.05, t.health - 0.2)            # the radars and a launcher or two; the battery survives
+        s_dead = sum(f.count * ROLE_WEIGHT[Role.STRIKE] for f in dead)
+        air = 0.05 * sum(w.available for w in state.enemy_air) * (0.6 + 0.6 * d.iads)
+        defense = (site * (0.35 if blinded else 1.4)) + garrison * 0.3 + air
+        p_dead = s_dead / (s_dead + defense) if s_dead else 0.0
+        killed = chance(rng, p_dead, d.variance)
+        if dead:
+            if killed:
+                before = t.health
+                t.health = max(0.0, t.health - (1.0 if blinded else 0.45))
+                lines.append(f"   DEAD: {t.name} {'destroyed' if t.destroyed else f'damaged, {t.health:.0%} left'} (odds {p_dead:.0%})")
+            else:
+                t.health = max(0.0, t.health - 0.05)
+                lines.append(f"   DEAD: attack failed (odds {p_dead:.0%})")
+        success = (killed if dead else blinded)
+        loss_base = d.loss_rate * 2
+        for f in pkg.flights:
+            if f.tag:
+                continue
+            exposure = 1.0
+            if f.role == Role.STRIKE:
+                exposure = 0.5 if blinded else 1.8          # an unsuppressed site shoots at the DEAD flight
+            elif f.role == Role.SEAD:
+                exposure = 1.0 if blinded else 1.3
+            lp = min(0.9, loss_base * exposure * (defense / (s_dead + s_sead + defense) if (s_dead + s_sead + defense) else 0.0))
+            n_lost = count_roll(rng, f.count, lp, d.variance)
+            if n_lost:
+                sq = state.squadrons[f.squadron_id]
+                sq.available = max(0, sq.available - n_lost)
+                lines.append(f"   {f.callsign} lost {n_lost} aircraft")
+        for ln in lines:
+            state.note(ln.strip())
+        return {"success": success, "odds": p_dead if dead else p_sead, "lines": lines, "objective": pkg.objective.description}
+
     def resolve_abstract(self, state: CampaignState, pkg: Package) -> dict:
         d, rng = self.d, self.rng
         if pkg.objective.type == ObjectiveType.FLEET_DEFENSE:
             return self._resolve_raid(state, pkg)
+        if pkg.objective.type == ObjectiveType.DEAD and any(f.role == Role.STRIKE for f in pkg.flights):
+            return self._resolve_dead(state, pkg)
         p, strength, defense = self.odds(state, pkg)
         success = chance(rng, p, d.variance)
         obj = pkg.objective
@@ -197,13 +261,19 @@ class WarSimulator:
             if sq.available < sq.authorized:
                 sq.available = min(sq.authorized, sq.available + max(1, round(sq.authorized * d.friendly_replenish)))
         for w in state.enemy_air:
+            if state.assets[w.base_asset_id].destroyed:             # a cratered field cannot operate or rearm: the survivors scatter or are lost
+                w.available = int(w.available * 0.75)
+                continue
             if w.available < w.authorized:
                 w.available = min(w.authorized, w.available + max(1, round(w.authorized * d.enemy_replenish)))
         for a in state.assets.values():
             if 0 < a.health < 1.0:
                 a.health = min(1.0, a.health + (d.sam_repair if a.kind == AssetKind.SAM else d.asset_repair))
+        for a in state.assets.values():
+            a.suppressed = False                                    # blinded radars come back on overnight
         self.counterstrike(state)
         state.day += 1
+        update_front(state)
         update_status(state)
 
     def counterstrike(self, state: CampaignState) -> None:
@@ -226,13 +296,40 @@ def totals(state: CampaignState) -> dict:
     ea = sum(w.available for w in state.enemy_air); ez = sum(w.authorized for w in state.enemy_air) or 1
     ad = [a for a in state.assets.values() if a.kind in (AssetKind.SAM, AssetKind.EWR)]
     iads = sum(a.health for a in ad) / len(ad) if ad else 0.0
-    arm = [a for a in state.assets.values() if a.kind == AssetKind.ARMOR]
+    arm = [a for a in state.assets.values() if a.kind == AssetKind.ARMOR and a.variant != "GARRISON"]
     armor = sum(a.health for a in arm) / len(arm) if arm else 0.0
     c2 = [a for a in state.assets.values() if a.kind == AssetKind.C2]
     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
     return {"base_defense": (sum(b.defense for b in fields) / len(fields)) if fields else 1.0, "friendly_air": fa / fz, "enemy_air": ea / ez, "iads": iads, "armor": armor,
             "c2": sum(a.health for a in c2) / len(c2) if c2 else 0.0,
             "fa": fa, "fz": fz, "ea": ea, "ez": ez}
+
+
+FRONT_NAMES = ["Abkhazia front", "coast and north Caucasus", "deep strike"]
+FRONT_STALL_DAYS = 14        # a stalled front breaks anyway: the enemy line buckles
+FRONT_MIN_DAYS = 4           # the front never jumps two stages in a week
+
+
+def tier_health(state: CampaignState, tier: int) -> float:
+    """Mean health of the combat assets (SAMs and ground forces) of one tier; 0 when there are none."""
+    xs = [a.health for a in state.assets.values() if a.tier <= tier and a.kind in (AssetKind.SAM, AssetKind.ARMOR)]
+    return sum(xs) / len(xs) if xs else 0.0
+
+
+def update_front(state: CampaignState) -> bool:
+    """The front advances when the tier now in play is broken (its SAMs and ground forces average 30% or less), or after a long stall.
+    Destroyed assets stay destroyed, so progress always sticks. Returns True when the front moved."""
+    state.front_days += 1
+    if state.front >= 2 or state.status != "ACTIVE":
+        return False
+    broken = tier_health(state, state.front + 2) <= 0.30 and state.front_days >= FRONT_MIN_DAYS
+    if broken or state.front_days >= FRONT_STALL_DAYS:
+        state.front += 1
+        state.front_days = 0
+        state.note(f"THE FRONT ADVANCES: {'the enemy line is broken' if broken else 'the enemy line buckles'}. "
+                   f"New targets are open: {FRONT_NAMES[state.front]}.")
+        return True
+    return False
 
 
 def update_status(state: CampaignState) -> str:

@@ -33,6 +33,8 @@ class CampaignState:
     start_date: str = "2004-06-12"                 # campaign day 1 (year 2004: F-14B(U) era)
     night_ops: bool = False                        # allow night sorties in the daily cycle
     pilot: dict = field(default_factory=dict)      # your pilot log
+    front: int = 0                                 # how far the war has advanced: tiers up to front+2 are open for tasking
+    front_days: int = 0                            # days spent at this stage (the anti-stall clock)
 
     # ---- helpers ------------------------------------------------------------------------
     def campaign_date(self):
@@ -55,6 +57,7 @@ class CampaignState:
             "name": self.name, "theatre": self.theatre, "level": self.level, "campaign_id": self.campaign_id,
             "day": self.day, "sortie_counter": self.sortie_counter, "status": self.status,
             "start_date": self.start_date, "night_ops": self.night_ops, "pilot": self.pilot,
+            "front": self.front, "front_days": self.front_days,
             "player": asdict(self.player) if self.player else None,
             "bases": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.bases.items()},
             "squadrons": {k: asdict(v) for k, v in self.squadrons.items()},
@@ -67,13 +70,14 @@ class CampaignState:
     def from_dict(cls, d: dict) -> "CampaignState":
         if d.get("format", 1) > FORMAT_VERSION:
             raise ValueError("This campaign was saved by a newer version of SQE.")
-        if d.get("format", 1) < 3:
-            raise ValueError("This campaign was saved by an older SQE (before multiple squadrons per type, v0.7). "
-                             "The squadron structure changed, so it cannot be loaded; please start a new campaign.")
+        if d.get("format", 1) < 4:
+            raise ValueError("This campaign was saved by an older SQE (before depth tiers and SAM garrisons, v0.8). "
+                             "The enemy order of battle changed, so it cannot be loaded; please start a new campaign.")
         s = cls(name=d["name"], theatre=d.get("theatre", "caucasus"), level=d.get("level", 2),
                 campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1),
                 sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"),
-                start_date=d.get("start_date", "2004-06-12"), night_ops=d.get("night_ops", False), pilot=d.get("pilot", {}))
+                start_date=d.get("start_date", "2004-06-12"), night_ops=d.get("night_ops", False), pilot=d.get("pilot", {}),
+                front=d.get("front", 0), front_days=d.get("front_days", 0))
         s.player = PlayerProfile(**d["player"]) if d.get("player") else None
         s.bases = {k: Base(**{**v, "kind": BaseKind(v["kind"])}) for k, v in d["bases"].items()}
         s.squadrons = {k: Squadron(**v) for k, v in d["squadrons"].items()}

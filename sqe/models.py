@@ -79,7 +79,10 @@ class EnemyAsset:
     value: int = 5                      # planner priority weight
     defended_by: list[str] = field(default_factory=list)  # ids of SAM/EWR assets covering it
     airport: str | None = None          # AIRFIELD assets: pydcs airport name
-    variant: str = ""                   # SAM/EWR flavour: "SA-2", "SA-6", "SA-11", "EWR"
+    variant: str = ""                   # SAM/EWR flavour: "SA-2", "SA-6", "SA-11", "EWR"; ARMOR: "ARMOR" (moving column) or "GARRISON" (dug in)
+    tier: int = 1                       # depth tier: 1 front, 2 Abkhazia, 3 coast / north Caucasus, 4 deep; gated by CampaignState.front
+    guards: str = ""                    # GARRISON: id of the SAM site it protects
+    suppressed: bool = False            # SAM: radars blinded today (SEAD worked, the launchers are still there); clears at end of day
 
     @property
     def destroyed(self) -> bool:

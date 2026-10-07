@@ -33,7 +33,8 @@ class Slot:
 
 TEMPLATES = {
     ObjectiveType.STRIKE: [Slot(Role.STRIKE, 4), Slot(Role.ESCORT, 2), Slot(Role.SEAD, 2, False, True)],
-    ObjectiveType.DEAD: [Slot(Role.SEAD, 4), Slot(Role.ESCORT, 2)],
+    # SEAD only blinds the radars; the DEAD flight (the strikers) kills the site right behind it. Both fly in the same package.
+    ObjectiveType.DEAD: [Slot(Role.SEAD, 2), Slot(Role.STRIKE, 4), Slot(Role.ESCORT, 2)],
     ObjectiveType.COUNTER_AIR: [Slot(Role.SWEEP, 4), Slot(Role.STRIKE, 2, False)],
     ObjectiveType.BARCAP: [Slot(Role.CAP, 2), Slot(Role.CAP, 2, False)],
     ObjectiveType.CAS: [Slot(Role.CAS, 4), Slot(Role.ESCORT, 2, False), Slot(Role.SEAD, 2, False, True)],
@@ -42,6 +43,7 @@ TEMPLATES = {
 _FLEET = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
 _TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM", Role.ESCORT: "Escort package",
          Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
+_DEAD_TASK = {Role.SEAD: "SEAD: blind the radars ahead of the DEAD flight", Role.STRIKE: "DEAD: destroy the SAM site (follow the SEAD flight in)"}
 _TAG_TASK = {"HAVCAP": "HAVCAP (guards tanker and AWACS)", "BASECAP": "Base CAP"}
 
 
@@ -240,7 +242,7 @@ class PackageBuilder:
             used[sq.callsign] = used.get(sq.callsign, 0) + 1
             pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", f"{sq.callsign} {used[sq.callsign]}", slot.role, sq.id,
                                           sq.aircraft, count, sq.base_id,
-                                          _TAG_TASK.get(slot.tag) or _TASK[slot.role], is_pl, slot.tag))
+                                          _TAG_TASK.get(slot.tag) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role], is_pl, slot.tag))
         pkg.support = self._support(pkg)
         pkg.jtac = obj.type in JTAC_OBJECTIVES
         return pkg
