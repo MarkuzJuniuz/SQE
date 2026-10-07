@@ -1,3 +1,7 @@
+# Changes in v0.8.1
+
+- Settings: the fuel option is now called "AI fuel management" and the MissionScripting note no longer names other tools. README and THIRD_PARTY_NOTICES credit Liberation, Retribution, Falcon BMS and Strike Fighters as inspiration (no code from them). GitHub guide: corrected the licence of Retribution (LGPL-3.0, not GPL).
+
 # Changes in v0.8.0
 
 **Old campaigns will not load** (the enemy order of battle changed; the save format is now 4). Start a new campaign.

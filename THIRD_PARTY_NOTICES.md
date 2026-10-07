@@ -8,7 +8,7 @@ SQE does not contain, copy or redistribute any DCS World file, texture, model, s
 out the `io` / `lfs` sanitizing lines of your own local `MissionScripting.lua`, then restores it when SQE closes.
 
 SQE is not affiliated with DCS Liberation, DCS Retribution, DCS Dynamic Campaign Creator, Falcon BMS or Strike Fighters.
-Their names appear only to describe similar tools.
+Many of its ideas take inspiration from them (see the README), but it contains none of their code. Their names appear only to credit that inspiration.
 
 Unit names in the sample squadrons (for example VF-31, 77th FS) are real unit designations used as flavour. No insignia or
 artwork is included, and no endorsement by any air force or navy is implied. Pilots, call signs and events are fictional.

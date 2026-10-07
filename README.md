@@ -19,3 +19,8 @@ Start here: **docs/GUIDE.md**   |   Sample briefing: docs/SAMPLE_BRIEFING.txt
   those sanitizing lines in your own `MissionScripting.lua` when it starts (a backup is saved beside it) and restores the file when it closes. It changes nothing else. DCS updates and repairs can
   overwrite the file, which is why SQE re-applies the change at every start. If you play multiplayer, close SQE first so the file is unmodified.
 * Use at your own risk; there is no warranty.
+
+## Inspiration
+
+Many of SQE's ideas are inspired by community campaign tools, especially DCS Liberation and DCS Retribution (a front line that moves as targets fall, packages with escorts and SEAD,
+the MissionScripting approach for results, AI fuel management), and by the feel of Falcon BMS and the Strike Fighters series. SQE contains no code from them and is not affiliated with them.

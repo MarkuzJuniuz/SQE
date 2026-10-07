@@ -91,7 +91,7 @@ class SettingsDialog(QDialog):
         row.addWidget(lb); row.addWidget(self.hold); row.addStretch(1); lay.addLayout(row)
         h = QLabel("Time between reaching the marshal point and the PUSH. Smaller = less waiting. Negative means you must beat the "
                    "natural pace (afterburner time). AI flights adjust automatically."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
-        self.fuel = QCheckBox("AI flights use the Retribution fuel trick (unlimited until the push, real fuel in the fight, unlimited again from egress)")
+        self.fuel = QCheckBox("AI fuel management (unlimited until the push, real fuel in the fight, unlimited again from egress)")
         self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); lay.addWidget(self.fuel)
         row = QHBoxLayout(); lb = QLabel("Package merging"); lb.setMinimumWidth(120)
         self.merge = QComboBox(); self.merge.addItem("Off (one package per mission)", "off"); self.merge.addItem("Same area (fold up to 3 packages)", "area")
@@ -103,7 +103,7 @@ class SettingsDialog(QDialog):
         self.ms = QLabel(); lay.addWidget(self.ms)
         self.autopatch = QCheckBox("Enable DCS scripting access while SQE is open (patches MissionScripting.lua at start, restores it on exit)")
         self.autopatch.setChecked(bool(settings.auto_patch_scripting)); lay.addWidget(self.autopatch)
-        note = QLabel("Results need io/lfs enabled in MissionScripting.lua (same approach as Liberation/Retribution). A backup is saved next to the file. "
+        note = QLabel("Results need io/lfs enabled in MissionScripting.lua. A backup is saved next to the file. "
                       "If SQE is closed before the mission ends, DCS can no longer write the results file.")
         note.setWordWrap(True); note.setObjectName("small"); lay.addWidget(note)
         self.inst.textChanged.connect(self._refresh); self._refresh()

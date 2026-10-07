@@ -22,11 +22,11 @@ This is a practical checklist, not legal advice. I checked the licences and term
 |---|---|---|
 | **MIT** (recommended) | Anyone may use, change and redistribute, including inside closed projects, as long as they keep your copyright and licence text. No warranty. | You want it used and do not care if someone forks it privately. |
 | **Apache-2.0** | Same as MIT plus an explicit patent grant and a NOTICE mechanism. Longer text. | You want the patent language. |
-| **GPL-3.0** | Anyone who distributes a modified SQE must release their source under GPL too. | You want forks to stay open. Fine here: it is what Liberation and Retribution use. |
+| **GPL-3.0** | Anyone who distributes a modified SQE must release their source under GPL too. | You want forks to stay open. Works with the LGPL libraries SQE uses. |
 
 Why none of these clash with the libraries: pydcs and PySide6 are LGPL-3.0 and SQE only *uses* them as separately installed packages. LGPL lets an app under any licence use them that way. What it asks of you is in section 4.
 
-**Do not copy code from DCS Liberation or Retribution.** They are GPL-3.0. Taking even a function from them would force the whole of SQE onto the GPL. SQE was written from scratch and only borrows ideas (the MissionScripting approach, the fuel trick, steerpoint order). Ideas are not protected; code is. If at any point you pasted code from either project into SQE, tell me and we will either replace it or you switch to GPL-3.0.
+**Do not copy code from DCS Liberation or Retribution.** The Retribution repository's `LICENSE` file is LGPL-3.0 (I checked the file itself; I have not checked Liberation's). Code taken from it would have to stay under that licence with its notices, which is a constraint you do not want on an MIT project. SQE was written from scratch and only borrows ideas (the MissionScripting approach, the AI fuel setting, steerpoint order). Ideas are not protected; code is. You told me you pasted nothing from either project, and none of the SQE code was copied from them, so you are clear.
 
 **How to add it (easy way):** after the first push, on the repo page choose *Add file > Create new file*, type `LICENSE` as the name, and GitHub shows a **Choose a license template** button. Pick MIT, put the year and your name (or handle), commit. That puts the standard text in place without you editing it.
 
@@ -115,7 +115,7 @@ git push -u origin main
 - **Generated missions are "New Game Materials" under the EULA.** That means free to distribute, must say who made them and that they are not made by ED (SQE adds that line), and the EULA says ED owns such materials as derivative works. In practice this is the same footing as every community mission.
 - **Real unit names** (VF-31, 77th FS and so on) are used as flavour. No insignia, no endorsement implied; the notices say so. If anyone with standing objected, renaming them is a small edit in `scenario.py`.
 - **Trademarks.** "DCS World" and "Falcon BMS" appear only to say what SQE works with or resembles. Do not use ED's logos, and do not make a logo that looks like one.
-- **Contributors.** GitHub's terms say contributions to a licensed public repo are licensed under that repo's licence ("inbound = outbound"), so you do not need a separate agreement for small pull requests. Do not merge code you suspect was copied from a GPL project.
+- **Contributors.** GitHub's terms say contributions to a licensed public repo are licensed under that repo's licence ("inbound = outbound"), so you do not need a separate agreement for small pull requests. Do not merge code you suspect was copied from another project.
 - **If Eagle Dynamics or anyone sends a takedown or complaint**, you can pause the repo (make it private) while you read it. Do not ignore it.
 
 ---
