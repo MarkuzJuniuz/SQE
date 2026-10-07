@@ -52,6 +52,7 @@ class AppSettings:
     dcs_install: str = ""
     dcs_saves: str = ""
     last_campaign: str = ""
+    ai_unlimited_fuel: bool = True        # AI flights: unlimited fuel until the push, real fuel for the combat leg, unlimited again from egress
     hold_minutes: int = 2                 # slack at the marshal point before PUSH (minutes; negative = hurry)
     persist: bool = True          # False in tests: never write %APPDATA%\\SQE\\settings.json
 

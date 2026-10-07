@@ -138,3 +138,25 @@ def safe_marshal(state, base_xy, hdg_to_target, min_enemy_nm: float = 90, ring_m
             if slack > best_slack:
                 best, best_slack = (x, y), slack
     return best
+
+
+def first_safe_egress(state, tx, ty, hdg_to_target, skip_ids=(), min_nm: float = 8, max_nm: float = 60, margin_nm: float = 4):
+    """EGR = the FIRST safe point after the target: the closest point (8 nm and out) that is clear of every live SAM ring (plus a margin).
+    Bearings that turn for home are tried first; among equals, the one farther from enemy fighter bases wins (away from their CAP).
+    Returns None when nothing within max_nm is clear (the caller falls back to safe_egress)."""
+    rs = [(a, r) for a, r in rings(state, min_range=3) if a.id not in skip_ids]
+    enemies = fighter_bases(state)
+    best, best_score = None, 1e18
+    for k, off in enumerate((150, -150, 120, -120, 180, 90, -90, 60, -60)):
+        h = math.radians(hdg_to_target + off)
+        r = min_nm
+        while r <= max_nm:
+            x, y = tx + r * NM * math.cos(h), ty + r * NM * math.sin(h)
+            if all(math.hypot(x - a.x, y - a.y) >= rr + margin_nm * NM for a, rr in rs):
+                far = min((math.hypot(x - ex, y - ey) for ex, ey in enemies), default=0) / NM
+                score = r - 0.08 * min(far, 150) + 0.4 * k
+                if score < best_score:
+                    best, best_score = (x, y), score
+                break
+            r += 2
+    return best

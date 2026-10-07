@@ -13,20 +13,20 @@ from .models import Role, BaseKind, RefuelMethod
 class RouteProfile:
     """Altitudes (ft) and ground speeds (kts) for the route planner. Waypoint speeds are ground speed."""
     depart_alt_ft: int = 8000
-    depart_kts: int = 350
+    depart_kts: int = 380
     aar_alt_ft: int = 20000
     aar_kts: int = 350
     marshal_alt_ft: int = 22000
-    marshal_kts: int = 330
+    marshal_kts: int = 380
     cap_alt_ft: int = 25000
     cap_kts: int = 380
     cap_leg_nm: int = 25
     alt_ft: dict = field(default_factory=lambda: {Role.STRIKE: 20000, Role.SEAD: 25000, Role.ESCORT: 24000,
                                                   Role.SWEEP: 26000, Role.CAS: 9000})
-    push_kts: int = 430
-    ip_kts: int = 450
-    attack_kts: int = 450
-    egress_kts: int = 500
+    push_kts: int = 500
+    ip_kts: int = 510
+    attack_kts: int = 510
+    egress_kts: int = 540
     push_nm: int = 60                # PUSH this far before the target
     ip_nm: int = 25
     egress_nm: int = 25
@@ -76,16 +76,16 @@ AIRCRAFT: dict[str, AircraftSpec] = {
         "F-14BU", "F-14B(U) Tomcat", "F_14BU", BaseKind.CARRIER,
         frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.STRIKE}), RefuelMethod.BASKET, 2, 300, 450, True,
         RouteProfile(depart_alt_ft=6000, depart_kts=330, aar_alt_ft=20000, aar_kts=350,
-                     marshal_alt_ft=24000, marshal_kts=330, cap_alt_ft=25000, cap_kts=380,
+                     marshal_alt_ft=24000, marshal_kts=380, cap_alt_ft=25000, cap_kts=400,
                      alt_ft={_R.STRIKE: 25000, _R.ESCORT: 26000, _R.SWEEP: 28000, _R.SEAD: 25000, _R.CAS: 12000},
-                     push_kts=480, ip_kts=480, attack_kts=480, egress_kts=520, push_nm=70, ip_nm=25, egress_nm=30,
+                     push_kts=510, ip_kts=510, attack_kts=510, egress_kts=540, push_nm=70, ip_nm=25, egress_nm=30,
                      tgt_note="JDAM target: coords below. Release", special_points=("IP", "ST")),
         bingo_lbs=3000, joker_lbs=4500),
     "FA-18C": AircraftSpec(
         "FA-18C", "F/A-18C Hornet", "FA_18C_hornet", BaseKind.CARRIER,
         frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.STRIKE, _R.SEAD}), RefuelMethod.BASKET, 1, 300, 450, True,
-        RouteProfile(aar_alt_ft=20000, aar_kts=350, marshal_alt_ft=23000, push_kts=460, ip_kts=460,
-                     attack_kts=460, egress_kts=510, push_nm=65), bingo_lbs=2500, joker_lbs=3500),
+        RouteProfile(aar_alt_ft=20000, aar_kts=350, marshal_alt_ft=23000, push_kts=500, ip_kts=500,
+                     attack_kts=500, egress_kts=540, push_nm=65), bingo_lbs=2500, joker_lbs=3500),
     "F-16C": AircraftSpec(
         "F-16C", "F-16C Viper", "F_16C_50", BaseKind.AIRFIELD,
         frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.STRIKE, _R.SEAD}), RefuelMethod.BOOM, 1, 280, 450, True,
@@ -95,7 +95,7 @@ AIRCRAFT: dict[str, AircraftSpec] = {
         frozenset({_R.CAP, _R.SWEEP, _R.ESCORT}), RefuelMethod.BOOM, 1, 400, 480, True,
         RouteProfile(aar_alt_ft=22000, aar_kts=350, marshal_alt_ft=27000, cap_alt_ft=28000, cap_kts=400,
                      alt_ft={_R.ESCORT: 27000, _R.SWEEP: 30000, _R.STRIKE: 25000, _R.SEAD: 25000, _R.CAS: 12000},
-                     push_kts=500, ip_kts=500, attack_kts=500, egress_kts=540, push_nm=80),
+                     push_kts=520, ip_kts=520, attack_kts=520, egress_kts=550, push_nm=80),
         first_wp_label="B", bingo_lbs=3500, joker_lbs=5000),
     "A-10C": AircraftSpec(
         "A-10C", "A-10C Warthog", "A_10C_2", BaseKind.AIRFIELD,

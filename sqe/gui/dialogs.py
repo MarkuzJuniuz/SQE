@@ -77,6 +77,8 @@ class SettingsDialog(QDialog):
         row.addWidget(lb); row.addWidget(self.hold); row.addStretch(1); lay.addLayout(row)
         h = QLabel("Time between reaching the marshal point and the PUSH. Smaller = less waiting. Negative means you must beat the "
                    "natural pace (afterburner time). AI flights adjust automatically."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
+        self.fuel = QCheckBox("AI flights use the Retribution fuel trick (unlimited until the push, real fuel in the fight, unlimited again from egress)")
+        self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); lay.addWidget(self.fuel)
         self.ms = QLabel(); lay.addWidget(self.ms)
         row = QHBoxLayout(); pb = QPushButton("Patch MissionScripting.lua"); pb.clicked.connect(self._patch)
         row.addWidget(pb); row.addStretch(1); lay.addLayout(row)
@@ -97,6 +99,7 @@ class SettingsDialog(QDialog):
     def _save(self):
         self.s.dcs_install, self.s.dcs_saves = self.inst.text().strip(), self.saves.text().strip()
         self.s.hold_minutes = int(self.hold.value())
+        self.s.ai_unlimited_fuel = self.fuel.isChecked()
         pr = self.s.problems()
         if pr:
             QMessageBox.warning(self, "Check your paths", "\n".join(pr)); return

@@ -52,8 +52,9 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None) ->
     the hold are in friendly, defended airspace; the route then runs marshal -> PUSH -> IP -> target."""
     d = dist(bx, by, tx, ty)
     hdg = bearing(bx, by, tx, ty)
-    push_d = max(d - p.push_nm * NM, 0.55 * d)
-    ip_d = max(d - p.ip_nm * NM, push_d + 0.4 * (d - push_d))
+    # PUSH sits just ahead of home plate (well out from the target); the long straight cruise to the IP is the ingress
+    ip_d = max(d - p.ip_nm * NM, 0.5 * d)
+    push_d = max(2 * NM, min(12 * NM, 0.15 * d, ip_d - 8 * NM))
     at = lambda dd: offset(bx, by, hdg, dd)
     if mshl is None:
         mshl = offset(bx, by, hdg + 180, 25 * NM)
@@ -90,7 +91,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     if role == Role.STRIKE:
         wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts, p.tgt_note, "BOMB"))
     elif role == Role.SEAD:
-        wp.append(Wpt("SEAD", *offset(g.tx, g.ty, g.hdg + 180, 30 * NM), alt, p.attack_kts, "HARM launch point", "SEAD"))
+        wp.append(Wpt("SEAD", *offset(g.tx, g.ty, g.hdg + 180, max(8, p.ip_nm - 4) * NM), alt, p.attack_kts, "HARM launch point", "SEAD"))
     elif role == Role.SWEEP:
         wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts + 30, "SWEEP: clear the airspace", "SWEEP"))
     elif role == Role.CAS:

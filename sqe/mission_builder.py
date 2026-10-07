@@ -50,7 +50,7 @@ class MissionOptions:
     launch_offset_min: int = 3          # you are ready on the cat/runway at start; briefed launch is this many minutes in
     hold_minutes: int = 2               # slack at MARSHAL before PUSH, minutes. Negative = you must be quicker than the natural pace
     cap_minutes: int = 40               # time on station for CAP flights
-    ai_unlimited_fuel: bool = False
+    ai_unlimited_fuel: bool = True      # Retribution-style: ON until the push, OFF for the combat leg, ON again from egress
     enemy_unlimited_fuel: bool = False
     ai_despawn_on_land: bool = True
     base_defenses: bool = True
@@ -172,7 +172,9 @@ class MissionBuilder:
         mshl_xy = tm.safe_marshal(st, (pbase.x, pbase.y), bearing(pbase.x, pbase.y, tx, ty))
         geom = make_geometry(pbase.x, pbase.y, tx, ty, pspec.profile, mshl_xy)
         if tgt_asset is not None:                      # steer the egress away from SAM rings
-            geom.egr = tm.safe_egress(st, tx, ty, geom.hdg, pspec.profile.egress_nm, tm.cluster_ids(tgt_asset)) or geom.egr
+            skip = {tgt_asset.id} if package.objective.type == ObjectiveType.DEAD else set()      # a DEAD target is the one thing we are killing
+            geom.egr = (tm.first_safe_egress(st, tx, ty, geom.hdg, skip) or
+                        tm.safe_egress(st, tx, ty, geom.hdg, pspec.profile.egress_nm, tm.cluster_ids(tgt_asset)) or geom.egr)
         manifest = Manifest(st.campaign_id, st.sortie_counter + 1, package.id, st.day)
         self.groups_by_asset, self.flight_groups = {}, []
 
@@ -660,6 +662,10 @@ class MissionBuilder:
                 if w.action == "BOMB":
                     wp.tasks.append(task.Bombing(pt(w.x, w.y), group_attack=True))
                 continue
+            if o.ai_unlimited_fuel and w.name in ("PUSH", "CAP1"):
+                wp.tasks.insert(0, task.SetUnlimitedFuelCommand(False))          # the combat leg burns real fuel
+            if o.ai_unlimited_fuel and w.name == "EGR":
+                wp.tasks.insert(0, task.SetUnlimitedFuelCommand(True))           # and the trip home is free again
             if w.action == "HOLD":
                 ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
                 ct.stop_after_time(int(hold_leave_s(wps, push_s))); wp.tasks.append(ct)
@@ -670,6 +676,10 @@ class MissionBuilder:
                 wp.tasks.append(task.Bombing(pt(w.x, w.y), group_attack=True))
             elif w.action == "CAS":
                 self._cas_tasks(wp, w, armor, tot_s)
+            elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
+                ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.Auto, group_attack=True))
+                ct.stop_after_time(int(w.eta_s) + 600)
+                wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree)); wp.tasks.append(ct)
         if base.kind == BaseKind.AIRFIELD:
             g.land_at(self.apt[base.id])
         else:
@@ -690,7 +700,7 @@ class MissionBuilder:
         along = min(room, 4.0 + 3.0 * k)
         x, y = offset(base.x, base.y, brg, along * NM)
         x, y = offset(x, y, brg + 90, (1.5 if k % 2 else -1.5) * NM * (1 + k // 2))
-        return (x, y), (2500 if navy else 4500), (260 if navy else 320)
+        return (x, y), (2500 if navy else 4500), (300 if navy else 360)
 
     def _cas_tasks(self, wp, w, armor, tot_s):
         """AI CAS: look at the fight, attack the column, then keep working the zone. Time-boxed so they eventually go home."""
@@ -717,6 +727,18 @@ class MissionBuilder:
     def _datalinks(self, package, awacs_unit) -> list:
         stn = {}
         whois = []
+        for f, g in self.flight_groups:               # your own flight is one network: wingmen are members of each other (blue on the HSD/TAD)
+            for u1 in g.units:
+                if getattr(u1, "datalink", None) is None:
+                    continue
+                if len(g.units) > 1:
+                    try:
+                        u1.datalink.settings.flight_lead = (u1 is g.units[0])
+                    except Exception:
+                        pass
+                for u2 in g.units:
+                    if u1 is not u2 and getattr(u2, "datalink", None) is not None:
+                        u1.datalink.network.add_member(u2.id)
         for f, g in self.flight_groups:
             lead = g.units[0]
             lead_stn = "-"
@@ -848,7 +870,6 @@ class MissionBuilder:
                 ct.stop_after_time(int(tot_s + 3600))
                 g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
                 g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + 90, 20 * NM)), alt, spd, "CAP2")
-                self._late(g, max(60, int(tot_s - 270 + r.uniform(-60, 60))))       # on station a few minutes before the strikers, like a game
             else:                                           # alert: on the runway, scrambles when detected
                 ap = self.t.airports.get(a.airport) if a.airport else None
                 if ap is None:

@@ -18,7 +18,7 @@ NM = 1852.0
 class ObjectivePlanner:
     """Looks at the war and decides what matters today, with the FLOT rule: a target is only offered when the route to it
     does not cross an intact SAM belt in front of it; the blocking sites become DEAD objectives instead."""
-    MIN_NM = 50
+    MIN_NM = 87        # about 100 statute miles; CAS is exempt (it has no near-ness test)
 
     def __init__(self, d=None):
         self.d = d

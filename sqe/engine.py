@@ -110,6 +110,7 @@ class Session:
         if problems:
             raise RuntimeError("; ".join(problems))
         self.options.hold_minutes = int(self.settings.hold_minutes)
+        self.options.ai_unlimited_fuel = bool(self.settings.ai_unlimited_fuel)
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
         with contextlib.redirect_stdout(io.StringIO()):          # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
