@@ -37,7 +37,10 @@ QTableWidget {{ gridline-color: {BORDER}; }}
 QProgressBar {{ background: {PANEL}; border: 1px solid {BORDER}; border-radius: 6px; text-align: center; height: 14px; color: {TEXT}; }}
 QProgressBar::chunk {{ background: {BLUE}; border-radius: 5px; }}
 QMenuBar {{ background: {PANEL}; }} QMenuBar::item:selected, QMenu::item:selected {{ background: #22476b; }}
-QMenu {{ background: {PANEL}; border: 1px solid {BORDER}; }}
+QMenu {{ background: {PANEL}; border: 1px solid {BORDER}; padding: 4px; }}
+QMenu::item {{ padding: 6px 36px 6px 22px; margin: 1px 2px; border-radius: 3px; }}
+QMenu::item:disabled {{ color: #6b7a8c; }}
+QMenu::separator {{ height: 1px; background: {BORDER}; margin: 4px 10px; }}
 QTabWidget::pane {{ border: 1px solid {BORDER}; border-radius: 8px; }}
 QTabBar::tab {{ background: {PANEL}; padding: 8px 16px; border-top-left-radius: 8px; border-top-right-radius: 8px; color: {DIM}; }}
 QTabBar::tab:selected {{ background: {CARD}; color: {TEXT}; }}

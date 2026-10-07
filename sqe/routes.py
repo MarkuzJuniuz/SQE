@@ -35,7 +35,7 @@ class Wpt:
     alt_ft: int
     speed_kts: int
     note: str = ""
-    action: str = ""        # "" | HOLD | BOMB | SEAD | SWEEP | CAS | CAPORBIT
+    action: str = ""        # "" | HOLD | BOMB | SEAD | SWEEP | CAS | ESCORT | CAPORBIT
     eta_s: float = 0.0      # seconds after mission start (filled by assign_times)
 
 
@@ -44,35 +44,37 @@ class Geometry:
     bx: float; by: float; tx: float; ty: float
     hdg: float; d: float
     mshl: tuple; push: tuple; ip: tuple; egr: tuple; cap1: tuple; cap2: tuple
+    dep: tuple = (0.0, 0.0)
 
 
-def make_geometry(bx, by, tx, ty, p: RouteProfile) -> Geometry:
+def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None) -> Geometry:
+    """mshl: where the package marshals. It is chosen by the caller BEHIND the base (away from the enemy) so the departure and
+    the hold are in friendly, defended airspace; the route then runs marshal -> PUSH -> IP -> target."""
     d = dist(bx, by, tx, ty)
     hdg = bearing(bx, by, tx, ty)
     push_d = max(d - p.push_nm * NM, 0.55 * d)
-    mshl_d = max(push_d - 45 * NM, 0.30 * d)
     ip_d = max(d - p.ip_nm * NM, push_d + 0.4 * (d - push_d))
     at = lambda dd: offset(bx, by, hdg, dd)
+    if mshl is None:
+        mshl = offset(bx, by, hdg + 180, 25 * NM)
     cap_d = max(0.45 * d, min(60 * NM, d))
     cap1 = at(cap_d)
-    return Geometry(bx, by, tx, ty, hdg, d, at(mshl_d), at(push_d), at(ip_d),
-                    offset(tx, ty, hdg + 100, p.egress_nm * NM), cap1, offset(*cap1, hdg + 90, p.cap_leg_nm * NM))
+    dep = offset(bx, by, bearing(bx, by, *mshl), min(8 * NM, 0.4 * dist(bx, by, *mshl)))
+    return Geometry(bx, by, tx, ty, hdg, d, mshl, at(push_d), at(ip_d),
+                    offset(tx, ty, hdg + 100, p.egress_nm * NM), cap1, offset(*cap1, hdg + 90, p.cap_leg_nm * NM), dep)
 
 
 def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_player: bool,
-               tanker_xy: tuple | None, stack_idx: int = 0) -> list[Wpt]:
-    """Waypoints from start (takeoff for the player, an in-air spawn for AI) to egress. RTB is added by the builder."""
+               tanker_xy: tuple | None, stack_idx: int = 0, spawn: tuple | None = None, spawn_alt_ft: int = 0,
+               spawn_kts: int = 0) -> list[Wpt]:
+    """Waypoints from start (takeoff for the player, an in-air 'just departed' spawn for AI) to egress. RTB is added by the builder."""
     wp: list[Wpt] = []
     bx, by = own_base
     if is_player:
-        wp.append(Wpt("DEP", *offset(bx, by, bearing(bx, by, *g.mshl), min(10 * NM, 0.15 * g.d)),
-                      p.depart_alt_ft, p.depart_kts, "Climb out, check in with AWACS"))
+        wp.append(Wpt("DEP", *g.dep, p.depart_alt_ft, p.depart_kts, "Climb out, check in with AWACS"))
     else:
-        tgt_pt = g.cap1 if role == Role.CAP else g.mshl
-        dd = dist(bx, by, *tgt_pt)
-        f = min(0.65, max(0.2, 1.0 - (min(90 * NM, max(25 * NM, 0.4 * dd)) / max(dd, 1))))
-        sx, sy = bx + (tgt_pt[0] - bx) * f, by + (tgt_pt[1] - by) * f
-        wp.append(Wpt("SPAWN", sx, sy, p.marshal_alt_ft - 3000, p.depart_kts + 100, "Airborne start"))
+        sx, sy = spawn if spawn else g.dep
+        wp.append(Wpt("SPAWN", sx, sy, spawn_alt_ft or p.depart_alt_ft, spawn_kts or p.depart_kts, "Airborne start"))
 
     if role == Role.CAP:
         alt = p.cap_alt_ft + 1000 * stack_idx
@@ -90,11 +92,11 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     elif role == Role.SEAD:
         wp.append(Wpt("SEAD", *offset(g.tx, g.ty, g.hdg + 180, 30 * NM), alt, p.attack_kts, "HARM launch point", "SEAD"))
     elif role == Role.SWEEP:
-        wp.append(Wpt("SWP", g.tx, g.ty, alt, p.attack_kts + 30, "Clear the airspace", "SWEEP"))
+        wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts + 30, "SWEEP: clear the airspace", "SWEEP"))
     elif role == Role.CAS:
-        wp.append(Wpt("CAS", g.tx, g.ty, alt, p.attack_kts, "Check in with JTAC (COMM1 CH4)", "CAS"))
+        wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts, "CAS: check in with JTAC (COMM1 CH4)", "CAS"))
     else:
-        wp.append(Wpt("ESC", g.tx, g.ty, alt, p.attack_kts, "Escort over target", ""))
+        wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts, "ESCORT: cover the strikers over target", "ESCORT"))
     wp.append(Wpt("EGR", *g.egr, alt, p.egress_kts, "Exit threat area"))
     if len(wp) + 2 > p.max_points:
         raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")
@@ -125,3 +127,11 @@ def hold_leave_s(wps: list[Wpt], push_s: float) -> float:
         if w.action == "HOLD":
             return push_s - (leg_seconds(w, wps[i + 1]) if i + 1 < len(wps) else 0)
     return push_s
+
+
+OBJECTIVE_ACTIONS = ("BOMB", "SEAD", "SWEEP", "CAS", "ESCORT", "CAPORBIT")
+
+
+def objective_wp(wps: list[Wpt]) -> Wpt | None:
+    """The waypoint a flight is on station at for TOT purposes (target / HARM point / CAP station)."""
+    return next((w for w in wps if w.action in OBJECTIVE_ACTIONS), None)

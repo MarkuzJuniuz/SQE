@@ -52,7 +52,7 @@ class AppSettings:
     dcs_install: str = ""
     dcs_saves: str = ""
     last_campaign: str = ""
-    player_unlimited_fuel: bool = False   # cheat: YOUR flight (wingmen included) never runs out of fuel
+    hold_minutes: int = 2                 # slack at the marshal point before PUSH (minutes; negative = hurry)
     persist: bool = True          # False in tests: never write %APPDATA%\\SQE\\settings.json
 
     # ---- derived paths ------------------------------------------------------------------

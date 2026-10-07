@@ -109,7 +109,7 @@ timer.scheduleFunction(function(_, t)
     local p, w = u:getPoint(), WPS[nextwp]
     local dx, dz = p.x - w.x, p.z - w.z
     if dx * dx + dz * dz < 5500 * 5500 then
-      say(string.format("Waypoint %s, %s.", w.label, w.name)); nextwp = nextwp + 1
+      say(string.format("NAV: Waypoint %s, %s.", w.label, w.name)); nextwp = nextwp + 1
     end
   end
   return t + 2

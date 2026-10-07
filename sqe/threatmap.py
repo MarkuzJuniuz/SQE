@@ -117,3 +117,24 @@ def point_back_along(poly, d_back: float):
             return (x0 + (x1 - x0) * f, y0 + (y1 - y0) * f), i
         remaining -= seg
     return pts[0], 1
+
+
+def safe_marshal(state, base_xy, hdg_to_target, min_enemy_nm: float = 90, ring_margin_nm: float = 20):
+    """Marshal point BEHIND the base: well away from enemy fighter bases and at least ring_margin_nm outside every SAM ring.
+    Tries close-in first, directly behind, then swings to the sides. Returns the best spot found (never None)."""
+    bx, by = base_xy
+    enemies = fighter_bases(state)
+    rs = rings(state, min_range=3)
+    back = hdg_to_target + 180
+    best, best_slack = None, -1e18
+    for nm in (25, 32, 40, 50, 62):
+        for ang in (0, 35, -35, 70, -70, 105, -105):
+            h = math.radians(back + ang)
+            x, y = bx + nm * NM * math.cos(h), by + nm * NM * math.sin(h)
+            slack = min([(math.hypot(x - ex, y - ey) / NM) - min_enemy_nm for ex, ey in enemies] +
+                        [(math.hypot(x - a.x, y - a.y) - r) / NM - ring_margin_nm for a, r in rs] + [1e9])
+            if slack >= 0:
+                return x, y
+            if slack > best_slack:
+                best, best_slack = (x, y), slack
+    return best

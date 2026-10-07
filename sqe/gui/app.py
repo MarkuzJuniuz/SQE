@@ -108,6 +108,8 @@ class MissionsPage(QWidget):
         self.note = QLabel("Press FLY on your flight. Push time, TOT and the briefing are built when you do."); self.note.setObjectName("small"); L.addWidget(self.note)
         self.resume = QPushButton("Resume pending sortie..."); self.resume.setObjectName("danger"); self.resume.hide(); L.addWidget(self.resume)
         self.resume.clicked.connect(win.wait_for_results)
+        self.skip = QPushButton("Skip Turn"); self.skip.setToolTip("Stand down for today: the whole tasking order is resolved by the war simulation and the date advances.")
+        self.skip.clicked.connect(win.skip_turn); L.addWidget(self.skip, 0, Qt.AlignRight)
 
     def refresh(self, sess: Session):
         st = sess.state; self.sess = sess
@@ -125,6 +127,7 @@ class MissionsPage(QWidget):
             self.lst.addItem(it)
         self.lst.blockSignals(False)
         self.resume.setVisible(bool(st.pending))
+        self.skip.setEnabled(st.status == "ACTIVE")
         if self.pkgs:
             self.lst.setCurrentRow(0)
 
@@ -291,17 +294,7 @@ class MainWindow(QMainWindow):
         self.recent = f.addMenu("Open &Recent"); self.recent.aboutToShow.connect(self._recent)
         f.addSeparator(); act("&Save", self.save, "Ctrl+S"); act("Save &As...", self.save_as, "Ctrl+Shift+S")
         f.addSeparator(); act("S&ettings...", self.settings, "Ctrl+,"); f.addSeparator(); act("E&xit", self.close, "Alt+F4")
-        opt = mb.addMenu("&Options")
-        self.cheat = QAction("My flight has unlimited fuel (cheat)", self); self.cheat.setCheckable(True)
-        self.cheat.setChecked(self.session.settings.player_unlimited_fuel)
-        self.cheat.toggled.connect(self._cheat); opt.addAction(self.cheat)
 
-    def _cheat(self, on: bool):
-        self.session.settings.player_unlimited_fuel = on
-        try:
-            self.session.settings.save()
-        except OSError:
-            pass
 
     def _recent(self):
         self.recent.clear()
@@ -368,6 +361,18 @@ class MainWindow(QMainWindow):
         if res.warnings:
             QMessageBox.information(self, "Built with notes", "\n".join(res.warnings))
         self.refresh_all(); self.wait_for_results()
+
+    def skip_turn(self):
+        sess = self.session
+        msg = "Skip today? Every package on the tasking order (including the ones you could fly) is resolved by the war simulation and the date advances."
+        if sess.state.pending:
+            msg += "\n\nThe sortie you built and have not finished will be discarded."
+        if QMessageBox.question(self, "Skip Turn", msg) != QMessageBox.Yes:
+            return
+        out = sess.skip_day(); self.refresh_all()
+        lines = [f"{'+' if r['success'] else '-'} {r['objective']}" for r in out["results"]]
+        end = {"VICTORY": "\n\nVICTORY. The enemy has been broken.", "DEFEAT": "\n\nDEFEAT. The coalition position has collapsed."}.get(out["status"], "")
+        QMessageBox.information(self, "Day resolved", "\n".join(lines) + end)
 
     def wait_for_results(self):
         dlg = WaitingDialog(self.session, self); r = dlg.exec()

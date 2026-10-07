@@ -109,7 +109,7 @@ class Session:
         problems = self.settings.problems()
         if problems:
             raise RuntimeError("; ".join(problems))
-        self.options.player_unlimited_fuel = bool(self.settings.player_unlimited_fuel)
+        self.options.hold_minutes = int(self.settings.hold_minutes)
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
         with contextlib.redirect_stdout(io.StringIO()):          # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
@@ -127,6 +127,22 @@ class Session:
             pass
         self.save()
         return res
+
+    # ---- skip the day ---------------------------------------------------------------------------------
+    def skip_day(self) -> dict:
+        """Skip Turn: any pending sortie is discarded and EVERY package of the day (even ones you could have flown) is resolved
+        by the war simulation. The date advances, the war replans."""
+        st = self.state
+        st.pending = None
+        sim = WarSimulator(self.d, self._rng(44))
+        results = [sim.resolve_abstract(st, Package.from_dict(pd)) for pd in st.plan]
+        st.note(f"Day {st.day}: you stood down. The war went on without you ({sum(1 for r in results if r['success'])} of {len(results)} packages succeeded).")
+        sim.end_day(st)
+        status = update_status(st)
+        if st.status == "ACTIVE":
+            self.plan_day()
+        self.save()
+        return {"results": results, "status": st.status, "text": status}
 
     # ---- results -------------------------------------------------------------------------------------
     def manifest(self) -> Manifest | None:

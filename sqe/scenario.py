@@ -21,6 +21,8 @@ RED_FIELDS = [("ab_sukhumi", "Sukhumi-Babushara", "Sukhumi-Babushara", 7), ("ab_
               ("ab_krymsk", "Krymsk", "Krymsk", 8), ("ab_maykop", "Maykop-Khanskaya", "Maykop-Khanskaya", 9),
               ("ab_nalchik", "Nalchik", "Nalchik", 6), ("ab_beslan", "Beslan", "Beslan", 6),
               ("ab_mozdok", "Mozdok", "Mozdok", 7)]
+# Level 1 (insurgent): only these enemy airfields are enemy-held; every other field is neutral and never appears in the war.
+RED_KEEP = {1: {"ab_sukhumi", "ab_sochi"}}
 WING_WEIGHT = {"ab_sukhumi": 1, "ab_gudauta": 2, "ab_sochi": 3, "ab_krymsk": 3, "ab_maykop": 4, "ab_nalchik": 2,
                "ab_beslan": 2, "ab_gelen": 1}
 SAM_LABEL = {"AAA": "AAA battery", "MANPAD": "MANPADS team", "SA-2": "SA-2 site", "SA-3": "SA-3 site",
@@ -77,11 +79,15 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     def add(id_, name_, kind, x, y, value, apt=None, variant=""):
         st.assets[id_] = EnemyAsset(id_, name_, kind, x, y, 1.0, value, [], apt, variant)
 
-    for aid, nm, apt, val in RED_FIELDS:
+    keep = RED_KEEP.get(d.level)
+    fields = [f for f in RED_FIELDS if keep is None or f[0] in keep]
+    live = {f[0] for f in fields}
+    for aid, nm, apt, val in fields:
         p = ap(apt)
         add(aid, nm, AssetKind.AIRFIELD, p.x, p.y, val, apt)
-    total_w = sum(WING_WEIGHT.values())
-    for aid, w in WING_WEIGHT.items():
+    ww = {k: v for k, v in WING_WEIGHT.items() if k in live}
+    total_w = sum(ww.values())
+    for aid, w in ww.items():
         cnt = max(2, round(d.enemy_air_total * w / total_w))
         types = rng.sample(d.enemy_types, k=min(len(d.enemy_types), 2))
         st.enemy_air.append(EnemyAirWing(aid, types, cnt, cnt))
@@ -92,7 +98,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     # ---- air defence clusters ----------------------------------------------------------------------
     variants = d.sam_variants
     k = 0
-    for aid, nm, apt, val in RED_FIELDS:
+    for aid, nm, apt, val in fields:
         p = ap(apt)
         for i in range(d.sam_sites_per_cluster):
             v = variants[k % len(variants)]
@@ -108,12 +114,15 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     def near(apt, dx, dy):
         p = ap(apt)
         return p.x + dx, p.y + dy
-    add("c2_maykop", "Southern Sector HQ (Maykop)", AssetKind.C2, *near("Maykop-Khanskaya", -9000, 11000), 9)
-    add("c2_sochi", "Coastal Command Post (Sochi)", AssetKind.C2, *near("Sochi-Adler", 8000, -9000), 8)
-    add("fuel_krymsk", "Krymsk fuel depot", AssetKind.FUEL, *near("Krymsk", 6000, 14000), 6)
-    add("fuel_gudauta", "Gudauta fuel farm", AssetKind.FUEL, *near("Gudauta", -4000, 9000), 5)
-    add("depot_beslan", "Beslan ammunition depot", AssetKind.DEPOT, *near("Beslan", 9000, 8000), 5)
-    add("depot_nalchik", "Nalchik ammunition depot", AssetKind.DEPOT, *near("Nalchik", -8000, 6000), 4)
+    for parent, aid, nm, kind, apt, dx, dy, val in (
+            ("ab_maykop", "c2_maykop", "Southern Sector HQ (Maykop)", AssetKind.C2, "Maykop-Khanskaya", -9000, 11000, 9),
+            ("ab_sochi", "c2_sochi", "Coastal Command Post (Sochi)", AssetKind.C2, "Sochi-Adler", 8000, -9000, 8),
+            ("ab_krymsk", "fuel_krymsk", "Krymsk fuel depot", AssetKind.FUEL, "Krymsk", 6000, 14000, 6),
+            ("ab_gudauta", "fuel_gudauta", "Gudauta fuel farm", AssetKind.FUEL, "Gudauta", -4000, 9000, 5),
+            ("ab_beslan", "depot_beslan", "Beslan ammunition depot", AssetKind.DEPOT, "Beslan", 9000, 8000, 5),
+            ("ab_nalchik", "depot_nalchik", "Nalchik ammunition depot", AssetKind.DEPOT, "Nalchik", -8000, 6000, 4)):
+        if parent in live:
+            add(aid, nm, kind, *near(apt, dx, dy), val)
 
     # ---- the ground push toward Senaki (CAS targets) ------------------------------------------------------------
     a, b = ap("Sukhumi-Babushara"), ap("Senaki-Kolkhi")

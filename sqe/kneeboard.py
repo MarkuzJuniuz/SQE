@@ -69,14 +69,14 @@ def render_pages(outdir, ctx: dict) -> list:
     for ch, e in ctx["comm2"].items():
         p.cols([(20, f"CH{ch}"), (84, e.label), (230, f"{e.mhz:7.3f}"), (340, e.callsign)], 18, bold=True, gap=5)
     p.rule(6)
-    p.cols([(20, "WP"), (64, "NAME"), (160, "TIME"), (282, "ALT"), (342, "KTS"), (400, "HDG/NM"), (500, "WINDOW")], 14, DIM, True, 4)
+    p.cols([(20, "WP"), (64, "NAME"), (160, "TIME"), (282, "ALT"), (342, "KTS"), (396, "HDG/NM"), (474, "REMARKS")], 14, DIM, True, 4)
     for r in ctx["waypoints"]:
-        hot = r["name"] in ("MSHL", "PUSH", "TGT", "CAS", "ESC", "SEAD", "SWP", "CAP1")
+        hot = r["name"] in ("MSHL", "PUSH", "TGT", "SEAD", "CAP1")
         y0 = p.y
         p.cols([(20, r["wp"]), (64, r["name"]), (160, r["time"]), (282, r["alt"]), (342, r["kts"]), (400, r["leg"])], 17, bold=hot, gap=7)
-        last = r["win"] or (r["note"][:34] if r["name"] in ("TKR", "RTB", "DIVERT") else "")
+        last = " ".join(x for x in (r["win"], r["note"]) if x)[:40]
         if last:
-            p.d.text((492, y0 + 3), last, font=_font(13, bool(r["win"])), fill=INK if r["win"] else DIM)
+            p.d.text((474, y0 + 3), last, font=_font(12, bool(r["win"])), fill=INK if r["win"] else DIM)
     p.y += 4
     p.text(f"Numbers are as your {ctx['jet']} cockpit shows them: {ctx['numbering']}", 12, color=DIM, gap=3)
     p.text("PUSH +/-30 s, TOT +/-1 min. Times are YOUR flight's.", 12, color=DIM)

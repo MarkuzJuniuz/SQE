@@ -72,6 +72,11 @@ class SettingsDialog(QDialog):
             b.clicked.connect(lambda _=0, l=line, t=ttl: _browse(self, l, t))
             row.addWidget(lb); row.addWidget(line, 1); row.addWidget(b); lay.addLayout(row)
             h = QLabel(hint); h.setObjectName("small"); lay.addWidget(h)
+        row = QHBoxLayout(); lb = QLabel("Marshal slack"); lb.setMinimumWidth(80)
+        self.hold = QSpinBox(); self.hold.setRange(-10, 30); self.hold.setSuffix(" min"); self.hold.setValue(int(settings.hold_minutes))
+        row.addWidget(lb); row.addWidget(self.hold); row.addStretch(1); lay.addLayout(row)
+        h = QLabel("Time between reaching the marshal point and the PUSH. Smaller = less waiting. Negative means you must beat the "
+                   "natural pace (afterburner time). AI flights adjust automatically."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
         self.ms = QLabel(); lay.addWidget(self.ms)
         row = QHBoxLayout(); pb = QPushButton("Patch MissionScripting.lua"); pb.clicked.connect(self._patch)
         row.addWidget(pb); row.addStretch(1); lay.addLayout(row)
@@ -91,6 +96,7 @@ class SettingsDialog(QDialog):
 
     def _save(self):
         self.s.dcs_install, self.s.dcs_saves = self.inst.text().strip(), self.saves.text().strip()
+        self.s.hold_minutes = int(self.hold.value())
         pr = self.s.problems()
         if pr:
             QMessageBox.warning(self, "Check your paths", "\n".join(pr)); return
@@ -115,7 +121,7 @@ class WaitingDialog(QDialog):
             wl = QLabel("Note: " + wmsg); wl.setWordWrap(True); wl.setStyleSheet(f"color:{theme.AMBER};"); il.addWidget(wl)
         il.addWidget(QLabel(f"Launch {tl['launch']}   |   Marshal {tl['marshal']}   |   <b>PUSH {tl['push']}</b>   |   <b>TOT {tl['tot']}</b>   |   Egress {tl['egress']}"))
         self.status = QLabel("Waiting for DCS results..."); self.status.setObjectName("h2"); lay.addWidget(self.status)
-        self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["", "Coalition (blue)", "Enemy (red)"])
+        self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["This sortie", "Coalition (blue)", "Enemy (red)"])
         self.tbl.verticalHeader().setVisible(False); self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch); self.tbl.setMinimumHeight(190)
         lay.addWidget(self.tbl)

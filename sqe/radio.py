@@ -21,7 +21,7 @@ from .models import BaseKind
 @_dc
 class RadioLayout:
     """Your fixed preset layout. CH4 (JTAC) and CH5 (second tanker) appear only when the mission has them."""
-    comm1: dict = field(default_factory=lambda: {1: "ATC", 2: "AWACS", 3: "TANKER1", 4: "JTAC", 5: "TANKER2"})
+    comm1: dict = field(default_factory=lambda: {1: "ATC", 2: "AWACS", 3: "TANKER1", 4: "JTAC", 5: "TANKER2", 6: "DIVERT"})
     comm2: dict = field(default_factory=lambda: {1: "FLIGHT"})
     optional: frozenset = frozenset({"JTAC", "TANKER2"})
     comm1_radio_id: int = 1
@@ -79,9 +79,11 @@ class FrequencyAllocator:
 
 
 def build_radio_plan(package, state, atc_mhz: float, rng: random.Random,
-                     layout: RadioLayout, mcfg: RadioCfg) -> RadioPlan:
+                     layout: RadioLayout, mcfg: RadioCfg, divert_mhz: float | None = None, divert_name: str = "") -> RadioPlan:
     alloc = FrequencyAllocator(rng)
     alloc.reserve(atc_mhz)
+    if divert_mhz:
+        alloc.reserve(divert_mhz)
     alloc.reserve(mcfg.carrier_link4_mhz)
     plan = RadioPlan()
     plan.comm1[1] = RadioEntry(layout.comm1[1], atc_mhz, note="Tower / carrier control")
@@ -90,6 +92,10 @@ def build_radio_plan(package, state, atc_mhz: float, rng: random.Random,
     tacans_used = {mcfg.carrier_tacan}
     for ch, label in layout.comm1.items():
         if ch == 1:
+            continue
+        if label == "DIVERT":
+            if divert_mhz:
+                plan.comm1[ch] = RadioEntry("DIVERT", divert_mhz, divert_name[:14], "Divert tower")
             continue
         if label in layout.optional and not (package.jtac if label == "JTAC" else label in sup):
             continue

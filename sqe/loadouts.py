@@ -31,7 +31,7 @@ _D: dict = {
     },
     "F-15C": {"CAP": {1: "AIM_120C", 3: "AIM_9M", 4: "AIM_120C", 5: "AIM_120C", 7: "AIM_120C", 8: "AIM_120C",
                       9: "AIM_9M", 11: "AIM_120C"}},
-    "A-10C": {"CAS": {1: "GBU_12", 11: "GBU_12", 2: "LAU_68___7_x_UnGd_Rkts__70_mm_Hydra_70_M151_HE",
+    "A-10C": {"CAS": {1: "GBU_12", 11: "GBU_12", 3: "LAU_117___AGM_65D", 9: "LAU_117___AGM_65D", 2: "LAU_68___7_x_UnGd_Rkts__70_mm_Hydra_70_M151_HE",
                       10: "LAU_68___7_x_UnGd_Rkts__70_mm_Hydra_70_M151_HE", 5: "BRU_42___1_x_Mk_82___500lb_GP_Bomb_LD",
                       7: "BRU_42___1_x_Mk_82___500lb_GP_Bomb_LD", 6: "Mk_82___500lb_GP_Bomb_LD"}},
 }

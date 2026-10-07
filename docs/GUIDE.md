@@ -103,7 +103,7 @@ I cannot run DCS where I build this. Always run `python tools/smoke_test.py` fir
 - [ ] CAS: friendly tanks and a JTAC are in contact with the enemy column; the A-10s attack it. Debrief reports friendly losses.
 - [ ] Level 3 only: a bomber raid on the fleet (4x Tu-22M3 with escorts) already en route from their base at mission start.
 - [ ] Kneeboard page 1 = comms + times (no coordinates); page 2 = bingo/joker, IFF Mode 3, laser code, bullseye, package who's-who with STNs, threats, target coordinates (strike/SEAD/CAS roles).
-- [ ] Wingmen follow you on your route; the Options menu has "My flight has unlimited fuel (cheat)" (off by default).
+- [ ] Wingmen follow you on your route. Nobody has unlimited fuel (AI included). Marshal slack is in Settings (negative values allowed).
 
 **Fixed earlier, still worth a look**
 - [ ] No `DictKey_Translation` Lua error; `Saved Games\DCS\SQE\SQE_state.json` appears while you fly.
