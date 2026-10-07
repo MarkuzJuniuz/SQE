@@ -45,3 +45,20 @@ def ato_times(n: int, d: date, night_ops: bool, rng: random.Random) -> list:
         return [hhmm((lo + hi) / 2)]
     step = (hi - lo) / (n - 1)
     return [hhmm(lo + i * step + rng.uniform(-0.2, 0.2) * (0 if i in (0, n - 1) else 1)) for i in range(n)]
+
+
+def wave_times(n: int, d: date, night_ops: bool, rng: random.Random, wave: int = 3) -> list:
+    """n start times in 'waves' of up to `wave` packages 0-25 minutes apart, the waves spread through the day (like a real ATO).
+    Returned ascending; the caller gives consecutive packages (same area) consecutive times."""
+    rise, sets = sun_times(d)
+    lo, hi = (rise + 0.5, rise + 0.5 + 22.0) if night_ops else (rise + 1.0, sets - 2.5)
+    n_w = max(1, math.ceil(n / wave))
+    centers = [(lo + hi) / 2] if n_w == 1 else [lo + i * (hi - lo) / (n_w - 1) for i in range(n_w)]
+    out = []
+    for w in range(n_w):
+        k = min(wave, n - w * wave)
+        offs = sorted(rng.uniform(0, 0.42) for _ in range(k))
+        if k:
+            offs[0] = 0.0
+        out += [hhmm(centers[w] + o) for o in offs]
+    return sorted(out)

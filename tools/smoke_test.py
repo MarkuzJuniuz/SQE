@@ -48,6 +48,22 @@ def main():
         assert len([n for n in z.namelist() if "KNEEBOARD" in n]) == 2, "expected 2 kneeboard pages"
         from dcs import lua                                       # the mission file must parse as valid Lua, exactly like DCS reads it
         lua.loads(mission); lua.loads(z.read("l10n/DEFAULT/dictionary").decode())
+        try:                                                      # the embedded hook must compile as Lua (checked when lupa is installed)
+            import lupa
+            def _find(o):
+                if isinstance(o, str):
+                    return o if "SQE debrief hook" in o else None
+                for v in (o.values() if isinstance(o, dict) else o if isinstance(o, (list, tuple)) else ()):
+                    r = _find(v)
+                    if r:
+                        return r
+            hook = _find(lua.loads(mission)) or _find(lua.loads(z.read("l10n/DEFAULT/dictionary").decode()))
+            assert hook, "hook script not found in the mission"
+            res_ = lupa.LuaRuntime(unpack_returned_tuples=True).eval("function(s) return load(s) end")(hook)
+            fn, err = (res_ if isinstance(res_, tuple) else (res_, None))
+            assert fn is not None, f"hook does not compile: {err}"
+        except ImportError:
+            pass
         print(f"[{aircraft}] {pk.objective.type.value}: {pk.objective.description} | {fl.callsign}-1 {fl.role.value} | start {pk.start} | push {res.timeline['push']}"
               f" TOT {res.timeline['tot']} | seed {res.seed} | {res.counts['groups']} groups / {res.counts['units']} units | warnings: {res.warnings or 'none'}")
         man = s.manifest()
@@ -68,6 +84,27 @@ def main():
         assert r.state.day == 2 and r.state.pilot["sorties"] == 1
         tested += 1
     assert tested >= 3, "too few jets tested"
+    # ---- package merging: fold same-area packages into one mission, fly it, debrief all of them ---------------------------
+    ms = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all"))
+    ms.new("Smoke merge", "F-16C", 2, seed=5)
+    cand = next(((p, ms.merge_candidates(p)) for p in ms.packages() if ms.flyable(p) and ms.merge_candidates(p)), None)
+    assert cand, "no mergeable packages found"
+    pk, extra = cand
+    res = ms.fly(pk.number, ms.flyable(pk)[0].id)
+    assert res.merged and len(res.merged) == len(extra), res.merged
+    man = ms.manifest()
+    z = zipfile.ZipFile(ms.settings.sortie_miz); lua.loads(z.read("mission").decode())
+    print(f"[merge] #{pk.number} {pk.objective.type.value} + {[(m['number'], m['type']) for m in res.merged]}: {res.counts['groups']} groups / {res.counts['units']} units")
+    prim2 = [g for g in man.groups if g["kind"] == "asset" and g.get("primary_pkgs")]
+    assert any(res.merged[0]["id"] in g["primary_pkgs"] for g in prim2), "merged package has no primary target"
+    t_late = max(m["tot_s"] for m in res.merged) + 200
+    dead = [u for g in man.groups if g["kind"] == "asset" and res.merged[0]["id"] in g.get("primary_pkgs", []) for u in g["units"][:2]]
+    ms.settings.state_file.write_text(json.dumps({"campaign": man.campaign_id, "sortie": man.sortie, "package": man.package_id, "mission_ended": True,
+        "time": t_late, "dead": dead, "ejected": [], "landed": [man.player_unit], "player": {"takeoff": 300, "landed": 2300, "ka": 0, "kg": 0, "ks": 0}}))
+    st_, got, _ = ms.poll(); assert st_ == "ok"
+    out = ms.apply(got)
+    assert out["packages"] and out["packages"][0]["resolved"], out["packages"]
+    print("    merged debrief:", [ln for ln in out["lines"] if ln.startswith("Package #")][:2])
     print("SMOKE TEST PASSED")
 
 

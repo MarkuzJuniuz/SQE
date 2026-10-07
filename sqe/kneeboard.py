@@ -79,7 +79,8 @@ def render_pages(outdir, ctx: dict) -> list:
             p.d.text((474, y0 + 3), last, font=_font(12, bool(r["win"])), fill=INK if r["win"] else DIM)
     p.y += 4
     p.text(f"Numbers are as your {ctx['jet']} cockpit shows them: {ctx['numbering']}", 12, color=DIM, gap=3)
-    p.text("PUSH +/-30 s, TOT +/-1 min. Times are YOUR flight's.", 12, color=DIM)
+    p.text("PUSH +/-30 s, TOT +/-1 min. Times are YOUR flight's.", 12, color=DIM, gap=3)
+    p.text(ctx.get("zulu_note", "Times are local. Zulu = local - 4 h (your jet may show Zulu)."), 12, color=DIM)
     pages.append(p.save(outdir / "1_comms_times.png"))
 
     # ------------------------------------------------ page 2: fuel, codes, package, threats
@@ -94,6 +95,12 @@ def render_pages(outdir, ctx: dict) -> list:
     p.cols([(20, "CALLSIGN"), (200, "TYPE"), (300, "TASK"), (430, "M3"), (500, "STN")], 13, DIM, True, 3)
     for r in ctx["whois"]:
         p.cols([(20, r["cs"]), (200, r["ac"]), (300, r["role"]), (430, r["m3"]), (500, r["stn"])], 14, bold=r["you"], gap=3)
+    if ctx.get("others"):
+        p.rule()
+        p.text("ALSO IN THIS MISSION (AI packages, same area; each pushes and strikes on its own time)", 12, color=DIM, bold=True, gap=3)
+        for o in ctx["others"][:3]:
+            p.text(o["line"][:70], 13, bold=True, gap=1)
+            p.text("   " + o["sub"][:88], 11, color=DIM, gap=3)
     p.rule()
     p.text("THREATS NEAR TARGET", 15, bold=True, gap=3)
     for t in (ctx["threats"][:8] or ["No known SAM or radar sites within 60 nm."]):

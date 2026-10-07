@@ -1,3 +1,52 @@
+# Changes in v0.7.3
+
+- Shorter transit to the marshal point. DEP is now a short climb-out / turning point about 4 nm from the field (was 8 nm), on the line toward the marshal. The marshal search starts at 15 nm behind the base (was 25 nm) and only moves farther back when the safety rules need it (at least 20 nm outside SAM rings, 90 nm from enemy fighter bases).
+
+# Changes in v0.7.2
+
+- New setting **Takeoff buffer** (Settings): seconds between mission start and the takeoff time on your kneeboard. It replaces the fixed 3 minutes; default 60 s, can be negative, granular to the second (-600 to +900 s). Negative means the plan expects you to be rolling before the clock starts, so you make the time up in the air; waypoint times in the jet are never written before mission start. Marshal slack is unchanged (default 2 min).
+
+# Changes in v0.7.1
+
+- **MissionScripting.lua is automatic.** Settings has a checkbox (on by default) replacing the old patch button: SQE patches DCS's MissionScripting.lua when it starts and restores it when it exits. It only comments out the io/lfs sanitize lines (the rest of the file is never overwritten, so DCS updates are safe) and keeps a backup next to the file. If SQE crashed and left the patch in place, the next start recognises it and restores it at exit. Closing SQE with a sortie pending asks first, because DCS can no longer write results once the file is restored.
+- **Call-outs rewritten.** The waypoint "NAV:" messages are gone. The sound is now a short 1 kHz beep (not a squelch). Messages name the speaker in capitals:
+  - the AWACS and tanker keep their scheduled calls ("OVERLORD to VIPER 1: package, push, push, push.");
+  - every other flight announces "pushing", "off target, egressing", or "on station" (HAVCAP, base CAP, CAP) at its own times; extra packages of a merged mission are prefixed "P2 ...";
+  - AI aircraft, including your own wingmen (never you), call their weapons: "Magnum" (anti-radiation missile), "Fox 1/2/3", "Rifle" (guided air-to-ground missile), "Bombs away", then "direct hit" when one of their weapons hits the target's site, and "splash one" for aircraft kills;
+  - radar results: "track radar destroyed", "<site> blinded, all radars destroyed" (a radar that is only shut down is not detected), and "target destroyed" when the last unit of an objective goes. These come from the flight that last hit that site, or the package's lead flight.
+  The AWACS makes no splash or target calls.
+
+# Changes in v0.7.0
+
+**Old campaigns will not load** (the squadron structure changed; the save format is now 3). Start a new campaign.
+
+**Realistic squadrons**
+- The coalition now has 11 squadrons, about 175 jets at Level 2: Navy 2x F-14B(U) and 2x F/A-18C (12 each), USAF 3x F-16C, 2x F-15C and 2x A-10C (18 each; Level 1 is scaled up, Level 3 down). Every squadron has its own callsign (Springfield/Uzi, Hornet/Squid, Viper/Cowboy/Venom, Enfield/Dodge, Hawg/Boar).
+- The enemy air force is about 20 aircraft at Level 1, 90 at Level 2 and 150 at Level 3, spread over several squadrons per airfield (Forces page shows it). Expected fighter opposition per target was recalibrated so a bigger air force does not swamp every mission.
+- New Campaign has a squadron picker for the jet you chose.
+- The daily tasking order is bigger (up to ~14 packages, usually 6-12 depending on level). Packages are launched in waves, same-area packages together, and are numbered in time order.
+
+**Missions filter**
+- A drop-down above the list: "My squadron" (default; only packages with a flight from your own squadron) or "All packages". Your choice is remembered. In My squadron mode FLY buttons appear only on your squadron's flights; in All mode on any flight your jet type can fly.
+
+**Package merging** (Settings > Package merging: Off / Same area)
+- With it on, packages in the same area (targets within ~45 km, or covered by the same SAM cluster) that start at or after yours and within 30 minutes are folded into your mission (at most 2 extra, 3 packages in all). The tasking list shows "+N packages".
+- The extra packages are AI-flown but fully live: their own marshal, push, TOT and stagger, each pushing at its own time. They share ONE ground world (a site needed by two packages is spawned once), ONE set of support (tanker, AWACS, HAVCAP, base CAP) and ONE enemy air picture sized by the biggest need, not the sum. Callsigns are renumbered so nothing collides. Kneeboard page 2 lists the other packages with their push/TOT/done times.
+- A merged mission is trimmed (last package dropped) until it fits the unit limit (Settings, default 150), so you can compare performance: the waiting window already prints groups and units.
+- Debrief reads what really happened, per package (target damage and losses). If you landed and ended the mission before a merged package reached its target, that package is resolved by the war simulation instead, so staying in the mission longer is rewarded but never required.
+
+# Changes in v0.6.3
+
+- PUSH is now about 10 nm from the marshal point, toward the target (BMS style). DEP, MSHL and PUSH cluster near home; the ingress to the IP is one long straight run.
+- Every player waypoint now carries its planned time, so the F-16 CRUS/TOS page matches the kneeboard. Only PUSH and the objective (TGT/SEAD) point are time-locked; speed is left free between them. Kneeboard page 1 notes that Caucasus local = Zulu + 4 h (jets show Zulu).
+- AWACS and tanker racetracks run sideways (parallel to the front), shorter (AWACS 40 nm, tanker 30 nm), behind the marshal point; the HAVCAP sits in the rear as well.
+- Kneeboard REMARKS show your base name on the TAKEOFF and RTB lines ("Kobuleti: Land. Tower COMM1 CH1", "Stennis: Case I TACAN 74X ICLS 11").
+- Enemy CAP stations sit 20-25 nm in front of their OWN base (toward the target), inside their SAM cover, and stay up from the start.
+- EGR also avoids CAP stations (35 nm) and enemy fighter bases (40 nm) where possible, as well as SAM rings.
+- Alert fighters now scramble when the package comes within a ring around the TARGET (sized so they arrive ~1-2 min before TOT; smaller with no EWR cover; never trips at start). Far-off SAMs and armour are protected. CAS packages scramble on a clock because friendly troops sit on the target.
+- Intercept missions (fleet defence / BARCAP) now keep the enemy SAM sites (and nearest EWRs) whose rings touch your route or station.
+- Fixed: the player's takeoff/DEP times were offset from the kneeboard times in the mission file.
+
 # Changes in v0.6.2
 
 - EGR is now the FIRST safe point after the target: the closest point (8 nm or more from the target) that is clear of every live SAM ring plus a margin, turning for home and away from enemy fighter bases where it can. It used to sit a fixed 25-30 nm out. A DEAD target itself is ignored (you are killing it); its surviving neighbours are not.

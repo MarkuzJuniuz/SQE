@@ -127,7 +127,7 @@ def safe_marshal(state, base_xy, hdg_to_target, min_enemy_nm: float = 90, ring_m
     rs = rings(state, min_range=3)
     back = hdg_to_target + 180
     best, best_slack = None, -1e18
-    for nm in (25, 32, 40, 50, 62):
+    for nm in (15, 20, 25, 32, 40, 50, 62):
         for ang in (0, 35, -35, 70, -70, 105, -105):
             h = math.radians(back + ang)
             x, y = bx + nm * NM * math.cos(h), by + nm * NM * math.sin(h)
@@ -140,9 +140,10 @@ def safe_marshal(state, base_xy, hdg_to_target, min_enemy_nm: float = 90, ring_m
     return best
 
 
-def first_safe_egress(state, tx, ty, hdg_to_target, skip_ids=(), min_nm: float = 8, max_nm: float = 60, margin_nm: float = 4):
+def first_safe_egress(state, tx, ty, hdg_to_target, skip_ids=(), min_nm: float = 8, max_nm: float = 60, margin_nm: float = 4, avoid=()):
     """EGR = the FIRST safe point after the target: the closest point (8 nm and out) that is clear of every live SAM ring (plus a margin).
     Bearings that turn for home are tried first; among equals, the one farther from enemy fighter bases wins (away from their CAP).
+    avoid = [(x, y, nm)] extra keep-out circles (enemy CAP stations, fighter bases).
     Returns None when nothing within max_nm is clear (the caller falls back to safe_egress)."""
     rs = [(a, r) for a, r in rings(state, min_range=3) if a.id not in skip_ids]
     enemies = fighter_bases(state)
@@ -152,7 +153,8 @@ def first_safe_egress(state, tx, ty, hdg_to_target, skip_ids=(), min_nm: float =
         r = min_nm
         while r <= max_nm:
             x, y = tx + r * NM * math.cos(h), ty + r * NM * math.sin(h)
-            if all(math.hypot(x - a.x, y - a.y) >= rr + margin_nm * NM for a, rr in rs):
+            if all(math.hypot(x - a.x, y - a.y) >= rr + margin_nm * NM for a, rr in rs) and \
+                    all(math.hypot(x - ax, y - ay) >= anm * NM for ax, ay, anm in avoid):
                 far = min((math.hypot(x - ex, y - ey) for ex, ey in enemies), default=0) / NM
                 score = r - 0.08 * min(far, 150) + 0.4 * k
                 if score < best_score:

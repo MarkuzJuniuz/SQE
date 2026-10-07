@@ -84,6 +84,11 @@ class MissionsPage(QWidget):
         root = QHBoxLayout(self); root.setSpacing(16)
         left = QVBoxLayout(); root.addLayout(left, 4)
         self.day = QLabel(); self.day.setObjectName("h2"); left.addWidget(self.day)
+        frow = QHBoxLayout(); fl = QLabel("Show"); fl.setObjectName("small"); frow.addWidget(fl)
+        self.flt = QComboBox(); self.flt.addItem("My squadron", "squadron"); self.flt.addItem("All packages", "all")
+        self.flt.setToolTip("My squadron: only packages with a flight from your squadron.  All: every package of the day.")
+        frow.addWidget(self.flt, 1); left.addLayout(frow)
+        self.flt.currentIndexChanged.connect(self._filter_changed)
         self.lst = QListWidget(); left.addWidget(self.lst, 1); self.lst.currentRowChanged.connect(self._show)
         right = QVBoxLayout(); root.addLayout(right, 6)
         self.c = card(); right.addWidget(self.c, 1)
@@ -111,16 +116,32 @@ class MissionsPage(QWidget):
         self.skip = QPushButton("Skip Turn"); self.skip.setToolTip("Stand down for today: the whole tasking order is resolved by the war simulation and the date advances.")
         self.skip.clicked.connect(win.skip_turn); L.addWidget(self.skip, 0, Qt.AlignRight)
 
+    def _filter_changed(self):
+        if getattr(self, "sess", None) is None or getattr(self, "_loading", False):
+            return
+        self.sess.settings.flight_filter = self.flt.currentData()
+        try:
+            self.sess.settings.save()
+        except OSError:
+            pass
+        self.refresh(self.sess)
+
     def refresh(self, sess: Session):
         st = sess.state; self.sess = sess
-        self.pkgs = sess.packages()
-        self.day.setText(f"{st.campaign_date().strftime('%d %b %Y').upper()}  -  Day {st.day} tasking order")
+        self._loading = True
+        self.flt.setCurrentIndex(0 if sess.settings.flight_filter != "all" else 1)
+        self._loading = False
+        mine_only = sess.settings.flight_filter != "all"
+        self.pkgs = [p for p in sess.packages() if (bool(sess.flyable(p)) or not mine_only)]
+        self.day.setText(f"{st.campaign_date().strftime('%d %b %Y').upper()}  -  Day {st.day} tasking order  ({len(self.pkgs)} shown)")
         self.lst.blockSignals(True); self.lst.clear()
         for p in self.pkgs:
             ok = bool(sess.flyable(p))
             night = is_night(st.campaign_date(), p.start)
+            extra = sess.merge_candidates(p) if ok else []
             it = QListWidgetItem(f"#{p.number}  {p.objective.type.value.replace('_', ' ')}   {p.start}{' (night)' if night else ''}"
-                                 f"{'   [JOINT]' if p.joint else ''}\n{p.objective.description}" + ("" if ok else "\n(no flight for your aircraft)"))
+                                 f"{'   [JOINT]' if p.joint else ''}{f'   +{len(extra)} package' + ('s' if len(extra) > 1 else '') if extra else ''}"
+                                 f"\n{p.objective.description}" + ("" if ok else "\n(no flight for your aircraft)"))
             it.setData(Qt.UserRole, p.number); it.setSizeHint(QSize(0, 66))
             if not ok:
                 it.setForeground(QColor(theme.DIM))
@@ -162,7 +183,9 @@ class MissionsPage(QWidget):
                 self.ft.removeCellWidget(i, 5)
                 self.ft.setItem(i, 5, _item("AI support" if f.tag else f"AI {spec.service}", theme.DIM))
         self.sup.setText("Support: " + ", ".join(f"{s.label} ({s.slot.title()})" for s in p.support) +
-                         ("  |  JTAC on the ground" if p.jtac else "") + ("  |  Joint Navy / Air Force package" if p.joint else ""))
+                         ("  |  JTAC on the ground" if p.jtac else "") + ("  |  Joint Navy / Air Force package" if p.joint else "") +
+                         (("  |  Merged mission: also flies " + ", ".join(f"#{x.number}" for x in self.sess.merge_candidates(p)))
+                          if opts and self.sess.merge_candidates(p) else ""))
         tx, ty = PackageBuilder(st).target_xy(p.objective)
         th = threat_lines(st, tx, ty)[:4]
         self.thr.setText((f"Expect about {p.n_def} hostile fighters at the target.  " if p.n_def else "") +
@@ -194,7 +217,7 @@ class ForcesPage(QWidget):
             self.sq.setCellWidget(i, 5, self._bar(s.readiness, theme.BLUE))
         self.ea.setRowCount(len(st.enemy_air))
         for i, w in enumerate(st.enemy_air):
-            for j, v in enumerate((st.assets[w.base_asset_id].name, ", ".join(w.types), f"{w.available} / {w.authorized}")):
+            for j, v in enumerate((st.assets[w.base_asset_id].name + (f"  ({w.squadrons} squadrons)" if w.squadrons > 1 else ""), ", ".join(w.types), f"{w.available} / {w.authorized}")):
                 self.ea.setItem(i, j, _item(v))
             self.ea.setCellWidget(i, 3, self._bar(w.available / max(1, w.authorized), theme.RED))
         bl = list(st.bases.values()); self.bs.setRowCount(len(bl))
@@ -312,7 +335,7 @@ class MainWindow(QMainWindow):
         dlg = NewCampaignDialog(self)
         if dlg.exec() == QDialog.Accepted:
             try:
-                v = dlg.values(); self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], night_ops=v['night_ops']); self.refresh_all()
+                v = dlg.values(); self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], night_ops=v['night_ops'], squadron=v.get('squadron')); self.refresh_all()
             except Exception:
                 QMessageBox.critical(self, "Could not create campaign", traceback.format_exc())
 
@@ -338,6 +361,15 @@ class MainWindow(QMainWindow):
                                            f"SQE campaign (*{CAMPAIGN_EXT})")
         if f:
             self.session.save(f if f.endswith(CAMPAIGN_EXT) else f + CAMPAIGN_EXT); self.refresh_all()
+
+    def closeEvent(self, ev):
+        st = self.session.state
+        if st is not None and st.pending and self.session.settings.auto_patch_scripting and \
+                QMessageBox.question(self, "Sortie pending",
+                    "A sortie is still pending. Closing SQE restores DCS's MissionScripting.lua, so DCS can no longer write the results "
+                    "for this mission.\n\nClose anyway?") != QMessageBox.Yes:
+            ev.ignore(); return
+        ev.accept()
 
     def settings(self):
         if SettingsDialog(self.session.settings, self).exec() == QDialog.Accepted:
@@ -408,7 +440,18 @@ def run():
     f = app.font(); f.setPointSize(10); app.setFont(f)
     settings = AppSettings.load(); sess = Session(settings)
     w = MainWindow(sess); w.show()
+    from .. import settings as S
+    def scripting_on():
+        if settings.auto_patch_scripting and settings.dcs_install:
+            ok, msg = S.patch_mission_scripting(settings.dcs_install)
+            if not ok:
+                QMessageBox.warning(w, "MissionScripting.lua", msg + "\n\nWithout it DCS cannot write the sortie results for debriefing.")
+        elif settings.auto_patch_scripting and not settings.dcs_install:
+            QMessageBox.information(w, "MissionScripting.lua", "No DCS install folder is set (Settings), so MissionScripting.lua can't be patched automatically. "
+                                    "Debriefing needs it.")
+    app.aboutToQuit.connect(lambda: S.restore_mission_scripting(settings.dcs_install) if settings.dcs_install and settings.auto_patch_scripting else None)
     def start():
+        scripting_on()
         if settings.problems():
             QMessageBox.information(w, "Welcome", "First, tell SQE where DCS keeps your saves (Settings).")
             w.settings()

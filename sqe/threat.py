@@ -17,7 +17,7 @@ def expected_defenders(state, tx: float, ty: float, iads: float = 0.5) -> float:
             continue
         wgt = 1.0 if d < 60 else 1.0 - 0.7 * (d - 60) / 120
         fighters = [t for t in w.types if t in ENEMY_FIGHTERS]
-        e += w.available * (len(fighters) / max(1, len(w.types))) * 0.30 * wgt
+        e += w.available * (len(fighters) / max(1, len(w.types))) * 0.14 * wgt
     return e * (0.7 + 0.6 * iads)
 
 

@@ -53,7 +53,12 @@ class AppSettings:
     dcs_saves: str = ""
     last_campaign: str = ""
     ai_unlimited_fuel: bool = True        # AI flights: unlimited fuel until the push, real fuel for the combat leg, unlimited again from egress
+    takeoff_buffer_s: int = 60            # seconds between mission start and the briefed takeoff (negative = you must be quicker than the plan)
     hold_minutes: int = 2                 # slack at the marshal point before PUSH (minutes; negative = hurry)
+    flight_filter: str = "squadron"      # Missions page: "squadron" (only flights of YOUR squadron) or "all" (any flight your jet can fly)
+    merge_mode: str = "off"               # "off" | "area": fold packages in the same area, starting within 30 min, into one mission
+    merge_max_units: int = 150            # a merged mission is trimmed until it holds no more than this many units
+    auto_patch_scripting: bool = True     # patch DCS MissionScripting.lua when SQE starts, restore it when SQE exits (like Liberation / Retribution)
     persist: bool = True          # False in tests: never write %APPDATA%\\SQE\\settings.json
 
     # ---- derived paths ------------------------------------------------------------------
@@ -110,12 +115,19 @@ class AppSettings:
         (config_dir() / "settings.json").write_text(json.dumps(d, indent=2))
 
 
-# ---- optional MissionScripting.lua helper ------------------------------------------------------
+# ---- MissionScripting.lua: patched while SQE is open, restored on exit -------------------------------------------------
 _PAT = re.compile(r"^(\s*)(sanitizeModule\(\s*['\"](io|lfs)['\"]\s*\))", re.M)
+_MARK = "-- patched by SQE"
+_DONE = re.compile(r"^(\s*)-- (sanitizeModule\(\s*['\"](?:io|lfs)['\"]\s*\))  " + re.escape(_MARK) + r"\s*$", re.M)
+_APPLIED = {"by_us": False}
 
 
 def mission_scripting_path(install: str) -> Path:
     return Path(install) / "Scripts" / "MissionScripting.lua"
+
+
+def _backup(p: Path) -> Path:
+    return p.with_suffix(".lua.sqe.bak")
 
 
 def mission_scripting_status(install: str) -> str:
@@ -123,22 +135,50 @@ def mission_scripting_status(install: str) -> str:
     if not install or not p.exists():
         return "MissionScripting.lua not found. Set the DCS folder first."
     text = p.read_text(encoding="utf-8", errors="replace")
-    return "NOT patched (debrief will not work)" if _PAT.search(text) else "Patched (io/lfs available to missions)"
+    if _PAT.search(text):
+        return "NOT patched (debrief will not work)"
+    return "Patched by SQE (restored when SQE closes)" if _DONE.search(text) else "Patched (io/lfs available to missions)"
 
 
 def patch_mission_scripting(install: str) -> tuple[bool, str]:
-    """Comment out sanitizeModule('io') and sanitizeModule('lfs'). Makes a .sqe.bak first."""
+    """Comment out sanitizeModule('io') and sanitizeModule('lfs'), after saving a backup next to the file. Safe to call repeatedly.
+    A file somebody else already unsanitised is left alone (and never 'restored' by us)."""
     p = mission_scripting_path(install)
-    if not p.exists():
+    if not install or not p.exists():
         return False, f"{p} not found"
     text = p.read_text(encoding="utf-8", errors="replace")
     if not _PAT.search(text):
         return True, "Already patched."
     try:
-        bak = p.with_suffix(".lua.sqe.bak")
-        if not bak.exists():
-            shutil.copy2(p, bak)
-        p.write_text(_PAT.sub(r"\1-- \2  -- patched by SQE", text), encoding="utf-8")
+        shutil.copy2(p, _backup(p))                           # the file is untouched right now, so it IS the original
+        p.write_text(_PAT.sub(r"\1-- \2  " + _MARK, text), encoding="utf-8")
     except OSError as e:
-        return False, f"Could not write (run as administrator?): {e}"
-    return True, f"Patched. Backup: {bak.name}. Re-apply after DCS updates."
+        return False, f"Could not write MissionScripting.lua (run SQE as administrator, or turn the setting off and patch it by hand): {e}"
+    _APPLIED["by_us"] = True
+    return True, f"Patched. Backup: {_backup(p).name}. It is restored when SQE closes."
+
+
+def restore_mission_scripting(install: str) -> tuple[bool, str]:
+    """Undo OUR patch only (re-enable the sanitize lines). Works line by line, so a DCS update to the rest of the file is never overwritten.
+    If a crash left the patch in place, the next start simply finds our marker and restores it at exit."""
+    p = mission_scripting_path(install)
+    if not install or not p.exists():
+        return False, "MissionScripting.lua not found."
+    try:
+        text = p.read_text(encoding="utf-8", errors="replace")
+        if not _DONE.search(text):
+            _APPLIED["by_us"] = False
+            return True, "Nothing of ours to restore."
+        p.write_text(_DONE.sub(r"\1\2", text), encoding="utf-8")
+    except OSError as e:
+        return False, f"Could not restore MissionScripting.lua: {e} (a backup is at {_backup(p)})"
+    _APPLIED["by_us"] = False
+    return True, "MissionScripting.lua restored."
+
+
+def scripting_patched_by_us(install: str) -> bool:
+    p = mission_scripting_path(install)
+    try:
+        return bool(install) and p.exists() and bool(_DONE.search(p.read_text(encoding="utf-8", errors="replace")))
+    except OSError:
+        return False

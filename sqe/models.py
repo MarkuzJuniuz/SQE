@@ -92,6 +92,7 @@ class EnemyAirWing:
     types: list[str]            # pydcs plane class names, e.g. ["MiG_29A", "F_4E"]
     authorized: int
     available: int
+    squadrons: int = 1          # how many squadrons the wing is made of (display / flavour)
 
 
 @dataclass

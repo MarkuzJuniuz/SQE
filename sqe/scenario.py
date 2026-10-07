@@ -31,6 +31,26 @@ SAM_LABEL = {"AAA": "AAA battery", "MANPAD": "MANPADS team", "SA-2": "SA-2 site"
 SAM_VALUE = {"AAA": 2, "MANPAD": 2, "SA-2": 5, "SA-3": 5, "SA-6": 6, "SA-11": 7, "SA-10": 9, "SA-15": 6, "SA-19": 5}
 
 
+SQUADRONS = [("vf_31", "VF-31 'Tomcatters'", "F-14BU", "cvn74", 12, "Springfield"),
+    ("vf_213", "VF-213 'Black Lions'", "F-14BU", "cvn74", 12, "Uzi"),
+    ("vfa_37", "VFA-37 'Ragin' Bulls'", "FA-18C", "cvn74", 12, "Hornet"),
+    ("vfa_105", "VFA-105 'Gunslingers'", "FA-18C", "cvn74", 12, "Squid"),
+    ("fs_77", "77th FS 'Gamblers'", "F-16C", "senaki", 18, "Viper"),
+    ("fs_55", "55th FS 'Shooters'", "F-16C", "kutaisi", 18, "Cowboy"),
+    ("fs_79", "79th FS 'Tigers'", "F-16C", "batumi", 18, "Venom"),
+    ("fs_27", "27th FS 'Fighting Eagles'", "F-15C", "kutaisi", 18, "Enfield"),
+    ("fs_94", "94th FS 'Hat in the Ring'", "F-15C", "senaki", 18, "Dodge"),
+    ("as_354", "354th FS 'Bulldogs'", "A-10C", "kobuleti", 18, "Hawg"),
+    ("as_75", "75th FS 'Flying Tigers'", "A-10C", "batumi", 18, "Boar")]
+
+
+_BASE_NAME = {"cvn74": "USS Stennis", **{k: v.replace(" AB", "") for k, v, _ in BLUE_FIELDS}}
+
+
+def squadron_options(aircraft: str) -> list:
+    """(id, label) for the New Campaign squadron picker."""
+    return [(i, f"{nm}  -  {cnt} aircraft at {_BASE_NAME.get(bs, bs)}") for i, nm, ac, bs, cnt, cs in SQUADRONS if ac == aircraft]
+
 def _offset(x, y, hdg, d):
     h = math.radians(hdg)
     return x + d * math.cos(h), y + d * math.sin(h)
@@ -45,7 +65,8 @@ def _terrain(name: str):
 
 
 def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str = "caucasus",
-                 seed: int | None = None, start_date: str = "2004-06-12", night_ops: bool = False) -> CampaignState:
+                 seed: int | None = None, start_date: str = "2004-06-12", night_ops: bool = False,
+                 player_squadron: str | None = None) -> CampaignState:
     d: Difficulty = get_difficulty(level)
     rng = random.Random(seed)
     t = _terrain(theatre)
@@ -62,14 +83,9 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
 
     sc = d.friendly_scale
     n = lambda base: max(4, int(round(base * sc / 2) * 2))
-    st.squadrons = {s.id: s for s in [
-        Squadron("vf_a", "VF-31 'Hammer'", "F-14BU", "cvn74", n(12), n(12), "Springfield"),
-        Squadron("vfa_b", "VFA-37 'Tiger'", "FA-18C", "cvn74", n(12), n(12), "Hornet"),
-        Squadron("fs_a", "77th FS 'Viper'", "F-16C", "senaki", n(14), n(14), "Viper"),
-        Squadron("fs_b", "55th FS 'Cobra'", "F-16C", "kutaisi", n(14), n(14), "Cowboy"),
-        Squadron("fs_c", "27th FS 'Eagle'", "F-15C", "kutaisi", n(12), n(12), "Enfield"),
-        Squadron("as_a", "354th FS 'Hog'", "A-10C", "kobuleti", n(14), n(14), "Hawg"),
-    ]}
+    # Realistic squadron structure (about 175 jets at Level 2): two Tomcat and two Hornet squadrons on the carrier, three Viper,
+    # two Eagle and two Hog squadrons ashore. Callsigns are unique across the whole coalition (group names must never collide).
+    st.squadrons = {i: Squadron(i, nm, ac, bs, n(cnt), n(cnt), cs) for i, nm, ac, bs, cnt, cs in SQUADRONS}
     for s in st.squadrons.values():                       # sanity: land jets on land, carrier jets on the boat
         spec, base = AIRCRAFT[s.aircraft], st.bases[s.base_id]
         if spec.home != base.kind:
@@ -89,8 +105,9 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     total_w = sum(ww.values())
     for aid, w in ww.items():
         cnt = max(2, round(d.enemy_air_total * w / total_w))
-        types = rng.sample(d.enemy_types, k=min(len(d.enemy_types), 2))
-        st.enemy_air.append(EnemyAirWing(aid, types, cnt, cnt))
+        squads = max(1, round(cnt / 14))                   # several squadrons per field at the bigger levels
+        types = rng.sample(d.enemy_types, k=min(len(d.enemy_types), 1 + min(2, squads)))
+        st.enemy_air.append(EnemyAirWing(aid, types, cnt, cnt, squads))
 
     if d.bomber_wing > 0:       # strategic bombers live far to the east, at Mozdok
         st.enemy_air.append(EnemyAirWing("ab_mozdok", ["Tu_22M3"], d.bomber_wing, d.bomber_wing))
@@ -141,6 +158,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     mine = st.squadrons_for(player_aircraft)
     if not mine or not AIRCRAFT[player_aircraft].player_flyable:
         raise ValueError(f"{player_aircraft} is not a player-flyable type with a squadron")
-    st.player = PlayerProfile(aircraft=player_aircraft, squadron_id=mine[0].id, callsign=mine[0].callsign)
-    st.note(f"Campaign '{name}' begins. You fly the {AIRCRAFT[player_aircraft].display} with {mine[0].name}. {d.name}.")
+    me = next((q for q in mine if q.id == player_squadron), mine[0])
+    st.player = PlayerProfile(aircraft=player_aircraft, squadron_id=me.id, callsign=me.callsign)
+    st.note(f"Campaign '{name}' begins. You fly the {AIRCRAFT[player_aircraft].display} with {me.name}. {d.name}.")
     return st

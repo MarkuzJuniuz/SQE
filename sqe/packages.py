@@ -345,3 +345,24 @@ class PackageBuilder:
             chosen.count = min(chosen.count, CARRIER_PLAYER_FLIGHT_MAX)
         pkg.support = self._support(pkg)
         return chosen
+
+
+def target_point(state: CampaignState, obj: Objective):
+    if obj.type in _FLEET:
+        b = state.bases[obj.target_id]
+        return b.x, b.y
+    a = state.assets[obj.target_id]
+    return a.x, a.y
+
+
+def packages_linked(state: CampaignState, p1: "Package", p2: "Package", km: float = 45.0) -> bool:
+    """Same general area: targets within ~45 km of each other, or covered by the same SAM cluster (asset.defended_by), or one is the
+    SAM site that defends the other's target. Fleet objectives are never linked."""
+    if p1.objective.type in _FLEET or p2.objective.type in _FLEET:
+        return False
+    a, b = state.assets[p1.objective.target_id], state.assets[p2.objective.target_id]
+    if math.hypot(a.x - b.x, a.y - b.y) <= km * 1000:
+        return True
+    if a.id in b.defended_by or b.id in a.defended_by:
+        return True
+    return bool(set(a.defended_by) & set(b.defended_by))

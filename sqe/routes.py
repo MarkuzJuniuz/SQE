@@ -52,16 +52,18 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None) ->
     the hold are in friendly, defended airspace; the route then runs marshal -> PUSH -> IP -> target."""
     d = dist(bx, by, tx, ty)
     hdg = bearing(bx, by, tx, ty)
-    # PUSH sits just ahead of home plate (well out from the target); the long straight cruise to the IP is the ingress
+    # PUSH is ~10 nm from the marshal point toward the target (as in BMS); the long straight cruise from there to the IP is the ingress
     ip_d = max(d - p.ip_nm * NM, 0.5 * d)
-    push_d = max(2 * NM, min(12 * NM, 0.15 * d, ip_d - 8 * NM))
     at = lambda dd: offset(bx, by, hdg, dd)
     if mshl is None:
-        mshl = offset(bx, by, hdg + 180, 25 * NM)
+        mshl = offset(bx, by, hdg + 180, 15 * NM)
+    ip_xy = at(ip_d)
+    push_nm = max(2.0, min(10.0, 0.4 * dist(*mshl, *ip_xy) / NM))
+    push_xy = offset(*mshl, bearing(*mshl, tx, ty), push_nm * NM)
     cap_d = max(0.45 * d, min(60 * NM, d))
     cap1 = at(cap_d)
-    dep = offset(bx, by, bearing(bx, by, *mshl), min(8 * NM, 0.4 * dist(bx, by, *mshl)))
-    return Geometry(bx, by, tx, ty, hdg, d, mshl, at(push_d), at(ip_d),
+    dep = offset(bx, by, bearing(bx, by, *mshl), min(4 * NM, 0.4 * dist(bx, by, *mshl)))      # DEP: a short climb-out / turning point toward the marshal
+    return Geometry(bx, by, tx, ty, hdg, d, mshl, push_xy, ip_xy,
                     offset(tx, ty, hdg + 100, p.egress_nm * NM), cap1, offset(*cap1, hdg + 90, p.cap_leg_nm * NM), dep)
 
 

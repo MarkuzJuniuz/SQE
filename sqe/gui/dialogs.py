@@ -31,6 +31,8 @@ class NewCampaignDialog(QDialog):
             if s.player_flyable:
                 self.ac.addItem(f"{s.display}  ({s.service}, {'carrier' if s.service == 'Navy' else 'land-based'})", k)
         form.addRow("You fly", self.ac)
+        self.sqd = QComboBox(); form.addRow("Your squadron", self.sqd)
+        self.ac.currentIndexChanged.connect(self._squads); self._squads()
         self.lvl = QComboBox()
         for n, d in LEVELS.items():
             self.lvl.addItem(d.name, n)
@@ -54,9 +56,16 @@ class NewCampaignDialog(QDialog):
     def _b(self):
         self.blurb.setText(LEVELS[self.lvl.currentData()].blurb)
 
+    def _squads(self):
+        from ..scenario import squadron_options
+        self.sqd.clear()
+        for sid, label in squadron_options(self.ac.currentData()):
+            self.sqd.addItem(label, sid)
+
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
-                "start_date": f"2004-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked()}
+                "start_date": f"2004-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(),
+                "squadron": self.sqd.currentData()}
 
 
 class SettingsDialog(QDialog):
@@ -72,6 +81,11 @@ class SettingsDialog(QDialog):
             b.clicked.connect(lambda _=0, l=line, t=ttl: _browse(self, l, t))
             row.addWidget(lb); row.addWidget(line, 1); row.addWidget(b); lay.addLayout(row)
             h = QLabel(hint); h.setObjectName("small"); lay.addWidget(h)
+        row = QHBoxLayout(); lb = QLabel("Takeoff buffer"); lb.setMinimumWidth(80)
+        self.tob = QSpinBox(); self.tob.setRange(-600, 900); self.tob.setSuffix(" s"); self.tob.setValue(int(settings.takeoff_buffer_s))
+        row.addWidget(lb); row.addWidget(self.tob); row.addStretch(1); lay.addLayout(row)
+        h = QLabel("Time between mission start and the takeoff time on your kneeboard (you start on the runway or cat, engines running). "
+                   "Default 60 s. Negative means the plan expects you to be rolling before the clock starts, so you must make the time up in the air."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
         row = QHBoxLayout(); lb = QLabel("Marshal slack"); lb.setMinimumWidth(80)
         self.hold = QSpinBox(); self.hold.setRange(-10, 30); self.hold.setSuffix(" min"); self.hold.setValue(int(settings.hold_minutes))
         row.addWidget(lb); row.addWidget(self.hold); row.addStretch(1); lay.addLayout(row)
@@ -79,11 +93,18 @@ class SettingsDialog(QDialog):
                    "natural pace (afterburner time). AI flights adjust automatically."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
         self.fuel = QCheckBox("AI flights use the Retribution fuel trick (unlimited until the push, real fuel in the fight, unlimited again from egress)")
         self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); lay.addWidget(self.fuel)
+        row = QHBoxLayout(); lb = QLabel("Package merging"); lb.setMinimumWidth(120)
+        self.merge = QComboBox(); self.merge.addItem("Off (one package per mission)", "off"); self.merge.addItem("Same area (fold up to 3 packages)", "area")
+        self.merge.setCurrentIndex(1 if settings.merge_mode == "area" else 0)
+        self.mmax = QSpinBox(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.merge_max_units))
+        row.addWidget(lb); row.addWidget(self.merge, 1); row.addWidget(self.mmax); lay.addLayout(row)
+        h = QLabel("Packages in the same area that start within 30 minutes after yours fly in the same mission (AI-flown, one shared ground "
+                   "world and support). The waiting window shows the unit count so you can compare performance. Trimmed to the unit limit."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
         self.ms = QLabel(); lay.addWidget(self.ms)
-        row = QHBoxLayout(); pb = QPushButton("Patch MissionScripting.lua"); pb.clicked.connect(self._patch)
-        row.addWidget(pb); row.addStretch(1); lay.addLayout(row)
-        note = QLabel("Results need io/lfs enabled in MissionScripting.lua (same as Liberation/Retribution). A backup is made. "
-                      "DCS updates undo the patch; click again after an update.")
+        self.autopatch = QCheckBox("Enable DCS scripting access while SQE is open (patches MissionScripting.lua at start, restores it on exit)")
+        self.autopatch.setChecked(bool(settings.auto_patch_scripting)); lay.addWidget(self.autopatch)
+        note = QLabel("Results need io/lfs enabled in MissionScripting.lua (same approach as Liberation/Retribution). A backup is saved next to the file. "
+                      "If SQE is closed before the mission ends, DCS can no longer write the results file.")
         note.setWordWrap(True); note.setObjectName("small"); lay.addWidget(note)
         self.inst.textChanged.connect(self._refresh); self._refresh()
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); bb.accepted.connect(self._save)
@@ -92,14 +113,17 @@ class SettingsDialog(QDialog):
     def _refresh(self):
         self.ms.setText("MissionScripting.lua: " + S.mission_scripting_status(self.inst.text()))
 
-    def _patch(self):
-        ok, msg = S.patch_mission_scripting(self.inst.text())
-        (QMessageBox.information if ok else QMessageBox.warning)(self, "MissionScripting.lua", msg); self._refresh()
-
     def _save(self):
         self.s.dcs_install, self.s.dcs_saves = self.inst.text().strip(), self.saves.text().strip()
         self.s.hold_minutes = int(self.hold.value())
+        self.s.takeoff_buffer_s = int(self.tob.value())
         self.s.ai_unlimited_fuel = self.fuel.isChecked()
+        self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())
+        self.s.auto_patch_scripting = self.autopatch.isChecked()
+        if self.s.dcs_install:                                   # take effect now, not at the next start
+            ok, msg = (S.patch_mission_scripting if self.s.auto_patch_scripting else S.restore_mission_scripting)(self.s.dcs_install)
+            if not ok:
+                QMessageBox.warning(self, "MissionScripting.lua", msg)
         pr = self.s.problems()
         if pr:
             QMessageBox.warning(self, "Check your paths", "\n".join(pr)); return

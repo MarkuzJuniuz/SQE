@@ -39,8 +39,9 @@ class Session:
         d = self.campaigns_dir()
         return sorted(d.glob(f"*{CAMPAIGN_EXT}"), key=lambda p: p.stat().st_mtime, reverse=True) if d.exists() else []
 
-    def new(self, name: str, aircraft: str, level: int, seed: int | None = None, start_date: str = "2004-06-12", night_ops: bool = False) -> None:
-        self.state = new_campaign(name, aircraft, level, seed=seed, start_date=start_date, night_ops=night_ops)
+    def new(self, name: str, aircraft: str, level: int, seed: int | None = None, start_date: str = "2004-06-12", night_ops: bool = False,
+            squadron: str | None = None) -> None:
+        self.state = new_campaign(name, aircraft, level, seed=seed, start_date=start_date, night_ops=night_ops, player_squadron=squadron)
         safe = "".join(c if c.isalnum() or c in "-_ " else "_" for c in name).strip() or "campaign"
         self.path = self.campaigns_dir() / f"{safe}{CAMPAIGN_EXT}"
         self.plan_day()
@@ -68,38 +69,90 @@ class Session:
     def _rng(self, salt: int = 0) -> random.Random:
         return random.Random(int(self.state.campaign_id, 16) % 10_000_019 + self.state.day * 101 + salt)
 
+    PACKAGES_PER_DAY = 14
+
     def plan_day(self) -> list:
         st = self.state
-        objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=6)
-        pb, pkgs = PackageBuilder(st, self.d), []
-        # Packages launch at different times of day, so an aircraft can fly more than one sortie: each package sees every
-        # serviceable airframe, but no squadron is asked for more than two sorties per airframe per day.
-        daily = {sid: 2 * s.available for sid, s in st.squadrons.items()}
-        for i, o in enumerate(objs, 1):
-            ledger = Ledger(st)
-            for sid in ledger.free:
-                ledger.free[sid] = min(ledger.free[sid], daily[sid])
-            try:
-                pkg = pb.build(o, i, ledger, for_player=True)
-            except NoPlayerSlot:
-                try:
-                    pkg = pb.build(o, i, ledger, for_player=False)
-                except NoPlayerSlot:
+        objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=self.PACKAGES_PER_DAY)
+        pb = PackageBuilder(st, self.d)
+        psq = st.player.squadron_id if st.player else None
+
+        def build_all(forced: set) -> list:
+            # Packages launch at different times of day, so an aircraft can fly more than one sortie: each package sees every
+            # serviceable airframe, but no squadron is asked for more than two sorties per airframe per day.
+            daily = {sid: 2 * q.available for sid, q in st.squadrons.items()}
+            out = []
+            for i, o in enumerate(objs, 1):
+                ledger = Ledger(st)
+                for sid in ledger.free:
+                    ledger.free[sid] = min(ledger.free[sid], daily[sid])
+                pkg = None
+                for fp in ((True, False) if (i - 1) in forced else (False,)):
+                    try:
+                        pkg = pb.build(o, i, ledger, for_player=fp)
+                        break
+                    except NoPlayerSlot:
+                        continue
+                if pkg is None:
                     continue
-            for f in pkg.flights:
-                daily[f.squadron_id] -= f.count
-            pkgs.append(pkg)
-        from .timeofday import ato_times
-        for p, t in zip(pkgs, ato_times(len(pkgs), st.campaign_date(), st.night_ops, self._rng(5))):
-            p.start = t
+                for f in pkg.flights:
+                    daily[f.squadron_id] -= f.count
+                out.append(pkg)
+            return out
+
+        mine = lambda pk: sum(1 for p in pk if any(f.squadron_id == psq and not f.tag for f in p.flights))
+        rng = self._rng(3)
+        pkgs = build_all(set(rng.sample(range(len(objs)), min(len(objs), 5))))     # your squadron is tasked on a handful of them
+        if mine(pkgs) < 3:
+            pkgs = build_all(set(range(len(objs))))
+        # same-area packages are launched in the same wave (so they can be folded together), waves spread through the day
+        from .packages import packages_linked
+        from .timeofday import wave_times
+        comp = list(range(len(pkgs)))
+        def root(i):
+            while comp[i] != i:
+                comp[i] = comp[comp[i]]; i = comp[i]
+            return i
+        for i in range(len(pkgs)):
+            for j in range(i + 1, len(pkgs)):
+                if packages_linked(st, pkgs[i], pkgs[j]):
+                    comp[root(j)] = root(i)
+        groups: dict = {}
+        for i in range(len(pkgs)):
+            groups.setdefault(root(i), []).append(i)
+        order = [i for g in sorted(groups.values(), key=lambda g: (-len(g), g[0])) for i in g]
+        times = wave_times(len(pkgs), st.campaign_date(), st.night_ops, self._rng(5))
+        for i, t in zip(order, times):
+            pkgs[i].start = t
+        pkgs.sort(key=lambda p: p.start)
+        for n, p in enumerate(pkgs, 1):                              # numbers follow the clock
+            p.number, p.id = n, f"pkg{n}"
+            for k, f in enumerate(p.flights, 1):
+                f.id = f"{p.id}-f{k}"
         st.plan = [p.to_dict() for p in pkgs]
         return pkgs
 
     def packages(self) -> list:
         return [Package.from_dict(d) for d in self.state.plan]
 
-    def flyable(self, pkg: Package) -> list:
-        return pkg.player_options(self.state.player.aircraft)
+    def flyable(self, pkg: Package, squadron_only: bool | None = None) -> list:
+        """Flights you could fly. 'My squadron' (the default filter) = flights of YOUR squadron; 'all' = any flight of your aircraft type."""
+        if squadron_only is None:
+            squadron_only = self.settings.flight_filter != "all"
+        opts = pkg.player_options(self.state.player.aircraft)
+        return [f for f in opts if f.squadron_id == self.state.player.squadron_id] if squadron_only else opts
+
+    def merge_candidates(self, pkg: Package) -> list:
+        """Packages that would be folded into a mission built around `pkg`: same area, starting at or after it and within 30 minutes,
+        at most two extra (three packages in all). Empty when merging is off."""
+        if self.settings.merge_mode != "area":
+            return []
+        from .packages import packages_linked
+        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
+        out = [p for p in self.packages() if p.number != pkg.number and 0 <= hm(p) - hm(pkg) <= 30
+               and any(not f.tag for f in p.flights) and packages_linked(self.state, pkg, p)]
+        out.sort(key=lambda p: (hm(p), p.number))
+        return out[:2]
 
     # ---- fly ---------------------------------------------------------------------------------------
     def fly(self, package_number: int, flight_id: str | None):
@@ -110,16 +163,24 @@ class Session:
         if problems:
             raise RuntimeError("; ".join(problems))
         self.options.hold_minutes = int(self.settings.hold_minutes)
+        self.options.launch_offset_s = int(self.settings.takeoff_buffer_s)
         self.options.ai_unlimited_fuel = bool(self.settings.ai_unlimited_fuel)
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
-        with contextlib.redirect_stdout(io.StringIO()):          # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
-            res = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz)
+        extras = self.merge_candidates(pkg)
+        cap = int(self.settings.merge_max_units)
+        while True:
+            with contextlib.redirect_stdout(io.StringIO()):      # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
+                res = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz, extras)
+            if not extras or res.counts["units"] <= cap:
+                break
+            extras = extras[:-1]                                 # too heavy for VR: drop the last package and rebuild
+            res.warnings.append(f"merged mission trimmed to fit the {cap}-unit limit")
         st.sortie_counter += 1
         st.pending = {"package": package_number, "flight": pkg.player_flight.id, "manifest": res.manifest.to_dict(),
                       "built_at": time.time(), "miz": str(res.miz), "timeline": res.timeline,
                       "objective": pkg.objective.description, "objective_type": pkg.objective.type.value, "counts": res.counts, "warnings": res.warnings, "seed": res.seed,
-                      "package_dict": pkg.to_dict()}
+                      "package_dict": pkg.to_dict(), "merged": res.manifest.merged}
         self.last_build = res
         # a stale results file from a previous sortie must never be mistaken for this one
         try:
@@ -189,8 +250,11 @@ class Session:
         out["story"] = narrative.debrief_story(out, st, rng)
         sim = WarSimulator(self.d, rng)
         meanwhile = []
+        t_end = float(data.get("time", 0) or 0)
+        real = {m["number"] for m in pend.get("merged", []) if t_end >= m["tot_s"] + 90}    # their strike was really flown; the rest are dice
+        out["merged_real"] = sorted(real)
         for pd in st.plan:
-            if pd["number"] == pend["package"]:
+            if pd["number"] == pend["package"] or pd["number"] in real:
                 continue
             r = sim.resolve_abstract(st, Package.from_dict(pd))
             meanwhile.append(r)

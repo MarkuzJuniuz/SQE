@@ -67,6 +67,9 @@ class CampaignState:
     def from_dict(cls, d: dict) -> "CampaignState":
         if d.get("format", 1) > FORMAT_VERSION:
             raise ValueError("This campaign was saved by a newer version of SQE.")
+        if d.get("format", 1) < 3:
+            raise ValueError("This campaign was saved by an older SQE (before multiple squadrons per type, v0.7). "
+                             "The squadron structure changed, so it cannot be loaded; please start a new campaign.")
         s = cls(name=d["name"], theatre=d.get("theatre", "caucasus"), level=d.get("level", 2),
                 campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1),
                 sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"),
