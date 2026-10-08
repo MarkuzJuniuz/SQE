@@ -42,7 +42,7 @@ def stagger(package, role) -> int:
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, leg_seconds, make_geometry, objective_wp, offset, plan_route
+from .routes import OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route
 from .state import CampaignState
 
 KPH = 1.852
@@ -312,7 +312,7 @@ class MissionBuilder:
         x = {"date": date_str, "mode3": mode3, "laser": laser, "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}",
              "bullseye": latlon(bx, by, self.t), "divert": div.name, "weather": "clear skies, unrestricted visibility",
              "link16": any(r["stn"] != "-" for r in whois), "pkg_table": pkg_table,
-             "n_def": air_pkg.n_def, "merged_nums": [x.number for x in extras]}
+             "n_def": air_pkg.n_def, "merged_nums": [m_["number"] for m_ in merged]}
         text = brief.build_text(st, package, tl, plan, self.rng, (tx, ty), x)
         m.set_description_text(text["full"])
         m.set_description_bluetask_text(text["blue_task"])
@@ -340,7 +340,7 @@ class MissionBuilder:
                    "numbering": (f"{pspec.first_wp_label} for the start point, then 1, 2, 3..." if pspec.first_wp_label else "waypoint 1 = start point"),
                    "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": "CLEAR", "mode3": mode3, "laser": laser,
                    "bullseye": latlon(bx, by, self.t), "whois": whois, "threats": text["threats"], "n_def": air_pkg.n_def, "target_data": tdata,
-                   "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "sub": f"start {m_['start']}  push {m_['push']}  TOT {m_['tot']}  done {m_['rtb']}  ({m_['flights']})"} for m_ in merged]}
+                   "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "sub": f"start {m_['start']}{' (already airborne when you start)' if m_.get('underway') else ''}  push {m_['push']}  TOT {m_['tot']}  done {m_['rtb']}  ({m_['flights']})"} for m_ in merged]}
             for pg in render_pages(td, ctx):
                 m.add_aircraft_kneeboard(pspec.dcs_type, pg)
             warns += list(dict.fromkeys(self.lo.warnings))
@@ -379,14 +379,22 @@ class MissionBuilder:
             skip = {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else set()
             geom2.egr = (tm.first_safe_egress(st, tx2, ty2, geom2.hdg, skip) or
                          tm.safe_egress(st, tx2, ty2, geom2.hdg, spec2.profile.egress_nm, tm.cluster_ids(tgt2)) or geom2.egr)
-            self._spawn_opfor_ground(xp, tx2, ty2, manifest, [(base2.x, base2.y), geom2.mshl, geom2.push, geom2.ip, (tx2, ty2), geom2.egr])
-            # timeline: this package pushes (start difference) minutes after yours
-            P0x = P0 + max(0, hm(xp) - hm(anchor)) * 60.0
+            # timeline: this package pushes (start difference) minutes after yours. An EARLIER package has a negative offset: it is already underway when the mission starts.
+            P0x = P0 + (hm(xp) - hm(anchor)) * 60.0
             pw2 = plan_route(lead.role, (base2.x, base2.y), geom2, spec2.profile, is_player=True, tanker_xy=None)
             assign_times(pw2, 0.0, P0x + stagger(xp, lead.role))
+            pu = next((w for w in pw2 if w.name == "PUSH"), None)
+            if pu is not None and P0x + stagger(xp, lead.role) < pu.eta_s:            # it pushes before it could even have reached its marshal point in this timeline: shift the whole leg after PUSH
+                sh = (P0x + stagger(xp, lead.role)) - pu.eta_s
+                for w in pw2:
+                    w.eta_s += sh
             tg2 = objective_wp(pw2) or pw2[-1]
             eg2 = next((w for w in pw2 if w.name == "EGR"), pw2[-1])
             rtb2 = eg2.eta_s + leg_seconds(eg2, Wpt("RTB", base2.x, base2.y, 0, 300))
+            if rtb2 <= 0 or tg2.eta_s < -60:                   # it has already struck and gone home before the mission starts: not flown, the war sim resolves it
+                self.warns.append(f"package #{xp.number} had already finished before your start and is not in this mission")
+                continue
+            self._spawn_opfor_ground(xp, tx2, ty2, manifest, [(base2.x, base2.y), geom2.mshl, geom2.push, geom2.ip, (tx2, ty2), geom2.egr])
             freqs = [SimpleNamespace(callsign=f.callsign, mhz=round(128.0 + 0.5 * ((k * 7 + i * 3) % 18), 1)) for i, f in enumerate(xp.flights)]
             plan2 = SimpleNamespace(package_flights=freqs, freq=lambda slot, _k=k: 252.0 + 3.5 * (_k + 1))
             tots = []
@@ -405,7 +413,7 @@ class MissionBuilder:
                 self._spawn_cas_support(xp, plan2, geom2, manifest)
             tot = max(tots) if tots else tg2.eta_s
             out.append({"id": xp.id, "number": xp.number, "objective": xp.objective.description, "type": xp.objective.type.value,
-                        "start": xp.start, "push": clock(P0x), "tot": clock(tot), "rtb": clock(rtb2), "tot_s": tot, "rtb_s": rtb2,
+                        "start": xp.start, "push": clock(P0x), "tot": clock(tot), "rtb": clock(rtb2), "tot_s": tot, "rtb_s": rtb2, "underway": P0x < 0,
                         "flights": ", ".join(f"{f.callsign} {f.count}x{f.aircraft}" for f in xp.flights)})
         return out
 
@@ -761,6 +769,7 @@ class MissionBuilder:
         spec = AIRCRAFT[f.aircraft]
         base = st.bases[f.base_id]
         pt = lambda x, y: mapping.Point(x, y, self.t)
+        past_push = False
         csname, fno = f.callsign.rsplit(" ", 1)
         fno = int(fno)
 
@@ -783,8 +792,14 @@ class MissionBuilder:
                 assign_times(wps, 0.0)                      # natural pace from the spawn
                 hold_i = next((i for i, w in enumerate(wps) if w.action == "HOLD"), None)
                 nat = wps[hold_i + 1].eta_s if hold_i is not None else next((w.eta_s for w in wps if w.action == "CAPORBIT"), wps[-1].eta_s)
-                act_s = max(0, int(push_s - nat - (120 if hold_i is not None else 60)))      # arrive ~2 min early, hold, push on time
-                assign_times(wps, float(act_s), push_s)
+                act_raw = int(push_s - nat - (120 if hold_i is not None else 60))      # arrive ~2 min early, hold, push on time
+                act_s = max(0, act_raw)
+                assign_times(wps, float(act_raw), push_s)
+                if act_raw < 0:                              # its schedule began before the mission did (an earlier package folded in): it is already underway
+                    wps = in_progress(wps, (base.x, base.y))
+                    if wps is None:                          # already back on the ground
+                        return None, None
+                    past_push = not any(w.name == "PUSH" for w in wps)
             stop = int(tot_s + o.cap_minutes * 60)
 
         if f.is_player:       # hot on the runway / catapult
@@ -802,6 +817,12 @@ class MissionBuilder:
             first = 1
         if not f.tag and not f.is_player and act_s > 0:
             self._late(g, act_s)                                # they 'depart' on their own schedule, not at mission start
+        if first == 1 and not f.tag:                            # face the way they are going (in-flight groups spawn pointing north)
+            nxt = next((w for w in wps[1:] if dist(wps[0].x, wps[0].y, w.x, w.y) > 100), None)
+            if nxt is not None:
+                hdg = bearing(wps[0].x, wps[0].y, nxt.x, nxt.y)
+                for u_ in g.units:
+                    u_.heading = hdg
         cs_names = callsigns.apply(g, csname, fno, callsigns.table(f.aircraft))
         load = self.lo.for_role(f.aircraft, f.role)
         names = []
@@ -832,7 +853,7 @@ class MissionBuilder:
             if o.ai_despawn_on_land:
                 despawn.extend(names)
             if o.ai_unlimited_fuel:
-                g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
+                g.points[0].tasks.append(task.SetUnlimitedFuelCommand(not past_push))      # already past its PUSH point: the combat leg burns real fuel
         manifest.add("friendly", f.id, names, squadron=f.squadron_id, callsign=f.callsign, player=f.is_player)
         self.flight_groups.append((f, g))
         # who speaks: every AI aircraft (your own wingmen included, never you) is announced by callsign; extra packages carry a package prefix
@@ -849,10 +870,12 @@ class MissionBuilder:
                 cap = next((w.eta_s for w in wps if w.action == "CAPORBIT"), None)
                 egr = next((w.eta_s for w in wps if w.name == "EGR"), None)
                 if cap is not None:
-                    self._fcalls.append((float(cap), f"{lab}: on station."))
+                    if cap > 10:
+                        self._fcalls.append((float(cap), f"{lab}: on station."))
                 else:
-                    self._fcalls.append((float(push_s), f"{lab}: pushing."))
-                    if egr is not None:
+                    if push_s > 10:
+                        self._fcalls.append((float(push_s), f"{lab}: pushing."))
+                    if egr is not None and egr > 10:
                         self._fcalls.append((float(egr), f"{lab}: off target, egressing."))
 
         armor = self.groups_by_asset.get(package.objective.target_id)

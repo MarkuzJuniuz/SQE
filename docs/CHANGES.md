@@ -1,3 +1,8 @@
+## v0.10.0
+* Package merging now works in both directions: packages that started up to 15 minutes BEFORE yours (Settings > Earlier packages, 0-30) also fly, already airborne and underway when the mission starts (spawned along their route, or holding at the marshal point). A package that has already struck and gone home by then is left out with a note.
+* Missions screen: a package that another one folds in is shown inside that package's panel instead of as its own row. Each package in the panel has its own table and FLY button, and a line says what FLY there gives you (start time and which packages fly with it).
+* Commander's intent: 6-8 lines per objective type, each naming the actual site. Packages of the same type in one day's tasking order never share a line, and the signing officer rotates too. The briefing uses the same line.
+
 ## v0.9.12
 * The player's TGT waypoint now sits on the ground target at 0 AGL (kneeboard shows "AGL 0"), so pods, weapons and Jester / the WSO can slave to it. Applies to strike, DEAD, SEAD and CAS.
 * A player SEAD route is now IP, TGT, EGR like the others: the standoff "SEAD" launch point is gone for the player and the standoff range is your call. AI SEAD flights keep their launch point.

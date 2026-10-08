@@ -100,6 +100,11 @@ class SettingsDialog(QDialog):
         row.addWidget(lb); row.addWidget(self.merge, 1); row.addWidget(self.mmax); lay.addLayout(row)
         h = QLabel("Packages in the same area that start within 30 minutes after yours fly in the same mission (AI-flown, one shared ground "
                    "world and support). The waiting window shows the unit count so you can compare performance. Trimmed to the unit limit."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
+        row = QHBoxLayout(); lb = QLabel("Earlier packages"); lb.setMinimumWidth(120)
+        self.mback = QSpinBox(); self.mback.setRange(0, 30); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_back_min", 15)))
+        row.addWidget(lb); row.addWidget(self.mback); row.addStretch(1); lay.addLayout(row)
+        h = QLabel("Packages that started up to this long before yours also fly, already airborne and underway when the mission starts. "
+                   "A package that has already struck and gone home by then is not flown. 0 = only later packages."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
         row = QHBoxLayout(); lb = QLabel("Enemy air sum"); lb.setMinimumWidth(120)
         self.mpct = QSpinBox(); self.mpct.setRange(0, 100); self.mpct.setSuffix(" %"); self.mpct.setValue(int(settings.merge_enemy_pct))
         row.addWidget(lb); row.addWidget(self.mpct); row.addStretch(1); lay.addLayout(row)
@@ -131,6 +136,7 @@ class SettingsDialog(QDialog):
         self.s.ai_unlimited_fuel = self.fuel.isChecked()
         self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())
         self.s.merge_enemy_pct = int(self.mpct.value())
+        self.s.merge_back_min = int(self.mback.value())
         self.s.enemy_cap_engage_nm = int(self.ecap.value()); self.s.friendly_cap_engage_nm = int(self.fcap.value())
         self.s.f14_special_names = self.f14n.isChecked()
         self.s.auto_patch_scripting = self.autopatch.isChecked(); self.s.patch_asked = True

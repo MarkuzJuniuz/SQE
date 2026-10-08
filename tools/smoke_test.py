@@ -107,6 +107,55 @@ def main():
     out = ms.apply(got)
     assert out["packages"] and out["packages"][0]["resolved"], out["packages"]
     print("    merged debrief:", [ln for ln in out["lines"] if ln.startswith("Package #")][:2])
+    # ---- v0.10: earlier packages fly with you, already underway; the Missions list folds later ones into the first -----------------
+    bs = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all"))
+    found = None
+    for seed_b in range(1, 13):
+        bs.new("Smoke back", "F-14BU", 2, seed=seed_b)
+        for pk_b in bs.packages():
+            if bs.flyable(pk_b) and any(c.start < pk_b.start for c in bs.merge_candidates(pk_b)):
+                found = (seed_b, pk_b); break
+        if found:
+            break
+    assert found, "no host with an earlier package found"
+    seed_b, pk_b = found
+    rb = bs.fly(pk_b.number, bs.flyable(pk_b)[0].id)
+    early = [c for c in bs.merge_candidates(pk_b) if c.start < pk_b.start]
+    assert any(m["number"] == early[0].number for m in rb.merged) or rb.warnings, "earlier package neither flown nor reported skipped"
+    zb = zipfile.ZipFile(bs.settings.sortie_miz); mb = lua.loads(zb.read("mission").decode())
+    print(f"[back] seed {seed_b} host #{pk_b.number} {pk_b.start} + {[(m['number'], m['tot_s'] and round(m['tot_s']), m.get('underway')) for m in rb.merged]}")
+    # one where the earlier package really is already airborne at the start: its flights must be live (not late-activated) and in the air
+    under = None
+    for seed_u in range(1, 13):
+        bs.new("Smoke under", "F-14BU", 2, seed=seed_u)
+        for pk_u in bs.packages():
+            if bs.flyable(pk_u) and any(c.start < pk_u.start for c in bs.merge_candidates(pk_u)):
+                ru = bs.fly(pk_u.number, bs.flyable(pk_u)[0].id)
+                if any(m.get("underway") for m in ru.merged):
+                    under = (seed_u, pk_u, ru); break
+        if under:
+            break
+    assert under, "no merged mission with an earlier package already underway was produced"
+    zu = zipfile.ZipFile(bs.settings.sortie_miz); mu = lua.loads(zu.read("mission").decode())["mission"]
+    uman = bs.manifest()
+    names = {n for g in uman.groups if g.get("pkg") == [m for m in under[2].merged if m.get("underway")][0]["id"] and g["kind"] == "friendly" for n in g["units"]}
+    live = 0
+    for side in mu["coalition"].values():
+        for c in side["country"].values():
+            for g in (c.get("plane", {}).get("group", {}) or {}).values():
+                if any(u.get("name") in names for u in g["units"].values()) and not g.get("lateActivation"):
+                    live += 1
+                    assert all(u["alt"] > 300 for u in g["units"].values()), "an underway flight starts on the ground"
+    assert live >= 1, "no live in-flight group for the underway package"
+    print(f"[underway] seed {under[0]} host #{under[1].number}: {live} flight groups already airborne at the start")
+    for m_ in rb.merged:
+        assert m_["rtb_s"] > 0, m_
+    vis = [p_ for p_ in bs.packages() if bs.flyable(p_)]
+    groups = bs.collapse(vis)
+    shown = {h.number for h, _ in groups}; folded = {x.number for _, mem in groups for x in mem}
+    assert not (shown & folded), (shown, folded)
+    assert {p_.number for p_ in vis} <= (shown | folded), "collapse lost a package"
+    print(f"[list] {len(vis)} packages -> {len(groups)} rows")
     # ---- v0.8: SEAD/DEAD split, suppression, depth tiers, front, garrisons ------------------------------------------------
     import random
     from sqe.models import AssetKind, Role

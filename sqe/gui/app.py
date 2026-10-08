@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtGui import QAction, QColor, QFont
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
                                QHeaderView, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QProgressBar,
-                               QPushButton, QCheckBox, QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser,
+                               QPushButton, QCheckBox, QScrollArea, QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser,
                                QVBoxLayout, QWidget)
 
 from .. import APP_NAME, CAMPAIGN_EXT, __version__, narrative
@@ -80,7 +80,7 @@ class OverviewPage(QWidget):
 
 class MissionsPage(QWidget):
     def __init__(self, win):
-        super().__init__(); self.win = win; self.pkgs = []
+        super().__init__(); self.win = win; self.pkgs = []; self.members = {}
         root = QHBoxLayout(self); root.setSpacing(16)
         left = QVBoxLayout(); root.addLayout(left, 4)
         self.day = QLabel(); self.day.setObjectName("h2"); left.addWidget(self.day)
@@ -93,23 +93,12 @@ class MissionsPage(QWidget):
         right = QVBoxLayout(); root.addLayout(right, 6)
         self.c = card(); right.addWidget(self.c, 1)
         L = self.c.layout()
-        self.title = QLabel(); self.title.setObjectName("title"); self.title.setWordWrap(True); L.addWidget(self.title)
-        self.when = QLabel(); self.when.setObjectName("h2"); self.when.setStyleSheet(f"color:{theme.AMBER};"); L.addWidget(self.when)
-        self.intent = QLabel(); self.intent.setObjectName("dim"); self.intent.setWordWrap(True); L.addWidget(self.intent)
-        self.ft = _tbl(["Flight", "Aircraft", "Qty", "Task", "Based at", ""])
-        self.ft.setSelectionMode(QTableWidget.NoSelection); self.ft.setFocusPolicy(Qt.NoFocus)
-        self.ft.setStyleSheet("QTableWidget::item:selected, QTableWidget::item:hover, QTableWidget::item:focus { background: transparent; border: none; }")
-        self.ft.verticalHeader().setDefaultSectionSize(42)
-        self.ft.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        hh = self.ft.horizontalHeader()
-        for c, m in enumerate((QHeaderView.ResizeToContents, QHeaderView.Stretch, QHeaderView.ResizeToContents, QHeaderView.Stretch,
-                               QHeaderView.Stretch, QHeaderView.Fixed)):
-            hh.setSectionResizeMode(c, m)
-        hh.resizeSection(5, 100)
-        L.addWidget(self.ft)
-        self.sup = QLabel(); self.sup.setObjectName("dim"); self.sup.setWordWrap(True); L.addWidget(self.sup)
-        self.thr = QLabel(); self.thr.setWordWrap(True); self.thr.setStyleSheet(f"color:{theme.AMBER};"); L.addWidget(self.thr)
-        L.addStretch(1)
+        # everything that depends on the selected package lives in a scroll area, so a merged group of packages can be as tall as it needs
+        self.scroll = QScrollArea(); self.scroll.setWidgetResizable(True); self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setStyleSheet("QScrollArea { background: transparent; } QScrollArea > QWidget > QWidget { background: transparent; }")
+        self.body = QWidget(); self.bl = QVBoxLayout(self.body); self.bl.setContentsMargins(0, 0, 6, 0); self.bl.setSpacing(8)
+        self.scroll.setWidget(self.body); L.addWidget(self.scroll, 1)
         self.note = QLabel("Press FLY on your flight. Push time, TOT and the briefing are built when you do."); self.note.setObjectName("small"); L.addWidget(self.note)
         self.resume = QPushButton("Resume pending sortie..."); self.resume.setObjectName("danger"); self.resume.hide(); L.addWidget(self.resume)
         self.resume.clicked.connect(win.wait_for_results)
@@ -132,7 +121,9 @@ class MissionsPage(QWidget):
         self.flt.setCurrentIndex(0 if sess.settings.flight_filter != "all" else 1)
         self._loading = False
         mine_only = sess.settings.flight_filter != "all"
-        self.pkgs = [p for p in sess.packages() if (bool(sess.flyable(p)) or not mine_only)]
+        visible = [p for p in sess.packages() if (bool(sess.flyable(p)) or not mine_only)]
+        groups = sess.collapse(visible)                     # a package that another one folds in is shown inside it, not as its own row
+        self.pkgs = [h for h, _ in groups]; self.members = {h.number: m for h, m in groups}
         self.day.setText(f"{st.campaign_date().strftime('%d %b %Y').upper()}  -  Day {st.day} tasking order  ({len(self.pkgs)} shown)")
         self.lst.blockSignals(True); self.lst.clear()
         for p in self.pkgs:
@@ -151,47 +142,98 @@ class MissionsPage(QWidget):
         self.skip.setEnabled(st.status == "ACTIVE")
         if self.pkgs:
             self.lst.setCurrentRow(0)
+        else:
+            self._clear_body()
 
-    def _show(self, row):
-        if row < 0 or row >= len(self.pkgs):
-            return
-        p = self.pkgs[row]; st = self.sess.state
-        self.title.setText(p.objective.description)
-        night = is_night(st.campaign_date(), p.start)
-        self.when.setText(f"Mission start {p.start} local ({'night' if night else 'day'})   -   clear weather")
-        import random
-        self.intent.setText(narrative.commander_intent(p.objective.type, random.Random(p.number * 7 + st.day)))
-        for r in range(self.ft.rowCount()):                     # drop old buttons completely (no ghost widgets)
-            old = self.ft.cellWidget(r, 5)
-            if old is not None:
-                self.ft.removeCellWidget(r, 5); old.setParent(None); old.deleteLater()
-        self.ft.clearContents()
-        self.ft.setRowCount(len(p.flights)); self.ft.setMinimumHeight(40 + 42 * len(p.flights)); self.ft.setMaximumHeight(60 + 42 * len(p.flights))
+    # ---- the right-hand panel ------------------------------------------------------------------------------------------------
+    def _clear_body(self):
+        while self.bl.count():
+            it = self.bl.takeAt(0)
+            w = it.widget()
+            if w is not None:
+                w.setParent(None); w.deleteLater()
+
+    def _label(self, text, obj=None, color=None, wrap=True):
+        l = QLabel(text)
+        if obj:
+            l.setObjectName(obj)
+        l.setWordWrap(wrap)
+        if color:
+            l.setStyleSheet(f"color:{color};")
+        return l
+
+    def _fly_note(self, p) -> str:
+        """What pressing FLY on this package's flight gives you: the start time and the other packages that fly with it."""
+        ex = self.sess.merge_candidates(p)
+        if not ex:
+            return f"FLY here: the mission starts {p.start}, this package alone."
+        parts = [f"#{x.number} ({'already airborne, started ' if x.start < p.start else 'starts '}{x.start})" for x in ex]
+        return f"FLY here: the mission starts {p.start} and also flies " + ", ".join(parts) + "."
+
+    def _flight_table(self, p):
+        st = self.sess.state
+        t = _tbl(["Flight", "Aircraft", "Qty", "Task", "Based at", ""])
+        t.setSelectionMode(QTableWidget.NoSelection); t.setFocusPolicy(Qt.NoFocus)
+        t.setStyleSheet("QTableWidget::item:selected, QTableWidget::item:hover, QTableWidget::item:focus { background: transparent; border: none; }")
+        t.verticalHeader().setDefaultSectionSize(42)
+        t.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff); t.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        hh = t.horizontalHeader()
+        for c, m in enumerate((QHeaderView.ResizeToContents, QHeaderView.Stretch, QHeaderView.ResizeToContents, QHeaderView.Stretch,
+                               QHeaderView.Stretch, QHeaderView.Fixed)):
+            hh.setSectionResizeMode(c, m)
+        hh.resizeSection(5, 100)
+        t.setRowCount(len(p.flights)); t.setFixedHeight(64 + 42 * len(p.flights))
         opts = {f.id for f in self.sess.flyable(p)}
         active = st.status == "ACTIVE"
         for i, f in enumerate(p.flights):
             spec = AIRCRAFT[f.aircraft]; yours = f.id in opts
             vals = (f.callsign, spec.display, f.count, f.task, st.bases[f.base_id].name.replace(" AB", ""))
             for j, v in enumerate(vals):
-                self.ft.setItem(i, j, _item(v, theme.GREEN if (yours and j == 0) else (theme.DIM if f.tag else None), center=(j == 2)))
+                t.setItem(i, j, _item(v, theme.GREEN if (yours and j == 0) else (theme.DIM if f.tag else None), center=(j == 2)))
             if yours:
                 b = QPushButton("FLY"); b.setObjectName("fly"); b.setEnabled(active); b.setFixedSize(84, 30)
+                b.setToolTip(self._fly_note(p))
                 b.clicked.connect(lambda _=0, n=p.number, fid=f.id: self.win.do_fly(n, fid))
                 cont = QWidget(); cl = QHBoxLayout(cont); cl.setContentsMargins(4, 4, 4, 4); cl.addWidget(b, 0, Qt.AlignCenter)
-                self.ft.setCellWidget(i, 5, cont)
+                t.setCellWidget(i, 5, cont)
             else:
-                self.ft.removeCellWidget(i, 5)
-                self.ft.setItem(i, 5, _item("AI support" if f.tag else f"AI {spec.service}", theme.DIM))
-        self.sup.setText("Support: " + ", ".join(f"{s.label} ({s.slot.title()})" for s in p.support) +
-                         ("  |  JTAC on the ground" if p.jtac else "") + ("  |  Joint Navy / Air Force package" if p.joint else "") +
-                         (("  |  Merged mission: also flies " + ", ".join(f"#{x.number}" for x in self.sess.merge_candidates(p)))
-                          if opts and self.sess.merge_candidates(p) else ""))
+                t.setItem(i, 5, _item("AI support" if f.tag else f"AI {spec.service}", theme.DIM))
+        return t, bool(opts)
+
+    def _show(self, row):
+        if row < 0 or row >= len(self.pkgs):
+            return
+        p = self.pkgs[row]; st = self.sess.state; mem = self.members.get(p.number, [])
+        self._clear_body()
+        night = is_night(st.campaign_date(), p.start)
+        self.bl.addWidget(self._label(p.objective.description, "title"))
+        self.bl.addWidget(self._label(f"Mission start {p.start} local ({'night' if night else 'day'})   -   clear weather", "h2", theme.AMBER))
+        self.bl.addWidget(self._label(narrative.intent_for(st, p), "dim"))
+        tbl, yours = self._flight_table(p)
+        if yours:
+            self.bl.addWidget(self._label(self._fly_note(p), "small"))
+        self.bl.addWidget(tbl)
+        for x in mem:                                       # the packages that fly with this one: each with its own flights and FLY button
+            line = QFrame(); line.setFrameShape(QFrame.HLine); line.setStyleSheet(f"color:{theme.DIM};"); self.bl.addWidget(line)
+            xnight = is_night(st.campaign_date(), x.start)
+            self.bl.addWidget(self._label(f"Also in this mission: #{x.number}  {x.objective.type.value.replace('_', ' ')}   {x.start}{' (night)' if xnight else ''}", "h2", theme.AMBER))
+            self.bl.addWidget(self._label(x.objective.description, "title"))
+            xt, xyours = self._flight_table(x)
+            if xyours:
+                self.bl.addWidget(self._label(self._fly_note(x), "small"))
+            self.bl.addWidget(xt)
+        sup = ("Support: " + ", ".join(f"{s.label} ({s.slot.title()})" for s in p.support) +
+               ("  |  JTAC on the ground" if p.jtac else "") + ("  |  Joint Navy / Air Force package" if p.joint else ""))
+        ex = self.sess.merge_candidates(p)
+        if ex and yours:
+            sup += "  |  Merged mission: also flies " + ", ".join(f"#{x.number}" for x in ex)
+        self.bl.addWidget(self._label(sup, "dim"))
         tx, ty = PackageBuilder(st).target_xy(p.objective)
         th = threat_lines(st, tx, ty)[:4]
-        ex = self.sess.merge_candidates(p)
         nd = folded_n_def(p, ex, self.sess.settings.merge_enemy_pct)
-        self.thr.setText((f"Expect about {nd} hostile fighters at the target" + (f" (includes {', '.join('#%d' % x.number for x in ex)})" if ex else "") + ".  " if nd else "") +
-                         "Threats near target: " + ("; ".join(th) if th else "none known"))
+        self.bl.addWidget(self._label((f"Expect about {nd} hostile fighters at the target" + (f" (includes {', '.join('#%d' % x.number for x in ex)})" if ex else "") + ".  " if nd else "") +
+                                      "Threats near target: " + ("; ".join(th) if th else "none known"), None, theme.AMBER))
+        self.bl.addStretch(1)
 
 
 class ForcesPage(QWidget):

@@ -175,7 +175,8 @@ build the loadout, save, then `python tools/capture_loadouts.py that.miz`. They 
 
 ### Squadrons, the Missions filter and package merging (v0.7)
 - New Campaign lets you pick your squadron. Missions shows "My squadron" packages by default; switch to "All packages" to fly any flight of your jet type.
-- Settings > Package merging > "Same area" folds same-area packages that start within 30 minutes after yours into one mission. Compare the unit counts on the waiting window with merging Off to see the performance cost. Lower the unit limit if your VR system struggles.
+- Settings > Package merging > "Same area" folds same-area packages into one mission: ones that start up to 30 minutes after yours, and ones that started up to "Earlier packages" minutes (default 15) before yours. An earlier package is already airborne and underway when the mission starts (it spawns along its route, or holding at its marshal point); one that has already struck and gone home by then is not flown. Compare the unit counts on the waiting window with merging Off to see the performance cost. Lower the unit limit if your VR system struggles.
+- On the Missions screen, a package that another one folds in is shown inside that package's panel, each with its own flights and FLY button. The line above each table says what FLY gives you: the start time, and which other packages fly with it. Pressing FLY on a later package starts the mission at its time instead.
 
 ### Depth tiers, SEAD vs DEAD, garrisons (v0.8)
 - The war opens over Abkhazia (tiers 1 and 2: the armour columns and the Sukhumi/Gudauta belts). The coast and north Caucasus (Sochi, Nalchik, Beslan, Mozdok) open when the front advances, and the deep rear after that. Overview shows "front: stage N of 3"; Forces > Enemy assets shows each asset's depth and whether it is still locked.

@@ -143,16 +143,33 @@ class Session:
         return [f for f in opts if f.squadron_id == self.state.player.squadron_id] if squadron_only else opts
 
     def merge_candidates(self, pkg: Package) -> list:
-        """Packages that would be folded into a mission built around `pkg`: same area, starting at or after it and within 30 minutes,
-        at most two extra (three packages in all). Empty when merging is off."""
+        """Packages that would be folded into a mission built around `pkg`: same area, starting up to 30 minutes AFTER it, or up to
+        `merge_back_min` minutes BEFORE it (those are already underway when the mission starts), at most two extra (three packages in all),
+        the ones closest in time first. Empty when merging is off."""
         if self.settings.merge_mode != "area":
             return []
         from .packages import packages_linked
         hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
-        out = [p for p in self.packages() if p.number != pkg.number and 0 <= hm(p) - hm(pkg) <= 30
+        back = max(0, int(getattr(self.settings, "merge_back_min", 15)))
+        out = [p for p in self.packages() if p.number != pkg.number and -back <= hm(p) - hm(pkg) <= 30
                and any(not f.tag for f in p.flights) and packages_linked(self.state, pkg, p)]
+        out.sort(key=lambda p: (abs(hm(p) - hm(pkg)), hm(p), p.number))
+        out = out[:2]
         out.sort(key=lambda p: (hm(p), p.number))
-        return out[:2]
+        return out
+
+    def collapse(self, pkgs: list) -> list:
+        """The Missions list: [(package, [packages shown inside it])]. A package that an earlier shown package folds in (it starts after it, same area)
+        is listed inside that package's panel instead of as a row of its own, each with its own FLY button."""
+        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
+        absorbed, out = set(), []
+        for p in sorted(pkgs, key=lambda p: (hm(p), p.number)):
+            if p.number in absorbed:
+                continue
+            mem = [x for x in self.merge_candidates(p) if (hm(x), x.number) > (hm(p), p.number)] if self.flyable(p) else []
+            absorbed |= {x.number for x in mem}
+            out.append((p, mem))
+        return out
 
     # ---- fly ---------------------------------------------------------------------------------------
     def fly(self, package_number: int, flight_id: str | None):

@@ -143,3 +143,29 @@ OBJECTIVE_ACTIONS = ("BOMB", "SEAD", "SWEEP", "CAS", "ESCORT", "CAPORBIT")
 def objective_wp(wps: list[Wpt]) -> Wpt | None:
     """The waypoint a flight is on station at for TOT purposes (target / HARM point / CAP station)."""
     return next((w for w in wps if w.action in OBJECTIVE_ACTIONS), None)
+
+
+def in_progress(wps: list[Wpt], home: tuple) -> list[Wpt] | None:
+    """A flight whose schedule started BEFORE the mission did. `wps` already carries absolute times (assign_times, first point at a negative time).
+    Returns the route as it stands at mission time 0: a SPAWN point where the flight is by then (interpolated along its leg, or at the hold point
+    if it is still holding) followed by the points it still has to fly. None if it is already back on the ground."""
+    hx, hy = home
+    rtb = Wpt("RTB", hx, hy, 0, 300)
+    end_t = wps[-1].eta_s + leg_seconds(wps[-1], rtb)
+    if end_t <= 0:
+        return None
+    pts = list(wps) + [rtb]
+    pts[-1].eta_s = end_t
+    for i in range(len(wps)):
+        a, b = pts[i], pts[i + 1]
+        ts = a.eta_s
+        if a.action == "HOLD":
+            ts = b.eta_s - leg_seconds(a, b)                       # when it leaves the hold
+            if a.eta_s <= 0 < ts:                                  # still orbiting at the marshal point
+                return [Wpt("SPAWN", a.x, a.y, a.alt_ft, a.speed_kts)] + list(wps[i:])
+        te = b.eta_s
+        if ts <= 0 < te:
+            f = (0 - ts) / max(1.0, te - ts)
+            sp = Wpt("SPAWN", a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, int(a.alt_ft + (b.alt_ft - a.alt_ft) * f), a.speed_kts)
+            return [sp] + list(wps[i + 1:])
+    return None

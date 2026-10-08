@@ -35,7 +35,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     threats = threat_lines(state, *tgt_xy)
     t = totals(state)
     sit = [f"{x['date']}. {narrative.TITLE}, day {state.day}. {pname}.", "", ptext, "", *narrative.sitrep(state), "",
-           f"Commander's intent: {narrative.commander_intent(obj.type, rng)}"]
+           f"Commander's intent: {narrative.intent_for(state, pkg)}"]
     if threats:
         sit += ["", "Threats near the target:"] + [f"  - {s}" for s in threats]
     if obj.type.value == "FLEET_DEFENSE" and pkg.extra:

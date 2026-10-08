@@ -56,25 +56,90 @@ def sitrep(state) -> list:
 
 
 _INTENT = {
-    ObjectiveType.STRIKE: ["The offensive lives on what this site supplies. Cut it and the front starves.",
-                           "Intel puts this target at the heart of the enemy's sustainment. Make it burn."],
-    ObjectiveType.DEAD: ["This site is a thorn in every package's side. SEAD blinds it; the DEAD flight right behind must finish it.",
-                         "Until this battery is dead our strikers pay a toll. Blinding it is not enough: the launchers have to burn."],
-    ObjectiveType.COUNTER_AIR: ["Their fighters are sheltered and rested. Make them fight or make them burn on the ramp.",
-                                "Hit the air regiment while it is still on the ground. Air control starts here."],
-    ObjectiveType.BARCAP: ["The fleet is the center of gravity. Nothing gets through to the carrier.",
-                           "Hold the line over the task force and kill anything that approaches."],
-    ObjectiveType.FLEET_DEFENSE: ["Backfires are inbound with anti-ship missiles. The fleet is counting on you to kill them before they launch.",
-                                  "Intelligence has the bombers in the air. Stop the raid at long range; the missiles are the real threat."],
-    ObjectiveType.CAS: ["Ground forces are under pressure. The column must be stopped before it reaches the airbase.",
-                        "Friendly troops are in contact. Your JTAC is waiting. Find the armor and destroy it."],
+    ObjectiveType.STRIKE: [
+        "The offensive lives on what {site} supplies. Cut it and the front starves.",
+        "Intel puts {site} at the heart of the enemy's sustainment. Make it burn.",
+        "{site} keeps their columns moving. Every hour it stands costs us on the ground.",
+        "Strike {site} hard and fast. Command wants it out of the war before the next wave.",
+        "Reconnaissance shows {site} fully operational. Today is the day that changes.",
+        "{site} is on the list because it matters. Put your weapons on it and bring everyone home.",
+        "Their logistics run through {site}. Break it and the offensive stutters.",
+        "Priority target: {site}. Command is counting on a clean hit.",
+    ],
+    ObjectiveType.DEAD: [
+        "{site} is a thorn in every package's side. SEAD blinds it; the DEAD flight right behind must finish it.",
+        "Until {site} is dead our strikers pay a toll. Blinding it is not enough: the launchers have to burn.",
+        "{site} has been swatting at everything we send north. Take it off the board.",
+        "Intel has {site} on alert and ready. SEAD goes in first; DEAD follows through the hole they open.",
+        "The air-defence network leans on {site}. Kill it and the corridor opens for every package behind you.",
+        "Expect {site} to track you early. Use your standoff and your timing; the launchers are the prize.",
+        "{site} anchors the local air defences. Make it quiet, then make it permanent.",
+        "Command wants {site} gone today. SEAD blinds, DEAD destroys, nobody lingers.",
+    ],
+    ObjectiveType.COUNTER_AIR: [
+        "Their fighters at {site} are sheltered and rested. Make them fight or make them burn on the ramp.",
+        "Hit the air regiment at {site} while it is still on the ground. Air control starts here.",
+        "{site} is where their fighter wing lives. Crater the ramp and the sorties stop.",
+        "Every jet destroyed at {site} is one we will not meet over the fleet tomorrow.",
+        "Intel shows {site} loaded and fuelled. Hit it before it launches.",
+        "Take {site} out of the fight. What cannot launch cannot kill us.",
+    ],
+    ObjectiveType.BARCAP: [
+        "The fleet is the center of gravity. Nothing gets through to the carrier.",
+        "Hold the line over the task force and kill anything that approaches.",
+        "{site} is what everything else depends on. Keep the picture clean and the airspace ours.",
+        "Stay sharp on station. The enemy wants {site} and will probe for a gap.",
+        "Patrol the approaches to {site}. Anything unidentified is hostile until proven otherwise.",
+        "A quiet patrol is a good patrol, but be ready. They only need one gap at {site}.",
+    ],
+    ObjectiveType.FLEET_DEFENSE: [
+        "Backfires are inbound with anti-ship missiles. The fleet is counting on you to kill them before they launch.",
+        "Intelligence has the bombers in the air. Stop the raid at long range; the missiles are the real threat.",
+        "A raid is heading for {site}. Intercept early and keep the shooters outside missile range.",
+        "Radar has the Backfires tracking toward {site}. Every bomber that reaches launch range is a missile in the air.",
+        "Kill the shooters, not the missiles. Hit the raid before it turns on {site}.",
+        "The low threats are the fleet's blind spot, so the intercept is on you. Hold the raid away from {site}.",
+    ],
+    ObjectiveType.CAS: [
+        "Ground forces are under pressure from {site}. Break it before it breaks us.",
+        "Friendly troops are in contact. Your JTAC is waiting. Find {site} and destroy it.",
+        "Our troops cannot take {site} without you. Check in with the JTAC and clear the way.",
+        "{site} is the only thing between our line and the next objective. Hit it hard and early.",
+        "Our task force needs air now. Your JTAC will talk you onto {site}.",
+        "Hold the line on the ground by breaking {site}. Call the JTAC and work the target.",
+    ],
 }
-_COMMANDERS = ["Capt. Reyes (Air Wing)", "Col. Hale (Air Component)", "Cdr. Ito (CAG)", "Col. Brandt (Ops)"]
-_INTEL = ["Maj. Okafor (Intel)", "Lt. Cdr. Vance (Intel)", "Capt. Lindqvist (Intel)"]
+_COMMANDERS = ["Capt. Reyes (Air Wing)", "Col. Hale (Air Component)", "Cdr. Ito (CAG)", "Col. Brandt (Ops)",
+               "Maj. Gen. Whitlow (Air Component)", "Capt. Duarte (Strike Ops)", "Cdr. Nakamura (Air Boss)", "Lt. Col. Sorensen (Ops)"]
+_INTEL = ["Maj. Okafor (Intel)", "Lt. Cdr. Vance (Intel)", "Capt. Lindqvist (Intel)", "Lt. Hargrove (Intel)", "Maj. Delacroix (Intel)", "Capt. Mbeki (Intel)"]
 
 
-def commander_intent(obj_type, rng: random.Random) -> str:
-    return rng.choice(_INTENT[obj_type]) + f"  -- {rng.choice(_COMMANDERS)}"
+def commander_intent(obj_type, rng: random.Random | None = None, n: int | None = None, site: str = "", pkg_no: int = 0, day: int = 0) -> str:
+    """One line of commander's intent plus a signature.
+    n = how many packages of the same objective type come before this one in the day's tasking order: consecutive packages walk through the pool,
+    so two on the same screen never get the same line (the day rotates where the walk starts). With no n it falls back to a random pick."""
+    pool = _INTENT[obj_type]
+    site = site or "the target"
+    if n is None:
+        line, who = (rng or random).choice(pool), (rng or random).choice(_COMMANDERS)
+    else:
+        line, who = pool[(day * 3 + n) % len(pool)], _COMMANDERS[(day * 5 + pkg_no) % len(_COMMANDERS)]
+    return line.format(site=site) + f"  -- {who}"
+
+
+def site_name(state, obj) -> str:
+    try:
+        a = state.assets.get(obj.target_id) or state.bases.get(obj.target_id)
+        return a.name if a is not None else ""
+    except Exception:
+        return ""
+
+
+def intent_for(state, pkg) -> str:
+    """The intent line for a package, stable for the day and varied across the tasking order (see commander_intent)."""
+    typ = pkg.objective.type
+    n = sum(1 for d in state.plan if d["number"] < pkg.number and d["objective"]["type"] == typ.value)
+    return commander_intent(typ, None, n, site_name(state, pkg.objective), pkg.number, state.day)
 
 
 def intel_officer(rng) -> str:
