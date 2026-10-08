@@ -442,6 +442,16 @@ class MainWindow(QMainWindow):
 def run():
     app = QApplication(sys.argv)
     app.setStyleSheet(theme.QSS); app.setApplicationName(APP_NAME)
+    try:                                                       # own taskbar identity + icon (otherwise Windows groups SQE under python.exe)
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("MarkuzJuniuz.SQE")
+    except Exception:
+        pass
+    try:
+        from PySide6.QtGui import QIcon
+        app.setWindowIcon(QIcon(str(Path(__file__).resolve().parent.parent / "data" / "sqe.png")))
+    except Exception:
+        pass
     f = app.font(); f.setPointSize(10); app.setFont(f)
     settings = AppSettings.load(); sess = Session(settings)
     w = MainWindow(sess); w.show()

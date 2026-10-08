@@ -1,3 +1,6 @@
+## v0.9.3
+* App icon (stencil SQE roundel): window and taskbar icon, and the built SQE.exe.
+
 ## v0.9.2
 * F-14B(U) CAP: 4 AIM-54C, 2 AIM-7P, 2 AIM-9M, 2 tanks (stock AAW05 with the LANTIRN pod on station 9 swapped for the second Sparrow).
 
