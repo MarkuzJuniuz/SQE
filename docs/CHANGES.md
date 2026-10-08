@@ -1,3 +1,11 @@
+# Changes in v0.8.5
+
+- **Fixed: "Flight is delayed to start" and no cockpit.** Your takeoff waypoint was time-unlocked while PUSH and the target were time-locked, so DCS worked out your start time backwards from those and held you at the F10 map until then (several minutes). The takeoff waypoint is now locked at mission start, as the Mission Editor does for a normal runway start. Kneeboard times and the plan are unchanged. AI flights keep their staggered starts.
+
+# Changes in v0.8.4
+
+- Package merging ("Same area") is now the default for new installs. If you already have a settings file, your saved choice stays; change it under Settings.
+
 # Changes in v0.8.3
 
 - The takeoff waypoint in the mission file no longer carries a time (it was the Takeoff buffer, 60 s by default). DCS can show "flight delayed to start" and hold a player at the start when the takeoff waypoint's time is later than the mission start; your flight now starts the moment the mission loads. The kneeboard still shows the buffered takeoff time and every other time is unchanged.

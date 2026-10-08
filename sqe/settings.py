@@ -62,7 +62,7 @@ class AppSettings:
     takeoff_buffer_s: int = 60            # seconds between mission start and the briefed takeoff (negative = you must be quicker than the plan)
     hold_minutes: int = 2                 # slack at the marshal point before PUSH (minutes; negative = hurry)
     flight_filter: str = "squadron"      # Missions page: "squadron" (only flights of YOUR squadron) or "all" (any flight your jet can fly)
-    merge_mode: str = "off"               # "off" | "area": fold packages in the same area, starting within 30 min, into one mission
+    merge_mode: str = "area"              # "off" | "area" (default): fold packages in the same area, starting within 30 min, into one mission
     merge_max_units: int = 150            # a merged mission is trimmed until it holds no more than this many units
     auto_patch_scripting: bool = True     # patch DCS MissionScripting.lua when SQE starts, restore it when SQE exits (like Liberation / Retribution)
     persist: bool = True          # False in tests: never write %APPDATA%\\SQE\\settings.json
