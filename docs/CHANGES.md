@@ -1,3 +1,7 @@
+# Changes in v0.8.6
+
+- Fixed: opening a v0.8.5 sortie in the Mission Editor gave "All waypoints (2-4) have locked speed and surrounded by waypoints 1 and 4 with locked time" and it could not be saved. The point just before PUSH now has a free speed on your flight, so the takeoff-to-PUSH leg is valid. v0.8.5's fix for "Flight is delayed to start" (takeoff locked at mission start) is kept.
+
 # Changes in v0.8.5
 
 - **Fixed: "Flight is delayed to start" and no cockpit.** Your takeoff waypoint was time-unlocked while PUSH and the target were time-locked, so DCS worked out your start time backwards from those and held you at the F10 map until then (several minutes). The takeoff waypoint is now locked at mission start, as the Mission Editor does for a normal runway start. Kneeboard times and the plan are unchanged. AI flights keep their staggered starts.

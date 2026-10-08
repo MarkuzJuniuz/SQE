@@ -868,6 +868,8 @@ class MissionBuilder:
         here = idx.get(w.name)
         between = lo is not None and hi is not None and here is not None and lo < here < hi
         wp.speed_locked = not between
+        if lo is not None and here is not None and here == lo - 1 and here >= 1 and w.name != "TAKEOFF":
+            wp.speed_locked = False       # the Mission Editor refuses takeoff(locked) .. PUSH(locked) with every point between at locked speed; the leg into PUSH stays free
 
     def _spawn_point(self, f, base, geom):
         """Where an AI flight 'just departed': a pretend-DEP point behind the base. Carrier jets and land jets start differently and
