@@ -896,8 +896,9 @@ class MissionBuilder:
                 g.points[-1].name = "RTBXHB"
         else:
             rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
-            rtb.type, rtb.action = "Land", PointAction.Landing
-            rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
+            # A "Land" point linked to a ship is something the Mission Editor rewrites on save (to a Turning Point that keeps the ship link), and the
+            # un-rewritten version drops the player into the F10 map instead of the cockpit. So write what the editor would: a turning point riding on the ship.
+            rtb.link_unit = self.ship[base.id].units[0].id
         tw = None if f.tag else objective_wp(wps)
         return g, (tw.eta_s if tw is not None else None)
 
