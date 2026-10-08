@@ -37,6 +37,7 @@ class Wpt:
     note: str = ""
     action: str = ""        # "" | HOLD | BOMB | SEAD | SWEEP | CAS | ESCORT | CAPORBIT
     eta_s: float = 0.0      # seconds after mission start (filled by assign_times)
+    agl: bool = False       # altitude is metres/feet above ground (the player's TGT sits on the ground so sensors and weapons can slave to it)
 
 
 @dataclass
@@ -90,14 +91,18 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     alt = p.alt_ft.get(role, 20000)
     wp.append(Wpt("PUSH", *g.push, alt, p.push_kts, "Push on time, check in with AWACS"))
     wp.append(Wpt("IP", *g.ip, alt, p.ip_kts, "Weapons armed, master arm"))
+    # The player's TGT is on the ground target at 0 AGL so pods, weapons and the WSO / Jester can slave to it. The wingmen follow the player, and AI-only flights
+    # never get a ground-level point (they would descend to it).
     if role == Role.STRIKE:
-        wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts, p.tgt_note, "BOMB"))
+        wp.append(Wpt("TGT", g.tx, g.ty, 0 if is_player else alt, p.attack_kts, p.tgt_note, "BOMB", agl=is_player))
+    elif role == Role.SEAD and is_player:
+        wp.append(Wpt("TGT", g.tx, g.ty, 0, p.attack_kts, "SEAD site. You set standoff", "SEAD", agl=True))
     elif role == Role.SEAD:
         wp.append(Wpt("SEAD", *offset(g.tx, g.ty, g.hdg + 180, max(8, p.ip_nm - 4) * NM), alt, p.attack_kts, "HARM launch point", "SEAD"))
     elif role == Role.SWEEP:
         wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts + 30, "SWEEP: clear the airspace", "SWEEP"))
     elif role == Role.CAS:
-        wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts, "CAS: check in with JTAC (COMM1 CH4)", "CAS"))
+        wp.append(Wpt("TGT", g.tx, g.ty, 0 if is_player else alt, p.attack_kts, "CAS: check in with JTAC (COMM1 CH4)", "CAS", agl=is_player))
     else:
         wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts, "ESCORT: cover the strikers over target", "ESCORT"))
     wp.append(Wpt("EGR", *g.egr, alt, p.egress_kts, "Exit threat area"))

@@ -1,3 +1,8 @@
+## v0.9.12
+* The player's TGT waypoint now sits on the ground target at 0 AGL (kneeboard shows "AGL 0"), so pods, weapons and Jester / the WSO can slave to it. Applies to strike, DEAD, SEAD and CAS.
+* A player SEAD route is now IP, TGT, EGR like the others: the standoff "SEAD" launch point is gone for the player and the standoff range is your call. AI SEAD flights keep their launch point.
+* AI flights are unchanged: TGT stays at cruise altitude for them, so no AI-only flight gets a ground-level waypoint.
+
 ## v0.9.11
 * Carrier starts: the carrier and escort ships now get warehouse entries like the Mission Editor writes on save. Without them the carrier had no warehouse to spawn the player's aircraft from, which dropped you into the F10 map until you resaved the mission in the editor.
 

@@ -279,14 +279,14 @@ class MissionBuilder:
         # ---- waypoint table as the jet numbers it ------------------------------------------------------------------------------
         rows = [("TAKEOFF", pbase.x, pbase.y, launch_s, "", "", self._short(pbase.name))]
         for w in pw:
-            rows.append((w.name, w.x, w.y, w.eta_s, f"{w.alt_ft // 1000}K", w.speed_kts, w.note))
+            rows.append((w.name, w.x, w.y, w.eta_s, "AGL 0" if w.agl else f"{w.alt_ft // 1000}K", w.speed_kts, w.note))
         rows.append(("RTB", pbase.x, pbase.y, rtb_s, "-", 300, self._rtb_note(pspec, pbase)))
         n_route = len(rows)
         rows.append(("DIVERT", div.x, div.y, 0, "-", "", div.name))
         if tanker_xy:
             rows.append(("TKR", tanker_xy[0], tanker_xy[1], 0, f"{pspec.profile.aar_alt_ft // 1000}K", pspec.profile.aar_kts, "Top off. See COMMS for TACAN"))
         rows.append(("BULLS", bx, by, 0, "", "", "Bullseye reference"))
-        player_wps = [Wpt(r[0], r[1], r[2], 0 if r[4] in ("", "-") else int(str(r[4]).rstrip("K")) * 1000,
+        player_wps = [Wpt(r[0], r[1], r[2], 0 if r[4] in ("", "-", "AGL 0") else int(str(r[4]).rstrip("K")) * 1000,
                           int(r[5]) if str(r[5]).isdigit() else 0, r[6]) for r in rows]
         self._trailing_steerpoints(package, rows[n_route:], pspec)
         kn_rows, hook_wps = [], []
@@ -860,6 +860,8 @@ class MissionBuilder:
         for w in wps[first:]:
             wp = g.add_waypoint(pt(w.x, w.y), w.alt_ft * FT, w.speed_kts * KPH, w.name)
             if f.is_player:
+                if w.agl:
+                    wp.alt, wp.alt_type = 0, "RADIO"                 # on the ground: sensors and weapons slave to the target
                 self._set_eta(wp, w, wps)
                 if special:
                     nm = special(w)
