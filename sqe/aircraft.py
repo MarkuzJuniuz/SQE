@@ -81,7 +81,7 @@ AIRCRAFT: dict[str, AircraftSpec] = {
                      alt_ft={_R.STRIKE: 25000, _R.ESCORT: 26000, _R.SWEEP: 28000, _R.SEAD: 25000, _R.CAS: 12000},
                      push_kts=510, ip_kts=510, attack_kts=510, egress_kts=540, push_nm=70, ip_nm=25, egress_nm=30,
                      tgt_note="JDAM target: coords below. Release", special_points=("IP", "ST")),
-        bingo_lbs=3000, joker_lbs=4500),
+        first_wp_label="0", bingo_lbs=3000, joker_lbs=4500),
     "FA-18C": AircraftSpec(
         "FA-18C", "F/A-18C Hornet", "FA_18C_hornet", BaseKind.CARRIER,
         frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.STRIKE, _R.SEAD}), RefuelMethod.BASKET, 1, 300, 450, True,

@@ -1,3 +1,6 @@
+## v0.9.8
+* F-14B(U) kneeboard: the start point is now 0 and DEP is 1, matching Jester.
+
 ## v0.9.7
 * Packaging only: release zips no longer contain `.gitignore` or the GitHub guide, so copying a zip over your repo folder keeps your own.
 
