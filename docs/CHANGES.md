@@ -1,3 +1,7 @@
+# Changes in v0.8.2
+
+- Folder paths in Settings (and the saved settings file) now use one slash style, the OS's own (backslashes on Windows). Before, the DCS install path (from the registry) and the Saves path (from the folder picker) could show different slashes.
+
 # Changes in v0.8.1
 
 - Settings: the fuel option is now called "AI fuel management" and the MissionScripting note no longer names other tools. README and THIRD_PARTY_NOTICES credit Liberation, Retribution, Falcon BMS and Strike Fighters as inspiration (no code from them). GitHub guide: corrected the licence of Retribution (LGPL-3.0, not GPL).

@@ -17,6 +17,12 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 
 
+def native(p: str) -> str:
+    """One slash style everywhere: the OS's own (backslashes on Windows). Qt file dialogs and the registry mix them."""
+    p = (p or "").strip()
+    return os.path.normpath(p) if p else ""
+
+
 def config_dir() -> Path:
     base = os.environ.get("APPDATA")
     p = Path(base) / "SQE" if base else Path.home() / ".config" / "SQE"
@@ -104,13 +110,15 @@ class AppSettings:
                 s = cls(**{k: v for k, v in json.loads(f.read_text()).items() if k in cls.__dataclass_fields__ and k != "persist"})
             except (OSError, ValueError):
                 pass
-        s.dcs_install = s.dcs_install or _detect_install()
-        s.dcs_saves = s.dcs_saves or _detect_saves()
+        s.dcs_install = native(s.dcs_install or _detect_install())
+        s.dcs_saves = native(s.dcs_saves or _detect_saves())
+        s.last_campaign = native(s.last_campaign)
         return s
 
     def save(self) -> None:
         if not self.persist:
             return
+        self.dcs_install, self.dcs_saves, self.last_campaign = native(self.dcs_install), native(self.dcs_saves), native(self.last_campaign)
         d = asdict(self); d.pop("persist", None)
         (config_dir() / "settings.json").write_text(json.dumps(d, indent=2))
 

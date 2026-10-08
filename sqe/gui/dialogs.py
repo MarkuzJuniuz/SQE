@@ -16,7 +16,7 @@ from .widgets import card
 def _browse(parent, line: QLineEdit, title: str):
     d = QFileDialog.getExistingDirectory(parent, title, line.text() or str(Path.home()))
     if d:
-        line.setText(d)
+        line.setText(S.native(d))
 
 
 class NewCampaignDialog(QDialog):
@@ -73,7 +73,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent); self.s = settings; self.setWindowTitle("Settings"); self.setMinimumWidth(680)
         lay = QVBoxLayout(self); lay.setSpacing(12)
         t = QLabel("Settings"); t.setObjectName("title"); lay.addWidget(t)
-        self.inst, self.saves = QLineEdit(settings.dcs_install), QLineEdit(settings.dcs_saves)
+        self.inst, self.saves = QLineEdit(S.native(settings.dcs_install)), QLineEdit(S.native(settings.dcs_saves))
         for label, line, ttl, hint in (
                 ("DCS", self.inst, "Select the DCS World install folder", "Install folder (only needed for the MissionScripting.lua patch)"),
                 ("DCS Saves", self.saves, "Select your DCS Saved Games folder", r"e.g. C:\Users\You\Saved Games\DCS  or  ...\DCS_Server")):
@@ -114,7 +114,7 @@ class SettingsDialog(QDialog):
         self.ms.setText("MissionScripting.lua: " + S.mission_scripting_status(self.inst.text()))
 
     def _save(self):
-        self.s.dcs_install, self.s.dcs_saves = self.inst.text().strip(), self.saves.text().strip()
+        self.s.dcs_install, self.s.dcs_saves = S.native(self.inst.text()), S.native(self.saves.text())
         self.s.hold_minutes = int(self.hold.value())
         self.s.takeoff_buffer_s = int(self.tob.value())
         self.s.ai_unlimited_fuel = self.fuel.isChecked()
