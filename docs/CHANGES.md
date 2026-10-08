@@ -1,3 +1,7 @@
+# Changes in v0.8.8
+
+- Kneeboard (F/A-18C): the start point is waypoint 0 and DEP is 1 (ED: "Waypoint 0 is your starting position" in the Hornet). F-14B and A-10C still number the takeoff point 1 until checked in the cockpit.
+
 # Changes in v0.8.7
 
 - Kneeboard (F-16C): the base / takeoff point is steerpoint 0 and DEP is 1, then 2, 3... (F-15C is unchanged: B, then 1, 2...). The note under the table says so. Other jets still number the takeoff point 1.
