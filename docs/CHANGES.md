@@ -1,3 +1,7 @@
+# Changes in v0.8.3
+
+- The takeoff waypoint in the mission file no longer carries a time (it was the Takeoff buffer, 60 s by default). DCS can show "flight delayed to start" and hold a player at the start when the takeoff waypoint's time is later than the mission start; your flight now starts the moment the mission loads. The kneeboard still shows the buffered takeoff time and every other time is unchanged.
+
 # Changes in v0.8.2
 
 - Folder paths in Settings (and the saved settings file) now use one slash style, the OS's own (backslashes on Windows). Before, the DCS install path (from the registry) and the Saves path (from the folder picker) could show different slashes.

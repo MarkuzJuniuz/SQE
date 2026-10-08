@@ -787,7 +787,7 @@ class MissionBuilder:
             except Exception:
                 g.set_frequency(plan.freq("FLIGHT"))
             manifest.player_unit = u0.name
-            g.points[0].ETA = max(0, int(o.launch_offset_s)); g.points[0].ETA_locked = False
+            g.points[0].ETA = 0; g.points[0].ETA_locked = False       # never a timed takeoff waypoint: DCS can hold a player at the start ("delayed to start") when it is later than mission start. The kneeboard still shows the buffered takeoff time.
         else:
             g.set_frequency(next((e.mhz for e in plan.package_flights if e.callsign == f.callsign), 130.0))
             if o.ai_despawn_on_land:
