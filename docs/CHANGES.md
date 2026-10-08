@@ -1,3 +1,6 @@
+## v0.9.7
+* Packaging only: release zips no longer contain `.gitignore` or the GitHub guide, so copying a zip over your repo folder keeps your own.
+
 ## v0.9.6
 * The sidebar no longer shows the file name or a second copy of the campaign title (the title is in the page header and the window title).
 
