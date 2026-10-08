@@ -24,6 +24,7 @@ from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
 from . import briefing as brief, callsigns
+from . import seacheck as seac
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
 from .debrief import Manifest, install_hook
@@ -62,6 +63,10 @@ class MissionOptions:
     ai_despawn_on_land: bool = True
     base_defenses: bool = True
     carrier_escorts: bool = True
+    enemy_cap_engage_nm: int = 50       # enemy patrol fighters chase no further than this (0 = unlimited)
+    friendly_cap_engage_nm: int = 50    # HAVCAP / BASECAP likewise (0 = unlimited)
+    f14_special_names: bool = True
+    merge_enemy_pct: int = 100          # folded packages: biggest enemy-air need + this % of the others'
     carrier_min_enemy_nm: int = 150     # the carrier group is moved back along the line of retreat until it is at least this far from the fight
     player_is_client: bool = False
     carrier_speed_kts: int = 15
@@ -159,7 +164,8 @@ class MissionBuilder:
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
         extras = [x for x in extras if any(not f.tag for f in x.flights)]
         air_pkg = copy.copy(package)
-        air_pkg.n_def = max([package.n_def] + [x.n_def for x in extras])     # enemy air is sized by the biggest need, not the sum
+        needs = sorted([package.n_def] + [x.n_def for x in extras], reverse=True)       # enemy air: the biggest package's need plus a share of the others'
+        air_pkg.n_def = needs[0] + int(round(sum(needs[1:]) * max(0, o.merge_enemy_pct) / 100.0))
         out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
 
         m = Mission(Caucasus())
@@ -315,7 +321,7 @@ class MissionBuilder:
         calls = []
         t1 = next((s for s in package.support if s.slot == "TANKER1"), None)
         if t1 is not None:
-            calls.append((25, f"{t1.label.upper()} to {pf.callsign.upper()}: on station, TACAN {plan.tacan.get('TANKER1', '')}, COMM1 channel 3."))
+            calls.append((25, f"{t1.label.upper()} to {pf.callsign.upper()}: on station, TACAN {plan.tacan.get('TANKER1', '')}, " + (f"{plan.freq('TANKER1'):.3f}." if pspec.fc3 else "COMM1 channel 3.")))
         calls.append((P0, f"{awl.upper()} to {pf.callsign.upper()}: package, push, push, push."))
         if tgt.eta_s - 300 > 60:
             calls.append((tgt.eta_s - 300, f"{awl.upper()} to {pf.callsign.upper()}: five minutes to TOT."))
@@ -330,7 +336,7 @@ class MissionBuilder:
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
             ctx = {"date": date_str, "callsign": f"{pf.callsign}-1", "role": ("DEAD" if (pf.role == Role.STRIKE and package.objective.type == ObjectiveType.DEAD) else pf.role.value), "objective": package.objective.description,
-                   "comm1": plan.comm1, "comm2": plan.comm2, "waypoints": kn_rows, "jet": pspec.display,
+                   "comm1": plan.comm1, "comm2": plan.comm2, "fc3": pspec.fc3, "waypoints": kn_rows, "jet": pspec.display,
                    "numbering": (f"{pspec.first_wp_label} for the start point, then 1, 2, 3..." if pspec.first_wp_label else "waypoint 1 = start point"),
                    "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": "CLEAR", "mode3": mode3, "laser": laser,
                    "bullseye": latlon(bx, by, self.t), "whois": whois, "threats": text["threats"], "n_def": air_pkg.n_def, "target_data": tdata,
@@ -339,6 +345,7 @@ class MissionBuilder:
                 m.add_aircraft_kneeboard(pspec.dcs_type, pg)
             warns += list(dict.fromkeys(self.lo.warnings))
             counts = self._counts()
+            self._free_locked_speeds(m)
             m.save(str(out_path))
         return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns, self.seed_code, merged)
 
@@ -476,7 +483,7 @@ class MissionBuilder:
         nm = self._short(pbase.name) if pbase is not None else ""
         if spec.home == BaseKind.CARRIER:
             return f"{nm}: Case I TACAN {self.o.carrier_tacan} ICLS {self.o.carrier_icls}".lstrip(": ")
-        return f"{nm}: Land. Tower COMM1 CH1".lstrip(": ")
+        return (f"{nm}: Land. Tower, ATC frequency" if spec.fc3 else f"{nm}: Land. Tower COMM1 CH1").lstrip(": ")
 
     def _divert(self, pbase):
         fields = [b for b in self.state.bases.values() if b.kind == BaseKind.AIRFIELD and b.id != pbase.id]
@@ -492,24 +499,49 @@ class MissionBuilder:
         return LASER[package.flights.index(pf) % 8]
 
     # ---- bases -------------------------------------------------------------------------------------------------------
+    def _carrier_heading(self, x, y, prefer):
+        """A heading with 120 nm of open sea ahead (and 8 nm off the coast all the way), nearest to `prefer`. None if there is none."""
+        for d in (0, 15, -15, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90, 120, -120, 150, -150, 180):
+            h = (prefer + d) % 360
+            if seac.clear_run(x, y, h, 120 * NM, 8 * NM):
+                return h
+        return None
+
     def _pull_back_carriers(self, tx, ty):
-        """Keep the carrier group out of the fight: slide it back along the line of retreat (up to 60 nm, this sortie only) until it
-        is far from the target and from every enemy fighter base. Skipped when the carrier itself IS the objective (fleet defence)."""
-        if self._fleet_obj:
-            return
+        """Keep the carrier group out of the fight: slide it back (up to 60 nm, this sortie only) until it is far from the target and from
+        every enemy fighter base, but only onto open water (>= 25 nm off the coast, 120 nm of clear sea ahead). If no such spot exists
+        the carrier stays on its home station. Skipped when the carrier itself IS the objective (fleet defence)."""
+        self._cv_hdg = {}
         enemies = tm.fighter_bases(self.state)
         need = self.o.carrier_min_enemy_nm * NM
         for b in self.state.bases.values():
             if b.kind != BaseKind.CARRIER:
                 continue
-            brg = (bearing(b.x, b.y, tx, ty) + 180) % 360
-            x0, y0 = b.x, b.y
-            x, y = x0, y0
-            for nm in range(0, 66, 10):
-                x, y = offset(x0, y0, brg, nm * NM)
-                if dist(x, y, tx, ty) >= need and all(dist(x, y, ex, ey) >= need for ex, ey in enemies):
-                    break
-            b.x, b.y = x, y
+            away = (bearing(b.x, b.y, tx, ty) + 180) % 360
+            home = (b.x, b.y)
+            if not self._fleet_obj:
+                found = None
+                for nm in range(0, 66, 10):
+                    for da in ((0,) if nm == 0 else (0, 25, -25, 50, -50, 80, -80, 110, -110)):
+                        x, y = offset(b.x, b.y, away + da, nm * NM)
+                        if not seac.open_water(x, y, 25 * NM):
+                            continue
+                        if dist(x, y, tx, ty) >= need and all(dist(x, y, ex, ey) >= need for ex, ey in enemies):
+                            h = self._carrier_heading(x, y, away)
+                            if h is not None:
+                                found = (x, y, h)
+                                break
+                    if found:
+                        break
+                if found:
+                    b.x, b.y = found[0], found[1]
+                    self._cv_hdg[b.id] = found[2]
+                    continue
+            h = self._carrier_heading(home[0], home[1], away)
+            if h is None:
+                h = away
+                self.warns.append(f"{b.name}: no clear 120 nm of sea ahead of the carrier; check its route in the editor.")
+            self._cv_hdg[b.id] = h
 
     def _platoon(self, country, name, comp, x, y, heading, formation, scale=1.0):
         types = []
@@ -537,7 +569,9 @@ class MissionBuilder:
                 x, y = offset(p.x, p.y, ang + 120, 3500)
                 self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if full else 1)], x, y, ang, F.Line)
             return
-        hdg = (bearing(base.x, base.y, tx, ty) + 180) % 360
+        hdg = getattr(self, '_cv_hdg', {}).get(base.id)
+        if hdg is None:
+            hdg = (bearing(base.x, base.y, tx, ty) + 180) % 360
         pos = mapping.Point(base.x, base.y, self.t)
         cv = self.m.ship_group(self.usa, base.name, ships.Stennis, pos, heading=hdg)      # legacy free CVN-74: no deck crew
         cv.add_waypoint(pos.point_from_heading(hdg, 120 * NM), speed=o.carrier_speed_kts * KPH)
@@ -776,11 +810,15 @@ class MissionBuilder:
             if f.is_player and f.aircraft == "F-14BU":
                 u.set_property("INSAlignmentStored", True)
         g.set_skill(Skill.High)
+        if f.tag:
+            self._limit_engage(g, self.o.friendly_cap_engage_nm)
 
         if f.is_player:
             u0 = g.units[0]
             u0.set_client() if o.player_is_client else u0.set_player()
-            if not (hasattr(spec.dcs_type, "panel_radio") and spec.dcs_type.panel_radio and apply_player_presets(u0, plan, o.layout)):
+            if spec.fc3:
+                pass                                           # FC3 radios have no presets or channels: frequencies are on the kneeboard
+            elif not (hasattr(spec.dcs_type, "panel_radio") and spec.dcs_type.panel_radio and apply_player_presets(u0, plan, o.layout)):
                 self.warns.append(f"{spec.display}: COMM1 presets can't be set automatically; set them from the kneeboard comms page.")
             try:
                 g.set_frequency(plan.freq("FLIGHT"), radio_id=o.layout.comm2_radio_id)
@@ -817,10 +855,15 @@ class MissionBuilder:
                         self._fcalls.append((float(egr), f"{lab}: off target, egressing."))
 
         armor = self.groups_by_asset.get(package.objective.target_id)
+        special = self._f14_special_namer(wps) if (f.is_player and f.aircraft == "F-14BU" and o.f14_special_names) else None
         for w in wps[first:]:
             wp = g.add_waypoint(pt(w.x, w.y), w.alt_ft * FT, w.speed_kts * KPH, w.name)
             if f.is_player:
                 self._set_eta(wp, w, wps)
+                if special:
+                    nm = special(w)
+                    if nm:
+                        wp.name = nm
                 if w.action == "BOMB":
                     wp.tasks.append(task.Bombing(pt(w.x, w.y), group_attack=True))
                 continue
@@ -849,12 +892,50 @@ class MissionBuilder:
                 wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree)); wp.tasks.append(ct)
         if base.kind == BaseKind.AIRFIELD:
             g.land_at(self.apt[base.id])
+            if special:
+                g.points[-1].name = "RTBXHB"
         else:
-            rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTB")
+            rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
             rtb.type, rtb.action = "Land", PointAction.Landing
             rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
         tw = None if f.tag else objective_wp(wps)
         return g, (tw.eta_s if tw is not None else None)
+
+    @staticmethod
+    def _free_locked_speeds(m):
+        """Mission Editor refuses to save a route where every point between two time-locked points has a locked speed. Free the first one."""
+        for co in m.coalition.values():
+            for c in co.countries.values():
+                for grp in list(c.plane_group) + list(c.helicopter_group):
+                    p = grp.points
+                    L = [i for i, x in enumerate(p) if getattr(x, "ETA_locked", False)]
+                    for a, b in zip(L, L[1:]):
+                        mid = p[a + 1:b]
+                        if mid and all(getattr(x, "speed_locked", False) for x in mid):
+                            mid[0].speed_locked = False
+
+    @staticmethod
+    def _f14_special_namer(wps):
+        """F-14B(U) (ED mission-editor naming): a waypoint whose name carries 'X' + a code is also a special point the jet can select
+        (IP, ST = target, HB = home base, B = bullseye; X1..X3 = priority points). Each code may appear only once, otherwise the jet ignores
+        the duplicates, so every code is handed out to the first matching planner waypoint only. Untested in the cockpit (a Settings toggle)."""
+        by = {}
+        for w in wps:
+            by.setdefault(w.name, w)
+        tgt = next((w for w in wps if w.action in OBJECTIVE_ACTIONS), None)
+        plan = {}
+        if "IP" in by:
+            plan[id(by["IP"])] = "IPXIP"
+        if tgt is not None:
+            plan[id(tgt)] = "TGTXST"
+        if "RTB" in by:
+            plan[id(by["RTB"])] = "RTBXHB"
+        if "BULLS" in by:
+            plan[id(by["BULLS"])] = "BULLSXB"
+        for nm, code in (("DEP", "DEPX1"), ("MSHL", "MSHLX2"), ("PUSH", "PUSHX3")):
+            if nm in by and id(by[nm]) not in plan:
+                plan[id(by[nm])] = code
+        return lambda w: plan.get(id(w))
 
     @staticmethod
     def _set_eta(wp, w, wps):
@@ -1059,6 +1140,19 @@ class MissionBuilder:
         return max(25.0, min(r, cap))
 
     # ---- enemy air picture: what the intelligence briefing says is there IS there, from the first second ----------------------
+    @staticmethod
+    def _limit_engage(g, nm):
+        """Cap how far a patrol flight will go after a target (DCS 'engage targets within X'). 0 = leave it unlimited."""
+        if not nm or nm <= 0:
+            return
+        meters = int(nm * 1852)
+        for t in g.points[0].tasks:
+            if getattr(t, "Id", "") == "EngageTargets":
+                t.params["maxDistEnabled"] = True
+                t.params["maxDist"] = meters
+                return
+        g.points[0].tasks.insert(0, task.EngageTargets(meters, [task.Targets.All.Air]))
+
     def _spawn_air_picture(self, package, tx, ty, tot_s, geom, manifest, keepout):
         """Known CAP flights are airborne from t=0 on briefed stations. The rest of the defenders are alert aircraft sitting on real
         enemy airfields; they take off (scramble) when the package is detected inside the field's detection zone."""
@@ -1092,6 +1186,7 @@ class MissionBuilder:
                 ct.stop_after_time(int(tot_s + 3600))
                 g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
                 g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + 90, 20 * NM)), alt, spd, "CAP2")
+                self._limit_engage(g, self.o.enemy_cap_engage_nm)
             else:                                           # alert: on the runway, scrambles when detected
                 ap = self.t.airports.get(a.airport) if a.airport else None
                 if ap is None:

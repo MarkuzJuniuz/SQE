@@ -100,6 +100,17 @@ class SettingsDialog(QDialog):
         row.addWidget(lb); row.addWidget(self.merge, 1); row.addWidget(self.mmax); lay.addLayout(row)
         h = QLabel("Packages in the same area that start within 30 minutes after yours fly in the same mission (AI-flown, one shared ground "
                    "world and support). The waiting window shows the unit count so you can compare performance. Trimmed to the unit limit."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
+        row = QHBoxLayout(); lb = QLabel("Enemy air sum"); lb.setMinimumWidth(120)
+        self.mpct = QSpinBox(); self.mpct.setRange(0, 100); self.mpct.setSuffix(" %"); self.mpct.setValue(int(settings.merge_enemy_pct))
+        row.addWidget(lb); row.addWidget(self.mpct); row.addStretch(1); lay.addLayout(row)
+        h = QLabel("When packages are folded in: enemy fighters = the biggest package's need + this share of every other folded package's need (100 = full sum)."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
+        row = QHBoxLayout(); lb = QLabel("CAP engage range"); lb.setMinimumWidth(120)
+        self.ecap = QSpinBox(); self.ecap.setRange(0, 300); self.ecap.setSuffix(" nm enemy"); self.ecap.setValue(int(settings.enemy_cap_engage_nm))
+        self.fcap = QSpinBox(); self.fcap.setRange(0, 300); self.fcap.setSuffix(" nm friendly"); self.fcap.setValue(int(settings.friendly_cap_engage_nm))
+        row.addWidget(lb); row.addWidget(self.ecap); row.addWidget(self.fcap); row.addStretch(1); lay.addLayout(row)
+        h = QLabel("How far patrol fighters (enemy CAP, your HAVCAP/BASECAP) chase before breaking off. 0 = unlimited. Scrambled alert fighters are not limited."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
+        self.f14n = QCheckBox("F-14B(U): name waypoints with special-point codes (IP, ST, HB...) so DEST can select them (untested in the cockpit)")
+        self.f14n.setChecked(bool(settings.f14_special_names)); lay.addWidget(self.f14n)
         self.ms = QLabel(); lay.addWidget(self.ms)
         self.autopatch = QCheckBox("Enable DCS scripting access while SQE is open (patches MissionScripting.lua at start, restores it on exit)")
         self.autopatch.setChecked(bool(settings.auto_patch_scripting)); lay.addWidget(self.autopatch)
@@ -119,7 +130,10 @@ class SettingsDialog(QDialog):
         self.s.takeoff_buffer_s = int(self.tob.value())
         self.s.ai_unlimited_fuel = self.fuel.isChecked()
         self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())
-        self.s.auto_patch_scripting = self.autopatch.isChecked()
+        self.s.merge_enemy_pct = int(self.mpct.value())
+        self.s.enemy_cap_engage_nm = int(self.ecap.value()); self.s.friendly_cap_engage_nm = int(self.fcap.value())
+        self.s.f14_special_names = self.f14n.isChecked()
+        self.s.auto_patch_scripting = self.autopatch.isChecked(); self.s.patch_asked = True
         if self.s.dcs_install:                                   # take effect now, not at the next start
             ok, msg = (S.patch_mission_scripting if self.s.auto_patch_scripting else S.restore_mission_scripting)(self.s.dcs_install)
             if not ok:
@@ -143,7 +157,7 @@ class WaitingDialog(QDialog):
         il.addWidget(QLabel(f"<b>{p['objective']}</b>"))
         il.addWidget(QLabel(f"Mission file: <b>SQE_Sortie.miz</b> in your DCS Missions folder. Start DCS, open it from the Missions list, and fly."))
         pd = p.get("package_dict", {}); cn = p.get("counts") or {}
-        il.addWidget(QLabel(f"Mission start <b>{pd.get('start', '')}</b> local   |   {cn.get('groups', '?')} groups, {cn.get('units', '?')} units   |   seed {p.get('seed', '')}"))
+        il.addWidget(QLabel(f"Mission start <b>{pd.get('start', '')}</b> local   |   {cn.get('groups', '?')} groups, {cn.get('units', '?')} units"))
         for wmsg in (p.get("warnings") or []):
             wl = QLabel("Note: " + wmsg); wl.setWordWrap(True); wl.setStyleSheet(f"color:{theme.AMBER};"); il.addWidget(wl)
         il.addWidget(QLabel(f"Launch {tl['launch']}   |   Marshal {tl['marshal']}   |   <b>PUSH {tl['push']}</b>   |   <b>TOT {tl['tot']}</b>   |   Egress {tl['egress']}"))
@@ -232,6 +246,10 @@ class DebriefDialog(QDialog):
         tb = QTextBrowser(); tb.setMaximumHeight(130)
         tb.setHtml("<br>".join(out["lines"]) + (f"<br><span style='color:{theme.DIM}'>(Mission end event not seen: results are from the last checkpoint.)</span>" if not out["ended"] else ""))
         lay.addWidget(tb)
+        if out.get("kill_log"):
+            h = QLabel("Kill log"); h.setObjectName("h2"); lay.addWidget(h)
+            kb = QTextBrowser(); kb.setMaximumHeight(130)
+            kb.setHtml("<br>".join(k.replace("&", "&amp;").replace("<", "&lt;") for k in out["kill_log"])); lay.addWidget(kb)
         h = QLabel("Meanwhile, elsewhere in the theatre"); h.setObjectName("h2"); lay.addWidget(h)
         mw = QTextBrowser()
         mw.setHtml("<br>".join(("<b>" + ln + "</b>") if i == 0 else ln for r in out["meanwhile"] for i, ln in enumerate(r["lines"])) or "Nothing else was tasked.")

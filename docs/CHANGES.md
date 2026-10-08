@@ -1,3 +1,22 @@
+## v0.9.2
+* F-14B(U) CAP: 4 AIM-54C, 2 AIM-7P, 2 AIM-9M, 2 tanks (stock AAW05 with the LANTIRN pod on station 9 swapped for the second Sparrow).
+
+## v0.9.1
+* **Loadouts corrected from DCS's own stock presets** (`loadouts.py`): the F-16C SEAD flight now carries 2 HARM + 2 AMRAAM + 2 AIM-9X + 2 tanks + ECM + Litening + HTS instead of 4 HARMs. F/A-18C, F-14B(U), F-15C and A-10C loads were taken from their stock presets too.
+* Docs: "DCC" is now "Digital Crew Chief" in THIRD_PARTY_NOTICES.
+
+## v0.9.0
+* **Enemy air with folded packages:** enemy fighters = the biggest package's need + a share (Settings, default 100%) of every other folded package's need. Still trimmed to the unit cap.
+* **Engage cap:** enemy patrol fighters and your HAVCAP/BASECAP no longer chase past a set range (default 50 nm each, 0 = unlimited). Scrambled alert fighters are untouched.
+* **Carrier placement:** the pull-back only uses open water (25 nm off the coast), picks a heading with 120 nm of clear sea, and otherwise stays on its home station. Smoke test checks carrier/escort routes for land.
+* **Start numbering:** F-15C and A-10C now start at 0 (F-14B still 1 until checked in the cockpit).
+* **FC3 (F-15C):** no COMM1 presets popup; briefing and kneeboard list plain frequencies, no channels.
+* **F-14B(U) special waypoint names (untested in the cockpit, Settings toggle, default ON):** IPXIP, TGTXST, RTBXHB, BULLSXB, DEPX1, MSHLX2, PUSHX3. Kneeboard keeps plain names.
+* **Debrief kill log:** who killed what, with weapon and time, recorded by the hook and shown in the debrief.
+* Removed "seed" from the waiting window.
+* Mission Editor lock rule now enforced for every group (fixes an AI CAP edge case in fleet defence).
+* **GitHub prep:** MIT LICENSE (MarkuzJuniuz), author set, MissionScripting patch is now opt-in (asked on first run, default off).
+
 # Changes in v0.8.8
 
 - Kneeboard (F/A-18C): the start point is waypoint 0 and DEP is 1 (ED: "Waypoint 0 is your starting position" in the Hornet). F-14B and A-10C still number the takeoff point 1 until checked in the cockpit.

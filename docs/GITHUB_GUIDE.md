@@ -7,7 +7,7 @@ This is a practical checklist, not legal advice. I checked the licences and term
 ## 1. The short version
 
 1. **Free and non-commercial.** DCS's EULA requires anything built on it to stay freeware, and it names donations and crowdfunding. So: no Sponsors button, Patreon, Ko-fi or paid tier unless Eagle Dynamics approves in writing.
-2. **Add a licence file.** Without one, GitHub's own docs say default copyright applies: nobody may legally use, copy or modify your code, even though it is public. Recommended: **MIT**.
+2. **Add a licence file.** Without one, GitHub's own docs say default copyright applies: nobody may legally use, copy or modify your code, even though it is public. **Decided: MIT**, copyright MarkuzJuniuz. The `LICENSE` file is already in the project, so you do not need to add it on GitHub (skip step 8's licence part and just `git pull` if you did add one).
 3. **Ship the notices.** `THIRD_PARTY_NOTICES.md` and the README "Legal" section are already in the project. Keep them in the repo and inside every download.
 4. **Never put DCS files in the repo** (no copy of `MissionScripting.lua`, no game screenshots you did not take of SQE itself, no textures/models/sounds).
 5. **Fill in `AUTHOR` in `sqe/__init__.py`** before you publish. The EULA wants the creator named on mission material and the line "THIS MATERIAL IS NOT MADE OR SUPPORTED BY EAGLE DYNAMICS SA." SQE already writes that line into every briefing; `AUTHOR` adds your name or GitHub profile after "Created by".
@@ -38,7 +38,7 @@ A note on AI-assisted code: this project was written with Claude. You can still 
 
 | File | Status | Purpose |
 |---|---|---|
-| `LICENSE` | **you add it** (section 2) | Lets people legally use the code. |
+| `LICENSE` | in the project (MIT) | Lets people legally use the code. |
 | `THIRD_PARTY_NOTICES.md` | in the project | Licences of pydcs, PySide6, Pillow, PyInstaller, Natural Earth; the "not affiliated with Eagle Dynamics" statement; real unit names disclaimer. |
 | `README.md` | in the project (Legal section added) | Says what SQE is, that it is free, not made or supported by Eagle Dynamics, and exactly what the MissionScripting option does. |
 | `.gitignore` | in the project | Keeps saves, missions, settings, build output and caches out. |
@@ -136,3 +136,7 @@ git push -u origin main
 - New library? Add it to `THIRD_PARTY_NOTICES.md` with its licence before you commit.
 - Every release: version in `sqe/__init__.py`, entry in `docs/CHANGES.md`, smoke test, build, check the zip contains the licence files, tag.
 - Never `git add -A` blindly; run `git status` first.
+
+
+## Note: MissionScripting patch
+SQE no longer edits DCS's `MissionScripting.lua` unless you agree. It asks on first run (default No); the choice lives in Settings. Without it the debrief cannot read results.

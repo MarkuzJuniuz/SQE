@@ -72,11 +72,13 @@ def main():
         en = next((g for g in man.groups if g["kind"] == "enemy_air"), None)
         dead = (prim["units"][: int(len(prim["units"]) * 0.6)] if prim else []) + (en["units"][:1] if en and not prim else []) + (fr["units"][:1] if fr else [])
         data = {"campaign": man.campaign_id, "sortie": man.sortie, "package": man.package_id, "mission_ended": True, "time": 2400,
-                "dead": dead, "ejected": [], "landed": [man.player_unit], "player": {"takeoff": 300, "landed": 2300, "ka": 1, "kg": 2, "ks": 0}}
+                "dead": dead, "ejected": [], "landed": [man.player_unit], "player": {"takeoff": 300, "landed": 2300, "ka": 1, "kg": 2, "ks": 0},
+                "kills": [{"k": man.player_unit, "kt": "Test", "v": (dead or ["x"])[0], "vt": "TargetType", "w": "AIM-120C", "t": 725}]}
         s.settings.state_file.write_text(json.dumps(data))
         status, got, tl = s.poll()
         assert status == "ok", status
         out = s.apply(got)
+        assert out.get("kill_log") and "killed by" in out["kill_log"][0], out.get("kill_log")
         assert s.state.day == 2 and s.state.plan, "campaign did not advance"
         assert s.state.pilot["sorties"] == 1 and s.state.pilot["kills_ground"] == 2, s.state.pilot
         print(f"    debrief: {out['story'].splitlines()[0][:100]}...  pilot: {s.state.pilot['sorties']} sortie, {s.state.pilot['kills_air']}A/{s.state.pilot['kills_ground']}G kills")
@@ -91,7 +93,7 @@ def main():
     assert cand, "no mergeable packages found"
     pk, extra = cand
     res = ms.fly(pk.number, ms.flyable(pk)[0].id)
-    assert res.merged and len(res.merged) == len(extra), res.merged
+    assert res.merged and len(res.merged) <= len(extra), res.merged   # extras may be dropped to fit the unit cap
     man = ms.manifest()
     z = zipfile.ZipFile(ms.settings.sortie_miz); lua.loads(z.read("mission").decode())
     print(f"[merge] #{pk.number} {pk.objective.type.value} + {[(m['number'], m['type']) for m in res.merged]}: {res.counts['groups']} groups / {res.counts['units']} units")
@@ -165,6 +167,31 @@ def main():
     except ValueError:
         pass
     print("[front] advance, anti-stall and old-save refusal OK")
+    # ---- carrier + escort routes must stay on open water (no land on the track, none inland) --------------------------------
+    from sqe import mission_builder as mb, seacheck as sc
+    seen = []
+    orig_pb = mb.MissionBuilder._place_base
+    def _pb(self, base, tx, ty):
+        r = orig_pb(self, base, tx, ty)
+        for nm, g in self.ship.items():
+            seen.extend((g.name, p.position.x, p.position.y) for p in g.points)
+        return r
+    mb.MissionBuilder._place_base = _pb
+    try:
+        for ac in ("FA-18C", "F-14BU"):
+            for sd in (1, 2, 3):
+                cs = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="off", flight_filter="all"))
+                cs.new(f"Smoke cv {ac}{sd}", ac, 3, seed=sd)
+                for pk in cs.packages():
+                    fl = [f for f in cs.flyable(pk) if f.base_id == "cvn74"]
+                    if fl:
+                        cs.fly(pk.number, fl[0].id); break
+    finally:
+        mb.MissionBuilder._place_base = orig_pb
+    assert seen, "no carrier sortie was built for the land check"
+    bad = [(n, round(x / 1000), round(y / 1000)) for n, x, y in seen if sc.is_land(x, y)]
+    assert not bad, f"carrier/escort route over land: {bad[:3]}"
+    print(f"[carrier] {len(seen)} carrier/escort route points, none on land")
     print("SMOKE TEST PASSED")
 
 

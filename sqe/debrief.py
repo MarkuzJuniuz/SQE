@@ -34,6 +34,7 @@ local ENEMYAIR = { __ENEMYAIR__ }
 local SITES = { __SITES__ }
 local pl = { takeoff = nil, landed = nil, ka = 0, kg = 0, ks = 0 }
 local dead, ejected, landed, ended = {}, {}, {}, false
+local kills = {}
 local function esc(s) return (tostring(s):gsub('[%c"\\]', function(c) return string.format("\\u%04x", string.byte(c)) end)) end
 local function list(t)
   local o = {}
@@ -41,13 +42,20 @@ local function list(t)
   table.sort(o)
   return "[" .. table.concat(o, ",") .. "]"
 end
+local function killsJson()
+  local o = {}
+  for _, k in ipairs(kills) do
+    o[#o + 1] = string.format('{"k":"%s","kt":"%s","v":"%s","vt":"%s","w":"%s","t":%d}', esc(k.k), esc(k.kt), esc(k.v), esc(k.vt), esc(k.w), k.t)
+  end
+  return "[" .. table.concat(o, ",") .. "]"
+end
 local function num(x) if x then return string.format("%d", math.floor(x)) end return "null" end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d}}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson()))
   f:close()
 end
 local function nameOf(obj)
@@ -147,6 +155,16 @@ function H:onEvent(e)
       if throttle("hit:" .. lab, 15) then say(lab .. ": direct hit.") end
     end
   elseif id == world.event.S_EVENT_KILL then
+    do
+      local tn0 = nameOf(e.target)
+      if tn0 and #kills < 300 then
+        local function tname(o) local ok, t = pcall(function() return o:getTypeName() end); if ok and t then return t end return "?" end
+        local wn = "?"
+        if e.weapon then local ok, t = pcall(function() return e.weapon:getTypeName() end); if ok and t then wn = t end end
+        kills[#kills + 1] = { k = n or "?", kt = e.initiator and tname(e.initiator) or "?", v = tn0, vt = e.target and tname(e.target) or "?", w = wn, t = math.floor(timer.getTime()) }
+        dump()
+      end
+    end
     if n == PLAYER then
       local ok, cat = pcall(function() return e.target:getDesc().category end)
       if ok then
@@ -288,6 +306,25 @@ def tally(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     return t
 
 
+def kill_log(manifest: Manifest, data: dict) -> list[str]:
+    """'12:34 MiG-29S (Bandit 2-1) killed by F-16C (Viper 1-1) with AIM-120C' for every kill the hook saw."""
+    label = {}
+    for g in manifest.groups:
+        lab = g.get("callsign") or ""
+        for i, u in enumerate(g["units"]):
+            label[u] = f"{lab}-{i + 1}" if lab and g.get("kind") in ("friendly",) else (lab or "")
+    def who(unit, typ):
+        l = label.get(unit, "")
+        return f"{typ} ({l})" if l else typ
+    out = []
+    for k in data.get("kills", []) or []:
+        t = int(k.get("t", 0))
+        w = k.get("w", "?")
+        by = who(k.get("k", "?"), k.get("kt", "?")) if k.get("k", "?") != "?" else "unknown"
+        out.append(f"{t // 60:02d}:{t % 60:02d}  {who(k.get('v', '?'), k.get('vt', '?'))} killed by {by}" + (f" [{w}]" if w not in ("?", "") else ""))
+    return out
+
+
 def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     """Player-flown package: results are applied 1:1 (no dice). Returns a structured outcome for the debrief screen."""
     lost = set(data.get("dead", [])) | set(data.get("ejected", []))
@@ -365,6 +402,7 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         out["player"] = "lost"
     elif pu in landed:
         out["player"] = "recovered"
+    out["kill_log"] = kill_log(manifest, data)
     for ln in out["lines"]:
         state.note(ln)
     if not out["lines"]:

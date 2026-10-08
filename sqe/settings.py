@@ -1,4 +1,4 @@
-"""App settings: just two paths, like DCC/Retribution.
+"""App settings: just two paths, like DCC (Digital Crew Chief) and Retribution.
 
     DCS        the DCS World install folder (only needed by the optional MissionScripting.lua patch helper)
     DCS Saves  the Saved Games profile, e.g. C:\\Users\\You\\Saved Games\\DCS  or  ...\\DCS_Server
@@ -64,7 +64,12 @@ class AppSettings:
     flight_filter: str = "squadron"      # Missions page: "squadron" (only flights of YOUR squadron) or "all" (any flight your jet can fly)
     merge_mode: str = "area"              # "off" | "area" (default): fold packages in the same area, starting within 30 min, into one mission
     merge_max_units: int = 150            # a merged mission is trimmed until it holds no more than this many units
-    auto_patch_scripting: bool = True     # patch DCS MissionScripting.lua when SQE starts, restore it when SQE exits (like Liberation / Retribution)
+    merge_enemy_pct: int = 100            # folded packages: enemy fighters = the biggest package's + this % of every other folded package's (100 = full sum)
+    enemy_cap_engage_nm: int = 50         # enemy patrol fighters will not chase further than this from where they are (0 = unlimited)
+    friendly_cap_engage_nm: int = 50      # same for your HAVCAP / BASECAP (0 = unlimited)
+    auto_patch_scripting: bool = False    # patch DCS MissionScripting.lua when SQE starts, restore it when SQE exits. Off until the user agrees on first run
+    patch_asked: bool = False
+    f14_special_names: bool = True             # F-14B(U): special-point waypoint names (untested in the cockpit)
     persist: bool = True          # False in tests: never write %APPDATA%\\SQE\\settings.json
 
     # ---- derived paths ------------------------------------------------------------------
@@ -107,7 +112,10 @@ class AppSettings:
         s = cls()
         if f.exists():
             try:
-                s = cls(**{k: v for k, v in json.loads(f.read_text()).items() if k in cls.__dataclass_fields__ and k != "persist"})
+                raw = json.loads(f.read_text())
+                s = cls(**{k: v for k, v in raw.items() if k in cls.__dataclass_fields__ and k != "persist"})
+                if "patch_asked" not in raw and "auto_patch_scripting" in raw:
+                    s.patch_asked = True          # a settings file from before the question existed: the choice stands
             except (OSError, ValueError):
                 pass
         s.dcs_install = native(s.dcs_install or _detect_install())

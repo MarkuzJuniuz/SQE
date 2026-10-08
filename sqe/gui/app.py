@@ -456,6 +456,11 @@ def run():
                                     "Debriefing needs it.")
     app.aboutToQuit.connect(lambda: S.restore_mission_scripting(settings.dcs_install) if settings.dcs_install and settings.auto_patch_scripting else None)
     def start():
+        if not settings.patch_asked:
+            r = QMessageBox.question(w, "Debrief results", "To read mission results, SQE can temporarily edit DCS's MissionScripting.lua "
+                                     "(enable io/lfs) while SQE is open. A backup is made and the file is restored when SQE closes.\n\n"
+                                     "Allow this? You can change it later in Settings.", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            settings.auto_patch_scripting = (r == QMessageBox.Yes); settings.patch_asked = True; settings.save()
         scripting_on()
         if settings.problems():
             QMessageBox.information(w, "Welcome", "First, tell SQE where DCS keeps your saves (Settings).")

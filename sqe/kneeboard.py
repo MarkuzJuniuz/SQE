@@ -62,12 +62,17 @@ def render_pages(outdir, ctx: dict) -> list:
 
     # ------------------------------------------------ page 1: comms + the times YOU must hit
     p = _Page(f"SQE  {head}", sub)
-    p.cols([(20, "COMM1 UHF")], 15, DIM, True, 3)
-    for ch, e in ctx["comm1"].items():
-        p.cols([(20, f"CH{ch}"), (84, e.label), (230, f"{e.mhz:7.3f}"), (340, (e.callsign + " " + e.note).strip()[:36])], 18, bold=True, gap=5)
-    p.cols([(20, "COMM2 VHF")], 15, DIM, True, 3)
-    for ch, e in ctx["comm2"].items():
-        p.cols([(20, f"CH{ch}"), (84, e.label), (230, f"{e.mhz:7.3f}"), (340, e.callsign)], 18, bold=True, gap=5)
+    if ctx.get("fc3"):                      # FC3 radios have no channels: just the frequencies
+        p.cols([(20, "FREQUENCIES")], 15, DIM, True, 3)
+        for e in list(ctx["comm1"].values()) + list(ctx["comm2"].values()):
+            p.cols([(20, e.label), (160, f"{e.mhz:7.3f}"), (290, (e.callsign + " " + e.note).strip()[:44])], 18, bold=True, gap=5)
+    else:
+        p.cols([(20, "COMM1 UHF")], 15, DIM, True, 3)
+        for ch, e in ctx["comm1"].items():
+            p.cols([(20, f"CH{ch}"), (84, e.label), (230, f"{e.mhz:7.3f}"), (340, (e.callsign + " " + e.note).strip()[:36])], 18, bold=True, gap=5)
+        p.cols([(20, "COMM2 VHF")], 15, DIM, True, 3)
+        for ch, e in ctx["comm2"].items():
+            p.cols([(20, f"CH{ch}"), (84, e.label), (230, f"{e.mhz:7.3f}"), (340, e.callsign)], 18, bold=True, gap=5)
     p.rule(6)
     p.cols([(20, "WP"), (64, "NAME"), (160, "TIME"), (282, "ALT"), (342, "KTS"), (396, "HDG/NM"), (474, "REMARKS")], 14, DIM, True, 4)
     for r in ctx["waypoints"]:

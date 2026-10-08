@@ -48,7 +48,8 @@ class AircraftSpec:
     cruise_kts: int
     player_flyable: bool = False
     profile: RouteProfile = field(default_factory=RouteProfile)
-    first_wp_label: str = ""          # label of the start point; the next point is then 1, 2, ... (F-15C: 'B'; F-16C: '0')
+    fc3: bool = False                 # Flaming Cliffs 3 jet: no radio presets / channels, plain frequencies only
+    first_wp_label: str = ""          # label of the start point; the next point is then 1, 2, ... (0 for every jet except the F-14B, which stays 1 until checked in the cockpit)
     bingo_lbs: int = 2500             # starting estimates: tune to your own flying
     joker_lbs: int = 3500
     # Intra-flight frequency band (MHz). Must be a band ONLY the COMM2 radio covers (VHF), because DCS puts a
@@ -96,14 +97,14 @@ AIRCRAFT: dict[str, AircraftSpec] = {
         RouteProfile(aar_alt_ft=22000, aar_kts=350, marshal_alt_ft=27000, cap_alt_ft=28000, cap_kts=400,
                      alt_ft={_R.ESCORT: 27000, _R.SWEEP: 30000, _R.STRIKE: 25000, _R.SEAD: 25000, _R.CAS: 12000},
                      push_kts=520, ip_kts=520, attack_kts=520, egress_kts=550, push_nm=80),
-        first_wp_label="B", bingo_lbs=3500, joker_lbs=5000),
+        first_wp_label="0", fc3=True, bingo_lbs=3500, joker_lbs=5000),
     "A-10C": AircraftSpec(
         "A-10C", "A-10C Warthog", "A_10C_2", BaseKind.AIRFIELD,
         frozenset({_R.CAS}), RefuelMethod.BOOM, 1, 230, 300, True,
         RouteProfile(depart_alt_ft=4000, depart_kts=250, aar_alt_ft=15000, aar_kts=270, marshal_alt_ft=10000,
                      marshal_kts=250, alt_ft={_R.CAS: 9000, _R.STRIKE: 9000}, push_kts=300, ip_kts=300,
                      attack_kts=300, egress_kts=330, push_nm=35, ip_nm=12, egress_nm=15,
-                     tgt_note="CAS: check in with JTAC"), bingo_lbs=1500, joker_lbs=2500),
+                     tgt_note="CAS: check in with JTAC"), first_wp_label="0", bingo_lbs=1500, joker_lbs=2500),
 }
 
 

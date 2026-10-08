@@ -165,6 +165,9 @@ class Session:
         self.options.hold_minutes = int(self.settings.hold_minutes)
         self.options.launch_offset_s = int(self.settings.takeoff_buffer_s)
         self.options.ai_unlimited_fuel = bool(self.settings.ai_unlimited_fuel)
+        self.options.enemy_cap_engage_nm = int(self.settings.enemy_cap_engage_nm)
+        self.options.friendly_cap_engage_nm = int(self.settings.friendly_cap_engage_nm)
+        self.options.f14_special_names = bool(getattr(self.settings, 'f14_special_names', True)); self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct)
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
         extras = self.merge_candidates(pkg)

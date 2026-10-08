@@ -1,13 +1,15 @@
 # Third-party notices
 
+SQE itself is MIT licensed (see `LICENSE`, copyright MarkuzJuniuz).
+
 SQE is not affiliated with, endorsed by, or supported by Eagle Dynamics SA. "DCS World" and "Digital Combat Simulator" belong to
 their owners and are used here only to say what SQE works with. THIS MATERIAL IS NOT MADE OR SUPPORTED BY EAGLE DYNAMICS SA.
 
 SQE does not contain, copy or redistribute any DCS World file, texture, model, sound or script. It writes new mission files
-(.miz) that reference DCS's own content by name, and (only while it is running, only if you leave the setting on) comments
+(.miz) that reference DCS's own content by name, and (only while it is running, only if you said yes on first run or switched it on in Settings; it is off by default) comments
 out the `io` / `lfs` sanitizing lines of your own local `MissionScripting.lua`, then restores it when SQE closes.
 
-SQE is not affiliated with DCS Liberation, DCS Retribution, DCS Dynamic Campaign Creator, Falcon BMS or Strike Fighters.
+SQE is not affiliated with DCS Liberation, DCS Retribution, DCC (Digital Crew Chief), Falcon BMS or Strike Fighters.
 Many of its ideas take inspiration from them (see the README), but it contains none of their code. Their names appear only to credit that inspiration.
 
 Unit names in the sample squadrons (for example VF-31, 77th FS) are real unit designations used as flavour. No insignia or

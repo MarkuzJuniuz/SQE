@@ -71,7 +71,7 @@ First launch:
    * **DCS Saves**: `C:\Users\<you>\Saved Games\DCS` (or `...\DCS_Server`). Everything hangs off this folder:
      missions go to `Missions\SQE_Sortie.miz`, results are read from `SQE\SQE_state.json`, campaigns are saved as `SQE\*.sqe`.
    * **DCS**: your DCS World install folder. Only used by the patch button below.
-2. Leave **Enable DCS scripting access while SQE is open** ticked. SQE patches MissionScripting.lua when it starts and restores it when it closes, like Liberation/Retribution (a backup is saved next to the file). This is required for results to come back from DCS. Keep SQE open until the mission is over.
+2. Tick **Enable DCS scripting access while SQE is open** (SQE asks on first run; it is off until you agree). SQE patches MissionScripting.lua when it starts and restores it when it closes, like Liberation/Retribution (a backup is saved next to the file). This is required for results to come back from DCS. Keep SQE open until the mission is over.
    It makes a backup (`MissionScripting.lua.sqe.bak`) and comments out the `io` and `lfs` sanitize lines.
    If your install is under *Program Files* and it says it cannot write, run VS Code (or SQE.exe) **as administrator** once,
    or edit the file by hand. **DCS updates revert it**: patch again after an update.
