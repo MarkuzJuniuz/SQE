@@ -48,7 +48,7 @@ class AircraftSpec:
     cruise_kts: int
     player_flyable: bool = False
     profile: RouteProfile = field(default_factory=RouteProfile)
-    first_wp_label: str = ""          # F-15C: HUD shows the start point as 'B', then 1, 2, ...
+    first_wp_label: str = ""          # label of the start point; the next point is then 1, 2, ... (F-15C: 'B'; F-16C: '0')
     bingo_lbs: int = 2500             # starting estimates: tune to your own flying
     joker_lbs: int = 3500
     # Intra-flight frequency band (MHz). Must be a band ONLY the COMM2 radio covers (VHF), because DCS puts a
@@ -89,7 +89,7 @@ AIRCRAFT: dict[str, AircraftSpec] = {
     "F-16C": AircraftSpec(
         "F-16C", "F-16C Viper", "F_16C_50", BaseKind.AIRFIELD,
         frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.STRIKE, _R.SEAD}), RefuelMethod.BOOM, 1, 280, 450, True,
-        RouteProfile(aar_alt_ft=22000, aar_kts=350, marshal_alt_ft=21000), bingo_lbs=2000, joker_lbs=3000),
+        RouteProfile(aar_alt_ft=22000, aar_kts=350, marshal_alt_ft=21000), first_wp_label="0", bingo_lbs=2000, joker_lbs=3000),
     "F-15C": AircraftSpec(
         "F-15C", "F-15C Eagle", "F_15C", BaseKind.AIRFIELD,
         frozenset({_R.CAP, _R.SWEEP, _R.ESCORT}), RefuelMethod.BOOM, 1, 400, 480, True,

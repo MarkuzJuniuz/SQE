@@ -331,7 +331,7 @@ class MissionBuilder:
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
             ctx = {"date": date_str, "callsign": f"{pf.callsign}-1", "role": ("DEAD" if (pf.role == Role.STRIKE and package.objective.type == ObjectiveType.DEAD) else pf.role.value), "objective": package.objective.description,
                    "comm1": plan.comm1, "comm2": plan.comm2, "waypoints": kn_rows, "jet": pspec.display,
-                   "numbering": ("B for the start point, then 1, 2, 3..." if pspec.first_wp_label else "waypoint 1 = start point"),
+                   "numbering": (f"{pspec.first_wp_label} for the start point, then 1, 2, 3..." if pspec.first_wp_label else "waypoint 1 = start point"),
                    "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": "CLEAR", "mode3": mode3, "laser": laser,
                    "bullseye": latlon(bx, by, self.t), "whois": whois, "threats": text["threats"], "n_def": air_pkg.n_def, "target_data": tdata,
                    "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "sub": f"start {m_['start']}  push {m_['push']}  TOT {m_['tot']}  done {m_['rtb']}  ({m_['flights']})"} for m_ in merged]}
