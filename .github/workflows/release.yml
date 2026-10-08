@@ -1,0 +1,57 @@
+# Builds SQE on a Windows runner and publishes SQE_vX.Y.Z.zip as a GitHub Release.
+# Trigger: push a tag that matches sqe/__init__.py __version__, e.g.
+#   git tag v0.10.0
+#   git push origin v0.10.0
+# "Run workflow" on the Actions tab builds without releasing (zip shows up as a build artifact).
+
+name: Build release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Read version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path sqe/__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          "version=$v" >> $env:GITHUB_OUTPUT
+          if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne "v$v") {
+            Write-Error "Tag ${{ github.ref_name }} does not match __version__ $v"
+            exit 1
+          }
+
+      - name: Build
+        shell: cmd
+        run: build_exe.bat
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path dist/SQE -DestinationPath "SQE_v${{ steps.ver.outputs.version }}.zip"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SQE_v${{ steps.ver.outputs.version }}
+          path: SQE_v${{ steps.ver.outputs.version }}.zip
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: SQE_v${{ steps.ver.outputs.version }}.zip
+          generate_release_notes: true
