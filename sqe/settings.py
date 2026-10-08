@@ -63,6 +63,7 @@ class AppSettings:
     hold_minutes: int = 2                 # slack at the marshal point before PUSH (minutes; negative = hurry)
     flight_filter: str = "squadron"      # Missions page: "squadron" (only flights of YOUR squadron) or "all" (any flight your jet can fly)
     merge_mode: str = "area"              # "off" | "area" (default): fold packages in the same area, starting within 30 min, into one mission
+    ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
     merge_back_min: int = 15              # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
     merge_max_units: int = 150            # a merged mission is trimmed until it holds no more than this many units
     merge_enemy_pct: int = 100            # folded packages: enemy fighters = the biggest package's + this % of every other folded package's (100 = full sum)

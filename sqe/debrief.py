@@ -32,6 +32,7 @@ local CALLS = { __CALLS__ }
 local UFLT = { __UFLT__ }
 local ENEMYAIR = { __ENEMYAIR__ }
 local SITES = { __SITES__ }
+local RUINS = { __RUINS__ }
 local pl = { takeoff = nil, landed = nil, ka = 0, kg = 0, ks = 0 }
 local dead, ejected, landed, ended = {}, {}, {}, false
 local kills = {}
@@ -198,6 +199,26 @@ timer.scheduleFunction(function(_, t)
   end
   return t + 2
 end, nil, timer.getTime() + 5)
+-- ruins of what earlier packages already hit: a few fires and smoke plumes (kept few for VR performance)
+do
+  local nid = 0
+  timer.scheduleFunction(function()
+    for _, r in ipairs(RUINS) do
+      for i = 1, r.n do
+        local a = r.s + (i - 1) * 2.1
+        local d = (i == 1) and 0 or r.r
+        local x, z = r.x + math.cos(a) * d, r.z + math.sin(a) * d
+        local y = 0
+        pcall(function() y = land.getHeight({x = x, y = z}) end)
+        local v = {x = x, y = y, z = z}
+        pcall(function() trigger.action.explosion(v, r.pw) end)
+        nid = nid + 1
+        pcall(function() trigger.action.effectSmokeBig(v, r.p, r.dn, "sqe_ruin_" .. nid) end)
+      end
+    end
+    return nil
+  end, nil, timer.getTime() + 4)
+end
 dump()
 '''
 
@@ -212,7 +233,7 @@ def _lq(s) -> str:
 
 def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "", group: str = "",
              calls: list | None = None, wps: list | None = None, sound: str = "", flights: dict | None = None,
-             enemy_air: list | None = None, sites: list | None = None) -> str:
+             enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(t):.0f}, text="{_lua_str(x)}"}}' for t, x in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
@@ -220,7 +241,9 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
     lst = lambda xs: "{" + ", ".join(_lq(x) for x in xs) + "}"
     st = ", ".join(f'{{id={_lq(x["id"])}, label={_lq(x["label"])}, who={_lq(x["who"])}, prim={"true" if x["prim"] else "false"}, '
                    f'units={lst(x["units"])}, trk={lst(x["trk"])}, srch={lst(x["srch"])}}}' for x in (sites or []))
-    return (LUA_HOOK.replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
+    ru = ", ".join(f'{{x={r["x"]:.1f}, z={r["z"]:.1f}, n={int(r["n"])}, r={float(r["r"]):.0f}, p={int(r["p"])}, dn={float(r["dn"]):.2f}, pw={int(r["pw"])}, s={float(r["s"]):.2f}}}'
+                   for r in (ruins or []))
+    return (LUA_HOOK.replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
             .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__CALLS__", cl).replace("__UFLT__", uf)
             .replace("__ENEMYAIR__", ea).replace("__SITES__", st))
@@ -228,14 +251,14 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
 
 def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "",
                  group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "", flights: dict | None = None,
-                 enemy_air: list | None = None, sites: list | None = None) -> None:
+                 enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, flights, enemy_air, sites))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, flights, enemy_air, sites, ruins))))
     mission.triggerrules.triggers.append(t)
 
 
@@ -250,6 +273,7 @@ class Manifest:
     groups: list = field(default_factory=list)
     cur_pkg: str = ""                      # package whose groups are being added right now (merged missions hold several)
     merged: list = field(default_factory=list)   # extra packages folded into this mission: id, number, objective, tot_s...
+    ruins: list = field(default_factory=list)    # earlier packages whose strike is shown as ruins: id, number
 
     def add(self, kind: str, ref: str, units: list, **extra) -> None:
         if self.cur_pkg:

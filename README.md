@@ -3,17 +3,6 @@
 Abstracted war in the background; each sortie, one fully generated DCS package (Caucasus) with a BMS-style
 marshal/push/TOT timeline, proper briefing, kneeboard, and results fed back into the war.
 
-## Download
-
-1. Get **`SQE_vX.Y.Z.zip`** from the [latest release](https://github.com/MarkuzJuniuz/SQE/releases/latest).
-2. Extract the whole `SQE` folder anywhere (not inside DCS's own folders) and run **`SQE.exe`**. Keep the folder together; the .exe needs the files beside it.
-3. Windows may show **"Windows protected your PC"** because SQE isn't code-signed. Click **More info → Run anyway**.
-4. On first run, set the two folders in Settings (your DCS install and `Saved Games\DCS`) and answer the scripting-access question (see Legal below).
-
-Needs Windows and DCS World with the Caucasus map. To update, extract the new zip over the old folder; campaigns are kept in `Saved Games\DCS\SQE`.
-
-## Running from source
-
 Start here: **docs/GUIDE.md**   |   Sample briefing: docs/SAMPLE_BRIEFING.txt
 
     py -m venv .venv && .venv\Scripts\Activate.ps1

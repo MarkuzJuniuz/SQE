@@ -10,6 +10,7 @@ from .aircraft import AIRCRAFT
 from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
+from .models import ObjectiveType
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import Ledger, NoPlayerSlot, Package, PackageBuilder
 from .scenario import new_campaign
@@ -158,6 +159,33 @@ class Session:
         out.sort(key=lambda p: (hm(p), p.number))
         return out
 
+    def ruin_candidates(self, pkg: Package, extras: list) -> list:
+        """Earlier packages of the same day, same area, that may already have struck when your mission starts: their targets are shown as ruins.
+        The closest in time first, at most four looked at (the builder shows at most three)."""
+        if not getattr(self.settings, "ruins", True) or self.settings.merge_mode != "area":
+            return []
+        from .packages import packages_linked
+        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
+        have = {x.number for x in extras}
+        out = [p for p in self.packages() if p.number != pkg.number and p.number not in have and hm(p) < hm(pkg)
+               and any(not f.tag for f in p.flights) and p.objective.type not in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
+               and packages_linked(self.state, pkg, p)]
+        out.sort(key=lambda p: (-hm(p), p.number))
+        return out[:4]
+
+    def _preroll(self, pkgs: list) -> dict:
+        """The war sim's verdict on these packages, rolled NOW on a throwaway copy of the state. The mission shows it as ruins, and the same
+        verdict is applied for real at the debrief, so what you saw burning is what happened."""
+        import copy
+        out = {}
+        for p in pkgs:
+            sim = WarSimulator(self.d, self._rng(55 + p.number))
+            try:
+                out[p.id] = sim.resolve_abstract(copy.deepcopy(self.state), Package.from_dict(p.to_dict()))["roll"]
+            except Exception:
+                continue
+        return out
+
     def collapse(self, pkgs: list) -> list:
         """The Missions list: [(package, [packages shown inside it])]. A package that an earlier shown package folds in (it starts after it, same area)
         is listed inside that package's panel instead of as a row of its own, each with its own FLY button."""
@@ -188,19 +216,25 @@ class Session:
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
         extras = self.merge_candidates(pkg)
+        ruins = self.ruin_candidates(pkg, extras)
+        pre = self._preroll(list(extras) + ruins) if (ruins or extras) and getattr(self.settings, "ruins", True) else {}
         cap = int(self.settings.merge_max_units)
         while True:
             with contextlib.redirect_stdout(io.StringIO()):      # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
-                res = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz, extras)
-            if not extras or res.counts["units"] <= cap:
+                res = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz, extras, ruins, pre)
+            if (not extras and not ruins) or res.counts["units"] <= cap:
                 break
-            extras = extras[:-1]                                 # too heavy for VR: drop the last package and rebuild
+            if ruins:
+                ruins = ruins[:-1]                               # returning flights first
+            else:
+                extras = extras[:-1]                             # too heavy for VR: drop the last package and rebuild
             res.warnings.append(f"merged mission trimmed to fit the {cap}-unit limit")
         st.sortie_counter += 1
         st.pending = {"package": package_number, "flight": pkg.player_flight.id, "manifest": res.manifest.to_dict(),
                       "built_at": time.time(), "miz": str(res.miz), "timeline": res.timeline,
                       "objective": pkg.objective.description, "objective_type": pkg.objective.type.value, "counts": res.counts, "warnings": res.warnings, "seed": res.seed,
-                      "package_dict": pkg.to_dict(), "merged": res.manifest.merged}
+                      "package_dict": pkg.to_dict(), "merged": res.manifest.merged,
+                      "ruins": {str(r["number"]): pre[r["id"]] for r in res.manifest.ruins if r["id"] in pre}}
         self.last_build = res
         # a stale results file from a previous sortie must never be mistaken for this one
         try:
@@ -276,7 +310,7 @@ class Session:
         for pd in st.plan:
             if pd["number"] == pend["package"] or pd["number"] in real:
                 continue
-            r = sim.resolve_abstract(st, Package.from_dict(pd))
+            r = sim.resolve_abstract(st, Package.from_dict(pd), force=(pend.get("ruins") or {}).get(str(pd["number"])))    # ruins you saw = what happened
             meanwhile.append(r)
         out["meanwhile"] = meanwhile
         st.history.append({"day": st.day, "date": str(st.campaign_date()), "sortie": man.sortie, "objective": pend["objective"], "player": out["player"],

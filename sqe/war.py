@@ -141,13 +141,13 @@ class WarSimulator:
         defense = sam + air
         return (strength / (strength + defense) if strength + defense else 0.0), strength, defense
 
-    def _resolve_raid(self, state: CampaignState, pkg: Package) -> dict:
+    def _resolve_raid(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         d, rng = self.d, self.rng
         bw = state.enemy_air_at(pkg.extra.get("bomber_wing", "")) if pkg.extra else None
         strength = sum(f.count * ROLE_WEIGHT[f.role] for f in pkg.flights)
         esc = pkg.extra.get("escorts", 0)
         p = strength / (strength + 2.5 + 2.0 * d.iads + 0.4 * esc)
-        ok = chance(rng, p, d.variance)
+        ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
         lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'} (odds {p:.0%})"]
         if bw is not None and ok:
             k = min(bw.available, rng.randint(2, 4)); bw.available -= k
@@ -160,9 +160,9 @@ class WarSimulator:
                 lines.append(f"   missiles hit the fleet: {lost} aircraft lost on deck ({sq.name})")
         for ln in lines:
             state.note(ln.strip())
-        return {"success": ok, "odds": p, "lines": lines, "objective": pkg.objective.description}
+        return {"success": ok, "odds": p, "lines": lines, "objective": pkg.objective.description, "roll": {"success": ok}}
 
-    def _resolve_dead(self, state: CampaignState, pkg: Package) -> dict:
+    def _resolve_dead(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         """SEAD and DEAD are two different jobs. The SEAD flight blinds the radars (the site is 'suppressed', not dead). The DEAD flight
         then goes in: against a blinded site it usually destroys it; against an active one it takes losses and rarely finishes it."""
         d, rng = self.d, self.rng
@@ -173,7 +173,7 @@ class WarSimulator:
         site = (1.0 + 0.8 * d.iads) * t.health + 0.4 * garrison
         s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in sead)
         p_sead = s_sead / (s_sead + site) if s_sead else 0.0
-        blinded = chance(rng, p_sead, d.variance)
+        blinded = force["blinded"] if force and "blinded" in force else chance(rng, p_sead, d.variance)
         lines = [f"{pkg.objective.description}:"]
         if sead:
             lines.append(f"   SEAD: {'radars blinded' if blinded else 'radars still emitting'} (odds {p_sead:.0%})")
@@ -184,7 +184,7 @@ class WarSimulator:
         air = 0.05 * sum(w.available for w in state.enemy_air) * (0.6 + 0.6 * d.iads)
         defense = (site * (0.35 if blinded else 1.4)) + garrison * 0.3 + air
         p_dead = s_dead / (s_dead + defense) if s_dead else 0.0
-        killed = chance(rng, p_dead, d.variance)
+        killed = force["killed"] if force and "killed" in force else chance(rng, p_dead, d.variance)
         if dead:
             if killed:
                 before = t.health
@@ -211,16 +211,17 @@ class WarSimulator:
                 lines.append(f"   {f.callsign} lost {n_lost} aircraft")
         for ln in lines:
             state.note(ln.strip())
-        return {"success": success, "odds": p_dead if dead else p_sead, "lines": lines, "objective": pkg.objective.description}
+        return {"success": success, "odds": p_dead if dead else p_sead, "lines": lines, "objective": pkg.objective.description,
+                "roll": {"success": success, "blinded": blinded, "killed": killed, "dead": bool(dead)}}
 
-    def resolve_abstract(self, state: CampaignState, pkg: Package) -> dict:
+    def resolve_abstract(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         d, rng = self.d, self.rng
         if pkg.objective.type == ObjectiveType.FLEET_DEFENSE:
-            return self._resolve_raid(state, pkg)
+            return self._resolve_raid(state, pkg, force)
         if pkg.objective.type == ObjectiveType.DEAD and any(f.role == Role.STRIKE for f in pkg.flights):
-            return self._resolve_dead(state, pkg)
+            return self._resolve_dead(state, pkg, force)
         p, strength, defense = self.odds(state, pkg)
-        success = chance(rng, p, d.variance)
+        success = force["success"] if force and "success" in force else chance(rng, p, d.variance)
         obj = pkg.objective
         lines = [f"{obj.description}: {'SUCCESS' if success else 'FAILED'} (odds {p:.0%})"]
         if obj.type != ObjectiveType.BARCAP:
@@ -253,7 +254,7 @@ class WarSimulator:
                 lines.append(f"   {f.callsign} lost {lost} aircraft")
         for ln in lines:
             state.note(ln.strip())
-        return {"success": success, "odds": p, "lines": lines, "objective": obj.description}
+        return {"success": success, "odds": p, "lines": lines, "objective": obj.description, "roll": {"success": success}}
 
     def end_day(self, state: CampaignState) -> None:
         d = self.d

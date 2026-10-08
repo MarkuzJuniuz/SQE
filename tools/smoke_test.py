@@ -156,6 +156,31 @@ def main():
     assert not (shown & folded), (shown, folded)
     assert {p_.number for p_ in vis} <= (shown | folded), "collapse lost a package"
     print(f"[list] {len(vis)} packages -> {len(groups)} rows")
+    # ---- v0.11: ruins of earlier packages, pre-rolled and applied at the debrief -------------------------------------------------
+    import re as _re
+    got = None
+    for sd in range(1, 40):
+        rs = Session(AppSettings(dcs_saves=str(TMP / f"rs{sd}"), persist=False)); (TMP / f"rs{sd}").mkdir(exist_ok=True)
+        rs.settings.merge_back_min = 0
+        rs.new("dev", "F-14BU", 3, seed=sd)
+        for p_ in rs.packages():
+            if rs.flyable(p_) and rs.ruin_candidates(p_, rs.merge_candidates(p_)):
+                rr = rs.fly(p_.number, rs.flyable(p_)[0].id)
+                if rr.manifest.ruins:
+                    got = (rs, p_, rr); break
+        if got: break
+    assert got, "no seed produced ruins"
+    rs, hp, rr = got
+    mis = zipfile.ZipFile(rr.miz).read("mission").decode("utf8", "ignore")
+    assert _re.search(r"RUINS = \{ \{x=", mis), "ruins missing from the hook"
+    pend = rs.state.pending
+    assert pend["ruins"] and all(str(r_["number"]) in pend["ruins"] for r_ in rr.manifest.ruins)
+    n_rn = rr.manifest.ruins[0]["number"]; roll = pend["ruins"][str(n_rn)]
+    data = {"campaign": rs.state.campaign_id, "sortie": rr.manifest.sortie, "package": hp.id, "mission_ended": True, "time": 3000, "dead": [], "ejected": [],
+            "landed": [], "player": {"takeoff": 10, "landed": 2900, "ka": 0, "kg": 0, "ks": 0}, "kills": []}
+    out = rs.apply(data)
+    assert any(m_["success"] == roll["success"] for m_ in out["meanwhile"]), "the stored roll was not applied"
+    print(f"[ruins] host #{hp.number}: ruins for #{n_rn} (success={roll['success']}), stored roll applied at the debrief")
     # ---- v0.8: SEAD/DEAD split, suppression, depth tiers, front, garrisons ------------------------------------------------
     import random
     from sqe.models import AssetKind, Role

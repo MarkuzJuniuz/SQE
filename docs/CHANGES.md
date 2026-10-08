@@ -1,3 +1,8 @@
+## v0.11.0
+* Ruins: an earlier package of the same day and area that has already struck by the time your mission starts leaves its target burning: up to three sites, a few smoke plumes each (a destroyed site gets three big fires, a failed attack one small fire). Capped to protect VR frame rates. Settings > Package merging > Ruins switches it off.
+* If that package has struck but is still airborne, its flights spawn on the way home along their egress route, land on their own, and the ruins are already there. If it has landed, only the ruins remain.
+* The result is rolled when the mission is built and stored: what you saw burning is what the war applies at the debrief. Those packages are not credited to you.
+
 ## v0.10.0
 * Package merging now works in both directions: packages that started up to 15 minutes BEFORE yours (Settings > Earlier packages, 0-30) also fly, already airborne and underway when the mission starts (spawned along their route, or holding at the marshal point). A package that has already struck and gone home by then is left out with a note.
 * Missions screen: a package that another one folds in is shown inside that package's panel instead of as its own row. Each package in the panel has its own table and FLY button, and a line says what FLY there gives you (start time and which packages fly with it).

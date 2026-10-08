@@ -149,7 +149,7 @@ class MissionBuilder:
         self.rng = rng or random.Random()
 
     # =====================================================================================================
-    def build(self, package: Package, out_path, extras: list | tuple = ()) -> BuildResult:
+    def build(self, package: Package, out_path, extras: list | tuple = (), ruins: list | tuple = (), preroll: dict | None = None) -> BuildResult:
         """extras: other packages (AI only) folded into this mission: same area, starting at or after yours. They share the ground world,
         the support aircraft and the enemy air picture, and fly live with their own push, TOT and stagger."""
         o = self.o
@@ -163,6 +163,8 @@ class MissionBuilder:
         self._anchor_id = package.id
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
         extras = [x for x in extras if any(not f.tag for f in x.flights)]
+        ruins = [x for x in ruins if any(not f.tag for f in x.flights)]
+        self._preroll, self._ruin_sites = dict(preroll or {}), []
         air_pkg = copy.copy(package)
         air_pkg.n_def = folded_n_def(package, extras, o.merge_enemy_pct)       # enemy air: the biggest package's need plus a share of the others'
         out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -270,9 +272,9 @@ class MissionBuilder:
             keep.append((st.bases[bid].x, st.bases[bid].y, 130 if st.bases[bid].kind == BaseKind.CARRIER else 80))
         self._spawn_air_picture(air_pkg, tx, ty, tgt.eta_s, geom, manifest, keep)
         self._spawn_cas_support(package, plan, geom, manifest)
-        merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock)
+        merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock, ruins)
         manifest.cur_pkg = ""
-        manifest.merged = [{k: v for k, v in m_.items() if k in ("id", "number", "objective", "type", "tot_s")} for m_ in merged]
+        manifest.merged = [{k: v for k, v in m_.items() if k in ("id", "number", "objective", "type", "tot_s")} for m_ in merged if not m_.get("struck")]
         bx, by = geom.push
         m.coalition["blue"].bullseye = {"x": bx, "y": by}
 
@@ -312,7 +314,7 @@ class MissionBuilder:
         x = {"date": date_str, "mode3": mode3, "laser": laser, "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}",
              "bullseye": latlon(bx, by, self.t), "divert": div.name, "weather": "clear skies, unrestricted visibility",
              "link16": any(r["stn"] != "-" for r in whois), "pkg_table": pkg_table,
-             "n_def": air_pkg.n_def, "merged_nums": [m_["number"] for m_ in merged]}
+             "n_def": air_pkg.n_def, "merged_nums": [m_["number"] for m_ in merged if not m_.get("struck")]}
         text = brief.build_text(st, package, tl, plan, self.rng, (tx, ty), x)
         m.set_description_text(text["full"])
         m.set_description_bluetask_text(text["blue_task"])
@@ -331,7 +333,7 @@ class MissionBuilder:
             install_hook(m, st.campaign_id, manifest.sortie, package.id, despawn if o.ai_despawn_on_land else [], manifest.player_unit,
                          group=pf.callsign, calls=calls, wps=[], sound=sound, flights=self._ulabels,
                          enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" for u in g_["units"]],
-                         sites=self._hook_sites(manifest))
+                         sites=self._hook_sites(manifest), ruins=self._ruin_sites)
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -340,7 +342,7 @@ class MissionBuilder:
                    "numbering": (f"{pspec.first_wp_label} for the start point, then 1, 2, 3..." if pspec.first_wp_label else "waypoint 1 = start point"),
                    "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": "CLEAR", "mode3": mode3, "laser": laser,
                    "bullseye": latlon(bx, by, self.t), "whois": whois, "threats": text["threats"], "n_def": air_pkg.n_def, "target_data": tdata,
-                   "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "sub": f"start {m_['start']}{' (already airborne when you start)' if m_.get('underway') else ''}  push {m_['push']}  TOT {m_['tot']}  done {m_['rtb']}  ({m_['flights']})"} for m_ in merged]}
+                   "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "sub": f"start {m_['start']}{' (already struck, heading home when you start; its target is in ruins)' if m_.get('struck') else ' (already airborne when you start)' if m_.get('underway') else ''}  push {m_['push']}  TOT {m_['tot']}  done {m_['rtb']}  ({m_['flights']})"} for m_ in merged]}
             for pg in render_pages(td, ctx):
                 m.add_aircraft_kneeboard(pspec.dcs_type, pg)
             warns += list(dict.fromkeys(self.lo.warnings))
@@ -350,7 +352,7 @@ class MissionBuilder:
             self._save_without_carrier_slots(m, out_path)
         return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns, self.seed_code, merged)
 
-    def _add_merged(self, anchor, extras, P0, manifest, despawn, atc, div_mhz, div_name, clock) -> list:
+    def _add_merged(self, anchor, extras, P0, manifest, despawn, atc, div_mhz, div_name, clock, ruins=()) -> list:
         """Fold extra packages into this mission. Their flights are AI, airborne on their own schedule (late-activated so they push at
         THEIR time), with their own geometry, route and TOT. Support (tanker, AWACS, HAVCAP, base CAP) is shared, so tag flights are skipped."""
         from types import SimpleNamespace
@@ -358,7 +360,8 @@ class MissionBuilder:
         hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
         used = {f.callsign for f in anchor.flights}
         out = []
-        for k, x in enumerate(extras):
+        ruin_ids = {x.id for x in ruins}
+        for k, x in enumerate(list(extras) + [r for r in ruins if r.id not in {e.id for e in extras}]):
             xp = copy.deepcopy(x)
             xp.flights = [f for f in xp.flights if not f.tag]
             for f in xp.flights:
@@ -391,10 +394,22 @@ class MissionBuilder:
             tg2 = objective_wp(pw2) or pw2[-1]
             eg2 = next((w for w in pw2 if w.name == "EGR"), pw2[-1])
             rtb2 = eg2.eta_s + leg_seconds(eg2, Wpt("RTB", base2.x, base2.y, 0, 300))
-            if rtb2 <= 0 or tg2.eta_s < -60:                   # it has already struck and gone home before the mission starts: not flown, the war sim resolves it
-                self.warns.append(f"package #{xp.number} had already finished before your start and is not in this mission")
+            struck = tg2.eta_s < -60
+            if xp.id in ruin_ids and not struck:
+                continue                                       # an earlier package that has not struck yet and is not a merge candidate: left to the war sim
+            ruined = False
+            if struck and xp.id in self._preroll and xp.objective.type not in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE) \
+                    and xp.objective.target_id not in self.groups_by_asset and len(self._ruin_sites) < 3:
+                self._add_ruin(xp, tx2, ty2, self._preroll[xp.id], manifest)
+                ruined = True
+                if rtb2 <= 0:
+                    continue                                   # struck and already landed: just the ruins, no aircraft
+            elif rtb2 <= 0 or struck:                          # it has already struck and gone home before the mission starts: not flown, the war sim resolves it
+                if xp.id not in ruin_ids:
+                    self.warns.append(f"package #{xp.number} had already finished before your start and is not in this mission")
                 continue
-            self._spawn_opfor_ground(xp, tx2, ty2, manifest, [(base2.x, base2.y), geom2.mshl, geom2.push, geom2.ip, (tx2, ty2), geom2.egr])
+            if not ruined:
+                self._spawn_opfor_ground(xp, tx2, ty2, manifest, [(base2.x, base2.y), geom2.mshl, geom2.push, geom2.ip, (tx2, ty2), geom2.egr])
             freqs = [SimpleNamespace(callsign=f.callsign, mhz=round(128.0 + 0.5 * ((k * 7 + i * 3) % 18), 1)) for i, f in enumerate(xp.flights)]
             plan2 = SimpleNamespace(package_flights=freqs, freq=lambda slot, _k=k: 252.0 + 3.5 * (_k + 1))
             tots = []
@@ -413,9 +428,21 @@ class MissionBuilder:
                 self._spawn_cas_support(xp, plan2, geom2, manifest)
             tot = max(tots) if tots else tg2.eta_s
             out.append({"id": xp.id, "number": xp.number, "objective": xp.objective.description, "type": xp.objective.type.value,
-                        "start": xp.start, "push": clock(P0x), "tot": clock(tot), "rtb": clock(rtb2), "tot_s": tot, "rtb_s": rtb2, "underway": P0x < 0,
+                        "start": xp.start, "push": clock(P0x), "tot": clock(tot), "rtb": clock(rtb2), "tot_s": tot, "rtb_s": rtb2, "underway": P0x < 0, "struck": ruined,
                         "flights": ", ".join(f"{f.callsign} {f.count}x{f.aircraft}" for f in xp.flights)})
         return out
+
+    def _add_ruin(self, xp, x, y, roll, manifest) -> None:
+        """Smoke and fire where an earlier package already struck. Success: a destroyed site (three plumes, big fire). Failure: a single small fire.
+        Kept to a handful of effects so VR performance is untouched. The roll was made in advance and is applied to the war at debrief."""
+        ok = bool(roll.get("success"))
+        if xp.objective.type == ObjectiveType.DEAD and roll.get("dead") and not roll.get("killed"):
+            ok = False
+        if xp.objective.type == ObjectiveType.DEAD and not roll.get("dead") and roll.get("blinded"):
+            ok = False                                         # a SEAD-only package blinds the radars; it does not leave a burning site
+        self._ruin_sites.append({"x": x, "z": y, "n": 3 if ok else 1, "r": 110 if ok else 40, "p": 2 if ok else 3, "dn": 0.9 if ok else 0.6,
+                                 "pw": 120 if ok else 40, "s": self.vrng.uniform(0, 6.28)})
+        manifest.ruins.append({"id": xp.id, "number": xp.number})
 
     def _hook_sites(self, manifest) -> list:
         """Enemy sites the call-outs track: units, radars, the package they belong to and who reports on them."""

@@ -104,7 +104,11 @@ class SettingsDialog(QDialog):
         self.mback = QSpinBox(); self.mback.setRange(0, 30); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_back_min", 15)))
         row.addWidget(lb); row.addWidget(self.mback); row.addStretch(1); lay.addLayout(row)
         h = QLabel("Packages that started up to this long before yours also fly, already airborne and underway when the mission starts. "
-                   "A package that has already struck and gone home by then is not flown. 0 = only later packages."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
+                   "A package that has already struck is not flown to its target (see ruins below). 0 = only later packages."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
+        self.ruins = QCheckBox("Ruins: show what earlier packages already hit (smoke and fire); struck flights fly home")
+        self.ruins.setChecked(bool(getattr(settings, "ruins", True))); lay.addWidget(self.ruins)
+        h = QLabel("Earlier packages in the same area that struck before your start leave smoking ruins (at most three sites, a few plumes each). The result is "
+                   "decided when you build the mission and applied at the debrief."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
         row = QHBoxLayout(); lb = QLabel("Enemy air sum"); lb.setMinimumWidth(120)
         self.mpct = QSpinBox(); self.mpct.setRange(0, 100); self.mpct.setSuffix(" %"); self.mpct.setValue(int(settings.merge_enemy_pct))
         row.addWidget(lb); row.addWidget(self.mpct); row.addStretch(1); lay.addLayout(row)
@@ -137,6 +141,7 @@ class SettingsDialog(QDialog):
         self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())
         self.s.merge_enemy_pct = int(self.mpct.value())
         self.s.merge_back_min = int(self.mback.value())
+        self.s.ruins = bool(self.ruins.isChecked())
         self.s.enemy_cap_engage_nm = int(self.ecap.value()); self.s.friendly_cap_engage_nm = int(self.fcap.value())
         self.s.f14_special_names = self.f14n.isChecked()
         self.s.auto_patch_scripting = self.autopatch.isChecked(); self.s.patch_asked = True
