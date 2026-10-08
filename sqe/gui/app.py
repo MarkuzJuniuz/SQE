@@ -299,7 +299,6 @@ class MainWindow(QMainWindow):
             if i == 1:
                 self.nav_missions = b
         grp.button(0).setChecked(True); sl.addStretch(1)
-        self.camp = QLabel(""); self.camp.setObjectName("dim"); self.camp.setWordWrap(True); sl.addWidget(self.camp)
         st_btn = QPushButton("Settings"); st_btn.clicked.connect(self.settings); sl.addWidget(st_btn)
         vl = QLabel(f"v{__version__}"); vl.setObjectName("small"); sl.addWidget(vl)
         main = QVBoxLayout(); main.setContentsMargins(22, 18, 22, 18); main.setSpacing(14); lay.addLayout(main, 1)
@@ -437,7 +436,6 @@ class MainWindow(QMainWindow):
             pill.setText(txt)
         self.banner.setText({"ACTIVE": "Sortie pending" if st.pending else "", "VICTORY": "VICTORY", "DEFEAT": "DEFEAT"}[st.status])
         self.banner.setVisible(bool(self.banner.text()))
-        self.camp.setText(f"{st.name}\n{self.session.path.name if self.session.path else ''}")
         self.setWindowTitle(f"{APP_NAME} - {st.name}")
 
 

@@ -1,3 +1,6 @@
+## v0.9.6
+* The sidebar no longer shows the file name or a second copy of the campaign title (the title is in the page header and the window title).
+
 ## v0.9.4
 * The Missions screen and the briefing now show the enemy fighter count for the whole mission, counting folded packages, the same number the mission is built with.
 
