@@ -1,5 +1,5 @@
-## v0.9.10
-* Flying from the carrier now drops you into the cockpit without having to resave the mission in the Mission Editor. The carrier RTB point was written as a "Land" waypoint, which the editor rewrites on save; it is now written the way the editor leaves it (a turning point riding on the ship).
+## v0.9.11
+* Carrier starts: the carrier and escort ships now get warehouse entries like the Mission Editor writes on save. Without them the carrier had no warehouse to spawn the player's aircraft from, which dropped you into the F10 map until you resaved the mission in the editor.
 
 ## v0.9.9
 * Flying from the carrier no longer lists the "LSO" and "Air Boss" stations as slots (the carrier is saved with allowLso / allowAirboss false).

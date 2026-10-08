@@ -346,6 +346,7 @@ class MissionBuilder:
             warns += list(dict.fromkeys(self.lo.warnings))
             counts = self._counts()
             self._free_locked_speeds(m)
+            self._add_ship_warehouses(m)
             self._save_without_carrier_slots(m, out_path)
         return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns, self.seed_code, merged)
 
@@ -896,11 +897,27 @@ class MissionBuilder:
                 g.points[-1].name = "RTBXHB"
         else:
             rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
-            # A "Land" point linked to a ship is something the Mission Editor rewrites on save (to a Turning Point that keeps the ship link), and the
-            # un-rewritten version drops the player into the F10 map instead of the cockpit. So write what the editor would: a turning point riding on the ship.
-            rtb.link_unit = self.ship[base.id].units[0].id
+            rtb.type, rtb.action = "Land", PointAction.Landing
+            rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
         tw = None if f.tag else objective_wp(wps)
         return g, (tw.eta_s if tw is not None else None)
+
+    @staticmethod
+    def _add_ship_warehouses(m):
+        """The Mission Editor writes a warehouse entry for every ship (keyed by unit id) and pydcs writes none. A carrier with no entry leaves the
+        player's aircraft with no warehouse to spawn from, which dropped the player into the F10 map until the mission was resaved in the editor."""
+        for coal_name, coal in (("blue", m.coalition.get("blue")), ("red", m.coalition.get("red"))):
+            if coal is None:
+                continue
+            for country in coal.countries.values():
+                for sg in country.ship_group:
+                    for u in sg.units:
+                        m.warehouses.warehouses[u.id] = {
+                            "jet_fuel": {"InitFuel": 100}, "gasoline": {"InitFuel": 100}, "diesel": {"InitFuel": 100}, "methanol_mixture": {"InitFuel": 100},
+                            "unlimitedFuel": True, "unlimitedMunitions": True, "unlimitedAircrafts": True,
+                            "OperatingLevel_Air": 10, "OperatingLevel_Eqp": 10, "OperatingLevel_Fuel": 10,
+                            "aircrafts": {}, "weapons": {}, "suppliers": {}, "allowHotStart": False, "dynamicCargo": True, "dynamicSpawn": False,
+                            "periodicity": 30, "size": 100, "speed": 16.666666, "coalition": coal_name}
 
     @staticmethod
     def _save_without_carrier_slots(m, out_path):
