@@ -40,7 +40,7 @@ def stagger(package, role) -> int:
     if role == Role.SEAD and package.objective.type == ObjectiveType.DEAD:
         return -90
     return STAGGER.get(role, 0)
-from .packages import Package
+from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
 from .routes import OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, leg_seconds, make_geometry, objective_wp, offset, plan_route
 from .state import CampaignState
@@ -164,8 +164,7 @@ class MissionBuilder:
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
         extras = [x for x in extras if any(not f.tag for f in x.flights)]
         air_pkg = copy.copy(package)
-        needs = sorted([package.n_def] + [x.n_def for x in extras], reverse=True)       # enemy air: the biggest package's need plus a share of the others'
-        air_pkg.n_def = needs[0] + int(round(sum(needs[1:]) * max(0, o.merge_enemy_pct) / 100.0))
+        air_pkg.n_def = folded_n_def(package, extras, o.merge_enemy_pct)       # enemy air: the biggest package's need plus a share of the others'
         out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
 
         m = Mission(Caucasus())
@@ -312,7 +311,8 @@ class MissionBuilder:
         laser = self._laser(package, pf)
         x = {"date": date_str, "mode3": mode3, "laser": laser, "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}",
              "bullseye": latlon(bx, by, self.t), "divert": div.name, "weather": "clear skies, unrestricted visibility",
-             "link16": any(r["stn"] != "-" for r in whois), "pkg_table": pkg_table}
+             "link16": any(r["stn"] != "-" for r in whois), "pkg_table": pkg_table,
+             "n_def": air_pkg.n_def, "merged_nums": [x.number for x in extras]}
         text = brief.build_text(st, package, tl, plan, self.rng, (tx, ty), x)
         m.set_description_text(text["full"])
         m.set_description_bluetask_text(text["blue_task"])

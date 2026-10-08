@@ -16,7 +16,7 @@ from ..briefing import threat_lines
 from ..timeofday import is_night
 from ..difficulty import LEVELS
 from ..engine import Session
-from ..packages import PackageBuilder
+from ..packages import PackageBuilder, folded_n_def
 from ..settings import AppSettings
 from ..war import totals
 from . import theme
@@ -188,7 +188,9 @@ class MissionsPage(QWidget):
                           if opts and self.sess.merge_candidates(p) else ""))
         tx, ty = PackageBuilder(st).target_xy(p.objective)
         th = threat_lines(st, tx, ty)[:4]
-        self.thr.setText((f"Expect about {p.n_def} hostile fighters at the target.  " if p.n_def else "") +
+        ex = self.sess.merge_candidates(p)
+        nd = folded_n_def(p, ex, self.sess.settings.merge_enemy_pct)
+        self.thr.setText((f"Expect about {nd} hostile fighters at the target" + (f" (includes {', '.join('#%d' % x.number for x in ex)})" if ex else "") + ".  " if nd else "") +
                          "Threats near target: " + ("; ".join(th) if th else "none known"))
 
 

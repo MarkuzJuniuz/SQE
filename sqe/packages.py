@@ -368,3 +368,9 @@ def packages_linked(state: CampaignState, p1: "Package", p2: "Package", km: floa
     if a.id in b.defended_by or b.id in a.defended_by:
         return True
     return bool(set(a.defended_by) & set(b.defended_by))
+
+
+def folded_n_def(package, extras, pct: int = 100) -> int:
+    """Enemy fighters for a mission with folded packages: the biggest package's need plus pct% of every other package's need."""
+    needs = sorted([package.n_def] + [x.n_def for x in extras], reverse=True)
+    return needs[0] + int(round(sum(needs[1:]) * max(0, pct) / 100.0))

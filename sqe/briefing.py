@@ -44,8 +44,10 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                     f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier."
                     + (f" They are escorted by {e['escorts']} fighters." if e.get("escorts") else
                        " They have no escort: the enemy cannot reach this far with fighters. It is a last throw of the dice.")]
-    sit += ["", (f"Expect about {pkg.n_def} hostile fighters to contest the target; command is committing enough fighters to answer them."
-                 if pkg.n_def and obj.type.value != "FLEET_DEFENSE" else
+    n_def = x.get("n_def", pkg.n_def)
+    inc = (" (counting the packages flown with this one: " + ", ".join(f"#{n}" for n in x["merged_nums"]) + ")") if x.get("merged_nums") else ""
+    sit += ["", (f"Expect about {n_def} hostile fighters to contest the target{inc}; command is committing enough fighters to answer them."
+                 if n_def and obj.type.value != "FLEET_DEFENSE" else
                  ("" if obj.type.value == "FLEET_DEFENSE" else "No organised fighter defence is expected at the target.")),
             f"Weather: {x['weather']}."]
     mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {'DEAD' if (pf.role.value == 'STRIKE' and obj.type.value == 'DEAD') else pf.role.value}.", f"Your task: {pf.task}."]

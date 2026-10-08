@@ -1,3 +1,6 @@
+## v0.9.4
+* The Missions screen and the briefing now show the enemy fighter count for the whole mission, counting folded packages, the same number the mission is built with.
+
 ## v0.9.3
 * App icon (stencil SQE roundel): window and taskbar icon, and the built SQE.exe.
 
