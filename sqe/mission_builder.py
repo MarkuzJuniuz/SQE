@@ -346,7 +346,7 @@ class MissionBuilder:
             warns += list(dict.fromkeys(self.lo.warnings))
             counts = self._counts()
             self._free_locked_speeds(m)
-            m.save(str(out_path))
+            self._save_without_carrier_slots(m, out_path)
         return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns, self.seed_code, merged)
 
     def _add_merged(self, anchor, extras, P0, manifest, despawn, atc, div_mhz, div_name, clock) -> list:
@@ -900,6 +900,25 @@ class MissionBuilder:
             rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
         tw = None if f.tag else objective_wp(wps)
         return g, (tw.eta_s if tw is not None else None)
+
+    @staticmethod
+    def _save_without_carrier_slots(m, out_path):
+        """pydcs writes allowLso / allowAirboss = true for every carrier, which adds "LSO" and "Air Boss" client slots to the slot list when you
+        fly from the boat. SQE has no use for them, so they are written as false (the pinned pydcs is left unmodified; we wrap its dict() for the save)."""
+        from dcs import unit as dcs_unit
+        orig = dcs_unit.Ship.dict
+        def patched(self):
+            d = orig(self)
+            if "allowLso" in d:
+                d["allowLso"] = False
+            if "allowAirboss" in d:
+                d["allowAirboss"] = False
+            return d
+        dcs_unit.Ship.dict = patched
+        try:
+            m.save(str(out_path))
+        finally:
+            dcs_unit.Ship.dict = orig
 
     @staticmethod
     def _free_locked_speeds(m):

@@ -1,3 +1,6 @@
+## v0.9.9
+* Flying from the carrier no longer lists the "LSO" and "Air Boss" stations as slots (the carrier is saved with allowLso / allowAirboss false).
+
 ## v0.9.8
 * F-14B(U) kneeboard: the start point is now 0 and DEP is 1, matching Jester.
 
