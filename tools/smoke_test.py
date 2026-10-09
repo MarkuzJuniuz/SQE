@@ -181,6 +181,19 @@ def main():
     out = rs.apply(data)
     assert any(m_["success"] == roll["success"] for m_ in out["meanwhile"]), "the stored roll was not applied"
     print(f"[ruins] host #{hp.number}: ruins for #{n_rn} (success={roll['success']}), stored roll applied at the debrief")
+    # ---- v0.12: terrain mask from DCS ---------------------------------------------------------------------------------------
+    import json as _json
+    from sqe import terrainmask as _tm, terrainprobe as _tp
+    (TMP / "tm").mkdir(exist_ok=True)
+    _json.dump({"terrain": "Caucasus", "x0": 0, "y0": 0, "step": 250, "nx": 40, "ny": 40,
+                "rows": ["l20 s2 l18" if i != 5 else "l40" for i in range(40)]}, open(TMP / "tm" / _tm.FILE, "w"))
+    _tm.configure(TMP / "tm")
+    assert _tm.land_ok(5000, 2000, 300) is True and _tm.land_ok(5000, 5100, 300) is False, "river cells must fail"
+    assert _tm.land_ok(5000, 4700, 300) is True, "land 200 m+ from the river must pass"
+    assert _tm.land_ok(99999, 99999) is None
+    assert "land.getSurfaceType" in _tp.probe_lua() and "SQE_terrain_caucasus" in _tp.probe_lua()
+    _tm.configure(None)
+    print("[terrain] mask read, river margin and off-map fallback OK")
     # ---- v0.8: SEAD/DEAD split, suppression, depth tiers, front, garrisons ------------------------------------------------
     import random
     from sqe.models import AssetKind, Role

@@ -1,3 +1,20 @@
+## v0.12.3
+* River margin is now a setting (Settings > Shore margin, second box) and defaults to 100 m instead of 400 m: sites only keep out of the water and off the very bank, so batteries can sit near streams. Needs the terrain scan; the sea margin is unchanged (1500 m).
+
+## v0.12.2
+* First campaign: if the terrain scan has not been done, SQE offers it once (create the scan mission now, or skip and do it later in Settings). Choosing the scan means no campaign is created until you have run it, so the first campaign already gets exact placement.
+
+## v0.12.1
+* The terrain scan mission now uses the free Su-25T slot instead of the F-15C (part of the paid Flaming Cliffs 3 pack), so it runs on a DCS install with only the free aircraft and the free Caucasus map.
+
+## v0.12.0
+* Terrain scan: Settings > "Create terrain scan mission" writes SQE_TerrainScan.miz into your DCS Missions folder. Fly it once; a script reads DCS's own surface type over the whole theatre (four samples per 250 m cell, so narrow rivers are not stepped over) and saves SQE_terrain_caucasus.json in Saved Games\\SQE. From then on every ground site (SAMs, garrisons, radars, depots, armour columns) is placed on real dry land, at least the "Shore margin" from the sea (default 1500 m) and 400 m from rivers. Airfield base defences are placed on dry ground the same way. Without the scan the coarse built-in coastline is used, as in v0.11.1.
+* Campaigns you open are re-checked against the scan; sites that are in water or on a riverbank are moved once.
+* Nothing from DCS is bundled: the scan is made on your own install.
+
+## v0.11.1
+* Fix: enemy sites generated in the sea. SAM sites, garrisons, radars, depots and armour columns are now placed on land, at least 1.5 km from the coast, and garrisons and column air defence stay close to what they guard. Campaigns you open from older versions are corrected once (a note goes in the war log). A site's random shift in the mission can no longer push it into the water either.
+
 ## v0.11.0
 * Ruins: an earlier package of the same day and area that has already struck by the time your mission starts leaves its target burning: up to three sites, a few smoke plumes each (a destroyed site gets three big fires, a failed attack one small fire). Capped to protect VR frame rates. Settings > Package merging > Ruins switches it off.
 * If that package has struck but is still airborne, its flights spawn on the way home along their egress route, land on their own, and the ruins are already there. If it has landed, only the ruins remain.

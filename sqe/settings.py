@@ -63,6 +63,8 @@ class AppSettings:
     hold_minutes: int = 2                 # slack at the marshal point before PUSH (minutes; negative = hurry)
     flight_filter: str = "squadron"      # Missions page: "squadron" (only flights of YOUR squadron) or "all" (any flight your jet can fly)
     merge_mode: str = "area"              # "off" | "area" (default): fold packages in the same area, starting within 30 min, into one mission
+    shore_margin_m: int = 1500            # ground sites keep this far from the sea and lakes
+    river_margin_m: int = 100             # ...and this far from rivers and shallow water (terrain scan only)
     ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
     merge_back_min: int = 15              # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
     merge_max_units: int = 150            # a merged mission is trimmed until it holds no more than this many units
@@ -71,6 +73,7 @@ class AppSettings:
     friendly_cap_engage_nm: int = 50      # same for your HAVCAP / BASECAP (0 = unlimited)
     auto_patch_scripting: bool = False    # patch DCS MissionScripting.lua when SQE starts, restore it when SQE exits. Off until the user agrees on first run
     patch_asked: bool = False
+    terrain_asked: bool = False           # the one-time 'scan the map?' offer has been shown
     f14_special_names: bool = True             # F-14B(U): special-point waypoint names (untested in the cockpit)
     persist: bool = True          # False in tests: never write %APPDATA%\\SQE\\settings.json
 

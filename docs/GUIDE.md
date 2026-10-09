@@ -210,3 +210,12 @@ build the loadout, save, then `python tools/capture_loadouts.py that.miz`. They 
 * Weather is always clear for now (seasonal temperature only). Procedural/static weather options come later.
 * Special points (IP, ST) are added for the F-14BU as per the F-14 manual; confirm in-game that the BU shows them.
 * The campaign has one story (Operation IRON TIDE). New stories mean new text in `narrative.py` and a new scenario.
+
+
+### Terrain scan (v0.12)
+Ground sites are placed with a coastline that is only roughly right, and it knows nothing about rivers. For exact placement run the scan once:
+1. Open SQE, then Settings. Set the Saved Games folder, press "Create terrain scan mission".
+2. Keep SQE open (it enables DCS scripting while open; the scan needs the same access as debriefs).
+3. In DCS: Fly > Missions > My Missions > SQE_TerrainScan, then Fly (you start in a parked Su-25T, which is free with DCS World, so no paid aircraft is needed). Messages show the percentage; wait for "SQE terrain scan COMPLETE" (about two minutes, DCS may stutter), then leave the mission.
+4. Open or start a campaign in SQE. Settings > Terrain scan reads "loaded".
+Sites then keep the Shore margin from the sea and lakes (default 1500 m) and the river margin from rivers and shallow water (default 100 m); both are in Settings. Re-running is only needed after a DCS terrain update.

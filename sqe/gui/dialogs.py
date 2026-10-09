@@ -120,6 +120,13 @@ class SettingsDialog(QDialog):
         h = QLabel("How far patrol fighters (enemy CAP, your HAVCAP/BASECAP) chase before breaking off. 0 = unlimited. Scrambled alert fighters are not limited."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
         self.f14n = QCheckBox("F-14B(U): name waypoints with special-point codes (IP, ST, HB...) so DEST can select them (untested in the cockpit)")
         self.f14n.setChecked(bool(settings.f14_special_names)); lay.addWidget(self.f14n)
+        row = QHBoxLayout(); lb = QLabel("Shore margin"); lb.setMinimumWidth(120)
+        self.shore = QSpinBox(); self.shore.setRange(300, 5000); self.shore.setSingleStep(100); self.shore.setSuffix(" m"); self.shore.setValue(int(getattr(settings, "shore_margin_m", 1500)))
+        self.river = QSpinBox(); self.river.setRange(0, 1000); self.river.setSingleStep(50); self.river.setSuffix(" m rivers"); self.river.setValue(int(getattr(settings, "river_margin_m", 100)))
+        self.probe_btn = QPushButton("Create terrain scan mission"); self.probe_btn.clicked.connect(self._make_probe)
+        row.addWidget(lb); row.addWidget(self.shore); row.addWidget(self.river); row.addWidget(self.probe_btn); row.addStretch(1); lay.addLayout(row)
+        self.tm = QLabel(); self.tm.setObjectName("small"); self.tm.setWordWrap(True); lay.addWidget(self.tm)
+        self._tm_refresh()
         self.ms = QLabel(); lay.addWidget(self.ms)
         self.autopatch = QCheckBox("Enable DCS scripting access while SQE is open (patches MissionScripting.lua at start, restores it on exit)")
         self.autopatch.setChecked(bool(settings.auto_patch_scripting)); lay.addWidget(self.autopatch)
@@ -129,6 +136,15 @@ class SettingsDialog(QDialog):
         self.inst.textChanged.connect(self._refresh); self._refresh()
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); bb.accepted.connect(self._save)
         bb.rejected.connect(self.reject); lay.addWidget(bb)
+
+    def _tm_refresh(self):
+        from . import terrainmask as _tmk
+        _tmk.configure(self.s.sqe_dir if self.s.dcs_saves else None)
+        self.tm.setText("Ground sites stay this far from the sea and lakes, and the second value from rivers and shallow water (rivers need the scan). Terrain scan: " + _tmk.info() +
+                        ". To measure the real map once: create the scan mission, start it in DCS (Fly), wait for COMPLETE.")
+
+    def _make_probe(self):
+        create_scan_mission(self, self.s, self.saves.text())
 
     def _refresh(self):
         self.ms.setText("MissionScripting.lua: " + S.mission_scripting_status(self.inst.text()))
@@ -142,6 +158,8 @@ class SettingsDialog(QDialog):
         self.s.merge_enemy_pct = int(self.mpct.value())
         self.s.merge_back_min = int(self.mback.value())
         self.s.ruins = bool(self.ruins.isChecked())
+        self.s.shore_margin_m = int(self.shore.value())
+        self.s.river_margin_m = int(self.river.value())
         self.s.enemy_cap_engage_nm = int(self.ecap.value()); self.s.friendly_cap_engage_nm = int(self.fcap.value())
         self.s.f14_special_names = self.f14n.isChecked()
         self.s.auto_patch_scripting = self.autopatch.isChecked(); self.s.patch_asked = True
@@ -269,3 +287,21 @@ class DebriefDialog(QDialog):
         bb = QDialogButtonBox(QDialogButtonBox.Close); bb.rejected.connect(self.reject); bb.accepted.connect(self.accept)
         btn = bb.button(QDialogButtonBox.Close); btn.setText("Continue"); btn.setObjectName("primary")
         btn.clicked.connect(self.accept); lay.addWidget(bb)
+
+
+def create_scan_mission(parent, settings, saves_text: str = "") -> bool:
+    """Write SQE_TerrainScan.miz into the DCS Missions folder and tell the user how to run it. Returns True when it was created."""
+    from .. import terrainprobe
+    saves = saves_text or settings.dcs_saves
+    if not saves:
+        QMessageBox.warning(parent, "Terrain scan", "Set the DCS Saved Games folder first."); return False
+    try:
+        p = terrainprobe.make_probe(Path(S.native(saves)) / "Missions" / "SQE_TerrainScan.miz")
+    except Exception as ex:
+        QMessageBox.warning(parent, "Terrain scan", f"Could not create the mission: {ex}"); return False
+    QMessageBox.information(parent, "Terrain scan",
+                            f"Created {p.name} in your DCS Missions folder (you start in a free Su-25T).\n\n1. Keep SQE open (it enables DCS scripting while open).\n"
+                            "2. In DCS: Mission > Fly > Missions > My Missions > SQE_TerrainScan, then Fly.\n"
+                            "3. Wait for the message 'SQE terrain scan COMPLETE' (about a minute; DCS may stutter), then leave the mission.\n"
+                            "SQE uses the result the next time you open or start a campaign.")
+    return True

@@ -27,6 +27,14 @@ class Session:
         self.last_build = None
         self.options = MissionOptions()
         self.loadouts = LoadoutLibrary(Path(settings.sqe_dir) / "loadouts.json" if settings.dcs_saves else None)
+        self.sync_terrain()
+
+    def sync_terrain(self) -> None:
+        """Point the land / water checks at the terrain scan DCS measured (if it has been run) and at the shore margin from Settings."""
+        from . import seacheck, terrainmask
+        seacheck.SITE_MARGIN = float(getattr(self.settings, "shore_margin_m", 1500))
+        terrainmask.RIVER_MARGIN = float(getattr(self.settings, "river_margin_m", 100))
+        terrainmask.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
 
     # ---- persistence ---------------------------------------------------------------------------
     @property
@@ -42,6 +50,7 @@ class Session:
 
     def new(self, name: str, aircraft: str, level: int, seed: int | None = None, start_date: str = "2004-06-12", night_ops: bool = False,
             squadron: str | None = None) -> None:
+        self.sync_terrain()
         self.state = new_campaign(name, aircraft, level, seed=seed, start_date=start_date, night_ops=night_ops, player_squadron=squadron)
         safe = "".join(c if c.isalnum() or c in "-_ " else "_" for c in name).strip() or "campaign"
         self.path = self.campaigns_dir() / f"{safe}{CAMPAIGN_EXT}"
@@ -49,12 +58,19 @@ class Session:
         self.save()
 
     def open(self, path) -> None:
+        self.sync_terrain()
         self.state = CampaignState.load(path)
         self.path = Path(path)
         self.settings.last_campaign = str(path)
         self.settings.save()
+        from .scenario import snap_assets_to_land
+        moved = snap_assets_to_land(self.state)          # older campaigns generated some sites in the sea
+        if moved:
+            self.state.note(f"{moved} enemy sites that were placed in the water have been moved onto land.")
         if not self.state.plan:
             self.plan_day()
+        if moved:
+            self.save()
 
     def save(self, path=None) -> None:
         if path:

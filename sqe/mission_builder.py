@@ -599,10 +599,12 @@ class MissionBuilder:
                 p = self.apt[base.id].position
                 ang = sum(ord(c) for c in base.id) % 360
                 full = base.defense >= 0.6
-                x, y = offset(p.x, p.y, ang, 4500)
+                dry = lambda a0, d0: next(((px, py) for k in range(12) for px, py in [offset(p.x, p.y, a0 + (30 * ((k + 1) // 2)) * (1 if k % 2 else -1), d0)]
+                                           if seac.site_ok(px, py, 300.0)), offset(p.x, p.y, a0, d0))           # the nearest bearing that is dry land
+                x, y = dry(ang, 4500)
                 self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
                               ("Patriot_EPP", 1), ("Patriot_ln", 3 if full else 1)], x, y, ang, F.Star)
-                x, y = offset(p.x, p.y, ang + 120, 3500)
+                x, y = dry(ang + 120, 3500)
                 self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if full else 1)], x, y, ang, F.Line)
             return
         hdg = getattr(self, '_cv_hdg', {}).get(base.id)
@@ -643,6 +645,8 @@ class MissionBuilder:
             pos = offset(a.x, a.y, bearing(a.x, a.y, fb.x, fb.y), r.uniform(-1500, 1500))
         else:
             pos = offset(a.x, a.y, r.uniform(0, 360), r.uniform(0, 900))
+        if a.kind != AssetKind.AIRFIELD and not seac.site_ok(pos[0], pos[1], min(600.0, seac.SITE_MARGIN)):
+            pos = (a.x, a.y)                  # the random shift would put it in the sea: keep the site where it is (it is on land)
         self.site_pos[a.id] = pos
         return pos
 

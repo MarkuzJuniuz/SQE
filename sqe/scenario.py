@@ -61,6 +61,38 @@ def _offset(x, y, hdg, d):
     return x + d * math.cos(h), y + d * math.sin(h)
 
 
+def snap_assets_to_land(st) -> int:
+    """Move every non-airfield enemy asset that sits in the water (or hugs the coast) to the nearest land. Garrisons and a column's air
+    defence are then kept close to the site or column they belong to. Idempotent; returns how many moved."""
+    from . import seacheck
+    ok = seacheck.site_ok
+    pair = {}
+    for a in st.assets.values():
+        if a.guards:
+            pair[a.id] = a.guards
+        elif a.id.startswith("fsam_"):
+            pair[a.id] = "armor_" + a.id[5:]
+    n = 0
+    for a in sorted(st.assets.values(), key=lambda a: a.id in pair):          # parents first
+        if a.kind == AssetKind.AIRFIELD:
+            continue
+        x, y = a.x, a.y
+        par = st.assets.get(pair.get(a.id, ""))
+        if par is not None and not (ok(x, y) and math.hypot(x - par.x, y - par.y) <= 4500):
+            for r in (2500, 3200, 1900, 3800):
+                cands = [(par.x + r * math.cos(math.radians(k * 30)), par.y + r * math.sin(math.radians(k * 30))) for k in range(12)]
+                good = [c for c in cands if ok(*c)]
+                if good:
+                    x, y = good[(sum(map(ord, a.id)) + r) % len(good)]
+                    break
+        if not ok(x, y):
+            x, y = seacheck.snap_to_land(x, y)
+        if (x, y) != (a.x, a.y):
+            a.x, a.y = x, y
+            n += 1
+    return n
+
+
 def _terrain(name: str):
     from dcs import terrain
     cls = getattr(terrain, THEATRES.get(name, ""), None)
@@ -161,6 +193,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
             sx, sy = _offset(x, y, rng.randint(0, 359), rng.randint(2200, 3600))
             add(f"fsam_{i+1}", f"Column {chr(65 + i)} {SAM_LABEL[v]}", AssetKind.SAM, sx, sy, SAM_VALUE[v], variant=v, tier=1)
 
+    snap_assets_to_land(st)                                          # nothing is generated in the sea
     sams = [x for x in st.assets.values() if x.kind == AssetKind.SAM]
     for x in st.assets.values():
         if x.kind in (AssetKind.SAM, AssetKind.EWR):

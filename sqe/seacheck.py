@@ -61,3 +61,38 @@ def clear_run(x, y, hdg_deg, length_m, clearance_m, step_m=9260):
             return False
         d += step_m
     return True
+
+
+SITE_MARGIN = 1500.0                 # metres a ground site keeps from the sea (rivers: terrainmask.RIVER_MARGIN); set from Settings
+
+
+def site_ok(x, y, margin=None):
+    """True when a ground site can sit here: on land, clear of the sea by `margin`. Uses the map DCS measured (terrainmask) when the terrain
+    scan has been run and covers the point, otherwise the coarse built-in coastline."""
+    margin = SITE_MARGIN if margin is None else margin
+    from . import terrainmask
+    r = terrainmask.land_ok(x, y, margin)
+    if r is not None:
+        return r
+    return is_land(x, y) and coast_distance(x, y) >= margin
+
+
+def snap_to_land(x, y, margin_m=None, max_m=40000.0):
+    """The nearest point to (x, y) where site_ok holds (the point itself when it already does). Searches outward in 1 km rings, every 15 degrees,
+    preferring the point furthest from the water on the first ring that has any. Returns the original when nothing is found."""
+    if site_ok(x, y, margin_m):
+        return x, y
+    r = 1000.0
+    while r <= max_m:
+        best = None
+        for k in range(24):
+            a = math.radians(k * 15)
+            px, py = x + r * math.cos(a), y + r * math.sin(a)
+            if site_ok(px, py, margin_m):
+                cd = coast_distance(px, py)
+                if best is None or cd > best[0]:
+                    best = (cd, px, py)
+        if best is not None:
+            return best[1], best[2]
+        r += 1000.0
+    return x, y

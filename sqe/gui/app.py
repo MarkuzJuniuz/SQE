@@ -380,12 +380,32 @@ class MainWindow(QMainWindow):
             self.settings()
             if self.session.settings.problems():
                 return
+        if self._offer_terrain_scan():
+            return
         dlg = NewCampaignDialog(self)
         if dlg.exec() == QDialog.Accepted:
             try:
                 v = dlg.values(); self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], night_ops=v['night_ops'], squadron=v.get('squadron')); self.refresh_all()
             except Exception:
                 QMessageBox.critical(self, "Could not create campaign", traceback.format_exc())
+
+    def _offer_terrain_scan(self) -> bool:
+        """Once, before the first campaign: offer the one-time terrain scan. True when the user chose to scan first (no campaign is created now)."""
+        from .. import terrainmask
+        from .dialogs import create_scan_mission
+        s = self.session.settings
+        self.session.sync_terrain()
+        if terrainmask.available() or getattr(s, "terrain_asked", False):
+            return False
+        s.terrain_asked = True; s.save()
+        box = QMessageBox(self); box.setWindowTitle("Scan the map once?"); box.setIcon(QMessageBox.Question)
+        box.setText("Enemy sites are placed with a rough coastline. For exact placement (on dry land, off riverbanks) SQE can read the real map from DCS.")
+        box.setInformativeText("It takes one short mission in DCS (about two minutes, free Su-25T, once ever). You can also do it later in Settings.")
+        go = box.addButton("Create the scan mission", QMessageBox.AcceptRole); box.addButton("Skip for now", QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is go:
+            return create_scan_mission(self, s)
+        return False
 
     def open_campaign(self):
         f, _ = QFileDialog.getOpenFileName(self, "Open campaign", str(self.session.campaigns_dir()), f"SQE campaign (*{CAMPAIGN_EXT})")
