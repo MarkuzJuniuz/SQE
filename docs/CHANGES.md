@@ -1,3 +1,6 @@
+## v0.12.5
+* Creating the terrain scan mission no longer prints pydcs's harmless 'Failed to parse Lua code ... description.lua' lines (a livery file in your DCS install that pydcs cannot read; it is skipped either way).
+
 ## v0.12.4
 * Fix: Settings crashed on opening (wrong import for the terrain scan status line). The smoke test now builds the Settings and New Campaign dialogs so this kind of slip is caught.
 

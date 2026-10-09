@@ -68,6 +68,15 @@ def probe_lua() -> str:
 
 
 def make_probe(out_path) -> Path:
+    import contextlib
+    import io
+    import logging
+    logging.getLogger("pydcs").setLevel(logging.CRITICAL)
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):      # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS livery files
+        return _make_probe(out_path)
+
+
+def _make_probe(out_path) -> Path:
     from dcs.mission import Mission, StartType
     from dcs.terrain import Caucasus
     from dcs.planes import Su_25T
