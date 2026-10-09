@@ -56,5 +56,4 @@ Start here: **docs/GUIDE.md**   |   Sample briefing: docs/SAMPLE_BRIEFING.txt
 
 ## Inspiration
 
-Many of SQE's ideas are inspired by community campaign tools, especially DCS Liberation and DCS Retribution (a front line that moves as targets fall, packages with escorts and SEAD,
-the MissionScripting approach for results, AI fuel management), and by the feel of the Strike Fighters series. SQE contains no code from them and is not affiliated with them.
+Many of SQE's ideas are inspired by community campaign tools, especially DCS Liberation and DCS Retribution (a front line that moves as targets fall, packages with escorts and SEAD, the MissionScripting approach for results, AI fuel management). The procedural feel comes from Falcon BMS: the marshal, push and TOT timeline, other flights running to schedule whether you're there or not, and the radio chatter that lets you follow the package. The sense of flying your sortie while the war goes on around you comes from the Strike Fighters series. SQE contains no code from any of them and is not affiliated with them.
