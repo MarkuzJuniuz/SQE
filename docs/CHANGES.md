@@ -1,3 +1,13 @@
+## v0.13.0
+* Merging by radius: packages whose target lies inside a circle (Settings > Merge radius, default 50 nm) around YOUR target fly in the same mission, within the same time windows as before (up to 30 min after yours, up to "Earlier packages" before). The old "same area" test is replaced. At most six packages fold in; the unit limit (default 250) is applied by dropping the package furthest from the circle's centre first.
+* The circle is kept inside the box that holds every possible target (destroyed sites included): near an edge its centre slides inward so it is not half empty, and your own target always stays inside it.
+* The daily plan now launches packages whose targets are within the radius of each other in the same wave, so they can actually fold together.
+* Ruins use the same circle. BARCAP and fleet defence are still never folded by area.
+* The debrief no longer says anything when the sortie ended with you still airborne.
+
+## v0.12.8
+* The default merged-mission unit limit is now 250 (was 150). A settings file that still holds the old default of 150 is moved to 250 once; any other value you set is kept. Change it any time in Settings.
+
 ## v0.12.7
 * Fix: vehicles in the water. A final pass now checks every ground group (armour columns, the friendly task force and its JTAC, base defences, sites) against the terrain scan and moves any group with a unit or driving destination in the water, as a whole and as little as possible. In 74 test builds against a real scan, no ground unit started in the water. Without the scan the rough coastline is used for the same check.
 * DCS reports rivers and ponds as water too, so only the sea and big lakes keep the full shore margin; rivers and small lakes use the river margin (100 m).

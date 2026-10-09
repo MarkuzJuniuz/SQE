@@ -94,12 +94,18 @@ class SettingsDialog(QDialog):
         self.fuel = QCheckBox("AI fuel management (unlimited until the push, real fuel in the fight, unlimited again from egress)")
         self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); lay.addWidget(self.fuel)
         row = QHBoxLayout(); lb = QLabel("Package merging"); lb.setMinimumWidth(120)
-        self.merge = QComboBox(); self.merge.addItem("Off (one package per mission)", "off"); self.merge.addItem("Same area (fold up to 3 packages)", "area")
+        self.merge = QComboBox(); self.merge.addItem("Off (one package per mission)", "off"); self.merge.addItem("Same area (targets inside the radius)", "area")
         self.merge.setCurrentIndex(1 if settings.merge_mode == "area" else 0)
         self.mmax = QSpinBox(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.merge_max_units))
         row.addWidget(lb); row.addWidget(self.merge, 1); row.addWidget(self.mmax); lay.addLayout(row)
-        h = QLabel("Packages in the same area that start within 30 minutes after yours fly in the same mission (AI-flown, one shared ground "
+        h = QLabel("Packages inside the radius that start within 30 minutes after yours fly in the same mission (AI-flown, one shared ground "
                    "world and support). The waiting window shows the unit count so you can compare performance. Trimmed to the unit limit."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
+        row = QHBoxLayout(); lb = QLabel("Merge radius"); lb.setMinimumWidth(120)
+        self.mrad = QSpinBox(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "merge_radius_nm", 50)))
+        row.addWidget(lb); row.addWidget(self.mrad); row.addStretch(1); lay.addLayout(row)
+        h = QLabel("Packages whose target is inside this circle fly in the same mission (within the time windows below). The circle is centred on your target, "
+                   "slid inward so it never hangs over the edge of the target area; your own target stays inside it. If the unit limit is exceeded, the package "
+                   "furthest from the centre drops first."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
         row = QHBoxLayout(); lb = QLabel("Earlier packages"); lb.setMinimumWidth(120)
         self.mback = QSpinBox(); self.mback.setRange(0, 30); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_back_min", 15)))
         row.addWidget(lb); row.addWidget(self.mback); row.addStretch(1); lay.addLayout(row)
@@ -160,6 +166,7 @@ class SettingsDialog(QDialog):
         self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())
         self.s.merge_enemy_pct = int(self.mpct.value())
         self.s.merge_back_min = int(self.mback.value())
+        self.s.merge_radius_nm = int(self.mrad.value())
         self.s.ruins = bool(self.ruins.isChecked())
         self.s.shore_margin_m = int(self.shore.value())
         self.s.river_margin_m = int(self.river.value())

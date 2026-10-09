@@ -160,7 +160,7 @@ _PLAYER = {"recovered": ["You brought your jet home.", "You recovered safely."],
            "ejected": ["You ejected and are being recovered.", "You punched out. Search-and-rescue is on the way."],
            "lost": ["Your aircraft was lost. The squadron will write to your family if you are not found.",
                     "You did not return."],
-           "airborne": ["You were still airborne when the sortie was closed out."]}
+           "airborne": [""]}
 _FOLLOW = {"great": ["Command wants more of the same tomorrow.", "The enemy will feel this for days."],
            "good": ["The picture is improving.", "It was enough. Rest, and get ready for tomorrow."],
            "mixed": ["Intel will reassess before the next tasking.", "We take the gain and plan around the cost."],
@@ -187,6 +187,8 @@ def debrief_story(outcome: dict, state, rng: random.Random) -> str:
     if outcome.get("red_air_lost") and outcome.get("objective_type") not in (ObjectiveType.BARCAP.value, ObjectiveType.FLEET_DEFENSE.value):
         parts.append(f"{outcome['red_air_lost']} enemy aircraft were also destroyed.")
     parts.append(rng.choice(_LOSS[min(lost, 2)]) if lost < 3 else f"The package lost {lost} aircraft.")
-    parts.append(rng.choice(_PLAYER.get(outcome.get("player", "recovered"), _PLAYER["recovered"])))
+    pl = rng.choice(_PLAYER.get(outcome.get("player", "recovered"), _PLAYER["recovered"]))
+    if pl:                                              # nothing is said when you were still airborne at the end
+        parts.append(pl)
     parts.append(rng.choice(_FOLLOW[tone]))
     return "  ".join(parts) + f"\n\n-- {intel_officer(rng)}"

@@ -1,6 +1,7 @@
 """Session: the single API the GUI (and the smoke test) talk to. No Qt in here."""
 from __future__ import annotations
 import json
+import math
 import random
 import time
 from pathlib import Path
@@ -130,9 +131,11 @@ class Session:
             while comp[i] != i:
                 comp[i] = comp[comp[i]]; i = comp[i]
             return i
+        use_radius = self.settings.merge_mode == "area"
+        R = self.merge_radius_m()
         for i in range(len(pkgs)):
             for j in range(i + 1, len(pkgs)):
-                if packages_linked(st, pkgs[i], pkgs[j]):
+                if packages_linked(st, pkgs[i], pkgs[j]) or (use_radius and self._near(pkgs[i], pkgs[j], R)):
                     comp[root(j)] = root(i)
         groups: dict = {}
         for i in range(len(pkgs)):
@@ -159,33 +162,77 @@ class Session:
         opts = pkg.player_options(self.state.player.aircraft)
         return [f for f in opts if f.squadron_id == self.state.player.squadron_id] if squadron_only else opts
 
+    # ---- merge area: a circle around the package's target, kept inside the area where targets exist ---------------------
+    def merge_radius_m(self) -> float:
+        return max(5.0, float(getattr(self.settings, "merge_radius_nm", 50))) * 1852.0
+
+    def _pkg_xy(self, p: Package):
+        """The ground target of a package, or None for fleet packages (BARCAP, fleet defence), which are never folded by area."""
+        if p.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
+            return None
+        a = self.state.assets.get(p.objective.target_id)
+        return (a.x, a.y) if a is not None else None
+
+    def _near(self, a: Package, b: Package, R: float) -> bool:
+        pa, pb = self._pkg_xy(a), self._pkg_xy(b)
+        return pa is not None and pb is not None and math.hypot(pa[0] - pb[0], pa[1] - pb[1]) <= R
+
+    def merge_center(self, pkg: Package, R: float | None = None):
+        """The centre of the merge circle: your target, slid inward so the whole circle stays inside the box that holds every possible target
+        (destroyed sites included, so it does not shrink as the war goes on). Your own target always stays inside the circle."""
+        R = self.merge_radius_m() if R is None else R
+        t = self._pkg_xy(pkg)
+        if t is None:
+            return None
+        A = list(self.state.assets.values())
+        x0, x1 = min(a.x for a in A), max(a.x for a in A)
+        y0, y1 = min(a.y for a in A), max(a.y for a in A)
+        cx = min(max(t[0], x0 + R), x1 - R) if (x1 - x0) >= 2 * R else (x0 + x1) / 2
+        cy = min(max(t[1], y0 + R), y1 - R) if (y1 - y0) >= 2 * R else (y0 + y1) / 2
+        d = math.hypot(t[0] - cx, t[1] - cy)
+        if d > R:                                     # never push your own target out of the circle
+            cx, cy = t[0] + (cx - t[0]) * R / d, t[1] + (cy - t[1]) * R / d
+        return cx, cy
+
     def merge_candidates(self, pkg: Package) -> list:
-        """Packages that would be folded into a mission built around `pkg`: same area, starting up to 30 minutes AFTER it, or up to
-        `merge_back_min` minutes BEFORE it (those are already underway when the mission starts), at most two extra (three packages in all),
-        the ones closest in time first. Empty when merging is off."""
+        """Packages folded into a mission built around `pkg`: every package whose target lies inside the merge circle (Settings: radius, default
+        50 nm, centred by merge_center), starting up to 30 minutes AFTER it or up to `merge_back_min` minutes BEFORE it (those are already underway
+        when the mission starts). At most six, closest to the centre first, so the unit limit drops the furthest first. Empty when merging is off."""
         if self.settings.merge_mode != "area":
             return []
-        from .packages import packages_linked
         hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
         back = max(0, int(getattr(self.settings, "merge_back_min", 15)))
-        out = [p for p in self.packages() if p.number != pkg.number and -back <= hm(p) - hm(pkg) <= 30
-               and any(not f.tag for f in p.flights) and packages_linked(self.state, pkg, p)]
-        out.sort(key=lambda p: (abs(hm(p) - hm(pkg)), hm(p), p.number))
-        out = out[:2]
-        out.sort(key=lambda p: (hm(p), p.number))
-        return out
+        R = self.merge_radius_m()
+        c = self.merge_center(pkg, R)
+        if c is None:
+            return []
+        out = []
+        for p in self.packages():
+            t = self._pkg_xy(p)
+            if p.number == pkg.number or t is None or not (-back <= hm(p) - hm(pkg) <= 30) or not any(not f.tag for f in p.flights):
+                continue
+            d = math.hypot(t[0] - c[0], t[1] - c[1])
+            if d <= R:
+                out.append((d, hm(p), p.number, p))
+        out.sort(key=lambda r: r[:3])
+        return [r[3] for r in out[:6]]
 
     def ruin_candidates(self, pkg: Package, extras: list) -> list:
         """Earlier packages of the same day, same area, that may already have struck when your mission starts: their targets are shown as ruins.
         The closest in time first, at most four looked at (the builder shows at most three)."""
         if not getattr(self.settings, "ruins", True) or self.settings.merge_mode != "area":
             return []
-        from .packages import packages_linked
         hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
         have = {x.number for x in extras}
+        R = self.merge_radius_m()
+        c = self.merge_center(pkg, R)
+        if c is None:
+            return []
+        def inside(p):
+            t = self._pkg_xy(p)
+            return t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= R
         out = [p for p in self.packages() if p.number != pkg.number and p.number not in have and hm(p) < hm(pkg)
-               and any(not f.tag for f in p.flights) and p.objective.type not in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
-               and packages_linked(self.state, pkg, p)]
+               and any(not f.tag for f in p.flights) and inside(p)]
         out.sort(key=lambda p: (-hm(p), p.number))
         return out[:4]
 

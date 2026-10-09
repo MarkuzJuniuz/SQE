@@ -66,8 +66,10 @@ class AppSettings:
     shore_margin_m: int = 1500            # ground sites keep this far from the sea and lakes
     river_margin_m: int = 100             # ...and this far from rivers and shallow water (terrain scan only)
     ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
+    merge_radius_nm: int = 50             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in
     merge_back_min: int = 15              # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
-    merge_max_units: int = 150            # a merged mission is trimmed until it holds no more than this many units
+    merge_max_units: int = 250            # a merged mission is trimmed until it holds no more than this many units
+    unit_cap_v2: bool = False             # the old default (150) has been moved to the new one (250) once
     merge_enemy_pct: int = 100            # folded packages: enemy fighters = the biggest package's + this % of every other folded package's (100 = full sum)
     enemy_cap_engage_nm: int = 50         # enemy patrol fighters will not chase further than this from where they are (0 = unlimited)
     friendly_cap_engage_nm: int = 50      # same for your HAVCAP / BASECAP (0 = unlimited)
@@ -119,6 +121,10 @@ class AppSettings:
             try:
                 raw = json.loads(f.read_text())
                 s = cls(**{k: v for k, v in raw.items() if k in cls.__dataclass_fields__ and k != "persist"})
+                if not raw.get("unit_cap_v2"):
+                    if raw.get("merge_max_units") == 150:
+                        s.merge_max_units = 250   # still on the old default: move to the new one (an explicit different value is kept)
+                    s.unit_cap_v2 = True
                 if "patch_asked" not in raw and "auto_patch_scripting" in raw:
                     s.patch_asked = True          # a settings file from before the question existed: the choice stands
             except (OSError, ValueError):

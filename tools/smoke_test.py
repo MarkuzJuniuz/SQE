@@ -210,6 +210,29 @@ def main():
         print("[gui] settings and new-campaign dialogs build; scan mission button works")
     except ImportError:
         print("[gui] PySide6 not installed here; dialogs not exercised")
+    # ---- v0.13: merge circle (radius, edge-shifted centre) -------------------------------------------------------------------
+    import math as _m
+    rs2 = Session(AppSettings(dcs_saves=str(TMP / "rad"), persist=False)); (TMP / "rad").mkdir(exist_ok=True)
+    rs2.new("dev", "F-14BU", 3, seed=1)
+    _R = rs2.merge_radius_m(); assert abs(_R - 50 * 1852.0) < 1
+    _A = list(rs2.state.assets.values())
+    _bx = (min(a.x for a in _A), max(a.x for a in _A), min(a.y for a in _A), max(a.y for a in _A))
+    _n = 0
+    for p_ in rs2.packages():
+        c_ = rs2.merge_center(p_)
+        if c_ is None:
+            continue
+        t_ = rs2._pkg_xy(p_)
+        assert _m.hypot(t_[0] - c_[0], t_[1] - c_[1]) <= _R + 1, "your own target must stay inside the circle"
+        for x_ in rs2.merge_candidates(p_):
+            tx_ = rs2._pkg_xy(x_)
+            assert _m.hypot(tx_[0] - c_[0], tx_[1] - c_[1]) <= _R + 1
+            _n += 1
+    from sqe import narrative as _nar
+    import random as _rd
+    _story = _nar.debrief_story({"objective": "X", "objective_type": "STRIKE", "target_damage": 0.5, "blue_air_lost": 0, "player": "airborne"}, rs2.state, _rd.Random(2))
+    assert "airborne" not in _story and "  " in _story and "   " not in _story
+    print(f"[radius] 50 nm circle: own target always inside, {_n} folded candidates all inside; debrief says nothing about being airborne")
     # ---- v0.8: SEAD/DEAD split, suppression, depth tiers, front, garrisons ------------------------------------------------
     import random
     from sqe.models import AssetKind, Role
