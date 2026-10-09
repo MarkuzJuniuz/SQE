@@ -138,7 +138,7 @@ class SettingsDialog(QDialog):
         bb.rejected.connect(self.reject); lay.addWidget(bb)
 
     def _tm_refresh(self):
-        from . import terrainmask as _tmk
+        from .. import terrainmask as _tmk
         _tmk.configure(self.s.sqe_dir if self.s.dcs_saves else None)
         self.tm.setText("Ground sites stay this far from the sea and lakes, and the second value from rivers and shallow water (rivers need the scan). Terrain scan: " + _tmk.info() +
                         ". To measure the real map once: create the scan mission, start it in DCS (Fly), wait for COMPLETE.")

@@ -194,6 +194,22 @@ def main():
     assert "land.getSurfaceType" in _tp.probe_lua() and "SQE_terrain_caucasus" in _tp.probe_lua()
     _tm.configure(None)
     print("[terrain] mask read, river margin and off-map fallback OK")
+    # ---- GUI dialogs build (offscreen) and the scan button works --------------------------------------------------------------
+    try:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication, QMessageBox
+        _app = QApplication.instance() or QApplication([])
+        from sqe.gui.dialogs import SettingsDialog, NewCampaignDialog
+        (TMP / "gsv").mkdir(exist_ok=True)
+        _gs = AppSettings(dcs_saves=str(TMP / "gsv"), persist=False)
+        _dlg = SettingsDialog(_gs)
+        QMessageBox.information = staticmethod(lambda *a, **k: None)
+        _dlg._make_probe(); _dlg._save()
+        assert (TMP / "gsv" / "Missions" / "SQE_TerrainScan.miz").exists()
+        NewCampaignDialog()
+        print("[gui] settings and new-campaign dialogs build; scan mission button works")
+    except ImportError:
+        print("[gui] PySide6 not installed here; dialogs not exercised")
     # ---- v0.8: SEAD/DEAD split, suppression, depth tiers, front, garrisons ------------------------------------------------
     import random
     from sqe.models import AssetKind, Role

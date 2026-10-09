@@ -1,3 +1,6 @@
+## v0.12.4
+* Fix: Settings crashed on opening (wrong import for the terrain scan status line). The smoke test now builds the Settings and New Campaign dialogs so this kind of slip is caught.
+
 ## v0.12.3
 * River margin is now a setting (Settings > Shore margin, second box) and defaults to 100 m instead of 400 m: sites only keep out of the water and off the very bank, so batteries can sit near streams. Needs the terrain scan; the sea margin is unchanged (1500 m).
 
