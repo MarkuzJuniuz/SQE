@@ -4,7 +4,7 @@
 
 **A dynamic campaign for DCS World that gets out of your way.** An abstracted war runs in the background and issues a daily tasking order. You pick one flight; SQE builds a lightweight mission with only that package, its support and the enemy it will meet. Fly it, and the results go back into the war.
 
-Low unit counts mean it runs smoothly in VR. The feel is Strike Fighters / Falcon BMS: you fly your sortie, the war goes on around you.
+Low unit counts mean it runs smoothly in VR. The feel is Strike Fighters: you fly your sortie, the war goes on around you.
 
 <p align="center"><img src="docs/images/feature-strip.png" alt="Tasking order, debrief and theatre map" width="100%"></p>
 
@@ -12,7 +12,7 @@ Low unit counts mean it runs smoothly in VR. The feel is Strike Fighters / Falco
 
 * **A war that moves without you.** Airfields, SAM sites, armour columns and the fleet are simulated in the background; strikes, SEAD/DEAD, close air support and counter-air all change the picture.
 * **One flight, one mission.** Choose from the day's tasking order; only that package and the relevant OpFor are built. Packages flying nearby can be folded in (merge radius, default 50 nm).
-* **Proper packages.** Marshal/push/TOT timeline, escorts, SEAD, tankers, briefing and kneeboard.
+* **Proper packages.** BMS-style marshal/push/TOT timeline, escorts, SEAD, tankers, briefing and kneeboard.
 * **Results that count.** A debrief hook reports kills and losses back through `SQE_state.json`; damaged sites stay damaged.
 * **Sites that make sense.** Enemy sites are kept on land with an optional scan of your own DCS terrain.
 
@@ -46,4 +46,4 @@ Start here: **docs/GUIDE.md**   |   Sample briefing: docs/SAMPLE_BRIEFING.txt
 ## Inspiration
 
 Many of SQE's ideas are inspired by community campaign tools, especially DCS Liberation and DCS Retribution (a front line that moves as targets fall, packages with escorts and SEAD,
-the MissionScripting approach for results, AI fuel management), and by the feel of Falcon BMS and the Strike Fighters series. SQE contains no code from them and is not affiliated with them.
+the MissionScripting approach for results, AI fuel management), and by the feel of the Strike Fighters series. SQE contains no code from them and is not affiliated with them.
