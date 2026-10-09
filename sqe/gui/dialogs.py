@@ -131,6 +131,13 @@ class SettingsDialog(QDialog):
         self.ruins.setChecked(bool(getattr(settings, "ruins", True))); lay.addWidget(self.ruins)
         h = QLabel("Earlier packages in the same area that struck before your start leave smoking ruins (at most three sites, a few plumes each). The result is "
                    "decided when you build the mission and applied at the debrief."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
+        self.carc = QCheckBox("Carcasses: wrecks at damaged and destroyed ground sites near your route")
+        self.carc.setChecked(bool(getattr(settings, "carcasses", True))); lay.addWidget(self.carc)
+        row = QHBoxLayout(); lb = QLabel("Wreck weight"); lb.setMinimumWidth(120)
+        self.cw = QSpinBox(); self.cw.setRange(5, 100); self.cw.setSuffix(" % of a unit"); self.cw.setValue(int(getattr(settings, "carcass_weight_pct", 25)))
+        row.addWidget(lb); row.addWidget(self.cw); row.addStretch(1); lay.addLayout(row)
+        h = QLabel("Wrecks are dead static objects: no AI, no weapons. Each counts this share of a unit toward the unit limit. When a mission is over the limit the "
+                   "furthest wrecks from your route are dropped first, before any flight is touched. Wrecks stay where they are from day to day."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
         row = QHBoxLayout(); lb = QLabel("Enemy air sum"); lb.setMinimumWidth(120)
         self.mpct = QSpinBox(); self.mpct.setRange(0, 100); self.mpct.setSuffix(" %"); self.mpct.setValue(int(settings.merge_enemy_pct))
         row.addWidget(lb); row.addWidget(self.mpct); row.addStretch(1); lay.addLayout(row)
@@ -184,6 +191,7 @@ class SettingsDialog(QDialog):
         self.s.merge_back_min = int(self.mback.value())
         self.s.merge_radius_nm = int(self.mrad.value())
         self.s.ruins = bool(self.ruins.isChecked())
+        self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.shore_margin_m = int(self.shore.value())
         self.s.river_margin_m = int(self.river.value())

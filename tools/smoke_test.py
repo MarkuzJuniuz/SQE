@@ -412,6 +412,39 @@ def main():
     sk = ss.skip_day()
     assert any(r_.get("scrubbed") for r_ in sk["results"])
     print(f"[weather] climate odds, no jumps, repeatable; gate swaps lasers for JDAM and imaging Mavericks off; overcast build clean; storm scrubs {len(scr)} package(s), leaves CAP alone")
+
+    # ---- carcasses: stable layouts, health -> count, weight and trim, off switch ----------------------------------------------------
+    from sqe import carcass as _cc
+    from sqe.mission_builder import SITES as _SITES, SOFT as _SOFT
+    cs = mk(); cs.new("Carc", "FA-18C", 2, seed=5)
+    sam = next(a_ for a_ in cs.state.assets.values() if a_.kind.value == "SAM" or str(a_.kind).endswith("SAM"))
+    okf = lambda x, y: True
+    sam.health = 0.5
+    w50 = _cc.wrecks_for(sam, cs.state.campaign_id, (sam.x, sam.y), _SITES, _SOFT, okf)
+    sam.health = 0.0
+    w00 = _cc.wrecks_for(sam, cs.state.campaign_id, (sam.x, sam.y), _SITES, _SOFT, okf)
+    assert 0 < len(w50) < len(w00) <= _cc.MAX_PER_SITE and w00[:len(w50)] == w50, "a worse site must only ADD wrecks, none may move"
+    assert w00 == _cc.wrecks_for(sam, cs.state.campaign_id, (sam.x, sam.y), _SITES, _SOFT, okf), "wreck layout must be repeatable"
+    assert _cc.stable_center(sam, cs.state.campaign_id, okf) == _cc.stable_center(sam, cs.state.campaign_id, okf)
+    sam.health = 1.0
+    assert _cc.wrecks_for(sam, cs.state.campaign_id, (sam.x, sam.y), _SITES, _SOFT, okf) == []
+    n_by = {}
+    for tag, kw in (("on", {}), ("off", {"carcasses": False}), ("tight", {"merge_max_units": 1})):
+        ws_ = mk(); ws_.new("Carc2", "FA-18C", 2, seed=5)
+        for a_ in ws_.state.assets.values():
+            if a_.kind.value != "AIRFIELD" and not str(a_.kind).endswith("AIRFIELD"):
+                a_.health = 0.0 if a_.id.endswith(("_0", "_1")) else a_.health
+        for k_, v_ in kw.items():
+            setattr(ws_.settings, k_, v_)
+        p_ = next(p0 for p0 in ws_.packages() if ws_.flyable(p0) and p0.objective.type.value not in ("BARCAP", "FLEET_DEFENSE") and ws_.state.assets[p0.objective.target_id].health > 0)
+        r_ = ws_.fly(p_.number, ws_.flyable(p_)[0].id)
+        with zipfile.ZipFile(ws_.settings.sortie_miz) as z_:
+            mis = z_.read("mission").decode("utf-8", "replace")
+        n_by[tag] = (r_.counts.get("wrecks", 0), mis.count("WRECK "))
+    assert n_by["on"][0] > 0 and n_by["on"][1] >= n_by["on"][0], n_by
+    assert n_by["off"] == (0, 0), n_by
+    assert n_by["tight"][0] == 0, n_by
+    print(f"[carcass] layouts repeat and only grow as a site worsens; {n_by['on'][0]} wrecks built; off = none; unit limit trims them")
     print("SMOKE TEST PASSED")
 
 

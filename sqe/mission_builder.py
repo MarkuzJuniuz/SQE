@@ -23,7 +23,7 @@ from . import theatres, weather
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import briefing as brief, callsigns
+from . import briefing as brief, callsigns, carcass
 from . import seacheck as seac
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
@@ -66,6 +66,10 @@ class MissionOptions:
     friendly_cap_engage_nm: int = 50    # HAVCAP / BASECAP likewise (0 = unlimited)
     f14_special_names: bool = True
     weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
+    carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
+    carcass_weight: float = 0.25        # how much of a live unit one wreck counts toward the unit limit
+    carcass_range_nm: int = 40          # only sites this close to the route get wrecks
+    max_units: int = 250                # the mission's unit limit (wrecks are trimmed, furthest first, to fit under it)
     merge_enemy_pct: int = 100          # folded packages: biggest enemy-air need + this % of the others'
     carrier_min_enemy_nm: int = 150     # the carrier group is moved back along the line of retreat until it is at least this far from the fight
     player_is_client: bool = False
@@ -231,6 +235,7 @@ class MissionBuilder:
 
         # ---- enemy ground: everything the route touches is live from the first second ----------------------------------
         polyline = [(pbase.x, pbase.y), geom.mshl, geom.push, geom.ip, (tx, ty), geom.egr]
+        self._poly = polyline
         self._spawn_opfor_ground(package, tx, ty, manifest, polyline)
 
         # ---- radios + support -----------------------------------------------------------------------------------------
@@ -281,6 +286,7 @@ class MissionBuilder:
         merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock, ruins)
         manifest.cur_pkg = ""
         self._dry_pass()
+        self._place_carcasses()
         manifest.merged = [{k: v for k, v in m_.items() if k in ("id", "number", "objective", "type", "tot_s")} for m_ in merged if not m_.get("struck")]
         bx, by = geom.push
         m.coalition["blue"].bullseye = {"x": bx, "y": by}
@@ -540,13 +546,49 @@ class MissionBuilder:
             self.warns.append(f"could not set the weather ({ex}); the mission keeps pydcs's clear default")
 
     def _counts(self) -> dict:
-        g = u = 0
+        """Units for the VR budget. A dead static (wreck) is cheap, so it counts `carcass_weight` of a unit; 'wrecks' is how many there are."""
+        g = u = w = 0
         for coal in self.m.coalition.values():
             for c in coal.countries.values():
                 for attr in ("plane_group", "helicopter_group", "vehicle_group", "ship_group", "static_group"):
                     for grp in getattr(c, attr, []):
+                        if attr == "static_group" and getattr(grp, "dead", False):
+                            w += len(grp.units)
+                            continue
                         g += 1; u += len(grp.units)
-        return {"groups": g, "units": u}
+        return {"groups": g, "units": u + int(math.ceil(w * self.o.carcass_weight)), "wrecks": w}
+
+    def _place_carcasses(self) -> None:
+        """Wrecks for every damaged or destroyed ground site near the route. Trimmed to what fits under the unit limit: the furthest
+        from the route go first, and this runs after everything live is placed, so wrecks never push a flight out."""
+        o, st = self.o, self.state
+        if not o.carcasses:
+            return
+        w = max(0.05, float(o.carcass_weight))
+        budget = int(max(0, o.max_units - self._counts()["units"]) / w)
+        if budget <= 0:
+            return
+        ok = lambda x, y: seac.site_ok(x, y, 60.0)
+        cands = []
+        for a in st.assets.values():
+            if a.kind == AssetKind.AIRFIELD or a.health >= 0.999:
+                continue
+            dnm = tm.poly_dist(a.x, a.y, self._poly) / NM
+            if dnm > o.carcass_range_nm:
+                continue
+            centre = self.site_pos.get(a.id) or carcass.stable_center(a, st.campaign_id, ok)
+            for k, wr in enumerate(carcass.wrecks_for(a, st.campaign_id, centre, SITES, SOFT, ok)):
+                cands.append((dnm, a.id, k, wr))
+        cands.sort(key=lambda c: (c[0], c[1], c[2]))
+        placed = 0
+        for dnm, aid, k, wr in cands[:budget]:
+            vt = _vt(wr["type"])
+            if vt is None:
+                continue
+            self.m.static_group(self.red, f"WRECK {aid} {k + 1}", vt, mapping.Point(wr["x"], wr["y"], self.t), heading=wr["hdg"], dead=True)
+            placed += 1
+        if len(cands) > placed:
+            self.warns.append(f"{len(cands) - placed} wrecks left out to stay under the {o.max_units}-unit limit (furthest from your route first)")
 
     def _target_xy(self, package):
         o = package.objective

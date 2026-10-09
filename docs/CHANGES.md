@@ -1,3 +1,9 @@
+## v0.16.0
+* Carcasses. Ground sites the war has damaged or destroyed now show burnt-out wrecks (SAM launchers, trucks, tanks) near your route, next to the smoking ruins. A site that is half gone shows about half its vehicles as wrecks; a destroyed site shows all of them (at most six per site).
+* The layout is fixed per site: it is seeded by the campaign and the site, not by the day or the sortie, so a wreck stays where it was and a site that gets worse only ADDS wrecks. A damaged site that still has live vehicles puts its wrecks with them; a destroyed site uses a fixed spot.
+* Cheap by design: wrecks are dead static objects (no AI, no weapons, no radar), and each counts 25% of a unit toward the unit limit (Settings > Wreck weight). They are placed last, so when a mission is over the limit the wrecks furthest from your route are dropped first and no flight is touched. Only sites within 40 nm of the route get wrecks. Switch them off with Settings > Carcasses.
+* Untested in DCS itself: SQE writes the wrecks as dead statics using the vehicle's own type. If DCS shows nothing, or shows a live-looking vehicle, tell me which. With nothing damaged (a fresh campaign) nothing changes.
+
 ## v0.15.0
 * Weather (Settings > Weather). **Clear** is still the default and is exactly what SQE always built. **Procedural** follows the theatre's climate: each month has its own odds of clear, scattered, broken, overcast, rain and storm, and the weather changes slowly from day to day (a day is always the same as yesterday or one step different, never clear to storm overnight). Inside a day it drifts from morning to the next morning, so each sortie sees the weather at its own start time. You can also pin one weather for the whole campaign (scattered, broken, overcast, rain, storms).
 * Everything is seeded from the campaign and the day, so the plan, the mission and the briefing agree and a saved campaign shows the same weather every time you open it.

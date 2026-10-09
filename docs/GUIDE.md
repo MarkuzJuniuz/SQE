@@ -89,6 +89,9 @@ First launch:
 
 ---------------------------------------------------------------------------------------------------
 
+## Carcasses (v0.16)
+Damaged and destroyed ground sites within 40 nm of your route show wrecks. They are fixed per site (the same wreck in the same spot every sortie) and a worse site only adds wrecks. Each counts 25% of a unit toward the unit limit and the furthest are dropped first when a mission is too heavy. Settings: Carcasses on/off and Wreck weight.
+
 ## 4. Test checklist inside DCS (please report what fails)
 
 I cannot run DCS where I build this. Always run `python tools/smoke_test.py` first (it is isolated and cleans up after itself).
