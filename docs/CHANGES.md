@@ -1,3 +1,6 @@
+## v0.12.6
+* Every sortie build now says in its warnings whether ground sites were placed with the DCS terrain scan or only with the rough built-in coastline, so it is clear which one produced a given mission.
+
 ## v0.12.5
 * Creating the terrain scan mission no longer prints pydcs's harmless 'Failed to parse Lua code ... description.lua' lines (a livery file in your DCS install that pydcs cannot read; it is skipped either way).
 
