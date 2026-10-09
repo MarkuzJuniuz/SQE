@@ -26,13 +26,19 @@ class NewCampaignDialog(QDialog):
         t = QLabel("New Campaign"); t.setObjectName("title"); lay.addWidget(t)
         form = QFormLayout(); form.setSpacing(10)
         self.name = QLineEdit("Iron Tide"); form.addRow("Campaign name", self.name)
+        from .. import theatres as _th
+        self.th = QComboBox()
+        for tid, tname in _th.available().items():
+            self.th.addItem(tname, tid)
+        if self.th.count() > 1:                       # the picker only appears once there is more than one theatre pack
+            form.addRow("Theatre", self.th)
         self.ac = QComboBox()
         for k, s in AIRCRAFT.items():
             if s.player_flyable:
                 self.ac.addItem(f"{s.display}  ({s.service}, {'carrier' if s.service == 'Navy' else 'land-based'})", k)
         form.addRow("You fly", self.ac)
         self.sqd = QComboBox(); form.addRow("Your squadron", self.sqd)
-        self.ac.currentIndexChanged.connect(self._squads); self._squads()
+        self.ac.currentIndexChanged.connect(self._squads); self.th.currentIndexChanged.connect(self._squads); self._squads()
         self.lvl = QComboBox()
         for n, d in LEVELS.items():
             self.lvl.addItem(d.name, n)
@@ -59,13 +65,13 @@ class NewCampaignDialog(QDialog):
     def _squads(self):
         from ..scenario import squadron_options
         self.sqd.clear()
-        for sid, label in squadron_options(self.ac.currentData()):
+        for sid, label in squadron_options(self.ac.currentData(), self.th.currentData() or "caucasus"):
             self.sqd.addItem(label, sid)
 
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
                 "start_date": f"2004-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(),
-                "squadron": self.sqd.currentData()}
+                "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus"}
 
 
 class SettingsDialog(QDialog):
@@ -149,7 +155,7 @@ class SettingsDialog(QDialog):
         sc = _tmk.scanned(self.s.sqe_dir if self.s.dcs_saves else None)
         have = ", ".join(f"{t} (scanned {dte})" for t, dte in sc) if sc else "none yet"
         self.tm.setText("Ground sites stay this far from the sea and lakes, and the second value from rivers and shallow water (rivers need the scan). "
-                        f"Terrain scans: {have}. SQE currently builds campaigns on the Caucasus map only. Status: " + _tmk.info() +
+                        f"Terrain scans: {have}. Status: " + _tmk.info() +
                         ". To measure the real map once: create the scan mission, start it in DCS (Fly), wait for COMPLETE.")
 
     def _make_probe(self):
@@ -306,7 +312,9 @@ def create_scan_mission(parent, settings, saves_text: str = "") -> bool:
     if not saves:
         QMessageBox.warning(parent, "Terrain scan", "Set the DCS Saved Games folder first."); return False
     try:
-        p = terrainprobe.make_probe(Path(S.native(saves)) / "Missions" / "SQE_TerrainScan.miz")
+        from .. import theatres as _th
+        tid = _th.active()["id"]
+        p = terrainprobe.make_probe(Path(S.native(saves)) / "Missions" / ("SQE_TerrainScan.miz" if tid == "caucasus" else f"SQE_TerrainScan_{tid}.miz"))
     except Exception as ex:
         QMessageBox.warning(parent, "Terrain scan", f"Could not create the mission: {ex}"); return False
     QMessageBox.information(parent, "Terrain scan",

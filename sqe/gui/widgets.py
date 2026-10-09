@@ -28,11 +28,12 @@ class StatCard(QFrame):
 
 
 def _load_geo():
-    from ..geo_data import GEO
-    return GEO
+    from .. import theatres
+    return theatres.active()["id"], theatres.geo()
 
 
 _GEO = None
+_GEO_ID = None
 SEA, LAND, COAST, BORDER = "#0a141f", "#16212e", "#33485f", "#3d5169"
 
 
@@ -49,9 +50,10 @@ class MapView(QWidget):
         self.rings = on; self.update()
 
     def paintEvent(self, _):
-        global _GEO
-        if _GEO is None:
-            _GEO = _load_geo()
+        global _GEO, _GEO_ID
+        from .. import theatres
+        if _GEO is None or _GEO_ID != theatres.active()["id"]:
+            _GEO_ID, _GEO = _load_geo()
         from ..briefing import RANGE_NM
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
         p.fillRect(self.rect(), QColor(SEA))

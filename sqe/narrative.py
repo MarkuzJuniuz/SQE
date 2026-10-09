@@ -3,22 +3,16 @@ Hand-written templates (no runtime AI). Add variants to any list to widen the po
 from __future__ import annotations
 import random
 from .models import ObjectiveType
+from . import theatres
 from .war import totals
 
-TITLE = "Operation IRON TIDE"
+def __getattr__(name):
+    """TITLE and BACKGROUND come from the active theatre pack (so `narrative.TITLE` keeps working)."""
+    if name in ("TITLE", "BACKGROUND"):
+        from . import theatres
+        return theatres.active()[name.lower()]
+    raise AttributeError(name)
 
-BACKGROUND = (
-    "After months of border incidents and a collapsed ceasefire, the Northern Federation's Southern Military "
-    "District crossed the frontier in force. Its armored columns are pushing south along the Black Sea coast "
-    "toward the Georgian airbase at Senaki, supported by air regiments at Sukhumi, Gudauta, Sochi and across the "
-    "Kuban, and covered by a layered air-defence network.\n\n"
-    "A coalition task force has answered the request for assistance. The USS Stennis carrier air wing operates "
-    "from the eastern Black Sea; U.S. Air Force squadrons operate from Senaki, Kutaisi and Kobuleti. You fly with "
-    "the Navy's Tomcat community or with the Air Force, as part of a joint air campaign.\n\n"
-    "Coalition command's intent is plain: stop the armored advance, win control of the air, take the enemy "
-    "air-defence network apart, and then strike the headquarters and logistics that keep the offensive moving. "
-    "Every day the war is planned; every day the packages go out. Yours is the one you fly yourself."
-)
 
 PHASES = [
     ("Phase 1 - Stop the Advance and Contest the Air",
@@ -49,7 +43,7 @@ def sitrep(state) -> list:
     lines = [f"Enemy air arm: {t['ea']} of {t['ez']} aircraft serviceable ({t['enemy_air']:.0%}).",
              f"Air-defence network: {t['iads']:.0%} of sites operational.",
              f"Armored advance: columns at {t['armor']:.0%} strength.",
-             f"The front: {['Abkhazia and the forward belt', 'the coast and the north Caucasus', 'the enemy deep rear'][min(2, state.front)]} (stage {min(3, state.front + 1)} of 3).",
+             f"The front: {theatres.active()['front_desc'][min(2, state.front)]} (stage {min(3, state.front + 1)} of 3).",
              f"Enemy command posts: {t['c2']:.0%} intact.",
              f"Coalition air component: {t['fa']} of {t['fz']} aircraft serviceable ({t['friendly_air']:.0%})."]
     return lines

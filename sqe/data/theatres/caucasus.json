@@ -1,0 +1,321 @@
+{
+ "id": "caucasus",
+ "name": "Caucasus",
+ "dcs_terrain": "Caucasus",
+ "lat": 42.5,
+ "lon": 41.5,
+ "tz": 4.0,
+ "temp_c": [
+  6,
+  6,
+  9,
+  12,
+  17,
+  21,
+  24,
+  24,
+  20,
+  16,
+  11,
+  8
+ ],
+ "geo": "caucasus_geo.json",
+ "scan": {
+  "file": "SQE_terrain_caucasus.json",
+  "x0": -430000,
+  "x1": 70000,
+  "y0": 190000,
+  "y1": 970000,
+  "step": 250,
+  "probe_airport": "Sochi-Adler"
+ },
+ "carrier": {
+  "id": "cvn74",
+  "name": "USS Stennis (CVN-74)",
+  "short": "USS Stennis",
+  "from_airport": "Kobuleti",
+  "heading": 270,
+  "distance_m": 100000
+ },
+ "blue_fields": [
+  {
+   "id": "senaki",
+   "name": "Senaki-Kolkhi AB",
+   "airport": "Senaki-Kolkhi"
+  },
+  {
+   "id": "kutaisi",
+   "name": "Kutaisi AB",
+   "airport": "Kutaisi"
+  },
+  {
+   "id": "kobuleti",
+   "name": "Kobuleti AB",
+   "airport": "Kobuleti"
+  },
+  {
+   "id": "batumi",
+   "name": "Batumi AB",
+   "airport": "Batumi"
+  }
+ ],
+ "red_fields": [
+  {
+   "id": "ab_sukhumi",
+   "name": "Sukhumi-Babushara",
+   "airport": "Sukhumi-Babushara",
+   "value": 7
+  },
+  {
+   "id": "ab_gudauta",
+   "name": "Gudauta",
+   "airport": "Gudauta",
+   "value": 8
+  },
+  {
+   "id": "ab_sochi",
+   "name": "Sochi-Adler",
+   "airport": "Sochi-Adler",
+   "value": 9
+  },
+  {
+   "id": "ab_gelen",
+   "name": "Gelendzhik",
+   "airport": "Gelendzhik",
+   "value": 5
+  },
+  {
+   "id": "ab_krymsk",
+   "name": "Krymsk",
+   "airport": "Krymsk",
+   "value": 8
+  },
+  {
+   "id": "ab_maykop",
+   "name": "Maykop-Khanskaya",
+   "airport": "Maykop-Khanskaya",
+   "value": 9
+  },
+  {
+   "id": "ab_nalchik",
+   "name": "Nalchik",
+   "airport": "Nalchik",
+   "value": 6
+  },
+  {
+   "id": "ab_beslan",
+   "name": "Beslan",
+   "airport": "Beslan",
+   "value": 6
+  },
+  {
+   "id": "ab_mozdok",
+   "name": "Mozdok",
+   "airport": "Mozdok",
+   "value": 7
+  }
+ ],
+ "red_keep": {
+  "1": [
+   "ab_sochi",
+   "ab_sukhumi"
+  ]
+ },
+ "wing_weight": {
+  "ab_sukhumi": 1,
+  "ab_gudauta": 2,
+  "ab_sochi": 3,
+  "ab_krymsk": 3,
+  "ab_maykop": 4,
+  "ab_nalchik": 2,
+  "ab_beslan": 2,
+  "ab_gelen": 1
+ },
+ "field_tier": {
+  "ab_sukhumi": 2,
+  "ab_gudauta": 2,
+  "ab_sochi": 3,
+  "ab_nalchik": 3,
+  "ab_beslan": 3,
+  "ab_mozdok": 3,
+  "ab_maykop": 4,
+  "ab_gelen": 4,
+  "ab_krymsk": 4
+ },
+ "bomber_base": "ab_mozdok",
+ "squadrons": [
+  {
+   "id": "vf_31",
+   "name": "VF-31 'Tomcatters'",
+   "aircraft": "F-14BU",
+   "base": "cvn74",
+   "count": 12,
+   "callsign": "Springfield"
+  },
+  {
+   "id": "vf_213",
+   "name": "VF-213 'Black Lions'",
+   "aircraft": "F-14BU",
+   "base": "cvn74",
+   "count": 12,
+   "callsign": "Uzi"
+  },
+  {
+   "id": "vfa_37",
+   "name": "VFA-37 'Ragin' Bulls'",
+   "aircraft": "FA-18C",
+   "base": "cvn74",
+   "count": 12,
+   "callsign": "Hornet"
+  },
+  {
+   "id": "vfa_105",
+   "name": "VFA-105 'Gunslingers'",
+   "aircraft": "FA-18C",
+   "base": "cvn74",
+   "count": 12,
+   "callsign": "Squid"
+  },
+  {
+   "id": "fs_77",
+   "name": "77th FS 'Gamblers'",
+   "aircraft": "F-16C",
+   "base": "senaki",
+   "count": 18,
+   "callsign": "Viper"
+  },
+  {
+   "id": "fs_55",
+   "name": "55th FS 'Shooters'",
+   "aircraft": "F-16C",
+   "base": "kutaisi",
+   "count": 18,
+   "callsign": "Cowboy"
+  },
+  {
+   "id": "fs_79",
+   "name": "79th FS 'Tigers'",
+   "aircraft": "F-16C",
+   "base": "batumi",
+   "count": 18,
+   "callsign": "Venom"
+  },
+  {
+   "id": "fs_27",
+   "name": "27th FS 'Fighting Eagles'",
+   "aircraft": "F-15C",
+   "base": "kutaisi",
+   "count": 18,
+   "callsign": "Enfield"
+  },
+  {
+   "id": "fs_94",
+   "name": "94th FS 'Hat in the Ring'",
+   "aircraft": "F-15C",
+   "base": "senaki",
+   "count": 18,
+   "callsign": "Dodge"
+  },
+  {
+   "id": "as_354",
+   "name": "354th FS 'Bulldogs'",
+   "aircraft": "A-10C",
+   "base": "kobuleti",
+   "count": 18,
+   "callsign": "Hawg"
+  },
+  {
+   "id": "as_75",
+   "name": "75th FS 'Flying Tigers'",
+   "aircraft": "A-10C",
+   "base": "batumi",
+   "count": 18,
+   "callsign": "Boar"
+  }
+ ],
+ "support_targets": [
+  {
+   "parent": "ab_maykop",
+   "id": "c2_maykop",
+   "name": "Southern Sector HQ (Maykop)",
+   "kind": "C2",
+   "airport": "Maykop-Khanskaya",
+   "dx": -9000,
+   "dy": 11000,
+   "value": 9
+  },
+  {
+   "parent": "ab_sochi",
+   "id": "c2_sochi",
+   "name": "Coastal Command Post (Sochi)",
+   "kind": "C2",
+   "airport": "Sochi-Adler",
+   "dx": 8000,
+   "dy": -9000,
+   "value": 8
+  },
+  {
+   "parent": "ab_krymsk",
+   "id": "fuel_krymsk",
+   "name": "Krymsk fuel depot",
+   "kind": "FUEL",
+   "airport": "Krymsk",
+   "dx": 6000,
+   "dy": 14000,
+   "value": 6
+  },
+  {
+   "parent": "ab_gudauta",
+   "id": "fuel_gudauta",
+   "name": "Gudauta fuel farm",
+   "kind": "FUEL",
+   "airport": "Gudauta",
+   "dx": -4000,
+   "dy": 9000,
+   "value": 5
+  },
+  {
+   "parent": "ab_beslan",
+   "id": "depot_beslan",
+   "name": "Beslan ammunition depot",
+   "kind": "DEPOT",
+   "airport": "Beslan",
+   "dx": 9000,
+   "dy": 8000,
+   "value": 5
+  },
+  {
+   "parent": "ab_nalchik",
+   "id": "depot_nalchik",
+   "name": "Nalchik ammunition depot",
+   "kind": "DEPOT",
+   "airport": "Nalchik",
+   "dx": -8000,
+   "dy": 6000,
+   "value": 4
+  }
+ ],
+ "front": {
+  "from_airport": "Sukhumi-Babushara",
+  "to_airport": "Senaki-Kolkhi"
+ },
+ "tier_labels": [
+  "",
+  "T1 front",
+  "T2 Abkhazia",
+  "T3 coast / north",
+  "T4 deep"
+ ],
+ "front_names": [
+  "Abkhazia front",
+  "coast and north Caucasus",
+  "deep strike"
+ ],
+ "front_desc": [
+  "Abkhazia and the forward belt",
+  "the coast and the north Caucasus",
+  "the enemy deep rear"
+ ],
+ "title": "Operation IRON TIDE",
+ "background": "After months of border incidents and a collapsed ceasefire, the Northern Federation's Southern Military District crossed the frontier in force. Its armored columns are pushing south along the Black Sea coast toward the Georgian airbase at Senaki, supported by air regiments at Sukhumi, Gudauta, Sochi and across the Kuban, and covered by a layered air-defence network.\n\nA coalition task force has answered the request for assistance. The USS Stennis carrier air wing operates from the eastern Black Sea; U.S. Air Force squadrons operate from Senaki, Kutaisi and Kobuleti. You fly with the Navy's Tomcat community or with the Air Force, as part of a joint air campaign.\n\nCoalition command's intent is plain: stop the armored advance, win control of the air, take the enemy air-defence network apart, and then strike the headquarters and logistics that keep the offensive moving. Every day the war is planned; every day the packages go out. Yours is the one you fly yourself."
+}

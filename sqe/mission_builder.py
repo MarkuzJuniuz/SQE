@@ -1,4 +1,4 @@
-"""Package -> SQE_Sortie.miz (Caucasus, 2004).
+"""Package -> SQE_Sortie.miz (terrain, date and airfields come from the campaign's theatre pack).
 
 * Your flight (and wingmen) sit hot on the catapult/runway; the F-14B(U) INS is pre-aligned.
 * Every other friendly flight is already airborne and holds at MARSHAL until PUSH (a clock time; nobody waits for anybody).
@@ -19,7 +19,7 @@ from pathlib import Path
 from dcs import action, condition, mapping, planes, ships, task, triggers, vehicles
 from dcs.mission import Mission, StartType
 from dcs.point import PointAction
-from dcs.terrain import Caucasus
+from . import theatres
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
@@ -49,7 +49,6 @@ KPH = 1.852
 F = VehicleGroup.Formation
 MAIN_TASK = {Role.CAP: task.CAP, Role.ESCORT: task.CAP, Role.SWEEP: task.FighterSweep, Role.SEAD: task.SEAD,
              Role.STRIKE: task.PinpointStrike, Role.CAS: task.CAS}
-TEMP_C = {1: 6, 2: 6, 3: 9, 4: 12, 5: 17, 6: 21, 7: 24, 8: 24, 9: 20, 10: 16, 11: 11, 12: 8}   # coastal Black Sea, approximate
 LASER = ["1688", "1687", "1686", "1685", "1684", "1683", "1682", "1681"]
 
 
@@ -172,7 +171,8 @@ class MissionBuilder:
         air_pkg.n_def = folded_n_def(package, extras, o.merge_enemy_pct)       # enemy air: the biggest package's need plus a share of the others'
         out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
 
-        m = Mission(Caucasus())
+        theatres.use(st.theatre)
+        m = Mission(theatres.terrain())
         self.m, self.t = m, m.terrain
         self.usa, self.red = m.country("USA"), m.country("Russia")
         date = st.campaign_date()
@@ -534,7 +534,7 @@ class MissionBuilder:
         w = m.weather
         try:
             w.clouds_density = 0; w.enable_fog = False; w.enable_dust = False; w.visibility_distance = 80000
-            w.season_temperature = float(TEMP_C[date.month]); w.qnh = 760
+            w.season_temperature = float(theatres.active()["temp_c"][date.month - 1]); w.qnh = 760
         except Exception:
             self.warns.append("could not set clear weather explicitly (pydcs defaults are already clear)")
 

@@ -1,13 +1,16 @@
 """A one-off DCS mission that measures the map. Fly it once (Fly > any slot): a script samples land.getSurfaceType over the whole
-theatre and writes <Saved Games>\\SQE\\SQE_terrain_caucasus.json, which terrainmask.py reads. The mission has nothing in it but one
-parked Su-25T (free with DCS World, like the Caucasus map); no Eagle Dynamics data is copied, only the answers DCS gives."""
+theatre and writes <Saved Games>\\SQE\\SQE_terrain_<theatre>.json, which terrainmask.py reads. The mission has nothing in it but one
+parked Su-25T (free with DCS World); no Eagle Dynamics data is copied, only the answers DCS gives. The area, grid and file name come
+from the active theatre pack (the "scan" block)."""
 from __future__ import annotations
 from pathlib import Path
 
-X0, X1, Y0, Y1, STEP = -430000, 70000, 190000, 970000, 250      # x north, y east: Black Sea coast to Mozdok, Maykop to Tbilisi
+def _scan() -> dict:
+    from . import theatres
+    return theatres.active()["scan"]
 
 PROBE_LUA = r'''
--- SQE terrain probe: samples the surface type over the map and writes SQE_terrain_caucasus.json
+-- SQE terrain probe: samples the surface type over the map and writes the terrain scan file
 if not (io and lfs) then
   trigger.action.outText("SQE terrain probe: io/lfs are sanitized. Start SQE (it patches MissionScripting.lua while open) or use Settings > patch, then restart this mission.", 90)
   return
@@ -15,7 +18,7 @@ end
 local X0, Y0, STEP, NX, NY = __X0__, __Y0__, __STEP__, __NX__, __NY__
 local DIR = lfs.writedir() .. "SQE"
 lfs.mkdir(DIR)
-local OUT = DIR .. "\\SQE_terrain_caucasus.json"
+local OUT = DIR .. "\\__FILE__"
 local ST = land.SurfaceType
 local rows, nxt, per = {}, 0, 4
 local H = STEP / 4
@@ -42,7 +45,7 @@ end
 local function finish()
   local f = io.open(OUT, "w")
   if not f then trigger.action.outText("SQE terrain probe: cannot write " .. OUT, 90) return end
-  f:write('{"terrain":"Caucasus","x0":' .. X0 .. ',"y0":' .. Y0 .. ',"step":' .. STEP .. ',"nx":' .. NX .. ',"ny":' .. NY .. ',"rows":["')
+  f:write('{"terrain":"__NAME__","x0":' .. X0 .. ',"y0":' .. Y0 .. ',"step":' .. STEP .. ',"nx":' .. NX .. ',"ny":' .. NY .. ',"rows":["')
   f:write(table.concat(rows, '","'))
   f:write('"]}')
   f:close()
@@ -62,9 +65,12 @@ trigger.action.outText("SQE terrain scan started. Do not leave this mission unti
 
 
 def probe_lua() -> str:
+    from . import theatres
+    sc, th = _scan(), theatres.active()
+    X0, X1, Y0, Y1, STEP = sc["x0"], sc["x1"], sc["y0"], sc["y1"], sc["step"]
     nx, ny = (X1 - X0) // STEP, (Y1 - Y0) // STEP
     return (PROBE_LUA.replace("__X0__", str(X0)).replace("__Y0__", str(Y0)).replace("__STEP__", str(STEP))
-            .replace("__NX__", str(nx)).replace("__NY__", str(ny)))
+            .replace("__NX__", str(nx)).replace("__NY__", str(ny)).replace("__FILE__", sc["file"]).replace("__NAME__", th["name"]))
 
 
 def make_probe(out_path) -> Path:
@@ -78,16 +84,16 @@ def make_probe(out_path) -> Path:
 
 def _make_probe(out_path) -> Path:
     from dcs.mission import Mission, StartType
-    from dcs.terrain import Caucasus
+    from . import theatres
     from dcs.planes import Su_25T
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     import datetime
-    m = Mission(Caucasus())
+    m = Mission(theatres.terrain())
     m.start_time = datetime.datetime(2004, 6, 12, 12, 0)
     ru = m.country("Russia")
-    apt = m.terrain.airports["Sochi-Adler"]
+    apt = m.terrain.airports[_scan()["probe_airport"]]
     g = m.flight_group_from_airport(ru, "SQE terrain probe", Su_25T, apt, group_size=1, start_type=StartType.Cold)
     g.units[0].set_client()
     t = TriggerStart(comment="SQE terrain probe")

@@ -276,7 +276,7 @@ class ForcesPage(QWidget):
             kind = "Garrison" if a.variant == "GARRISON" else (f"SAM {a.variant}" if a.kind.value == "SAM" else a.kind.value.title())
             if a.suppressed:
                 kind += "  (radars blinded)"
-            tier = ["", "T1 front", "T2 Abkhazia", "T3 coast / north", "T4 deep"][min(4, max(1, a.tier))]
+            from .. import theatres as _th; _tl = _th.active()["tier_labels"]; tier = _tl[min(len(_tl) - 1, max(1, a.tier))]
             self.as_.setItem(i, 0, _item(a.name, theme.DIM if a.destroyed else None)); self.as_.setItem(i, 1, _item(kind))
             self.as_.setItem(i, 2, _item(tier + ("" if a.tier <= st.front + 2 else "  (locked)"), theme.DIM if a.tier > st.front + 2 else None))
             self.as_.setCellWidget(i, 3, self._bar(a.health, theme.GREEN if a.health > 0.6 else theme.AMBER if a.health > 0.25 else theme.RED))
@@ -385,7 +385,7 @@ class MainWindow(QMainWindow):
         dlg = NewCampaignDialog(self)
         if dlg.exec() == QDialog.Accepted:
             try:
-                v = dlg.values(); self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], night_ops=v['night_ops'], squadron=v.get('squadron')); self.refresh_all()
+                v = dlg.values(); self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], night_ops=v['night_ops'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus')); self.refresh_all()
             except Exception:
                 QMessageBox.critical(self, "Could not create campaign", traceback.format_exc())
 

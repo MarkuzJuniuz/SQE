@@ -15,6 +15,7 @@ from .models import ObjectiveType
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import Ledger, NoPlayerSlot, Package, PackageBuilder
 from .scenario import new_campaign
+from . import theatres
 from .settings import AppSettings
 from .state import CampaignState
 from .war import ObjectivePlanner, WarSimulator, update_status
@@ -50,17 +51,19 @@ class Session:
         return sorted(d.glob(f"*{CAMPAIGN_EXT}"), key=lambda p: p.stat().st_mtime, reverse=True) if d.exists() else []
 
     def new(self, name: str, aircraft: str, level: int, seed: int | None = None, start_date: str = "2004-06-12", night_ops: bool = False,
-            squadron: str | None = None) -> None:
+            squadron: str | None = None, theatre: str = "caucasus") -> None:
+        theatres.use(theatre)
         self.sync_terrain()
-        self.state = new_campaign(name, aircraft, level, seed=seed, start_date=start_date, night_ops=night_ops, player_squadron=squadron)
+        self.state = new_campaign(name, aircraft, level, theatre=theatre, seed=seed, start_date=start_date, night_ops=night_ops, player_squadron=squadron)
         safe = "".join(c if c.isalnum() or c in "-_ " else "_" for c in name).strip() or "campaign"
         self.path = self.campaigns_dir() / f"{safe}{CAMPAIGN_EXT}"
         self.plan_day()
         self.save()
 
     def open(self, path) -> None:
-        self.sync_terrain()
         self.state = CampaignState.load(path)
+        theatres.use(self.state.theatre)
+        self.sync_terrain()
         self.path = Path(path)
         self.settings.last_campaign = str(path)
         self.settings.save()

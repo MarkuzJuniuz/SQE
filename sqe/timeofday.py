@@ -4,7 +4,11 @@ import math
 import random
 from datetime import date
 
-LAT, LON, TZ = 42.5, 41.5, 4.0          # Georgian Black Sea coast; DCS Caucasus local time is UTC+4
+def _loc() -> tuple:
+    """(lat, lon, utc offset) of the active theatre pack (the Caucasus pack: Georgian Black Sea coast, UTC+4)."""
+    from . import theatres
+    t = theatres.active()
+    return t["lat"], t["lon"], t["tz"]
 
 
 def sun_times(d: date) -> tuple:
@@ -14,6 +18,7 @@ def sun_times(d: date) -> tuple:
     eq = 229.18 * (0.000075 + 0.001868 * math.cos(g) - 0.032077 * math.sin(g) - 0.014615 * math.cos(2 * g) - 0.040849 * math.sin(2 * g))
     decl = (0.006918 - 0.399912 * math.cos(g) + 0.070257 * math.sin(g) - 0.006758 * math.cos(2 * g)
             + 0.000907 * math.sin(2 * g) - 0.002697 * math.cos(3 * g) + 0.00148 * math.sin(3 * g))
+    LAT, LON, TZ = _loc()
     lat = math.radians(LAT)
     ha = math.degrees(math.acos(max(-1, min(1, math.cos(math.radians(90.833)) / (math.cos(lat) * math.cos(decl)) - math.tan(lat) * math.tan(decl)))))
     rise = (720 - 4 * (LON + ha) - eq) / 60 + TZ

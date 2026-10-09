@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 import random
 from . import threatmap as tm
+from . import theatres
 from .difficulty import Difficulty
 from .models import Objective, ObjectiveType, AssetKind, Role
 from .packages import Package
@@ -23,7 +24,7 @@ class ObjectivePlanner:
 
     @staticmethod
     def _open(state, a) -> bool:
-        """Depth tiers: tiers up to (front + 2) are open for tasking, so Nalchik and the north Caucasus come late in a campaign."""
+        """Depth tiers: tiers up to (front + 2) are open for tasking, so the deep targets come late in a campaign."""
         return a.tier <= state.front + 2
 
     def _blockers(self, state, a) -> list:
@@ -306,7 +307,6 @@ def totals(state: CampaignState) -> dict:
             "fa": fa, "fz": fz, "ea": ea, "ez": ez}
 
 
-FRONT_NAMES = ["Abkhazia front", "coast and north Caucasus", "deep strike"]
 FRONT_STALL_DAYS = 14        # a stalled front breaks anyway: the enemy line buckles
 FRONT_MIN_DAYS = 4           # the front never jumps two stages in a week
 
@@ -328,7 +328,7 @@ def update_front(state: CampaignState) -> bool:
         state.front += 1
         state.front_days = 0
         state.note(f"THE FRONT ADVANCES: {'the enemy line is broken' if broken else 'the enemy line buckles'}. "
-                   f"New targets are open: {FRONT_NAMES[state.front]}.")
+                   f"New targets are open: {theatres.active()['front_names'][state.front]}.")
         return True
     return False
 

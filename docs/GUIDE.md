@@ -212,6 +212,10 @@ build the loadout, save, then `python tools/capture_loadouts.py that.miz`. They 
 * The campaign has one story (Operation IRON TIDE). New stories mean new text in `narrative.py` and a new scenario.
 
 
+### Theatres (v0.14)
+
+SQE builds the Caucasus out of the box. Maps are data: each theatre is a JSON "pack" (airfields, squadrons, tiers, carrier station, sun position, temperatures, scan area, operation text). To add one, see docs/THEATRES.md and put the file in `%APPDATA%\SQE\theatres\`. The New Campaign window shows a Theatre picker once more than one pack is installed.
+
 ### Terrain scan (v0.12)
 Ground sites are placed with a coastline that is only roughly right, and it knows nothing about rivers. For exact placement run the scan once:
 1. Open SQE, then Settings. Set the Saved Games folder, press "Create terrain scan mission".

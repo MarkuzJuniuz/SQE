@@ -1,3 +1,10 @@
+## v0.14.0
+* Theatre packs: everything that is specific to the Caucasus (airfields, squadrons, depth tiers, carrier station, sun position and time zone, monthly temperatures, terrain scan area and file, operation text) now lives in `sqe/data/theatres/caucasus.json` instead of being spread through the code. Behaviour is unchanged: 12 campaigns generated with fixed seeds, across all difficulty levels and jets, and their built missions are identical to v0.13.0.
+* You can add a theatre without touching code: put a pack in `%APPDATA%\SQE\theatres\`. The New Campaign window shows a Theatre picker once there is more than one. See docs/THEATRES.md.
+* A campaign remembers its theatre; opening one switches the map, coastline, sun times and terrain scan to it. The terrain scan mission and file follow the theatre.
+* A pack whose bomber base is not one of its enemy airfields no longer crashes the war planner.
+* Internal: `geo_data.py` is gone (the coastline is a data file in the pack).
+
 ## v0.13.0
 * Merging by radius: packages whose target lies inside a circle (Settings > Merge radius, default 50 nm) around YOUR target fly in the same mission, within the same time windows as before (up to 30 min after yours, up to "Earlier packages" before). The old "same area" test is replaced. At most six packages fold in; the unit limit (default 250) is applied by dropping the package furthest from the circle's centre first.
 * The circle is kept inside the box that holds every possible target (destroyed sites included): near an edge its centre slides inward so it is not half empty, and your own target always stays inside it.

@@ -1,4 +1,4 @@
-"""Land / water mask measured by DCS itself (see terrainprobe.py). Read from <Saved Games>\\SQE\\SQE_terrain_caucasus.json.
+"""Land / water mask measured by DCS itself (see terrainprobe.py). Read from <Saved Games>\\SQE\\SQE_terrain_<theatre>.json.
 
 Cell codes: 0 land (roads and runways included), 1 water (sea and lakes), 2 shallow water (rivers, river mouths, shallows).
 Coordinates are DCS's: x north, y east, metres. Everything here returns None when there is no mask (or the point is off it),
@@ -11,7 +11,20 @@ import re
 import time
 from pathlib import Path
 
-FILE = "SQE_terrain_caucasus.json"
+
+def _file() -> str:
+    from . import theatres
+    return theatres.active()["scan"]["file"]
+
+
+def theatre_changed() -> None:
+    """The active theatre changed: drop the loaded mask and look for the new theatre's scan."""
+    global _M, _MTIME, _CHECKED
+    _M, _MTIME, _CHECKED = None, None, 0.0
+    _OFFS.clear()
+    if _DIR is not None:
+        _refresh(force=True)
+
 RIVER_MARGIN = 100.0               # a site keeps this far from shallow water / rivers; the open-sea margin is passed in by the caller
 
 _M = None                          # dict | None
@@ -37,7 +50,7 @@ def _refresh(force: bool = False) -> None:
     if _DIR is None:
         _M = None
         return
-    p = _DIR / FILE
+    p = _DIR / _file()
     try:
         mt = p.stat().st_mtime
     except OSError:

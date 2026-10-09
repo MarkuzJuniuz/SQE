@@ -186,7 +186,7 @@ def main():
     from sqe import terrainmask as _tm, terrainprobe as _tp
     (TMP / "tm").mkdir(exist_ok=True)
     _json.dump({"terrain": "Caucasus", "x0": 0, "y0": 0, "step": 250, "nx": 40, "ny": 40,
-                "rows": ["l20 s2 l18" if i != 5 else "l40" for i in range(40)]}, open(TMP / "tm" / _tm.FILE, "w"))
+                "rows": ["l20 s2 l18" if i != 5 else "l40" for i in range(40)]}, open(TMP / "tm" / _tm._file(), "w"))
     _tm.configure(TMP / "tm")
     assert _tm.land_ok(5000, 2000, 300) is True and _tm.land_ok(5000, 5100, 300) is False, "river cells must fail"
     assert _tm.land_ok(5000, 4700, 300) is True, "land 200 m+ from the river must pass"
@@ -318,6 +318,41 @@ def main():
     bad = [(n, round(x / 1000), round(y / 1000)) for n, x, y in seen if sc.is_land(x, y)]
     assert not bad, f"carrier/escort route over land: {bad[:3]}"
     print(f"[carrier] {len(seen)} carrier/escort route points, none on land")
+    # ---- theatre packs: data, not code -------------------------------------------------------------
+    from sqe import theatres, terrainmask as _tmk2, seacheck as _sc2
+    assert "caucasus" in theatres.available()
+    pack = json.loads((theatres.DATA / "caucasus.json").read_text(encoding="utf-8"))
+    pack.update({"id": "demo", "name": "Demo Theatre", "title": "Operation DEMO", "tz": 3.0, "lat": 30.0})
+    pack["scan"] = dict(pack["scan"], file="SQE_terrain_demo.json")
+    pack["red_fields"] = pack["red_fields"][:4]
+    pack["wing_weight"] = {k: v for k, v in pack["wing_weight"].items() if k in {f["id"] for f in pack["red_fields"]}}
+    pack["support_targets"] = []
+    (TMP / "packs").mkdir(); (TMP / "packs" / "demo.json").write_text(json.dumps(pack), encoding="utf-8")
+    broken = dict(pack); broken.pop("front"); broken["id"] = "broken"
+    (TMP / "packs" / "broken.json").write_text(json.dumps(broken), encoding="utf-8")
+    theatres.EXTRA_DIRS.append(str(TMP / "packs")); theatres._CACHE.clear()
+    assert theatres.available().get("demo") == "Demo Theatre"
+    try:
+        theatres.load("broken"); raise SystemExit("a pack with a missing key was accepted")
+    except ValueError as ex:
+        assert "front" in str(ex)
+    ds = mk(); ds.new("Demo", "F-16C", 2, seed=7, theatre="demo")
+    assert ds.state.theatre == "demo" and len([a for a in ds.state.assets.values() if a.kind.value == "AIRFIELD"]) == 4
+    assert theatres.active()["id"] == "demo" and _tmk2._file() == "SQE_terrain_demo.json"
+    from sqe import narrative as _nr, timeofday as _tod
+    assert _nr.TITLE == "Operation DEMO"
+    r1 = _tod.sun_times(__import__("datetime").date(2004, 6, 12))
+    dpk = next(p for p in ds.packages() if ds.flyable(p))
+    ds.fly(dpk.number, ds.flyable(dpk)[0].id)
+    ds.save(); ds2 = mk(); ds2.open(ds.path)
+    assert theatres.active()["id"] == "demo"
+    from sqe import terrainprobe as _tp
+    assert "SQE_terrain_demo.json" in _tp.probe_lua() and "Demo Theatre" in _tp.probe_lua()
+    theatres.use("caucasus")
+    assert _nr.TITLE == "Operation IRON TIDE" and _tod.sun_times(__import__("datetime").date(2004, 6, 12)) != r1
+    assert "SQE_terrain_caucasus.json" in _tp.probe_lua()
+    theatres.EXTRA_DIRS.clear(); theatres._CACHE.clear()
+    print("[theatres] pack loader, validation, a second pack builds a campaign and a sortie, the scan follows the active theatre")
     print("SMOKE TEST PASSED")
 
 

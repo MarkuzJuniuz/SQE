@@ -8,9 +8,15 @@ _RINGS = None
 def _rings():
     global _RINGS
     if _RINGS is None:
-        from .geo_data import GEO
-        _RINGS = [r for r in GEO["land"] if len(r) >= 3]
+        from . import theatres
+        _RINGS = [r for r in theatres.geo()["land"] if len(r) >= 3]
     return _RINGS
+
+
+def reset() -> None:
+    """Forget the cached coastline (the active theatre changed)."""
+    global _RINGS
+    _RINGS = None
 
 
 def _inside(x, y, ring):
