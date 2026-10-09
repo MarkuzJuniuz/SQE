@@ -207,7 +207,13 @@ class MissionsPage(QWidget):
         self._clear_body()
         night = is_night(st.campaign_date(), p.start)
         self.bl.addWidget(self._label(p.objective.description, "title"))
-        self.bl.addWidget(self._label(f"Mission start {p.start} local ({'night' if night else 'day'})   -   clear weather", "h2", theme.AMBER))
+        from .. import weather as _wx
+        _w = self.sess.wx_of(p)
+        self.bl.addWidget(self._label(f"Mission start {p.start} local ({'night' if night else 'day'})   -   " + (_wx.describe(_w) if _w else "clear weather"), "h2", theme.AMBER))
+        if p.extra.get("scrub"):
+            self.bl.addWidget(self._label("SCRUBBED: " + p.extra["scrub"] + ". Nobody flies this package and the war simulation leaves its target alone.", None, theme.RED))
+        for _n in p.extra.get("wx_notes", []):
+            self.bl.addWidget(self._label("Weather loadout: " + _n, "small", theme.AMBER))
         self.bl.addWidget(self._label(narrative.intent_for(st, p), "dim"))
         tbl, yours = self._flight_table(p)
         if yours:
@@ -441,6 +447,8 @@ class MainWindow(QMainWindow):
 
     def settings(self):
         if SettingsDialog(self.session.settings, self).exec() == QDialog.Accepted:
+            if getattr(self.session, "state", None) is not None:
+                self.session.refresh_weather(); self.session.save()      # the weather setting changes which packages fly
             self.refresh_all()
 
     # ---- flying --------------------------------------------------------------------------------------------------------

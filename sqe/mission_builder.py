@@ -19,7 +19,7 @@ from pathlib import Path
 from dcs import action, condition, mapping, planes, ships, task, triggers, vehicles
 from dcs.mission import Mission, StartType
 from dcs.point import PointAction
-from . import theatres
+from . import theatres, weather
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
@@ -65,6 +65,7 @@ class MissionOptions:
     enemy_cap_engage_nm: int = 50       # enemy patrol fighters chase no further than this (0 = unlimited)
     friendly_cap_engage_nm: int = 50    # HAVCAP / BASECAP likewise (0 = unlimited)
     f14_special_names: bool = True
+    weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
     merge_enemy_pct: int = 100          # folded packages: biggest enemy-air need + this % of the others'
     carrier_min_enemy_nm: int = 150     # the carrier group is moved back along the line of retreat until it is at least this far from the fight
     player_is_client: bool = False
@@ -181,6 +182,8 @@ class MissionBuilder:
         m.start_time = start
         clock = lambda s: (start + datetime.timedelta(seconds=s)).strftime("%H:%M:%S")
         date_str = start.strftime("%d %b %Y").upper()
+        self.wx = weather.for_package(st, o.weather_mode, theatres.active(), package.start)
+        self.wx_notes = []
         self._weather(m, date)
 
         tx, ty = self._target_xy(package)
@@ -316,7 +319,7 @@ class MissionBuilder:
         mode3 = self._mode3(package, pf)
         laser = self._laser(package, pf)
         x = {"date": date_str, "mode3": mode3, "laser": laser, "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}",
-             "bullseye": latlon(bx, by, self.t), "divert": div.name, "weather": "clear skies, unrestricted visibility",
+             "bullseye": latlon(bx, by, self.t), "divert": div.name, "weather": weather.describe(self.wx), "weather_short": weather.metar(self.wx), "wx_notes": self.wx_notes,
              "link16": any(r["stn"] != "-" for r in whois), "pkg_table": pkg_table,
              "n_def": air_pkg.n_def, "merged_nums": [m_["number"] for m_ in merged if not m_.get("struck")]}
         text = brief.build_text(st, package, tl, plan, self.rng, (tx, ty), x)
@@ -344,7 +347,7 @@ class MissionBuilder:
             ctx = {"date": date_str, "callsign": f"{pf.callsign}-1", "role": ("DEAD" if (pf.role == Role.STRIKE and package.objective.type == ObjectiveType.DEAD) else pf.role.value), "objective": package.objective.description,
                    "comm1": plan.comm1, "comm2": plan.comm2, "fc3": pspec.fc3, "waypoints": kn_rows, "jet": pspec.display,
                    "numbering": (f"{pspec.first_wp_label} for the start point, then 1, 2, 3..." if pspec.first_wp_label else "waypoint 1 = start point"),
-                   "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": "CLEAR", "mode3": mode3, "laser": laser,
+                   "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": weather.metar(self.wx), "mode3": mode3, "laser": laser,
                    "bullseye": latlon(bx, by, self.t), "whois": whois, "threats": text["threats"], "n_def": air_pkg.n_def, "target_data": tdata,
                    "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "sub": f"start {m_['start']}{' (already struck, heading home when you start; its target is in ruins)' if m_.get('struck') else ' (already airborne when you start)' if m_.get('underway') else ''}  push {m_['push']}  TOT {m_['tot']}  done {m_['rtb']}  ({m_['flights']})"} for m_ in merged]}
             for pg in render_pages(td, ctx):
@@ -531,12 +534,10 @@ class MissionBuilder:
 
     # =====================================================================================================
     def _weather(self, m, date):
-        w = m.weather
         try:
-            w.clouds_density = 0; w.enable_fog = False; w.enable_dust = False; w.visibility_distance = 80000
-            w.season_temperature = float(theatres.active()["temp_c"][date.month - 1]); w.qnh = 760
-        except Exception:
-            self.warns.append("could not set clear weather explicitly (pydcs defaults are already clear)")
+            weather.apply(m, self.wx)
+        except Exception as ex:
+            self.warns.append(f"could not set the weather ({ex}); the mission keeps pydcs's clear default")
 
     def _counts(self) -> dict:
         g = u = 0
@@ -906,6 +907,10 @@ class MissionBuilder:
                     u_.heading = hdg
         cs_names = callsigns.apply(g, csname, fno, callsigns.table(f.aircraft))
         load = self.lo.for_role(f.aircraft, f.role)
+        if self.wx.mode != "clear":
+            load, wnotes, _k, _d = weather.adapt(spec.dcs_type, load, self.wx)
+            if wnotes and not f.tag:
+                self.wx_notes.append(f"{f.callsign}: " + "; ".join(sorted(set(wnotes))))
         names = []
         for i, u in enumerate(g.units):
             u.name = cs_names[i]; names.append(u.name)

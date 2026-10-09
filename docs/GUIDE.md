@@ -212,6 +212,15 @@ build the loadout, save, then `python tools/capture_loadouts.py that.miz`. They 
 * The campaign has one story (Operation IRON TIDE). New stories mean new text in `narrative.py` and a new scenario.
 
 
+### Weather (v0.15)
+
+Settings > Weather. **Clear** (default) builds what SQE always built. **Procedural** uses the theatre's climate and changes slowly day to day; the fixed options hold one weather for the whole campaign.
+
+* What you see: the Missions page shows each package's weather at its start time; the briefing and the kneeboard carry it; DCS gets a real cloud preset, base, visibility, rain, dawn fog, wind and turbulence.
+* Weapons: laser-guided weapons are unusable under a broken or overcast sky below 10,000 ft or in rain or low visibility; imaging Mavericks need a ceiling above about 3,000 ft and 6 km; unguided weapons need 1,500 ft and 5 km. Whatever the weather rules out is swapped for a JDAM on the same pylon, and the change is shown. JDAMs, HARMs and air-to-air weapons don't care.
+* Scrubs: storms, fog or a very low ceiling stop every attacking package; so does a flight with nothing it can use (for example an A-10 with only Mavericks and cluster bombs under a 1,000 ft ceiling). Defensive air patrols still fly. A scrubbed package is not flown and its target is left alone by the war simulation.
+* The thresholds are in `sqe/weather.py` (`LASER_BASE_FT`, `EO_BASE_FT`, `VISUAL_BASE_FT` and so on) if you want to change them.
+
 ### Theatres (v0.14)
 
 SQE builds the Caucasus out of the box. Maps are data: each theatre is a JSON "pack" (airfields, squadrons, tiers, carrier station, sun position, temperatures, scan area, operation text). To add one, see docs/THEATRES.md and put the file in `%APPDATA%\SQE\theatres\`. The New Campaign window shows a Theatre picker once more than one pack is installed.

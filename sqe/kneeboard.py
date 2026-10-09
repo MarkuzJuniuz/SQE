@@ -90,7 +90,7 @@ def render_pages(outdir, ctx: dict) -> list:
 
     # ------------------------------------------------ page 2: fuel, codes, package, threats
     p = _Page(f"SQE  {head}", "FUEL / CODES / PACKAGE / THREATS")
-    p.cols([(20, f"BINGO {ctx['bingo']} lb"), (260, f"JOKER {ctx['joker']} lb"), (500, f"WX: {ctx['weather']}")], 18, bold=True, gap=6)
+    p.cols([(20, f"BINGO {ctx['bingo']} lb"), (260, f"JOKER {ctx['joker']} lb"), (500, f"WX: {ctx.get('weather_short') or ctx['weather']}")], 18, bold=True, gap=6)
     p.cols([(20, f"IFF M3 {ctx['mode3']}"), (260, f"LASER {ctx['laser']}")], 18, bold=True, gap=6)
     p.text("BULLSEYE  " + ctx["bullseye"], 14, color=DIM, gap=4)
     if ctx.get("target_data"):

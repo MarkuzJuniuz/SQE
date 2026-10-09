@@ -317,5 +317,64 @@
   "the enemy deep rear"
  ],
  "title": "Operation IRON TIDE",
- "background": "After months of border incidents and a collapsed ceasefire, the Northern Federation's Southern Military District crossed the frontier in force. Its armored columns are pushing south along the Black Sea coast toward the Georgian airbase at Senaki, supported by air regiments at Sukhumi, Gudauta, Sochi and across the Kuban, and covered by a layered air-defence network.\n\nA coalition task force has answered the request for assistance. The USS Stennis carrier air wing operates from the eastern Black Sea; U.S. Air Force squadrons operate from Senaki, Kutaisi and Kobuleti. You fly with the Navy's Tomcat community or with the Air Force, as part of a joint air campaign.\n\nCoalition command's intent is plain: stop the armored advance, win control of the air, take the enemy air-defence network apart, and then strike the headquarters and logistics that keep the offensive moving. Every day the war is planned; every day the packages go out. Yours is the one you fly yourself."
+ "background": "After months of border incidents and a collapsed ceasefire, the Northern Federation's Southern Military District crossed the frontier in force. Its armored columns are pushing south along the Black Sea coast toward the Georgian airbase at Senaki, supported by air regiments at Sukhumi, Gudauta, Sochi and across the Kuban, and covered by a layered air-defence network.\n\nA coalition task force has answered the request for assistance. The USS Stennis carrier air wing operates from the eastern Black Sea; U.S. Air Force squadrons operate from Senaki, Kutaisi and Kobuleti. You fly with the Navy's Tomcat community or with the Air Force, as part of a joint air campaign.\n\nCoalition command's intent is plain: stop the armored advance, win control of the air, take the enemy air-defence network apart, and then strike the headquarters and logistics that keep the offensive moving. Every day the war is planned; every day the packages go out. Yours is the one you fly yourself.",
+ "climate": {
+  "source": "Sochi monthly normals: sunshine hours (NOAA 1961-1990) and days with precipitation (Pogoda.ru.net), as published in Wikipedia 'Climate of Sochi'. sun_frac = sunshine hours / possible daylight hours at 43.6N; rain_frac = precipitation days / days in month. wind_ms and fog are hand-tuned, not measured.",
+  "sun_frac": [
+   0.34,
+   0.37,
+   0.4,
+   0.41,
+   0.49,
+   0.57,
+   0.6,
+   0.66,
+   0.61,
+   0.59,
+   0.43,
+   0.32
+  ],
+  "rain_frac": [
+   0.61,
+   0.64,
+   0.58,
+   0.6,
+   0.52,
+   0.47,
+   0.35,
+   0.32,
+   0.43,
+   0.48,
+   0.57,
+   0.65
+  ],
+  "wind_ms": [
+   4.0,
+   4.0,
+   4.5,
+   4.0,
+   3.5,
+   3.5,
+   3.0,
+   3.0,
+   3.0,
+   3.5,
+   4.0,
+   4.0
+  ],
+  "fog": [
+   0.1,
+   0.1,
+   0.07,
+   0.04,
+   0.02,
+   0.01,
+   0.01,
+   0.01,
+   0.03,
+   0.05,
+   0.08,
+   0.1
+  ]
+ }
 }

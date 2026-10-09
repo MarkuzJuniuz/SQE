@@ -65,6 +65,7 @@ class AppSettings:
     merge_mode: str = "area"              # "off" | "area" (default): fold packages in the same area, starting within 30 min, into one mission
     shore_margin_m: int = 1500            # ground sites keep this far from the sea and lakes
     river_margin_m: int = 100             # ...and this far from rivers and shallow water (terrain scan only)
+    weather_mode: str = "clear"            # "clear" | "procedural" | a fixed weather: scattered, broken, overcast, rain, storm
     ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
     merge_radius_nm: int = 50             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in
     merge_back_min: int = 15              # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)

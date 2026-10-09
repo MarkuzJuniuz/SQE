@@ -353,6 +353,65 @@ def main():
     assert "SQE_terrain_caucasus.json" in _tp.probe_lua()
     theatres.EXTRA_DIRS.clear(); theatres._CACHE.clear()
     print("[theatres] pack loader, validation, a second pack builds a campaign and a sortie, the scan follows the active theatre")
+    # ---- weather and the weapons it allows -------------------------------------------------------------
+    import datetime as _dt, collections as _co
+    from sqe import weather as W
+    pack = theatres.load("caucasus")
+    clim = pack["climate"]
+    for mth in (1, 7):                                                      # long-run odds match the climate; the walk never jumps two steps
+        cnt, jump = _co.Counter(), 0
+        for cid in range(30):
+            prev = None
+            for k in range(28):
+                st_ = W._state_on(f"t{cid}", _dt.date(2004, mth, 1), k, clim); cnt[st_] += 1
+                jump += 1 if prev is not None and abs(st_ - prev) > 1 else 0
+                prev = st_
+        tot = sum(cnt.values()); pi = W.stationary(clim, mth)
+        assert jump == 0 and all(abs(cnt[i] / tot - pi[i]) < 0.07 for i in range(6)), (mth, jump, [cnt[i] / tot for i in range(6)], pi)
+    a1 = W.forecast("procedural", "zz", _dt.date(2004, 6, 12), 3, 14.0, pack); a2 = W.forecast("procedural", "zz", _dt.date(2004, 6, 12), 3, 14.0, pack)
+    assert a1 == a2, "weather must be repeatable"
+    last = None
+    for h in range(6, 22):                                                  # within a day the picture drifts, it does not flip
+        w_ = W.forecast("procedural", "zz", _dt.date(2004, 11, 3), 2, float(h), pack)
+        assert last is None or abs(W.STATES.index(w_.state) - W.STATES.index(last.state)) <= 1, (h, last.state, w_.state)
+        last = w_
+    # the gate, on the real loadouts
+    from sqe.loadouts import LoadoutLibrary as _LL
+    lib_ = _LL()
+    low = W.forecast("overcast", "t", _dt.date(2004, 6, 12), 1, 12.0, pack)
+    hi = W.forecast("clear", "t", _dt.date(2004, 6, 12), 1, 12.0, pack)
+    from sqe.models import Role as _R
+    new_, notes_, keep_, dead_ = W.adapt(AIRCRAFT["FA-18C"].dcs_type, lib_.for_role("FA-18C", _R.STRIKE), low)
+    names_ = [W.weapon_name(v["CLSID"]) for v in new_.values()]
+    assert not any("GBU-12" in n for n in names_) and any("GBU-38" in n for n in names_) and notes_, names_
+    assert W.adapt(AIRCRAFT["FA-18C"].dcs_type, lib_.for_role("FA-18C", _R.STRIKE), hi)[1] == []
+    assert not any(W.classify(W.weapon_name(v["CLSID"])) == "EO" for v in W.adapt(AIRCRAFT["F-16C"].dcs_type, lib_.for_role("F-16C", _R.CAS), low)[0].values())
+    # a campaign in an overcast: loadouts change in the built mission, a storm scrubs offensive packages and not the CAP, scrubbed ones are left alone
+    done_ = False
+    for sd in range(1, 9):
+        ws = mk(); ws.settings.weather_mode = "overcast"
+        ws.new("Wx", "FA-18C", 2, seed=sd)
+        cand = [(p_, f_) for p_ in ws.packages() for f_ in ws.flyable(p_) if f_.role in (_R.STRIKE, _R.CAS)]
+        if not cand:
+            continue
+        p_, f_ = cand[0]
+        assert ws.wx_of(p_) is not None
+        r_ = ws.fly(p_.number, f_.id)
+        with zipfile.ZipFile(ws.settings.sortie_miz) as z_:
+            mis = z_.read("mission").decode("utf-8", "replace")
+        assert "BRU33_2X_GBU-12" not in mis and "LAU_117_AGM_65F" not in mis, "laser / imaging weapons loaded in an overcast"
+        assert '["preset"]="' in mis and "SQE Overcast" in mis, "overcast clouds were not written to the mission"
+        done_ = True
+        break
+    assert done_, "no Hornet strike or CAS package found to test"
+    ss = mk(); ss.settings.weather_mode = "storm"; ss.new("Storm", "FA-18C", 2, seed=3)
+    scr = [p_ for p_ in ss.packages() if p_.extra.get("scrub")]
+    keep_ = [p_ for p_ in ss.packages() if p_.objective.type.value in ("BARCAP", "FLEET_DEFENSE")]
+    assert scr and all(not ss.flyable(p_) for p_ in scr) and all(not p_.extra.get("scrub") for p_ in keep_)
+    h0 = {a_.id: a_.health for a_ in ss.state.assets.values()}
+    sk = ss.skip_day()
+    assert any(r_.get("scrubbed") for r_ in sk["results"])
+    print(f"[weather] climate odds, no jumps, repeatable; gate swaps lasers for JDAM and imaging Mavericks off; overcast build clean; storm scrubs {len(scr)} package(s), leaves CAP alone")
     print("SMOKE TEST PASSED")
 
 

@@ -28,6 +28,7 @@ You still need the map installed in DCS to fly it, and pydcs must know the terra
 | `support_targets` | headquarters, fuel and ammunition: `parent` field, `id`, `name`, `kind` (C2, FUEL, DEPOT), `airport`, `dx`, `dy` offset in metres, `value` |
 | `front` | `from_airport` and `to_airport`: where the ground push runs |
 | `tier_labels`, `front_names`, `front_desc` | text for the tiers and the three front stages |
+| `climate` | optional. `sun_frac` and `rain_frac` (12 monthly values each: share of possible sunshine, share of days with precipitation), `wind_ms` (mean ground wind, 12 values), `fog` (chance of dawn fog, 12 values), `source` (free text). Without it a mild generic climate is used. Drives Procedural weather |
 | `title`, `background` | the operation name and the conflict background shown in the app and on the briefing |
 
 Order matters in `wing_weight` and `red_fields` (they decide the order random choices are made in, so the same seed gives the same campaign).

@@ -73,6 +73,8 @@ class Session:
             self.state.note(f"{moved} enemy sites that were placed in the water have been moved onto land.")
         if not self.state.plan:
             self.plan_day()
+        else:
+            self.refresh_weather()                       # old saves, or the weather setting changed since
         if moved:
             self.save()
 
@@ -153,15 +155,47 @@ class Session:
             for k, f in enumerate(p.flights, 1):
                 f.id = f"{p.id}-f{k}"
         st.plan = [p.to_dict() for p in pkgs]
-        return pkgs
+        self.refresh_weather()
+        return self.packages()
 
     def packages(self) -> list:
         return [Package.from_dict(d) for d in self.state.plan]
+
+    # ---- weather: what the sky does to each package of the day ------------------------------------------------------
+    def weather_mode(self) -> str:
+        return str(getattr(self.settings, "weather_mode", "clear") or "clear")
+
+    def refresh_weather(self) -> None:
+        """Work out the weather at every package's start time, which packages it scrubs and which loadouts it changes. Stored in the plan so
+        the Missions page, the war simulation and the mission builder all see the same thing. Safe to call any time (mode changes, old saves)."""
+        from . import weather as W, theatres
+        st, mode, pack = self.state, self.weather_mode(), theatres.active()
+        for pd in st.plan:
+            ex = pd.setdefault("extra", {})
+            for k in ("wx", "wx_notes", "scrub"):
+                ex.pop(k, None)
+            if mode == "clear":
+                continue
+            pkg = Package.from_dict(pd)
+            wx = W.for_package(st, mode, pack, pkg.start)
+            res = W.assess(wx, pkg.objective.type.value, pkg.flights, self.loadouts, AIRCRAFT)
+            ex["wx"] = wx.to_dict()
+            if res["notes"]:
+                ex["wx_notes"] = res["notes"]
+            if res["scrub"]:
+                ex["scrub"] = res["scrub"]
+
+    def wx_of(self, pkg: Package):
+        """The Wx stored for a package (None in clear mode)."""
+        from . import weather as W
+        return W.Wx.from_dict(pkg.extra.get("wx"))
 
     def flyable(self, pkg: Package, squadron_only: bool | None = None) -> list:
         """Flights you could fly. 'My squadron' (the default filter) = flights of YOUR squadron; 'all' = any flight of your aircraft type."""
         if squadron_only is None:
             squadron_only = self.settings.flight_filter != "all"
+        if pkg.extra.get("scrub"):                                       # scrubbed for weather: nobody flies it, the war sim ignores it
+            return []
         opts = pkg.player_options(self.state.player.aircraft)
         return [f for f in opts if f.squadron_id == self.state.player.squadron_id] if squadron_only else opts
 
@@ -212,7 +246,7 @@ class Session:
         out = []
         for p in self.packages():
             t = self._pkg_xy(p)
-            if p.number == pkg.number or t is None or not (-back <= hm(p) - hm(pkg) <= 30) or not any(not f.tag for f in p.flights):
+            if p.number == pkg.number or t is None or not (-back <= hm(p) - hm(pkg) <= 30) or not any(not f.tag for f in p.flights) or p.extra.get("scrub"):
                 continue
             d = math.hypot(t[0] - c[0], t[1] - c[1])
             if d <= R:
@@ -235,7 +269,7 @@ class Session:
             t = self._pkg_xy(p)
             return t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= R
         out = [p for p in self.packages() if p.number != pkg.number and p.number not in have and hm(p) < hm(pkg)
-               and any(not f.tag for f in p.flights) and inside(p)]
+               and any(not f.tag for f in p.flights) and not p.extra.get("scrub") and inside(p)]
         out.sort(key=lambda p: (-hm(p), p.number))
         return out[:4]
 
@@ -278,7 +312,7 @@ class Session:
         self.options.ai_unlimited_fuel = bool(self.settings.ai_unlimited_fuel)
         self.options.enemy_cap_engage_nm = int(self.settings.enemy_cap_engage_nm)
         self.options.friendly_cap_engage_nm = int(self.settings.friendly_cap_engage_nm)
-        self.options.f14_special_names = bool(getattr(self.settings, 'f14_special_names', True)); self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct)
+        self.options.f14_special_names = bool(getattr(self.settings, 'f14_special_names', True)); self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct); self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear'))
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
         extras = self.merge_candidates(pkg)
@@ -318,7 +352,8 @@ class Session:
         st.pending = None
         sim = WarSimulator(self.d, self._rng(44))
         results = [sim.resolve_abstract(st, Package.from_dict(pd)) for pd in st.plan]
-        st.note(f"Day {st.day}: you stood down. The war went on without you ({sum(1 for r in results if r['success'])} of {len(results)} packages succeeded).")
+        st.note(f"Day {st.day}: you stood down. The war went on without you ({sum(1 for r in results if r['success'])} of {sum(1 for r in results if not r.get('scrubbed'))} packages succeeded"
+                f"{'; ' + str(sum(1 for r in results if r.get('scrubbed'))) + ' scrubbed for weather' if any(r.get('scrubbed') for r in results) else ''}).")
         sim.end_day(st)
         status = update_status(st)
         if st.status == "ACTIVE":

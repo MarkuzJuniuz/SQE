@@ -44,6 +44,8 @@ def _validate(d: dict, src) -> dict:
         raise ValueError(f"theatre pack {src} is missing: {', '.join(miss)}")
     if len(d["temp_c"]) != 12:
         raise ValueError(f"theatre pack {src}: temp_c needs 12 monthly values")
+    from .weather import DEFAULT_CLIMATE
+    d.setdefault("climate", dict(DEFAULT_CLIMATE))
     d.setdefault("support_targets", [])
     d.setdefault("red_keep", {})
     d.setdefault("bomber_base", "")

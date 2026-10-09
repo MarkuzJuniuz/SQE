@@ -117,6 +117,16 @@ class SettingsDialog(QDialog):
         row.addWidget(lb); row.addWidget(self.mback); row.addStretch(1); lay.addLayout(row)
         h = QLabel("Packages that started up to this long before yours also fly, already airborne and underway when the mission starts. "
                    "A package that has already struck is not flown to its target (see ruins below). 0 = only later packages."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
+        row = QHBoxLayout(); lb = QLabel("Weather"); lb.setMinimumWidth(120)
+        from .. import weather as _wxm
+        self.wxm = QComboBox()
+        for k, v in _wxm.MODES.items():
+            self.wxm.addItem(v, k)
+        self.wxm.setCurrentIndex(max(0, self.wxm.findData(getattr(settings, "weather_mode", "clear"))))
+        row.addWidget(lb); row.addWidget(self.wxm, 1); lay.addLayout(row)
+        h = QLabel("Procedural follows the theatre's climate for the month and changes slowly from day to day (never clear to storm in an afternoon); each sortie "
+                   "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
+                   "that cannot attack at all is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
         self.ruins = QCheckBox("Ruins: show what earlier packages already hit (smoke and fire); struck flights fly home")
         self.ruins.setChecked(bool(getattr(settings, "ruins", True))); lay.addWidget(self.ruins)
         h = QLabel("Earlier packages in the same area that struck before your start leave smoking ruins (at most three sites, a few plumes each). The result is "
@@ -174,6 +184,7 @@ class SettingsDialog(QDialog):
         self.s.merge_back_min = int(self.mback.value())
         self.s.merge_radius_nm = int(self.mrad.value())
         self.s.ruins = bool(self.ruins.isChecked())
+        self.s.weather_mode = str(self.wxm.currentData())
         self.s.shore_margin_m = int(self.shore.value())
         self.s.river_margin_m = int(self.river.value())
         self.s.enemy_cap_engage_nm = int(self.ecap.value()); self.s.friendly_cap_engage_nm = int(self.fcap.value())

@@ -217,6 +217,10 @@ class WarSimulator:
 
     def resolve_abstract(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         d, rng = self.d, self.rng
+        if pkg.extra.get("scrub"):                       # scrubbed for weather: it never flew, so nothing happens to the target
+            state.note(f"Package #{pkg.number} ({pkg.objective.description}) was scrubbed: {pkg.extra['scrub']}")
+            return {"success": False, "scrubbed": True, "odds": 0.0, "lines": [f"{pkg.objective.description}: SCRUBBED - {pkg.extra['scrub']}"],
+                    "objective": pkg.objective.description, "roll": {"success": False}}
         if pkg.objective.type == ObjectiveType.FLEET_DEFENSE:
             return self._resolve_raid(state, pkg, force)
         if pkg.objective.type == ObjectiveType.DEAD and any(f.role == Role.STRIKE for f in pkg.flights):
