@@ -1,7 +1,30 @@
+<p align="center"><img src="docs/images/banner.png" alt="Squadron Campaign Engine" width="100%"></p>
+
 # Squadron Campaign Engine (SQE)
 
-Abstracted war in the background; each sortie, one fully generated DCS package (Caucasus) with a BMS-style
-marshal/push/TOT timeline, proper briefing, kneeboard, and results fed back into the war.
+**A dynamic campaign for DCS World that gets out of your way.** An abstracted war runs in the background and issues a daily tasking order. You pick one flight; SQE builds a lightweight mission with only that package, its support and the enemy it will meet. Fly it, and the results go back into the war.
+
+Low unit counts mean it runs smoothly in VR. The feel is Strike Fighters / Falcon BMS: you fly your sortie, the war goes on around you.
+
+<p align="center"><img src="docs/images/feature-strip.png" alt="Tasking order, debrief and theatre map" width="100%"></p>
+
+## What you get
+
+* **A war that moves without you.** Airfields, SAM sites, armour columns and the fleet are simulated in the background; strikes, SEAD/DEAD, close air support and counter-air all change the picture.
+* **One flight, one mission.** Choose from the day's tasking order; only that package and the relevant OpFor are built. Packages flying nearby can be folded in (merge radius, default 50 nm).
+* **Proper packages.** Marshal/push/TOT timeline, escorts, SEAD, tankers, briefing and kneeboard.
+* **Results that count.** A debrief hook reports kills and losses back through `SQE_state.json`; damaged sites stay damaged.
+* **Sites that make sense.** Enemy sites are kept on land with an optional scan of your own DCS terrain.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Missions](docs/images/missions.png) | ![Overview](docs/images/overview.png) |
+| ![Debrief](docs/images/debrief.png) | ![Pilot log](docs/images/pilot.png) |
+| ![Enemy air wings](docs/images/enemy-air-wings.png) | ![War log](docs/images/war-log.png) |
+
+## Get started
 
 Start here: **docs/GUIDE.md**   |   Sample briefing: docs/SAMPLE_BRIEFING.txt
 
