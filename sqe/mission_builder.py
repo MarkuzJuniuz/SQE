@@ -277,6 +277,7 @@ class MissionBuilder:
         self._spawn_cas_support(package, plan, geom, manifest)
         merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock, ruins)
         manifest.cur_pkg = ""
+        self._dry_pass()
         manifest.merged = [{k: v for k, v in m_.items() if k in ("id", "number", "objective", "type", "tot_s")} for m_ in merged if not m_.get("struck")]
         bx, by = geom.push
         m.coalition["blue"].bullseye = {"x": bx, "y": by}
@@ -446,6 +447,52 @@ class MissionBuilder:
         self._ruin_sites.append({"x": x, "z": y, "n": 3 if ok else 1, "r": 110 if ok else 40, "p": 2 if ok else 3, "dn": 0.9 if ok else 0.6,
                                  "pw": 120 if ok else 40, "s": self.vrng.uniform(0, 6.28)})
         manifest.ruins.append({"id": xp.id, "number": xp.number})
+
+    def _dry_pass(self) -> None:
+        """Last step before saving: any ground group with a unit (or a driving destination) in the water is moved as a whole, as little as possible,
+        to where all of it is on dry land. The JTAC moves with its task force. Uses the DCS terrain scan when present, otherwise the rough coastline."""
+        from . import seacheck, terrainmask
+        dry = lambda x, y: seacheck.site_ok(x, y, 150.0)
+        groups = []
+        for coal in self.m.coalition.values():
+            for c in coal.countries.values():
+                groups += list(getattr(c, "vehicle_group", []))
+        shifts = {}
+
+        def pts(g):
+            return [(u.position.x, u.position.y) for u in g.units] + ([(g.points[-1].position.x, g.points[-1].position.y)] if len(g.points) > 1 else [])
+
+        def fits(g, dx, dy):
+            return all(dry(px + dx, py + dy) for px, py in pts(g))
+
+        order = sorted(groups, key=lambda g: g.name.startswith("Axeman"))        # task forces before their JTAC
+        for g in order:
+            if not g.units:
+                continue
+            dx = dy = 0.0
+            if g.name.startswith("Axeman "):
+                tf = shifts.get("Friendly Task Force " + g.name.split()[1].split("-")[0])
+                if tf:
+                    dx, dy = tf
+                    self._translate(g, dx, dy)
+                    dx = dy = 0.0
+            if fits(g, 0, 0):
+                continue
+            found = None
+            r = 250.0
+            while r <= 8000.0 and found is None:
+                for k in range(24):
+                    a = math.radians(k * 15)
+                    sx, sy = r * math.cos(a), r * math.sin(a)
+                    if fits(g, sx, sy):
+                        found = (sx, sy)
+                        break
+                r += 250.0
+            if found is None:
+                self.warns.append(f"{g.name}: could not find dry ground for the whole group; check it in the editor")
+                continue
+            self._translate(g, *found)
+            shifts[g.name] = found
 
     def _hook_sites(self, manifest) -> list:
         """Enemy sites the call-outs track: units, radars, the package they belong to and who reports on them."""

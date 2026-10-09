@@ -1,3 +1,8 @@
+## v0.12.7
+* Fix: vehicles in the water. A final pass now checks every ground group (armour columns, the friendly task force and its JTAC, base defences, sites) against the terrain scan and moves any group with a unit or driving destination in the water, as a whole and as little as possible. In 74 test builds against a real scan, no ground unit started in the water. Without the scan the rough coastline is used for the same check.
+* DCS reports rivers and ponds as water too, so only the sea and big lakes keep the full shore margin; rivers and small lakes use the river margin (100 m).
+* Settings lists which theatres have a terrain scan and when it was made.
+
 ## v0.12.6
 * Every sortie build now says in its warnings whether ground sites were placed with the DCS terrain scan or only with the rough built-in coastline, so it is clear which one produced a given mission.
 

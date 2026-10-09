@@ -140,7 +140,10 @@ class SettingsDialog(QDialog):
     def _tm_refresh(self):
         from .. import terrainmask as _tmk
         _tmk.configure(self.s.sqe_dir if self.s.dcs_saves else None)
-        self.tm.setText("Ground sites stay this far from the sea and lakes, and the second value from rivers and shallow water (rivers need the scan). Terrain scan: " + _tmk.info() +
+        sc = _tmk.scanned(self.s.sqe_dir if self.s.dcs_saves else None)
+        have = ", ".join(f"{t} (scanned {dte})" for t, dte in sc) if sc else "none yet"
+        self.tm.setText("Ground sites stay this far from the sea and lakes, and the second value from rivers and shallow water (rivers need the scan). "
+                        f"Terrain scans: {have}. SQE currently builds campaigns on the Caucasus map only. Status: " + _tmk.info() +
                         ". To measure the real map once: create the scan mission, start it in DCS (Fly), wait for COMPLETE.")
 
     def _make_probe(self):
