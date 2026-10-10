@@ -390,7 +390,7 @@ class Session:
             from . import ground
             zi = ground.info(st, sec)
             obj = Objective(f"obj-d{st.day}-e{number}", ObjectiveType.CAS, f"armor_{sec + 1}", 12.0,
-                            f"EMERGENCY - troops in contact: {zi['name']} (Red {zi['red']:.0f}, Blue {zi['blue']:.0f})")
+                            f"EMERGENCY - troops in contact: {zi['name']} (enemy {zi['red']:.0f}, friendly {zi['blue']:.0f})")
             role_needed, where = "cas", zi["name"]
         pb = PackageBuilder(st, d)
         xy = pb.target_xy(obj)

@@ -646,7 +646,7 @@ def main():
     _opts = _war.ObjectivePlanner(_gd(2)).plan(_st, _rnd.Random(2), limit=40)
     assert not any(getattr(o, "target_id", "") == "armor_1" for o in _opts), "an uncontested sector is not a CAS target"
     _g["red"][1], _g["blue"][1] = 60.0, 20.0; _gr.push(_st); _ground_pl = _war.ObjectivePlanner(_gd(2)).plan(_st, _rnd.Random(2), limit=40)
-    assert any(getattr(o, "target_id", "") == "armor_2" and "Red 60" in o.description for o in _ground_pl), "a contested sector is, with its strengths"
+    assert any(getattr(o, "target_id", "") == "armor_2" and "enemy 60" in o.description for o in _ground_pl), "a contested sector is, with its strengths"
     # a full night of the war on a live campaign
     for _ in range(3):
         s.state.status = "ACTIVE"; _war.WarSimulator(_gd(2), _rnd.Random(9)).end_day(s.state)

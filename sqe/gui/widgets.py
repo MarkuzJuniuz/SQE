@@ -133,5 +133,5 @@ class MapView(QWidget):
             p.setPen(QColor(theme.TEXT)); p.drawText(QPointF(q.x() + 9, q.y() + 4), b.name.replace(" AB", "")[:20])
         self._draw_ground(p, P, st)
         p.setPen(QColor(theme.DIM))
-        p.drawText(10, self.height() - 22, "North up. Blue = coalition, red = enemy. Circles = SAM threat range.")
+        p.drawText(10, self.height() - 22, "North up. Friendly in blue, enemy in red. Circles = SAM threat range.")
         p.drawText(10, self.height() - 8, "Square airfield, triangle SAM, bar armor, diamond HQ/depot.")

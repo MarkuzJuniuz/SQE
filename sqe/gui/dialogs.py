@@ -129,7 +129,7 @@ class SettingsDialog(QDialog):
         hint(v, "Procedural follows the theatre's climate for the month and changes slowly from day to day (never clear to storm in an afternoon); each sortie "
                 "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
                 "that cannot attack at all is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
-        self.react = QCheckBox("Reactive dispatch: enemy reinforcements and blue alert fighters can launch during a sortie")
+        self.react = QCheckBox("Reactive dispatch: enemy reinforcements and friendly alert fighters can launch during a sortie")
         self.react.setChecked(bool(getattr(settings, "reactive", True))); v.addWidget(self.react)
         hint(v, "Random and difficulty-scaled: other enemy wings within range of the target may send extra pairs (never more aircraft than the wing has), "
                 "and our carrier or nearby bases may launch alert pairs when the fight is lopsided, for fleet defence, or when the fleet is raided. "
@@ -289,7 +289,7 @@ class WaitingDialog(QDialog):
             wl = QLabel("Note: " + wmsg); wl.setWordWrap(True); wl.setStyleSheet(f"color:{theme.AMBER};"); il.addWidget(wl)
         il.addWidget(QLabel(f"Launch {tl['launch']}   |   Marshal {tl['marshal']}   |   <b>PUSH {tl['push']}</b>   |   <b>TOT {tl['tot']}</b>   |   Egress {tl['egress']}"))
         self.status = QLabel("Waiting for DCS results..."); self.status.setObjectName("h2"); lay.addWidget(self.status)
-        self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["This sortie", "Coalition (blue)", "Enemy (red)"])
+        self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["This sortie", "Friendly", "Enemy"])
         self.tbl.verticalHeader().setVisible(False); self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch); self.tbl.setMinimumHeight(190)
         lay.addWidget(self.tbl)

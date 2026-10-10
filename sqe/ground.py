@@ -266,15 +266,15 @@ def resolve_day(state, d, rng) -> list:
                 if pa > DECISIVE * pd:
                     _rout(g, i, "blue" if a_is_red else "red")
                     _advance(g, i, "red" if a_is_red else "blue")
-                    lines.append(f"{name}: {'Red' if a_is_red else 'Blue'} attacked and broke the other side; the survivors fell back")
+                    lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked and broke the other side; the survivors fell back")
                 elif pa < REPULSED * pd:
                     if a_is_red:
                         red[i] *= 0.85
                     else:
                         blue[i] *= 0.85
-                    lines.append(f"{name}: {'Red' if a_is_red else 'Blue'} attacked and was thrown back")
+                    lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked and were thrown back")
                 else:
-                    lines.append(f"{name}: {'Red' if a_is_red else 'Blue'} attacked, heavy fighting (Red {red[i]:.0f}, Blue {blue[i]:.0f})")
+                    lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked, heavy fighting (enemy {red[i]:.0f}, friendly {blue[i]:.0f})")
     for i in range(n):                                  # a remnant too small to hold ground withdraws
         if red[i] < MIN_FORCE and red[i] > 0 and blue[i] >= MIN_FORCE:
             _fall_back(g, i, "red")
@@ -387,7 +387,7 @@ def blue_losses(state, asset_id: str, dead: int, total: int):
         return None
     g = state.ground
     g["blue"][i] = max(0.0, g["blue"][i] - BLUE_LOSS * dead / total)
-    return f"{g['names'][i]}: Blue strength now {g['blue'][i]:.0f}"
+    return f"{g['names'][i]}: friendly strength now {g['blue'][i]:.0f}"
 
 
 def summary(state) -> list:
@@ -396,8 +396,8 @@ def summary(state) -> list:
     out = []
     for i in range(n_zones(g)):
         r, b = red_strength(state, i), blue_strength(state, i)
-        tag = "contested" if (r >= MIN_FORCE and b >= MIN_FORCE) else ("Red holds" if r >= MIN_FORCE else "Blue holds" if b >= MIN_FORCE else "empty")
-        out.append(f"{g['names'][i]}: Red {r:.0f} | Blue {b:.0f}  ({tag})")
+        tag = "contested" if (r >= MIN_FORCE and b >= MIN_FORCE) else ("enemy holds" if r >= MIN_FORCE else "friendly holds" if b >= MIN_FORCE else "empty")
+        out.append(f"{g['names'][i]}: enemy {r:.0f} | friendly {b:.0f}  ({tag})")
     if g.get("fallen"):
         out.append("FALLEN: " + ", ".join(state.bases[x].name for x in g["fallen"] if x in state.bases))
     return out

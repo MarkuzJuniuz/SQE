@@ -1,3 +1,6 @@
+## v0.28.2
+* In-world wording: the text you read in the game no longer says "Red" and "Blue". The ground-war lines, the sector list, the "troops in contact" and CAS job text, the SAM-rebuild line, the map legend, the Settings label and the debrief table headers say "enemy" and "friendly" (an attack is "Enemy forces attacked ...", a sector is "enemy 60 | friendly 15 (contested)"). Code, comments, docs and the state file keep their Red / Blue names. The map still draws friendly in blue and enemy in red.
+
 ## v0.28.1
 * Every DEAD gate is now written to `SQE_state.json` (`"gates"`), so an all-AI run shows what happened without watching: for each flight the site, the scheduled and actual check time, radars left, whether the turn-back command went through (`cmd`), and the flight's distance to the target when the command was issued (`d0`) and 60 s later (`d1`; a smaller number than `d0` means it kept going in, a larger one means it turned). A gate that found the radars dead is logged too, with `abort: false`.
 * In the `--ai-test` launch the radio calls (with their beeps) are shown to everyone instead of to your flight's group, which nobody is in. Before this you saw nothing in an all-AI run.

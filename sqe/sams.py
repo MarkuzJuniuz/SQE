@@ -78,7 +78,7 @@ def rebuild(state, d, rng: random.Random) -> list:
         if rng.random() < p:
             a.health = REBUILT_HEALTH
             r["down"].pop(a.id, None)
-            lines.append(f"Red put up a replacement {a.variant} site: {a.name} (half strength)")
+            lines.append(f"The enemy put up a replacement {a.variant} site: {a.name} (half strength)")
     return lines
 
 

@@ -79,7 +79,7 @@ class ObjectivePlanner:
                     if not zi["contested"]:
                         continue
                     pr *= 0.7 + 0.6 * zi["pressure"]                 # the harder Red is pressing, the more urgent
-                    what = f"Close air support: {zi['name']} (Red {zi['red']:.0f}, Blue {zi['blue']:.0f})"
+                    what = f"Close air support: {zi['name']} (enemy {zi['red']:.0f}, friendly {zi['blue']:.0f})"
                 bl = self._garrison_cover(state, a) if a.variant == "GARRISON" else []        # a dug-in garrison sits under its sites' umbrella: SEAD / DEAD goes first
                 cand.append((pr, Objective("", ObjectiveType.CAS, a.id, pr, what), bl, locked))
             elif a.kind == AssetKind.AIRFIELD:
