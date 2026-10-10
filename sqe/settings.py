@@ -80,7 +80,6 @@ class AppSettings:
     friendly_cap_engage_nm: int = 50      # same for your HAVCAP / BASECAP (0 = unlimited)
     fighter_engage_nm: int = 40           # AI escorts and sweeps chase no further than this (0 = unlimited)
     fighter_engage_minutes: int = 5       # AI escorts, sweeps and SEAD stop engaging this long after the TOT and fly on (0 = no time limit)
-    player_is_ai: bool = False            # test: your own flight is built as an AI flight (no player slot) with the AI stand-off and engage window
     fighter_standoff: bool = True         # AI escorts and sweeps stop short of live SAM cover
     auto_patch_scripting: bool = False    # patch DCS MissionScripting.lua when SQE starts, restore it when SQE exits. Off until the user agrees on first run
     patch_asked: bool = False

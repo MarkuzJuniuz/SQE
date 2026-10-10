@@ -29,6 +29,19 @@ class ObjectivePlanner:
         """Depth tiers: tiers up to (front + 2) are open for tasking, so the deep targets come late in a campaign."""
         return a.tier <= state.front + 2
 
+    def _garrison_cover(self, state, a) -> list:
+        """The long-range SAM sites (the kind a SEAD / DEAD package is sent to) whose ring covers a dug-in garrison and that can be tasked now. While any is
+        alive the garrison is not offered as a CAS job: the A-10s would fly into the whole cluster (and the site's Tors and Shilkas, which are never DEAD
+        targets themselves, are why only the long-range sites count)."""
+        out = []
+        for x in state.assets.values():
+            if x.kind != AssetKind.SAM or x.destroyed or x.id.startswith("fsam_") or x.value < 5 or not self._open(state, x):
+                continue
+            r = tm.RANGE_NM.get(x.variant, 0)
+            if r >= 10 and ((x.x - a.x) ** 2 + (x.y - a.y) ** 2) ** 0.5 <= r * 1852:
+                out.append(x)
+        return out
+
     def _blockers(self, state, a) -> list:
         best = None
         for b in state.bases.values():
@@ -67,7 +80,8 @@ class ObjectivePlanner:
                         continue
                     pr *= 0.7 + 0.6 * zi["pressure"]                 # the harder Red is pressing, the more urgent
                     what = f"Close air support: {zi['name']} (Red {zi['red']:.0f}, Blue {zi['blue']:.0f})"
-                cand.append((pr, Objective("", ObjectiveType.CAS, a.id, pr, what), [], locked))
+                bl = self._garrison_cover(state, a) if a.variant == "GARRISON" else []        # a dug-in garrison sits under its sites' umbrella: SEAD / DEAD goes first
+                cand.append((pr, Objective("", ObjectiveType.CAS, a.id, pr, what), bl, locked))
             elif a.kind == AssetKind.AIRFIELD:
                 w = state.enemy_air_at(a.id)
                 if w and w.available > 0:

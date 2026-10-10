@@ -35,10 +35,20 @@ from .models import AssetKind, BaseKind, ObjectiveType, Role
 STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -30}      # seconds relative to the strikers' push (BMS-style)
 
 
+DEAD_SEAD_LEAD_S = 300         # in a DEAD package the SEAD flight is on the site this long before the DEAD flight
+DEAD_GATE_BEFORE_TGT_S = 75    # the radars are checked this long before the DEAD flight reaches its target; any still up and DEAD turns back
+
+
 def stagger(package, role) -> int:
-    """SEAD leads the strikers by a minute and a half in a DEAD package: the radars must be blind before the DEAD flight commits."""
-    if role == Role.SEAD and package.objective.type == ObjectiveType.DEAD:
-        return -90
+    """SEAD leads the strikers by five minutes in a DEAD package (the radars must be blind before the DEAD flight commits); the sweep and the
+    escorts keep their usual 30 s spacing around it: the sweep ahead, the escorts behind."""
+    if package.objective.type == ObjectiveType.DEAD:
+        if role == Role.SEAD:
+            return -DEAD_SEAD_LEAD_S
+        if role == Role.SWEEP:
+            return -DEAD_SEAD_LEAD_S - 30
+        if role == Role.ESCORT:
+            return -DEAD_SEAD_LEAD_S + 30
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
@@ -172,6 +182,7 @@ class MissionBuilder:
         self.warns = warns
         self._anchor_id = package.id
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
+        self._gates = []                                         # DEAD flights that turn back when the site's radars are still up
         extras = [x for x in extras if any(not f.tag for f in x.flights)]
         ruins = [x for x in ruins if any(not f.tag for f in x.flights)]
         self._preroll, self._ruin_sites = dict(preroll or {}), []
@@ -357,11 +368,11 @@ class MissionBuilder:
             calls.append((tgt.eta_s - 300, f"{awl.upper()} to {pf.callsign.upper()}: five minutes to TOT."))
         calls += self._fcalls
         with tempfile.TemporaryDirectory(prefix="sqe_kb_") as td:
-            sound = self._squelch(td)
+            sound, sound_you = self._squelch(td)
             install_hook(m, st.campaign_id, manifest.sortie, package.id, despawn if o.ai_despawn_on_land else [], manifest.player_unit,
-                         group=pf.callsign, calls=calls, wps=[], sound=sound, flights=self._ulabels,
+                         group=pf.callsign, calls=[(t_, x_, f"TO {pf.callsign.upper()}:" in x_.upper()) for t_, x_ in calls], wps=[], sound=sound, sound_you=sound_you, flights=self._ulabels,
                          enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" for u in g_["units"]],
-                         sites=self._hook_sites(manifest), ruins=self._ruin_sites)
+                         sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai))
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -536,27 +547,33 @@ class MissionBuilder:
                         "units": g["units"], "trk": g.get("trk", []), "srch": g.get("srch", [])})
         return out
 
-    def _squelch(self, folder) -> str:
-        """A short beep (1 kHz, 0.2 s) bundled into the mission; played with each radio call-out. Returns the in-mission file name ('' on failure)."""
+    def _squelch(self, folder) -> tuple:
+        """Two short beeps bundled into the mission, played with the radio call-outs: a single 1 kHz tone (0.2 s) for calls to anyone else, and a
+        double higher tone for calls addressed to the player's flight. Returns the in-mission file names ('' on failure)."""
         try:
             import struct
             import wave
-            p = Path(folder) / "sqe_beep.wav"
-            rate, secs = 22050, 0.20
-            with wave.open(str(p), "wb") as w:
-                w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
-                n = int(rate * secs)
-                frames = bytearray()
-                for i in range(n):
+            rate = 22050
+
+            def tone(freq, secs, amp=11000):
+                out = bytearray()
+                for i in range(int(rate * secs)):
                     t = i / rate
                     env = min(1.0, t / 0.01, (secs - t) / 0.03)              # short fade in / out so it does not click
-                    frames += struct.pack("<h", int(math.sin(2 * math.pi * 1000 * t) * 11000 * max(0.0, env)))
-                w.writeframes(bytes(frames))
-            self.m.map_resource.add_resource_file(str(p))
-            return "l10n/DEFAULT/sqe_beep.wav"
+                    out += struct.pack("<h", int(math.sin(2 * math.pi * freq * t) * amp * max(0.0, env)))
+                return bytes(out)
+
+            def put(name, data):
+                p = Path(folder) / name
+                with wave.open(str(p), "wb") as w:
+                    w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate); w.writeframes(data)
+                self.m.map_resource.add_resource_file(str(p))
+                return "l10n/DEFAULT/" + name
+            gap = bytes(2 * int(rate * 0.05))
+            return put("sqe_beep.wav", tone(1000, 0.20)), put("sqe_beep_you.wav", tone(1500, 0.09) + gap + tone(1500, 0.09))
         except Exception:
             self.warns.append("radio beep sound could not be bundled; call-outs are text only")
-            return ""
+            return "", ""
 
     # =====================================================================================================
     def _weather(self, m, date):
@@ -1081,6 +1098,17 @@ class MissionBuilder:
             rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
             rtb.type, rtb.action = "Land", PointAction.Landing
             rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
+        if (not f.tag and package.objective.type == ObjectiveType.DEAD and package.objective.target_id and tot_s is not None
+                and f.role in (Role.STRIKE, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10):
+            # radar gate: the DEAD flight, and its escorts and sweeps, break off if the site's radars are still up shortly before the strike
+            added = [w.name for w in wps[first:]]
+            n0_ = len(g.points) - len(added) - 1                       # points before the first one added above (the start point); the landing point is the last
+            tw_ = objective_wp(wps)
+            ti_ = next((k for k, w in enumerate(wps[first:]) if w is tw_), 1)
+            self._gates.append({"t": tot_s - DEAD_GATE_BEFORE_TGT_S, "site": package.objective.target_id, "grp": g.name,
+                                "from": n0_ + max(0, ti_ - 1) + 1,                                        # Lua route indices are 1-based
+                                "to": (n0_ + added.index("EGR") + 1) if "EGR" in added else len(g.points),   # egress, or straight to the landing point
+                                "ai": bool(not f.is_player or o.player_is_ai), "you": bool(f.is_player), "pkg": package.id})
         tw = None if f.tag else objective_wp(wps)
         return g, (tw.eta_s if tw is not None else None)
 

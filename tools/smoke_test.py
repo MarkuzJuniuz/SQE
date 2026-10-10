@@ -858,13 +858,48 @@ def main():
     # AI-test mode builds the player's flight as an AI flight
     s.new("AI test", "F-15C", 3, seed=4); _st = s.state
     _pk = next(p_ for p_ in s.packages() if s.flyable(p_))
-    s.settings.player_is_ai = False; s.fly(_pk.number, None)
+    s.ai_test = False; s.fly(_pk.number, None)
     _t0 = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
-    s.settings.player_is_ai = True; s.fly(_pk.number, None)
+    s.ai_test = True; s.fly(_pk.number, None)
     _t1 = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
-    s.settings.player_is_ai = False
+    s.ai_test = False
     assert '"Player"' in _t0 and '"Player"' not in _t1 and '"Client"' not in _t1, "with the AI-test tick the mission has no player or client slot"
-    print("[ai test] the AI-flown tick builds your flight as AI (no player slot); off = a player slot")
+    print("[ai test] the --ai-test launch option builds your flight as AI (no player slot); without it = a player slot")
+    # garrison CAS waits for the long-range SAM cover to be cleared
+    s.new("Garrison", "FA-18C", 2, seed=9); _st = s.state; _pl = _war.ObjectivePlanner(_gd(2))
+    _gc = lambda: [o_ for o_ in _pl.plan(_st, _rnd.Random(1), limit=12) if o_.type.value == "CAS" and _st.assets[o_.target_id].variant == "GARRISON"]
+    _gs = [a_ for a_ in _st.assets.values() if a_.variant == "GARRISON" and not a_.destroyed and _pl._open(_st, a_)]
+    assert _gs and not _gc(), "no garrison CAS while the long-range sites around it live"
+    for a_ in _gs:
+        for x_ in _pl._garrison_cover(_st, a_): x_.health = 0.0
+    assert _gc(), "garrison CAS is offered once the cover is cleared"
+    print("[garrison cas] held back while the long-range SAM sites that cover a garrison live, offered once they are down; front-line CAS unchanged")
+    # DEAD abort gate: SEAD leads by 5 min (sweep and escorts keep their 30 s spacing around it), the AI flights carry a radar check, calls to you sound different
+    import re as _re
+    from sqe import debrief as _db
+    from sqe.mission_builder import stagger as _stg
+    from sqe.models import Role as _Rl
+    for sd_ in range(1, 40):
+        s.new("Gate", "FA-18C", 3, seed=sd_); _st = s.state
+        _dk = next((p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and s.flyable(p_)), None)
+        if _dk: break
+    assert _dk, "no DEAD package found"
+    assert (_stg(_dk, _Rl.SWEEP), _stg(_dk, _Rl.SEAD), _stg(_dk, _Rl.ESCORT), _stg(_dk, _Rl.STRIKE)) == (-330, -300, -270, 0), "DEAD package timing"
+    s.ai_test = True; s.fly(_dk.number, None); s.ai_test = False
+    _zz = _zf.ZipFile(_st.pending["miz"]); _mt = _zz.read("mission").decode("utf-8", "ignore")
+    assert _mt.count("SwitchWaypoint") >= 1 and _re.search(r"local GATES = \{ \{t=\d+, site=", _mt), "the AI flights carry a radar gate"
+    assert {"l10n/DEFAULT/sqe_beep.wav", "l10n/DEFAULT/sqe_beep_you.wav"} <= set(_zz.namelist()), "both beeps are bundled"
+    _hk = _db.lua_hook("c", 1, "p", [], "Hornet 1-1", "Hornet 1", [(10, "AWACS to HORNET 1: push.", True), (20, "X: on station.", False)], None, "a.wav", "b.wav",
+                       {}, [], [{"id": "sam_x", "label": "X", "who": "W", "prim": True, "units": ["u1"], "trk": ["u1"], "srch": []}], [],
+                       [{"t": 100, "site": "sam_x", "grp": "Hornet 2", "from": 3, "to": 5, "ai": True, "you": False}], True)
+    assert "AITEST = true" in _hk and "gatesJson" in _hk and '"gates":%s' in _hk, "all-AI test: calls go to everyone; every gate is logged in the state file"
+    assert "you=true" in _hk and "SOUND_YOU" in _hk and "GATES = { {t=100" in _hk
+    try:
+        import lupa
+        _err = lupa.LuaRuntime().eval("function(s) local f, e = load(s) return e end")(_hk); assert _err is None, _err
+    except ImportError:
+        pass
+    print("[dead gate] SEAD leads DEAD by 5 min with sweep and escorts around it; AI DEAD, escorts and sweeps carry the radar check; two beeps (calls to your flight sound different)")
     print("SMOKE TEST PASSED")
 
 

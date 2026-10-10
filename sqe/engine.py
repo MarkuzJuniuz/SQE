@@ -29,6 +29,7 @@ class Session:
         self.path: Path | None = None
         self.last_build = None
         self.options = MissionOptions()
+        self.ai_test = False                                  # launch option --ai-test: your own flight is built as an AI flight (see run() in gui/app.py)
         self.loadouts = LoadoutLibrary(Path(settings.sqe_dir) / "loadouts.json" if settings.dcs_saves else None)
         self.sync_terrain()
 
@@ -458,7 +459,7 @@ class Session:
         self.options.friendly_cap_engage_nm = int(self.settings.friendly_cap_engage_nm)
         self.options.fighter_engage_nm = int(self.settings.fighter_engage_nm)
         self.options.fighter_engage_minutes = int(self.settings.fighter_engage_minutes)
-        self.options.player_is_ai = bool(self.settings.player_is_ai)
+        self.options.player_is_ai = bool(self.ai_test)
         self.options.fighter_standoff = bool(self.settings.fighter_standoff)
         self.options.carcasses = bool(getattr(self.settings, 'carcasses', True)); self.options.carcass_weight = max(5, int(getattr(self.settings, 'carcass_weight_pct', 25))) / 100.0
         self.options.reactive = bool(getattr(self.settings, 'reactive', True))

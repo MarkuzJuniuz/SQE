@@ -28,13 +28,18 @@ local DESPAWN = { __DESPAWN__ }
 local PLAYER = "__PLAYER__"
 local PGROUP = "__PGROUP__"
 local SOUND = "__SOUND__"
+local SOUND_YOU = "__SOUND_YOU__"
+local AITEST = __AITEST__            -- all-AI test: nobody sits in a flight, so calls go to everyone
 local CALLS = { __CALLS__ }
 local UFLT = { __UFLT__ }
 local ENEMYAIR = { __ENEMYAIR__ }
 local SITES = { __SITES__ }
 local RUINS = { __RUINS__ }
+local GATES = { __GATES__ }
 local pl = { takeoff = nil, landed = nil, ka = 0, kg = 0, ks = 0 }
 local dead, ejected, landed, ended = {}, {}, {}, false
+local aborted = {}
+local gateLog = {}
 local kills = {}
 local function esc(s) return (tostring(s):gsub('[%c"\\]', function(c) return string.format("\\u%04x", string.byte(c)) end)) end
 local function list(t)
@@ -51,12 +56,20 @@ local function killsJson()
   return "[" .. table.concat(o, ",") .. "]"
 end
 local function num(x) if x then return string.format("%d", math.floor(x)) end return "null" end
+local function gatesJson()
+  local o = {}
+  for _, e in ipairs(gateLog) do
+    o[#o + 1] = string.format('{"site":"%s","grp":"%s","t":%d,"ran":%d,"radars":%d,"abort":%s,"cmd":%s,"d0":%s,"d1":%s}',
+      esc(e.site), esc(e.grp), e.t, e.ran, e.radars, tostring(e.abort), tostring(e.cmd), num(e.d0), num(e.d1))
+  end
+  return "[" .. table.concat(o, ",") .. "]"
+end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson()))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson()))
   f:close()
 end
 local function nameOf(obj)
@@ -185,17 +198,24 @@ world.addEventHandler(H)
 timer.scheduleFunction(function(_, t) dump(); return t + 30 end, nil, timer.getTime() + 30)
 -- call-outs for the player's flight: scheduled radio calls from the other flights and the support aircraft, plus weapon and result calls
 local said = {}
-function say(text)
+function say(text, you)
+  if AITEST then
+    trigger.action.outText(text, 8, false)
+    local snd0 = (you and SOUND_YOU ~= "") and SOUND_YOU or SOUND
+    if snd0 ~= "" then trigger.action.outSound(snd0) end
+    return
+  end
   local g = Group.getByName(PGROUP)
   if not g then return end
   local id = g:getID()
   trigger.action.outTextForGroup(id, text, 8, false)
-  if SOUND ~= "" then trigger.action.outSoundForGroup(id, SOUND) end
+  local snd = (you and SOUND_YOU ~= "") and SOUND_YOU or SOUND
+  if snd ~= "" then trigger.action.outSoundForGroup(id, snd) end
 end
 timer.scheduleFunction(function(_, t)
   local now = timer.getTime()
   for i, c in ipairs(CALLS) do
-    if not said[i] and now >= c.t then said[i] = true; say(c.text) end
+    if not said[i] and now >= c.t then said[i] = true; say(c.text, c.you) end
   end
   return t + 2
 end, nil, timer.getTime() + 5)
@@ -219,6 +239,51 @@ do
     return nil
   end, nil, timer.getTime() + 4)
 end
+-- DEAD gate: shortly before the DEAD flight reaches its target, the site's radars are checked. Any still alive: the DEAD flight turns back
+-- (the AI skips to its egress point; a human gets the call) and the debrief records the abort. Every gate is logged in the state file:
+-- when it ran, radars left, whether the turn-back command went through, and the flight's distance to the target then and 60 s later.
+local function gdist(grpName, tp)
+  if not tp then return nil end
+  local ok, d = pcall(function()
+    local g = Group.getByName(grpName)
+    local u = g and g:getUnit(1)
+    if not u then return nil end
+    local a = u:getPoint()
+    return math.sqrt((a.x - tp.x) ^ 2 + (a.z - tp.z) ^ 2)
+  end)
+  if ok then return d end
+  return nil
+end
+for _, gt in ipairs(GATES) do
+  timer.scheduleFunction(function()
+    local s
+    for _, x in ipairs(SITES) do if x.id == gt.site then s = x end end
+    local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = false, cmd = false }
+    gateLog[#gateLog + 1] = e
+    if s then
+      for _, un in ipairs(s.units) do
+        local u = Unit.getByName(un)
+        if u then local ok, p = pcall(function() return u:getPoint() end); if ok then e.tp = p; break end end
+      end
+    end
+    e.d0 = gdist(gt.grp, e.tp)
+    if not s or s.nrad <= 0 or s.nalive <= 0 then dump(); return nil end
+    e.abort = true
+    if not aborted[gt.site] then
+      aborted[gt.site] = true
+      say(s.who .. ": abort, abort. " .. s.label .. " radars still up, DEAD flight break off.", gt.you)
+    end
+    if gt.ai then
+      local g = Group.getByName(gt.grp)
+      if g and g:getController() then
+        e.cmd = pcall(function() g:getController():setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = gt.from, goToWaypointIndex = gt.to } }) end)
+      end
+      timer.scheduleFunction(function() e.d1 = gdist(gt.grp, e.tp); dump(); return nil end, nil, timer.getTime() + 60)
+    end
+    dump()
+    return nil
+  end, nil, gt.t)
+end
 dump()
 '''
 
@@ -232,10 +297,10 @@ def _lq(s) -> str:
 
 
 def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "", group: str = "",
-             calls: list | None = None, wps: list | None = None, sound: str = "", flights: dict | None = None,
-             enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None) -> str:
+             calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
+             enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
-    cl = ", ".join(f'{{t={float(t):.0f}, text="{_lua_str(x)}"}}' for t, x in (calls or []))
+    cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
     ea = ", ".join(f"[{_lq(n)}]=true" for n in (enemy_air or []))
     lst = lambda xs: "{" + ", ".join(_lq(x) for x in xs) + "}"
@@ -243,22 +308,24 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
                    f'units={lst(x["units"])}, trk={lst(x["trk"])}, srch={lst(x["srch"])}}}' for x in (sites or []))
     ru = ", ".join(f'{{x={r["x"]:.1f}, z={r["z"]:.1f}, n={int(r["n"])}, r={float(r["r"]):.0f}, p={int(r["p"])}, dn={float(r["dn"]):.2f}, pw={int(r["pw"])}, s={float(r["s"]):.2f}}}'
                    for r in (ruins or []))
-    return (LUA_HOOK.replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
+    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, you={"true" if x.get("you") else "false"}}}'
+                   for x in (gates or []))
+    return (LUA_HOOK.replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
-            .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__CALLS__", cl).replace("__UFLT__", uf)
+            .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
             .replace("__ENEMYAIR__", ea).replace("__SITES__", st))
 
 
 def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "",
-                 group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "", flights: dict | None = None,
-                 enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None) -> None:
+                 group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
+                 enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, flights, enemy_air, sites, ruins))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test))))
     mission.triggerrules.triggers.append(t)
 
 
@@ -427,6 +494,10 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                     out["lines"].append("Raid: you left before the bombers arrived; the defences at the base stopped them")
             else:
                 out["lines"].append(f"Raid on {state.bases[g['raid_base']].name}: stopped, no bombs fell")
+    for ref in data.get("aborted", []) or []:
+        a = state.assets.get(ref)
+        if a is not None:
+            out["lines"].append(f"DEAD called off on {a.name}: its radars were still up when the strike flight reached the gate, so it turned back without attacking.")
     # merged missions: one line per folded-in package, from what really happened (reported only if its strike time was reached)
     t_end = float(data.get("time", 0) or 0)
     out["packages"] = []

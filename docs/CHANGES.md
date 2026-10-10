@@ -1,3 +1,23 @@
+## v0.28.1
+* Every DEAD gate is now written to `SQE_state.json` (`"gates"`), so an all-AI run shows what happened without watching: for each flight the site, the scheduled and actual check time, radars left, whether the turn-back command went through (`cmd`), and the flight's distance to the target when the command was issued (`d0`) and 60 s later (`d1`; a smaller number than `d0` means it kept going in, a larger one means it turned). A gate that found the radars dead is logged too, with `abort: false`.
+* In the `--ai-test` launch the radio calls (with their beeps) are shown to everyone instead of to your flight's group, which nobody is in. Before this you saw nothing in an all-AI run.
+* Time compression: the script runs on mission time, so the checks happen at the same mission second at any speed; at very high compression the check can run a little late (the file records both times).
+
+## v0.28.0
+* DEAD packages call themselves off when the radars are still up. Shortly before the strike (75 s before the target time) the mission checks every search and track radar of the target site. If any is still alive, the DEAD flight, and the escorts and sweeps in the package, break off: the AI skips to its egress point (or straight to the landing point for stand-off fighters), a "abort, abort, ... radars still up, DEAD flight break off." call goes out, and the debrief says "DEAD called off on <site>". A human flight gets the call and decides. A site with no radars at all is never aborted. Abstract (unflown) packages are unchanged: they already did badly against an unblinded site.
+* SEAD now leads the DEAD flight by 5 minutes (it was 90 s) so the HARMs have time to land before the check. The sweep keeps going in 30 s ahead of SEAD and the escorts 30 s behind it, so the fighters stay with the SEAD flight instead of arriving minutes after it. Other package types are unchanged.
+* Calls addressed to your flight ("AWACS to VIPER 1: ...", and the abort call when you are in the DEAD flight) have their own sound, a double high beep, instead of the single low beep every other call uses.
+* Not verified in DCS: the AI turn-back uses the SwitchWaypoint command from the debrief script. The smoke test checks that the gate is built and that the script compiles.
+
+## v0.27.1
+* The all-AI test is a launch option now, not a setting. Start SQE with `--ai-test` (`run_ai_test.bat` does it from the folder; for the exe, add `--ai-test` to a shortcut's target) and your own flight is built as an AI flight: no player or client slot, the AI stand-off and the engage window. The title bar says "[AI TEST ...]" so you cannot forget. Started normally, nothing changes. The Settings tick from v0.26.1 is gone; an old settings file that still has it is read without trouble.
+
+## v0.27.0
+* Garrison CAS waits for the SAM cover to be cleared. "Close air support: dislodge the ... garrison" used to be offered from day 1, and the A-10s flew straight into the whole SAM cluster around it (twelve lost in one all-AI sortie). Now a dug-in garrison is not offered while any long-range SAM site (the kind SEAD / DEAD packages are sent to: value 5 or more, ring 10 nm or more) whose ring covers it is alive and can be tasked. Clear the sites (SEAD and DEAD, or "Finish off" jobs) and the garrison CAS appears. The Tors, Shilkas and other short-range systems are not counted: they are never DEAD targets, so waiting for them would hold the job back for ever.
+* The sites that stand between you and a garrison now also count as "blocking" for the planner, so their DEAD packages are ranked higher (the same x1.8 the SAM belt already got).
+* Front-line CAS (the armor column in each contested sector) is unchanged: in my test, an A-10C pilot still has a flyable CAS job on day 1 at all three levels. Level 1 has no garrison jobs open on day 1 at all.
+* In 20 test campaigns per level: Level 2 offered no garrison CAS on day 1 and offered it for all 61 open garrisons once their cover was cleared; Level 3 offered none on day 1 and 80 of 120 after clearing (the rest did not fit the daily list).
+
 ## v0.26.5
 * A DEAD package never flies LOW. Its target is a defended cluster (the site's own AAA, Shilka and Strela, a garrison, Tunguskas next door), and LOW only helps against radar missiles, which are exactly what the package is there to destroy. In the last test the four Hornets that bombed a mop-up SA-10 site at 500 ft AGL all died within 40 seconds. A DEAD package now picks between its normal altitude and MED, as before. CAS, STRIKE and the other packages are unchanged.
 * The altitude profile now counts SAM sites at 25% health or less, like the stand-off since v0.26.4: a site with a unit left still shoots, so it no longer makes a package look safer than it is.
