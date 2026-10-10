@@ -48,7 +48,10 @@ class Geometry:
     dep: tuple = (0.0, 0.0)
 
 
-def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None) -> Geometry:
+CARRIER_DEP_NM = 10.0      # Case III: the departure circle is 10 nm from the boat, and the flight leaves on the briefed departure radial
+
+
+def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, carrier: bool = False) -> Geometry:
     """mshl: where the package marshals. It is chosen by the caller BEHIND the base (away from the enemy) so the departure and
     the hold are in friendly, defended airspace; the route then runs marshal -> PUSH -> IP -> target."""
     d = dist(bx, by, tx, ty)
@@ -63,7 +66,10 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None) ->
     push_xy = offset(*mshl, bearing(*mshl, tx, ty), push_nm * NM)
     cap_d = max(0.45 * d, min(60 * NM, d))
     cap1 = at(cap_d)
-    dep = offset(bx, by, bearing(bx, by, *mshl), min(4 * NM, 0.4 * dist(bx, by, *mshl)))      # DEP: a short climb-out / turning point toward the marshal
+    # DEP: where the flight is established and on its way. 10 nm from a carrier (the departure radial points at the marshal), 8 nm from a
+    # land base (6 for slow types), on the straight line to the marshal point and never beyond 40% of the way there.
+    dep_nm = CARRIER_DEP_NM if carrier else p.dep_nm
+    dep = offset(bx, by, bearing(bx, by, *mshl), min(dep_nm * NM, 0.4 * dist(bx, by, *mshl)))
     return Geometry(bx, by, tx, ty, hdg, d, mshl, push_xy, ip_xy,
                     offset(tx, ty, hdg + 100, p.egress_nm * NM), cap1, offset(*cap1, hdg + 90, p.cap_leg_nm * NM), dep)
 

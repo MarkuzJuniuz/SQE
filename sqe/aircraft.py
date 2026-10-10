@@ -14,6 +14,7 @@ class RouteProfile:
     """Altitudes (ft) and ground speeds (kts) for the route planner. Waypoint speeds are ground speed."""
     depart_alt_ft: int = 8000
     depart_kts: int = 380
+    dep_nm: float = 8.0              # DEP is this far from a land base (a carrier uses CARRIER_DEP_NM: the Case III 10 nm departure circle)
     aar_alt_ft: int = 20000
     aar_kts: int = 350
     marshal_alt_ft: int = 22000
@@ -101,7 +102,7 @@ AIRCRAFT: dict[str, AircraftSpec] = {
     "A-10C": AircraftSpec(
         "A-10C", "A-10C Warthog", "A_10C_2", BaseKind.AIRFIELD,
         frozenset({_R.CAS}), RefuelMethod.BOOM, 1, 230, 300, True,
-        RouteProfile(depart_alt_ft=4000, depart_kts=250, aar_alt_ft=15000, aar_kts=270, marshal_alt_ft=10000,
+        RouteProfile(depart_alt_ft=4000, depart_kts=250, dep_nm=6, aar_alt_ft=15000, aar_kts=270, marshal_alt_ft=10000,
                      marshal_kts=250, alt_ft={_R.CAS: 9000, _R.STRIKE: 9000}, push_kts=300, ip_kts=300,
                      attack_kts=300, egress_kts=330, push_nm=35, ip_nm=12, egress_nm=15,
                      tgt_note="CAS: check in with JTAC"), first_wp_label="0", bingo_lbs=1500, joker_lbs=2500),

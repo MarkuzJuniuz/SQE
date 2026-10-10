@@ -525,6 +525,16 @@ def main():
         assert [Path(p_).name for p_ in pgs] == ["1_comms_times.png", "2_fuel_codes_package.png", "3_other_threats_intel.png"]
         assert all(_Im.open(p_).size == (768, 1024) for p_ in pgs)
     print("[kneeboard] 3 form pages, every time hh:mm:ss, TGT remark points to page 2, 768x1024")
+    # ---- DEP spacing: 10 nm from a boat, 8 nm from a field (6 for the A-10C), straight toward the marshal point
+    from sqe.routes import make_geometry as _mg, dist as _d, bearing as _b, NM as _NM
+    from sqe.aircraft import AIRCRAFT as _AC
+    _pr = _AC["FA-18C"].profile
+    _g = _mg(0, 0, 200 * _NM, 0, _pr, (-60 * _NM, 0)); assert abs(_d(0, 0, *_g.dep) / _NM - 8) < 0.01
+    _g = _mg(0, 0, 200 * _NM, 0, _pr, (-60 * _NM, 0), carrier=True); assert abs(_d(0, 0, *_g.dep) / _NM - 10) < 0.01 and abs(_b(0, 0, *_g.dep) - 180) < 0.1
+    _g = _mg(0, 0, 200 * _NM, 0, _pr, (-15 * _NM, 0)); assert abs(_d(0, 0, *_g.dep) / _NM - 6) < 0.01          # 40% cap on a short leg
+    assert [k for k, v in _AC.items() if v.profile.dep_nm != 8.0] == ["A-10C"], "only the A-10C departs at 6 nm"
+    assert ks.__class__ and any(r_["name"] == "TAKEOFF" for r_ in ctx_["waypoints"])
+    print("[departure] DEP 8 nm land / 10 nm carrier / 6 nm A-10C, capped at 40% of the way to the marshal point")
     print("SMOKE TEST PASSED")
 
 

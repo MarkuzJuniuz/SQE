@@ -1,3 +1,9 @@
+## v0.20.0
+* DEP (the climb-out point after takeoff) is now spaced out the way real departures are flown. It used to sit 4 nm from the runway, which was too close to the takeoff spot.
+* From a carrier DEP is 10 nm out, the Case III departure circle, on the radial toward the marshal point. The TAKEOFF line on the kneeboard now reads, for example, "CVN-74, depart radial 045". From a land base DEP is 8 nm out (6 nm for the A-10C) on the straight line to the marshal point. On a short leg it never goes past 40% of the way to the marshal point.
+* Straight-out-along-the-runway is not modelled: the FAA only requires 400 ft above the runway end before a turn, and a fighter does that within a mile or two. It would also mean guessing which runway DCS puts you on.
+* The timeline follows: the longer climb-out moves DEP, marshal and the whole schedule by about a minute. Nothing else in a built mission changed.
+
 ## v0.19.0
 * The kneeboard is now three pages laid out like a printed form: shaded section bands, ruled rows and exactly three type sizes (24 px title, 16 px values, 11 px labels). The old pages mixed 11-18 px text; nothing is smaller than 16 px now except the small band labels.
 * Page 1: comms and waypoints, then notes (waypoint numbering, tolerances, time zone), one fact per line. Page 2: fuel, codes, weather, the target LAT/LONG in its own block, bullseye, package list. Page 3: other packages in the mission, threats near the target, intelligence, including the new reinforcement and alert hints.

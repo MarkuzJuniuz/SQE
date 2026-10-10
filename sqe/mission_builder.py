@@ -206,7 +206,7 @@ class MissionBuilder:
         fleet_obj = package.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
         tgt_asset = None if fleet_obj else st.assets[package.objective.target_id]
         mshl_xy = tm.safe_marshal(st, (pbase.x, pbase.y), bearing(pbase.x, pbase.y, tx, ty))
-        geom = make_geometry(pbase.x, pbase.y, tx, ty, pspec.profile, mshl_xy)
+        geom = make_geometry(pbase.x, pbase.y, tx, ty, pspec.profile, mshl_xy, carrier=pbase.kind == BaseKind.CARRIER)
         # enemy CAP stations are planned first so the egress can stay clear of them too (they sit 20-25 nm in front of their own base)
         keep0 = [(geom.mshl[0], geom.mshl[1], 120)]
         for bid in dict.fromkeys(f.base_id for f in package.flights):
@@ -295,7 +295,10 @@ class MissionBuilder:
         m.coalition["blue"].bullseye = {"x": bx, "y": by}
 
         # ---- waypoint table as the jet numbers it ------------------------------------------------------------------------------
-        rows = [("TAKEOFF", pbase.x, pbase.y, launch_s, "", "", self._short(pbase.name))]
+        to_note = self._short(pbase.name)
+        if pbase.kind == BaseKind.CARRIER:                       # Case III wording: the leg to DEP is the departure radial
+            to_note += f", depart radial {int(bearing(pbase.x, pbase.y, *geom.dep)):03d}"
+        rows = [("TAKEOFF", pbase.x, pbase.y, launch_s, "", "", to_note)]
         for w in pw:
             rows.append((w.name, w.x, w.y, w.eta_s, "AGL 0" if w.agl else f"{w.alt_ft // 1000}K", w.speed_kts, w.note))
         rows.append(("RTB", pbase.x, pbase.y, rtb_s, "-", 300, self._rtb_note(pspec, pbase)))
@@ -397,7 +400,7 @@ class MissionBuilder:
             tx2, ty2 = self._jitter_primary(xp, tx2, ty2)
             tgt2 = st.assets[xp.objective.target_id]
             mshl2 = tm.safe_marshal(st, (base2.x, base2.y), bearing(base2.x, base2.y, tx2, ty2))
-            geom2 = make_geometry(base2.x, base2.y, tx2, ty2, spec2.profile, mshl2)
+            geom2 = make_geometry(base2.x, base2.y, tx2, ty2, spec2.profile, mshl2, carrier=base2.kind == BaseKind.CARRIER)
             skip = {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else set()
             geom2.egr = (tm.first_safe_egress(st, tx2, ty2, geom2.hdg, skip) or
                          tm.safe_egress(st, tx2, ty2, geom2.hdg, spec2.profile.egress_nm, tm.cluster_ids(tgt2)) or geom2.egr)
