@@ -114,6 +114,7 @@ I cannot run DCS where I build this. Always run `python tools/smoke_test.py` fir
 - [ ] Day-1 targets are the front belt (Sukhumi / Gudauta / Sochi area) and CAS; deep targets only appear after the belts in front of them are broken.
 - [ ] Tanker and AWACS orbit well back from enemy bases, with a HAVCAP flight (Springfield 3 / Viper 3 etc.).
 - [ ] Flights push staggered (sweep first, then SEAD, then escorts, then strikers). Your kneeboard times are for YOUR flight only: MSHL arrival, "hold to" time, PUSH (+/-30 s), your TOT (+/-1 min).
+- [ ] Heavy SAM cover near the target: AI escorts and sweeps stop and orbit outside the SAM rings (waypoint note "hold here, N nm short of the target") and chase no further than the engage range (Settings > Mission build). Your own flight is not cut short.
 - [ ] Text call-outs with a beep: tanker on station, AWACS push and five minutes to TOT, each other flight "pushing" / "off target" / "on station", weapon calls (Magnum, Fox 1/2/3, Rifle, Bombs away), "direct hit", "splash one", "track radar destroyed", "SA-11 site blinded", "target destroyed". (If the beep is silent but text appears, tell me; the sound path is the part I could not verify.)
 - [ ] CAS: friendly tanks and a JTAC are in contact with the enemy column; the A-10s attack it. Debrief reports friendly losses.
 - [ ] Level 3 only: a bomber raid on the fleet (4x Tu-22M3 with escorts) already en route from their base at mission start.

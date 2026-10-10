@@ -121,3 +121,44 @@ def choose(state, role, p, pts, tgt, cloud_base_ft: float | None = None, skip=()
     lab = label_for(best[1], best[2])
     verb = "covers" if len({v for v, _w in hit}) == 1 else "cover"
     return Tier(lab, best[1], best[2], f"{lab} from the IP: {names} {verb} the {where} at {label_for(base[1], base[2])} altitude.", True)
+
+
+# ---- fighters stand off from live SAM cover ---------------------------------------------------------------------------------------
+STANDOFF_MARGIN_NM = 3.0        # stop this far outside the ring of the first live SAM that can reach the flight's altitude
+STANDOFF_MIN_SHORT_NM = 4.0     # only worth moving if the stand-off point is at least this far short of the target
+
+
+def standoff(state, pts, alt_ft: int, margin_nm: float = STANDOFF_MARGIN_NM):
+    """Where a sweep or an escort should stop so it never flies into the umbrella of a live SAM site: the last point on the route (PUSH -> IP -> target,
+    walked in 1 nm steps) outside every ring (plus the margin) of a SAM that can engage `alt_ft`. -> (x, y, [variants that stopped it], nm short of the
+    target) or None when the route is clear of live SAM cover, the flight already starts inside it, or the stop would be hardly short of the target."""
+    sites = []
+    for a in state.assets.values():
+        if a.kind != AssetKind.SAM or a.destroyed or a.health <= 0.25:
+            continue
+        r = tm.RANGE_NM.get(a.variant, 0)
+        if r <= 0 or not hits(a.variant, alt_ft):
+            continue
+        sites.append((a, a.variant, (r + margin_nm) * NM))
+    if not sites or len(pts) < 2:
+        return None
+    path = []
+    for p0, p1 in zip(pts, pts[1:]):
+        d = ((p1[0] - p0[0]) ** 2 + (p1[1] - p0[1]) ** 2) ** 0.5
+        n = max(1, int(d // NM))
+        path += [(p0[0] + (p1[0] - p0[0]) * k / n, p0[1] + (p1[1] - p0[1]) * k / n) for k in range(n)]
+    path.append(pts[-1])
+    def cover(pt):
+        return [(a, v) for a, v, reach in sites if ((a.x - pt[0]) ** 2 + (a.y - pt[1]) ** 2) ** 0.5 <= reach]
+    if cover(path[0]):
+        return None
+    for i, pt in enumerate(path):
+        c = cover(pt)
+        if c:
+            stop = path[i - 1]
+            short = ((stop[0] - pts[-1][0]) ** 2 + (stop[1] - pts[-1][1]) ** 2) ** 0.5 / NM
+            if short < STANDOFF_MIN_SHORT_NM:
+                return None
+            names = sorted({v for _a, v in c}, key=lambda v: -WEIGHT.get(v, 1.0))
+            return stop[0], stop[1], names, short
+    return None

@@ -39,6 +39,7 @@ class Wpt:
     eta_s: float = 0.0      # seconds after mission start (filled by assign_times)
     agl: bool = False       # altitude is metres/feet above ground (the player's TGT sits on the ground so sensors and weapons can slave to it)
     rad: bool = False       # alt_ft is height above the ground (the LOW tier): DCS "radio altitude", so the flight follows the terrain
+    orbit: bool = False     # a fighter stand-off point: the flight holds here (an orbit) instead of flying on to the target
 
 
 @dataclass
@@ -47,7 +48,9 @@ class Geometry:
     hdg: float; d: float
     mshl: tuple; push: tuple; ip: tuple; egr: tuple; cap1: tuple; cap2: tuple
     dep: tuple = (0.0, 0.0)
-    tier: object = None     # profiles.Tier: the altitude profile from the IP on (None = the role altitude)
+    tier: object = None     # profiles.Tier: the altitude profile from the IP on (None = the role altitude); the player's flight
+    tiers: dict = None      # {(role, id(profile)): Tier} one per kind of flight in the package (an escort never inherits a striker's LOW)
+    stand: dict = None      # {(role, id(profile)): (x, y, [SAM types], nm short)} sweeps and escorts that stop at the edge of SAM cover
 
 
 CARRIER_DEP_NM = 10.0      # Case III: the departure circle is 10 nm from the boat, and the flight leaves on the briefed departure radial
@@ -97,7 +100,9 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     wp.append(Wpt("MSHL", *g.mshl, p.marshal_alt_ft + 1000 * stack_idx, p.marshal_kts,
                   "Hold here until PUSH time", "HOLD"))
     alt = p.alt_ft.get(role, 20000)
-    t = g.tier
+    key = (role, id(p))
+    t = g.tiers.get(key) if g.tiers else g.tier                # per kind of flight when the builder worked them out; the single tier otherwise
+    so = None if is_player else (g.stand or {}).get(key)
     ialt, irad = (t.alt_ft, t.rad) if (t is not None and t.changed) else (alt, False)          # the tier applies from the IP on
     wp.append(Wpt("PUSH", *g.push, alt, p.push_kts, "Push on time, check in with AWACS"))
     wp.append(Wpt("IP", *g.ip, ialt, p.ip_kts, "Weapons armed, master arm", rad=irad))
@@ -109,13 +114,18 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         wp.append(Wpt("TGT", g.tx, g.ty, 0, p.attack_kts, "SEAD site. You set standoff", "SEAD", agl=True))
     elif role == Role.SEAD:
         wp.append(Wpt("SEAD", *offset(g.tx, g.ty, g.hdg + 180, max(8, p.ip_nm - 4) * NM), ialt, p.attack_kts, "HARM launch point", "SEAD", rad=irad))
+    elif role == Role.SWEEP and so:
+        wp.append(Wpt("TGT", so[0], so[1], alt, p.cap_kts, f"SWEEP: stop here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "SWEEP", orbit=True))
     elif role == Role.SWEEP:
         wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts + 30, "SWEEP: clear the airspace", "SWEEP"))
     elif role == Role.CAS:
         wp.append(Wpt("TGT", g.tx, g.ty, 0 if is_player else ialt, p.attack_kts, "CAS: check in with JTAC (COMM1 CH4)", "CAS", agl=is_player, rad=irad and not is_player))
+    elif so:
+        wp.append(Wpt("TGT", so[0], so[1], ialt, p.cap_kts, f"ESCORT: hold here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "ESCORT", rad=irad, orbit=True))
     else:
         wp.append(Wpt("TGT", g.tx, g.ty, ialt, p.attack_kts, "ESCORT: cover the strikers over target", "ESCORT", rad=irad))
-    wp.append(Wpt("EGR", *g.egr, ialt, p.egress_kts, "Exit threat area", rad=irad))
+    if not (so and role in (Role.SWEEP, Role.ESCORT)):         # a stand-off flight never crosses the target area: it goes home from its hold
+        wp.append(Wpt("EGR", *g.egr, ialt, p.egress_kts, "Exit threat area", rad=irad))
     if len(wp) + 2 > p.max_points:
         raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")
     return wp
