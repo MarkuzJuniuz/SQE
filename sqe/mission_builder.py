@@ -230,7 +230,7 @@ class MissionBuilder:
         for a in st.assets.values():
             if a.kind == AssetKind.AIRFIELD and a.airport:
                 self.t.airports[a.airport].set_red()
-        for bid in dict.fromkeys([f.base_id for f in package.flights] + [f.base_id for x in extras for f in x.flights if not f.tag]):
+        for bid in dict.fromkeys([f.base_id for f in package.flights] + [f.base_id for x in list(extras) + list(ruins) for f in x.flights if not f.tag]):
             self._place_base(st.bases[bid], tx, ty)
         atc = (o.carrier_atc_mhz if pbase.kind == BaseKind.CARRIER else self.t.airports[pbase.airport].atc_radio.uhf_hz / 1e6)
 

@@ -18,6 +18,11 @@ from .routes import NM
 # scramble has to reach the area, fight and get home. Tune freely.
 INTERCEPT_NM = {"MiG_21Bis": 110, "MiG_23MLD": 130, "MiG_29A": 170, "MiG_29S": 170, "Su_27": 220, "F_4E": 150, "F_5E_3": 100}
 
+# The same for our alert pairs: how far from its base a squadron's alert pair is sent (nm), never more than 60% of the combat radius. Hand-set, shorter
+# than that radius for the same reason: it has to reach the area, fight and get home. Tune freely.
+BLUE_DISPATCH_NM = {"F-14BU": 150, "FA-18C": 130, "F-16C": 120, "F-15C": 160}
+BLUE_DISPATCH_DEFAULT_NM = 110
+
 MAX_RED_FLIGHTS = 3                      # pairs added on top of the planned picture
 COMPASS = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 
@@ -73,8 +78,8 @@ def blue_pairs(rng, red_total: int, blue_fighters: int, fleet_obj: bool, raid_in
 
 
 def blue_sources(state, aircraft_table, fighter_roles, committed: dict, px, py) -> list:
-    """Squadrons that can put a pair up near (px, py): a fighter type, within 60% of its combat radius, with 2+ aircraft the mission
-    is not using. Nearest first. -> [(squadron, base, nm, free)]"""
+    """Squadrons that can put a pair up near (px, py): a fighter type, within BLUE_DISPATCH_NM of its base (and 60% of its combat radius), with
+    2+ aircraft the mission is not using. Nearest first. -> [(squadron, base, nm, free)]"""
     out = []
     for sq in state.squadrons.values():
         spec = aircraft_table.get(sq.aircraft)
@@ -83,7 +88,7 @@ def blue_sources(state, aircraft_table, fighter_roles, committed: dict, px, py) 
         b = state.bases[sq.base_id]
         nm = math.hypot(b.x - px, b.y - py) / NM
         free = sq.available - committed.get(sq.id, 0)
-        if free >= 2 and nm <= 0.6 * spec.combat_radius_nm:
+        if free >= 2 and nm <= min(0.6 * spec.combat_radius_nm, BLUE_DISPATCH_NM.get(sq.aircraft, BLUE_DISPATCH_DEFAULT_NM)):
             out.append((sq, b, nm, free))
     out.sort(key=lambda c: c[2])
     return out

@@ -23,6 +23,10 @@ from sqe.settings import AppSettings
 
 
 def main():
+    from sqe import raids as _r0
+    global _EMERG
+    _EMERG = _r0.emergency_happens
+    _r0.emergency_happens = lambda *a, **k: False
     print(f"SQE smoke test, version {sqe.__version__}  (isolated temp data: {TMP})")
     mk = lambda: Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
     s = mk()
@@ -646,7 +650,8 @@ def main():
     # ---- raids and emergencies ----
     from sqe import raids as _rd
     from sqe.packages import Package as _Pk
-    _ev_orig = _rd.emergency_happens
+    _ev_orig = _EMERG
+    _rd.emergency_happens = _EMERG                       # switched back on here (it is off above so the other tests are not at the mercy of the dice)
     s.new("Raids 2", "F-16C", 2, seed=4); _st = s.state
     # rates over a long run follow the difficulty table, and the same day plans the same raids
     _nw = _ns = 0
@@ -657,7 +662,7 @@ def main():
     _st.day = 5; s.plan_day(); _a = [d_["objective"]["description"] for d_ in _st.plan]; s.plan_day(); assert _a == [d_["objective"]["description"] for d_ in _st.plan], "a day replans the same"
     # per-sortie dice: roughly the table, never two in a row, and asking twice gives the same answer
     _hits = _tot = 0
-    for _ in range(50):
+    for _ in range(150):
         s.plan_day(); _st.day += 1
         for p_ in s.packages():
             if s.flyable(p_):
@@ -668,7 +673,7 @@ def main():
                     _hits += 1
                     _st.raids["last_emerg"] = _st.sortie_counter                         # as fly() leaves it: that sortie had one
                     assert s.emergency_for(p_.number, "x") is None, "none in two sorties in a row"
-    assert 0.04 <= _hits / _tot <= 0.2, (_hits, _tot)
+    assert 0.045 <= _hits / _tot <= 0.16, (_hits, _tot)
     # an emergency forced: scramble (fighter) and decline (folds in or odds); both build a mission
     _rd.emergency_happens = lambda st_, d_, rng_: True
     try:
@@ -685,7 +690,13 @@ def main():
                 assert all(not x_.extra.get("past") for x_ in s.packages()), "emergency packages are not listed"
         # postponement: the squadron cannot cover both
         s.new("Emerg post", "A-10C", 2, seed=9); _st = s.state
-        _p = next(p_ for p_ in s.packages() if s.flyable(p_) and s.emergency_for(p_.number, None) and s.emergency_for(p_.number, None)["kind"] == "CAS")
+        _p = None
+        for _day in range(8):                                                       # any day that has a troops-in-contact emergency for an A-10 package
+            _p = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "CAS"), None)
+            if _p:
+                break
+            _st.day += 1; s.plan_day()
+        assert _p is not None
         _ev = s.emergency_for(_p.number, None)
         _st.squadrons[_st.player.squadron_id].available = _ev["package"].flights[0].count
         s.fly(_p.number, None, scramble=True)
@@ -702,7 +713,13 @@ def main():
     if _rp is None:
         _rd.emergency_happens = lambda st_, d_, rng_: True
         try:
-            _rp0 = next(p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "RAID" and s.emergency_for(p_.number, None)["eligible"])
+            _rp0 = None
+            for _day in range(8):
+                _rp0 = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "RAID" and s.emergency_for(p_.number, None)["eligible"]), None)
+                if _rp0:
+                    break
+                _st.day += 1; s.plan_day()
+            assert _rp0 is not None
             s.fly(_rp0.number, None, scramble=True)
         finally:
             _rd.emergency_happens = _ev_orig
@@ -721,6 +738,16 @@ def main():
     _rt = _CS.from_dict(_st.to_dict()); assert _rt.raids == _st.raids
     _o = _st.to_dict(); _o.pop("raids"); assert _CS.from_dict(_o).raids == {}
     print("[raids] announced and surprise raids by level, repeatable emergencies (about 9% a sortie, never two in a row), scramble / stay, CAS folded in, postponement, Su-24M raid built and applied, overnight surprises")
+    # alert pairs have a dispatch range like the enemy's reinforcements
+    from sqe import reactive as _rv
+    s.new("Alert range", "FA-18C", 2, seed=4); _st = s.state
+    _cv = next(b_ for b_ in _st.bases.values() if b_.kind.value == "CARRIER")
+    _near = _rv.blue_sources(_st, AIRCRAFT, {Role.CAP, Role.ESCORT, Role.SWEEP}, {}, _cv.x + 60 * 1852, _cv.y)
+    _far = _rv.blue_sources(_st, AIRCRAFT, {Role.CAP, Role.ESCORT, Role.SWEEP}, {}, _cv.x, _cv.y + 170 * 1852)
+    assert any(c_[1].id == _cv.id for c_ in _near), "the carrier answers 60 nm away"
+    assert not any(c_[1].id == _cv.id and c_[0].aircraft == "FA-18C" for c_ in _far), "no Hornet alert pair is sent 170 nm"
+    assert all(c_[2] <= _rv.BLUE_DISPATCH_NM.get(c_[0].aircraft, _rv.BLUE_DISPATCH_DEFAULT_NM) for c_ in _far + _near)
+    print("[alert range] alert pairs are sent no further than their dispatch range (F-14 150, Hornet 130, Viper 120, Eagle 160 nm)")
     print("SMOKE TEST PASSED")
 
 
