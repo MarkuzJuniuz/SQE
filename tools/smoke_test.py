@@ -777,6 +777,48 @@ def main():
     _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 0); assert not _gx.points[0].tasks
     print("[engage time] the engage task stops at TOT + 5 min and the flight flies on (alert pairs +5); distance-only and unlimited forms unchanged")
     print("[stand-off] fighters stop outside live SAM rings (player excepted), hold there and go home; AI escorts and sweeps carry the 40 nm engage limit")
+    # ---- phase 3: air defence that rebuilds and moves ----
+    from sqe import sams as _sm
+    import math as _mm
+    s.new("Sams", "FA-18C", 3, seed=11); _st = s.state
+    _ds = _NS(sam_rebuild=1.0, sam_scoot=1.0)
+    _lr = next(a_ for a_ in _st.assets.values() if a_.kind == _AK.SAM and a_.id.startswith("sam_") and a_.variant in ("SA-2", "SA-3", "SA-6", "SA-11", "SA-10") and a_.tier <= _st.front + 2)
+    _lr.health = 0.0; _st.day = 10; _sm.track(_st); assert _st.sams["down"][_lr.id] == 10
+    _st.day = 12; assert not _sm.rebuild(_st, _ds, _rnd.Random(1)) and _lr.destroyed, "not rebuilt before the third day"
+    _st.day = 13; _got = []
+    for _k in range(30):
+        _got = _sm.rebuild(_st, _ds, _rnd.Random(_k))
+        if _got: break
+    assert _got and abs(_lr.health - _sm.REBUILT_HEALTH) < 1e-9 and _lr.id not in _st.sams["down"], "a destroyed site is replaced at half strength"
+    _fs = next(a_ for a_ in _st.assets.values() if a_.id.startswith("fsam_")); _fs.health = 0.0; _st.day = 30; _sm.track(_st); _st.day = 40
+    for k_ in range(5): _sm.rebuild(_st, _ds, _rnd.Random(k_))
+    assert _fs.destroyed, "column air defence is not rebuilt"
+    _deep = next((a_ for a_ in _st.assets.values() if a_.kind == _AK.SAM and a_.tier > _st.front + 2 and a_.id.startswith("sam_")), None)
+    if _deep is not None:
+        _deep.health = 0.0; _st.day = 30; _sm.track(_st); _st.day = 40
+        assert all(not _sm.rebuild(_st, _ds, _rnd.Random(k_)) for k_ in range(5)) and _deep.destroyed, "nothing is rebuilt beyond the tiers in play"
+    _mob = next(a_ for a_ in _st.assets.values() if a_.kind == _AK.SAM and a_.variant in _sm.MOBILE and not a_.id.startswith("fsam_") and not a_.destroyed)
+    _gar = next((g_ for g_ in _st.assets.values() if g_.guards == _mob.id), None)
+    _mob.health = 1.0
+    _x0, _y0 = _mob.x, _mob.y; _g0 = (_gar.x, _gar.y) if _gar else None
+    _mob.health = 0.5; _n = 0
+    for _k in range(6):
+        _n += len([l_ for l_ in _sm.relocate(_st, _ds, _rnd.Random(50 + _k)) if _mob.name in l_])
+    assert 1 <= _n <= _sm.MAX_MOVES, "a hurt mobile site moves, at most twice"
+    assert _mm.hypot(_mob.x - _x0, _mob.y - _y0) <= _sm.MAX_DRIFT_NM * 1852 + 1, "and never drifts far from where it started"
+    if _gar: assert abs((_gar.x - _mob.x) - (_g0[0] - _x0)) < 1, "its garrison goes with it"
+    _fx = next(a_ for a_ in _st.assets.values() if a_.kind == _AK.SAM and a_.variant not in _sm.MOBILE and not a_.id.startswith("fsam_") and not a_.destroyed)
+    _fx.health = 0.4; _px = (_fx.x, _fx.y); _sm.relocate(_st, _ds, _rnd.Random(7)); assert (_fx.x, _fx.y) == _px, "fixed sites (SA-2, SA-3, SA-10) never move"
+    _fl = [b_ for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD"]
+    for b_ in _fl: b_.defense = 0.3
+    _sm.blue_defence(_st, _gd(3)); assert all(0.31 < b_.defense <= 0.41 for b_ in _fl), "airfield defences repair by supply (at most 0.10 a day)"
+    _fl[0].defense = 0.95; _fl[1].defense = 0.2; _lines = _sm.blue_defence(_st, _gd(3)); assert _lines and _fl[0].defense < 1.0, "a strong field lends a battery to the weakest"
+    _st.ground["fallen"] = [_fl[1].id]; _d1 = _fl[1].defense; _sm.blue_defence(_st, _gd(3)); assert _fl[1].defense == _d1, "a fallen field does not repair"
+    _rt = _CS.from_dict(_st.to_dict()); assert _rt.sams == _st.sams
+    _o = _st.to_dict(); _o.pop("sams"); assert _CS.from_dict(_o).sams == {}
+    s.new("Sams night", "FA-18C", 3, seed=12); _st = s.state; _st.status = "ACTIVE"
+    for _k in range(8): _war.WarSimulator(_gd(3), _rnd.Random(_k)).end_day(_st)
+    print("[sams] destroyed sites are replaced after 3 days (not column SAMs, not beyond the tiers in play), hurt mobile sites move (garrison too, 2 moves, 10 nm), airfield defences repair by supply and lend a battery, save round trip")
     print("SMOKE TEST PASSED")
 
 

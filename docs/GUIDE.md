@@ -95,6 +95,9 @@ Red raids our airfields. Announced raids are in the tasking order as "Intercept 
 ## The ground war (v0.23)
 The front is five sectors along the Sukhumi to Senaki axis, each with a Red and a Blue strength. Every night contested sectors fight; the line moves; Red takes a field if it holds the sector beside it, and two fallen fields lose the war. Your CAS sorties (and anything that hurts Red supply, such as its fuel farms and depots) are what keeps the line where it is. Blue has the same kind of facilities and supply as Red. The Campaign page shows the sectors and the map draws the front line. See docs/CHANGES.md v0.23.0 for the rules.
 
+## Air defence that rebuilds and moves (v0.26)
+A destroyed Red SAM site can be replaced from its fourth day down (half strength, slower when Red's depots and fuel farms are hit); a hurt SA-6 / SA-11 / SA-8 / SA-15 / SA-19 can move a few nm overnight with its garrison. Fixed sites (SA-2, SA-3, SA-10) and the column air defence never move. Blue's airfield defences repair by supply and a strong field lends a battery to the weakest. See CHANGES v0.26.0 for the numbers; the rates are Difficulty.sam_rebuild and sam_scoot.
+
 ## Settings (v0.18)
 Five tabs. General: takeoff buffer, marshal slack, AI fuel, F-14 names. Campaign: weather, reactive dispatch, ruins, carcasses. Mission build: merging, radius, unit limit, CAP ranges. DCS integration: folders and the scripting patch. Terrain scan: the green / amber status, margins, the scan mission and Re-check.
 
@@ -113,6 +116,7 @@ I cannot run DCS where I build this. Always run `python tools/smoke_test.py` fir
 - [ ] Enemy CAPs are airborne at mission start on the stations the briefing/kneeboard intelligence line implies; alert fighters sit on a real enemy runway and take off only when your package enters their airfield's detection zone.
 - [ ] Day-1 targets are the front belt (Sukhumi / Gudauta / Sochi area) and CAS; deep targets only appear after the belts in front of them are broken.
 - [ ] Tanker and AWACS orbit well back from enemy bases, with a HAVCAP flight (Springfield 3 / Viper 3 etc.).
+- [ ] After a few nights: a site you destroyed shows up again at half strength in the tasking order (Overnight log: "put up a replacement"); a hurt SA-6 / SA-11 has a new position (log: "has moved about N nm") and its garrison is next to it.
 - [ ] Flights push staggered (sweep first, then SEAD, then escorts, then strikers). Your kneeboard times are for YOUR flight only: MSHL arrival, "hold to" time, PUSH (+/-30 s), your TOT (+/-1 min).
 - [ ] Heavy SAM cover near the target: AI escorts and sweeps stop and orbit outside the SAM rings (waypoint note "hold here, N nm short of the target") and chase no further than the engage range (Settings > Mission build). Your own flight is not cut short.
 - [ ] Text call-outs with a beep: tanker on station, AWACS push and five minutes to TOT, each other flight "pushing" / "off target" / "on station", weapon calls (Magnum, Fox 1/2/3, Rifle, Bombs away), "direct hit", "splash one", "track radar destroyed", "SA-11 site blinded", "target destroyed". (If the beep is silent but text appears, tell me; the sound path is the part I could not verify.)
@@ -179,7 +183,7 @@ python -m PyInstaller --noconfirm --clean --windowed --name SQE --collect-all dc
 | `sqe/callsigns.py` | DCS-native callsign names/ids per aircraft type |
 | `sqe/timeofday.py` | sunrise/sunset and the daily tasking timeline (day only, or night too) |
 | `sqe/threatmap.py` | SAM rings, the FLOT/gatekeeper rule, tanker stations, egress steering, corridor sites |
-| `sqe/geo_data.py` | the map's coastline and borders (Natural Earth, public domain) in DCS coordinates, embedded in code |
+| `sqe/data/theatres/<theatre>_geo.json` | the map's coastline and borders (Natural Earth, public domain) in DCS coordinates, one file per theatre pack |
 
 **Custom loadouts**: in the Mission Editor name an aircraft group like `F-14BU:STRIKE`, `F-14BU:CAP`, `FA-18C:SEAD`, `A-10C:CAS`,
 build the loadout, save, then `python tools/capture_loadouts.py that.miz`. They override the defaults.

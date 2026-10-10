@@ -5,7 +5,7 @@ import math
 import random
 from . import threatmap as tm
 from . import ground, theatres
-from . import raids
+from . import raids, sams
 from .raids import hit as raids_hit
 from .difficulty import Difficulty
 from .models import Objective, ObjectiveType, AssetKind, Role
@@ -279,6 +279,7 @@ class WarSimulator:
 
     def end_day(self, state: CampaignState) -> None:
         d = self.d
+        sams.track(state)                                           # the day each SAM site went down (it can be rebuilt later)
         for sq in state.squadrons.values():
             if sq.available < sq.authorized:
                 sq.available = min(sq.authorized, sq.available + max(1, round(sq.authorized * d.friendly_replenish)))
@@ -293,7 +294,10 @@ class WarSimulator:
                 a.health = min(1.0, a.health + (d.sam_repair if a.kind == AssetKind.SAM else d.asset_repair))
         for a in state.assets.values():
             a.suppressed = False                                    # blinded radars come back on overnight
-        self.counterstrike(state)
+        for ln in self.counterstrike(state):
+            state.note("Overnight: " + ln)
+        for ln in sams.rebuild(state, d, self.rng) + sams.relocate(state, d, self.rng):
+            state.note("Overnight: " + ln)
         for ln in raids.overnight(state, d, self.rng):               # surprise raids nobody flew: alert aircraft against the bombers
             state.note("Overnight: " + ln)
         if ground.active(state):
@@ -307,11 +311,10 @@ class WarSimulator:
         update_front(state)
         update_status(state)
 
-    def counterstrike(self, state: CampaignState) -> None:
-        """Airfield air defences repair a little every day. (The old random overnight air strike is gone: Red raids are planned now, see raids.py.)"""
-        fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
-        for b in fields:
-            b.defense = min(1.0, b.defense + 0.10)
+    def counterstrike(self, state: CampaignState) -> list:
+        """Our airfield air defences repair (by supply; see sams.blue_defence) and a strong field lends a battery to the weakest. (The old random
+        overnight air strike is gone: Red raids are planned now, see raids.py.) Returns log lines."""
+        return sams.blue_defence(state, self.d)
 
 
 def totals(state: CampaignState) -> dict:
