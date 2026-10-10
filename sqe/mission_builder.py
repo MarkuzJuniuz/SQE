@@ -49,6 +49,7 @@ KPH = 1.852
 F = VehicleGroup.Formation
 MAIN_TASK = {Role.CAP: task.CAP, Role.ESCORT: task.CAP, Role.SWEEP: task.FighterSweep, Role.SEAD: task.SEAD,
              Role.STRIKE: task.PinpointStrike, Role.CAS: task.CAS}
+CAP_FLEET_KEEPOUT_NM = 90      # Red's known CAP stations stay at least this far from any carrier (hand-set: the cruiser's SM-2s killed CAP pairs 51 to 67 nm out)
 LASER = ["1688", "1687", "1686", "1685", "1684", "1683", "1682", "1681"]
 
 
@@ -66,6 +67,7 @@ class MissionOptions:
     friendly_cap_engage_nm: int = 50    # HAVCAP / BASECAP likewise (0 = unlimited)
     fighter_engage_nm: int = 40         # AI escorts and sweeps chase no further than this (0 = unlimited)
     fighter_engage_minutes: int = 5     # AI escorts, sweeps, SEAD stop engaging this many minutes after the TOT and fly on (alert pairs: +5). 0 = no time limit
+    player_is_ai: bool = False          # test: your slot is set to AI in the editor, so your own flight gets the AI behaviour too (stand-off, engage window)
     fighter_standoff: bool = True       # AI escorts and sweeps stop short of live SAM cover instead of flying into it
     f14_special_names: bool = True
     weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
@@ -288,6 +290,7 @@ class MissionBuilder:
         keep = [(geom.mshl[0], geom.mshl[1], 100)] + [(p[0], p[1], 100) for p in (tanker_xy, hav_xy) if p is not None]
         for bid in dict.fromkeys(f.base_id for f in package.flights):
             keep.append((st.bases[bid].x, st.bases[bid].y, 130 if st.bases[bid].kind == BaseKind.CARRIER else 80))
+        keep += self._fleet_keepout()
         self._spawn_air_picture(air_pkg, tx, ty, tgt.eta_s, geom, manifest, keep)
         self._spawn_cas_support(package, plan, geom, manifest)
         merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock, ruins)
@@ -979,7 +982,7 @@ class MissionBuilder:
         g.set_skill(Skill.High)
         if f.tag:
             self._limit_engage(g, self.o.friendly_cap_engage_nm)
-        elif not f.is_player and f.role in (Role.ESCORT, Role.SWEEP, Role.SEAD):
+        elif (not f.is_player or o.player_is_ai) and f.role in (Role.ESCORT, Role.SWEEP, Role.SEAD):
             m_ = self.o.fighter_engage_minutes
             self._limit_engage(g, self.o.fighter_engage_nm if f.role != Role.SEAD else 0, (tot_s + m_ * 60) if (m_ > 0 and tot_s is not None) else None)
 
@@ -1330,6 +1333,7 @@ class MissionBuilder:
             return []
         rr = random.Random(self.seed_code + ":cap")
         n_cap = max(1, math.ceil((package.n_def // 2) / 2))
+        keepout = list(keepout) + self._fleet_keepout()
         out = []
         for i in range(n_cap):
             w, a = wings[i % len(wings)]
@@ -1341,8 +1345,21 @@ class MissionBuilder:
             for kx, ky, knm in keepout:
                 if dist(sx, sy, kx, ky) < knm * NM:
                     sx, sy = offset(kx, ky, bearing(kx, ky, sx, sy), knm * NM)
-            out.append({"x": sx, "y": sy})
+            out.append({"x": sx, "y": sy, "side": self._cap_side(sx, sy, tx, ty)})
         return out
+
+    def _fleet_keepout(self) -> list:
+        """Every carrier in the campaign, whichever package uses it: the escorts' SM-2s reach well past 50 nm, so Red's known CAP stays out of it."""
+        return [(b.x, b.y, CAP_FLEET_KEEPOUT_NM) for b in self.state.bases.values() if b.kind == BaseKind.CARRIER]
+
+    def _cap_side(self, sx, sy, tx, ty) -> int:
+        """Which way the CAP racetrack leg runs from its station (+90 or -90 off the line to the target): the way that stays further from the fleet."""
+        cvs = [(b.x, b.y) for b in self.state.bases.values() if b.kind == BaseKind.CARRIER]
+        if not cvs:
+            return 90
+        h = bearing(sx, sy, tx, ty)
+        far = lambda sd: min(dist(*offset(sx, sy, h + sd, 20 * NM), cx, cy) for cx, cy in cvs)
+        return 90 if far(90) >= far(-90) else -90
 
     def _scramble_radius(self, package, a, tx, ty, geom) -> float:
         """Alert fighters launch when the package comes this close to the TARGET (nm), so they arrive ~1-2 min before TOT. Smaller when
@@ -1407,7 +1424,7 @@ class MissionBuilder:
                 ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
                 ct.stop_after_time(int(tot_s + 3600))
                 g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
-                g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + 90, 20 * NM)), alt, spd, "CAP2")
+                g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
                 self._limit_engage(g, self.o.enemy_cap_engage_nm)
             else:                                           # alert: on the runway, scrambles when detected
                 ap = self.t.airports.get(a.airport) if a.airport else None
@@ -1450,6 +1467,7 @@ class MissionBuilder:
         Keyed (role, profile) like routes.plan_route looks them up. The player's own route is never cut short; a package whose job IS the sweep
         (COUNTER_AIR) goes in as before."""
         geom.tiers, geom.stand = {}, {}
+        geom.ai_player = bool(self.o.player_is_ai)
         pts = [geom.push, geom.ip, (tx, ty)]
         for f in package.flights:
             if f.tag:
@@ -1458,7 +1476,7 @@ class MissionBuilder:
             key = (f.role, id(prof))
             if key not in geom.tiers:
                 geom.tiers[key] = self._pick_tier(geom, f.role, prof, tx, ty, skip)
-            if f.is_player or key in geom.stand or not self.o.fighter_standoff or f.role not in (Role.ESCORT, Role.SWEEP):
+            if (f.is_player and not self.o.player_is_ai) or key in geom.stand or not self.o.fighter_standoff or f.role not in (Role.ESCORT, Role.SWEEP):
                 continue
             if package.objective.type in (ObjectiveType.COUNTER_AIR, ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
                 continue

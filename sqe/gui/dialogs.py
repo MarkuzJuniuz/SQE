@@ -180,6 +180,9 @@ class SettingsDialog(QDialog):
         hint(v, "How far AI escorts, sweeps and SEAD go after a fighter, and for how long: the engage task ends this many minutes after the strike's TOT and they fly on home (alert pairs get 5 minutes more). 0 = unlimited. Your own flight is never limited.")
         self.fso = QCheckBox("AI escorts and sweeps stop short of live SAM cover"); self.fso.setChecked(bool(settings.fighter_standoff))
         v.addWidget(self.fso)
+        self.pai = QCheckBox("My flight is AI-flown (testing: I set my slot to AI in the editor)"); self.pai.setChecked(bool(settings.player_is_ai))
+        v.addWidget(self.pai)
+        hint(v, "For all-AI test runs: your own flight then stops short of SAM cover and has the engage time limit like the other AI flights. Leave off when you fly.")
         hint(v, "Their route ends where the first live SAM ring (plus 3 nm) would begin, and they hold there. Off = they fly to the target as before.")
         v.addStretch(1)
 
@@ -258,7 +261,7 @@ class SettingsDialog(QDialog):
         self.s.shore_margin_m = int(self.shore.value())
         self.s.river_margin_m = int(self.river.value())
         self.s.enemy_cap_engage_nm = int(self.ecap.value()); self.s.friendly_cap_engage_nm = int(self.fcap.value())
-        self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value()); self.s.fighter_standoff = self.fso.isChecked()
+        self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value()); self.s.fighter_standoff = self.fso.isChecked(); self.s.player_is_ai = self.pai.isChecked()
         self.s.f14_special_names = self.f14n.isChecked()
         self.s.auto_patch_scripting = self.autopatch.isChecked(); self.s.patch_asked = True
         if self.s.dcs_install:                                   # take effect now, not at the next start

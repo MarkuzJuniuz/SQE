@@ -819,6 +819,29 @@ def main():
     s.new("Sams night", "FA-18C", 3, seed=12); _st = s.state; _st.status = "ACTIVE"
     for _k in range(8): _war.WarSimulator(_gd(3), _rnd.Random(_k)).end_day(_st)
     print("[sams] destroyed sites are replaced after 3 days (not column SAMs, not beyond the tiers in play), hurt mobile sites move (garrison too, 2 moves, 10 nm), airfield defences repair by supply and lend a battery, save round trip")
+    # v0.26.1: Red's known CAP stays out of the fleet's reach; the player's flight gets the stand-off in AI-test mode
+    _g3.ai_player = True
+    _w6 = {w.name: w for w in _pr3(_Rl.ESCORT, (0, 0), _g3, _P("FA-18C"), is_player=True, tanker_xy=None)}
+    assert _w6["TGT"].orbit and "EGR" not in _w6, "AI-test mode: the player's own flight stops short too"
+    from sqe import mission_builder as _mbm
+    _rec_cap = []
+    _orig_pcs = _mbm.MissionBuilder._plan_cap_stations
+    def _spy_pcs(self_, *a_, **k_):
+        out_ = _orig_pcs(self_, *a_, **k_)
+        cvs_ = [(b_.x, b_.y) for b_ in self_.state.bases.values() if b_.kind.value == "CARRIER"]
+        for c_ in out_:
+            _rec_cap.append(min(_mm.hypot(c_["x"] - cx_, c_["y"] - cy_) / 1852 for cx_, cy_ in cvs_) if cvs_ else 999.0)
+        return out_
+    _mbm.MissionBuilder._plan_cap_stations = _spy_pcs
+    try:
+        for _sd in (3, 5, 8, 11):
+            s.new(f"Fleet {_sd}", "F-15C", 3, seed=_sd); _st = s.state
+            for _p in [p_ for p_ in s.packages() if s.flyable(p_)][:2]:
+                s.fly(_p.number, None)
+    finally:
+        _mbm.MissionBuilder._plan_cap_stations = _orig_pcs
+    assert _rec_cap and min(_rec_cap) >= _mbm.CAP_FLEET_KEEPOUT_NM - 1.0, f"Red CAP stations stay 90 nm from every carrier ({min(_rec_cap):.0f})"
+    print(f"[fleet keep-out] {len(_rec_cap)} known CAP stations, the nearest {min(_rec_cap):.0f} nm from a carrier (limit 90); AI-test mode gives your flight the stand-off")
     print("SMOKE TEST PASSED")
 
 

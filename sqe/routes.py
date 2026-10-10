@@ -50,6 +50,7 @@ class Geometry:
     dep: tuple = (0.0, 0.0)
     tier: object = None     # profiles.Tier: the altitude profile from the IP on (None = the role altitude); the player's flight
     tiers: dict = None      # {(role, id(profile)): Tier} one per kind of flight in the package (an escort never inherits a striker's LOW)
+    ai_player: bool = False  # test mode: the player's slot is flown by the AI, so the player's flight gets the AI stand-off too
     stand: dict = None      # {(role, id(profile)): (x, y, [SAM types], nm short)} sweeps and escorts that stop at the edge of SAM cover
 
 
@@ -102,7 +103,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     alt = p.alt_ft.get(role, 20000)
     key = (role, id(p))
     t = g.tiers.get(key) if g.tiers else g.tier                # per kind of flight when the builder worked them out; the single tier otherwise
-    so = None if is_player else (g.stand or {}).get(key)
+    so = None if (is_player and not g.ai_player) else (g.stand or {}).get(key)
     ialt, irad = (t.alt_ft, t.rad) if (t is not None and t.changed) else (alt, False)          # the tier applies from the IP on
     wp.append(Wpt("PUSH", *g.push, alt, p.push_kts, "Push on time, check in with AWACS"))
     wp.append(Wpt("IP", *g.ip, ialt, p.ip_kts, "Weapons armed, master arm", rad=irad))
