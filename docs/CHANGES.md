@@ -1,3 +1,8 @@
+## v0.26.4
+* Stand-off bug: a SAM site that is nearly dead still counted as dead. The stand-off ignored sites at 25% health or less, but a mop-up target ("Finish off Gudauta SA-10 site, 11% left") still has units: its track radar killed an F-14 and an F-15 that the stand-off had parked 23 nm from it. Now every site with a unit left counts as live; only a destroyed site (5% or less) is ignored. Consequence: escorts and sweeps now stay outside the ring of a mop-up site too, so on a "finish it off" mission they stop further out.
+* Not changed (found in the same mission): the altitude profile still ignores sites at 25% health or less when it decides whether the package goes LOW, and it only looks at long-range SAMs. The four Hornets that bombed that site at 500 ft AGL all died within 40 seconds to the Tunguskas, a Strela and a Shilka in its cluster. Whether LOW should count the short-range systems around the target is a decision for you.
+* Checked, not a bug: the Maykop pair that killed a Viper at 1126 s was not chasing; it is a scramble pair whose waypoint is the target, 97 nm from its base, so it flew to the fight. The Viper 1 SEAD flight stayed within 21 to 40 nm of the target.
+
 ## v0.26.3
 * The "My flight is flown by the AI" tick (Settings > Mission build) now really does it. In v0.26.1 it only gave your flight the AI stand-off and engage window; the aircraft was still a player slot, so you had to switch it to AI in the editor yourself (and if you did not, you could sit in it and fly). Now the flight is built as an AI flight: no player or client slot at all, so there is nothing to change in the editor, and you cannot take it. It flies like the other AI flights (stand-off short of SAM cover, engage window). Leave the tick off when you fly.
 

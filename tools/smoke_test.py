@@ -750,11 +750,12 @@ def main():
     print("[alert range] alert pairs are sent no further than their dispatch range (F-14 150, Hornet 130, Viper 120, Eagle 160 nm)")
     # fighters stop short of live SAM cover, and AI escorts / sweeps have an engage limit
     from sqe.routes import make_geometry as _mg3, plan_route as _pr3
-    _sam = lambda x_, v_="SA-11", h_=1.0: _NS(assets={"z": _NS(id="z", kind=_AK.SAM, variant=v_, destroyed=False, health=h_, x=x_, y=0)})
+    _sam = lambda x_, v_="SA-11", h_=1.0: _NS(assets={"z": _NS(id="z", kind=_AK.SAM, variant=v_, destroyed=h_ <= 0.05, health=h_, x=x_, y=0)})
     _line = [(0, 0), (60_000, 0), (140_000, 0)]
     _r = _pf.standoff(_sam(140_000), _line, 22000)
     assert _r and _r[2] == ["SA-11"] and _r[3] > 20, "a live SA-11 at the target stops the fighters well short"
-    assert _pf.standoff(_sam(140_000, h_=0.1), _line, 22000) is None, "a dead site stops nobody"
+    assert _pf.standoff(_sam(140_000, h_=0.0), _line, 22000) is None, "a destroyed site stops nobody"
+    assert _pf.standoff(_sam(140_000, h_=0.11), _line, 22000) is not None, "a site at 11% still shoots (mop-up targets): it counts"
     assert _pf.standoff(_sam(10_000), _line, 22000) is None, "a flight that already starts inside cover is left alone"
     assert _pf.standoff(_NS(assets={}), _line, 22000) is None
     _g3 = _mg3(0, 0, 140_000, 0, _P("FA-18C"), (-20_000, 0)); _g3.tier = _pf.Tier(22000, False) if False else None

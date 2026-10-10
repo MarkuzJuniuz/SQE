@@ -134,7 +134,7 @@ def standoff(state, pts, alt_ft: int, margin_nm: float = STANDOFF_MARGIN_NM):
     target) or None when the route is clear of live SAM cover, the flight already starts inside it, or the stop would be hardly short of the target."""
     sites = []
     for a in state.assets.values():
-        if a.kind != AssetKind.SAM or a.destroyed or a.health <= 0.25:
+        if a.kind != AssetKind.SAM or a.destroyed:                  # any site with a unit left shoots: a mop-up target at 11% still has its radar and launchers
             continue
         r = tm.RANGE_NM.get(a.variant, 0)
         if r <= 0 or not hits(a.variant, alt_ft):
