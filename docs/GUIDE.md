@@ -111,7 +111,7 @@ I cannot run DCS where I build this. Always run `python tools/smoke_test.py` fir
 - [ ] Text call-outs with a beep: tanker on station, AWACS push and five minutes to TOT, each other flight "pushing" / "off target" / "on station", weapon calls (Magnum, Fox 1/2/3, Rifle, Bombs away), "direct hit", "splash one", "track radar destroyed", "SA-11 site blinded", "target destroyed". (If the beep is silent but text appears, tell me; the sound path is the part I could not verify.)
 - [ ] CAS: friendly tanks and a JTAC are in contact with the enemy column; the A-10s attack it. Debrief reports friendly losses.
 - [ ] Level 3 only: a bomber raid on the fleet (4x Tu-22M3 with escorts) already en route from their base at mission start.
-- [ ] Kneeboard page 1 = comms + times (no coordinates); page 2 = bingo/joker, IFF Mode 3, laser code, bullseye, package who's-who with STNs, threats, target coordinates (strike/SEAD/CAS roles).
+- [ ] Kneeboard (3 pages, form layout, all times hh:mm:ss): page 1 = comms + waypoints + notes; page 2 = bingo/joker, IFF Mode 3, laser code, weather, target LAT/LONG (strike/SEAD/CAS roles), bullseye, package who's-who with STNs; page 3 = other packages in the mission, threats near the target, intelligence.
 - [ ] Wingmen follow you on your route. Nobody has unlimited fuel (AI included). Marshal slack is in Settings (negative values allowed).
 
 **Fixed earlier, still worth a look**

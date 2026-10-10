@@ -315,10 +315,10 @@ class MissionBuilder:
                 leg = f"{int(bearing(r[1], r[2], nx[1], nx[2])):03d}/{dist(r[1], r[2], nx[1], nx[2]) / NM:.0f}"
             tstr = ""
             if r[3]:
-                tstr = clock(r[3]) if r[0] in ("PUSH", "TGT", "SEAD", "CAP1") else clock(r[3])[:5]
+                tstr = clock(r[3])                                  # every time on the card is hh:mm:ss
             win = {"PUSH": "+/-30s", "TGT": "+/-1m", "SEAD": "+/-1m"}.get(r[0], "")
             if r[0] == "MSHL":
-                win = f"hold to {clock(leave_s)[:5]}"
+                win = f"hold to {clock(leave_s)}"
             kn_rows.append({"wp": pspec.wp_label(i), "name": r[0], "time": tstr, "alt": r[4], "kts": str(r[5]), "leg": leg, "win": win,
                             "note": r[6] if r[0] in ("TGT", "TKR", "RTB", "DIVERT", "TAKEOFF") else ""})
             if r[0] not in ("TAKEOFF", "DIVERT", "TKR", "BULLS"):
@@ -358,7 +358,10 @@ class MissionBuilder:
                    "numbering": (f"{pspec.first_wp_label} for the start point, then 1, 2, 3..." if pspec.first_wp_label else "waypoint 1 = start point"),
                    "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": weather.metar(self.wx), "mode3": mode3, "laser": laser,
                    "bullseye": latlon(bx, by, self.t), "whois": whois, "threats": text["threats"], "n_def": air_pkg.n_def, "target_data": tdata,
-                   "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "sub": f"start {m_['start']}{' (already struck, heading home when you start; its target is in ruins)' if m_.get('struck') else ' (already airborne when you start)' if m_.get('underway') else ''}  push {m_['push']}  TOT {m_['tot']}  done {m_['rtb']}  ({m_['flights']})"} for m_ in merged]}
+                   "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "push": m_["push"], "tot": m_["tot"], "rtb": m_["rtb"], "flights": m_["flights"],
+                               "status": ("already struck, heading home; its target is in ruins" if m_.get("struck") else "airborne when you start" if m_.get("underway") else "")} for m_ in merged],
+                   "intel": [l_.replace(" are within reach of the target area and may be sent to reinforce.", " may reinforce.").replace(" are on cockpit alert and may launch to help.", " on alert, may launch.") for l_ in self._intel],
+                   "zulu_note": self._zulu_note()}
             for pg in render_pages(td, ctx):
                 m.add_aircraft_kneeboard(pspec.dcs_type, pg)
             warns += list(dict.fromkeys(self.lo.warnings))
@@ -1411,6 +1414,10 @@ class MissionBuilder:
             manifest.add("enemy_air", w.base_asset_id, names)
 
     # ---- reactive dispatch: enemy reinforcements and blue alert pairs launched during the sortie ---------------------------------
+    def _zulu_note(self) -> str:
+        tz = float(theatres.active().get("tz", 0) or 0)
+        return "Times are local. Zulu = local" + (f" - {tz:g} h." if tz > 0 else f" + {-tz:g} h." if tz < 0 else " (no offset).")
+
     def _spawn_reactive(self, package, extras, tx, ty, tot_s, geom, manifest, despawn) -> None:
         o, st, d = self.o, self.state, self.d
         if not o.reactive:

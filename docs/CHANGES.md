@@ -1,3 +1,12 @@
+## v0.19.0
+* The kneeboard is now three pages laid out like a printed form: shaded section bands, ruled rows and exactly three type sizes (24 px title, 16 px values, 11 px labels). The old pages mixed 11-18 px text; nothing is smaller than 16 px now except the small band labels.
+* Page 1: comms and waypoints, then notes (waypoint numbering, tolerances, time zone), one fact per line. Page 2: fuel, codes, weather, the target LAT/LONG in its own block, bullseye, package list. Page 3: other packages in the mission, threats near the target, intelligence, including the new reinforcement and alert hints.
+* The header no longer says SQE. The page-3 band reads "OTHER PACKAGES - OWN PUSH / TOT" (it used to say "AI packages").
+* Every time on the kneeboard is hh:mm:ss, including takeoff, DEP, IP, EGR, RTB and the "hold to" time (before, only PUSH and TGT had seconds). Other-package lines are laid out as PUSH / TOT / DONE in a row.
+* Text wraps only at logical breaks: after a comma or a sentence, so "+/-30 s" and "Dodge 2 4xF-15C" are never split.
+* The TGT row's remark now says "TGT LAT/LONG - PG 2" ahead of the jet's own note. The F-14B(U)'s old remark "coords below" was wrong (the coordinates are on page 2) and is gone. The time-zone note uses the theatre's own offset.
+* Only the kneeboard changed in the mission: nothing else in a built mission is different from v0.18.0.
+
 ## v0.18.0
 * Settings is now five tabs instead of one long page: General (takeoff buffer, marshal slack, AI fuel, F-14 waypoint names), Campaign (weather, reactive dispatch, ruins, carcasses), Mission build (package merging, radius, limits, CAP ranges), DCS integration (DCS and Saved Games folders, the MissionScripting.lua patch) and Terrain scan.
 * The Terrain scan tab starts with a plain status line: green "Scanned" with the grid size, or amber "Not scanned". The scan mission button and a Re-check button live there. Every tab scrolls, so the long help texts never get squeezed.

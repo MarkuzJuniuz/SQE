@@ -45,7 +45,7 @@ def main():
         z = zipfile.ZipFile(s.settings.sortie_miz)
         mission = z.read("mission").decode()
         assert "world.addEventHandler" in mission and "DictKey_Translation" not in mission.split("a_do_script")[1][:120], "hook not embedded as code"
-        assert len([n for n in z.namelist() if "KNEEBOARD" in n]) == 2, "expected 2 kneeboard pages"
+        assert len([n for n in z.namelist() if "KNEEBOARD" in n]) == 3, "expected 3 kneeboard pages"
         from dcs import lua                                       # the mission file must parse as valid Lua, exactly like DCS reads it
         lua.loads(mission); lua.loads(z.read("l10n/DEFAULT/dictionary").decode())
         try:                                                      # the embedded hook must compile as Lua (checked when lupa is installed)
@@ -499,6 +499,32 @@ def main():
             break
     assert seen_r and seen_b, (seen_r, seen_b)
     print(f"[reactive] range and availability respected, never past 2:1; chance by level {rate[1]:.0%}/{rate[2]:.0%}/{rate[3]:.0%}; red + blue launch in a build; off = none")
+
+    # ---- kneeboard: form layout, hh:mm:ss everywhere, no stale 'coords below' / 'SQE' / 'AI' wording --------------------------------------
+    import re as _re
+    from sqe import kneeboard as _kb
+    assert _kb.hms("07:03") == "07:03:00" and _kb.hms("07:03:09") == "07:03:09" and _kb.hms("hold to 06:46") == "hold to 06:46:00"
+    assert "coords below" not in open(Path(_kb.__file__).parent / "aircraft.py", encoding="utf-8").read()
+    ks = mk(); ks.new("KB", "FA-18C", 3, seed=7)
+    pk_ = next(p_ for p_ in ks.packages() if ks.flyable(p_))
+    import sqe.mission_builder as _mb
+    _cap = {}
+    _orig = _mb.render_pages
+    _mb.render_pages = lambda td, ctx: (_cap.update(ctx=ctx), _orig(td, ctx))[1]
+    try:
+        ks.fly(pk_.number, ks.flyable(pk_)[0].id)
+    finally:
+        _mb.render_pages = _orig
+    ctx_ = _cap["ctx"]
+    assert all(_re.fullmatch(r"\d\d:\d\d:\d\d", r_["time"]) for r_ in ctx_["waypoints"] if r_["time"]), [r_["time"] for r_ in ctx_["waypoints"]]
+    assert all("hold to" not in r_["win"] or _re.search(r"\d\d:\d\d:\d\d", r_["win"]) for r_ in ctx_["waypoints"])
+    import tempfile as _tf
+    from PIL import Image as _Im
+    with _tf.TemporaryDirectory() as td_:
+        pgs = _kb.render_pages(td_, ctx_)
+        assert [Path(p_).name for p_ in pgs] == ["1_comms_times.png", "2_fuel_codes_package.png", "3_other_threats_intel.png"]
+        assert all(_Im.open(p_).size == (768, 1024) for p_ in pgs)
+    print("[kneeboard] 3 form pages, every time hh:mm:ss, TGT remark points to page 2, 768x1024")
     print("SMOKE TEST PASSED")
 
 
