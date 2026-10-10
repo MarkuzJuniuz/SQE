@@ -553,6 +553,10 @@ def main():
     t_ = _ch("FA-18C", _Rl.STRIKE, "SA-11", "SA-6", "SA-2"); assert t_.changed and t_.rad and t_.alt_ft == 500 and t_.label == "LOW" and "from the IP" in t_.reason, t_
     assert not _pf.choose(_st("SA-11", "SA-6", "SA-2"), _Rl.STRIKE, _P("FA-18C"), _pts, (100_000, 0), None, skip={"s0", "s1", "s2"}).changed, "the DEAD target itself does not push the package low"
     assert not _ch("F-15C", _Rl.STRIKE, "SA-11", "SA-6", "SA-2").changed, "the FC3 F-15C never goes LOW"
+    assert not _pf.choose(_st("SA-11", "SA-6", "SA-2"), _Rl.STRIKE, _P("FA-18C"), _pts, (100_000, 0), None, skip={"nothing"}).rad, "a DEAD package never goes LOW"
+    _stn = _st("SA-11", "SA-6", "SA-2")
+    for _a in _stn.assets.values(): _a.health = 0.1
+    assert _pf.choose(_stn, _Rl.STRIKE, _P("FA-18C"), _pts, (100_000, 0), None).rad, "sites at 10% health still count for the profile"
     assert not _ch("FA-18C", _Rl.STRIKE, "SA-11", "SA-6", "SA-2", cloud=1500).changed, "a low cloud base closes LOW"
     assert not _ch("FA-18C", _Rl.SEAD, "SA-11", "SA-6", "SA-2").rad and not _ch("FA-18C", _Rl.ESCORT, "SA-11", "SA-6", "SA-2").rad, "SEAD and escorts never go LOW"
     t_ = _ch("A-10C", _Rl.CAS, "SA-11", "SA-6", "SA-2"); assert t_.rad and t_.alt_ft == 300, t_

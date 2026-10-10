@@ -9,7 +9,7 @@ is least exposed. With no threat, or when nothing is better, the profile is exac
     the minimum safe altitude of the IP-to-egress legs. Without it the old flat estimate applies.
   * A lower profile has to be clearly safer (MIN_GAIN) to be chosen; radar SAMs count half against a LOW flight (terrain masking, radar horizon).
   * LOW is flown as height above the ground (DCS "radio altitude"), so the flight follows the terrain.
-  * Which tiers are open depends on the role and the jet: SEAD and escorts never go LOW, CAS only chooses between its usual altitude and LOW,
+  * Which tiers are open depends on the role and the jet: SEAD and escorts never go LOW, neither does a DEAD package (its target is a defended cluster), CAS only chooses between its usual altitude and LOW,
     a jet marked no_low (the FC3 F-15C) never does, and a cloud base under 2,000 ft closes LOW.
 
 Pure planning (no pydcs). The engagement bands and weights below are hand-set approximations, not published figures: tune freely.
@@ -62,7 +62,7 @@ def covering(state, pts, tgt, skip=()) -> list:
     """Live SAM/AAA sites whose ring reaches the route from the PUSH on: [(asset, variant, where)]."""
     out = []
     for a in state.assets.values():
-        if a.kind != AssetKind.SAM or a.destroyed or a.health <= 0.25 or a.id in skip:
+        if a.kind != AssetKind.SAM or a.destroyed or a.id in skip:               # any site with a unit left counts (a mop-up target at 11% still shoots)
             continue
         r = tm.RANGE_NM.get(a.variant, 0)
         if r <= 0:
@@ -101,6 +101,7 @@ def choose(state, role, p, pts, tgt, cloud_base_ft: float | None = None, skip=()
     """pts: the route from PUSH to egress as [(x, y)]; tgt: (x, y); skip: asset ids that are the objective itself (a DEAD target is the site we are
     killing, so it does not push the package low). Returns the profile to fly."""
     cands = [c for c in candidates(p, role) if not (c[0] == "low" and cloud_base_ft is not None and cloud_base_ft < LOW_MIN_CLOUD_FT)
+             and not (c[0] == "low" and skip)                                         # a DEAD package (the only one with a skip) never goes LOW: its target is a defended cluster
              and not (c[0] == "med" and msa_ft is not None and c[1] < msa_ft)]          # MED is dropped when it would sit below the safe altitude
     base = cands[0]
     t0 = Tier(label_for(base[1], base[2]), base[1], base[2])
