@@ -155,6 +155,13 @@ def objective_wp(wps: list[Wpt]) -> Wpt | None:
     return next((w for w in wps if w.action in OBJECTIVE_ACTIONS), None)
 
 
+def _floor_ft(x: float, y: float) -> int:
+    """Lowest altitude (MSL) a flight may be spawned at: 1,500 ft over the highest ground near that point, or 6,000 ft without a ground-height scan."""
+    from . import relief
+    h = relief.max_near_m(x, y, 5 * NM)
+    return 6000 if h is None else int(math.ceil((h / FT + 1500) / 500.0) * 500)
+
+
 def in_progress(wps: list[Wpt], home: tuple) -> list[Wpt] | None:
     """A flight whose schedule started BEFORE the mission did. `wps` already carries absolute times (assign_times, first point at a negative time).
     Returns the route as it stands at mission time 0: a SPAWN point where the flight is by then (interpolated along its leg, or at the hold point
@@ -172,10 +179,10 @@ def in_progress(wps: list[Wpt], home: tuple) -> list[Wpt] | None:
         if a.action == "HOLD":
             ts = b.eta_s - leg_seconds(a, b)                       # when it leaves the hold
             if a.eta_s <= 0 < ts:                                  # still orbiting at the marshal point
-                return [Wpt("SPAWN", a.x, a.y, max(a.alt_ft, 6000) if a.rad else a.alt_ft, a.speed_kts)] + list(wps[i:])
+                return [Wpt("SPAWN", a.x, a.y, max(a.alt_ft, _floor_ft(a.x, a.y)) if a.rad else a.alt_ft, a.speed_kts)] + list(wps[i:])
         te = b.eta_s
         if ts <= 0 < te:
             f = (0 - ts) / max(1.0, te - ts)
-            sp = Wpt("SPAWN", a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, max(6000, int(a.alt_ft + (b.alt_ft - a.alt_ft) * f)) if (a.rad or b.rad) else int(a.alt_ft + (b.alt_ft - a.alt_ft) * f), a.speed_kts)
+            sp = Wpt("SPAWN", a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, max(_floor_ft(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f), int(a.alt_ft + (b.alt_ft - a.alt_ft) * f)) if (a.rad or b.rad) else int(a.alt_ft + (b.alt_ft - a.alt_ft) * f), a.speed_kts)
             return [sp] + list(wps[i + 1:])
     return None

@@ -23,7 +23,7 @@ from . import theatres, weather
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import briefing as brief, callsigns, carcass, profiles, reactive
+from . import briefing as brief, callsigns, carcass, profiles, reactive, relief
 from . import seacheck as seac
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
@@ -365,7 +365,7 @@ class MissionBuilder:
                    "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "push": m_["push"], "tot": m_["tot"], "rtb": m_["rtb"], "flights": m_["flights"],
                                "status": ("already struck, heading home; its target is in ruins" if m_.get("struck") else "airborne when you start" if m_.get("underway") else "")} for m_ in merged],
                    "intel": [l_.replace(" are within reach of the target area and may be sent to reinforce.", " may reinforce.").replace(" are on cockpit alert and may launch to help.", " on alert, may launch.") for l_ in self._intel],
-                   "zulu_note": self._zulu_note()}
+                   "zulu_note": self._zulu_note(), "msa": relief.msa_ft(polyline)}
             for pg in render_pages(td, ctx):
                 m.add_aircraft_kneeboard(pspec.dcs_type, pg)
             warns += list(dict.fromkeys(self.lo.warnings))
@@ -1424,7 +1424,7 @@ class MissionBuilder:
     def _pick_tier(self, geom, role, profile, tx, ty, skip=()):
         """The altitude profile for this package from the SAM picture (profiles.py); the role altitude when nothing is better."""
         pts = [geom.push, geom.ip, (tx, ty), geom.egr]
-        return profiles.choose(self.state, role, profile, pts, (tx, ty), getattr(self.wx, "ceiling_ft", None), skip)
+        return profiles.choose(self.state, role, profile, pts, (tx, ty), getattr(self.wx, "ceiling_ft", None), skip, relief.msa_ft(pts[1:]))
 
     def _zulu_note(self) -> str:
         tz = float(theatres.active().get("tz", 0) or 0)

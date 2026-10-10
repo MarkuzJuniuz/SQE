@@ -16,7 +16,7 @@ You still need the map installed in DCS to fly it, and pydcs must know the terra
 | `lat`, `lon`, `tz` | sun times and local time (`tz` = hours from UTC) |
 | `temp_c` | 12 monthly mean temperatures for the mission weather |
 | `geo` | coarse coastline / lakes / borders file for the map view (file in the same folder; `land`, `lakes`, `borders` as lists of [x, y] points, x north, y east, metres) |
-| `scan` | terrain scan: `file` (the name written to `Saved Games\SQE`), the area `x0 x1 y0 y1` in metres, `step`, and `probe_airport` (where the free Su-25T starts) |
+| `scan` | terrain scan: `file` (the name written to `Saved Games\SQE`), the area `x0 x1 y0 y1` in metres, `step`, and `probe_airport` (where the free Su-25T starts). Optional: `height_step` (ground-height grid in metres, default 1000) and `relief_file` (default: the `file` name with "terrain" replaced by "relief") |
 | `carrier` | `id`, `name`, and the station: `from_airport`, `heading` and `distance_m` out to sea |
 | `blue_fields` | friendly airfields: `id`, `name`, `airport` (the pydcs airport name) |
 | `red_fields` | enemy airfields: `id` (must start with `ab_`), `name`, `airport`, `value` |
@@ -37,4 +37,4 @@ SQE refuses a pack with a missing key and says which one.
 ## Making a scan for a new theatre
 
 Create a campaign on the theatre, then Settings > Create terrain scan mission. The scan area and file name come from the pack,
-so each theatre gets its own `SQE_terrain_<name>.json`. Without a scan SQE falls back to the coarse coastline.
+so each theatre gets its own `SQE_terrain_<name>.json` and `SQE_relief_<name>.json` (ground height). Without a scan SQE falls back to the coarse coastline; without the relief file it uses a flat estimate for low flights and shows no minimum safe altitude.

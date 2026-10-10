@@ -193,6 +193,7 @@ class SettingsDialog(QDialog):
         # ---- Terrain scan ---------------------------------------------------------------------------------------------------------------
         v = page("Terrain scan")
         self.tm_status = QLabel(); self.tm_status.setWordWrap(True); v.addWidget(self.tm_status)
+        self.tm_relief = QLabel(); self.tm_relief.setWordWrap(True); v.addWidget(self.tm_relief)
         self.shore = QSpinBox(); self.shore.setRange(300, 5000); self.shore.setSingleStep(100); self.shore.setSuffix(" m"); self.shore.setValue(int(getattr(settings, "shore_margin_m", 1500)))
         self.river = QSpinBox(); self.river.setRange(0, 1000); self.river.setSingleStep(50); self.river.setSuffix(" m rivers"); self.river.setValue(int(getattr(settings, "river_margin_m", 100)))
         row(v, "Shore margin", self.shore, self.river)
@@ -211,13 +212,17 @@ class SettingsDialog(QDialog):
             self.tabs.setCurrentIndex(3)                                  # first run: the paths are what is missing
 
     def _tm_refresh(self):
-        from .. import terrainmask as _tmk
+        from .. import terrainmask as _tmk, relief as _rl
         _tmk.configure(self.s.sqe_dir if self.s.dcs_saves else None)
+        _rl.configure(self.s.sqe_dir if self.s.dcs_saves else None)
         sc = _tmk.scanned(self.s.sqe_dir if self.s.dcs_saves else None)
         have = ", ".join(f"{t} (scanned {dte})" for t, dte in sc) if sc else "none yet"
         ok = bool(_tmk.available())
         self.tm_status.setText(("Scanned: " + _tmk.info()) if ok else "Not scanned: ground sites use the coarse built-in coastline (up to 1-3 km off, no rivers).")
         self.tm_status.setStyleSheet(f"color: {theme.GREEN if ok else theme.AMBER}; font-weight: 700; font-size: 15px;")
+        rok = bool(_rl.available())
+        self.tm_relief.setText(("Ground height: " + _rl.info()) if rok else "Ground height: not scanned. Low flights use a flat estimate and the kneeboard has no minimum safe altitude (run the scan mission again).")
+        self.tm_relief.setStyleSheet(f"color: {theme.GREEN if rok else theme.AMBER}; font-weight: 700; font-size: 15px;")
         self.tm.setText("Ground sites stay this far from the sea and lakes, and the second value from rivers and shallow water (rivers need the scan). "
                         f"Terrain scans on disk: {have}.")
 

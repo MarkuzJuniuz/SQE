@@ -239,5 +239,5 @@ Ground sites are placed with a coastline that is only roughly right, and it know
 1. Open SQE, then Settings. Set the Saved Games folder, press "Create terrain scan mission".
 2. Keep SQE open (it enables DCS scripting while open; the scan needs the same access as debriefs).
 3. In DCS: Fly > Missions > My Missions > SQE_TerrainScan, then Fly (you start in a parked Su-25T, which is free with DCS World, so no paid aircraft is needed). Messages show the percentage; wait for "SQE terrain scan COMPLETE" (about two minutes, DCS may stutter), then leave the mission.
-4. Open or start a campaign in SQE. Settings > Terrain scan reads "loaded".
+4. Open or start a campaign in SQE. Settings > Terrain scan reads "loaded" and, from v0.22, a second line "Ground height: loaded ...". An older scan has no ground height: run the scan mission once more (it measures both).
 Sites then keep the Shore margin from the sea and lakes (default 1500 m) and the river margin from rivers and shallow water (default 100 m); both are in Settings. Re-running is only needed after a DCS terrain update.

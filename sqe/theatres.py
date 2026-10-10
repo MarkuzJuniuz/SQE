@@ -93,9 +93,10 @@ def use(tid: str) -> dict:
     _ACTIVE = d
     if changed:
         try:
-            from . import seacheck, terrainmask
+            from . import relief, seacheck, terrainmask
             seacheck.reset()
             terrainmask.theatre_changed()
+            relief.theatre_changed()
         except Exception:
             pass
     return d

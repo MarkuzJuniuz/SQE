@@ -1,5 +1,5 @@
 """Kneeboard pages (PNG 768x1024), laid out like a printed form: shaded section bands, ruled rows, and exactly three type sizes.
-Page 1: comms ladder + waypoints (numbered the way YOUR jet's cockpit numbers them), the tolerances and the time zone.
+Page 1: comms ladder + waypoints (numbered the way YOUR jet's cockpit numbers them), the tolerances, the time zone and the minimum safe altitude (with the ground-height scan).
 Page 2: fuel, codes, weather, target lat/long, bullseye, package who's-who (with Link 16 STNs).
 Page 3: the other packages in the mission (own push / TOT), threats near the target, intelligence.
 Every clock time is hh:mm:ss. Text wraps only at logical breaks (after a comma or a sentence), never inside an item."""
@@ -142,8 +142,10 @@ def render_pages(outdir, ctx: dict) -> list:
             f.line(_tol(hms(note)), False, INK if hot else DIM, indent=3, gap=6)
     f.band("NOTES")
     num = str(ctx.get("numbering", "")).replace("...", "").rstrip(" .,")
-    for note in (f"{ctx['jet']} waypoint numbers: {num}.", "PUSH +/-30 s, TOT +/-1 min.",
-                 ctx.get("zulu_note", "Times are local.")):
+    notes = [f"{ctx['jet']} waypoint numbers: {num}.", "PUSH +/-30 s, TOT +/-1 min.", ctx.get("zulu_note", "Times are local.")]
+    if ctx.get("msa"):
+        notes.append(f"MSA {int(ctx['msa']):,} ft along the route.")
+    for note in notes:
         f.line(note, color=DIM, gap=4)
     pages.append(f.save(outdir / "1_comms_times.png"))
 

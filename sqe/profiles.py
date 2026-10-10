@@ -5,6 +5,8 @@ the egress (their ring, from threatmap.RANGE_NM), asks whether each of them can 
 is least exposed. With no threat, or when nothing is better, the profile is exactly what it was before (the role altitude).
 
   * PUSH stays at the role altitude (the long cruise, easy on fuel); the tier applies from the IP to the egress.
+  * With the ground-height scan (relief.py) a LOW flight is judged against what each radar can really see over the terrain, and MED is never planned below
+    the minimum safe altitude of the IP-to-egress legs. Without it the old flat estimate applies.
   * A lower profile has to be clearly safer (MIN_GAIN) to be chosen; radar SAMs count half against a LOW flight (terrain masking, radar horizon).
   * LOW is flown as height above the ground (DCS "radio altitude"), so the flight follows the terrain.
   * Which tiers are open depends on the role and the jet: SEAD and escorts never go LOW, CAS only chooses between its usual altitude and LOW,
@@ -15,7 +17,7 @@ Pure planning (no pydcs). The engagement bands and weights below are hand-set ap
 from __future__ import annotations
 from dataclasses import dataclass
 from .models import AssetKind, Role
-from . import threatmap as tm
+from . import relief, threatmap as tm
 
 NM = 1852.0
 # (lowest, highest) altitude in ft at which the system realistically engages. Hand-set.
@@ -77,18 +79,29 @@ def hits(v: str, alt_ft: int) -> bool:
     return lo <= alt_ft <= hi
 
 
-def exposure(sites, alt_ft: int, rad: bool = False) -> float:
+def low_factor(a, v: str, route, agl_ft: float) -> float:
+    """How much of its weight a radar SAM keeps against a LOW flight: the share of the route it can actually see (ground height measured by the
+    scan, so a ridge in the way counts), never below 0.2; the flat LOW_RADAR_FACTOR when there is no relief file."""
+    if route:
+        f = relief.visible_fraction((a.x, a.y), route, agl_ft, tm.RANGE_NM.get(v, 0) * NM)
+        if f is not None:
+            return max(0.2, min(1.0, f))
+    return LOW_RADAR_FACTOR
+
+
+def exposure(sites, alt_ft: int, rad: bool = False, route=None) -> float:
     s = 0.0
-    for _a, v, _w in sites:
+    for a, v, _w in sites:
         if hits(v, alt_ft):
-            s += WEIGHT.get(v, 1.0) * (LOW_RADAR_FACTOR if (rad and v in RADAR) else 1.0)
+            s += WEIGHT.get(v, 1.0) * (low_factor(a, v, route, alt_ft) if (rad and v in RADAR) else 1.0)
     return s
 
 
-def choose(state, role, p, pts, tgt, cloud_base_ft: float | None = None, skip=()) -> Tier:
+def choose(state, role, p, pts, tgt, cloud_base_ft: float | None = None, skip=(), msa_ft: int | None = None) -> Tier:
     """pts: the route from PUSH to egress as [(x, y)]; tgt: (x, y); skip: asset ids that are the objective itself (a DEAD target is the site we are
     killing, so it does not push the package low). Returns the profile to fly."""
-    cands = [c for c in candidates(p, role) if not (c[0] == "low" and cloud_base_ft is not None and cloud_base_ft < LOW_MIN_CLOUD_FT)]
+    cands = [c for c in candidates(p, role) if not (c[0] == "low" and cloud_base_ft is not None and cloud_base_ft < LOW_MIN_CLOUD_FT)
+             and not (c[0] == "med" and msa_ft is not None and c[1] < msa_ft)]          # MED is dropped when it would sit below the safe altitude
     base = cands[0]
     t0 = Tier(label_for(base[1], base[2]), base[1], base[2])
     if len(cands) == 1:
@@ -96,7 +109,7 @@ def choose(state, role, p, pts, tgt, cloud_base_ft: float | None = None, skip=()
     sites = covering(state, pts, tgt, skip)
     if not sites:
         return t0
-    score = lambda c: exposure(sites, c[1], c[2]) + PENALTY[c[0]]
+    score = lambda c: exposure(sites, c[1], c[2], pts[1:]) + PENALTY[c[0]]
     best = min(cands, key=lambda c: (score(c), cands.index(c)))
     if best is base or score(base) - score(best) < MIN_GAIN:
         return t0

@@ -560,6 +560,46 @@ def main():
     _w3 = {w.name: w for w in _pr2(_Rl.STRIKE, (0, 0), _g2, _P("FA-18C"), is_player=True, tanker_xy=None)}
     assert _w3["TGT"].agl and _w3["TGT"].alt_ft == 0 and not _w3["TGT"].rad, "the player's target point stays on the ground"
     print("[profiles] no threat = unchanged; heavy SAM cover -> LOW from the IP; F-15C, SEAD, escorts, low cloud stay up; PUSH keeps its altitude")
+    # ---- ground height (relief): MSA, terrain masking, MED floor, spawn floor, kneeboard line
+    from sqe import relief as _rl
+    _rl.clear(); assert _rl.msa_ft(_pts) is None and _rl.visible_fraction((0, 0), _pts, 500, 50_000) is None, "no relief file: everything falls back"
+    # 160 x 20 cells of 1 km: flat at 100 m, a 2,800 m ridge across the route at x = 50..52 km
+    _hi = [[100.0] * 20 for _ in range(160)]
+    for _i in (50, 51, 52):
+        _hi[_i] = [2800.0] * 20
+    _rl.from_grid(0, 0, 1000.0, _hi)
+    _m = _rl.msa_ft([(10_000, 5_000), (120_000, 5_000)]); assert _m == int(-(-(2800 / 0.3048 + 2000) // 500) * 500), _m      # mountains: +2,000 ft
+    _flat = _rl.msa_ft([(100_000, 5_000), (140_000, 5_000)]); assert _flat == int(-(-(100 / 0.3048 + 1000) // 500) * 500), _flat
+    assert _rl.los_clear((10_000, 5_000), 10, (30_000, 5_000), 152) is True
+    assert _rl.los_clear((10_000, 5_000), 10, (90_000, 5_000), 152) is False, "the ridge hides a low flight"
+    assert _rl.los_clear((10_000, 5_000), 10, (90_000, 5_000), 12_000) is True, "...but not a high one"
+    # a radar SAM behind the ridge counts for little against LOW; with open ground it keeps its full weight
+    _t_open = _pf.exposure([(_NS(x=20_000, y=5_000), "SA-11", "target")], 500, True, [(30_000, 5_000), (45_000, 5_000)])
+    _t_hid = _pf.exposure([(_NS(x=40_000, y=5_000), "SA-11", "target")], 500, True, [(56_000, 5_000), (70_000, 5_000)])
+    assert _t_open > _t_hid and abs(_t_hid - 2.5 * 0.2) < 1e-6 and abs(_t_open - 2.5) < 1e-6, (_t_open, _t_hid)
+    assert _pf.low_factor(_NS(x=0, y=0), "SA-11", None, 500) == _pf.LOW_RADAR_FACTOR
+    # MED is dropped when it would sit under the safe altitude
+    _rl.clear()
+    _ok = _pf.choose(_st("SA-8", "SA-15"), _Rl.ESCORT, _P("FA-18C"), _pts, (100_000, 0), None, (), None)
+    _no = _pf.choose(_st("SA-8", "SA-15"), _Rl.ESCORT, _P("FA-18C"), _pts, (100_000, 0), None, (), 30_000)
+    assert not _no.changed, "MED below the minimum safe altitude is never chosen"
+    # spawn floor: ground + 1,500 ft near the ridge, 6,000 ft without a scan
+    from sqe.routes import _floor_ft
+    assert _floor_ft(51_000, 5_000) == 6000
+    _rl.from_grid(0, 0, 1000.0, _hi); assert _floor_ft(51_000, 5_000) == int(-(-(2800 / 0.3048 + 1500) // 500) * 500) and _floor_ft(140_000, 5_000) < 6000
+    _rl.clear()
+    # kneeboard: the MSA line shows when the build knows it, and is absent otherwise
+    import sqe.kneeboard as _kb2
+    _seen = []
+    _ol = _kb2._Form.line
+    _kb2._Form.line = lambda self, t, *a_, **k_: (_seen.append(str(t)), _ol(self, t, *a_, **k_))[1]
+    try:
+        with _tf.TemporaryDirectory() as td_:
+            _kb2.render_pages(td_, dict(ctx_, msa=14500)); assert "MSA 14,500 ft along the route." in _seen, _seen
+            _seen.clear(); _kb2.render_pages(td_, dict(ctx_, msa=None)); assert not any(x_.startswith("MSA") for x_ in _seen)
+    finally:
+        _kb2._Form.line = _ol
+    print("[relief] MSA with 1,000/2,000 ft margin, ridge masks a low flight but not a high one, MED floor, spawn floor, no file = old behaviour")
     print("SMOKE TEST PASSED")
 
 

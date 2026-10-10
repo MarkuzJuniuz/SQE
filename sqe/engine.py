@@ -33,10 +33,11 @@ class Session:
 
     def sync_terrain(self) -> None:
         """Point the land / water checks at the terrain scan DCS measured (if it has been run) and at the shore margin from Settings."""
-        from . import seacheck, terrainmask
+        from . import relief, seacheck, terrainmask
         seacheck.SITE_MARGIN = float(getattr(self.settings, "shore_margin_m", 1500))
         terrainmask.RIVER_MARGIN = float(getattr(self.settings, "river_margin_m", 100))
         terrainmask.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
+        relief.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
 
     # ---- persistence ---------------------------------------------------------------------------
     @property
