@@ -57,18 +57,19 @@ class MapView(QWidget):
         import math
         g = st.ground; c = g["centers"]
         f = QFont(); f.setPointSize(8); f.setBold(True); p.setFont(f)
-        for i, (cx, cy) in enumerate(c):
+        for i, (cx, cy) in enumerate(c):                                      # a sector number and a small red | blue bar: the figures are in the list above the map
             q = P(cx, cy); r, b = g["red"][i], g["blue"][i]
-            p.setPen(QColor(theme.RED if r >= ground.MIN_FORCE else theme.DIM))
-            p.drawText(QPointF(q.x() - 20, q.y() + 22), f"R{r:.0f}")
-            p.setPen(QColor(theme.BLUE if b >= ground.MIN_FORCE else theme.DIM))
-            p.drawText(QPointF(q.x() + 4, q.y() + 22), f"B{b:.0f}")
+            w = 24.0; tot = max(1.0, r + b); x0 = q.x() - w / 2; y0 = q.y() + 9
+            p.setPen(Qt.NoPen)
+            p.setBrush(QBrush(QColor(theme.RED if r >= ground.MIN_FORCE else theme.DIM))); p.drawRect(QRectF(x0, y0, w * r / tot, 4))
+            p.setBrush(QBrush(QColor(theme.BLUE if b >= ground.MIN_FORCE else theme.DIM))); p.drawRect(QRectF(x0 + w * r / tot, y0, w * b / tot, 4))
+            p.setPen(QColor(theme.TEXT)); p.drawText(QPointF(q.x() - 3, q.y() + 7), str(i + 1))
         lx, ly = ground.line_xy(g)
         dx, dy = c[-1][0] - c[0][0], c[-1][1] - c[0][1]; n = math.hypot(dx, dy) or 1.0
         nx, ny = -dy / n, dx / n; half = 25000.0
         pen = QPen(QColor(theme.AMBER), 2); pen.setStyle(Qt.DashLine); p.setPen(pen)
         p.drawLine(P(lx + nx * half, ly + ny * half), P(lx - nx * half, ly - ny * half))
-        p.setPen(QColor(theme.AMBER)); p.drawText(P(lx + nx * half, ly + ny * half) + QPointF(4, -2), "front line")
+        p.setPen(QColor(theme.AMBER)); p.drawText(P(lx + nx * half, ly + ny * half) + QPointF(8, -6), "front line")
 
     def paintEvent(self, _):
         global _GEO, _GEO_ID

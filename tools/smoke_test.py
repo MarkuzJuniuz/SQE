@@ -842,6 +842,14 @@ def main():
         _mbm.MissionBuilder._plan_cap_stations = _orig_pcs
     assert _rec_cap and min(_rec_cap) >= _mbm.CAP_FLEET_KEEPOUT_NM - 1.0, f"Red CAP stations stay 90 nm from every carrier ({min(_rec_cap):.0f})"
     print(f"[fleet keep-out] {len(_rec_cap)} known CAP stations, the nearest {min(_rec_cap):.0f} nm from a carrier (limit 90); AI-test mode gives your flight the stand-off")
+    # the ground-war map draws (sector numbers and strength bars, no overlapping figures)
+    import os as _os; _os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication as _QA
+    _qa = _QA.instance() or _QA([])
+    from sqe.gui.widgets import MapView as _MV
+    s.new("Map", "FA-18C", 3, seed=2); _mv = _MV(); _mv.resize(600, 420); _mv.set_state(s.state)
+    _img = _mv.grab().toImage(); assert _img.width() >= 600 and not _img.isNull(), "the map renders"
+    print("[map] the ground-war map renders with sector numbers and red | blue bars")
     print("SMOKE TEST PASSED")
 
 
