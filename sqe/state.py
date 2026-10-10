@@ -35,6 +35,8 @@ class CampaignState:
     pilot: dict = field(default_factory=dict)      # your pilot log
     front: int = 0                                 # how far the war has advanced: tiers up to front+2 are open for tasking
     front_days: int = 0                            # days spent at this stage (the anti-stall clock)
+    ground: dict = field(default_factory=dict)     # the ground war (ground.py): sectors, strengths, the line, fallen fields
+    blue_assets: dict = field(default_factory=dict)  # Blue supply sites (fuel farms, forward depot): same record as the enemy assets
 
     # ---- helpers ------------------------------------------------------------------------
     def campaign_date(self):
@@ -57,12 +59,13 @@ class CampaignState:
             "name": self.name, "theatre": self.theatre, "level": self.level, "campaign_id": self.campaign_id,
             "day": self.day, "sortie_counter": self.sortie_counter, "status": self.status,
             "start_date": self.start_date, "night_ops": self.night_ops, "pilot": self.pilot,
-            "front": self.front, "front_days": self.front_days,
+            "front": self.front, "front_days": self.front_days, "ground": self.ground,
             "player": asdict(self.player) if self.player else None,
             "bases": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.bases.items()},
             "squadrons": {k: asdict(v) for k, v in self.squadrons.items()},
             "assets": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.assets.items()},
             "enemy_air": [asdict(w) for w in self.enemy_air],
+            "blue_assets": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.blue_assets.items()},
             "plan": self.plan, "pending": self.pending, "history": self.history[-300:], "log": self.log[-400:],
         }
 
@@ -83,8 +86,14 @@ class CampaignState:
         s.squadrons = {k: Squadron(**v) for k, v in d["squadrons"].items()}
         s.assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in d["assets"].items()}
         s.enemy_air = [EnemyAirWing(**w) for w in d["enemy_air"]]
+        s.ground = d.get("ground") or {}
+        s.blue_assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_assets") or {}).items()}
         s.plan, s.pending = d.get("plan", []), d.get("pending")
         s.history, s.log = d.get("history", []), d.get("log", [])
+        if not s.ground:                           # a campaign from before the ground war (format 4): give it one for its level
+            from . import ground
+            if ground.ensure(s):
+                s.note("The ground war is now simulated: the front is split into sectors held by both sides (see the Campaign page).")
         return s
 
     def save(self, path: str | Path, backups_dir: str | Path | None = None, keep: int = 6) -> None:

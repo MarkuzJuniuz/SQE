@@ -23,7 +23,7 @@ from . import theatres, weather
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import briefing as brief, callsigns, carcass, profiles, reactive, relief
+from . import briefing as brief, callsigns, carcass, ground, profiles, reactive, relief
 from . import seacheck as seac
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
@@ -1275,6 +1275,8 @@ class MissionBuilder:
             self._drive(enemy, [offset(cx, cy, brg, 2500)], v)
         fx, fy = offset(cx, cy, brg + r.uniform(-6, 6), dist_run)
         comp = [("M_1_Abrams", r.randint(1, 2)), ("M_2_Bradley", r.randint(2, 3)), ("M1043_HMMWV_Armament", r.randint(1, 2))]
+        sc = ground.blue_scale(self.state, self.armor_id or "")          # the friendly force is as strong as Blue is in this sector
+        comp = [(n_, max(1, int(round(c_ * sc)))) for n_, c_ in comp]
         g = self._platoon(self.usa, f"Friendly Task Force {package.number}", comp, fx, fy, (int(brg) + 180) % 360, F.Rectangle)
         if g is not None:
             names = []

@@ -600,6 +600,49 @@ def main():
     finally:
         _kb2._Form.line = _ol
     print("[relief] MSA with 1,000/2,000 ft margin, ridge masks a low flight but not a high one, MED floor, spawn floor, no file = old behaviour")
+    # ---- the ground war ----
+    import random as _rnd, json as _js
+    from sqe import ground as _gr, war as _war
+    from sqe.state import CampaignState as _CS
+    from sqe.difficulty import get as _gd
+    for _lv in (1, 2, 3):
+        s.new(f"Ground {_lv}", "F-16C", _lv, seed=11)
+        _st = s.state; _g = _st.ground
+        assert _gr.active(_st) and _gr.n_zones(_g) == 5 and len(_gr.summary(_st)) >= 5
+        assert all(f"armor_{i + 1}" in _st.assets for i in range(5)) and _st.blue_assets, "columns and Blue facilities exist"
+        # same seed, same fighting
+        _a, _b = _CS.from_dict(_st.to_dict()), _CS.from_dict(_st.to_dict())
+        for _d in range(8):
+            _gr.resolve_day(_a, _gd(_lv), _rnd.Random(_d)); _gr.resolve_day(_b, _gd(_lv), _rnd.Random(_d))
+        assert _a.ground["red"] == _b.ground["red"] and _a.ground["blue"] == _b.ground["blue"]
+        assert all(0 <= v <= _gr.MAX_FORCE for v in _a.ground["red"] + _a.ground["blue"])
+        # the round trip keeps it
+        assert _CS.from_dict(_a.to_dict()).ground == _a.ground and set(_CS.from_dict(_a.to_dict()).blue_assets) == set(_a.blue_assets)
+    # a field falls when Red holds the zone beside it; two fallen fields is defeat; Blue retaking it brings it back
+    s.new("Ground fall", "F-16C", 2, seed=5); _st = s.state; _g = _st.ground
+    _g["red"][3], _g["blue"][3] = 40.0, 0.0
+    _ln = _gr.check_falls(_st); assert _g["fallen"] == ["senaki"] and _ln and _st.bases["senaki"].defense == 0
+    _g["red"][4], _g["blue"][4] = 40.0, 0.0; _gr.check_falls(_st)
+    assert _gr.fallen_count(_st) == 2; assert _war.update_status(_st) == "DEFEAT", "two fallen fields lose the war"; _st.status = "ACTIVE"
+    _g["blue"][3] = 30.0; _gr.check_falls(_st); assert "senaki" not in _g["fallen"]
+    # a debrief loss in a zone column is damped; Blue losses reduce the zone's strength
+    _col = _st.assets["armor_2"]
+    assert _gr.column_health(_st, _col, 1.0, 0.0) == 1.0 - _gr.AIR_EFFECT
+    _before = _g["blue"][1]; _gr.blue_losses(_st, "armor_2", 2, 4); assert _g["blue"][1] == max(0.0, _before - _gr.BLUE_LOSS / 2)
+    # an old format-4 save gets a ground war
+    _old = _CS.from_dict(s.state.to_dict()).to_dict(); _old["format"] = 4; _old.pop("ground"); _old.pop("blue_assets")
+    _mig = _CS.from_dict(_old); assert _gr.active(_mig) and _mig.blue_assets and any("ground war" in x for x in _mig.log)
+    # CAS on a column is offered only where the sector is contested
+    s.new("Ground cas", "A-10C", 2, seed=3); _st = s.state; _g = _st.ground
+    _g["red"][0], _g["blue"][0] = 70.0, 0.0
+    _opts = _war.ObjectivePlanner(_gd(2)).plan(_st, _rnd.Random(2), limit=40)
+    assert not any(getattr(o, "target_id", "") == "armor_1" for o in _opts), "an uncontested sector is not a CAS target"
+    _g["red"][1], _g["blue"][1] = 60.0, 20.0; _gr.push(_st); _ground_pl = _war.ObjectivePlanner(_gd(2)).plan(_st, _rnd.Random(2), limit=40)
+    assert any(getattr(o, "target_id", "") == "armor_2" and "Red 60" in o.description for o in _ground_pl), "a contested sector is, with its strengths"
+    # a full night of the war on a live campaign
+    for _ in range(3):
+        s.state.status = "ACTIVE"; _war.WarSimulator(_gd(2), _rnd.Random(9)).end_day(s.state)
+    print("[ground] 5 sectors per level, repeatable fighting, round trip, falls / retaking / defeat, damped column losses, Blue losses, format-4 migration, nightly resolution")
     print("SMOKE TEST PASSED")
 
 

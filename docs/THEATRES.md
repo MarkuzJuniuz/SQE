@@ -27,6 +27,7 @@ You still need the map installed in DCS to fly it, and pydcs must know the terra
 | `squadrons` | `id`, `name`, `aircraft`, `base` (the carrier or a blue field id), `count`, `callsign` (unique across the coalition) |
 | `support_targets` | headquarters, fuel and ammunition: `parent` field, `id`, `name`, `kind` (C2, FUEL, DEPOT), `airport`, `dx`, `dy` offset in metres, `value` |
 | `front` | `from_airport` and `to_airport`: where the ground push runs |
+| `front.zones`, `front.beyond`, `front.deep_zones`, `front.fall` | ground war: number of sectors between the two airfields, the name of the town beyond, extra deep sectors, and which sector's fall takes which base, e.g. `{"3": "senaki", "4": "kutaisi"}`; optional `front.zone_names` |
 | `tier_labels`, `front_names`, `front_desc` | text for the tiers and the three front stages |
 | `climate` | optional. `sun_frac` and `rain_frac` (12 monthly values each: share of possible sunshine, share of days with precipitation), `wind_ms` (mean ground wind, 12 values), `fog` (chance of dawn fog, 12 values), `source` (free text). Without it a mild generic climate is used. Drives Procedural weather |
 | `title`, `background` | the operation name and the conflict background shown in the app and on the briefing |

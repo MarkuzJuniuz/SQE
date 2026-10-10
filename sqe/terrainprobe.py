@@ -123,16 +123,16 @@ def probe_lua() -> str:
             .replace("__NX__", str(nx)).replace("__NY__", str(ny)).replace("__FILE__", sc["file"]).replace("__NAME__", th["name"]))
 
 
-def make_probe(out_path) -> Path:
+def make_probe(out_path, seat: bool = True) -> Path:
     import contextlib
     import io
     import logging
     logging.getLogger("pydcs").setLevel(logging.CRITICAL)
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):      # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS livery files
-        return _make_probe(out_path)
+        return _make_probe(out_path, seat)
 
 
-def _make_probe(out_path) -> Path:
+def _make_probe(out_path, seat: bool = True) -> Path:
     from dcs.mission import Mission, StartType
     from . import theatres
     from dcs.planes import Su_25T
@@ -145,7 +145,8 @@ def _make_probe(out_path) -> Path:
     ru = m.country("Russia")
     apt = m.terrain.airports[_scan()["probe_airport"]]
     g = m.flight_group_from_airport(ru, "SQE terrain probe", Su_25T, apt, group_size=1, start_type=StartType.Cold)
-    g.units[0].set_client()
+    if seat:
+        g.units[0].set_client()               # the player slot DCS needs to enter the mission; seat=False leaves only an AI aircraft (experimental)
     t = TriggerStart(comment="SQE terrain probe")
     t.add_action(DoScript(String(probe_lua())))
     m.triggerrules.triggers.append(t)

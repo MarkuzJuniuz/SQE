@@ -10,7 +10,7 @@ from .difficulty import Difficulty, get as get_difficulty
 from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, PlayerProfile)
 from .state import CampaignState
 from .aircraft import AIRCRAFT
-from . import theatres
+from . import ground, theatres
 
 def THEATRES() -> dict:
     """{id: name} of the installed theatre packs."""
@@ -152,15 +152,13 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
             add(q["id"], q["name"], AssetKind[q["kind"]], *near(q["airport"], q["dx"], q["dy"]), q["value"], tier=FIELD_TIER.get(q["parent"], 3))
 
     # ---- the ground push toward Senaki (CAS targets) ------------------------------------------------------------
-    a, b = ap(th["front"]["from_airport"]), ap(th["front"]["to_airport"])
-    for i in range(d.armor_columns):
-        f = 0.15 + 0.22 * i
-        x, y = a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f
-        add(f"armor_{i+1}", f"Armor column {chr(65 + i)}", AssetKind.ARMOR, x, y, 6 + i, variant="ARMOR", tier=1)
-        if i < len(d.forward_sams):                                  # short-range air defence travels with the column
-            v = d.forward_sams[i]
-            sx, sy = _offset(x, y, rng.randint(0, 359), rng.randint(2200, 3600))
-            add(f"fsam_{i+1}", f"Column {chr(65 + i)} {SAM_LABEL[v]}", AssetKind.SAM, sx, sy, SAM_VALUE[v], variant=v, tier=1)
+    ground.build(st, th, d, rng, ap)                                # the sectors of the front, a Red column in each, Blue's supply sites
+    for i, v in enumerate(d.forward_sams):                          # short-range air defence travels with the column
+        col = st.assets.get(f"armor_{i + 1}")
+        if col is None:
+            break
+        sx, sy = _offset(col.x, col.y, rng.randint(0, 359), rng.randint(2200, 3600))
+        add(f"fsam_{i+1}", f"Column {chr(65 + i)} {SAM_LABEL[v]}", AssetKind.SAM, sx, sy, SAM_VALUE[v], variant=v, tier=1)
 
     snap_assets_to_land(st)                                          # nothing is generated in the sea
     sams = [x for x in st.assets.values() if x.kind == AssetKind.SAM]

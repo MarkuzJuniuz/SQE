@@ -49,6 +49,27 @@ class MapView(QWidget):
     def set_rings(self, on: bool):
         self.rings = on; self.update()
 
+    def _draw_ground(self, p, P, st):
+        """The ground war: strengths at the sector centres and the contact line across the axis."""
+        from .. import ground
+        if not ground.active(st):
+            return
+        import math
+        g = st.ground; c = g["centers"]
+        f = QFont(); f.setPointSize(8); f.setBold(True); p.setFont(f)
+        for i, (cx, cy) in enumerate(c):
+            q = P(cx, cy); r, b = g["red"][i], g["blue"][i]
+            p.setPen(QColor(theme.RED if r >= ground.MIN_FORCE else theme.DIM))
+            p.drawText(QPointF(q.x() - 20, q.y() + 22), f"R{r:.0f}")
+            p.setPen(QColor(theme.BLUE if b >= ground.MIN_FORCE else theme.DIM))
+            p.drawText(QPointF(q.x() + 4, q.y() + 22), f"B{b:.0f}")
+        lx, ly = ground.line_xy(g)
+        dx, dy = c[-1][0] - c[0][0], c[-1][1] - c[0][1]; n = math.hypot(dx, dy) or 1.0
+        nx, ny = -dy / n, dx / n; half = 25000.0
+        pen = QPen(QColor(theme.AMBER), 2); pen.setStyle(Qt.DashLine); p.setPen(pen)
+        p.drawLine(P(lx + nx * half, ly + ny * half), P(lx - nx * half, ly - ny * half))
+        p.setPen(QColor(theme.AMBER)); p.drawText(P(lx + nx * half, ly + ny * half) + QPointF(4, -2), "front line")
+
     def paintEvent(self, _):
         global _GEO, _GEO_ID
         from .. import theatres
@@ -109,6 +130,7 @@ class MapView(QWidget):
             else:
                 p.drawEllipse(q, 5, 5)
             p.setPen(QColor(theme.TEXT)); p.drawText(QPointF(q.x() + 9, q.y() + 4), b.name.replace(" AB", "")[:20])
+        self._draw_ground(p, P, st)
         p.setPen(QColor(theme.DIM))
         p.drawText(10, self.height() - 22, "North up. Blue = coalition, red = enemy. Circles = SAM threat range.")
         p.drawText(10, self.height() - 8, "Square airfield, triangle SAM, bar armor, diamond HQ/depot.")

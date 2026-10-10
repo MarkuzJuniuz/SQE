@@ -370,7 +370,11 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             out["ground_total"] = out.get("ground_total", 0) + len(g["units"]); out["ground_lost"] = out.get("ground_lost", 0) + len(dead)
             if g["units"]:
                 out["lines"].append(f"Friendly troops: lost {len(dead)} of {len(g['units'])} vehicles")
-                if len(dead) * 2 >= len(g["units"]) and g.get("ref") in state.assets:      # the position is overrun
+                from . import ground as _gr
+                gl = _gr.blue_losses(state, g.get("ref", ""), len(dead), len(g["units"])) if dead else None
+                if gl:                                                  # the ground war takes the loss from that sector's Blue strength
+                    out["lines"].append(gl)
+                elif len(dead) * 2 >= len(g["units"]) and g.get("ref") in state.assets and not _gr.active(state):      # the position is overrun
                     a0 = state.assets[g["ref"]]
                     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
                     if fields:
@@ -381,7 +385,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             a = state.assets[g["ref"]]
             frac = (len(g["units"]) - len(dead)) / max(1, g["base_count"])
             before = a.health
-            a.health = max(0.0, min(before, frac))
+            from . import ground as _gr2
+            a.health = _gr2.column_health(state, a, before, frac)
             dmg = before - a.health
             out["red_assets"].append({"name": a.name, "before": before, "after": a.health})
             if g.get("primary"):

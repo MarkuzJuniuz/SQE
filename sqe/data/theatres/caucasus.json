@@ -297,7 +297,11 @@
  ],
  "front": {
   "from_airport": "Sukhumi-Babushara",
-  "to_airport": "Senaki-Kolkhi"
+  "to_airport": "Senaki-Kolkhi",
+  "zones": 4,
+  "beyond": "Kutaisi",
+  "deep_zones": 1,
+  "fall": {"3": "senaki", "4": "kutaisi"}
  },
  "tier_labels": [
   "",

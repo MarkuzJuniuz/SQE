@@ -89,6 +89,9 @@ First launch:
 
 ---------------------------------------------------------------------------------------------------
 
+## The ground war (v0.23)
+The front is five sectors along the Sukhumi to Senaki axis, each with a Red and a Blue strength. Every night contested sectors fight; the line moves; Red takes a field if it holds the sector beside it, and two fallen fields lose the war. Your CAS sorties (and anything that hurts Red supply, such as its fuel farms and depots) are what keeps the line where it is. Blue has the same kind of facilities and supply as Red. The Campaign page shows the sectors and the map draws the front line. See docs/CHANGES.md v0.23.0 for the rules.
+
 ## Settings (v0.18)
 Five tabs. General: takeoff buffer, marshal slack, AI fuel, F-14 names. Campaign: weather, reactive dispatch, ruins, carcasses. Mission build: merging, radius, unit limit, CAP ranges. DCS integration: folders and the scripting patch. Terrain scan: the green / amber status, margins, the scan mission and Re-check.
 

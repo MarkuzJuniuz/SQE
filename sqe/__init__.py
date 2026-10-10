@@ -1,9 +1,9 @@
 """Squadron Campaign Engine (SQE): abstracted war + one fully generated DCS package per sortie."""
 APP_NAME = "Squadron Campaign Engine"
 SHORT = "SQE"
-__version__ = "0.22.0"
+__version__ = "0.23.0"
 CAMPAIGN_EXT = ".sqe"
-FORMAT_VERSION = 4
+FORMAT_VERSION = 5
 AUTHOR = "MarkuzJuniuz"        # named on generated missions (DCS EULA 4.1)
 EULA_LINE = "THIS MATERIAL IS NOT MADE OR SUPPORTED BY EAGLE DYNAMICS SA."
 

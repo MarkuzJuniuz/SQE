@@ -62,6 +62,7 @@ class OverviewPage(QWidget):
         top = QHBoxLayout(); mc.layout().addLayout(top)
         t = QLabel("THEATRE"); t.setObjectName("small"); top.addWidget(t); top.addStretch(1)
         self.rings = QCheckBox("SAM threat rings"); self.rings.setChecked(True); top.addWidget(self.rings)
+        self.gsum = QLabel(); self.gsum.setWordWrap(True); self.gsum.setObjectName("small"); mc.layout().addWidget(self.gsum)
         self.map = MapView(); mc.layout().addWidget(self.map, 1)
         self.rings.toggled.connect(self.map.set_rings)
 
@@ -75,6 +76,8 @@ class OverviewPage(QWidget):
         self.cards["ea"].set(f"{t['enemy_air']:.0%}", f"{t['ea']} of {t['ez']} aircraft")
         self.cards["ad"].set(f"{t['iads']:.0%}", "SAM / radar sites operational")
         self.cards["ar"].set(f"{t['armor']:.0%}", "column strength")
+        from .. import ground as _g
+        self.gsum.setText("\n".join(_g.summary(st)) if _g.active(st) else "")
         self.map.set_state(st)
 
 

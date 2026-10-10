@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import random
 from . import threatmap as tm
-from . import theatres
+from . import ground, theatres
 from .difficulty import Difficulty
 from .models import Objective, ObjectiveType, AssetKind, Role
 from .packages import Package
@@ -58,6 +58,13 @@ class ObjectivePlanner:
             elif a.kind == AssetKind.ARMOR:
                 pr = a.value * a.health * 1.4
                 what = f"Close air support: dislodge the {a.name}" if a.variant == "GARRISON" else f"Close air support against {a.name}"
+                z = ground.zone_of(state, a.id)
+                if z is not None:                                    # a front-line column: only where the sector is actually being fought over
+                    zi = ground.info(state, z)
+                    if not zi["contested"]:
+                        continue
+                    pr *= 0.7 + 0.6 * zi["pressure"]                 # the harder Red is pressing, the more urgent
+                    what = f"Close air support: {zi['name']} (Red {zi['red']:.0f}, Blue {zi['blue']:.0f})"
                 cand.append((pr, Objective("", ObjectiveType.CAS, a.id, pr, what), [], locked))
             elif a.kind == AssetKind.AIRFIELD:
                 w = state.enemy_air_at(a.id)
@@ -231,10 +238,15 @@ class WarSimulator:
         lines = [f"{obj.description}: {'SUCCESS' if success else 'FAILED'} (odds {p:.0%})"]
         if obj.type != ObjectiveType.BARCAP:
             t = state.assets[obj.target_id]
+            z = ground.zone_of(state, t.id) if obj.type == ObjectiveType.CAS else None
             if obj.type == ObjectiveType.CAS and not success:
-                state.note("   the friendly position was overrun; the column advances")
+                if z is not None:
+                    ground.blue_losses(state, t.id, 1, 4)
+                    state.note("   the friendly position was hard pressed")
+                else:
+                    state.note("   the friendly position was overrun; the column advances")
             if success:
-                t.health = max(0.0, t.health - d.base_damage * (0.5 + p))
+                t.health = max(0.0, t.health - d.base_damage * (0.5 + p) * (ground.AIR_EFFECT if z is not None else 1.0))
                 lines.append(f"   {t.name} now at {t.health:.0%}")
                 if obj.type == ObjectiveType.COUNTER_AIR:
                     w = state.enemy_air_at(t.id)
@@ -278,6 +290,13 @@ class WarSimulator:
         for a in state.assets.values():
             a.suppressed = False                                    # blinded radars come back on overnight
         self.counterstrike(state)
+        if ground.active(state):
+            for ln in ground.resolve_day(state, d, self.rng):
+                state.note("Overnight: " + ln)
+            ground.repair_blue(state, d)
+            for bid in state.ground.get("fallen", []):
+                if bid in state.bases:
+                    state.bases[bid].defense = 0.0
         state.day += 1
         update_front(state)
         update_status(state)
@@ -317,7 +336,7 @@ FRONT_MIN_DAYS = 4           # the front never jumps two stages in a week
 
 def tier_health(state: CampaignState, tier: int) -> float:
     """Mean health of the combat assets (SAMs and ground forces) of one tier; 0 when there are none."""
-    xs = [a.health for a in state.assets.values() if a.tier <= tier and a.kind in (AssetKind.SAM, AssetKind.ARMOR)]
+    xs = [a.health for a in state.assets.values() if a.tier <= tier and a.kind in (AssetKind.SAM, AssetKind.ARMOR) and ground.zone_of(state, a.id) is None]
     return sum(xs) / len(xs) if xs else 0.0
 
 
@@ -344,4 +363,6 @@ def update_status(state: CampaignState) -> str:
             state.status = "VICTORY"; state.note("VICTORY: the enemy command structure and air arm are broken.")
         elif t["friendly_air"] < 0.15:
             state.status = "DEFEAT"; state.note("DEFEAT: the coalition air component can no longer sustain operations.")
+        elif ground.fallen_count(state) >= 2:
+            state.status = "DEFEAT"; state.note("DEFEAT: the front has collapsed; two of our airfields are lost.")
     return state.status
