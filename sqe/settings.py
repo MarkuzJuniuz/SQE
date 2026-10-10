@@ -78,6 +78,9 @@ class AppSettings:
     merge_enemy_pct: int = 100            # folded packages: enemy fighters = the biggest package's + this % of every other folded package's (100 = full sum)
     enemy_cap_engage_nm: int = 50         # enemy patrol fighters will not chase further than this from where they are (0 = unlimited)
     friendly_cap_engage_nm: int = 50      # same for your HAVCAP / BASECAP (0 = unlimited)
+    fighter_engage_nm: int = 40           # AI escorts and sweeps chase no further than this (0 = unlimited)
+    fighter_engage_minutes: int = 5       # AI escorts, sweeps and SEAD stop engaging this long after the TOT and fly on (0 = no time limit)
+    fighter_standoff: bool = True         # AI escorts and sweeps stop short of live SAM cover
     auto_patch_scripting: bool = False    # patch DCS MissionScripting.lua when SQE starts, restore it when SQE exits. Off until the user agrees on first run
     patch_asked: bool = False
     terrain_asked: bool = False           # the one-time 'scan the map?' offer has been shown

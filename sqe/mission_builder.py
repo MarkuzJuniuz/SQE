@@ -64,6 +64,9 @@ class MissionOptions:
     carrier_escorts: bool = True
     enemy_cap_engage_nm: int = 50       # enemy patrol fighters chase no further than this (0 = unlimited)
     friendly_cap_engage_nm: int = 50    # HAVCAP / BASECAP likewise (0 = unlimited)
+    fighter_engage_nm: int = 40         # AI escorts and sweeps chase no further than this (0 = unlimited)
+    fighter_engage_minutes: int = 5     # AI escorts, sweeps, SEAD stop engaging this many minutes after the TOT and fly on (alert pairs: +5). 0 = no time limit
+    fighter_standoff: bool = True       # AI escorts and sweeps stop short of live SAM cover instead of flying into it
     f14_special_names: bool = True
     weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
     reactive: bool = True               # extra enemy fighters / blue alert pairs that launch during the sortie (reactive.py)
@@ -247,7 +250,9 @@ class MissionBuilder:
 
         # ---- timeline: YOUR times. Roles are staggered around the strikers' push (sweep, SEAD, escorts go first) ---------
         launch_s = float(o.launch_offset_s)
-        geom.tier = self._pick_tier(geom, pf.role, pspec.profile, tx, ty, {tgt_asset.id} if (tgt_asset is not None and package.objective.type == ObjectiveType.DEAD) else ())
+        skip1 = {tgt_asset.id} if (tgt_asset is not None and package.objective.type == ObjectiveType.DEAD) else ()
+        geom.tier = self._pick_tier(geom, pf.role, pspec.profile, tx, ty, skip1)
+        self._flight_plans(geom, package, tx, ty, skip1)
         pw = plan_route(pf.role, (pbase.x, pbase.y), geom, pspec.profile, is_player=True, tanker_xy=None)
         dep_s = launch_s + 60 + dist(pbase.x, pbase.y, *geom.dep) / (pspec.profile.depart_kts * 0.514444) * 1.12     # roll + climb-out to DEP
         self._dep_s = dep_s
@@ -408,6 +413,7 @@ class MissionBuilder:
             # timeline: this package pushes (start difference) minutes after yours. An EARLIER package has a negative offset: it is already underway when the mission starts.
             P0x = P0 + (hm(xp) - hm(anchor)) * 60.0
             geom2.tier = self._pick_tier(geom2, lead.role, spec2.profile, tx2, ty2, {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else ())
+            self._flight_plans(geom2, xp, tx2, ty2, {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else ())
             pw2 = plan_route(lead.role, (base2.x, base2.y), geom2, spec2.profile, is_player=True, tanker_xy=None)
             assign_times(pw2, 0.0, P0x + stagger(xp, lead.role))
             pu = next((w for w in pw2 if w.name == "PUSH"), None)
@@ -973,6 +979,9 @@ class MissionBuilder:
         g.set_skill(Skill.High)
         if f.tag:
             self._limit_engage(g, self.o.friendly_cap_engage_nm)
+        elif not f.is_player and f.role in (Role.ESCORT, Role.SWEEP, Role.SEAD):
+            m_ = self.o.fighter_engage_minutes
+            self._limit_engage(g, self.o.fighter_engage_nm if f.role != Role.SEAD else 0, (tot_s + m_ * 60) if (m_ > 0 and tot_s is not None) else None)
 
         if f.is_player:
             u0 = g.units[0]
@@ -1042,6 +1051,9 @@ class MissionBuilder:
                 ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
                 ct.stop_after_time(int(hold_leave_s(wps, push_s))); wp.tasks.append(ct)
             elif w.action == "CAPORBIT":
+                ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH)))
+                ct.stop_after_time(stop); wp.tasks.append(ct)
+            elif w.orbit:                                                    # fighters held short of live SAM cover
                 ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH)))
                 ct.stop_after_time(stop); wp.tasks.append(ct)
             elif w.action == "BOMB":
@@ -1346,17 +1358,22 @@ class MissionBuilder:
 
     # ---- enemy air picture: what the intelligence briefing says is there IS there, from the first second ----------------------
     @staticmethod
-    def _limit_engage(g, nm):
-        """Cap how far a patrol flight will go after a target (DCS 'engage targets within X'). 0 = leave it unlimited."""
-        if not nm or nm <= 0:
+    def _limit_engage(g, nm, until_s=None):
+        """Cap how far a patrol flight will go after a target (DCS 'engage targets within X'; 0 = unlimited) and, when until_s is given, how LONG:
+        the engage task is wrapped so it stops at that mission time and the flight carries on along its route. The distance alone is no leash
+        (DCS measures it from the aircraft, so a bandit running home is chased as far as it runs)."""
+        if (not nm or nm <= 0) and until_s is None:
             return
-        meters = int(nm * 1852)
-        for t in g.points[0].tasks:
-            if getattr(t, "Id", "") == "EngageTargets":
-                t.params["maxDistEnabled"] = True
-                t.params["maxDist"] = meters
-                return
-        g.points[0].tasks.insert(0, task.EngageTargets(meters, [task.Targets.All.Air]))
+        meters = int(nm * 1852) if (nm and nm > 0) else None
+        old = [t for t in g.points[0].tasks if getattr(t, "Id", "") == "EngageTargets"]
+        for t in old:
+            g.points[0].tasks.remove(t)
+        et = task.EngageTargets(meters, [task.Targets.All.Air])
+        if until_s is not None:
+            ct = task.ControlledTask(et)
+            ct.stop_after_time(max(60, int(until_s)))
+            et = ct
+        g.points[0].tasks.insert(0, et)
 
     def _spawn_air_picture(self, package, tx, ty, tot_s, geom, manifest, keepout):
         """Known CAP flights are airborne from t=0 on briefed stations. The rest of the defenders are alert aircraft sitting on real
@@ -1427,6 +1444,28 @@ class MissionBuilder:
         """The altitude profile for this package from the SAM picture (profiles.py); the role altitude when nothing is better."""
         pts = [geom.push, geom.ip, (tx, ty), geom.egr]
         return profiles.choose(self.state, role, profile, pts, (tx, ty), getattr(self.wx, "ceiling_ft", None), skip, relief.msa_ft(pts[1:]))
+
+    def _flight_plans(self, geom, package, tx, ty, skip=()):
+        """Per kind of flight: its own altitude tier, and for AI escorts and sweeps the point short of live SAM cover where they stop.
+        Keyed (role, profile) like routes.plan_route looks them up. The player's own route is never cut short; a package whose job IS the sweep
+        (COUNTER_AIR) goes in as before."""
+        geom.tiers, geom.stand = {}, {}
+        pts = [geom.push, geom.ip, (tx, ty)]
+        for f in package.flights:
+            if f.tag:
+                continue
+            prof = AIRCRAFT[f.aircraft].profile
+            key = (f.role, id(prof))
+            if key not in geom.tiers:
+                geom.tiers[key] = self._pick_tier(geom, f.role, prof, tx, ty, skip)
+            if f.is_player or key in geom.stand or not self.o.fighter_standoff or f.role not in (Role.ESCORT, Role.SWEEP):
+                continue
+            if package.objective.type in (ObjectiveType.COUNTER_AIR, ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
+                continue
+            t = geom.tiers[key]
+            so = profiles.standoff(self.state, pts, t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000))
+            if so:
+                geom.stand[key] = so
 
     def _zulu_note(self) -> str:
         tz = float(theatres.active().get("tz", 0) or 0)
@@ -1539,7 +1578,7 @@ class MissionBuilder:
             ct = task.ControlledTask(task.OrbitAction(int(p_.cap_alt_ft * FT), int(p_.cap_kts * KPH)))
             ct.stop_after_time(int(tot_s + o.cap_minutes * 60))
             g.add_waypoint(pt(*dpt), p_.cap_alt_ft * FT, p_.cap_kts * KPH, "CAP").tasks.append(ct)
-            self._limit_engage(g, o.friendly_cap_engage_nm)
+            self._limit_engage(g, o.friendly_cap_engage_nm, (tot_s + (o.fighter_engage_minutes + 5) * 60) if o.fighter_engage_minutes > 0 else None)
             if base.kind == BaseKind.AIRFIELD:
                 g.land_at(self.apt[base.id])
             else:

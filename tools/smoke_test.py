@@ -748,6 +748,35 @@ def main():
     assert not any(c_[1].id == _cv.id and c_[0].aircraft == "FA-18C" for c_ in _far), "no Hornet alert pair is sent 170 nm"
     assert all(c_[2] <= _rv.BLUE_DISPATCH_NM.get(c_[0].aircraft, _rv.BLUE_DISPATCH_DEFAULT_NM) for c_ in _far + _near)
     print("[alert range] alert pairs are sent no further than their dispatch range (F-14 150, Hornet 130, Viper 120, Eagle 160 nm)")
+    # fighters stop short of live SAM cover, and AI escorts / sweeps have an engage limit
+    from sqe.routes import make_geometry as _mg3, plan_route as _pr3
+    _sam = lambda x_, v_="SA-11", h_=1.0: _NS(assets={"z": _NS(id="z", kind=_AK.SAM, variant=v_, destroyed=False, health=h_, x=x_, y=0)})
+    _line = [(0, 0), (60_000, 0), (140_000, 0)]
+    _r = _pf.standoff(_sam(140_000), _line, 22000)
+    assert _r and _r[2] == ["SA-11"] and _r[3] > 20, "a live SA-11 at the target stops the fighters well short"
+    assert _pf.standoff(_sam(140_000, h_=0.1), _line, 22000) is None, "a dead site stops nobody"
+    assert _pf.standoff(_sam(10_000), _line, 22000) is None, "a flight that already starts inside cover is left alone"
+    assert _pf.standoff(_NS(assets={}), _line, 22000) is None
+    _g3 = _mg3(0, 0, 140_000, 0, _P("FA-18C"), (-20_000, 0)); _g3.tier = _pf.Tier(22000, False) if False else None
+    _key = (_Rl.ESCORT, id(_P("FA-18C"))); _g3.stand = {_key: _r}
+    _w4 = {w.name: w for w in _pr3(_Rl.ESCORT, (0, 0), _g3, _P("FA-18C"), is_player=False, tanker_xy=None)}
+    assert _w4["TGT"].orbit and "EGR" not in _w4 and abs(_w4["TGT"].x - _r[0]) < 1, "an AI escort holds at the stand-off point and goes home from it"
+    _w5 = {w.name: w for w in _pr3(_Rl.ESCORT, (0, 0), _g3, _P("FA-18C"), is_player=True, tanker_xy=None)}
+    assert not _w5["TGT"].orbit and "EGR" in _w5, "the player's own route is never cut short"
+    # in a built mission: put a live SAM site on the target and look for the limit and the hold
+    s.new("Stand off", "FA-18C", 2, seed=8); _st = s.state
+    _p = next(p_ for p_ in s.packages() if s.flyable(p_) and any(f_.role == _Rl.ESCORT for f_ in p_.flights) and p_.objective.type.value in ("STRIKE", "DEAD"))
+    s.fly(_p.number, None)
+    _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
+    assert "EngageTargets" in _mz and "74080" in _mz, "AI escorts carry a 40 nm engage limit"
+    from sqe.mission_builder import MissionBuilder as _MB
+    _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 40, 1500)
+    _t0 = _gx.points[0].tasks[0]; assert _t0.Id == "ControlledTask" and _t0.params["stopCondition"]["time"] == 1500 and _t0.params["task"]["params"]["maxDist"] == 74080, "engage task is time-limited"
+    _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 0, 900); assert _gx.points[0].tasks[0].params["task"]["params"]["maxDistEnabled"] is False
+    _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 40); assert _gx.points[0].tasks[0].Id == "EngageTargets" and len(_gx.points[0].tasks) == 1
+    _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 0); assert not _gx.points[0].tasks
+    print("[engage time] the engage task stops at TOT + 5 min and the flight flies on (alert pairs +5); distance-only and unlimited forms unchanged")
+    print("[stand-off] fighters stop outside live SAM rings (player excepted), hold there and go home; AI escorts and sweeps carry the 40 nm engage limit")
     print("SMOKE TEST PASSED")
 
 
