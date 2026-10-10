@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (QCheckBox, QSpinBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
                                QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
-                               QTextBrowser, QVBoxLayout, QHeaderView)
+                               QTextBrowser, QVBoxLayout, QHeaderView, QTabWidget, QWidget, QScrollArea)
 from .. import settings as S
 from ..aircraft import AIRCRAFT
 from ..difficulty import LEVELS
@@ -75,110 +75,151 @@ class NewCampaignDialog(QDialog):
 
 
 class SettingsDialog(QDialog):
+    """Five tabs: General (flight timing), Campaign (what the world does), Mission build (merging, limits), DCS integration (paths, the
+    scripting patch) and Terrain scan (with a plain scanned / not scanned status). Every control keeps the name it always had."""
     def __init__(self, settings: S.AppSettings, parent=None):
-        super().__init__(parent); self.s = settings; self.setWindowTitle("Settings"); self.setMinimumWidth(680)
-        lay = QVBoxLayout(self); lay.setSpacing(12)
+        super().__init__(parent); self.s = settings; self.setWindowTitle("Settings"); self.setMinimumWidth(720); self.setMinimumHeight(560); self.resize(780, 700)
+        lay = QVBoxLayout(self); lay.setSpacing(10)
         t = QLabel("Settings"); t.setObjectName("title"); lay.addWidget(t)
-        self.inst, self.saves = QLineEdit(S.native(settings.dcs_install)), QLineEdit(S.native(settings.dcs_saves))
-        for label, line, ttl, hint in (
-                ("DCS", self.inst, "Select the DCS World install folder", "Install folder (only needed for the MissionScripting.lua patch)"),
-                ("DCS Saves", self.saves, "Select your DCS Saved Games folder", r"e.g. C:\Users\You\Saved Games\DCS  or  ...\DCS_Server")):
-            row = QHBoxLayout(); lb = QLabel(label); lb.setMinimumWidth(80); b = QPushButton("Browse")
-            b.clicked.connect(lambda _=0, l=line, t=ttl: _browse(self, l, t))
-            row.addWidget(lb); row.addWidget(line, 1); row.addWidget(b); lay.addLayout(row)
-            h = QLabel(hint); h.setObjectName("small"); lay.addWidget(h)
-        row = QHBoxLayout(); lb = QLabel("Takeoff buffer"); lb.setMinimumWidth(80)
+        self.tabs = QTabWidget(); lay.addWidget(self.tabs, 1)
+
+        def page(title):
+            w = QWidget(); v = QVBoxLayout(w); v.setSpacing(10); v.setContentsMargins(14, 14, 14, 14)
+            sa = QScrollArea(); sa.setWidgetResizable(True); sa.setFrameShape(QFrame.NoFrame); sa.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            w.setObjectName("tabpage"); sa.setObjectName("tabscroll")
+            sa.setStyleSheet("QScrollArea#tabscroll, QScrollArea#tabscroll > QWidget > QWidget#tabpage { background: transparent; border: none; }")
+            sa.viewport().setAutoFillBackground(False)
+            sa.setWidget(w)                                                  # long hint texts keep their full height; the tab scrolls instead of squeezing them
+            self.tabs.addTab(sa, title)
+            return v
+
+        def hint(v, text):
+            h = QLabel(text); h.setObjectName("small"); h.setWordWrap(True); v.addWidget(h)
+
+        def row(v, label, *widgets, width=130):
+            r = QHBoxLayout(); lb = QLabel(label); lb.setMinimumWidth(width); r.addWidget(lb)
+            for i, w_ in enumerate(widgets):
+                r.addWidget(w_, 1 if (i == 0 and len(widgets) == 1 and isinstance(w_, (QLineEdit, QComboBox))) else 0)
+            r.addStretch(1); v.addLayout(r)
+
+        # ---- General: how a sortie runs for you ------------------------------------------------------------------------------
+        v = page("General")
         self.tob = QSpinBox(); self.tob.setRange(-600, 900); self.tob.setSuffix(" s"); self.tob.setValue(int(settings.takeoff_buffer_s))
-        row.addWidget(lb); row.addWidget(self.tob); row.addStretch(1); lay.addLayout(row)
-        h = QLabel("Time between mission start and the takeoff time on your kneeboard (you start on the runway or cat, engines running). "
-                   "Default 60 s. Negative means the plan expects you to be rolling before the clock starts, so you must make the time up in the air."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
-        row = QHBoxLayout(); lb = QLabel("Marshal slack"); lb.setMinimumWidth(80)
+        row(v, "Takeoff buffer", self.tob)
+        hint(v, "Time between mission start and the takeoff time on your kneeboard (you start on the runway or cat, engines running). "
+                "Default 60 s. Negative means the plan expects you to be rolling before the clock starts, so you must make the time up in the air.")
         self.hold = QSpinBox(); self.hold.setRange(-10, 30); self.hold.setSuffix(" min"); self.hold.setValue(int(settings.hold_minutes))
-        row.addWidget(lb); row.addWidget(self.hold); row.addStretch(1); lay.addLayout(row)
-        h = QLabel("Time between reaching the marshal point and the PUSH. Smaller = less waiting. Negative means you must beat the "
-                   "natural pace (afterburner time). AI flights adjust automatically."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
+        row(v, "Marshal slack", self.hold)
+        hint(v, "Time between reaching the marshal point and the PUSH. Smaller = less waiting. Negative means you must beat the "
+                "natural pace (afterburner time). AI flights adjust automatically.")
         self.fuel = QCheckBox("AI fuel management (unlimited until the push, real fuel in the fight, unlimited again from egress)")
-        self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); lay.addWidget(self.fuel)
-        row = QHBoxLayout(); lb = QLabel("Package merging"); lb.setMinimumWidth(120)
+        self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); v.addWidget(self.fuel)
+        self.f14n = QCheckBox("F-14B(U): name waypoints with special-point codes (IP, ST, HB...) so DEST can select them (untested in the cockpit)")
+        self.f14n.setChecked(bool(settings.f14_special_names)); v.addWidget(self.f14n)
+        v.addStretch(1)
+
+        # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
+        v = page("Campaign")
+        from .. import weather as _wxm
+        self.wxm = QComboBox()
+        for k, val in _wxm.MODES.items():
+            self.wxm.addItem(val, k)
+        self.wxm.setCurrentIndex(max(0, self.wxm.findData(getattr(settings, "weather_mode", "clear"))))
+        row(v, "Weather", self.wxm)
+        hint(v, "Procedural follows the theatre's climate for the month and changes slowly from day to day (never clear to storm in an afternoon); each sortie "
+                "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
+                "that cannot attack at all is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
+        self.react = QCheckBox("Reactive dispatch: enemy reinforcements and blue alert fighters can launch during a sortie")
+        self.react.setChecked(bool(getattr(settings, "reactive", True))); v.addWidget(self.react)
+        hint(v, "Random and difficulty-scaled: other enemy wings within range of the target may send extra pairs (never more aircraft than the wing has), "
+                "and our carrier or nearby bases may launch alert pairs when the fight is lopsided, for fleet defence, or when the fleet is raided. "
+                "Reinforcements are skipped before a flight is dropped when a mission is near the unit limit.")
+        self.ruins = QCheckBox("Ruins: show what earlier packages already hit (smoke and fire); struck flights fly home")
+        self.ruins.setChecked(bool(getattr(settings, "ruins", True))); v.addWidget(self.ruins)
+        hint(v, "Earlier packages in the same area that struck before your start leave smoking ruins (at most three sites, a few plumes each). The result is "
+                "decided when you build the mission and applied at the debrief.")
+        self.carc = QCheckBox("Carcasses: wrecks at damaged and destroyed ground sites near your route")
+        self.carc.setChecked(bool(getattr(settings, "carcasses", True))); v.addWidget(self.carc)
+        self.cw = QSpinBox(); self.cw.setRange(5, 100); self.cw.setSuffix(" % of a unit"); self.cw.setValue(int(getattr(settings, "carcass_weight_pct", 25)))
+        row(v, "Wreck weight", self.cw)
+        hint(v, "Wrecks are dead static objects: no AI, no weapons. Each counts this share of a unit toward the unit limit. When a mission is over the limit the "
+                "furthest wrecks from your route are dropped first, before any flight is touched. Wrecks stay where they are from day to day.")
+        v.addStretch(1)
+
+        # ---- Mission build: merging and limits -----------------------------------------------------------------------------------
+        v = page("Mission build")
         self.merge = QComboBox(); self.merge.addItem("Off (one package per mission)", "off"); self.merge.addItem("Same area (targets inside the radius)", "area")
         self.merge.setCurrentIndex(1 if settings.merge_mode == "area" else 0)
         self.mmax = QSpinBox(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.merge_max_units))
-        row.addWidget(lb); row.addWidget(self.merge, 1); row.addWidget(self.mmax); lay.addLayout(row)
-        h = QLabel("Packages inside the radius that start within 30 minutes after yours fly in the same mission (AI-flown, one shared ground "
-                   "world and support). The waiting window shows the unit count so you can compare performance. Trimmed to the unit limit."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
-        row = QHBoxLayout(); lb = QLabel("Merge radius"); lb.setMinimumWidth(120)
+        row(v, "Package merging", self.merge, self.mmax)
+        hint(v, "Packages inside the radius that start within 30 minutes after yours fly in the same mission (AI-flown, one shared ground "
+                "world and support). The waiting window shows the unit count so you can compare performance. Trimmed to the unit limit.")
         self.mrad = QSpinBox(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "merge_radius_nm", 50)))
-        row.addWidget(lb); row.addWidget(self.mrad); row.addStretch(1); lay.addLayout(row)
-        h = QLabel("Packages whose target is inside this circle fly in the same mission (within the time windows below). The circle is centred on your target, "
-                   "slid inward so it never hangs over the edge of the target area; your own target stays inside it. If the unit limit is exceeded, the package "
-                   "furthest from the centre drops first."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
-        row = QHBoxLayout(); lb = QLabel("Earlier packages"); lb.setMinimumWidth(120)
+        row(v, "Merge radius", self.mrad)
+        hint(v, "Packages whose target is inside this circle fly in the same mission (within the time windows below). The circle is centred on your target, "
+                "slid inward so it never hangs over the edge of the target area; your own target stays inside it. If the unit limit is exceeded, the package "
+                "furthest from the centre drops first.")
         self.mback = QSpinBox(); self.mback.setRange(0, 30); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_back_min", 15)))
-        row.addWidget(lb); row.addWidget(self.mback); row.addStretch(1); lay.addLayout(row)
-        h = QLabel("Packages that started up to this long before yours also fly, already airborne and underway when the mission starts. "
-                   "A package that has already struck is not flown to its target (see ruins below). 0 = only later packages."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
-        row = QHBoxLayout(); lb = QLabel("Weather"); lb.setMinimumWidth(120)
-        from .. import weather as _wxm
-        self.wxm = QComboBox()
-        for k, v in _wxm.MODES.items():
-            self.wxm.addItem(v, k)
-        self.wxm.setCurrentIndex(max(0, self.wxm.findData(getattr(settings, "weather_mode", "clear"))))
-        row.addWidget(lb); row.addWidget(self.wxm, 1); lay.addLayout(row)
-        h = QLabel("Procedural follows the theatre's climate for the month and changes slowly from day to day (never clear to storm in an afternoon); each sortie "
-                   "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
-                   "that cannot attack at all is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
-        self.ruins = QCheckBox("Ruins: show what earlier packages already hit (smoke and fire); struck flights fly home")
-        self.ruins.setChecked(bool(getattr(settings, "ruins", True))); lay.addWidget(self.ruins)
-        h = QLabel("Earlier packages in the same area that struck before your start leave smoking ruins (at most three sites, a few plumes each). The result is "
-                   "decided when you build the mission and applied at the debrief."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
-        self.react = QCheckBox("Reactive dispatch: enemy reinforcements and blue alert fighters can launch during a sortie")
-        self.react.setChecked(bool(getattr(settings, "reactive", True))); lay.addWidget(self.react)
-        h = QLabel("Random and difficulty-scaled: other enemy wings within range of the target may send extra pairs (never more aircraft than the wing has), "
-                   "and our carrier or nearby bases may launch alert pairs when the fight is lopsided, for fleet defence, or when the fleet is raided. "
-                   "Reinforcements are skipped before a flight is dropped when a mission is near the unit limit."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
-        self.carc = QCheckBox("Carcasses: wrecks at damaged and destroyed ground sites near your route")
-        self.carc.setChecked(bool(getattr(settings, "carcasses", True))); lay.addWidget(self.carc)
-        row = QHBoxLayout(); lb = QLabel("Wreck weight"); lb.setMinimumWidth(120)
-        self.cw = QSpinBox(); self.cw.setRange(5, 100); self.cw.setSuffix(" % of a unit"); self.cw.setValue(int(getattr(settings, "carcass_weight_pct", 25)))
-        row.addWidget(lb); row.addWidget(self.cw); row.addStretch(1); lay.addLayout(row)
-        h = QLabel("Wrecks are dead static objects: no AI, no weapons. Each counts this share of a unit toward the unit limit. When a mission is over the limit the "
-                   "furthest wrecks from your route are dropped first, before any flight is touched. Wrecks stay where they are from day to day."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
-        row = QHBoxLayout(); lb = QLabel("Enemy air sum"); lb.setMinimumWidth(120)
+        row(v, "Earlier packages", self.mback)
+        hint(v, "Packages that started up to this long before yours also fly, already airborne and underway when the mission starts. "
+                "A package that has already struck is not flown to its target (see Ruins on the Campaign tab). 0 = only later packages.")
         self.mpct = QSpinBox(); self.mpct.setRange(0, 100); self.mpct.setSuffix(" %"); self.mpct.setValue(int(settings.merge_enemy_pct))
-        row.addWidget(lb); row.addWidget(self.mpct); row.addStretch(1); lay.addLayout(row)
-        h = QLabel("When packages are folded in: enemy fighters = the biggest package's need + this share of every other folded package's need (100 = full sum)."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
-        row = QHBoxLayout(); lb = QLabel("CAP engage range"); lb.setMinimumWidth(120)
+        row(v, "Enemy air sum", self.mpct)
+        hint(v, "When packages are folded in: enemy fighters = the biggest package's need + this share of every other folded package's need (100 = full sum).")
         self.ecap = QSpinBox(); self.ecap.setRange(0, 300); self.ecap.setSuffix(" nm enemy"); self.ecap.setValue(int(settings.enemy_cap_engage_nm))
         self.fcap = QSpinBox(); self.fcap.setRange(0, 300); self.fcap.setSuffix(" nm friendly"); self.fcap.setValue(int(settings.friendly_cap_engage_nm))
-        row.addWidget(lb); row.addWidget(self.ecap); row.addWidget(self.fcap); row.addStretch(1); lay.addLayout(row)
-        h = QLabel("How far patrol fighters (enemy CAP, your HAVCAP/BASECAP) chase before breaking off. 0 = unlimited. Scrambled alert fighters are not limited."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
-        self.f14n = QCheckBox("F-14B(U): name waypoints with special-point codes (IP, ST, HB...) so DEST can select them (untested in the cockpit)")
-        self.f14n.setChecked(bool(settings.f14_special_names)); lay.addWidget(self.f14n)
-        row = QHBoxLayout(); lb = QLabel("Shore margin"); lb.setMinimumWidth(120)
+        row(v, "CAP engage range", self.ecap, self.fcap)
+        hint(v, "How far patrol fighters (enemy CAP, your HAVCAP/BASECAP) chase before breaking off. 0 = unlimited. Scrambled alert fighters are not limited.")
+        v.addStretch(1)
+
+        # ---- DCS integration: paths and the scripting patch ---------------------------------------------------------------------
+        v = page("DCS integration")
+        self.inst, self.saves = QLineEdit(S.native(settings.dcs_install)), QLineEdit(S.native(settings.dcs_saves))
+        for label, line, ttl, h_ in (
+                ("DCS", self.inst, "Select the DCS World install folder", "Install folder (only needed for the MissionScripting.lua patch)"),
+                ("DCS Saves", self.saves, "Select your DCS Saved Games folder", r"e.g. C:\Users\You\Saved Games\DCS  or  ...\DCS_Server")):
+            r = QHBoxLayout(); lb = QLabel(label); lb.setMinimumWidth(80); b = QPushButton("Browse")
+            b.clicked.connect(lambda _=0, l=line, t_=ttl: _browse(self, l, t_))
+            r.addWidget(lb); r.addWidget(line, 1); r.addWidget(b); v.addLayout(r)
+            hint(v, h_)
+        self.ms = QLabel(); v.addWidget(self.ms)
+        self.autopatch = QCheckBox("Enable DCS scripting access while SQE is open (patches MissionScripting.lua at start, restores it on exit)")
+        self.autopatch.setChecked(bool(settings.auto_patch_scripting)); v.addWidget(self.autopatch)
+        hint(v, "Results need io/lfs enabled in MissionScripting.lua. A backup is saved next to the file. "
+                "If SQE is closed before the mission ends, DCS can no longer write the results file.")
+        v.addStretch(1)
+        self.inst.textChanged.connect(self._refresh); self._refresh()
+
+        # ---- Terrain scan ---------------------------------------------------------------------------------------------------------------
+        v = page("Terrain scan")
+        self.tm_status = QLabel(); self.tm_status.setWordWrap(True); v.addWidget(self.tm_status)
         self.shore = QSpinBox(); self.shore.setRange(300, 5000); self.shore.setSingleStep(100); self.shore.setSuffix(" m"); self.shore.setValue(int(getattr(settings, "shore_margin_m", 1500)))
         self.river = QSpinBox(); self.river.setRange(0, 1000); self.river.setSingleStep(50); self.river.setSuffix(" m rivers"); self.river.setValue(int(getattr(settings, "river_margin_m", 100)))
+        row(v, "Shore margin", self.shore, self.river)
+        self.tm = QLabel(); self.tm.setObjectName("small"); self.tm.setWordWrap(True); v.addWidget(self.tm)
         self.probe_btn = QPushButton("Create terrain scan mission"); self.probe_btn.clicked.connect(self._make_probe)
-        row.addWidget(lb); row.addWidget(self.shore); row.addWidget(self.river); row.addWidget(self.probe_btn); row.addStretch(1); lay.addLayout(row)
-        self.tm = QLabel(); self.tm.setObjectName("small"); self.tm.setWordWrap(True); lay.addWidget(self.tm)
+        self.recheck_btn = QPushButton("Re-check"); self.recheck_btn.clicked.connect(self._tm_refresh)
+        r = QHBoxLayout(); r.addWidget(self.probe_btn); r.addWidget(self.recheck_btn); r.addStretch(1); v.addLayout(r)
+        hint(v, "To measure the real map once: create the scan mission, start it in DCS (Fly), wait for COMPLETE, then Re-check. "
+                "Without a scan SQE uses a rough built-in coastline (it can be 1-3 km off and has no rivers).")
+        v.addStretch(1)
         self._tm_refresh()
-        self.ms = QLabel(); lay.addWidget(self.ms)
-        self.autopatch = QCheckBox("Enable DCS scripting access while SQE is open (patches MissionScripting.lua at start, restores it on exit)")
-        self.autopatch.setChecked(bool(settings.auto_patch_scripting)); lay.addWidget(self.autopatch)
-        note = QLabel("Results need io/lfs enabled in MissionScripting.lua. A backup is saved next to the file. "
-                      "If SQE is closed before the mission ends, DCS can no longer write the results file.")
-        note.setWordWrap(True); note.setObjectName("small"); lay.addWidget(note)
-        self.inst.textChanged.connect(self._refresh); self._refresh()
+
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); bb.accepted.connect(self._save)
         bb.rejected.connect(self.reject); lay.addWidget(bb)
+        if not settings.dcs_saves or not Path(settings.dcs_saves).exists():
+            self.tabs.setCurrentIndex(3)                                  # first run: the paths are what is missing
 
     def _tm_refresh(self):
         from .. import terrainmask as _tmk
         _tmk.configure(self.s.sqe_dir if self.s.dcs_saves else None)
         sc = _tmk.scanned(self.s.sqe_dir if self.s.dcs_saves else None)
         have = ", ".join(f"{t} (scanned {dte})" for t, dte in sc) if sc else "none yet"
+        ok = bool(_tmk.available())
+        self.tm_status.setText(("Scanned: " + _tmk.info()) if ok else "Not scanned: ground sites use the coarse built-in coastline (up to 1-3 km off, no rivers).")
+        self.tm_status.setStyleSheet(f"color: {theme.GREEN if ok else theme.AMBER}; font-weight: 700; font-size: 15px;")
         self.tm.setText("Ground sites stay this far from the sea and lakes, and the second value from rivers and shallow water (rivers need the scan). "
-                        f"Terrain scans: {have}. Status: " + _tmk.info() +
-                        ". To measure the real map once: create the scan mission, start it in DCS (Fly), wait for COMPLETE.")
+                        f"Terrain scans on disk: {have}.")
 
     def _make_probe(self):
         create_scan_mission(self, self.s, self.saves.text())

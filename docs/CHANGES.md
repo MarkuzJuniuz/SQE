@@ -1,3 +1,9 @@
+## v0.18.0
+* Settings is now five tabs instead of one long page: General (takeoff buffer, marshal slack, AI fuel, F-14 waypoint names), Campaign (weather, reactive dispatch, ruins, carcasses), Mission build (package merging, radius, limits, CAP ranges), DCS integration (DCS and Saved Games folders, the MissionScripting.lua patch) and Terrain scan.
+* The Terrain scan tab starts with a plain status line: green "Scanned" with the grid size, or amber "Not scanned". The scan mission button and a Re-check button live there. Every tab scrolls, so the long help texts never get squeezed.
+* On a first run, with no valid Saved Games folder, Settings opens on the DCS integration tab.
+* Nothing else changed: the same settings, the same names, the same saved file, and missions are identical to v0.17.0.
+
 ## v0.17.0
 * Reactive dispatch. On top of the planned enemy air picture, a sortie can now see extra fighters launch while you fly.
 * Red reinforcements: with a chance that depends on difficulty (rare at Level 1, about one sortie in three at Level 2, more than half at Level 3), other enemy wings send extra pairs toward the target. They are real aircraft of that wing: a wing never sends more than it has available, counting what the planned picture already uses, and only types within their intercept radius of the target fly (MiG-21 110 nm, MiG-23 130, MiG-29 170, Su-27 220, F-4 150, F-5 100; hand-set and shorter than published combat radii because a scramble must reach the area, fight and get home). They launch after the package is detected, with a short random delay, so far fields arrive late, often during your egress. Losses come out of the wing at the debrief like any other.

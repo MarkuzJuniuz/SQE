@@ -89,6 +89,9 @@ First launch:
 
 ---------------------------------------------------------------------------------------------------
 
+## Settings (v0.18)
+Five tabs. General: takeoff buffer, marshal slack, AI fuel, F-14 names. Campaign: weather, reactive dispatch, ruins, carcasses. Mission build: merging, radius, unit limit, CAP ranges. DCS integration: folders and the scripting patch. Terrain scan: the green / amber status, margins, the scan mission and Re-check.
+
 ## Reactive dispatch (v0.17)
 Random enemy reinforcements (other wings, only within the type's intercept radius, only aircraft the wing really has) and blue alert pairs (carrier or nearby bases, only aircraft the mission is not using). Scaled by difficulty, capped at 2:1 against your fighters, and skipped first when a mission is near the unit limit. The briefing's Intelligence line hints at them. Settings: Reactive dispatch on/off.
 

@@ -204,10 +204,15 @@ def main():
         _gs = AppSettings(dcs_saves=str(TMP / "gsv"), persist=False)
         _dlg = SettingsDialog(_gs)
         QMessageBox.information = staticmethod(lambda *a, **k: None)
+        assert [_dlg.tabs.tabText(i) for i in range(_dlg.tabs.count())] == ["General", "Campaign", "Mission build", "DCS integration", "Terrain scan"]
+        assert "Not scanned" in _dlg.tm_status.text()
+        _gs.carcass_weight_pct, _gs.reactive, _gs.weather_mode, _gs.merge_radius_nm = 40, False, "rain", 35       # every moved control still round-trips
+        _d2 = SettingsDialog(_gs)
+        assert (_d2.cw.value(), _d2.react.isChecked(), _d2.wxm.currentData(), _d2.mrad.value()) == (40, False, "rain", 35)
         _dlg._make_probe(); _dlg._save()
         assert (TMP / "gsv" / "Missions" / "SQE_TerrainScan.miz").exists()
         NewCampaignDialog()
-        print("[gui] settings and new-campaign dialogs build; scan mission button works")
+        print("[gui] settings (5 tabs, scan status) and new-campaign dialogs build; every control round-trips; scan mission button works")
     except ImportError:
         print("[gui] PySide6 not installed here; dialogs not exercised")
     # ---- v0.13: merge circle (radius, edge-shifted centre) -------------------------------------------------------------------
