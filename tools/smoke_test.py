@@ -769,6 +769,13 @@ def main():
     s.fly(_p.number, None)
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
     assert "EngageTargets" in _mz and "74080" in _mz, "AI escorts carry a 40 nm engage limit"
+    from sqe.mission_builder import MissionBuilder as _MB
+    _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 40, 1500)
+    _t0 = _gx.points[0].tasks[0]; assert _t0.Id == "ControlledTask" and _t0.params["stopCondition"]["time"] == 1500 and _t0.params["task"]["params"]["maxDist"] == 74080, "engage task is time-limited"
+    _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 0, 900); assert _gx.points[0].tasks[0].params["task"]["params"]["maxDistEnabled"] is False
+    _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 40); assert _gx.points[0].tasks[0].Id == "EngageTargets" and len(_gx.points[0].tasks) == 1
+    _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 0); assert not _gx.points[0].tasks
+    print("[engage time] the engage task stops at TOT + 5 min and the flight flies on (alert pairs +5); distance-only and unlimited forms unchanged")
     print("[stand-off] fighters stop outside live SAM rings (player excepted), hold there and go home; AI escorts and sweeps carry the 40 nm engage limit")
     print("SMOKE TEST PASSED")
 

@@ -175,8 +175,9 @@ class SettingsDialog(QDialog):
         row(v, "CAP engage range", self.ecap, self.fcap)
         hint(v, "How far patrol fighters (enemy CAP, your HAVCAP/BASECAP) chase before breaking off. 0 = unlimited. Scrambled alert fighters are not limited.")
         self.feng = QSpinBox(); self.feng.setRange(0, 300); self.feng.setSuffix(" nm"); self.feng.setValue(int(settings.fighter_engage_nm))
-        row(v, "Escort / sweep engage range", self.feng)
-        hint(v, "How far AI escorts and sweeps leave their route to chase a fighter. 0 = unlimited. Your own flight is never limited.")
+        self.fmin = QSpinBox(); self.fmin.setRange(0, 120); self.fmin.setSuffix(" min after TOT"); self.fmin.setValue(int(settings.fighter_engage_minutes))
+        row(v, "Escort / sweep engage range", self.feng, self.fmin)
+        hint(v, "How far AI escorts, sweeps and SEAD go after a fighter, and for how long: the engage task ends this many minutes after the strike's TOT and they fly on home (alert pairs get 5 minutes more). 0 = unlimited. Your own flight is never limited.")
         self.fso = QCheckBox("AI escorts and sweeps stop short of live SAM cover"); self.fso.setChecked(bool(settings.fighter_standoff))
         v.addWidget(self.fso)
         hint(v, "Their route ends where the first live SAM ring (plus 3 nm) would begin, and they hold there. Off = they fly to the target as before.")
@@ -257,7 +258,7 @@ class SettingsDialog(QDialog):
         self.s.shore_margin_m = int(self.shore.value())
         self.s.river_margin_m = int(self.river.value())
         self.s.enemy_cap_engage_nm = int(self.ecap.value()); self.s.friendly_cap_engage_nm = int(self.fcap.value())
-        self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_standoff = self.fso.isChecked()
+        self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value()); self.s.fighter_standoff = self.fso.isChecked()
         self.s.f14_special_names = self.f14n.isChecked()
         self.s.auto_patch_scripting = self.autopatch.isChecked(); self.s.patch_asked = True
         if self.s.dcs_install:                                   # take effect now, not at the next start

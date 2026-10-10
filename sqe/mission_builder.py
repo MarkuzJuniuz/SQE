@@ -65,6 +65,7 @@ class MissionOptions:
     enemy_cap_engage_nm: int = 50       # enemy patrol fighters chase no further than this (0 = unlimited)
     friendly_cap_engage_nm: int = 50    # HAVCAP / BASECAP likewise (0 = unlimited)
     fighter_engage_nm: int = 40         # AI escorts and sweeps chase no further than this (0 = unlimited)
+    fighter_engage_minutes: int = 5     # AI escorts, sweeps, SEAD stop engaging this many minutes after the TOT and fly on (alert pairs: +5). 0 = no time limit
     fighter_standoff: bool = True       # AI escorts and sweeps stop short of live SAM cover instead of flying into it
     f14_special_names: bool = True
     weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
@@ -978,8 +979,9 @@ class MissionBuilder:
         g.set_skill(Skill.High)
         if f.tag:
             self._limit_engage(g, self.o.friendly_cap_engage_nm)
-        elif not f.is_player and f.role in (Role.ESCORT, Role.SWEEP):
-            self._limit_engage(g, self.o.fighter_engage_nm)
+        elif not f.is_player and f.role in (Role.ESCORT, Role.SWEEP, Role.SEAD):
+            m_ = self.o.fighter_engage_minutes
+            self._limit_engage(g, self.o.fighter_engage_nm if f.role != Role.SEAD else 0, (tot_s + m_ * 60) if (m_ > 0 and tot_s is not None) else None)
 
         if f.is_player:
             u0 = g.units[0]
@@ -1356,17 +1358,22 @@ class MissionBuilder:
 
     # ---- enemy air picture: what the intelligence briefing says is there IS there, from the first second ----------------------
     @staticmethod
-    def _limit_engage(g, nm):
-        """Cap how far a patrol flight will go after a target (DCS 'engage targets within X'). 0 = leave it unlimited."""
-        if not nm or nm <= 0:
+    def _limit_engage(g, nm, until_s=None):
+        """Cap how far a patrol flight will go after a target (DCS 'engage targets within X'; 0 = unlimited) and, when until_s is given, how LONG:
+        the engage task is wrapped so it stops at that mission time and the flight carries on along its route. The distance alone is no leash
+        (DCS measures it from the aircraft, so a bandit running home is chased as far as it runs)."""
+        if (not nm or nm <= 0) and until_s is None:
             return
-        meters = int(nm * 1852)
-        for t in g.points[0].tasks:
-            if getattr(t, "Id", "") == "EngageTargets":
-                t.params["maxDistEnabled"] = True
-                t.params["maxDist"] = meters
-                return
-        g.points[0].tasks.insert(0, task.EngageTargets(meters, [task.Targets.All.Air]))
+        meters = int(nm * 1852) if (nm and nm > 0) else None
+        old = [t for t in g.points[0].tasks if getattr(t, "Id", "") == "EngageTargets"]
+        for t in old:
+            g.points[0].tasks.remove(t)
+        et = task.EngageTargets(meters, [task.Targets.All.Air])
+        if until_s is not None:
+            ct = task.ControlledTask(et)
+            ct.stop_after_time(max(60, int(until_s)))
+            et = ct
+        g.points[0].tasks.insert(0, et)
 
     def _spawn_air_picture(self, package, tx, ty, tot_s, geom, manifest, keepout):
         """Known CAP flights are airborne from t=0 on briefed stations. The rest of the defenders are alert aircraft sitting on real
@@ -1571,7 +1578,7 @@ class MissionBuilder:
             ct = task.ControlledTask(task.OrbitAction(int(p_.cap_alt_ft * FT), int(p_.cap_kts * KPH)))
             ct.stop_after_time(int(tot_s + o.cap_minutes * 60))
             g.add_waypoint(pt(*dpt), p_.cap_alt_ft * FT, p_.cap_kts * KPH, "CAP").tasks.append(ct)
-            self._limit_engage(g, o.friendly_cap_engage_nm)
+            self._limit_engage(g, o.friendly_cap_engage_nm, (tot_s + (o.fighter_engage_minutes + 5) * 60) if o.fighter_engage_minutes > 0 else None)
             if base.kind == BaseKind.AIRFIELD:
                 g.land_at(self.apt[base.id])
             else:
