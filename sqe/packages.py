@@ -352,8 +352,10 @@ class PackageBuilder:
         methods: list = []
         for f in sorted((f for f in pkg.flights if not f.tag), key=lambda f: f is not lead):
             m = AIRCRAFT[f.aircraft].refuel
-            if m not in methods:
+            if m not in methods and m in TANKER_FOR:          # RefuelMethod.NONE (warbirds, most mods) never gets a tanker
                 methods.append(m)
+        if not methods:
+            return out
         t1 = TANKER_FOR[methods[0]]
         out.append(SupportPlan("TANKER1", t1.dcs_class, t1.label, t1.altitude_ft, t1.speed_kts, methods[0].value))
         if len(methods) > 1:

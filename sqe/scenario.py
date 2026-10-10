@@ -24,16 +24,44 @@ LONG_RANGE = {"SA-2", "SA-3", "SA-6", "SA-10", "SA-11"}
 SAM_VALUE = {"SA-8": 4, "AAA": 2, "MANPAD": 2, "SA-2": 5, "SA-3": 5, "SA-6": 6, "SA-11": 7, "SA-10": 9, "SA-15": 6, "SA-19": 5}
 
 
+NEW_SQUADRON = "new:"          # squadron picker value prefix: "new:<base id>" raises a fresh squadron of your type at that base
+
+
 def squadron_options(aircraft: str, theatre: str = "caucasus") -> list:
-    """(id, label) for the New Campaign squadron picker."""
+    """(id, label) for the New Campaign squadron picker: the pack's squadrons of that type, then "raise a new squadron" at every base
+    the type may use (so any aircraft in the catalog, mods included, can be flown on any theatre)."""
     th = theatres.load(theatre)
+    names = {th["carrier"]["id"]: th["carrier"].get("short", th["carrier"]["name"])} if th.get("carrier") else {}
+    names.update({f["id"]: f["name"].replace(" AB", "") for f in th["blue_fields"]})
     out = []
     for q in th["squadrons"]:
         if q["aircraft"] == aircraft:
-            nm = {th["carrier"]["id"]: th["carrier"].get("short", th["carrier"]["name"]),
-                  **{f["id"]: f["name"].replace(" AB", "") for f in th["blue_fields"]}}.get(q["base"], q["base"])
-            out.append((q["id"], f"{q['name']}  -  {q['count']} aircraft at {nm}"))
+            out.append((q["id"], f"{q['name']}  -  {q['count']} aircraft at {names.get(q['base'], q['base'])}"))
+    spec = AIRCRAFT[aircraft] if aircraft in AIRCRAFT else None
+    if spec is not None:
+        for bid, kind in _bases_of(th):
+            if _may_base(spec, kind):
+                out.append((NEW_SQUADRON + bid, f"New {spec.display} squadron at {names.get(bid, bid)}"))
     return out
+
+
+def _bases_of(th) -> list:
+    out = [(th["carrier"]["id"], BaseKind.CARRIER)] if th.get("carrier") else []
+    return out + [(f["id"], BaseKind.AIRFIELD) for f in th["blue_fields"]]
+
+
+def _may_base(spec, kind) -> bool:
+    if spec.home == kind:
+        return True
+    return kind == BaseKind.CARRIER and spec.carrier_capable
+
+
+def _callsign_for(st, spec) -> str:
+    used = {q.callsign for q in st.squadrons.values()}
+    for cs in ("Hawg", "Ford", "Dodge", "Chevy", "Pontiac", "Colt", "Enfield", "Lancer", "Sabre", "Mustang", "Spitfire", "Hammer"):
+        if cs not in used:
+            return cs
+    return f"Flight{len(used) + 1}"
 
 
 def _offset(x, y, hdg, d):
@@ -97,9 +125,16 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     # Realistic squadron structure (about 175 jets at Level 2): two Tomcat and two Hornet squadrons on the carrier, three Viper,
     # two Eagle and two Hog squadrons ashore. Callsigns are unique across the whole coalition (group names must never collide).
     st.squadrons = {q["id"]: Squadron(q["id"], q["name"], q["aircraft"], q["base"], n(q["count"]), n(q["count"]), q["callsign"]) for q in th["squadrons"]}
-    for s in st.squadrons.values():                       # sanity: land jets on land, carrier jets on the boat
+    if player_squadron and player_squadron.startswith(NEW_SQUADRON):  # the player raised a new squadron of any catalog type
+        bid = player_squadron[len(NEW_SQUADRON):]
+        spec = AIRCRAFT[player_aircraft]
+        sid = "sq_" + "".join(ch.lower() if ch.isalnum() else "_" for ch in player_aircraft) + "_" + bid
+        cnt = n(12)
+        st.squadrons[sid] = Squadron(sid, f"{spec.display} squadron", player_aircraft, bid, cnt, cnt, _callsign_for(st, spec))
+        player_squadron = sid
+    for s in st.squadrons.values():                       # sanity: land jets on land, carrier jets on the boat (carrier-capable types may use both)
         spec, base = AIRCRAFT[s.aircraft], st.bases[s.base_id]
-        if spec.home != base.kind:
+        if not _may_base(spec, base.kind):
             raise ValueError(f"{s.name}: {spec.display} cannot be based at {base.name}")
 
     # ---- enemy airfields + air wings -----------------------------------------------------------
