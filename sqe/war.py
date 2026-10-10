@@ -83,7 +83,8 @@ class ObjectivePlanner:
                 pr *= 1.8                                              # clear the belt first
             pool.append((pr, o))
         fleet = next((b for b in state.bases.values() if b.kind.value == "CARRIER"), None)
-        bw = next((x for x in state.enemy_air if "Tu_22M3" in x.types and x.available >= 2 and not state.assets[x.base_asset_id].destroyed), None)
+        from . import factions
+        bw = next((x for x in state.enemy_air if factions.bomber() and factions.bomber() in x.types and x.available >= 2 and not state.assets[x.base_asset_id].destroyed), None)
         if fleet and bw and self.d is not None and self.d.bomber_policy != "none":
             t = totals(state)
             if self.d.bomber_policy == "normal" or t["enemy_air"] < 0.45 or t["c2"] < 0.5:     # regional powers use bombers only when losing badly

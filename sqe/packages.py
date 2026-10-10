@@ -7,6 +7,7 @@ from dataclasses import dataclass, field, asdict
 from . import threat
 from . import threatmap as tm
 from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM
+from . import factions
 from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER
 from .models import Objective, ObjectiveType, Role, BaseKind, RefuelMethod
 from .state import CampaignState
@@ -256,7 +257,7 @@ class PackageBuilder:
         cands = []
         for w in st.enemy_air:
             a = st.assets[w.base_asset_id]
-            if "Su_24M" in w.types and w.available >= 2 and not a.destroyed and math.hypot(a.x - tb.x, a.y - tb.y) / NM <= ENEMY_RADIUS_NM["Su_24M"] * 0.85:
+            if factions.striker() in w.types and w.available >= 2 and not a.destroyed and math.hypot(a.x - tb.x, a.y - tb.y) / NM <= ENEMY_RADIUS_NM.get(factions.striker(), 300) * 0.85:
                 cands.append((math.hypot(a.x - tb.x, a.y - tb.y), w))
         if not cands:
             return None
@@ -275,7 +276,7 @@ class PackageBuilder:
             if types:
                 esc = (w.base_asset_id, rnd.choice(types)); break
         brg = math.degrees(math.atan2(ba.y - tb.y, ba.x - tb.x)) % 360          # they come from where they took off
-        return {"land": True, "raider": "Su_24M", "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
+        return {"land": True, "raider": factions.striker(), "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
                 "escort_wing": esc[0] if esc else "", "escort_type": esc[1] if esc else "",
                 "escorts": (4 if nb >= 4 else 2) if esc else 0}
 
@@ -284,7 +285,7 @@ class PackageBuilder:
         st = self.state
         if obj is not None and obj.target_id in st.bases and st.bases[obj.target_id].kind != BaseKind.CARRIER:
             return self._land_raid_plan(number, obj)
-        bw = next((w for w in st.enemy_air if "Tu_22M3" in w.types and w.available >= 2 and not st.assets[w.base_asset_id].destroyed), None)
+        bw = next((w for w in st.enemy_air if factions.bomber() and factions.bomber() in w.types and w.available >= 2 and not st.assets[w.base_asset_id].destroyed), None)
         cv = next((b for b in st.bases.values() if b.kind == BaseKind.CARRIER), None)
         if bw is None or cv is None:
             return None
@@ -347,20 +348,22 @@ class PackageBuilder:
     def _support(self, pkg: Package) -> list:
         lead = pkg.player_flight or next((f for f in pkg.flights if not f.tag), pkg.flights[0])
         lead_home = AIRCRAFT[lead.aircraft].home
-        awacs = AWACS_FOR[lead_home]          # E-2C for Navy leads (F-14 Link-4), E-3 for USAF leads
-        out = [SupportPlan("AWACS", awacs.dcs_class, awacs.label, awacs.altitude_ft, awacs.speed_kts)]
+        awacs = AWACS_FOR.get(lead_home)      # E-2C for Navy leads (F-14 Link-4), E-3 for USAF leads; none in a WWII faction
+        out = [SupportPlan("AWACS", awacs.dcs_class, awacs.label, awacs.altitude_ft, awacs.speed_kts)] if awacs else []
         methods: list = []
         for f in sorted((f for f in pkg.flights if not f.tag), key=lambda f: f is not lead):
             m = AIRCRAFT[f.aircraft].refuel
-            if m not in methods:
+            if m not in methods and m in TANKER_FOR:          # RefuelMethod.NONE (warbirds, most mods) never gets a tanker
                 methods.append(m)
+        if not methods:
+            return out
         t1 = TANKER_FOR[methods[0]]
         out.append(SupportPlan("TANKER1", t1.dcs_class, t1.label, t1.altitude_ft, t1.speed_kts, methods[0].value))
         if len(methods) > 1:
             t2 = TANKER_FOR[methods[1]]
             out.append(SupportPlan("TANKER2", t2.dcs_class, "Arco" if t2.label == t1.label else t2.label,
                                    t2.altitude_ft, t2.speed_kts, methods[1].value))
-        elif lead_home == BaseKind.CARRIER:
+        elif lead_home == BaseKind.CARRIER and RECOVERY_TANKER:
             r = RECOVERY_TANKER
             out.append(SupportPlan("TANKER2", r.dcs_class, r.label, r.altitude_ft, r.speed_kts,
                                    RefuelMethod.BASKET.value, from_carrier=True))

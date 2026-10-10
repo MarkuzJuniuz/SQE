@@ -56,16 +56,33 @@ def _find(P, want):
 
 
 class LoadoutLibrary:
+    """Loadouts for any aircraft in the catalog. Looked up in this order, first hit wins:
+      1. your captured overrides (loadouts.json, see capture_from_miz);
+      2. the hand-copied stock presets above (the five tuned jets);
+      3. the unit pack's own "loadouts" table (mods);
+      4. DCS's payload presets for the type: stock, the mod's UnitPayloads folder, and the ones you saved in the Mission Editor.
+         A preset named "SQE <ROLE>" (e.g. "SQE CAS") is preferred, then one whose tasks match the role;
+      5. a generic load built from the pylon tables (missiles for air-to-air, bombs or rockets for ground work).
+    """
     def __init__(self, path=None):
         self.path = Path(path) if path else None
         self.custom = json.loads(self.path.read_text()) if self.path and self.path.exists() else {}
         self.warnings: list = []
+        self._cache: dict = {}
 
     def for_role(self, key: str, role: Role) -> dict:
         name = _ALIAS.get(role, role.value)
         c = self.custom.get(key, {})
         if name in c:
             return {int(p): {"CLSID": v} for p, v in c[name].items()}
+        if key in _D:
+            return self._table(key, role, name)
+        ck = (key, name)
+        if ck not in self._cache:
+            self._cache[ck] = self._resolve(key, role, name)
+        return {p: dict(v) for p, v in self._cache[ck].items()}
+
+    def _table(self, key: str, role: Role, name: str) -> dict:
         table = _D.get(key, {}).get(name) or _D.get(key, {}).get("CAP") or next(iter(_D.get(key, {}).values()), {})
         cls, out = AIRCRAFT[key].dcs_type, {}
         for pylon, want in table.items():
@@ -80,11 +97,94 @@ class LoadoutLibrary:
             out[pylon] = {"CLSID": w[1]["clsid"]}
         return out
 
+    def _resolve(self, key: str, role: Role, name: str) -> dict:
+        from . import modunits
+        pk = modunits.pack_loadout(key, name) or (modunits.pack_loadout(key, "CAP") if name in ("ESCORT", "SWEEP") else None)
+        if pk:
+            return {int(p): {"CLSID": v} for p, v in pk.items()}
+        pre = preset_loadout(AIRCRAFT[key].dcs_type, role)
+        if pre:
+            return pre
+        gen = generic_loadout(AIRCRAFT[key].dcs_type, role)
+        if gen:
+            return gen
+        if AIRCRAFT[key].era == "ww2" and role in (Role.CAP, Role.ESCORT, Role.SWEEP):
+            return {}                                      # a fighter-sweep warbird flies on its guns: nothing to warn about
+        self.warnings.append(f"{AIRCRAFT[key].display}: no {name} loadout found; it flies clean. Save a preset named 'SQE {name}' "
+                             f"for it in the Mission Editor and SQE will use it.")
+        return {}
+
+
+def _role_tasks(role: Role) -> list:
+    from dcs import task as T
+    m = {Role.CAP: [T.CAP, T.Intercept, T.FighterSweep, T.Escort], Role.ESCORT: [T.Escort, T.CAP, T.FighterSweep],
+         Role.SWEEP: [T.FighterSweep, T.CAP, T.Intercept], Role.CAS: [T.CAS, T.GroundAttack],
+         Role.STRIKE: [T.GroundAttack, T.PinpointStrike, T.CAS, T.RunwayAttack], Role.SEAD: [T.SEAD, T.GroundAttack]}
+    return [t.id for t in m[role]]
+
+
+def preset_loadout(cls, role: Role) -> dict | None:
+    """The best DCS payload preset for the role, or None (no DCS install found, or no preset for this type)."""
+    try:
+        pays = cls.load_payloads() or {}
+    except Exception:                                      # no DCS install / unreadable Lua: fall through to the generic load
+        return None
+    if not pays:
+        return None
+    want = _role_tasks(role)
+    tag = f"sqe {_ALIAS.get(role, role.value).lower()}"
+
+    def score(p):
+        nm = str(p.get("name", "")).lower()
+        tasks = list((p.get("tasks") or {}).values())
+        if tag in nm:
+            return 0
+        for i, t in enumerate(want):
+            if t in tasks:
+                return 1 + i
+        return 99
+
+    best = min(pays.values(), key=score)
+    if score(best) == 99:
+        return None
+    out = {}
+    for py in (best.get("pylons") or {}).values():
+        if isinstance(py, dict) and py.get("CLSID") and py.get("num") is not None:
+            out[int(py["num"])] = {"CLSID": py["CLSID"]}
+    return out or None
+
+
+_G_HEAVY = ["AIM_120", "R_77", "R_27ER", "AIM_7", "R_24R"]
+_G_SHORT = ["AIM_9", "R_73", "R_60", "R_13M", "R_3S"]
+_A2G = ["Mk_82", "FAB_250", "AN_M64", "SC_250", "FAB_100", "M117", "Mk_81", "HVAR", "S_5", "LAU_68", "Mk_20"]
+
+
+def generic_loadout(cls, role: Role) -> dict:
+    """A plain load from the pylon tables: missiles for air-to-air, bombs or rockets for ground work. Empty when the type has no
+    pylon tables (most mods: they get their loads from presets instead)."""
+    out = {}
+    air = role in (Role.CAP, Role.ESCORT, Role.SWEEP)
+    for i in sorted(getattr(cls, "pylons", ()) or ()):
+        P = getattr(cls, f"Pylon{i}", None)
+        if P is None:
+            continue
+        names = sorted((a for a in dir(P) if not a.startswith("_") and "smoke" not in a.lower()), key=len)   # never smoke markers
+        if air:
+            order = (_G_HEAVY, _G_SHORT) if i % 2 else (_G_SHORT, _G_HEAVY)
+            stems = [s for grp in order for s in grp]
+        else:
+            stems = (["AGM_88", "Kh_58", "Kh_25MP"] if role == Role.SEAD else []) + _A2G
+        hit = next((a for s in stems for a in names if s in a), None)
+        if hit:
+            out[i] = {"CLSID": getattr(P, hit)[1]["clsid"]}
+    return out
+
 
 # ---- enemy fighter air-to-air loads, built generically from pydcs's own tables -----------------------
 _HEAVY = ["R_27ER", "R_24R", "R_77", "AIM_7"]
 _SHORT = ["R_73", "R_60", "R_3S", "AIM_9"]
-ENEMY_FIGHTERS = {"MiG_29A", "MiG_29S", "Su_27", "MiG_21Bis", "MiG_23MLD", "F_4E", "F_5E_3"}
+from . import factions as _fx                       # noqa: E402
+ENEMY_FIGHTERS = _fx.ENEMY_FIGHTERS_LIVE           # the red faction's fighters (factions.py: air.fighters)
 
 
 def enemy_cap_loadout(cls_name: str) -> dict:
@@ -128,8 +228,7 @@ def capture_from_miz(miz_path: str, out_path: str = "loadouts.json") -> dict:
 
 
 # approximate combat radius (nm) of enemy types: used to decide who can escort a raid
-ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, "MiG_23MLD": 200, "MiG_21Bis": 170,
-                   "F_4E": 300, "F_5E_3": 200, "Su_24M": 300}
+ENEMY_RADIUS_NM = _fx.ENEMY_RADIUS_LIVE             # red faction: air.radius_nm
 
 
 def enemy_bomber_loadout(cls_name: str) -> dict:

@@ -19,7 +19,7 @@ from pathlib import Path
 from dcs import action, condition, mapping, planes, ships, task, triggers, vehicles
 from dcs.mission import Mission, StartType
 from dcs.point import PointAction
-from . import theatres, weather
+from . import factions, theatres, weather
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
@@ -110,28 +110,12 @@ def _vt(name):
     return None
 
 
-SITES = {
-    "AAA":    [("ZU_23_Emplacement", 3), ("Ural_375_ZU_23", 2), ("ZSU_23_4_Shilka", 1)],
-    "MANPAD": [("SA_18_Igla_manpad", 4), ("SA_18_Igla_comm", 1)],
-    "SA-2":   [("S_75M_Volhov", 4), ("SNR_75V", 1), ("ZSU_23_4_Shilka", 1)],
-    "SA-3":   [("x_5p73_s_125_ln", 4), ("snr_s_125_tr", 1), ("p_19_s_125_sr", 1)],
-    "SA-6":   [("Kub_2P25_ln", 3), ("Kub_1S91_str", 1), ("ZSU_23_4_Shilka", 1)],
-    "SA-11":  [("SA_11_Buk_LN_9A310M1", 3), ("SA_11_Buk_SR_9S18M1", 1), ("SA_11_Buk_CC_9S470M1", 1)],
-    "SA-10":  [("S_300PS_5P85C_ln", 2), ("S_300PS_5P85D_ln", 2), ("S_300PS_40B6M_tr", 1), ("S_300PS_64H6E_sr", 1), ("S_300PS_54K6_cp", 1)],
-    "SA-15":  [("Tor_9A331", 2), ("ZSU_23_4_Shilka", 1)],
-    "SA-19":  [("x_2S6_Tunguska", 2)],
-    "SA-8":   [("Osa_9A33_ln", 2)],
-    "EWR":    [("x_1L13_EWR", 1)], "EWR55": [("x_55G6_EWR", 1)],
-}
-TRACK_RADARS = {"SNR_75V", "snr s-125 tr", "Kub 1S91 str", "S-300PS 40B6M tr"}          # fire-control / track radars (unit type names as DCS stores them)
-SEARCH_RADARS = {"p-19 s-125 sr", "SA-11 Buk SR 9S18M1", "S-300PS 64H6E sr", "1L13 EWR", "55G6 EWR"}
-SOFT = {
-    AssetKind.C2:    [("ZIL_131_KUNG", 2), ("Ural_375", 3), ("ZSU_23_4_Shilka", 2)],
-    AssetKind.FUEL:  [("ATZ_10", 4), ("Ural_375", 2), ("ZSU_23_4_Shilka", 1)],
-    AssetKind.DEPOT: [("Ural_375", 6), ("KAMAZ_Truck", 2), ("ZSU_23_4_Shilka", 2)],
-    AssetKind.AIRFIELD: [("ZSU_23_4_Shilka", 2), ("Ural_375", 3)],
-    AssetKind.ARMOR: [("T_72B", 4), ("BMP_2", 3), ("BTR_80", 2), ("ZSU_23_4_Shilka", 1)],
-}
+# Air-defence site types and red's ground compositions come from the faction packs (factions.py). Live views: they always show the
+# packs of the campaign that is being built.
+SITES = factions.LiveMap(factions.sites)                                     # {variant: [(unit, count)]}
+TRACK_RADARS = factions.LiveSet(lambda: factions.radar_types("track"))      # fire-control / track radars (unit type names as DCS stores them)
+SEARCH_RADARS = factions.LiveSet(lambda: factions.radar_types("search"))
+SOFT = factions.LiveMap(lambda: {k.value: v for k, v in factions.soft("red").items()})   # {AssetKind: [(unit, count)]}
 
 
 @dataclass
@@ -185,7 +169,7 @@ class MissionBuilder:
         theatres.use(st.theatre)
         m = Mission(theatres.terrain())
         self.m, self.t = m, m.terrain
-        self.usa, self.red = m.country("USA"), m.country("Russia")
+        self.usa, self.red = m.country(factions.country("blue")), m.country(factions.country("red"))     # self.usa = the blue side
         date = st.campaign_date()
         hh, mm = int(package.start[:2]), int(package.start[3:5])
         start = datetime.datetime(date.year, date.month, date.day, hh, mm)
@@ -380,6 +364,7 @@ class MissionBuilder:
             counts = self._counts()
             self._free_locked_speeds(m)
             self._add_ship_warehouses(m)
+            self._require_mods(m)
             self._save_without_carrier_slots(m, out_path)
         return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns, self.seed_code, merged)
 
@@ -714,28 +699,29 @@ class MissionBuilder:
                 full = base.defense >= 0.6
                 dry = lambda a0, d0: next(((px, py) for k in range(12) for px, py in [offset(p.x, p.y, a0 + (30 * ((k + 1) // 2)) * (1 if k % 2 else -1), d0)]
                                            if seac.site_ok(px, py, 300.0)), offset(p.x, p.y, a0, d0))           # the nearest bearing that is dry land
-                x, y = dry(ang, 4500)
-                self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
-                              ("Patriot_EPP", 1), ("Patriot_ln", 3 if full else 1)], x, y, ang, F.Star)
-                x, y = dry(ang + 120, 3500)
-                self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if full else 1)], x, y, ang, F.Line)
+                for bd in factions.base_defence("blue"):     # blue faction: e.g. a Patriot battery and AAA (modern), flak (WWII)
+                    x, y = dry(ang + bd.get("bearing", 0), bd.get("distance_m", 4000))
+                    comp = [(u[0], u[1] if full else u[2]) for u in bd["units"]]
+                    self._platoon(self.usa, f"BASEDEF {base.name} {bd['name']}", comp, x, y, ang, getattr(F, bd.get("formation", "Star")))
             return
         hdg = getattr(self, '_cv_hdg', {}).get(base.id)
         if hdg is None:
             hdg = (bearing(base.x, base.y, tx, ty) + 180) % 360
         pos = mapping.Point(base.x, base.y, self.t)
-        cv = self.m.ship_group(self.usa, base.name, ships.Stennis, pos, heading=hdg)      # legacy free CVN-74: no deck crew
+        nv = factions.navy("blue")
+        cv = self.m.ship_group(self.usa, base.name, getattr(ships, nv.get("carrier", "Stennis")), pos, heading=hdg)      # modern pack: legacy free CVN-74, no deck crew
         cv.add_waypoint(pos.point_from_heading(hdg, 120 * NM), speed=o.carrier_speed_kts * KPH)
         uid = cv.units[0].id
         p0 = cv.points[0]
-        p0.add_task(task.ActivateBeaconCommand(channel=int(o.carrier_tacan[:-1]), modechannel=o.carrier_tacan[-1], callsign="STN", unit_id=uid, aa=False))
+        p0.add_task(task.ActivateBeaconCommand(channel=int(o.carrier_tacan[:-1]), modechannel=o.carrier_tacan[-1], callsign=nv.get("carrier_tacan_callsign", "STN"), unit_id=uid, aa=False))
         p0.add_task(task.ActivateICLSCommand(channel=o.carrier_icls, unit_id=uid))
         p0.add_task(task.ActivateLink4Command(frequency=o.carrier_link4_mhz, unit_id=uid))
         p0.add_task(task.ActivateACLSCommand(unit_id=uid))
         cv.set_frequency(int(o.carrier_atc_mhz * 1e6))
         self.ship[base.id] = cv
         if o.carrier_escorts:      # the fleet is never alone: a cruiser and two escorts station-keeping on the carrier
-            for k, (cls, ang, nm) in enumerate(((ships.TICONDEROG, 40, 3.0), (ships.USS_Arleigh_Burke_IIa, -40, 3.0), (ships.PERRY, 180, 3.5))):
+            for k, (cname, ang, nm) in enumerate(nv.get("escorts", [])):
+                cls = getattr(ships, cname)
                 ex, ey = offset(base.x, base.y, hdg + ang, nm * NM)
                 ep = mapping.Point(ex, ey, self.t)
                 eg = self.m.ship_group(self.usa, f"{base.name} escort {k + 1}", cls, ep, heading=hdg)
@@ -786,18 +772,20 @@ class MissionBuilder:
     def _garrison_comp(self):
         """A dug-in garrison: fewer vehicles than a column, no one is advancing. Bigger at higher difficulty."""
         r, k = self.vrng, self.d.garrison_size
-        comp = [(r.choice(["T_72B", "T_80B"]), max(1, round(r.randint(2, 3) * k))), (r.choice(["BMP_2", "BMP_1"]), max(1, round(r.randint(1, 2) * k))),
-                ("ZSU_23_4_Shilka", 1), ("Ural_375", r.randint(0, 1))]
-        if self.d.level >= 3:
-            comp.append(("Strela_10M3", 1))
+        g = factions.garrison("red")
+        comp = [(r.choice(g["tank"]), max(1, round(r.randint(2, 3) * k))), (r.choice(g["ifv"]), max(1, round(r.randint(1, 2) * k))),
+                (g["aaa"], 1), (g["truck"], r.randint(0, 1))]
+        if self.d.level >= 3 and g.get("high_level_ad"):
+            comp.append((g["high_level_ad"], 1))
         return comp
 
     def _armor_comp(self):
         r = self.vrng
-        comp = [(r.choice(["T_72B", "T_72B", "T_80B", "T_80UD"]), r.randint(3, 6)), (r.choice(["BMP_2", "BMP_1", "BMP_3"]), r.randint(2, 5)),
-                (r.choice(["BTR_80", "BTR_70", "BTR_60"]), r.randint(1, 3)), ("ZSU_23_4_Shilka", r.randint(0, 2)), ("Ural_375", r.randint(0, 3))]
-        if r.random() < 0.4:
-            comp.append((r.choice(["Strela_10M3", "Osa_9A33_ln"]), 1))       # mobile air defence travelling with the column
+        a = factions.armor("red")
+        comp = [(r.choice(a["tank"]), r.randint(3, 6)), (r.choice(a["ifv"]), r.randint(2, 5)),
+                (r.choice(a["apc"]), r.randint(1, 3)), (a["aaa"], r.randint(0, 2)), (a["truck"], r.randint(0, 3))]
+        if r.random() < 0.4 and a.get("mobile_ad"):
+            comp.append((r.choice(a["mobile_ad"]), 1))       # mobile air defence travelling with the column
         return [(n, c) for n, c in comp if c > 0]
 
     def _spawn_opfor_ground(self, package, tx, ty, manifest, polyline=None):
@@ -1102,6 +1090,20 @@ class MissionBuilder:
                             "periodicity": 30, "size": 100, "speed": 16.666666, "coalition": coal_name}
 
     @staticmethod
+    def _require_mods(m):
+        """List every mod aircraft in the mission under requiredModules, so DCS tells a player (or the server) which mod is missing
+        instead of failing to load the mission."""
+        from . import modunits
+        used = set()
+        for coal in m.coalition.values():
+            for c in coal.countries.values():
+                for g in list(getattr(c, "plane_group", [])) + list(getattr(c, "helicopter_group", [])):
+                    used.update(u.type for u in g.units)
+        req = modunits.required_modules(used)
+        if req:
+            m.required_modules = {**(m.required_modules or {}), **req}
+
+    @staticmethod
     def _save_without_carrier_slots(m, out_path):
         """pydcs writes allowLso / allowAirboss = true for every carrier, which adds "LSO" and "Air Boss" client slots to the slot list when you
         fly from the boat. SQE has no use for them, so they are written as false (the pinned pydcs is left unmodified; we wrap its dict() for the save)."""
@@ -1290,7 +1292,7 @@ class MissionBuilder:
             self._translate(enemy, ex - cx, ey - cy)
             self._drive(enemy, [offset(cx, cy, brg, 2500)], v)
         fx, fy = offset(cx, cy, brg + r.uniform(-6, 6), dist_run)
-        comp = [("M_1_Abrams", r.randint(1, 2)), ("M_2_Bradley", r.randint(2, 3)), ("M1043_HMMWV_Armament", r.randint(1, 2))]
+        comp = [(n_, r.randint(lo_, hi_)) for n_, lo_, hi_ in factions.task_force("blue")]      # blue faction: the friendly force at the JTAC
         sc = ground.blue_scale(self.state, self.armor_id or "")          # the friendly force is as strong as Blue is in this sector
         comp = [(n_, max(1, int(round(c_ * sc)))) for n_, c_ in comp]
         g = self._platoon(self.usa, f"Friendly Task Force {package.number}", comp, fx, fy, (int(brg) + 180) % 360, F.Rectangle)
@@ -1301,7 +1303,7 @@ class MissionBuilder:
             self._drive(g, [offset(cx, cy, brg + (0 if static else 180), 2000 if static else 2500)], v)
             manifest.add("friendly_ground", self.armor_id or "", names)
         jx, jy = offset(fx, fy, brg + 90, 120)
-        jt = self.m.vehicle_group(self.usa, f"Axeman {package.number}-1", _UN.Hummer, mapping.Point(jx, jy, self.t), heading=(int(brg) + 180) % 360, group_size=1)
+        jt = self.m.vehicle_group(self.usa, f"Axeman {package.number}-1", _vt(factions.jtac_vehicle("blue")) or _UN.Hummer, mapping.Point(jx, jy, self.t), heading=(int(brg) + 180) % 360, group_size=1)
         jt.units[0].name = f"JTAC-{package.id}"
         p0 = jt.points[0]
         p0.tasks.append(task.FAC(callsign=1, frequency=int(plan.freq("JTAC") * 1e6), modulation=task.Modulation.AM, number=1))
@@ -1648,17 +1650,18 @@ class MissionBuilder:
                 if k == len(remaining) - 1 and bomber:
                     if land and apt is not None:
                         wp.tasks.append(task.BombingRunway(airport_id=apt.id))
-                    elif cvg is not None and cls is planes.Tu_22M3:
+                    elif cvg is not None and factions.bomber() and cls.id == getattr(planes, factions.bomber()).id:
                         wp.tasks.append(task.AttackGroup(cvg.id))
             g.set_skill(skill)
             return g
 
         if land:
-            g = build_group("Raid Bomber 1", getattr(planes, ex.get("raider", "Su_24M")), ex["bombers"], task.RunwayAttack, (sx, sy), bomber=True)
-            load = enemy_strike_loadout(ex.get("raider", "Su_24M"))
+            raider = ex.get("raider") or factions.striker()
+            g = build_group("Raid Bomber 1", getattr(planes, raider), ex["bombers"], task.RunwayAttack, (sx, sy), bomber=True)
+            load = enemy_strike_loadout(raider)
         else:
-            g = build_group("Raid Bomber 1", planes.Tu_22M3, ex["bombers"], task.AntishipStrike, (sx, sy), bomber=True)
-            load = enemy_bomber_loadout("Tu_22M3")
+            g = build_group("Raid Bomber 1", getattr(planes, factions.bomber()), ex["bombers"], task.AntishipStrike, (sx, sy), bomber=True)
+            load = enemy_bomber_loadout(factions.bomber())
         names = []
         for j, u in enumerate(g.units, 1):
             u.name = f"RAID-B-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)

@@ -24,7 +24,8 @@ RAID_PRIORITY = 8.0
 
 
 def _bomber_wings(state) -> list:
-    return [w for w in state.enemy_air if "Su_24M" in w.types and w.available >= 2 and not state.assets[w.base_asset_id].destroyed]
+    from . import factions
+    return [w for w in state.enemy_air if factions.striker() in w.types and w.available >= 2 and not state.assets[w.base_asset_id].destroyed]
 
 
 def target_weights(state) -> list:
@@ -38,7 +39,8 @@ def target_weights(state) -> list:
         if b.id in (state.ground or {}).get("fallen", []):
             continue
         near = min((math.hypot(state.assets[w.base_asset_id].x - b.x, state.assets[w.base_asset_id].y - b.y) / NM for w in wings), default=None)
-        if near is None or near > ENEMY_RADIUS_NM["Su_24M"] * 0.85:
+        from . import factions
+        if near is None or near > ENEMY_RADIUS_NM.get(factions.striker(), 300) * 0.85:
             continue
         out.append((b, max(0.15, 1.0 - near / 330.0) * (0.6 + 0.8 * (1.0 - getattr(b, "defense", 0.5)))))
     return out

@@ -1,3 +1,16 @@
+## Danica 0.2 - faction packs
+* Who fights with what is now data. Each campaign has a blue and a red faction pack (docs/FACTIONS.md): countries, aircraft, air-defence site types, ground forces, ships and support aircraft. The hard-coded USA/Russia, Stennis, Patriot, E-3/KC-135, MiGs and SAM tables moved into `modern_usa` and `modern_russia`.
+* Modern campaigns are unchanged. A mission fingerprint over 15 campaigns and 45 missions is byte-identical before and after.
+* New WWII packs: `ww2_allies_europe` vs `ww2_axis_germany` (heavy flak with Wurzburg radars, Freya early warning, Fw 190, Bf 109 and Ju 88; Shermans, Bofors and quad .50s), plus `ww2_allies_pacific` and `ww2_axis_japan`. Japan is marked incomplete: pydcs has no Japanese aircraft and no Marianas WWII map yet.
+* A pair from different eras, or a pack marked incomplete, is refused when a campaign is created. Campaigns save their factions. Older saves get their theatre's pair when opened.
+
+## Danica 0.1 - unit catalog
+* Any aircraft DCS can fly is now available. Next to the five tuned jets there are 69 more: every flyable type pydcs knows, plus mods from unit packs. The first pack is the A-4E-C. See docs/UNITS.md.
+* Loadouts for non-tuned aircraft come from DCS's own payload presets: the stock presets, the mod's `UnitPayloads` folder and the ones you save in the Mission Editor. A preset named `SQE CAS` (or `SQE STRIKE`, `SQE SEAD`, `SQE CAP`) wins.
+* New Campaign can raise a new squadron of any aircraft at any friendly base. Carrier-capable land jets (A-4E-C) may also go on the carrier.
+* Aircraft without air-to-air refuelling (warbirds, most mods) never get a tanker. Missions with mod aircraft list them under `requiredModules`.
+* `tools/make_unit_pack.py` lists your installed aircraft mods and writes starter packs for the ones SQE doesn't know yet.
+
 ## v0.26.5
 * A DEAD package never flies LOW. Its target is a defended cluster (the site's own AAA, Shilka and Strela, a garrison, Tunguskas next door), and LOW only helps against radar missiles, which are exactly what the package is there to destroy. In the last test the four Hornets that bombed a mop-up SA-10 site at 500 ft AGL all died within 40 seconds. A DEAD package now picks between its normal altitude and MED, as before. CAS, STRIKE and the other packages are unchanged.
 * The altitude profile now counts SAM sites at 25% health or less, like the stand-off since v0.26.4: a site with a unit left still shoots, so it no longer makes a package look safer than it is.

@@ -21,11 +21,11 @@ from . import relief, threatmap as tm
 
 NM = 1852.0
 # (lowest, highest) altitude in ft at which the system realistically engages. Hand-set.
-ENVELOPE = {"AAA": (0, 10000), "MANPAD": (0, 10000), "SA-8": (0, 16000), "SA-15": (0, 20000), "SA-19": (0, 11000), "SA-3": (300, 45000),
-            "SA-6": (300, 45000), "SA-11": (100, 70000), "SA-10": (200, 90000), "SA-2": (1500, 80000)}
+from . import factions as _fx
+ENVELOPE = _fx.VariantView("envelope_ft", tuple)    # (floor, ceiling) ft of each site type (factions.py)
 # How much each system matters when it covers the route (the long-range ones hurt most).
-WEIGHT = {"AAA": 1.0, "MANPAD": 1.0, "SA-8": 1.5, "SA-15": 2.0, "SA-19": 1.0, "SA-3": 1.5, "SA-6": 2.0, "SA-11": 2.5, "SA-10": 3.0, "SA-2": 1.5}
-RADAR = {"SA-2", "SA-3", "SA-6", "SA-10", "SA-11"}         # radar-guided: terrain masking and the radar horizon cut their reach against a LOW flight
+WEIGHT = _fx.VariantView("weight")
+RADAR = _fx.VariantFlag("radar")         # radar-guided: terrain masking and the radar horizon cut their reach against a LOW flight
 LOW_RADAR_FACTOR = 0.5
 MIN_GAIN = 0.5                                              # a lower profile has to be at least this much safer than the role altitude
 PENALTY = {"base": 0.0, "med": 0.25, "low": 0.75}          # a lower profile costs fuel and is harder to fly

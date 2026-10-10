@@ -1,0 +1,531 @@
+{
+ "id": "modern_russia",
+ "name": "Northern Federation (Russian equipment, 2000s)",
+ "era": "modern",
+ "side": "red",
+ "countries": [
+  "Russia"
+ ],
+ "air": {
+  "fighters": [
+   "F_4E",
+   "F_5E_3",
+   "MiG_21Bis",
+   "MiG_23MLD",
+   "MiG_29A",
+   "MiG_29S",
+   "Su_27"
+  ],
+  "radius_nm": {
+   "MiG_29A": 250,
+   "MiG_29S": 270,
+   "Su_27": 400,
+   "MiG_31": 450,
+   "MiG_23MLD": 200,
+   "MiG_21Bis": 170,
+   "F_4E": 300,
+   "F_5E_3": 200,
+   "Su_24M": 300
+  },
+  "intercept_nm": {
+   "MiG_21Bis": 110,
+   "MiG_23MLD": 130,
+   "MiG_29A": 170,
+   "MiG_29S": 170,
+   "Su_27": 220,
+   "F_4E": 150,
+   "F_5E_3": 100
+  },
+  "types_by_level": {
+   "1": [
+    "MiG_21Bis",
+    "Su_25",
+    "MiG_23MLD"
+   ],
+   "2": [
+    "MiG_29A",
+    "MiG_29S",
+    "MiG_23MLD",
+    "Su_24M",
+    "Su_25"
+   ],
+   "3": [
+    "MiG_29S",
+    "Su_27",
+    "Su_24M",
+    "Su_25",
+    "MiG_29A"
+   ]
+  },
+  "striker": "Su_24M",
+  "bomber": "Tu_22M3"
+ },
+ "air_defence": {
+  "variants": {
+   "AAA": {
+    "label": "AAA battery",
+    "name": "AAA",
+    "value": 2,
+    "range_nm": 3,
+    "envelope_ft": [
+     0,
+     10000
+    ],
+    "weight": 1.0,
+    "radar": false,
+    "long_range": false,
+    "mobile": false,
+    "units": [
+     [
+      "ZU_23_Emplacement",
+      3
+     ],
+     [
+      "Ural_375_ZU_23",
+      2
+     ],
+     [
+      "ZSU_23_4_Shilka",
+      1
+     ]
+    ]
+   },
+   "MANPAD": {
+    "label": "MANPADS team",
+    "name": "MANPADS",
+    "value": 2,
+    "range_nm": 3,
+    "envelope_ft": [
+     0,
+     10000
+    ],
+    "weight": 1.0,
+    "radar": false,
+    "long_range": false,
+    "mobile": false,
+    "units": [
+     [
+      "SA_18_Igla_manpad",
+      4
+     ],
+     [
+      "SA_18_Igla_comm",
+      1
+     ]
+    ]
+   },
+   "SA-2": {
+    "label": "SA-2 site",
+    "name": "SA-2 Guideline",
+    "value": 5,
+    "range_nm": 25,
+    "envelope_ft": [
+     1500,
+     80000
+    ],
+    "weight": 1.5,
+    "radar": true,
+    "long_range": true,
+    "mobile": false,
+    "units": [
+     [
+      "S_75M_Volhov",
+      4
+     ],
+     [
+      "SNR_75V",
+      1
+     ],
+     [
+      "ZSU_23_4_Shilka",
+      1
+     ]
+    ]
+   },
+   "SA-3": {
+    "label": "SA-3 site",
+    "name": "SA-3 Goa",
+    "value": 5,
+    "range_nm": 13,
+    "envelope_ft": [
+     300,
+     45000
+    ],
+    "weight": 1.5,
+    "radar": true,
+    "long_range": true,
+    "mobile": false,
+    "units": [
+     [
+      "x_5p73_s_125_ln",
+      4
+     ],
+     [
+      "snr_s_125_tr",
+      1
+     ],
+     [
+      "p_19_s_125_sr",
+      1
+     ]
+    ]
+   },
+   "SA-6": {
+    "label": "SA-6 site",
+    "name": "SA-6 Gainful",
+    "value": 6,
+    "range_nm": 13,
+    "envelope_ft": [
+     300,
+     45000
+    ],
+    "weight": 2.0,
+    "radar": true,
+    "long_range": true,
+    "mobile": true,
+    "units": [
+     [
+      "Kub_2P25_ln",
+      3
+     ],
+     [
+      "Kub_1S91_str",
+      1
+     ],
+     [
+      "ZSU_23_4_Shilka",
+      1
+     ]
+    ]
+   },
+   "SA-11": {
+    "label": "SA-11 site",
+    "name": "SA-11 Gadfly",
+    "value": 7,
+    "range_nm": 18,
+    "envelope_ft": [
+     100,
+     70000
+    ],
+    "weight": 2.5,
+    "radar": true,
+    "long_range": true,
+    "mobile": true,
+    "units": [
+     [
+      "SA_11_Buk_LN_9A310M1",
+      3
+     ],
+     [
+      "SA_11_Buk_SR_9S18M1",
+      1
+     ],
+     [
+      "SA_11_Buk_CC_9S470M1",
+      1
+     ]
+    ]
+   },
+   "SA-10": {
+    "label": "SA-10 site",
+    "name": "SA-10 Grumble",
+    "value": 9,
+    "range_nm": 48,
+    "envelope_ft": [
+     200,
+     90000
+    ],
+    "weight": 3.0,
+    "radar": true,
+    "long_range": true,
+    "mobile": false,
+    "units": [
+     [
+      "S_300PS_5P85C_ln",
+      2
+     ],
+     [
+      "S_300PS_5P85D_ln",
+      2
+     ],
+     [
+      "S_300PS_40B6M_tr",
+      1
+     ],
+     [
+      "S_300PS_64H6E_sr",
+      1
+     ],
+     [
+      "S_300PS_54K6_cp",
+      1
+     ]
+    ]
+   },
+   "SA-15": {
+    "label": "SA-15 battery",
+    "name": "SA-15 Gauntlet",
+    "value": 6,
+    "range_nm": 8,
+    "envelope_ft": [
+     0,
+     20000
+    ],
+    "weight": 2.0,
+    "radar": false,
+    "long_range": false,
+    "mobile": true,
+    "units": [
+     [
+      "Tor_9A331",
+      2
+     ],
+     [
+      "ZSU_23_4_Shilka",
+      1
+     ]
+    ]
+   },
+   "SA-19": {
+    "label": "SA-19 battery",
+    "name": "SA-19 Grison",
+    "value": 5,
+    "range_nm": 5,
+    "envelope_ft": [
+     0,
+     11000
+    ],
+    "weight": 1.0,
+    "radar": false,
+    "long_range": false,
+    "mobile": true,
+    "units": [
+     [
+      "x_2S6_Tunguska",
+      2
+     ]
+    ]
+   },
+   "SA-8": {
+    "label": "SA-8 battery",
+    "name": "SA-8 Gecko",
+    "value": 4,
+    "range_nm": 7,
+    "envelope_ft": [
+     0,
+     16000
+    ],
+    "weight": 1.5,
+    "radar": false,
+    "long_range": false,
+    "mobile": true,
+    "units": [
+     [
+      "Osa_9A33_ln",
+      2
+     ]
+    ]
+   },
+   "EWR": {
+    "radar": false,
+    "long_range": false,
+    "mobile": false,
+    "units": [
+     [
+      "x_1L13_EWR",
+      1
+     ]
+    ]
+   },
+   "EWR55": {
+    "radar": false,
+    "long_range": false,
+    "mobile": false,
+    "units": [
+     [
+      "x_55G6_EWR",
+      1
+     ]
+    ]
+   }
+  },
+  "track_radars": [
+   "Kub 1S91 str",
+   "S-300PS 40B6M tr",
+   "SNR_75V",
+   "snr s-125 tr"
+  ],
+  "search_radars": [
+   "1L13 EWR",
+   "55G6 EWR",
+   "S-300PS 64H6E sr",
+   "SA-11 Buk SR 9S18M1",
+   "p-19 s-125 sr"
+  ],
+  "sam_variants_by_level": {
+   "1": [
+    "AAA",
+    "MANPAD",
+    "SA-3"
+   ],
+   "2": [
+    "SA-2",
+    "SA-3",
+    "SA-6",
+    "SA-11",
+    "AAA"
+   ],
+   "3": [
+    "SA-10",
+    "SA-11",
+    "SA-6",
+    "SA-15",
+    "SA-19"
+   ]
+  },
+  "forward_sams_by_level": {
+   "1": [],
+   "2": [
+    "SA-8",
+    "SA-8"
+   ],
+   "3": [
+    "SA-15",
+    "SA-8",
+    "SA-19"
+   ]
+  },
+  "ewr": "EWR",
+  "ewr_advanced": "EWR55"
+ },
+ "ground": {
+  "soft": {
+   "C2": [
+    [
+     "ZIL_131_KUNG",
+     2
+    ],
+    [
+     "Ural_375",
+     3
+    ],
+    [
+     "ZSU_23_4_Shilka",
+     2
+    ]
+   ],
+   "FUEL": [
+    [
+     "ATZ_10",
+     4
+    ],
+    [
+     "Ural_375",
+     2
+    ],
+    [
+     "ZSU_23_4_Shilka",
+     1
+    ]
+   ],
+   "DEPOT": [
+    [
+     "Ural_375",
+     6
+    ],
+    [
+     "KAMAZ_Truck",
+     2
+    ],
+    [
+     "ZSU_23_4_Shilka",
+     2
+    ]
+   ],
+   "AIRFIELD": [
+    [
+     "ZSU_23_4_Shilka",
+     2
+    ],
+    [
+     "Ural_375",
+     3
+    ]
+   ],
+   "ARMOR": [
+    [
+     "T_72B",
+     4
+    ],
+    [
+     "BMP_2",
+     3
+    ],
+    [
+     "BTR_80",
+     2
+    ],
+    [
+     "ZSU_23_4_Shilka",
+     1
+    ]
+   ]
+  },
+  "armor": {
+   "tank": [
+    "T_72B",
+    "T_72B",
+    "T_80B",
+    "T_80UD"
+   ],
+   "ifv": [
+    "BMP_2",
+    "BMP_1",
+    "BMP_3"
+   ],
+   "apc": [
+    "BTR_80",
+    "BTR_70",
+    "BTR_60"
+   ],
+   "aaa": "ZSU_23_4_Shilka",
+   "truck": "Ural_375",
+   "mobile_ad": [
+    "Strela_10M3",
+    "Osa_9A33_ln"
+   ]
+  },
+  "garrison": {
+   "tank": [
+    "T_72B",
+    "T_80B"
+   ],
+   "ifv": [
+    "BMP_2",
+    "BMP_1"
+   ],
+   "aaa": "ZSU_23_4_Shilka",
+   "truck": "Ural_375",
+   "high_level_ad": "Strela_10M3"
+  },
+  "wreck_mix": [
+   [
+    "T_72B",
+    "T_72B",
+    "T_80B",
+    "T_80UD"
+   ],
+   [
+    "BMP_2",
+    "BMP_1",
+    "BMP_3"
+   ],
+   [
+    "BTR_80",
+    "BTR_70",
+    "BTR_60"
+   ]
+  ],
+  "wreck_aaa": "ZSU_23_4_Shilka"
+ }
+}

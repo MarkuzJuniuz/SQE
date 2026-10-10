@@ -21,7 +21,8 @@ NM = 1852.0
 REBUILD_MIN_DAYS = 3
 REBUILT_HEALTH = 0.5
 REBUILD_PER_DAY = 1
-MOBILE = {"SA-6", "SA-11", "SA-8", "SA-15", "SA-19"}
+from . import factions as _fx
+MOBILE = _fx.VariantFlag("mobile")                  # site types that can move (factions.py)
 HURT = 0.8                    # health at or below this is "hurt" enough to move
 MAX_MOVES = 2
 MAX_DRIFT_NM = 10.0

@@ -16,7 +16,8 @@ from .routes import NM
 
 # How far from its field a type will be sent to intercept (nm). Hand-set and deliberately shorter than the published combat radius: a
 # scramble has to reach the area, fight and get home. Tune freely.
-INTERCEPT_NM = {"MiG_21Bis": 110, "MiG_23MLD": 130, "MiG_29A": 170, "MiG_29S": 170, "Su_27": 220, "F_4E": 150, "F_5E_3": 100}
+from . import factions as _fx                       # noqa: E402
+INTERCEPT_NM = _fx.INTERCEPT_LIVE                   # red faction: air.intercept_nm
 
 # The same for our alert pairs: how far from its base a squadron's alert pair is sent (nm), never more than 60% of the combat radius. Hand-set, shorter
 # than that radius for the same reason: it has to reach the area, fight and get home. Tune freely.

@@ -1,11 +1,17 @@
-"""Aircraft registry. Add a jet = add one AircraftSpec (+ loadouts in loadouts.py).
+"""Aircraft registry.
+
+Two kinds of entry share one table, `AIRCRAFT` (see catalog.py):
+  * hand-tuned specs below (_TUNED): route profiles, bingo/joker and loadouts tuned by flying them;
+  * everything else DCS can fly, generated on first use: every flyable type pydcs knows, plus mod aircraft from unit packs
+    (sqe/data/units/*.json and %APPDATA%\\SQE\\units\\*.json, see modunits.py). Their profile comes from their speed class and
+    their loadouts from DCS's own payload presets (loadouts.py).
+A hand-tuned spec always wins over a generated one with the same key.
 
 Service is derived from where the jet lives: carrier jets are Navy, runway jets are USAF.
-A land-based type can never be based on a carrier (checked when a scenario loads).
+A land-based type can never be based on a carrier unless it is carrier_capable (checked when a scenario loads).
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
-from dcs import planes
 from .models import Role, BaseKind, RefuelMethod
 
 
@@ -59,6 +65,10 @@ class AircraftSpec:
     # Intra-flight frequency band (MHz). Must be a band ONLY the COMM2 radio covers (VHF), because DCS puts a
     # group's frequency on the first radio able to tune it; UHF would overwrite a COMM1 preset.
     comm2_band_mhz: tuple = (127.0, 137.0)
+    carrier_capable: bool = False     # a land-home type that may still be based on a carrier (A-4E-C)
+    helicopter: bool = False
+    era: str = "modern"               # "ww2" | "early_jet" | "modern": used by faction packs to keep each war in its period
+    source: str = "tuned"             # "tuned" (this file) | "pydcs" (generated) | "mod" (unit pack)
 
     def wp_label(self, me_index: int) -> str:
         """Label the cockpit uses for mission-editor waypoint number me_index (1 = start point)."""
@@ -71,12 +81,17 @@ class AircraftSpec:
         return "Navy" if self.home == BaseKind.CARRIER else "USAF"
 
     @property
+    def tuned(self) -> bool:
+        return self.source == "tuned"
+
+    @property
     def dcs_type(self):
-        return getattr(planes, self.dcs_class)
+        from .catalog import resolve_type
+        return resolve_type(self.dcs_class)
 
 
 _R = Role
-AIRCRAFT: dict[str, AircraftSpec] = {
+_TUNED: dict[str, AircraftSpec] = {
     "F-14BU": AircraftSpec(
         "F-14BU", "F-14B(U) Tomcat", "F_14BU", BaseKind.CARRIER,
         frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.STRIKE}), RefuelMethod.BASKET, 2, 300, 450, True,
@@ -112,6 +127,10 @@ AIRCRAFT: dict[str, AircraftSpec] = {
 }
 
 
+from .catalog import Catalog                       # noqa: E402  (needs the dataclasses above)
+AIRCRAFT = Catalog(_TUNED)
+
+
 @dataclass(frozen=True)
 class SupportSpec:
     dcs_class: str
@@ -120,9 +139,10 @@ class SupportSpec:
     speed_kts: int
 
 
-AWACS_FOR = {BaseKind.CARRIER: SupportSpec("E_2C", "Magic", 25000, 300),
-             BaseKind.AIRFIELD: SupportSpec("E_3A", "Overlord", 30000, 400)}
+# Support aircraft come from the blue faction pack (factions.py: support.awacs / tankers / recovery_tanker). These are live views:
+# AWACS_FOR[BaseKind.CARRIER] is whatever the campaign's blue faction flies (E-2C for the modern US pack, nothing for WWII).
+from . import factions as _fx                       # noqa: E402
+AWACS_FOR = _fx.AWACS_LIVE
 # Basket tanker speed matters: AI Tomcats fail to plug the drogue when the tanker is set slow (DCS forums).
-TANKER_FOR = {RefuelMethod.BASKET: SupportSpec("KC135MPRS", "Texaco", 20000, 350),
-              RefuelMethod.BOOM: SupportSpec("KC_135", "Arco", 22000, 350)}
-RECOVERY_TANKER = SupportSpec("S_3B_Tanker", "Shell", 6000, 250)
+TANKER_FOR = _fx.TANKER_LIVE
+RECOVERY_TANKER = _fx.RECOVERY_LIVE

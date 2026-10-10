@@ -39,6 +39,8 @@ class Session:
         terrainmask.RIVER_MARGIN = float(getattr(self.settings, "river_margin_m", 100))
         terrainmask.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
         relief.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
+        from . import catalog                          # payload presets (stock, mods, your own) come from your DCS folders
+        catalog.configure(self.settings.dcs_install or None, self.settings.dcs_saves or None)
 
     # ---- persistence ---------------------------------------------------------------------------
     @property
@@ -64,7 +66,10 @@ class Session:
 
     def open(self, path) -> None:
         self.state = CampaignState.load(path)
-        theatres.use(self.state.theatre)
+        th = theatres.use(self.state.theatre)
+        from . import factions
+        self.state.factions = self.state.factions or factions.for_theatre(th)
+        factions.use(**self.state.factions)
         self.sync_terrain()
         self.path = Path(path)
         self.settings.last_campaign = str(path)

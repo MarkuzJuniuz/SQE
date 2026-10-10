@@ -33,7 +33,7 @@ def main():
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
     assert not s.settings.problems(), s.settings.problems()
     tested, kinds = 0, set()
-    for aircraft, spec in AIRCRAFT.items():
+    for aircraft, spec in AIRCRAFT.tuned().items():          # the hand-tuned jets; the generated catalog has its own test below
         if not spec.player_flyable:
             continue
         s.new(f"Smoke {aircraft}", aircraft, 3, seed=7)         # level 3 so the bomber raid objective exists too
@@ -536,7 +536,7 @@ def main():
     _g = _mg(0, 0, 200 * _NM, 0, _pr, (-60 * _NM, 0)); assert abs(_d(0, 0, *_g.dep) / _NM - 8) < 0.01
     _g = _mg(0, 0, 200 * _NM, 0, _pr, (-60 * _NM, 0), carrier=True); assert abs(_d(0, 0, *_g.dep) / _NM - 10) < 0.01 and abs(_b(0, 0, *_g.dep) - 180) < 0.1
     _g = _mg(0, 0, 200 * _NM, 0, _pr, (-15 * _NM, 0)); assert abs(_d(0, 0, *_g.dep) / _NM - 6) < 0.01          # 40% cap on a short leg
-    assert [k for k, v in _AC.items() if v.profile.dep_nm != 8.0] == ["A-10C"], "only the A-10C departs at 6 nm"
+    assert [k for k, v in _AC.tuned().items() if v.profile.dep_nm != 8.0] == ["A-10C"], "only the A-10C departs at 6 nm (tuned jets)"
     assert ks.__class__ and any(r_["name"] == "TAKEOFF" for r_ in ctx_["waypoints"])
     print("[departure] DEP 8 nm land / 10 nm carrier / 6 nm A-10C, capped at 40% of the way to the marshal point")
     # ---- altitude profiles: HIGH / MED / LOW from the SAM picture
@@ -865,7 +865,73 @@ def main():
     s.settings.player_is_ai = False
     assert '"Player"' in _t0 and '"Player"' not in _t1 and '"Client"' not in _t1, "with the AI-test tick the mission has no player or client slot"
     print("[ai test] the AI-flown tick builds your flight as AI (no player slot); off = a player slot")
+    _catalog_test(s)
+    _faction_test(s)
     print("SMOKE TEST PASSED")
+
+
+def _faction_test(s):
+    """Faction packs: every bundled pack names only units this pydcs knows; mixed eras and incomplete packs are refused; a campaign saves
+    its factions and gets them back on open; the modern pair reproduces the old hard-coded order of battle."""
+    from sqe import factions as _fx
+    from sqe.state import CampaignState as _CS
+    bad = {f: _fx.problems(f) for f in _fx.packs()}
+    assert not any(bad.values()), f"faction packs name unknown units: {bad}"
+    for pair, ok in ((("modern_usa", "modern_russia"), True), (("ww2_allies_europe", "ww2_axis_germany"), True),
+                     (("modern_usa", "ww2_axis_germany"), False), (("ww2_allies_pacific", "ww2_axis_japan"), False)):
+        try:
+            _fx.check_pair(*pair); got = True
+        except ValueError:
+            got = False
+        assert got == ok, f"pair {pair} should be {'accepted' if ok else 'refused'}"
+    s.new("Factions", "F-16C", 2, seed=3)
+    assert s.state.factions == {"blue": "modern_usa", "red": "modern_russia"}, s.state.factions
+    s.save(); back = _CS.load(s.path)
+    assert back.factions == s.state.factions, "factions survive a save"
+    _fx.use("ww2_allies_europe", "ww2_axis_germany")
+    assert "FW_190D9" in __import__("sqe.loadouts", fromlist=["x"]).ENEMY_FIGHTERS and _fx.striker() == "Ju_88A4", "live views follow the active factions"
+    s.open(s.path)
+    assert _fx.red()["id"] == "modern_russia" and "MiG_29A" in __import__("sqe.loadouts", fromlist=["x"]).ENEMY_FIGHTERS, "opening a campaign restores its factions"
+    from sqe.mission_builder import SITES as _S
+    assert _S["SA-6"] == [("Kub_2P25_ln", 3), ("Kub_1S91_str", 1), ("ZSU_23_4_Shilka", 1)] and "FLAK88" in _S, "site types from every pack"
+    print(f"[factions] {len(_fx.packs())} packs, all units known to pydcs; eras and incomplete packs checked; saved and restored with the campaign")
+
+
+def _catalog_test(s):
+    """The unit catalog: every flyable pydcs type plus the A-4E-C unit pack resolve; a new squadron of a generated type and of the mod
+    can be raised on any theatre, flies a sortie, and the mod mission lists the A-4E-C under requiredModules."""
+    import zipfile as _zf
+    from dcs import planes as _pl, lua as _lua
+    from sqe import scenario as _sc, modunits as _mu
+    from sqe.models import RefuelMethod as _RM
+    flyable = [t for t in _pl.plane_map.values() if t.flyable]
+    assert all(t.id in AIRCRAFT or any(sp.dcs_type is t for sp in AIRCRAFT.tuned().values()) for t in flyable), "every flyable pydcs plane is in the catalog"
+    a4 = AIRCRAFT["A-4E-C"]
+    assert a4.source == "mod" and a4.player_flyable and a4.carrier_capable and a4.era == "early_jet", "A-4E-C comes from its unit pack"
+    assert a4.dcs_type.id == "A-4E-C" and "A-4E-C" in _pl.plane_map, "the A-4E-C is a real pydcs type at runtime"
+    assert AIRCRAFT["P-51D"].era == "ww2" and AIRCRAFT["P-51D"].refuel == _RM.NONE, "warbirds are WWII and never refuel"
+    assert not AIRCRAFT["CH-47Fbl1"].player_flyable, "helicopters wait for their own profiles"
+    built = []
+    for key in ("A-4E-C", "P-51D", "MiG-21Bis"):
+        opts = [sid for sid, _ in _sc.squadron_options(key, "caucasus") if sid.startswith(_sc.NEW_SQUADRON)]
+        assert opts, f"{key}: a new squadron can be raised"
+        s.new(f"Catalog {key}", key, 2, seed=5, squadron=opts[-1])
+        assert s.state.squadrons[s.state.player.squadron_id].aircraft == key
+        pks = [p for p in s.packages() if s.flyable(p)]
+        if not pks:
+            print(f"[catalog] {key}: no flyable package today (fine)"); continue
+        res = s.fly(pks[0].number, None)
+        mission = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode()
+        m = _lua.loads(mission)["mission"]
+        if key == "A-4E-C":
+            assert m.get("requiredModules", {}).get("A-4E-C") == "A-4E-C", "the mod is listed under requiredModules"
+            assert '"A-4E-C"' in mission
+        if all(AIRCRAFT[f.aircraft].refuel == _RM.NONE for f in pks[0].flights if not f.tag):
+            assert not any(sp.slot.startswith("TANKER") for sp in pks[0].support), "no tanker for a package nobody in it can refuel from"
+        built.append(f"{key}: {pks[0].objective.type.value}, {res.counts['units']} units")
+    assert _mu.required_modules({"F-16C_50"}) == {}, "stock types need no module entry"
+    print(f"[catalog] {len(AIRCRAFT)} types ({len(AIRCRAFT.tuned())} tuned, {len(AIRCRAFT.by_source('mod'))} mod, "
+          f"{len(AIRCRAFT.player_types())} flyable by you); new squadrons flown: " + "; ".join(built))
 
 
 if __name__ == "__main__":

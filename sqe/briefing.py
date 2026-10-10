@@ -7,9 +7,9 @@ from .models import AssetKind
 from .routes import dist, NM
 from .war import totals
 
-_SAM_NAME = {"SA-8": "SA-8 Gecko", "AAA": "AAA", "MANPAD": "MANPADS", "SA-2": "SA-2 Guideline", "SA-3": "SA-3 Goa", "SA-6": "SA-6 Gainful",
-             "SA-11": "SA-11 Gadfly", "SA-10": "SA-10 Grumble", "SA-15": "SA-15 Gauntlet", "SA-19": "SA-19 Grison"}
-RANGE_NM = {"SA-8": 7, "AAA": 3, "MANPAD": 3, "SA-2": 25, "SA-3": 13, "SA-6": 13, "SA-11": 18, "SA-10": 48, "SA-15": 8, "SA-19": 5}
+from . import factions as _fx
+_SAM_NAME = _fx.VariantView("name")                 # every pack's air-defence site types (factions.py)
+RANGE_NM = _fx.VariantView("range_nm")
 
 
 def threat_lines(state, tx, ty) -> list:

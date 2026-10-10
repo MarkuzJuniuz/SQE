@@ -49,6 +49,7 @@ def _validate(d: dict, src) -> dict:
     d.setdefault("support_targets", [])
     d.setdefault("red_keep", {})
     d.setdefault("bomber_base", "")
+    d.setdefault("factions", {"blue": "modern_usa", "red": "modern_russia"})
     d["_dir"] = str(Path(src).parent)
     return d
 

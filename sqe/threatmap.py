@@ -9,7 +9,8 @@ import math
 from .models import AssetKind
 
 NM = 1852.0
-RANGE_NM = {"SA-8": 7, "AAA": 3, "MANPAD": 3, "SA-2": 25, "SA-3": 13, "SA-6": 13, "SA-11": 18, "SA-10": 48, "SA-15": 8, "SA-19": 5}
+from . import factions as _fx
+RANGE_NM = _fx.VariantView("range_nm")              # ring radius of each air-defence site type (factions.py)
 SERIOUS_NM = 8          # shorter-ranged systems do not block routes (they only matter at the target)
 
 
