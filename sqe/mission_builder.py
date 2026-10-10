@@ -67,7 +67,7 @@ class MissionOptions:
     friendly_cap_engage_nm: int = 50    # HAVCAP / BASECAP likewise (0 = unlimited)
     fighter_engage_nm: int = 40         # AI escorts and sweeps chase no further than this (0 = unlimited)
     fighter_engage_minutes: int = 5     # AI escorts, sweeps, SEAD stop engaging this many minutes after the TOT and fly on (alert pairs: +5). 0 = no time limit
-    player_is_ai: bool = False          # test: your slot is set to AI in the editor, so your own flight gets the AI behaviour too (stand-off, engage window)
+    player_is_ai: bool = False          # test: your own flight is built as an AI flight (no player / client slot) and gets the AI behaviour too (stand-off, engage window)
     fighter_standoff: bool = True       # AI escorts and sweeps stop short of live SAM cover instead of flying into it
     f14_special_names: bool = True
     weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
@@ -988,7 +988,8 @@ class MissionBuilder:
 
         if f.is_player:
             u0 = g.units[0]
-            u0.set_client() if o.player_is_client else u0.set_player()
+            if not o.player_is_ai:                              # test mode: the slot stays an AI aircraft, so nothing has to be changed in the editor
+                u0.set_client() if o.player_is_client else u0.set_player()
             if spec.fc3:
                 pass                                           # FC3 radios have no presets or channels: frequencies are on the kneeboard
             elif not (hasattr(spec.dcs_type, "panel_radio") and spec.dcs_type.panel_radio and apply_player_presets(u0, plan, o.layout)):

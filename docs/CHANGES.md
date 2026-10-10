@@ -1,3 +1,6 @@
+## v0.26.3
+* The "My flight is flown by the AI" tick (Settings > Mission build) now really does it. In v0.26.1 it only gave your flight the AI stand-off and engage window; the aircraft was still a player slot, so you had to switch it to AI in the editor yourself (and if you did not, you could sit in it and fly). Now the flight is built as an AI flight: no player or client slot at all, so there is nothing to change in the editor, and you cannot take it. It flies like the other AI flights (stand-off short of SAM cover, engage window). Leave the tick off when you fly.
+
 ## v0.26.2
 * The ground-war map is readable again. The red and blue strength figures (R100, B18 ...) overlapped each other and the airfield names around Sukhumi and Senaki. Each sector is now a number with a small red | blue bar under it (the strengths themselves are in the list above the map). The "front line" label moved clear of the sector numbers.
 * Found, not changed: garrison CAS ("dislodge the ... garrison") is still offered from day 1 even though the garrison sits under its site's SAM cluster. The planner's blocker check only looks at SAM rings on the route, not at the target's own cluster, so it never holds the mission back. A rule that offers garrison CAS only after the long-range sites around it are cleared needs your decision first (it also changes what a campaign offers early on).

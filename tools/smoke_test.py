@@ -850,6 +850,16 @@ def main():
     s.new("Map", "FA-18C", 3, seed=2); _mv = _MV(); _mv.resize(600, 420); _mv.set_state(s.state)
     _img = _mv.grab().toImage(); assert _img.width() >= 600 and not _img.isNull(), "the map renders"
     print("[map] the ground-war map renders with sector numbers and red | blue bars")
+    # AI-test mode builds the player's flight as an AI flight
+    s.new("AI test", "F-15C", 3, seed=4); _st = s.state
+    _pk = next(p_ for p_ in s.packages() if s.flyable(p_))
+    s.settings.player_is_ai = False; s.fly(_pk.number, None)
+    _t0 = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
+    s.settings.player_is_ai = True; s.fly(_pk.number, None)
+    _t1 = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
+    s.settings.player_is_ai = False
+    assert '"Player"' in _t0 and '"Player"' not in _t1 and '"Client"' not in _t1, "with the AI-test tick the mission has no player or client slot"
+    print("[ai test] the AI-flown tick builds your flight as AI (no player slot); off = a player slot")
     print("SMOKE TEST PASSED")
 
 
