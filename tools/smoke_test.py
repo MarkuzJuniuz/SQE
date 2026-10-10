@@ -773,13 +773,16 @@ def main():
     _p = next(p_ for p_ in s.packages() if s.flyable(p_) and any(f_.role == _Rl.ESCORT for f_ in p_.flights) and p_.objective.type.value in ("STRIKE", "DEAD"))
     s.fly(_p.number, None)
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
-    assert "EngageTargets" in _mz and "74080" in _mz, "AI escorts carry a 40 nm engage limit"
+    assert "EngageTargetsInZone" in _mz and "zoneRadius" in _mz, "AI escorts engage only inside a circle around their hold point"
     from sqe.mission_builder import MissionBuilder as _MB
     _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 40, 1500)
     _t0 = _gx.points[0].tasks[0]; assert _t0.Id == "ControlledTask" and _t0.params["stopCondition"]["time"] == 1500 and _t0.params["task"]["params"]["maxDist"] == 74080, "engage task is time-limited"
     _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 0, 900); assert _gx.points[0].tasks[0].params["task"]["params"]["maxDistEnabled"] is False
     _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 40); assert _gx.points[0].tasks[0].Id == "EngageTargets" and len(_gx.points[0].tasks) == 1
     _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 0); assert not _gx.points[0].tasks
+    _gx = _NS(points=[_NS(tasks=[])]); _MB._limit_engage(_gx, 40, 1500, (1000.0, 2000.0, 30))
+    _t1 = _gx.points[0].tasks[0]; _zp = _t1.params["task"]["params"]
+    assert _t1.params["stopCondition"]["time"] == 1500 and _t1.params["task"]["id"] == "EngageTargetsInZone" and _zp["zoneRadius"] == 55560 and (_zp["x"], _zp["y"]) == (1000.0, 2000.0), "the engage zone leash"
     print("[engage time] the engage task stops at TOT + 5 min and the flight flies on (alert pairs +5); distance-only and unlimited forms unchanged")
     print("[stand-off] fighters stop outside live SAM rings (player excepted), hold there and go home; AI escorts and sweeps carry the 40 nm engage limit")
     # ---- phase 3: air defence that rebuilds and moves ----
@@ -888,10 +891,12 @@ def main():
     s.ai_test = True; s.fly(_dk.number, None); s.ai_test = False
     _zz = _zf.ZipFile(_st.pending["miz"]); _mt = _zz.read("mission").decode("utf-8", "ignore")
     assert _mt.count("SwitchWaypoint") >= 1 and _re.search(r"local GATES = \{ \{t=\d+, site=", _mt), "the AI flights carry a radar gate"
+    assert "ABORT" in _mt, "stand-off flights get a return waypoint before the landing"
     assert {"l10n/DEFAULT/sqe_beep.wav", "l10n/DEFAULT/sqe_beep_you.wav"} <= set(_zz.namelist()), "both beeps are bundled"
     _hk = _db.lua_hook("c", 1, "p", [], "Hornet 1-1", "Hornet 1", [(10, "AWACS to HORNET 1: push.", True), (20, "X: on station.", False)], None, "a.wav", "b.wav",
                        {}, [], [{"id": "sam_x", "label": "X", "who": "W", "prim": True, "units": ["u1"], "trk": ["u1"], "srch": []}], [],
-                       [{"t": 100, "site": "sam_x", "grp": "Hornet 2", "from": 3, "to": 5, "ai": True, "you": False}], True)
+                       [{"t": 100, "site": "sam_x", "grp": "Hornet 2", "from": 3, "to": 5, "ai": True, "dead": True, "you": False}], True)
+    assert "GATE_M = 40 * 1000" in _hk and "dead=true" in _hk, "the gate fires on distance"
     assert "AITEST = true" in _hk and "gatesJson" in _hk and '"gates":%s' in _hk, "all-AI test: calls go to everyone; every gate is logged in the state file"
     assert "you=true" in _hk and "SOUND_YOU" in _hk and "GATES = { {t=100" in _hk
     try:

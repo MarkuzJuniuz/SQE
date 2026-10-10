@@ -35,8 +35,10 @@ from .models import AssetKind, BaseKind, ObjectiveType, Role
 STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -30}      # seconds relative to the strikers' push (BMS-style)
 
 
+SEAD_ENGAGE_NM = 30            # a SEAD flight, or a fighter held at its stand-off point, engages only what is within this of that point
 DEAD_SEAD_LEAD_S = 300         # in a DEAD package the SEAD flight is on the site this long before the DEAD flight
-DEAD_GATE_BEFORE_TGT_S = 75    # the radars are checked this long before the DEAD flight reaches its target; any still up and DEAD turns back
+DEAD_GATE_BEFORE_TGT_S = 75    # fallback: if the DEAD flight never gets close, the radars are checked this long before its planned target time
+DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
 
 
 def stagger(package, role) -> int:
@@ -372,7 +374,7 @@ class MissionBuilder:
             install_hook(m, st.campaign_id, manifest.sortie, package.id, despawn if o.ai_despawn_on_land else [], manifest.player_unit,
                          group=pf.callsign, calls=[(t_, x_, f"TO {pf.callsign.upper()}:" in x_.upper()) for t_, x_ in calls], wps=[], sound=sound, sound_you=sound_you, flights=self._ulabels,
                          enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" for u in g_["units"]],
-                         sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai))
+                         sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM)
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -1001,7 +1003,12 @@ class MissionBuilder:
             self._limit_engage(g, self.o.friendly_cap_engage_nm)
         elif (not f.is_player or o.player_is_ai) and f.role in (Role.ESCORT, Role.SWEEP, Role.SEAD):
             m_ = self.o.fighter_engage_minutes
-            self._limit_engage(g, self.o.fighter_engage_nm if f.role != Role.SEAD else 0, (tot_s + m_ * 60) if (m_ > 0 and tot_s is not None) else None)
+            zone = None
+            if self.o.fighter_engage_nm > 0:                        # a leash: engage only what is inside a circle around the hold / SEAD point (DCS's distance limit moves with the aircraft)
+                zw = next((w for w in wps if w.orbit), None) or next((w for w in wps if w.action == "SEAD"), None) or objective_wp(wps)
+                if zw is not None:
+                    zone = (zw.x, zw.y, min(self.o.fighter_engage_nm, SEAD_ENGAGE_NM) if (zw.orbit or f.role == Role.SEAD) else self.o.fighter_engage_nm)
+            self._limit_engage(g, self.o.fighter_engage_nm if f.role != Role.SEAD else 0, (tot_s + m_ * 60) if (m_ > 0 and tot_s is not None) else None, zone)
 
         if f.is_player:
             u0 = g.units[0]
@@ -1090,6 +1097,23 @@ class MissionBuilder:
                     ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.Auto, group_attack=True))
                 ct.stop_after_time(int(w.eta_s) + 600)
                 wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree)); wp.tasks.append(ct)
+        gate = None
+        if (not f.tag and package.objective.type == ObjectiveType.DEAD and package.objective.target_id and tot_s is not None
+                and f.role in (Role.STRIKE, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10):
+            # radar gate: the DEAD flight, and its escorts and sweeps, break off if the site's radars are still up when the DEAD flight commits
+            added = [w.name for w in wps[first:]]
+            n0_ = len(g.points) - len(added)                           # points before the first one added above (the start point)
+            tw_ = objective_wp(wps)
+            ti_ = next((k for k, w in enumerate(wps[first:]) if w is tw_), 1)
+            ai_ = bool(not f.is_player or o.player_is_ai)
+            to_ = (n0_ + added.index("EGR") + 1) if "EGR" in added else None          # Lua route indices are 1-based
+            if to_ is None and ai_ and wps[first:]:
+                lw = wps[-1]                                            # a stand-off flight has no egress: a return point on the way home, so the turn-back
+                bx, by = offset(base.x, base.y, bearing(base.x, base.y, lw.x, lw.y), 20 * NM)   # does not cut straight from cruise altitude to the runway
+                g.add_waypoint(pt(bx, by), min(lw.alt_ft, 9000) * FT, 320 * KPH, "ABORT")
+                to_ = len(g.points)
+            gate = {"t": tot_s - DEAD_GATE_BEFORE_TGT_S, "site": package.objective.target_id, "grp": g.name,
+                    "from": n0_ + max(0, ti_ - 1) + 1, "to": to_, "ai": ai_, "dead": f.role == Role.STRIKE, "you": bool(f.is_player), "pkg": package.id}
         if base.kind == BaseKind.AIRFIELD:
             g.land_at(self.apt[base.id])
             if special:
@@ -1098,17 +1122,10 @@ class MissionBuilder:
             rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
             rtb.type, rtb.action = "Land", PointAction.Landing
             rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
-        if (not f.tag and package.objective.type == ObjectiveType.DEAD and package.objective.target_id and tot_s is not None
-                and f.role in (Role.STRIKE, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10):
-            # radar gate: the DEAD flight, and its escorts and sweeps, break off if the site's radars are still up shortly before the strike
-            added = [w.name for w in wps[first:]]
-            n0_ = len(g.points) - len(added) - 1                       # points before the first one added above (the start point); the landing point is the last
-            tw_ = objective_wp(wps)
-            ti_ = next((k for k, w in enumerate(wps[first:]) if w is tw_), 1)
-            self._gates.append({"t": tot_s - DEAD_GATE_BEFORE_TGT_S, "site": package.objective.target_id, "grp": g.name,
-                                "from": n0_ + max(0, ti_ - 1) + 1,                                        # Lua route indices are 1-based
-                                "to": (n0_ + added.index("EGR") + 1) if "EGR" in added else len(g.points),   # egress, or straight to the landing point
-                                "ai": bool(not f.is_player or o.player_is_ai), "you": bool(f.is_player), "pkg": package.id})
+        if gate is not None:
+            if gate["to"] is None:
+                gate["to"] = len(g.points)                              # the landing point
+            self._gates.append(gate)
         tw = None if f.tag else objective_wp(wps)
         return g, (tw.eta_s if tw is not None else None)
 
@@ -1404,17 +1421,20 @@ class MissionBuilder:
 
     # ---- enemy air picture: what the intelligence briefing says is there IS there, from the first second ----------------------
     @staticmethod
-    def _limit_engage(g, nm, until_s=None):
+    def _limit_engage(g, nm, until_s=None, zone=None):
         """Cap how far a patrol flight will go after a target (DCS 'engage targets within X'; 0 = unlimited) and, when until_s is given, how LONG:
         the engage task is wrapped so it stops at that mission time and the flight carries on along its route. The distance alone is no leash
         (DCS measures it from the aircraft, so a bandit running home is chased as far as it runs)."""
         if (not nm or nm <= 0) and until_s is None:
             return
         meters = int(nm * 1852) if (nm and nm > 0) else None
-        old = [t for t in g.points[0].tasks if getattr(t, "Id", "") == "EngageTargets"]
+        old = [t for t in g.points[0].tasks if getattr(t, "Id", "") in ("EngageTargets", "EngageTargetsInZone")]
         for t in old:
             g.points[0].tasks.remove(t)
-        et = task.EngageTargets(meters, [task.Targets.All.Air])
+        if zone is not None:                                        # engage only inside a circle (x, y, radius nm): the real leash
+            et = task.EngageTargetsInZone(mapping.Vector2(zone[0], zone[1]), int(zone[2] * 1852), [task.Targets.All.Air])
+        else:
+            et = task.EngageTargets(meters, [task.Targets.All.Air])
         if until_s is not None:
             ct = task.ControlledTask(et)
             ct.stop_after_time(max(60, int(until_s)))

@@ -59,8 +59,8 @@ local function num(x) if x then return string.format("%d", math.floor(x)) end re
 local function gatesJson()
   local o = {}
   for _, e in ipairs(gateLog) do
-    o[#o + 1] = string.format('{"site":"%s","grp":"%s","t":%d,"ran":%d,"radars":%d,"abort":%s,"cmd":%s,"d0":%s,"d1":%s}',
-      esc(e.site), esc(e.grp), e.t, e.ran, e.radars, tostring(e.abort), tostring(e.cmd), num(e.d0), num(e.d1))
+    o[#o + 1] = string.format('{"site":"%s","grp":"%s","t":%d,"ran":%d,"radars":%d,"abort":%s,"cmd":%s,"by":"%s","d0":%s,"d1":%s}',
+      esc(e.site), esc(e.grp), e.t, e.ran, e.radars, tostring(e.abort), tostring(e.cmd), esc(e.by or ""), num(e.d0), num(e.d1))
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
@@ -239,9 +239,12 @@ do
     return nil
   end, nil, timer.getTime() + 4)
 end
--- DEAD gate: shortly before the DEAD flight reaches its target, the site's radars are checked. Any still alive: the DEAD flight turns back
--- (the AI skips to its egress point; a human gets the call) and the debrief records the abort. Every gate is logged in the state file:
--- when it ran, radars left, whether the turn-back command went through, and the flight's distance to the target then and 60 s later.
+-- DEAD gate: before the DEAD flight commits, the target site's radars are checked. Any still alive: the DEAD flight turns back
+-- (the AI skips to its egress / return point; a human gets the call) and so do the escorts and sweeps of that package. The check fires
+-- when the DEAD flight's lead is within GATE_M of the site (so a late flight is judged where it really is), or at the clock time as a
+-- fallback (flight gone). Every gate is logged in the state file: when it ran, why, radars left, whether the command went through, and
+-- the flight's distance to the target then and 60 s later.
+local GATE_M = __GATEKM__ * 1000
 local function gdist(grpName, tp)
   if not tp then return nil end
   local ok, d = pcall(function()
@@ -254,36 +257,67 @@ local function gdist(grpName, tp)
   if ok then return d end
   return nil
 end
+local gsites, gorder = {}, {}
 for _, gt in ipairs(GATES) do
-  timer.scheduleFunction(function()
-    local s
-    for _, x in ipairs(SITES) do if x.id == gt.site then s = x end end
-    local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = false, cmd = false }
+  local gs = gsites[gt.site]
+  if not gs then gs = { site = gt.site, gates = {}, fall = 0, done = false }; gsites[gt.site] = gs; gorder[#gorder + 1] = gs end
+  gs.gates[#gs.gates + 1] = gt
+  if gt.t + 300 > gs.fall then gs.fall = gt.t + 300 end
+end
+local function sitePoint(s)
+  for _, un in ipairs(s.units) do
+    local u = Unit.getByName(un)
+    if u then local ok, p = pcall(function() return u:getPoint() end); if ok and p then return p end end
+  end
+end
+local function decide(gs, why)
+  gs.done = true
+  local s
+  for _, x in ipairs(SITES) do if x.id == gs.site then s = x end end
+  local blind = (not s) or s.nrad <= 0 or s.nalive <= 0
+  if not blind and not aborted[gs.site] then
+    aborted[gs.site] = true
+    say(s.who .. ": abort, abort. " .. s.label .. " radars still up, DEAD flight break off.", gs.gates[1].you)
+  end
+  for _, gt in ipairs(gs.gates) do
+    local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = not blind, cmd = false, by = why }
     gateLog[#gateLog + 1] = e
-    if s then
-      for _, un in ipairs(s.units) do
-        local u = Unit.getByName(un)
-        if u then local ok, p = pcall(function() return u:getPoint() end); if ok then e.tp = p; break end end
-      end
-    end
+    e.tp = gs.tp
     e.d0 = gdist(gt.grp, e.tp)
-    if not s or s.nrad <= 0 or s.nalive <= 0 then dump(); return nil end
-    e.abort = true
-    if not aborted[gt.site] then
-      aborted[gt.site] = true
-      say(s.who .. ": abort, abort. " .. s.label .. " radars still up, DEAD flight break off.", gt.you)
-    end
-    if gt.ai then
+    if not blind and gt.ai then
       local g = Group.getByName(gt.grp)
       if g and g:getController() then
         e.cmd = pcall(function() g:getController():setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = gt.from, goToWaypointIndex = gt.to } }) end)
       end
       timer.scheduleFunction(function() e.d1 = gdist(gt.grp, e.tp); dump(); return nil end, nil, timer.getTime() + 60)
     end
-    dump()
-    return nil
-  end, nil, gt.t)
+  end
+  dump()
 end
+timer.scheduleFunction(function(_, t)
+  local now = timer.getTime()
+  local left = false
+  for _, gs in ipairs(gorder) do
+    if not gs.done then
+      left = true
+      local s
+      for _, x in ipairs(SITES) do if x.id == gs.site then s = x end end
+      if s and not gs.tp then gs.tp = sitePoint(s) end
+      if now >= gs.fall then
+        decide(gs, "clock")
+      else
+        for _, gt in ipairs(gs.gates) do
+          if gt.dead then
+            local d = gdist(gt.grp, gs.tp)
+            if d and d <= GATE_M then decide(gs, "dist"); break end
+          end
+        end
+      end
+    end
+  end
+  if left then return t + 5 end
+  return nil
+end, nil, timer.getTime() + 5)
 dump()
 '''
 
@@ -298,7 +332,7 @@ def _lq(s) -> str:
 
 def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "", group: str = "",
              calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
-             enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False) -> str:
+             enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
@@ -308,9 +342,9 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
                    f'units={lst(x["units"])}, trk={lst(x["trk"])}, srch={lst(x["srch"])}}}' for x in (sites or []))
     ru = ", ".join(f'{{x={r["x"]:.1f}, z={r["z"]:.1f}, n={int(r["n"])}, r={float(r["r"]):.0f}, p={int(r["p"])}, dn={float(r["dn"]):.2f}, pw={int(r["pw"])}, s={float(r["s"]):.2f}}}'
                    for r in (ruins or []))
-    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, you={"true" if x.get("you") else "false"}}}'
+    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}}}'
                    for x in (gates or []))
-    return (LUA_HOOK.replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
+    return (LUA_HOOK.replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
             .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
             .replace("__ENEMYAIR__", ea).replace("__SITES__", st))
@@ -318,14 +352,14 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
 
 def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "",
                  group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
-                 enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False) -> None:
+                 enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km))))
     mission.triggerrules.triggers.append(t)
 
 
