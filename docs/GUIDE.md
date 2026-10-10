@@ -89,6 +89,9 @@ First launch:
 
 ---------------------------------------------------------------------------------------------------
 
+## Raids and emergencies (v0.24)
+Red raids our airfields. Announced raids are in the tasking order as "Intercept a raid on <airfield>". Surprise raids are settled overnight unless an emergency puts one in front of you: now and then, when you click Fly, a popup tells you a raid has broken out or troops are in contact. If your squadron can take it you can scramble; if not, the war handles it and the popup says why. Details and numbers: docs/CHANGES.md v0.24.0.
+
 ## The ground war (v0.23)
 The front is five sectors along the Sukhumi to Senaki axis, each with a Red and a Blue strength. Every night contested sectors fight; the line moves; Red takes a field if it holds the sector beside it, and two fallen fields lose the war. Your CAS sorties (and anything that hurts Red supply, such as its fuel farms and depots) are what keeps the line where it is. Blue has the same kind of facilities and supply as Red. The Campaign page shows the sectors and the map draws the front line. See docs/CHANGES.md v0.23.0 for the rules.
 

@@ -40,10 +40,13 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         sit += ["", "Threats near the target:"] + [f"  - {s}" for s in threats]
     if obj.type.value == "FLEET_DEFENSE" and pkg.extra:
         e = pkg.extra
-        sit += ["", f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
-                    f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier."
+        tb = state.bases.get(obj.target_id)
+        sit += ["", (f"Intelligence reports {e['bombers']} Su-24M bombers with free-fall bombs inbound toward {tb.name if tb else 'our airfield'}, "
+                     f"approaching from a bearing of about {e['brg']:.0f} degrees." if e.get("land") else
+                     f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
+                     f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier.")
                     + (f" They are escorted by {e['escorts']} fighters." if e.get("escorts") else
-                       " They have no escort: the enemy cannot reach this far with fighters. It is a last throw of the dice.")]
+                       (" They have no escort." if e.get("land") else " They have no escort: the enemy cannot reach this far with fighters. It is a last throw of the dice."))]
     n_def = x.get("n_def", pkg.n_def)
     inc = (" (counting the packages flown with this one: " + ", ".join(f"#{n}" for n in x["merged_nums"]) + ")") if x.get("merged_nums") else ""
     sit += ["", (f"Expect about {n_def} hostile fighters to contest the target{inc}; command is committing enough fighters to answer them."

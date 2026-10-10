@@ -134,6 +134,10 @@ class SettingsDialog(QDialog):
         hint(v, "Random and difficulty-scaled: other enemy wings within range of the target may send extra pairs (never more aircraft than the wing has), "
                 "and our carrier or nearby bases may launch alert pairs when the fight is lopsided, for fleet defence, or when the fleet is raided. "
                 "Reinforcements are skipped before a flight is dropped when a mission is near the unit limit.")
+        self.emerg = QCheckBox("Emergencies: a raid or troops in contact can break out when you click Fly")
+        self.emerg.setChecked(bool(getattr(settings, "emergencies", True))); v.addWidget(self.emerg)
+        hint(v, "Chance per sortie by difficulty (about 3%, 9%, 21%), never two sorties in a row. If your squadron can take it you are offered the scramble; "
+                "otherwise you are told, and the war settles it. Raids on our airfields (announced or not) happen whether this is on or off.")
         self.ruins = QCheckBox("Ruins: show what earlier packages already hit (smoke and fire); struck flights fly home")
         self.ruins.setChecked(bool(getattr(settings, "ruins", True))); v.addWidget(self.ruins)
         hint(v, "Earlier packages in the same area that struck before your start leave smoking ruins (at most three sites, a few plumes each). The result is "
@@ -242,7 +246,7 @@ class SettingsDialog(QDialog):
         self.s.merge_back_min = int(self.mback.value())
         self.s.merge_radius_nm = int(self.mrad.value())
         self.s.ruins = bool(self.ruins.isChecked())
-        self.s.reactive = bool(self.react.isChecked()); self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
+        self.s.reactive = bool(self.react.isChecked()); self.s.emergencies = bool(self.emerg.isChecked()); self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.shore_margin_m = int(self.shore.value())
         self.s.river_margin_m = int(self.river.value())

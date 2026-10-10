@@ -30,7 +30,7 @@ from .aircraft import AIRCRAFT
 from .debrief import Manifest, install_hook
 from .difficulty import Difficulty
 from .kneeboard import latlon, render_pages
-from .loadouts import LoadoutLibrary, enemy_bomber_loadout, enemy_cap_loadout, ENEMY_FIGHTERS
+from .loadouts import LoadoutLibrary, enemy_bomber_loadout, enemy_strike_loadout, enemy_cap_loadout, ENEMY_FIGHTERS
 from .models import AssetKind, BaseKind, ObjectiveType, Role
 STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -30}      # seconds relative to the strikers' push (BMS-style)
 
@@ -605,7 +605,7 @@ class MissionBuilder:
         o = package.objective
         if o.type == ObjectiveType.FLEET_DEFENSE:           # CAP station on the bearing the raid will arrive on
             c = self.state.bases[o.target_id]
-            return offset(c.x, c.y, package.extra.get("brg", 20.0), 85 * NM)
+            return offset(c.x, c.y, package.extra.get("brg", 20.0), (40 if package.extra.get("land") else 85) * NM)
         if o.type == ObjectiveType.BARCAP:
             b = self.state.bases[o.target_id]
             air = [a for a in self.state.assets.values() if a.kind == AssetKind.AIRFIELD and not a.destroyed]
@@ -1579,25 +1579,34 @@ class MissionBuilder:
         (sx, sy), seg_i = tm.point_back_along(poly, min(232.0 * arrive, 0.97 * path_len))
         remaining = poly[seg_i:] + [(cvb.x, cvb.y)]
         skill = getattr(Skill, d.enemy_skill, Skill.High)
-        alt = 30000 * FT
+        land = bool(ex.get("land"))
+        alt = (20000 if land else 30000) * FT
+        apt = self.t.airports.get(cvb.airport) if (land and cvb.airport) else None
 
-        def build_group(name, cls, count, task_cls, pos):
+        def build_group(name, cls, count, task_cls, pos, bomber=False):
             g = self.m.flight_group(self.red, name, cls, None, pt(*pos), altitude=alt, speed=450 * KPH, maintask=task_cls, group_size=count)
             for k, q in enumerate(remaining):
-                wp = g.add_waypoint(pt(*q), alt, 450 * KPH, "STN" if k < len(remaining) - 1 else "FLEET")
-                if k == len(remaining) - 1 and cvg is not None and cls is planes.Tu_22M3:
-                    wp.tasks.append(task.AttackGroup(cvg.id))
+                wp = g.add_waypoint(pt(*q), alt, 450 * KPH, "STN" if k < len(remaining) - 1 else ("BASE" if land else "FLEET"))
+                if k == len(remaining) - 1 and bomber:
+                    if land and apt is not None:
+                        wp.tasks.append(task.BombingRunway(airport_id=apt.id))
+                    elif cvg is not None and cls is planes.Tu_22M3:
+                        wp.tasks.append(task.AttackGroup(cvg.id))
             g.set_skill(skill)
             return g
 
-        g = build_group("Raid Bomber 1", planes.Tu_22M3, ex["bombers"], task.AntishipStrike, (sx, sy))
-        load = enemy_bomber_loadout("Tu_22M3")
+        if land:
+            g = build_group("Raid Bomber 1", getattr(planes, ex.get("raider", "Su_24M")), ex["bombers"], task.RunwayAttack, (sx, sy), bomber=True)
+            load = enemy_strike_loadout(ex.get("raider", "Su_24M"))
+        else:
+            g = build_group("Raid Bomber 1", planes.Tu_22M3, ex["bombers"], task.AntishipStrike, (sx, sy), bomber=True)
+            load = enemy_bomber_loadout("Tu_22M3")
         names = []
         for j, u in enumerate(g.units, 1):
             u.name = f"RAID-B-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
         if not load:
-            self.warns.append("Tu-22M3: no anti-ship weapon found; the raid has no missiles.")
-        manifest.add("enemy_air", ex["bomber_wing"], names)
+            self.warns.append(f"{ex.get('raider', 'Tu-22M3')}: no bomb or missile found; the raid is unarmed.")
+        manifest.add("enemy_air", ex["bomber_wing"], names, raid_base=cvb.id, raid_arrive_s=float(arrive + dist(sx_, sy_, cvb.x, cvb.y) / 232.0))
         if ex.get("escorts"):
             back = offset(sx, sy, bearing(remaining[0][0], remaining[0][1], sx, sy), 3 * NM)
             eg = build_group("Raid Escort 1", getattr(planes, ex["escort_type"]), ex["escorts"], task.CAP, back)

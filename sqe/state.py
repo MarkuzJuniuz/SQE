@@ -36,6 +36,7 @@ class CampaignState:
     front: int = 0                                 # how far the war has advanced: tiers up to front+2 are open for tasking
     front_days: int = 0                            # days spent at this stage (the anti-stall clock)
     ground: dict = field(default_factory=dict)     # the ground war (ground.py): sectors, strengths, the line, fallen fields
+    raids: dict = field(default_factory=dict)      # Red raids and emergencies (raids.py): today's surprise raids, the emergency in play, postponed packages
     blue_assets: dict = field(default_factory=dict)  # Blue supply sites (fuel farms, forward depot): same record as the enemy assets
 
     # ---- helpers ------------------------------------------------------------------------
@@ -65,6 +66,7 @@ class CampaignState:
             "squadrons": {k: asdict(v) for k, v in self.squadrons.items()},
             "assets": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.assets.items()},
             "enemy_air": [asdict(w) for w in self.enemy_air],
+            "raids": self.raids,
             "blue_assets": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.blue_assets.items()},
             "plan": self.plan, "pending": self.pending, "history": self.history[-300:], "log": self.log[-400:],
         }
@@ -87,6 +89,7 @@ class CampaignState:
         s.assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in d["assets"].items()}
         s.enemy_air = [EnemyAirWing(**w) for w in d["enemy_air"]]
         s.ground = d.get("ground") or {}
+        s.raids = d.get("raids") or {}
         s.blue_assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_assets") or {}).items()}
         s.plan, s.pending = d.get("plan", []), d.get("pending")
         s.history, s.log = d.get("history", []), d.get("log", [])

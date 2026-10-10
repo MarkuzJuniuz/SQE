@@ -5,6 +5,8 @@ import math
 import random
 from . import threatmap as tm
 from . import ground, theatres
+from . import raids
+from .raids import hit as raids_hit
 from .difficulty import Difficulty
 from .models import Objective, ObjectiveType, AssetKind, Role
 from .packages import Package
@@ -159,7 +161,9 @@ class WarSimulator:
         lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'} (odds {p:.0%})"]
         if bw is not None and ok:
             k = min(bw.available, rng.randint(2, 4)); bw.available -= k
-            lines.append(f"   {k} bombers shot down before launching their missiles")
+            lines.append(f"   {k} bombers shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
+        elif bw is not None and pkg.extra.get("land"):
+            lines += raids_hit(state, pkg.objective.target_id, bw, rng)
         elif bw is not None:
             bw.available = max(0, bw.available - 1)
             carriers = [s for s in state.squadrons.values() if state.bases[s.base_id].kind.value == "CARRIER"]
@@ -290,6 +294,8 @@ class WarSimulator:
         for a in state.assets.values():
             a.suppressed = False                                    # blinded radars come back on overnight
         self.counterstrike(state)
+        for ln in raids.overnight(state, d, self.rng):               # surprise raids nobody flew: alert aircraft against the bombers
+            state.note("Overnight: " + ln)
         if ground.active(state):
             for ln in ground.resolve_day(state, d, self.rng):
                 state.note("Overnight: " + ln)
@@ -302,16 +308,8 @@ class WarSimulator:
         update_status(state)
 
     def counterstrike(self, state: CampaignState) -> None:
-        """The enemy may hit one coalition airfield's air defences; they repair a little every day."""
+        """Airfield air defences repair a little every day. (The old random overnight air strike is gone: Red raids are planned now, see raids.py.)"""
         fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
-        ea = sum(w.available for w in state.enemy_air) / max(1, sum(w.authorized for w in state.enemy_air))
-        if fields and self.rng.random() < self.d.counterstrike * ea:
-            enemy = [a for a in state.assets.values() if a.kind == AssetKind.AIRFIELD and not a.destroyed]
-            wts = [1.0 / (1.0 + min(math.hypot(b.x - a.x, b.y - a.y) for a in enemy) / NM / 100.0) if enemy else 1.0 for b in fields]
-            b = self.rng.choices(fields, weights=wts)[0]
-            before = b.defense
-            b.defense = max(0.0, b.defense - self.rng.uniform(0.15, 0.40))
-            state.note(f"Enemy air strike on {b.name}: air defences {before:.0%} -> {b.defense:.0%}.")
         for b in fields:
             b.defense = min(1.0, b.defense + 0.10)
 

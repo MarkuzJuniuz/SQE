@@ -129,7 +129,7 @@ def capture_from_miz(miz_path: str, out_path: str = "loadouts.json") -> dict:
 
 # approximate combat radius (nm) of enemy types: used to decide who can escort a raid
 ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, "MiG_23MLD": 200, "MiG_21Bis": 170,
-                   "F_4E": 300, "F_5E_3": 200}
+                   "F_4E": 300, "F_5E_3": 200, "Su_24M": 300}
 
 
 def enemy_bomber_loadout(cls_name: str) -> dict:
@@ -140,6 +140,19 @@ def enemy_bomber_loadout(cls_name: str) -> dict:
     for i in sorted(cls.pylons):
         P = getattr(cls, f"Pylon{i}", None)
         w = _find(P, "Kh_22") if P is not None else None
+        if w is not None:
+            out[i] = {"CLSID": w[1]["clsid"]}
+    return out
+
+
+def enemy_strike_loadout(cls_name: str) -> dict:
+    """Free-fall bombs for a raid on an airfield (Su-24M): FAB-500 where a pylon takes one, else FAB-250."""
+    from dcs import planes
+    cls = getattr(planes, cls_name)
+    out = {}
+    for i in sorted(cls.pylons):
+        P = getattr(cls, f"Pylon{i}", None)
+        w = (_find(P, "FAB_500M") or _find(P, "FAB_250M")) if P is not None else None
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
     return out

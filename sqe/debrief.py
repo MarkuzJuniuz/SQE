@@ -403,6 +403,30 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 w.available = max(0, w.available - len(dead))
                 out["red_air_lost"] += len(dead)
                 out["lines"].append(f"{len(dead)} enemy aircraft from {state.assets[g['ref']].name} destroyed")
+    # a raid you were sent to stop: bombers still alive when they reached their base got through
+    t_now = float(data.get("time", 0) or 0)
+    for g in manifest.groups:
+        if g["kind"] == "enemy_air" and g.get("raid_base") and g["raid_base"] in state.bases:
+            alive = [u for u in g["units"] if u not in lost]
+            wing = state.enemy_air_at(g["ref"])
+            if len(alive) < len(g["units"]):
+                out["lines"].append(f"Raid: {len(g['units']) - len(alive)} of {len(g['units'])} bombers shot down")
+            if alive and t_now >= g.get("raid_arrive_s", 0.0):
+                from . import raids as _rd
+                import random as _rnd
+                out["lines"].append(f"Raid on {state.bases[g['raid_base']].name}: {len(alive)} bombers got through")
+                out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, _rnd.Random(f"{state.campaign_id}:{state.day}:through"), len(alive))]
+            elif alive:
+                from . import raids as _rd
+                import random as _rnd
+                rr = _rnd.Random(f"{state.campaign_id}:{state.day}:early")
+                if rr.random() < 0.5:
+                    out["lines"].append(f"Raid: you left before the bombers arrived; {len(alive)} got through to {state.bases[g['raid_base']].name}")
+                    out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, rr, len(alive))]
+                else:
+                    out["lines"].append("Raid: you left before the bombers arrived; the defences at the base stopped them")
+            else:
+                out["lines"].append(f"Raid on {state.bases[g['raid_base']].name}: stopped, no bombs fell")
     # merged missions: one line per folded-in package, from what really happened (reported only if its strike time was reached)
     t_end = float(data.get("time", 0) or 0)
     out["packages"] = []

@@ -462,9 +462,16 @@ class MainWindow(QMainWindow):
             return
         if sess.settings.problems():
             QMessageBox.warning(self, "Settings", "\n".join(sess.settings.problems())); self.settings(); return
+        scramble = False
+        try:
+            ev = sess.emergency_for(number, flight_id)
+        except Exception:
+            ev = None
+        if ev:
+            scramble = self._emergency_popup(ev, number)
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            res = sess.fly(number, flight_id)
+            res = sess.fly(number, flight_id, scramble=scramble)
         except Exception:
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "Could not build the mission", traceback.format_exc()); return
@@ -472,6 +479,26 @@ class MainWindow(QMainWindow):
         if res.warnings:
             QMessageBox.information(self, "Built with notes", "\n".join(res.warnings))
         self.refresh_all(); self.wait_for_results()
+
+    def _emergency_popup(self, ev, number) -> bool:
+        """An emergency came up as you clicked Fly. Returns True when you take it."""
+        epkg = ev["package"]
+        box = QMessageBox(self); box.setIcon(QMessageBox.Warning); box.setWindowTitle(ev["title"])
+        if ev["eligible"]:
+            box.setText(f"<b>{ev['title']}</b><br>{ev['text']}")
+            box.setInformativeText(f"Your squadron can answer it: {epkg.objective.description}.\n\nIf you scramble, the package you were tasked with "
+                                   f"(#{number}) is left to the other squadrons and is settled by the war simulation (or postponed a day if there are not "
+                                   f"enough aircraft for both). If you stay with your tasking, the emergency is settled without you"
+                                   + (" or flown by AI inside your mission." if epkg.objective.type.value == "CAS" else "."))
+            go = box.addButton("Scramble", QMessageBox.AcceptRole); box.addButton("Stay with my tasking", QMessageBox.RejectRole)
+            box.exec()
+            return box.clickedButton() is go
+        box.setText(f"<b>{ev['title']}</b><br>{ev['text']}")
+        box.setInformativeText(f"You cannot take this one: {ev['reason']}.\n\nOther squadrons are answering it; "
+                               + ("if it lies inside your mission area it is joined to your mission as AI, otherwise the war simulation settles it." if epkg.objective.type.value == "CAS" else "the war simulation settles it.")
+                               + " Your own tasking goes ahead as planned.")
+        box.addButton("Understood", QMessageBox.AcceptRole); box.exec()
+        return False
 
     def skip_turn(self):
         sess = self.session

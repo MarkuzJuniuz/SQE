@@ -183,7 +183,7 @@ class PackageBuilder:
         iads = self.d.iads if self.d else 0.5
         extra = {}
         if obj.type == ObjectiveType.FLEET_DEFENSE:
-            extra = self._raid_plan(number) or {}
+            extra = self._raid_plan(number, obj) or {}
             n_fl = extra.get("escorts", 0) // 2
         elif obj.type == ObjectiveType.BARCAP:       # a fleet patrol meets a probing enemy flight if the enemy still has fighters
             n_fl = 1 if any(w.available > 0 for w in st.enemy_air) else 0
@@ -247,9 +247,43 @@ class PackageBuilder:
         pkg.jtac = obj.type in JTAC_OBJECTIVES
         return pkg
 
-    def _raid_plan(self, number: int):
+    def _land_raid_plan(self, number: int, obj):
+        """Su-24M raid on one of our airfields (raids.py): the raiders' field, how many, the bearing they arrive on, and escorts that can reach."""
+        from .difficulty import get as _get
+        st = self.state
+        tb = st.bases[obj.target_id]
+        rnd = random.Random(f"{st.campaign_id}:{st.day}:{number}:{obj.target_id}:raid")
+        cands = []
+        for w in st.enemy_air:
+            a = st.assets[w.base_asset_id]
+            if "Su_24M" in w.types and w.available >= 2 and not a.destroyed and math.hypot(a.x - tb.x, a.y - tb.y) / NM <= ENEMY_RADIUS_NM["Su_24M"] * 0.85:
+                cands.append((math.hypot(a.x - tb.x, a.y - tb.y), w))
+        if not cands:
+            return None
+        bw = min(cands, key=lambda c: c[0])[1]
+        ba = st.assets[bw.base_asset_id]
+        lo, hi = (self.d.raid_size if self.d else (2, 2))
+        nb = max(2, min(rnd.randint(lo, hi), bw.available))
+        nb -= nb % 2
+        esc = None
+        for w in sorted(st.enemy_air, key=lambda w: math.hypot(st.assets[w.base_asset_id].x - tb.x, st.assets[w.base_asset_id].y - tb.y)):
+            a = st.assets[w.base_asset_id]
+            if w is bw or w.available < 2 or a.destroyed:
+                continue
+            d_nm = math.hypot(a.x - tb.x, a.y - tb.y) / NM
+            types = [t for t in w.types if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm]
+            if types:
+                esc = (w.base_asset_id, rnd.choice(types)); break
+        brg = math.degrees(math.atan2(ba.y - tb.y, ba.x - tb.x)) % 360          # they come from where they took off
+        return {"land": True, "raider": "Su_24M", "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
+                "escort_wing": esc[0] if esc else "", "escort_type": esc[1] if esc else "",
+                "escorts": (4 if nb >= 4 else 2) if esc else 0}
+
+    def _raid_plan(self, number: int, obj=None):
         """Bomber raid on the fleet: bearing it arrives on, how many bombers, and escorts that can really reach (range-limited)."""
         st = self.state
+        if obj is not None and obj.target_id in st.bases and st.bases[obj.target_id].kind != BaseKind.CARRIER:
+            return self._land_raid_plan(number, obj)
         bw = next((w for w in st.enemy_air if "Tu_22M3" in w.types and w.available >= 2 and not st.assets[w.base_asset_id].destroyed), None)
         cv = next((b for b in st.bases.values() if b.kind == BaseKind.CARRIER), None)
         if bw is None or cv is None:

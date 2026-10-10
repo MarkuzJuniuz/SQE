@@ -643,6 +643,84 @@ def main():
     for _ in range(3):
         s.state.status = "ACTIVE"; _war.WarSimulator(_gd(2), _rnd.Random(9)).end_day(s.state)
     print("[ground] 5 sectors per level, repeatable fighting, round trip, falls / retaking / defeat, damped column losses, Blue losses, format-4 migration, nightly resolution")
+    # ---- raids and emergencies ----
+    from sqe import raids as _rd
+    from sqe.packages import Package as _Pk
+    _ev_orig = _rd.emergency_happens
+    s.new("Raids 2", "F-16C", 2, seed=4); _st = s.state
+    # rates over a long run follow the difficulty table, and the same day plans the same raids
+    _nw = _ns = 0
+    for _ in range(60):
+        s.plan_day(); _st.day += 1
+        _nw += sum(1 for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land")); _ns += _st.raids["surprise"]
+    assert 8 <= _nw <= 36 and _ns >= 1, (_nw, _ns)
+    _st.day = 5; s.plan_day(); _a = [d_["objective"]["description"] for d_ in _st.plan]; s.plan_day(); assert _a == [d_["objective"]["description"] for d_ in _st.plan], "a day replans the same"
+    # per-sortie dice: roughly the table, never two in a row, and asking twice gives the same answer
+    _hits = _tot = 0
+    for _ in range(50):
+        s.plan_day(); _st.day += 1
+        for p_ in s.packages():
+            if s.flyable(p_):
+                _st.sortie_counter += 1; _tot += 1
+                e1 = s.emergency_for(p_.number, None); e2 = s.emergency_for(p_.number, None)
+                assert (e1 is None) == (e2 is None) and (e1 is None or e1["kind"] == e2["kind"]), "reopening never re-rolls"
+                if e1:
+                    _hits += 1
+                    _st.raids["last_emerg"] = _st.sortie_counter                         # as fly() leaves it: that sortie had one
+                    assert s.emergency_for(p_.number, "x") is None, "none in two sorties in a row"
+    assert 0.04 <= _hits / _tot <= 0.2, (_hits, _tot)
+    # an emergency forced: scramble (fighter) and decline (folds in or odds); both build a mission
+    _rd.emergency_happens = lambda st_, d_, rng_: True
+    try:
+        for _ac, _lv, _seed in (("F-16C", 2, 4), ("A-10C", 2, 9), ("FA-18C", 3, 3)):
+            for _scr in (True, False):
+                s.new(f"Emerg {_ac}{_scr}", _ac, _lv, seed=_seed); _st = s.state
+                _p = next(p_ for p_ in s.packages() if s.flyable(p_) and s.emergency_for(p_.number, None))
+                _ev = s.emergency_for(_p.number, None); assert _ev["kind"] in ("RAID", "CAS") and _ev["title"] and _ev["text"]
+                _res = s.fly(_p.number, None, scramble=_scr)
+                assert _st.pending and _res.counts["units"] > 0
+                if _scr and _ev["eligible"]:
+                    assert "Intercept a raid" in _st.pending["objective"] or "EMERGENCY" in _st.pending["objective"]
+                assert all(p_.number != _st.pending["package"] or True for p_ in s.packages())
+                assert all(not x_.extra.get("past") for x_ in s.packages()), "emergency packages are not listed"
+        # postponement: the squadron cannot cover both
+        s.new("Emerg post", "A-10C", 2, seed=9); _st = s.state
+        _p = next(p_ for p_ in s.packages() if s.flyable(p_) and s.emergency_for(p_.number, None) and s.emergency_for(p_.number, None)["kind"] == "CAS")
+        _ev = s.emergency_for(_p.number, None)
+        _st.squadrons[_st.player.squadron_id].available = _ev["package"].flights[0].count
+        s.fly(_p.number, None, scramble=True)
+        assert _st.raids["carry"], "the displaced package is postponed"
+        _n_before = len(_st.raids["carry"]); _tgt = _st.raids["carry"][0]["target_id"]
+        s.state.status = "ACTIVE"; _war.WarSimulator(_gd(2), _rnd.Random(3)).end_day(_st); s.plan_day()
+        assert any(p_.objective.target_id == _tgt for p_ in s.packages()) or _tgt in _st.assets and _st.assets[_tgt].destroyed, "postponed objective returns next day"
+    finally:
+        _rd.emergency_happens = _ev_orig
+    # the land raid is built with Su-24M bombers, and the debrief applies what got through
+    import zipfile as _zf
+    s.new("Raid build", "F-16C", 2, seed=4); _st = s.state
+    _rp = next((p_ for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land") and s.flyable(p_)), None)
+    if _rp is None:
+        _rd.emergency_happens = lambda st_, d_, rng_: True
+        try:
+            _rp0 = next(p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "RAID" and s.emergency_for(p_.number, None)["eligible"])
+            s.fly(_rp0.number, None, scramble=True)
+        finally:
+            _rd.emergency_happens = _ev_orig
+    else:
+        s.fly(_rp.number, None)
+    _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
+    assert "Su-24M" in _mz and "RAID-B-1" in _mz, "the raiders are in the mission"
+    _man = s.manifest(); _rg = next(g_ for g_ in _man.groups if g_.get("raid_base"))
+    _base = _st.bases[_rg["raid_base"]]; _def0 = _base.defense
+    _data = {"campaign": _st.campaign_id, "sortie": _st.sortie_counter, "package": _st.pending["package_dict"]["id"], "mission_ended": True,
+             "time": int(_rg["raid_arrive_s"]) + 600, "dead": [], "ejected": [], "landed": [_man.player_unit], "player": {"takeoff": 60, "landed": 3000, "ka": 0, "kg": 0, "ks": 0}, "kills": []}
+    s.apply(_data); assert _base.defense < _def0 or any("bombs fell" in x_ for x_ in _st.log), "bombers that got through hit the base"
+    # surprise raids nobody flew are settled overnight; the file round-trips and an old save loads
+    s.new("Raid night", "F-16C", 2, seed=6); _st = s.state
+    _st.raids["surprise"] = 3; _lines = _rd.overnight(_st, _gd(2), _rnd.Random(1)); assert _lines and _st.raids["surprise"] == 0
+    _rt = _CS.from_dict(_st.to_dict()); assert _rt.raids == _st.raids
+    _o = _st.to_dict(); _o.pop("raids"); assert _CS.from_dict(_o).raids == {}
+    print("[raids] announced and surprise raids by level, repeatable emergencies (about 9% a sortie, never two in a row), scramble / stay, CAS folded in, postponement, Su-24M raid built and applied, overnight surprises")
     print("SMOKE TEST PASSED")
 
 

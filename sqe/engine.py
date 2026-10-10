@@ -11,7 +11,8 @@ from .aircraft import AIRCRAFT
 from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
-from .models import ObjectiveType
+from .models import Objective, ObjectiveType
+from . import raids
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import Ledger, NoPlayerSlot, Package, PackageBuilder
 from .scenario import new_campaign
@@ -98,6 +99,11 @@ class Session:
     def plan_day(self) -> list:
         st = self.state
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=self.PACKAGES_PER_DAY)
+        keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry")}
+        warned, n_surprise = raids.todays_raids(st, self.d, self._rng(71))
+        carry = self._carried(objs)
+        objs = carry + objs + warned                    # postponed from yesterday first, then the day's job list, then the announced raids
+        st.raids = {**keep, "day": st.day, "surprise": n_surprise, "carry": []}
         pb = PackageBuilder(st, self.d)
         psq = st.player.squadron_id if st.player else None
 
@@ -160,7 +166,19 @@ class Session:
         return self.packages()
 
     def packages(self) -> list:
-        return [Package.from_dict(d) for d in self.state.plan]
+        """The tasking order. Emergency packages (flown, folded in or settled by odds) are in the plan but are not listed."""
+        return [p for p in (Package.from_dict(d) for d in self.state.plan) if not p.extra.get("past")]
+
+    def _carried(self, objs: list) -> list:
+        """Objectives postponed yesterday (no aircraft left for them after an emergency scramble), if they are still worth flying and not already in the list."""
+        st, out = self.state, []
+        for od in (st.raids or {}).get("carry", []):
+            o = Objective(od["id"], ObjectiveType(od["type"]), od["target_id"], od["priority"] + 2.0, od.get("description", ""))
+            tgt = st.assets.get(o.target_id) or st.bases.get(o.target_id)
+            if tgt is None or getattr(tgt, "destroyed", False) or any(x.type == o.type and x.target_id == o.target_id for x in objs + out):
+                continue
+            out.append(o)
+        return out
 
     # ---- weather: what the sky does to each package of the day ------------------------------------------------------
     def weather_mode(self) -> str:
@@ -232,6 +250,25 @@ class Session:
             cx, cy = t[0] + (cx - t[0]) * R / d, t[1] + (cy - t[1]) * R / d
         return cx, cy
 
+    def _inside_merge(self, anchor: Package, other: Package) -> bool:
+        """Is `other`'s target inside the merge circle around `anchor`'s?"""
+        if self.settings.merge_mode != "area":
+            return False
+        c, t = self.merge_center(anchor), self._pkg_xy(other)
+        return c is not None and t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= self.merge_radius_m()
+
+    def _postpone_if_short(self, orig: Package, emerg: Package) -> None:
+        """You took the emergency, so your squadron's aircraft are spent on it first. If it cannot also cover the package you were tasked with, that
+        package is not dice-rolled with missing aircraft: it is postponed to tomorrow's tasking order."""
+        st = self.state
+        sid = st.player.squadron_id
+        need = sum(f.count for f in emerg.flights if f.squadron_id == sid) + sum(f.count for f in orig.flights if f.squadron_id == sid)
+        if st.squadrons[sid].available >= need:
+            return
+        st.plan = [d for d in st.plan if d["number"] != orig.number]
+        st.raids.setdefault("carry", []).append(orig.objective.to_dict())
+        st.note(f"Package #{orig.number} ({orig.objective.description}) is postponed to tomorrow: {st.squadrons[sid].name} cannot cover both.")
+
     def merge_candidates(self, pkg: Package) -> list:
         """Packages folded into a mission built around `pkg`: every package whose target lies inside the merge circle (Settings: radius, default
         50 nm, centred by merge_center), starting up to 30 minutes AFTER it or up to `merge_back_min` minutes BEFORE it (those are already underway
@@ -300,14 +337,120 @@ class Session:
             out.append((p, mem))
         return out
 
+    # ---- emergencies: something breaks out while you are about to fly (raids.py) ----------------------------------------
+    def emergency_for(self, package_number: int, flight_id: str | None = None) -> dict | None:
+        """The emergency, if any, that comes with flying this package right now. The answer is fixed by the campaign, the day and the package: asking
+        twice (or reopening the dialog) never re-rolls it. Returns None, or a dict:
+          kind 'RAID' | 'CAS', package (the emergency, ready to fly), eligible (your squadron can take it), reason (why not), title, text."""
+        st, d = self.state, self.d
+        if not getattr(self.settings, "emergencies", True):
+            return None
+        key = f"{st.day}:{package_number}:{flight_id}:{st.sortie_counter}"
+        cache = (st.raids or {}).get("emerg")
+        if cache and cache.get("key") == key:
+            return None if cache.get("none") else self._emerg_view(cache)
+        pkg = next((p for p in self.packages() if p.number == package_number), None)
+        if pkg is None or not self.flyable(pkg):
+            return None
+        rng = raids.emergency_seed(st, package_number, flight_id)
+        ev = self._make_emergency(pkg, rng) if raids.emergency_happens(st, d, rng) else None
+        if st.raids is None:
+            st.raids = {}
+        st.raids["emerg"] = {"key": key, "none": True} if ev is None else {"key": key, **ev}
+        return None if ev is None else self._emerg_view(st.raids["emerg"])
+
+    def _emerg_view(self, c: dict) -> dict:
+        return {**c, "package": Package.from_dict(c["pkg"])}
+
+    def _make_emergency(self, pkg: Package, rng) -> dict | None:
+        st, d = self.state, self.d
+        psq = st.squadrons[st.player.squadron_id]
+        spec = AIRCRAFT[psq.aircraft]
+        committed = sum(f.count for f in pkg.flights if f.squadron_id == psq.id)
+        kinds = []
+        base = raids.pick_target(st, random.Random(rng.random()))
+        if base is not None:
+            kinds.append("RAID")
+        sec = raids.hot_sector(st)
+        if sec is not None:
+            kinds.append("CAS")
+        if not kinds:
+            return None
+        fighter = bool({r.value for r in spec.roles} & {"CAP", "SWEEP"})
+        kind = kinds[0] if len(kinds) == 1 else ("RAID" if rng.random() < (0.55 if fighter else 0.3) else "CAS")      # an A-10 gets mostly "troops in contact"
+        number = max([p["number"] for p in st.plan] + [pkg.number]) + 1
+        if kind == "RAID":
+            obj = raids.raid_objective(base)
+            obj.id = f"obj-d{st.day}-e{number}"
+            if PackageBuilder(st, d)._land_raid_plan(number, obj) is None:
+                return None
+            role_needed, where = "fighter", f"{base.name}"
+        else:
+            from . import ground
+            zi = ground.info(st, sec)
+            obj = Objective(f"obj-d{st.day}-e{number}", ObjectiveType.CAS, f"armor_{sec + 1}", 12.0,
+                            f"EMERGENCY - troops in contact: {zi['name']} (Red {zi['red']:.0f}, Blue {zi['blue']:.0f})")
+            role_needed, where = "cas", zi["name"]
+        pb = PackageBuilder(st, d)
+        xy = pb.target_xy(obj)
+        ok, why = raids.eligible(st, spec, role_needed, xy, psq, committed)
+        epkg = None
+        for want in ((True, False) if ok else (False,)):
+            ledger = Ledger(st)
+            ledger.free[psq.id] = max(0, ledger.free[psq.id] - committed)         # the tasked flight keeps its own aircraft
+            try:
+                epkg = pb.build(obj, number, ledger, for_player=want)
+                ok = ok and want
+                break
+            except NoPlayerSlot:
+                continue
+        if epkg is None:
+            return None
+        if ok is False and not why:
+            why = f"{psq.name} cannot reach it or has no free pair"
+        epkg.start = pkg.start
+        epkg.extra = {**epkg.extra, "emergency": kind, "past": True}
+        for f in epkg.flights:
+            f.is_player = False
+        if kind == "RAID":
+            text = (f"Bombers are inbound on {where} and nobody was warned. Alert aircraft are not enough: the fighters nearest to it are being scrambled.")
+            title = "EMERGENCY SCRAMBLE"
+        else:
+            text = (f"Troops in contact in {where}: the position is being overrun and the JTAC is calling for anything that can reach it.")
+            title = "TROOPS IN CONTACT"
+        return {"kind": kind, "eligible": bool(ok), "reason": "" if ok else why, "title": title, "text": text, "pkg": epkg.to_dict(),
+                "where": where, "number": number}
+
     # ---- fly ---------------------------------------------------------------------------------------
-    def fly(self, package_number: int, flight_id: str | None):
+    def fly(self, package_number: int, flight_id: str | None, scramble: bool = False):
+        """Build the sortie. If an emergency came up for this package (emergency_for) and `scramble` is True and your squadron can take it, you fly the
+        emergency and the package you were tasked with goes to the war simulation (or is postponed a day if the squadron cannot cover both). Otherwise the
+        emergency is folded into your mission if it is a ground job inside the merge circle, and settled by odds if it is not."""
         st = self.state
-        pkg = next(p for p in self.packages() if p.number == package_number)
-        PackageBuilder(st, self.d).assign_player(pkg, flight_id)
         problems = self.settings.problems()
         if problems:
             raise RuntimeError("; ".join(problems))
+        pkg = next(p for p in self.packages() if p.number == package_number)
+        ev = self.emergency_for(package_number, flight_id)
+        lead_extras = []
+        if ev:
+            epkg = ev["package"]
+            st.plan.append(epkg.to_dict())
+            st.raids["last_emerg"] = st.sortie_counter + 1
+            st.raids["emerg"] = {"key": st.raids["emerg"]["key"], "none": True}              # used: asking again gives nothing new
+            self.refresh_weather()
+            epkg = next(Package.from_dict(d) for d in st.plan if d["number"] == epkg.number)
+            if epkg.extra.get("scrub"):
+                scramble = False                                                              # weather scrubs it: nothing flies
+            if scramble and ev["eligible"]:
+                orig, pkg, flight_id = pkg, epkg, None
+                self._postpone_if_short(orig, epkg)
+                st.note(f"EMERGENCY: you were scrambled to {ev['where']} ({ev['kind'].lower()}); package #{orig.number} is left to the other squadrons.")
+            else:
+                st.note(f"EMERGENCY at {ev['where']}: " + ("you stayed with your tasking." if ev["eligible"] else ev["reason"] + ".") + " The war handles it.")
+                if epkg.objective.type == ObjectiveType.CAS and self._inside_merge(pkg, epkg):
+                    lead_extras = [epkg]
+        PackageBuilder(st, self.d).assign_player(pkg, flight_id)
         self.options.hold_minutes = int(self.settings.hold_minutes)
         self.options.launch_offset_s = int(self.settings.takeoff_buffer_s)
         self.options.ai_unlimited_fuel = bool(self.settings.ai_unlimited_fuel)
@@ -319,7 +462,7 @@ class Session:
         self.options.f14_special_names = bool(getattr(self.settings, 'f14_special_names', True)); self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct); self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear'))
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
-        extras = self.merge_candidates(pkg)
+        extras = lead_extras + [x for x in self.merge_candidates(pkg) if all(x.number != y.number for y in lead_extras)]
         ruins = self.ruin_candidates(pkg, extras)
         pre = self._preroll(list(extras) + ruins) if (ruins or extras) and getattr(self.settings, "ruins", True) else {}
         cap = int(self.settings.merge_max_units)
