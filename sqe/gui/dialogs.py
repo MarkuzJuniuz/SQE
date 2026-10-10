@@ -33,9 +33,12 @@ class NewCampaignDialog(QDialog):
         if self.th.count() > 1:                       # the picker only appears once there is more than one theatre pack
             form.addRow("Theatre", self.th)
         self.ac = QComboBox()
-        for k, s in AIRCRAFT.items():
+        era_label = {"ww2": "WWII", "early_jet": "early jet", "modern": "modern"}
+        for k, s in AIRCRAFT.items():                  # tuned jets first, then mods, then every other flyable type DCS has
             if s.player_flyable:
-                self.ac.addItem(f"{s.display}  ({s.service}, {'carrier' if s.service == 'Navy' else 'land-based'})", k)
+                basing = "carrier" if s.home.value == "CARRIER" else ("land or carrier" if s.carrier_capable else "land-based")
+                tag = "" if s.tuned else ("  - mod" if s.source == "mod" else "  - generic profile")
+                self.ac.addItem(f"{s.display}  ({era_label.get(s.era, s.era)}, {basing}){tag}", k)
         form.addRow("You fly", self.ac)
         self.sqd = QComboBox(); form.addRow("Your squadron", self.sqd)
         self.ac.currentIndexChanged.connect(self._squads); self.th.currentIndexChanged.connect(self._squads); self._squads()

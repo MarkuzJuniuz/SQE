@@ -380,6 +380,7 @@ class MissionBuilder:
             counts = self._counts()
             self._free_locked_speeds(m)
             self._add_ship_warehouses(m)
+            self._require_mods(m)
             self._save_without_carrier_slots(m, out_path)
         return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns, self.seed_code, merged)
 
@@ -1100,6 +1101,20 @@ class MissionBuilder:
                             "OperatingLevel_Air": 10, "OperatingLevel_Eqp": 10, "OperatingLevel_Fuel": 10,
                             "aircrafts": {}, "weapons": {}, "suppliers": {}, "allowHotStart": False, "dynamicCargo": True, "dynamicSpawn": False,
                             "periodicity": 30, "size": 100, "speed": 16.666666, "coalition": coal_name}
+
+    @staticmethod
+    def _require_mods(m):
+        """List every mod aircraft in the mission under requiredModules, so DCS tells a player (or the server) which mod is missing
+        instead of failing to load the mission."""
+        from . import modunits
+        used = set()
+        for coal in m.coalition.values():
+            for c in coal.countries.values():
+                for g in list(getattr(c, "plane_group", [])) + list(getattr(c, "helicopter_group", [])):
+                    used.update(u.type for u in g.units)
+        req = modunits.required_modules(used)
+        if req:
+            m.required_modules = {**(m.required_modules or {}), **req}
 
     @staticmethod
     def _save_without_carrier_slots(m, out_path):

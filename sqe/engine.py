@@ -39,6 +39,8 @@ class Session:
         terrainmask.RIVER_MARGIN = float(getattr(self.settings, "river_margin_m", 100))
         terrainmask.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
         relief.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
+        from . import catalog                          # payload presets (stock, mods, your own) come from your DCS folders
+        catalog.configure(self.settings.dcs_install or None, self.settings.dcs_saves or None)
 
     # ---- persistence ---------------------------------------------------------------------------
     @property

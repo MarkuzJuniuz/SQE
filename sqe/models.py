@@ -21,6 +21,7 @@ class BaseKind(str, Enum):
 class RefuelMethod(str, Enum):
     BASKET = "BASKET"   # probe-and-drogue (Navy jets)
     BOOM = "BOOM"       # F-16 etc.
+    NONE = "NONE"       # no air-to-air refuelling (warbirds, most trainers and many mods): never gets a tanker
 
 
 class AssetKind(str, Enum):

@@ -1,3 +1,10 @@
+## Danica 0.1 - unit catalog
+* Any aircraft DCS can fly is now available. Next to the five tuned jets there are 69 more: every flyable type pydcs knows, plus mods from unit packs. The first pack is the A-4E-C. See docs/UNITS.md.
+* Loadouts for non-tuned aircraft come from DCS's own payload presets: the stock presets, the mod's `UnitPayloads` folder and the ones you save in the Mission Editor. A preset named `SQE CAS` (or `SQE STRIKE`, `SQE SEAD`, `SQE CAP`) wins.
+* New Campaign can raise a new squadron of any aircraft at any friendly base. Carrier-capable land jets (A-4E-C) may also go on the carrier.
+* Aircraft without air-to-air refuelling (warbirds, most mods) never get a tanker. Missions with mod aircraft list them under `requiredModules`.
+* `tools/make_unit_pack.py` lists your installed aircraft mods and writes starter packs for the ones SQE doesn't know yet.
+
 ## v0.26.5
 * A DEAD package never flies LOW. Its target is a defended cluster (the site's own AAA, Shilka and Strela, a garrison, Tunguskas next door), and LOW only helps against radar missiles, which are exactly what the package is there to destroy. In the last test the four Hornets that bombed a mop-up SA-10 site at 500 ft AGL all died within 40 seconds. A DEAD package now picks between its normal altitude and MED, as before. CAS, STRIKE and the other packages are unchanged.
 * The altitude profile now counts SAM sites at 25% health or less, like the stand-off since v0.26.4: a site with a unit left still shoots, so it no longer makes a package look safer than it is.
