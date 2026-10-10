@@ -131,6 +131,11 @@ class SettingsDialog(QDialog):
         self.ruins.setChecked(bool(getattr(settings, "ruins", True))); lay.addWidget(self.ruins)
         h = QLabel("Earlier packages in the same area that struck before your start leave smoking ruins (at most three sites, a few plumes each). The result is "
                    "decided when you build the mission and applied at the debrief."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
+        self.react = QCheckBox("Reactive dispatch: enemy reinforcements and blue alert fighters can launch during a sortie")
+        self.react.setChecked(bool(getattr(settings, "reactive", True))); lay.addWidget(self.react)
+        h = QLabel("Random and difficulty-scaled: other enemy wings within range of the target may send extra pairs (never more aircraft than the wing has), "
+                   "and our carrier or nearby bases may launch alert pairs when the fight is lopsided, for fleet defence, or when the fleet is raided. "
+                   "Reinforcements are skipped before a flight is dropped when a mission is near the unit limit."); h.setObjectName("small"); h.setWordWrap(True); lay.addWidget(h)
         self.carc = QCheckBox("Carcasses: wrecks at damaged and destroyed ground sites near your route")
         self.carc.setChecked(bool(getattr(settings, "carcasses", True))); lay.addWidget(self.carc)
         row = QHBoxLayout(); lb = QLabel("Wreck weight"); lb.setMinimumWidth(120)
@@ -191,7 +196,7 @@ class SettingsDialog(QDialog):
         self.s.merge_back_min = int(self.mback.value())
         self.s.merge_radius_nm = int(self.mrad.value())
         self.s.ruins = bool(self.ruins.isChecked())
-        self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
+        self.s.reactive = bool(self.react.isChecked()); self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.shore_margin_m = int(self.shore.value())
         self.s.river_margin_m = int(self.river.value())

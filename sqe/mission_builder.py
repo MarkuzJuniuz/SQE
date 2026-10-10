@@ -23,7 +23,7 @@ from . import theatres, weather
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import briefing as brief, callsigns, carcass
+from . import briefing as brief, callsigns, carcass, reactive
 from . import seacheck as seac
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
@@ -66,6 +66,7 @@ class MissionOptions:
     friendly_cap_engage_nm: int = 50    # HAVCAP / BASECAP likewise (0 = unlimited)
     f14_special_names: bool = True
     weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
+    reactive: bool = True               # extra enemy fighters / blue alert pairs that launch during the sortie (reactive.py)
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
     carcass_weight: float = 0.25        # how much of a live unit one wreck counts toward the unit limit
     carcass_range_nm: int = 40          # only sites this close to the route get wrecks
@@ -285,6 +286,8 @@ class MissionBuilder:
         self._spawn_cas_support(package, plan, geom, manifest)
         merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock, ruins)
         manifest.cur_pkg = ""
+        self._intel = []
+        self._spawn_reactive(package, extras, tx, ty, tgt.eta_s, geom, manifest, despawn)
         self._dry_pass()
         self._place_carcasses()
         manifest.merged = [{k: v for k, v in m_.items() if k in ("id", "number", "objective", "type", "tot_s")} for m_ in merged if not m_.get("struck")]
@@ -327,7 +330,7 @@ class MissionBuilder:
         x = {"date": date_str, "mode3": mode3, "laser": laser, "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}",
              "bullseye": latlon(bx, by, self.t), "divert": div.name, "weather": weather.describe(self.wx), "weather_short": weather.metar(self.wx), "wx_notes": self.wx_notes,
              "link16": any(r["stn"] != "-" for r in whois), "pkg_table": pkg_table,
-             "n_def": air_pkg.n_def, "merged_nums": [m_["number"] for m_ in merged if not m_.get("struck")]}
+             "n_def": air_pkg.n_def, "intel": self._intel, "merged_nums": [m_["number"] for m_ in merged if not m_.get("struck")]}
         text = brief.build_text(st, package, tl, plan, self.rng, (tx, ty), x)
         m.set_description_text(text["full"])
         m.set_description_bluetask_text(text["blue_task"])
@@ -1406,6 +1409,136 @@ class MissionBuilder:
             if not load:
                 self.warns.append(f"{tname}: no air-to-air loadout found; spawned unarmed")
             manifest.add("enemy_air", w.base_asset_id, names)
+
+    # ---- reactive dispatch: enemy reinforcements and blue alert pairs launched during the sortie ---------------------------------
+    def _spawn_reactive(self, package, extras, tx, ty, tot_s, geom, manifest, despawn) -> None:
+        o, st, d = self.o, self.state, self.d
+        if not o.reactive:
+            return
+        rr = random.Random(self.seed_code + ":react")
+        fight = {Role.CAP, Role.ESCORT, Role.SWEEP}
+        pkgs = [package] + list(extras)
+        blue_f = sum(f.count for pk in pkgs for f in pk.flights if f.role in fight and not f.tag)
+        used = {}
+        for g in manifest.groups:
+            if g["kind"] == "enemy_air":
+                used[g["ref"]] = used.get(g["ref"], 0) + len(g["units"])
+        base_n = sum(used.values())
+        fleet_obj = package.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
+        picks = reactive.plan_red(st, d, rr, tx, ty, base_n, blue_f, used, ENEMY_FIGHTERS, bearing) if not fleet_obj else []
+        skill = getattr(Skill, d.enemy_skill, Skill.High)
+        pt = lambda x, y: mapping.Point(x, y, self.t)
+        alt, spd = 22000 * FT, 400 * KPH
+        placed_red, seen_src = 0, set()
+        for k, pk in enumerate(picks, 1):
+            if self._counts()["units"] + pk["size"] > o.max_units:
+                self.warns.append("enemy reinforcements left out to stay under the unit limit")
+                break
+            a = st.assets[pk["base"]]
+            ap = self.t.airports.get(a.airport) if a.airport else None
+            if ap is None:
+                continue
+            cls = getattr(planes, pk["type"])
+            load = enemy_cap_loadout(pk["type"])
+            g = self.m.flight_group_from_airport(self.red, f"Reinforce {k}", cls, ap, maintask=task.CAP, start_type=StartType.Runway, group_size=pk["size"])
+            g.add_trigger_action(task.StartCommand())
+            g.uncontrolled = True
+            trig = triggers.TriggerOnce(comment=f"reinforce {g.name}")
+            delay = int(rr.uniform(60, 240))
+            if any(fl.role == Role.CAS for fl in package.flights):
+                trig.add_condition(condition.TimeAfter(max(5, int(tot_s - 120 - 90 - pk["nm"] * NM / (430 * 0.514444))) + delay))
+            else:
+                zone = self.m.triggers.add_triggerzone(pt(tx, ty), self._scramble_radius(package, a, tx, ty, geom) * NM, True, f"reinforce {a.id} {k}")
+                trig.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
+                trig.add_condition(condition.TimeAfter(delay))
+            trig.add_action(action.AITaskPush(g.id, 1))
+            self.m.triggerrules.triggers.append(trig)
+            ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
+            ct.stop_after_time(int(tot_s + 3600))
+            g.add_waypoint(pt(tx, ty), alt, spd, "INTERCEPT").tasks.append(ct)
+            self._limit_engage(g, o.enemy_cap_engage_nm)
+            names = []
+            for j, u in enumerate(g.units, 1):
+                u.name = f"ENM-{a.id}-R{k}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
+            g.set_skill(skill)
+            if o.enemy_unlimited_fuel:
+                g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
+            manifest.add("enemy_air", a.id, names)
+            placed_red += pk["size"]
+            if a.id not in seen_src:
+                seen_src.add(a.id)
+                self._intel.append(f"Enemy fighters at {self._short(a.name)} ({reactive.compass(pk['brg'])} of the target) are within reach of the target area and may be sent to reinforce.")
+
+        # ---- blue alert pairs ---------------------------------------------------------------------------------------------------
+        raid_x = next((x for x in extras if x.objective.type == ObjectiveType.FLEET_DEFENSE), None)
+        n_pairs = reactive.blue_pairs(rr, base_n + placed_red, blue_f, fleet_obj, raid_x is not None)
+        if not n_pairs:
+            return
+        dpt = (tx, ty) if (fleet_obj or raid_x is None) else self._target_xy(raid_x)
+        committed = {}
+        for f_, _g in self.flight_groups:
+            committed[f_.squadron_id] = committed.get(f_.squadron_id, 0) + f_.count
+        srcs = reactive.blue_sources(st, AIRCRAFT, fight, committed, *dpt)
+        taken = {(g_.name) for g_ in getattr(self.usa, "plane_group", [])}
+        for k in range(n_pairs):
+            if not srcs:
+                break
+            sq, base, nm, free = srcs[0]
+            if self._counts()["units"] + 2 > o.max_units:
+                self.warns.append("blue alert aircraft left out to stay under the unit limit")
+                break
+            if base.kind == BaseKind.CARRIER:
+                carrier = self.ship.get(base.id)
+                if carrier is None:
+                    srcs = srcs[1:]
+                    continue
+            elif base.id not in self.apt:
+                self._place_base(base, tx, ty)
+            spec = AIRCRAFT[sq.aircraft]
+            fno = next((n for n in range(9, 0, -1) if f"{sq.callsign} {n}" not in taken), None)
+            if fno is None:
+                break
+            label = f"{sq.callsign} {fno}"
+            taken.add(label)
+            if base.kind == BaseKind.CARRIER:
+                g = self.m.flight_group_from_unit(self.usa, label, spec.dcs_type, self.ship[base.id], maintask=task.CAP, start_type=StartType.Runway, group_size=2)
+            else:
+                g = self.m.flight_group_from_airport(self.usa, label, spec.dcs_type, self.apt[base.id], maintask=task.CAP, start_type=StartType.Runway, group_size=2)
+            g.add_trigger_action(task.StartCommand())
+            g.uncontrolled = True
+            trig = triggers.TriggerOnce(comment=f"alert {label}")
+            if fleet_obj or raid_x is not None:
+                zone = self.m.triggers.add_triggerzone(pt(*dpt), 120 * NM, True, f"alert {label}")
+                trig.add_condition(condition.PartOfCoalitionInZone("red", zone.id))
+            else:
+                trig.add_condition(condition.TimeAfter(max(5, int(tot_s - 240 - nm * NM / (420 * 0.514444)))))
+            trig.add_action(action.AITaskPush(g.id, 1))
+            self.m.triggerrules.triggers.append(trig)
+            p_ = spec.profile
+            ct = task.ControlledTask(task.OrbitAction(int(p_.cap_alt_ft * FT), int(p_.cap_kts * KPH)))
+            ct.stop_after_time(int(tot_s + o.cap_minutes * 60))
+            g.add_waypoint(pt(*dpt), p_.cap_alt_ft * FT, p_.cap_kts * KPH, "CAP").tasks.append(ct)
+            self._limit_engage(g, o.friendly_cap_engage_nm)
+            if base.kind == BaseKind.AIRFIELD:
+                g.land_at(self.apt[base.id])
+            else:
+                rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTB")
+                rtb.type, rtb.action = "Land", PointAction.Landing
+                rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
+            cs = callsigns.apply(g, sq.callsign, fno, callsigns.table(sq.aircraft))
+            load = self.lo.for_role(sq.aircraft, Role.CAP)
+            names = []
+            for i, u in enumerate(g.units):
+                u.name = cs[i]; u.pylons = copy.deepcopy(load); names.append(u.name); self._ulabels[u.name] = u.name.upper()
+            g.set_skill(Skill.High)
+            g.set_frequency(130.0)
+            manifest.add("friendly", f"alert_{sq.id}_{fno}", names, squadron=sq.id, callsign=label, player=False)
+            if self.o.ai_despawn_on_land:
+                despawn.extend(names)
+            committed[sq.id] = committed.get(sq.id, 0) + 2
+            srcs = reactive.blue_sources(st, AIRCRAFT, fight, committed, *dpt)
+            self._intel.append(f"Alert fighters of {sq.name} ({self._short(base.name)}) are on cockpit alert and may launch to help.")
+
 
     # ---- bomber raid on the fleet: already en route from the first second, along a real path from their base ----------------
     def _spawn_raid(self, package, sx_, sy_, tot_s, geom, manifest):

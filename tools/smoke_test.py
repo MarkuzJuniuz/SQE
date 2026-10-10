@@ -445,6 +445,55 @@ def main():
     assert n_by["off"] == (0, 0), n_by
     assert n_by["tight"][0] == 0, n_by
     print(f"[carcass] layouts repeat and only grow as a site worsens; {n_by['on'][0]} wrecks built; off = none; unit limit trims them")
+
+    # ---- reactive dispatch: range, availability, ratio, difficulty scaling, off switch -------------------------------------------------
+    import random as _rnd
+    from sqe import reactive as _rx
+    from sqe.difficulty import get as _gd
+    from sqe.loadouts import ENEMY_FIGHTERS as _EF
+    from sqe.routes import bearing as _brg, NM as _NM
+    rs = mk(); rs.new("React", "FA-18C", 3, seed=11)
+    tgt_ = next(a_ for a_ in rs.state.assets.values() if a_.kind.value == "SAM")
+    rate = {}
+    for lv in (1, 2, 3):
+        n_ = 0
+        for k_ in range(400):
+            used_ = {}
+            picks_ = _rx.plan_red(rs.state, _gd(lv), _rnd.Random(k_), tgt_.x, tgt_.y, 2, 6, used_, _EF, _brg)
+            n_ += bool(picks_)
+            for pk_ in picks_:
+                w_ = next(w for w in rs.state.enemy_air if w.base_asset_id == pk_["base"])
+                assert used_[pk_["base"]] <= w_.available, "a wing cannot send more than it has"
+                assert pk_["nm"] <= _rx.INTERCEPT_NM.get(pk_["type"], 120) and pk_["type"] in w_.types, "out of range or not that wing's type"
+            assert 2 * len(picks_) + 2 <= max(2, round(2.0 * 6)), "reinforcements exceed 2:1"
+        rate[lv] = n_ / 400
+    assert rate[1] < rate[2] < rate[3] and rate[1] < 0.15, rate
+    full_ = {w.base_asset_id: w.available for w in rs.state.enemy_air}
+    for w in rs.state.enemy_air:
+        w.available = 1                                                     # a wing with one jet cannot send a pair
+    assert all(not _rx.plan_red(rs.state, _gd(3), _rnd.Random(k_), tgt_.x, tgt_.y, 2, 8, {}, _EF, _brg) for k_ in range(60))
+    for w in rs.state.enemy_air:
+        w.available = full_[w.base_asset_id]
+    seen_r = seen_b = False
+    for sd_ in range(1, 9):
+        rr_ = mk(); rr_.new("React2", "FA-18C", 3, seed=sd_)
+        for p_ in [q for q in rr_.packages() if rr_.flyable(q)][:3]:
+            res_ = rr_.fly(p_.number, rr_.flyable(p_)[0].id)
+            txt_ = res_.text["full"]
+            sq_ = {g_["squadron"] for g_ in res_.manifest.groups if g_["kind"] == "friendly" and g_["ref"].startswith("alert_")}
+            seen_b |= bool(sq_)
+            seen_r |= "may be sent to reinforce" in txt_
+            if sq_ or "may be sent to reinforce" in txt_:
+                rr_.settings.reactive = False
+                r2_ = rr_.fly(p_.number, rr_.flyable(p_)[0].id)
+                with zipfile.ZipFile(rr_.settings.sortie_miz) as z_:
+                    off_ = z_.read("mission").decode("utf-8", "replace")
+                assert "Reinforce " not in off_ and "Intelligence:" not in r2_.text["full"] and not any(g_["ref"].startswith("alert_") for g_ in r2_.manifest.groups), "reactive off must add nothing"
+                rr_.settings.reactive = True
+        if seen_r and seen_b:
+            break
+    assert seen_r and seen_b, (seen_r, seen_b)
+    print(f"[reactive] range and availability respected, never past 2:1; chance by level {rate[1]:.0%}/{rate[2]:.0%}/{rate[3]:.0%}; red + blue launch in a build; off = none")
     print("SMOKE TEST PASSED")
 
 

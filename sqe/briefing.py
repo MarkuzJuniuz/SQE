@@ -50,6 +50,8 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                  if n_def and obj.type.value != "FLEET_DEFENSE" else
                  ("" if obj.type.value == "FLEET_DEFENSE" else "No organised fighter defence is expected at the target.")),
             f"Weather: {x['weather']}." + ((" Loadouts changed for the weather: " + " ".join(x["wx_notes"])) if x.get("wx_notes") else "")]
+    if x.get("intel"):
+        sit += ["", "Intelligence: " + " ".join(x["intel"])]
     mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {'DEAD' if (pf.role.value == 'STRIKE' and obj.type.value == 'DEAD') else pf.role.value}.", f"Your task: {pf.task}."]
     exe = ["Package (push / TOT are staggered: sweep first, then SEAD, escorts, strikers):"]
     for r in x["pkg_table"]:

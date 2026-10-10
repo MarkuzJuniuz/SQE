@@ -313,6 +313,7 @@ class Session:
         self.options.enemy_cap_engage_nm = int(self.settings.enemy_cap_engage_nm)
         self.options.friendly_cap_engage_nm = int(self.settings.friendly_cap_engage_nm)
         self.options.carcasses = bool(getattr(self.settings, 'carcasses', True)); self.options.carcass_weight = max(5, int(getattr(self.settings, 'carcass_weight_pct', 25))) / 100.0
+        self.options.reactive = bool(getattr(self.settings, 'reactive', True))
         self.options.max_units = int(self.settings.merge_max_units)
         self.options.f14_special_names = bool(getattr(self.settings, 'f14_special_names', True)); self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct); self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear'))
         import contextlib, io, logging

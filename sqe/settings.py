@@ -70,6 +70,7 @@ class AppSettings:
     merge_radius_nm: int = 50             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in
     merge_back_min: int = 15              # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
     merge_max_units: int = 250            # a merged mission is trimmed until it holds no more than this many units
+    reactive: bool = True                 # enemy reinforcements and blue alert pairs can launch during a sortie
     carcasses: bool = True                # burnt-out wrecks at damaged and destroyed ground sites near your route
     carcass_weight_pct: int = 25          # one wreck counts this % of a live unit toward the unit limit
     unit_cap_v2: bool = False             # the old default (150) has been moved to the new one (250) once

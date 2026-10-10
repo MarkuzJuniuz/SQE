@@ -89,6 +89,9 @@ First launch:
 
 ---------------------------------------------------------------------------------------------------
 
+## Reactive dispatch (v0.17)
+Random enemy reinforcements (other wings, only within the type's intercept radius, only aircraft the wing really has) and blue alert pairs (carrier or nearby bases, only aircraft the mission is not using). Scaled by difficulty, capped at 2:1 against your fighters, and skipped first when a mission is near the unit limit. The briefing's Intelligence line hints at them. Settings: Reactive dispatch on/off.
+
 ## Carcasses (v0.16)
 Damaged and destroyed ground sites within 40 nm of your route show wrecks. They are fixed per site (the same wreck in the same spot every sortie) and a worse site only adds wrecks. Each counts 25% of a unit toward the unit limit and the furthest are dropped first when a mission is too heavy. Settings: Carcasses on/off and Wreck weight.
 
