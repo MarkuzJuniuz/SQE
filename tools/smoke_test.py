@@ -535,6 +535,31 @@ def main():
     assert [k for k, v in _AC.items() if v.profile.dep_nm != 8.0] == ["A-10C"], "only the A-10C departs at 6 nm"
     assert ks.__class__ and any(r_["name"] == "TAKEOFF" for r_ in ctx_["waypoints"])
     print("[departure] DEP 8 nm land / 10 nm carrier / 6 nm A-10C, capped at 40% of the way to the marshal point")
+    # ---- altitude profiles: HIGH / MED / LOW from the SAM picture
+    from types import SimpleNamespace as _NS
+    from sqe import profiles as _pf
+    from sqe.models import AssetKind as _AK, Role as _Rl
+    def _st(*variants):
+        return _NS(assets={f"s{i}": _NS(id=f"s{i}", kind=_AK.SAM, variant=v, destroyed=False, health=1.0, x=100_000 + 500 * i, y=0) for i, v in enumerate(variants)})
+    _pts = [(0, 0), (60_000, 0), (100_000, 0), (140_000, 0)]
+    _P = lambda ac: _AC[ac].profile
+    _ch = lambda ac, role, *v, cloud=None: _pf.choose(_st(*v), role, _P(ac), _pts, (100_000, 0), cloud)
+    t_ = _ch("FA-18C", _Rl.STRIKE); assert not t_.changed and t_.alt_ft == 20000 and not t_.rad, t_
+    t_ = _ch("FA-18C", _Rl.STRIKE, "SA-6"); assert not t_.changed, "one SA-6 is not enough to change the profile"
+    t_ = _ch("FA-18C", _Rl.STRIKE, "SA-11", "SA-6", "SA-2"); assert t_.changed and t_.rad and t_.alt_ft == 500 and t_.label == "LOW" and "from the IP" in t_.reason, t_
+    assert not _pf.choose(_st("SA-11", "SA-6", "SA-2"), _Rl.STRIKE, _P("FA-18C"), _pts, (100_000, 0), None, skip={"s0", "s1", "s2"}).changed, "the DEAD target itself does not push the package low"
+    assert not _ch("F-15C", _Rl.STRIKE, "SA-11", "SA-6", "SA-2").changed, "the FC3 F-15C never goes LOW"
+    assert not _ch("FA-18C", _Rl.STRIKE, "SA-11", "SA-6", "SA-2", cloud=1500).changed, "a low cloud base closes LOW"
+    assert not _ch("FA-18C", _Rl.SEAD, "SA-11", "SA-6", "SA-2").rad and not _ch("FA-18C", _Rl.ESCORT, "SA-11", "SA-6", "SA-2").rad, "SEAD and escorts never go LOW"
+    t_ = _ch("A-10C", _Rl.CAS, "SA-11", "SA-6", "SA-2"); assert t_.rad and t_.alt_ft == 300, t_
+    assert not _ch("A-10C", _Rl.CAS, "AAA").rad, "AAA alone does not push a CAS flight lower"
+    from sqe.routes import make_geometry as _mg2, plan_route as _pr2
+    _g2 = _mg2(0, 0, 100_000, 0, _P("FA-18C"), (-20_000, 0)); _g2.tier = _ch("FA-18C", _Rl.STRIKE, "SA-11", "SA-6", "SA-2")
+    _w2 = {w.name: w for w in _pr2(_Rl.STRIKE, (0, 0), _g2, _P("FA-18C"), is_player=False, tanker_xy=None)}
+    assert not _w2["PUSH"].rad and _w2["PUSH"].alt_ft == 20000 and all(_w2[n].rad and _w2[n].alt_ft == 500 for n in ("IP", "TGT", "EGR")), "the tier applies from the IP on"
+    _w3 = {w.name: w for w in _pr2(_Rl.STRIKE, (0, 0), _g2, _P("FA-18C"), is_player=True, tanker_xy=None)}
+    assert _w3["TGT"].agl and _w3["TGT"].alt_ft == 0 and not _w3["TGT"].rad, "the player's target point stays on the ground"
+    print("[profiles] no threat = unchanged; heavy SAM cover -> LOW from the IP; F-15C, SEAD, escorts, low cloud stay up; PUSH keeps its altitude")
     print("SMOKE TEST PASSED")
 
 

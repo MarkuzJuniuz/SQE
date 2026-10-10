@@ -23,7 +23,7 @@ from . import theatres, weather
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import briefing as brief, callsigns, carcass, reactive
+from . import briefing as brief, callsigns, carcass, profiles, reactive
 from . import seacheck as seac
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
@@ -247,6 +247,7 @@ class MissionBuilder:
 
         # ---- timeline: YOUR times. Roles are staggered around the strikers' push (sweep, SEAD, escorts go first) ---------
         launch_s = float(o.launch_offset_s)
+        geom.tier = self._pick_tier(geom, pf.role, pspec.profile, tx, ty, {tgt_asset.id} if (tgt_asset is not None and package.objective.type == ObjectiveType.DEAD) else ())
         pw = plan_route(pf.role, (pbase.x, pbase.y), geom, pspec.profile, is_player=True, tanker_xy=None)
         dep_s = launch_s + 60 + dist(pbase.x, pbase.y, *geom.dep) / (pspec.profile.depart_kts * 0.514444) * 1.12     # roll + climb-out to DEP
         self._dep_s = dep_s
@@ -286,7 +287,7 @@ class MissionBuilder:
         self._spawn_cas_support(package, plan, geom, manifest)
         merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock, ruins)
         manifest.cur_pkg = ""
-        self._intel = []
+        self._intel = [geom.tier.reason] if geom.tier.reason else []
         self._spawn_reactive(package, extras, tx, ty, tgt.eta_s, geom, manifest, despawn)
         self._dry_pass()
         self._place_carcasses()
@@ -300,14 +301,14 @@ class MissionBuilder:
             to_note += f", depart radial {int(bearing(pbase.x, pbase.y, *geom.dep)):03d}"
         rows = [("TAKEOFF", pbase.x, pbase.y, launch_s, "", "", to_note)]
         for w in pw:
-            rows.append((w.name, w.x, w.y, w.eta_s, "AGL 0" if w.agl else f"{w.alt_ft // 1000}K", w.speed_kts, w.note))
+            rows.append((w.name, w.x, w.y, w.eta_s, "AGL 0" if w.agl else (f"{w.alt_ft}AGL" if w.rad else f"{w.alt_ft // 1000}K"), w.speed_kts, w.note))
         rows.append(("RTB", pbase.x, pbase.y, rtb_s, "-", 300, self._rtb_note(pspec, pbase)))
         n_route = len(rows)
         rows.append(("DIVERT", div.x, div.y, 0, "-", "", div.name))
         if tanker_xy:
             rows.append(("TKR", tanker_xy[0], tanker_xy[1], 0, f"{pspec.profile.aar_alt_ft // 1000}K", pspec.profile.aar_kts, "Top off. See COMMS for TACAN"))
         rows.append(("BULLS", bx, by, 0, "", "", "Bullseye reference"))
-        player_wps = [Wpt(r[0], r[1], r[2], 0 if r[4] in ("", "-", "AGL 0") else int(str(r[4]).rstrip("K")) * 1000,
+        player_wps = [Wpt(r[0], r[1], r[2], 0 if (r[4] in ("", "-", "AGL 0") or str(r[4]).endswith("AGL")) else int(str(r[4]).rstrip("K")) * 1000,
                           int(r[5]) if str(r[5]).isdigit() else 0, r[6]) for r in rows]
         self._trailing_steerpoints(package, rows[n_route:], pspec)
         kn_rows, hook_wps = [], []
@@ -406,6 +407,7 @@ class MissionBuilder:
                          tm.safe_egress(st, tx2, ty2, geom2.hdg, spec2.profile.egress_nm, tm.cluster_ids(tgt2)) or geom2.egr)
             # timeline: this package pushes (start difference) minutes after yours. An EARLIER package has a negative offset: it is already underway when the mission starts.
             P0x = P0 + (hm(xp) - hm(anchor)) * 60.0
+            geom2.tier = self._pick_tier(geom2, lead.role, spec2.profile, tx2, ty2, {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else ())
             pw2 = plan_route(lead.role, (base2.x, base2.y), geom2, spec2.profile, is_player=True, tanker_xy=None)
             assign_times(pw2, 0.0, P0x + stagger(xp, lead.role))
             pu = next((w for w in pw2 if w.name == "PUSH"), None)
@@ -1019,6 +1021,8 @@ class MissionBuilder:
         special = self._f14_special_namer(wps) if (f.is_player and f.aircraft == "F-14BU" and o.f14_special_names) else None
         for w in wps[first:]:
             wp = g.add_waypoint(pt(w.x, w.y), w.alt_ft * FT, w.speed_kts * KPH, w.name)
+            if w.rad:
+                wp.alt_type = "RADIO"                                 # LOW tier: height above the ground
             if f.is_player:
                 if w.agl:
                     wp.alt, wp.alt_type = 0, "RADIO"                 # on the ground: sensors and weapons slave to the target
@@ -1417,6 +1421,11 @@ class MissionBuilder:
             manifest.add("enemy_air", w.base_asset_id, names)
 
     # ---- reactive dispatch: enemy reinforcements and blue alert pairs launched during the sortie ---------------------------------
+    def _pick_tier(self, geom, role, profile, tx, ty, skip=()):
+        """The altitude profile for this package from the SAM picture (profiles.py); the role altitude when nothing is better."""
+        pts = [geom.push, geom.ip, (tx, ty), geom.egr]
+        return profiles.choose(self.state, role, profile, pts, (tx, ty), getattr(self.wx, "ceiling_ft", None), skip)
+
     def _zulu_note(self) -> str:
         tz = float(theatres.active().get("tz", 0) or 0)
         return "Times are local. Zulu = local" + (f" - {tz:g} h." if tz > 0 else f" + {-tz:g} h." if tz < 0 else " (no offset).")

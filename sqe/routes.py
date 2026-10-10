@@ -38,6 +38,7 @@ class Wpt:
     action: str = ""        # "" | HOLD | BOMB | SEAD | SWEEP | CAS | ESCORT | CAPORBIT
     eta_s: float = 0.0      # seconds after mission start (filled by assign_times)
     agl: bool = False       # altitude is metres/feet above ground (the player's TGT sits on the ground so sensors and weapons can slave to it)
+    rad: bool = False       # alt_ft is height above the ground (the LOW tier): DCS "radio altitude", so the flight follows the terrain
 
 
 @dataclass
@@ -46,6 +47,7 @@ class Geometry:
     hdg: float; d: float
     mshl: tuple; push: tuple; ip: tuple; egr: tuple; cap1: tuple; cap2: tuple
     dep: tuple = (0.0, 0.0)
+    tier: object = None     # profiles.Tier: the altitude profile from the IP on (None = the role altitude)
 
 
 CARRIER_DEP_NM = 10.0      # Case III: the departure circle is 10 nm from the boat, and the flight leaves on the briefed departure radial
@@ -95,23 +97,25 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     wp.append(Wpt("MSHL", *g.mshl, p.marshal_alt_ft + 1000 * stack_idx, p.marshal_kts,
                   "Hold here until PUSH time", "HOLD"))
     alt = p.alt_ft.get(role, 20000)
+    t = g.tier
+    ialt, irad = (t.alt_ft, t.rad) if (t is not None and t.changed) else (alt, False)          # the tier applies from the IP on
     wp.append(Wpt("PUSH", *g.push, alt, p.push_kts, "Push on time, check in with AWACS"))
-    wp.append(Wpt("IP", *g.ip, alt, p.ip_kts, "Weapons armed, master arm"))
+    wp.append(Wpt("IP", *g.ip, ialt, p.ip_kts, "Weapons armed, master arm", rad=irad))
     # The player's TGT is on the ground target at 0 AGL so pods, weapons and the WSO / Jester can slave to it. The wingmen follow the player, and AI-only flights
     # never get a ground-level point (they would descend to it).
     if role == Role.STRIKE:
-        wp.append(Wpt("TGT", g.tx, g.ty, 0 if is_player else alt, p.attack_kts, p.tgt_note, "BOMB", agl=is_player))
+        wp.append(Wpt("TGT", g.tx, g.ty, 0 if is_player else ialt, p.attack_kts, p.tgt_note, "BOMB", agl=is_player, rad=irad and not is_player))
     elif role == Role.SEAD and is_player:
         wp.append(Wpt("TGT", g.tx, g.ty, 0, p.attack_kts, "SEAD site. You set standoff", "SEAD", agl=True))
     elif role == Role.SEAD:
-        wp.append(Wpt("SEAD", *offset(g.tx, g.ty, g.hdg + 180, max(8, p.ip_nm - 4) * NM), alt, p.attack_kts, "HARM launch point", "SEAD"))
+        wp.append(Wpt("SEAD", *offset(g.tx, g.ty, g.hdg + 180, max(8, p.ip_nm - 4) * NM), ialt, p.attack_kts, "HARM launch point", "SEAD", rad=irad))
     elif role == Role.SWEEP:
         wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts + 30, "SWEEP: clear the airspace", "SWEEP"))
     elif role == Role.CAS:
-        wp.append(Wpt("TGT", g.tx, g.ty, 0 if is_player else alt, p.attack_kts, "CAS: check in with JTAC (COMM1 CH4)", "CAS", agl=is_player))
+        wp.append(Wpt("TGT", g.tx, g.ty, 0 if is_player else ialt, p.attack_kts, "CAS: check in with JTAC (COMM1 CH4)", "CAS", agl=is_player, rad=irad and not is_player))
     else:
-        wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts, "ESCORT: cover the strikers over target", "ESCORT"))
-    wp.append(Wpt("EGR", *g.egr, alt, p.egress_kts, "Exit threat area"))
+        wp.append(Wpt("TGT", g.tx, g.ty, ialt, p.attack_kts, "ESCORT: cover the strikers over target", "ESCORT", rad=irad))
+    wp.append(Wpt("EGR", *g.egr, ialt, p.egress_kts, "Exit threat area", rad=irad))
     if len(wp) + 2 > p.max_points:
         raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")
     return wp
@@ -168,10 +172,10 @@ def in_progress(wps: list[Wpt], home: tuple) -> list[Wpt] | None:
         if a.action == "HOLD":
             ts = b.eta_s - leg_seconds(a, b)                       # when it leaves the hold
             if a.eta_s <= 0 < ts:                                  # still orbiting at the marshal point
-                return [Wpt("SPAWN", a.x, a.y, a.alt_ft, a.speed_kts)] + list(wps[i:])
+                return [Wpt("SPAWN", a.x, a.y, max(a.alt_ft, 6000) if a.rad else a.alt_ft, a.speed_kts)] + list(wps[i:])
         te = b.eta_s
         if ts <= 0 < te:
             f = (0 - ts) / max(1.0, te - ts)
-            sp = Wpt("SPAWN", a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, int(a.alt_ft + (b.alt_ft - a.alt_ft) * f), a.speed_kts)
+            sp = Wpt("SPAWN", a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, max(6000, int(a.alt_ft + (b.alt_ft - a.alt_ft) * f)) if (a.rad or b.rad) else int(a.alt_ft + (b.alt_ft - a.alt_ft) * f), a.speed_kts)
             return [sp] + list(wps[i + 1:])
     return None

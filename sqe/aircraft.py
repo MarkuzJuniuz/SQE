@@ -32,6 +32,9 @@ class RouteProfile:
     ip_nm: int = 25
     egress_nm: int = 25
     max_points: int = 50
+    med_alt_ft: int = 0              # MED tier altitude (0 = 60% of the role altitude, at least 10,000 ft)
+    low_agl_ft: int = 500            # LOW tier: height above the ground, flown from the IP to the egress
+    no_low: bool = False             # never planned LOW (FC3 F-15C)
     tgt_note: str = "Release"
     special_points: tuple = ()
 
@@ -95,14 +98,14 @@ AIRCRAFT: dict[str, AircraftSpec] = {
     "F-15C": AircraftSpec(
         "F-15C", "F-15C Eagle", "F_15C", BaseKind.AIRFIELD,
         frozenset({_R.CAP, _R.SWEEP, _R.ESCORT}), RefuelMethod.BOOM, 1, 400, 480, True,
-        RouteProfile(aar_alt_ft=22000, aar_kts=350, marshal_alt_ft=27000, cap_alt_ft=28000, cap_kts=400,
+        RouteProfile(no_low=True, aar_alt_ft=22000, aar_kts=350, marshal_alt_ft=27000, cap_alt_ft=28000, cap_kts=400,
                      alt_ft={_R.ESCORT: 27000, _R.SWEEP: 30000, _R.STRIKE: 25000, _R.SEAD: 25000, _R.CAS: 12000},
                      push_kts=520, ip_kts=520, attack_kts=520, egress_kts=550, push_nm=80),
         first_wp_label="0", fc3=True, bingo_lbs=3500, joker_lbs=5000),
     "A-10C": AircraftSpec(
         "A-10C", "A-10C Warthog", "A_10C_2", BaseKind.AIRFIELD,
         frozenset({_R.CAS}), RefuelMethod.BOOM, 1, 230, 300, True,
-        RouteProfile(depart_alt_ft=4000, depart_kts=250, dep_nm=6, aar_alt_ft=15000, aar_kts=270, marshal_alt_ft=10000,
+        RouteProfile(depart_alt_ft=4000, depart_kts=250, dep_nm=6, low_agl_ft=300, aar_alt_ft=15000, aar_kts=270, marshal_alt_ft=10000,
                      marshal_kts=250, alt_ft={_R.CAS: 9000, _R.STRIKE: 9000}, push_kts=300, ip_kts=300,
                      attack_kts=300, egress_kts=330, push_nm=35, ip_nm=12, egress_nm=15,
                      tgt_note="CAS: check in with JTAC"), first_wp_label="0", bingo_lbs=1500, joker_lbs=2500),
