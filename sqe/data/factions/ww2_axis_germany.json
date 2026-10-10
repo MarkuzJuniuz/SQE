@@ -1,0 +1,374 @@
+{
+ "id": "ww2_axis_germany",
+ "name": "Germany (Luftwaffe and Wehrmacht, 1944)",
+ "era": "ww2",
+ "side": "red",
+ "countries": [
+  "Third Reich"
+ ],
+ "notes": "Red on the European WWII theatres (Normandy, The Channel).",
+ "air": {
+  "fighters": [
+   "Bf_109K_4",
+   "FW_190A8",
+   "FW_190D9"
+  ],
+  "radius_nm": {
+   "Bf_109K_4": 200,
+   "FW_190A8": 250,
+   "FW_190D9": 250,
+   "Ju_88A4": 400
+  },
+  "intercept_nm": {
+   "Bf_109K_4": 70,
+   "FW_190A8": 80,
+   "FW_190D9": 90
+  },
+  "types_by_level": {
+   "1": [
+    "Bf_109K_4",
+    "FW_190A8"
+   ],
+   "2": [
+    "Bf_109K_4",
+    "FW_190A8",
+    "FW_190D9",
+    "Ju_88A4"
+   ],
+   "3": [
+    "FW_190D9",
+    "Bf_109K_4",
+    "FW_190A8",
+    "Ju_88A4"
+   ]
+  },
+  "striker": "Ju_88A4",
+  "bomber": ""
+ },
+ "air_defence": {
+  "variants": {
+   "FLAK20": {
+    "label": "light flak battery",
+    "name": "2 cm Flak",
+    "value": 2,
+    "range_nm": 1.5,
+    "envelope_ft": [
+     0,
+     6500
+    ],
+    "weight": 1.0,
+    "radar": false,
+    "long_range": false,
+    "mobile": false,
+    "units": [
+     [
+      "flak38",
+      3
+     ],
+     [
+      "flak30",
+      1
+     ]
+    ]
+   },
+   "FLAK88": {
+    "label": "heavy flak battery",
+    "name": "8.8 cm Flak with Wurzburg",
+    "value": 5,
+    "range_nm": 5,
+    "envelope_ft": [
+     1000,
+     26000
+    ],
+    "weight": 2.0,
+    "radar": true,
+    "long_range": true,
+    "mobile": false,
+    "units": [
+     [
+      "flak36",
+      4
+     ],
+     [
+      "FuSe_65",
+      1
+     ],
+     [
+      "KDO_Mod40",
+      1
+     ],
+     [
+      "flak38",
+      2
+     ]
+    ]
+   },
+   "FLAK41": {
+    "label": "heavy flak battery (Flak 41)",
+    "name": "8.8 cm Flak 41 with Wurzburg",
+    "value": 6,
+    "range_nm": 6,
+    "envelope_ft": [
+     1000,
+     32000
+    ],
+    "weight": 2.5,
+    "radar": true,
+    "long_range": true,
+    "mobile": false,
+    "units": [
+     [
+      "flak41",
+      4
+     ],
+     [
+      "FuSe_65",
+      1
+     ],
+     [
+      "KDO_Mod40",
+      1
+     ],
+     [
+      "flak38",
+      2
+     ]
+    ]
+   },
+   "EWR_FREYA": {
+    "units": [
+     [
+      "FuMG_401",
+      1
+     ]
+    ],
+    "radar": false,
+    "long_range": false,
+    "mobile": false
+   }
+  },
+  "track_radars": [
+   "FuSe-65"
+  ],
+  "search_radars": [
+   "FuMG-401"
+  ],
+  "sam_variants_by_level": {
+   "1": [
+    "FLAK20",
+    "FLAK20",
+    "FLAK88"
+   ],
+   "2": [
+    "FLAK20",
+    "FLAK88",
+    "FLAK88"
+   ],
+   "3": [
+    "FLAK88",
+    "FLAK41",
+    "FLAK20",
+    "FLAK88"
+   ]
+  },
+  "forward_sams_by_level": {
+   "1": [],
+   "2": [
+    "FLAK20"
+   ],
+   "3": [
+    "FLAK20",
+    "FLAK20"
+   ]
+  },
+  "ewr": "EWR_FREYA",
+  "ewr_advanced": "EWR_FREYA"
+ },
+ "ground": {
+  "soft": {
+   "C2": [
+    [
+     "Horch_901_typ_40_kfz_21",
+     2
+    ],
+    [
+     "Blitz_36_6700A",
+     3
+    ],
+    [
+     "flak38",
+     1
+    ]
+   ],
+   "FUEL": [
+    [
+     "Blitz_36_6700A",
+     4
+    ],
+    [
+     "Sd_Kfz_7",
+     1
+    ],
+    [
+     "flak38",
+     1
+    ]
+   ],
+   "DEPOT": [
+    [
+     "Blitz_36_6700A",
+     6
+    ],
+    [
+     "Sd_Kfz_2",
+     2
+    ],
+    [
+     "flak38",
+     2
+    ]
+   ],
+   "AIRFIELD": [
+    [
+     "flak38",
+     2
+    ],
+    [
+     "Blitz_36_6700A",
+     3
+    ]
+   ],
+   "ARMOR": [
+    [
+     "Pz_IV_H",
+     4
+    ],
+    [
+     "Sd_Kfz_251",
+     3
+    ],
+    [
+     "Sd_Kfz_234_2_Puma",
+     2
+    ],
+    [
+     "flak38",
+     1
+    ]
+   ]
+  },
+  "armor": {
+   "tank": [
+    "Pz_IV_H",
+    "Pz_IV_H",
+    "Pz_V_Panther_G",
+    "Tiger_I"
+   ],
+   "ifv": [
+    "Sd_Kfz_251",
+    "Sd_Kfz_251",
+    "Stug_III"
+   ],
+   "apc": [
+    "Sd_Kfz_234_2_Puma",
+    "Sd_Kfz_2",
+    "Kubelwagen_82"
+   ],
+   "aaa": "flak38",
+   "truck": "Blitz_36_6700A",
+   "mobile_ad": [
+    "flak38"
+   ]
+  },
+  "garrison": {
+   "tank": [
+    "Pz_IV_H",
+    "Stug_IV"
+   ],
+   "ifv": [
+    "Sd_Kfz_251",
+    "Stug_III"
+   ],
+   "aaa": "flak38",
+   "truck": "Blitz_36_6700A",
+   "high_level_ad": "flak36"
+  },
+  "wreck_mix": [
+   [
+    "Pz_IV_H",
+    "Pz_IV_H",
+    "Pz_V_Panther_G",
+    "Tiger_I"
+   ],
+   [
+    "Sd_Kfz_251",
+    "Stug_III"
+   ],
+   [
+    "Sd_Kfz_234_2_Puma",
+    "Sd_Kfz_2"
+   ]
+  ],
+  "wreck_aaa": "flak38",
+  "task_force": [
+   [
+    "Pz_IV_H",
+    1,
+    2
+   ],
+   [
+    "Sd_Kfz_251",
+    2,
+    3
+   ],
+   [
+    "Sd_Kfz_234_2_Puma",
+    1,
+    1
+   ]
+  ],
+  "jtac": "Kubelwagen_82"
+ },
+ "base_defence": [
+  {
+   "name": "Heavy flak",
+   "units": [
+    [
+     "flak36",
+     3,
+     2
+    ],
+    [
+     "KDO_Mod40",
+     1,
+     1
+    ]
+   ],
+   "formation": "Star",
+   "bearing": 0,
+   "distance_m": 2500
+  },
+  {
+   "name": "Light flak",
+   "units": [
+    [
+     "flak38",
+     3,
+     2
+    ]
+   ],
+   "formation": "Line",
+   "bearing": 120,
+   "distance_m": 1500
+  }
+ ],
+ "navy": {
+  "escorts": [
+   [
+    "Schnellboot_type_S130",
+    40,
+    1.5
+   ]
+  ]
+ }
+}

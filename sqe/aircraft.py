@@ -139,9 +139,10 @@ class SupportSpec:
     speed_kts: int
 
 
-AWACS_FOR = {BaseKind.CARRIER: SupportSpec("E_2C", "Magic", 25000, 300),
-             BaseKind.AIRFIELD: SupportSpec("E_3A", "Overlord", 30000, 400)}
+# Support aircraft come from the blue faction pack (factions.py: support.awacs / tankers / recovery_tanker). These are live views:
+# AWACS_FOR[BaseKind.CARRIER] is whatever the campaign's blue faction flies (E-2C for the modern US pack, nothing for WWII).
+from . import factions as _fx                       # noqa: E402
+AWACS_FOR = _fx.AWACS_LIVE
 # Basket tanker speed matters: AI Tomcats fail to plug the drogue when the tanker is set slow (DCS forums).
-TANKER_FOR = {RefuelMethod.BASKET: SupportSpec("KC135MPRS", "Texaco", 20000, 350),
-              RefuelMethod.BOOM: SupportSpec("KC_135", "Arco", 22000, 350)}
-RECOVERY_TANKER = SupportSpec("S_3B_Tanker", "Shell", 6000, 250)
+TANKER_FOR = _fx.TANKER_LIVE
+RECOVERY_TANKER = _fx.RECOVERY_LIVE

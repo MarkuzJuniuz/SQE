@@ -1,0 +1,185 @@
+{
+ "id": "ww2_axis_japan",
+ "name": "Japan (1944) - incomplete",
+ "era": "ww2",
+ "side": "red",
+ "countries": [
+  "Japan"
+ ],
+ "incomplete": true,
+ "notes": "Ground forces only. This pydcs has no Japanese aircraft and no Marianas WWII map; add aircraft with unit packs when they exist.",
+ "air": {
+  "fighters": [],
+  "radius_nm": {},
+  "intercept_nm": {},
+  "types_by_level": {},
+  "striker": "",
+  "bomber": ""
+ },
+ "air_defence": {
+  "variants": {
+   "AA25": {
+    "label": "25 mm AA battery",
+    "name": "Type 96 25 mm AA",
+    "value": 2,
+    "range_nm": 1.5,
+    "envelope_ft": [
+     0,
+     6000
+    ],
+    "weight": 1.0,
+    "radar": false,
+    "long_range": false,
+    "mobile": false,
+    "units": [
+     [
+      "Type_96_25mm_AA",
+      3
+     ],
+     [
+      "Type_94_25mm_AA_Truck",
+      1
+     ]
+    ]
+   }
+  },
+  "sam_variants_by_level": {
+   "1": [
+    "AA25"
+   ],
+   "2": [
+    "AA25",
+    "AA25"
+   ],
+   "3": [
+    "AA25",
+    "AA25",
+    "AA25"
+   ]
+  },
+  "forward_sams_by_level": {
+   "1": [],
+   "2": [
+    "AA25"
+   ],
+   "3": [
+    "AA25"
+   ]
+  }
+ },
+ "ground": {
+  "soft": {
+   "C2": [
+    [
+     "Type_98_So_Da",
+     2
+    ],
+    [
+     "Type_94_Truck",
+     3
+    ],
+    [
+     "Type_96_25mm_AA",
+     1
+    ]
+   ],
+   "FUEL": [
+    [
+     "Type_94_Truck",
+     5
+    ],
+    [
+     "Type_96_25mm_AA",
+     1
+    ]
+   ],
+   "DEPOT": [
+    [
+     "Type_94_Truck",
+     6
+    ],
+    [
+     "Type_96_25mm_AA",
+     2
+    ]
+   ],
+   "AIRFIELD": [
+    [
+     "Type_96_25mm_AA",
+     2
+    ],
+    [
+     "Type_94_Truck",
+     3
+    ]
+   ],
+   "ARMOR": [
+    [
+     "Type_98_Ke_Ni",
+     4
+    ],
+    [
+     "Type_98_So_Da",
+     2
+    ],
+    [
+     "Type_94_25mm_AA_Truck",
+     1
+    ]
+   ]
+  },
+  "armor": {
+   "tank": [
+    "Type_98_Ke_Ni"
+   ],
+   "ifv": [
+    "Type_98_So_Da"
+   ],
+   "apc": [
+    "Type_94_Truck"
+   ],
+   "aaa": "Type_94_25mm_AA_Truck",
+   "truck": "Type_94_Truck",
+   "mobile_ad": [
+    "Type_94_25mm_AA_Truck"
+   ]
+  },
+  "garrison": {
+   "tank": [
+    "Type_98_Ke_Ni"
+   ],
+   "ifv": [
+    "Type_98_So_Da"
+   ],
+   "aaa": "Type_96_25mm_AA",
+   "truck": "Type_94_Truck"
+  },
+  "wreck_mix": [
+   [
+    "Type_98_Ke_Ni"
+   ],
+   [
+    "Type_98_So_Da"
+   ],
+   [
+    "Type_94_Truck"
+   ]
+  ],
+  "wreck_aaa": "Type_96_25mm_AA"
+ },
+ "base_defence": [
+  {
+   "name": "25 mm AA",
+   "units": [
+    [
+     "Type_96_25mm_AA",
+     3,
+     2
+    ]
+   ],
+   "formation": "Star",
+   "bearing": 0,
+   "distance_m": 2000
+  }
+ ]
+}

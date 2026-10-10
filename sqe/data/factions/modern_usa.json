@@ -1,0 +1,139 @@
+{
+ "id": "modern_usa",
+ "name": "Coalition (US equipment, 2000s)",
+ "era": "modern",
+ "side": "blue",
+ "countries": [
+  "USA"
+ ],
+ "support": {
+  "awacs": {
+   "CARRIER": {
+    "type": "E_2C",
+    "label": "Magic",
+    "altitude_ft": 25000,
+    "speed_kts": 300
+   },
+   "AIRFIELD": {
+    "type": "E_3A",
+    "label": "Overlord",
+    "altitude_ft": 30000,
+    "speed_kts": 400
+   }
+  },
+  "tankers": {
+   "BASKET": {
+    "type": "KC135MPRS",
+    "label": "Texaco",
+    "altitude_ft": 20000,
+    "speed_kts": 350
+   },
+   "BOOM": {
+    "type": "KC_135",
+    "label": "Arco",
+    "altitude_ft": 22000,
+    "speed_kts": 350
+   }
+  },
+  "recovery_tanker": {
+   "type": "S_3B_Tanker",
+   "label": "Shell",
+   "altitude_ft": 6000,
+   "speed_kts": 250
+  }
+ },
+ "navy": {
+  "carrier": "Stennis",
+  "carrier_tacan_callsign": "STN",
+  "escorts": [
+   [
+    "TICONDEROG",
+    40,
+    3.0
+   ],
+   [
+    "USS_Arleigh_Burke_IIa",
+    -40,
+    3.0
+   ],
+   [
+    "PERRY",
+    180,
+    3.5
+   ]
+  ]
+ },
+ "base_defence": [
+  {
+   "name": "Patriot",
+   "units": [
+    [
+     "Patriot_str",
+     1,
+     1
+    ],
+    [
+     "Patriot_ECS",
+     1,
+     1
+    ],
+    [
+     "Patriot_cp",
+     1,
+     1
+    ],
+    [
+     "Patriot_EPP",
+     1,
+     1
+    ],
+    [
+     "Patriot_ln",
+     3,
+     1
+    ]
+   ],
+   "formation": "Star",
+   "bearing": 0,
+   "distance_m": 4500
+  },
+  {
+   "name": "AAA",
+   "units": [
+    [
+     "Vulcan",
+     2,
+     2
+    ],
+    [
+     "M1097_Avenger",
+     2,
+     1
+    ]
+   ],
+   "formation": "Line",
+   "bearing": 120,
+   "distance_m": 3500
+  }
+ ],
+ "ground": {
+  "task_force": [
+   [
+    "M_1_Abrams",
+    1,
+    2
+   ],
+   [
+    "M_2_Bradley",
+    2,
+    3
+   ],
+   [
+    "M1043_HMMWV_Armament",
+    1,
+    2
+   ]
+  ],
+  "jtac": "Hummer"
+ }
+}

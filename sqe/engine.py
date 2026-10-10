@@ -66,7 +66,10 @@ class Session:
 
     def open(self, path) -> None:
         self.state = CampaignState.load(path)
-        theatres.use(self.state.theatre)
+        th = theatres.use(self.state.theatre)
+        from . import factions
+        self.state.factions = self.state.factions or factions.for_theatre(th)
+        factions.use(**self.state.factions)
         self.sync_terrain()
         self.path = Path(path)
         self.settings.last_campaign = str(path)

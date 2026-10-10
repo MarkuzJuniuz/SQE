@@ -15,7 +15,7 @@ import random
 from .models import AssetKind
 
 MAX_PER_SITE = 6
-ARMOR_MIX = (["T_72B", "T_72B", "T_80B", "T_80UD"], ["BMP_2", "BMP_1", "BMP_3"], ["BTR_80", "BTR_70", "BTR_60"])
+# (tank, IFV, APC) choices and the column's AAA come from the red faction pack (factions.py: ground.wreck_mix / wreck_aaa)
 
 
 def _rng(campaign_id: str, aid: str, tag: str = "wreck") -> random.Random:
@@ -27,8 +27,13 @@ def composition(a, rng: random.Random, sites: dict, soft: dict) -> list:
     if a.kind in (AssetKind.SAM, AssetKind.EWR):
         comp = sites.get(a.variant) or []
     elif a.kind == AssetKind.ARMOR:
-        tank, ifv, apc = (rng.choice(x) for x in ARMOR_MIX)
-        comp = [(tank, 2), (ifv, 1), ("ZSU_23_4_Shilka", 1)] if a.variant == "GARRISON" else [(tank, 4), (ifv, 3), (apc, 2), ("ZSU_23_4_Shilka", 1)]
+        from . import factions
+        mix, aaa = factions.wreck_mix("red")
+        if len(mix) < 3:
+            return []
+        tank, ifv, apc = (rng.choice(x) for x in mix[:3])
+        comp = [(tank, 2), (ifv, 1), (aaa, 1)] if a.variant == "GARRISON" else [(tank, 4), (ifv, 3), (apc, 2), (aaa, 1)]
+        comp = [(n, c) for n, c in comp if n]
     else:
         comp = soft.get(a.kind) or []
     out: list = []

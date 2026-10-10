@@ -39,6 +39,7 @@ class CampaignState:
     raids: dict = field(default_factory=dict)      # Red raids and emergencies (raids.py): today's surprise raids, the emergency in play, postponed packages
     sams: dict = field(default_factory=dict)       # air defence that rebuilds and moves (sams.py): day each site went down, moves made, original positions
     blue_assets: dict = field(default_factory=dict)  # Blue supply sites (fuel farms, forward depot): same record as the enemy assets
+    factions: dict = field(default_factory=dict)     # {"blue": pack id, "red": pack id} (factions.py); empty = the theatre's defaults
 
     # ---- helpers ------------------------------------------------------------------------
     def campaign_date(self):
@@ -67,7 +68,7 @@ class CampaignState:
             "squadrons": {k: asdict(v) for k, v in self.squadrons.items()},
             "assets": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.assets.items()},
             "enemy_air": [asdict(w) for w in self.enemy_air],
-            "raids": self.raids,
+            "raids": self.raids, "factions": self.factions,
             "sams": self.sams,
             "blue_assets": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.blue_assets.items()},
             "plan": self.plan, "pending": self.pending, "history": self.history[-300:], "log": self.log[-400:],
@@ -93,6 +94,7 @@ class CampaignState:
         s.ground = d.get("ground") or {}
         s.raids = d.get("raids") or {}
         s.sams = d.get("sams") or {}
+        s.factions = dict(d.get("factions") or {})
         s.blue_assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_assets") or {}).items()}
         s.plan, s.pending = d.get("plan", []), d.get("pending")
         s.history, s.log = d.get("history", []), d.get("log", [])

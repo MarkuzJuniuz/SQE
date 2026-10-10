@@ -10,18 +10,16 @@ from .difficulty import Difficulty, get as get_difficulty
 from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, PlayerProfile)
 from .state import CampaignState
 from .aircraft import AIRCRAFT
-from . import ground, theatres
+from . import factions, ground, theatres
 
 def THEATRES() -> dict:
     """{id: name} of the installed theatre packs."""
     return theatres.available()
 
 
-SAM_LABEL = {"SA-8": "SA-8 battery", "AAA": "AAA battery", "MANPAD": "MANPADS team", "SA-2": "SA-2 site", "SA-3": "SA-3 site",
-             "SA-6": "SA-6 site", "SA-11": "SA-11 site", "SA-10": "SA-10 site", "SA-15": "SA-15 battery",
-             "SA-19": "SA-19 battery"}
-LONG_RANGE = {"SA-2", "SA-3", "SA-6", "SA-10", "SA-11"}
-SAM_VALUE = {"SA-8": 4, "AAA": 2, "MANPAD": 2, "SA-2": 5, "SA-3": 5, "SA-6": 6, "SA-11": 7, "SA-10": 9, "SA-15": 6, "SA-19": 5}
+SAM_LABEL = factions.VariantView("label")           # air-defence site types come from the faction packs (factions.py)
+LONG_RANGE = factions.VariantFlag("long_range")
+SAM_VALUE = factions.VariantView("value")
 
 
 NEW_SQUADRON = "new:"          # squadron picker value prefix: "new:<base id>" raises a fresh squadron of your type at that base
@@ -107,9 +105,12 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     d: Difficulty = get_difficulty(level)
     rng = random.Random(seed)
     th = theatres.use(theatre)
+    fx = factions.for_theatre(th)
+    factions.check_pair(fx["blue"], fx["red"])
+    factions.use(**fx)                                              # who fights with what: the theatre's blue and red faction packs
     t = theatres.terrain()
     ap = lambda n: t.airports[n].position
-    st = CampaignState(name=name, theatre=theatre, level=d.level, start_date=start_date, night_ops=night_ops)
+    st = CampaignState(name=name, theatre=theatre, level=d.level, start_date=start_date, night_ops=night_ops, factions=dict(fx))
 
     # ---- friendly bases ---------------------------------------------------------------------
     cv = th["carrier"]
@@ -153,14 +154,15 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     for aid, w in ww.items():
         cnt = max(2, round(d.enemy_air_total * w / total_w))
         squads = max(1, round(cnt / 14))                   # several squadrons per field at the bigger levels
-        types = rng.sample(d.enemy_types, k=min(len(d.enemy_types), 1 + min(2, squads)))
+        pool = factions.enemy_types(d.level, d.enemy_types)
+        types = rng.sample(pool, k=min(len(pool), 1 + min(2, squads)))
         st.enemy_air.append(EnemyAirWing(aid, types, cnt, cnt, squads))
 
-    if d.bomber_wing > 0 and th["bomber_base"] in live:       # strategic bombers live far from the front (Mozdok in the Caucasus)
-        st.enemy_air.append(EnemyAirWing(th["bomber_base"], ["Tu_22M3"], d.bomber_wing, d.bomber_wing))
+    if d.bomber_wing > 0 and th["bomber_base"] in live and factions.bomber():   # strategic bombers live far from the front (Mozdok in the Caucasus)
+        st.enemy_air.append(EnemyAirWing(th["bomber_base"], [factions.bomber()], d.bomber_wing, d.bomber_wing))
 
     # ---- air defence clusters ----------------------------------------------------------------------
-    variants = d.sam_variants
+    variants = factions.sam_variants(d.level, d.sam_variants)
     k = 0
     for aid, nm, apt, val in fields:
         p = ap(apt)
@@ -176,7 +178,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         if d.iads > 0.3 and val >= 7:
             x, y = _offset(p.x, p.y, 20 + rng.randint(0, 80), 14000)
             add(f"ewr_{aid[3:]}", f"{nm} early-warning radar", AssetKind.EWR, x, y, 4,
-                variant="EWR55" if d.level >= 3 else "EWR", tier=FIELD_TIER.get(aid, 3))
+                variant=factions.ewr_variant(d.level >= 3), tier=FIELD_TIER.get(aid, 3))
 
     # ---- strategic and logistics targets -------------------------------------------------------------------
     def near(apt, dx, dy):
@@ -188,7 +190,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
 
     # ---- the ground push toward Senaki (CAS targets) ------------------------------------------------------------
     ground.build(st, th, d, rng, ap)                                # the sectors of the front, a Red column in each, Blue's supply sites
-    for i, v in enumerate(d.forward_sams):                          # short-range air defence travels with the column
+    for i, v in enumerate(factions.forward_sams(d.level, d.forward_sams)):                          # short-range air defence travels with the column
         col = st.assets.get(f"armor_{i + 1}")
         if col is None:
             break

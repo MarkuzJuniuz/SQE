@@ -183,7 +183,8 @@ def generic_loadout(cls, role: Role) -> dict:
 # ---- enemy fighter air-to-air loads, built generically from pydcs's own tables -----------------------
 _HEAVY = ["R_27ER", "R_24R", "R_77", "AIM_7"]
 _SHORT = ["R_73", "R_60", "R_3S", "AIM_9"]
-ENEMY_FIGHTERS = {"MiG_29A", "MiG_29S", "Su_27", "MiG_21Bis", "MiG_23MLD", "F_4E", "F_5E_3"}
+from . import factions as _fx                       # noqa: E402
+ENEMY_FIGHTERS = _fx.ENEMY_FIGHTERS_LIVE           # the red faction's fighters (factions.py: air.fighters)
 
 
 def enemy_cap_loadout(cls_name: str) -> dict:
@@ -227,8 +228,7 @@ def capture_from_miz(miz_path: str, out_path: str = "loadouts.json") -> dict:
 
 
 # approximate combat radius (nm) of enemy types: used to decide who can escort a raid
-ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, "MiG_23MLD": 200, "MiG_21Bis": 170,
-                   "F_4E": 300, "F_5E_3": 200, "Su_24M": 300}
+ENEMY_RADIUS_NM = _fx.ENEMY_RADIUS_LIVE             # red faction: air.radius_nm
 
 
 def enemy_bomber_loadout(cls_name: str) -> dict:

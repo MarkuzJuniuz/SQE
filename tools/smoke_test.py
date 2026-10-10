@@ -866,7 +866,35 @@ def main():
     assert '"Player"' in _t0 and '"Player"' not in _t1 and '"Client"' not in _t1, "with the AI-test tick the mission has no player or client slot"
     print("[ai test] the AI-flown tick builds your flight as AI (no player slot); off = a player slot")
     _catalog_test(s)
+    _faction_test(s)
     print("SMOKE TEST PASSED")
+
+
+def _faction_test(s):
+    """Faction packs: every bundled pack names only units this pydcs knows; mixed eras and incomplete packs are refused; a campaign saves
+    its factions and gets them back on open; the modern pair reproduces the old hard-coded order of battle."""
+    from sqe import factions as _fx
+    from sqe.state import CampaignState as _CS
+    bad = {f: _fx.problems(f) for f in _fx.packs()}
+    assert not any(bad.values()), f"faction packs name unknown units: {bad}"
+    for pair, ok in ((("modern_usa", "modern_russia"), True), (("ww2_allies_europe", "ww2_axis_germany"), True),
+                     (("modern_usa", "ww2_axis_germany"), False), (("ww2_allies_pacific", "ww2_axis_japan"), False)):
+        try:
+            _fx.check_pair(*pair); got = True
+        except ValueError:
+            got = False
+        assert got == ok, f"pair {pair} should be {'accepted' if ok else 'refused'}"
+    s.new("Factions", "F-16C", 2, seed=3)
+    assert s.state.factions == {"blue": "modern_usa", "red": "modern_russia"}, s.state.factions
+    s.save(); back = _CS.load(s.path)
+    assert back.factions == s.state.factions, "factions survive a save"
+    _fx.use("ww2_allies_europe", "ww2_axis_germany")
+    assert "FW_190D9" in __import__("sqe.loadouts", fromlist=["x"]).ENEMY_FIGHTERS and _fx.striker() == "Ju_88A4", "live views follow the active factions"
+    s.open(s.path)
+    assert _fx.red()["id"] == "modern_russia" and "MiG_29A" in __import__("sqe.loadouts", fromlist=["x"]).ENEMY_FIGHTERS, "opening a campaign restores its factions"
+    from sqe.mission_builder import SITES as _S
+    assert _S["SA-6"] == [("Kub_2P25_ln", 3), ("Kub_1S91_str", 1), ("ZSU_23_4_Shilka", 1)] and "FLAK88" in _S, "site types from every pack"
+    print(f"[factions] {len(_fx.packs())} packs, all units known to pydcs; eras and incomplete packs checked; saved and restored with the campaign")
 
 
 def _catalog_test(s):

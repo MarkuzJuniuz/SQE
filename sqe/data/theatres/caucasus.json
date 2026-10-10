@@ -2,6 +2,10 @@
  "id": "caucasus",
  "name": "Caucasus",
  "dcs_terrain": "Caucasus",
+ "factions": {
+  "blue": "modern_usa",
+  "red": "modern_russia"
+ },
  "lat": 42.5,
  "lon": 41.5,
  "tz": 4.0,
@@ -301,7 +305,10 @@
   "zones": 4,
   "beyond": "Kutaisi",
   "deep_zones": 1,
-  "fall": {"3": "senaki", "4": "kutaisi"}
+  "fall": {
+   "3": "senaki",
+   "4": "kutaisi"
+  }
  },
  "tier_labels": [
   "",
