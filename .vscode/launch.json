@@ -1,7 +1,31 @@
 {
   "version": "0.2.0",
   "configurations": [
-    { "name": "SQE: run app", "type": "debugpy", "request": "launch", "module": "sqe", "console": "integratedTerminal", "justMyCode": true },
-    { "name": "SQE: smoke test", "type": "debugpy", "request": "launch", "program": "${workspaceFolder}/tools/smoke_test.py", "console": "integratedTerminal" }
+    {
+      "name": "SQE: run app",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "sqe",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "SQE: run app (AI test)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "sqe",
+      "args": [
+        "--ai-test"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "SQE: smoke test",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/smoke_test.py",
+      "console": "integratedTerminal"
+    }
   ]
 }
