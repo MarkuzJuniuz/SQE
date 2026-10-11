@@ -1116,6 +1116,9 @@ def main():
             _atk = [t_["params"]["task"]["params"]["weaponType"] for p_ in _g["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()
                     if t_["id"] == "ControlledTask" and t_["params"]["task"]["id"] in ("AttackUnit", "AttackGroup")]
             assert _atk == [32768], ("the SEAD task asks for ARMs", _atk)
+            _ids = [t_["params"]["task"]["id"] for p_ in _g["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()
+                    if t_["id"] == "ControlledTask" and t_["params"]["task"]["id"] in ("AttackUnit", "AttackGroup")]
+            assert _ids == ["AttackGroup"], ("the HARM task is aimed at the whole site, not one track radar", _ids)
     print("[sead first] SEAD and DEAD are two packages 25 min apart, dice cast at planning, DEAD held without a blind site, valve after 3 failed days, DEAD-stage mission has no radars after a good SEAD")
     # an empty Missions pane says why and points at Skip Turn
     try:

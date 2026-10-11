@@ -1191,12 +1191,10 @@ class MissionBuilder:
             elif w.action == "CAS":
                 self._cas_tasks(wp, w, armor, tot_s)
             elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
-                radars = [u for u in armor.units if str(getattr(u, "type", "")) in TRACK_RADARS | SEARCH_RADARS]
-                if package.objective.type == ObjectiveType.DEAD and radars:
-                    # SEAD blinds the site: HARMs go for the radars; the launchers are the DEAD flight's job
-                    ct = task.ControlledTask(task.AttackUnit(radars[0].id, weapon_type=task.WeaponType.ARM, group_attack=True))
-                else:
-                    ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                # The whole site, not one radar: an S-300 track radar only radiates while it is tracking, so a HARM task aimed at it
+                # has nothing to shoot at (v0.39.7 run: the SEAD pair never fired). Aimed at the group, the AI fires at whatever radiates (an escort CAS SEAD did).
+                # The launchers are still the DEAD flight's job: HARMs only kill what radiates.
+                ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                 ct.stop_after_time(int(w.eta_s) + 600)
                 wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree)); wp.tasks.append(ct)
         gate = None
