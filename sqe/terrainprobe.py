@@ -85,9 +85,17 @@ local function relief_pass()
   end
   road_pass = function()
     -- distinct road points: land.getClosestPointOnRoads('roads', x, y) on a coarse grid, kept when the answer is near the sample, rounded to 50 m.
-    -- The call is a nearest-road search of unknown cost, so: (1) three announced test calls first (the message shows BEFORE each call, so a hang is visible
-    -- and the scan skips the roads when a call is slow), (2) the grid is coarsened until the estimate fits about 20 minutes, (3) work in 20 ms time slices.
-    local clock, BUDGET = os and os.clock, 0.5
+    -- DCS's mission environment has NO clock (os is not there), so time is read from a file: write a tiny file, ask lfs for its modification time (whole seconds).
+    -- (1) three announced test calls first (the message shows BEFORE each call, so a hang is visible; a call that takes 1 s or more ends the scan without roads),
+    -- (2) then the grid is walked in slices of 1 to 2 seconds of wall time per timer tick: DCS's anti-freeze hands out ticks rarely while the scan loads the sim.
+    local WALLF = DIR .. "\\SQE_clock.tmp"
+    local function wall()
+      local f = io.open(WALLF, "w")
+      if not f then return nil end
+      f:write("x"); f:close()
+      local okw, m = pcall(lfs.attributes, WALLF, "modification")
+      return okw and m or nil
+    end
     local seen, pts, nxt3, rowj = {}, {}, 0, 0
     local RS, RNX, RNY = RSTEP, 0, 0
     local function say(m)
@@ -106,9 +114,9 @@ local function relief_pass()
       trigger.action.outText("SQE terrain scan COMPLETE (land, ground height" .. (ok and ", roads" or ("; roads not available" .. (why and (": " .. why) or ""))) .. "). You can leave this mission and quit to the menu. Restart SQE or just build your next sortie.", 3600)
     end
     local function main_scan()
-      local t_start, lastpct = timer.getTime(), -5
+      local t_start, lastpct, w_start = timer.getTime(), -5, wall()
       timer.scheduleFunction(function(_, t)
-        local c0, nc = clock and clock() or 0, 0
+        local w0, nc = wall(), 0
         while true do
           if nxt3 >= RNX then finish_roads(nil) return nil end
           local x = X0 + (nxt3 + 0.5) * RS
@@ -122,7 +130,10 @@ local function relief_pass()
               if not seen[key] then seen[key] = true; pts[#pts + 1] = "[" .. kx .. "," .. ky .. "]" end
             end
             rowj = rowj + 1; nc = nc + 1
-            if (clock and clock() - c0 >= BUDGET) or (not clock and nc >= 50) then stop = true break end
+            if nc % 200 == 0 then
+              local w = w0 and wall()
+              if (w and w - w0 >= 2) or ((not w0) and nc >= 1000) or nc >= 40000 then stop = true break end
+            end
           end
           if rowj >= RNY then rowj = 0; nxt3 = nxt3 + 1 end
           if stop then break end
@@ -131,21 +142,16 @@ local function relief_pass()
         if pct >= lastpct + 5 then
           lastpct = pct
           trigger.action.outText(string.format("SQE road scan: %d%%", pct), 8)
-          if env and env.info then env.info(string.format("SQE road scan: %d%% columns=%d points=%d mission_s=%.1f cpu_s=%.1f", pct, nxt3, #pts, t - t_start, clock and clock() or -1)) end
+          if env and env.info then env.info(string.format("SQE road scan: %d%% columns=%d points=%d mission_s=%.1f wall_s=%s", pct, nxt3, #pts, t - t_start, (w_start and w0) and tostring(w0 - w_start) or "n/a")) end
         end
         return t + 0.05
       end, nil, timer.getTime() + 1)
     end
-    local TESTS, ti, tsum, tmax = {{0.5, 0.5}, {0.35, 0.65}, {0.65, 0.35}}, 0, 0, 0
+    local TESTS, ti = {{0.5, 0.5}, {0.35, 0.65}, {0.65, 0.35}}, 0
     local function next_test()
       if ti >= #TESTS then
-        local per = tsum / #TESTS
-        if clock and per > 0 then
-          local calls = ((X1 - X0) / RS) * ((Y1 - Y0) / RS)
-          while calls * per > 1200 and RS < 16000 do RS = RS * 2; calls = ((X1 - X0) / RS) * ((Y1 - Y0) / RS) end
-        end
         RNX, RNY = math.floor((X1 - X0) / RS), math.floor((Y1 - Y0) / RS)
-        say(string.format("road calls take about %.0f ms each. Scanning %d x %d points (every %d m); this can take a while, do not leave this mission.", per * 1000, RNX, RNY, RS))
+        say(string.format("road test done. Scanning %d x %d points (every %d m); this can take a few minutes, do not leave this mission.", RNX, RNY, RS))
         main_scan()
         return
       end
@@ -153,13 +159,12 @@ local function relief_pass()
       local x, y = X0 + (X1 - X0) * TESTS[ti][1], Y0 + (Y1 - Y0) * TESTS[ti][2]
       say(string.format("road test %d of %d: calling now at %d, %d. If this is the last message, DCS is stuck in that call.", ti, #TESTS, x, y))
       timer.scheduleFunction(function()
-        local c = clock and clock() or 0
+        local w0 = wall()
         local okc, rx, ry = pcall(land.getClosestPointOnRoads, "roads", x, y)
-        local dt = clock and (clock() - c) or 0
-        tsum = tsum + dt
-        if dt > tmax then tmax = dt end
-        say(string.format("road test %d: %.0f ms, %s", ti, dt * 1000, okc and (rx and "road found" or "no road") or "error"))
-        if tmax > 1.0 then finish_roads("road search too slow here") return nil end
+        local w1 = wall()
+        local dt = (w0 and w1) and (w1 - w0) or 0
+        say(string.format("road test %d: %s, about %d s", ti, okc and (rx and "road found" or "no road") or "error", dt))
+        if dt >= 2 then finish_roads("road search too slow here") return nil end
         next_test()
         return nil
       end, nil, timer.getTime() + 2)

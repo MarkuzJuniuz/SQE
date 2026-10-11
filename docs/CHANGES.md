@@ -1,6 +1,10 @@
+## v0.39.4
+
+* **The road scan finally gets a clock.** The DCS log of the v0.39.2 run showed `cpu_s=-1`: `os.clock` does not exist in DCS's mission environment, so every timer in the road pass had been silently off, the "0 ms" test results meant nothing, and the scan fell back to 50 calls per tick (hours for the map). The scan now reads wall time from a small file's modification time (`SQE_clock.tmp` in the SQE folder, whole seconds) and works in slices of 1 to 2 seconds per timer tick. A test call that takes 1 s or more still ends the scan without roads. Progress is shown as a percentage and every 5% is written to dcs.log (`SQE road scan:` lines with the mission and wall seconds). Untested in DCS.
+
 ## v0.39.3
 
-* **The road scan is much faster.** In the first DCS run the scan worked (each road call takes well under a millisecond) but advanced only about 5% in 9 minutes: DCS's anti-freeze hands out timer ticks rarely while the scan loads the sim, and each tick did only 20 ms of work. Each tick now works for 0.5 s. The progress message shows the percentage only (the old "minutes left" counted mission time, which crawls), and every 5% is also written to dcs.log (`SQE road scan:` lines with mission and CPU seconds) so real rates can be read afterwards. Untested in DCS.
+* Road scan: 0.5 s slices and progress lines in dcs.log. Superseded by v0.39.4: it relied on `os.clock`, which DCS's mission environment does not have, so the slices never applied.
 
 ## v0.39.2
 
