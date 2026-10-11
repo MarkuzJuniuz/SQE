@@ -1,3 +1,7 @@
+## v0.39.5
+
+* **The road scan only covers the places the war touches.** The v0.39.4 run in DCS showed the real cost: `getClosestPointOnRoads` takes about 90 ms whenever no road is near, so scanning the whole map (97,500 points) would take hours. The scan now covers 25 km around every airfield of the theatre (both sides) and along the front line (Sukhumi to Senaki to Kutaisi), skips water, and runs in three passes (8 km, 4 km, 2 km spacing, about 7,000 points in all). The roads file is written after each pass, so any finished pass is usable and the messages say when you can leave. Slices are 0 to 1 s of wall time per timer tick (the clock comes from a file's modification time). Theatre packs can set `road_radius_m` in the scan block. Untested in DCS.
+
 ## v0.39.4
 
 * **The road scan finally gets a clock.** The DCS log of the v0.39.2 run showed `cpu_s=-1`: `os.clock` does not exist in DCS's mission environment, so every timer in the road pass had been silently off, the "0 ms" test results meant nothing, and the scan fell back to 50 calls per tick (hours for the map). The scan now reads wall time from a small file's modification time (`SQE_clock.tmp` in the SQE folder, whole seconds) and works in slices of 1 to 2 seconds per timer tick. A test call that takes 1 s or more still ends the scan without roads. Progress is shown as a percentage and every 5% is written to dcs.log (`SQE road scan:` lines with the mission and wall seconds). Untested in DCS.

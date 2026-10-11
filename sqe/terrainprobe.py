@@ -84,10 +84,11 @@ local function relief_pass()
     road_pass()
   end
   road_pass = function()
-    -- distinct road points: land.getClosestPointOnRoads('roads', x, y) on a coarse grid, kept when the answer is near the sample, rounded to 50 m.
-    -- DCS's mission environment has NO clock (os is not there), so time is read from a file: write a tiny file, ask lfs for its modification time (whole seconds).
-    -- (1) three announced test calls first (the message shows BEFORE each call, so a hang is visible; a call that takes 1 s or more ends the scan without roads),
-    -- (2) then the grid is walked in slices of 1 to 2 seconds of wall time per timer tick: DCS's anti-freeze hands out ticks rarely while the scan loads the sim.
+    -- Roads: land.getClosestPointOnRoads('roads', x, y) is a nearest-road search that costs ~90 ms when no road is near (measured in DCS), so the whole map
+    -- (97,500 points) would take hours. Only the places the war touches are scanned: a disc around every airfield of the theatre plus points along the
+    -- front line, water skipped, in three passes (coarse, medium, fine); the roads file is written after every pass, so any finished pass is usable.
+    -- DCS's mission environment has NO clock (os is not there): time is read from a file (write a tiny file, ask lfs for its modification time, whole seconds),
+    -- and the work is cut into slices of 1 to 2 s per timer tick (DCS's anti-freeze hands out ticks rarely while the scan loads the sim).
     local WALLF = DIR .. "\\SQE_clock.tmp"
     local function wall()
       local f = io.open(WALLF, "w")
@@ -96,75 +97,118 @@ local function relief_pass()
       local okw, m = pcall(lfs.attributes, WALLF, "modification")
       return okw and m or nil
     end
-    local seen, pts, nxt3, rowj = {}, {}, 0, 0
-    local RS, RNX, RNY = RSTEP, 0, 0
     local function say(m)
       trigger.action.outText(m, 12)
       if env and env.info then env.info("SQE road scan: " .. m) end
     end
-    local function finish_roads(why)
-      local ok = (not why) and #pts > 0
-      if ok then
-        local f = io.open(DOUT, "w")
-        if f then
-          f:write('{"terrain":"__NAME__","step":' .. RS .. ',"pts":[' .. table.concat(pts, ",") .. ']}')
-          f:close()
-        else ok = false end
-      end
+    local pts, seen = {}, {}
+    local function write_roads(step)
+      if #pts == 0 then return false end
+      local f = io.open(DOUT, "w")
+      if not f then return false end
+      f:write('{"terrain":"__NAME__","step":' .. step .. ',"pts":[' .. table.concat(pts, ",") .. ']}')
+      f:close()
+      return true
+    end
+    local function finish_all(why)
+      local ok = #pts > 0
       trigger.action.outText("SQE terrain scan COMPLETE (land, ground height" .. (ok and ", roads" or ("; roads not available" .. (why and (": " .. why) or ""))) .. "). You can leave this mission and quit to the menu. Restart SQE or just build your next sortie.", 3600)
     end
-    local function main_scan()
-      local t_start, lastpct, w_start = timer.getTime(), -5, wall()
-      timer.scheduleFunction(function(_, t)
-        local w0, nc = wall(), 0
-        while true do
-          if nxt3 >= RNX then finish_roads(nil) return nil end
-          local x = X0 + (nxt3 + 0.5) * RS
-          local stop = false
-          while rowj < RNY do
-            local y = Y0 + (rowj + 0.5) * RS
-            local okc, rx, ry = pcall(land.getClosestPointOnRoads, "roads", x, y)
-            if okc and rx and ry and math.abs(rx - x) <= RS and math.abs(ry - y) <= RS then
-              local kx, ky = math.floor(rx / 50 + 0.5) * 50, math.floor(ry / 50 + 0.5) * 50
-              local key = kx .. ":" .. ky
-              if not seen[key] then seen[key] = true; pts[#pts + 1] = "[" .. kx .. "," .. ky .. "]" end
-            end
-            rowj = rowj + 1; nc = nc + 1
-            if nc % 200 == 0 then
-              local w = w0 and wall()
-              if (w and w - w0 >= 2) or ((not w0) and nc >= 1000) or nc >= 40000 then stop = true break end
+    local ANAMES, FRONT, RRAD = __ANCHORS__, __FRONT__, __RRAD__
+    local pos = {}
+    local okb, abl = pcall(world.getAirbases)
+    if okb and abl then
+      for _, ab in ipairs(abl) do
+        local okn, nm = pcall(ab.getName, ab)
+        local okp, p = pcall(ab.getPoint, ab)
+        if okn and okp and nm and p then pos[nm] = {p.x, p.z} end
+      end
+    end
+    local anch = {}
+    for _, nm in ipairs(ANAMES) do if pos[nm] then anch[#anch + 1] = pos[nm] end end
+    for k = 1, #FRONT - 1 do
+      local a, b = pos[FRONT[k]], pos[FRONT[k + 1]]
+      if a and b then
+        local n = math.max(1, math.floor(math.sqrt((b[1] - a[1]) ^ 2 + (b[2] - a[2]) ^ 2) / 12000))
+        for q = 1, n - 1 do anch[#anch + 1] = {a[1] + (b[1] - a[1]) * q / n, a[2] + (b[2] - a[2]) * q / n} end
+      end
+    end
+    if #anch == 0 then finish_all("no airfields found") return end
+    local lists, have = {{}, {}, {}}, {}
+    local ni, nj = math.floor((X1 - X0) / RSTEP), math.floor((Y1 - Y0) / RSTEP)
+    for _, a in ipairs(anch) do
+      for i = math.max(0, math.floor((a[1] - RRAD - X0) / RSTEP)), math.min(ni - 1, math.floor((a[1] + RRAD - X0) / RSTEP)) do
+        for j = math.max(0, math.floor((a[2] - RRAD - Y0) / RSTEP)), math.min(nj - 1, math.floor((a[2] + RRAD - Y0) / RSTEP)) do
+          local key = i * 100000 + j
+          if not have[key] then
+            local x, y = X0 + (i + 0.5) * RSTEP, Y0 + (j + 0.5) * RSTEP
+            if (x - a[1]) ^ 2 + (y - a[2]) ^ 2 <= RRAD ^ 2 then
+              have[key] = true
+              local okw, sf = pcall(land.getSurfaceType, {x = x, y = y})
+              if not (okw and sf == ST.WATER) then
+                local L = lists[(i % 4 == 0 and j % 4 == 0) and 1 or ((i % 2 == 0 and j % 2 == 0) and 2 or 3)]
+                L[#L + 1] = {x, y}
+              end
             end
           end
-          if rowj >= RNY then rowj = 0; nxt3 = nxt3 + 1 end
-          if stop then break end
         end
-        local pct = math.floor(100 * nxt3 / RNX)
-        if pct >= lastpct + 5 then
-          lastpct = pct
-          trigger.action.outText(string.format("SQE road scan: %d%%", pct), 8)
-          if env and env.info then env.info(string.format("SQE road scan: %d%% columns=%d points=%d mission_s=%.1f wall_s=%s", pct, nxt3, #pts, t - t_start, (w_start and w0) and tostring(w0 - w_start) or "n/a")) end
+      end
+    end
+    local PSTEP = {RSTEP * 4, RSTEP * 2, RSTEP}
+    if #lists[1] == 0 then finish_all("no land points near the airfields") return end
+    say(string.format("road scan area: %d airfield and front points, %d km around each. Passes: %d + %d + %d sample points.", #anch, RRAD / 1000, #lists[1], #lists[2], #lists[3]))
+    local function main_scan()
+      local pk, ci, lastpct, t_start, w_start = 1, 1, -10, timer.getTime(), wall()
+      timer.scheduleFunction(function(_, t)
+        local w0, nc, chk, wprev = wall(), 0, 5, nil
+        while true do
+          local L = lists[pk]
+          if ci > #L then
+            local okf = write_roads(PSTEP[pk])
+            say(string.format("road pass %d of 3 done: %d road points%s.%s", pk, #pts, okf and ", roads file written" or "", pk < 3 and " You can leave now, or wait for the finer passes." or ""))
+            pk = pk + 1; ci = 1; lastpct = -10
+            if pk > 3 then finish_all(nil) return nil end
+            break
+          end
+          local pt = L[ci]
+          ci = ci + 1; nc = nc + 1
+          local okc, rx, ry = pcall(land.getClosestPointOnRoads, "roads", pt[1], pt[2])
+          if okc and rx and ry and math.abs(rx - pt[1]) <= PSTEP[pk] * 2 and math.abs(ry - pt[2]) <= PSTEP[pk] * 2 then
+            local kx, ky = math.floor(rx / 50 + 0.5) * 50, math.floor(ry / 50 + 0.5) * 50
+            local key = kx .. ":" .. ky
+            if not seen[key] then seen[key] = true; pts[#pts + 1] = "[" .. kx .. "," .. ky .. "]" end
+          end
+          if nc % chk == 0 then
+            local w = w0 and wall()
+            if w then
+              if w - w0 >= 1 then break end
+              if w == wprev then chk = math.min(200, chk * 2) else chk = math.max(5, math.floor(chk / 2)) end
+              wprev = w
+            elseif nc >= 40 then break end
+          end
+        end
+        if pk <= 3 then
+          local pct = math.floor(100 * (ci - 1) / #lists[pk])
+          if pct >= lastpct + 10 then
+            lastpct = pct
+            trigger.action.outText(string.format("SQE road scan, pass %d of 3: %d%%", pk, pct), 8)
+            if env and env.info then env.info(string.format("SQE road scan: pass %d %d%% points=%d mission_s=%.1f wall_s=%s", pk, pct, #pts, t - t_start, (w_start and w0) and tostring(w0 - w_start) or "n/a")) end
+          end
         end
         return t + 0.05
       end, nil, timer.getTime() + 1)
     end
-    local TESTS, ti = {{0.5, 0.5}, {0.35, 0.65}, {0.65, 0.35}}, 0
+    local TESTS, ti = {lists[1][1], lists[1][math.ceil(#lists[1] / 2)], lists[1][#lists[1]]}, 0
     local function next_test()
-      if ti >= #TESTS then
-        RNX, RNY = math.floor((X1 - X0) / RS), math.floor((Y1 - Y0) / RS)
-        say(string.format("road test done. Scanning %d x %d points (every %d m); this can take a few minutes, do not leave this mission.", RNX, RNY, RS))
-        main_scan()
-        return
-      end
+      if ti >= #TESTS then main_scan() return end
       ti = ti + 1
-      local x, y = X0 + (X1 - X0) * TESTS[ti][1], Y0 + (Y1 - Y0) * TESTS[ti][2]
-      say(string.format("road test %d of %d: calling now at %d, %d. If this is the last message, DCS is stuck in that call.", ti, #TESTS, x, y))
+      local x, y = TESTS[ti][1], TESTS[ti][2]
+      say(string.format("road test %d of %d: calling now at %d, %d. A call can take a while; if this stays the last message for minutes, DCS is stuck in that call.", ti, #TESTS, x, y))
       timer.scheduleFunction(function()
         local w0 = wall()
         local okc, rx, ry = pcall(land.getClosestPointOnRoads, "roads", x, y)
         local w1 = wall()
-        local dt = (w0 and w1) and (w1 - w0) or 0
-        say(string.format("road test %d: %s, about %d s", ti, okc and (rx and "road found" or "no road") or "error", dt))
-        if dt >= 2 then finish_roads("road search too slow here") return nil end
+        say(string.format("road test %d: %s, about %d s", ti, okc and (rx and "road found" or "no road") or "error", (w0 and w1) and (w1 - w0) or 0))
         next_test()
         return nil
       end, nil, timer.getTime() + 2)
@@ -214,7 +258,24 @@ def probe_lua() -> str:
     rfile = sc.get("relief_file") or sc["file"].replace("terrain", "relief")
     dfile = sc.get("roads_file") or sc["file"].replace("terrain", "roads")
     return (PROBE_LUA.replace("__DFILE__", dfile).replace("__RSTEP__", str(int(sc.get("road_step", 2000)))).replace("__X1__", str(X1)).replace("__Y1__", str(Y1)).replace("__HSTEP__", str(HS)).replace("__HNX__", str(hnx)).replace("__HNY__", str(hny)).replace("__RFILE__", rfile).replace("__X0__", str(X0)).replace("__Y0__", str(Y0)).replace("__STEP__", str(STEP))
+            .replace("__ANCHORS__", _lua_list(_airports(th))).replace("__FRONT__", _lua_list(_front_chain(th))).replace("__RRAD__", str(int(sc.get("road_radius_m", 25000))))
             .replace("__NX__", str(nx)).replace("__NY__", str(ny)).replace("__FILE__", sc["file"]).replace("__NAME__", th["name"]))
+
+
+def _lua_list(names) -> str:
+    return "{" + ",".join('"' + str(n).replace('"', "") + '"' for n in names) + "}"
+
+
+def _airports(th: dict) -> list:
+    """Airfields of the theatre (both sides) plus the front-line ends: the places the war touches."""
+    out = [f["airport"] for f in list(th.get("blue_fields", [])) + list(th.get("red_fields", [])) if f.get("airport")]
+    out += _front_chain(th)
+    return list(dict.fromkeys(out))
+
+
+def _front_chain(th: dict) -> list:
+    fr = th.get("front", {}) or {}
+    return [a for a in (fr.get("from_airport"), fr.get("to_airport"), fr.get("beyond")) if a]
 
 
 def make_probe(out_path, seat: bool = True) -> Path:
