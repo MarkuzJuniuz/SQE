@@ -71,6 +71,28 @@ def covering(state, pts, tgt, skip=()) -> list:
         if tm.poly_dist(a.x, a.y, pts) <= reach:
             near_tgt = ((a.x - tgt[0]) ** 2 + (a.y - tgt[1]) ** 2) ** 0.5 <= reach
             out.append((a, a.variant, "target" if near_tgt else "route"))
+    out += _ground_aa(state, pts, tgt, skip)
+    return out
+
+
+GROUND_AA_KINDS = (AssetKind.ARMOR, AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.AIRFIELD)   # sites that carry ZSU-23-4s, Strela / Osa and MANPADs
+GROUND_AA_MERGE_M = 6000.0                                 # one cluster of vehicles and buildings counts as one AAA site
+
+
+def _ground_aa(state, pts, tgt, skip=()) -> list:
+    """Anti-aircraft that travels with columns, garrisons and the support sites. It only reaches a flight that is LOW (AAA / MANPAD envelope, 0-10,000 ft),
+    so it keeps the 'go LOW' choice honest: a column's guns beside the target outweigh a SAM that the terrain hides. -> [(site, "AAA", where)]"""
+    out, seen = [], []
+    reach = (tm.RANGE_NM.get("AAA", 3) + COVER_MARGIN_NM) * NM
+    for a in state.assets.values():
+        if a.kind not in GROUND_AA_KINDS or a.destroyed or a.id in skip or getattr(a, "health", 1.0) <= 0.15:
+            continue
+        if any(((a.x - x) ** 2 + (a.y - y) ** 2) ** 0.5 < GROUND_AA_MERGE_M for x, y in seen):
+            continue
+        if tm.poly_dist(a.x, a.y, pts) <= reach:
+            seen.append((a.x, a.y))
+            near_tgt = ((a.x - tgt[0]) ** 2 + (a.y - tgt[1]) ** 2) ** 0.5 <= reach
+            out.append((a, "AAA", "target" if near_tgt else "route"))
     return out
 
 

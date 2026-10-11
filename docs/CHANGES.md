@@ -1,3 +1,9 @@
+## v0.37.0
+The altitude choice (HIGH / MED / LOW) now counts ground anti-aircraft. Untested in DCS.
+* **Ground AA counts**: front-line columns, garrisons, support sites (fuel, depot, C2) and Red airfields carry guns and short-range SAMs (ZSU-23-4, Strela, Osa, MANPADs). Each live one within 5 nm of the route from the PUSH on counts as an AAA site, which only reaches a flight that goes LOW (0 to 10,000 ft). Vehicles and buildings within 6 km of each other count as one site (`profiles.GROUND_AA_MERGE_M`).
+* **Effect**: with enough guns beside the route or at the target, a package that would have gone LOW to dodge radar SAMs stays up instead. One or two columns do not change a clear case.
+* CAS is unaffected (its choices are 9,000 ft and LOW, both inside gun range).
+
 ## v0.36.0
 Air wings that fall back to recover, the same rule for both sides. Untested in DCS.
 * **Stand-down** (`sqe/airwings.py`): an air wing (Red) or squadron (friendly) down to 30% of its aircraft or less may stand down overnight (`Difficulty.air_retreat`: 60% / 80% / 100% a night at Levels 1 / 2 / 3). Its survivors go to a rear field: they stop flying, so they are out of every patrol, raid, escort, sweep and threat count while they rest.

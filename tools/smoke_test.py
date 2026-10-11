@@ -569,6 +569,15 @@ def main():
     assert not _w2["PUSH"].rad and _w2["PUSH"].alt_ft == 20000 and all(_w2[n].rad and _w2[n].alt_ft == 500 for n in ("IP", "TGT", "EGR")), "the tier applies from the IP on"
     _w3 = {w.name: w for w in _pr2(_Rl.STRIKE, (0, 0), _g2, _P("FA-18C"), is_player=True, tanker_xy=None)}
     assert _w3["TGT"].agl and _w3["TGT"].alt_ft == 0 and not _w3["TGT"].rad, "the player's target point stays on the ground"
+    # ground anti-aircraft (columns, garrisons, support sites) only bites a LOW flight: enough of it beside the route keeps the package up; one cluster counts once
+    def _gaa(*xy):
+        stg = _st("SA-11", "SA-6", "SA-2")
+        for i_, (x_, y_) in enumerate(xy):
+            stg.assets[f"g{i_}"] = _NS(id=f"g{i_}", kind=_AK.ARMOR, variant="", destroyed=False, health=1.0, x=x_, y=y_)
+        return _pf.choose(stg, _Rl.STRIKE, _P("FA-18C"), _pts, (100_000, 0), None)
+    assert _gaa().rad and _gaa((90_000, 2_000)).rad and _gaa((90_000, 2_000), (60_000, 1_000)).rad, "one or two columns' guns do not change a clear case"
+    assert not _gaa((90_000, 2_000), (60_000, 1_000), (30_000, 1_500)).rad, "three separate columns of guns on the route keep the package up"
+    assert _gaa((90_000, 2_000), (91_000, 2_500)).rad, "vehicles in one cluster count as one site"
     print("[profiles] no threat = unchanged; heavy SAM cover -> LOW from the IP; F-15C, SEAD, escorts, low cloud stay up; PUSH keeps its altitude")
     # ---- ground height (relief): MSA, terrain masking, MED floor, spawn floor, kneeboard line
     from sqe import relief as _rl

@@ -282,3 +282,6 @@ Aircraft with jamming gear defeat some radar-guided missiles. Internal sets (F-1
 ## Air wings that fall back
 A wing or squadron that is badly beaten up (30% of its aircraft or less) may stand down overnight to a rear field and sit out the war for a few days: no patrols, raids or escorts from it. It recovers at twice the normal rate and returns at 65% strength after at least 2 nights. The same rule covers both sides; your own squadron, carrier squadrons and the strategic bomber wing are exempt. The Campaign log shows when a unit stands down and when it comes back. If the whole enemy air arm seems to vanish, this is the reason, and it comes back.
 
+## Ground guns and the LOW decision
+When the planner weighs going LOW to get under radar SAMs, it now also counts the guns and short-range SAMs that travel with columns and garrisons and sit at support sites and airfields. Enough of them near the route or the target keep a strike package at its normal altitude, so you no longer get a LOW profile that flies straight into a column's ZSU-23-4s.
+
