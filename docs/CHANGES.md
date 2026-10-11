@@ -1,3 +1,8 @@
+## v0.39.8
+
+* **AI flights climb clear of the mountains.** In the AI run, Viper 3-4 crashed at 596 s with nothing shooting at it. The ground-height scan shows why: the leg from the departure point to the marshal point (59 km, south-east of Senaki, toward the hills) crosses ridges up to 2,650 m (8,700 ft), and the departure point was at 8,000 ft. An AI flight holds the altitude of its last waypoint until it gets to the next one, so it flew the ridges at 2,300 m. Every waypoint of an AI route (and your own flight in the AI test) is now lifted to the minimum safe altitude of the leg it starts and of the leg it ends (highest ground within 5 nm of the leg, plus 1,000 ft, or 2,000 ft over mountains). On that leg the departure point goes from 8,000 to 11,500 ft. The LOW tier (it follows the ground) and ground points are left alone. Without a ground-height scan nothing changes; a person flying the flight still reads the MSA on the kneeboard.
+* Untested in DCS. Still open: the marshal point itself sits over high ground (2,100 m); it is now safe at 24,000 ft, but picking one over low ground would be better.
+
 ## v0.39.7
 
 * **SEAD flights get to shoot first.** In the AI-only run on the Sukhumi SA-10 the four SEAD F-16s fired no HARM at all and all four died (the site lost nothing). Two causes, both fixed:
