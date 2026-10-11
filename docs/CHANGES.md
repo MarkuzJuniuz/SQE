@@ -1,3 +1,11 @@
+## v0.36.0
+Air wings that fall back to recover, the same rule for both sides. Untested in DCS.
+* **Stand-down** (`sqe/airwings.py`): an air wing (Red) or squadron (friendly) down to 30% of its aircraft or less may stand down overnight (`Difficulty.air_retreat`: 60% / 80% / 100% a night at Levels 1 / 2 / 3). Its survivors go to a rear field: they stop flying, so they are out of every patrol, raid, escort, sweep and threat count while they rest.
+* **Recovery**: twice the normal replenishment rate; the unit returns after at least 2 nights once it is back to 65% of its aircraft. The overnight log says when a unit stands down and when it returns.
+* **Left alone**: your own squadron, carrier squadrons (a ship has no rear field), the strategic bomber wing and units of fewer than 4 aircraft. A rest-base cratered while resting costs a quarter of the aircraft.
+* **Totals**: resting aircraft still count in the strength totals (victory / defeat), because they are not lost.
+* Smoke test: the raid-rate and emergency-rate checks now pin the campaign id, which is random, so those dice repeat from run to run (they could fail now and then before).
+
 ## v0.35.0
 Jamming emulation. DCS gives jammers almost no effect of their own, so SQE adds one, the same for both sides and for you. Untested in DCS.
 * **Tiers** (`sqe/ecm.py`): 1 = an internal self-protection set (F-15C, F-14, F/A-18C, Red Su-24M and Tu-22M3), 2 = an ECM pod on the loadout (the F-16C presets and the A-10C CAS preset carry the ALQ-184). The numbers are judgement, not sourced.

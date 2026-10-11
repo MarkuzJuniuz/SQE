@@ -62,6 +62,8 @@ class Squadron:
     authorized: int
     available: int
     callsign: str = "Viper"
+    reserve: int = 0            # aircraft pulled back to a rear field to recover (airwings.py); available is 0 while they rest
+    rest_days: int = 0
 
     @property
     def readiness(self) -> float:
@@ -96,6 +98,8 @@ class EnemyAirWing:
     authorized: int
     available: int
     squadrons: int = 1          # how many squadrons the wing is made of (display / flavour)
+    reserve: int = 0            # aircraft pulled back to a rear field to recover (airwings.py); available is 0 while they rest
+    rest_days: int = 0
 
 
 @dataclass

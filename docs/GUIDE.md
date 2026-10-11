@@ -277,3 +277,8 @@ Sites then keep the Shore margin from the sea and lakes (default 1500 m) and the
 
 ## Jamming
 Aircraft with jamming gear defeat some radar-guided missiles. Internal sets (F-15C, F-14, F/A-18C, Red Su-24M) protect only their own jet; an ECM pod on the loadout (F-16C, A-10C CAS) is stronger and also covers aircraft within 2 nm. Chance by launch range: nothing inside 12 km, full from 40 km. AI flights jam from PUSH to EGR only; your jet jams throughout. Anti-radiation missiles are not affected. The rolls are written to `SQE_state.json` under `jams` (test guideline: fly a SEAD or strike package and check them). The tier values are SQE's own judgement.
+
+
+## Air wings that fall back
+A wing or squadron that is badly beaten up (30% of its aircraft or less) may stand down overnight to a rear field and sit out the war for a few days: no patrols, raids or escorts from it. It recovers at twice the normal rate and returns at 65% strength after at least 2 nights. The same rule covers both sides; your own squadron, carrier squadrons and the strategic bomber wing are exempt. The Campaign log shows when a unit stands down and when it comes back. If the whole enemy air arm seems to vanish, this is the reason, and it comes back.
+

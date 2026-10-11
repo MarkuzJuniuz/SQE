@@ -659,6 +659,7 @@ def main():
     _ev_orig = _EMERG
     _rd.emergency_happens = _EMERG                       # switched back on here (it is off above so the other tests are not at the mercy of the dice)
     s.new("Raids 2", "F-16C", 2, seed=4); _st = s.state
+    _st.campaign_id = "5a0e1b2c3d"; s.plan_day()                  # the dice are seeded from the campaign id, which is random: pin it so the rate checks repeat
     # rates over a long run follow the difficulty table, and the same day plans the same raids
     _nw = _ns = 0
     for _ in range(60):
@@ -1180,6 +1181,32 @@ def main():
     _ecm_cut = _ecm.SITE_CUT; _ecm.SITE_CUT = 0.0; _pn = _sim.sead_p(_st, _se2); _ecm.SITE_CUT = _ecm_cut
     assert _pj > _pn, "jamming cover raises the SEAD odds"
     print("[jamming] tiers (internal / pod / none), burn-through by range, pods and tiers in the hook, jamming cover raises the SEAD odds")
+    # air wings that fall back: a badly depleted wing or squadron stands down, recovers faster, returns; the player's squadron and carriers never
+    from sqe import airwings as _aw
+    s.new("Air rest", "F-16C", 3, seed=11); _st = s.state; _d9 = type(_gd(3))(**{**_gd(3).__dict__, "air_retreat": 1.0})
+    _w9 = next(w_ for w_ in _st.enemy_air if "Tu_22M3" not in w_.types and w_.authorized >= 8); _w9.available = 2
+    _bs = [sq_ for sq_ in _st.squadrons.values() if sq_.id != _st.player.squadron_id and _st.bases[sq_.base_id].kind.value != "CARRIER"]
+    _psq = _st.squadrons[_st.player.squadron_id]; _psq.available = 1
+    for _b9 in _bs:
+        _b9.available = 1
+    _ea0 = _war.totals(_st)["ea"]; _rng9 = _rnd.Random(1)
+    _l9 = _aw.step(_st, _d9, _rng9)
+    assert _w9.available == 0 and _w9.reserve == 2 and any("air wing" in x_ for x_ in _l9), "a depleted wing stands down"
+    assert _psq.available == 1 and _psq.reserve == 0, "your own squadron is never pulled"
+    assert all(b_.reserve == 1 for b_ in _bs if b_.authorized >= _aw.MIN_AUTHORIZED), "the other friendly squadrons follow the same rule"
+    assert _war.totals(_st)["ea"] == _ea0, "resting aircraft still count in the strength totals"
+    _bw = next((w_ for w_ in _st.enemy_air if "Tu_22M3" in w_.types), None)
+    if _bw is not None:
+        _bw.available = 1; _aw.step(_st, _d9, _rng9); assert _bw.reserve == 0, "the strategic bomber wing is left alone"
+    _sim9 = _war.WarSimulator(_d9, _rnd.Random(2)); _back = False
+    for _n9 in range(30):
+        _sim9.end_day(_st)
+        if _w9.reserve == 0 and _w9.available > 0:
+            _back = True; break
+        assert _w9.available == 0, "a resting wing does not fly"
+    assert _back and _n9 >= _aw.RETURN_MIN_DAYS - 1 and _w9.available >= _aw.RETURN_FRAC * _w9.authorized - 1, "it returns after resting, at strength"
+    _rt9 = _CS.from_dict(_st.to_dict()); assert [w_.reserve for w_ in _rt9.enemy_air] == [w_.reserve for w_ in _st.enemy_air], "saved and loaded"
+    print("[air rest] depleted wings and squadrons stand down, recover faster and return; your squadron, carriers and the bomber wing are left alone; saved")
     print("SMOKE TEST PASSED")
 
 

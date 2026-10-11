@@ -5,7 +5,7 @@ import math
 import random
 from . import threatmap as tm
 from . import ground, theatres
-from . import raids, sams, ecm
+from . import raids, sams, ecm, airwings
 from .raids import hit as raids_hit
 from .difficulty import Difficulty
 from .models import Objective, ObjectiveType, AssetKind, Role
@@ -376,14 +376,16 @@ class WarSimulator:
         d = self.d
         sams.track(state)                                           # the day each SAM site went down (it can be rebuilt later)
         for sq in state.squadrons.values():
-            if sq.available < sq.authorized:
+            if sq.available < sq.authorized and not sq.reserve:
                 sq.available = min(sq.authorized, sq.available + max(1, round(sq.authorized * d.friendly_replenish)))
         for w in state.enemy_air:
             if state.assets[w.base_asset_id].destroyed:             # a cratered field cannot operate or rearm: the survivors scatter or are lost
                 w.available = int(w.available * 0.75)
                 continue
-            if w.available < w.authorized:
+            if w.available < w.authorized and not w.reserve:
                 w.available = min(w.authorized, w.available + max(1, round(w.authorized * d.enemy_replenish)))
+        for ln in airwings.step(state, d, self.rng):
+            state.note("Overnight: " + ln)
         for a in state.assets.values():
             if 0 < a.health < 1.0:
                 a.health = min(1.0, a.health + (d.sam_repair if a.kind == AssetKind.SAM else d.asset_repair))
@@ -415,8 +417,8 @@ class WarSimulator:
 
 
 def totals(state: CampaignState) -> dict:
-    fa = sum(s.available for s in state.squadrons.values()); fz = sum(s.authorized for s in state.squadrons.values()) or 1
-    ea = sum(w.available for w in state.enemy_air); ez = sum(w.authorized for w in state.enemy_air) or 1
+    fa = sum(s.available + s.reserve for s in state.squadrons.values()); fz = sum(s.authorized for s in state.squadrons.values()) or 1
+    ea = sum(w.available + w.reserve for w in state.enemy_air); ez = sum(w.authorized for w in state.enemy_air) or 1
     ad = [a for a in state.assets.values() if a.kind in (AssetKind.SAM, AssetKind.EWR)]
     iads = sum(a.health for a in ad) / len(ad) if ad else 0.0
     arm = [a for a in state.assets.values() if a.kind == AssetKind.ARMOR and a.variant != "GARRISON"]
