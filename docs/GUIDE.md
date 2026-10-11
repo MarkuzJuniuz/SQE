@@ -262,7 +262,7 @@ Sites then keep the Shore margin from the sea and lakes (default 1500 m) and the
 * A raid can go for an airfield, a friendly supply site (fuel farm, forward depot), a field's garrison, or friendly troops in a contested sector. The tasking order lists them as "Intercept a raid on ..." / "Intercept an air attack on ...". What is under attack is on the map; the raiders fly there from their base.
 * If the raiders get through: fields lose defence (less with a garrison), supply sites and garrisons lose health, troops lose sector strength. Friendly supply falls when fuel farms or the depot are hit, as the enemy's does when you hit its depots. Destroyed friendly sites are replaced overnight with a chance.
 * Each enemy wing can fly 2 sorties per serviceable airframe a day, shared by patrols, sweeps and raids.
-* Things to check in DCS: do the raiders fly to the thing the briefing names, and do they bomb it? Is the garrison / fuel farm / column visible and in the right place? After a raid got through, does the debrief line match? In `SQE_state.json`, read `shots` (who fired what at what) and `gates` after a DEAD.
+* Things to check in DCS: do the raiders fly to the thing the briefing names, and do they bomb it? Is the garrison / fuel farm / column visible and in the right place? After a raid got through, does the debrief line match? In `SQE_state.json`, read `shots` (who fired what at what), `gates` after a DEAD, and `deaths` (the last hit, fuel, altitude and speed for every unit lost).
 * Tune: `Difficulty.raid_mix`, `blue_garrison_size`, `blue_rebuild`; `raids.ASSET_HIT`, `SECTOR_HIT`, `GARRISON_SHIELD`; `redair.DAILY_SORTIES`.
 
 ## SEAD first

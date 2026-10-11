@@ -1,3 +1,11 @@
+## v0.39.6
+
+* **HAVCAP and base CAP stay until the last flight is home.** In the AI run, Viper 4 (the HAVCAP) left 40 minutes after your TOT and landed while the merged DEAD package was still flying, so the tanker and AWACS were unguarded for the last hour. Both support CAPs now stay on station until five minutes after the latest return of any package in the mission (yours or a merged one). Fuel still applies: DCS sends an AI flight home at bingo whatever its task says, so a very long mission can still lose them (a relief pair is a later idea).
+* **The waiting window counts landings per side.** "Landed / recovered" showed 31 under Friendly when only 24 of your aircraft had landed: the hook's list also holds red aircraft that landed. It now counts your side in the Friendly column and red in the Enemy column.
+* **`SQE_state.json` explains losses.** New `deaths` list: for every unit lost, the event (`dead`, `crash` or `pilot_dead`), the last hit on it (who and with what, and how many seconds before), and the last fuel (fraction), altitude (m) and speed (kts) sampled for it (every 30 s, both sides, all aircraft) and how old that sample was. A loss with no recent hit and low fuel is a fuel or crash loss; with a recent hit it was shot. The three Viper 6 losses in the last run had no shot or kill record and could not be explained from the old file.
+* **The shot log skips scenery.** Trees, houses and power poles that bombs and wrecks hit made up about a third of the `hit` entries; they are no longer logged.
+* Untested in DCS.
+
 ## v0.39.5
 
 * **The road scan only covers the places the war touches.** The v0.39.4 run in DCS showed the real cost: `getClosestPointOnRoads` takes about 90 ms whenever no road is near, so scanning the whole map (97,500 points) would take hours. The scan now covers 25 km around every airfield of the theatre (both sides) and along the front line (Sukhumi to Senaki to Kutaisi), skips water, and runs in three passes (8 km, 4 km, 2 km spacing, about 7,000 points in all). The roads file is written after each pass, so any finished pass is usable and the messages say when you can leave. Slices are 0 to 1 s of wall time per timer tick (the clock comes from a file's modification time). Theatre packs can set `road_radius_m` in the scan block. Untested in DCS.
