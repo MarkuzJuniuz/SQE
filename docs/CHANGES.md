@@ -1,3 +1,11 @@
+## v0.34.0
+SEAD wears the defence down, so a campaign against a strong air-defence network moves instead of stalling. Untested in DCS.
+* **Each failed SEAD day raises the next day's odds** on that site by 10 points, up to 40 (`war.SEAD_LEARN`, `SEAD_LEARN_MAX`); the failed-days count is the one the valve already kept. A success starts over.
+* **A failed SEAD still costs the site** 4% health (`war.SEAD_WEAR`), which also feeds the retreat of v0.32.
+* **The valve opens after 2 failed days at Level 3** (3 at Levels 1 and 2; `Difficulty.sead_valve`).
+* **The SEAD briefing gives the odds**: "Intelligence puts the chance of blinding this site at about 55%", and says when the site has beaten us before.
+* Queued next: a jamming emulation (event-driven missile kills near a jammer); see the notes in the chat. Not started.
+
 ## v0.33.0
 * **Denser front-line columns.** The number of vehicles in an enemy front-line column now follows its sector's strength: the base mix is multiplied by 0.5 + 1.5 x strength (2x at full strength, 1x at a third, as few as half at nearly nothing). Before, the column was the base mix times strength, so a strong sector looked the same as it always had. At Level 2-3 a full-strength column is about 20-28 vehicles, a third-strength one about 12. Losses still read back as sector strength: nothing lost leaves the sector as it was, and half the column destroyed took a full-strength sector from 100% to 70% (the existing damping). Garrisons and other sites are unchanged. Tune `mission_builder.ARMOR_DENSITY`. A mission with a full-strength column was 114-140 units in the trial builds (limit 250), so VR cost goes up where the front is hot.
 

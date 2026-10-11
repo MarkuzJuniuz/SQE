@@ -50,6 +50,7 @@ class Difficulty:
     raid_size: tuple = (2, 2)            # Su-24M in a raid: drawn between these (never more than the wing has)
     raid_mix: tuple = (0.0, 0.0, 0.0)    # share of the raids that go for (a supply site, a field's garrison, friendly troops in a contested sector) instead of the airfield itself
     blue_garrison_size: float = 1.0      # scales the vehicle count of a friendly airfield garrison
+    sead_valve: int = 3                  # failed SEAD days on one site before the combined SEAD + DEAD package is offered again (war.py)
     sam_retreat: float = 1.0             # scales the nightly chance that a badly hurt long-range SAM site pulls back from the front to recover (sams.retreat)
     blue_rebuild: float = 0.15           # nightly chance (x friendly supply) that a destroyed friendly supply site or garrison is replaced
 
@@ -72,7 +73,7 @@ LEVELS: dict[int, Difficulty] = {
                   friendly_scale=1.0, enemy_cap_per_air=0.15, counterstrike=0.30, bomber_wing=4, bomber_policy="desperate",
                   forward_sams=("SA-8", "SA-8"), garrison_chance=0.6, garrison_size=0.8, react_chance=0.35, react_ratio=(0.6, 1.1),
                   ground_red=(70, 55, 15, 0, 0), ground_blue=(0, 15, 60, 70, 50), red_attack=0.45, red_reinf=7.5, blue_reinf=4.0, raid_rate=0.4, raid_surprise=0.35, emerg_chance=0.09, raid_size=(2, 4), sam_rebuild=0.04, sam_scoot=0.30,
-                  raid_mix=(0.20, 0.15, 0.25), blue_garrison_size=0.8, blue_rebuild=0.15, sam_retreat=0.8),
+                  raid_mix=(0.20, 0.15, 0.25), blue_garrison_size=0.8, blue_rebuild=0.15, sam_retreat=0.8, sead_valve=3),
     3: Difficulty(3, "Level 3 - Near-Peer", "Modern fighters, long-range SAMs and an integrated air-defence network. "
                   "Every sortie is contested and attrition bites.",
                   enemy_air_total=150, enemy_types=["MiG_29S", "Su_27", "Su_24M", "Su_25", "MiG_29A"],
@@ -82,7 +83,7 @@ LEVELS: dict[int, Difficulty] = {
                   friendly_scale=0.85, enemy_cap_per_air=0.20, counterstrike=0.55, bomber_wing=10, bomber_policy="normal",
                   forward_sams=("SA-15", "SA-8", "SA-19"), garrison_chance=1.0, garrison_size=1.0, react_chance=0.55, react_ratio=(1.0, 1.6),
                   ground_red=(90, 80, 35, 0, 0), ground_blue=(0, 10, 45, 55, 40), red_attack=0.55, red_reinf=7.0, blue_reinf=4.0, raid_rate=0.7, raid_surprise=0.45, emerg_chance=0.21, raid_size=(4, 4), sam_rebuild=0.07, sam_scoot=0.50,
-                  raid_mix=(0.25, 0.20, 0.25), blue_garrison_size=0.7, blue_rebuild=0.10, sam_retreat=1.0),
+                  raid_mix=(0.25, 0.20, 0.25), blue_garrison_size=0.7, blue_rebuild=0.10, sam_retreat=1.0, sead_valve=2),
 }
 
 

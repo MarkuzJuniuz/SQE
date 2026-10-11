@@ -1125,6 +1125,27 @@ def main():
     assert _cnt[1.0] > 1.5 * _cnt[0.3], f"a full-strength column is far denser than a beaten one: {_cnt}"
     assert s.last_build.counts["units"] < 250
     print(f"[dense columns] vehicles in a front-line column: {_cnt[1.0]:.0f} at full strength, {_cnt[0.3]:.0f} at 30%; no losses leaves the strength unchanged")
+    # SEAD wears the defence down: each failed day raises the next day's odds, a failed attempt still costs the site, level 3 opens the valve after 2 days
+    from sqe import war as _w4
+    s.new("SEAD learn", "F-16C", 3, seed=11); _st = s.state
+    _se = next(p_ for p_ in s.packages() if p_.objective.aim == "SEAD"); _site = _se.objective.target_id
+    _sim = _w4.WarSimulator(s.d, random.Random(1)); _p0 = _sim.sead_p(_st, _se)
+    _w4.note_sead(_st, _site, False); _p1 = _sim.sead_p(_st, _se); _w4.note_sead(_st, _site, False); _p2 = _sim.sead_p(_st, _se)
+    assert abs((_p1 - _p0) - 0.10) < 1e-9 and _p2 > _p1, "each failed day adds to the odds"
+    for _ in range(6):
+        _w4.note_sead(_st, _site, False)
+    assert _sim.sead_p(_st, _se) <= min(0.95, _p0 + 0.40) + 1e-9, "the bonus is capped"
+    _w4.note_sead(_st, _site, True); assert abs(_sim.sead_p(_st, _se) - _p0) < 1e-9, "a success starts over"
+    _t = _st.assets[_site]; _h = _t.health; _st.raids["sead"][_site] = False
+    _sim.resolve_abstract(_st, _se); assert _t.health < _h, "a failed SEAD still wears the site down"
+    assert (_gd(1).sead_valve, _gd(2).sead_valve, _gd(3).sead_valve) == (3, 3, 2)
+    _st.raids["sead_fail"] = {_site: 2}; s.plan_day()
+    assert not any(p_.objective.target_id == _site and p_.objective.aim in ("SEAD", "DEAD") for p_ in s.packages()), "two failed days at Level 3: the combined package is back for that site"
+    s.new("SEAD brief", "F-16C", 3, seed=11); _st = s.state
+    _se = next(p_ for p_ in s.packages() if p_.objective.aim == "SEAD" and s.flyable(p_))
+    s.fly(_se.number, next(f_ for f_ in s.flyable(_se) if f_.role == Role.SEAD).id)
+    assert "chance of blinding" in s.last_build.text["situation"], "the SEAD briefing states the odds"
+    print("[sead attrition] +10% a failed day (cap 40%), a failed attempt wears the site, valve after 2 failed days at Level 3, the briefing gives the odds")
     print("SMOKE TEST PASSED")
 
 

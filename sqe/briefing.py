@@ -59,7 +59,11 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         sit += ["", "A SEAD package goes in ahead of you to blind this site's radars. If any search or track radar is still up when you reach the gate, "
                     "the strike is called off."]
     elif obj.type.value == "DEAD" and obj.aim == "SEAD":
-        sit += ["", "Your job is only to blind the radars. A DEAD package follows about 25 minutes behind you and goes in only if the radars are out."]
+        from .difficulty import get as _gd2
+        from .war import WarSimulator as _WS, sead_fail as _sf
+        _p = _WS(_gd2(state.level)).sead_p(state, pkg)
+        sit += ["", "Your job is only to blind the radars. A DEAD package follows about 25 minutes behind you and goes in only if the radars are out. "
+                    f"Intelligence puts the chance of blinding this site at about {round(_p * 100 / 5) * 5:.0f}%" + (f", better than it was: this site has beaten us {_sf(state, obj.target_id)} time{'s' if _sf(state, obj.target_id) != 1 else ''} running and its crews and positions are known." if _sf(state, obj.target_id) else ".")]
     if x.get("intel"):
         sit += ["", "Intelligence: " + " ".join(x["intel"])]
     mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {'DEAD' if (pf.role.value == 'STRIKE' and obj.type.value == 'DEAD') else pf.role.value}.", f"Your task: {pf.task}."]

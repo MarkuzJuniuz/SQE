@@ -136,7 +136,7 @@ class ObjectivePlanner:
         combined package is offered again. The pair counts against the day's package limit: the lowest-priority other jobs make room."""
         out, extra = [], 0
         for s_, o in picked:
-            if o.type == ObjectiveType.DEAD and not o.aim and sead_fail(state, o.target_id) < SEAD_FAIL_VALVE:
+            if o.type == ObjectiveType.DEAD and not o.aim and sead_fail(state, o.target_id) < int(getattr(self.d, 'sead_valve', SEAD_FAIL_VALVE)):
                 a = state.assets[o.target_id]
                 tail = f" ({a.health:.0%} left)" if a.health < 0.85 else ""
                 out.append((s_, Objective("", ObjectiveType.DEAD, o.target_id, o.priority, f"SEAD: blind {a.name}{tail}", "SEAD")))
@@ -167,6 +167,9 @@ def count_roll(rng, n: int, p: float, variance: float) -> int:
     return sum(1 for _ in range(n) if rng.random() < p)
 
 
+SEAD_LEARN = 0.10             # each failed SEAD day on a site adds this to the next SEAD package's odds (the defence is being worn down and located)...
+SEAD_LEARN_MAX = 0.40         # ...up to this much
+SEAD_WEAR = 0.04              # health a failed SEAD still takes off the site
 SEAD_FAIL_VALVE = 3           # days of failed SEAD on the same site before the combined SEAD + DEAD package is offered again
 DEAD_STAGE_GAP_MIN = 25       # the DEAD package starts this long after the SEAD package of the same site
 
@@ -251,7 +254,9 @@ class WarSimulator:
         garrison = sum(g.health for g in state.assets.values() if g.guards == t.id and not g.destroyed)
         site = (1.0 + 0.8 * self.d.iads) * t.health + 0.4 * garrison
         s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in pkg.flights if f.role == Role.SEAD)
-        return s_sead / (s_sead + site) if s_sead else 0.0
+        if not s_sead:
+            return 0.0
+        return min(0.95, s_sead / (s_sead + site) + min(SEAD_LEARN_MAX, SEAD_LEARN * sead_fail(state, t.id)))
 
     def _resolve_dead(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         """SEAD and DEAD are two different jobs. The SEAD flight blinds the radars (the site is 'suppressed', not dead). The DEAD flight
@@ -277,6 +282,8 @@ class WarSimulator:
         lines = [f"{pkg.objective.description}:"]
         if sead:
             lines.append(f"   SEAD: {'radars blinded' if blinded else 'radars still emitting'} (odds {p_sead:.0%})")
+        if sead and not blinded:
+            t.health = max(0.05, t.health - SEAD_WEAR)      # a failed attempt still wears the site down
         if blinded and sead:
             t.suppressed = True
             t.health = max(0.05, t.health - 0.2)            # the radars and a launcher or two; the battery survives
