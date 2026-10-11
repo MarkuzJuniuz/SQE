@@ -310,7 +310,7 @@ class WaitingDialog(QDialog):
     def _fill(self, t):
         rows = [("Aircraft lost / total", f"{t['blue_air_lost']} / {t['blue_air_total']}", f"{t['red_air_lost']} / {t['red_air_total']}"),
                 ("Ground units lost / total", f"{t['blue_ground_lost']} / {t['blue_ground_total']}", f"{t['red_ground_lost']} / {t['red_ground_total']}"),
-                ("Landed / recovered", str(t["landed"]), "-")]
+                ("Landed / recovered", str(t["landed"]), str(t.get("red_landed", 0)))]
         self.tbl.setRowCount(len(rows))
         for i, r in enumerate(rows):
             for j, v in enumerate(r):

@@ -100,6 +100,15 @@ def main():
     assert res.merged and len(res.merged) <= len(extra), res.merged   # extras may be dropped to fit the unit cap
     man = ms.manifest()
     z = zipfile.ZipFile(ms.settings.sortie_miz); lua.loads(z.read("mission").decode())
+    _mz = lua.loads(z.read("mission").decode())
+    _tags = {f.callsign for f in pk.flights if f.tag}
+    _stops = []
+    for _c in _mz["mission"]["coalition"].values():
+        for _cn in _c["country"].values():
+            for _g in _cn.get("plane", {}).get("group", {}).values():
+                if _g["name"] in _tags:
+                    _stops += [t_["params"]["stopCondition"]["time"] for t_ in _g["route"]["points"][2]["task"]["params"]["tasks"].values() if t_["params"].get("stopCondition")]
+    assert _tags and _stops and min(_stops) >= max(m["rtb_s"] for m in res.merged) + 300 - 1, ("HAVCAP / base CAP outlast the merged packages", _stops)
     print(f"[merge] #{pk.number} {pk.objective.type.value} + {[(m['number'], m['type']) for m in res.merged]}: {res.counts['groups']} groups / {res.counts['units']} units")
     prim2 = [g for g in man.groups if g["kind"] == "asset" and g.get("primary_pkgs")]
     assert any(res.merged[0]["id"] in g["primary_pkgs"] for g in prim2), "merged package has no primary target"
@@ -916,6 +925,11 @@ def main():
     assert "AITEST = true" in _hk and "gatesJson" in _hk and '"gates":%s' in _hk, "all-AI test: calls go to everyone; every gate is logged in the state file"
     assert '"shots":%s' in _hk and "logShot" in _hk and "getTarget" in _hk, "every shot and hit is logged in the state file"
     assert "you=true" in _hk and "SOUND_YOU" in _hk and "GATES = { {t=100" in _hk
+    assert '"deaths":%s' in _hk and "LASTHIT" in _hk and "Object.Category.SCENERY" in _hk, "losses are explained (last hit, fuel, altitude) and scenery hits are not logged"
+    _mf = _db.Manifest("c", 1, "p", 1)
+    _mf.add("friendly", "f1", ["B1", "B2", "B3"]); _mf.add("enemy_air", "e1", ["R1", "R2"])
+    _tl = _db.tally(None, _mf, {"dead": ["B1"], "ejected": [], "landed": ["B2", "R1"]})
+    assert _tl["landed"] == 1 and _tl["red_landed"] == 1 and _tl["blue_air_lost"] == 1, "landed is counted per side"
     try:
         import lupa
         _err = lupa.LuaRuntime().eval("function(s) local f, e = load(s) return e end")(_hk); assert _err is None, _err

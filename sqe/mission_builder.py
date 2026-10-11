@@ -297,6 +297,7 @@ class MissionBuilder:
 
         # ---- friendly flights --------------------------------------------------------------------------------------------
         despawn, pkg_table = [], []
+        self._sup_cts = []                                                   # HAVCAP / base CAP orbit tasks: their stop time is extended once the merged packages are known
         for idx, f in enumerate(package.flights):
             g, tot_f = self._spawn_flight(package, f, plan, geom, tanker_xy, hav_xy, push_of(f), tgt.eta_s, rtb_s, idx, manifest, despawn)
             if f.is_player:
@@ -315,12 +316,18 @@ class MissionBuilder:
         self._spawn_air_picture(air_pkg, tx, ty, tgt.eta_s, geom, manifest, keep)
         self._spawn_cas_support(package, plan, geom, manifest)
         merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock, ruins)
+        # HAVCAP and base CAP guard the tanker, AWACS and home field: they stay until the last flight of ANY package in this mission is home
+        # (they used to leave 40 min after your TOT, so later merged packages flew with the tanker and AWACS unguarded)
+        last_home = max([m_["rtb_s"] for m_ in merged if not m_.get("struck")] + [rtb_s]) + 300
+        for ct_ in self._sup_cts:
+            if last_home > ct_.params.get("stopCondition", {}).get("time", 0):
+                ct_.stop_after_time(int(last_home))
         manifest.cur_pkg = ""
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + list(self._red_intel)
         self._spawn_reactive(package, extras, tx, ty, tgt.eta_s, geom, manifest, despawn)
         self._dry_pass()
         self._place_carcasses()
-        manifest.merged = [{k: v for k, v in m_.items() if k in ("id", "number", "objective", "type", "tot_s")} for m_ in merged if not m_.get("struck")]
+        manifest.merged = [{k: v for k, v in m_.items() if k in ("id", "number", "objective", "type", "tot_s", "rtb_s")} for m_ in merged if not m_.get("struck")]
         bx, by = geom.push
         m.coalition["blue"].bullseye = {"x": bx, "y": by}
 
@@ -1171,6 +1178,8 @@ class MissionBuilder:
             elif w.action == "CAPORBIT":
                 ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH)))
                 ct.stop_after_time(stop); wp.tasks.append(ct)
+                if f.tag:
+                    self._sup_cts.append(ct)
             elif w.orbit:                                                    # fighters held short of live SAM cover
                 ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH)))
                 ct.stop_after_time(stop); wp.tasks.append(ct)

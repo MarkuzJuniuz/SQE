@@ -43,6 +43,9 @@ local gateLog = {}
 local kills = {}
 local shots = {}
 local jams = {}
+local deaths = {}                 -- why each loss happened: last hit seen, last fuel and altitude sample (so an unexplained loss still tells something)
+local LASTHIT = {}                -- unit name -> {by, w, t} of the last hit on it
+local SAMPLE = {}                 -- unit name -> {fuel, alt, spd, t} sampled every 30 s for every aircraft
 local JAMW = { __JAMW__ }          -- unit name -> {from, to} mission seconds the jammer runs (AI: the attack leg); absent = always on
 local JAMS = { __JAMS__ }          -- unit name -> 1 internal set, 2 ECM pod (ecm.py)
 __JAMCFG__
@@ -75,6 +78,14 @@ local function jamsJson()
   return "[" .. table.concat(o, ",") .. "]"
 end
 local function num(x) if x then return string.format("%d", math.floor(x)) end return "null" end
+local function deathsJson()
+  local o = {}
+  for _, k in ipairs(deaths) do
+    o[#o + 1] = string.format('{"n":"%s","t":%d,"ev":"%s","by":"%s","w":"%s","ago":%s,"fuel":%s,"alt_m":%s,"kts":%s,"sample_age":%s}',
+      esc(k.n), k.t, esc(k.ev), esc(k.by), esc(k.w), num(k.ago), k.fuel and string.format("%.2f", k.fuel) or "null", num(k.alt), num(k.kts), num(k.sage))
+  end
+  return "[" .. table.concat(o, ",") .. "]"
+end
 local function gatesJson()
   local o = {}
   for _, e in ipairs(gateLog) do
@@ -86,9 +97,9 @@ end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson()))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson()))
   f:close()
 end
 local function nameOf(obj)
@@ -154,7 +165,6 @@ local function shotCall(e)
   return nil
 end
 local function logShot(ev, e, by)
-  if #shots >= 600 then return end
   local function tname(o) local ok, t = pcall(function() return o:getTypeName() end); if ok and t then return t end return "?" end
   local w, tg, tt = "?", "", ""
   if e.weapon then
@@ -164,7 +174,13 @@ local function logShot(ev, e, by)
       if okt and tgo then tg = nameOf(tgo) or ""; tt = tname(tgo) end
     end
   end
-  if ev == "hit" and e.target then tg = nameOf(e.target) or ""; tt = tname(e.target) end
+  if ev == "hit" and e.target then
+    local okc, cat = pcall(function() return e.target:getCategory() end)
+    if okc and cat == Object.Category.SCENERY then return end        -- trees, houses, poles: pure noise in the log
+    tg = nameOf(e.target) or ""; tt = tname(e.target)
+  end
+  if ev == "hit" and tg ~= "" then LASTHIT[tg] = { by = by or "?", w = w, t = timer.getTime() } end
+  if #shots >= 600 then return end
   shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt }
 end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
@@ -234,7 +250,15 @@ function H:onEvent(e)
       end
     end
   elseif id == world.event.S_EVENT_DEAD or id == world.event.S_EVENT_CRASH or id == world.event.S_EVENT_PILOT_DEAD then
-    if n and not landed[n] then dead[n] = true; dump(); siteDead(n) end
+    if n and not landed[n] then
+      if not dead[n] and #deaths < 200 then
+        local lh, sm, now = LASTHIT[n], SAMPLE[n], timer.getTime()
+        local evn = (id == world.event.S_EVENT_CRASH) and "crash" or ((id == world.event.S_EVENT_PILOT_DEAD) and "pilot_dead" or "dead")
+        deaths[#deaths + 1] = { n = n, t = math.floor(now), ev = evn, by = lh and lh.by or "", w = lh and lh.w or "", ago = lh and (now - lh.t) or nil,
+                                fuel = sm and sm.fuel, alt = sm and sm.alt, kts = sm and sm.spd, sage = sm and (now - sm.t) or nil }
+      end
+      dead[n] = true; dump(); siteDead(n)
+    end
   elseif id == world.event.S_EVENT_TAKEOFF then
     if n == PLAYER and not pl.takeoff then pl.takeoff = timer.getTime(); dump() end
   elseif id == world.event.S_EVENT_SHOT then
@@ -281,7 +305,26 @@ function H:onEvent(e)
   end
 end
 world.addEventHandler(H)
-timer.scheduleFunction(function(_, t) dump(); return t + 30 end, nil, timer.getTime() + 30)
+timer.scheduleFunction(function(_, t)
+  for _, side in ipairs({ coalition.side.BLUE, coalition.side.RED }) do
+    local okg, groups = pcall(function() return coalition.getGroups(side, Group.Category.AIRPLANE) end)
+    if okg and groups then
+      for _, g in ipairs(groups) do
+        local oku, units = pcall(function() return g:getUnits() end)
+        for _, u in ipairs((oku and units) or {}) do
+          pcall(function()
+            local un = u:getName()
+            if un and u:isExist() then
+              local p, v = u:getPoint(), u:getVelocity()
+              SAMPLE[un] = { fuel = u:getFuel(), alt = p.y, spd = math.sqrt(v.x ^ 2 + v.y ^ 2 + v.z ^ 2) * 1.944, t = timer.getTime() }
+            end
+          end)
+        end
+      end
+    end
+  end
+  dump(); return t + 30
+end, nil, timer.getTime() + 30)
 -- call-outs for the player's flight: scheduled radio calls from the other flights and the support aircraft, plus weapon and result calls
 local said = {}
 function say(text, you)
@@ -510,14 +553,17 @@ def tally(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     """Live casualty counts for the waiting window."""
     lost = set(data.get("dead", [])) | set(data.get("ejected", []))
     t = {"blue_air_total": 0, "blue_air_lost": 0, "blue_ground_total": 0, "blue_ground_lost": 0, "red_air_total": 0, "red_air_lost": 0,
-         "red_ground_total": 0, "red_ground_lost": 0, "landed": len(data.get("landed", []))}
+         "red_ground_total": 0, "red_ground_lost": 0, "landed": 0, "red_landed": 0}
+    down = set(data.get("landed", []))
     for g in manifest.groups:
         n_dead = sum(1 for u in g["units"] if u in lost)
         if g["kind"] == "friendly":
+            t["landed"] += sum(1 for u in g["units"] if u in down)      # this side only: the raw list also holds red aircraft that landed
             t["blue_air_total"] += len(g["units"]); t["blue_air_lost"] += n_dead
         elif g["kind"] == "friendly_ground":
             t["blue_ground_total"] += len(g["units"]); t["blue_ground_lost"] += n_dead
         elif g["kind"] == "enemy_air":
+            t["red_landed"] += sum(1 for u in g["units"] if u in down)
             t["red_air_total"] += len(g["units"]); t["red_air_lost"] += n_dead
         elif g["kind"] == "asset":
             t["red_ground_total"] += len(g["units"]); t["red_ground_lost"] += n_dead
