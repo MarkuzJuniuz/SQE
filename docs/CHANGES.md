@@ -1,3 +1,9 @@
+## v0.39.10
+
+* **SEAD jets no longer chase fighters.** In the v0.39.9 run both Hornet SEAD flights (Hornet 1, Squid 1, four HARMs each) fought MiGs on the way in, drifted into Tor and SA-11 range (15-16 km from the site) and died 140 to 180 s before their HARM launch point without firing a HARM. AI SEAD flights (and your own flight in the AI test) now fly with hold-fire "return fire" from the start: they shoot back when shot at, and go weapons free at the HARM point, as before. On the way home they are back on return fire so they do not turn round for a kill. Support SEAD flights in strike and CAS packages get the same treatment.
+* **Every shot in `SQE_state.json` now carries `km` and `alt`**: the range to its target (km) and the shooter's altitude (m) at launch. This is the data the standoff work needs: it shows how far out the AI really fires a HARM, and how far out the S-300 really shoots at the launching jet. Before this the file had times only, so every distance was inferred.
+* Untested in DCS. Check: do the SEAD flights now arrive at the HARM point alive (Hornet 1, Squid 1 and Viper 1/2), and what are the `km` values of the `AGM_88` shots?
+
 ## v0.39.9
 
 * **SEAD flights aim at the whole site.** In the v0.39.7 run (AI test, Sukhumi SA-10) the player package's SEAD pair (Viper 1/2) never fired a HARM: its task was aimed at the site's S-300 track radar, which only radiates while it is tracking, so there was nothing to shoot at. The pair fought MiGs, pressed on past the launch point and a Tor killed both 12 km from the site. The escort SEAD flight of another package (Cowboy 1) was aimed at a ground group instead, fired two HARMs from 31 nm and killed both Osa launchers it radiated against. The HARM task is now `AttackGroup` on the whole site (ARM only), as that one was. HARMs still only kill what radiates; the launchers stay the DEAD flight's job.

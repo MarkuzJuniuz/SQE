@@ -934,6 +934,7 @@ def main():
     assert '"shots":%s' in _hk and "logShot" in _hk and "getTarget" in _hk, "every shot and hit is logged in the state file"
     assert "you=true" in _hk and "SOUND_YOU" in _hk and "GATES = { {t=100" in _hk
     assert '"deaths":%s' in _hk and "LASTHIT" in _hk and "Object.Category.SCENERY" in _hk, "losses are explained (last hit, fuel, altitude) and scenery hits are not logged"
+    assert ',"km":%.1f,"alt":%d' in _hk and "salt = sp.y" in _hk, "every shot logs the range to its target (km) and the shooter's altitude (m)"
     _mf = _db.Manifest("c", 1, "p", 1)
     _mf.add("friendly", "f1", ["B1", "B2", "B3"]); _mf.add("enemy_air", "e1", ["R1", "R2"])
     _tl = _db.tally(None, _mf, {"dead": ["B1"], "ejected": [], "landed": ["B2", "R1"]})
@@ -1119,6 +1120,10 @@ def main():
             _ids = [t_["params"]["task"]["id"] for p_ in _g["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()
                     if t_["id"] == "ControlledTask" and t_["params"]["task"]["id"] in ("AttackUnit", "AttackGroup")]
             assert _ids == ["AttackGroup"], ("the HARM task is aimed at the whole site, not one track radar", _ids)
+            _roe = lambda p_: [t_["params"]["action"]["params"]["value"] for t_ in p_["task"]["params"]["tasks"].values()
+                               if t_["id"] == "WrappedAction" and t_["params"]["action"]["id"] == "Option" and t_["params"]["action"]["params"].get("name") == 0]
+            _p1 = _g["route"]["points"][1]
+            assert 3 in _roe(_p1) and 0 in _roe(_pts["SEAD"]) and 3 in _roe(_pts["EGR"]), ("SEAD jets hold fire (return fire) until the HARM point, weapons free there, return fire again on the way home", _roe(_p1), _roe(_pts["SEAD"]), _roe(_pts["EGR"]))
     print("[sead first] SEAD and DEAD are two packages 25 min apart, dice cast at planning, DEAD held without a blind site, valve after 3 failed days, DEAD-stage mission has no radars after a good SEAD")
     # an empty Missions pane says why and points at Skip Turn
     try:
