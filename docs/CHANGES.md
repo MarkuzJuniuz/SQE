@@ -1,5 +1,8 @@
+## v0.31.2
+* The empty Missions pane calls it a stand-down day ("Stand-down day for you. Skip Turn takes the day.") instead of talking about the war going on without you.
+
 ## v0.31.1
-* When the Missions list has nothing you can fly, the right-hand pane now says so: "No flights for <squadron> today." with the reasons that apply (too few serviceable aircraft for a pair, nothing on the tasking order for your aircraft's roles, jobs given to other squadrons or out of reach) and a quiet line pointing at Skip Turn.
+* When the Missions list has nothing you can fly, the right-hand pane now says so: "No flights for <squadron> today." with the reasons that apply (too few serviceable aircraft for a pair, nothing on the tasking order for your aircraft's roles, jobs given to other squadrons or out of reach) and a quiet line: "Stand-down day for you. Skip Turn takes the day."
 
 ## v0.31.0
 SEAD first. Untested in DCS.

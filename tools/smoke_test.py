@@ -1069,7 +1069,7 @@ def main():
             def __getattr__(self, k): return lambda *a, **kw: None
         _pg = _MP(_W()); _pg.refresh(s)
         _txt = " | ".join(l_.text() for l_ in _pg.body.findChildren(_QL))
-        assert "No flights for" in _txt and "Skip Turn" in _txt and "not enough for a pair" in _txt, _txt
+        assert "No flights for" in _txt and "Stand-down day" in _txt and "Skip Turn" in _txt and "not enough for a pair" in _txt, _txt
         print("[idle pane] nothing to fly: the Missions pane says why (aircraft, roles, range) and points at Skip Turn")
     except ImportError:
         pass

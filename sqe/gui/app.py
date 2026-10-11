@@ -156,7 +156,7 @@ class MissionsPage(QWidget):
         self.bl.addWidget(self._label(f"No flights for {sess.state.squadrons[sess.state.player.squadron_id].name} today.", "title"))
         for r in sess.idle_reasons():
             self.bl.addWidget(self._label(r, "dim"))
-        self.bl.addWidget(self._label("Nothing for you today? Skip Turn lets the war go on without you.", "small"))
+        self.bl.addWidget(self._label("Stand-down day for you. Skip Turn takes the day.", "small"))
         self.bl.addStretch(1)
 
     # ---- the right-hand panel ------------------------------------------------------------------------------------------------
