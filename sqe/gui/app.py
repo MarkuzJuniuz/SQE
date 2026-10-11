@@ -143,10 +143,21 @@ class MissionsPage(QWidget):
         self.lst.blockSignals(False)
         self.resume.setVisible(bool(st.pending))
         self.skip.setEnabled(st.status == "ACTIVE")
-        if self.pkgs:
+        if self.pkgs and any(sess.flyable(p) for p in self.pkgs):
             self.lst.setCurrentRow(0)
         else:
             self._clear_body()
+            self._idle_note(sess)
+
+    def _idle_note(self, sess: Session):
+        """Nothing to fly today: say so on the same pane, with the reasons, and a quiet pointer to Skip Turn."""
+        if not sess.state or sess.state.status != "ACTIVE":
+            return
+        self.bl.addWidget(self._label(f"No flights for {sess.state.squadrons[sess.state.player.squadron_id].name} today.", "title"))
+        for r in sess.idle_reasons():
+            self.bl.addWidget(self._label(r, "dim"))
+        self.bl.addWidget(self._label("Nothing for you today? Skip Turn lets the war go on without you.", "small"))
+        self.bl.addStretch(1)
 
     # ---- the right-hand panel ------------------------------------------------------------------------------------------------
     def _clear_body(self):

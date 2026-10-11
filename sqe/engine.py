@@ -196,6 +196,23 @@ class Session:
                 rng = _r.Random(f"{st.campaign_id}:{st.day}:{p.objective.target_id}:sead")
                 st.raids["sead"][p.objective.target_id] = chance(rng, sim.sead_p(st, p), self.d.variance)
 
+    def idle_reasons(self) -> list:
+        """Why your squadron has nothing to fly today, from the facts at hand (shown when the Missions list has no flight for you)."""
+        st = self.state
+        sq = st.squadrons[st.player.squadron_id]
+        spec = AIRCRAFT[sq.aircraft]
+        pk = self.packages()
+        out = []
+        if sq.available < 2:
+            out.append(f"{sq.name} has {sq.available} of {sq.authorized} aircraft serviceable, not enough for a pair.")
+        if not pk:
+            out.append("No jobs are open on today's tasking order.")
+        elif not any(f.role in spec.roles for p in pk for f in p.flights if not f.tag):
+            out.append(f"Nothing on today's tasking order is a job for {spec.display} ({', '.join(sorted(r.value for r in spec.roles))}).")
+        elif sq.available >= 2:
+            out.append("Today's jobs were given to other squadrons, or are out of reach of your base.")
+        return out
+
     def packages(self) -> list:
         """The tasking order. Emergency packages (flown, folded in or settled by odds) are in the plan but are not listed."""
         return [p for p in (Package.from_dict(d) for d in self.state.plan) if not p.extra.get("past")]

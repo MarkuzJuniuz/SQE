@@ -1,3 +1,6 @@
+## v0.31.1
+* When the Missions list has nothing you can fly, the right-hand pane now says so: "No flights for <squadron> today." with the reasons that apply (too few serviceable aircraft for a pair, nothing on the tasking order for your aircraft's roles, jobs given to other squadrons or out of reach) and a quiet line pointing at Skip Turn.
+
 ## v0.31.0
 SEAD first. Untested in DCS.
 * **A SEAD / DEAD job is now two packages for the same site**: "SEAD: blind <site>" (SEAD flights, escorts, sweeps if the threat calls for them) and, 25 minutes later, "DEAD: destroy <site>, once its radars are blind" (strikers and their escorts). The pair counts against the day's package limit. Before this, one package carried both and the DEAD flight depended on the in-mission gate alone.

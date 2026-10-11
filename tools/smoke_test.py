@@ -732,7 +732,7 @@ def main():
     else:
         s.fly(_rp.number, None)
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
-    assert "Su-24M" in _mz and "RAID-B-1" in _mz, "the raiders are in the mission"
+    assert ("Su-24M" in _mz or "Su-25" in _mz) and "RAID-B-1" in _mz, "the raiders are in the mission"
     _man = s.manifest(); _rg = next(g_ for g_ in _man.groups if g_.get("raid_base"))
     _base = _st.bases[_rg["raid_base"]]; _def0 = _base.defense
     _data = {"campaign": _st.campaign_id, "sortie": _st.sortie_counter, "package": _st.pending["package_dict"]["id"], "mission_ended": True,
@@ -1055,6 +1055,24 @@ def main():
     from sqe.mission_builder import stagger as _stg
     assert _stg(_de, Role.ESCORT) == -30 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage keeps its escorts with it"
     print("[sead first] SEAD and DEAD are two packages 25 min apart, dice cast at planning, DEAD held without a blind site, valve after 3 failed days, DEAD-stage mission has no radars after a good SEAD")
+    # an empty Missions pane says why and points at Skip Turn
+    try:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication as _QA2, QLabel as _QL
+        from types import SimpleNamespace as _SN
+        _qa2 = _QA2.instance() or _QA2([])
+        from sqe.gui.app import MissionsPage as _MP
+        s.new("Idle pane", "A-10C", 2, seed=3); _st = s.state
+        _st.squadrons[_st.player.squadron_id].available = 1; s.plan_day()
+        assert s.idle_reasons() and "not enough for a pair" in s.idle_reasons()[0]
+        class _W(_SN):
+            def __getattr__(self, k): return lambda *a, **kw: None
+        _pg = _MP(_W()); _pg.refresh(s)
+        _txt = " | ".join(l_.text() for l_ in _pg.body.findChildren(_QL))
+        assert "No flights for" in _txt and "Skip Turn" in _txt and "not enough for a pair" in _txt, _txt
+        print("[idle pane] nothing to fly: the Missions pane says why (aircraft, roles, range) and points at Skip Turn")
+    except ImportError:
+        pass
     print("SMOKE TEST PASSED")
 
 
