@@ -1,3 +1,10 @@
+## v0.39.13
+
+* **SEAD packages on the same ground go in together.** SEAD packages whose targets lie within 60 km of each other are synchronised: each push is moved so that its estimated arrival lands on the latest arrival of the group, so the earlier flights wait rather than going in alone. In the v0.39.11 run the USAF SEAD salvo went in at about 14 minutes and the Navy's, on the same ground, at about 30. The estimate is straight-line at 400 kt; the mission builder still builds the real route.
+* **The DEAD stage goes in 10 minutes after its SEAD stage** (was 25). The v0.39.12 hold covers the case where the SEAD runs late.
+* Untested in DCS. Check: SEAD packages on the same site arrive within about a minute of each other; the DEAD stage goes in 10 minutes after the SEAD; the hold still fires when the radars are up.
+* Stacked on PR #10 (v0.39.12); merge #9 and #10 first.
+
 ## v0.39.12
 
 * **An AI DEAD flight holds instead of turning back when the radars are still up.** In the v0.39.11 run Viper 1 reached the gate at about 22 minutes, found the Sukhumi radars still up and turned back, but the Navy SEAD finished blinding the site about 15 minutes later. The DEAD flight now orbits outside the threat (6 km radius at its own altitude), re-checks the radars every minute, and goes in as soon as the site is blind. It breaks off after 12 minutes (`HOLD_S = 720`) or at once if fuel falls below 30% (`HOLD_FUEL`), so it can still get home.

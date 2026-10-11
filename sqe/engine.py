@@ -11,7 +11,7 @@ from .aircraft import AIRCRAFT
 from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
-from .models import Objective, ObjectiveType
+from .models import Objective, ObjectiveType, Role
 from . import raids, redair
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import Ledger, NoPlayerSlot, Package, PackageBuilder
@@ -21,6 +21,11 @@ from .settings import AppSettings
 from .state import CampaignState
 from .war import ObjectivePlanner, WarSimulator, update_status
 
+
+
+SEAD_SYNC_KM = 60            # SEAD packages whose targets are this close together are synchronised (the same ground, the same defence)
+SEAD_SYNC_KTS = 400          # the straight-line speed the sync assumes from base to target
+SEAD_SYNC_ON = True          # off only in tests that need an unsynchronised day (the merge-underway case)
 
 class Session:
     def __init__(self, settings: AppSettings):
@@ -165,7 +170,8 @@ class Session:
         times = wave_times(len(pkgs), st.campaign_date(), st.night_ops, self._rng(5))
         for i, t in zip(order, times):
             pkgs[i].start = t
-        self._stage_times(pkgs)                                      # a DEAD stage goes in 25 minutes after the SEAD stage of the same site
+        self._sync_sead(pkgs)                                        # SEAD flights on the same ground (within SEAD_SYNC_KM) arrive together, not one after another
+        self._stage_times(pkgs)                                      # a DEAD stage goes in DEAD_STAGE_GAP_MIN after the SEAD stage of the same site
         pkgs.sort(key=lambda p: p.start)
         for n, p in enumerate(pkgs, 1):                              # numbers follow the clock
             p.number, p.id = n, f"pkg{n}"
@@ -175,6 +181,49 @@ class Session:
         self._cast_sead(pkgs)
         self.refresh_weather()
         return self.packages()
+
+    def _sync_sead(self, pkgs: list) -> None:
+        """SEAD packages whose targets sit within SEAD_SYNC_KM of each other go in together: each one's push is moved so that its estimated
+        arrival at its target lands on the latest arrival of the group (the earlier packages wait; none goes in ahead of the others). The estimate
+        is straight-line from the base at SEAD_SYNC_KTS; the mission builder still builds the real route."""
+        import math
+        NM = 1852.0
+        if not SEAD_SYNC_ON:
+            return
+        st = self.state
+        sead = []
+        for p in pkgs:
+            if p.objective.type != ObjectiveType.DEAD or not p.objective.target_id or p.objective.target_id not in st.assets:
+                continue
+            fl = [f for f in p.flights if f.role == Role.SEAD and getattr(f, "base_id", None) in st.bases]
+            if not fl:
+                continue
+            tgt = st.assets[p.objective.target_id]
+            base = st.bases[fl[0].base_id]
+            d_m = math.hypot(tgt.x - base.x, tgt.y - base.y)
+            sead.append((p, tgt, d_m))
+        groups = []
+        for item in sead:                                             # greedy: a package joins the first group whose lead target is close enough
+            for g in groups:
+                if math.hypot(g[0][1].x - item[1].x, g[0][1].y - item[1].y) <= SEAD_SYNC_KM * 1000:
+                    g.append(item)
+                    break
+            else:
+                groups.append([item])
+        for g in groups:
+            if len(g) < 2:
+                continue
+            def arrive(item):
+                p, _, d_m = item
+                h, m = int(p.start[:2]), int(p.start[3:5])
+                return h * 60 + m + (d_m / (SEAD_SYNC_KTS * NM / 3600.0)) / 60.0
+            latest = max(arrive(it) for it in g)
+            for it in g:
+                shift = round(latest - arrive(it))
+                if shift:
+                    p = it[0]
+                    m = min(23 * 60 + 55, max(0, int(p.start[:2]) * 60 + int(p.start[3:5]) + shift))
+                    p.start = f"{m // 60:02d}:{m % 60:02d}"
 
     def _stage_times(self, pkgs: list) -> None:
         """Keep each DEAD-stage package DEAD_STAGE_GAP_MIN after the SEAD-stage package of the same site (waves would otherwise spread them)."""

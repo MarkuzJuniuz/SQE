@@ -171,7 +171,7 @@ SEAD_LEARN = 0.10             # each failed SEAD day on a site adds this to the 
 SEAD_LEARN_MAX = 0.40         # ...up to this much
 SEAD_WEAR = 0.04              # health a failed SEAD still takes off the site
 SEAD_FAIL_VALVE = 3           # days of failed SEAD on the same site before the combined SEAD + DEAD package is offered again
-DEAD_STAGE_GAP_MIN = 25       # the DEAD package starts this long after the SEAD package of the same site
+DEAD_STAGE_GAP_MIN = 10       # the DEAD package starts this long after the SEAD package of the same site (a radar hold covers the SEAD running late)
 
 
 def sead_fail(state, site: str) -> int:

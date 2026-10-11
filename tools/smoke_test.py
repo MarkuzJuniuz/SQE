@@ -138,6 +138,8 @@ def main():
     zb = zipfile.ZipFile(bs.settings.sortie_miz); mb = lua.loads(zb.read("mission").decode())
     print(f"[back] seed {seed_b} host #{pk_b.number} {pk_b.start} + {[(m['number'], m['tot_s'] and round(m['tot_s']), m.get('underway')) for m in rb.merged]}")
     # one where the earlier package really is already airborne at the start: its flights must be live (not late-activated) and in the air
+    import sqe.engine as _eng
+    _eng.SEAD_SYNC_ON = False                     # the sync (v0.39.13) would put every SEAD package on one site at one time: no earlier one is ever underway
     under = None
     for seed_u in range(1, 41):
         bs.new("Smoke under", "F-14BU", 2, seed=seed_u)
@@ -149,6 +151,7 @@ def main():
         if under:
             break
     assert under, "no merged mission with an earlier package already underway was produced"
+    _eng.SEAD_SYNC_ON = True
     zu = zipfile.ZipFile(bs.settings.sortie_miz); mu = lua.loads(zu.read("mission").decode())["mission"]
     uman = bs.manifest()
     names = {n for g in uman.groups if g.get("pkg") == [m for m in under[2].merged if m.get("underway")][0]["id"] and g["kind"] == "friendly" for n in g["units"]}
