@@ -1,3 +1,9 @@
+## v0.38.0
+Road snapping, needing a new scan. Untested in DCS.
+* **The scan mission also finds roads** (`terrainprobe.py`): after the land / water and ground-height passes it asks `land.getClosestPointOnRoads('roads', x, y)` on a 2 km grid (`"road_step"` in the theatre's scan block) and writes the distinct road points (rounded to 50 m) to `SQE_roads_<theatre>.json`. This adds a minute or two to the scan. The Settings > Terrain scan page shows whether roads are loaded. Run the scan mission again to get them; the old files are still valid.
+* **Snapping** (`ground.snap_roads`, `sqe/roads.py`): once, as soon as a roads file exists (new campaigns at creation, older ones at the next day plan), front-line columns, fuel farms and depots for both sides move onto the nearest road point within 3 km, if it is still on land. A column's air defence and anything guarding a moved site moves with it. Garrisons stay off the road, dug in. No roads file means nothing changes.
+* It is a point cloud, not a road graph: things sit on a road, they do not drive along one.
+
 ## v0.37.0
 The altitude choice (HIGH / MED / LOW) now counts ground anti-aircraft. Untested in DCS.
 * **Ground AA counts**: front-line columns, garrisons, support sites (fuel, depot, C2) and Red airfields carry guns and short-range SAMs (ZSU-23-4, Strela, Osa, MANPADs). Each live one within 5 nm of the route from the PUSH on counts as an AAA site, which only reaches a flight that goes LOW (0 to 10,000 ft). Vehicles and buildings within 6 km of each other count as one site (`profiles.GROUND_AA_MERGE_M`).

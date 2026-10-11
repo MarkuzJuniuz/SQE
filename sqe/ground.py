@@ -126,6 +126,36 @@ def ensure_blue_garrisons(state) -> bool:
     return added
 
 
+ROAD_SNAP_M = 3000.0                     # a column or supply site moves onto a road if one is this close
+
+
+def snap_roads(state) -> int:
+    """Once, as soon as a road scan exists: front-line columns, fuel farms and depots (both sides) move onto the nearest road point (<= ROAD_SNAP_M,
+    and still on land); a column's air defence and anything guarding a moved site moves with it. Garrisons stay off the road, dug in. Returns how many moved."""
+    from . import roads, seacheck
+    g = getattr(state, "ground", None)
+    if not g or g.get("roads") or not roads.available():
+        return 0
+    g["roads"] = True
+    moved = 0
+    pool = list(state.assets.values()) + list((getattr(state, "blue_assets", None) or {}).values())
+    for a in pool:
+        if not (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or (a.kind == AssetKind.ARMOR and a.variant != "GARRISON")):
+            continue
+        p = roads.snap(a.x, a.y, ROAD_SNAP_M)
+        if p is None or p == (a.x, a.y) or not seacheck.site_ok(*p):
+            continue
+        dx, dy = p[0] - a.x, p[1] - a.y
+        a.x, a.y = p
+        moved += 1
+        for c in state.assets.values():                                   # followers
+            if c.guards == a.id or (a.id.startswith("armor_") and c.id == "fsam_" + a.id[6:]):
+                c.x, c.y = c.x + dx, c.y + dy
+    if moved:
+        state.note(f"{moved} columns and supply sites now sit on roads.")
+    return moved
+
+
 def rebuild_blue(state, d, rng) -> list:
     """Overnight: a destroyed friendly supply site or garrison is replaced with a chance that follows friendly supply (the enemy's SAM sites rebuild the same way)."""
     out = []

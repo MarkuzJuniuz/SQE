@@ -285,3 +285,6 @@ A wing or squadron that is badly beaten up (30% of its aircraft or less) may sta
 ## Ground guns and the LOW decision
 When the planner weighs going LOW to get under radar SAMs, it now also counts the guns and short-range SAMs that travel with columns and garrisons and sit at support sites and airfields. Enough of them near the route or the target keep a strike package at its normal altitude, so you no longer get a LOW profile that flies straight into a column's ZSU-23-4s.
 
+## Roads
+Run the terrain scan mission again after updating: it now also records roads (adds a minute or two). With the roads file, columns, fuel farms and depots are placed on roads. The Settings > Terrain scan page shows "Roads: loaded" when it worked. If it says the scan did not find roads, the mission message at the end says "roads not available" and nothing else changes.
+

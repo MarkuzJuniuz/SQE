@@ -35,11 +35,12 @@ class Session:
 
     def sync_terrain(self) -> None:
         """Point the land / water checks at the terrain scan DCS measured (if it has been run) and at the shore margin from Settings."""
-        from . import relief, seacheck, terrainmask
+        from . import relief, roads, seacheck, terrainmask
         seacheck.SITE_MARGIN = float(getattr(self.settings, "shore_margin_m", 1500))
         terrainmask.RIVER_MARGIN = float(getattr(self.settings, "river_margin_m", 100))
         terrainmask.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
         relief.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
+        roads.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
 
     # ---- persistence ---------------------------------------------------------------------------
     @property
@@ -101,6 +102,7 @@ class Session:
         st = self.state
         from . import ground
         ground.ensure_blue_garrisons(st)                # older saves: a friendly garrison at every airfield
+        ground.snap_roads(st)                           # once, as soon as a road scan exists: columns and supply sites sit on a road
         redair.ensure(st, self.d)                       # the enemy's air tasking for the day
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=self.PACKAGES_PER_DAY)
         keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry", "sead_fail")}

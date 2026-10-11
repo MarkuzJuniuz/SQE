@@ -205,6 +205,7 @@ class SettingsDialog(QDialog):
         v = page("Terrain scan")
         self.tm_status = QLabel(); self.tm_status.setWordWrap(True); v.addWidget(self.tm_status)
         self.tm_relief = QLabel(); self.tm_relief.setWordWrap(True); v.addWidget(self.tm_relief)
+        self.tm_roads = QLabel(); self.tm_roads.setWordWrap(True); v.addWidget(self.tm_roads)
         self.shore = QSpinBox(); self.shore.setRange(300, 5000); self.shore.setSingleStep(100); self.shore.setSuffix(" m"); self.shore.setValue(int(getattr(settings, "shore_margin_m", 1500)))
         self.river = QSpinBox(); self.river.setRange(0, 1000); self.river.setSingleStep(50); self.river.setSuffix(" m rivers"); self.river.setValue(int(getattr(settings, "river_margin_m", 100)))
         row(v, "Shore margin", self.shore, self.river)
@@ -223,9 +224,10 @@ class SettingsDialog(QDialog):
             self.tabs.setCurrentIndex(3)                                  # first run: the paths are what is missing
 
     def _tm_refresh(self):
-        from .. import terrainmask as _tmk, relief as _rl
+        from .. import terrainmask as _tmk, relief as _rl, roads as _rd
         _tmk.configure(self.s.sqe_dir if self.s.dcs_saves else None)
         _rl.configure(self.s.sqe_dir if self.s.dcs_saves else None)
+        _rd.configure(self.s.sqe_dir if self.s.dcs_saves else None)
         sc = _tmk.scanned(self.s.sqe_dir if self.s.dcs_saves else None)
         have = ", ".join(f"{t} (scanned {dte})" for t, dte in sc) if sc else "none yet"
         ok = bool(_tmk.available())
@@ -234,6 +236,9 @@ class SettingsDialog(QDialog):
         rok = bool(_rl.available())
         self.tm_relief.setText(("Ground height: " + _rl.info()) if rok else "Ground height: not scanned. Low flights use a flat estimate and the kneeboard has no minimum safe altitude (run the scan mission again).")
         self.tm_relief.setStyleSheet(f"color: {theme.GREEN if rok else theme.AMBER}; font-weight: 700; font-size: 15px;")
+        dok = bool(_rd.available())
+        self.tm_roads.setText(("Roads: " + _rd.info()) if dok else "Roads: not scanned. Columns and supply sites are not placed on roads (run the scan mission again).")
+        self.tm_roads.setStyleSheet(f"color: {theme.GREEN if dok else theme.AMBER}; font-weight: 700; font-size: 15px;")
         self.tm.setText("Ground sites stay this far from the sea and lakes, and the second value from rivers and shallow water (rivers need the scan). "
                         f"Terrain scans on disk: {have}.")
 

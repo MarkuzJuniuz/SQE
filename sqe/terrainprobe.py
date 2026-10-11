@@ -17,11 +17,14 @@ if not (io and lfs) then
   return
 end
 local X0, Y0, STEP, NX, NY = __X0__, __Y0__, __STEP__, __NX__, __NY__
+local X1, Y1 = __X1__, __Y1__
 local HSTEP, HNX, HNY = __HSTEP__, __HNX__, __HNY__
 local DIR = lfs.writedir() .. "SQE"
 lfs.mkdir(DIR)
 local OUT = DIR .. "\\__FILE__"
 local ROUT = DIR .. "\\__RFILE__"
+local DOUT = DIR .. "\\__DFILE__"
+local RSTEP = __RSTEP__
 local ST = land.SurfaceType
 local rows, nxt, per = {}, 0, 4
 local H = STEP / 4
@@ -67,6 +70,7 @@ local function relief_pass()
     mx[#mx + 1] = table.concat(a, " ")
     mn[#mn + 1] = table.concat(b, " ")
   end
+  local road_pass
   local function finish2()
     local f = io.open(ROUT, "w")
     if not f then trigger.action.outText("SQE terrain probe: cannot write " .. ROUT, 90) return end
@@ -76,7 +80,42 @@ local function relief_pass()
     f:write(table.concat(mn, '","'))
     f:write('"]}')
     f:close()
-    trigger.action.outText("SQE terrain scan COMPLETE (land and ground height). You can leave this mission and quit to the menu. Restart SQE or just build your next sortie.", 3600)
+    trigger.action.outText("SQE ground height done. Now finding roads; do not leave this mission yet.", 15)
+    road_pass()
+  end
+  road_pass = function()
+    -- distinct road points: land.getClosestPointOnRoads('roads', x, y) on a coarse grid, kept when the answer is near the sample, rounded to 50 m
+    local seen, pts, nxt3, per3 = {}, {}, 0, 40
+    local RNX, RNY = math.floor((X1 - X0) / RSTEP), math.floor((Y1 - Y0) / RSTEP)
+    local function done()
+      local ok = #pts > 0
+      if ok then
+        local f = io.open(DOUT, "w")
+        if f then
+          f:write('{"terrain":"__NAME__","step":' .. RSTEP .. ',"pts":[' .. table.concat(pts, ",") .. ']}')
+          f:close()
+        else ok = false end
+      end
+      trigger.action.outText("SQE terrain scan COMPLETE (land, ground height" .. (ok and ", roads" or "; roads not available") .. "). You can leave this mission and quit to the menu. Restart SQE or just build your next sortie.", 3600)
+    end
+    timer.scheduleFunction(function(_, t)
+      for _ = 1, per3 do
+        if nxt3 >= RNX then done() return nil end
+        local x = X0 + (nxt3 + 0.5) * RSTEP
+        for j = 0, RNY - 1 do
+          local y = Y0 + (j + 0.5) * RSTEP
+          local okc, rx, ry = pcall(land.getClosestPointOnRoads, "roads", x, y)
+          if okc and rx and ry and math.abs(rx - x) <= RSTEP and math.abs(ry - y) <= RSTEP then
+            local kx, ky = math.floor(rx / 50 + 0.5) * 50, math.floor(ry / 50 + 0.5) * 50
+            local key = kx .. ":" .. ky
+            if not seen[key] then seen[key] = true; pts[#pts + 1] = "[" .. kx .. "," .. ky .. "]" end
+          end
+        end
+        nxt3 = nxt3 + 1
+      end
+      if (nxt3 % 40) < per3 then trigger.action.outText(string.format("SQE road scan: %d%%", math.floor(100 * nxt3 / RNX)), 5) end
+      return t + 0.05
+    end, nil, timer.getTime() + 1)
   end
   timer.scheduleFunction(function(_, t)
     for _ = 1, per2 do
@@ -119,7 +158,8 @@ def probe_lua() -> str:
     HS = int(sc.get("height_step", 1000))
     hnx, hny = (X1 - X0) // HS, (Y1 - Y0) // HS
     rfile = sc.get("relief_file") or sc["file"].replace("terrain", "relief")
-    return (PROBE_LUA.replace("__HSTEP__", str(HS)).replace("__HNX__", str(hnx)).replace("__HNY__", str(hny)).replace("__RFILE__", rfile).replace("__X0__", str(X0)).replace("__Y0__", str(Y0)).replace("__STEP__", str(STEP))
+    dfile = sc.get("roads_file") or sc["file"].replace("terrain", "roads")
+    return (PROBE_LUA.replace("__DFILE__", dfile).replace("__RSTEP__", str(int(sc.get("road_step", 2000)))).replace("__X1__", str(X1)).replace("__Y1__", str(Y1)).replace("__HSTEP__", str(HS)).replace("__HNX__", str(hnx)).replace("__HNY__", str(hny)).replace("__RFILE__", rfile).replace("__X0__", str(X0)).replace("__Y0__", str(Y0)).replace("__STEP__", str(STEP))
             .replace("__NX__", str(nx)).replace("__NY__", str(ny)).replace("__FILE__", sc["file"]).replace("__NAME__", th["name"]))
 
 

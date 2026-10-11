@@ -195,7 +195,7 @@ def main():
     assert _tm.land_ok(5000, 2000, 300) is True and _tm.land_ok(5000, 5100, 300) is False, "river cells must fail"
     assert _tm.land_ok(5000, 4700, 300) is True, "land 200 m+ from the river must pass"
     assert _tm.land_ok(99999, 99999) is None
-    assert "land.getSurfaceType" in _tp.probe_lua() and "SQE_terrain_caucasus" in _tp.probe_lua()
+    assert "land.getSurfaceType" in _tp.probe_lua() and "SQE_terrain_caucasus" in _tp.probe_lua() and "getClosestPointOnRoads" in _tp.probe_lua() and "SQE_roads_caucasus.json" in _tp.probe_lua(), "the scan mission also finds roads"
     _tm.configure(None)
     print("[terrain] mask read, river margin and off-map fallback OK")
     # ---- GUI dialogs build (offscreen) and the scan button works --------------------------------------------------------------
@@ -1216,6 +1216,25 @@ def main():
     assert _back and _n9 >= _aw.RETURN_MIN_DAYS - 1 and _w9.available >= _aw.RETURN_FRAC * _w9.authorized - 1, "it returns after resting, at strength"
     _rt9 = _CS.from_dict(_st.to_dict()); assert [w_.reserve for w_ in _rt9.enemy_air] == [w_.reserve for w_ in _st.enemy_air], "saved and loaded"
     print("[air rest] depleted wings and squadrons stand down, recover faster and return; your squadron, carriers and the bomber wing are left alone; saved")
+    # roads: the scan file's points, nearest-point snapping, columns and supply sites moved onto a road once (garrisons stay off it)
+    from sqe import roads as _rdm, ground as _grd9
+    _rdm.clear(); assert not _rdm.available() and _rdm.snap(0, 0) is None, "no road scan: no snapping"
+    _rdm.from_points([(1000, 1000), (1000, 9000), (-20000, 5000)])
+    assert _rdm.snap(1500, 1200) == (1000.0, 1000.0) and _rdm.snap(1000, 5000, 3000) is None and _rdm.snap(1000, 8000) == (1000.0, 9000.0), "nearest road point within the limit"
+    s.new("Roads", "F-16C", 2, seed=5); _st = s.state
+    _col = _st.assets["armor_1"]; _fs = _st.assets.get("fsam_1"); _gar = next((a_ for a_ in _st.assets.values() if a_.variant == "GARRISON"), None)
+    _off = (_fs.x - _col.x, _fs.y - _col.y) if _fs else None; _g0 = (_gar.x, _gar.y) if _gar else None
+    _st.ground.pop("roads", None)
+    _rdm.from_points([(_col.x + 1200, _col.y - 800)])
+    _n9 = _grd9.snap_roads(_st)
+    assert _n9 >= 1 and (_col.x, _col.y) == (_col.x, _col.y) and abs(_col.x - (_fs.x - _off[0] if _fs else _col.x)) < 1e-6, "the column moved onto the road point"
+    if _fs:
+        assert abs((_fs.x - _col.x) - _off[0]) < 1e-6 and abs((_fs.y - _col.y) - _off[1]) < 1e-6, "its air defence moved with it"
+    if _gar:
+        assert (_gar.x, _gar.y) == _g0, "garrisons stay where they are"
+    assert _st.ground.get("roads") and _grd9.snap_roads(_st) == 0, "done once"
+    _rdm.clear()
+    print("[roads] scan file points, nearest-point snap, columns and supply sites placed on a road once with their air defence; no scan = nothing changes")
     print("SMOKE TEST PASSED")
 
 
