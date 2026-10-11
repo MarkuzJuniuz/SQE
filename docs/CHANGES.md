@@ -1,3 +1,6 @@
+## v0.38.2
+* New campaigns start in 2006 (June 12 by default, was 2004). The A-10C flew first in 2005, so 2004 never fitted; in this story the F-14 stays in service because the war needs it. The year only changes the date (daylight, kneeboard); nothing in the war reads it. Existing campaigns keep their date.
+
 ## v0.38.1
 * The FC3 F-15C no longer counts as having an internal jammer: its tier is 0 (no jamming rolls, no cover in the abstract war). Its switch cannot be read later and what the real set does is not clear enough to emulate.
 

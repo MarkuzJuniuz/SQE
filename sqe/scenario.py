@@ -74,7 +74,7 @@ def snap_assets_to_land(st) -> int:
 
 
 def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str = "caucasus",
-                 seed: int | None = None, start_date: str = "2004-06-12", night_ops: bool = False,
+                 seed: int | None = None, start_date: str = "2006-06-12", night_ops: bool = False,
                  player_squadron: str | None = None) -> CampaignState:
     d: Difficulty = get_difficulty(level)
     rng = random.Random(seed)

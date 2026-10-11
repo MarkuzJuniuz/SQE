@@ -30,7 +30,7 @@ class CampaignState:
     history: list = field(default_factory=list)    # one dict per debriefed sortie
     log: list = field(default_factory=list)
     status: str = "ACTIVE"                         # ACTIVE | VICTORY | DEFEAT
-    start_date: str = "2004-06-12"                 # campaign day 1 (year 2004: F-14B(U) era)
+    start_date: str = "2006-06-12"                 # campaign day 1 (year 2006: the F-14B(U) and the A-10C both in service; the Tomcat is kept past its real retirement)
     night_ops: bool = False                        # allow night sorties in the daily cycle
     pilot: dict = field(default_factory=dict)      # your pilot log
     front: int = 0                                 # how far the war has advanced: tiers up to front+2 are open for tasking

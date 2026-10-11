@@ -75,7 +75,7 @@ First launch:
    It makes a backup (`MissionScripting.lua.sqe.bak`) and comments out the `io` and `lfs` sanitize lines.
    If your install is under *Program Files* and it says it cannot write, run VS Code (or SQE.exe) **as administrator** once,
    or edit the file by hand. **DCS updates revert it**: patch again after an update.
-3. **File > New Campaign**: name it, pick your jet (**F-14B(U), F/A-18C, F-16C, F-15C or A-10C**), a difficulty, the start month/day (year is 2004) and whether to allow night sorties, OK.
+3. **File > New Campaign**: name it, pick your jet (**F-14B(U), F/A-18C, F-16C, F-15C or A-10C**), a difficulty, the start month/day (year is 2006) and whether to allow night sorties, OK.
 
 **Playing a day**
 1. **Missions** tab: pick a tasking, then press **FLY** on the row of the flight you want to fly (green rows). SQE writes `SQE_Sortie.miz` and opens the **waiting window**. HAVCAP and base-CAP flights are AI-only.

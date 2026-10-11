@@ -54,7 +54,7 @@ class Session:
         d = self.campaigns_dir()
         return sorted(d.glob(f"*{CAMPAIGN_EXT}"), key=lambda p: p.stat().st_mtime, reverse=True) if d.exists() else []
 
-    def new(self, name: str, aircraft: str, level: int, seed: int | None = None, start_date: str = "2004-06-12", night_ops: bool = False,
+    def new(self, name: str, aircraft: str, level: int, seed: int | None = None, start_date: str = "2006-06-12", night_ops: bool = False,
             squadron: str | None = None, theatre: str = "caucasus") -> None:
         theatres.use(theatre)
         self.sync_terrain()
