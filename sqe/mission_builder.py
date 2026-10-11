@@ -1147,6 +1147,9 @@ class MissionBuilder:
                         self._fcalls.append((float(egr), f"{lab}: off target, egressing."))
 
         armor = self.groups_by_asset.get(package.objective.target_id)
+        ai_sead = f.role == Role.SEAD and not f.tag and (not f.is_player or o.player_is_ai)
+        if ai_sead:         # a SEAD jet's job is the radar, not the fighters: v0.39.9 run, both Hornet SEAD flights chased MiGs into Tor and SA-11 range and died 150 s before their HARM point
+            g.points[0].tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))        # shoots back when shot at; weapons free again at the HARM point (below)
         special = self._f14_special_namer(wps) if (f.is_player and f.aircraft == "F-14BU" and o.f14_special_names) else None
         for w in wps[first:]:
             wp = g.add_waypoint(pt(w.x, w.y), w.alt_ft * FT, w.speed_kts * KPH, w.name)
@@ -1164,6 +1167,8 @@ class MissionBuilder:
                     if w.action == "BOMB":
                         wp.tasks.append(task.Bombing(pt(w.x, w.y), group_attack=True))
                     continue
+            if ai_sead and w.name == "EGR":
+                wp.tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))                      # and no chasing on the way home either
             if run_t0 is not None:
                 if w is wps[first]:
                     wp.tasks.append(task.OptECMUsing(task.OptECMUsing.Values.NeverUse))          # jammers off until the attack leg

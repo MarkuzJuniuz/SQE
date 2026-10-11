@@ -66,7 +66,9 @@ end
 local function shotsJson()
   local o = {}
   for _, k in ipairs(shots) do
-    o[#o + 1] = string.format('{"t":%d,"ev":"%s","by":"%s","bt":"%s","w":"%s","tg":"%s","tt":"%s"}', k.t, k.ev, esc(k.by), esc(k.bt), esc(k.w), esc(k.tg), esc(k.tt))
+    local more = ""
+    if k.km then more = string.format(',"km":%.1f,"alt":%d', k.km, math.floor(k.alt or 0)) end        -- shooter-to-target range (km) and shooter altitude (m) at launch
+    o[#o + 1] = string.format('{"t":%d,"ev":"%s","by":"%s","bt":"%s","w":"%s","tg":"%s","tt":"%s"%s}', k.t, k.ev, esc(k.by), esc(k.bt), esc(k.w), esc(k.tg), esc(k.tt), more)
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
@@ -167,11 +169,17 @@ end
 local function logShot(ev, e, by)
   local function tname(o) local ok, t = pcall(function() return o:getTypeName() end); if ok and t then return t end return "?" end
   local w, tg, tt = "?", "", ""
+  local km, salt = nil, nil
   if e.weapon then
     local ok, t = pcall(function() return e.weapon:getTypeName() end); if ok and t then w = t end
     if ev == "shot" then
       local okt, tgo = pcall(function() return e.weapon:getTarget() end)
-      if okt and tgo then tg = nameOf(tgo) or ""; tt = tname(tgo) end
+      if okt and tgo then
+        tg = nameOf(tgo) or ""; tt = tname(tgo)
+        local okp, tp = pcall(function() return tgo:getPoint() end)
+        local oks, sp = pcall(function() return e.initiator:getPoint() end)
+        if okp and oks and tp and sp then km = math.sqrt((tp.x - sp.x) ^ 2 + (tp.z - sp.z) ^ 2) / 1000; salt = sp.y end
+      end
     end
   end
   if ev == "hit" and e.target then
@@ -181,7 +189,7 @@ local function logShot(ev, e, by)
   end
   if ev == "hit" and tg ~= "" then LASTHIT[tg] = { by = by or "?", w = w, t = timer.getTime() } end
   if #shots >= 600 then return end
-  shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt }
+  shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt, km = km, alt = salt }
 end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
 local function jamOn(name)                  -- future: the player's cockpit switch (export script) feeds this
