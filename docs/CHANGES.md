@@ -1,3 +1,7 @@
+## v0.39.1
+
+* **The road scan no longer freezes DCS.** The road pass ran 40 map columns (about 15,600 `getClosestPointOnRoads` calls) in one tick; that call is a nearest-road search and far slower than the height calls, so DCS stalled. It now works in 20 ms time slices and the progress message shows the percentage and a rough time left. If the scan is still too slow, raise `road_step` in the theatre's scan block (default 2000 m) and fly the scan again.
+
 ## v0.39.0
 A full-map stress run. Untested in DCS.
 * **`--full-map` launch option**: nothing is left out of the mission. Every live enemy site, column, garrison, support site and early-warning radar is built; every friendly airfield gets its defences, garrison and supply sites; every friendly sector with troops gets its column; every planned enemy patrol is airborne at its station. The unit limit and the merge trim are off. Your package and the target are the same as in a normal run. On a Level 3 campaign one sortie went from 144 to 766 units in testing.

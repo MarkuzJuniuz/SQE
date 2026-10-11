@@ -85,7 +85,7 @@ local function relief_pass()
   end
   road_pass = function()
     -- distinct road points: land.getClosestPointOnRoads('roads', x, y) on a coarse grid, kept when the answer is near the sample, rounded to 50 m
-    local seen, pts, nxt3, per3 = {}, {}, 0, 40
+    local seen, pts, nxt3 = {}, {}, 0
     local RNX, RNY = math.floor((X1 - X0) / RSTEP), math.floor((Y1 - Y0) / RSTEP)
     local function done()
       local ok = #pts > 0
@@ -98,22 +98,35 @@ local function relief_pass()
       end
       trigger.action.outText("SQE terrain scan COMPLETE (land, ground height" .. (ok and ", roads" or "; roads not available") .. "). You can leave this mission and quit to the menu. Restart SQE or just build your next sortie.", 3600)
     end
+    -- getClosestPointOnRoads is a nearest-road search, far slower than getHeight: work in time slices (about 20 ms per tick), never a fixed number of columns
+    local clock, BUDGET = os and os.clock, 0.02
+    local t_start, t_msg, rowj = timer.getTime(), timer.getTime(), 0
     timer.scheduleFunction(function(_, t)
-      for _ = 1, per3 do
+      local c0, nc = clock and clock() or 0, 0
+      while true do
         if nxt3 >= RNX then done() return nil end
         local x = X0 + (nxt3 + 0.5) * RSTEP
-        for j = 0, RNY - 1 do
-          local y = Y0 + (j + 0.5) * RSTEP
+        local stop = false
+        while rowj < RNY do
+          local y = Y0 + (rowj + 0.5) * RSTEP
           local okc, rx, ry = pcall(land.getClosestPointOnRoads, "roads", x, y)
           if okc and rx and ry and math.abs(rx - x) <= RSTEP and math.abs(ry - y) <= RSTEP then
             local kx, ky = math.floor(rx / 50 + 0.5) * 50, math.floor(ry / 50 + 0.5) * 50
             local key = kx .. ":" .. ky
             if not seen[key] then seen[key] = true; pts[#pts + 1] = "[" .. kx .. "," .. ky .. "]" end
           end
+          rowj = rowj + 1; nc = nc + 1
+          if (clock and clock() - c0 >= BUDGET) or (not clock and nc >= 50) then stop = true break end
         end
-        nxt3 = nxt3 + 1
+        if rowj >= RNY then rowj = 0; nxt3 = nxt3 + 1 end
+        if stop then break end
       end
-      if (nxt3 % 40) < per3 then trigger.action.outText(string.format("SQE road scan: %d%%", math.floor(100 * nxt3 / RNX)), 5) end
+      if t - t_msg >= 5 then
+        t_msg = t
+        local el = t - t_start
+        local eta = math.ceil(el * (RNX - nxt3) / math.max(nxt3, 1) / 60)
+        trigger.action.outText(string.format("SQE road scan: %d%% (about %d min left)", math.floor(100 * nxt3 / RNX), eta), 6)
+      end
       return t + 0.05
     end, nil, timer.getTime() + 1)
   end
