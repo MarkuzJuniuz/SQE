@@ -931,6 +931,7 @@ def main():
                        [{"t": 100, "site": "sam_x", "grp": "Hornet 2", "from": 3, "to": 5, "ai": True, "dead": True, "you": False}], True)
     assert "GATE_M = 40 * 1000" in _hk and "dead=true" in _hk, "the gate fires on distance"
     assert "AITEST = true" in _hk and "gatesJson" in _hk and '"gates":%s' in _hk, "all-AI test: calls go to everyone; every gate is logged in the state file"
+    assert "HOLD_S = 720" in _hk and 'id = "Orbit"' in _hk and "hold-resumed" in _hk and "hold-timeout" in _hk and "HOLD_FUEL" in _hk, "an AI DEAD flight holds outside when the radars are up, re-checks, goes in when blind, breaks off on timeout or low fuel"
     assert '"shots":%s' in _hk and "logShot" in _hk and "getTarget" in _hk, "every shot and hit is logged in the state file"
     assert "you=true" in _hk and "SOUND_YOU" in _hk and "GATES = { {t=100" in _hk
     assert '"deaths":%s' in _hk and "LASTHIT" in _hk and "Object.Category.SCENERY" in _hk, "losses are explained (last hit, fuel, altitude) and scenery hits are not logged"

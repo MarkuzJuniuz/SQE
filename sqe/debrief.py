@@ -412,6 +412,176 @@ local function sitePoint(s)
     if u then local ok, p = pcall(function() return u:getPoint() end); if ok and p then return p end end
   end
 end
+local HOLD_S = 720           -- an AI DEAD flight whose radars are still up holds this long (12 min) before it breaks off
+local HOLD_CHECK_S = 60      -- and re-checks the radars this often while it holds
+local HOLD_FUEL = 0.30       -- below this fuel fraction the holding flight breaks off at once: it must have fuel for the strike and the way home
+local function siteOf(gs)
+  for _, x in ipairs(SITES) do if x.id == gs.site then return x end end
+end
+local function breakOff(gs, why)
+  gs.done = true
+  gs.holding = false
+  local s = siteOf(gs)
+  if not aborted[gs.site] then
+    aborted[gs.site] = true
+    say(s.who .. ": abort, abort. " .. s.label .. " radars still up, DEAD flight break off.", gs.gates[1].you)
+  end
+  for _, gt in ipairs(gs.gates) do
+    local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = true, cmd = false, by = why }
+    gateLog[#gateLog + 1] = e
+    e.tp = gs.tp
+    e.d0 = gdist(gt.grp, e.tp)
+    if gt.ai then
+      local g = Group.getByName(gt.grp)
+      if g and g:getController() then
+        e.cmd = pcall(function() g:getController():setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = gt.from, goToWaypointIndex = gt.to } }) end)
+      end
+      timer.scheduleFunction(function() e.d1 = gdist(gt.grp, e.tp); dump(); return nil end, nil, timer.getTime() + 60)
+    end
+  end
+  dump()
+end
+local function resume(gs)
+  gs.done = true
+  gs.holding = false
+  local s = siteOf(gs)
+  for _, gt in ipairs(gs.gates) do
+    local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = false, cmd = false, by = "hold-resumed", held = math.floor(timer.getTime() - gs.holdAt) }
+    gateLog[#gateLog + 1] = e
+    if gt.ai then
+      local g = Group.getByName(gt.grp)
+      if g and g:getController() then
+        e.cmd = pcall(function()
+          local c = g:getController()
+          c:resetTask()
+          c:setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = gt.from, goToWaypointIndex = gt.from } })
+        end)
+      end
+    end
+  end
+  say(s.who .. ": " .. s.label .. " radars are down. DEAD flight is in.", gs.gates[1].you)
+  dump()
+end
+local function holdGroups(gs)
+  gs.holding = true
+  gs.holdAt = timer.getTime()
+  local s = siteOf(gs)
+  say(s.who .. ": " .. s.label .. " radars still up. DEAD flight holds outside, rechecking.", gs.gates[1].you)
+  for _, gt in ipairs(gs.gates) do
+    if gt.ai and gt.dead then
+      local g = Group.getByName(gt.grp)
+      local ok, c = pcall(function() return g and g:getController() end)
+      if g and ok and c then
+        local okp, p = pcall(function() return g:getUnit(1):getPoint() end)
+        if okp and p then
+          pcall(function() c:pushTask({ id = "Orbit", params = { pattern = "Circle", point = { x = p.x, y = p.z }, radius = 6000, altitude = p.y, speed = 230 } }) end)
+        end
+      end
+    end
+  end
+  dump()
+end
+local function holdFuelLow(gs)
+  for _, gt in ipairs(gs.gates) do
+    if gt.ai and gt.dead then
+      local g = Group.getByName(gt.grp)
+      local okf, f = pcall(function() return g:getUnit(1):getFuel() end)
+      if okf and f and f < HOLD_FUEL then return true end
+    end
+  end
+  return false
+end
+local function holdCheck(gs, t)
+  if not gs.holding then return nil end
+  local s = siteOf(gs)
+  local blind = (not s) or s.nrad <= 0 or s.nalive <= 0
+  if blind then resume(gs); return nil end
+  if timer.getTime() - gs.holdAt >= HOLD_S then breakOff(gs, "hold-timeout"); return nil end
+  if holdFuelLow(gs) then breakOff(gs, "hold-fuel"); return nil end
+  return t + HOLD_CHECK_S
+end
+local function decide(gs, why)
+  local s = siteOf(gs)
+  local blind = (not s) or s.nrad <= 0 or s.nalive <= 0
+  if not blind then
+    local canHold = false
+    for _, gt in ipairs(gs.gates) do if gt.ai and gt.dead then canHold = true end end
+    if canHold and why ~= "hold-timeout" and why ~= "hold-fuel" then
+      if not gs.tp then gs.tp = sitePoint(s) end
+      holdGroups(gs)
+      timer.scheduleFunction(holdCheck, gs, timer.getTime() + HOLD_CHECK_S)
+      return
+    end
+    breakOff(gs, why)
+    return
+  end
+  gs.done = true
+  for _, gt in ipairs(gs.gates) do
+    local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = false, cmd = false, by = why }
+    gateLog[#gateLog + 1] = e
+    e.tp = gs.tp
+    e.d0 = gdist(gt.grp, e.tp)
+  end
+  dump()
+end
+timer.scheduleFunction(function(_, t)
+  local now = timer.getTime()
+  for i, c in ipairs(CALLS) do
+    if not said[i] and now >= c.t then said[i] = true; say(c.text, c.you) end
+  end
+  return t + 2
+end, nil, timer.getTime() + 5)
+-- ruins of what earlier packages already hit: a few fires and smoke plumes (kept few for VR performance)
+do
+  local nid = 0
+  timer.scheduleFunction(function()
+    for _, r in ipairs(RUINS) do
+      for i = 1, r.n do
+        local a = r.s + (i - 1) * 2.1
+        local d = (i == 1) and 0 or r.r
+        local x, z = r.x + math.cos(a) * d, r.z + math.sin(a) * d
+        local y = 0
+        pcall(function() y = land.getHeight({x = x, y = z}) end)
+        local v = {x = x, y = y, z = z}
+        pcall(function() trigger.action.explosion(v, r.pw) end)
+        nid = nid + 1
+        pcall(function() trigger.action.effectSmokeBig(v, r.p, r.dn, "sqe_ruin_" .. nid) end)
+      end
+    end
+    return nil
+  end, nil, timer.getTime() + 4)
+end
+-- DEAD gate: before the DEAD flight commits, the target site's radars are checked. Any still alive: the DEAD flight turns back
+-- (the AI skips to its egress / return point; a human gets the call) and so do the escorts and sweeps of that package. The check fires
+-- when the DEAD flight's lead is within GATE_M of the site (so a late flight is judged where it really is), or at the clock time as a
+-- fallback (flight gone). Every gate is logged in the state file: when it ran, why, radars left, whether the command went through, and
+-- the flight's distance to the target then and 60 s later.
+local GATE_M = __GATEKM__ * 1000
+local function gdist(grpName, tp)
+  if not tp then return nil end
+  local ok, d = pcall(function()
+    local g = Group.getByName(grpName)
+    local u = g and g:getUnit(1)
+    if not u then return nil end
+    local a = u:getPoint()
+    return math.sqrt((a.x - tp.x) ^ 2 + (a.z - tp.z) ^ 2)
+  end)
+  if ok then return d end
+  return nil
+end
+local gsites, gorder = {}, {}
+for _, gt in ipairs(GATES) do
+  local gs = gsites[gt.site]
+  if not gs then gs = { site = gt.site, gates = {}, fall = 0, done = false }; gsites[gt.site] = gs; gorder[#gorder + 1] = gs end
+  gs.gates[#gs.gates + 1] = gt
+  if gt.t + 300 > gs.fall then gs.fall = gt.t + 300 end
+end
+local function sitePoint(s)
+  for _, un in ipairs(s.units) do
+    local u = Unit.getByName(un)
+    if u then local ok, p = pcall(function() return u:getPoint() end); if ok and p then return p end end
+  end
+end
 local function decide(gs, why)
   gs.done = true
   local s
@@ -440,7 +610,7 @@ timer.scheduleFunction(function(_, t)
   local now = timer.getTime()
   local left = false
   for _, gs in ipairs(gorder) do
-    if not gs.done then
+    if not gs.done and not gs.holding then
       left = true
       local s
       for _, x in ipairs(SITES) do if x.id == gs.site then s = x end end

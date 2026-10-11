@@ -1,3 +1,11 @@
+## v0.39.12
+
+* **An AI DEAD flight holds instead of turning back when the radars are still up.** In the v0.39.11 run Viper 1 reached the gate at about 22 minutes, found the Sukhumi radars still up and turned back, but the Navy SEAD finished blinding the site about 15 minutes later. The DEAD flight now orbits outside the threat (6 km radius at its own altitude), re-checks the radars every minute, and goes in as soon as the site is blind. It breaks off after 12 minutes (`HOLD_S = 720`) or at once if fuel falls below 30% (`HOLD_FUEL`), so it can still get home.
+* The state file logs the outcome as `hold-resumed`, `hold-timeout` or `hold-fuel`, with `held` (seconds held) on the resumed entries.
+* AI flights only. Your own flight still turns back at the gate.
+* Untested in DCS. Check: an AI DEAD flight with radars up orbits and rechecks; it goes in when the site is blind; it breaks off after the timeout.
+* Stacked on PR #9 (v0.39.11); merge #9 first.
+
 ## v0.39.11
 
 * **Every shot in `SQE_state.json` now carries the target's map position (`tx`, `tz`)**: its last known spot at the time of the shot or hit. This is the first step of the JSOW strike plan: a later strike aims at where the emitters were last seen, not where the launchers are.
