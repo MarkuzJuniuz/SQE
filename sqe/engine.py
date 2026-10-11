@@ -103,7 +103,7 @@ class Session:
         ground.ensure_blue_garrisons(st)                # older saves: a friendly garrison at every airfield
         redair.ensure(st, self.d)                       # the enemy's air tasking for the day
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=self.PACKAGES_PER_DAY)
-        keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry")}
+        keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry", "sead_fail")}
         if st.red_air.get("patrol_used") is not None:                 # replanning the same day never books the raids twice
             st.red_air["used"] = dict(st.red_air["patrol_used"])
         warned, n_surprise = raids.todays_raids(st, self.d, self._rng(71))
@@ -162,14 +162,39 @@ class Session:
         times = wave_times(len(pkgs), st.campaign_date(), st.night_ops, self._rng(5))
         for i, t in zip(order, times):
             pkgs[i].start = t
+        self._stage_times(pkgs)                                      # a DEAD stage goes in 25 minutes after the SEAD stage of the same site
         pkgs.sort(key=lambda p: p.start)
         for n, p in enumerate(pkgs, 1):                              # numbers follow the clock
             p.number, p.id = n, f"pkg{n}"
             for k, f in enumerate(p.flights, 1):
                 f.id = f"{p.id}-f{k}"
         st.plan = [p.to_dict() for p in pkgs]
+        self._cast_sead(pkgs)
         self.refresh_weather()
         return self.packages()
+
+    def _stage_times(self, pkgs: list) -> None:
+        """Keep each DEAD-stage package DEAD_STAGE_GAP_MIN after the SEAD-stage package of the same site (waves would otherwise spread them)."""
+        from .war import DEAD_STAGE_GAP_MIN
+        sead = {p.objective.target_id: p for p in pkgs if p.objective.type == ObjectiveType.DEAD and p.objective.aim == "SEAD"}
+        for p in pkgs:
+            sp = sead.get(p.objective.target_id)
+            if p.objective.type == ObjectiveType.DEAD and p.objective.aim == "DEAD" and sp is not None:
+                m = min(23 * 60 + 55, int(sp.start[:2]) * 60 + int(sp.start[3:5]) + DEAD_STAGE_GAP_MIN)
+                p.start = f"{m // 60:02d}:{m % 60:02d}"
+
+    def _cast_sead(self, pkgs: list) -> None:
+        """The dice for every SEAD package of the day are cast now, once (seeded from the campaign, the day and the site): the war simulation, the
+        DEAD stage's briefing and the mission builder all read the same answer. Flying the SEAD package replaces it with what really happened."""
+        import random as _r
+        from .war import WarSimulator, chance
+        st = self.state
+        st.raids.setdefault("sead", {})
+        sim = WarSimulator(self.d)
+        for p in pkgs:
+            if p.objective.type == ObjectiveType.DEAD and p.objective.aim == "SEAD":
+                rng = _r.Random(f"{st.campaign_id}:{st.day}:{p.objective.target_id}:sead")
+                st.raids["sead"][p.objective.target_id] = chance(rng, sim.sead_p(st, p), self.d.variance)
 
     def packages(self) -> list:
         """The tasking order. Emergency packages (flown, folded in or settled by odds) are in the plan but are not listed."""
@@ -179,6 +204,8 @@ class Session:
         """Objectives postponed yesterday (no aircraft left for them after an emergency scramble), if they are still worth flying and not already in the list."""
         st, out = self.state, []
         for od in (st.raids or {}).get("carry", []):
+            if od["type"] == "DEAD" and od.get("aim"):
+                continue                                        # a SEAD / DEAD stage is planned fresh with its partner, never carried alone
             o = Objective(od["id"], ObjectiveType(od["type"]), od["target_id"], od["priority"] + 2.0, od.get("description", ""), od.get("aim", ""))
             tgt = st.assets.get(o.target_id) or st.bases.get(o.target_id)
             if tgt is None or getattr(tgt, "destroyed", False) or any(x.type == o.type and x.target_id == o.target_id for x in objs + out):

@@ -44,6 +44,8 @@ DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's l
 def stagger(package, role) -> int:
     """SEAD leads the strikers by five minutes in a DEAD package (the radars must be blind before the DEAD flight commits); the sweep and the
     escorts keep their usual 30 s spacing around it: the sweep ahead, the escorts behind."""
+    if package.objective.type == ObjectiveType.DEAD and package.objective.aim == "DEAD":      # the DEAD stage: the SEAD package went in 25 min earlier
+        return {Role.SWEEP: -60, Role.ESCORT: -30}.get(role, 0)
     if package.objective.type == ObjectiveType.DEAD:
         if role == Role.SEAD:
             return -DEAD_SEAD_LEAD_S
@@ -184,7 +186,8 @@ class MissionBuilder:
         self.warns = warns
         self._anchor_id = package.id
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
-        self._gates = []                                         # DEAD flights that turn back when the site's radars are still up
+        self._gates = []                                                # DEAD flights that turn back when the site's radars are still up
+        self._blind_site = None
         extras = [x for x in extras if any(not f.tag for f in x.flights)]
         ruins = [x for x in ruins if any(not f.tag for f in x.flights)]
         self._preroll, self._ruin_sites = dict(preroll or {}), []
@@ -823,6 +826,9 @@ class MissionBuilder:
 
     def _spawn_opfor_ground(self, package, tx, ty, manifest, polyline=None):
         st, obj = self.state, package.objective
+        from .war import blinded_today
+        # the DEAD stage of a SEAD-first pair: if the SEAD package blinded the site (the day's verdict), its radars are already gone when the mission starts
+        self._blind_site = obj.target_id if (obj.type == ObjectiveType.DEAD and obj.aim == "DEAD" and blinded_today(st, obj.target_id)) else None
         if obj.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
             tgt, relevant = None, []            # no ground target, but enemy SAMs whose rings touch the route / station stay live
         else:
@@ -868,6 +874,11 @@ class MissionBuilder:
         g = self._platoon(self.red, a.id, comp, cx, cy, heading, form, scale=a.health)
         if g is None:
             return
+        if a.kind == AssetKind.SAM and (a.suppressed or a.id == self._blind_site):
+            gone = [u for u in g.units if str(getattr(u, "type", "")) in TRACK_RADARS | SEARCH_RADARS]
+            for u in gone:
+                g.units.remove(u)
+            base_count = max(1, base_count - len(gone))      # the radars were already destroyed: not damage this mission caused
         names = []
         for k, u in enumerate(g.units, 1):
             u.name = f"{a.id}|{k}"
@@ -1100,7 +1111,7 @@ class MissionBuilder:
                 ct.stop_after_time(int(w.eta_s) + 600)
                 wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree)); wp.tasks.append(ct)
         gate = None
-        if (not f.tag and package.objective.type == ObjectiveType.DEAD and package.objective.target_id and tot_s is not None
+        if (not f.tag and package.objective.type == ObjectiveType.DEAD and package.objective.aim != "SEAD" and package.objective.target_id and tot_s is not None
                 and f.role in (Role.STRIKE, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10):
             # radar gate: the DEAD flight, and its escorts and sweeps, break off if the site's radars are still up when the DEAD flight commits
             added = [w.name for w in wps[first:]]

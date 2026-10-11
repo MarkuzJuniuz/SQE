@@ -123,10 +123,35 @@ class ObjectivePlanner:
             if (s, o) not in picked and per.get(o.type, 0) < cap:
                 picked.append((s, o)); per[o.type] = per.get(o.type, 0) + 1
         picked.sort(key=lambda t: t[0], reverse=True)
+        picked = self._stage_dead(state, picked, limit)
         out = []
         for i, (_, o) in enumerate(picked, 1):
             o.id = f"obj-d{state.day}-{i}"
             out.append(o)
+        return out
+
+    def _stage_dead(self, state, picked: list, limit: int) -> list:
+        """SEAD first. Each SEAD / DEAD job becomes two packages for the same site: a SEAD package that blinds the radars, and a DEAD package that
+        goes in 25 minutes later and only if the radars are blind (see blinded_today). After SEAD_FAIL_VALVE failed days on the same site the
+        combined package is offered again. The pair counts against the day's package limit: the lowest-priority other jobs make room."""
+        out, extra = [], 0
+        for s_, o in picked:
+            if o.type == ObjectiveType.DEAD and not o.aim and sead_fail(state, o.target_id) < SEAD_FAIL_VALVE:
+                a = state.assets[o.target_id]
+                tail = f" ({a.health:.0%} left)" if a.health < 0.85 else ""
+                out.append((s_, Objective("", ObjectiveType.DEAD, o.target_id, o.priority, f"SEAD: blind {a.name}{tail}", "SEAD")))
+                out.append((s_, Objective("", ObjectiveType.DEAD, o.target_id, o.priority, f"DEAD: destroy {a.name}, once its radars are blind", "DEAD")))
+                extra += 1
+            else:
+                out.append((s_, o))
+        while extra > 0 and len(out) > limit:
+            for k in range(len(out) - 1, -1, -1):
+                if out[k][1].type != ObjectiveType.DEAD:
+                    del out[k]
+                    break
+            else:
+                break
+            extra -= 1
         return out
 
 
@@ -140,6 +165,38 @@ def count_roll(rng, n: int, p: float, variance: float) -> int:
     if variance <= 0.001:
         return int(round(n * p))
     return sum(1 for _ in range(n) if rng.random() < p)
+
+
+SEAD_FAIL_VALVE = 3           # days of failed SEAD on the same site before the combined SEAD + DEAD package is offered again
+DEAD_STAGE_GAP_MIN = 25       # the DEAD package starts this long after the SEAD package of the same site
+
+
+def sead_fail(state, site: str) -> int:
+    return int(((state.raids or {}).get("sead_fail") or {}).get(site, 0))
+
+
+def note_sead(state, site: str, blinded: bool) -> None:
+    """Record a SEAD result for a site: today's verdict (the DEAD stage reads it) and the running count of failed days (the valve)."""
+    if state.raids is None:
+        state.raids = {}
+    state.raids.setdefault("sead", {})[site] = bool(blinded)
+    ff = state.raids.setdefault("sead_fail", {})
+    ff[site] = 0 if blinded else int(ff.get(site, 0)) + 1
+
+
+def sead_stage_in_plan(state, site: str) -> bool:
+    """Is there a SEAD package (not scrubbed) for this site in today's plan?"""
+    return any(p["objective"].get("type") == "DEAD" and p["objective"].get("aim") == "SEAD" and p["objective"].get("target_id") == site
+               and not (p.get("extra") or {}).get("scrub") for p in (state.plan or []))
+
+
+def blinded_today(state, site: str) -> bool:
+    """Are the site's radars out for the DEAD stage: blinded by a SEAD package that already went in, or by one that is in today's plan and has a
+    verdict of success (the dice are cast when the day is planned, so every part of the program reads the same answer)."""
+    a = state.assets.get(site)
+    if a is None:
+        return False
+    return bool(a.suppressed or (((state.raids or {}).get("sead") or {}).get(site) and sead_stage_in_plan(state, site)))
 
 
 class WarSimulator:
@@ -188,6 +245,14 @@ class WarSimulator:
             state.note(ln.strip())
         return {"success": ok, "odds": p, "lines": lines, "objective": pkg.objective.description, "roll": {"success": ok}}
 
+    def sead_p(self, state: CampaignState, pkg: Package) -> float:
+        """Odds that this package's SEAD flights blind the site's radars."""
+        t = state.assets[pkg.objective.target_id]
+        garrison = sum(g.health for g in state.assets.values() if g.guards == t.id and not g.destroyed)
+        site = (1.0 + 0.8 * self.d.iads) * t.health + 0.4 * garrison
+        s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in pkg.flights if f.role == Role.SEAD)
+        return s_sead / (s_sead + site) if s_sead else 0.0
+
     def _resolve_dead(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         """SEAD and DEAD are two different jobs. The SEAD flight blinds the radars (the site is 'suppressed', not dead). The DEAD flight
         then goes in: against a blinded site it usually destroys it; against an active one it takes losses and rarely finishes it."""
@@ -198,12 +263,21 @@ class WarSimulator:
         garrison = sum(g.health for g in state.assets.values() if g.guards == t.id and not g.destroyed)
         site = (1.0 + 0.8 * d.iads) * t.health + 0.4 * garrison
         s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in sead)
-        p_sead = s_sead / (s_sead + site) if s_sead else 0.0
-        blinded = force["blinded"] if force and "blinded" in force else chance(rng, p_sead, d.variance)
+        p_sead = self.sead_p(state, pkg)
+        if pkg.objective.aim == "DEAD" and not blinded_today(state, t.id) and not (force and force.get("blinded")):
+            line = f"{pkg.objective.description}: HELD - the radars were not blinded, so the DEAD flight did not go in"
+            state.note(line)
+            return {"success": False, "held": True, "odds": 0.0, "lines": [line], "objective": pkg.objective.description, "roll": {"success": False, "held": True}}
+        if sead:
+            verdict = ((state.raids or {}).get("sead") or {}).get(t.id) if pkg.objective.aim == "SEAD" else None
+            blinded = force["blinded"] if force and "blinded" in force else (bool(verdict) if verdict is not None else chance(rng, p_sead, d.variance))
+            note_sead(state, t.id, blinded)
+        else:
+            blinded = bool(t.suppressed) or blinded_today(state, t.id)               # the DEAD stage: the SEAD package already went in
         lines = [f"{pkg.objective.description}:"]
         if sead:
             lines.append(f"   SEAD: {'radars blinded' if blinded else 'radars still emitting'} (odds {p_sead:.0%})")
-        if blinded:
+        if blinded and sead:
             t.suppressed = True
             t.health = max(0.05, t.health - 0.2)            # the radars and a launcher or two; the battery survives
         s_dead = sum(f.count * ROLE_WEIGHT[Role.STRIKE] for f in dead)
@@ -248,7 +322,7 @@ class WarSimulator:
                     "objective": pkg.objective.description, "roll": {"success": False}}
         if pkg.objective.type == ObjectiveType.FLEET_DEFENSE:
             return self._resolve_raid(state, pkg, force)
-        if pkg.objective.type == ObjectiveType.DEAD and any(f.role == Role.STRIKE for f in pkg.flights):
+        if pkg.objective.type == ObjectiveType.DEAD and (any(f.role == Role.STRIKE for f in pkg.flights) or pkg.objective.aim == "SEAD"):
             return self._resolve_dead(state, pkg, force)
         p, strength, defense = self.odds(state, pkg)
         success = force["success"] if force and "success" in force else chance(rng, p, d.variance)

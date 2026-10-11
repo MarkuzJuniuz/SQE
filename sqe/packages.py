@@ -43,7 +43,7 @@ TEMPLATES = {
 _FLEET = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
 _TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM", Role.ESCORT: "Escort package",
          Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
-_DEAD_TASK = {Role.SEAD: "SEAD: blind the radars ahead of the DEAD flight", Role.STRIKE: "DEAD: destroy the SAM site (follow the SEAD flight in)"}
+_DEAD_TASK = {Role.SEAD: "SEAD: blind the radars ahead of the DEAD flight", Role.STRIKE: "DEAD: destroy the SAM site (the SEAD package goes in ahead of you; call it off if the radars are up)"}
 _TAG_TASK = {"HAVCAP": "HAVCAP (guards tanker and AWACS)", "BASECAP": "Base CAP"}
 
 
@@ -167,7 +167,12 @@ class PackageBuilder:
 
     # ---- slot list sized to the threat ---------------------------------------------------------------------
     def _slots(self, obj, defended, n_fl) -> list:
-        slots = [copy.copy(s) for s in TEMPLATES[obj.type] if not (s.only_if_defended and not defended)]
+        tmpl = TEMPLATES[obj.type]
+        if obj.type == ObjectiveType.DEAD and obj.aim == "SEAD":            # SEAD first: a package that only blinds the radars
+            tmpl = [Slot(Role.SEAD, 2), Slot(Role.SEAD, 2, False)]
+        elif obj.type == ObjectiveType.DEAD and obj.aim == "DEAD":          # ...and the DEAD package that follows it once they are blind
+            tmpl = [Slot(Role.STRIKE, 4), Slot(Role.ESCORT, 2)]
+        slots = [copy.copy(s) for s in tmpl if not (s.only_if_defended and not defended)]
         if obj.type in (ObjectiveType.STRIKE, ObjectiveType.DEAD, ObjectiveType.CAS):
             req = threat.fighters_required(n_fl)
             slots = [s for s in slots if s.role != Role.ESCORT]

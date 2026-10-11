@@ -573,6 +573,16 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         out["packages"].append({"number": m["number"], "objective": m["objective"], "damage": dmg, "lost": n_lost, "total": tot, "resolved": done})
         out["lines"].append(f"Package #{m['number']} ({m['objective']}): " + (f"target damage {dmg:.0%}, lost {n_lost}/{tot} aircraft" if done and dmg is not None else
                             (f"flown to the end: lost {n_lost}/{tot} aircraft" if done else "you were out of the mission before its strike; it is resolved by the war simulation")))
+    # SEAD first: a SEAD package that was really flown settles whether the site is blind (the DEAD stage and the failed-days count read it)
+    from .war import note_sead as _note_sead
+    t_end2 = float(data.get("time", 0) or 0)
+    flown_ids = [data.get("package")] + [m["id"] for m in manifest.merged if t_end2 >= m["tot_s"] + 90]
+    for pk in state.plan:
+        o_ = pk.get("objective", {})
+        if pk.get("id") in flown_ids and o_.get("type") == "DEAD" and o_.get("aim") == "SEAD" and o_.get("target_id") in state.assets:
+            a_ = state.assets[o_["target_id"]]
+            _note_sead(state, a_.id, bool(a_.suppressed or a_.destroyed))
+            out["lines"].append(f"SEAD on {a_.name}: " + ("its radars are out; the DEAD package can go in" if (a_.suppressed or a_.destroyed) else "its radars are still up; the DEAD package will not commit"))
     pdat = data.get("player") or {}
     t0, t1 = pdat.get("takeoff"), pdat.get("landed")
     flight_s = (t1 - t0) if (t0 is not None and t1 is not None) else ((data.get("time", 0) - t0) if t0 is not None else 0)

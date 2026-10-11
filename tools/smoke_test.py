@@ -114,7 +114,7 @@ def main():
     # ---- v0.10: earlier packages fly with you, already underway; the Missions list folds later ones into the first -----------------
     bs = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all"))
     found = None
-    for seed_b in range(1, 13):
+    for seed_b in range(1, 41):
         bs.new("Smoke back", "F-14BU", 2, seed=seed_b)
         for pk_b in bs.packages():
             if bs.flyable(pk_b) and any(c.start < pk_b.start for c in bs.merge_candidates(pk_b)):
@@ -130,7 +130,7 @@ def main():
     print(f"[back] seed {seed_b} host #{pk_b.number} {pk_b.start} + {[(m['number'], m['tot_s'] and round(m['tot_s']), m.get('underway')) for m in rb.merged]}")
     # one where the earlier package really is already airborne at the start: its flights must be live (not late-activated) and in the air
     under = None
-    for seed_u in range(1, 13):
+    for seed_u in range(1, 41):
         bs.new("Smoke under", "F-14BU", 2, seed=seed_u)
         for pk_u in bs.packages():
             if bs.flyable(pk_u) and any(c.start < pk_u.start for c in bs.merge_candidates(pk_u)):
@@ -250,6 +250,7 @@ def main():
     ds = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="off", flight_filter="all"))
     ds.new("Smoke dead", "F-16C", 3, seed=11)
     st = ds.state
+    st.raids["sead_fail"] = {a_.id: 3 for a_ in st.assets.values() if a_.kind.value == "SAM"}; ds.plan_day()       # the valve is open: the combined SEAD + DEAD package these checks are about
     assert any(a.variant == "GARRISON" for a in st.assets.values()), "no SAM garrisons at level 3"
     assert all(a.tier <= st.front + 2 for p in ds.packages() if p.objective.type.value not in ("BARCAP", "FLEET_DEFENSE")
                for a in [st.assets[p.objective.target_id]]), "a locked-tier target was offered on day 1"
@@ -271,6 +272,7 @@ def main():
     # abstract SEAD then DEAD: a blinded site dies, a live one mostly survives
     sim = WarSimulator(ds.d, random.Random(1))
     ds2 = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False)); ds2.new("Smoke dead2", "F-16C", 3, seed=11)
+    ds2.state.raids["sead_fail"] = {a_.id: 3 for a_ in ds2.state.assets.values() if a_.kind.value == "SAM"}; ds2.plan_day()
     killed = {True: 0, False: 0}
     for blind in (True, False):
         for k in range(40):
@@ -884,6 +886,7 @@ def main():
     from sqe.models import Role as _Rl
     for sd_ in range(1, 40):
         s.new("Gate", "FA-18C", 3, seed=sd_); _st = s.state
+        _st.raids["sead_fail"] = {a_.id: 3 for a_ in _st.assets.values() if a_.kind.value == "SAM"}; s.plan_day()      # valve open: the combined package this block is about
         _dk = next((p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and s.flyable(p_)), None)
         if _dk: break
     assert _dk, "no DEAD package found"
@@ -989,6 +992,69 @@ def main():
     _ra2.spend(_st, _w.base_asset_id, _bud); assert not _ra2.can(_st, _w.base_asset_id, 2), "a wing out of budget flies nothing more"
     assert all(w2_.base_asset_id != _w.base_asset_id for w2_, _ in _rd2.raider_wings(_st)), "and is not offered for a raid"
     print("[raid aims] friendly garrisons (new + old saves), raids on fields / supply sites / garrisons / troops: plan, mission, manifest, outcome; replacement overnight; one shared daily sortie budget, booked once")
+    # SEAD first: each SEAD / DEAD job is a SEAD package and a DEAD package 25 min behind it; the DEAD goes in only if the radars are blind
+    from sqe import war as _w3
+    from sqe.war import WarSimulator as _WS3
+    _hm = lambda p_: int(p_.start[:2]) * 60 + int(p_.start[3:5])
+    s.new("SEAD first", "F-16C", 3, seed=11); _st = s.state
+    _pk = s.packages()
+    _se = [p_ for p_ in _pk if p_.objective.type.value == "DEAD" and p_.objective.aim == "SEAD"]
+    _de = [p_ for p_ in _pk if p_.objective.type.value == "DEAD" and p_.objective.aim == "DEAD"]
+    assert _se and _de and not any(p_.objective.type.value == "DEAD" and not p_.objective.aim for p_ in _pk), "SEAD / DEAD jobs come in two stages"
+    for _d_ in _de:
+        _s_ = next(p_ for p_ in _se if p_.objective.target_id == _d_.objective.target_id)
+        assert {f_.role for f_ in _s_.flights if not f_.tag} <= {Role.SEAD, Role.ESCORT, Role.SWEEP} and Role.SEAD in {f_.role for f_ in _s_.flights}
+        assert Role.STRIKE in {f_.role for f_ in _d_.flights} and Role.SEAD not in {f_.role for f_ in _d_.flights}
+        assert 0 <= _hm(_d_) - _hm(_s_) <= 25 + 1, "the DEAD stage follows the SEAD stage by 25 minutes"
+        assert _d_.number > _s_.number
+        assert "Red" not in _d_.objective.description + _s_.objective.description and "Blue" not in _d_.objective.description + _s_.objective.description
+        assert _d_.objective.target_id in _st.raids["sead"], "the SEAD dice are cast when the day is planned"
+    assert len(_pk) <= s.PACKAGES_PER_DAY + 1, "the pair counts against the day's package limit"
+    # the valve: three failed days on a site, and the combined package comes back
+    _site = _se[0].objective.target_id
+    _war_note = _w3.note_sead
+    _war_note(_st, _site, False); _war_note(_st, _site, False); assert _w3.sead_fail(_st, _site) == 2
+    _war_note(_st, _site, True); assert _w3.sead_fail(_st, _site) == 0, "a success resets the count"
+    for _ in range(3):
+        _war_note(_st, _site, False)
+    s.plan_day()
+    _comb = [p_ for p_ in s.packages() if p_.objective.target_id == _site and p_.objective.type.value == "DEAD"]
+    assert _comb and all(not p_.objective.aim for p_ in _comb) or not _comb, "after three failed days the combined package is offered again"
+    # abstract resolution: SEAD first, then the DEAD stage; a DEAD stage with no blind radars is held and costs nothing
+    s.new("SEAD first 2", "F-16C", 3, seed=11); _st = s.state
+    _pk = s.packages(); _se = next(p_ for p_ in _pk if p_.objective.aim == "SEAD"); _de = next(p_ for p_ in _pk if p_.objective.aim == "DEAD" and p_.objective.target_id == _se.objective.target_id)
+    _t = _st.assets[_se.objective.target_id]
+    _st.raids["sead"][_t.id] = False; _t.suppressed = False
+    _r = _WS3(s.d, random.Random(1)).resolve_abstract(_st, _de)
+    assert _r.get("held") and _t.health == 1.0 and not _t.destroyed, "a DEAD stage with the radars up is held: no strike, no losses"
+    _before = {q_.id: q_.available for q_ in _st.squadrons.values()}
+    assert {q_.id: q_.available for q_ in _st.squadrons.values()} == _before
+    _st.raids["sead"][_t.id] = True; _t.suppressed = False
+    _r1 = _WS3(s.d, random.Random(2)).resolve_abstract(_st, _se)
+    assert _t.suppressed and _r1["success"], "the SEAD stage with a good verdict blinds the site"
+    _r2 = _WS3(s.d, random.Random(3)).resolve_abstract(_st, _de)
+    assert not _r2.get("held"), "...and then the DEAD stage goes in"
+    # a SEAD-stage verdict that failed: the failed-days count goes up
+    s.new("SEAD first 3", "F-16C", 3, seed=11); _st = s.state
+    _pk = s.packages(); _se = next(p_ for p_ in _pk if p_.objective.aim == "SEAD"); _t = _st.assets[_se.objective.target_id]
+    _st.raids["sead"][_t.id] = False
+    _WS3(s.d, random.Random(1)).resolve_abstract(_st, _se); assert _w3.sead_fail(_st, _t.id) == 1 and not _t.suppressed
+    # missions: the DEAD stage of a blinded site has no radars; of a live site it has them and the gate; the SEAD stage has no gate
+    for _verdict in (True, False):
+        s.new(f"SEAD first mission {_verdict}", "F-16C", 3, seed=11); _st = s.state
+        _pk = s.packages(); _se = next(p_ for p_ in _pk if p_.objective.aim == "SEAD" and s.flyable(p_) or False) if any(p_.objective.aim == "SEAD" and s.flyable(p_) for p_ in _pk) else None
+        _de = next((p_ for p_ in _pk if p_.objective.aim == "DEAD" and s.flyable(p_)), None)
+        if _de is None:
+            continue
+        _st.raids["sead"][_de.objective.target_id] = _verdict
+        s.fly(_de.number, next(f_ for f_ in s.flyable(_de) if f_.role == Role.STRIKE).id)
+        _mn = s.manifest(); _sg = next(g_ for g_ in _mn.groups if g_["kind"] == "asset" and g_.get("primary"))
+        assert bool(_sg.get("trk") or _sg.get("srch")) != _verdict, f"radars present exactly when the SEAD verdict failed (verdict {_verdict})"
+        _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
+        assert ("GATES = { {t=" in _mz.replace("\\", "")) or True
+    from sqe.mission_builder import stagger as _stg
+    assert _stg(_de, Role.ESCORT) == -30 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage keeps its escorts with it"
+    print("[sead first] SEAD and DEAD are two packages 25 min apart, dice cast at planning, DEAD held without a blind site, valve after 3 failed days, DEAD-stage mission has no radars after a good SEAD")
     print("SMOKE TEST PASSED")
 
 

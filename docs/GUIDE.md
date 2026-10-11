@@ -264,3 +264,9 @@ Sites then keep the Shore margin from the sea and lakes (default 1500 m) and the
 * Each enemy wing can fly 2 sorties per serviceable airframe a day, shared by patrols, sweeps and raids.
 * Things to check in DCS: do the raiders fly to the thing the briefing names, and do they bomb it? Is the garrison / fuel farm / column visible and in the right place? After a raid got through, does the debrief line match? In `SQE_state.json`, read `shots` (who fired what at what) and `gates` after a DEAD.
 * Tune: `Difficulty.raid_mix`, `blue_garrison_size`, `blue_rebuild`; `raids.ASSET_HIT`, `SECTOR_HIT`, `GARRISON_SHIELD`; `redair.DAILY_SORTIES`.
+
+## SEAD first
+* Each SEAD / DEAD job appears as two packages: SEAD (blind the radars), then DEAD 25 minutes behind it. If the SEAD package was a success the DEAD stage starts with the radars gone; if not, the radars are up and the DEAD flight and its escorts turn back at the gate. In the war simulation a DEAD stage with no blind site is held.
+* Fly the SEAD package and the result is real (the debrief says whether the radars are out). Fly the DEAD stage and the SEAD package has been settled for you.
+* After 3 failed SEAD days on a site, the combined package comes back for it.
+* Things to check in DCS: does the DEAD stage start with no radars at the site when the SEAD stage "succeeded"? Does a failed one start with radars and turn back? Are the escorts with the strikers (not minutes ahead)? Tuning: `war.SEAD_FAIL_VALVE`, `war.DEAD_STAGE_GAP_MIN`.

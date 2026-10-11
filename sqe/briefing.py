@@ -41,7 +41,9 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     if obj.type.value == "FLEET_DEFENSE" and pkg.extra:
         e = pkg.extra
         tb = state.bases.get(obj.target_id)
-        sit += ["", (f"Intelligence reports {e['bombers']} Su-24M bombers with free-fall bombs inbound toward {tb.name if tb else 'our airfield'}, "
+        rtype = {"Su_24M": "Su-24M bombers", "Su_25": "Su-25 attack aircraft"}.get(e.get("raider", "Su_24M"), "attack aircraft")
+        what = obj.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", "") if e.get("aim") else (tb.name if tb else "our airfield")
+        sit += ["", (f"Intelligence reports {e['bombers']} {rtype} with free-fall bombs inbound toward {what}, "
                      f"approaching from a bearing of about {e['brg']:.0f} degrees." if e.get("land") else
                      f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
                      f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier.")
@@ -53,6 +55,11 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                  if n_def and obj.type.value != "FLEET_DEFENSE" else
                  ("" if obj.type.value == "FLEET_DEFENSE" else "No organised fighter defence is expected at the target.")),
             f"Weather: {x['weather']}." + ((" Loadouts changed for the weather: " + " ".join(x["wx_notes"])) if x.get("wx_notes") else "")]
+    if obj.type.value == "DEAD" and obj.aim == "DEAD":
+        sit += ["", "A SEAD package goes in ahead of you to blind this site's radars. If any search or track radar is still up when you reach the gate, "
+                    "the strike is called off."]
+    elif obj.type.value == "DEAD" and obj.aim == "SEAD":
+        sit += ["", "Your job is only to blind the radars. A DEAD package follows about 25 minutes behind you and goes in only if the radars are out."]
     if x.get("intel"):
         sit += ["", "Intelligence: " + " ".join(x["intel"])]
     mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {'DEAD' if (pf.role.value == 'STRIKE' and obj.type.value == 'DEAD') else pf.role.value}.", f"Your task: {pf.task}."]
