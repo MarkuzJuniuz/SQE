@@ -181,6 +181,28 @@ def _floor_ft(x: float, y: float) -> int:
     return 6000 if h is None else int(math.ceil((h / FT + 1500) / 500.0) * 500)
 
 
+def terrain_clear(wps: list[Wpt]) -> int:
+    """AI flights hold the altitude of their last waypoint until they get to the next one, so a leg over mountains needs its START altitude above
+    the ridges on it. Lifts every waypoint (not the LOW tier, which follows the ground, and not a ground point) to the minimum safe altitude of
+    the leg it starts, and the end of the leg to the same, so a descent never ends in a hillside. Returns how many waypoints it lifted.
+    Without a ground-height scan nothing changes. A person flying the flight reads the MSA on the kneeboard instead."""
+    from . import relief
+    if not relief.available():
+        return 0
+    n = 0
+    for a, b in zip(wps, wps[1:]):
+        h = relief.leg_max_ft((a.x, a.y), (b.x, b.y))
+        if h is None:
+            continue
+        need = int(math.ceil((h + (2000 if h > 5000 else 1000)) / 500.0) * 500)
+        for w in (a, b):
+            if w.rad or w.agl or w.alt_ft >= need:
+                continue
+            w.alt_ft = need
+            n += 1
+    return n
+
+
 def in_progress(wps: list[Wpt], home: tuple) -> list[Wpt] | None:
     """A flight whose schedule started BEFORE the mission did. `wps` already carries absolute times (assign_times, first point at a negative time).
     Returns the route as it stands at mission time 0: a SPAWN point where the flight is by then (interpolated along its leg, or at the hold point

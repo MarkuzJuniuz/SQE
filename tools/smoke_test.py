@@ -617,6 +617,14 @@ def main():
     from sqe.routes import _floor_ft
     assert _floor_ft(51_000, 5_000) == 6000
     _rl.from_grid(0, 0, 1000.0, _hi); assert _floor_ft(51_000, 5_000) == int(-(-(2800 / 0.3048 + 1500) // 500) * 500) and _floor_ft(140_000, 5_000) < 6000
+    # AI routes: each leg starts and ends above its ridges (the AI holds the last waypoint's altitude until the next one); LOW and ground points are left alone
+    from sqe.routes import terrain_clear as _tc, Wpt as _W
+    _rl.from_grid(0, 0, 1000.0, _hi)
+    _w = [_W("DEP", 10_000, 5_000, 8000, 400), _W("MSHL", 100_000, 5_000, 24000, 400), _W("LOW", 130_000, 5_000, 500, 400, rad=True)]
+    assert _tc(_w) == 1 and _w[0].alt_ft == int(-(-(2800 / 0.3048 + 2000) // 500) * 500) and _w[1].alt_ft == 24000 and _w[2].alt_ft == 500, [(x.name, x.alt_ft) for x in _w]
+    _rl.clear()
+    _w = [_W("DEP", 10_000, 5_000, 8000, 400), _W("MSHL", 100_000, 5_000, 24000, 400)]
+    assert _tc(_w) == 0 and _w[0].alt_ft == 8000, "no ground-height scan: nothing changes"
     _rl.clear()
     # kneeboard: the MSA line shows when the build knows it, and is absent otherwise
     import sqe.kneeboard as _kb2
