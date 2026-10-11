@@ -63,6 +63,7 @@ KPH = 1.852
 F = VehicleGroup.Formation
 MAIN_TASK = {Role.CAP: task.CAP, Role.ESCORT: task.CAP, Role.SWEEP: task.FighterSweep, Role.SEAD: task.SEAD,
              Role.STRIKE: task.PinpointStrike, Role.CAS: task.CAS}
+ARMOR_DENSITY = (0.5, 1.5)    # vehicles in a front-line column = the base mix x (0.5 + 1.5 x the sector's enemy strength): 2x at full strength, 1x at 33%
 CAP_FLEET_KEEPOUT_NM = 90      # Red's known CAP stations stay at least this far from any carrier (hand-set: the cruiser's SM-2s killed CAP pairs 51 to 67 nm out)
 LASER = ["1688", "1687", "1686", "1685", "1684", "1683", "1682", "1681"]
 
@@ -871,9 +872,13 @@ class MissionBuilder:
             heading, form = int(bearing(cx, cy, fb.x, fb.y)), r.choice([F.Line, F.Rectangle, F.Line])
         else:
             heading, form = r.randint(0, 359), r.choice([F.Star, F.Scattered, F.Rectangle])
-        g = self._platoon(self.red, a.id, comp, cx, cy, heading, form, scale=a.health)
+        column = a.kind == AssetKind.ARMOR and not garrison and ground.zone_of(self.state, a.id) is not None
+        scale = (ARMOR_DENSITY[0] + ARMOR_DENSITY[1] * a.health) if column else a.health         # a front-line column is as dense as its sector is strong
+        g = self._platoon(self.red, a.id, comp, cx, cy, heading, form, scale=scale)
         if g is None:
             return
+        if column:
+            base_count = max(1, round(len(g.units) / max(0.05, a.health)))                      # the count at full health, so losses read back as health
         if a.kind == AssetKind.SAM and (a.suppressed or a.id == self._blind_site):
             gone = [u for u in g.units if str(getattr(u, "type", "")) in TRACK_RADARS | SEARCH_RADARS]
             for u in gone:

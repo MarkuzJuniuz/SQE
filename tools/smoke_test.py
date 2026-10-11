@@ -1104,6 +1104,27 @@ def main():
     assert _site.id not in _st.sams["pulled"] and (round(_site.x), round(_site.y)) == (round(_o[0]), round(_o[1])) and any("back in position" in l_ for l_ in _back), "repaired, it returns to its old position"
     assert _sm.RETREAT_HEALTH < _sm.RETURN_HEALTH
     print("[retreat] a long-range site at 35% or less pulls back 35-55 nm with its garrison, is saved, and returns once repaired (65%, 2+ days); healthy sites stay")
+    # front-line columns are as dense as their sector is strong; losses still read back as health
+    from sqe.debrief import apply_debrief as _ad
+    from sqe import ground as _gr3
+    _cnt = {}
+    for _str in (1.0, 0.3):
+        _vals = []
+        for _sd in (5, 6, 7):
+            s.new("Dense", "A-10C", 3, seed=_sd); _st = s.state
+            _pk = next((p_ for p_ in s.packages() if p_.objective.type.value == "CAS" and p_.objective.target_id.startswith("armor_") and s.flyable(p_)), None)
+            if _pk is None:
+                continue
+            _a = _st.assets[_pk.objective.target_id]; _a.health = _str; _gr3.pull(_st)
+            s.fly(_pk.number, s.flyable(_pk)[0].id); _mn = s.manifest(); _g = next(g_ for g_ in _mn.groups if g_["kind"] == "asset" and g_["ref"] == _a.id)
+            _vals.append(len(_g["units"]))
+            _d = {"campaign": _st.campaign_id, "sortie": _st.sortie_counter, "package": _st.pending["package_dict"]["id"], "mission_ended": True, "time": 3000,
+                  "dead": [], "ejected": [], "landed": [_mn.player_unit], "player": {"takeoff": 60, "landed": 2900, "ka": 0, "kg": 0, "ks": 0}, "kills": []}
+            _ad(_st, _mn, _d); assert abs(_st.assets[_a.id].health - _str) < 0.02, "no losses: the sector keeps its strength"
+        _cnt[_str] = sum(_vals) / max(1, len(_vals))
+    assert _cnt[1.0] > 1.5 * _cnt[0.3], f"a full-strength column is far denser than a beaten one: {_cnt}"
+    assert s.last_build.counts["units"] < 250
+    print(f"[dense columns] vehicles in a front-line column: {_cnt[1.0]:.0f} at full strength, {_cnt[0.3]:.0f} at 30%; no losses leaves the strength unchanged")
     print("SMOKE TEST PASSED")
 
 
