@@ -197,6 +197,7 @@ def main():
     assert _tm.land_ok(99999, 99999) is None
     assert "land.getSurfaceType" in _tp.probe_lua() and "SQE_terrain_caucasus" in _tp.probe_lua() and "getClosestPointOnRoads" in _tp.probe_lua() and "SQE_roads_caucasus.json" in _tp.probe_lua(), "the scan mission also finds roads"
     assert "os.clock" in _tp.probe_lua() and "per3" not in _tp.probe_lua(), "the road pass works in time slices (a fixed column count froze DCS)"
+    assert "road test" in _tp.probe_lua() and "road search too slow" in _tp.probe_lua(), "the road pass announces test calls and skips roads when a call is slow"
     _tm.configure(None)
     print("[terrain] mask read, river margin and off-map fallback OK")
     # ---- GUI dialogs build (offscreen) and the scan button works --------------------------------------------------------------

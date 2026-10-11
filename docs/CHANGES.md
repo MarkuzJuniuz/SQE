@@ -1,3 +1,7 @@
+## v0.39.2
+
+* **The road scan announces its first calls and skips the roads instead of freezing.** The first DCS test froze right at the start of the road pass even in time slices, so a single `getClosestPointOnRoads` call is the suspect. The scan now makes three test calls first, each announced on screen before it runs ("road test 1 of 3: calling now ... If this is the last message, DCS is stuck in that call") and logged to dcs.log with the prefix `SQE road scan:`. A call slower than 1 s ends the scan as COMPLETE without roads. The grid is coarsened until the estimate is about 20 minutes. Untested in DCS.
+
 ## v0.39.1
 
 * **The road scan no longer freezes DCS.** The road pass ran 40 map columns (about 15,600 `getClosestPointOnRoads` calls) in one tick; that call is a nearest-road search and far slower than the height calls, so DCS stalled. It now works in 20 ms time slices and the progress message shows the percentage and a rough time left. If the scan is still too slow, raise `road_step` in the theatre's scan block (default 2000 m) and fly the scan again.
