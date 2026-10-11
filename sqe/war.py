@@ -175,9 +175,9 @@ class WarSimulator:
         lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'} (odds {p:.0%})"]
         if bw is not None and ok:
             k = min(bw.available, rng.randint(2, 4)); bw.available -= k
-            lines.append(f"   {k} bombers shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
+            lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
         elif bw is not None and pkg.extra.get("land"):
-            lines += raids_hit(state, pkg.objective.target_id, bw, rng)
+            lines += raids_hit(state, pkg.objective.target_id, bw, rng, None, pkg.objective.aim)
         elif bw is not None:
             bw.available = max(0, bw.available - 1)
             carriers = [s for s in state.squadrons.values() if state.bases[s.base_id].kind.value == "CARRIER"]
@@ -318,6 +318,8 @@ class WarSimulator:
             for ln in ground.resolve_day(state, d, self.rng):
                 state.note("Overnight: " + ln)
             ground.repair_blue(state, d)
+            for ln in ground.rebuild_blue(state, d, self.rng):
+                state.note("Overnight: " + ln)
             for bid in state.ground.get("fallen", []):
                 if bid in state.bases:
                     state.bases[bid].defense = 0.0

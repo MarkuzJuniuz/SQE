@@ -41,6 +41,7 @@ local dead, ejected, landed, ended = {}, {}, {}, false
 local aborted = {}
 local gateLog = {}
 local kills = {}
+local shots = {}
 local function esc(s) return (tostring(s):gsub('[%c"\\]', function(c) return string.format("\\u%04x", string.byte(c)) end)) end
 local function list(t)
   local o = {}
@@ -52,6 +53,13 @@ local function killsJson()
   local o = {}
   for _, k in ipairs(kills) do
     o[#o + 1] = string.format('{"k":"%s","kt":"%s","v":"%s","vt":"%s","w":"%s","t":%d}', esc(k.k), esc(k.kt), esc(k.v), esc(k.vt), esc(k.w), k.t)
+  end
+  return "[" .. table.concat(o, ",") .. "]"
+end
+local function shotsJson()
+  local o = {}
+  for _, k in ipairs(shots) do
+    o[#o + 1] = string.format('{"t":%d,"ev":"%s","by":"%s","bt":"%s","w":"%s","tg":"%s","tt":"%s"}', k.t, k.ev, esc(k.by), esc(k.bt), esc(k.w), esc(k.tg), esc(k.tt))
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
@@ -67,9 +75,9 @@ end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson()))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson()))
   f:close()
 end
 local function nameOf(obj)
@@ -134,6 +142,20 @@ local function shotCall(e)
   end
   return nil
 end
+local function logShot(ev, e, by)
+  if #shots >= 600 then return end
+  local function tname(o) local ok, t = pcall(function() return o:getTypeName() end); if ok and t then return t end return "?" end
+  local w, tg, tt = "?", "", ""
+  if e.weapon then
+    local ok, t = pcall(function() return e.weapon:getTypeName() end); if ok and t then w = t end
+    if ev == "shot" then
+      local okt, tgo = pcall(function() return e.weapon:getTarget() end)
+      if okt and tgo then tg = nameOf(tgo) or ""; tt = tname(tgo) end
+    end
+  end
+  if ev == "hit" and e.target then tg = nameOf(e.target) or ""; tt = tname(e.target) end
+  shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt }
+end
 local H = {}
 function H:onEvent(e)
   local id = e.id
@@ -155,12 +177,14 @@ function H:onEvent(e)
   elseif id == world.event.S_EVENT_TAKEOFF then
     if n == PLAYER and not pl.takeoff then pl.takeoff = timer.getTime(); dump() end
   elseif id == world.event.S_EVENT_SHOT then
+    logShot("shot", e, n)
     local lab = UFLT[n]
     if lab and e.weapon then
       local call = shotCall(e)
       if call and throttle("shot:" .. lab .. call, 6) then say(lab .. ": " .. call .. ".") end
     end
   elseif id == world.event.S_EVENT_HIT then
+    logShot("hit", e, n)
     local tn = nameOf(e.target)
     local s = tn and SITE_OF[tn]
     local lab = UFLT[n]
@@ -509,25 +533,26 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     for g in manifest.groups:
         if g["kind"] == "enemy_air" and g.get("raid_base") and g["raid_base"] in state.bases:
             alive = [u for u in g["units"] if u not in lost]
+            where = g.get("raid_label") or state.bases[g["raid_base"]].name
             wing = state.enemy_air_at(g["ref"])
             if len(alive) < len(g["units"]):
-                out["lines"].append(f"Raid: {len(g['units']) - len(alive)} of {len(g['units'])} bombers shot down")
+                out["lines"].append(f"Raid: {len(g['units']) - len(alive)} of {len(g['units'])} attack aircraft shot down")
             if alive and t_now >= g.get("raid_arrive_s", 0.0):
                 from . import raids as _rd
                 import random as _rnd
-                out["lines"].append(f"Raid on {state.bases[g['raid_base']].name}: {len(alive)} bombers got through")
-                out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, _rnd.Random(f"{state.campaign_id}:{state.day}:through"), len(alive))]
+                out["lines"].append(f"Raid on {where}: {len(alive)} attack aircraft got through")
+                out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, _rnd.Random(f"{state.campaign_id}:{state.day}:through"), len(alive), g.get("raid_aim", ""))]
             elif alive:
                 from . import raids as _rd
                 import random as _rnd
                 rr = _rnd.Random(f"{state.campaign_id}:{state.day}:early")
                 if rr.random() < 0.5:
-                    out["lines"].append(f"Raid: you left before the bombers arrived; {len(alive)} got through to {state.bases[g['raid_base']].name}")
-                    out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, rr, len(alive))]
+                    out["lines"].append(f"Raid: you left before the raiders arrived; {len(alive)} got through to {where}")
+                    out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, rr, len(alive), g.get("raid_aim", ""))]
                 else:
-                    out["lines"].append("Raid: you left before the bombers arrived; the defences at the base stopped them")
+                    out["lines"].append("Raid: you left before the raiders arrived; the defences stopped them")
             else:
-                out["lines"].append(f"Raid on {state.bases[g['raid_base']].name}: stopped, no bombs fell")
+                out["lines"].append(f"Raid on {where}: stopped, no bombs fell")
     for ref in data.get("aborted", []) or []:
         a = state.assets.get(ref)
         if a is not None:

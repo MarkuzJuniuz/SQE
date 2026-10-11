@@ -105,6 +105,7 @@ class Objective:
     target_id: str              # asset id (or base id for BARCAP)
     priority: float
     description: str = ""
+    aim: str = ""               # FLEET_DEFENSE raids: what the raiders are after. "" = the airfield itself, else a blue asset id ("bfuel_...", "bdepot_fwd", "bgar_...") or "sector:N"
 
     def to_dict(self):
         d = asdict(self)

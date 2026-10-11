@@ -109,7 +109,7 @@ class Package:
     @classmethod
     def from_dict(cls, d: dict) -> "Package":
         o = d["objective"]
-        obj = Objective(o["id"], ObjectiveType(o["type"]), o["target_id"], o["priority"], o.get("description", ""))
+        obj = Objective(o["id"], ObjectiveType(o["type"]), o["target_id"], o["priority"], o.get("description", ""), o.get("aim", ""))
         return cls(d["id"], d["number"], obj, [FlightPlan(**{**f, "role": Role(f["role"])}) for f in d["flights"]],
                    [SupportPlan(**s) for s in d["support"]], d.get("jtac", False), d.get("jtac_laser_code", 1688),
                    d.get("start", "09:00"), d.get("n_def", 0), d.get("extra", {}))
@@ -128,6 +128,9 @@ class PackageBuilder:
     def target_xy(self, obj: Objective):
         if obj.type in _FLEET:
             b = self.state.bases[obj.target_id]
+            if obj.aim:
+                from . import raids
+                return raids.aim_xy(self.state, obj.aim, b)
             return b.x, b.y
         a = self.state.assets[obj.target_id]
         return a.x, a.y
@@ -248,36 +251,35 @@ class PackageBuilder:
         return pkg
 
     def _land_raid_plan(self, number: int, obj):
-        """Su-24M raid on one of our airfields (raids.py): the raiders' field, how many, the bearing they arrive on, and escorts that can reach."""
-        from .difficulty import get as _get
+        """Air raid on one of our airfields, a supply site, a garrison or friendly troops (raids.py): the raiders' field and type, how many, where they are going,
+        the bearing they arrive on, and escorts that can reach."""
+        from . import raids
         st = self.state
         tb = st.bases[obj.target_id]
-        rnd = random.Random(f"{st.campaign_id}:{st.day}:{number}:{obj.target_id}:raid")
-        cands = []
-        for w in st.enemy_air:
-            a = st.assets[w.base_asset_id]
-            if "Su_24M" in w.types and w.available >= 2 and not a.destroyed and math.hypot(a.x - tb.x, a.y - tb.y) / NM <= ENEMY_RADIUS_NM["Su_24M"] * 0.85:
-                cands.append((math.hypot(a.x - tb.x, a.y - tb.y), w))
-        if not cands:
+        aim = getattr(obj, "aim", "") or ""
+        ax, ay = raids.aim_xy(st, aim, tb)
+        rnd = random.Random(f"{st.campaign_id}:{st.day}:{number}:{obj.target_id}:{aim}:raid")
+        r = raids._reach(st, raids.aim_kind(aim), ax, ay, budget=False)
+        if r is None:
             return None
-        bw = min(cands, key=lambda c: c[0])[1]
+        bw, raider = r[1], r[2]
         ba = st.assets[bw.base_asset_id]
         lo, hi = (self.d.raid_size if self.d else (2, 2))
         nb = max(2, min(rnd.randint(lo, hi), bw.available))
         nb -= nb % 2
         esc = None
-        for w in sorted(st.enemy_air, key=lambda w: math.hypot(st.assets[w.base_asset_id].x - tb.x, st.assets[w.base_asset_id].y - tb.y)):
+        for w in sorted(st.enemy_air, key=lambda w: math.hypot(st.assets[w.base_asset_id].x - ax, st.assets[w.base_asset_id].y - ay)):
             a = st.assets[w.base_asset_id]
             if w is bw or w.available < 2 or a.destroyed:
                 continue
-            d_nm = math.hypot(a.x - tb.x, a.y - tb.y) / NM
+            d_nm = math.hypot(a.x - ax, a.y - ay) / NM
             types = [t for t in w.types if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm]
             if types:
                 esc = (w.base_asset_id, rnd.choice(types)); break
-        brg = math.degrees(math.atan2(ba.y - tb.y, ba.x - tb.x)) % 360          # they come from where they took off
-        return {"land": True, "raider": "Su_24M", "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
+        brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360          # they come from where they took off
+        return {"land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
                 "escort_wing": esc[0] if esc else "", "escort_type": esc[1] if esc else "",
-                "escorts": (4 if nb >= 4 else 2) if esc else 0}
+                "escorts": (4 if nb >= 4 else 2) if esc else 0, "aim": aim, "dest": [ax, ay]}
 
     def _raid_plan(self, number: int, obj=None):
         """Bomber raid on the fleet: bearing it arrives on, how many bombers, and escorts that can really reach (range-limited)."""

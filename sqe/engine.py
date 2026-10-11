@@ -99,9 +99,13 @@ class Session:
 
     def plan_day(self) -> list:
         st = self.state
+        from . import ground
+        ground.ensure_blue_garrisons(st)                # older saves: a friendly garrison at every airfield
         redair.ensure(st, self.d)                       # the enemy's air tasking for the day
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=self.PACKAGES_PER_DAY)
         keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry")}
+        if st.red_air.get("patrol_used") is not None:                 # replanning the same day never books the raids twice
+            st.red_air["used"] = dict(st.red_air["patrol_used"])
         warned, n_surprise = raids.todays_raids(st, self.d, self._rng(71))
         carry = self._carried(objs)
         objs = carry + objs + warned                    # postponed from yesterday first, then the day's job list, then the announced raids
@@ -175,7 +179,7 @@ class Session:
         """Objectives postponed yesterday (no aircraft left for them after an emergency scramble), if they are still worth flying and not already in the list."""
         st, out = self.state, []
         for od in (st.raids or {}).get("carry", []):
-            o = Objective(od["id"], ObjectiveType(od["type"]), od["target_id"], od["priority"] + 2.0, od.get("description", ""))
+            o = Objective(od["id"], ObjectiveType(od["type"]), od["target_id"], od["priority"] + 2.0, od.get("description", ""), od.get("aim", ""))
             tgt = st.assets.get(o.target_id) or st.bases.get(o.target_id)
             if tgt is None or getattr(tgt, "destroyed", False) or any(x.type == o.type and x.target_id == o.target_id for x in objs + out):
                 continue

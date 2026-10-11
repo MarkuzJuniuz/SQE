@@ -258,3 +258,9 @@ Sites then keep the Shore margin from the sea and lakes (default 1500 m) and the
 * A mission picks the patrols that are up at your time over the target and near the target or route; they are briefed ("Reported enemy patrol: ...") and airborne at the start. The rest of the threat-sized defenders are alert aircraft.
 * Things to check in DCS: do the patrol pairs sit where the briefing says, and do they stay until the end of their window? Is the number of briefed patrols about right (some missions will have none)? Does a mission in the same area at a different time of day meet different patrols? Tune: `redair.DOCTRINE` (pairs and share of aircraft per level), `WAVES`, `REL_NM` / `ROUTE_NM` (how close counts as "in the area").
 
+## Raids on friendly sites and the sortie budget
+* A raid can go for an airfield, a friendly supply site (fuel farm, forward depot), a field's garrison, or friendly troops in a contested sector. The tasking order lists them as "Intercept a raid on ..." / "Intercept an air attack on ...". What is under attack is on the map; the raiders fly there from their base.
+* If the raiders get through: fields lose defence (less with a garrison), supply sites and garrisons lose health, troops lose sector strength. Friendly supply falls when fuel farms or the depot are hit, as the enemy's does when you hit its depots. Destroyed friendly sites are replaced overnight with a chance.
+* Each enemy wing can fly 2 sorties per serviceable airframe a day, shared by patrols, sweeps and raids.
+* Things to check in DCS: do the raiders fly to the thing the briefing names, and do they bomb it? Is the garrison / fuel farm / column visible and in the right place? After a raid got through, does the debrief line match? In `SQE_state.json`, read `shots` (who fired what at what) and `gates` after a DEAD.
+* Tune: `Difficulty.raid_mix`, `blue_garrison_size`, `blue_rebuild`; `raids.ASSET_HIT`, `SECTOR_HIT`, `GARRISON_SHIELD`; `redair.DAILY_SORTIES`.

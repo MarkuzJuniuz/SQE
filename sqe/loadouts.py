@@ -129,7 +129,7 @@ def capture_from_miz(miz_path: str, out_path: str = "loadouts.json") -> dict:
 
 # approximate combat radius (nm) of enemy types: used to decide who can escort a raid
 ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, "MiG_23MLD": 200, "MiG_21Bis": 170,
-                   "F_4E": 300, "F_5E_3": 200, "Su_24M": 300}
+                   "F_4E": 300, "F_5E_3": 200, "Su_24M": 300, "Su_25": 160}
 
 
 def enemy_bomber_loadout(cls_name: str) -> dict:

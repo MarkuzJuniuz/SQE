@@ -898,6 +898,7 @@ def main():
                        [{"t": 100, "site": "sam_x", "grp": "Hornet 2", "from": 3, "to": 5, "ai": True, "dead": True, "you": False}], True)
     assert "GATE_M = 40 * 1000" in _hk and "dead=true" in _hk, "the gate fires on distance"
     assert "AITEST = true" in _hk and "gatesJson" in _hk and '"gates":%s' in _hk, "all-AI test: calls go to everyone; every gate is logged in the state file"
+    assert '"shots":%s' in _hk and "logShot" in _hk and "getTarget" in _hk, "every shot and hit is logged in the state file"
     assert "you=true" in _hk and "SOUND_YOU" in _hk and "GATES = { {t=100" in _hk
     try:
         import lupa
@@ -910,7 +911,7 @@ def main():
     s.new("Red air", "F-16C", 3, seed=7); _st = s.state
     _p1 = {"day": _st.red_air["day"], "flights": [dict(f_) for f_ in _st.red_air["flights"]]}
     assert _p1["flights"] and {f_["kind"] for f_ in _p1["flights"]} <= {"CAP", "SWEEP"} and any(f_["kind"] == "SWEEP" for f_ in _p1["flights"]), "a plan with patrols and a sweep"
-    _st.red_air = {}; _ra.ensure(_st, _gd(3)); assert _st.red_air == _p1, "the same day plans the same"
+    _st.red_air = {}; _ra.ensure(_st, _gd(3)); assert {"day": _st.red_air["day"], "flights": _st.red_air["flights"]} == _p1, "the same day plans the same"
     for w_ in _st.enemy_air:
         n_ = sum(1 for f_ in _p1["flights"] if f_["wing"] == w_.base_asset_id and f_["kind"] == "CAP")
         assert n_ <= max(0, w_.available // 2 - 1), "one pair per wing always stays on alert"
@@ -932,6 +933,62 @@ def main():
             _res = s.fly(p_.number, s.flyable(p_)[0].id); _seen += [l_ for l_ in _res.text["full"].splitlines() if "Reported enemy" in l_]
     assert _seen, "a mission whose area has a planned patrol says so in the briefing"
     print("[red air] a daily plan (patrols by wave, sweeps over the front), the same on a replan, one pair per wing stays on alert, picked by window, area and wing strength, saved and regenerated for old saves; briefing: " + _seen[0].strip()[:90])
+    # raids with an aim: friendly garrisons, supply sites and troops in a sector are targets under the same rules; one shared sortie budget
+    from sqe import raids as _rd2, redair as _ra2, ground as _gr2
+    from sqe.packages import Ledger as _Led, PackageBuilder as _PB, Package as _Pk
+    for _lvl in (1, 2, 3):
+        s.new(f"Aims {_lvl}", "F-16C", _lvl, seed=11 + _lvl); _st = s.state
+        _fields = [b_.id for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD"]
+        assert all(f"bgar_{b_}" in _st.blue_assets and _st.blue_assets[f"bgar_{b_}"].variant == "GARRISON" for b_ in _fields), "a friendly garrison at every airfield"
+        _st.blue_assets.pop(f"bgar_{_fields[0]}"); s.plan_day(); assert f"bgar_{_fields[0]}" in _st.blue_assets, "an older save gets its garrisons back"
+        _u0 = dict(_st.red_air["used"]); s.plan_day(); assert _st.red_air["used"] == _u0, "replanning the same day never books the raids twice"
+    s.new("Aims build", "F-16C", 3, seed=14); _st = s.state; _d3 = _gd(3)
+    _kinds = set()
+    for _kind in ("field", "supply", "garrison", "sector"):
+        _ws = _rd2.candidates(_st, _kind)
+        if not _ws:
+            continue
+        _b, _aim, _w = _ws[0]
+        _o = _rd2.raid_objective(_b, _aim, _rd2.describe(_st, _b, _aim)); _o.id = f"obj-test-{_kind}"
+        assert _rd2.aim_kind(_aim) == _kind and "Red" not in _o.description and "Blue" not in _o.description
+        _pk = _PB(_st, _d3).build(_o, 1, _Led(_st), for_player=True)
+        assert _pk.extra.get("aim", "") == _aim and _pk.extra.get("dest") and _pk.extra["raider"] in ("Su_24M", "Su_25"), "the plan carries the aim and where they go"
+        assert _Pk.from_dict(_pk.to_dict()).objective.aim == _aim, "the aim survives the save"
+        _st.plan = [_pk.to_dict()]; _st.pending = None
+        s.fly(1, None)
+        _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
+        assert "RAID-B-1" in _mz, "raiders in the mission"
+        if _kind == "supply":
+            assert _aim in _mz, "the supply site is on the map"
+        if _kind in ("garrison", "sector"):
+            assert "Friendly " in _mz, "the troops under attack are on the map"
+        _man = s.manifest(); _rg = next(g_ for g_ in _man.groups if g_.get("raid_base"))
+        assert _rg["raid_aim"] == _aim and _rg["raid_label"], "the manifest carries the aim"
+        _kinds.add(_kind)
+    assert {"field", "garrison", "sector"} <= _kinds, f"kinds exercised: {_kinds}"
+    # what a raid that gets through does, by aim
+    import random as _r2
+    s.new("Aims hit", "F-16C", 3, seed=15); _st = s.state
+    _gar = next(a_ for a_ in _st.blue_assets.values() if a_.id.startswith("bgar_")); _h0 = _gar.health
+    _rd2.hit(_st, _gar.id.split("_", 1)[1], None, _r2.Random(1), 2, _gar.id); assert _gar.health < _h0
+    _fu = next(a_ for a_ in _st.blue_assets.values() if a_.id.startswith("bfuel_")); _fu.health = 1.0; _s0 = _gr2.supply(_st, "blue")
+    _rd2.hit(_st, _fu.id.split("_", 1)[1], None, _r2.Random(1), 3, _fu.id); assert _fu.health < 1.0 and _gr2.supply(_st, "blue") < _s0, "a struck fuel farm lowers friendly supply"
+    _zi = 0; _b0 = _st.ground["blue"][_zi]
+    _fld = next(b_ for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD")
+    _rd2.hit(_st, _fld.id, None, _r2.Random(1), 2, f"sector:{_zi}"); assert _st.ground["blue"][_zi] < _b0 or _b0 == 0
+    _g1 = _st.blue_assets[f"bgar_{_fld.id}"]; _f1 = _st.bases[_fld.id]
+    _g1.health = 1.0; _f1.defense = 1.0; _rd2.hit(_st, _fld.id, None, _r2.Random(2), 2); _with = 1.0 - _f1.defense
+    _g1.health = 0.0; _f1.defense = 1.0; _rd2.hit(_st, _fld.id, None, _r2.Random(2), 2); _without = 1.0 - _f1.defense
+    assert _with < _without, "a garrison takes damage off the field's defences"
+    _fu.health = 0.0; _sd = _gd(1); _sd = type(_sd)(**{**_sd.__dict__, "blue_rebuild": 1.0})
+    assert _gr2.rebuild_blue(_st, _sd, _r2.Random(1)) and _fu.health > 0, "destroyed friendly sites are replaced overnight"
+    # one daily sortie budget per wing: raids draw on it once
+    s.new("Aims budget", "F-16C", 3, seed=16); _st = s.state
+    _w = next(w_ for w_ in _st.enemy_air if "Su_24M" in w_.types and w_.available >= 4); _bud = _ra2.budget(_st, _w.base_asset_id)
+    _n0 = _ra2.used(_st, _w.base_asset_id); _ra2.spend(_st, _w.base_asset_id, 4); assert _ra2.used(_st, _w.base_asset_id) == _n0 + 4
+    _ra2.spend(_st, _w.base_asset_id, _bud); assert not _ra2.can(_st, _w.base_asset_id, 2), "a wing out of budget flies nothing more"
+    assert all(w2_.base_asset_id != _w.base_asset_id for w2_, _ in _rd2.raider_wings(_st)), "and is not offered for a raid"
+    print("[raid aims] friendly garrisons (new + old saves), raids on fields / supply sites / garrisons / troops: plan, mission, manifest, outcome; replacement overnight; one shared daily sortie budget, booked once")
     print("SMOKE TEST PASSED")
 
 

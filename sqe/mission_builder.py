@@ -16,7 +16,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from dcs import action, condition, mapping, planes, ships, task, triggers, vehicles
+from dcs import action, condition, mapping, planes, ships, statics, task, triggers, vehicles
 from dcs.mission import Mission, StartType
 from dcs.point import PointAction
 from . import theatres, weather
@@ -634,7 +634,8 @@ class MissionBuilder:
         o = package.objective
         if o.type == ObjectiveType.FLEET_DEFENSE:           # CAP station on the bearing the raid will arrive on
             c = self.state.bases[o.target_id]
-            return offset(c.x, c.y, package.extra.get("brg", 20.0), (40 if package.extra.get("land") else 85) * NM)
+            cx_, cy_ = package.extra.get("dest") or (c.x, c.y)
+            return offset(cx_, cy_, package.extra.get("brg", 20.0), (40 if package.extra.get("land") else 85) * NM)
         if o.type == ObjectiveType.BARCAP:
             b = self.state.bases[o.target_id]
             air = [a for a in self.state.assets.values() if a.kind == AssetKind.AIRFIELD and not a.destroyed]
@@ -1673,6 +1674,50 @@ class MissionBuilder:
             self._intel.append(f"Alert fighters of {sq.name} ({self._short(base.name)}) are on cockpit alert and may launch to help.")
 
 
+    # ---- what the raiders are going for: the friendly garrison, supply site or troops they will bomb ---------------------------
+    def _spawn_raid_target(self, package, base, aim, dx, dy, manifest):
+        """Put the thing under attack on the map: a field's garrison, a fuel farm / depot, or a column of friendly troops. They are what the
+        raiders bomb, so the intercepting player sees what is at stake. Small groups (a handful of vehicles or statics)."""
+        from . import raids, ground
+        st, d, r = self.state, self.d, self.vrng
+        kind = raids.aim_kind(aim)
+        pt = lambda x, y: mapping.Point(x, y, self.t)
+        if kind == "supply":
+            a = st.blue_assets[aim]
+            hdg = r.randint(0, 359)
+            if a.kind == AssetKind.DEPOT:
+                parts = [statics.Warehouse.Warehouse, statics.Warehouse._Ammunition_depot, statics.Warehouse.Warehouse]
+            else:
+                parts = [statics.Warehouse.Tank, statics.Warehouse.Tank_2, statics.Warehouse.Tank_3, statics.Warehouse.Warehouse]
+            names = []
+            for k, vt in enumerate(parts):
+                x, y = offset(a.x, a.y, k * (360 / len(parts)) + hdg, 40 + 12 * k)
+                nm = f"{aim}|{k + 1}"
+                self.m.static_group(self.usa, nm, vt, pt(x, y), heading=hdg)
+                names.append(nm)
+            manifest.add("blue_site", aim, names, label=a.name)
+            return
+        if kind == "sector":
+            i = int(aim.split(":")[1])
+            sc = max(0.5, min(1.5, ground.blue_strength(st, i) / 50.0))
+            comp = [("M_1_Abrams", r.randint(1, 2)), ("M_2_Bradley", r.randint(1, 2)), ("M1043_HMMWV_Armament", 1), ("M1097_Avenger", 1)]
+            scale, label, head = sc, st.ground["names"][i], r.randint(0, 359)
+        else:
+            gar = st.blue_assets.get(aim if kind == "garrison" else f"bgar_{base.id}")
+            if gar is None or gar.destroyed:
+                return
+            comp = [("M_1_Abrams", r.randint(1, 2)), ("M_2_Bradley", r.randint(1, 2)), ("Vulcan", 1), ("M1097_Avenger", 1), ("M_818", 1)]
+            scale, label, head = d.blue_garrison_size * max(0.5, gar.health), gar.name, r.randint(0, 359)
+            aim = gar.id
+            dx, dy = gar.x, gar.y
+        g = self._platoon(self.usa, f"Friendly {label}", comp, dx, dy, head, F.Star if kind != "sector" else F.Line, scale=scale)
+        if g is None:
+            return
+        names = []
+        for k, u in enumerate(g.units, 1):
+            u.name = f"{aim}|{k}"; names.append(u.name)
+        manifest.add("blue_site", aim, names, label=label)
+
     # ---- bomber raid on the fleet: already en route from the first second, along a real path from their base ----------------
     def _spawn_raid(self, package, sx_, sy_, tot_s, geom, manifest):
         st, d, r = self.state, self.d, self.vrng
@@ -1680,20 +1725,22 @@ class MissionBuilder:
         if not ex:
             return
         cvb = st.bases[package.objective.target_id]
+        aim = ex.get("aim", "") or ""
+        dx, dy = (ex.get("dest") or (cvb.x, cvb.y))              # where the raiders are going: the field, a supply site, a garrison or a sector
         cvg = self.ship.get(cvb.id)
         ba = st.assets[ex["bomber_wing"]]
         pt = lambda x, y: mapping.Point(x, y, self.t)
         station = (sx_, sy_)
-        w1 = offset(cvb.x, cvb.y, ex["brg"], min(220 * NM, 0.9 * dist(ba.x, ba.y, cvb.x, cvb.y)))
+        w1 = offset(dx, dy, ex["brg"], min(220 * NM, 0.9 * dist(ba.x, ba.y, dx, dy)))
         poly = [(ba.x, ba.y), w1, station]
         arrive = tot_s + r.uniform(60, 150)
         path_len = dist(*poly[0], *poly[1]) + dist(*poly[1], *poly[2])
         (sx, sy), seg_i = tm.point_back_along(poly, min(232.0 * arrive, 0.97 * path_len))
-        remaining = poly[seg_i:] + [(cvb.x, cvb.y)]
+        remaining = poly[seg_i:] + [(dx, dy)]
         skill = getattr(Skill, d.enemy_skill, Skill.High)
         land = bool(ex.get("land"))
-        alt = (20000 if land else 30000) * FT
-        apt = self.t.airports.get(cvb.airport) if (land and cvb.airport) else None
+        alt = ((12000 if ex.get("raider") == "Su_25" else 20000) if land else 30000) * FT
+        apt = self.t.airports.get(cvb.airport) if (land and cvb.airport and not aim) else None
 
         def build_group(name, cls, count, task_cls, pos, bomber=False):
             g = self.m.flight_group(self.red, name, cls, None, pt(*pos), altitude=alt, speed=450 * KPH, maintask=task_cls, group_size=count)
@@ -1702,13 +1749,15 @@ class MissionBuilder:
                 if k == len(remaining) - 1 and bomber:
                     if land and apt is not None:
                         wp.tasks.append(task.BombingRunway(airport_id=apt.id))
+                    elif land and aim:
+                        wp.tasks.append(task.Bombing(mapping.Vector2(dx, dy)))
                     elif cvg is not None and cls is planes.Tu_22M3:
                         wp.tasks.append(task.AttackGroup(cvg.id))
             g.set_skill(skill)
             return g
 
         if land:
-            g = build_group("Raid Bomber 1", getattr(planes, ex.get("raider", "Su_24M")), ex["bombers"], task.RunwayAttack, (sx, sy), bomber=True)
+            g = build_group("Raid Bomber 1", getattr(planes, ex.get("raider", "Su_24M")), ex["bombers"], task.GroundAttack if aim else task.RunwayAttack, (sx, sy), bomber=True)
             load = enemy_strike_loadout(ex.get("raider", "Su_24M"))
         else:
             g = build_group("Raid Bomber 1", planes.Tu_22M3, ex["bombers"], task.AntishipStrike, (sx, sy), bomber=True)
@@ -1718,7 +1767,9 @@ class MissionBuilder:
             u.name = f"RAID-B-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
         if not load:
             self.warns.append(f"{ex.get('raider', 'Tu-22M3')}: no bomb or missile found; the raid is unarmed.")
-        manifest.add("enemy_air", ex["bomber_wing"], names, raid_base=cvb.id, raid_arrive_s=float(arrive + dist(sx_, sy_, cvb.x, cvb.y) / 232.0))
+        manifest.add("enemy_air", ex["bomber_wing"], names, raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
+                     raid_arrive_s=float(arrive + dist(sx_, sy_, dx, dy) / 232.0))
+        self._spawn_raid_target(package, cvb, aim, dx, dy, manifest)
         if ex.get("escorts"):
             back = offset(sx, sy, bearing(remaining[0][0], remaining[0][1], sx, sy), 3 * NM)
             eg = build_group("Raid Escort 1", getattr(planes, ex["escort_type"]), ex["escorts"], task.CAP, back)

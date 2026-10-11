@@ -8,6 +8,8 @@ of each base. Now the enemy has a plan for the day, made once and kept in the ca
   How many pairs a wing flies a day follows the difficulty and what the wing has left; one pair always stays on alert.
 * Sweeps (Level 2 and 3): a pair that patrols over a contested sector of the front for 90 minutes.
 
+Patrols, sweeps and raids draw on one daily sortie budget per wing (DAILY_SORTIES per serviceable airframe, the rule the friendly packages follow).
+
 The mission builder uses the plan where it overlaps your mission (the window contains the time on target, the station is near the target or
 the route): those are the briefed, airborne-at-the-start enemy fighters. How many enemy fighters there are still follows the package's threat
 size (n_def); the plan decides which wings, where and when. Losses carry on as before (the wing has fewer aircraft tomorrow, so tomorrow's plan
@@ -28,7 +30,34 @@ SWEEP_MIN = 90
 REL_NM = 110                                                   # a patrol station this close to the target counts as "in the area"
 ROUTE_NM = 45                                                  # ...or this close to a point on the route
 # per level: share of a wing's aircraft flying patrols, most patrol pairs per wing, sweeps per day
+DAILY_SORTIES = 2                                              # per serviceable airframe per day: the same rule the friendly packages follow (engine.plan_day)
 DOCTRINE = {1: {"frac": 0.20, "pairs": 1, "sweeps": 0}, 2: {"frac": 0.30, "pairs": 2, "sweeps": 1}, 3: {"frac": 0.40, "pairs": 3, "sweeps": 2}}
+
+
+def budget(state, wing_id: str) -> int:
+    """Aircraft-sorties a wing can fly today: DAILY_SORTIES per serviceable airframe (what it had when the day was planned)."""
+    ra = getattr(state, "red_air", None) or {}
+    if "budget" in ra and wing_id in ra["budget"]:
+        return int(ra["budget"][wing_id])
+    w = state.enemy_air_at(wing_id)
+    return DAILY_SORTIES * w.available if w else 0
+
+
+def used(state, wing_id: str) -> int:
+    return int(((getattr(state, "red_air", None) or {}).get("used") or {}).get(wing_id, 0))
+
+
+def can(state, wing_id: str, n: int) -> bool:
+    return used(state, wing_id) + n <= budget(state, wing_id)
+
+
+def spend(state, wing_id: str, n: int) -> None:
+    """Book n aircraft-sorties against a wing's day (patrols, sweeps and raids all draw on the same budget)."""
+    ra = getattr(state, "red_air", None)
+    if ra is None:
+        return
+    ra.setdefault("used", {})
+    ra["used"][wing_id] = int(ra["used"].get(wing_id, 0)) + int(n)
 
 
 def _wave_order(base_id: str, day: int) -> list:
@@ -42,6 +71,7 @@ def plan(state, d) -> dict:
     doc = DOCTRINE[max(1, min(3, int(getattr(d, "level", 1))))]
     blue_af = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD]
     flights, spare = [], []
+    use, bud = {}, {}
     wings = sorted(state.enemy_air, key=lambda w: w.base_asset_id)
     for w in wings:
         types = [t for t in w.types if t in ENEMY_FIGHTERS]
@@ -49,10 +79,14 @@ def plan(state, d) -> dict:
         if not types or a is None or a.destroyed or w.available < 2:
             continue
         pairs = w.available // 2
+        bud[w.base_asset_id] = DAILY_SORTIES * w.available
         n_cap = min(doc["pairs"], pairs - 1, max(1, round(doc["frac"] * w.available / 2)))     # one pair always stays on alert
         tgt = min(blue_af, key=lambda b: dist(a.x, a.y, b.x, b.y)) if blue_af else None
         order = _wave_order(w.base_asset_id, state.day)
         for k in range(max(0, n_cap)):
+            if use.get(w.base_asset_id, 0) + 2 > bud[w.base_asset_id]:
+                break
+            use[w.base_asset_id] = use.get(w.base_asset_id, 0) + 2
             if tgt is not None and dist(a.x, a.y, tgt.x, tgt.y) < 35 * NM:
                 sx, sy = offset(a.x, a.y, bearing(a.x, a.y, tgt.x, tgt.y), 0.5 * dist(a.x, a.y, tgt.x, tgt.y))
             elif tgt is not None:
@@ -68,11 +102,14 @@ def plan(state, d) -> dict:
     contested = [i for i, (r, b) in enumerate(zip(g.get("red", []), g.get("blue", []))) if r >= 15 and b >= 15]
     for k in range(doc["sweeps"] if (spare and contested) else 0):
         w, types = spare[rng.randrange(len(spare))]
+        if use.get(w.base_asset_id, 0) + 2 > bud.get(w.base_asset_id, 0):
+            continue
+        use[w.base_asset_id] = use.get(w.base_asset_id, 0) + 2
         c = g["centers"][rng.choice(contested)]
         lo = rng.randrange(6 * 60, 19 * 60, 30)
         flights.append({"id": f"rf{state.day}-{w.base_asset_id}-s{k}", "kind": "SWEEP", "wing": w.base_asset_id, "type": rng.choice(types), "size": 2,
                         "start": lo, "end": lo + SWEEP_MIN, "x": float(c[0]), "y": float(c[1])})
-    return {"day": state.day, "flights": flights}
+    return {"day": state.day, "flights": flights, "budget": bud, "used": dict(use), "patrol_used": dict(use)}
 
 
 def ensure(state, d) -> dict:
