@@ -252,3 +252,9 @@ Ground sites are placed with a coastline that is only roughly right, and it know
 3. In DCS: Fly > Missions > My Missions > SQE_TerrainScan, then Fly (you start in a parked Su-25T, which is free with DCS World, so no paid aircraft is needed). Messages show the percentage; wait for "SQE terrain scan COMPLETE" (about two minutes, DCS may stutter), then leave the mission.
 4. Open or start a campaign in SQE. Settings > Terrain scan reads "loaded" and, from v0.22, a second line "Ground height: loaded ...". An older scan has no ground height: run the scan mission once more (it measures both).
 Sites then keep the Shore margin from the sea and lakes (default 1500 m) and the river margin from rivers and shallow water (default 100 m); both are in Settings. Re-running is only needed after a DCS terrain update.
+
+## The enemy's air plan
+* Each day every enemy fighter wing with at least two aircraft gets patrol pairs (one pair always stays on alert) in 6-hour waves, and at Level 2 and 3 a 90-minute sweep over a contested sector is added. The plan is in the save (`red_air`) and is the same however often you replan the day.
+* A mission picks the patrols that are up at your time over the target and near the target or route; they are briefed ("Reported enemy patrol: ...") and airborne at the start. The rest of the threat-sized defenders are alert aircraft.
+* Things to check in DCS: do the patrol pairs sit where the briefing says, and do they stay until the end of their window? Is the number of briefed patrols about right (some missions will have none)? Does a mission in the same area at a different time of day meet different patrols? Tune: `redair.DOCTRINE` (pairs and share of aircraft per level), `WAVES`, `REL_NM` / `ROUTE_NM` (how close counts as "in the area").
+

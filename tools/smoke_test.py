@@ -497,7 +497,7 @@ def main():
                 r2_ = rr_.fly(p_.number, rr_.flyable(p_)[0].id)
                 with zipfile.ZipFile(rr_.settings.sortie_miz) as z_:
                     off_ = z_.read("mission").decode("utf-8", "replace")
-                assert "Reinforce " not in off_ and "Intelligence:" not in r2_.text["full"] and not any(g_["ref"].startswith("alert_") for g_ in r2_.manifest.groups), "reactive off must add nothing"
+                assert "Reinforce " not in off_ and "may reinforce" not in r2_.text["full"] and "cockpit alert" not in r2_.text["full"] and not any(g_["ref"].startswith("alert_") for g_ in r2_.manifest.groups), "reactive off must add nothing"
                 rr_.settings.reactive = True
         if seen_r and seen_b:
             break
@@ -905,6 +905,33 @@ def main():
     except ImportError:
         pass
     print("[dead gate] SEAD leads DEAD by 5 min with sweep and escorts around it; AI DEAD, escorts and sweeps carry the radar check; two beeps (calls to your flight sound different)")
+    # the enemy's air plan: made once a day, kept in the save, used where it overlaps the mission
+    from sqe import redair as _ra
+    s.new("Red air", "F-16C", 3, seed=7); _st = s.state
+    _p1 = {"day": _st.red_air["day"], "flights": [dict(f_) for f_ in _st.red_air["flights"]]}
+    assert _p1["flights"] and {f_["kind"] for f_ in _p1["flights"]} <= {"CAP", "SWEEP"} and any(f_["kind"] == "SWEEP" for f_ in _p1["flights"]), "a plan with patrols and a sweep"
+    _st.red_air = {}; _ra.ensure(_st, _gd(3)); assert _st.red_air == _p1, "the same day plans the same"
+    for w_ in _st.enemy_air:
+        n_ = sum(1 for f_ in _p1["flights"] if f_["wing"] == w_.base_asset_id and f_["kind"] == "CAP")
+        assert n_ <= max(0, w_.available // 2 - 1), "one pair per wing always stays on alert"
+    _f0 = next(f_ for f_ in _p1["flights"] if f_["kind"] == "CAP"); _tm = (_f0["start"] + _f0["end"]) // 2
+    assert any(g_["id"] == _f0["id"] for g_ in _ra.pick(_st, _tm, [], _f0["x"], _f0["y"], 99)), "a patrol is picked inside its window, near the target"
+    _tout = next(t_ for t_ in range(0, 1440, 10) if not any(f_["start"] <= t_ <= f_["end"] or f_["start"] <= t_ + 1440 <= f_["end"] for f_ in _p1["flights"] if f_["id"] == _f0["id"]))
+    assert not any(g_["id"] == _f0["id"] for g_ in _ra.pick(_st, _tout, [], _f0["x"], _f0["y"], 99)), "...and not outside it"
+    assert not _ra.pick(_st, _tm, [], _f0["x"] + 900000, _f0["y"] + 900000, 99), "...nor far from the target and the route"
+    _w0 = _st.enemy_air_at(_f0["wing"]); _av = _w0.available; _w0.available = 1
+    assert not any(g_["id"] == _f0["id"] for g_ in _ra.pick(_st, _tm, [], _f0["x"], _f0["y"], 99)), "a wing with no pair left supplies none"
+    _w0.available = _av
+    _rr = mk(); s.save() if hasattr(s, "save") else None
+    _rr.open(s.path); assert _rr.state.red_air == _st.red_air, "the plan is saved with the campaign"
+    _old = _st.to_dict(); _old.pop("red_air"); from sqe.state import CampaignState as _CS
+    assert _ra.ensure(_CS.from_dict(_old), _gd(3))["flights"], "an old save without a plan gets one"
+    _seen = []
+    for p_ in s.packages():
+        if s.flyable(p_) and p_.n_def:
+            _res = s.fly(p_.number, s.flyable(p_)[0].id); _seen += [l_ for l_ in _res.text["full"].splitlines() if "Reported enemy" in l_]
+    assert _seen, "a mission whose area has a planned patrol says so in the briefing"
+    print("[red air] a daily plan (patrols by wave, sweeps over the front), the same on a replan, one pair per wing stays on alert, picked by window, area and wing strength, saved and regenerated for old saves; briefing: " + _seen[0].strip()[:90])
     print("SMOKE TEST PASSED")
 
 

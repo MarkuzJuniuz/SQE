@@ -23,7 +23,7 @@ from . import theatres, weather
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import briefing as brief, callsigns, carcass, ground, profiles, reactive, relief
+from . import briefing as brief, callsigns, carcass, ground, profiles, reactive, redair, relief
 from . import seacheck as seac
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
@@ -202,6 +202,7 @@ class MissionBuilder:
         date = st.campaign_date()
         hh, mm = int(package.start[:2]), int(package.start[3:5])
         start = datetime.datetime(date.year, date.month, date.day, hh, mm)
+        self._start_min, self._red_intel, self._red_sel = hh * 60 + mm, [], []
         m.start_time = start
         clock = lambda s: (start + datetime.timedelta(seconds=s)).strftime("%H:%M:%S")
         date_str = start.strftime("%d %b %Y").upper()
@@ -308,7 +309,7 @@ class MissionBuilder:
         self._spawn_cas_support(package, plan, geom, manifest)
         merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock, ruins)
         manifest.cur_pkg = ""
-        self._intel = [geom.tier.reason] if geom.tier.reason else []
+        self._intel = ([geom.tier.reason] if geom.tier.reason else []) + list(self._red_intel)
         self._spawn_reactive(package, extras, tx, ty, tgt.eta_s, geom, manifest, despawn)
         self._dry_pass()
         self._place_carcasses()
@@ -1370,24 +1371,21 @@ class MissionBuilder:
         return wings
 
     def _plan_cap_stations(self, package, tx, ty, geom, keepout) -> list:
-        """Known enemy CAP stations: 20-25 nm in front of their OWN base (toward the target), so they sit inside their SAM cover.
-        Uses its own seeded rng so planning here does not disturb the rest of the layout."""
-        if package.objective.type == ObjectiveType.FLEET_DEFENSE or package.n_def // 2 <= 0:
+        """Known enemy CAP stations: the enemy's own air plan for the day (redair.py) decides which patrol pairs are up at the time on target near the
+        target or the route, and where (20-25 nm in front of their own base, or over the contested sector for a sweep). The stations here are only moved
+        clear of the tanker, AWACS, HAVCAP and the fleet. How many enemy fighters there are overall is still the package's threat size; patrols
+        fill the first places, the rest are alert aircraft."""
+        self._red_sel = []
+        n_fl = package.n_def // 2
+        if package.objective.type == ObjectiveType.FLEET_DEFENSE or n_fl <= 0 or not self._fighter_wings(tx, ty):
             return []
-        wings = self._fighter_wings(tx, ty)
-        if not wings:
-            return []
-        rr = random.Random(self.seed_code + ":cap")
-        n_cap = max(1, math.ceil((package.n_def // 2) / 2))
+        redair.ensure(self.state, self.d)
+        tot_min = self._start_min + 20                              # the time on target is not known yet; a package is over the target about 20 minutes in
+        self._red_sel = redair.pick(self.state, tot_min, [geom.push, geom.ip, (tx, ty)], tx, ty, max(1, math.ceil(n_fl / 2)))
         keepout = list(keepout) + self._fleet_keepout()
         out = []
-        for i in range(n_cap):
-            w, a = wings[i % len(wings)]
-            dd = dist(a.x, a.y, tx, ty)
-            if dd < 35 * NM:
-                sx, sy = offset(a.x, a.y, bearing(a.x, a.y, tx, ty), 0.5 * dd)
-            else:
-                sx, sy = offset(a.x, a.y, bearing(a.x, a.y, tx, ty) + rr.uniform(-12, 12), rr.uniform(20, 25) * NM)
+        for f in self._red_sel:
+            sx, sy = f["x"], f["y"]
             for kx, ky, knm in keepout:
                 if dist(sx, sy, kx, ky) < knm * NM:
                     sx, sy = offset(kx, ky, bearing(kx, ky, sx, sy), knm * NM)
@@ -1455,15 +1453,20 @@ class MissionBuilder:
             return
         skill = getattr(Skill, d.enemy_skill, Skill.High)
         pt = lambda x, y: mapping.Point(x, y, self.t)
-        n_cap = max(1, math.ceil(n_fl / 2))
+        n_cap = len(self._cap_plan)                         # the planned patrol pairs that are up (redair.py); the rest of the defenders are alert aircraft
         alt, spd = 22000 * FT, 400 * KPH
         for i in range(n_fl):
-            w, a = wings[i % len(wings)]
-            tname = r.choice([t for t in w.types if t in ENEMY_FIGHTERS])
+            if i < n_cap:
+                pf_ = self._red_sel[i]
+                w, a = st.enemy_air_at(pf_["wing"]), st.assets[pf_["wing"]]
+                tname = pf_["type"] if pf_["type"] in w.types else r.choice([t for t in w.types if t in ENEMY_FIGHTERS])
+            else:
+                w, a = wings[i % len(wings)]
+                tname = r.choice([t for t in w.types if t in ENEMY_FIGHTERS])
             cls = getattr(planes, tname)
             load = enemy_cap_loadout(tname)
             dd = dist(a.x, a.y, tx, ty)
-            if i < n_cap:                                   # known CAP, on station from the start, in front of its own base
+            if i < n_cap:                                   # known CAP, on station from the start
                 cp = self._cap_plan[i]
                 sx, sy = cp["x"], cp["y"]
                 for kx, ky, knm in keepout:                 # tanker / AWACS / HAVCAP stay well clear as well
@@ -1471,8 +1474,11 @@ class MissionBuilder:
                         sx, sy = offset(kx, ky, bearing(kx, ky, sx, sy), knm * NM)
                 g = self.m.flight_group(self.red, f"Bandit {i + 1}", cls, None, pt(sx, sy), altitude=alt, speed=spd, maintask=task.CAP, group_size=2)
                 ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
-                ct.stop_after_time(int(tot_s + 3600))
+                ct.stop_after_time(int(max(tot_s + 300, (pf_["end"] - self._start_min) * 60)))       # on station until its planned window ends
                 g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
+                bd_ = bearing(tx, ty, sx, sy)
+                self._red_intel.append(f"Reported enemy {'fighter sweep' if pf_['kind'] == 'SWEEP' else 'patrol'}: a pair of {tname.replace('_', '-')} from "
+                                       f"{self._short(a.name)}, {dist(sx, sy, tx, ty) / NM:.0f} nm {reactive.compass(bd_)} of the target, {redair.hhmm(pf_['start'])}-{redair.hhmm(pf_['end'])}.")
                 g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
                 self._limit_engage(g, self.o.enemy_cap_engage_nm)
             else:                                           # alert: on the runway, scrambles when detected

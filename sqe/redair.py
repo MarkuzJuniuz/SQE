@@ -1,0 +1,109 @@
+"""The enemy's air tasking (phase 1): what its fighter wings are doing today.
+
+Until now the enemy's fighters were invented around your package when the mission was built: whichever wings were nearest, a CAP in front
+of each base. Now the enemy has a plan for the day, made once and kept in the campaign (state.red_air):
+
+* CAP pairs: a wing flies a few patrol pairs, each on a station in front of its own base toward the nearest friendly airfield, in a time
+  window (the day is cut into four 6-hour waves; which waves a wing covers differs from wing to wing and from day to day, so there are gaps).
+  How many pairs a wing flies a day follows the difficulty and what the wing has left; one pair always stays on alert.
+* Sweeps (Level 2 and 3): a pair that patrols over a contested sector of the front for 90 minutes.
+
+The mission builder uses the plan where it overlaps your mission (the window contains the time on target, the station is near the target or
+the route): those are the briefed, airborne-at-the-start enemy fighters. How many enemy fighters there are still follows the package's threat
+size (n_def); the plan decides which wings, where and when. Losses carry on as before (the wing has fewer aircraft tomorrow, so tomorrow's plan
+is smaller).
+
+Pure planning, no pydcs.
+"""
+from __future__ import annotations
+import hashlib
+import random
+from .loadouts import ENEMY_FIGHTERS
+from .models import BaseKind
+from .routes import NM, bearing, dist, offset
+
+WAVES = [(0, 360), (360, 720), (720, 1080), (1080, 1440)]     # minutes of the day
+WAVE_OVERLAP_MIN = 20                                          # a pair stays up this long into the next wave (no gap at the boundary)
+SWEEP_MIN = 90
+REL_NM = 110                                                   # a patrol station this close to the target counts as "in the area"
+ROUTE_NM = 45                                                  # ...or this close to a point on the route
+# per level: share of a wing's aircraft flying patrols, most patrol pairs per wing, sweeps per day
+DOCTRINE = {1: {"frac": 0.20, "pairs": 1, "sweeps": 0}, 2: {"frac": 0.30, "pairs": 2, "sweeps": 1}, 3: {"frac": 0.40, "pairs": 3, "sweeps": 2}}
+
+
+def _wave_order(base_id: str, day: int) -> list:
+    s = int(hashlib.md5(f"{base_id}:{day}".encode()).hexdigest()[:4], 16) % 4
+    return [(s + k) % 4 for k in (0, 2, 1, 3)]
+
+
+def plan(state, d) -> dict:
+    """-> {"day": n, "flights": [{id, kind CAP|SWEEP, wing (base asset id), type, size, start, end (minutes of the day), x, y}]}."""
+    rng = random.Random(f"{state.campaign_id}:{state.day}:redair")
+    doc = DOCTRINE[max(1, min(3, int(getattr(d, "level", 1))))]
+    blue_af = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD]
+    flights, spare = [], []
+    wings = sorted(state.enemy_air, key=lambda w: w.base_asset_id)
+    for w in wings:
+        types = [t for t in w.types if t in ENEMY_FIGHTERS]
+        a = state.assets.get(w.base_asset_id)
+        if not types or a is None or a.destroyed or w.available < 2:
+            continue
+        pairs = w.available // 2
+        n_cap = min(doc["pairs"], pairs - 1, max(1, round(doc["frac"] * w.available / 2)))     # one pair always stays on alert
+        tgt = min(blue_af, key=lambda b: dist(a.x, a.y, b.x, b.y)) if blue_af else None
+        order = _wave_order(w.base_asset_id, state.day)
+        for k in range(max(0, n_cap)):
+            if tgt is not None and dist(a.x, a.y, tgt.x, tgt.y) < 35 * NM:
+                sx, sy = offset(a.x, a.y, bearing(a.x, a.y, tgt.x, tgt.y), 0.5 * dist(a.x, a.y, tgt.x, tgt.y))
+            elif tgt is not None:
+                sx, sy = offset(a.x, a.y, bearing(a.x, a.y, tgt.x, tgt.y) + rng.uniform(-12, 12), rng.uniform(20, 25) * NM)
+            else:
+                sx, sy = a.x, a.y
+            lo, hi = WAVES[order[k]]
+            flights.append({"id": f"rf{state.day}-{w.base_asset_id}-{k}", "kind": "CAP", "wing": w.base_asset_id, "type": rng.choice(types), "size": 2,
+                            "start": lo, "end": min(1440 + WAVE_OVERLAP_MIN, hi + WAVE_OVERLAP_MIN), "x": sx, "y": sy})
+        if w.available - 2 * max(0, n_cap) >= 4:
+            spare.append((w, types))
+    g = state.ground or {}
+    contested = [i for i, (r, b) in enumerate(zip(g.get("red", []), g.get("blue", []))) if r >= 15 and b >= 15]
+    for k in range(doc["sweeps"] if (spare and contested) else 0):
+        w, types = spare[rng.randrange(len(spare))]
+        c = g["centers"][rng.choice(contested)]
+        lo = rng.randrange(6 * 60, 19 * 60, 30)
+        flights.append({"id": f"rf{state.day}-{w.base_asset_id}-s{k}", "kind": "SWEEP", "wing": w.base_asset_id, "type": rng.choice(types), "size": 2,
+                        "start": lo, "end": lo + SWEEP_MIN, "x": float(c[0]), "y": float(c[1])})
+    return {"day": state.day, "flights": flights}
+
+
+def ensure(state, d) -> dict:
+    """Today's plan (made on first use, kept for the day; an old save without one gets one)."""
+    ra = getattr(state, "red_air", None)
+    if not ra or ra.get("day") != state.day:
+        state.red_air = ra = plan(state, d)
+    return ra
+
+
+def pick(state, tot_min: float, pts: list, tx: float, ty: float, limit: int) -> list:
+    """The planned patrol flights that are up at the time on target and near the target or the route, nearest the target first.
+    A wing never supplies more pairs than it has aircraft for right now."""
+    out, used = [], {}
+    t = tot_min % 1440
+    for f in sorted((state.red_air or {}).get("flights", []), key=lambda f: dist(f["x"], f["y"], tx, ty)):
+        if len(out) >= limit:
+            break
+        if not (f["start"] <= t <= f["end"] or f["start"] <= t + 1440 <= f["end"]):
+            continue
+        w = state.enemy_air_at(f["wing"])
+        a = state.assets.get(f["wing"])
+        if w is None or a is None or a.destroyed or w.available // 2 <= used.get(f["wing"], 0):
+            continue
+        if not (dist(f["x"], f["y"], tx, ty) <= REL_NM * NM or any(dist(f["x"], f["y"], px, py) <= ROUTE_NM * NM for px, py in pts)):
+            continue
+        used[f["wing"]] = used.get(f["wing"], 0) + 1
+        out.append(f)
+    return out
+
+
+def hhmm(minute: float) -> str:
+    m = int(minute) % 1440
+    return f"{m // 60:02d}{m % 60:02d}"

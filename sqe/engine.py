@@ -12,7 +12,7 @@ from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
 from .models import Objective, ObjectiveType
-from . import raids
+from . import raids, redair
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import Ledger, NoPlayerSlot, Package, PackageBuilder
 from .scenario import new_campaign
@@ -99,6 +99,7 @@ class Session:
 
     def plan_day(self) -> list:
         st = self.state
+        redair.ensure(st, self.d)                       # the enemy's air tasking for the day
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=self.PACKAGES_PER_DAY)
         keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry")}
         warned, n_surprise = raids.todays_raids(st, self.d, self._rng(71))
