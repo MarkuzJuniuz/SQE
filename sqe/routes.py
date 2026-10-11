@@ -54,6 +54,7 @@ class Geometry:
     stand: dict = None      # {(role, id(profile)): (x, y, [SAM types], nm short)} sweeps and escorts that stop at the edge of SAM cover
 
 
+HARM_LAUNCH_NM = 30.0      # an AI SEAD flight's HARM launch point: at the edge of what an SA-10 first reaches (it opened fire at about 55 km in testing); 21 nm put the launch point deep inside it
 CARRIER_DEP_NM = 10.0      # Case III: the departure circle is 10 nm from the boat, and the flight leaves on the briefed departure radial
 
 
@@ -105,22 +106,29 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     t = g.tiers.get(key) if g.tiers else g.tier                # per kind of flight when the builder worked them out; the single tier otherwise
     so = None if (is_player and not g.ai_player) else (g.stand or {}).get(key)
     ialt, irad = (t.alt_ft, t.rad) if (t is not None and t.changed) else (alt, False)          # the tier applies from the IP on
+    human = is_player and not g.ai_player                    # a person flies it; in the all-AI test the player's flight is routed and tasked like any AI flight
+    harm_nm = max(8.0, min(HARM_LAUNCH_NM, g.d / NM * 0.8 - 6))        # on short routes it still leaves the IP ahead of the base
+    ip_xy = g.ip
+    if role == Role.SEAD and not human:                      # the IP sits 6 nm before the launch point (the launch point is farther out than the usual IP)
+        far = offset(g.tx, g.ty, g.hdg + 180, (harm_nm + 6) * NM)
+        if dist(g.tx, g.ty, *far) > dist(g.tx, g.ty, *g.ip):
+            ip_xy = far
     wp.append(Wpt("PUSH", *g.push, alt, p.push_kts, "Push on time, check in with AWACS"))
-    wp.append(Wpt("IP", *g.ip, ialt, p.ip_kts, "Weapons armed, master arm", rad=irad))
+    wp.append(Wpt("IP", *ip_xy, ialt, p.ip_kts, "Weapons armed, master arm", rad=irad))
     # The player's TGT is on the ground target at 0 AGL so pods, weapons and the WSO / Jester can slave to it. The wingmen follow the player, and AI-only flights
     # never get a ground-level point (they would descend to it).
     if role == Role.STRIKE:
-        wp.append(Wpt("TGT", g.tx, g.ty, 0 if is_player else ialt, p.attack_kts, p.tgt_note, "BOMB", agl=is_player, rad=irad and not is_player))
-    elif role == Role.SEAD and is_player:
+        wp.append(Wpt("TGT", g.tx, g.ty, 0 if human else ialt, p.attack_kts, p.tgt_note, "BOMB", agl=human, rad=irad and not human))
+    elif role == Role.SEAD and human:
         wp.append(Wpt("TGT", g.tx, g.ty, 0, p.attack_kts, "SEAD site. You set standoff", "SEAD", agl=True))
     elif role == Role.SEAD:
-        wp.append(Wpt("SEAD", *offset(g.tx, g.ty, g.hdg + 180, max(8, p.ip_nm - 4) * NM), ialt, p.attack_kts, "HARM launch point", "SEAD", rad=irad))
+        wp.append(Wpt("SEAD", *offset(g.tx, g.ty, g.hdg + 180, harm_nm * NM), ialt, p.attack_kts, "HARM launch point", "SEAD", rad=irad))
     elif role == Role.SWEEP and so:
         wp.append(Wpt("TGT", so[0], so[1], alt, p.cap_kts, f"SWEEP: stop here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "SWEEP", orbit=True))
     elif role == Role.SWEEP:
         wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts + 30, "SWEEP: clear the airspace", "SWEEP"))
     elif role == Role.CAS:
-        wp.append(Wpt("TGT", g.tx, g.ty, 0 if is_player else ialt, p.attack_kts, "CAS: check in with JTAC (COMM1 CH4)", "CAS", agl=is_player, rad=irad and not is_player))
+        wp.append(Wpt("TGT", g.tx, g.ty, 0 if human else ialt, p.attack_kts, "CAS: check in with JTAC (COMM1 CH4)", "CAS", agl=human, rad=irad and not human))
     elif so:
         wp.append(Wpt("TGT", so[0], so[1], ialt, p.cap_kts, f"ESCORT: hold here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "ESCORT", rad=irad, orbit=True))
     else:

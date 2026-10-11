@@ -1158,9 +1158,10 @@ class MissionBuilder:
                     nm = special(w)
                     if nm:
                         wp.name = nm
-                if w.action == "BOMB":
-                    wp.tasks.append(task.Bombing(pt(w.x, w.y), group_attack=True))
-                continue
+                if not o.player_is_ai:                                       # all-AI test: the player's flight now gets the AI tasks below, like any AI flight
+                    if w.action == "BOMB":
+                        wp.tasks.append(task.Bombing(pt(w.x, w.y), group_attack=True))
+                    continue
             if run_t0 is not None:
                 if w is wps[first]:
                     wp.tasks.append(task.OptECMUsing(task.OptECMUsing.Values.NeverUse))          # jammers off until the attack leg
@@ -1191,9 +1192,9 @@ class MissionBuilder:
                 radars = [u for u in armor.units if str(getattr(u, "type", "")) in TRACK_RADARS | SEARCH_RADARS]
                 if package.objective.type == ObjectiveType.DEAD and radars:
                     # SEAD blinds the site: HARMs go for the radars; the launchers are the DEAD flight's job
-                    ct = task.ControlledTask(task.AttackUnit(radars[0].id, weapon_type=task.WeaponType.Auto, group_attack=True))
+                    ct = task.ControlledTask(task.AttackUnit(radars[0].id, weapon_type=task.WeaponType.ARM, group_attack=True))
                 else:
-                    ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.Auto, group_attack=True))
+                    ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                 ct.stop_after_time(int(w.eta_s) + 600)
                 wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree)); wp.tasks.append(ct)
         gate = None

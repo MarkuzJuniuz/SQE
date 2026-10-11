@@ -1,3 +1,11 @@
+## v0.39.7
+
+* **SEAD flights get to shoot first.** In the AI-only run on the Sukhumi SA-10 the four SEAD F-16s fired no HARM at all and all four died (the site lost nothing). Two causes, both fixed:
+  * **The HARM launch point was inside the SA-10's reach.** It was 21 nm (39 km) from the site, and the S-300 opened fire at about 55 km. SEAD flights now launch from 30 nm (55 km), with the IP 6 nm before it; on a short route the distance is pulled in so the IP stays ahead of the base. They egress from there, so the SEAD flight never flies over the site. Both SEAD flights of a package hold the same launch time, so the missiles go off together.
+  * **In the all-AI test your own flight had no SEAD tasking at all.** It was routed like a person flying it: a point on the radar itself at 0 m above ground and no attack task, so it flew straight at the site. In the AI test your flight is now routed and tasked like any AI flight (launch point, HARM task, orbit at the marshal, a strike's target point at altitude instead of on the ground). Flying it yourself is unchanged.
+  * The HARM task now asks for anti-radiation missiles (`ARM`) instead of "Auto", so the AI can't pick another weapon.
+* Untested in DCS. In particular: does the AI actually fire HARMs at the launch point (read `shots` in `SQE_state.json`: AGM_88C), and does it still manoeuvre toward the site while doing it?
+
 ## v0.39.6
 
 * **HAVCAP and base CAP stay until the last flight is home.** In the AI run, Viper 4 (the HAVCAP) left 40 minutes after your TOT and landed while the merged DEAD package was still flying, so the tanker and AWACS were unguarded for the last hour. Both support CAPs now stay on station until five minutes after the latest return of any package in the mission (yours or a merged one). Fuel still applies: DCS sends an AI flight home at bingo whatever its task says, so a very long mission can still lose them (a relief pair is a later idea).
