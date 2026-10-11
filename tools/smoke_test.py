@@ -1081,6 +1081,33 @@ def main():
         assert ("GATES = { {t=" in _mz.replace("\\", "")) or True
     from sqe.mission_builder import stagger as _stg
     assert _stg(_de, Role.ESCORT) == -30 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage keeps its escorts with it"
+    # the HARM launch point is at the edge of an SA-10's reach and the HARM task asks for ARMs; in the all-AI test your own SEAD flight gets the same tasking
+    import math as _m
+    _sx = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="off", flight_filter="all"))
+    _sx.new("SEAD launch", "F-16C", 3, seed=11)
+    _se_ = next(p_ for p_ in _sx.packages() if p_.objective.aim == "SEAD" and _sx.flyable(p_))
+    for _ai in (False, True):
+        _sx.ai_test = _ai
+        _sx.fly(_se_.number, next(f_ for f_ in _sx.flyable(_se_) if f_.role == Role.SEAD).id)
+        _mz2 = lua.loads(_zf.ZipFile(_sx.settings.sortie_miz).read("mission").decode())["mission"]
+        _site = None; _seads = []
+        for _c in _mz2["coalition"].values():
+            for _cn in _c["country"].values():
+                for _g in _cn.get("vehicle", {}).get("group", {}).values():
+                    if _g["name"] == _se_.objective.target_id: _site = (_g["x"], _g["y"])
+                for _g in _cn.get("plane", {}).get("group", {}).values():
+                    if _g["task"] == "SEAD": _seads.append(_g)
+        assert _site and len(_seads) == 2, "two SEAD flights and the site"
+        for _g in _seads:
+            _pts = {p_.get("name"): p_ for p_ in _g["route"]["points"].values()}
+            if _g["units"][1]["skill"] == "Player" and not _ai:
+                assert "SEAD" not in _pts and _pts["TGT"]["alt"] == 0, "a person flying it keeps the target point on the radar"
+                continue
+            _d = lambda n_: _m.hypot(_pts[n_]["x"] - _site[0], _pts[n_]["y"] - _site[1]) / 1852
+            assert 29 <= _d("SEAD") <= 31 and _d("IP") > _d("SEAD") + 5, ("HARM launch point 30 nm out, IP before it", _d("SEAD"), _d("IP"))
+            _atk = [t_["params"]["task"]["params"]["weaponType"] for p_ in _g["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()
+                    if t_["id"] == "ControlledTask" and t_["params"]["task"]["id"] in ("AttackUnit", "AttackGroup")]
+            assert _atk == [32768], ("the SEAD task asks for ARMs", _atk)
     print("[sead first] SEAD and DEAD are two packages 25 min apart, dice cast at planning, DEAD held without a blind site, valve after 3 failed days, DEAD-stage mission has no radars after a good SEAD")
     # an empty Missions pane says why and points at Skip Turn
     try:
