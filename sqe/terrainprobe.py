@@ -87,7 +87,7 @@ local function relief_pass()
     -- distinct road points: land.getClosestPointOnRoads('roads', x, y) on a coarse grid, kept when the answer is near the sample, rounded to 50 m.
     -- The call is a nearest-road search of unknown cost, so: (1) three announced test calls first (the message shows BEFORE each call, so a hang is visible
     -- and the scan skips the roads when a call is slow), (2) the grid is coarsened until the estimate fits about 20 minutes, (3) work in 20 ms time slices.
-    local clock, BUDGET = os and os.clock, 0.02
+    local clock, BUDGET = os and os.clock, 0.5
     local seen, pts, nxt3, rowj = {}, {}, 0, 0
     local RS, RNX, RNY = RSTEP, 0, 0
     local function say(m)
@@ -130,9 +130,8 @@ local function relief_pass()
         local pct = math.floor(100 * nxt3 / RNX)
         if pct >= lastpct + 5 then
           lastpct = pct
-          local el = t - t_start
-          local eta = math.ceil(el * (RNX - nxt3) / math.max(nxt3, 1) / 60)
-          trigger.action.outText(string.format("SQE road scan: %d%% (about %d min left in mission time)", pct, eta), 8)
+          trigger.action.outText(string.format("SQE road scan: %d%%", pct), 8)
+          if env and env.info then env.info(string.format("SQE road scan: %d%% columns=%d points=%d mission_s=%.1f cpu_s=%.1f", pct, nxt3, #pts, t - t_start, clock and clock() or -1)) end
         end
         return t + 0.05
       end, nil, timer.getTime() + 1)

@@ -1,3 +1,7 @@
+## v0.39.3
+
+* **The road scan is much faster.** In the first DCS run the scan worked (each road call takes well under a millisecond) but advanced only about 5% in 9 minutes: DCS's anti-freeze hands out timer ticks rarely while the scan loads the sim, and each tick did only 20 ms of work. Each tick now works for 0.5 s. The progress message shows the percentage only (the old "minutes left" counted mission time, which crawls), and every 5% is also written to dcs.log (`SQE road scan:` lines with mission and CPU seconds) so real rates can be read afterwards. Untested in DCS.
+
 ## v0.39.2
 
 * **The road scan announces its first calls and skips the roads instead of freezing.** The first DCS test froze right at the start of the road pass even in time slices, so a single `getClosestPointOnRoads` call is the suspect. The scan now makes three test calls first, each announced on screen before it runs ("road test 1 of 3: calling now ... If this is the last message, DCS is stuck in that call") and logged to dcs.log with the prefix `SQE road scan:`. A call slower than 1 s ends the scan as COMPLETE without roads. The grid is coarsened until the estimate is about 20 minutes. Untested in DCS.
