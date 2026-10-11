@@ -276,7 +276,7 @@ Sites then keep the Shore margin from the sea and lakes (default 1500 m) and the
 * Things to check: does the "pulled back" line appear after a site was beaten down, and does the site show at its new position the next day (map and briefing)? Tuning: `sams.RETREAT_HEALTH`, `RETURN_HEALTH`, `RETREAT_NM`, `RETURN_MIN_DAYS`, `Difficulty.sam_retreat`.
 
 ## Jamming
-Aircraft with jamming gear defeat some radar-guided missiles. Internal sets (F-15C, F-14, F/A-18C, Red Su-24M) protect only their own jet; an ECM pod on the loadout (F-16C, A-10C CAS) is stronger and also covers aircraft within 2 nm. Chance by launch range: nothing inside 12 km, full from 40 km. AI flights jam from PUSH to EGR only; your jet jams throughout. Anti-radiation missiles are not affected. The rolls are written to `SQE_state.json` under `jams` (test guideline: fly a SEAD or strike package and check them). The tier values are SQE's own judgement.
+Aircraft with jamming gear defeat some radar-guided missiles. Internal sets (F-14, F/A-18C, Red Su-24M; not the FC3 F-15C) protect only their own jet; an ECM pod on the loadout (F-16C, A-10C CAS) is stronger and also covers aircraft within 2 nm. Chance by launch range: nothing inside 12 km, full from 40 km. AI flights jam from PUSH to EGR only; your jet jams throughout. Anti-radiation missiles are not affected. The rolls are written to `SQE_state.json` under `jams` (test guideline: fly a SEAD or strike package and check them). The tier values are SQE's own judgement.
 
 
 ## Air wings that fall back

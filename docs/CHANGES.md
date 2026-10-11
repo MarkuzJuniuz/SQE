@@ -1,3 +1,6 @@
+## v0.38.1
+* The FC3 F-15C no longer counts as having an internal jammer: its tier is 0 (no jamming rolls, no cover in the abstract war). Its switch cannot be read later and what the real set does is not clear enough to emulate.
+
 ## v0.38.0
 Road snapping, needing a new scan. Untested in DCS.
 * **The scan mission also finds roads** (`terrainprobe.py`): after the land / water and ground-height passes it asks `land.getClosestPointOnRoads('roads', x, y)` on a 2 km grid (`"road_step"` in the theatre's scan block) and writes the distinct road points (rounded to 50 m) to `SQE_roads_<theatre>.json`. This adds a minute or two to the scan. The Settings > Terrain scan page shows whether roads are loaded. Run the scan mission again to get them; the old files are still valid.
