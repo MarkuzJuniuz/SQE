@@ -270,3 +270,7 @@ Sites then keep the Shore margin from the sea and lakes (default 1500 m) and the
 * Fly the SEAD package and the result is real (the debrief says whether the radars are out). Fly the DEAD stage and the SEAD package has been settled for you.
 * After 3 failed SEAD days on a site, the combined package comes back for it.
 * Things to check in DCS: does the DEAD stage start with no radars at the site when the SEAD stage "succeeded"? Does a failed one start with radars and turn back? Are the escorts with the strikers (not minutes ahead)? Tuning: `war.SEAD_FAIL_VALVE`, `war.DEAD_STAGE_GAP_MIN`.
+
+## Retreat of hurt SAM sites
+* A long-range site at 35% or less may pull back 35-55 nm overnight (with its garrison) and comes back once repaired to 65%. You see it in the overnight log. Tasking can still go against it where it sits.
+* Things to check: does the "pulled back" line appear after a site was beaten down, and does the site show at its new position the next day (map and briefing)? Tuning: `sams.RETREAT_HEALTH`, `RETURN_HEALTH`, `RETREAT_NM`, `RETURN_MIN_DAYS`, `Difficulty.sam_retreat`.

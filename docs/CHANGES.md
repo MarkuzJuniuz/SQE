@@ -1,3 +1,11 @@
+## v0.32.0
+Retreat for badly hurt long-range SAM sites. Untested in DCS.
+* A long-range site (the kind SEAD / DEAD packages are sent to) at **35% health or less** can **pull back from the front to recover**. Each night, with a chance that grows the worse it is hurt and falls with the enemy's supply (`sams.retreat`, scaled by the level: 60% / 80% / 100%), the site and its dug-in garrison move 35-55 nm further from our nearest airfield, onto land. Its ring leaves the contested ground while it is away. It is still on the map and the planner can still send a package against it where it sits. Once it is repaired to **65%** (at least 2 days later) it returns to its old position, with a 50% chance each night. A site destroyed while pulled back is handled by the normal rebuild rule at the position it had reached.
+* The overnight log says "<site> (25% left) pulled back about 44 nm from the front to recover" and "<site> is back in position". State: `sams.pulled` in the campaign (old position, day).
+* Sites that scoot (mobile ones, up to 10 nm) are unchanged. They do not scoot while pulled back.
+* Not done: retreat of depleted air wings to a rear field (it needs a merge rule for wings), and the friendly equivalent.
+* Seen in an all-AI simulation of 40 days at Level 3: 8 pulls, 1 return and 33 held DEAD stages (the SEAD stage fails often at Level 3, which is the point of the 3-day valve); at Level 2, none (no long-range site got below 42%).
+
 ## v0.31.2
 * The empty Missions pane calls it a stand-down day ("Stand-down day for you. Skip Turn takes the day.") instead of talking about the war going on without you.
 

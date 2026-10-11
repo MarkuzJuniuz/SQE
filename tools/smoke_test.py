@@ -788,6 +788,7 @@ def main():
     print("[engage time] the engage task stops at TOT + 5 min and the flight flies on (alert pairs +5); distance-only and unlimited forms unchanged")
     print("[stand-off] fighters stop outside live SAM rings (player excepted), hold there and go home; AI escorts and sweeps carry the 40 nm engage limit")
     # ---- phase 3: air defence that rebuilds and moves ----
+    import math
     from sqe import sams as _sm
     import math as _mm
     s.new("Sams", "FA-18C", 3, seed=11); _st = s.state
@@ -1073,6 +1074,36 @@ def main():
         print("[idle pane] nothing to fly: the Missions pane says why (aircraft, roles, range) and points at Skip Turn")
     except ImportError:
         pass
+    # retreat: a badly hurt long-range site pulls back from the front with its garrison, and comes back once repaired
+    import math
+    from sqe import sams as _sm
+    s.new("Retreat", "F-16C", 3, seed=21); _st = s.state
+    _site = next(a_ for a_ in sorted(_st.assets.values(), key=lambda a_: a_.id) if _sm._long_range(_st, a_) and not a_.destroyed)
+    _gar = [g_ for g_ in _st.assets.values() if g_.guards == _site.id]
+    _fl = [b_ for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD"]
+    _dist0 = min(math.hypot(b_.x - _site.x, b_.y - _site.y) for b_ in _fl) / 1852.0
+    _o = (_site.x, _site.y); _go = [(g_.x, g_.y) for g_ in _gar]
+    _site.health = 0.9
+    assert not _sm.retreat(_st, _gd(3), random.Random(1)) or not _st.sams.get("pulled", {}).get(_site.id), "a healthy site stays put"
+    _site.health = 0.15; _lines = []
+    for _k in range(30):
+        _lines = _sm.retreat(_st, _gd(3), random.Random(_k))
+        if _site.id in _st.sams["pulled"]:
+            break
+    assert _site.id in _st.sams["pulled"] and any("pulled back" in l_ for l_ in _lines), "a badly hurt long-range site pulls back"
+    _dist1 = min(math.hypot(b_.x - _site.x, b_.y - _site.y) for b_ in _fl) / 1852.0
+    assert _dist1 > _dist0 + 20, f"it moved away from our airfields ({_dist0:.0f} -> {_dist1:.0f} nm)"
+    assert all(math.isclose(g_.x - gx_, _site.x - _o[0], abs_tol=1) and math.isclose(g_.y - gy_, _site.y - _o[1], abs_tol=1) for g_, (gx_, gy_) in zip(_gar, [(a_[0], a_[1]) for a_ in _go])) or not _gar, "its garrison went with it"
+    assert not _sm.retreat(_st, _gd(3), random.Random(5)) or _site.id in _st.sams["pulled"], "it does not pull back twice"
+    _rt = _CS.from_dict(_st.to_dict()); assert _site.id in _rt.sams["pulled"], "saved with the campaign"
+    _site.health = 0.9; _st.day += 3; _back = []
+    for _k in range(30):
+        _back = _sm.retreat(_st, _gd(3), random.Random(100 + _k))
+        if _site.id not in _st.sams["pulled"]:
+            break
+    assert _site.id not in _st.sams["pulled"] and (round(_site.x), round(_site.y)) == (round(_o[0]), round(_o[1])) and any("back in position" in l_ for l_ in _back), "repaired, it returns to its old position"
+    assert _sm.RETREAT_HEALTH < _sm.RETURN_HEALTH
+    print("[retreat] a long-range site at 35% or less pulls back 35-55 nm with its garrison, is saved, and returns once repaired (65%, 2+ days); healthy sites stay")
     print("SMOKE TEST PASSED")
 
 
