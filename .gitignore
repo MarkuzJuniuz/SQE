@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Build output
+build/
+dist/
+
+# Your own data: never commit these
+*.sqe
+*.miz
+SQE_state.json
+SQE_flightlog.json
+/settings.json
+/loadouts.json
+*.bak
+*.tmp
+
+# Editors / OS
+.idea/
+.DS_Store
+Thumbs.db
+
+# Personal Claude Code notes (CLAUDE.md itself is committed)
+CLAUDE.local.md
+
+# Release zips made by tools/mkzip.sh
+/release/

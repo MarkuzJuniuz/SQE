@@ -1,0 +1,31 @@
+# Runs the headless smoke test (tools/smoke_test.py, about a minute) on every pull request and on pushes to main.
+# PySide6 is not installed on purpose: the GUI checks skip themselves, everything else runs.
+name: Smoke test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install (pydcs fork pinned in requirements.txt, plus Pillow)
+        run: |
+          python -m pip install --upgrade pip
+          pip install "$(grep -E '^pydcs' requirements.txt)" "pillow>=10"
+
+      - name: Smoke test
+        run: python tools/smoke_test.py
