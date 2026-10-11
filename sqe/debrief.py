@@ -42,6 +42,10 @@ local aborted = {}
 local gateLog = {}
 local kills = {}
 local shots = {}
+local jams = {}
+local JAMW = { __JAMW__ }          -- unit name -> {from, to} mission seconds the jammer runs (AI: the attack leg); absent = always on
+local JAMS = { __JAMS__ }          -- unit name -> 1 internal set, 2 ECM pod (ecm.py)
+__JAMCFG__
 local function esc(s) return (tostring(s):gsub('[%c"\\]', function(c) return string.format("\\u%04x", string.byte(c)) end)) end
 local function list(t)
   local o = {}
@@ -63,6 +67,13 @@ local function shotsJson()
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
+local function jamsJson()
+  local o = {}
+  for _, k in ipairs(jams) do
+    o[#o + 1] = string.format('{"t":%d,"by":"%s","w":"%s","tg":"%s","p":%.2f,"km":%.1f,"killed":%s}', k.t, esc(k.by), esc(k.w), esc(k.tg), k.p, k.km, tostring(k.killed))
+  end
+  return "[" .. table.concat(o, ",") .. "]"
+end
 local function num(x) if x then return string.format("%d", math.floor(x)) end return "null" end
 local function gatesJson()
   local o = {}
@@ -75,9 +86,9 @@ end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson()))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson()))
   f:close()
 end
 local function nameOf(obj)
@@ -156,6 +167,56 @@ local function logShot(ev, e, by)
   if ev == "hit" and e.target then tg = nameOf(e.target) or ""; tt = tname(e.target) end
   shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt }
 end
+-- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
+local function jamOn(name)                  -- future: the player's cockpit switch (export script) feeds this
+  local w = JAMW[name]
+  if not w then return true end
+  local t = timer.getTime()
+  return t >= w[1] and t <= w[2]
+end
+local function jamCheck(e, shooter)
+  if not next(JAMS) or not e.weapon then return end
+  local ok, d = pcall(function() return e.weapon:getDesc() end)
+  if not ok or not d or d.category ~= 1 or (d.guidance ~= 3 and d.guidance ~= 4) then return end
+  local okt, tgo = pcall(function() return e.weapon:getTarget() end)
+  if not okt or not tgo then return end
+  local tn = nameOf(tgo)
+  if not tn then return end
+  local okp, tp = pcall(function() return tgo:getPoint() end)
+  local oks, sp = pcall(function() return e.initiator:getPoint() end)
+  if not (okp and oks and tp and sp) then return end
+  local dm = math.sqrt((tp.x - sp.x) ^ 2 + (tp.z - sp.z) ^ 2)
+  if dm <= JC.burn then return end
+  local p = 0
+  if JAMS[tn] and jamOn(tn) then p = JC["p" .. JAMS[tn]] or 0 end
+  if p < JC.cover then
+    local tc = tgo:getCoalition()
+    for name, tier in pairs(JAMS) do
+      if tier >= 2 and name ~= tn and jamOn(name) then
+        local u = Unit.getByName(name)
+        if u and u:isExist() and u:getCoalition() == tc then
+          local pp = u:getPoint()
+          if math.sqrt((pp.x - tp.x) ^ 2 + (pp.z - tp.z) ^ 2) <= JC.coverM then p = math.max(p, JC.cover); break end
+        end
+      end
+    end
+  end
+  if p <= 0 then return end
+  p = p * math.min(1, (dm - JC.burn) / (JC.full - JC.burn))
+  local killed = math.random() < p
+  local wn = "?"
+  local okw, t = pcall(function() return e.weapon:getTypeName() end); if okw and t then wn = t end
+  if #jams < 200 then jams[#jams + 1] = { t = math.floor(timer.getTime()), by = shooter or "?", w = wn, tg = tn, p = p, km = dm / 1000, killed = killed } end
+  if killed then
+    local w = e.weapon
+    timer.scheduleFunction(function()
+      local okx, ex = pcall(function() return w:isExist() end)
+      if okx and ex then pcall(function() w:destroy() end) end
+    end, nil, timer.getTime() + math.max(1.5, dm / 800 * (0.3 + 0.4 * math.random())))
+    if UFLT[tn] and throttle("jam:" .. tn, 8) then say(UFLT[tn] .. ": missile defeated.") end
+  end
+  dump()
+end
 local H = {}
 function H:onEvent(e)
   local id = e.id
@@ -178,6 +239,7 @@ function H:onEvent(e)
     if n == PLAYER and not pl.takeoff then pl.takeoff = timer.getTime(); dump() end
   elseif id == world.event.S_EVENT_SHOT then
     logShot("shot", e, n)
+    pcall(jamCheck, e, n)
     local lab = UFLT[n]
     if lab and e.weapon then
       local call = shotCall(e)
@@ -346,6 +408,12 @@ dump()
 '''
 
 
+def _jamcfg() -> str:
+    from . import ecm
+    return (f"local JC = {{ p1={ecm.P_SELF[1]}, p2={ecm.P_SELF[2]}, cover={ecm.P_COVER}, coverM={ecm.COVER_NM * 1852:.0f}, "
+            f"burn={ecm.BURN_KM * 1000:.0f}, full={ecm.FULL_KM * 1000:.0f} }}")
+
+
 def _lua_str(s: str) -> str:
     return str(s).replace("\\", "/").replace('"', "'")
 
@@ -356,7 +424,7 @@ def _lq(s) -> str:
 
 def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "", group: str = "",
              calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
-             enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40) -> str:
+             enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
@@ -371,19 +439,20 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
     return (LUA_HOOK.replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
             .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
-            .replace("__ENEMYAIR__", ea).replace("__SITES__", st))
+            .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__JAMS__", ", ".join(f"[{_lq(k)}]={int(v)}" for k, v in (jams or {}).items()))
+            .replace("__JAMW__", ", ".join(f"[{_lq(k)}]={{{float(a):.0f}, {float(b):.0f}}}" for k, (a, b) in (jamw or {}).items())))
 
 
 def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "",
                  group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
-                 enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40) -> None:
+                 enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw))))
     mission.triggerrules.triggers.append(t)
 
 

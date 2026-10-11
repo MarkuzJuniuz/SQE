@@ -1146,6 +1146,40 @@ def main():
     s.fly(_se.number, next(f_ for f_ in s.flyable(_se) if f_.role == Role.SEAD).id)
     assert "chance of blinding" in s.last_build.text["situation"], "the SEAD briefing states the odds"
     print("[sead attrition] +10% a failed day (cap 40%), a failed attempt wears the site, valve after 2 failed days at Level 3, the briefing gives the odds")
+    # jamming: pod / internal tiers, the hook carries them, the abstract war counts them
+    from sqe import ecm as _ecm
+    assert _ecm.internal_tier("F_15C") == 1 and _ecm.internal_tier("MiG-29S") == 0 and _ecm.has_pod({5: {"CLSID": "ALQ_184_Long"}}) and not _ecm.has_pod({1: {"CLSID": "{AIM}"}})
+    assert _ecm.chance(2, 0, 10) == 0.0 and _ecm.chance(2, 0, 60) == _ecm.P_SELF[2] and _ecm.chance(0, 2, 60) == _ecm.P_COVER and _ecm.chance(0, 0, 60) == 0.0
+    assert _ecm.flight_tier("F-16C", Role.SEAD) == 2 and _ecm.flight_tier("F-15C", Role.CAP) == 1 and _ecm.jammer_on("x")
+    s.new("Jam hook", "F-16C", 3, seed=11); _st = s.state
+    _se = next(p_ for p_ in s.packages() if p_.objective.aim == "SEAD" and s.flyable(p_))
+    s.fly(_se.number, next(f_ for f_ in s.flyable(_se) if f_.role == Role.SEAD).id)
+    from dcs import lua as _lua9
+    _z9 = _zf.ZipFile(_st.pending["miz"]); _pu = s.manifest().player_unit
+    def _fh(o):
+        if isinstance(o, str):
+            return o if "SQE debrief hook" in o else None
+        for v in (o.values() if isinstance(o, dict) else o if isinstance(o, (list, tuple)) else ()):
+            r = _fh(v)
+            if r:
+                return r
+    _mz = _fh(_lua9.loads(_z9.read("mission").decode())) or _fh(_lua9.loads(_z9.read("l10n/DEFAULT/dictionary").decode()))
+    _mz = (_mz or "").replace('\\"', '"')
+    assert "local JAMS =" in _mz and f'["{_pu}"]=2' in _mz and "jamCheck" in _mz and "local JAMW =" in _mz, "the hook knows which aircraft carry a pod"
+    _jw = [l_ for l_ in _mz.splitlines() if l_.startswith("local JAMW")][0]
+    assert f'["{_pu}"]' not in _jw and "={" in _jw, "AI jammers run for the attack leg only; the player's runs throughout"
+    import re as _re9
+    _m9 = _z9.read("mission").decode()
+    assert _re9.search(r'\["name"\]\s*=\s*13,\s*\["value"\]\s*=\s*3', _m9) or _re9.search(r'\["value"\]\s*=\s*3,\s*\["name"\]\s*=\s*13', _m9), "AI flights get the jammer switched on at PUSH (option 13)"
+    try:
+        import lupa as _lu
+        assert _lu.LuaRuntime().eval("function(s) return load(s) ~= nil end")(__import__("sqe.debrief", fromlist=["x"]).lua_hook("c", 1, "p", [], "P", "G", jams={"a": 2}))
+    except ImportError:
+        pass
+    _se2 = next(p_ for p_ in s.packages() if p_.objective.aim == "SEAD"); _sim = _w4.WarSimulator(s.d, random.Random(1)); _pj = _sim.sead_p(_st, _se2)
+    _ecm_cut = _ecm.SITE_CUT; _ecm.SITE_CUT = 0.0; _pn = _sim.sead_p(_st, _se2); _ecm.SITE_CUT = _ecm_cut
+    assert _pj > _pn, "jamming cover raises the SEAD odds"
+    print("[jamming] tiers (internal / pod / none), burn-through by range, pods and tiers in the hook, jamming cover raises the SEAD odds")
     print("SMOKE TEST PASSED")
 
 

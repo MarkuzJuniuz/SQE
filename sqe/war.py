@@ -5,7 +5,7 @@ import math
 import random
 from . import threatmap as tm
 from . import ground, theatres
-from . import raids, sams
+from . import raids, sams, ecm
 from .raids import hit as raids_hit
 from .difficulty import Difficulty
 from .models import Objective, ObjectiveType, AssetKind, Role
@@ -252,7 +252,7 @@ class WarSimulator:
         """Odds that this package's SEAD flights blind the site's radars."""
         t = state.assets[pkg.objective.target_id]
         garrison = sum(g.health for g in state.assets.values() if g.guards == t.id and not g.destroyed)
-        site = (1.0 + 0.8 * self.d.iads) * t.health + 0.4 * garrison
+        site = ((1.0 + 0.8 * self.d.iads) * t.health + 0.4 * garrison) * (1.0 - ecm.SITE_CUT * ecm.package_cover(pkg))
         s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in pkg.flights if f.role == Role.SEAD)
         if not s_sead:
             return 0.0
@@ -310,7 +310,7 @@ class WarSimulator:
                 exposure = 0.5 if blinded else 1.8          # an unsuppressed site shoots at the DEAD flight
             elif f.role == Role.SEAD:
                 exposure = 1.0 if blinded else 1.3
-            lp = min(0.9, loss_base * exposure * (defense / (s_dead + s_sead + defense) if (s_dead + s_sead + defense) else 0.0))
+            lp = min(0.9, loss_base * exposure * (1.0 - ecm.LOSS_CUT * ecm.package_cover(pkg)) * (defense / (s_dead + s_sead + defense) if (s_dead + s_sead + defense) else 0.0))
             n_lost = count_roll(rng, f.count, lp, d.variance)
             if n_lost:
                 sq = state.squadrons[f.squadron_id]

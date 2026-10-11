@@ -1,3 +1,11 @@
+## v0.35.0
+Jamming emulation. DCS gives jammers almost no effect of their own, so SQE adds one, the same for both sides and for you. Untested in DCS.
+* **Tiers** (`sqe/ecm.py`): 1 = an internal self-protection set (F-15C, F-14, F/A-18C, Red Su-24M and Tu-22M3), 2 = an ECM pod on the loadout (the F-16C presets and the A-10C CAS preset carry the ALQ-184). The numbers are judgement, not sourced.
+* **The missile roll** (in the hook): when a radar-guided missile (active or semi-active guidance; never anti-radiation missiles, IR missiles or bombs) is launched at an aircraft, the hook rolls the target's chance (20% internal, 45% pod, 30% when a pod-carrier within 2 nm covers it), scaled by launch range: none inside 12 km (burn-through), full from 40 km. A defeated missile is destroyed partway through its flight. The RWR still warns. Your flight hears "missile defeated". Every roll goes into `SQE_state.json` as `"jams"`.
+* **When it runs**: AI flights switch the jammer on at PUSH and off at EGR (the DCS option `ECM_USING` is set on those waypoints, and the hook only rolls inside that window), so the jam strobes appear when they go in. Your own jet is on throughout for now. `ecm.jammer_on` / the hook's `jamOn` is the one place a future cockpit-switch export script plugs in.
+* **The abstract war**: a package's jamming cover (pod 1.0, internal 0.4, by aircraft) cuts the site's strength in the SEAD odds by up to 20% and the package's loss chance by up to 15%.
+* Not done: a dedicated jammer support flight (no Growler in DCS); the cockpit switch.
+
 ## v0.34.0
 SEAD wears the defence down, so a campaign against a strong air-defence network moves instead of stalling. Untested in DCS.
 * **Each failed SEAD day raises the next day's odds** on that site by 10 points, up to 40 (`war.SEAD_LEARN`, `SEAD_LEARN_MAX`); the failed-days count is the one the valve already kept. A success starts over.

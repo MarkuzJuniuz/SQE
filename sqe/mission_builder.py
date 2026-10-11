@@ -379,7 +379,7 @@ class MissionBuilder:
             install_hook(m, st.campaign_id, manifest.sortie, package.id, despawn if o.ai_despawn_on_land else [], manifest.player_unit,
                          group=pf.callsign, calls=[(t_, x_, f"TO {pf.callsign.upper()}:" in x_.upper()) for t_, x_ in calls], wps=[], sound=sound, sound_you=sound_you, flights=self._ulabels,
                          enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" for u in g_["units"]],
-                         sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM)
+                         sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM, jams=self._jams, jamw=self._jamw)
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -540,6 +540,21 @@ class MissionBuilder:
                 continue
             self._translate(g, *found)
             shifts[g.name] = found
+
+    @property
+    def _jams(self) -> dict:
+        return self.__dict__.setdefault("_jams_d", {})
+
+    @property
+    def _jamw(self) -> dict:
+        return self.__dict__.setdefault("_jamw_d", {})
+
+    def _note_jam(self, u) -> None:
+        """Remember what jamming equipment this unit has (ecm.py) for the hook's missile roll."""
+        from . import ecm
+        t = ecm.tier(getattr(u, "type", ""), getattr(u, "pylons", None))
+        if t:
+            self._jams[u.name] = t
 
     def _hook_sites(self, manifest) -> list:
         """Enemy sites the call-outs track: units, radars, the package they belong to and who reports on them."""
@@ -1013,7 +1028,13 @@ class MissionBuilder:
         names = []
         for i, u in enumerate(g.units):
             u.name = cs_names[i]; names.append(u.name)
-            u.pylons = copy.deepcopy(load)
+            u.pylons = copy.deepcopy(load); self._note_jam(u)
+        run_t0 = run_t1 = None
+        if not f.tag and not f.is_player and self._jams.get(names[0]):
+            run_t0 = float(push_s)                                            # the jammers run for the attack leg only: PUSH to EGR
+            run_t1 = float(next((w.eta_s for w in wps if w.name == "EGR"), (tot_s if tot_s is not None else push_s) + 900))
+            for un_ in names:
+                self._jamw[un_] = (run_t0, run_t1)
             if f.is_player and f.aircraft == "F-14BU":
                 u.set_property("INSAlignmentStored", True)
         g.set_skill(Skill.High)
@@ -1089,6 +1110,13 @@ class MissionBuilder:
                 if w.action == "BOMB":
                     wp.tasks.append(task.Bombing(pt(w.x, w.y), group_attack=True))
                 continue
+            if run_t0 is not None:
+                if w is wps[first]:
+                    wp.tasks.append(task.OptECMUsing(task.OptECMUsing.Values.NeverUse))          # jammers off until the attack leg
+                if w.name == "PUSH":
+                    wp.tasks.append(task.OptECMUsing(task.OptECMUsing.Values.AlwaysUse))
+                elif w.name == "EGR":
+                    wp.tasks.append(task.OptECMUsing(task.OptECMUsing.Values.NeverUse))
             if o.ai_unlimited_fuel and w.name in ("PUSH", "CAP1"):
                 wp.tasks.insert(0, task.SetUnlimitedFuelCommand(False))          # the combat leg burns real fuel
             if o.ai_unlimited_fuel and w.name == "EGR":
@@ -1520,7 +1548,7 @@ class MissionBuilder:
                 g.add_waypoint(pt(tx, ty), alt, spd, "INTERCEPT").tasks.append(ct)
             names = []
             for j, u in enumerate(g.units, 1):
-                u.name = f"ENM-{a.id}-{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
+                u.name = f"ENM-{a.id}-{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             g.set_skill(skill)
             if self.o.enemy_unlimited_fuel:
                 g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
@@ -1609,7 +1637,7 @@ class MissionBuilder:
             self._limit_engage(g, o.enemy_cap_engage_nm)
             names = []
             for j, u in enumerate(g.units, 1):
-                u.name = f"ENM-{a.id}-R{k}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
+                u.name = f"ENM-{a.id}-R{k}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             g.set_skill(skill)
             if o.enemy_unlimited_fuel:
                 g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
@@ -1679,7 +1707,7 @@ class MissionBuilder:
             load = self.lo.for_role(sq.aircraft, Role.CAP)
             names = []
             for i, u in enumerate(g.units):
-                u.name = cs[i]; u.pylons = copy.deepcopy(load); names.append(u.name); self._ulabels[u.name] = u.name.upper()
+                u.name = cs[i]; u.pylons = copy.deepcopy(load); names.append(u.name); self._ulabels[u.name] = u.name.upper(); self._note_jam(u)
             g.set_skill(Skill.High)
             g.set_frequency(130.0)
             manifest.add("friendly", f"alert_{sq.id}_{fno}", names, squadron=sq.id, callsign=label, player=False)
@@ -1780,7 +1808,7 @@ class MissionBuilder:
             load = enemy_bomber_loadout("Tu_22M3")
         names = []
         for j, u in enumerate(g.units, 1):
-            u.name = f"RAID-B-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
+            u.name = f"RAID-B-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
         if not load:
             self.warns.append(f"{ex.get('raider', 'Tu-22M3')}: no bomb or missile found; the raid is unarmed.")
         manifest.add("enemy_air", ex["bomber_wing"], names, raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
@@ -1792,5 +1820,5 @@ class MissionBuilder:
             eload = enemy_cap_loadout(ex["escort_type"])
             en = []
             for j, u in enumerate(eg.units, 1):
-                u.name = f"RAID-E-{j}"; u.pylons = copy.deepcopy(eload); en.append(u.name)
+                u.name = f"RAID-E-{j}"; u.pylons = copy.deepcopy(eload); en.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", ex["escort_wing"], en)
