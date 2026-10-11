@@ -90,6 +90,7 @@ class MissionOptions:
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
     carcass_weight: float = 0.25        # how much of a live unit one wreck counts toward the unit limit
     carcass_range_nm: int = 40          # only sites this close to the route get wrecks
+    full_map: bool = False              # stress test: build everything that exists (see _spawn_everything); the unit limit is off
     max_units: int = 250                # the mission's unit limit (wrecks are trimmed, furthest first, to fit under it)
     merge_enemy_pct: int = 100          # folded packages: biggest enemy-air need + this % of the others'
     carrier_min_enemy_nm: int = 150     # the carrier group is moved back along the line of retreat until it is at least this far from the fight
@@ -261,6 +262,8 @@ class MissionBuilder:
         polyline = [(pbase.x, pbase.y), geom.mshl, geom.push, geom.ip, (tx, ty), geom.egr]
         self._poly = polyline
         self._spawn_opfor_ground(package, tx, ty, manifest, polyline)
+        if o.full_map:
+            self._spawn_everything(package, manifest, tx, ty)
 
         # ---- radios + support -----------------------------------------------------------------------------------------
         div = self._divert(pbase)
@@ -839,6 +842,47 @@ class MissionBuilder:
         if r.random() < 0.4:
             comp.append((r.choice(["Strela_10M3", "Osa_9A33_ln"]), 1))       # mobile air defence travelling with the column
         return [(n, c) for n, c in comp if c > 0]
+
+    def _spawn_everything(self, package, manifest, tx, ty) -> None:
+        """Full-map stress test: no restrictions. Every live enemy site, column, garrison, support site and early-warning radar is built; every friendly
+        airfield gets its defences, garrison and supply sites; every friendly sector with troops gets its column; every planned enemy patrol is
+        airborne at its station. The target and your package are unchanged. A mission this size may not load well in VR: that is the point."""
+        st, d = self.state, self.d
+        for a in sorted(st.assets.values(), key=lambda a: a.id):
+            if a.destroyed or a.id in self.groups_by_asset:
+                continue
+            comp = SITES.get(a.variant) if a.kind in (AssetKind.SAM, AssetKind.EWR) else SOFT.get(a.kind)
+            if comp:
+                self._spawn_site(a, comp, manifest, primary=False)
+        for b in st.bases.values():
+            if b.kind == BaseKind.AIRFIELD and b.id not in self.apt:
+                self._place_base(b, tx, ty)
+        home = min((b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD), key=lambda b: dist(b.x, b.y, tx, ty), default=None)
+        if home is not None:
+            for aim, ba in sorted(st.blue_assets.items()):
+                if ba.destroyed:
+                    continue
+                base = st.bases.get(ba.guards) or home
+                self._spawn_raid_target(package, base, aim, ba.x, ba.y, manifest)
+            g = st.ground or {}
+            for i, v in enumerate(g.get("blue", [])):
+                if v > 0 and i < len(g.get("centers", [])):
+                    c = g["centers"][i]
+                    self._spawn_raid_target(package, home, f"sector:{i}", float(c[0]), float(c[1]), manifest)
+        skill = getattr(Skill, d.enemy_skill, Skill.High)
+        pt = lambda x, y: mapping.Point(x, y, self.t)
+        for n, pf in enumerate((st.red_air or {}).get("flights", [])):
+            a = st.assets.get(pf["wing"])
+            if a is None or a.destroyed or pf["type"] not in ENEMY_FIGHTERS:
+                continue
+            g = self.m.flight_group(self.red, f"FM Bandit {n + 1}", getattr(planes, pf["type"]), None, pt(pf["x"], pf["y"]), altitude=22000 * FT, speed=400 * KPH,
+                                    maintask=task.CAP, group_size=2)
+            g.set_skill(skill)
+            load = enemy_cap_loadout(pf["type"])
+            names = []
+            for j, u in enumerate(g.units, 1):
+                u.name = f"ENM-FM-{pf['wing']}-{n}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+            manifest.add("enemy_air", pf["wing"], names)
 
     def _spawn_opfor_ground(self, package, tx, ty, manifest, polyline=None):
         st, obj = self.state, package.objective

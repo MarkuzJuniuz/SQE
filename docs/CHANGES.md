@@ -1,3 +1,9 @@
+## v0.39.0
+A full-map stress run. Untested in DCS.
+* **`--full-map` launch option**: nothing is left out of the mission. Every live enemy site, column, garrison, support site and early-warning radar is built; every friendly airfield gets its defences, garrison and supply sites; every friendly sector with troops gets its column; every planned enemy patrol is airborne at its station. The unit limit and the merge trim are off. Your package and the target are the same as in a normal run. On a Level 3 campaign one sortie went from 144 to 766 units in testing.
+* **Debug dropdown** (`.vscode/launch.json`): "SQE: run app (full map)" and "SQE: run app (AI test + full map)" next to the existing AI test entry. The window title shows [FULL MAP: no restrictions].
+* Meant to find out what DCS and your VR rig can carry. A mission this size may load slowly or not at all.
+
 ## v0.38.2
 * New campaigns start in 2006 (June 12 by default, was 2004). The A-10C flew first in 2005, so 2004 never fitted; in this story the F-14 stays in service because the war needs it. The year only changes the date (daylight, kneeboard); nothing in the war reads it. Existing campaigns keep their date.
 

@@ -1235,6 +1235,21 @@ def main():
     assert _st.ground.get("roads") and _grd9.snap_roads(_st) == 0, "done once"
     _rdm.clear()
     print("[roads] scan file points, nearest-point snap, columns and supply sites placed on a road once with their air defence; no scan = nothing changes")
+    # --full-map: nothing is left out (a stress test; the launch option comes from the debug dropdown)
+    s.new("Full map", "F-16C", 3, seed=11); _st = s.state
+    _pk = next(p_ for p_ in s.packages() if s.flyable(p_))
+    s.full_map = False; _n0 = s.fly(_pk.number, None).counts["units"]
+    s.full_map = True; _rf = s.fly(_pk.number, None); _n1 = _rf.counts["units"]
+    assert s.options.full_map and s.options.max_units >= 10 ** 5, "the unit limit is off"
+    assert _n1 > 3 * _n0 and _n1 > 500, (_n0, _n1)
+    _kinds = {g_["kind"] for g_ in s.manifest().groups}
+    assert {"asset", "blue_site", "enemy_air"} <= _kinds, _kinds
+    assert len([g_ for g_ in s.manifest().groups if g_["kind"] == "asset"]) >= len([a_ for a_ in _st.assets.values() if not a_.destroyed and a_.kind.value in ("SAM", "EWR", "ARMOR", "C2", "FUEL", "DEPOT", "AIRFIELD")]) - 1, "every live site is built"
+    s.full_map = False
+    import json as _js9
+    _ln = _js9.load(open(Path(__file__).resolve().parent.parent / ".vscode" / "launch.json"))["configurations"]
+    assert any("--full-map" in c_.get("args", []) for c_ in _ln) and any(c_.get("args") == ["--ai-test", "--full-map"] for c_ in _ln), "the debug dropdown has the launch combinations"
+    print(f"[full map] a normal mission has {_n0} units, the same sortie with --full-map {_n1}; every site, friendly garrison and planned patrol built; launch combinations in the debug dropdown")
     print("SMOKE TEST PASSED")
 
 

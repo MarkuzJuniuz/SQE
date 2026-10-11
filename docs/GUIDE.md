@@ -288,3 +288,6 @@ When the planner weighs going LOW to get under radar SAMs, it now also counts th
 ## Roads
 Run the terrain scan mission again after updating: it now also records roads (adds a minute or two). With the roads file, columns, fuel farms and depots are placed on roads. The Settings > Terrain scan page shows "Roads: loaded" when it worked. If it says the scan did not find roads, the mission message at the end says "roads not available" and nothing else changes.
 
+## Full-map run (stress test)
+Start SQE with `--full-map` (the VS Code debug dropdown has it, alone and combined with the AI test) and every sortie is built with everything on the map: all enemy sites and columns, all friendly garrisons, supply sites and sector columns, all planned enemy patrols, no unit limit. Use it to see what DCS and VR can carry; it is not meant for a campaign.
+

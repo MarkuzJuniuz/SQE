@@ -547,7 +547,7 @@ class MainWindow(QMainWindow):
             pill.setText(txt)
         self.banner.setText({"ACTIVE": "Sortie pending" if st.pending else "", "VICTORY": "VICTORY", "DEFEAT": "DEFEAT"}[st.status])
         self.banner.setVisible(bool(self.banner.text()))
-        self.setWindowTitle(f"{APP_NAME} - {st.name}" + ("  [AI TEST: your flight is flown by the AI]" if getattr(self.session, "ai_test", False) else ""))
+        self.setWindowTitle(f"{APP_NAME} - {st.name}" + ("  [AI TEST: your flight is flown by the AI]" if getattr(self.session, "ai_test", False) else "") + ("  [FULL MAP: no restrictions]" if getattr(self.session, "full_map", False) else ""))
 
 
 def run():
@@ -566,6 +566,7 @@ def run():
     f = app.font(); f.setPointSize(10); app.setFont(f)
     settings = AppSettings.load(); sess = Session(settings)
     sess.ai_test = "--ai-test" in sys.argv[1:]                  # all-AI test: your flight is built as an AI flight, no player slot
+    sess.full_map = "--full-map" in sys.argv[1:]                # stress test: nothing is left out of the mission (every site, garrison, column and planned patrol)
     w = MainWindow(sess); w.show()
     from .. import settings as S
     def scripting_on():

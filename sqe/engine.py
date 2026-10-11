@@ -29,6 +29,7 @@ class Session:
         self.path: Path | None = None
         self.last_build = None
         self.options = MissionOptions()
+        self.full_map = False                                 # launch option --full-map: no restrictions, every site, garrison, column and planned patrol is built (a stress test)
         self.ai_test = False                                  # launch option --ai-test: your own flight is built as an AI flight (see run() in gui/app.py)
         self.loadouts = LoadoutLibrary(Path(settings.sqe_dir) / "loadouts.json" if settings.dcs_saves else None)
         self.sync_terrain()
@@ -515,13 +516,16 @@ class Session:
         self.options.carcasses = bool(getattr(self.settings, 'carcasses', True)); self.options.carcass_weight = max(5, int(getattr(self.settings, 'carcass_weight_pct', 25))) / 100.0
         self.options.reactive = bool(getattr(self.settings, 'reactive', True))
         self.options.max_units = int(self.settings.merge_max_units)
+        self.options.full_map = bool(self.full_map)
+        if self.full_map:
+            self.options.max_units = 10 ** 6
         self.options.f14_special_names = bool(getattr(self.settings, 'f14_special_names', True)); self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct); self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear'))
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
         extras = lead_extras + [x for x in self.merge_candidates(pkg) if all(x.number != y.number for y in lead_extras)]
         ruins = self.ruin_candidates(pkg, extras)
         pre = self._preroll(list(extras) + ruins) if (ruins or extras) and getattr(self.settings, "ruins", True) else {}
-        cap = int(self.settings.merge_max_units)
+        cap = 10 ** 6 if self.full_map else int(self.settings.merge_max_units)
         while True:
             with contextlib.redirect_stdout(io.StringIO()):      # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
                 res = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz, extras, ruins, pre)

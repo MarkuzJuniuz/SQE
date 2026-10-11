@@ -21,6 +21,29 @@
       "justMyCode": true
     },
     {
+      "name": "SQE: run app (full map)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "sqe",
+      "args": [
+        "--full-map"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "SQE: run app (AI test + full map)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "sqe",
+      "args": [
+        "--ai-test",
+        "--full-map"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
       "name": "SQE: smoke test",
       "type": "debugpy",
       "request": "launch",
