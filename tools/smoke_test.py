@@ -912,6 +912,28 @@ def main():
         for x_ in _pl._garrison_cover(_st, a_): x_.health = 0.0
     assert _gc(), "garrison CAS is offered once the cover is cleared"
     print("[garrison cas] held back while the long-range SAM sites that cover a garrison live, offered once they are down; front-line CAS unchanged")
+    # --late-sead (hold test): the SEAD stage goes in LATE_SEAD_MIN later, so the DEAD stage (DEAD_STAGE_GAP_MIN behind it) arrives first and holds
+    import sqe.engine as _eng2
+    from sqe.war import DEAD_STAGE_GAP_MIN as _gap2
+    _hm2 = lambda p_: int(p_.start[:2]) * 60 + int(p_.start[3:5])
+    def _stage_pairs():
+        _ps = s.packages()
+        _sp = {p_.objective.target_id: p_ for p_ in _ps if p_.objective.type.value == "DEAD" and p_.objective.aim == "SEAD"}
+        return [(_sp[p_.objective.target_id], p_) for p_ in _ps if p_.objective.type.value == "DEAD" and p_.objective.aim == "DEAD"
+                and p_.objective.target_id in _sp and _hm2(_sp[p_.objective.target_id]) < 23 * 60]
+    _pr = []
+    for sd_ in range(1, 30):
+        s.new("Late", "F-16C", 3, seed=sd_); s.late_sead_min = 0; s.plan_day()
+        _pr = _stage_pairs()
+        if _pr: break
+    assert _pr, "no SEAD/DEAD stage pair found"
+    assert all(_hm2(d_) - _hm2(s_) == _gap2 for s_, d_ in _pr), "without --late-sead the DEAD stage goes in DEAD_STAGE_GAP_MIN after its SEAD"
+    s.late_sead_min = _eng2.LATE_SEAD_MIN; s.plan_day(); s.late_sead_min = 0
+    _pr = _stage_pairs()
+    assert _pr and all(_hm2(d_) - _hm2(s_) == _gap2 - _eng2.LATE_SEAD_MIN for s_, d_ in _pr), "with --late-sead the DEAD stage goes in ahead of its SEAD"
+    _ln2 = json.load(open(Path(__file__).resolve().parent.parent / ".vscode" / "launch.json"))["configurations"]
+    assert any(c_.get("args") == ["--ai-test", "--late-sead"] for c_ in _ln2), "the debug dropdown has the hold test"
+    print(f"[late sead] --late-sead puts the DEAD stage {_eng2.LATE_SEAD_MIN - _gap2} min ahead of its SEAD (normally {_gap2} min behind): the hold test")
     # DEAD abort gate: SEAD leads by 5 min (sweep and escorts keep their 30 s spacing around it), the AI flights carry a radar check, calls to you sound different
     import re as _re
     from sqe import debrief as _db

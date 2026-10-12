@@ -26,6 +26,9 @@ from .war import ObjectivePlanner, WarSimulator, update_status
 SEAD_SYNC_KM = 60            # SEAD packages whose targets are this close together are synchronised (the same ground, the same defence)
 SEAD_SYNC_KTS = 400          # the straight-line speed the sync assumes from base to target
 SEAD_SYNC_ON = True          # off only in tests that need an unsynchronised day (the merge-underway case)
+LATE_SEAD_MIN = 15           # launch option --late-sead: SEAD-stage packages go in this much later, so the DEAD stage (10 min behind) arrives
+                             # about 5 min ahead of them and reaches its gate with the radars still up: it holds (HOLD_S = 12 min) and goes in once
+                             # the late SEAD blinds the site. A test of the hold; it changes that day's plan in the save.
 
 class Session:
     def __init__(self, settings: AppSettings):
@@ -36,6 +39,7 @@ class Session:
         self.options = MissionOptions()
         self.full_map = False                                 # launch option --full-map: no restrictions, every site, garrison, column and planned patrol is built (a stress test)
         self.ai_test = False                                  # launch option --ai-test: your own flight is built as an AI flight (see run() in gui/app.py)
+        self.late_sead_min = 0                                # launch option --late-sead: SEAD-stage packages go in LATE_SEAD_MIN later (forces the DEAD hold; a test)
         self.loadouts = LoadoutLibrary(Path(settings.sqe_dir) / "loadouts.json" if settings.dcs_saves else None)
         self.sync_terrain()
 
@@ -172,6 +176,7 @@ class Session:
             pkgs[i].start = t
         self._sync_sead(pkgs)                                        # SEAD flights on the same ground (within SEAD_SYNC_KM) arrive together, not one after another
         self._stage_times(pkgs)                                      # a DEAD stage goes in DEAD_STAGE_GAP_MIN after the SEAD stage of the same site
+        self._late_sead(pkgs)                                        # test option --late-sead: the SEAD stage goes in late, so the DEAD stage holds
         pkgs.sort(key=lambda p: p.start)
         for n, p in enumerate(pkgs, 1):                              # numbers follow the clock
             p.number, p.id = n, f"pkg{n}"
@@ -233,6 +238,18 @@ class Session:
             sp = sead.get(p.objective.target_id)
             if p.objective.type == ObjectiveType.DEAD and p.objective.aim == "DEAD" and sp is not None:
                 m = min(23 * 60 + 55, int(sp.start[:2]) * 60 + int(sp.start[3:5]) + DEAD_STAGE_GAP_MIN)
+                p.start = f"{m // 60:02d}:{m % 60:02d}"
+
+    def _late_sead(self, pkgs: list) -> None:
+        """Test option --late-sead: every SEAD-stage package starts late_sead_min later. It runs after _stage_times, so the DEAD stage keeps its
+        time and now arrives ahead of its SEAD: it reaches the gate with the radars still up and the SEAD flights still alive, which is the case
+        the hold is for. Only days planned while the option is on are affected (the plan is saved with the day)."""
+        n = int(getattr(self, "late_sead_min", 0) or 0)
+        if n <= 0:
+            return
+        for p in pkgs:
+            if p.objective.type == ObjectiveType.DEAD and p.objective.aim == "SEAD":
+                m = min(23 * 60 + 55, int(p.start[:2]) * 60 + int(p.start[3:5]) + n)
                 p.start = f"{m // 60:02d}:{m % 60:02d}"
 
     def _cast_sead(self, pkgs: list) -> None:

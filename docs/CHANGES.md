@@ -1,3 +1,11 @@
+## v0.39.18
+
+* **New test option `--late-sead` (hold test).** SEAD-stage packages go in 15 minutes later (`LATE_SEAD_MIN`), so each DEAD stage, normally 10 minutes behind its SEAD, now arrives about 5 minutes ahead of it. The DEAD flight reaches its gate with the radars still up and its SEAD flights still alive, which is exactly the case the hold is for. In the last AI test every gate found the radars already down, so the hold never ran.
+* In VS Code it's in the debug dropdown as "SQE: run app (AI test + late SEAD: hold test)". The window title shows `[LATE SEAD: +15 min, from the next planned day]`.
+* It only changes days planned while it is on, and the shifted times are saved with that day. Use it on a test campaign: Skip Turn once after launching with it, or start a new campaign.
+* The hook no longer counts a SEAD flight that has not launched yet (late-activated) as gone, so the `seads-gone` abort cannot fire on a SEAD that is still on its way.
+* Untested in DCS. Check: the DEAD flight holds at the gate ("radars still up. Hold outside, rechecking."), the late SEAD suppresses the site, and the DEAD flight gets "Go, go, go" and goes in. If the SEAD fails, the hold ends with an RTB.
+
 ## v0.39.17
 
 * **Aborting DEAD flights go home, not back over the target.** In the v0.39.16 run, Viper 1 got the `seads-gone` abort at 1255 s but flew on toward the Sukhumi site (39.8 km to 33.8 km in 60 s), dropped two GBU-31s and lost Viper 1-3 to the Tor. The abort pointed at the egress waypoint itself, which lies past the target. It now points at the waypoint after egress, the way home.
