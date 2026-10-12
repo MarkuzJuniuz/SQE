@@ -43,6 +43,12 @@ JSOW_TRAIL_S = 0               # a SEAD package's JSOW flight pushes this long a
 JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
 DEAD_GATE_BEFORE_TGT_S = 75    # fallback: if the DEAD flight never gets close, the radars are checked this long before its planned target time
 DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
+A2G_ROLES = (Role.STRIKE, Role.SEAD, Role.CAS)
+# DCS weapon flags for "RTB when out of ammo": bombs (guided, iron, cluster), air-to-ground missiles (HARM, JSOW, Maverick) and rockets.
+# Not guns and not air-to-air missiles, so a flight goes home once its air-to-ground load is gone.
+A2G_WEAPONS = 14 | 240 | 768 | 4161536 | 30720
+# Air-to-ground jets whose loadouts carry radar missiles (AIM-120, AIM-54; checked in loadouts.py): after the attack they may shoot back.
+SHOOTS_BACK = {"F-16C", "FA-18C", "F-14BU"}
 SA10_GATE_KM = 60              # ...but never inside an SA-10's reach (55 km): against an SA-10 target, or under an SA-10 umbrella, the gate (and so the hold
                                # orbit) is this far from the SA-10. v0.39.21 run: Hornet 1 held 40 km from the Sukhumi SA-6, 26 km from the SA-10, and was shot down there
 SEAD_WAVE_KM = 60              # SEAD packages in one mission whose targets are this close together reach their HARM points at the same moment (the builder's sync)
@@ -1197,6 +1203,17 @@ class MissionBuilder:
         ai_sead = (f.role == Role.SEAD or getattr(f, "kit", "") == "JSOW") and not f.tag and (not f.is_player or o.player_is_ai)
         if ai_sead:         # a SEAD (or JSOW) jet's job is the radar, not the fighters: v0.39.9 run, both Hornet SEAD flights chased MiGs into Tor and SA-11 range and died 150 s before their HARM point
             g.points[0].tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))        # shoots back when shot at; weapons free again at the HARM point (below)
+        # Every AI ground-attack flight (strike, DEAD, SEAD, JSOW, CAS) stays on its job: v0.39.23 run, strikers with nothing but guns left
+        # turned on fresh MiGs and Su-27s and most of the coalition's air losses were these flights never leaving after their task.
+        # On the way in: evade, never attack aircraft. After the attack (EGR): a jet with radar missiles shoots back at whoever shoots it,
+        # a jet without them (the Hog) stays restricted and relies on the air cover. Out of air-to-ground weapons: home.
+        ai_a2g = not f.tag and (not f.is_player or o.player_is_ai) and (f.role in A2G_ROLES or getattr(f, "kit", "") == "JSOW")
+        if ai_a2g:
+            g.points[0].tasks.append(task.OptRestrictAirToAirAttack(True))
+            rtb = task.OptRTBOnOutOfAmmo(); rtb.params["action"]["params"]["value"] = A2G_WEAPONS
+            g.points[0].tasks.append(rtb)
+            if not ai_sead:
+                g.points[0].tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))    # weapons free again at the attack point (below)
         special = self._f14_special_namer(wps) if (f.is_player and f.aircraft == "F-14BU" and o.f14_special_names) else None
         for w in wps[first:]:
             wp = g.add_waypoint(pt(w.x, w.y), w.alt_ft * FT, w.speed_kts * KPH, w.name)
@@ -1214,8 +1231,12 @@ class MissionBuilder:
                     if w.action == "BOMB":
                         wp.tasks.append(task.Bombing(pt(w.x, w.y), group_attack=True))
                     continue
-            if ai_sead and w.name == "EGR":
+            if ai_a2g and w.name == "EGR":
                 wp.tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))                      # and no chasing on the way home either
+                if f.aircraft in SHOOTS_BACK:
+                    wp.tasks.append(task.OptRestrictAirToAirAttack(False))                       # self-defence only: return fire, at whoever shoots
+            if ai_a2g and not ai_sead and w.action in ("BOMB", "CAS"):
+                wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))                      # the ground target; aircraft stay off limits (restricted)
             if run_t0 is not None:
                 if w is wps[first]:
                     wp.tasks.append(task.OptECMUsing(task.OptECMUsing.Values.NeverUse))          # jammers off until the attack leg
