@@ -54,6 +54,7 @@ class Geometry:
     stand: dict = None      # {(role, id(profile)): (x, y, [SAM types], nm short)} sweeps and escorts that stop at the edge of SAM cover
 
 
+JSOW_LAUNCH_NM = 20.0      # an AI JSOW flight's launch point (the AGM-154A glides about this far from 20,000 ft); it releases from there and turns home
 HARM_LAUNCH_NM = 30.0      # an AI SEAD flight's HARM launch point: at the edge of what an SA-10 first reaches (it opened fire at about 55 km in testing); 21 nm put the launch point deep inside it
 CARRIER_DEP_NM = 10.0      # Case III: the departure circle is 10 nm from the boat, and the flight leaves on the briefed departure radial
 
@@ -83,7 +84,7 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, ca
 
 def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_player: bool,
                tanker_xy: tuple | None, stack_idx: int = 0, spawn: tuple | None = None, spawn_alt_ft: int = 0,
-               spawn_kts: int = 0) -> list[Wpt]:
+               spawn_kts: int = 0, jsow: bool = False) -> list[Wpt]:
     """Waypoints from start (takeoff for the player, an in-air 'just departed' spawn for AI) to egress. RTB is added by the builder."""
     wp: list[Wpt] = []
     bx, by = own_base
@@ -109,15 +110,18 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     human = is_player and not g.ai_player                    # a person flies it; in the all-AI test the player's flight is routed and tasked like any AI flight
     harm_nm = max(8.0, min(HARM_LAUNCH_NM, g.d / NM * 0.8 - 6))        # on short routes it still leaves the IP ahead of the base
     ip_xy = g.ip
-    if role == Role.SEAD and not human:                      # the IP sits 6 nm before the launch point (the launch point is farther out than the usual IP)
-        far = offset(g.tx, g.ty, g.hdg + 180, (harm_nm + 6) * NM)
+    jsow_nm = max(8.0, min(JSOW_LAUNCH_NM, g.d / NM * 0.8 - 6))
+    if (role == Role.SEAD or (jsow and role == Role.STRIKE)) and not human:      # the IP sits 6 nm before the launch point (farther out than the usual IP)
+        far = offset(g.tx, g.ty, g.hdg + 180, ((harm_nm if role == Role.SEAD else jsow_nm) + 6) * NM)
         if dist(g.tx, g.ty, *far) > dist(g.tx, g.ty, *g.ip):
             ip_xy = far
     wp.append(Wpt("PUSH", *g.push, alt, p.push_kts, "Push on time, check in with AWACS"))
     wp.append(Wpt("IP", *ip_xy, ialt, p.ip_kts, "Weapons armed, master arm", rad=irad))
     # The player's TGT is on the ground target at 0 AGL so pods, weapons and the WSO / Jester can slave to it. The wingmen follow the player, and AI-only flights
     # never get a ground-level point (they would descend to it).
-    if role == Role.STRIKE:
+    if role == Role.STRIKE and jsow and not human:             # a JSOW slinger never crosses the site: it releases from its launch point and goes home
+        wp.append(Wpt("JSOW", *offset(g.tx, g.ty, g.hdg + 180, jsow_nm * NM), ialt, p.attack_kts, "JSOW launch point", "JSOW", rad=irad))
+    elif role == Role.STRIKE:
         wp.append(Wpt("TGT", g.tx, g.ty, 0 if human else ialt, p.attack_kts, p.tgt_note, "BOMB", agl=human, rad=irad and not human))
     elif role == Role.SEAD and human:
         wp.append(Wpt("TGT", g.tx, g.ty, 0, p.attack_kts, "SEAD site. You set standoff", "SEAD", agl=True))
@@ -166,7 +170,7 @@ def hold_leave_s(wps: list[Wpt], push_s: float) -> float:
     return push_s
 
 
-OBJECTIVE_ACTIONS = ("BOMB", "SEAD", "SWEEP", "CAS", "ESCORT", "CAPORBIT")
+OBJECTIVE_ACTIONS = ("BOMB", "JSOW", "SEAD", "SWEEP", "CAS", "ESCORT", "CAPORBIT")
 
 
 def objective_wp(wps: list[Wpt]) -> Wpt | None:

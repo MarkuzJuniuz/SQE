@@ -1,3 +1,16 @@
+## v0.39.19
+
+* **JSOW slingers fly with the SEAD packages.** Every SEAD package now has an optional 4-ship JSOW flight alongside its HARM shooters: Hornets carry 4 AGM-154A JSOW CEB each (BRU-55 doubles on 2 and 8, tanks on 3, 5 and 7), Vipers carry 2 (pylons 3 and 7). Only Hornet and Viper squadrons fill the slot.
+* **The overwhelm.** The JSOW flight pushes 160 s (`JSOW_LEAD_S`) ahead of the HARM shooters, because a JSOW's glide from 20 nm takes about three minutes against a HARM's 70 s from 30 nm. Both arrive at the radars together: a radar that keeps tracking is the HARMs' kill, one that shuts down to dodge them is still where it was last seen. The sweep moves ahead of the JSOW flight.
+* **Stand-off attack.** The AI JSOW flight flies push, IP, a JSOW launch point 20 nm out (`JSOW_LAUNCH_NM`), then home; it never overflies the site. At the launch point it gets one release per radar of the target site (search and track radars), aimed at the radar's last-known position give or take 100 m (`JSOW_AIM_ERR_M`), with its JSOWs shared between the aim points. Like the SEAD flights it only returns fire until the launch point, so it does not chase fighters.
+* **Your flight.** In a SEAD package you may now be given the JSOW slot (strike outranks SEAD in your role preference) if you fly a Hornet or a Viper. Your briefing and task say so; your loadout is the JSOW kit and your target point is the site.
+* **War simulation.** Packages you do not fly count their JSOW flight as suppression (it raises the odds of blinding the site), not as a DEAD strike on the launchers.
+* A merged SEAD package is still timed on its HARM flight, not its JSOW flight: the HARM salvo is the package's event and the JSOWs are timed to it.
+* **Cost:** each SEAD package now takes up to 4 more Hornets or Vipers, so squadrons run out sooner and a day plans fewer other packages. If that turns out too heavy, the slot can drop to a pair.
+* Smoke test: two checks that depended on the random campaign id (ruins of earlier packages, an underway package's flights already airborne) now pin it, so they give the same answer every run. Both had failed intermittently since before this version.
+* Untested in DCS. Check: the JSOW flight releases at its launch point; JSOWs land on the radars about when the HARMs do; impacts appear as hits in `SQE_state.json`; the aim points are the release tasks in the .miz.
+* Stacked on PR #16 (v0.39.18); merge #16 first.
+
 ## v0.39.18
 
 * **New test option `--late-sead` (hold test).** SEAD-stage packages go in 15 minutes later (`LATE_SEAD_MIN`), so each DEAD stage, normally 10 minutes behind its SEAD, now arrives about 5 minutes ahead of it. The DEAD flight reaches its gate with the radars still up and its SEAD flights still alive, which is exactly the case the hold is for. In the last AI test every gate found the radars already down, so the hold never ran.

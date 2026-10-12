@@ -30,13 +30,16 @@ from .aircraft import AIRCRAFT
 from .debrief import Manifest, install_hook
 from .difficulty import Difficulty
 from .kneeboard import latlon, render_pages
-from .loadouts import LoadoutLibrary, enemy_bomber_loadout, enemy_strike_loadout, enemy_cap_loadout, ENEMY_FIGHTERS
+from .loadouts import LoadoutLibrary, enemy_bomber_loadout, enemy_strike_loadout, enemy_cap_loadout, ENEMY_FIGHTERS, JSOW_PER_JET
 from .models import AssetKind, BaseKind, ObjectiveType, Role
 STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -30}      # seconds relative to the strikers' push (BMS-style)
 
 
 SEAD_ENGAGE_NM = 30            # a SEAD flight, or a fighter held at its stand-off point, engages only what is within this of that point
 DEAD_SEAD_LEAD_S = 300         # in a DEAD package the SEAD flight is on the site this long before the DEAD flight
+JSOW_LEAD_S = 160              # a SEAD package's JSOW flight pushes this long ahead of its HARM shooters: a JSOW glides ~20 nm (about 3 min) where a
+                               # HARM covers 30 nm in about 70 s, so both arrive at the radars together (the overwhelm: shut down for the JSOW or track for the HARM)
+JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
 DEAD_GATE_BEFORE_TGT_S = 75    # fallback: if the DEAD flight never gets close, the radars are checked this long before its planned target time
 DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
 
@@ -47,10 +50,13 @@ def stagger(package, role) -> int:
     if package.objective.type == ObjectiveType.DEAD and package.objective.aim == "DEAD":      # the DEAD stage: the SEAD package went in 25 min earlier
         return {Role.SWEEP: -60, Role.ESCORT: -30}.get(role, 0)
     if package.objective.type == ObjectiveType.DEAD:
+        jsow = package.objective.aim == "SEAD" and any(getattr(f, "kit", "") == "JSOW" for f in package.flights)
+        if jsow and role == Role.STRIKE:                     # the JSOW slingers of a SEAD package: ahead of the HARM shooters by their longer weapon flight
+            return -DEAD_SEAD_LEAD_S - JSOW_LEAD_S
         if role == Role.SEAD:
             return -DEAD_SEAD_LEAD_S
-        if role == Role.SWEEP:
-            return -DEAD_SEAD_LEAD_S - 30
+        if role == Role.SWEEP:                                # the sweep stays ahead of whoever goes in first
+            return -DEAD_SEAD_LEAD_S - (JSOW_LEAD_S if jsow else 0) - 30
         if role == Role.ESCORT:
             return -DEAD_SEAD_LEAD_S + 30
     return STAGGER.get(role, 0)
@@ -277,7 +283,7 @@ class MissionBuilder:
         skip1 = {tgt_asset.id} if (tgt_asset is not None and package.objective.type == ObjectiveType.DEAD) else ()
         geom.tier = self._pick_tier(geom, pf.role, pspec.profile, tx, ty, skip1)
         self._flight_plans(geom, package, tx, ty, skip1)
-        pw = plan_route(pf.role, (pbase.x, pbase.y), geom, pspec.profile, is_player=True, tanker_xy=None)
+        pw = plan_route(pf.role, (pbase.x, pbase.y), geom, pspec.profile, is_player=True, tanker_xy=None, jsow=getattr(pf, "kit", "") == "JSOW")
         dep_s = launch_s + 60 + dist(pbase.x, pbase.y, *geom.dep) / (pspec.profile.depart_kts * 0.514444) * 1.12     # roll + climb-out to DEP
         self._dep_s = dep_s
         assign_times(pw, dep_s)
@@ -434,7 +440,8 @@ class MissionBuilder:
                     no += 1
                 f.callsign = f"{nm} {no}"; used.add(f.callsign)
             manifest.cur_pkg = xp.id
-            lead = max(xp.flights, key=lambda f: {Role.STRIKE: 3, Role.SEAD: 3, Role.CAS: 3}.get(f.role, 1) * 10 + f.count)
+            # the flight the package's timeline is built on; a SEAD package's JSOW slingers never lead it (its event is the HARM salvo, which they are timed to)
+            lead = max(xp.flights, key=lambda f: ({Role.STRIKE: 3, Role.SEAD: 3, Role.CAS: 3}.get(f.role, 1) if getattr(f, "kit", "") != "JSOW" else 2) * 10 + f.count)
             base2, spec2 = st.bases[lead.base_id], AIRCRAFT[lead.aircraft]
             tx2, ty2 = self._target_xy(xp)
             tx2, ty2 = self._jitter_primary(xp, tx2, ty2)
@@ -448,7 +455,7 @@ class MissionBuilder:
             P0x = P0 + (hm(xp) - hm(anchor)) * 60.0
             geom2.tier = self._pick_tier(geom2, lead.role, spec2.profile, tx2, ty2, {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else ())
             self._flight_plans(geom2, xp, tx2, ty2, {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else ())
-            pw2 = plan_route(lead.role, (base2.x, base2.y), geom2, spec2.profile, is_player=True, tanker_xy=None)
+            pw2 = plan_route(lead.role, (base2.x, base2.y), geom2, spec2.profile, is_player=True, tanker_xy=None, jsow=getattr(lead, "kit", "") == "JSOW")
             assign_times(pw2, 0.0, P0x + stagger(xp, lead.role))
             pu = next((w for w in pw2 if w.name == "PUSH"), None)
             if pu is not None and P0x + stagger(xp, lead.role) < pu.eta_s:            # it pushes before it could even have reached its marshal point in this timeline: shift the whole leg after PUSH
@@ -1034,7 +1041,8 @@ class MissionBuilder:
             if not f.is_player:
                 sp = self._spawn_point(f, base, geom)
             wps = plan_route(f.role, (base.x, base.y), geom, spec.profile, is_player=f.is_player, tanker_xy=None, stack_idx=idx,
-                             spawn=sp[0] if sp else None, spawn_alt_ft=sp[1] if sp else 0, spawn_kts=sp[2] if sp else 0)
+                             spawn=sp[0] if sp else None, spawn_alt_ft=sp[1] if sp else 0, spawn_kts=sp[2] if sp else 0,
+                             jsow=getattr(f, "kit", "") == "JSOW")
             if not f.is_player or o.player_is_ai:
                 terrain_clear(wps)                          # an AI flight climbs on its own schedule: its altitudes must clear the ridges on each leg
             if f.is_player:
@@ -1076,7 +1084,7 @@ class MissionBuilder:
                 for u_ in g.units:
                     u_.heading = hdg
         cs_names = callsigns.apply(g, csname, fno, callsigns.table(f.aircraft))
-        load = self.lo.for_role(f.aircraft, f.role)
+        load = self.lo.for_role(f.aircraft, f.role, getattr(f, "kit", ""))
         if self.wx.mode != "clear":
             load, wnotes, _k, _d = weather.adapt(spec.dcs_type, load, self.wx)
             if wnotes and not f.tag:
@@ -1150,8 +1158,8 @@ class MissionBuilder:
                         self._fcalls.append((float(egr), f"{lab}: off target, egressing."))
 
         armor = self.groups_by_asset.get(package.objective.target_id)
-        ai_sead = f.role == Role.SEAD and not f.tag and (not f.is_player or o.player_is_ai)
-        if ai_sead:         # a SEAD jet's job is the radar, not the fighters: v0.39.9 run, both Hornet SEAD flights chased MiGs into Tor and SA-11 range and died 150 s before their HARM point
+        ai_sead = (f.role == Role.SEAD or getattr(f, "kit", "") == "JSOW") and not f.tag and (not f.is_player or o.player_is_ai)
+        if ai_sead:         # a SEAD (or JSOW) jet's job is the radar, not the fighters: v0.39.9 run, both Hornet SEAD flights chased MiGs into Tor and SA-11 range and died 150 s before their HARM point
             g.points[0].tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))        # shoots back when shot at; weapons free again at the HARM point (below)
         special = self._f14_special_namer(wps) if (f.is_player and f.aircraft == "F-14BU" and o.f14_special_names) else None
         for w in wps[first:]:
@@ -1196,6 +1204,8 @@ class MissionBuilder:
                 ct.stop_after_time(stop); wp.tasks.append(ct)
             elif w.action == "BOMB":
                 wp.tasks.append(task.Bombing(pt(w.x, w.y), group_attack=True))
+            elif w.action == "JSOW":
+                self._jsow_tasks(wp, f, armor, package)
             elif w.action == "CAS":
                 self._cas_tasks(wp, w, armor, tot_s)
             elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
@@ -1465,6 +1475,22 @@ class MissionBuilder:
         p0.tasks.append(task.SetInvisibleCommand(True))
         p0.tasks.append(task.SetImmortalCommand(True))
         jt.add_waypoint(mapping.Point(*offset(cx, cy, brg, 3800), self.t), PointAction.OffRoad, v * 3.6)
+
+    def _jsow_tasks(self, wp, f, site, package) -> None:
+        """A JSOW slinger's attack from its launch point: one release per radar of the target site (search and track radars; the first two
+        vehicles of a site whose radars ride on the launchers), aimed at the radar's last-known position give or take JSOW_AIM_ERR_M. The
+        flight's JSOWs are shared out between the aim points. A radar that shuts down to dodge the HARMs is still where it was last seen."""
+        if site is None or not site.units:
+            return
+        aims = [u for u in site.units if str(getattr(u, "type", "")) in TRACK_RADARS | SEARCH_RADARS][:3] or list(site.units)[:2]
+        each = max(1, JSOW_PER_JET.get(f.aircraft, 2) // len(aims))
+        exp = task.Expend.Four if each >= 4 else (task.Expend.Two if each >= 2 else task.Expend.One)
+        rng = random.Random(f"{self.state.campaign_id}:{package.id}:{f.id}:jsow")
+        wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
+        for u in aims:
+            a, d = rng.uniform(0, 2 * math.pi), JSOW_AIM_ERR_M * math.sqrt(rng.random())
+            x, y = u.position.x + math.cos(a) * d, u.position.y + math.sin(a) * d
+            wp.tasks.append(task.Bombing(mapping.Point(x, y, self.t), expend=exp, group_attack=True))
 
     # ---- late activation helper ------------------------------------------------------------------------------------------------
     def _late(self, g, seconds):
