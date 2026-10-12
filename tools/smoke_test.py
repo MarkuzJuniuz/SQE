@@ -937,6 +937,8 @@ def main():
     assert "HOLD_S = 720" in _hk and 'id = "Orbit"' in _hk and "hold-resumed" in _hk and "hold-timeout" in _hk and "HOLD_FUEL" in _hk, "an AI DEAD flight holds outside when the radars are up, re-checks, goes in when blind, breaks off on timeout or low fuel"
     assert "radars still up. Hold outside, rechecking." in _hk and "radars are down. Go, go, go." in _hk and "abort, RTB." in _hk, "AWACS calls: hold, go and RTB go out for every DEAD flight, player or AI"
     assert "if gt.dead then" in _hk and "gt.you" in _hk, "the player's DEAD flight holds too (advisory: AWACS calls only, no orbit)"
+    assert _hk.count("local function decide(") == 1 and _hk.count("local function holdCheck(") == 1, "the gate code is defined once: a second copy shadows the hold"
+    assert "local function seadsGone(" in _hk and '"seads-gone"' in _hk and "the SEAD flights are down or gone" in _hk, "the DEAD flight aborts when every SEAD flight on the site is down or gone"
     assert '"shots":%s' in _hk and "logShot" in _hk and "getTarget" in _hk, "every shot and hit is logged in the state file"
     assert "you=true" in _hk and "SOUND_YOU" in _hk and "GATES = { {t=100" in _hk
     assert '"deaths":%s' in _hk and "LASTHIT" in _hk and "Object.Category.SCENERY" in _hk, "losses are explained (last hit, fuel, altitude) and scenery hits are not logged"

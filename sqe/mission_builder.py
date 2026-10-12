@@ -189,6 +189,7 @@ class MissionBuilder:
         self._anchor_id = package.id
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
         self._gates = []                                                # DEAD flights that turn back when the site's radars are still up
+        self._sead_grps = {}                                            # site id -> the SEAD flights' group names (all merged packages); the gate aborts when they are all down
         self._blind_site = None
         extras = [x for x in extras if any(not f.tag for f in x.flights)]
         ruins = [x for x in ruins if any(not f.tag for f in x.flights)]
@@ -386,6 +387,8 @@ class MissionBuilder:
         calls += self._fcalls
         with tempfile.TemporaryDirectory(prefix="sqe_kb_") as td:
             sound, sound_you = self._squelch(td)
+            for gt_ in self._gates:                                    # every SEAD flight of this mission on the site, merged packages included (they spawned above)
+                gt_["seads"] = list(self._sead_grps.get(gt_["site"], []))
             install_hook(m, st.campaign_id, manifest.sortie, package.id, despawn if o.ai_despawn_on_land else [], manifest.player_unit,
                          group=pf.callsign, calls=[(t_, x_, f"TO {pf.callsign.upper()}:" in x_.upper()) for t_, x_ in calls], wps=[], sound=sound, sound_you=sound_you, flights=self._ulabels,
                          enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" for u in g_["units"]],
@@ -1202,6 +1205,8 @@ class MissionBuilder:
                 ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                 ct.stop_after_time(int(w.eta_s) + 600)
                 wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree)); wp.tasks.append(ct)
+        if f.role == Role.SEAD and package.objective.target_id:
+            self._sead_grps.setdefault(package.objective.target_id, []).append(g.name)
         gate = None
         if (not f.tag and package.objective.type == ObjectiveType.DEAD and package.objective.aim != "SEAD" and package.objective.target_id and tot_s is not None
                 and f.role in (Role.STRIKE, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10):
