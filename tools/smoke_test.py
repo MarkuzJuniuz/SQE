@@ -935,6 +935,7 @@ def main():
     assert "you=true" in _hk and "SOUND_YOU" in _hk and "GATES = { {t=100" in _hk
     assert '"deaths":%s' in _hk and "LASTHIT" in _hk and "Object.Category.SCENERY" in _hk, "losses are explained (last hit, fuel, altitude) and scenery hits are not logged"
     assert ',"km":%.1f,"alt":%d' in _hk and "salt = sp.y" in _hk, "every shot logs the range to its target (km) and the shooter's altitude (m)"
+    assert ',"tx":%d,"tz":%d' in _hk and "tx, tz = tp.x, tp.z" in _hk, "every shot logs the target's map position (its last known spot) for a later strike"
     _mf = _db.Manifest("c", 1, "p", 1)
     _mf.add("friendly", "f1", ["B1", "B2", "B3"]); _mf.add("enemy_air", "e1", ["R1", "R2"])
     _tl = _db.tally(None, _mf, {"dead": ["B1"], "ejected": [], "landed": ["B2", "R1"]})

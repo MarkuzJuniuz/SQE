@@ -68,6 +68,7 @@ local function shotsJson()
   for _, k in ipairs(shots) do
     local more = ""
     if k.km then more = string.format(',"km":%.1f,"alt":%d', k.km, math.floor(k.alt or 0)) end        -- shooter-to-target range (km) and shooter altitude (m) at launch
+    if k.tx and k.tz then more = more .. string.format(',"tx":%d,"tz":%d', math.floor(k.tx), math.floor(k.tz)) end        -- the target's map position: its last known spot
     o[#o + 1] = string.format('{"t":%d,"ev":"%s","by":"%s","bt":"%s","w":"%s","tg":"%s","tt":"%s"%s}', k.t, k.ev, esc(k.by), esc(k.bt), esc(k.w), esc(k.tg), esc(k.tt), more)
   end
   return "[" .. table.concat(o, ",") .. "]"
@@ -170,6 +171,7 @@ local function logShot(ev, e, by)
   local function tname(o) local ok, t = pcall(function() return o:getTypeName() end); if ok and t then return t end return "?" end
   local w, tg, tt = "?", "", ""
   local km, salt = nil, nil
+  local tx, tz = nil, nil                                     -- the target's map position (last known)
   if e.weapon then
     local ok, t = pcall(function() return e.weapon:getTypeName() end); if ok and t then w = t end
     if ev == "shot" then
@@ -178,6 +180,7 @@ local function logShot(ev, e, by)
         tg = nameOf(tgo) or ""; tt = tname(tgo)
         local okp, tp = pcall(function() return tgo:getPoint() end)
         local oks, sp = pcall(function() return e.initiator:getPoint() end)
+        if okp and tp then tx, tz = tp.x, tp.z end
         if okp and oks and tp and sp then km = math.sqrt((tp.x - sp.x) ^ 2 + (tp.z - sp.z) ^ 2) / 1000; salt = sp.y end
       end
     end
@@ -186,10 +189,12 @@ local function logShot(ev, e, by)
     local okc, cat = pcall(function() return e.target:getCategory() end)
     if okc and cat == Object.Category.SCENERY then return end        -- trees, houses, poles: pure noise in the log
     tg = nameOf(e.target) or ""; tt = tname(e.target)
+    local okq, tq = pcall(function() return e.target:getPoint() end)
+    if okq and tq then tx, tz = tq.x, tq.z end
   end
   if ev == "hit" and tg ~= "" then LASTHIT[tg] = { by = by or "?", w = w, t = timer.getTime() } end
   if #shots >= 600 then return end
-  shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt, km = km, alt = salt }
+  shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt, km = km, alt = salt, tx = tx, tz = tz }
 end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
 local function jamOn(name)                  -- future: the player's cockpit switch (export script) feeds this

@@ -1,3 +1,9 @@
+## v0.39.11
+
+* **Every shot in `SQE_state.json` now carries the target's map position (`tx`, `tz`)**: its last known spot at the time of the shot or hit. This is the first step of the JSOW strike plan: a later strike aims at where the emitters were last seen, not where the launchers are.
+* Untested in DCS. Check that `shots` entries for `AGM_88` carry `tx` and `tz`, and that the values match the site's position in the mission.
+* Stacked on PR #8 (v0.39.10); merge #8 first.
+
 ## v0.39.10
 
 * **SEAD jets no longer chase fighters.** In the v0.39.9 run both Hornet SEAD flights (Hornet 1, Squid 1, four HARMs each) fought MiGs on the way in, drifted into Tor and SA-11 range (15-16 km from the site) and died 140 to 180 s before their HARM launch point without firing a HARM. AI SEAD flights (and your own flight in the AI test) now fly with hold-fire "return fire" from the start: they shoot back when shot at, and go weapons free at the HARM point, as before. On the way home they are back on return fire so they do not turn round for a kill. Support SEAD flights in strike and CAS packages get the same treatment.
