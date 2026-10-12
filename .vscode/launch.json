@@ -44,6 +44,18 @@
       "justMyCode": true
     },
     {
+      "name": "SQE: run app (AI test + late SEAD: hold test)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "sqe",
+      "args": [
+        "--ai-test",
+        "--late-sead"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
       "name": "SQE: smoke test",
       "type": "debugpy",
       "request": "launch",

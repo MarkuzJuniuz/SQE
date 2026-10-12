@@ -424,7 +424,14 @@ local function seadsGone(gs)
   end
   if not any then return false end
   for _, n in ipairs(names) do
-    local ok, alive = pcall(function() local g = Group.getByName(n); return g ~= nil and g:getSize() > 0 end)
+    -- a late-activated SEAD flight that has not launched yet still exists (inactive): it is coming, not gone
+    local ok, alive = pcall(function()
+      local g = Group.getByName(n)
+      if g == nil then return false end
+      if g:getSize() > 0 then return true end
+      local u = g:getUnit(1)
+      return u ~= nil and not u:isActive()
+    end)
     if not ok or alive then return false end
   end
   return true
