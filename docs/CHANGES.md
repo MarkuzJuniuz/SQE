@@ -1,3 +1,9 @@
+## v0.39.16
+
+* **Briefing matches the current behaviour.** The DEAD briefing now says the DEAD package follows the SEAD by the real gap (10 minutes, read from `DEAD_STAGE_GAP_MIN`; it said a hardcoded 25). The strike briefing now describes the hold, the AWACS hold, go and RTB calls, and the abort conditions (timeout, low fuel, every SEAD flight down or gone).
+* Text only. Untested in DCS; check the briefing reads correctly on a DEAD and a SEAD flight.
+* Stacked on PR #13 (v0.39.15); merge #13 first.
+
 ## v0.39.15
 
 * **Early abort when the SEADs have failed.** If every SEAD flight on a site is down or gone while its radars are still up, the DEAD flight calls "abort, RTB" straight away instead of holding until the timeout. The check runs at the gate and on every hold re-check. AWACS gives the reason: "the SEAD flights are down or gone." The player and AI get the same calls.
