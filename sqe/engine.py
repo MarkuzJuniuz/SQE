@@ -24,7 +24,6 @@ from .war import ObjectivePlanner, WarSimulator, update_status
 
 
 SEAD_SYNC_KM = 60            # SEAD packages whose targets are this close together are synchronised (the same ground, the same defence)
-SEAD_SYNC_KTS = 400          # the straight-line speed the sync assumes from base to target
 SEAD_SYNC_ON = True          # off only in tests that need an unsynchronised day (the merge-underway case)
 LATE_SEAD_MIN = 15           # launch option --late-sead: SEAD-stage packages go in this much later, so the DEAD stage (10 min behind) arrives
                              # about 5 min ahead of them and reaches its gate with the radars still up: it holds (HOLD_S = 12 min) and goes in once
@@ -187,12 +186,37 @@ class Session:
         self.refresh_weather()
         return self.packages()
 
+    def _harm_leg_s(self, p) -> float | None:
+        """Seconds from PUSH to the HARM point for this SEAD package's first HARM flight, from the same marshal, geometry and route the
+        mission builder will use (an umbrella keep-out included). Within one mission every package pushes exactly its start difference after
+        the others, so this leg is all that separates their HARM times."""
+        from .models import BaseKind
+        from .routes import HARM_LAUNCH_NM, assign_times, bearing, make_geometry, objective_wp, plan_route
+        from . import threatmap as tm
+        st = self.state
+        fl = [f for f in p.flights if f.role == Role.SEAD and not f.tag and getattr(f, "base_id", None) in st.bases]
+        if not fl:
+            return None
+        f = fl[0]
+        base, spec, tgt = st.bases[f.base_id], AIRCRAFT[f.aircraft], st.assets[p.objective.target_id]
+        try:
+            mshl = tm.safe_marshal(st, (base.x, base.y), bearing(base.x, base.y, tgt.x, tgt.y))
+            g = make_geometry(base.x, base.y, tgt.x, tgt.y, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
+            um = tm.umbrella_site(st, tgt)
+            wps = plan_route(Role.SEAD, (base.x, base.y), g, spec.profile, is_player=False, tanker_xy=None,
+                             keep_out=(um.x, um.y, HARM_LAUNCH_NM) if um else None)
+            assign_times(wps, 0.0)
+            push, obj = next(w for w in wps if w.name == "PUSH"), objective_wp(wps)
+            return obj.eta_s - push.eta_s
+        except Exception:
+            return None
+
     def _sync_sead(self, pkgs: list) -> None:
-        """SEAD packages whose targets sit within SEAD_SYNC_KM of each other go in together: each one's push is moved so that its estimated
-        arrival at its target lands on the latest arrival of the group (the earlier packages wait; none goes in ahead of the others). The estimate
-        is straight-line from the base at SEAD_SYNC_KTS; the mission builder still builds the real route."""
+        """SEAD packages whose targets sit within SEAD_SYNC_KM of each other go in together: each one's start is moved so that its HARM time
+        lands on the latest of the group (the earlier packages wait; none goes in ahead of the others). The HARM time is the package's start plus
+        its real push-to-HARM-point leg (marshal, geometry and route as the builder makes them). v0.39.13-v0.39.20 used a straight line from the
+        base at 400 kt, which ignored where each package marshals: the carrier's wave arrived about 3 minutes after the land-based one."""
         import math
-        NM = 1852.0
         if not SEAD_SYNC_ON:
             return
         st = self.state
@@ -200,13 +224,10 @@ class Session:
         for p in pkgs:
             if p.objective.type != ObjectiveType.DEAD or not p.objective.target_id or p.objective.target_id not in st.assets:
                 continue
-            fl = [f for f in p.flights if f.role == Role.SEAD and getattr(f, "base_id", None) in st.bases]
-            if not fl:
+            leg = self._harm_leg_s(p)
+            if leg is None:
                 continue
-            tgt = st.assets[p.objective.target_id]
-            base = st.bases[fl[0].base_id]
-            d_m = math.hypot(tgt.x - base.x, tgt.y - base.y)
-            sead.append((p, tgt, d_m))
+            sead.append((p, st.assets[p.objective.target_id], leg))
         groups = []
         for item in sead:                                             # greedy: a package joins the first group whose lead target is close enough
             for g in groups:
@@ -219,9 +240,8 @@ class Session:
             if len(g) < 2:
                 continue
             def arrive(item):
-                p, _, d_m = item
-                h, m = int(p.start[:2]), int(p.start[3:5])
-                return h * 60 + m + (d_m / (SEAD_SYNC_KTS * NM / 3600.0)) / 60.0
+                p, _, leg = item
+                return int(p.start[:2]) * 60 + int(p.start[3:5]) + leg / 60.0
             latest = max(arrive(it) for it in g)
             for it in g:
                 shift = round(latest - arrive(it))

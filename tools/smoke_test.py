@@ -939,7 +939,7 @@ def main():
     # JSOW slingers (v0.39.19): SEAD packages carry a JSOW flight (Hornet 4 / Viper 2 AGM-154A per jet) timed so the JSOWs and HARMs arrive together
     from sqe.loadouts import JSOW_PER_JET as _jpj, LoadoutLibrary as _LL
     from sqe.packages import Package as _Pkg
-    from sqe.mission_builder import stagger as _stg2, JSOW_LEAD_S as _jl, DEAD_SEAD_LEAD_S as _dl
+    from sqe.mission_builder import stagger as _stg2, JSOW_TRAIL_S as _jl, DEAD_SEAD_LEAD_S as _dl
     from sqe.war import _suppressor as _sup
     from sqe.models import Role as _Rl2
     _lo = _LL()
@@ -947,19 +947,19 @@ def main():
     assert _h[2]["CLSID"] == _h[8]["CLSID"] == "{BRU55_2*AGM-154A}" and all(_h[k]["CLSID"] == "{FPU_8A_FUEL_TANK}" for k in (3, 5, 7)), "Hornet JSOW kit: 4 AGM-154A with tanks"
     assert _v[3]["CLSID"] == _v[7]["CLSID"] == "{AGM-154A}" and sum("154" in x["CLSID"] for x in _v.values()) == 2, "Viper JSOW kit: 2 AGM-154A"
     assert _jpj == {"FA-18C": 4, "F-16C": 2}
-    s.new("Jsow", "F-16C", 3, seed=1); s.late_sead_min = 0; s.plan_day()
+    s.new("Jsow", "F-16C", 3, seed=1); s.late_sead_min = 0; s.state.campaign_id = f"{0x15a0001:010x}"; s.plan_day()     # pinned: the dice come from the campaign id
     _sp3 = [p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and p_.objective.aim == "SEAD"]
     _jf = [f_ for p_ in _sp3 for f_ in p_.flights if f_.kit == "JSOW"]
     assert _jf and all(f_.aircraft in _jpj and f_.role == _Rl2.STRIKE for f_ in _jf), "SEAD packages carry JSOW slingers, Hornets or Vipers only"
     assert not any(f_.kit for p_ in s.packages() if p_.objective.aim != "SEAD" for f_ in p_.flights), "only SEAD packages get the JSOW slot"
-    _pj = next(p_ for p_ in _sp3 if any(f_.kit == "JSOW" for f_ in p_.flights))
+    _pj = next(p_ for p_ in _sp3 if any(f_.kit == "JSOW" for f_ in p_.flights) and s.flyable(p_, squadron_only=False))
     assert any(f_.kit == "JSOW" for f_ in _Pkg.from_dict(_pj.to_dict()).flights), "the JSOW kit survives the save"
-    assert (_stg2(_pj, _Rl2.SWEEP), _stg2(_pj, _Rl2.STRIKE), _stg2(_pj, _Rl2.SEAD)) == (-_dl - _jl - 30, -_dl - _jl, -_dl), "JSOW pushes ahead of the HARMs, the sweep ahead of both"
+    assert (_stg2(_pj, _Rl2.SWEEP), _stg2(_pj, _Rl2.STRIKE), _stg2(_pj, _Rl2.SEAD)) == (-_dl - 30, -_dl + _jl, -_dl), "JSOW jets push with the HARM shooters (v0.39.21), the sweep ahead"
     assert all(_sup(f_) for f_ in _jf), "the war sim counts JSOW slingers as suppression, not as a DEAD strike"
-    s.ai_test = True; s.fly(_pj.number, None); s.ai_test = False
+    s.ai_test = True; s.fly(_pj.number, s.flyable(_pj, squadron_only=False)[0].id); s.ai_test = False
     _mj = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
     assert "{AGM-154A}" in _mj and '["name"]="JSOW"' in _mj and _mj.count('["id"]="Bombing"') >= 1, "the JSOW flight is built: AGM-154A, a JSOW launch point, release tasks"
-    print(f"[jsow] {len(_jf)} JSOW flights in {len(_sp3)} SEAD packages; Hornet 4 / Viper 2 AGM-154A; they push {_jl} s ahead of the HARM shooters; built with a launch point and release tasks")
+    print(f"[jsow] {len(_jf)} JSOW flights in {len(_sp3)} SEAD packages; Hornet 4 / Viper 2 AGM-154A; they push with the HARM shooters; built with a launch point and release tasks")
     # Tors (v0.39.20): the Tors that cover a SEAD/DEAD target are part of the job: the second HARM flight opens on them, the JSOWs aim at them,
     # the DEAD gate waits for them (route check), and the Tor vehicle counts as a radar
     import math as _m3
@@ -999,6 +999,47 @@ def main():
     assert any(t_ in _d3t for t_ in _cov(_d3)) and _re.search(r"also=\{[^}]*(fsam_|sam_)", _d3t), "the DEAD gate also waits for the Tors (route check)"
     assert "local function gateBlind(" in _d3t or "local function gateBlind(" in _zf.ZipFile(_ts.state.pending["miz"]).read("l10n/DEFAULT/dictionary").decode("utf-8", "ignore"), "the hook's gate checks the Tors too"
     print(f"[tors] Tors within {_tck:.0f} km of a SEAD/DEAD target: the second HARM flight opens on them, the JSOWs aim at them, the DEAD gate waits for them")
+    # saturation (v0.39.21): SEAD packages on one cluster arrive together on their real routes; under an SA-10 umbrella the HARM point stays out of
+    # its reach and the first HARM flight opens on it; the JSOW jets come in with the HARM shooters, about 30 degrees off their axis
+    import math as _m
+    from sqe import threatmap as _tm9
+    from sqe.models import Role
+    from dcs import lua
+    _ss = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, flight_filter="all"))
+    _ss.new("Sat", "F-16C", 3, seed=1); _ss.state.campaign_id = f"{0x70a0001:010x}"; _ss.plan_day()
+    _A4 = _ss.state.assets; _sd4 = [p_ for p_ in _ss.packages() if p_.objective.aim == "SEAD"]
+    _arr = [int(p_.start[:2]) * 60 + int(p_.start[3:5]) + _ss._harm_leg_s(p_) / 60 for p_ in _sd4]
+    assert len(_sd4) >= 2 and max(_arr) - min(_arr) <= 1.5, ("SEAD packages on one cluster reach their HARM points together", _arr)
+    _pu = next(p_ for p_ in _sd4 if _tm9.umbrella_site(_ss.state, _A4[p_.objective.target_id]) and _ss.flyable(p_) and any(f_.kit == "JSOW" for f_ in p_.flights))
+    _um4 = _tm9.umbrella_site(_ss.state, _A4[_pu.objective.target_id]); _t4 = _A4[_pu.objective.target_id]
+    _ss.ai_test = True; _ss.fly(_pu.number, _ss.flyable(_pu)[0].id); _ss.ai_test = False
+    _M4 = lua.loads(_zf.ZipFile(_ss.state.pending["miz"]).read("mission").decode("utf-8", "ignore"))["mission"]
+    _red4 = {g_["groupId"]: g_["name"] for co_ in _M4["coalition"]["red"]["country"].values() for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()}
+    _own = {f_.callsign: f_ for f_ in _pu.flights}
+    _sead1 = next(f_.callsign for f_ in _pu.flights if f_.role == Role.SEAD and not f_.tag)
+    _jsc = next(f_.callsign for f_ in _pu.flights if f_.kit == "JSOW")
+    _brg = {}
+    for co_ in _M4["coalition"]["blue"]["country"].values():
+        for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
+            if g_["name"] not in (_sead1, _jsc):
+                continue
+            _pts4 = {p_.get("name"): p_ for p_ in g_["route"]["points"].values()}
+            _k4 = "SEAD" if g_["name"] == _sead1 else "JSOW"
+            _pt4 = _pts4[_k4]
+            _brg[_k4] = _m.degrees(_m.atan2(_pt4["y"] - _t4.y, _pt4["x"] - _t4.x))
+            if _k4 == "SEAD":
+                assert _m.hypot(_pt4["x"] - _um4.x, _pt4["y"] - _um4.y) / 1852 >= 29, "under an umbrella the HARM point stays out of the SA-10's reach"
+                _seq4 = []
+                for t_ in _pt4["task"]["params"]["tasks"].values():
+                    tid_, prm_ = t_.get("id"), t_.get("params", {})
+                    if tid_ == "ControlledTask":
+                        tid_, prm_ = prm_["task"]["id"], prm_["task"].get("params", {})
+                    if tid_ == "AttackGroup":
+                        _seq4.append(_red4.get(prm_.get("groupId")))
+                assert _seq4 and _seq4[0] == _um4.id, ("the first HARM flight opens on the umbrella", _seq4)
+    _off4 = abs((_brg["JSOW"] - _brg["SEAD"] + 180) % 360 - 180)
+    assert 20 <= _off4 <= 40, ("the JSOW flight comes in about 30 degrees off the HARM shooters' axis", _off4)
+    print(f"[saturation] {len(_sd4)} SEAD packages reach their HARM points within {max(_arr) - min(_arr):.1f} min; umbrella first; JSOW axis {_off4:.0f} deg off the HARMs'")
     # DEAD abort gate: SEAD leads by 5 min (sweep and escorts keep their 30 s spacing around it), the AI flights carry a radar check, calls to you sound different
     import re as _re
     from sqe import debrief as _db
@@ -1191,6 +1232,7 @@ def main():
     assert _stg(_de, Role.ESCORT) == -30 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage keeps its escorts with it"
     # the HARM launch point is at the edge of an SA-10's reach and the HARM task asks for ARMs; in the all-AI test your own SEAD flight gets the same tasking
     import math as _m
+    from sqe import threatmap as _tm9
     _sx = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="off", flight_filter="all"))
     _sx.new("SEAD launch", "F-16C", 3, seed=11)
     _se_ = next(p_ for p_ in _sx.packages() if p_.objective.aim == "SEAD" and _sx.flyable(p_))
@@ -1212,7 +1254,10 @@ def main():
                 assert "SEAD" not in _pts and _pts["TGT"]["alt"] == 0, "a person flying it keeps the target point on the radar"
                 continue
             _d = lambda n_: _m.hypot(_pts[n_]["x"] - _site[0], _pts[n_]["y"] - _site[1]) / 1852
-            assert 29 <= _d("SEAD") <= 31 and _d("IP") > _d("SEAD") + 5, ("HARM launch point 30 nm out, IP before it", _d("SEAD"), _d("IP"))
+            _umb = _tm9.umbrella_site(_sx.state, _sx.state.assets[_se_.objective.target_id])
+            _du = (_m.hypot(_pts["SEAD"]["x"] - _umb.x, _pts["SEAD"]["y"] - _umb.y) / 1852) if _umb else None
+            assert (29 <= _d("SEAD") <= 31 if _umb is None else (_d("SEAD") >= 29 and _du >= 29)) and _d("IP") > _d("SEAD") + 5, \
+                ("HARM launch point 30 nm out (and 30 nm from an SA-10 umbrella), IP before it", _d("SEAD"), _du, _d("IP"))
             _atk = [t_["params"]["task"]["params"]["weaponType"] for p_ in _g["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()
                     if t_["id"] == "ControlledTask" and t_["params"]["task"]["id"] in ("AttackUnit", "AttackGroup")]
             assert _atk and all(w_ == 32768 for w_ in _atk), ("the SEAD task asks for ARMs (the second flight also on the covering Tors first)", _atk)

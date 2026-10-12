@@ -37,8 +37,9 @@ STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -30}      # seconds rel
 
 SEAD_ENGAGE_NM = 30            # a SEAD flight, or a fighter held at its stand-off point, engages only what is within this of that point
 DEAD_SEAD_LEAD_S = 300         # in a DEAD package the SEAD flight is on the site this long before the DEAD flight
-JSOW_LEAD_S = 160              # a SEAD package's JSOW flight pushes this long ahead of its HARM shooters: a JSOW glides ~20 nm (about 3 min) where a
-                               # HARM covers 30 nm in about 70 s, so both arrive at the radars together (the overwhelm: shut down for the JSOW or track for the HARM)
+JSOW_TRAIL_S = 0               # a SEAD package's JSOW flight pushes this long after its HARM shooters: the JETS cross into the umbrella's reach together
+                               # (on two axes), the HARMs go first, the JSOWs land a few minutes later on a radar that is dead or has shut down.
+                               # v0.39.19 had the JSOW flight 160 s ahead so the WEAPONS would land together: it went in alone and died (v0.39.19 run, Viper 2).
 JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
 DEAD_GATE_BEFORE_TGT_S = 75    # fallback: if the DEAD flight never gets close, the radars are checked this long before its planned target time
 DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
@@ -51,18 +52,18 @@ def stagger(package, role) -> int:
         return {Role.SWEEP: -60, Role.ESCORT: -30}.get(role, 0)
     if package.objective.type == ObjectiveType.DEAD:
         jsow = package.objective.aim == "SEAD" and any(getattr(f, "kit", "") == "JSOW" for f in package.flights)
-        if jsow and role == Role.STRIKE:                     # the JSOW slingers of a SEAD package: ahead of the HARM shooters by their longer weapon flight
-            return -DEAD_SEAD_LEAD_S - JSOW_LEAD_S
+        if jsow and role == Role.STRIKE:                     # the JSOW slingers of a SEAD package: with the HARM shooters, on their own axis
+            return -DEAD_SEAD_LEAD_S + JSOW_TRAIL_S
         if role == Role.SEAD:
             return -DEAD_SEAD_LEAD_S
-        if role == Role.SWEEP:                                # the sweep stays ahead of whoever goes in first
-            return -DEAD_SEAD_LEAD_S - (JSOW_LEAD_S if jsow else 0) - 30
+        if role == Role.SWEEP:
+            return -DEAD_SEAD_LEAD_S - 30
         if role == Role.ESCORT:
             return -DEAD_SEAD_LEAD_S + 30
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear
+from .routes import HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear
 from .state import CampaignState
 
 KPH = 1.852
@@ -286,7 +287,8 @@ class MissionBuilder:
         skip1 = {tgt_asset.id} if (tgt_asset is not None and package.objective.type == ObjectiveType.DEAD) else ()
         geom.tier = self._pick_tier(geom, pf.role, pspec.profile, tx, ty, skip1)
         self._flight_plans(geom, package, tx, ty, skip1)
-        pw = plan_route(pf.role, (pbase.x, pbase.y), geom, pspec.profile, is_player=True, tanker_xy=None, jsow=getattr(pf, "kit", "") == "JSOW")
+        pw = plan_route(pf.role, (pbase.x, pbase.y), geom, pspec.profile, is_player=True, tanker_xy=None, jsow=getattr(pf, "kit", "") == "JSOW",
+                        jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package))
         dep_s = launch_s + 60 + dist(pbase.x, pbase.y, *geom.dep) / (pspec.profile.depart_kts * 0.514444) * 1.12     # roll + climb-out to DEP
         self._dep_s = dep_s
         assign_times(pw, dep_s)
@@ -458,7 +460,8 @@ class MissionBuilder:
             P0x = P0 + (hm(xp) - hm(anchor)) * 60.0
             geom2.tier = self._pick_tier(geom2, lead.role, spec2.profile, tx2, ty2, {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else ())
             self._flight_plans(geom2, xp, tx2, ty2, {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else ())
-            pw2 = plan_route(lead.role, (base2.x, base2.y), geom2, spec2.profile, is_player=True, tanker_xy=None, jsow=getattr(lead, "kit", "") == "JSOW")
+            pw2 = plan_route(lead.role, (base2.x, base2.y), geom2, spec2.profile, is_player=True, tanker_xy=None, jsow=getattr(lead, "kit", "") == "JSOW",
+                             keep_out=self._umbrella_keep(xp))
             assign_times(pw2, 0.0, P0x + stagger(xp, lead.role))
             pu = next((w for w in pw2 if w.name == "PUSH"), None)
             if pu is not None and P0x + stagger(xp, lead.role) < pu.eta_s:            # it pushes before it could even have reached its marshal point in this timeline: shift the whole leg after PUSH
@@ -1045,7 +1048,7 @@ class MissionBuilder:
                 sp = self._spawn_point(f, base, geom)
             wps = plan_route(f.role, (base.x, base.y), geom, spec.profile, is_player=f.is_player, tanker_xy=None, stack_idx=idx,
                              spawn=sp[0] if sp else None, spawn_alt_ft=sp[1] if sp else 0, spawn_kts=sp[2] if sp else 0,
-                             jsow=getattr(f, "kit", "") == "JSOW")
+                             jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package))
             if not f.is_player or o.player_is_ai:
                 terrain_clear(wps)                          # an AI flight climbs on its own schedule: its altitudes must clear the ridges on each leg
             if f.is_player:
@@ -1222,6 +1225,13 @@ class MissionBuilder:
                     for _, tg_ in self._cover_tors(package):
                         ctt = task.ControlledTask(task.AttackGroup(tg_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                         ctt.stop_after_time(int(w.eta_s) + 180); wp.tasks.append(ctt)
+                elif seads_ and (seads_[0] is f or seads_[0].id == f.id):
+                    # the first HARM flight opens on the umbrella (the SA-10 covering this target): it reaches every jet in the wave, so it goes first
+                    um_ = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
+                    ug_ = self.groups_by_asset.get(um_.id) if um_ else None
+                    if ug_ is not None:
+                        ctu = task.ControlledTask(task.AttackGroup(ug_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                        ctu.stop_after_time(int(w.eta_s) + 180); wp.tasks.append(ctu)
                 ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                 ct.stop_after_time(int(w.eta_s) + 600)
                 wp.tasks.append(ct)
@@ -1487,6 +1497,27 @@ class MissionBuilder:
         p0.tasks.append(task.SetInvisibleCommand(True))
         p0.tasks.append(task.SetImmortalCommand(True))
         jt.add_waypoint(mapping.Point(*offset(cx, cy, brg, 3800), self.t), PointAction.OffRoad, v * 3.6)
+
+    def _umbrella_keep(self, package):
+        """(x, y, nm) for plan_route's keep_out: a SEAD package whose target sits under a live SA-10 keeps its HARM point out of the SA-10's
+        reach as well (the umbrella is the first thing the wave has to beat). None when there is no umbrella."""
+        if package.objective.type != ObjectiveType.DEAD or not package.objective.target_id:
+            return None
+        um = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
+        return (um.x, um.y, HARM_LAUNCH_NM) if um else None
+
+    def _jsow_side(self, package, geom) -> int:
+        """Which side of the HARM shooters' axis the JSOW flight comes in on (+1 / -1): the side whose launch point stays farther from every
+        other live SAM site (in a cluster like Sukhumi the wrong side runs over the neighbours)."""
+        tid = package.objective.target_id
+        if package.objective.aim != "SEAD" or not tid:
+            return 0
+        sams = [a for a in self.state.assets.values() if a.kind == AssetKind.SAM and not a.destroyed and a.id != tid]
+        jn = max(8.0, min(JSOW_LAUNCH_NM, geom.d / NM * 0.8 - 6))
+        def clear(side):
+            lx, ly = offset(geom.tx, geom.ty, geom.hdg + 180 + JSOW_AXIS_DEG * side, jn * NM)
+            return min((dist(lx, ly, a.x, a.y) for a in sams), default=1e9)
+        return 1 if clear(1) >= clear(-1) else -1
 
     def _cover_tors(self, package, leg=None) -> list:
         """The Tor batteries in this mission that cover the package's target site: within TOR_COVER_KM of the site, or of the strike leg into it

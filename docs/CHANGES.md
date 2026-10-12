@@ -1,3 +1,14 @@
+## v0.39.21
+
+* **HARMs first, JSOWs right behind.** The JSOW flight now pushes with the HARM shooters (`JSOW_TRAIL_S = 0`) instead of 160 s ahead of them. The jets cross into the umbrella's reach together; the HARMs go first and force the radar to die or shut down, and the JSOWs land a few minutes later on a dead or silent site. In the v0.39.19 run the USAF JSOW flight went in alone, 4 minutes before the first HARM, and died without releasing; the Navy JSOWs, which happened to land after the Navy HARMs, hit the S-300. The sweep is back to 30 s ahead of the HARM shooters.
+* **Two axes.** The JSOW flight comes in about 30 degrees (`JSOW_AXIS_DEG`) off the HARM shooters' axis, on the side whose launch point stays farther from every other live SAM site, so the site has two directions to watch and the flights don't bunch up.
+* **Hit the umbrella first.** A SEAD target under a live SA-10's reach (55 km, `UMBRELLA_KM`) keeps its HARM point 30 nm from the SA-10 as well as from its own target, and the package's first HARM flight opens on the SA-10 (3 minutes) before its own site. In the last run the SA-6 package's flights were inside the S-300's reach before they could fire.
+* **SEAD sync on the real routes.** SEAD packages on one cluster are synced on each package's push-to-HARM-point leg, from the same marshal point, geometry and route the builder uses (umbrella keep-out included). The old estimate, a straight line from the base at 400 kt, ignored where each package marshals: the carrier's wave arrived about 3 minutes after the land-based one. In a test campaign the five SEAD packages on Sukhumi and Gudauta now reach their HARM points within 30 s of each other.
+* JSOW briefing updated: you push with the HARM shooters, on your own axis.
+* Smoke test: new saturation checks (sync within 1.5 min, umbrella first, JSOW axis 20-40 degrees off); the HARM-point check allows the umbrella keep-out; the v0.39.19 JSOW check pins its campaign id and flies a package your aircraft type can fly.
+* Untested in DCS. Check: the HARM and JSOW flights cross into the S-300's reach together; the first HARMs go at the SA-10; the JSOWs release after the HARMs are off; the Navy and USAF waves arrive together.
+* Stacked on PR #18 (v0.39.20); merge #18 first.
+
 ## v0.39.20
 
 * **The Tors are part of the job.** A Tor (SA-15) battery within 12 km (`TOR_COVER_KM`) of a SEAD or DEAD target, or of the strike leg into it, is now targeted with the site. At Sukhumi both Tors cover the SA-10 (7 and 11 km). They shot down HARMs and GBUs aimed at the S-300 and killed Vipers coming in low.
