@@ -118,6 +118,19 @@ class Package:
                    d.get("start", "09:00"), d.get("n_def", 0), d.get("extra", {}))
 
 
+def _next_callsign(st, sq, used: dict) -> str:
+    """The squadron's next free flight name today: Viper 1 ... Viper 9. DCS flight numbers stop at 9, so a squadron that flies more
+    than nine flights in a day carries on under a spare callsign of its type that no squadron owns (Python 1, Python 2 ...)."""
+    from .callsigns import table
+    owned = {q.callsign for q in st.squadrons.values()}
+    for nm in [sq.callsign] + [c for c in table(sq.aircraft) if c not in owned]:
+        if used.get(nm, 0) < 9:
+            used[nm] = used.get(nm, 0) + 1
+            return f"{nm} {used[nm]}"
+    used[sq.callsign] = used.get(sq.callsign, 0) + 1                  # every name taken nine times over: not reachable with real unit counts
+    return f"{sq.callsign} {used[sq.callsign]}"
+
+
 class Ledger:
     def __init__(self, state: CampaignState):
         self.free = {sid: s.available for sid, s in state.squadrons.items()}
@@ -189,7 +202,7 @@ class PackageBuilder:
             slots.append(Slot(Role.CAP, 2, False, tag="HAVCAP"))
         return slots
 
-    def build(self, obj: Objective, number: int, ledger: Ledger, *, for_player: bool) -> Package:
+    def build(self, obj: Objective, number: int, ledger: Ledger, *, for_player: bool, names: dict | None = None) -> Package:
         st = self.state
         tx, ty = self.target_xy(obj)
         self._ctx = (obj, None if obj.type in _FLEET else self.state.assets[obj.target_id])
@@ -249,11 +262,11 @@ class PackageBuilder:
                 ledger.free[sq.id] -= 2
                 chosen.append((Slot(Role.CAP, 2, False, tag=tag), sq, 2, False))
 
-        used, n = {}, 0
+        used, n = (names if names is not None else {}), 0     # names: the day's callsign counter, shared by every package that day
         for slot, sq, count, is_pl in chosen:
             n += 1
-            used[sq.callsign] = used.get(sq.callsign, 0) + 1
-            pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", f"{sq.callsign} {used[sq.callsign]}", slot.role, sq.id,
+            cs = _next_callsign(st, sq, used)
+            pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", cs, slot.role, sq.id,
                                           sq.aircraft, count, sq.base_id,
                                           _KIT_TASK.get(slot.kit) or _TAG_TASK.get(slot.tag) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role],
                                           is_pl, slot.tag, slot.kit))

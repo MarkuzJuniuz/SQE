@@ -128,7 +128,7 @@ class Session:
             # Packages launch at different times of day, so an aircraft can fly more than one sortie: each package sees every
             # serviceable airframe, but no squadron is asked for more than two sorties per airframe per day.
             daily = {sid: 2 * q.available for sid, q in st.squadrons.items()}
-            out = []
+            out, names = [], {}          # callsign counter for the whole day: Enfield 1, Enfield 2 ... never two Enfield 1s
             for i, o in enumerate(objs, 1):
                 ledger = Ledger(st)
                 for sid in ledger.free:
@@ -136,7 +136,7 @@ class Session:
                 pkg = None
                 for fp in ((True, False) if (i - 1) in forced else (False,)):
                     try:
-                        pkg = pb.build(o, i, ledger, for_player=fp)
+                        pkg = pb.build(o, i, ledger, for_player=fp, names=names)
                         break
                     except NoPlayerSlot:
                         continue
@@ -539,12 +539,17 @@ class Session:
         pb = PackageBuilder(st, d)
         xy = pb.target_xy(obj)
         ok, why = raids.eligible(st, spec, role_needed, xy, psq, committed)
+        names = {}                           # carry on the day's callsign numbering so the emergency flight never repeats a name
+        for cs in [ff["callsign"] for pd in st.plan for ff in pd["flights"]] + [ff.callsign for ff in pkg.flights]:
+            nm, _, no = cs.rpartition(" ")
+            if no.isdigit():
+                names[nm] = max(names.get(nm, 0), int(no))
         epkg = None
         for want in ((True, False) if ok else (False,)):
             ledger = Ledger(st)
             ledger.free[psq.id] = max(0, ledger.free[psq.id] - committed)         # the tasked flight keeps its own aircraft
             try:
-                epkg = pb.build(obj, number, ledger, for_player=want)
+                epkg = pb.build(obj, number, ledger, for_player=want, names=dict(names))
                 ok = ok and want
                 break
             except NoPlayerSlot:
