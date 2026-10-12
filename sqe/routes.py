@@ -54,6 +54,7 @@ class Geometry:
     stand: dict = None      # {(role, id(profile)): (x, y, [SAM types], nm short)} sweeps and escorts that stop at the edge of SAM cover
 
 
+STANDOFF_EGRESS_NM = 25.0  # a HARM or JSOW flight egresses this far beyond its launch point, straight back out along its own approach
 JSOW_AXIS_DEG = 30.0       # the JSOW flight's approach is this far off the HARM shooters' axis (side chosen by the builder, away from other SAM sites)
 JSOW_LAUNCH_NM = 20.0      # an AI JSOW flight's launch point (the AGM-154A glides about this far from 20,000 ft); it releases from there and turns home
 HARM_LAUNCH_NM = 30.0      # an AI SEAD flight's HARM launch point: at the edge of what an SA-10 first reaches (it opened fire at about 55 km in testing); 21 nm put the launch point deep inside it
@@ -143,7 +144,14 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         wp.append(Wpt("TGT", so[0], so[1], ialt, p.cap_kts, f"ESCORT: hold here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "ESCORT", rad=irad, orbit=True))
     else:
         wp.append(Wpt("TGT", g.tx, g.ty, ialt, p.attack_kts, "ESCORT: cover the strikers over target", "ESCORT", rad=irad))
-    if not (so and role in (Role.SWEEP, Role.ESCORT)):         # a stand-off flight never crosses the target area: it goes home from its hold
+    standoff = not human and (role == Role.SEAD or (jsow and role == Role.STRIKE))
+    if standoff:
+        # a HARM or JSOW flight fires from stand-off range and goes home the way it came. The package egress lies beyond the target for the
+        # strikers that overfly it: in the v0.39.21 run the JSOW Hornets released, then crossed the Sukhumi cluster to it and met the Su-27s.
+        sax = g.hdg + 180 if role == Role.SEAD else jsow_hdg
+        snm = (harm_nm if role == Role.SEAD else jsow_nm) + STANDOFF_EGRESS_NM
+        wp.append(Wpt("EGR", *offset(g.tx, g.ty, sax, snm * NM), ialt, p.egress_kts, "Exit: back out along the approach", rad=irad))
+    elif not (so and role in (Role.SWEEP, Role.ESCORT)):         # a stand-off fighter never crosses the target area: it goes home from its hold
         wp.append(Wpt("EGR", *g.egr, ialt, p.egress_kts, "Exit threat area", rad=irad))
     if len(wp) + 2 > p.max_points:
         raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")

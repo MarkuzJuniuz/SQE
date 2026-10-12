@@ -443,16 +443,19 @@ local function siteBlind(id)
   return true
 end
 local function gateBlind(gs)
-  if not siteBlind(gs.site) then return false end
+  return siteBlind(gs.site)      -- the target's own radars only: a Tor still up on the run-in no longer holds the strike (v0.39.22); the go call names it
+end
+local function torsUp(gs)
   for _, gt in ipairs(gs.gates) do
-    for _, a in ipairs(gt.also or {}) do if not siteBlind(a) then return false end end
+    for _, a in ipairs(gt.also or {}) do if not siteBlind(a) then return true end end
   end
-  return true
+  return false
 end
 local function siteOf(gs)
   for _, x in ipairs(SITES) do if x.id == gs.site then return x end end
 end
 local function breakOff(gs, why)
+  local held = gs.holding
   gs.done = true
   gs.holding = false
   local s = siteOf(gs)
@@ -474,7 +477,11 @@ local function breakOff(gs, why)
     if gt.ai then
       local g = Group.getByName(gt.grp)
       if g and g:getController() then
-        e.cmd = pcall(function() g:getController():setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = gt.from, goToWaypointIndex = gt.to } }) end)
+        e.cmd = pcall(function()
+          local c = g:getController()
+          if held then c:resetTask() end        -- the hold pushed an orbit on top of the route: clear it, or the flight keeps circling (v0.39.21 run, Springfield 1)
+          c:setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = gt.from, goToWaypointIndex = gt.to } })
+        end)
       end
       timer.scheduleFunction(function() e.d1 = gdist(gt.grp, e.tp); dump(); return nil end, nil, timer.getTime() + 60)
     end
@@ -500,7 +507,7 @@ local function resume(gs)
     end
   end
   for _, gt in ipairs(gs.gates) do
-    if gt.dead then say(s.who .. ": " .. s.label .. " radars are down. Go, go, go.", gt.you) end
+    if gt.dead then say(s.who .. ": " .. s.label .. " radars are down. Go, go, go." .. (torsUp(gs) and " A Tor is still up on the run-in, watch it." or ""), gt.you) end
   end
   dump()
 end
@@ -509,10 +516,7 @@ local function holdGroups(gs)
   gs.holdAt = timer.getTime()
   local s = siteOf(gs)
   for _, gt in ipairs(gs.gates) do
-    if gt.dead then
-      if siteBlind(gs.site) then say(s.who .. ": " .. s.label .. " blind, but the Tors covering it are still up. Hold outside, rechecking.", gt.you)
-      else say(s.who .. ": " .. s.label .. " radars still up. Hold outside, rechecking.", gt.you) end
-    end
+    if gt.dead then say(s.who .. ": " .. s.label .. " radars still up. Hold outside, rechecking.", gt.you) end
   end
   for _, gt in ipairs(gs.gates) do
     if gt.ai and gt.dead then
@@ -619,8 +623,11 @@ timer.scheduleFunction(function(_, t)
       else
         for _, gt in ipairs(gs.gates) do
           if gt.dead then
+            -- the gate (and so any hold) is outside the reach of the target's own radars (gt.gm: 60 km for an SA-10) and of an SA-10
+            -- umbrella covering it (gt.ux/uz/um): v0.39.21 run, Hornet 1 held 26 km from the Sukhumi SA-10 and was shot down in its orbit
             local d = gdist(gt.grp, gs.tp)
-            if d and d <= GATE_M then decide(gs, "dist"); break end
+            local du = gt.ux and gdist(gt.grp, { x = gt.ux, z = gt.uz }) or nil
+            if (d and d <= ((gt.gm and gt.gm > 0) and gt.gm or GATE_M)) or (du and du <= gt.um) then decide(gs, "dist"); break end
           end
         end
       end
@@ -647,6 +654,13 @@ def _lq(s) -> str:
     return '"' + _lua_str(s).replace("\n", " ") + '"'
 
 
+def _umbrella_lua(x: dict) -> str:
+    """The gate's umbrella fields for the hook (the SA-10 covering its target), or nothing."""
+    if x.get("ux") is None:
+        return ""
+    return ", ux=%.1f, uz=%.1f, um=%d" % (float(x["ux"]), float(x["uz"]), int(x["um"]))
+
+
 def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "", group: str = "",
              calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None) -> str:
@@ -659,7 +673,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
                    f'units={lst(x["units"])}, trk={lst(x["trk"])}, srch={lst(x["srch"])}}}' for x in (sites or []))
     ru = ", ".join(f'{{x={r["x"]:.1f}, z={r["z"]:.1f}, n={int(r["n"])}, r={float(r["r"]):.0f}, p={int(r["p"])}, dn={float(r["dn"]):.2f}, pw={int(r["pw"])}, s={float(r["s"]):.2f}}}'
                    for r in (ruins or []))
-    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}}}'
+    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}{_umbrella_lua(x)}}}'
                    for x in (gates or []))
     return (LUA_HOOK.replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)

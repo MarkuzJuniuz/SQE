@@ -1,3 +1,18 @@
+## v0.39.22
+
+Fixes from the v0.39.21 run (Sukhumi SA-6 SEAD, Day 1). The run worked (both SA-10s, the SA-11, the SA-6s and both Tors suppressed or dead, the first DEAD hold that resumed), but several of our own bugs drove the losses.
+
+* **HARM and JSOW flights go home the way they came.** They now egress 25 nm (`STANDOFF_EGRESS_NM`) beyond their launch point, straight back out along their own approach. They used to fly to the package egress, which lies beyond the target for the strikers that overfly it: after a clean release the Navy JSOW Hornets crossed the Sukhumi cluster toward it and the Su-27s and MiG-29s killed about 11 jets between minutes 36 and 43.
+* **An abort after a hold clears the orbit.** The hold pushes an orbit task on top of the route; "resume" cleared it but "abort" did not, so Springfield 1 timed out at 2250 s and then circled to the end of the mission. The hook now resets the task before sending the flight to its exit.
+* **The hold is outside the SA-10's reach.** A DEAD gate now fires 60 km (`SA10_GATE_KM`) from an SA-10 target (was 40 km, inside its 55 km reach), and a gate whose target sits under a live SA-10 umbrella also fires 60 km from the SA-10. Hornet 1 held 40 km from the Sukhumi SA-6, which is 26 km from the SA-10, and lost all four jets in the orbit.
+* **The gate waits only for the target's own radars.** A covering Tor still up no longer holds the strike (Springfield 1 held 12 minutes for one surviving column Tor while the SA-10's radars were already down). The go call says "A Tor is still up on the run-in, watch it."
+* **Second pass at the Tors.** Every HARM flight now ends its task list with the Tors that cover its site, after its main targets, with whatever HARMs are left.
+* **The SEAD waves in one mission arrive together (the Navy delay).** Traced from the mission file: the AI flew the plan to within seconds; the plan itself had the Navy HARMs 220 s after the USAF ones. The planner times a SEAD package from its first SEAD flight's base (Cowboy 1, Kutaisi), but the builder lays out your package from your own base (Senaki, about 20 nm closer). The builder now syncs: each merged SEAD package on the same ground (`SEAD_WAVE_KM` 60) is shifted to reach its HARM point with your package's. In a test build the SEAD waves are within 5 s of each other (they were 30 s apart there, 220 s in your run).
+* The planner also times a carrier's SEAD packages from where the builder will put the carrier (it slides it back for the sortie). Not the cause of this delay (the carrier did not move in your runs), but it would have been on another map.
+* Smoke test: checks for each fix (egress side, built HARM times, abort reset, gate radius and umbrella, second Tor pass).
+* Untested in DCS. Check: HARM and JSOW flights turn back after firing; a held flight that aborts leaves its orbit; holds sit 60 km from an SA-10; the Navy and USAF HARMs go off together.
+* Builds on v0.39.21 (#18 and #19 are merged into the catch-up branch).
+
 ## v0.39.21
 
 * **HARMs first, JSOWs right behind.** The JSOW flight now pushes with the HARM shooters (`JSOW_TRAIL_S = 0`) instead of 160 s ahead of them. The jets cross into the umbrella's reach together; the HARMs go first and force the radar to die or shut down, and the JSOWs land a few minutes later on a dead or silent site. In the v0.39.19 run the USAF JSOW flight went in alone, 4 minutes before the first HARM, and died without releasing; the Navy JSOWs, which happened to land after the Navy HARMs, hit the S-300. The sweep is back to 30 s ahead of the HARM shooters.
