@@ -1,3 +1,14 @@
+## v0.39.20
+
+* **The Tors are part of the job.** A Tor (SA-15) battery within 12 km (`TOR_COVER_KM`) of a SEAD or DEAD target, or of the strike leg into it, is now targeted with the site. At Sukhumi both Tors cover the SA-10 (7 and 11 km). They shot down HARMs and GBUs aimed at the S-300 and killed Vipers coming in low.
+  * **HARMs:** a SEAD package's second HARM flight opens on the covering Tors (3 minutes each), then joins on the site. The first flight goes straight at the site, as before.
+  * **JSOWs:** the JSOW flight gets an aim point on each covering Tor, after the site's radars. A Hornet 4-ship (16 JSOWs) covers both; a Viper 4-ship (8) may run out before the Tors at a two-radar site like the SA-10.
+  * **Route check:** the DEAD gate now also waits for the covering Tors, not just the target's radars, and holds while one is up. The hold call says so: "<site> blind, but the Tors covering it are still up."
+* **A Tor counts as a radar.** Its radar rides on the launcher, so the Tor vehicle is now in `TRACK_RADARS`. Before, a Tor battery always looked blind to the hook. It now reads blind only when its Tors are down, and the call-outs report it.
+* Smoke test: new Tor checks on a pinned campaign; the SEAD-task checks now allow the second flight's extra Tor attacks (still ARMs, still whole groups); the SEAD/DEAD resolution check pins its campaign id and finds a matching pair instead of assuming the first SEAD package has one.
+* Untested in DCS. Check: the second HARM flight fires at the Tors; JSOWs land on the Tors; the DEAD gate holds while a covering Tor is up.
+* Stacked on PR #17 (v0.39.19); merge #16 and #17 first.
+
 ## v0.39.19
 
 * **JSOW slingers fly with the SEAD packages.** Every SEAD package now has an optional 4-ship JSOW flight alongside its HARM shooters: Hornets carry 4 AGM-154A JSOW CEB each (BRU-55 doubles on 2 and 8, tanks on 3, 5 and 7), Vipers carry 2 (pylons 3 and 7). Only Hornet and Viper squadrons fill the slot.

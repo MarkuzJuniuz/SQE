@@ -145,7 +145,10 @@ SITES = {
     "SA-8":   [("Osa_9A33_ln", 2)],
     "EWR":    [("x_1L13_EWR", 1)], "EWR55": [("x_55G6_EWR", 1)],
 }
-TRACK_RADARS = {"SNR_75V", "snr s-125 tr", "Kub 1S91 str", "S-300PS 40B6M tr"}          # fire-control / track radars (unit type names as DCS stores them)
+TRACK_RADARS = {"SNR_75V", "snr s-125 tr", "Kub 1S91 str", "S-300PS 40B6M tr", "Tor 9A331"}          # fire-control / track radars (unit type names as DCS stores them).
+# The Tor carries its radar on the launcher: the vehicle IS the radar, so a Tor battery is blind only when its vehicles are down.
+TOR_VARIANTS = {"SA-15"}       # point defences that cover a long-range site and shoot down HARMs, GBUs and JSOWs aimed at it
+TOR_COVER_KM = 12.0           # a Tor this close to a SEAD/DEAD target, or to the strike leg into it, is part of the job: HARMs and JSOWs go at it, the DEAD gate waits for it
 SEARCH_RADARS = {"p-19 s-125 sr", "SA-11 Buk SR 9S18M1", "S-300PS 64H6E sr", "1L13 EWR", "55G6 EWR"}
 SOFT = {
     AssetKind.C2:    [("ZIL_131_KUNG", 2), ("Ural_375", 3), ("ZSU_23_4_Shilka", 2)],
@@ -1212,9 +1215,16 @@ class MissionBuilder:
                 # The whole site, not one radar: an S-300 track radar only radiates while it is tracking, so a HARM task aimed at it
                 # has nothing to shoot at (v0.39.7 run: the SEAD pair never fired). Aimed at the group, the AI fires at whatever radiates (an escort CAS SEAD did).
                 # The launchers are still the DEAD flight's job: HARMs only kill what radiates.
+                wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
+                # The package's second SEAD flight opens on the Tors that guard the site (they shoot the HARMs down, v0.39.16 run), then joins on the site.
+                seads_ = [x for x in package.flights if x.role == Role.SEAD and not x.tag]
+                if len(seads_) > 1 and any(x is f or x.id == f.id for x in seads_[1:]):
+                    for _, tg_ in self._cover_tors(package):
+                        ctt = task.ControlledTask(task.AttackGroup(tg_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                        ctt.stop_after_time(int(w.eta_s) + 180); wp.tasks.append(ctt)
                 ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                 ct.stop_after_time(int(w.eta_s) + 600)
-                wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree)); wp.tasks.append(ct)
+                wp.tasks.append(ct)
         if f.role == Role.SEAD and package.objective.target_id:
             self._sead_grps.setdefault(package.objective.target_id, []).append(g.name)
         gate = None
@@ -1234,7 +1244,9 @@ class MissionBuilder:
                 bx, by = offset(base.x, base.y, bearing(base.x, base.y, lw.x, lw.y), 20 * NM)   # does not cut straight from cruise altitude to the runway
                 g.add_waypoint(pt(bx, by), min(lw.alt_ft, 9000) * FT, 320 * KPH, "ABORT")
                 to_ = len(g.points)
-            gate = {"t": tot_s - DEAD_GATE_BEFORE_TGT_S, "site": package.objective.target_id, "grp": g.name,
+            leg_ = [(w.x, w.y) for w in wps if w.name in ("IP", "TGT")]
+            also_ = [a_.id for a_, _ in self._cover_tors(package, leg_)]          # the route check: the Tors that cover the site or the run in
+            gate = {"t": tot_s - DEAD_GATE_BEFORE_TGT_S, "site": package.objective.target_id, "grp": g.name, "also": also_,
                     "from": n0_ + max(0, ti_ - 1) + 1, "to": to_, "ai": ai_, "dead": f.role == Role.STRIKE, "you": bool(f.is_player), "pkg": package.id}
         if base.kind == BaseKind.AIRFIELD:
             g.land_at(self.apt[base.id])
@@ -1476,6 +1488,24 @@ class MissionBuilder:
         p0.tasks.append(task.SetImmortalCommand(True))
         jt.add_waypoint(mapping.Point(*offset(cx, cy, brg, 3800), self.t), PointAction.OffRoad, v * 3.6)
 
+    def _cover_tors(self, package, leg=None) -> list:
+        """The Tor batteries in this mission that cover the package's target site: within TOR_COVER_KM of the site, or of the strike leg into it
+        (leg = [(x, y), ...], e.g. IP to target). Returns [(asset, group)]; only batteries that are live in this mission (a group to task)."""
+        tid = package.objective.target_id
+        if not tid or tid not in self.state.assets:
+            return []
+        t, out = self.state.assets[tid], []
+        for aid, g in self.groups_by_asset.items():
+            a = self.state.assets.get(aid)
+            if a is None or aid == tid or a.variant not in TOR_VARIANTS or a.destroyed:
+                continue
+            near = dist(a.x, a.y, t.x, t.y) <= TOR_COVER_KM * 1000
+            if not near and leg and len(leg) >= 2:
+                near = tm.poly_dist(a.x, a.y, leg) <= TOR_COVER_KM * 1000
+            if near:
+                out.append((a, g))
+        return sorted(out, key=lambda ag: dist(ag[0].x, ag[0].y, t.x, t.y))
+
     def _jsow_tasks(self, wp, f, site, package) -> None:
         """A JSOW slinger's attack from its launch point: one release per radar of the target site (search and track radars; the first two
         vehicles of a site whose radars ride on the launchers), aimed at the radar's last-known position give or take JSOW_AIM_ERR_M. The
@@ -1483,6 +1513,7 @@ class MissionBuilder:
         if site is None or not site.units:
             return
         aims = [u for u in site.units if str(getattr(u, "type", "")) in TRACK_RADARS | SEARCH_RADARS][:3] or list(site.units)[:2]
+        aims += [g_.units[0] for _, g_ in self._cover_tors(package) if g_.units]          # and the Tors that guard it (they shoot JSOWs down)
         each = max(1, JSOW_PER_JET.get(f.aircraft, 2) // len(aims))
         exp = task.Expend.Four if each >= 4 else (task.Expend.Two if each >= 2 else task.Expend.One)
         rng = random.Random(f"{self.state.campaign_id}:{package.id}:{f.id}:jsow")

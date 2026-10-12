@@ -436,6 +436,19 @@ local function seadsGone(gs)
   end
   return true
 end
+-- a site is blind when its radars are all down (a Tor's radar rides on the launcher, so its vehicles count). The DEAD gate waits for the
+-- target AND the Tors that cover it or the run in (gt.also): the same package is tasked against them.
+local function siteBlind(id)
+  for _, x in ipairs(SITES) do if x.id == id then return x.nrad <= 0 or x.nalive <= 0 end end
+  return true
+end
+local function gateBlind(gs)
+  if not siteBlind(gs.site) then return false end
+  for _, gt in ipairs(gs.gates) do
+    for _, a in ipairs(gt.also or {}) do if not siteBlind(a) then return false end end
+  end
+  return true
+end
 local function siteOf(gs)
   for _, x in ipairs(SITES) do if x.id == gs.site then return x end end
 end
@@ -496,7 +509,10 @@ local function holdGroups(gs)
   gs.holdAt = timer.getTime()
   local s = siteOf(gs)
   for _, gt in ipairs(gs.gates) do
-    if gt.dead then say(s.who .. ": " .. s.label .. " radars still up. Hold outside, rechecking.", gt.you) end
+    if gt.dead then
+      if siteBlind(gs.site) then say(s.who .. ": " .. s.label .. " blind, but the Tors covering it are still up. Hold outside, rechecking.", gt.you)
+      else say(s.who .. ": " .. s.label .. " radars still up. Hold outside, rechecking.", gt.you) end
+    end
   end
   for _, gt in ipairs(gs.gates) do
     if gt.ai and gt.dead then
@@ -525,7 +541,7 @@ end
 local function holdCheck(gs, t)
   if not gs.holding then return nil end
   local s = siteOf(gs)
-  local blind = (not s) or s.nrad <= 0 or s.nalive <= 0
+  local blind = gateBlind(gs)
   if blind then resume(gs); return nil end
   if timer.getTime() - gs.holdAt >= HOLD_S then breakOff(gs, "hold-timeout"); return nil end
   if seadsGone(gs) then breakOff(gs, "seads-gone"); return nil end
@@ -534,7 +550,7 @@ local function holdCheck(gs, t)
 end
 local function decide(gs, why)
   local s = siteOf(gs)
-  local blind = (not s) or s.nrad <= 0 or s.nalive <= 0
+  local blind = gateBlind(gs)
   if not blind then
     local canHold = false
     for _, gt in ipairs(gs.gates) do if gt.dead then canHold = true end end
@@ -643,7 +659,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
                    f'units={lst(x["units"])}, trk={lst(x["trk"])}, srch={lst(x["srch"])}}}' for x in (sites or []))
     ru = ", ".join(f'{{x={r["x"]:.1f}, z={r["z"]:.1f}, n={int(r["n"])}, r={float(r["r"]):.0f}, p={int(r["p"])}, dn={float(r["dn"]):.2f}, pw={int(r["pw"])}, s={float(r["s"]):.2f}}}'
                    for r in (ruins or []))
-    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}}}'
+    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}}}'
                    for x in (gates or []))
     return (LUA_HOOK.replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)

@@ -960,6 +960,45 @@ def main():
     _mj = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
     assert "{AGM-154A}" in _mj and '["name"]="JSOW"' in _mj and _mj.count('["id"]="Bombing"') >= 1, "the JSOW flight is built: AGM-154A, a JSOW launch point, release tasks"
     print(f"[jsow] {len(_jf)} JSOW flights in {len(_sp3)} SEAD packages; Hornet 4 / Viper 2 AGM-154A; they push {_jl} s ahead of the HARM shooters; built with a launch point and release tasks")
+    # Tors (v0.39.20): the Tors that cover a SEAD/DEAD target are part of the job: the second HARM flight opens on them, the JSOWs aim at them,
+    # the DEAD gate waits for them (route check), and the Tor vehicle counts as a radar
+    import math as _m3
+    from dcs import lua as _lua3
+    from sqe.mission_builder import TRACK_RADARS as _TR, TOR_COVER_KM as _tck
+    assert "Tor 9A331" in _TR, "a Tor's radar rides on the launcher: the vehicle counts as a radar"
+    _ts = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, flight_filter="all"))
+    _ts.new("Tor", "F-16C", 3, seed=1); _ts.state.campaign_id = f"{0x70a0001:010x}"; _ts.plan_day()
+    _A3 = _ts.state.assets; _tors = [a_ for a_ in _A3.values() if a_.variant == "SA-15"]
+    _cov = lambda p_: [a_.id for a_ in _tors if _m3.hypot(a_.x - _A3[p_.objective.target_id].x, a_.y - _A3[p_.objective.target_id].y) <= _tck * 1000]
+    _p3 = next(p_ for p_ in _ts.packages() if p_.objective.aim == "SEAD" and _A3[p_.objective.target_id].variant == "SA-10" and _cov(p_) and _ts.flyable(p_))
+    _ts.ai_test = True; _ts.fly(_p3.number, _ts.flyable(_p3)[0].id); _ts.ai_test = False
+    _m3t = _zf.ZipFile(_ts.state.pending["miz"]).read("mission").decode("utf-8", "ignore"); _M3 = _lua3.loads(_m3t)["mission"]
+    _red = {g_["groupId"]: (g_["name"], [(u_["x"], u_["y"]) for u_ in g_["units"].values()]) for co_ in _M3["coalition"]["red"]["country"].values()
+            for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()}
+    _torpos = [xy_ for n_, xys_ in _red.values() if n_ in _cov(_p3) for xy_ in xys_]
+    _harm, _jsow = [], 0
+    for co_ in _M3["coalition"]["blue"]["country"].values():
+        for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
+            seq_ = []
+            for pt_ in g_["route"]["points"].values():
+                for t_ in ((pt_.get("task") or {}).get("params") or {}).get("tasks", {}).values():
+                    tid_, prm_ = t_.get("id"), t_.get("params", {})
+                    if tid_ == "ControlledTask":
+                        tid_, prm_ = prm_["task"]["id"], prm_["task"].get("params", {})
+                    if tid_ == "AttackGroup":
+                        seq_.append(_red.get(prm_.get("groupId"), ("?",))[0])
+                    elif tid_ == "Bombing" and any(_m3.hypot(prm_["x"] - a_, prm_["y"] - b_) < 150 for a_, b_ in _torpos):
+                        _jsow += 1
+            if seq_:
+                _harm.append(seq_)
+    assert any(sq_[0] in _cov(_p3) and _p3.objective.target_id in sq_ for sq_ in _harm), "the second HARM flight opens on the Tors, then joins on the site"
+    assert _jsow >= 1, "the JSOW flight aims at the Tors that guard the site"
+    _d3 = next(p_ for p_ in _ts.packages() if p_.objective.aim == "DEAD" and _cov(p_) and _ts.flyable(p_))
+    _ts.ai_test = True; _ts.fly(_d3.number, _ts.flyable(_d3)[0].id); _ts.ai_test = False
+    _d3t = _zf.ZipFile(_ts.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
+    assert any(t_ in _d3t for t_ in _cov(_d3)) and _re.search(r"also=\{[^}]*(fsam_|sam_)", _d3t), "the DEAD gate also waits for the Tors (route check)"
+    assert "local function gateBlind(" in _d3t or "local function gateBlind(" in _zf.ZipFile(_ts.state.pending["miz"]).read("l10n/DEFAULT/dictionary").decode("utf-8", "ignore"), "the hook's gate checks the Tors too"
+    print(f"[tors] Tors within {_tck:.0f} km of a SEAD/DEAD target: the second HARM flight opens on them, the JSOWs aim at them, the DEAD gate waits for them")
     # DEAD abort gate: SEAD leads by 5 min (sweep and escorts keep their 30 s spacing around it), the AI flights carry a radar check, calls to you sound different
     import re as _re
     from sqe import debrief as _db
@@ -1116,7 +1155,9 @@ def main():
     assert _comb and all(not p_.objective.aim for p_ in _comb) or not _comb, "after three failed days the combined package is offered again"
     # abstract resolution: SEAD first, then the DEAD stage; a DEAD stage with no blind radars is held and costs nothing
     s.new("SEAD first 2", "F-16C", 3, seed=11); _st = s.state
-    _pk = s.packages(); _se = next(p_ for p_ in _pk if p_.objective.aim == "SEAD"); _de = next(p_ for p_ in _pk if p_.objective.aim == "DEAD" and p_.objective.target_id == _se.objective.target_id)
+    _st.campaign_id = f"{0x5eed0b0:010x}"; s.plan_day()                 # pinned: the dice come from the campaign id, which is random
+    _pk = s.packages()
+    _se, _de = next((a_, b_) for a_ in _pk if a_.objective.aim == "SEAD" for b_ in _pk if b_.objective.aim == "DEAD" and b_.objective.target_id == a_.objective.target_id)
     _t = _st.assets[_se.objective.target_id]
     _st.raids["sead"][_t.id] = False; _t.suppressed = False
     _r = _WS3(s.d, random.Random(1)).resolve_abstract(_st, _de)
@@ -1174,10 +1215,10 @@ def main():
             assert 29 <= _d("SEAD") <= 31 and _d("IP") > _d("SEAD") + 5, ("HARM launch point 30 nm out, IP before it", _d("SEAD"), _d("IP"))
             _atk = [t_["params"]["task"]["params"]["weaponType"] for p_ in _g["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()
                     if t_["id"] == "ControlledTask" and t_["params"]["task"]["id"] in ("AttackUnit", "AttackGroup")]
-            assert _atk == [32768], ("the SEAD task asks for ARMs", _atk)
+            assert _atk and all(w_ == 32768 for w_ in _atk), ("the SEAD task asks for ARMs (the second flight also on the covering Tors first)", _atk)
             _ids = [t_["params"]["task"]["id"] for p_ in _g["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()
                     if t_["id"] == "ControlledTask" and t_["params"]["task"]["id"] in ("AttackUnit", "AttackGroup")]
-            assert _ids == ["AttackGroup"], ("the HARM task is aimed at the whole site, not one track radar", _ids)
+            assert _ids and all(i_ == "AttackGroup" for i_ in _ids), ("the HARM task is aimed at the whole site (and whole Tor batteries), not one track radar", _ids)
             _roe = lambda p_: [t_["params"]["action"]["params"]["value"] for t_ in p_["task"]["params"]["tasks"].values()
                                if t_["id"] == "WrappedAction" and t_["params"]["action"]["id"] == "Option" and t_["params"]["action"]["params"].get("name") == 0]
             _p1 = _g["route"]["points"][1]
