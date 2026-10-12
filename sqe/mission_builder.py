@@ -43,6 +43,37 @@ JSOW_TRAIL_S = 0               # a SEAD package's JSOW flight pushes this long a
 JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
 DEAD_GATE_BEFORE_TGT_S = 75    # fallback: if the DEAD flight never gets close, the radars are checked this long before its planned target time
 DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
+SA10_GATE_KM = 60              # ...but never inside an SA-10's reach (55 km): against an SA-10 target, or under an SA-10 umbrella, the gate (and so the hold
+                               # orbit) is this far from the SA-10. v0.39.21 run: Hornet 1 held 40 km from the Sukhumi SA-6, 26 km from the SA-10, and was shot down there
+SEAD_WAVE_KM = 60              # SEAD packages in one mission whose targets are this close together reach their HARM points at the same moment (the builder's sync)
+
+
+def carrier_heading(x, y, prefer):
+    """A heading with 120 nm of open sea ahead (and 8 nm off the coast all the way), nearest to `prefer`. None if there is none."""
+    for d in (0, 15, -15, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90, 120, -120, 150, -150, 180):
+        h = (prefer + d) % 360
+        if seac.clear_run(x, y, h, 120 * NM, 8 * NM):
+            return h
+    return None
+
+
+def carrier_station(state, b, tx, ty, min_enemy_nm) -> tuple | None:
+    """Where the carrier sits for a sortie against (tx, ty): slid back along the line of retreat (up to 60 nm, swinging up to 110 degrees)
+    onto open water, at least min_enemy_nm from the target and every enemy fighter base. (x, y, heading), or None = it stays home.
+    The mission builder moves the carrier here; the planner uses the same spot to time the carrier's SEAD packages (v0.39.22)."""
+    enemies = tm.fighter_bases(state)
+    need = min_enemy_nm * NM
+    away = (bearing(b.x, b.y, tx, ty) + 180) % 360
+    for nm in range(0, 66, 10):
+        for da in ((0,) if nm == 0 else (0, 25, -25, 50, -50, 80, -80, 110, -110)):
+            x, y = offset(b.x, b.y, away + da, nm * NM)
+            if not seac.open_water(x, y, 25 * NM):
+                continue
+            if dist(x, y, tx, ty) >= need and all(dist(x, y, ex, ey) >= need for ex, ey in enemies):
+                h = carrier_heading(x, y, away)
+                if h is not None:
+                    return (x, y, h)
+    return None
 
 
 def stagger(package, role) -> int:
@@ -327,6 +358,12 @@ class MissionBuilder:
         keep += self._fleet_keepout()
         self._spawn_air_picture(air_pkg, tx, ty, tgt.eta_s, geom, manifest, keep)
         self._spawn_cas_support(package, plan, geom, manifest)
+        self._harm_refs = []                                           # [(x, y, t)]: SEAD waves timed in this mission; merged SEAD packages on the same ground match them
+        if package.objective.type == ObjectiveType.DEAD and package.objective.aim == "SEAD" and package.objective.target_id:
+            hs_ = self._harm_time(package, geom, pbase, P0)
+            if hs_ is not None:
+                t_ = st.assets[package.objective.target_id]
+                self._harm_refs.append((t_.x, t_.y, hs_))
         merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock, ruins)
         # HAVCAP and base CAP guard the tanker, AWACS and home field: they stay until the last flight of ANY package in this mission is home
         # (they used to leave 40 min after your TOT, so later merged packages flew with the tanker and AWACS unguarded)
@@ -469,6 +506,18 @@ class MissionBuilder:
                 for w in pw2:
                     w.eta_s += sh
             tg2 = objective_wp(pw2) or pw2[-1]
+            if xp.objective.type == ObjectiveType.DEAD and xp.objective.aim == "SEAD" and tg2.action == "SEAD":
+                # the builder's sync: a SEAD package on the same ground as one already timed in this mission reaches its HARM point with it.
+                # The planner's estimate can be minutes off (v0.39.21 run: it timed the USAF package from Kutaisi, the mission flew it from Senaki,
+                # and the Navy HARMs came 3.7 minutes after the USAF ones); here the real routes are known.
+                ref_ = next((r for r in self._harm_refs if dist(r[0], r[1], tgt2.x, tgt2.y) <= SEAD_WAVE_KM * 1000), None)
+                if ref_ is None:
+                    self._harm_refs.append((tgt2.x, tgt2.y, tg2.eta_s))
+                elif abs(ref_[2] - tg2.eta_s) >= 5:
+                    dt_ = ref_[2] - tg2.eta_s
+                    P0x += dt_
+                    for w in pw2:
+                        w.eta_s += dt_
             eg2 = next((w for w in pw2 if w.name == "EGR"), pw2[-1])
             rtb2 = eg2.eta_s + leg_seconds(eg2, Wpt("RTB", base2.x, base2.y, 0, 300))
             struck = tg2.eta_s < -60
@@ -715,39 +764,20 @@ class MissionBuilder:
 
     # ---- bases -------------------------------------------------------------------------------------------------------
     def _carrier_heading(self, x, y, prefer):
-        """A heading with 120 nm of open sea ahead (and 8 nm off the coast all the way), nearest to `prefer`. None if there is none."""
-        for d in (0, 15, -15, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90, 120, -120, 150, -150, 180):
-            h = (prefer + d) % 360
-            if seac.clear_run(x, y, h, 120 * NM, 8 * NM):
-                return h
-        return None
+        return carrier_heading(x, y, prefer)
 
     def _pull_back_carriers(self, tx, ty):
         """Keep the carrier group out of the fight: slide it back (up to 60 nm, this sortie only) until it is far from the target and from
         every enemy fighter base, but only onto open water (>= 25 nm off the coast, 120 nm of clear sea ahead). If no such spot exists
         the carrier stays on its home station. Skipped when the carrier itself IS the objective (fleet defence)."""
         self._cv_hdg = {}
-        enemies = tm.fighter_bases(self.state)
-        need = self.o.carrier_min_enemy_nm * NM
         for b in self.state.bases.values():
             if b.kind != BaseKind.CARRIER:
                 continue
             away = (bearing(b.x, b.y, tx, ty) + 180) % 360
             home = (b.x, b.y)
             if not self._fleet_obj:
-                found = None
-                for nm in range(0, 66, 10):
-                    for da in ((0,) if nm == 0 else (0, 25, -25, 50, -50, 80, -80, 110, -110)):
-                        x, y = offset(b.x, b.y, away + da, nm * NM)
-                        if not seac.open_water(x, y, 25 * NM):
-                            continue
-                        if dist(x, y, tx, ty) >= need and all(dist(x, y, ex, ey) >= need for ex, ey in enemies):
-                            h = self._carrier_heading(x, y, away)
-                            if h is not None:
-                                found = (x, y, h)
-                                break
-                    if found:
-                        break
+                found = carrier_station(self.state, b, tx, ty, self.o.carrier_min_enemy_nm)
                 if found:
                     b.x, b.y = found[0], found[1]
                     self._cv_hdg[b.id] = found[2]
@@ -1235,6 +1265,9 @@ class MissionBuilder:
                 ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                 ct.stop_after_time(int(w.eta_s) + 600)
                 wp.tasks.append(ct)
+                for _, tg_ in self._cover_tors(package):            # a second pass at the Tors that guard the site, with whatever HARMs are left
+                    ct2 = task.ControlledTask(task.AttackGroup(tg_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                    ct2.stop_after_time(int(w.eta_s) + 780); wp.tasks.append(ct2)
         if f.role == Role.SEAD and package.objective.target_id:
             self._sead_grps.setdefault(package.objective.target_id, []).append(g.name)
         gate = None
@@ -1256,7 +1289,11 @@ class MissionBuilder:
                 to_ = len(g.points)
             leg_ = [(w.x, w.y) for w in wps if w.name in ("IP", "TGT")]
             also_ = [a_.id for a_, _ in self._cover_tors(package, leg_)]          # the route check: the Tors that cover the site or the run in
-            gate = {"t": tot_s - DEAD_GATE_BEFORE_TGT_S, "site": package.objective.target_id, "grp": g.name, "also": also_,
+            tga_ = st.assets.get(package.objective.target_id)
+            um_ = tm.umbrella_site(st, tga_)
+            gm_ = SA10_GATE_KM if (tga_ is not None and tga_.variant in tm.UMBRELLA_VARIANTS) else DEAD_GATE_KM
+            gate = {"t": tot_s - DEAD_GATE_BEFORE_TGT_S, "site": package.objective.target_id, "grp": g.name, "also": also_, "gm": gm_ * 1000,
+                    "ux": um_.x if um_ else None, "uz": um_.y if um_ else None, "um": SA10_GATE_KM * 1000 if um_ else None,
                     "from": n0_ + max(0, ti_ - 1) + 1, "to": to_, "ai": ai_, "dead": f.role == Role.STRIKE, "you": bool(f.is_player), "pkg": package.id}
         if base.kind == BaseKind.AIRFIELD:
             g.land_at(self.apt[base.id])
@@ -1497,6 +1534,17 @@ class MissionBuilder:
         p0.tasks.append(task.SetInvisibleCommand(True))
         p0.tasks.append(task.SetImmortalCommand(True))
         jt.add_waypoint(mapping.Point(*offset(cx, cy, brg, 3800), self.t), PointAction.OffRoad, v * 3.6)
+
+    def _harm_time(self, package, geom, base, P0):
+        """When this package's AI HARM flights reach their HARM point in this mission (push time + the push-to-HARM-point leg on its geometry)."""
+        sf = next((f for f in package.flights if f.role == Role.SEAD and not f.tag), None)
+        if sf is None:
+            return None
+        spec = AIRCRAFT[sf.aircraft]
+        wps = plan_route(Role.SEAD, (base.x, base.y), geom, spec.profile, is_player=False, tanker_xy=None, keep_out=self._umbrella_keep(package))
+        assign_times(wps, 0.0, P0 + stagger(package, Role.SEAD))
+        tw = objective_wp(wps)
+        return tw.eta_s if tw is not None and tw.action == "SEAD" else None
 
     def _umbrella_keep(self, package):
         """(x, y, nm) for plan_route's keep_out: a SEAD package whose target sits under a live SA-10 keeps its HARM point out of the SA-10's

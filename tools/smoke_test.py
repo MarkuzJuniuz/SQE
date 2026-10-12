@@ -965,6 +965,7 @@ def main():
     import math as _m3
     from dcs import lua as _lua3
     from sqe.mission_builder import TRACK_RADARS as _TR, TOR_COVER_KM as _tck
+    from sqe import threatmap as _tm9
     assert "Tor 9A331" in _TR, "a Tor's radar rides on the launcher: the vehicle counts as a radar"
     _ts = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, flight_filter="all"))
     _ts.new("Tor", "F-16C", 3, seed=1); _ts.state.campaign_id = f"{0x70a0001:010x}"; _ts.plan_day()
@@ -992,13 +993,20 @@ def main():
             if seq_:
                 _harm.append(seq_)
     assert any(sq_[0] in _cov(_p3) and _p3.objective.target_id in sq_ for sq_ in _harm), "the second HARM flight opens on the Tors, then joins on the site"
+    assert any(_p3.objective.target_id in sq_ and sq_[-1] in _cov(_p3) and sq_.index(_p3.objective.target_id) < len(sq_) - 1 for sq_ in _harm), \
+        "the HARM flights end with a second pass at the Tors that guard the site (v0.39.22)"
     assert _jsow >= 1, "the JSOW flight aims at the Tors that guard the site"
     _d3 = next(p_ for p_ in _ts.packages() if p_.objective.aim == "DEAD" and _cov(p_) and _ts.flyable(p_))
     _ts.ai_test = True; _ts.fly(_d3.number, _ts.flyable(_d3)[0].id); _ts.ai_test = False
     _d3t = _zf.ZipFile(_ts.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
-    assert any(t_ in _d3t for t_ in _cov(_d3)) and _re.search(r"also=\{[^}]*(fsam_|sam_)", _d3t), "the DEAD gate also waits for the Tors (route check)"
+    assert any(t_ in _d3t for t_ in _cov(_d3)) and _re.search(r"also=\{[^}]*(fsam_|sam_)", _d3t), "the DEAD gate knows the Tors on the run-in"
+    _gv3 = _A3[_d3.objective.target_id].variant
+    assert ("gm=60000" in _d3t) if _gv3 == "SA-10" else ("gm=40000" in _d3t), "the gate radius: 60 km against an SA-10, 40 km otherwise"
+    if _tm9.umbrella_site(_ts.state, _A3[_d3.objective.target_id]) is not None:
+        assert "um=60000" in _d3t, "a gate under an SA-10 umbrella also fires 60 km from the SA-10"
     assert "local function gateBlind(" in _d3t or "local function gateBlind(" in _zf.ZipFile(_ts.state.pending["miz"]).read("l10n/DEFAULT/dictionary").decode("utf-8", "ignore"), "the hook's gate checks the Tors too"
-    print(f"[tors] Tors within {_tck:.0f} km of a SEAD/DEAD target: the second HARM flight opens on them, the JSOWs aim at them, the DEAD gate waits for them")
+    print(f"[tors] Tors within {_tck:.0f} km of a SEAD/DEAD target: the second HARM flight opens on them, every HARM flight ends with a second pass, the JSOWs aim at them, "
+          f"the DEAD gate names them; gate 60 km out against an SA-10 or under its umbrella")
     # saturation (v0.39.21): SEAD packages on one cluster arrive together on their real routes; under an SA-10 umbrella the HARM point stays out of
     # its reach and the first HARM flight opens on it; the JSOW jets come in with the HARM shooters, about 30 degrees off their axis
     import math as _m
@@ -1038,8 +1046,26 @@ def main():
                         _seq4.append(_red4.get(prm_.get("groupId")))
                 assert _seq4 and _seq4[0] == _um4.id, ("the first HARM flight opens on the umbrella", _seq4)
     _off4 = abs((_brg["JSOW"] - _brg["SEAD"] + 180) % 360 - 180)
+    _eg4, _hs4 = {}, []
+    for co_ in _M4["coalition"]["blue"]["country"].values():
+        for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
+            _pp = list(g_["route"]["points"].values()); _nn = [p_.get("name") for p_ in _pp]
+            if g_["name"] in (_sead1, _jsc) and "EGR" in _nn:
+                _e_ = _pp[_nn.index("EGR")]
+                _eg4["SEAD" if g_["name"] == _sead1 else "JSOW"] = _m.degrees(_m.atan2(_e_["y"] - _t4.y, _e_["x"] - _t4.x))
+            if "SEAD" in _nn and "MSHL" in _nn:
+                _lv = None
+                for t_ in _pp[_nn.index("MSHL")]["task"]["params"]["tasks"].values():
+                    if t_.get("id") == "ControlledTask":
+                        _lv = t_["params"].get("stopCondition", {}).get("time")
+                _i0, _i1 = _nn.index("MSHL"), _nn.index("SEAD")
+                _hs4.append((_lv or 0) + sum(_m.hypot(b_["x"] - a_["x"], b_["y"] - a_["y"]) / max(1.0, b_["speed"]) for a_, b_ in zip(_pp[_i0:_i1], _pp[_i0 + 1:_i1 + 1])))
+    for k_ in ("SEAD", "JSOW"):
+        assert abs((_eg4[k_] - _brg[k_] + 180) % 360 - 180) <= 15, ("a HARM / JSOW flight egresses back out along its own approach, not across the target (v0.39.22)", k_, _eg4[k_], _brg[k_])
+    assert len(_hs4) >= 4 and max(_hs4) - min(_hs4) <= 15, ("the builder syncs the SEAD waves in one mission to the same HARM time (v0.39.22)", sorted(round(x_) for x_ in _hs4))
     assert 20 <= _off4 <= 40, ("the JSOW flight comes in about 30 degrees off the HARM shooters' axis", _off4)
-    print(f"[saturation] {len(_sd4)} SEAD packages reach their HARM points within {max(_arr) - min(_arr):.1f} min; umbrella first; JSOW axis {_off4:.0f} deg off the HARMs'")
+    print(f"[saturation] {len(_sd4)} SEAD packages reach their HARM points within {max(_arr) - min(_arr):.1f} min (planned) and {max(_hs4) - min(_hs4):.0f} s (built); umbrella first; "
+          f"JSOW axis {_off4:.0f} deg off the HARMs'; HARM and JSOW flights egress back out along their approach")
     # DEAD abort gate: SEAD leads by 5 min (sweep and escorts keep their 30 s spacing around it), the AI flights carry a radar check, calls to you sound different
     import re as _re
     from sqe import debrief as _db
@@ -1066,6 +1092,9 @@ def main():
     assert "radars still up. Hold outside, rechecking." in _hk and "radars are down. Go, go, go." in _hk and "abort, RTB." in _hk, "AWACS calls: hold, go and RTB go out for every DEAD flight, player or AI"
     assert "if gt.dead then" in _hk and "gt.you" in _hk, "the player's DEAD flight holds too (advisory: AWACS calls only, no orbit)"
     assert _hk.count("local function decide(") == 1 and _hk.count("local function holdCheck(") == 1, "the gate code is defined once: a second copy shadows the hold"
+    assert "if held then c:resetTask() end" in _hk, "an abort after a hold clears the orbit first, or the flight keeps circling (v0.39.22)"
+    assert "gt.gm" in _hk and "gt.um" in _hk and "return siteBlind(gs.site)" in _hk and "local function torsUp(" in _hk, \
+        "the gate fires outside the SA-10's reach, is blind on the target's own radars, and the go call names a Tor still up (v0.39.22)"
     assert "local function seadsGone(" in _hk and '"seads-gone"' in _hk and "the SEAD flights are down or gone" in _hk, "the DEAD flight aborts when every SEAD flight on the site is down or gone"
     assert '"shots":%s' in _hk and "logShot" in _hk and "getTarget" in _hk, "every shot and hit is logged in the state file"
     assert "you=true" in _hk and "SOUND_YOU" in _hk and "GATES = { {t=100" in _hk

@@ -200,10 +200,16 @@ class Session:
         f = fl[0]
         base, spec, tgt = st.bases[f.base_id], AIRCRAFT[f.aircraft], st.assets[p.objective.target_id]
         try:
-            mshl = tm.safe_marshal(st, (base.x, base.y), bearing(base.x, base.y, tgt.x, tgt.y))
-            g = make_geometry(base.x, base.y, tgt.x, tgt.y, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
+            bx, by = base.x, base.y
+            if base.kind == BaseKind.CARRIER:                          # the builder slides the carrier back for the sortie: time it from there
+                from .mission_builder import carrier_station
+                spot = carrier_station(st, base, tgt.x, tgt.y, self.options.carrier_min_enemy_nm)
+                if spot:
+                    bx, by = spot[0], spot[1]
+            mshl = tm.safe_marshal(st, (bx, by), bearing(bx, by, tgt.x, tgt.y))
+            g = make_geometry(bx, by, tgt.x, tgt.y, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
             um = tm.umbrella_site(st, tgt)
-            wps = plan_route(Role.SEAD, (base.x, base.y), g, spec.profile, is_player=False, tanker_xy=None,
+            wps = plan_route(Role.SEAD, (bx, by), g, spec.profile, is_player=False, tanker_xy=None,
                              keep_out=(um.x, um.y, HARM_LAUNCH_NM) if um else None)
             assign_times(wps, 0.0)
             push, obj = next(w for w in wps if w.name == "PUSH"), objective_wp(wps)
