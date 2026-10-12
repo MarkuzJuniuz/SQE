@@ -1,3 +1,10 @@
+## v0.39.17
+
+* **Aborting DEAD flights go home, not back over the target.** In the v0.39.16 run, Viper 1 got the `seads-gone` abort at 1255 s but flew on toward the Sukhumi site (39.8 km to 33.8 km in 60 s), dropped two GBU-31s and lost Viper 1-3 to the Tor. The abort pointed at the egress waypoint itself, which lies past the target. It now points at the waypoint after egress, the way home.
+* Sweeps and escorts that abort are unaffected (they carry no egress point).
+* Untested in DCS. Check: an AI strike that aborts turns onto the return leg, and its distance to the site grows in the 60 s after the abort.
+* Stacked on the catch-up branch (v0.39.16 and earlier are merged).
+
 ## v0.39.16
 
 * **Briefing matches the current behaviour.** The DEAD briefing now says the DEAD package follows the SEAD by the real gap (10 minutes, read from `DEAD_STAGE_GAP_MIN`; it said a hardcoded 25). The strike briefing now describes the hold, the AWACS hold, go and RTB calls, and the abort conditions (timeout, low fuel, every SEAD flight down or gone).

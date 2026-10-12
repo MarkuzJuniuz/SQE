@@ -1216,7 +1216,9 @@ class MissionBuilder:
             tw_ = objective_wp(wps)
             ti_ = next((k for k, w in enumerate(wps[first:]) if w is tw_), 1)
             ai_ = bool(not f.is_player or o.player_is_ai)
-            to_ = (n0_ + added.index("EGR") + 1) if "EGR" in added else None          # Lua route indices are 1-based
+            # Lua route indices are 1-based. The abort goes to the point AFTER egress (the way home). Pointing at EGR itself sent the
+            # v0.39.16 run's Viper 1 back over the target (39.8 to 33.8 km in 60 s, GBUs dropped, a jet lost to the Tor).
+            to_ = (n0_ + added.index("EGR") + 2) if "EGR" in added else None
             if to_ is None and ai_ and wps[first:]:
                 lw = wps[-1]                                            # a stand-off flight has no egress: a return point on the way home, so the turn-back
                 bx, by = offset(base.x, base.y, bearing(base.x, base.y, lw.x, lw.y), 20 * NM)   # does not cut straight from cruise altitude to the runway
