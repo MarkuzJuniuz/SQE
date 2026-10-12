@@ -37,6 +37,8 @@ def main():
         if not spec.player_flyable:
             continue
         s.new(f"Smoke {aircraft}", aircraft, 3, seed=7)         # level 3 so the bomber raid objective exists too
+        _cs = [f.callsign for p in s.packages() for f in p.flights]
+        assert len(_cs) == len(set(_cs)), f"no two flights share a callsign in a day: {sorted(c for c in _cs if _cs.count(c) > 1)}"
         opts = [p for p in s.packages() if s.flyable(p)]
         if not opts:
             print(f"[{aircraft}] no flyable package today (fine for niche jets like the A-10)"); continue
@@ -1365,7 +1367,7 @@ def main():
             _ad(_st, _mn, _d); assert abs(_st.assets[_a.id].health - _str) < 0.02, "no losses: the sector keeps its strength"
         _cnt[_str] = sum(_vals) / max(1, len(_vals))
     assert _cnt[1.0] > 1.5 * _cnt[0.3], f"a full-strength column is far denser than a beaten one: {_cnt}"
-    assert s.last_build.counts["units"] < 250
+    assert s.last_build.counts["units"] < 250, s.last_build.counts
     print(f"[dense columns] vehicles in a front-line column: {_cnt[1.0]:.0f} at full strength, {_cnt[0.3]:.0f} at 30%; no losses leaves the strength unchanged")
     # SEAD wears the defence down: each failed day raises the next day's odds, a failed attempt still costs the site, level 3 opens the valve after 2 days
     from sqe import war as _w4

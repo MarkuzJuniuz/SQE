@@ -1,3 +1,8 @@
+## v0.39.23
+
+* **No two flights share a name in a day.** Callsign numbers used to restart in every package, so the tasking order could list two Viper 1s in different packages. The planner now numbers flights across the whole day (Viper 1 to Viper 9). DCS flight numbers stop at 9, so a squadron flying more than nine flights in a day carries on under a spare callsign of its type that no squadron owns. An emergency package continues the day's numbering.
+* Smoke test: every planned day is checked for duplicate callsigns.
+
 ## v0.39.22
 
 Fixes from the v0.39.21 run (Sukhumi SA-6 SEAD, Day 1). The run worked (both SA-10s, the SA-11, the SA-6s and both Tors suppressed or dead, the first DEAD hold that resumed), but several of our own bugs drove the losses.
