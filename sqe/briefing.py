@@ -57,12 +57,14 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
             f"Weather: {x['weather']}." + ((" Loadouts changed for the weather: " + " ".join(x["wx_notes"])) if x.get("wx_notes") else "")]
     if obj.type.value == "DEAD" and obj.aim == "DEAD":
         sit += ["", "A SEAD package goes in ahead of you to blind this site's radars. If any search or track radar is still up when you reach the gate, "
-                    "the strike is called off."]
+                    "you hold outside the threat and re-check. AWACS calls hold, go, or RTB. You break off and RTB on a timeout, on low fuel, "
+                    "or when every SEAD flight on the site is down or gone."]
     elif obj.type.value == "DEAD" and obj.aim == "SEAD":
         from .difficulty import get as _gd2
         from .war import WarSimulator as _WS, sead_fail as _sf
         _p = _WS(_gd2(state.level)).sead_p(state, pkg)
-        sit += ["", "Your job is only to blind the radars. A DEAD package follows about 25 minutes behind you and goes in only if the radars are out. "
+        from .war import DEAD_STAGE_GAP_MIN as _gap
+        sit += ["", f"Your job is only to blind the radars. A DEAD package follows about {_gap} minutes behind you and goes in only if the radars are out. "
                     f"Intelligence puts the chance of blinding this site at about {round(_p * 100 / 5) * 5:.0f}%" + (f", better than it was: this site has beaten us {_sf(state, obj.target_id)} time{'s' if _sf(state, obj.target_id) != 1 else ''} running and its crews and positions are known." if _sf(state, obj.target_id) else ".")]
     if x.get("intel"):
         sit += ["", "Intelligence: " + " ".join(x["intel"])]
