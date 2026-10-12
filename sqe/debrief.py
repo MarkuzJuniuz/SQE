@@ -415,6 +415,20 @@ end
 local HOLD_S = 720           -- an AI DEAD flight whose radars are still up holds this long (12 min) before it breaks off
 local HOLD_CHECK_S = 60      -- and re-checks the radars this often while it holds
 local HOLD_FUEL = 0.30       -- below this fuel fraction the holding flight breaks off at once: it must have fuel for the strike and the way home
+-- every SEAD flight of this site is down or gone (no airborne unit left): the blinding has failed and there is no reason to go in.
+-- Only counts when the mission has SEAD flights on the site at all; an error reading a group counts it as still flying.
+local function seadsGone(gs)
+  local names, any = {}, false
+  for _, gt in ipairs(gs.gates) do
+    for _, n in ipairs(gt.seads or {}) do names[#names + 1] = n; any = true end
+  end
+  if not any then return false end
+  for _, n in ipairs(names) do
+    local ok, alive = pcall(function() local g = Group.getByName(n); return g ~= nil and g:getSize() > 0 end)
+    if not ok or alive then return false end
+  end
+  return true
+end
 local function siteOf(gs)
   for _, x in ipairs(SITES) do if x.id == gs.site then return x end end
 end
@@ -427,7 +441,10 @@ local function breakOff(gs, why)
     say(s.who .. ": abort, abort. " .. s.label .. " radars still up, DEAD flight break off.", gs.gates[1].you)
   end
   for _, gt in ipairs(gs.gates) do
-    if gt.dead then say(s.who .. ": abort, RTB. " .. s.label .. " not blind in time (" .. why .. ").", gt.you) end
+    if gt.dead then
+      local why_txt = ({ ["hold-timeout"] = "hold time is up", ["hold-fuel"] = "fuel is low", ["seads-gone"] = "the SEAD flights are down or gone" })[why] or ("not blind in time (" .. why .. ")")
+      say(s.who .. ": abort, RTB. " .. s.label .. " " .. why_txt .. ".", gt.you)
+    end
   end
   for _, gt in ipairs(gs.gates) do
     local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = true, cmd = false, by = why }
@@ -504,6 +521,7 @@ local function holdCheck(gs, t)
   local blind = (not s) or s.nrad <= 0 or s.nalive <= 0
   if blind then resume(gs); return nil end
   if timer.getTime() - gs.holdAt >= HOLD_S then breakOff(gs, "hold-timeout"); return nil end
+  if seadsGone(gs) then breakOff(gs, "seads-gone"); return nil end
   if holdFuelLow(gs) then breakOff(gs, "hold-fuel"); return nil end
   return t + HOLD_CHECK_S
 end
@@ -513,6 +531,7 @@ local function decide(gs, why)
   if not blind then
     local canHold = false
     for _, gt in ipairs(gs.gates) do if gt.dead then canHold = true end end
+    if canHold and seadsGone(gs) then breakOff(gs, "seads-gone"); return end
     if canHold and why ~= "hold-timeout" and why ~= "hold-fuel" then
       if not gs.tp then gs.tp = sitePoint(s) end
       holdGroups(gs)
@@ -563,56 +582,6 @@ end
 -- when the DEAD flight's lead is within GATE_M of the site (so a late flight is judged where it really is), or at the clock time as a
 -- fallback (flight gone). Every gate is logged in the state file: when it ran, why, radars left, whether the command went through, and
 -- the flight's distance to the target then and 60 s later.
-local GATE_M = __GATEKM__ * 1000
-local function gdist(grpName, tp)
-  if not tp then return nil end
-  local ok, d = pcall(function()
-    local g = Group.getByName(grpName)
-    local u = g and g:getUnit(1)
-    if not u then return nil end
-    local a = u:getPoint()
-    return math.sqrt((a.x - tp.x) ^ 2 + (a.z - tp.z) ^ 2)
-  end)
-  if ok then return d end
-  return nil
-end
-local gsites, gorder = {}, {}
-for _, gt in ipairs(GATES) do
-  local gs = gsites[gt.site]
-  if not gs then gs = { site = gt.site, gates = {}, fall = 0, done = false }; gsites[gt.site] = gs; gorder[#gorder + 1] = gs end
-  gs.gates[#gs.gates + 1] = gt
-  if gt.t + 300 > gs.fall then gs.fall = gt.t + 300 end
-end
-local function sitePoint(s)
-  for _, un in ipairs(s.units) do
-    local u = Unit.getByName(un)
-    if u then local ok, p = pcall(function() return u:getPoint() end); if ok and p then return p end end
-  end
-end
-local function decide(gs, why)
-  gs.done = true
-  local s
-  for _, x in ipairs(SITES) do if x.id == gs.site then s = x end end
-  local blind = (not s) or s.nrad <= 0 or s.nalive <= 0
-  if not blind and not aborted[gs.site] then
-    aborted[gs.site] = true
-    say(s.who .. ": abort, abort. " .. s.label .. " radars still up, DEAD flight break off.", gs.gates[1].you)
-  end
-  for _, gt in ipairs(gs.gates) do
-    local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = not blind, cmd = false, by = why }
-    gateLog[#gateLog + 1] = e
-    e.tp = gs.tp
-    e.d0 = gdist(gt.grp, e.tp)
-    if not blind and gt.ai then
-      local g = Group.getByName(gt.grp)
-      if g and g:getController() then
-        e.cmd = pcall(function() g:getController():setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = gt.from, goToWaypointIndex = gt.to } }) end)
-      end
-      timer.scheduleFunction(function() e.d1 = gdist(gt.grp, e.tp); dump(); return nil end, nil, timer.getTime() + 60)
-    end
-  end
-  dump()
-end
 timer.scheduleFunction(function(_, t)
   local now = timer.getTime()
   local left = false
@@ -667,7 +636,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
                    f'units={lst(x["units"])}, trk={lst(x["trk"])}, srch={lst(x["srch"])}}}' for x in (sites or []))
     ru = ", ".join(f'{{x={r["x"]:.1f}, z={r["z"]:.1f}, n={int(r["n"])}, r={float(r["r"]):.0f}, p={int(r["p"])}, dn={float(r["dn"]):.2f}, pw={int(r["pw"])}, s={float(r["s"]):.2f}}}'
                    for r in (ruins or []))
-    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}}}'
+    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}}}'
                    for x in (gates or []))
     return (LUA_HOOK.replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)

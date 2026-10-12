@@ -1,3 +1,11 @@
+## v0.39.15
+
+* **Early abort when the SEADs have failed.** If every SEAD flight on a site is down or gone while its radars are still up, the DEAD flight calls "abort, RTB" straight away instead of holding until the timeout. The check runs at the gate and on every hold re-check. AWACS gives the reason: "the SEAD flights are down or gone." The player and AI get the same calls.
+* The SEAD flights are every SEAD group on the site in the mission, merged packages included. A SEAD flight counts as gone once it has no airborne unit, so a SEAD that lands and despawns counts too.
+* **Fix:** v0.39.12 to v0.39.14 had the gate code defined twice in the hook. The second copy shadowed the hold, so the hold never ran in DCS. There is now one copy, and the smoke test fails if it comes back.
+* Untested in DCS. Check: the hold actually orbits and re-checks (the v0.39.12 check was never run); the RTB call comes when the SEADs are down; the hold still goes in when blind.
+* Stacked on PR #12 (v0.39.14); merge #12 first.
+
 ## v0.39.14
 
 * **Your own DEAD flight holds too, the same way AI does.** When the radars are still up at the gate, the player's DEAD flight gets the hold calls instead of an immediate turn back. AWACS calls the hold point: "Springfield 1, radars still up. Hold outside, rechecking." It re-checks each minute and calls "radars are down. Go, go, go." when the site is blind. If it times out, runs low on fuel or cannot go in, AWACS calls "abort, RTB."
