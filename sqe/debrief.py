@@ -427,6 +427,9 @@ local function breakOff(gs, why)
     say(s.who .. ": abort, abort. " .. s.label .. " radars still up, DEAD flight break off.", gs.gates[1].you)
   end
   for _, gt in ipairs(gs.gates) do
+    if gt.dead then say(s.who .. ": abort, RTB. " .. s.label .. " not blind in time (" .. why .. ").", gt.you) end
+  end
+  for _, gt in ipairs(gs.gates) do
     local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = true, cmd = false, by = why }
     gateLog[#gateLog + 1] = e
     e.tp = gs.tp
@@ -459,14 +462,18 @@ local function resume(gs)
       end
     end
   end
-  say(s.who .. ": " .. s.label .. " radars are down. DEAD flight is in.", gs.gates[1].you)
+  for _, gt in ipairs(gs.gates) do
+    if gt.dead then say(s.who .. ": " .. s.label .. " radars are down. Go, go, go.", gt.you) end
+  end
   dump()
 end
 local function holdGroups(gs)
   gs.holding = true
   gs.holdAt = timer.getTime()
   local s = siteOf(gs)
-  say(s.who .. ": " .. s.label .. " radars still up. DEAD flight holds outside, rechecking.", gs.gates[1].you)
+  for _, gt in ipairs(gs.gates) do
+    if gt.dead then say(s.who .. ": " .. s.label .. " radars still up. Hold outside, rechecking.", gt.you) end
+  end
   for _, gt in ipairs(gs.gates) do
     if gt.ai and gt.dead then
       local g = Group.getByName(gt.grp)
@@ -483,7 +490,7 @@ local function holdGroups(gs)
 end
 local function holdFuelLow(gs)
   for _, gt in ipairs(gs.gates) do
-    if gt.ai and gt.dead then
+    if gt.dead then
       local g = Group.getByName(gt.grp)
       local okf, f = pcall(function() return g:getUnit(1):getFuel() end)
       if okf and f and f < HOLD_FUEL then return true end
@@ -505,7 +512,7 @@ local function decide(gs, why)
   local blind = (not s) or s.nrad <= 0 or s.nalive <= 0
   if not blind then
     local canHold = false
-    for _, gt in ipairs(gs.gates) do if gt.ai and gt.dead then canHold = true end end
+    for _, gt in ipairs(gs.gates) do if gt.dead then canHold = true end end
     if canHold and why ~= "hold-timeout" and why ~= "hold-fuel" then
       if not gs.tp then gs.tp = sitePoint(s) end
       holdGroups(gs)

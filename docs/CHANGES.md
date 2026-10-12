@@ -1,3 +1,11 @@
+## v0.39.14
+
+* **Your own DEAD flight holds too, the same way AI does.** When the radars are still up at the gate, the player's DEAD flight gets the hold calls instead of an immediate turn back. AWACS calls the hold point: "Springfield 1, radars still up. Hold outside, rechecking." It re-checks each minute and calls "radars are down. Go, go, go." when the site is blind. If it times out, runs low on fuel or cannot go in, AWACS calls "abort, RTB."
+* **The hold is advisory for the player.** The game does not orbit your jet; the calls tell you when to hold, go or come home. AI DEAD flights get the same calls for immersion and still orbit and resume as before.
+* **Your call uses your beep**, the same as other player calls. AI calls use the AI beep.
+* Untested in DCS. Check: the hold call and beep come on the player's gate; the go call comes once the site is blind; the RTB call comes on timeout or low fuel.
+* Stacked on PR #11 (v0.39.13); merge #11 first.
+
 ## v0.39.13
 
 * **SEAD packages on the same ground go in together.** SEAD packages whose targets lie within 60 km of each other are synchronised: each push is moved so that its estimated arrival lands on the latest arrival of the group, so the earlier flights wait rather than going in alone. In the v0.39.11 run the USAF SEAD salvo went in at about 14 minutes and the Navy's, on the same ground, at about 30. The estimate is straight-line at 400 kt; the mission builder still builds the real route.
