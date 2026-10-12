@@ -65,9 +65,10 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         _p = _WS(_gd2(state.level)).sead_p(state, pkg)
         from .war import DEAD_STAGE_GAP_MIN as _gap
         if getattr(pf, "kit", "") == "JSOW":
-            sit += ["", "You are the JSOW slingers. Release your AGM-154As on the radars' last-known positions from stand-off range; your HARM shooters "
-                        "push about three minutes behind you so the JSOWs and the HARMs arrive together. A radar that keeps tracking is the HARMs' kill; "
-                        "one that shuts down to dodge them is still where it was last seen, and that is where your JSOWs land."]
+            sit += ["", "You are the JSOW slingers. You push with the HARM shooters and come in on your own axis, about 30 degrees off theirs, so the "
+                        "site has two directions to watch. The HARMs go first; release your AGM-154As on the radars' last-known positions from stand-off "
+                        "range. A radar that keeps tracking is the HARMs' kill; one that shuts down to dodge them is still where it was last seen, and "
+                        "that is where your JSOWs land."]
         sit += ["", f"Your job is only to blind the radars. A DEAD package follows about {_gap} minutes behind you and goes in only if the radars are out. "
                     f"Intelligence puts the chance of blinding this site at about {round(_p * 100 / 5) * 5:.0f}%" + (f", better than it was: this site has beaten us {_sf(state, obj.target_id)} time{'s' if _sf(state, obj.target_id) != 1 else ''} running and its crews and positions are known." if _sf(state, obj.target_id) else ".")]
     if x.get("intel"):
