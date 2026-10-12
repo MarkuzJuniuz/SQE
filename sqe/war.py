@@ -15,6 +15,11 @@ from .state import CampaignState
 ROLE_WEIGHT = {Role.STRIKE: 1.0, Role.SEAD: 0.9, Role.ESCORT: 0.6, Role.SWEEP: 0.7, Role.CAP: 0.6, Role.CAS: 1.0}
 
 
+def _suppressor(f) -> bool:
+    """A flight that works on the radars: a SEAD flight, or a SEAD package's JSOW slingers (aimed at the radars, not the launchers)."""
+    return f.role == Role.SEAD or getattr(f, "kit", "") == "JSOW"
+
+
 NM = 1852.0
 
 
@@ -253,7 +258,7 @@ class WarSimulator:
         t = state.assets[pkg.objective.target_id]
         garrison = sum(g.health for g in state.assets.values() if g.guards == t.id and not g.destroyed)
         site = ((1.0 + 0.8 * self.d.iads) * t.health + 0.4 * garrison) * (1.0 - ecm.SITE_CUT * ecm.package_cover(pkg))
-        s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in pkg.flights if f.role == Role.SEAD)
+        s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in pkg.flights if _suppressor(f))        # JSOW slingers add to the overwhelm
         if not s_sead:
             return 0.0
         return min(0.95, s_sead / (s_sead + site) + min(SEAD_LEARN_MAX, SEAD_LEARN * sead_fail(state, t.id)))
@@ -263,8 +268,8 @@ class WarSimulator:
         then goes in: against a blinded site it usually destroys it; against an active one it takes losses and rarely finishes it."""
         d, rng = self.d, self.rng
         t = state.assets[pkg.objective.target_id]
-        sead = [f for f in pkg.flights if f.role == Role.SEAD]
-        dead = [f for f in pkg.flights if f.role == Role.STRIKE]
+        sead = [f for f in pkg.flights if _suppressor(f)]
+        dead = [f for f in pkg.flights if f.role == Role.STRIKE and not _suppressor(f)]
         garrison = sum(g.health for g in state.assets.values() if g.guards == t.id and not g.destroyed)
         site = (1.0 + 0.8 * d.iads) * t.health + 0.4 * garrison
         s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in sead)
@@ -306,9 +311,9 @@ class WarSimulator:
             if f.tag:
                 continue
             exposure = 1.0
-            if f.role == Role.STRIKE:
+            if f.role == Role.STRIKE and not _suppressor(f):
                 exposure = 0.5 if blinded else 1.8          # an unsuppressed site shoots at the DEAD flight
-            elif f.role == Role.SEAD:
+            elif _suppressor(f):
                 exposure = 1.0 if blinded else 1.3
             lp = min(0.9, loss_base * exposure * (1.0 - ecm.LOSS_CUT * ecm.package_cover(pkg)) * (defense / (s_dead + s_sead + defense) if (s_dead + s_sead + defense) else 0.0))
             n_lost = count_roll(rng, f.count, lp, d.variance)
@@ -329,7 +334,7 @@ class WarSimulator:
                     "objective": pkg.objective.description, "roll": {"success": False}}
         if pkg.objective.type == ObjectiveType.FLEET_DEFENSE:
             return self._resolve_raid(state, pkg, force)
-        if pkg.objective.type == ObjectiveType.DEAD and (any(f.role == Role.STRIKE for f in pkg.flights) or pkg.objective.aim == "SEAD"):
+        if pkg.objective.type == ObjectiveType.DEAD and (any(f.role == Role.STRIKE and not _suppressor(f) for f in pkg.flights) or pkg.objective.aim == "SEAD"):
             return self._resolve_dead(state, pkg, force)
         p, strength, defense = self.odds(state, pkg)
         success = force["success"] if force and "success" in force else chance(rng, p, d.variance)

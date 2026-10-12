@@ -143,6 +143,7 @@ def main():
     under = None
     for seed_u in range(1, 41):
         bs.new("Smoke under", "F-14BU", 2, seed=seed_u)
+        bs.state.campaign_id = f"{0x0dd0000 + seed_u:010x}"; bs.plan_day()       # pinned: the dice come from the campaign id, which is random
         for pk_u in bs.packages():
             if bs.flyable(pk_u) and any(c.start < pk_u.start for c in bs.merge_candidates(pk_u)):
                 ru = bs.fly(pk_u.number, bs.flyable(pk_u)[0].id)
@@ -179,6 +180,7 @@ def main():
         rs = Session(AppSettings(dcs_saves=str(TMP / f"rs{sd}"), persist=False)); (TMP / f"rs{sd}").mkdir(exist_ok=True)
         rs.settings.merge_back_min = 0
         rs.new("dev", "F-14BU", 3, seed=sd)
+        rs.state.campaign_id = f"{0x5eed000 + sd:010x}"; rs.plan_day()       # the dice are seeded from the campaign id, which is random: pin it so this check repeats
         for p_ in rs.packages():
             if rs.flyable(p_) and rs.ruin_candidates(p_, rs.merge_candidates(p_)):
                 rr = rs.fly(p_.number, rs.flyable(p_)[0].id)
@@ -934,6 +936,30 @@ def main():
     _ln2 = json.load(open(Path(__file__).resolve().parent.parent / ".vscode" / "launch.json"))["configurations"]
     assert any(c_.get("args") == ["--ai-test", "--late-sead"] for c_ in _ln2), "the debug dropdown has the hold test"
     print(f"[late sead] --late-sead puts the DEAD stage {_eng2.LATE_SEAD_MIN - _gap2} min ahead of its SEAD (normally {_gap2} min behind): the hold test")
+    # JSOW slingers (v0.39.19): SEAD packages carry a JSOW flight (Hornet 4 / Viper 2 AGM-154A per jet) timed so the JSOWs and HARMs arrive together
+    from sqe.loadouts import JSOW_PER_JET as _jpj, LoadoutLibrary as _LL
+    from sqe.packages import Package as _Pkg
+    from sqe.mission_builder import stagger as _stg2, JSOW_LEAD_S as _jl, DEAD_SEAD_LEAD_S as _dl
+    from sqe.war import _suppressor as _sup
+    from sqe.models import Role as _Rl2
+    _lo = _LL()
+    _h = _lo.for_role("FA-18C", _Rl2.STRIKE, "JSOW"); _v = _lo.for_role("F-16C", _Rl2.STRIKE, "JSOW")
+    assert _h[2]["CLSID"] == _h[8]["CLSID"] == "{BRU55_2*AGM-154A}" and all(_h[k]["CLSID"] == "{FPU_8A_FUEL_TANK}" for k in (3, 5, 7)), "Hornet JSOW kit: 4 AGM-154A with tanks"
+    assert _v[3]["CLSID"] == _v[7]["CLSID"] == "{AGM-154A}" and sum("154" in x["CLSID"] for x in _v.values()) == 2, "Viper JSOW kit: 2 AGM-154A"
+    assert _jpj == {"FA-18C": 4, "F-16C": 2}
+    s.new("Jsow", "F-16C", 3, seed=1); s.late_sead_min = 0; s.plan_day()
+    _sp3 = [p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and p_.objective.aim == "SEAD"]
+    _jf = [f_ for p_ in _sp3 for f_ in p_.flights if f_.kit == "JSOW"]
+    assert _jf and all(f_.aircraft in _jpj and f_.role == _Rl2.STRIKE for f_ in _jf), "SEAD packages carry JSOW slingers, Hornets or Vipers only"
+    assert not any(f_.kit for p_ in s.packages() if p_.objective.aim != "SEAD" for f_ in p_.flights), "only SEAD packages get the JSOW slot"
+    _pj = next(p_ for p_ in _sp3 if any(f_.kit == "JSOW" for f_ in p_.flights))
+    assert any(f_.kit == "JSOW" for f_ in _Pkg.from_dict(_pj.to_dict()).flights), "the JSOW kit survives the save"
+    assert (_stg2(_pj, _Rl2.SWEEP), _stg2(_pj, _Rl2.STRIKE), _stg2(_pj, _Rl2.SEAD)) == (-_dl - _jl - 30, -_dl - _jl, -_dl), "JSOW pushes ahead of the HARMs, the sweep ahead of both"
+    assert all(_sup(f_) for f_ in _jf), "the war sim counts JSOW slingers as suppression, not as a DEAD strike"
+    s.ai_test = True; s.fly(_pj.number, None); s.ai_test = False
+    _mj = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
+    assert "{AGM-154A}" in _mj and '["name"]="JSOW"' in _mj and _mj.count('["id"]="Bombing"') >= 1, "the JSOW flight is built: AGM-154A, a JSOW launch point, release tasks"
+    print(f"[jsow] {len(_jf)} JSOW flights in {len(_sp3)} SEAD packages; Hornet 4 / Viper 2 AGM-154A; they push {_jl} s ahead of the HARM shooters; built with a launch point and release tasks")
     # DEAD abort gate: SEAD leads by 5 min (sweep and escorts keep their 30 s spacing around it), the AI flights carry a radar check, calls to you sound different
     import re as _re
     from sqe import debrief as _db
@@ -1070,7 +1096,8 @@ def main():
     assert _se and _de and not any(p_.objective.type.value == "DEAD" and not p_.objective.aim for p_ in _pk), "SEAD / DEAD jobs come in two stages"
     for _d_ in _de:
         _s_ = next(p_ for p_ in _se if p_.objective.target_id == _d_.objective.target_id)
-        assert {f_.role for f_ in _s_.flights if not f_.tag} <= {Role.SEAD, Role.ESCORT, Role.SWEEP} and Role.SEAD in {f_.role for f_ in _s_.flights}
+        assert {f_.role for f_ in _s_.flights if not f_.tag and f_.kit != "JSOW"} <= {Role.SEAD, Role.ESCORT, Role.SWEEP} and Role.SEAD in {f_.role for f_ in _s_.flights}
+        assert all(f_.role == Role.STRIKE for f_ in _s_.flights if f_.kit == "JSOW"), "the only strike flight in a SEAD package is its JSOW slingers"
         assert Role.STRIKE in {f_.role for f_ in _d_.flights} and Role.SEAD not in {f_.role for f_ in _d_.flights}
         assert 0 <= _hm(_d_) - _hm(_s_) <= 25 + 1, "the DEAD stage follows the SEAD stage by 25 minutes"
         assert _d_.number > _s_.number

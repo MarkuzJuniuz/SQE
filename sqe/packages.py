@@ -6,7 +6,7 @@ import random
 from dataclasses import dataclass, field, asdict
 from . import threat
 from . import threatmap as tm
-from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM
+from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM, JSOW_PER_JET
 from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER
 from .models import Objective, ObjectiveType, Role, BaseKind, RefuelMethod
 from .state import CampaignState
@@ -29,6 +29,7 @@ class Slot:
     required: bool = True
     only_if_defended: bool = False
     tag: str = ""                      # "" | HAVCAP | BASECAP (support flights: AI only)
+    kit: str = ""                      # "" | JSOW (a strike slot that only JSOW-capable jets fill, see loadouts.JSOW_PER_JET)
 
 
 TEMPLATES = {
@@ -44,6 +45,7 @@ _FLEET = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
 _TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM", Role.ESCORT: "Escort package",
          Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
 _DEAD_TASK = {Role.SEAD: "SEAD: blind the radars ahead of the DEAD flight", Role.STRIKE: "DEAD: destroy the SAM site (the SEAD package goes in ahead of you; call it off if the radars are up)"}
+_KIT_TASK = {"JSOW": "JSOW: AGM-154A on the radars' last-known positions, on the HARM salvo's time; stand-off release, then home"}
 _TAG_TASK = {"HAVCAP": "HAVCAP (guards tanker and AWACS)", "BASECAP": "Base CAP"}
 
 
@@ -59,6 +61,7 @@ class FlightPlan:
     task: str
     is_player: bool = False
     tag: str = ""
+    kit: str = ""                      # "JSOW": a JSOW slinger in a SEAD package (its loadout, route and attack differ from a plain strike)
 
 
 @dataclass
@@ -169,7 +172,9 @@ class PackageBuilder:
     def _slots(self, obj, defended, n_fl) -> list:
         tmpl = TEMPLATES[obj.type]
         if obj.type == ObjectiveType.DEAD and obj.aim == "SEAD":            # SEAD first: a package that only blinds the radars
-            tmpl = [Slot(Role.SEAD, 2), Slot(Role.SEAD, 2, False)]
+            # ...with JSOW slingers alongside the HARM shooters, timed so both arrive together: a radar that stays up is a HARM's target,
+            # one that shuts down is the JSOW's (aimed at where it was last seen). Optional: only Hornet and Viper squadrons fly it.
+            tmpl = [Slot(Role.SEAD, 2), Slot(Role.SEAD, 2, False), Slot(Role.STRIKE, 4, False, kit="JSOW")]
         elif obj.type == ObjectiveType.DEAD and obj.aim == "DEAD":          # ...and the DEAD package that follows it once they are blind
             tmpl = [Slot(Role.STRIKE, 4), Slot(Role.ESCORT, 2)]
         slots = [copy.copy(s) for s in tmpl if not (s.only_if_defended and not defended)]
@@ -205,7 +210,7 @@ class PackageBuilder:
         if for_player and pp:
             psq = st.squadrons[pp.squadron_id]
             spec = AIRCRAFT[psq.aircraft]
-            ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles
+            ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles and (s.kit != "JSOW" or psq.aircraft in JSOW_PER_JET)
                   and self._in_range(psq.id, tx, ty) and ledger.free[psq.id] >= 2]
             if not ok:
                 raise NoPlayerSlot(f"{psq.name} cannot fly any role in: {obj.description}")
@@ -250,7 +255,8 @@ class PackageBuilder:
             used[sq.callsign] = used.get(sq.callsign, 0) + 1
             pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", f"{sq.callsign} {used[sq.callsign]}", slot.role, sq.id,
                                           sq.aircraft, count, sq.base_id,
-                                          _TAG_TASK.get(slot.tag) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role], is_pl, slot.tag))
+                                          _KIT_TASK.get(slot.kit) or _TAG_TASK.get(slot.tag) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role],
+                                          is_pl, slot.tag, slot.kit))
         pkg.support = self._support(pkg)
         pkg.jtac = obj.type in JTAC_OBJECTIVES
         return pkg
@@ -313,7 +319,8 @@ class PackageBuilder:
     def _pick_squadron(self, slot: Slot, tx, ty, ledger: Ledger, lead_service):
         """Prefer the lead's service; cross over only when sound (same-service option missing, or the other base is >=30% closer)."""
         cands = [sq for sq in self.state.squadrons.values()
-                 if slot.role in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2 and self._in_range(sq.id, tx, ty)]
+                 if slot.role in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2 and self._in_range(sq.id, tx, ty)
+                 and (slot.kit != "JSOW" or sq.aircraft in JSOW_PER_JET)]
         if not cands:
             return None
         key = lambda sq: self._dist_nm(sq.id, tx, ty) - 40 * (ledger.free[sq.id] / max(1, sq.authorized))
