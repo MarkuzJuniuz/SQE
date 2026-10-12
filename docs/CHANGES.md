@@ -1,3 +1,14 @@
+## v0.39.24
+
+Fix from the v0.39.23 run: strikers with nothing but guns left turned on fresh MiGs and Su-27s, and most of the coalition's air losses were ground-attack flights that never left after their task.
+
+* **Ground-attack flights stay on their job.** Every AI strike, DEAD, SEAD, JSOW and CAS flight now takes off with "restrict air-to-air attack" on. On the way in it evades when attacked but never turns to fight aircraft. At its attack point it goes weapons free on the ground target only.
+* **Self-defence after the attack.** At the egress point, jets carrying radar missiles (F-16, F/A-18, F-14: AIM-120 or AIM-54 on their strike loadouts) switch to return fire: they shoot back at whoever shoots at them, but don't go hunting. The A-10 stays restricted all the way home and relies on the air cover.
+* **Home when the air-to-ground load is gone.** "RTB when out of ammo" is set for bombs (guided, iron, cluster), air-to-ground missiles (HARM, JSOW, Maverick) and rockets. Not guns or air-to-air missiles, so an empty bomber with a gun and two Sidewinders still goes home.
+* Strikers that had no ROE at all (DCS default, which lets them open fire on anything) now get return fire on the way in and weapons free at the target, like the SEAD flights.
+* Your own flight is not changed: your wingmen still follow your commands.
+* Smoke test: every AI ground-attack flight in a merged mission is checked for the three options and the switch at egress.
+
 ## v0.39.23
 
 * **No two flights share a name in a day.** Callsign numbers used to restart in every package, so the tasking order could list two Viper 1s in different packages. The planner now numbers flights across the whole day (Viper 1 to Viper 9). DCS flight numbers stop at 9, so a squadron flying more than nine flights in a day carries on under a spare callsign of its type that no squadron owns. An emergency package continues the day's numbering.

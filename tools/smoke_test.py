@@ -112,6 +112,24 @@ def main():
                     _stops += [t_["params"]["stopCondition"]["time"] for t_ in _g["route"]["points"][2]["task"]["params"]["tasks"].values() if t_["params"].get("stopCondition")]
     assert _tags and _stops and min(_stops) >= max(m["rtb_s"] for m in res.merged) + 300 - 1, ("HAVCAP / base CAP outlast the merged packages", _stops)
     print(f"[merge] #{pk.number} {pk.objective.type.value} + {[(m['number'], m['type']) for m in res.merged]}: {res.counts['groups']} groups / {res.counts['units']} units")
+    # every AI ground-attack flight stays on its job: no air-to-air on the way in, home when the air-to-ground load is gone, self-defence after the attack
+    from sqe.mission_builder import A2G_WEAPONS as _A2GW
+    _opts = lambda pt_: {t_["params"]["action"]["params"]["name"]: t_["params"]["action"]["params"].get("value") for t_ in pt_["task"]["params"]["tasks"].values()
+                         if t_.get("params", {}).get("action", {}).get("id") == "Option"}
+    _a2g = 0
+    for _cn in _mz["mission"]["coalition"]["blue"]["country"].values():
+        for _g in _cn.get("plane", {}).get("group", {}).values():
+            _us = list(_g["units"].values())
+            if _g.get("task") not in ("Pinpoint Strike", "SEAD", "CAS", "Ground Attack") or any(u_.get("skill") in ("Player", "Client") for u_ in _us):
+                continue
+            _pts = list(_g["route"]["points"].values()); _o0 = _opts(_pts[0])
+            assert _o0.get(14) is True and _o0.get(10) == _A2GW and _o0.get(0) == 3, (_g["name"], "restricted air-to-air, RTB when out of A2G weapons, return fire", _o0)
+            _egr = next((p_ for p_ in _pts if p_.get("name") == "EGR"), None)
+            if _egr is not None and _us[0]["type"].startswith(("F-16", "FA-18", "F-14")):
+                assert _opts(_egr).get(14) is False and _opts(_egr).get(0) == 3, (_g["name"], "self-defence after the attack")
+            _a2g += 1
+    assert _a2g, "no AI ground-attack flight checked"
+    print(f"    {_a2g} AI ground-attack flights: no air-to-air on the way in, RTB when out of A2G weapons, self-defence after the attack")
     prim2 = [g for g in man.groups if g["kind"] == "asset" and g.get("primary_pkgs")]
     assert any(res.merged[0]["id"] in g["primary_pkgs"] for g in prim2), "merged package has no primary target"
     t_late = max(m["tot_s"] for m in res.merged) + 200
