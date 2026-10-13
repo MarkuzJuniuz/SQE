@@ -1,3 +1,11 @@
+## v0.41.8
+
+From the v0.41.6 Sukhumi run: not one red alert pair was called. Gudauta's scramble circle was 29 nm round the field. The stand-off wave stayed outside it: HARM shooters about 32 nm out, now firing from their launch point (open fire) instead of drifting in after other radars, and JSOWs released 40 nm from the SA-10 next to the field. So it HARMed and bombed that SA-10 while the field slept.
+
+* **An enemy field next to a live long-range SAM sees as far as that radar.** A field with a live SA-10 within 15 nm scrambles on a 50 nm circle (at least), so a Standoff DEAD on the SA-10 brings its alert pairs up.
+* Marshal points and the forward tanker keep clear of the bigger circles too. In the test campaign the marshal points stay 15 nm behind their bases.
+* Smoke test: every field next to a live SA-10 has the 50 nm circle.
+
 ## v0.41.7
 
 Protecting friendly bases and support aircraft.

@@ -146,10 +146,20 @@ FIELD_DETECT_NM = 60.0      # an alert field scrambles when blue comes within th
 MARSHAL_FIELD_MARGIN_NM = 10.0   # v0.41.6: a marshal point stays this far outside every enemy field's detection circle
 
 
-def field_detect_nm(field_xy, target_xy) -> float:
-    """v0.41.1: the radius of an enemy field's scramble circle, round the field itself, sized by how far it is from the fight."""
+FIELD_SAM_NM = 15.0         # v0.41.8: a live long-range SAM this close to an enemy field is its radar...
+FIELD_SAM_DETECT_NM = 50.0  # ...and the field then sees this far (the v0.41.6 Gudauta run: the stand-off wave stayed outside a 29 nm circle,
+                            # HARMed and bombed the SA-10 next to the field, and not one alert pair was called)
+
+
+def field_detect_nm(field_xy, target_xy, state=None) -> float:
+    """v0.41.1: the radius of an enemy field's scramble circle, round the field itself, sized by how far it is from the fight.
+    v0.41.8: with state given, a field with a live long-range SAM (an SA-10) within FIELD_SAM_NM sees at least FIELD_SAM_DETECT_NM."""
     d = math.hypot(field_xy[0] - target_xy[0], field_xy[1] - target_xy[1]) / NM
-    return max(25.0, min(FIELD_DETECT_NM, 0.6 * d + 15.0))
+    r = max(25.0, min(FIELD_DETECT_NM, 0.6 * d + 15.0))
+    if state is not None and any(a.variant in UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.25
+                                 and math.hypot(a.x - field_xy[0], a.y - field_xy[1]) / NM <= FIELD_SAM_NM for a in state.assets.values()):
+        r = max(r, FIELD_SAM_DETECT_NM)
+    return r
 
 
 def safe_marshal(state, base_xy, hdg_to_target, target_xy=None, min_enemy_nm: float = 90, ring_margin_nm: float = 20):
@@ -158,7 +168,7 @@ def safe_marshal(state, base_xy, hdg_to_target, target_xy=None, min_enemy_nm: fl
     90 nm (which sent the Senaki Vipers 54 nm south to hold, then back north past their own base). Without it, the old flat distance.
     Tries close-in first, directly behind, then swings to the sides. Returns the best spot found (never None)."""
     bx, by = base_xy
-    enemies = [(ex, ey, (field_detect_nm((ex, ey), target_xy) + MARSHAL_FIELD_MARGIN_NM) if target_xy is not None else min_enemy_nm)
+    enemies = [(ex, ey, (field_detect_nm((ex, ey), target_xy, state) + MARSHAL_FIELD_MARGIN_NM) if target_xy is not None else min_enemy_nm)
                for ex, ey in fighter_bases(state)]
     rs = rings(state, min_range=3)
     back = hdg_to_target + 180
@@ -179,7 +189,7 @@ def safe_marshal(state, base_xy, hdg_to_target, target_xy=None, min_enemy_nm: fl
 def spot_slack(state, x, y, target_xy, ring_margin_nm: float = 20, field_margin_nm: float = MARSHAL_FIELD_MARGIN_NM) -> float:
     """v0.41.7: how far (nm) a friendly orbit at (x, y) is clear of every SAM ring (plus ring_margin_nm) and every enemy field's scramble circle
     (plus field_margin_nm). >= 0 means clear."""
-    fs = [math.hypot(x - ex, y - ey) / NM - field_detect_nm((ex, ey), target_xy) - field_margin_nm for ex, ey in fighter_bases(state)]
+    fs = [math.hypot(x - ex, y - ey) / NM - field_detect_nm((ex, ey), target_xy, state) - field_margin_nm for ex, ey in fighter_bases(state)]
     rs = [(math.hypot(x - a.x, y - a.y) - r) / NM - ring_margin_nm for a, r in rings(state, min_range=3)]
     return min(fs + rs + [1e9])
 

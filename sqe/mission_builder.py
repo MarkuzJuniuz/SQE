@@ -1875,7 +1875,7 @@ class MissionBuilder:
         """v0.41.1: an alert field scrambles on what ITS radar sees: a circle round the field (not round the target), sized by how far the
         field is from the fight (FIELD_DETECT_NM at most). The v0.41.0 Batumi run: an earlier package already airborne inside one big circle
         round the target scrambled all 20 pairs from six fields 10 s into the mission. -> (x, y, radius nm)"""
-        return a.x, a.y, tm.field_detect_nm((a.x, a.y), (tx, ty))
+        return a.x, a.y, tm.field_detect_nm((a.x, a.y), (tx, ty), self.state)
 
     # ---- enemy air picture: what the intelligence briefing says is there IS there, from the first second ----------------------
     @staticmethod
