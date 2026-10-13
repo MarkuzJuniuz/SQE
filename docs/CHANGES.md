@@ -1,3 +1,9 @@
+## v0.40.6
+
+* **Alert groups that cannot fit a field start in the air instead of being left out.** Since v0.39.25 a second alert or reinforcement group at a field whose runway was taken and which has no parking for the type (Gelendzhik, Beslan for red's Su-27s) was dropped, so red was thinner than planned. It is now late-activated in the air 4 km off the field, 2,000 ft, heading for the target, and activated by the same trigger that would have started it on the ground (as if it had just scrambled). Blue DCA alerts at a field get the same; carrier groups are unchanged.
+* **Weather on the new-campaign dialog.** The same choice as Settings > Campaign > Weather, starting from the current setting; your pick is saved to Settings when the campaign is created.
+* Smoke test: no alert group left out for parking in the merged mission; the dialog's weather choice; ECM script and splash damage off by default.
+
 ## v0.40.5
 
 * **New radio layout.** COMM1 (UHF): CH1 AWACS, CH2 tanker, CH3 JTAC (when there is one), CH4 second tanker (when there is one), CH5 divert. COMM2: CH1 your flight, CH2 the tower. The flight stays on COMM2 CH1 because DCS writes the group's frequency onto the first channel that can tune it, whatever preset is set there; putting the tower on CH1 would have had it overwritten.

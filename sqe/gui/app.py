@@ -402,10 +402,16 @@ class MainWindow(QMainWindow):
                 return
         if self._offer_terrain_scan():
             return
-        dlg = NewCampaignDialog(self)
+        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"))
         if dlg.exec() == QDialog.Accepted:
             try:
-                v = dlg.values(); self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], night_ops=v['night_ops'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus')); self.refresh_all()
+                v = dlg.values()
+                self.session.settings.weather_mode = v.get("weather_mode", self.session.settings.weather_mode)
+                try:
+                    self.session.settings.save()
+                except OSError:
+                    pass
+                self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], night_ops=v['night_ops'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus')); self.refresh_all()
             except Exception:
                 QMessageBox.critical(self, "Could not create campaign", traceback.format_exc())
 

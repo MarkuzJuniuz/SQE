@@ -143,6 +143,7 @@ def main():
     _stk = [(a_[0], b_[0]) for i_, a_ in enumerate(_air) for b_ in _air[:i_] if _m3.hypot(a_[1] - b_[1], a_[2] - b_[2]) < 200 and abs(a_[3] - b_[3]) < 100]
     assert not _stk, ("airborne groups spawned on top of each other", _stk)
     assert all(v_ == 1 for v_ in _rw.values()), ("two groups on one runway / catapult", _rw)
+    assert not any("left out: " in w_ and "no parking" in w_ for w_ in res.warnings), "an alert group that cannot fit a field starts in the air instead of being left out"
     # comms (v0.40.5): COMM1 CH1 AWACS, COMM2 CH1 flight (where DCS writes the group frequency) and CH2 the tower, VHF for an Air Force jet
     _pl5 = res.radio
     assert _pl5.comm1[1].label == "AWACS" and _pl5.comm2[1].label == "FLIGHT" and _pl5.comm2[2].label == "ATC" and not any(e_.label == "ATC" for e_ in _pl5.comm1.values()), "radio layout"
@@ -297,7 +298,9 @@ def main():
         assert (_d2.cw.value(), _d2.react.isChecked(), _d2.wxm.currentData(), _d2.mrad.value()) == (40, False, "rain", 35)
         _dlg._make_probe(); _dlg._save()
         assert (TMP / "gsv" / "Missions" / "SQE_TerrainScan.miz").exists()
-        NewCampaignDialog()
+        _nc = NewCampaignDialog(None, "rain")
+        assert _nc.values()["weather_mode"] == "rain", "the new-campaign dialog offers the weather, starting from the current setting"
+        assert _d2.ecm.isChecked() is False and _d2.splash.isChecked() is False, "ECM script and splash damage are off by default"
         print("[gui] settings (5 tabs, scan status) and new-campaign dialogs build; every control round-trips; scan mission button works")
     except ImportError:
         print("[gui] PySide6 not installed here; dialogs not exercised")
