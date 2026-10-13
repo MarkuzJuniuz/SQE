@@ -123,6 +123,23 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         if dist(g.tx, g.ty, *far) > dist(g.tx, g.ty, *g.ip):
             ip_xy = far
     wp.append(Wpt("PUSH", *g.push, alt, p.push_kts, "Push on time, check in with AWACS"))
+    st_ = (g.stand or {}).get(key) if role in (Role.ESCORT, Role.SWEEP) else None
+    if st_ is not None and len(st_) >= 5:
+        # TARCAP (ESCORT role) and ESCORT (SWEEP role, package escort): a station of their own, short of the target and outside live SAM cover,
+        # where they hold and shoot at what comes in range without chasing it. No IP. The TARCAP gets there first, holds its time and goes
+        # home from the station; the escort holds until the last ground-attack flight is off target and leaves by the package egress when
+        # that leg is clear of SAM cover (from the station otherwise). The same route for you and for the AI.
+        sx_, sy_, names_, short_, egr_ok_ = st_[:5]
+        why_ = f", outside {'/'.join(names_)} cover" if names_ else ""
+        if role == Role.ESCORT:
+            wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"TARCAP: on station {short_:.0f} nm short of the target{why_}; hold and shoot, do not chase", "TARCAP", orbit=True))
+        else:
+            wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"ESCORT: hold {short_:.0f} nm short of the target{why_} until the strikers are off; do not chase", "ESCORT", orbit=True))
+            if egr_ok_:
+                wp.append(Wpt("EGR", *g.egr, ialt, p.egress_kts, "Exit with the package", rad=irad))
+        if len(wp) + 2 > p.max_points:
+            raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")
+        return wp
     wp.append(Wpt("IP", *ip_xy, ialt, p.ip_kts, "Weapons armed, master arm", rad=irad))
     # The player's TGT is on the ground target at 0 AGL so pods, weapons and the WSO / Jester can slave to it. The wingmen follow the player, and AI-only flights
     # never get a ground-level point (they would descend to it).
@@ -184,7 +201,7 @@ def hold_leave_s(wps: list[Wpt], push_s: float) -> float:
     return push_s
 
 
-OBJECTIVE_ACTIONS = ("BOMB", "JSOW", "SEAD", "SWEEP", "CAS", "ESCORT", "CAPORBIT")
+OBJECTIVE_ACTIONS = ("BOMB", "JSOW", "SEAD", "SWEEP", "CAS", "ESCORT", "TARCAP", "CAPORBIT")
 
 
 def objective_wp(wps: list[Wpt]) -> Wpt | None:

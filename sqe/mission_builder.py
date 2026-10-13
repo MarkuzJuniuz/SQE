@@ -32,7 +32,12 @@ from .difficulty import Difficulty
 from .kneeboard import latlon, render_pages
 from .loadouts import LoadoutLibrary, enemy_bomber_loadout, enemy_strike_loadout, enemy_cap_loadout, ENEMY_FIGHTERS, JSOW_PER_JET
 from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType, Role, task_label
-STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -30}      # seconds relative to the strikers' push (BMS-style)
+TARCAP_LEAD_S = 180           # a TARCAP (ESCORT role) pushes this much ahead of the first flight it covers: on station first
+TARCAP_MIN = 15               # ...and holds there this long, then goes home
+ESCORT_AFTER_TOT_S = 180      # an escort (SWEEP role) holds its station until this long after the TOT (the last ground-attack flight off target)
+from .packages import LONG_RANGE_A2A     # the long-range shooters; F-16 and F/A-18 are secondary air-to-air
+A2A_ZONE_NM = {True: 25, False: 15}     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
+STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -TARCAP_LEAD_S}      # seconds relative to the strikers' push (BMS-style)
 
 
 SEAD_ENGAGE_NM = 30            # a SEAD flight, or a fighter held at its stand-off point, engages only what is within this of that point
@@ -87,7 +92,7 @@ def stagger(package, role) -> int:
     """SEAD leads the strikers by five minutes in a DEAD package (the radars must be blind before the DEAD flight commits); the sweep and the
     escorts keep their usual 30 s spacing around it: the sweep ahead, the escorts behind."""
     if package.objective.type == ObjectiveType.DEAD and package.objective.aim == "DEAD":      # the DEAD stage: the SEAD package went in 25 min earlier
-        return {Role.SWEEP: -60, Role.ESCORT: -30}.get(role, 0)
+        return {Role.SWEEP: -60, Role.ESCORT: -TARCAP_LEAD_S}.get(role, 0)
     if package.objective.type == ObjectiveType.DEAD:
         jsow = package.objective.aim in SEAD_AIMS and any(getattr(f, "kit", "") == "JSOW" for f in package.flights)
         if jsow and role == Role.STRIKE:                     # the JSOW flight (Standoff DEAD): with the HARM shooters, on its own axis
@@ -96,8 +101,8 @@ def stagger(package, role) -> int:
             return -DEAD_SEAD_LEAD_S
         if role == Role.SWEEP:
             return -DEAD_SEAD_LEAD_S - 30
-        if role == Role.ESCORT:
-            return -DEAD_SEAD_LEAD_S + 30
+        if role == Role.ESCORT:                              # TARCAP: on station before anyone else
+            return -DEAD_SEAD_LEAD_S - TARCAP_LEAD_S
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
@@ -1185,8 +1190,15 @@ class MissionBuilder:
             if f.is_player and f.aircraft == "F-14BU":
                 u.set_property("INSAlignmentStored", True)
         g.set_skill(Skill.High)
+        stw = next((w for w in wps if w.action in ("TARCAP", "ESCORT") and w.orbit), None)
+        hold_end = None
+        if stw is not None:                 # TARCAP: its time on station; escort: until the last ground-attack flight is off target
+            hold_end = int(stw.eta_s + TARCAP_MIN * 60) if stw.action == "TARCAP" else int(max(stw.eta_s + 120, (tot_s if tot_s is not None else stw.eta_s + 600) + ESCORT_AFTER_TOT_S))
         if f.tag:
             self._limit_engage(g, self.o.friendly_cap_engage_nm)
+        elif stw is not None and (not f.is_player or o.player_is_ai):
+            # no chasing: engage only inside a circle round the station (25 nm for the long-range shooters, 15 for the rest), until the hold ends
+            self._limit_engage(g, 0, hold_end, (stw.x, stw.y, A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]))
         elif (not f.is_player or o.player_is_ai) and f.role in (Role.ESCORT, Role.SWEEP, Role.SEAD):
             m_ = self.o.fighter_engage_minutes
             zone = None
@@ -1297,9 +1309,9 @@ class MissionBuilder:
                 ct.stop_after_time(stop); wp.tasks.append(ct)
                 if f.tag:
                     self._sup_cts.append(ct)
-            elif w.orbit:                                                    # fighters held short of live SAM cover
+            elif w.orbit:                                                    # fighters held short of live SAM cover / on their station
                 ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH)))
-                ct.stop_after_time(stop); wp.tasks.append(ct)
+                ct.stop_after_time(hold_end if (w is stw and hold_end is not None) else stop); wp.tasks.append(ct)
             elif w.action == "BOMB":
                 wp.tasks.append(task.Bombing(pt(w.x, w.y), group_attack=True))
             elif w.action == "JSOW":
@@ -1334,7 +1346,8 @@ class MissionBuilder:
             self._sead_grps.setdefault(package.objective.target_id, []).append(g.name)
         gate = None
         if (not f.tag and package.objective.type == ObjectiveType.DEAD and package.objective.aim not in SEAD_AIMS and package.objective.target_id and tot_s is not None
-                and f.role in (Role.STRIKE, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10):
+                and f.role in (Role.STRIKE, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10
+                and (f.role == Role.STRIKE or stw is None)):               # a TARCAP / escort on its own station is already outside the threat
             # radar gate: the DEAD flight, and its escorts and sweeps, break off if the site's radars are still up when the DEAD flight commits
             added = [w.name for w in wps[first:]]
             n0_ = len(g.points) - len(added)                           # points before the first one added above (the start point)
@@ -1737,7 +1750,7 @@ class MissionBuilder:
         """Cap how far a patrol flight will go after a target (DCS 'engage targets within X'; 0 = unlimited) and, when until_s is given, how LONG:
         the engage task is wrapped so it stops at that mission time and the flight carries on along its route. The distance alone is no leash
         (DCS measures it from the aircraft, so a bandit running home is chased as far as it runs)."""
-        if (not nm or nm <= 0) and until_s is None:
+        if (not nm or nm <= 0) and until_s is None and zone is None:
             return
         meters = int(nm * 1852) if (nm and nm > 0) else None
         old = [t for t in g.points[0].tasks if getattr(t, "Id", "") in ("EngageTargets", "EngageTargetsInZone")]
@@ -1795,7 +1808,8 @@ class MissionBuilder:
                 self._red_intel.append(f"Reported enemy {'fighter sweep' if pf_['kind'] == 'SWEEP' else 'patrol'}: a pair of {tname.replace('_', '-')} from "
                                        f"{self._short(a.name)}, {dist(sx, sy, tx, ty) / NM:.0f} nm {reactive.compass(bd_)} of the target, {redair.hhmm(pf_['start'])}-{redair.hhmm(pf_['end'])}.")
                 g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
-                self._limit_engage(g, self.o.enemy_cap_engage_nm)
+                # the same rule as ours: a patrol engages inside a circle round its station, it does not chase a target home
+                self._limit_engage(g, 0, None, (gx, gy, min(A2A_ZONE_NM[True], self.o.enemy_cap_engage_nm or A2A_ZONE_NM[True])))
             else:                                           # alert: on the runway, scrambles when detected
                 ap = self.t.airports.get(a.airport) if a.airport else None
                 if ap is None:
@@ -1848,14 +1862,13 @@ class MissionBuilder:
             key = (f.role, id(prof))
             if key not in geom.tiers:
                 geom.tiers[key] = self._pick_tier(geom, f.role, prof, tx, ty, skip)
-            if (f.is_player and not self.o.player_is_ai) or key in geom.stand or not self.o.fighter_standoff or f.role not in (Role.ESCORT, Role.SWEEP):
+            if key in geom.stand or not self.o.fighter_standoff or f.role not in (Role.ESCORT, Role.SWEEP):
                 continue
             if package.objective.type in (ObjectiveType.COUNTER_AIR, ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
                 continue
+            # TARCAP (ESCORT role) and ESCORT (SWEEP role): a station of their own, for you and for the AI alike (v0.40.1)
             t = geom.tiers[key]
-            so = profiles.standoff(self.state, pts, t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000))
-            if so:
-                geom.stand[key] = so
+            geom.stand[key] = profiles.station(self.state, pts, t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000), geom.egr)
 
     def _zulu_note(self) -> str:
         tz = float(theatres.active().get("tz", 0) or 0)

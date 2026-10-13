@@ -87,7 +87,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     if x.get("intel"):
         sit += ["", "Intelligence: " + " ".join(x["intel"])]
     mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {_long_label(pf, obj)}.", f"Your task: {pf.task}."]
-    exe = ["Package (push / TOT are staggered: sweep first, then SEAD, escorts, strikers):"]
+    exe = ["Package (push / TOT are staggered: TARCAP first, then SEAD and escorts, then strikers):"]
     for r in x["pkg_table"]:
         f = next(ff for ff in pkg.flights if ff.callsign == r["callsign"])
         exe.append(f"  {f.callsign:<14} {f.count}x {AIRCRAFT[f.aircraft].display:<16} {r['role']:<8} push {r['push']}   TOT {r['tot']}" + ("   <- YOU" if f.is_player else ""))

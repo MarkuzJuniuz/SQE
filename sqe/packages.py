@@ -42,11 +42,13 @@ TEMPLATES = {
     ObjectiveType.FLEET_DEFENSE: [Slot(Role.CAP, 4), Slot(Role.CAP, 2, False), Slot(Role.SWEEP, 2, False)],
 }
 _FLEET = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
-_TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM", Role.ESCORT: "Escort package",
+_TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM",
+         Role.ESCORT: "TARCAP: on station short of the target before the package, shoot what comes in range, do not chase; 15 minutes, then home",
          Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
 _DEAD_TASK = {Role.SEAD: "SEAD: suppress the radars ahead of the DEAD flight", Role.STRIKE: "Close DEAD: destroy the SAM site with GBUs (the SEAD package goes in ahead of you; call it off if the radars are up)"}
 _KIT_TASK = {"JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers and covering Tors, on the HARM salvo's time; stand-off release, then home"}
 _SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
+_ESC_TASK = "Escort: hold your station with the package, shoot what comes in range, do not chase; leave when the strikers are off target"
 _TAG_TASK = {"HAVCAP": "HAVCAP (guards tanker and AWACS)", "BASECAP": "Base CAP"}
 
 
@@ -130,6 +132,10 @@ def _next_callsign(st, sq, used: dict) -> str:
             return f"{nm} {used[nm]}"
     used[sq.callsign] = used.get(sq.callsign, 0) + 1                  # every name taken nine times over: not reachable with real unit counts
     return f"{sq.callsign} {used[sq.callsign]}"
+
+
+LONG_RANGE_A2A = {"F-15C", "F-14BU"}
+A2A_SECONDARY_NM = 400          # an F-16 / F/A-18 squadron is picked for TARCAP or escort only when no long-range shooter is within this much of it
 
 
 class Ledger:
@@ -271,7 +277,7 @@ class PackageBuilder:
             cs = _next_callsign(st, sq, used)
             pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", cs, slot.role, sq.id,
                                           sq.aircraft, count, sq.base_id,
-                                          _KIT_TASK.get(slot.kit) or _TAG_TASK.get(slot.tag) or (_SO_SEAD_TASK if (obj.aim == "STANDOFF" and slot.role == Role.SEAD) else None) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role],
+                                          _KIT_TASK.get(slot.kit) or _TAG_TASK.get(slot.tag) or (_SO_SEAD_TASK if (obj.aim == "STANDOFF" and slot.role == Role.SEAD) else None) or (_ESC_TASK if (slot.role == Role.SWEEP and obj.type not in (ObjectiveType.COUNTER_AIR, ObjectiveType.FLEET_DEFENSE)) else None) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role],
                                           is_pl, slot.tag, slot.kit))
         pkg.support = self._support(pkg)
         pkg.jtac = obj.type in JTAC_OBJECTIVES
@@ -339,7 +345,8 @@ class PackageBuilder:
                  and (slot.kit != "JSOW" or sq.aircraft in JSOW_PER_JET)]
         if not cands:
             return None
-        key = lambda sq: self._dist_nm(sq.id, tx, ty) - 40 * (ledger.free[sq.id] / max(1, sq.authorized))
+        a2a = slot.role in (Role.ESCORT, Role.SWEEP)              # TARCAP / escort: the long-range shooters (F-15C, F-14) first, F-16 / F/A-18 only behind them
+        key = lambda sq: self._dist_nm(sq.id, tx, ty) - 40 * (ledger.free[sq.id] / max(1, sq.authorized)) + (A2A_SECONDARY_NM if a2a and sq.aircraft not in LONG_RANGE_A2A else 0)
         if lead_service is None:
             return min(cands, key=key)
         same = [c for c in cands if AIRCRAFT[c.aircraft].service == lead_service]

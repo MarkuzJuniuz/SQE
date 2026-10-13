@@ -1,3 +1,16 @@
+## v0.40.1
+
+Air-to-air rework, part 1 (from the v0.39.24 remarks): fighters don't chase into danger, for blue and red.
+
+* **TARCAP** (the package's ESCORT flight, renamed): flies to a station of its own, short of the target and outside live SAM cover (12 nm short on the run-in when nothing is in the way). It pushes 3 minutes ahead of the first flight it covers, so it is on station first, holds there 15 minutes, then goes home from the station. No IP, no egress, for the AI and for you.
+* **ESCORT** (the package's fighter sweep, renamed): its own station the same way, held until 3 minutes after the TOT (the last ground-attack flight off target), then out with the package by its egress when that leg is clear of SAM cover, or home from the station when it isn't. No IP.
+* **No chasing.** An AI TARCAP or escort engages only inside a circle round its station: 25 nm for the long-range shooters (F-15C, F-14), 15 nm for the rest, until its hold ends. Enemy patrols are leashed the same way, 25 nm round their station (they used to chase up to 50 nm from wherever they were).
+* **Long-range shooters first.** TARCAP and escort slots go to F-15C and F-14 squadrons; an F-16 or F/A-18 squadron is picked only when no long-range shooter is within 400 nm more of the target.
+* A TARCAP or escort on its station is no longer held at a Close DEAD radar gate: it is already outside the threat.
+* Labels: TARCAP and ESCORT in package tables and briefings. A COUNTER_AIR package's sweep is still a SWEEP.
+* Not in this build: the new Fighter Sweep package (4-ships sent when intel expects heavy enemy air). Still open: how it is planned and whether you can fly it.
+* Smoke test: TARCAP and escort routes (no IP, TARCAP without egress), leash radius by type, red patrols leashed, the new timing.
+
 ## v0.40.0
 
 Standoff DEAD and Close DEAD. Each DEAD job now gets one kind of DEAD flight, picked by the threat at the site.
