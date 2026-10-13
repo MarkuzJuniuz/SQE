@@ -1,3 +1,10 @@
+## v0.40.7
+
+* **Alert and scramble jets wait hot on the ramp and taxi when called** (red alerts, red reinforcements, blue DCA; on the carrier, hot on deck). The runway and catapults stay free for flights scheduled to take off. Replaces v0.40.6's in-air fallback, which looked odd: a pair appearing off a field that could not have parked it.
+* **Runway queue.** A field with no ramp spot for the type: the group waits hidden, and when it is called the mission hook puts it on the runway, at least 60 seconds after the last group that went from that runway. At your own field it waits until you have taken off (or 15 minutes in).
+* **Dispersal (new campaigns).** No field holds more jets than DCS can park there. A red wing bigger than its field keeps what fits and its overflow goes to the nearest enemy fields with room (it joins their wings); the enemy total is unchanged. A blue squadron that does not fit moves, whole, to the nearest friendly airfield with room for its type; yours never moves. The campaign log says what moved. Fields that were over: Gelendzhik (Su-27, 3 slots), Sukhumi (Su-27, 5), Beslan (Su-24M, 5), Nalchik (15), Maykop (Su-27, 20), Batumi (blue, 10 slots for two squadrons). Existing campaigns keep their basing.
+* Smoke test: alert groups on the ramp (or hidden for the runway), the queue in the hook, no field over its parking at levels 2 and 3.
+
 ## v0.40.6
 
 * **Alert groups that cannot fit a field start in the air instead of being left out.** Since v0.39.25 a second alert or reinforcement group at a field whose runway was taken and which has no parking for the type (Gelendzhik, Beslan for red's Su-27s) was dropped, so red was thinner than planned. It is now late-activated in the air 4 km off the field, 2,000 ft, heading for the target, and activated by the same trigger that would have started it on the ground (as if it had just scrambled). Blue DCA alerts at a field get the same; carrier groups are unchanged.

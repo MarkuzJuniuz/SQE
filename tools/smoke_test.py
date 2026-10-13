@@ -138,8 +138,10 @@ def main():
                 _p0 = list(_g["route"]["points"].values())[0]
                 if _p0["type"] == "Turning Point":
                     _air.append((_g["name"], _p0["x"], _p0["y"], _p0["alt"]))
-                elif _p0["type"] == "TakeOff":
+                elif _p0["type"] == "TakeOff" and not _g.get("lateActivation"):           # a late one waits for the runway (the hook's queue)
                     _rw[(_side, _p0.get("airdromeId"), _p0.get("linkUnit"))] += 1
+                if _g["name"].startswith(("Alert ", "Reinforce ")) or "alert" in str(_g.get("name", "")).lower():
+                    assert _p0["type"] == "TakeOffParkingHot" or (_p0["type"] == "TakeOff" and _g.get("lateActivation")), (_g["name"], "alert groups wait hot on the ramp (or hidden for the runway)", _p0["type"])
     _stk = [(a_[0], b_[0]) for i_, a_ in enumerate(_air) for b_ in _air[:i_] if _m3.hypot(a_[1] - b_[1], a_[2] - b_[2]) < 200 and abs(a_[3] - b_[3]) < 100]
     assert not _stk, ("airborne groups spawned on top of each other", _stk)
     assert all(v_ == 1 for v_ in _rw.values()), ("two groups on one runway / catapult", _rw)
@@ -1095,6 +1097,27 @@ def main():
     _r5 = WarSimulator(_ws.d, random.Random(3)).resolve_abstract(_st5, _Pkg.from_dict(_sw.to_dict()), {"success": True})
     assert _st5.assets[_sw.objective.target_id].health == _h5 and sum(w_.available for w_ in _st5.enemy_air) < _air5, "an unflown sweep thins red's fighters and leaves the target alone"
     print(f"[sweep] #{_sw.number} {len(_sw.flights)}x 4-ship sweep {_slm} min ahead of {len(_cov5)} package(s); flyable; no marshal; station, leash, RTB when out of AAMs; war sim: fighters, not the target")
+    # dispersal (v0.40.7): no field holds more jets than DCS can park there (a wing's overflow goes to the nearest field with room, a squadron
+    # moves whole), the enemy total is kept, your squadron keeps its field
+    from sqe.scenario import _slots as _sl
+    from sqe import theatres as _thx
+    for _lv in (2, 3):
+        _ds = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False)); _ds.new("Disperse", "F-16C", _lv, seed=1); _sd = _ds.state
+        _tt = _thx.terrain()
+        for w_ in _sd.enemy_air:
+            _c = _sl(_tt, _sd.assets[w_.base_asset_id].airport, w_.types) if _sd.assets[w_.base_asset_id].airport else None
+            assert _c is None or w_.authorized <= max(2, _c) or w_.types == ["Tu_22M3"], (_sd.assets[w_.base_asset_id].name, w_.authorized, _c)
+        _use = {}
+        for q_ in _sd.squadrons.values():
+            b_ = _sd.bases[q_.base_id]
+            if b_.airport:
+                _use.setdefault(b_.id, []).append(q_)
+        for bid_, qs_ in _use.items():
+            if any(q_.id == _sd.player.squadron_id for q_ in qs_):
+                continue
+            _cb = min((_sl(_tt, _sd.bases[bid_].airport, [AIRCRAFT[q_.aircraft].dcs_class]) or 999) for q_ in qs_)
+            assert sum(q_.authorized for q_ in qs_) <= _cb or len(qs_) == 1, (bid_, [(q_.id, q_.authorized) for q_ in qs_], _cb)
+    print("[dispersal] no field holds more jets than it can park (red wings and blue squadrons); your squadron keeps its field")
     # Tors (v0.39.20): the Tors that cover a SEAD/DEAD target are part of the job: the second HARM flight opens on them, the JSOWs aim at them,
     # the DEAD gate waits for them (route check), and the Tor vehicle counts as a radar
     import math as _m3
@@ -1567,6 +1590,8 @@ def main():
         not _re9.search(r'\["name"\]\s*=\s*13,\s*\["value"\]\s*=\s*3', _m9b) and f'["{_pu}"]=2' not in _hk9b, "script off: DCS ECM 'use if locked' at PUSH, the hook models no jamming"
     assert "all packages complete, no further tasking today" in _hk9b and _re9.search(r'local WATCH = \{ "[^"]+', _hk9b) and "return t + 300" in _hk9b, \
         "AWACS says when every package is done (to you, by callsign), every 5 minutes"
+    _hq = __import__("sqe.debrief", fromlist=["x"]).lua_hook("c", 1, "p", [], "P", "G", rwyq=[{"g": "Alert 1", "f": 9001, "b": "Russia:Gelendzhik"}], prwy="USA:Senaki")
+    assert 'g="Alert 1", f=9001, b="Russia:Gelendzhik"' in _hq and "RWY_STAGGER_S = 60" in _hq and "g:activate()" in _hq, "the runway queue: one group a minute, after you have left yours"
     assert "local SPLASH = false" in _hk9b and "splashTrack" in _hk9b, "splash damage is off by default"
     _hks = __import__("sqe.debrief", fromlist=["x"]).lua_hook("c", 1, "p", [], "P", "G", splash=True)
     assert "local SPLASH = true" in _hks and "trigger.action.explosion" in _hks and "SPLBY[" in _hks, "splash damage on: blasts near the impact, kills credited to the shooter"
