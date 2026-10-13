@@ -1,3 +1,18 @@
+## v0.40.2
+
+Air-to-air rework, part 2: Fighter Sweep and Defensive Counter Air. And the ECM script becomes a setting, off by default.
+
+* **Fighter Sweep package.** Where intel expects more enemy fighters at a target than its package's 4-ship TARCAP can take, the day gets a Fighter Sweep package for that area (targets within 60 km share one): one 4-ship per 4 fighters beyond the TARCAP, sized to the worst package there. It starts 10 minutes ahead of the first package it covers. You can fly it. Route: departure, push, station, home: no marshal, no IP, no egress. The station is short of the target and outside live SAM cover; the flight engages only inside 25 nm of it (15 nm for F-16 / F/A-18), holds 15 minutes, and goes home sooner when its air-to-air missiles are gone. It gets no HAVCAP or base CAP of its own.
+* **No sweep slot inside strike packages any more.** A strike, DEAD or CAS package carries its TARCAP (and SEAD, strikers); the extra fighters it used to get are the sweep now.
+* **Aircraft priority:** sweeps are built after the day's other packages, so HAVCAP, TARCAP and escort get the F-15Cs and F-14s first; a sweep takes what is left, long-range shooters first, then F-16s and F/A-18s.
+* **Unit limit:** a merged sweep is listed first among the folded-in packages, so the unit limit drops strike packages before it (wrecks, red reinforcements and alert pairs are still trimmed before any package).
+* **Unflown sweeps** (war sim): the sweep fights the fighters of the three nearest enemy wings; a win shoots down about 40% of its own number times the odds. The target is left alone. Sweeps start earlier, so they are resolved before the packages they cover, which then face fewer enemy fighters.
+* **Defensive Counter Air.** Blue's alert pairs now launch only against a raid on the fleet or a base (zone-triggered, as before). The pairs that used to launch on the clock to reinforce a package's fight when red outnumbered it are gone: that is the sweep's job.
+* A sweep leaves no ruins and its debrief line shows losses, not target damage. Its briefing and commander's intent are its own.
+* **ECM script off by default** (Settings: "ECM script", experimental). Off: SQE's own jamming model in the hook is not used (the code stays), and jammers use DCS's own ECM: AI jets with a jammer keep it off on the way in and out and, over the attack leg (PUSH to egress), switch it on only when a radar has locked them. The F-15C (which the script counts as having none) gets the same. On: as before, the hook models jamming and burn-through, jammers always on over the attack leg. The war sim's jamming cover for unflown packages is unchanged.
+* With fewer fighters per package, red reinforces a little less often (its reinforcements are sized against the blue fighters it sees).
+* Smoke test: sweep planning, timing, route, RTB on AAMs, briefing and war sim; no sweep slot in strike packages; blue alert pairs only against raids; both ECM modes. The merge, ruins and reactive checks skip or pin around the new sweep packages.
+
 ## v0.40.1
 
 Air-to-air rework, part 1 (from the v0.39.24 remarks): fighters don't chase into danger, for blue and red.

@@ -25,6 +25,8 @@ from .war import ObjectivePlanner, WarSimulator, update_status
 
 SEAD_SYNC_KM = 60            # SEAD packages whose targets are this close together are synchronised (the same ground, the same defence)
 SEAD_SYNC_ON = True          # off only in tests that need an unsynchronised day (the merge-underway case)
+SWEEP_AREA_KM = 60           # packages whose targets are this close together share one Fighter Sweep
+SWEEP_LEAD_MIN = 10          # the sweep starts this much ahead of the first package it covers
 LATE_SEAD_MIN = 15           # launch option --late-sead: SEAD-stage packages go in this much later, so the DEAD stage (10 min behind) arrives
                              # about 5 min ahead of them and reaches its gate with the radars still up: it holds (HOLD_S = 12 min) and goes in once
                              # the late SEAD blinds the site. A test of the hold; it changes that day's plan in the save.
@@ -124,7 +126,10 @@ class Session:
         pb = PackageBuilder(st, self.d)
         psq = st.player.squadron_id if st.player else None
 
+        sweeps = {}                                     # id(sweep package) -> the packages it goes in ahead of
+
         def build_all(forced: set) -> list:
+            sweeps.clear()
             # Packages launch at different times of day, so an aircraft can fly more than one sortie: each package sees every
             # serviceable airframe, but no squadron is asked for more than two sorties per airframe per day.
             daily = {sid: 2 * q.available for sid, q in st.squadrons.items()}
@@ -144,6 +149,41 @@ class Session:
                     continue
                 for f in pkg.flights:
                     daily[f.squadron_id] -= f.count
+                out.append(pkg)
+            # Fighter Sweep (v0.40.2): where intel expects more enemy fighters than the packages' own TARCAP and escort can take, a sweep
+            # package of 4-ships goes in ahead of them. One per area (targets within SWEEP_AREA_KM), sized to the worst package there.
+            from .packages import is_sweep, sweep_4ships
+            need = [(p, sweep_4ships(p.n_def // 2)) for p in out if p.objective.type in (ObjectiveType.STRIKE, ObjectiveType.DEAD, ObjectiveType.CAS)
+                    and p.objective.target_id in st.assets]
+            areas = []
+            for p, n4 in sorted(need, key=lambda x: -x[1]):
+                if n4 <= 0:
+                    continue
+                t = st.assets[p.objective.target_id]
+                a = next((a for a in areas if math.hypot(a[0].x - t.x, a[0].y - t.y) <= SWEEP_AREA_KM * 1000), None)
+                if a is None:
+                    areas.append((t, [p]))
+                else:
+                    a[1].append(p)
+            sp_spec = AIRCRAFT[st.squadrons[psq].aircraft] if psq else None
+            for k, (t, covered) in enumerate(areas):
+                o = Objective(f"obj-d{st.day}-sw{k + 1}", ObjectiveType.COUNTER_AIR, t.id, max(p.objective.priority for p in covered),
+                              f"Fighter Sweep: clear the air over {t.name} ahead of the strikes", "SWEEP")
+                ledger = Ledger(st)
+                for sid in ledger.free:
+                    ledger.free[sid] = min(ledger.free[sid], daily[sid])
+                pkg = None
+                for fp in ((True, False) if (sp_spec and Role.SWEEP in sp_spec.roles) else (False,)):
+                    try:
+                        pkg = pb.build(o, len(objs) + k + 1, ledger, for_player=fp, names=names)
+                        break
+                    except NoPlayerSlot:
+                        continue
+                if pkg is None or not pkg.flights:
+                    continue
+                for f in pkg.flights:
+                    daily[f.squadron_id] -= f.count
+                sweeps[id(pkg)] = covered
                 out.append(pkg)
             return out
 
@@ -176,6 +216,11 @@ class Session:
         self._sync_sead(pkgs)                                        # SEAD flights on the same ground (within SEAD_SYNC_KM) arrive together, not one after another
         self._stage_times(pkgs)                                      # a DEAD stage goes in DEAD_STAGE_GAP_MIN after the SEAD stage of the same site
         self._late_sead(pkgs)                                        # test option --late-sead: the SEAD stage goes in late, so the DEAD stage holds
+        for p in pkgs:                                               # a Fighter Sweep starts SWEEP_LEAD_MIN ahead of the first package it covers (after every other timing step)
+            cov = sweeps.get(id(p))
+            if cov:
+                m = max(0, min(int(c.start[:2]) * 60 + int(c.start[3:5]) for c in cov) - SWEEP_LEAD_MIN)
+                p.start = f"{m // 60:02d}:{m % 60:02d}"
         pkgs.sort(key=lambda p: p.start)
         for n, p in enumerate(pkgs, 1):                              # numbers follow the clock
             p.number, p.id = n, f"pkg{n}"
@@ -435,7 +480,7 @@ class Session:
             d = math.hypot(t[0] - c[0], t[1] - c[1])
             if d <= R:
                 out.append((d, hm(p), p.number, p))
-        out.sort(key=lambda r: r[:3])
+        out.sort(key=lambda r: (not (r[3].objective.type == ObjectiveType.COUNTER_AIR and r[3].objective.aim == "SWEEP"),) + r[:3])     # a Fighter Sweep first: the unit limit drops the strike packages before it
         return [r[3] for r in out[:6]]
 
     def ruin_candidates(self, pkg: Package, extras: list) -> list:
@@ -453,7 +498,8 @@ class Session:
             t = self._pkg_xy(p)
             return t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= R
         out = [p for p in self.packages() if p.number != pkg.number and p.number not in have and hm(p) < hm(pkg)
-               and any(not f.tag for f in p.flights) and not p.extra.get("scrub") and inside(p)]
+               and any(not f.tag for f in p.flights) and not p.extra.get("scrub") and inside(p)
+               and not (p.objective.type == ObjectiveType.COUNTER_AIR and p.objective.aim == "SWEEP")]      # a sweep leaves nothing burning on the ground
         out.sort(key=lambda p: (-hm(p), p.number))
         return out[:4]
 
@@ -613,6 +659,7 @@ class Session:
         self.options.fighter_standoff = bool(self.settings.fighter_standoff)
         self.options.carcasses = bool(getattr(self.settings, 'carcasses', True)); self.options.carcass_weight = max(5, int(getattr(self.settings, 'carcass_weight_pct', 25))) / 100.0
         self.options.reactive = bool(getattr(self.settings, 'reactive', True))
+        self.options.ecm_script = bool(getattr(self.settings, 'ecm_script', False))
         self.options.max_units = int(self.settings.merge_max_units)
         self.options.full_map = bool(self.full_map)
         if self.full_map:

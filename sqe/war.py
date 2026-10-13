@@ -246,6 +246,37 @@ class WarSimulator:
         defense = sam + air
         return (strength / (strength + defense) if strength + defense else 0.0), strength, defense
 
+    def _resolve_sweep(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
+        """A Fighter Sweep fights the enemy fighters near its area; the target itself is not attacked. Kills come off the nearest wings, which
+        lowers the enemy air term (and so the losses) of the packages resolved after it."""
+        import math
+        d, rng = self.d, self.rng
+        t = state.assets[pkg.objective.target_id]
+        wings = sorted([w for w in state.enemy_air if w.available > 0 and w.base_asset_id in state.assets],
+                       key=lambda w: math.hypot(state.assets[w.base_asset_id].x - t.x, state.assets[w.base_asset_id].y - t.y))[:3]
+        strength = sum(f.count * ROLE_WEIGHT[f.role] for f in pkg.flights)
+        red = sum(w.available for w in wings) * (0.6 + 0.6 * d.iads) * 0.25
+        p = strength / (strength + red) if strength + red else 0.0
+        ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
+        lines = [f"{pkg.objective.description}: {'AIR CLEARED' if ok else 'CONTESTED'} (odds {p:.0%})"]
+        kills = (max(1, round(sum(f.count for f in pkg.flights) * 0.4 * p)) if ok else int(rng.random() < 0.5)) if wings else 0
+        for w in wings:
+            if kills <= 0:
+                break
+            k = min(w.available, kills); w.available -= k; kills -= k
+            if k:
+                lines.append(f"   {k} enemy fighters from {state.assets[w.base_asset_id].name} shot down")
+        loss_p = d.loss_rate * (0.6 if ok else 1.4) * (red / (strength + red) if strength + red else 0.0)
+        for f in pkg.flights:
+            lost = count_roll(rng, f.count, loss_p, d.variance)
+            if lost:
+                sq = state.squadrons[f.squadron_id]
+                sq.available = max(0, sq.available - lost)
+                lines.append(f"   {f.callsign} lost {lost} aircraft")
+        for ln in lines:
+            state.note(ln.strip())
+        return {"success": ok, "odds": p, "lines": lines, "objective": pkg.objective.description, "roll": {"success": ok}}
+
     def _resolve_raid(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         d, rng = self.d, self.rng
         bw = state.enemy_air_at(pkg.extra.get("bomber_wing", "")) if pkg.extra else None
@@ -352,6 +383,8 @@ class WarSimulator:
                     "objective": pkg.objective.description, "roll": {"success": False}}
         if pkg.objective.type == ObjectiveType.FLEET_DEFENSE:
             return self._resolve_raid(state, pkg, force)
+        if pkg.objective.type == ObjectiveType.COUNTER_AIR and pkg.objective.aim == "SWEEP":
+            return self._resolve_sweep(state, pkg, force)
         if pkg.objective.type == ObjectiveType.DEAD and (any(f.role == Role.STRIKE and not _suppressor(f, pkg) for f in pkg.flights) or pkg.objective.aim in SEAD_AIMS):
             return self._resolve_dead(state, pkg, force)
         p, strength, defense = self.odds(state, pkg)

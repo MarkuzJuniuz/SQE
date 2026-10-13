@@ -95,7 +95,7 @@ def main():
     # ---- package merging: fold same-area packages into one mission, fly it, debrief all of them ---------------------------
     ms = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all"))
     ms.new("Smoke merge", "F-16C", 2, seed=5)
-    cand = next(((p, ms.merge_candidates(p)) for p in ms.packages() if ms.flyable(p) and ms.merge_candidates(p)), None)
+    cand = next(((p, ms.merge_candidates(p)) for p in ms.packages() if ms.flyable(p) and ms.merge_candidates(p) and p.objective.aim != "SWEEP"), None)
     assert cand, "no mergeable packages found"
     pk, extra = cand
     res = ms.fly(pk.number, ms.flyable(pk)[0].id)
@@ -558,12 +558,16 @@ def main():
     for w in rs.state.enemy_air:
         w.available = full_[w.base_asset_id]
     seen_r = seen_b = False
-    for sd_ in range(1, 9):
+    for sd_ in range(1, 25):                  # v0.40.2: the packages carry fewer fighters (the sweep is its own package), so red reinforces less often
         rr_ = mk(); rr_.new("React2", "FA-18C", 3, seed=sd_)
-        for p_ in [q for q in rr_.packages() if rr_.flyable(q)][:3]:
+        rr_.state.campaign_id = f"{0x4eac000 + sd_:010x}"; rr_.plan_day()      # pinned: the reaction dice follow the campaign id
+        _dca = lambda q: q.objective.type.value in ("FLEET_DEFENSE", "BARCAP")          # v0.40.2: blue alerts are DCA only (a raid on the fleet / in the wave)
+        _fl_ = [q for q in rr_.packages() if rr_.flyable(q)]
+        for p_ in [q for q in _fl_ if _dca(q)][:2] + [q for q in _fl_ if not _dca(q) and q.objective.aim != "SWEEP"][:3]:
             res_ = rr_.fly(p_.number, rr_.flyable(p_)[0].id)
             txt_ = res_.text["full"]
             sq_ = {g_["squadron"] for g_ in res_.manifest.groups if g_["kind"] == "friendly" and g_["ref"].startswith("alert_")}
+            assert not sq_ or _dca(p_) or any(m_["type"] == "FLEET_DEFENSE" for m_ in res_.merged), ("blue alert pairs only against a raid (DCA)", p_.objective.description)
             seen_b |= bool(sq_)
             seen_r |= "may be sent to reinforce" in txt_
             if sq_ or "may be sent to reinforce" in txt_:
@@ -1037,6 +1041,43 @@ def main():
     assert all(_lrs(s.state, a_) for a_ in _sa10) and (not _far or not _lrs(s.state, _far[0])), "long range: an SA-10 or under one; anything else gets the SEAD / Close DEAD pair"
     assert {_tl(f_, _pj.objective) for f_ in _pj.flights if not f_.tag} >= {"SEAD", "SO DEAD"}, "package table labels"
     print(f"[jsow] {len(_jf)} JSOW flights in {len(_sp3)} Standoff DEAD packages; Hornet 4 / Viper 2 AGM-154A; they push with the HARM shooters; built with a launch point and release tasks")
+    # Fighter Sweep (v0.40.2): where intel expects more bandits than a package's TARCAP can take, a sweep package of 4-ships goes in ahead of
+    # the packages there; no sweep slot inside a package any more; flyable; no marshal; station, leash, RTB when out of AAMs; the war sim
+    # takes fighters off the nearest wings and leaves the target alone
+    from sqe.packages import is_sweep as _isw, sweep_4ships as _s4
+    from sqe.engine import SWEEP_LEAD_MIN as _slm, SWEEP_AREA_KM as _sak
+    from sqe.mission_builder import AAM_WEAPONS as _aamw
+    _sw = None
+    for sd_ in range(1, 20):
+        _ws = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="off", flight_filter="all"))
+        _ws.new("Sweep", "F-15C", 3, seed=sd_)
+        _swp = [p_ for p_ in _ws.packages() if _isw(p_.objective)]
+        if _swp and any(_ws.flyable(p_) for p_ in _swp):
+            _sw = next(p_ for p_ in _swp if _ws.flyable(p_)); break
+    assert _sw, "no Fighter Sweep planned in 19 days"
+    _pk_ = _ws.packages()
+    assert all(f_.role == _Rl2.SWEEP and f_.count == 4 and not f_.tag for f_ in _sw.flights), "a sweep is 4-ships only, no support CAP"
+    assert not any(f_.role == _Rl2.SWEEP for p_ in _pk_ if p_.objective.type.value in ("STRIKE", "DEAD", "CAS") for f_ in p_.flights), "no sweep slot inside a strike package"
+    _t5 = s.state.assets if False else _ws.state.assets
+    _cov5 = [p_ for p_ in _pk_ if p_.objective.type.value in ("STRIKE", "DEAD", "CAS") and _s4(p_.n_def // 2) > 0 and p_.objective.target_id in _t5
+             and _m3j.hypot(_t5[p_.objective.target_id].x - _t5[_sw.objective.target_id].x, _t5[p_.objective.target_id].y - _t5[_sw.objective.target_id].y) <= _sak * 1000]
+    _hm5 = lambda p_: int(p_.start[:2]) * 60 + int(p_.start[3:5])
+    assert _cov5 and _hm5(_sw) == max(0, min(_hm5(p_) for p_ in _cov5) - _slm), "the sweep starts SWEEP_LEAD_MIN ahead of the first package it covers"
+    _ws.fly(_sw.number, _ws.flyable(_sw)[0].id)
+    _Mw = _luaj.loads(_zf.ZipFile(_ws.state.pending["miz"]).read("mission").decode("utf-8", "ignore"))["mission"]
+    _gw = {g_["name"]: g_ for co_ in _Mw["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()}
+    for f_ in _sw.flights:
+        _nmw = [p_.get("name") for p_ in _gw[f_.callsign]["route"]["points"].values()]
+        assert "MSHL" not in _nmw and "IP" not in _nmw and "EGR" not in _nmw and "TGT" in _nmw, (f_.callsign, "sweep route: DEP / PUSH / station / home", _nmw)
+        if not f_.is_player:
+            _o0w = {t_["params"]["action"]["params"]["name"]: t_["params"]["action"]["params"].get("value") for t_ in list(_gw[f_.callsign]["route"]["points"].values())[0]["task"]["params"]["tasks"].values() if t_.get("params", {}).get("action", {}).get("id") == "Option"}
+            assert _o0w.get(10) == _aamw, (f_.callsign, "a sweep goes home when its air-to-air missiles are gone")
+    assert "Fighter Sweep" in _ws.last_build.text["situation"], "the sweep briefing"
+    _st5 = CampaignState.from_dict(_ws.state.to_dict()); _h5 = _st5.assets[_sw.objective.target_id].health
+    _air5 = sum(w_.available for w_ in _st5.enemy_air)
+    _r5 = WarSimulator(_ws.d, random.Random(3)).resolve_abstract(_st5, _Pkg.from_dict(_sw.to_dict()), {"success": True})
+    assert _st5.assets[_sw.objective.target_id].health == _h5 and sum(w_.available for w_ in _st5.enemy_air) < _air5, "an unflown sweep thins red's fighters and leaves the target alone"
+    print(f"[sweep] #{_sw.number} {len(_sw.flights)}x 4-ship sweep {_slm} min ahead of {len(_cov5)} package(s); flyable; no marshal; station, leash, RTB when out of AAMs; war sim: fighters, not the target")
     # Tors (v0.39.20): the Tors that cover a SEAD/DEAD target are part of the job: the second HARM flight opens on them, the JSOWs aim at them,
     # the DEAD gate waits for them (route check), and the Tor vehicle counts as a radar
     import math as _m3
@@ -1482,6 +1523,7 @@ def main():
     assert _ecm.flight_tier("F-16C", Role.SEAD) == 2 and _ecm.flight_tier("F-15C", Role.CAP) == 0 and _ecm.flight_tier("F-14BU", Role.CAP) == 1 and _ecm.jammer_on("x")
     s.new("Jam hook", "F-16C", 3, seed=11); _st = s.state
     _se = next(p_ for p_ in s.packages() if p_.objective.aim == "SEAD" and s.flyable(p_))
+    s.settings.ecm_script = True                                     # the ECM script (off by default since v0.40.2)
     s.fly(_se.number, next(f_ for f_ in s.flyable(_se) if f_.role == Role.SEAD).id)
     from dcs import lua as _lua9
     _z9 = _zf.ZipFile(_st.pending["miz"]); _pu = s.manifest().player_unit
@@ -1500,6 +1542,12 @@ def main():
     import re as _re9
     _m9 = _z9.read("mission").decode()
     assert _re9.search(r'\["name"\]\s*=\s*13,\s*\["value"\]\s*=\s*3', _m9) or _re9.search(r'\["value"\]\s*=\s*3,\s*\["name"\]\s*=\s*13', _m9), "AI flights get the jammer switched on at PUSH (option 13)"
+    s.settings.ecm_script = False                                    # default: DCS's own ECM, on at PUSH only when a radar locks
+    s.fly(_se.number, next(f_ for f_ in s.flyable(_se) if f_.role == Role.SEAD).id)
+    _z9b = _zf.ZipFile(_st.pending["miz"]); _m9b = _z9b.read("mission").decode()
+    _hk9b = (_fh(_lua9.loads(_m9b)) or _fh(_lua9.loads(_z9b.read("l10n/DEFAULT/dictionary").decode())) or "").replace('\\"', '"')
+    assert (_re9.search(r'\["name"\]\s*=\s*13,\s*\["value"\]\s*=\s*1', _m9b) or _re9.search(r'\["value"\]\s*=\s*1,\s*\["name"\]\s*=\s*13', _m9b)) and \
+        not _re9.search(r'\["name"\]\s*=\s*13,\s*\["value"\]\s*=\s*3', _m9b) and f'["{_pu}"]=2' not in _hk9b, "script off: DCS ECM 'use if locked' at PUSH, the hook models no jamming"
     try:
         import lupa as _lu
         assert _lu.LuaRuntime().eval("function(s) return load(s) ~= nil end")(__import__("sqe.debrief", fromlist=["x"]).lua_hook("c", 1, "p", [], "P", "G", jams={"a": 2}))

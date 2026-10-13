@@ -138,6 +138,17 @@ LONG_RANGE_A2A = {"F-15C", "F-14BU"}
 A2A_SECONDARY_NM = 400          # an F-16 / F/A-18 squadron is picked for TARCAP or escort only when no long-range shooter is within this much of it
 
 
+def is_sweep(obj) -> bool:
+    """A Fighter Sweep package: offensive counterair over a target area, planned when intel expects more enemy fighters there than the
+    packages' own TARCAP and escort can take (AFDP 3-01: sweeps are flown for local air superiority, as the air threat requires)."""
+    return obj.type == ObjectiveType.COUNTER_AIR and obj.aim == "SWEEP"
+
+
+def sweep_4ships(n_def_flights: int) -> int:
+    """4-ships of sweep needed for this many enemy 2-ship flights: the fighters required beyond a 4-ship TARCAP, 4 per sweep flight."""
+    return int(math.ceil(max(0, threat.fighters_required(n_def_flights) - 4) / 4))
+
+
 class Ledger:
     def __init__(self, state: CampaignState):
         self.free = {sid: s.available for sid, s in state.squadrons.items()}
@@ -199,14 +210,15 @@ class PackageBuilder:
             # Two HARM flights, both required: one on the long-range radars, one on the Tors, from the same salvo (equal weight, so the Tors are
             # busy with HARMs when the JSOWs arrive). The Standoff DEAD flight is JSOW-capable only (Hornet, Viper): no Tomcats on DEAD here.
             tmpl = [Slot(Role.SEAD, 2), Slot(Role.STRIKE, 4, kit="JSOW"), Slot(Role.SEAD, 2)]     # the JSOW flight is picked before the second HARM flight: without it nothing is destroyed
+        if is_sweep(obj):                                                    # Fighter Sweep: 4-ships only, one per 4 bandits beyond the packages' own cover
+            n4 = max(1, sweep_4ships(n_fl))
+            return [Slot(Role.SWEEP, 4)] + [Slot(Role.SWEEP, 4, False) for _ in range(n4 - 1)]
         slots = [copy.copy(s) for s in tmpl if not (s.only_if_defended and not defended)]
         if obj.type in (ObjectiveType.STRIKE, ObjectiveType.DEAD, ObjectiveType.CAS):
             req = threat.fighters_required(n_fl)
             slots = [s for s in slots if s.role != Role.ESCORT]
             if req:
-                slots.append(Slot(Role.ESCORT, min(4, req), True))
-                if req > 4:
-                    slots.append(Slot(Role.SWEEP, min(4, req - 4), False))
+                slots.append(Slot(Role.ESCORT, min(4, req), True))            # the TARCAP. More bandits than it can take: a Fighter Sweep package (v0.40.2)
         if obj.type not in _FLEET:
             slots.append(Slot(Role.CAP, 2, False, tag="HAVCAP"))
         return slots
@@ -262,8 +274,8 @@ class PackageBuilder:
         prim = st.bases[chosen[0][1].base_id]
         anchor = next((st.bases[sq.base_id] for _, sq, _, pl in chosen if pl), prim)
         dnm = math.hypot(tx - prim.x, ty - prim.y) / NM
-        wanted = [("HAVCAP", anchor)] if obj.type not in _FLEET else []
-        if obj.type == ObjectiveType.CAS or (obj.type not in _FLEET and dnm < 100):
+        wanted = [("HAVCAP", anchor)] if (obj.type not in _FLEET and not is_sweep(obj)) else []
+        if not is_sweep(obj) and (obj.type == ObjectiveType.CAS or (obj.type not in _FLEET and dnm < 100)):
             wanted.append(("BASECAP", prim))
         for tag, base in wanted:
             sq = self._pick_cap_near(base, ledger, lead_service) or (self._pick_cap_any(ledger, lead_service) if tag == "HAVCAP" else None)

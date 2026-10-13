@@ -132,8 +132,20 @@ def site_name(state, obj) -> str:
 def intent_for(state, pkg) -> str:
     """The intent line for a package, stable for the day and varied across the tasking order (see commander_intent)."""
     typ = pkg.objective.type
+    if typ == ObjectiveType.COUNTER_AIR and pkg.objective.aim == "SWEEP":         # a Fighter Sweep: its own lines
+        n = sum(1 for d in state.plan if d["number"] < pkg.number and d["objective"].get("aim") == "SWEEP")
+        line = _SWEEP_INTENT[(state.day * 3 + n) % len(_SWEEP_INTENT)]
+        return line.format(site=site_name(state, pkg.objective) or "the target") + f"  -- {_COMMANDERS[(state.day * 5 + pkg.number) % len(_COMMANDERS)]}"
     n = sum(1 for d in state.plan if d["number"] < pkg.number and d["objective"]["type"] == typ.value)
     return commander_intent(typ, None, n, site_name(state, pkg.objective), pkg.number, state.day)
+
+
+_SWEEP_INTENT = [
+    "Intel expects more fighters over {site} than the strike packages can carry. Get there first and make the sky ours.",
+    "Clear the air over {site} before the bombers arrive. Shoot from range; nobody chases into their SAMs.",
+    "Their fighters will be waiting near {site}. Be waiting for them.",
+    "Every bandit you take off the board over {site} is one the strikers never see.",
+]
 
 
 def intel_officer(rng) -> str:
