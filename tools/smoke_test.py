@@ -1276,10 +1276,20 @@ def main():
                 _sa10 = [a_ for a_ in _A4.values() if a_.variant in _tm9.UMBRELLA_VARIANTS and not a_.destroyed]
                 _jk = min(_m.hypot(_pt4["x"] - a_.x, _pt4["y"] - a_.y) / 1852 for a_ in _sa10)
                 _jt = _m.hypot(_pt4["x"] - _t4.x, _pt4["y"] - _t4.y) / 1852
-                assert _jk >= 29 or _jt >= 39, ("the JSOW launch point stays 30 nm from every live SA-10 (up to 40 nm from the target)", round(_jk, 1), round(_jt, 1))
+                assert _jk >= 39 or _jt >= 44, ("the JSOW launch point stays 40 nm from every live SA-10 (up to 45 nm from the target, v0.41.4)", round(_jk, 1), round(_jt, 1))
                 if _jt > 21:
                     assert _pts4["IP"]["alt"] / 0.3048 >= 32900, ("a long JSOW shot goes from 33,000 ft", _pts4["IP"]["alt"])
                 _jsow_kp = (_jk, _jt)
+    _sead2 = [f_.callsign for f_ in _pu.flights if f_.role == Role.SEAD and not f_.tag][1:]
+    if _sead2 and _um4.id != _t4.id:          # v0.41.4: the second HARM flight also holds HARMs for the umbrella after its Tor window
+        for co_ in _M4["coalition"]["blue"]["country"].values():
+            for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
+                if g_["name"] == _sead2[0]:
+                    _sp2 = next(p_ for p_ in g_["route"]["points"].values() if p_.get("name") == "SEAD")
+                    _q2 = [_red4.get((t_["params"]["task"].get("params") or {}).get("groupId")) for t_ in _sp2["task"]["params"]["tasks"].values()
+                           if t_.get("id") == "ControlledTask" and t_["params"]["task"]["id"] == "AttackGroup"]
+                    assert _um4.id in _q2, ("the second HARM flight waits on the umbrella too", _q2)
+        print(f"[umbrella] second HARM flight {_sead2[0]} also tasked on the SA-10 {_um4.id}")
     _off4 = abs((_brg["JSOW"] - _brg["SEAD"] + 180) % 360 - 180)
     _eg4, _hs4 = {}, []
     for co_ in _M4["coalition"]["blue"]["country"].values():

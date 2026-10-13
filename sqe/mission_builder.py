@@ -1404,6 +1404,13 @@ class MissionBuilder:
                     for _, tg_ in self._cover_tors(package):
                         ctt = task.ControlledTask(task.AttackGroup(tg_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                         ctt.stop_after_time(int(w.eta_s) + 180); wp.tasks.append(ctt)
+                    # v0.41.4: ...then it waits on the umbrella too. In the v0.41.3 run the Gudauta SA-10 stayed quiet through the first HARM flight's
+                    # window (one HARM went at it), lit up a minute later and killed the whole JSOW flight; a second flight still holding HARMs for it covers that.
+                    um_ = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
+                    ug_ = self.groups_by_asset.get(um_.id) if um_ else None
+                    if ug_ is not None and um_.id != package.objective.target_id:
+                        ctu = task.ControlledTask(task.AttackGroup(ug_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                        ctu.stop_after_time(int(w.eta_s) + 420); wp.tasks.append(ctu)
                 elif seads_ and (seads_[0] is f or seads_[0].id == f.id):
                     # the first HARM flight opens on the umbrella (the SA-10 covering this target): it reaches every jet in the wave, so it goes first
                     um_ = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
