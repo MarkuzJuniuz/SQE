@@ -129,6 +129,21 @@ def main():
                 assert _opts(_egr).get(14) is False and _opts(_egr).get(0) == 3, (_g["name"], "self-defence after the attack")
             _a2g += 1
     assert _a2g, "no AI ground-attack flight checked"
+    # nobody spawns on top of anybody: airborne groups 2 km apart (or 300 m in height), one group per runway / catapult
+    import math as _m3, collections as _co3
+    _air, _rw = [], _co3.Counter()
+    for _side in ("blue", "red"):
+        for _cn in _mz["mission"]["coalition"][_side]["country"].values():
+            for _g in _cn.get("plane", {}).get("group", {}).values():
+                _p0 = list(_g["route"]["points"].values())[0]
+                if _p0["type"] == "Turning Point":
+                    _air.append((_g["name"], _p0["x"], _p0["y"], _p0["alt"]))
+                elif _p0["type"] == "TakeOff":
+                    _rw[(_side, _p0.get("airdromeId"), _p0.get("linkUnit"))] += 1
+    _stk = [(a_[0], b_[0]) for i_, a_ in enumerate(_air) for b_ in _air[:i_] if _m3.hypot(a_[1] - b_[1], a_[2] - b_[2]) < 200 and abs(a_[3] - b_[3]) < 100]
+    assert not _stk, ("airborne groups spawned on top of each other", _stk)
+    assert all(v_ == 1 for v_ in _rw.values()), ("two groups on one runway / catapult", _rw)
+    print(f"    spawns: {len(_air)} airborne groups apart, {len(_rw)} runway / catapult starts, one group each")
     print(f"    {_a2g} AI ground-attack flights: no air-to-air on the way in, RTB when out of A2G weapons, self-defence after the attack")
     prim2 = [g for g in man.groups if g["kind"] == "asset" and g.get("primary_pkgs")]
     assert any(res.merged[0]["id"] in g["primary_pkgs"] for g in prim2), "merged package has no primary target"

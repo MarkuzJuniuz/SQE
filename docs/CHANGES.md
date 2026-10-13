@@ -1,3 +1,12 @@
+## v0.39.25
+
+Fix from the v0.39.24 run: about 9 of the 21 friendly losses were collisions in the first two minutes.
+
+* **Airborne flights no longer spawn on top of each other.** Two flights on the same route and schedule (the two SEAD flights of a package already underway when the mission starts) appeared at the same point and height: Viper 6 and 7, Viper 1 and 2, Cowboy 1 and Colt 2 flew into each other at 00:00. A flight that would appear within 2 km and 300 m of another, within 90 s of it, is now moved 2 km to the side and 1000 ft up (further if needed). Red CAP pairs and full-map patrols use the same rule.
+* **One group per runway or catapult.** Two Tomcat alert pairs were both put on the carrier's catapult (Springfield 8 and 9, three jets destroyed at 00:01). The first group at a base (your own flight first) gets the runway; every other one starts hot on the ramp or deck and taxis. A field with its runway taken and no parking for the type leaves that alert pair out (with a warning) instead of stacking it.
+* Who starts in the air and who starts on the ground is unchanged.
+* Smoke test: no stacked airborne spawns and one group per runway or catapult in a merged mission. A check over 18 missions (Viper, Hornet, Tomcat, level 3) found none.
+
 ## v0.39.24
 
 Fix from the v0.39.23 run: strikers with nothing but guns left turned on fresh MiGs and Su-27s, and most of the coalition's air losses were ground-attack flights that never left after their task.

@@ -49,6 +49,7 @@ A2G_ROLES = (Role.STRIKE, Role.SEAD, Role.CAS)
 A2G_WEAPONS = 14 | 240 | 768 | 4161536 | 30720
 # Air-to-ground jets whose loadouts carry radar missiles (AIM-120, AIM-54; checked in loadouts.py): after the attack they may shoot back.
 SHOOTS_BACK = {"F-16C", "FA-18C", "F-14BU"}
+SPAWN_SEP_M = 2000            # airborne flights never appear closer than this to each other (same height band, same minute)
 SA10_GATE_KM = 60              # ...but never inside an SA-10's reach (55 km): against an SA-10 target, or under an SA-10 umbrella, the gate (and so the hold
                                # orbit) is this far from the SA-10. v0.39.21 run: Hornet 1 held 40 km from the Sukhumi SA-6, 26 km from the SA-10, and was shot down there
 SEAD_WAVE_KM = 60              # SEAD packages in one mission whose targets are this close together reach their HARM points at the same moment (the builder's sync)
@@ -220,6 +221,8 @@ class MissionBuilder:
         self.o = opts or MissionOptions()
         self.lo = loadouts or LoadoutLibrary()
         self.rng = rng or random.Random()
+        self._runway_busy = set()                                      # bases whose runway / catapult already holds a group at mission start
+        self._air_spawns = []                                          # [(x, y, alt_m, t)]: where and when each airborne flight appears, so no two appear on top of each other
 
     # =====================================================================================================
     def build(self, package: Package, out_path, extras: list | tuple = (), ruins: list | tuple = (), preroll: dict | None = None) -> BuildResult:
@@ -563,6 +566,41 @@ class MissionBuilder:
                         "start": xp.start, "push": clock(P0x), "tot": clock(tot), "rtb": clock(rtb2), "tot_s": tot, "rtb_s": rtb2, "underway": P0x < 0, "struck": ruined,
                         "flights": ", ".join(f"{f.callsign} {f.count}x{f.aircraft}" for f in xp.flights)})
         return out
+
+    def _start_for(self, key) -> StartType:
+        """The first group at a base starts on the runway (or catapult); every other one starts hot on the ramp and taxis. v0.39.24 run: two
+        Tomcat alert pairs were both put on the carrier's catapult and three of the four jets were destroyed at mission start."""
+        if key in self._runway_busy:
+            return StartType.Warm
+        self._runway_busy.add(key)
+        return StartType.Runway
+
+    def _from_airport(self, side, name, typ, ap, maintask, start, size):
+        """None when the runway is taken and the field has no parking for this type: a second group on the runway would collide with the first."""
+        try:
+            return self.m.flight_group_from_airport(side, name, typ, ap, maintask=maintask, start_type=start, group_size=size)
+        except Exception:
+            self.warns.append(f"{name} left out: {ap.name} has its runway taken and no parking for the type")
+            return None
+
+    def _clear_spawn(self, s0, wps, act_s) -> None:
+        """Two flights on the same route and schedule (the two SEAD flights of a package already underway) used to appear at the same point
+        and height and fly into each other at mission start: v0.39.24 run, 4 pairs collided in the first 2 minutes and 9 jets were lost."""
+        nxt = next((w for w in wps[1:] if dist(s0.x, s0.y, w.x, w.y) > 100), None)
+        hdg = bearing(s0.x, s0.y, nxt.x, nxt.y) if nxt is not None else 0.0
+        s0.x, s0.y, alt = self._sep(s0.x, s0.y, s0.alt_ft * FT, hdg, act_s)
+        s0.alt_ft = alt / FT
+
+    def _sep(self, x0, y0, a0, hdg, t=0.0):
+        """An airborne group's spawn point, moved 2 km to the side and 1000 ft up (further if needed) when another group would appear within
+        2 km and 300 m of it, within 90 s of it. Both coalitions share the list: a mid-air at spawn kills either side."""
+        for k in range(12):
+            x, y = offset(x0, y0, hdg + 90, SPAWN_SEP_M * ((k + 1) // 2) * (1 if k % 2 else -1)) if k else (x0, y0)
+            alt = a0 + 1000 * FT * ((k + 1) // 2)
+            if not any(dist(x, y, ox, oy) < SPAWN_SEP_M and abs(alt - oa) < 300 and abs(t - ot) < 90 for ox, oy, oa, ot in self._air_spawns):
+                break
+        self._air_spawns.append((x, y, alt, t))
+        return x, y, alt
 
     def _add_ruin(self, xp, x, y, roll, manifest) -> None:
         """Smoke and fire where an earlier package already struck. Success: a destroyed site (three plumes, big fire). Failure: a single small fire.
@@ -934,7 +972,8 @@ class MissionBuilder:
             a = st.assets.get(pf["wing"])
             if a is None or a.destroyed or pf["type"] not in ENEMY_FIGHTERS:
                 continue
-            g = self.m.flight_group(self.red, f"FM Bandit {n + 1}", getattr(planes, pf["type"]), None, pt(pf["x"], pf["y"]), altitude=22000 * FT, speed=400 * KPH,
+            fx_, fy_, fa_ = self._sep(pf["x"], pf["y"], 22000 * FT, 0.0)
+            g = self.m.flight_group(self.red, f"FM Bandit {n + 1}", getattr(planes, pf["type"]), None, pt(fx_, fy_), altitude=fa_, speed=400 * KPH,
                                     maintask=task.CAP, group_size=2)
             g.set_skill(skill)
             load = enemy_cap_loadout(pf["type"])
@@ -1068,7 +1107,7 @@ class MissionBuilder:
         spec = AIRCRAFT[f.aircraft]
         base = st.bases[f.base_id]
         pt = lambda x, y: mapping.Point(x, y, self.t)
-        past_push = False
+        past_push, act_s = False, 0
         csname, fno = f.callsign.rsplit(" ", 1)
         fno = int(fno)
 
@@ -1111,9 +1150,11 @@ class MissionBuilder:
             else:
                 g = self.m.flight_group_from_airport(self.usa, f.callsign, spec.dcs_type, self.apt[base.id], maintask=MAIN_TASK[f.role],
                                                      start_type=StartType.Runway, group_size=f.count)
+            self._runway_busy.add(("blue", base.id))
             first = 0
         else:                 # already airborne
             s0 = wps[0]
+            self._clear_spawn(s0, wps, act_s)
             g = self.m.flight_group(self.usa, f.callsign, spec.dcs_type, None, pt(s0.x, s0.y), altitude=s0.alt_ft * FT,
                                     speed=s0.speed_kts * KPH, maintask=MAIN_TASK[f.role], group_size=f.count)
             first = 1
@@ -1740,7 +1781,8 @@ class MissionBuilder:
                 for kx, ky, knm in keepout:                 # tanker / AWACS / HAVCAP stay well clear as well
                     if dist(sx, sy, kx, ky) < knm * NM:
                         sx, sy = offset(kx, ky, bearing(kx, ky, sx, sy), knm * NM)
-                g = self.m.flight_group(self.red, f"Bandit {i + 1}", cls, None, pt(sx, sy), altitude=alt, speed=spd, maintask=task.CAP, group_size=2)
+                gx, gy, galt = self._sep(sx, sy, alt, bearing(sx, sy, tx, ty))
+                g = self.m.flight_group(self.red, f"Bandit {i + 1}", cls, None, pt(gx, gy), altitude=galt, speed=spd, maintask=task.CAP, group_size=2)
                 ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
                 ct.stop_after_time(int(max(tot_s + 300, (pf_["end"] - self._start_min) * 60)))       # on station until its planned window ends
                 g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
@@ -1753,7 +1795,9 @@ class MissionBuilder:
                 ap = self.t.airports.get(a.airport) if a.airport else None
                 if ap is None:
                     continue
-                g = self.m.flight_group_from_airport(self.red, f"Alert {i + 1}", cls, ap, maintask=task.CAP, start_type=StartType.Runway, group_size=2)
+                g = self._from_airport(self.red, f"Alert {i + 1}", cls, ap, task.CAP, self._start_for(("red", ap.name)), 2)
+                if g is None:
+                    continue
                 g.add_trigger_action(task.StartCommand())
                 g.uncontrolled = True
                 trig = triggers.TriggerOnce(comment=f"scramble {g.name}")
@@ -1841,7 +1885,9 @@ class MissionBuilder:
                 continue
             cls = getattr(planes, pk["type"])
             load = enemy_cap_loadout(pk["type"])
-            g = self.m.flight_group_from_airport(self.red, f"Reinforce {k}", cls, ap, maintask=task.CAP, start_type=StartType.Runway, group_size=pk["size"])
+            g = self._from_airport(self.red, f"Reinforce {k}", cls, ap, task.CAP, self._start_for(("red", ap.name)), pk["size"])
+            if g is None:
+                continue
             g.add_trigger_action(task.StartCommand())
             g.uncontrolled = True
             trig = triggers.TriggerOnce(comment=f"reinforce {g.name}")
@@ -1901,10 +1947,14 @@ class MissionBuilder:
                 break
             label = f"{sq.callsign} {fno}"
             taken.add(label)
+            st_ = self._start_for(("blue", base.id))
             if base.kind == BaseKind.CARRIER:
-                g = self.m.flight_group_from_unit(self.usa, label, spec.dcs_type, self.ship[base.id], maintask=task.CAP, start_type=StartType.Runway, group_size=2)
+                g = self.m.flight_group_from_unit(self.usa, label, spec.dcs_type, self.ship[base.id], maintask=task.CAP, start_type=st_, group_size=2)
             else:
-                g = self.m.flight_group_from_airport(self.usa, label, spec.dcs_type, self.apt[base.id], maintask=task.CAP, start_type=StartType.Runway, group_size=2)
+                g = self._from_airport(self.usa, label, spec.dcs_type, self.apt[base.id], task.CAP, st_, 2)
+                if g is None:
+                    srcs = srcs[1:]
+                    continue
             g.add_trigger_action(task.StartCommand())
             g.uncontrolled = True
             trig = triggers.TriggerOnce(comment=f"alert {label}")
