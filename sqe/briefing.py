@@ -55,8 +55,21 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                  if n_def and obj.type.value != "FLEET_DEFENSE" else
                  ("" if obj.type.value == "FLEET_DEFENSE" else "No organised fighter defence is expected at the target.")),
             f"Weather: {x['weather']}." + ((" Loadouts changed for the weather: " + " ".join(x["wx_notes"])) if x.get("wx_notes") else "")]
-    if obj.type.value == "DEAD" and obj.aim == "DEAD":
-        sit += ["", "A SEAD package goes in ahead of you to blind this site's radars. If any search or track radar is still up when you reach the gate, "
+    if obj.type.value == "DEAD" and obj.aim == "STANDOFF":
+        from .difficulty import get as _gd3
+        from .war import WarSimulator as _WS3
+        _p3 = _WS3(_gd3(state.level)).sead_p(state, pkg)
+        sit += ["", "Standoff DEAD. This site is, or sits under, a long-range SAM, so it is one package: two HARM flights and a JSOW flight go in "
+                    "together. The first HARM flight takes the long-range radars, the second takes the Tors that cover the site, in the same salvo, so the "
+                    "Tors are busy with HARMs when the JSOWs arrive. The JSOW flight comes in on its own axis, about 30 degrees off the HARM shooters', "
+                    "and releases its AGM-154As on the radars, the launchers and the Tors from stand-off range. Nobody flies into the long-range SAM's "
+                    "reach: release, then back out the way you came. Out of HARMs or JSOWs, go home.",
+                f"Intelligence puts the chance of suppressing the radars at about {round(_p3 * 100 / 5) * 5:.0f}%."]
+        if getattr(pf, "kit", "") == "JSOW":
+            sit += ["", "You are the Standoff DEAD flight. A radar that keeps tracking is the HARMs' kill; one that shuts down to dodge them is still "
+                        "where it was last seen, and that is where your JSOWs land, with the rest on the launchers and the Tors."]
+    elif obj.type.value == "DEAD" and obj.aim == "DEAD":
+        sit += ["", "Close DEAD. A SEAD package goes in ahead of you to suppress this site's radars. If any search or track radar is still up when you reach the gate, "
                     "you hold outside the threat and re-check. AWACS calls hold, go, or RTB. You break off and RTB on a timeout, on low fuel, "
                     "or when every SEAD flight on the site is down or gone."]
     elif obj.type.value == "DEAD" and obj.aim == "SEAD":
@@ -69,11 +82,11 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                         "site has two directions to watch. The HARMs go first; release your AGM-154As on the radars' last-known positions from stand-off "
                         "range. A radar that keeps tracking is the HARMs' kill; one that shuts down to dodge them is still where it was last seen, and "
                         "that is where your JSOWs land."]
-        sit += ["", f"Your job is only to blind the radars. A DEAD package follows about {_gap} minutes behind you and goes in only if the radars are out. "
-                    f"Intelligence puts the chance of blinding this site at about {round(_p * 100 / 5) * 5:.0f}%" + (f", better than it was: this site has beaten us {_sf(state, obj.target_id)} time{'s' if _sf(state, obj.target_id) != 1 else ''} running and its crews and positions are known." if _sf(state, obj.target_id) else ".")]
+        sit += ["", f"Your job is only to suppress the radars. A Close DEAD package follows about {_gap} minutes behind you and goes in only if the radars are out. "
+                    f"Intelligence puts the chance of suppressing this site at about {round(_p * 100 / 5) * 5:.0f}%" + (f", better than it was: this site has beaten us {_sf(state, obj.target_id)} time{'s' if _sf(state, obj.target_id) != 1 else ''} running and its crews and positions are known." if _sf(state, obj.target_id) else ".")]
     if x.get("intel"):
         sit += ["", "Intelligence: " + " ".join(x["intel"])]
-    mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {'JSOW' if getattr(pf, 'kit', '') == 'JSOW' else ('DEAD' if (pf.role.value == 'STRIKE' and obj.type.value == 'DEAD') else pf.role.value)}.", f"Your task: {pf.task}."]
+    mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {_long_label(pf, obj)}.", f"Your task: {pf.task}."]
     exe = ["Package (push / TOT are staggered: sweep first, then SEAD, escorts, strikers):"]
     for r in x["pkg_table"]:
         f = next(ff for ff in pkg.flights if ff.callsign == r["callsign"])
@@ -108,3 +121,9 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                     f"\n\n4. ADMINISTRATION AND LOGISTICS\n{text['admin']}\n\n5. COMMAND AND SIGNAL\n{text['comms']}\n\n{credit_line()}")
     text["blue_task"] = f"{text['mission']}\n\nPUSH {tl['push']}   TOT {tl['tot']}"
     return text
+
+
+def _long_label(f, obj) -> str:
+    """The flight's job in words, for 'tasked as ...'."""
+    from .models import task_label
+    return {"SO DEAD": "Standoff DEAD", "DEAD": "Close DEAD"}.get(task_label(f, obj), task_label(f, obj))

@@ -1,3 +1,17 @@
+## v0.40.0
+
+Standoff DEAD and Close DEAD. Each DEAD job now gets one kind of DEAD flight, picked by the threat at the site.
+
+* **Standoff DEAD** (a site that is, or sits within 55 km of, a live SA-10): one package, not two. Two HARM flights and a JSOW flight (Hornets or Vipers; no Tomcats on DEAD here) go in together, and nobody flies into the SA-10's reach. The JSOW flight is now the DEAD strike: its AGM-154As go on two radars, the covering Tors and the launchers, as far as one JSOW per aim point goes. The war sim counts it as the DEAD flight (it used to count JSOWs as suppression only), released from stand-off range so it is less exposed than a GBU flight. The JSOW flight is picked before the second HARM flight, so a package short of jets keeps its DEAD flight.
+* **Equal weight on the long-range radars and the Tors.** A Standoff DEAD package always has two HARM flights: the first opens on the long-range radars, the second on the Tors, in the same salvo, so the Tors are busy with HARMs when the JSOWs arrive (v0.39.24 run: Tors shot down 10 JSOWs). Every HARM flight still ends with a second pass at the Tors.
+* **Close DEAD** (everything else): as before, a SEAD package that suppresses the radars, then a GBU package 10 minutes later behind the radar gate and hold. The SEAD package no longer carries JSOWs.
+* A suppressed SA-10 (radars out) does not count as long-range: its site and its neighbours get the SEAD / Close DEAD pair until it is repaired overnight.
+* Names: "Standoff DEAD: destroy ...", "SEAD: suppress ...", "Close DEAD: destroy ..., once its radars are down". Package tables label the JSOW flight SO DEAD; the briefing says "tasked as Standoff DEAD" or "Close DEAD". "Blinded" is now "suppressed" in the briefing, the debrief, the radio and the Missions list.
+* The war sim ignores a flight with no aircraft in it (it could take the SEAD verdict without any SEAD jets).
+* Out of HARMs or JSOWs, a flight goes home (v0.39.24's RTB when empty) and stand-off flights egress back along their approach (v0.39.22).
+* Unit counts, 129 builds against 125 before (Viper, Hornet, Tomcat, Hog; levels 1-3): DEAD missions median 221 units (was 228), level 2 median 200 (was 213), missions at the 250 cap 4 (was 6).
+* Smoke test: Standoff DEAD packages (JSOW flight, two HARM flights, no Tomcat on DEAD, JSOW counted as the DEAD strike, JSOWs on the launchers), which sites are long-range, labels. The SEAD / Close DEAD checks force the pair. The dense-column check is pinned to fixed campaign ids (it failed once on a random one).
+
 ## v0.39.25
 
 Fix from the v0.39.24 run: about 9 of the 21 friendly losses were collisions in the first two minutes.

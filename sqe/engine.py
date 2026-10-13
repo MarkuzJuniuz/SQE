@@ -286,8 +286,9 @@ class Session:
         st = self.state
         st.raids.setdefault("sead", {})
         sim = WarSimulator(self.d)
+        from .models import SEAD_AIMS
         for p in pkgs:
-            if p.objective.type == ObjectiveType.DEAD and p.objective.aim == "SEAD":
+            if p.objective.type == ObjectiveType.DEAD and p.objective.aim in SEAD_AIMS:
                 rng = _r.Random(f"{st.campaign_id}:{st.day}:{p.objective.target_id}:sead")
                 st.raids["sead"][p.objective.target_id] = chance(rng, sim.sead_p(st, p), self.d.variance)
 

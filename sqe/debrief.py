@@ -141,7 +141,7 @@ local function siteDead(n)
   local trk = #s.trk > 0 and s.ntrk == 0 and not s.said.trk
   if blind then
     s.said.blind = true; s.said.trk = true
-    say(who .. ": " .. s.label .. " blinded, all radars destroyed.")
+    say(who .. ": " .. s.label .. " suppressed, all radars destroyed.")
   elseif trk then
     s.said.trk = true
     say(who .. ": track radar destroyed, " .. s.label .. ".")
@@ -890,10 +890,10 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     flown_ids = [data.get("package")] + [m["id"] for m in manifest.merged if t_end2 >= m["tot_s"] + 90]
     for pk in state.plan:
         o_ = pk.get("objective", {})
-        if pk.get("id") in flown_ids and o_.get("type") == "DEAD" and o_.get("aim") == "SEAD" and o_.get("target_id") in state.assets:
+        if pk.get("id") in flown_ids and o_.get("type") == "DEAD" and o_.get("aim") in ("SEAD", "STANDOFF") and o_.get("target_id") in state.assets:
             a_ = state.assets[o_["target_id"]]
             _note_sead(state, a_.id, bool(a_.suppressed or a_.destroyed))
-            out["lines"].append(f"SEAD on {a_.name}: " + ("its radars are out; the DEAD package can go in" if (a_.suppressed or a_.destroyed) else "its radars are still up; the DEAD package will not commit"))
+            out["lines"].append(f"SEAD on {a_.name}: " + (("its radars are out" + ("" if o_.get("aim") == "STANDOFF" else "; the Close DEAD package can go in")) if (a_.suppressed or a_.destroyed) else ("its radars are still up" + ("" if o_.get("aim") == "STANDOFF" else "; the Close DEAD package will not commit"))))
     pdat = data.get("player") or {}
     t0, t1 = pdat.get("takeoff"), pdat.get("landed")
     flight_s = (t1 - t0) if (t0 is not None and t1 is not None) else ((data.get("time", 0) - t0) if t0 is not None else 0)

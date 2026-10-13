@@ -949,6 +949,7 @@ def main():
         for x_ in _pl._garrison_cover(_st, a_): x_.health = 0.0
     assert _gc(), "garrison CAS is offered once the cover is cleared"
     print("[garrison cas] held back while the long-range SAM sites that cover a garrison live, offered once they are down; front-line CAS unchanged")
+    import sqe.war as _wlr; _lr_real = _wlr.long_range_site; _wlr.long_range_site = lambda *a_: False     # this check is about the SEAD / Close DEAD pair: no Standoff DEAD
     # --late-sead (hold test): the SEAD stage goes in LATE_SEAD_MIN later, so the DEAD stage (DEAD_STAGE_GAP_MIN behind it) arrives first and holds
     import sqe.engine as _eng2
     from sqe.war import DEAD_STAGE_GAP_MIN as _gap2
@@ -970,12 +971,14 @@ def main():
     assert _pr and all(_hm2(d_) - _hm2(s_) == _gap2 - _eng2.LATE_SEAD_MIN for s_, d_ in _pr), "with --late-sead the DEAD stage goes in ahead of its SEAD"
     _ln2 = json.load(open(Path(__file__).resolve().parent.parent / ".vscode" / "launch.json"))["configurations"]
     assert any(c_.get("args") == ["--ai-test", "--late-sead"] for c_ in _ln2), "the debug dropdown has the hold test"
+    _wlr.long_range_site = _lr_real
     print(f"[late sead] --late-sead puts the DEAD stage {_eng2.LATE_SEAD_MIN - _gap2} min ahead of its SEAD (normally {_gap2} min behind): the hold test")
     # JSOW slingers (v0.39.19): SEAD packages carry a JSOW flight (Hornet 4 / Viper 2 AGM-154A per jet) timed so the JSOWs and HARMs arrive together
     from sqe.loadouts import JSOW_PER_JET as _jpj, LoadoutLibrary as _LL
     from sqe.packages import Package as _Pkg
     from sqe.mission_builder import stagger as _stg2, JSOW_TRAIL_S as _jl, DEAD_SEAD_LEAD_S as _dl
     from sqe.war import _suppressor as _sup
+    import math as _m3j
     from sqe.models import Role as _Rl2
     _lo = _LL()
     _h = _lo.for_role("FA-18C", _Rl2.STRIKE, "JSOW"); _v = _lo.for_role("F-16C", _Rl2.STRIKE, "JSOW")
@@ -983,18 +986,36 @@ def main():
     assert _v[3]["CLSID"] == _v[7]["CLSID"] == "{AGM-154A}" and sum("154" in x["CLSID"] for x in _v.values()) == 2, "Viper JSOW kit: 2 AGM-154A"
     assert _jpj == {"FA-18C": 4, "F-16C": 2}
     s.new("Jsow", "F-16C", 3, seed=1); s.late_sead_min = 0; s.state.campaign_id = f"{0x15a0001:010x}"; s.plan_day()     # pinned: the dice come from the campaign id
-    _sp3 = [p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and p_.objective.aim == "SEAD"]
+    _sp3 = [p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and p_.objective.aim == "STANDOFF"]
     _jf = [f_ for p_ in _sp3 for f_ in p_.flights if f_.kit == "JSOW"]
-    assert _jf and all(f_.aircraft in _jpj and f_.role == _Rl2.STRIKE for f_ in _jf), "SEAD packages carry JSOW slingers, Hornets or Vipers only"
-    assert not any(f_.kit for p_ in s.packages() if p_.objective.aim != "SEAD" for f_ in p_.flights), "only SEAD packages get the JSOW slot"
+    assert _jf and all(f_.aircraft in _jpj and f_.role == _Rl2.STRIKE for f_ in _jf), "Standoff DEAD packages carry a JSOW flight, Hornets or Vipers only"
+    assert not any(f_.kit for p_ in s.packages() if p_.objective.aim != "STANDOFF" for f_ in p_.flights), "only Standoff DEAD packages get the JSOW slot"
+    assert not any(f_.aircraft == "F-14BU" and f_.role == _Rl2.STRIKE for p_ in _sp3 for f_ in p_.flights), "no Tomcats on DEAD under a long-range SAM"
+    assert all(sum(1 for f_ in p_.flights if f_.role == _Rl2.SEAD and not f_.tag) == 2 for p_ in _sp3 if sum(1 for f_ in p_.flights if f_.role == _Rl2.SEAD) >= 2) and \
+        any(sum(1 for f_ in p_.flights if f_.role == _Rl2.SEAD and not f_.tag) == 2 for p_ in _sp3), "Standoff DEAD: two HARM flights (long-range radars and Tors, same salvo)"
     _pj = next(p_ for p_ in _sp3 if any(f_.kit == "JSOW" for f_ in p_.flights) and s.flyable(p_, squadron_only=False))
     assert any(f_.kit == "JSOW" for f_ in _Pkg.from_dict(_pj.to_dict()).flights), "the JSOW kit survives the save"
     assert (_stg2(_pj, _Rl2.SWEEP), _stg2(_pj, _Rl2.STRIKE), _stg2(_pj, _Rl2.SEAD)) == (-_dl - 30, -_dl + _jl, -_dl), "JSOW jets push with the HARM shooters (v0.39.21), the sweep ahead"
-    assert all(_sup(f_) for f_ in _jf), "the war sim counts JSOW slingers as suppression, not as a DEAD strike"
+    assert not any(_sup(f_, p_) for p_ in _sp3 for f_ in p_.flights if f_.kit == "JSOW"), "the war sim counts the JSOW flight as the DEAD strike of a Standoff DEAD package"
     s.ai_test = True; s.fly(_pj.number, s.flyable(_pj, squadron_only=False)[0].id); s.ai_test = False
     _mj = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
     assert "{AGM-154A}" in _mj and '["name"]="JSOW"' in _mj and _mj.count('["id"]="Bombing"') >= 1, "the JSOW flight is built: AGM-154A, a JSOW launch point, release tasks"
-    print(f"[jsow] {len(_jf)} JSOW flights in {len(_sp3)} SEAD packages; Hornet 4 / Viper 2 AGM-154A; they push with the HARM shooters; built with a launch point and release tasks")
+    # Standoff DEAD: the JSOWs also go on the launchers; a site under a live SA-10 gets Standoff DEAD, one clear of it the SEAD / Close DEAD pair
+    from dcs import lua as _luaj
+    from sqe.war import long_range_site as _lrs
+    from sqe.models import task_label as _tl
+    _Mj = _luaj.loads(_mj)["mission"]
+    _tgt_j = _pj.objective.target_id
+    _lnx = [(u_["x"], u_["y"]) for co_ in _Mj["coalition"]["red"]["country"].values() for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()
+            if g_["name"] == _tgt_j for u_ in g_["units"].values() if " ln" in u_["type"].lower()]
+    _bmb = [(t_["params"]["x"], t_["params"]["y"]) for co_ in _Mj["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
+            for p_ in g_["route"]["points"].values() for t_ in ((p_.get("task") or {}).get("params") or {}).get("tasks", {}).values() if t_.get("id") == "Bombing"]
+    assert _lnx and any(_m3j.hypot(bx_ - lx_, by_ - ly_) < 150 for bx_, by_ in _bmb for lx_, ly_ in _lnx), "Standoff DEAD JSOWs aim at the launchers too"
+    _sa10 = [a_ for a_ in s.state.assets.values() if a_.variant == "SA-10" and not a_.destroyed]
+    _far = [a_ for a_ in s.state.assets.values() if a_.kind.value == "SAM" and a_.variant != "SA-10" and all(_m3j.hypot(a_.x - b_.x, a_.y - b_.y) > 60000 for b_ in _sa10)]
+    assert all(_lrs(s.state, a_) for a_ in _sa10) and (not _far or not _lrs(s.state, _far[0])), "long range: an SA-10 or under one; anything else gets the SEAD / Close DEAD pair"
+    assert {_tl(f_, _pj.objective) for f_ in _pj.flights if not f_.tag} >= {"SEAD", "SO DEAD"}, "package table labels"
+    print(f"[jsow] {len(_jf)} JSOW flights in {len(_sp3)} Standoff DEAD packages; Hornet 4 / Viper 2 AGM-154A; they push with the HARM shooters; built with a launch point and release tasks")
     # Tors (v0.39.20): the Tors that cover a SEAD/DEAD target are part of the job: the second HARM flight opens on them, the JSOWs aim at them,
     # the DEAD gate waits for them (route check), and the Tor vehicle counts as a radar
     import math as _m3
@@ -1006,7 +1027,7 @@ def main():
     _ts.new("Tor", "F-16C", 3, seed=1); _ts.state.campaign_id = f"{0x70a0001:010x}"; _ts.plan_day()
     _A3 = _ts.state.assets; _tors = [a_ for a_ in _A3.values() if a_.variant == "SA-15"]
     _cov = lambda p_: [a_.id for a_ in _tors if _m3.hypot(a_.x - _A3[p_.objective.target_id].x, a_.y - _A3[p_.objective.target_id].y) <= _tck * 1000]
-    _p3 = next(p_ for p_ in _ts.packages() if p_.objective.aim == "SEAD" and _A3[p_.objective.target_id].variant == "SA-10" and _cov(p_) and _ts.flyable(p_))
+    _p3 = next(p_ for p_ in _ts.packages() if p_.objective.aim == "STANDOFF" and _A3[p_.objective.target_id].variant == "SA-10" and _cov(p_) and _ts.flyable(p_))
     _ts.ai_test = True; _ts.fly(_p3.number, _ts.flyable(_p3)[0].id); _ts.ai_test = False
     _m3t = _zf.ZipFile(_ts.state.pending["miz"]).read("mission").decode("utf-8", "ignore"); _M3 = _lua3.loads(_m3t)["mission"]
     _red = {g_["groupId"]: (g_["name"], [(u_["x"], u_["y"]) for u_ in g_["units"].values()]) for co_ in _M3["coalition"]["red"]["country"].values()
@@ -1031,6 +1052,8 @@ def main():
     assert any(_p3.objective.target_id in sq_ and sq_[-1] in _cov(_p3) and sq_.index(_p3.objective.target_id) < len(sq_) - 1 for sq_ in _harm), \
         "the HARM flights end with a second pass at the Tors that guard the site (v0.39.22)"
     assert _jsow >= 1, "the JSOW flight aims at the Tors that guard the site"
+    import sqe.war as _wlr; _lr_real = _wlr.long_range_site; _wlr.long_range_site = lambda *a_: False     # this check is about the SEAD / Close DEAD pair: no Standoff DEAD
+    _ts.plan_day()
     _d3 = next(p_ for p_ in _ts.packages() if p_.objective.aim == "DEAD" and _cov(p_) and _ts.flyable(p_))
     _ts.ai_test = True; _ts.fly(_d3.number, _ts.flyable(_d3)[0].id); _ts.ai_test = False
     _d3t = _zf.ZipFile(_ts.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
@@ -1040,6 +1063,7 @@ def main():
     if _tm9.umbrella_site(_ts.state, _A3[_d3.objective.target_id]) is not None:
         assert "um=60000" in _d3t, "a gate under an SA-10 umbrella also fires 60 km from the SA-10"
     assert "local function gateBlind(" in _d3t or "local function gateBlind(" in _zf.ZipFile(_ts.state.pending["miz"]).read("l10n/DEFAULT/dictionary").decode("utf-8", "ignore"), "the hook's gate checks the Tors too"
+    _wlr.long_range_site = _lr_real
     print(f"[tors] Tors within {_tck:.0f} km of a SEAD/DEAD target: the second HARM flight opens on them, every HARM flight ends with a second pass, the JSOWs aim at them, "
           f"the DEAD gate names them; gate 60 km out against an SA-10 or under its umbrella")
     # saturation (v0.39.21): SEAD packages on one cluster arrive together on their real routes; under an SA-10 umbrella the HARM point stays out of
@@ -1050,7 +1074,7 @@ def main():
     from dcs import lua
     _ss = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, flight_filter="all"))
     _ss.new("Sat", "F-16C", 3, seed=1); _ss.state.campaign_id = f"{0x70a0001:010x}"; _ss.plan_day()
-    _A4 = _ss.state.assets; _sd4 = [p_ for p_ in _ss.packages() if p_.objective.aim == "SEAD"]
+    _A4 = _ss.state.assets; _sd4 = [p_ for p_ in _ss.packages() if p_.objective.aim in ("SEAD", "STANDOFF")]
     _arr = [int(p_.start[:2]) * 60 + int(p_.start[3:5]) + _ss._harm_leg_s(p_) / 60 for p_ in _sd4]
     assert len(_sd4) >= 2 and max(_arr) - min(_arr) <= 1.5, ("SEAD packages on one cluster reach their HARM points together", _arr)
     _pu = next(p_ for p_ in _sd4 if _tm9.umbrella_site(_ss.state, _A4[p_.objective.target_id]) and _ss.flyable(p_) and any(f_.kit == "JSOW" for f_ in p_.flights))
@@ -1106,6 +1130,7 @@ def main():
     from sqe import debrief as _db
     from sqe.mission_builder import stagger as _stg
     from sqe.models import Role as _Rl
+    import sqe.war as _wlr; _lr_real = _wlr.long_range_site; _wlr.long_range_site = lambda *a_: False     # this check is about the SEAD / Close DEAD pair: no Standoff DEAD
     for sd_ in range(1, 40):
         s.new("Gate", "FA-18C", 3, seed=sd_); _st = s.state
         _st.raids["sead_fail"] = {a_.id: 3 for a_ in _st.assets.values() if a_.kind.value == "SAM"}; s.plan_day()      # valve open: the combined package this block is about
@@ -1114,6 +1139,7 @@ def main():
     assert _dk, "no DEAD package found"
     assert (_stg(_dk, _Rl.SWEEP), _stg(_dk, _Rl.SEAD), _stg(_dk, _Rl.ESCORT), _stg(_dk, _Rl.STRIKE)) == (-330, -300, -270, 0), "DEAD package timing"
     s.ai_test = True; s.fly(_dk.number, None); s.ai_test = False
+    _wlr.long_range_site = _lr_real
     _zz = _zf.ZipFile(_st.pending["miz"]); _mt = _zz.read("mission").decode("utf-8", "ignore")
     assert _mt.count("SwitchWaypoint") >= 1 and _re.search(r"local GATES = \{ \{t=\d+, site=", _mt), "the AI flights carry a radar gate"
     assert "ABORT" in _mt, "stand-off flights get a return waypoint before the landing"
@@ -1229,6 +1255,7 @@ def main():
     _ra2.spend(_st, _w.base_asset_id, _bud); assert not _ra2.can(_st, _w.base_asset_id, 2), "a wing out of budget flies nothing more"
     assert all(w2_.base_asset_id != _w.base_asset_id for w2_, _ in _rd2.raider_wings(_st)), "and is not offered for a raid"
     print("[raid aims] friendly garrisons (new + old saves), raids on fields / supply sites / garrisons / troops: plan, mission, manifest, outcome; replacement overnight; one shared daily sortie budget, booked once")
+    import sqe.war as _wlr; _lr_real = _wlr.long_range_site; _wlr.long_range_site = lambda *a_: False     # this check is about the SEAD / Close DEAD pair: no Standoff DEAD
     # SEAD first: each SEAD / DEAD job is a SEAD package and a DEAD package 25 min behind it; the DEAD goes in only if the radars are blind
     from sqe import war as _w3
     from sqe.war import WarSimulator as _WS3
@@ -1294,12 +1321,13 @@ def main():
         assert ("GATES = { {t=" in _mz.replace("\\", "")) or True
     from sqe.mission_builder import stagger as _stg
     assert _stg(_de, Role.ESCORT) == -30 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage keeps its escorts with it"
+    _wlr.long_range_site = _lr_real
     # the HARM launch point is at the edge of an SA-10's reach and the HARM task asks for ARMs; in the all-AI test your own SEAD flight gets the same tasking
     import math as _m
     from sqe import threatmap as _tm9
     _sx = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="off", flight_filter="all"))
     _sx.new("SEAD launch", "F-16C", 3, seed=11)
-    _se_ = next(p_ for p_ in _sx.packages() if p_.objective.aim == "SEAD" and _sx.flyable(p_))
+    _se_ = next(p_ for p_ in _sx.packages() if p_.objective.aim in ("SEAD", "STANDOFF") and _sx.flyable(p_))
     for _ai in (False, True):
         _sx.ai_test = _ai
         _sx.fly(_se_.number, next(f_ for f_ in _sx.flyable(_se_) if f_.role == Role.SEAD).id)
@@ -1389,6 +1417,7 @@ def main():
         _vals = []
         for _sd in (5, 6, 7):
             s.new("Dense", "A-10C", 3, seed=_sd); _st = s.state
+            _st.campaign_id = f"{0xde05e00 + _sd:010x}"; s.plan_day()       # pinned: merged packages (and so the unit cap) follow the random campaign id
             _pk = next((p_ for p_ in s.packages() if p_.objective.type.value == "CAS" and p_.objective.target_id.startswith("armor_") and s.flyable(p_)), None)
             if _pk is None:
                 continue
@@ -1402,6 +1431,7 @@ def main():
     assert _cnt[1.0] > 1.5 * _cnt[0.3], f"a full-strength column is far denser than a beaten one: {_cnt}"
     assert s.last_build.counts["units"] < 250, s.last_build.counts
     print(f"[dense columns] vehicles in a front-line column: {_cnt[1.0]:.0f} at full strength, {_cnt[0.3]:.0f} at 30%; no losses leaves the strength unchanged")
+    import sqe.war as _wlr; _lr_real = _wlr.long_range_site; _wlr.long_range_site = lambda *a_: False     # this check is about the SEAD / Close DEAD pair: no Standoff DEAD
     # SEAD wears the defence down: each failed day raises the next day's odds, a failed attempt still costs the site, level 3 opens the valve after 2 days
     from sqe import war as _w4
     s.new("SEAD learn", "F-16C", 3, seed=11); _st = s.state
@@ -1421,7 +1451,7 @@ def main():
     s.new("SEAD brief", "F-16C", 3, seed=11); _st = s.state
     _se = next(p_ for p_ in s.packages() if p_.objective.aim == "SEAD" and s.flyable(p_))
     s.fly(_se.number, next(f_ for f_ in s.flyable(_se) if f_.role == Role.SEAD).id)
-    assert "chance of blinding" in s.last_build.text["situation"], "the SEAD briefing states the odds"
+    assert "chance of suppressing" in s.last_build.text["situation"], "the SEAD briefing states the odds"
     print("[sead attrition] +10% a failed day (cap 40%), a failed attempt wears the site, valve after 2 failed days at Level 3, the briefing gives the odds")
     # jamming: pod / internal tiers, the hook carries them, the abstract war counts them
     from sqe import ecm as _ecm
@@ -1456,6 +1486,7 @@ def main():
     _se2 = next(p_ for p_ in s.packages() if p_.objective.aim == "SEAD"); _sim = _w4.WarSimulator(s.d, random.Random(1)); _pj = _sim.sead_p(_st, _se2)
     _ecm_cut = _ecm.SITE_CUT; _ecm.SITE_CUT = 0.0; _pn = _sim.sead_p(_st, _se2); _ecm.SITE_CUT = _ecm_cut
     assert _pj > _pn, "jamming cover raises the SEAD odds"
+    _wlr.long_range_site = _lr_real
     print("[jamming] tiers (internal / pod / none), burn-through by range, pods and tiers in the hook, jamming cover raises the SEAD odds")
     # air wings that fall back: a badly depleted wing or squadron stands down, recovers faster, returns; the player's squadron and carriers never
     from sqe import airwings as _aw
