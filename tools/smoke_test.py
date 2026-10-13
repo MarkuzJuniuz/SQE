@@ -180,6 +180,13 @@ def main():
     _rz = [g_ for co_ in _mz["mission"]["coalition"]["red"]["country"].values() for g_ in co_.get("plane", {}).get("group", {}).values() if g_["name"].startswith("Bandit")]
     assert all(any(t_.get("id") == "EngageTargetsInZone" for t_ in list(g_["route"]["points"].values())[0]["task"]["params"]["tasks"].values()) for g_ in _rz), "red patrols: engage only round their station"
     print(f"    {_nst} TARCAP / escort flights on their own stations (no IP, TARCAP without egress, leashed); {len(_rz)} red patrols leashed the same way")
+    # v0.41.1: alert fields scramble on a circle round the FIELD, and only fields within reach of the fight send pairs
+    from sqe.mission_builder import ALERT_REACH_NM as _arn, FIELD_DETECT_NM as _fdn
+    _tz = [z_ for z_ in _mz["mission"]["triggers"]["zones"].values() if z_["name"].startswith("detect ")]
+    for z_ in _tz:
+        _fa = ms.state.assets[z_["name"].split(" ", 1)[1]]
+        assert _m3.hypot(z_["x"] - _fa.x, z_["y"] - _fa.y) < 100 and z_["radius"] <= _fdn * 1852 + 1, ("detection circle round the field", z_["name"])
+    print(f"    {len(_tz)} alert detection circles, each round its own field (at most {_fdn} nm); alert fields within {_arn} nm of the target")
     print(f"    spawns: {len(_air)} airborne groups apart, {len(_rw)} runway / catapult starts, one group each")
     print(f"    {_a2g} AI ground-attack flights: no air-to-air on the way in, RTB when out of A2G weapons, self-defence after the attack")
     prim2 = [g for g in man.groups if g["kind"] == "asset" and g.get("primary_pkgs")]
@@ -1083,7 +1090,9 @@ def main():
     assert _sw, "no Fighter Sweep planned in 19 days"
     _pk_ = _ws.packages()
     assert all(f_.role == _Rl2.SWEEP and f_.count == 4 and not f_.tag for f_ in _sw.flights), "a sweep is 4-ships only, no support CAP"
-    assert not any(f_.role == _Rl2.SWEEP for p_ in _pk_ if p_.objective.type.value in ("STRIKE", "DEAD", "CAS") for f_ in p_.flights), "no sweep slot inside a strike package"
+    _esc = [f_ for p_ in _pk_ if p_.objective.type.value in ("STRIKE", "DEAD", "CAS") for f_ in p_.flights if f_.role == _Rl2.SWEEP]
+    assert _esc and all(f_.count == 2 for f_ in _esc), "a defended strike package carries a 2-ship escort (v0.41.1), the extra fighters are the sweep's"
+    assert sum(f_.aircraft in ("F-16C", "FA-18C") for f_ in _esc) >= len(_esc) / 2, ("escorts: F-16 / F/A-18 first", [f_.aircraft for f_ in _esc])
     _t5 = s.state.assets if False else _ws.state.assets
     _cov5 = [p_ for p_ in _pk_ if p_.number in (_sw.extra.get("covers") or [])]
     assert all(_s4(p_.n_def // 2) > 0 and _m3j.hypot(_t5[p_.objective.target_id].x - _t5[_sw.objective.target_id].x, _t5[p_.objective.target_id].y - _t5[_sw.objective.target_id].y) <= _sak * 1000
@@ -1267,7 +1276,7 @@ def main():
         _dk = next((p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and s.flyable(p_)), None)
         if _dk: break
     assert _dk, "no DEAD package found"
-    assert (_stg(_dk, _Rl.SWEEP), _stg(_dk, _Rl.SEAD), _stg(_dk, _Rl.ESCORT), _stg(_dk, _Rl.STRIKE)) == (-330, -300, -600, 0), "DEAD package timing: TARCAP first (5 min ahead of SEAD), then the escort, SEAD, strikers"
+    assert (_stg(_dk, _Rl.SWEEP), _stg(_dk, _Rl.SEAD), _stg(_dk, _Rl.ESCORT), _stg(_dk, _Rl.STRIKE)) == (-330, -300, -300, 0), "DEAD package timing (v0.41.1): the TARCAP arrives with the SEAD, the escort just ahead, strikers"
     s.ai_test = True; s.fly(_dk.number, None); s.ai_test = False
     _wlr.long_range_site = _lr_real
     _zz = _zf.ZipFile(_st.pending["miz"]); _mt = _zz.read("mission").decode("utf-8", "ignore")
@@ -1451,7 +1460,7 @@ def main():
         _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
         assert ("GATES = { {t=" in _mz.replace("\\", "")) or True
     from sqe.mission_builder import stagger as _stg
-    assert _stg(_de, Role.ESCORT) == -300 and _stg(_de, Role.SWEEP) == -60 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage: TARCAP 5 min ahead, the escort with the strikers"
+    assert _stg(_de, Role.ESCORT) == 0 and _stg(_de, Role.SWEEP) == -60 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage: TARCAP and escort with the strikers"
     _wlr.long_range_site = _lr_real
     # the HARM launch point is at the edge of an SA-10's reach and the HARM task asks for ARMs; in the all-AI test your own SEAD flight gets the same tasking
     import math as _m

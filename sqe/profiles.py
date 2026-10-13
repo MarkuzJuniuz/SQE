@@ -188,7 +188,8 @@ def standoff(state, pts, alt_ft: int, margin_nm: float = STANDOFF_MARGIN_NM):
 
 
 STATION_SHORT_NM = 12.0
-STATION_FRAC = 0.62             # against a long-range SAM: the station sits this fraction of its reach from it (about 30 nm for an SA-10)
+STATION_FRAC = 0.75             # against a long-range SAM: the station sits this fraction of its reach from it (about 36 nm for an SA-10).
+                                # v0.41.1: 0.62 (30 nm) was inside where the SA-10 really engaged (59-61 km) and it killed six Eagles there
 STATION_OFFSET_NM = 9.0         # ...moved this far sideways toward the nearest enemy airfield
 LONG_RANGE_NM = 30.0            # a SAM that reaches this far counts as long-range for the station rule
 
