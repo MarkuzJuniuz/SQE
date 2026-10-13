@@ -3,7 +3,7 @@ the mission hook (debrief.LUA_HOOK) rolls the odds that the target's jamming def
 The same table serves both sides, the player's jet included.
 
 Tiers (what the aircraft brings):
-  1  internal self-protection set: protects only that aircraft (not the FC3 F-15C: its jammer is not emulated)
+  1  internal self-protection set: protects only that aircraft (the F-15C included since v0.40.9: it carries an internal jammer)
   2  an ECM pod on the loadout: stronger, and also covers aircraft flying close by
 
 The numbers are SQE's own judgement, not sourced figures. Pure data, no pydcs.
@@ -11,7 +11,7 @@ The numbers are SQE's own judgement, not sourced figures. Pure data, no pydcs.
 from __future__ import annotations
 
 # internal self-protection by DCS type string (substring match, first hit wins)
-INTERNAL = (("F-15C", 0), ("F-14", 1), ("FA-18C", 1), ("F-16C", 0), ("A-10C", 0), ("Su-24M", 1), ("Tu-22M3", 1), ("MiG-29", 0), ("Su-27", 0))
+INTERNAL = (("F-15C", 1), ("F-14", 1), ("FA-18C", 1), ("F-16C", 0), ("A-10C", 0), ("Su-24M", 1), ("Tu-22M3", 1), ("MiG-29", 0), ("Su-27", 0))
 
 # loadout CLSIDs that are an ECM pod
 PODS = ("=ALQ_184_Long", "=ALQ_184", "ALQ_184", "ALQ-184")

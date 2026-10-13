@@ -49,7 +49,7 @@ JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known po
 DEAD_GATE_BEFORE_TGT_S = 75    # fallback: if the DEAD flight never gets close, the radars are checked this long before its planned target time
 DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
 A2G_ROLES = (Role.STRIKE, Role.SEAD, Role.CAS)
-NATIVE_ECM = {"F-15C"}         # jets whose DCS model carries a jammer the ECM script does not count (it treats the F-15C as having none)
+NATIVE_ECM = {"F-15C"}         # jets with a jammer that switch DCS's ECM on over the attack leg (the ECM script counts the F-15C too since v0.40.9)
 AAM_WEAPONS = 264241152       # DCS weapon flags: air-to-air missiles (a Fighter Sweep's RTB when out of ammo)
 # DCS weapon flags for "RTB when out of ammo": bombs (guided, iron, cluster), air-to-ground missiles (HARM, JSOW, Maverick) and rockets.
 # Not guns and not air-to-air missiles, so a flight goes home once its air-to-ground load is gone.

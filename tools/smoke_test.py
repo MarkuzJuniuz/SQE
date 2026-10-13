@@ -1563,9 +1563,9 @@ def main():
     print("[sead attrition] +10% a failed day (cap 40%), a failed attempt wears the site, valve after 2 failed days at Level 3, the briefing gives the odds")
     # jamming: pod / internal tiers, the hook carries them, the abstract war counts them
     from sqe import ecm as _ecm
-    assert _ecm.internal_tier("F_15C") == 0 and _ecm.internal_tier("FA_18C_hornet") == 1 and _ecm.internal_tier("MiG-29S") == 0 and _ecm.has_pod({5: {"CLSID": "ALQ_184_Long"}}) and not _ecm.has_pod({1: {"CLSID": "{AIM}"}})
+    assert _ecm.internal_tier("F_15C") == 1 and _ecm.internal_tier("FA_18C_hornet") == 1 and _ecm.internal_tier("MiG-29S") == 0 and _ecm.has_pod({5: {"CLSID": "ALQ_184_Long"}}) and not _ecm.has_pod({1: {"CLSID": "{AIM}"}})
     assert _ecm.chance(2, 0, 10) == 0.0 and _ecm.chance(2, 0, 60) == _ecm.P_SELF[2] and _ecm.chance(0, 2, 60) == _ecm.P_COVER and _ecm.chance(0, 0, 60) == 0.0
-    assert _ecm.flight_tier("F-16C", Role.SEAD) == 2 and _ecm.flight_tier("F-15C", Role.CAP) == 0 and _ecm.flight_tier("F-14BU", Role.CAP) == 1 and _ecm.jammer_on("x")
+    assert _ecm.flight_tier("F-16C", Role.SEAD) == 2 and _ecm.flight_tier("F-15C", Role.CAP) == 1 and _ecm.flight_tier("F-14BU", Role.CAP) == 1 and _ecm.jammer_on("x")
     s.new("Jam hook", "F-16C", 3, seed=11); _st = s.state
     _se = next(p_ for p_ in s.packages() if p_.objective.aim == "SEAD" and s.flyable(p_))
     s.settings.ecm_script = True                                     # the ECM script (off by default since v0.40.2)
