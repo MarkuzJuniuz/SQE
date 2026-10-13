@@ -1,3 +1,13 @@
+## v0.41.6
+
+From the v0.41.5 runs: the Senaki Vipers flew about 50 nm south to their marshal point and back north past their own base; and Viper 5-2's HARM killed Squid 1-4 (a JSOW Hornet on its way home).
+
+* **HARM flights fire only at what they are tasked on** (OPEN FIRE, was weapons free): their own site, the Tors that guard it and the SA-10 umbrella. The fratricide: Viper 5-2 (a Sukhumi package) fired at the *Gudauta* SA-6 radar from 89 km, the radar went quiet, and 197 s later the HARM hit Squid 1-4, whose own radar was on, 40 nm short of Gudauta.
+* **Marshal points close behind the base.** A marshal point only has to be outside every enemy field's scramble circle (plus 10 nm) and 20 nm outside every SAM ring, not a flat 90 nm from every enemy field (from before the per-field circles of v0.41.1). In the test campaign the Senaki marshal moved from 40 nm to 15 nm behind the base. Early-warning radars still see the stack; they trigger nothing.
+* The shot log keeps up to 2,000 entries (was 600; busy runs reached 595).
+* Removed an unused scramble-radius function left over from v0.41.0.
+* Smoke test: every HARM flight is OPEN FIRE at its HARM point; every marshal point is outside the scramble circles.
+
 ## v0.41.5
 
 From the v0.41.4 run: the Gudauta package came through (all four Squid JSOW jets home, the SA-10 killed by JSOW bomblets). But after Springfield's (F-14 TARCAP) hold ended, a lone MiG-29 followed them home and fired four R-27s while they only defended: three F-14s lost with about 35 missiles still on board.

@@ -254,7 +254,7 @@ class Session:
                 spot = carrier_station(st, base, tgt.x, tgt.y, self.options.carrier_min_enemy_nm)
                 if spot:
                     bx, by = spot[0], spot[1]
-            mshl = tm.safe_marshal(st, (bx, by), bearing(bx, by, tgt.x, tgt.y))
+            mshl = tm.safe_marshal(st, (bx, by), bearing(bx, by, tgt.x, tgt.y), (tgt.x, tgt.y))
             g = make_geometry(bx, by, tgt.x, tgt.y, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
             um = tm.umbrella_site(st, tgt)
             wps = plan_route(Role.SEAD, (bx, by), g, spec.profile, is_player=False, tanker_xy=None,

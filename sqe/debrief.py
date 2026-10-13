@@ -206,7 +206,7 @@ local function logShot(ev, e, by)
     if okq and tq then tx, tz = tq.x, tq.z end
   end
   if ev == "hit" and tg ~= "" then LASTHIT[tg] = { by = by or "?", w = w, t = timer.getTime() } end
-  if #shots >= 600 then return end
+  if #shots >= 2000 then return end   -- v0.41.6: was 600; busy runs reached 595
   shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt, km = km, alt = salt, tx = tx, tz = tz }
 end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
