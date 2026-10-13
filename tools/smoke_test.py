@@ -1303,6 +1303,26 @@ def main():
             _hw += 1
     assert _hw >= 2, ("TARCAP / escort flights with the homeward engage", _hw)
     print(f"[homeward] {_hw} held fighter flights engage air within 20 nm of themselves after their hold ends")
+    # v0.41.6: HARM flights fire only at what they are tasked on (OPEN FIRE), and marshal points sit outside the enemy fields' scramble circles
+    for co_ in _M4["coalition"]["blue"]["country"].values():
+        for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
+            _sp6 = next((p_ for p_ in g_["route"]["points"].values() if p_.get("name") == "SEAD"), None)
+            if _sp6 is None:
+                continue
+            _roe6 = [t_["params"]["action"]["params"]["value"] for t_ in _sp6["task"]["params"]["tasks"].values()
+                     if t_.get("id") == "WrappedAction" and t_["params"]["action"].get("id") == "Option" and t_["params"]["action"]["params"].get("name") == 0]
+            assert _roe6 and _roe6[-1] == 2, ("a HARM flight is OPEN FIRE at its SEAD point (only its tasked groups)", g_["name"], _roe6)
+    _fb6 = _tm9.fighter_bases(_ss.state)
+    _md6 = []
+    for co_ in _M4["coalition"]["blue"]["country"].values():
+        for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
+            _mp6 = next((p_ for p_ in g_["route"]["points"].values() if p_.get("name") == "MSHL"), None)
+            if _mp6 is None:
+                continue
+            _gap = min(_m.hypot(_mp6["x"] - ex_, _mp6["y"] - ey_) / 1852 - _tm9.field_detect_nm((ex_, ey_), (_t4.x, _t4.y)) for ex_, ey_ in _fb6)
+            _md6.append(_gap)
+    assert _md6 and min(_md6) >= _tm9.MARSHAL_FIELD_MARGIN_NM - 1, ("every marshal point sits outside the enemy fields' scramble circles", [round(x_) for x_ in _md6])
+    print(f"[marshal] {len(_md6)} marshal points, the closest {min(_md6):.0f} nm outside an enemy field's scramble circle; HARM flights OPEN FIRE")
     _off4 = abs((_brg["JSOW"] - _brg["SEAD"] + 180) % 360 - 180)
     _eg4, _hs4 = {}, []
     for co_ in _M4["coalition"]["blue"]["country"].values():
@@ -1560,7 +1580,7 @@ def main():
             _roe = lambda p_: [t_["params"]["action"]["params"]["value"] for t_ in p_["task"]["params"]["tasks"].values()
                                if t_["id"] == "WrappedAction" and t_["params"]["action"]["id"] == "Option" and t_["params"]["action"]["params"].get("name") == 0]
             _p1 = _g["route"]["points"][1]
-            assert 3 in _roe(_p1) and 0 in _roe(_pts["SEAD"]) and 3 in _roe(_pts["EGR"]), ("SEAD jets hold fire (return fire) until the HARM point, weapons free there, return fire again on the way home", _roe(_p1), _roe(_pts["SEAD"]), _roe(_pts["EGR"]))
+            assert 3 in _roe(_p1) and 2 in _roe(_pts["SEAD"]) and 3 in _roe(_pts["EGR"]), ("SEAD jets hold fire (return fire) until the HARM point, open fire there (v0.41.6: only its tasked groups), return fire again on the way home", _roe(_p1), _roe(_pts["SEAD"]), _roe(_pts["EGR"]))
     print("[sead first] SEAD and DEAD are two packages 25 min apart, dice cast at planning, DEAD held without a blind site, valve after 3 failed days, DEAD-stage mission has no radars after a good SEAD")
     # an empty Missions pane says why and points at Skip Turn
     try:

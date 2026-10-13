@@ -34,7 +34,7 @@ from .loadouts import LoadoutLibrary, enemy_bomber_loadout, enemy_strike_loadout
 from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType, Role, task_label
 TARCAP_LEAD_S = 0             # v0.41.1: a TARCAP arrives WITH the first flight it covers (the HARM shooters): the SAM has to split its attention,
                               # and its exposure ends with the HARM salvo. v0.41.0's 5-minute head start let the SA-10 kill six waiting Eagles.
-FIELD_DETECT_NM = 60          # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
+FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 ALERT_REACH_NM = 130          # alert pairs come only from fields this close to the target (the far ones could not arrive in time)
 TARCAP_MIN = 15               # ...and holds there this long, then goes home
 ESCORT_AFTER_TOT_S = 180      # an escort (SWEEP role) holds its station until this long after the TOT (the last ground-attack flight off target)
@@ -298,7 +298,7 @@ class MissionBuilder:
         pspec = AIRCRAFT[pf.aircraft]
         fleet_obj = package.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
         tgt_asset = None if fleet_obj else st.assets[package.objective.target_id]
-        mshl_xy = tm.safe_marshal(st, (pbase.x, pbase.y), bearing(pbase.x, pbase.y, tx, ty))
+        mshl_xy = tm.safe_marshal(st, (pbase.x, pbase.y), bearing(pbase.x, pbase.y, tx, ty), (tx, ty))
         geom = make_geometry(pbase.x, pbase.y, tx, ty, pspec.profile, mshl_xy, carrier=pbase.kind == BaseKind.CARRIER)
         # enemy CAP stations are planned first so the egress can stay clear of them too (they sit 20-25 nm in front of their own base)
         keep0 = [(geom.mshl[0], geom.mshl[1], 120)]
@@ -521,7 +521,7 @@ class MissionBuilder:
             tx2, ty2 = self._target_xy(xp)
             tx2, ty2 = self._jitter_primary(xp, tx2, ty2)
             tgt2 = st.assets[xp.objective.target_id]
-            mshl2 = tm.safe_marshal(st, (base2.x, base2.y), bearing(base2.x, base2.y, tx2, ty2))
+            mshl2 = tm.safe_marshal(st, (base2.x, base2.y), bearing(base2.x, base2.y, tx2, ty2), (tx2, ty2))
             geom2 = make_geometry(base2.x, base2.y, tx2, ty2, spec2.profile, mshl2, carrier=base2.kind == BaseKind.CARRIER)
             skip = {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else set()
             geom2.egr = (tm.first_safe_egress(st, tx2, ty2, geom2.hdg, skip) or
@@ -1406,7 +1406,9 @@ class MissionBuilder:
                 # The whole site, not one radar: an S-300 track radar only radiates while it is tracking, so a HARM task aimed at it
                 # has nothing to shoot at (v0.39.7 run: the SEAD pair never fired). Aimed at the group, the AI fires at whatever radiates (an escort CAS SEAD did).
                 # The launchers are still the DEAD flight's job: HARMs only kill what radiates.
-                wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
+                # v0.41.6: OPEN FIRE, not weapon free: only the groups tasked below (its own site, the Tors that guard it, the umbrella). Weapon free,
+                # Viper 5-2 fired at another package's SA-6 from 89 km; the radar went quiet and the HARM homed on Squid 1-4's radar instead.
+                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
                 # The package's second SEAD flight opens on the Tors that guard the site (they shoot the HARMs down, v0.39.16 run), then joins on the site.
                 seads_ = [x for x in package.flights if x.role == Role.SEAD and not x.tag]
                 if len(seads_) > 1 and any(x is f or x.id == f.id for x in seads_[1:]):
@@ -1832,20 +1834,7 @@ class MissionBuilder:
         """v0.41.1: an alert field scrambles on what ITS radar sees: a circle round the field (not round the target), sized by how far the
         field is from the fight (FIELD_DETECT_NM at most). The v0.41.0 Batumi run: an earlier package already airborne inside one big circle
         round the target scrambled all 20 pairs from six fields 10 s into the mission. -> (x, y, radius nm)"""
-        d = dist(a.x, a.y, tx, ty) / NM
-        return a.x, a.y, max(25.0, min(FIELD_DETECT_NM, 0.6 * d + 15.0))
-
-    def _scramble_radius(self, package, a, tx, ty, geom) -> float:
-        """Alert fighters launch when the package comes this close to the TARGET (nm), so they arrive ~1-2 min before TOT. Smaller when
-        no EWR can see the package coming; never so big that it trips at start or before the push."""
-        st = self.state
-        dd = dist(a.x, a.y, tx, ty) / NM
-        r = min(dd, 110.0) + 8.0
-        if not any(e.kind == AssetKind.EWR and not e.destroyed and dist(e.x, e.y, tx, ty) < 100 * NM for e in st.assets.values()):
-            r = min(r, 45.0)
-        pb = st.bases[next(f.base_id for f in package.flights if f.is_player)]
-        cap = min(dist(pb.x, pb.y, tx, ty) / NM - 15.0, dist(*geom.push, tx, ty) / NM - 5.0)
-        return max(25.0, min(r, cap))
+        return a.x, a.y, tm.field_detect_nm((a.x, a.y), (tx, ty))
 
     # ---- enemy air picture: what the intelligence briefing says is there IS there, from the first second ----------------------
     @staticmethod

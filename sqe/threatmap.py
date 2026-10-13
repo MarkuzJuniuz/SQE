@@ -142,11 +142,24 @@ def point_back_along(poly, d_back: float):
     return pts[0], 1
 
 
-def safe_marshal(state, base_xy, hdg_to_target, min_enemy_nm: float = 90, ring_margin_nm: float = 20):
-    """Marshal point BEHIND the base: well away from enemy fighter bases and at least ring_margin_nm outside every SAM ring.
+FIELD_DETECT_NM = 60.0      # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
+MARSHAL_FIELD_MARGIN_NM = 10.0   # v0.41.6: a marshal point stays this far outside every enemy field's detection circle
+
+
+def field_detect_nm(field_xy, target_xy) -> float:
+    """v0.41.1: the radius of an enemy field's scramble circle, round the field itself, sized by how far it is from the fight."""
+    d = math.hypot(field_xy[0] - target_xy[0], field_xy[1] - target_xy[1]) / NM
+    return max(25.0, min(FIELD_DETECT_NM, 0.6 * d + 15.0))
+
+
+def safe_marshal(state, base_xy, hdg_to_target, target_xy=None, min_enemy_nm: float = 90, ring_margin_nm: float = 20):
+    """Marshal point BEHIND the base: clear of enemy fighter fields and at least ring_margin_nm outside every SAM ring.
+    v0.41.6: with the target known, a field only needs the marshal outside its own scramble circle (field_detect_nm) plus a margin, not a flat
+    90 nm (which sent the Senaki Vipers 54 nm south to hold, then back north past their own base). Without it, the old flat distance.
     Tries close-in first, directly behind, then swings to the sides. Returns the best spot found (never None)."""
     bx, by = base_xy
-    enemies = fighter_bases(state)
+    enemies = [(ex, ey, (field_detect_nm((ex, ey), target_xy) + MARSHAL_FIELD_MARGIN_NM) if target_xy is not None else min_enemy_nm)
+               for ex, ey in fighter_bases(state)]
     rs = rings(state, min_range=3)
     back = hdg_to_target + 180
     best, best_slack = None, -1e18
@@ -154,7 +167,7 @@ def safe_marshal(state, base_xy, hdg_to_target, min_enemy_nm: float = 90, ring_m
         for ang in (0, 35, -35, 70, -70, 105, -105):
             h = math.radians(back + ang)
             x, y = bx + nm * NM * math.cos(h), by + nm * NM * math.sin(h)
-            slack = min([(math.hypot(x - ex, y - ey) / NM) - min_enemy_nm for ex, ey in enemies] +
+            slack = min([(math.hypot(x - ex, y - ey) / NM) - need for ex, ey, need in enemies] +
                         [(math.hypot(x - a.x, y - a.y) - r) / NM - ring_margin_nm for a, r in rs] + [1e9])
             if slack >= 0:
                 return x, y
