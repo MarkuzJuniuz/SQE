@@ -1,3 +1,24 @@
+## v0.41.7
+
+Protecting friendly bases and support aircraft.
+
+* **Airfield air defence**
+  * The Patriot faces the nearest enemy fighter field. It used to face a direction picked from the base's name; a Patriot radar covers about 120 degrees, so a raid from the wrong side met none.
+  * A second short-range site (Vulcan + 2 Avengers) on the other side of the field.
+  * A HAWK battery as the middle layer at your home field.
+  * A degraded field (below 0.6) keeps what it had: the Patriot with 1 launcher and one short-range site.
+* **Tanker forward, on the way home.**
+  * Its track sits between the base and the egress point, as far forward as it can while staying 15 nm outside every SAM ring and outside every enemy field's scramble circle (plus 15 nm). It moves sideways off the line if it has to, or just behind the base when nothing forward is clear.
+  * It used to sit up to about 50 nm behind the base, behind the marshal point. A second tanker sits 15 nm nearer home; the carrier recovery tanker stays with the boat.
+* **Each support aircraft gets its own guard.**
+  * Tanker CAP: required, and it gets the pair when only one is free.
+  * HAVCAP: now only the AWACS, which is back at its old distance (no longer tied to the marshal point).
+  * Each guard orbits on the side the threat comes from and engages only inside 25 nm of what it guards.
+* **Base CAP** orbits on the side the threat comes from and engages only inside 25 nm of the field. It now also flies whenever an enemy fighter field is within 130 nm of the strikers' home field.
+* **Carrier CAP:** a package off the carrier brings a 2-ship from the carrier's own squadrons, 22 nm out from the boat toward the nearest enemy field. It engages within 35 nm of the boat, while the deck still has fighters free that day.
+* Red patrol stations keep 60 nm from the forward tanker (100 nm from the AWACS's HAVCAP, as before).
+* Smoke test: Patriot heading, both short-range sites and the HAWK, tanker placement and its CAP, the HAVCAP on the AWACS, carrier CAP off its own deck.
+
 ## v0.41.6
 
 From the v0.41.5 runs: the Senaki Vipers flew about 50 nm south to their marshal point and back north past their own base; and Viper 5-2's HARM killed Squid 1-4 (a JSOW Hornet on its way home).

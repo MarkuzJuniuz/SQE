@@ -1323,6 +1323,49 @@ def main():
             _md6.append(_gap)
     assert _md6 and min(_md6) >= _tm9.MARSHAL_FIELD_MARGIN_NM - 1, ("every marshal point sits outside the enemy fields' scramble circles", [round(x_) for x_ in _md6])
     print(f"[marshal] {len(_md6)} marshal points, the closest {min(_md6):.0f} nm outside an enemy field's scramble circle; HARM flights OPEN FIRE")
+    # v0.41.7: friendly bases. The Patriot faces the nearest enemy fighter field, short-range sites on both sides, a HAWK battery at your home field;
+    # the tanker forward (on the way home, clear of SAM rings and scramble circles) with its own CAP; the AWACS back with the HAVCAP; carrier CAP
+    _bv = {g_["name"]: g_ for co_ in _M4["coalition"]["blue"]["country"].values() for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()}
+    _hb7 = _ss.state.bases[_ss.state.player.squadron_id and _ss.state.squadrons[_ss.state.player.squadron_id].base_id]
+    _pat = [g_ for n_, g_ in _bv.items() if n_.startswith(f"BASEDEF {_hb7.name} Patriot")]
+    assert _pat, "your home field has its Patriot"
+    _ps = next(u_ for u_ in _pat[0]["units"].values() if u_["type"] == "Patriot str")
+    _thr7 = _tm9.nearest_threat_bearing(_ss.state, _ps["x"], _ps["y"], 0)
+    _off7 = abs((_m.degrees(_ps["heading"]) - _thr7 + 180) % 360 - 180)
+    assert _off7 <= 5, ("the Patriot radar faces the nearest enemy fighter field", round(_m.degrees(_ps["heading"])), round(_thr7))
+    if _hb7.defense >= 0.6:
+        assert any(n_ == f"BASEDEF {_hb7.name} AAA 2" for n_ in _bv), "a full-strength field has short-range sites on both sides"
+        assert any(n_ == f"BASEDEF {_hb7.name} HAWK" for n_ in _bv), "your home field has a HAWK battery"
+    _pl7 = {g_["name"]: g_ for co_ in _M4["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()}
+    _tags7 = {f_.tag: f_ for f_ in _pu.flights if f_.tag}
+    assert "TNKCAP" in _tags7, ("the tanker has its own CAP", sorted(_tags7))
+    _tk7 = next(g_ for g_ in _pl7.values() if any(t_.get("id") == "Tanker" for p_ in g_["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()))
+    _tp7 = list(_tk7["route"]["points"].values())
+    _tcx, _tcy = (_tp7[-2]["x"] + _tp7[-1]["x"]) / 2, (_tp7[-2]["y"] + _tp7[-1]["y"]) / 2      # the racetrack: its last two points
+    _pb7 = _ss.state.bases[_ss.flyable(_pu)[0].base_id]
+    _d_base, _d_tank = _m.hypot(_pb7.x - _t4.x, _pb7.y - _t4.y) / 1852, _m.hypot(_tcx - _t4.x, _tcy - _t4.y) / 1852
+    assert _tm9.spot_slack(_ss.state, _tcx, _tcy, (_t4.x, _t4.y), 14, 14) >= 0, "the tanker track is clear of SAM rings and scramble circles"
+    assert _d_tank < _d_base + 32, ("the tanker is forward of the base or close behind it, not 50 nm back", round(_d_tank), round(_d_base))
+    _tnk_g = _pl7[_tags7["TNKCAP"].callsign]
+    _tn0 = list(_tnk_g["route"]["points"].values())[0]
+    assert _m.hypot(_tn0["x"] - _tcx, _tn0["y"] - _tcy) / 1852 <= 8, "the tanker CAP orbits on the tanker"
+    if "HAVCAP" in _tags7:
+        _aw7 = next(g_ for g_ in _pl7.values() if any(t_.get("id") == "AWACS" for p_ in g_["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()))
+        _hv0 = list(_pl7[_tags7["HAVCAP"].callsign]["route"]["points"].values())[0]
+        _ap7 = list(_aw7["route"]["points"].values())[0]
+        assert _m.hypot(_hv0["x"] - _ap7["x"], _hv0["y"] - _ap7["y"]) / 1852 <= 30, "the HAVCAP orbits on the AWACS"
+    print(f"[bases] home-field Patriot faces the nearest enemy field; tanker {_d_tank:.0f} nm from the target (base {_d_base:.0f}), clear of rings and circles, "
+          f"with its own CAP; support CAP {sorted(_tags7)}")
+    _cvp = [p_ for p_ in _ss.packages() if p_.objective.type.value not in ("BARCAP", "FLEET_DEFENSE")
+            and any(not f_.tag and _ss.state.bases[f_.base_id].kind.value == "CARRIER" for f_ in p_.flights)]
+    _ncv = 0
+    for k_, p_ in enumerate(_cvp):           # the day's first carrier package always gets one; later ones when the deck still has fighters free
+        cv_ = next(f_.base_id for f_ in p_.flights if not f_.tag and _ss.state.bases[f_.base_id].kind.value == "CARRIER")
+        cc_ = [f_ for f_ in p_.flights if f_.tag == "CVCAP"]
+        assert all(f_.base_id == cv_ for f_ in cc_) and (cc_ or k_ > 0), ("a package off the carrier brings a carrier CAP from the carrier's own squadrons", p_.objective.description)
+        _ncv += bool(cc_)
+    assert not _cvp or _ncv >= 1
+    print(f"[bases] {_ncv} of {len(_cvp)} carrier packages with a carrier CAP off their own deck (the rest: the deck's fighters already committed that day)")
     _off4 = abs((_brg["JSOW"] - _brg["SEAD"] + 180) % 360 - 180)
     _eg4, _hs4 = {}, []
     for co_ in _M4["coalition"]["blue"]["country"].values():
