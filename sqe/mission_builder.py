@@ -54,6 +54,7 @@ JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known po
 DEAD_GATE_BEFORE_TGT_S = 75    # fallback: if the DEAD flight never gets close, the radars are checked this long before its planned target time
 DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
 A2G_ROLES = (Role.STRIKE, Role.SEAD, Role.CAS)
+STATION_ACTIONS = ("TARCAP", "ESCORT", "SWEEPSTN")       # fighter stations (v0.40.1 / v0.40.2): held, not flown to a time
 NATIVE_ECM = {"F-15C"}         # jets with a jammer that switch DCS's ECM on over the attack leg (the ECM script counts the F-15C too since v0.40.9)
 AAM_WEAPONS = 264241152       # DCS weapon flags: air-to-air missiles (a Fighter Sweep's RTB when out of ammo)
 # DCS weapon flags for "RTB when out of ammo": bombs (guided, iron, cluster), air-to-ground missiles (HARM, JSOW, Maverick) and rockets.
@@ -1452,6 +1453,8 @@ class MissionBuilder:
             rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
             rtb.type, rtb.action = "Land", PointAction.Landing
             rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
+        if f.is_player and not o.player_is_ai:
+            g.points[-1].speed_locked = False                           # your landing point: speed free, so it never closes a locked-speed run
         if gate is not None:
             if gate["to"] is None:
                 gate["to"] = len(g.points)                              # the landing point
@@ -1536,7 +1539,10 @@ class MissionBuilder:
         """Write the planned time on the waypoint so the jet's own TOS / TOT page (F-16 CRUS) shows the kneeboard time instead of the mission start.
         Only PUSH and the objective point are time-locked; speed is left free on points between two locked ones (as Retribution does)."""
         wp.ETA = max(0, int(w.eta_s))
-        locked = w.name == "PUSH" or w.action in OBJECTIVE_ACTIONS
+        # v0.41.2: a TARCAP / escort / sweep station is not time-locked. Its route goes PUSH -> station -> home, so a locked station put the
+        # landing point (speed locked) straight after a locked time, and DCS refused the mission ("Viper 3: All waypoints (5-5) have locked
+        # speed and surrounded by waypoints 4 and 5 with locked time"). PUSH stays locked: that is the time you have to hit.
+        locked = w.name == "PUSH" or (w.action in OBJECTIVE_ACTIONS and w.action not in STATION_ACTIONS)
         wp.ETA_locked = locked
         idx = {x.name: i for i, x in enumerate(wps)}
         lo = idx.get("PUSH"); hi = next((i for i, x in enumerate(wps) if x.action in OBJECTIVE_ACTIONS), None)

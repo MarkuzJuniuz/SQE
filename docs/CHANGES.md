@@ -1,3 +1,11 @@
+## v0.41.2
+
+DCS refused a v0.41.1 player escort mission: "Viper 3: All waypoints (5-5) have locked speed and surrounded by waypoints 4 and 5 with locked time!"
+
+* **Fighter stations (TARCAP, escort, sweep) are no longer time-locked.** Only the PUSH point and strike objectives keep a locked time, so the player's route never has a speed-locked run between two locked times.
+* **The player's landing point has no locked speed.**
+* Smoke test: every flyable player role (escort, sweep, SEAD, strike, CAP) for the F-16C, F-15C and F-14 is checked against that DCS rule.
+
 ## v0.41.1
 
 From the v0.41.0 Batumi run: an earlier package already airborne near the target scrambled all 20 red alert pairs from six fields 10 s into the mission (45 radar missiles fired at us); the SA-10 killed six F-15Cs waiting on the new 62% stations (it engaged from 59-61 km); and no package had an escort (v0.40.2 had dropped the slot).

@@ -1155,6 +1155,35 @@ def main():
     _cs.abort(); _r2 = _cs.fly(_cp.number, _cs.flyable(_cp)[0].id)
     assert _r1.seed == _r2.seed, "Abort rewinds the sortie counter: the re-fly has the same seed"
     print(f"[cap v0.41] TARCAP {min(_tar):.0f} nm from the SA-10, HARM points {min(_dd['SEAD']):.0f} nm; re-fly after Abort has the same seed ({_r1.seed})")
+    # v0.41.2: DCS refuses a mission whose player route has a run of locked-speed points between two locked times (v0.41.1: the player as an
+    # escort, "Viper 3: All waypoints (5-5) have locked speed and surrounded by waypoints 4 and 5 with locked time"). Every fighter role you
+    # can fly is built and checked.
+    def _dcs_eta_ok(pts_):
+        lk = [i for i, p_ in enumerate(pts_) if p_.get("ETA_locked")]
+        for a_, b_ in zip(lk, lk[1:]):
+            mid = pts_[a_ + 1:b_]
+            if mid and all(p_.get("speed_locked") for p_ in mid):
+                return False
+        if lk and lk[-1] + 1 < len(pts_) and pts_[lk[-1] + 1].get("type") == "Land" and pts_[lk[-1] + 1].get("speed_locked"):
+            return False
+        return True
+    _ps = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="off", flight_filter="all"))
+    _seen_r = set()
+    for _ac in ("F-16C", "F-15C", "F-14BU"):
+        _ps.new("Eta", _ac, 3, seed=3)
+        for _pk in _ps.packages():
+            for _fl in _ps.flyable(_pk, squadron_only=False):
+                _key = (_ac, _fl.role.value, _pk.objective.type.value)
+                if _key in _seen_r or _fl.role.value not in ("ESCORT", "SWEEP", "SEAD", "STRIKE", "CAP"):
+                    continue
+                _seen_r.add(_key)
+                _ps.fly(_pk.number, _fl.id)
+                _Me = _luaj.loads(_zf.ZipFile(_ps.state.pending["miz"]).read("mission").decode("utf-8", "ignore"))["mission"]
+                _pg = next(g_ for co_ in _Me["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
+                           if any(u_.get("skill") in ("Player", "Client") for u_ in g_["units"].values()))
+                assert _dcs_eta_ok(list(_pg["route"]["points"].values())), (_key, "DCS would refuse this player route (locked speed between locked times)")
+                _ps.abort()
+    print(f"[eta locks] {len(_seen_r)} player roles built (TARCAP, escort, sweep, SEAD, strike, CAP): no locked-speed run between locked times")
     # Tors (v0.39.20): the Tors that cover a SEAD/DEAD target are part of the job: the second HARM flight opens on them, the JSOWs aim at them,
     # the DEAD gate waits for them (route check), and the Tor vehicle counts as a radar
     import math as _m3
