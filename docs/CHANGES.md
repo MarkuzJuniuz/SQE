@@ -1,3 +1,8 @@
+## v0.40.10
+
+* **ECM script: your jammer follows the AI's window.** With the script on, it used to count your jammer on for the whole mission (it cannot read your switch). It now counts it on from your PUSH to your egress, like the AI's, until the cockpit-switch reading is built. With the script off (the default) nothing changes: your jammer is DCS's own and your switch decides.
+* Smoke test: your jammer window is in the hook.
+
 ## v0.40.9
 
 * **The ECM script counts the F-15C's jammer.** It treated the F-15C as having none (tier 0); it now has an internal self-protection set (tier 1, like the F-14 and F/A-18), for AI Eagles and for yours. With the script off (the default) nothing changes: AI F-15Cs already used DCS's own ECM when locked (v0.40.2).
