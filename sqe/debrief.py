@@ -246,6 +246,69 @@ local function jamCheck(e, shooter)
   end
   dump()
 end
+-- splash damage (Settings, off by default): DCS often leaves a vehicle a few metres from a bomb untouched. When an air-to-ground weapon
+-- (bomb, rocket, air-to-ground missile) reaches the ground, ground units within a blast radius scaled to its explosive mass (cube root,
+-- like real overpressure) get a blast of their own, weaker with distance. A weapon that vanishes in the air (a JSOW opening, a missile
+-- shot down) does nothing. Kills it causes are credited to the shooter (DCS gives them no initiator).
+local SPLASH = __SPLASH__
+local SPL = { k = 9.0, pow = 0.35, minkg = 1, maxr = 120, dt = 0.1 }
+local SPLW, SPLBY = {}, {}
+local function splashTrack(e, shooter)
+  if not SPLASH or not e.weapon then return end
+  local ok, d = pcall(function() return e.weapon:getDesc() end)
+  if not ok or not d then return end
+  local a2g = d.category == 3 or d.category == 2 or (d.category == 1 and (d.missileCategory == 4 or d.missileCategory == 5 or d.missileCategory == 6))
+  if not a2g then return end
+  local kg = (d.warhead and (d.warhead.explosiveMass or d.warhead.mass)) or 0
+  if kg < SPL.minkg then return end
+  local wn = "?"; pcall(function() wn = e.weapon:getTypeName() end)
+  SPLW[#SPLW + 1] = { w = e.weapon, kg = kg, by = shooter or "?", wn = wn }
+end
+local function splashAt(p, s)
+  local gh = land.getHeight({ x = p.x, y = p.z })
+  if p.y - gh > 15 then return end                                   -- ended in the air: no ground blast
+  local r = math.min(SPL.maxr, SPL.k * s.kg ^ (1 / 3))
+  local now = timer.getTime()
+  local hits = {}
+  pcall(function()
+    world.searchObjects(Object.Category.UNIT, { id = world.VolumeType.SPHERE, params = { point = { x = p.x, y = gh, z = p.z }, radius = r } },
+      function(u)
+        local ok, cat = pcall(function() return u:getDesc().category end)
+        if ok and (cat == Unit.Category.GROUND_UNIT or cat == Unit.Category.SHIP) then hits[#hits + 1] = u end
+        return true
+      end)
+  end)
+  for _, u in ipairs(hits) do
+    pcall(function()
+      local up = u:getPoint()
+      local d = math.sqrt((up.x - p.x) ^ 2 + (up.z - p.z) ^ 2)
+      if d > 3 then                                                    -- the direct hit is DCS's own
+        local f = 1 - d / r
+        if f > 0 then
+          SPLBY[u:getName()] = { by = s.by, w = "splash:" .. s.wn, t = now }
+          trigger.action.explosion(up, s.kg * SPL.pow * f * f)
+        end
+      end
+    end)
+  end
+end
+if SPLASH then
+  timer.scheduleFunction(function(_, t)
+    local keep = {}
+    for _, s in ipairs(SPLW) do
+      local ok, ex = pcall(function() return s.w:isExist() end)
+      if ok and ex then
+        pcall(function() s.p = s.w:getPoint(); s.v = s.w:getVelocity() end)
+        keep[#keep + 1] = s
+      elseif s.p then
+        local v = s.v or { x = 0, y = 0, z = 0 }
+        pcall(splashAt, { x = s.p.x + v.x * SPL.dt, y = s.p.y + v.y * SPL.dt, z = s.p.z + v.z * SPL.dt }, s)
+      end
+    end
+    SPLW = keep
+    return t + SPL.dt
+  end, nil, timer.getTime() + 1)
+end
 local H = {}
 function H:onEvent(e)
   local id = e.id
@@ -277,6 +340,7 @@ function H:onEvent(e)
   elseif id == world.event.S_EVENT_SHOT then
     logShot("shot", e, n)
     pcall(jamCheck, e, n)
+    pcall(splashTrack, e, n)
     local lab = UFLT[n]
     if lab and e.weapon then
       local call = shotCall(e)
@@ -292,6 +356,14 @@ function H:onEvent(e)
       if throttle("hit:" .. lab, 15) then say(lab .. ": direct hit.") end
     end
   elseif id == world.event.S_EVENT_KILL then
+    if not n then                                                      -- a splash kill: DCS names no killer, the blast's shooter gets it
+      local tn1 = nameOf(e.target)
+      local sb = tn1 and SPLBY[tn1]
+      if sb and timer.getTime() - sb.t < 10 then
+        n = sb.by
+        if n == PLAYER then pl.kg = pl.kg + 1; dump() end
+      end
+    end
     do
       local tn0 = nameOf(e.target)
       if tn0 and #kills < 300 then
@@ -697,7 +769,7 @@ def _umbrella_lua(x: dict) -> str:
 def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "", group: str = "",
              calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
-             watch: list | None = None, done_after: float = 0, awacs: str = "AWACS") -> str:
+             watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
@@ -714,20 +786,20 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
             .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__JAMS__", ", ".join(f"[{_lq(k)}]={int(v)}" for k, v in (jams or {}).items()))
             .replace("__JAMW__", ", ".join(f"[{_lq(k)}]={{{float(a):.0f}, {float(b):.0f}}}" for k, (a, b) in (jamw or {}).items()))
-            .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)))
+            .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)).replace("__SPLASH__", "true" if splash else "false"))
 
 
 def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "",
                  group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
                  enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
-                 watch: list | None = None, done_after: float = 0, awacs: str = "AWACS") -> None:
+                 watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash))))
     mission.triggerrules.triggers.append(t)
 
 

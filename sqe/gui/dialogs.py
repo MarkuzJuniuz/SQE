@@ -138,6 +138,10 @@ class SettingsDialog(QDialog):
         self.emerg.setChecked(bool(getattr(settings, "emergencies", True))); v.addWidget(self.emerg)
         hint(v, "Chance per sortie by difficulty (about 3%, 9%, 21%), never two sorties in a row. If your squadron can take it you are offered the scramble; "
                 "otherwise you are told, and the war settles it. Raids on our airfields (announced or not) happen whether this is on or off.")
+        self.splash = QCheckBox("Splash damage: blast damage around bomb and missile impacts (off by default)")
+        self.splash.setChecked(bool(getattr(settings, "splash_damage", False))); v.addWidget(self.splash)
+        hint(v, "DCS often leaves a vehicle a few metres from a bomb untouched. On: ground units near an air-to-ground weapon's impact take a blast "
+                "of their own, scaled to the warhead and weaker with distance. Kills it causes count for the shooter.")
         self.ecm = QCheckBox("ECM script: SQE's own jamming model (experimental, off by default)")
         self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
         hint(v, "Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
@@ -263,6 +267,7 @@ class SettingsDialog(QDialog):
         self.s.merge_radius_nm = int(self.mrad.value())
         self.s.ruins = bool(self.ruins.isChecked())
         self.s.ecm_script = bool(self.ecm.isChecked())
+        self.s.splash_damage = bool(self.splash.isChecked())
         self.s.reactive = bool(self.react.isChecked()); self.s.emergencies = bool(self.emerg.isChecked()); self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.shore_margin_m = int(self.shore.value())
