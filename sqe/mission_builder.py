@@ -40,6 +40,8 @@ TARCAP_MIN = 15               # ...and holds there this long, then goes home
 ESCORT_AFTER_TOT_S = 180      # an escort (SWEEP role) holds its station until this long after the TOT (the last ground-attack flight off target)
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
+SUPPORT_CAP_ZONE_NM = 25      # v0.41.7: HAVCAP / tanker CAP / base CAP engage inside this circle round what they guard
+CVCAP_NM = 22                 # v0.41.7: the carrier CAP orbits this far out from the boat toward the nearest enemy field (engages within 35 nm of it)
 HOMEWARD_ENGAGE_NM = 20       # v0.41.5: after its hold a TARCAP / escort / sweep still engages air within this of itself on the way home
 from .packages import LONG_RANGE_A2A     # the long-range shooters; F-16 and F/A-18 are secondary air-to-air
 A2A_ZONE_NM = {True: 25, False: 15}     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
@@ -317,6 +319,7 @@ class MissionBuilder:
 
         # ---- bases, base defenses, carrier + escorts --------------------------------------------------------
         self.ship, self.apt = {}, {}
+        self._main_base = pbase.id                    # v0.41.7: your home field gets the full air defence (HAWK battery)
         for bs in st.bases.values():
             if bs.kind == BaseKind.AIRFIELD:
                 self.t.airports[bs.airport].set_blue()
@@ -381,7 +384,8 @@ class MissionBuilder:
         whois = self._datalinks(package, awacs_unit)
 
         # ---- enemy air picture (known CAP airborne from the start + alert aircraft that scramble when detected) ----
-        keep = [(geom.mshl[0], geom.mshl[1], 100)] + [(p[0], p[1], 100) for p in (tanker_xy, hav_xy) if p is not None]
+        keep = [(geom.mshl[0], geom.mshl[1], 100)] + [(p[0], p[1], 100) for p in (hav_xy,) if p is not None] + \
+               [(p[0], p[1], 60) for p in (tanker_xy,) if p is not None]          # v0.41.7: the tanker is forward; 100 nm round it pushed red's patrols out of the fight
         for bid in dict.fromkeys(f.base_id for f in package.flights):
             keep.append((st.bases[bid].x, st.bases[bid].y, 130 if st.bases[bid].kind == BaseKind.CARRIER else 80))
         keep += self._fleet_keepout()
@@ -895,8 +899,12 @@ class MissionBuilder:
             self.apt[base.id] = self.t.airports[base.airport]
             if o.base_defenses and base.defense >= 0.15:
                 p = self.apt[base.id].position
-                ang = sum(ord(c) for c in base.id) % 360
+                # v0.41.7: the Patriot faces the threat (the nearest enemy fighter field; was a direction picked from the base's name: a Patriot
+                # radar covers about 120 degrees, so a raid from the wrong side met none). Short-range sites on both sides of the field, and a
+                # HAWK battery as the middle layer at your home field. A degraded field (below 0.6) keeps the Patriot with 1 launcher and one site.
+                ang = tm.nearest_threat_bearing(self.state, p.x, p.y, bearing(p.x, p.y, tx, ty))
                 full = base.defense >= 0.6
+                main = base.id == getattr(self, "_main_base", None)
                 dry = lambda a0, d0: next(((px, py) for k in range(12) for px, py in [offset(p.x, p.y, a0 + (30 * ((k + 1) // 2)) * (1 if k % 2 else -1), d0)]
                                            if seac.site_ok(px, py, 300.0)), offset(p.x, p.y, a0, d0))           # the nearest bearing that is dry land
                 x, y = dry(ang, 4500)
@@ -904,6 +912,13 @@ class MissionBuilder:
                               ("Patriot_EPP", 1), ("Patriot_ln", 3 if full else 1)], x, y, ang, F.Star)
                 x, y = dry(ang + 120, 3500)
                 self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if full else 1)], x, y, ang, F.Line)
+                if full:
+                    x, y = dry(ang - 120, 3500)
+                    self._platoon(self.usa, f"BASEDEF {base.name} AAA 2", [("Vulcan", 1), ("M1097_Avenger", 2)], x, y, ang, F.Line)
+                if full and main:
+                    x, y = dry(ang + 50, 6000)
+                    self._platoon(self.usa, f"BASEDEF {base.name} HAWK", [("Hawk_sr", 1), ("Hawk_tr", 1), ("Hawk_pcp", 1), ("Hawk_cwar", 1),
+                                  ("Hawk_ln", 3)], x, y, ang, F.Star)
             return
         hdg = getattr(self, '_cv_hdg', {}).get(base.id)
         if hdg is None:
@@ -1118,27 +1133,41 @@ class MissionBuilder:
         return x, y
 
     def _place_support(self, package, plan, g):
-        """Tanker, AWACS and HAVCAP sit around the rear marshal point: as close to home as it gets, behind the base, far from the enemy."""
+        """v0.41.7: the AWACS sits well back (its own anchor: where the marshal used to be, 90 nm from every enemy field) with its HAVCAP; the
+        tanker sits FORWARD, on the way home (between the base and the egress point, clear of SAM rings and the enemy fields' scramble circles),
+        with its own escort, so a flight short of fuel meets it before its own runway, not 50 nm behind it."""
         pt = lambda x, y: mapping.Point(x, y, self.t)
-        cx, cy = g.mshl
+        st = self.state
+        ax, ay = tm.safe_marshal(st, (g.bx, g.by), g.hdg)                   # the old flat-distance marshal spot: the AWACS's anchor
         tanker_xy, awacs_unit = None, None
-        hav_xy = offset(cx, cy, g.hdg + 180, 8 * NM)
+        hav_xy = offset(ax, ay, g.hdg + 180, 8 * NM)
+        fwd = tm.forward_tanker_spot(st, (g.bx, g.by), g.egr, (g.tx, g.ty))
+        self._tanker_c = None
         for s in package.support:
             cls = getattr(planes, s.dcs_class)
             alt, spd, freq = s.altitude_ft * FT, s.speed_kts * KPH, plan.freq(s.slot)
             if s.slot == "AWACS":
-                # racetrack runs sideways (parallel to the front), 40 nm long, centred behind the marshal point
-                x, y = offset(*offset(cx, cy, g.hdg + 180, 6 * NM), g.hdg - 90, 20 * NM)
+                # racetrack runs sideways (parallel to the front), 40 nm long, centred behind its anchor
+                x, y = offset(*offset(ax, ay, g.hdg + 180, 6 * NM), g.hdg - 90, 20 * NM)
                 grp = self.m.awacs_flight(self.usa, f"{s.label} 1", cls, None, pt(x, y), race_distance=40 * NM, heading=int(g.hdg + 90) % 360,
                                           altitude=alt, speed=spd, frequency=freq)
                 callsigns.apply(grp, s.label, 1, callsigns.AWACS); grp.units[0].name = f"{s.label} 1-1"
                 awacs_unit = grp.units[0]
             else:
-                if s.from_carrier:
+                if s.from_carrier:                                           # the recovery tanker stays with the boat
                     x, y = offset(*offset(g.bx, g.by, g.hdg + 180, 15 * NM), g.hdg - 90, 10 * NM); race = 20 * NM
-                else:
+                elif fwd is not None:
+                    # a 30 nm racetrack across the route (in and out both cross it); a second tanker 15 nm nearer home
+                    c_ = fwd if s.slot == "TANKER1" else offset(*fwd, bearing(*fwd, g.bx, g.by), 15 * NM)
+                    race = 30 * NM
+                    x, y = offset(*c_, g.hdg - 90, race / 2)
+                    if s.slot == "TANKER1":
+                        self._tanker_c = c_
+                else:                                                        # nothing forward is clear: behind the AWACS anchor, as before
                     back = 12 if s.slot == "TANKER1" else 24
-                    x, y = offset(*offset(cx, cy, g.hdg + 180, back * NM), g.hdg - 90, 15 * NM); race = 30 * NM
+                    x, y = offset(*offset(ax, ay, g.hdg + 180, back * NM), g.hdg - 90, 15 * NM); race = 30 * NM
+                    if s.slot == "TANKER1":
+                        self._tanker_c = offset(x, y, g.hdg + 90, race / 2)
                 grp = self.m.refuel_flight(self.usa, f"{s.label} 1", cls, None, pt(x, y), race_distance=race, heading=int(g.hdg + 90) % 360,
                                            altitude=alt, speed=spd, frequency=freq, tacanchannel=plan.tacan[s.slot])
                 callsigns.apply(grp, s.label, 1, callsigns.TANKER); grp.units[0].name = f"{s.label} 1-1"
@@ -1156,11 +1185,23 @@ class MissionBuilder:
         csname, fno = f.callsign.rsplit(" ", 1)
         fno = int(fno)
 
-        if f.tag:       # HAVCAP / BASECAP: airborne on station for the whole package
-            sx, sy = hav_xy if f.tag == "HAVCAP" else offset(base.x, base.y, geom.hdg, 8 * NM)
+        cap_zone = None
+        if f.tag:       # support CAP: airborne on station for the whole package
+            # v0.41.7: each guards one thing, from the side the threat comes from (the nearest enemy fighter field), and fights only inside
+            # a circle round it. HAVCAP: the AWACS (well back). TNKCAP: the tanker (forward, on the way home). BASECAP: the home field. CVCAP: the boat.
+            tc_ = getattr(self, "_tanker_c", None)
+            if f.tag == "TNKCAP" and tc_ is not None:
+                gx_, gy_ = tc_; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 5 * NM); zr_ = SUPPORT_CAP_ZONE_NM
+            elif f.tag in ("HAVCAP", "TNKCAP"):
+                gx_, gy_ = hav_xy; thr_ = geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
+            elif f.tag == "CVCAP":
+                gx_, gy_ = base.x, base.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, CVCAP_NM * NM); zr_ = CVCAP_NM + 13
+            else:           # BASECAP
+                gx_, gy_ = base.x, base.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 8 * NM); zr_ = SUPPORT_CAP_ZONE_NM
+            cap_zone = (gx_, gy_, min(self.o.friendly_cap_engage_nm or 999, zr_))
             p = spec.profile
             wps = [Wpt("SPAWN", sx, sy, p.cap_alt_ft, p.cap_kts), Wpt("CAP1", sx, sy, p.cap_alt_ft, p.cap_kts, "", "CAPORBIT"),
-                   Wpt("CAP2", *offset(sx, sy, geom.hdg + 90, 20 * NM), p.cap_alt_ft, p.cap_kts)]
+                   Wpt("CAP2", *offset(sx, sy, thr_ + 90, 15 * NM), p.cap_alt_ft, p.cap_kts)]
             stop = int(max(tot_s + o.cap_minutes * 60, rtb_s + 300))
         else:
             sp = None
@@ -1253,7 +1294,7 @@ class MissionBuilder:
             else:
                 hold_end = int(max(stw.eta_s + 120, t_end + ESCORT_AFTER_TOT_S))
         if f.tag:
-            self._limit_engage(g, self.o.friendly_cap_engage_nm)
+            self._limit_engage(g, self.o.friendly_cap_engage_nm, None, cap_zone)
         elif stw is not None and (not f.is_player or o.player_is_ai):
             # no chasing. A sweep engages inside a circle round its station (25 nm for the long-range shooters, 15 for the rest). A TARCAP or
             # escort covers the package: the circle is round the package's launch points (HARM / JSOW points, or the IP), COVER_ZONE_NM, and

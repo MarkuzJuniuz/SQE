@@ -176,6 +176,45 @@ def safe_marshal(state, base_xy, hdg_to_target, target_xy=None, min_enemy_nm: fl
     return best
 
 
+def spot_slack(state, x, y, target_xy, ring_margin_nm: float = 20, field_margin_nm: float = MARSHAL_FIELD_MARGIN_NM) -> float:
+    """v0.41.7: how far (nm) a friendly orbit at (x, y) is clear of every SAM ring (plus ring_margin_nm) and every enemy field's scramble circle
+    (plus field_margin_nm). >= 0 means clear."""
+    fs = [math.hypot(x - ex, y - ey) / NM - field_detect_nm((ex, ey), target_xy) - field_margin_nm for ex, ey in fighter_bases(state)]
+    rs = [(math.hypot(x - a.x, y - a.y) - r) / NM - ring_margin_nm for a, r in rings(state, min_range=3)]
+    return min(fs + rs + [1e9])
+
+
+def nearest_threat_bearing(state, x, y, fallback: float) -> float:
+    """v0.41.7: the bearing from (x, y) to the nearest enemy fighter field (where raids and chasers come from); fallback when there is none."""
+    fb = fighter_bases(state)
+    if not fb:
+        return fallback
+    ex, ey = min(fb, key=lambda e: math.hypot(e[0] - x, e[1] - y))
+    return math.degrees(math.atan2(ey - y, ex - x)) % 360
+
+
+def forward_tanker_spot(state, base_xy, egr_xy, target_xy, field_margin_nm: float = 15, ring_margin_nm: float = 15):
+    """v0.41.7: the tanker track centre on the way home: as far toward the egress point as it can go (half way at most), sideways off the line
+    if it has to, while it stays ring_margin_nm outside every SAM ring and outside every enemy field's scramble circle with a margin. When nothing
+    forward is clear, the nearest clear spot behind the base (up to 30 nm). None when nothing is."""
+    bx, by = base_xy
+    ex, ey = egr_xy
+    h = math.degrees(math.atan2(ey - by, ex - bx))
+    for f in (0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.05, 0.0):
+        cx, cy = bx + (ex - bx) * f, by + (ey - by) * f
+        for side in (0, 10, -10, 20, -20):
+            x, y = cx + side * NM * math.cos(math.radians(h + 90)), cy + side * NM * math.sin(math.radians(h + 90))
+            if spot_slack(state, x, y, target_xy, ring_margin_nm, field_margin_nm) >= 0:
+                return x, y
+    for back in (5, 10, 15, 20, 25, 30):
+        for side in (0, 10, -10, 20, -20):
+            x = bx - back * NM * math.cos(math.radians(h)) + side * NM * math.cos(math.radians(h + 90))
+            y = by - back * NM * math.sin(math.radians(h)) + side * NM * math.sin(math.radians(h + 90))
+            if spot_slack(state, x, y, target_xy, ring_margin_nm, field_margin_nm) >= 0:
+                return x, y
+    return None
+
+
 def first_safe_egress(state, tx, ty, hdg_to_target, skip_ids=(), min_nm: float = 8, max_nm: float = 60, margin_nm: float = 4, avoid=()):
     """EGR = the FIRST safe point after the target: the closest point (8 nm and out) that is clear of every live SAM ring (plus a margin).
     Bearings that turn for home are tried first; among equals, the one farther from enemy fighter bases wins (away from their CAP).

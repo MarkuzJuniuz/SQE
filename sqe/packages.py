@@ -49,7 +49,8 @@ _DEAD_TASK = {Role.SEAD: "SEAD: suppress the radars ahead of the DEAD flight", R
 _KIT_TASK = {"JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers and covering Tors, on the HARM salvo's time; stand-off release, then home"}
 _SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
 _ESC_TASK = "Escort: hold your station with the package, shoot what comes in range, do not chase; leave when the strikers are off target"
-_TAG_TASK = {"HAVCAP": "HAVCAP (guards tanker and AWACS)", "BASECAP": "Base CAP"}
+_TAG_TASK = {"HAVCAP": "HAVCAP (guards the AWACS)", "TNKCAP": "Tanker CAP (guards the tanker)", "BASECAP": "Base CAP", "CVCAP": "Carrier CAP"}
+BASECAP_ENEMY_NM = 130     # v0.41.7: a land base gets a base CAP when an enemy fighter field is within this (an alert pair reaches it)
 
 
 @dataclass
@@ -271,15 +272,25 @@ class PackageBuilder:
         if not chosen:
             raise NoPlayerSlot("no squadron could fly this objective")
 
-        # support CAP: HAVCAP guards the tanker/AWACS; BASECAP guards the strike/CAS flights' home field
+        # support CAP (v0.41.7): TNKCAP guards the tanker (forward, on the way home: mandatory), HAVCAP the AWACS (well back), BASECAP the
+        # strike/CAS flights' home field, CVCAP the carrier (from the carrier's own squadrons). One pair short: the tanker keeps its guard.
         prim = st.bases[chosen[0][1].base_id]
         anchor = next((st.bases[sq.base_id] for _, sq, _, pl in chosen if pl), prim)
         dnm = math.hypot(tx - prim.x, ty - prim.y) / NM
-        wanted = [("HAVCAP", anchor)] if (obj.type not in _FLEET and not is_sweep(obj)) else []
-        if not is_sweep(obj) and (obj.type == ObjectiveType.CAS or (obj.type not in _FLEET and dnm < 100)):
+        sup_ok = obj.type not in _FLEET and not is_sweep(obj)
+        wanted = [("TNKCAP", anchor), ("HAVCAP", anchor)] if sup_ok else []
+        enemy_near = prim.kind != BaseKind.CARRIER and any(math.hypot(st.assets[w.base_asset_id].x - prim.x, st.assets[w.base_asset_id].y - prim.y) / NM <= BASECAP_ENEMY_NM
+                                                          for w in st.enemy_air if w.available > 0 and not st.assets[w.base_asset_id].destroyed)
+        if not is_sweep(obj) and prim.kind != BaseKind.CARRIER and (obj.type == ObjectiveType.CAS or (obj.type not in _FLEET and (dnm < 100 or enemy_near))):
             wanted.append(("BASECAP", prim))
+        cv_ = next((st.bases[sq.base_id] for _, sq, _, _ in chosen if st.bases[sq.base_id].kind == BaseKind.CARRIER), None)
+        if cv_ is not None and obj.type not in _FLEET:
+            wanted.append(("CVCAP", cv_))
         for tag, base in wanted:
-            sq = self._pick_cap_near(base, ledger, lead_service) or (self._pick_cap_any(ledger, lead_service) if tag == "HAVCAP" else None)
+            if tag == "CVCAP":
+                sq = self._pick_cap_at(base, ledger, lead_service)
+            else:
+                sq = self._pick_cap_near(base, ledger, lead_service) or (self._pick_cap_any(ledger, lead_service) if tag == "TNKCAP" else None)
             if sq:
                 ledger.free[sq.id] -= 2
                 chosen.append((Slot(Role.CAP, 2, False, tag=tag), sq, 2, False))
@@ -395,8 +406,13 @@ class PackageBuilder:
                 best, best_s = sq, s
         return best
 
+    def _pick_cap_at(self, base, ledger: Ledger, lead_service):
+        """v0.41.7: a fighter squadron AT this base (the carrier CAP flies off its own deck)."""
+        cands = [sq for sq in self.state.squadrons.values() if sq.base_id == base.id and Role.CAP in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2]
+        return max(cands, key=lambda sq: (AIRCRAFT[sq.aircraft].service == lead_service, ledger.free.get(sq.id, 0))) if cands else None
+
     def _pick_cap_any(self, ledger: Ledger, lead_service):
-        """HAVCAP is mandatory: any fighter will do (it stays with the tanker, which stays behind the FLOT), range aside."""
+        """The tanker CAP is mandatory: any fighter will do (it stays with the tanker, short of the scramble circles), range aside."""
         cands = [sq for sq in self.state.squadrons.values() if Role.CAP in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2]
         if not cands:
             cands = [sq for sq in self.state.squadrons.values() if Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2]
