@@ -219,6 +219,7 @@ class PackageBuilder:
             slots = [s for s in slots if s.role != Role.ESCORT]
             if req:
                 slots.append(Slot(Role.ESCORT, min(4, req), True))            # the TARCAP. More bandits than it can take: a Fighter Sweep package (v0.40.2)
+                slots.append(Slot(Role.SWEEP, 2, False))                       # v0.41.1: the escort, back (v0.40.2 dropped it with the old sweep slot)
         if obj.type not in _FLEET:
             slots.append(Slot(Role.CAP, 2, False, tag="HAVCAP"))
         return slots
@@ -357,8 +358,18 @@ class PackageBuilder:
                  and (slot.kit != "JSOW" or sq.aircraft in JSOW_PER_JET)]
         if not cands:
             return None
-        a2a = slot.role in (Role.ESCORT, Role.SWEEP)              # TARCAP / escort: the long-range shooters (F-15C, F-14) first, F-16 / F/A-18 only behind them
-        key = lambda sq: self._dist_nm(sq.id, tx, ty) - 40 * (ledger.free[sq.id] / max(1, sq.authorized)) + (A2A_SECONDARY_NM if a2a and sq.aircraft not in LONG_RANGE_A2A else 0)
+        # TARCAP and sweep: the long-range shooters (F-15C, F-14) first, F-16 / F/A-18 behind them. The package escort (v0.41.1) the other
+        # way round: F-16 / F/A-18 first (it stays with the package and fights close), an F-15C / F-14 only when none is free.
+        obj_ = self._ctx[0] if self._ctx else None
+        escort = slot.role == Role.SWEEP and obj_ is not None and not is_sweep(obj_)
+        long_first = slot.role in (Role.ESCORT, Role.SWEEP) and not escort
+        def key(sq):
+            k = self._dist_nm(sq.id, tx, ty) - 40 * (ledger.free[sq.id] / max(1, sq.authorized))
+            if long_first and sq.aircraft not in LONG_RANGE_A2A:
+                k += A2A_SECONDARY_NM
+            if escort and sq.aircraft in LONG_RANGE_A2A:
+                k += A2A_SECONDARY_NM
+            return k
         if lead_service is None:
             return min(cands, key=key)
         same = [c for c in cands if AIRCRAFT[c.aircraft].service == lead_service]

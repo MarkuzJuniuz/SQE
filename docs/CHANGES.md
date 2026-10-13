@@ -1,3 +1,14 @@
+## v0.41.1
+
+From the v0.41.0 Batumi run: an earlier package already airborne near the target scrambled all 20 red alert pairs from six fields 10 s into the mission (45 radar missiles fired at us); the SA-10 killed six F-15Cs waiting on the new 62% stations (it engaged from 59-61 km); and no package had an escort (v0.40.2 had dropped the slot).
+
+* **Alert fields scramble on what their own radar sees.** Each field's trigger is a circle round the field itself (up to 60 nm, smaller for fields close to the fight), not one big circle round the target. Red reinforcements use the same circles.
+* **Only fields that can reach the fight send alert pairs:** within 130 nm of the target. The far fields (Krymsk, Gelendzhik, Maykop, Beslan for a Sukhumi target) no longer scramble at all.
+* **TARCAP arrives with the package:** no head start (was 5 minutes), so the SAM has to split its attention and its exposure ends with the HARM salvo. In DEAD packages it arrives with the HARM shooters.
+* **TARCAP and escort stations against a long-range SAM at 75% of its reach** (about 36 nm from an SA-10, was 62% / 30 nm), outside where it actually engaged.
+* **Escorts are back:** every defended strike, DEAD or CAS package carries a 2-ship escort beside its TARCAP. Escorts pick F-16s and F/A-18s first (they stay with the package and fight close); an F-15C or F-14 fills in when none is free. TARCAP and sweeps keep the F-15Cs and F-14s first.
+* Smoke test: detection circles round their own fields, the escort slot and its pick order, the new timing.
+
 ## v0.41.0
 
 From the v0.40.10 run (Standoff DEAD, Sukhumi SA-10): one Su-27 alert pair from Sukhumi killed 7 ground-attack jets from 4-6 nm in two minutes; the F-15C TARCAPs never fired a missile (their stations were about 50 nm from the SA-10, 20 nm behind the HARM shooters); alert pairs took 3 to 11 minutes from the call to the air and two never made it (DCS AI taxiing).
