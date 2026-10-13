@@ -328,7 +328,9 @@ class MissionBuilder:
         # ---- radios + support -----------------------------------------------------------------------------------------
         div = self._divert(pbase)
         div_mhz = self.t.airports[div.airport].atc_radio.uhf_hz / 1e6 if div.airport else None
-        plan = build_radio_plan(package, st, atc, self.rng, o.layout, RadioCfg(o.carrier_tacan, o.carrier_link4_mhz), div_mhz, div.name)
+        atc_vhf = (self.t.airports[pbase.airport].atc_radio.vhf_high_hz / 1e6) if (pbase.kind != BaseKind.CARRIER and getattr(self.t.airports[pbase.airport], "atc_radio", None)
+                                                                              and self.t.airports[pbase.airport].atc_radio.vhf_high_hz) else None
+        plan = build_radio_plan(package, st, atc, self.rng, o.layout, RadioCfg(o.carrier_tacan, o.carrier_link4_mhz), div_mhz, div.name, atc_vhf)
         tanker_xy, awacs_unit, hav_xy = self._place_support(package, plan, geom)
 
         # ---- timeline: YOUR times. Roles are staggered around the strikers' push (sweep, SEAD, escorts go first) ---------
@@ -446,7 +448,7 @@ class MissionBuilder:
         calls = []
         t1 = next((s for s in package.support if s.slot == "TANKER1"), None)
         if t1 is not None:
-            calls.append((25, f"{t1.label.upper()} to {pf.callsign.upper()}: on station, TACAN {plan.tacan.get('TANKER1', '')}, " + (f"{plan.freq('TANKER1'):.3f}." if pspec.fc3 else "COMM1 channel 3.")))
+            calls.append((25, f"{t1.label.upper()} to {pf.callsign.upper()}: on station, TACAN {plan.tacan.get('TANKER1', '')}, " + (f"{plan.freq('TANKER1'):.3f}." if pspec.fc3 else f"{plan.where('TANKER1')}.")))
         calls.append((P0, f"{awl.upper()} to {pf.callsign.upper()}: package, push, push, push."))
         if tgt.eta_s - 300 > 60:
             calls.append((tgt.eta_s - 300, f"{awl.upper()} to {pf.callsign.upper()}: five minutes to TOT."))
@@ -802,7 +804,7 @@ class MissionBuilder:
         nm = self._short(pbase.name) if pbase is not None else ""
         if spec.home == BaseKind.CARRIER:
             return f"{nm}: Case I TACAN {self.o.carrier_tacan} ICLS {self.o.carrier_icls}".lstrip(": ")
-        return (f"{nm}: Land. Tower, ATC frequency" if spec.fc3 else f"{nm}: Land. Tower COMM1 CH1").lstrip(": ")
+        return (f"{nm}: Land. Tower, ATC frequency" if spec.fc3 else f"{nm}: Land. Tower COMM2 CH2").lstrip(": ")
 
     def _divert(self, pbase):
         fields = [b for b in self.state.bases.values() if b.kind == BaseKind.AIRFIELD and b.id != pbase.id]

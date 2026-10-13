@@ -143,6 +143,16 @@ def main():
     _stk = [(a_[0], b_[0]) for i_, a_ in enumerate(_air) for b_ in _air[:i_] if _m3.hypot(a_[1] - b_[1], a_[2] - b_[2]) < 200 and abs(a_[3] - b_[3]) < 100]
     assert not _stk, ("airborne groups spawned on top of each other", _stk)
     assert all(v_ == 1 for v_ in _rw.values()), ("two groups on one runway / catapult", _rw)
+    # comms (v0.40.5): COMM1 CH1 AWACS, COMM2 CH1 flight (where DCS writes the group frequency) and CH2 the tower, VHF for an Air Force jet
+    _pl5 = res.radio
+    assert _pl5.comm1[1].label == "AWACS" and _pl5.comm2[1].label == "FLIGHT" and _pl5.comm2[2].label == "ATC" and not any(e_.label == "ATC" for e_ in _pl5.comm1.values()), "radio layout"
+    _pf5 = pk.player_flight
+    if _pf5.aircraft == "F-16C" and ms.state.bases[_pf5.base_id].kind.value != "CARRIER":
+        assert 108 <= _pl5.comm2[2].mhz <= 152, ("an F-16's tower is on its VHF COMM2", _pl5.comm2[2].mhz)
+        _pu5 = next(u_ for co_ in _mz["mission"]["coalition"]["blue"]["country"].values() for g_ in co_.get("plane", {}).get("group", {}).values()
+                    for u_ in g_["units"].values() if u_.get("skill") in ("Player", "Client"))
+        assert abs(float(_pu5["Radio"][2]["channels"][2]) - _pl5.comm2[2].mhz) < 0.01 and abs(float(_pu5["Radio"][1]["channels"][1]) - _pl5.comm1[1].mhz) < 0.01, "presets written: COMM1 CH1 AWACS, COMM2 CH2 tower"
+    assert "COMM2 CH2" in ms.last_build.text["admin"] or "Case I" in ms.last_build.text["admin"], "the briefing sends you to the tower on COMM2 CH2"
     # air-to-air (v0.40.1): TARCAP and escort fly to a station of their own (no IP), hold there, engage only inside a circle round it;
     # the TARCAP has no egress; red patrols are leashed the same way; the long-range shooters fill TARCAP / escort first
     from sqe.mission_builder import A2A_ZONE_NM as _azn, LONG_RANGE_A2A as _lra

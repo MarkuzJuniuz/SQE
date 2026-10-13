@@ -1,3 +1,12 @@
+## v0.40.5
+
+* **New radio layout.** COMM1 (UHF): CH1 AWACS, CH2 tanker, CH3 JTAC (when there is one), CH4 second tanker (when there is one), CH5 divert. COMM2: CH1 your flight, CH2 the tower. The flight stays on COMM2 CH1 because DCS writes the group's frequency onto the first channel that can tune it, whatever preset is set there; putting the tower on CH1 would have had it overwritten.
+* **The tower on COMM2 is VHF for Air Force jets** at an airfield (the F-16's COMM2 tunes VHF only): the field's own VHF tower frequency. Navy jets keep the UHF tower or carrier control there (their COMM2 tunes both).
+* COMM2 presets (flight and tower) are now written to your jet as well as COMM1.
+* Kneeboard, briefing and radio calls follow: the comms card lists COMM2 CH2 as TOWER (or CVN), the RTB note and recovery line say "Tower COMM2 CH2", the tanker's on-station call names its channel, the JTAC is COMM1 CH3.
+* Not in this build: starting both radios on CH1 (COMM2 starts on the flight frequency DCS gives the group), and showing AWACS and flight calls only when you are tuned to them (needs your cockpit radio state: the dcs-bios / Export.lua research item).
+* Smoke test: layout, the F-16's VHF tower, the presets in the mission file, the briefing.
+
 ## v0.40.4
 
 * **Splash damage** (Settings: "Splash damage", off by default). DCS often leaves a vehicle a few metres from a bomb untouched. On: when an air-to-ground weapon (bomb, rocket, air-to-ground missile, HARM included) reaches the ground, every ground unit or ship within a blast radius of 9 m x (explosive mass in kg)^(1/3) (a Mk-82 about 40 m, a 2000 lb bomb about 68 m, capped at 120 m) gets a blast of its own of 0.35 x explosive mass x (1 - distance / radius)^2. The direct hit is left to DCS. A weapon that ends in the air (a JSOW opening its dispenser, a missile shot down) does nothing, and a weapon whose DCS data gives no explosive mass is left alone. Kills it causes are credited to the shooter (DCS reports them with no killer), your ground kill count included. The numbers are a first guess, to tune from your test.
