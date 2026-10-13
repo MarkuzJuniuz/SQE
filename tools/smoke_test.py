@@ -141,7 +141,7 @@ def main():
                 elif _p0["type"] == "TakeOff" and not _g.get("lateActivation"):           # a late one waits for the runway (the hook's queue)
                     _rw[(_side, _p0.get("airdromeId"), _p0.get("linkUnit"))] += 1
                 if _g["name"].startswith(("Alert ", "Reinforce ")) or "alert" in str(_g.get("name", "")).lower():
-                    assert _p0["type"] == "TakeOffParkingHot" or (_p0["type"] == "TakeOff" and _g.get("lateActivation")), (_g["name"], "alert groups wait hot on the ramp (or hidden for the runway)", _p0["type"])
+                    assert _p0["type"] == "TakeOff" and _g.get("lateActivation"), (_g["name"], "alert groups wait hidden for the runway (v0.41.0)", _p0["type"])
     _stk = [(a_[0], b_[0]) for i_, a_ in enumerate(_air) for b_ in _air[:i_] if _m3.hypot(a_[1] - b_[1], a_[2] - b_[2]) < 200 and abs(a_[3] - b_[3]) < 100]
     assert not _stk, ("airborne groups spawned on top of each other", _stk)
     assert all(v_ == 1 for v_ in _rw.values()), ("two groups on one runway / catapult", _rw)
@@ -171,7 +171,10 @@ def main():
             assert "EGR" not in _nm, (f_.callsign, "a TARCAP goes home from its station", _nm)
         if not f_.is_player:
             _zt = [t_ for t_ in _pts[0]["task"]["params"]["tasks"].values() if t_.get("id") == "ControlledTask" and t_["params"]["task"]["id"] == "EngageTargetsInZone"]
-            assert _zt and round(_zt[0]["params"]["task"]["params"]["zoneRadius"] / 1852) == _azn[f_.aircraft in _lra], (f_.callsign, "leashed to its station")
+            assert _zt and round(_zt[0]["params"]["task"]["params"]["zoneRadius"] / 1852) >= 20, (f_.callsign, "leashed to the package's cover zone")
+            _o0a = {t_["params"]["action"]["params"]["name"]: t_["params"]["action"]["params"].get("value") for t_ in _pts[0]["task"]["params"]["tasks"].values()
+                    if t_.get("params", {}).get("action", {}).get("id") == "Option"}
+            assert _o0a.get(18) == 0 and _o0a.get(3) == 3, (f_.callsign, "max-range shots, radar searching all the time", _o0a)
         _nst += 1
     assert _nst, "no TARCAP / escort checked"
     _rz = [g_ for co_ in _mz["mission"]["coalition"]["red"]["country"].values() for g_ in co_.get("plane", {}).get("group", {}).values() if g_["name"].startswith("Bandit")]
@@ -1123,6 +1126,26 @@ def main():
             _cb = min((_sl(_tt, _sd.bases[bid_].airport, [AIRCRAFT[q_.aircraft].dcs_class]) or 999) for q_ in qs_)
             assert sum(q_.authorized for q_ in qs_) <= _cb or len(qs_) == 1, (bid_, [(q_.id, q_.authorized) for q_ in qs_], _cb)
     print("[dispersal] no field holds more jets than it can park (red wings and blue squadrons); your squadron keeps its field")
+    # v0.41.0: against an SA-10 the TARCAP sits level with the HARM shooters (about 62% of its reach), not behind them; Abort rewinds the
+    # sortie counter, so a re-fly of the same package has the same seed (layout)
+    from sqe.profiles import STATION_FRAC as _sfr, STATION_OFFSET_NM as _son
+    _cs = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="off", flight_filter="all"))
+    _cs.new("Cap", "F-15C", 3, seed=1); _cst = _cs.state; _cst.campaign_id = f"{0xcab0001:010x}"; _cs.plan_day()
+    _cp = next(p_ for p_ in _cs.packages() if p_.objective.aim == "STANDOFF" and _cst.assets[p_.objective.target_id].variant == "SA-10" and _cs.flyable(p_))
+    _r1 = _cs.fly(_cp.number, _cs.flyable(_cp)[0].id)
+    _sa = _cst.assets[_cp.objective.target_id]
+    _Mc = _luaj.loads(_zf.ZipFile(_cst.pending["miz"]).read("mission").decode("utf-8", "ignore"))["mission"]
+    _dd = {}
+    for co_ in _Mc["coalition"]["blue"]["country"].values():
+        for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
+            for p_ in g_["route"]["points"].values():
+                if p_.get("name") in ("SEAD", "TGT") and g_.get("task") in ("SEAD", "CAP"):
+                    _dd.setdefault(g_["task"], []).append(_m3j.hypot(p_["x"] - _sa.x, p_["y"] - _sa.y) / 1852)
+    _tar = [x_ for x_ in _dd.get("CAP", []) if x_ < 45]
+    assert _tar and all(abs(x_ - _sfr * 48) <= _son + 2 for x_ in _tar) and _dd.get("SEAD"), ("the TARCAP sits level with the HARM shooters", _dd)
+    _cs.abort(); _r2 = _cs.fly(_cp.number, _cs.flyable(_cp)[0].id)
+    assert _r1.seed == _r2.seed, "Abort rewinds the sortie counter: the re-fly has the same seed"
+    print(f"[cap v0.41] TARCAP {min(_tar):.0f} nm from the SA-10, HARM points {min(_dd['SEAD']):.0f} nm; re-fly after Abort has the same seed ({_r1.seed})")
     # Tors (v0.39.20): the Tors that cover a SEAD/DEAD target are part of the job: the second HARM flight opens on them, the JSOWs aim at them,
     # the DEAD gate waits for them (route check), and the Tor vehicle counts as a radar
     import math as _m3
@@ -1244,7 +1267,7 @@ def main():
         _dk = next((p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and s.flyable(p_)), None)
         if _dk: break
     assert _dk, "no DEAD package found"
-    assert (_stg(_dk, _Rl.SWEEP), _stg(_dk, _Rl.SEAD), _stg(_dk, _Rl.ESCORT), _stg(_dk, _Rl.STRIKE)) == (-330, -300, -480, 0), "DEAD package timing: TARCAP first, then the escort, SEAD, strikers"
+    assert (_stg(_dk, _Rl.SWEEP), _stg(_dk, _Rl.SEAD), _stg(_dk, _Rl.ESCORT), _stg(_dk, _Rl.STRIKE)) == (-330, -300, -600, 0), "DEAD package timing: TARCAP first (5 min ahead of SEAD), then the escort, SEAD, strikers"
     s.ai_test = True; s.fly(_dk.number, None); s.ai_test = False
     _wlr.long_range_site = _lr_real
     _zz = _zf.ZipFile(_st.pending["miz"]); _mt = _zz.read("mission").decode("utf-8", "ignore")
@@ -1428,7 +1451,7 @@ def main():
         _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
         assert ("GATES = { {t=" in _mz.replace("\\", "")) or True
     from sqe.mission_builder import stagger as _stg
-    assert _stg(_de, Role.ESCORT) == -180 and _stg(_de, Role.SWEEP) == -60 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage: TARCAP 3 min ahead, the escort with the strikers"
+    assert _stg(_de, Role.ESCORT) == -300 and _stg(_de, Role.SWEEP) == -60 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage: TARCAP 5 min ahead, the escort with the strikers"
     _wlr.long_range_site = _lr_real
     # the HARM launch point is at the edge of an SA-10's reach and the HARM task asks for ARMs; in the all-AI test your own SEAD flight gets the same tasking
     import math as _m

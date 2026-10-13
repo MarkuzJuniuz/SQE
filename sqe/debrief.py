@@ -472,6 +472,7 @@ end
 local RWYQ = { __RWYQ__ }
 local PRWY = "__PRWY__"
 local RWY_STAGGER_S = 60
+local ALERT_TAXI_S = 120          -- v0.41.0: an alert pair appears on the runway this long after it is called (the taxi it no longer does)
 local rwyLast = {}
 if #RWYQ > 0 then
   timer.scheduleFunction(function(_, t)
@@ -482,6 +483,8 @@ if #RWYQ > 0 then
         pend = pend + 1
         local want = false
         pcall(function() want = trigger.misc.getUserFlag(q.f) > 0 end)
+        if want and not q.wt then q.wt = now end
+        want = want and q.wt and (now - q.wt >= ALERT_TAXI_S)
         local free = (not rwyLast[q.b]) or (now - rwyLast[q.b] >= RWY_STAGGER_S)
         if q.b == PRWY and not (pl.takeoff or dead[PLAYER] or now > 900) then free = false end
         if want and free then
