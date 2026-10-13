@@ -1319,7 +1319,7 @@ def main():
             _mp6 = next((p_ for p_ in g_["route"]["points"].values() if p_.get("name") == "MSHL"), None)
             if _mp6 is None:
                 continue
-            _gap = min(_m.hypot(_mp6["x"] - ex_, _mp6["y"] - ey_) / 1852 - _tm9.field_detect_nm((ex_, ey_), (_t4.x, _t4.y)) for ex_, ey_ in _fb6)
+            _gap = min(_m.hypot(_mp6["x"] - ex_, _mp6["y"] - ey_) / 1852 - _tm9.field_detect_nm((ex_, ey_), (_t4.x, _t4.y), _ss.state) for ex_, ey_ in _fb6)
             _md6.append(_gap)
     assert _md6 and min(_md6) >= _tm9.MARSHAL_FIELD_MARGIN_NM - 1, ("every marshal point sits outside the enemy fields' scramble circles", [round(x_) for x_ in _md6])
     print(f"[marshal] {len(_md6)} marshal points, the closest {min(_md6):.0f} nm outside an enemy field's scramble circle; HARM flights OPEN FIRE")
@@ -1366,6 +1366,20 @@ def main():
         _ncv += bool(cc_)
     assert not _cvp or _ncv >= 1
     print(f"[bases] {_ncv} of {len(_cvp)} carrier packages with a carrier CAP off their own deck (the rest: the deck's fighters already committed that day)")
+    # v0.41.8: an enemy field next to a live SA-10 sees as far as that radar: a stand-off wave on the SA-10 brings its alert pairs up
+    _zr8 = {}
+    for z_ in _M4["triggers"]["zones"].values():
+        if z_["name"].startswith("detect "):
+            _zr8[z_["name"][7:]] = z_["radius"] / 1852
+    _sa8 = [a_ for a_ in _A4.values() if a_.variant in _tm9.UMBRELLA_VARIANTS and not a_.destroyed and a_.health > 0.25]
+    _n8 = 0
+    for fid_, r_ in _zr8.items():
+        fa_ = _A4.get(fid_)
+        if fa_ is not None and any(_m.hypot(s_.x - fa_.x, s_.y - fa_.y) / 1852 <= _tm9.FIELD_SAM_NM for s_ in _sa8):
+            assert r_ >= _tm9.FIELD_SAM_DETECT_NM - 0.5, ("a field next to a live SA-10 detects out to its radar's reach", fid_, round(r_, 1))
+            _n8 += 1
+    assert _n8 >= 1, ("the test campaign has a field next to an SA-10", sorted(_zr8))
+    print(f"[field radar] {_n8} enemy field(s) next to a live SA-10 scramble on a {_tm9.FIELD_SAM_DETECT_NM:.0f} nm circle")
     _off4 = abs((_brg["JSOW"] - _brg["SEAD"] + 180) % 360 - 180)
     _eg4, _hs4 = {}, []
     for co_ in _M4["coalition"]["blue"]["country"].values():
