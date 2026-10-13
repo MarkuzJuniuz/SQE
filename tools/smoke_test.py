@@ -1272,6 +1272,14 @@ def main():
                     if tid_ == "AttackGroup":
                         _seq4.append(_red4.get(prm_.get("groupId")))
                 assert _seq4 and _seq4[0] == _um4.id, ("the first HARM flight opens on the umbrella", _seq4)
+            else:       # v0.41.3: the JSOW launch point stays out of every live SA-10's reach too, and a pushed-out shot goes from high up
+                _sa10 = [a_ for a_ in _A4.values() if a_.variant in _tm9.UMBRELLA_VARIANTS and not a_.destroyed]
+                _jk = min(_m.hypot(_pt4["x"] - a_.x, _pt4["y"] - a_.y) / 1852 for a_ in _sa10)
+                _jt = _m.hypot(_pt4["x"] - _t4.x, _pt4["y"] - _t4.y) / 1852
+                assert _jk >= 29 or _jt >= 39, ("the JSOW launch point stays 30 nm from every live SA-10 (up to 40 nm from the target)", round(_jk, 1), round(_jt, 1))
+                if _jt > 21:
+                    assert _pts4["IP"]["alt"] / 0.3048 >= 32900, ("a long JSOW shot goes from 33,000 ft", _pts4["IP"]["alt"])
+                _jsow_kp = (_jk, _jt)
     _off4 = abs((_brg["JSOW"] - _brg["SEAD"] + 180) % 360 - 180)
     _eg4, _hs4 = {}, []
     for co_ in _M4["coalition"]["blue"]["country"].values():
@@ -1292,7 +1300,8 @@ def main():
     assert len(_hs4) >= 4 and max(_hs4) - min(_hs4) <= 15, ("the builder syncs the SEAD waves in one mission to the same HARM time (v0.39.22)", sorted(round(x_) for x_ in _hs4))
     assert 20 <= _off4 <= 40, ("the JSOW flight comes in about 30 degrees off the HARM shooters' axis", _off4)
     print(f"[saturation] {len(_sd4)} SEAD packages reach their HARM points within {max(_arr) - min(_arr):.1f} min (planned) and {max(_hs4) - min(_hs4):.0f} s (built); umbrella first; "
-          f"JSOW axis {_off4:.0f} deg off the HARMs'; HARM and JSOW flights egress back out along their approach")
+          f"JSOW axis {_off4:.0f} deg off the HARMs'; HARM and JSOW flights egress back out along their approach; "
+          f"JSOW launch point {_jsow_kp[1]:.0f} nm from the target, {_jsow_kp[0]:.0f} nm from the nearest SA-10")
     # DEAD abort gate: SEAD leads by 5 min (sweep and escorts keep their 30 s spacing around it), the AI flights carry a radar check, calls to you sound different
     import re as _re
     from sqe import debrief as _db
