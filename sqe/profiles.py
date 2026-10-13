@@ -187,7 +187,31 @@ def standoff(state, pts, alt_ft: int, margin_nm: float = STANDOFF_MARGIN_NM):
     return None
 
 
-STATION_SHORT_NM = 12.0         # a TARCAP / escort station with no SAM cover in the way: this far short of the target, on the run-in
+STATION_SHORT_NM = 12.0
+STATION_FRAC = 0.62             # against a long-range SAM: the station sits this fraction of its reach from it (about 30 nm for an SA-10)
+STATION_OFFSET_NM = 9.0         # ...moved this far sideways toward the nearest enemy airfield
+LONG_RANGE_NM = 30.0            # a SAM that reaches this far counts as long-range for the station rule
+
+
+def _long_range_threat(state, tgt, alt_ft):
+    """The live long-range SAM (reach >= LONG_RANGE_NM, able to engage alt_ft) whose ring covers the target, longest reach first. -> (asset, nm) or None"""
+    best = None
+    for a in state.assets.values():
+        if a.kind != AssetKind.SAM or a.destroyed or getattr(a, "suppressed", False):
+            continue
+        r = tm.RANGE_NM.get(a.variant, 0)
+        if r < LONG_RANGE_NM or not hits(a.variant, alt_ft):
+            continue
+        if ((a.x - tgt[0]) ** 2 + (a.y - tgt[1]) ** 2) ** 0.5 > r * NM:
+            continue
+        if best is None or r > best[1]:
+            best = (a, r)
+    return best
+
+
+def _nearest_enemy_field(state, x, y):
+    fl = [a for a in state.assets.values() if a.kind == AssetKind.AIRFIELD and not a.destroyed]
+    return min(fl, key=lambda a: (a.x - x) ** 2 + (a.y - y) ** 2) if fl else None         # a TARCAP / escort station with no SAM cover in the way: this far short of the target, on the run-in
 
 
 def _cover_sites(state, alt_ft, margin_nm=STANDOFF_MARGIN_NM):
@@ -217,7 +241,25 @@ def station(state, pts, alt_ft: int, egr=None):
     """A TARCAP's or an escort's own station: the stand-off point when live SAM cover is in the way, else STATION_SHORT_NM short of the
     target on the run-in (never behind the first point). -> (x, y, [variants], nm short of the target, package egress clear from there)."""
     so = standoff(state, pts, alt_ft)
-    if so:
+    lr = _long_range_threat(state, pts[-1], alt_ft)
+    if lr is not None:
+        # v0.41.0: against a long-range SAM (an SA-10) the stand-off edge left the TARCAP ~20 nm behind the HARM shooters it covers (v0.40.10 run:
+        # the F-15Cs never fired). Now it sits STATION_FRAC of that SAM's reach from it, on our side (toward the first route point), level with
+        # the HARM shooters, and STATION_OFFSET_NM toward the nearest enemy airfield, between the threat and the package.
+        a, reach_nm = lr
+        px, py = pts[0]
+        d0 = ((px - a.x) ** 2 + (py - a.y) ** 2) ** 0.5 or 1.0
+        ux, uy = (px - a.x) / d0, (py - a.y) / d0
+        r = STATION_FRAC * reach_nm * NM
+        x, y = a.x + ux * r, a.y + uy * r
+        fld = _nearest_enemy_field(state, x, y)
+        if fld is not None:
+            vx, vy = -uy, ux                                   # perpendicular to the SAM -> station line; pick the side the field is on
+            sgn = 1.0 if ((fld.x - x) * vx + (fld.y - y) * vy) >= 0 else -1.0
+            x, y = x + sgn * vx * STATION_OFFSET_NM * NM, y + sgn * vy * STATION_OFFSET_NM * NM
+        tx, ty = pts[-1]
+        names, short = [a.variant], ((x - tx) ** 2 + (y - ty) ** 2) ** 0.5 / NM
+    elif so:
         x, y, names, short = so
     else:
         tx, ty = pts[-1]

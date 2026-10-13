@@ -1,3 +1,15 @@
+## v0.41.0
+
+From the v0.40.10 run (Standoff DEAD, Sukhumi SA-10): one Su-27 alert pair from Sukhumi killed 7 ground-attack jets from 4-6 nm in two minutes; the F-15C TARCAPs never fired a missile (their stations were about 50 nm from the SA-10, 20 nm behind the HARM shooters); alert pairs took 3 to 11 minutes from the call to the air and two never made it (DCS AI taxiing).
+
+* **TARCAP and escort stations against a long-range SAM** (an SA-10 whose reach covers the target): 62% of its reach from it (about 30 nm), level with the HARM shooters, and 9 nm sideways toward the nearest enemy airfield, between the threat and the package. Against shorter-ranged SAMs the stand-off edge rule is unchanged.
+* **They cover the package, not their own station:** a TARCAP or escort engages inside a 20 nm circle round the package's launch points (HARM / JSOW points, or the IP), widened to take in its own station. Sweeps keep the circle round their station.
+* **Snipe:** TARCAP, escort and sweep fire at maximum missile range and search with their radar all the time, so red is spiked and forced defensive early. (DCS AI launch behaviour varies by type; the shot log will show the real ranges.)
+* **TARCAP on station first and for the whole attack:** it pushes 5 minutes ahead of the first flight it covers (was 3) and holds until 5 minutes after the TOT (was a fixed 15 minutes).
+* **Alert pairs no longer taxi.** Every alert pair (red and blue, airfield and carrier) waits hidden and appears on the runway or catapult 2 minutes after it is called, 60 s apart at one runway, and after you have left it at your own field. In the run the queued pairs were airborne in about 45 s from appearing.
+* **Abort rewinds the sortie counter.** The counter feeds the mission seed, so flying the same package again after Abort rebuilds the same layout (sites, spawns, patrols): two test runs of one package can be compared.
+* Smoke test: TARCAP level with the HARM points against an SA-10, the cover zone, max-range / radar options, alert pairs hidden for the runway, the new timing, Abort keeps the seed.
+
 ## v0.40.10
 
 * **ECM script: your jammer follows the AI's window.** With the script on, it used to count your jammer on for the whole mission (it cannot read your switch). It now counts it on from your PUSH to your egress, like the AI's, until the cockpit-switch reading is built. With the script off (the default) nothing changes: your jammer is DCS's own and your switch decides.

@@ -32,9 +32,11 @@ from .difficulty import Difficulty
 from .kneeboard import latlon, render_pages
 from .loadouts import LoadoutLibrary, enemy_bomber_loadout, enemy_strike_loadout, enemy_cap_loadout, ENEMY_FIGHTERS, JSOW_PER_JET
 from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType, Role, task_label
-TARCAP_LEAD_S = 180           # a TARCAP (ESCORT role) pushes this much ahead of the first flight it covers: on station first
+TARCAP_LEAD_S = 300           # a TARCAP (ESCORT role) pushes this much ahead of the first flight it covers: on station first (v0.41.0: 5 min, was 3)
 TARCAP_MIN = 15               # ...and holds there this long, then goes home
 ESCORT_AFTER_TOT_S = 180      # an escort (SWEEP role) holds its station until this long after the TOT (the last ground-attack flight off target)
+TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
+COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
 from .packages import LONG_RANGE_A2A     # the long-range shooters; F-16 and F/A-18 are secondary air-to-air
 A2A_ZONE_NM = {True: 25, False: 15}     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
 STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -TARCAP_LEAD_S}      # seconds relative to the strikers' push (BMS-style)
@@ -231,7 +233,8 @@ class MissionBuilder:
         self.lo = loadouts or LoadoutLibrary()
         self.rng = rng or random.Random()
         self._runway_busy = set()                                      # bases whose runway / catapult already holds a group at mission start
-        self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []             # alert groups waiting for a runway (the hook lines them up), trigger flags, your runway
+        self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []
+        self._launch_pts = {}                                          # package id -> [(x, y)] where its HARM / JSOW / strike flights launch (the cover zone)             # alert groups waiting for a runway (the hook lines them up), trigger flags, your runway
         self._air_spawns = []                                          # [(x, y, alt_m, t)]: where and when each airborne flight appears, so no two appear on top of each other
 
     # =====================================================================================================
@@ -596,10 +599,9 @@ class MissionBuilder:
         scheduled to take off). A field with no parking for the type: the group waits, hidden, for the runway instead, and the mission
         hook lines it up there when it is called, at least RWY_STAGGER_S after the last group that went from that runway (and only once you
         have left it, at your own field). -> (group, "ramp" | "rwy")"""
-        g = self._from_airport(side, name, typ, ap, maintask, StartType.Warm, size, quiet=True)
-        if g is not None:
-            self._note_alert(name, ap.name, typ)
-            return g, "ramp"
+        # v0.41.0: no taxiing. The v0.40.10 run's ramp starts took 3 to 11 minutes from the call to the air and two pairs at Sukhumi never
+        # made it (DCS AI taxiing); the runway-queued pairs were airborne in about 45 s. Every alert pair now waits hidden and appears on the
+        # runway ALERT_TAXI_S after it is called (the taxi it would have done), RWY_STAGGER_S apart at one runway.
         g = self.m.flight_group_from_airport(side, name, typ, ap, maintask=maintask, start_type=StartType.Runway, group_size=size)
         g.late_activation = True
         self._note_alert(name, ap.name, typ)
@@ -1189,8 +1191,7 @@ class MissionBuilder:
                 g = self.m.flight_group_from_airport(self.usa, f.callsign, spec.dcs_type, self.apt[base.id], maintask=MAIN_TASK[f.role],
                                                      start_type=StartType.Runway, group_size=f.count)
             self._runway_busy.add(("blue", base.id))
-            if base.kind != BaseKind.CARRIER:
-                self._prwy = f"{self.usa.name}:{self.apt[base.id].name}"
+            self._prwy = f"{self.usa.name}:{self.apt[base.id].name}" if base.kind != BaseKind.CARRIER else f"carrier:{base.id}"
             first = 0
         else:                 # already airborne
             s0 = wps[0]
@@ -1232,15 +1233,37 @@ class MissionBuilder:
             if f.is_player and f.aircraft == "F-14BU":
                 u.set_property("INSAlignmentStored", True)
         g.set_skill(Skill.High)
+        if not f.tag and f.role in (Role.SEAD, Role.STRIKE, Role.CAS):      # where this package's shooters launch: the TARCAP / escort cover zone
+            lp_ = next((w for w in wps if w.action in ("SEAD", "JSOW")), None) or next((w for w in wps if w.name == "IP"), None)
+            if lp_ is not None:
+                self._launch_pts.setdefault(package.id, []).append((lp_.x, lp_.y))
         stw = next((w for w in wps if w.action in ("TARCAP", "ESCORT", "SWEEPSTN") and w.orbit), None)
         hold_end = None
         if stw is not None:                 # TARCAP / sweep: their time on station; escort: until the last ground-attack flight is off target
-            hold_end = int(stw.eta_s + TARCAP_MIN * 60) if stw.action in ("TARCAP", "SWEEPSTN") else int(max(stw.eta_s + 120, (tot_s if tot_s is not None else stw.eta_s + 600) + ESCORT_AFTER_TOT_S))
+            t_end = (tot_s if tot_s is not None else stw.eta_s + 600)
+            if stw.action == "SWEEPSTN":
+                hold_end = int(stw.eta_s + TARCAP_MIN * 60)
+            elif stw.action == "TARCAP":
+                hold_end = int(max(stw.eta_s + TARCAP_MIN * 60 // 2, t_end + TARCAP_AFTER_TOT_S))
+            else:
+                hold_end = int(max(stw.eta_s + 120, t_end + ESCORT_AFTER_TOT_S))
         if f.tag:
             self._limit_engage(g, self.o.friendly_cap_engage_nm)
         elif stw is not None and (not f.is_player or o.player_is_ai):
-            # no chasing: engage only inside a circle round the station (25 nm for the long-range shooters, 15 for the rest), until the hold ends
-            self._limit_engage(g, 0, hold_end, (stw.x, stw.y, A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]))
+            # no chasing. A sweep engages inside a circle round its station (25 nm for the long-range shooters, 15 for the rest). A TARCAP or
+            # escort covers the package: the circle is round the package's launch points (HARM / JSOW points, or the IP), COVER_ZONE_NM, and
+            # always takes in its own station. Until the hold ends.
+            if stw.action == "SWEEPSTN" or not self._launch_pts.get(package.id):
+                zone_ = (stw.x, stw.y, A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A])
+            else:
+                lp_ = self._launch_pts[package.id]
+                cx_, cy_ = sum(p_[0] for p_ in lp_) / len(lp_), sum(p_[1] for p_ in lp_) / len(lp_)
+                zone_ = (cx_, cy_, max(COVER_ZONE_NM, dist(cx_, cy_, stw.x, stw.y) / NM + 5))
+            self._limit_engage(g, 0, hold_end, zone_)
+            # snipe: fire at maximum range, radar searching all the time (red's warning receivers light up and it turns away early). AI
+            # launch behaviour still varies by type in DCS (forum reports), so the shot log is the check.
+            g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
+            g.points[0].tasks.append(task.OptRadarUsing(task.OptRadarUsing.Values.UseForContinuousSearch))
             if stw.action == "SWEEPSTN":    # a sweep goes home once its air-to-air missiles are gone
                 rtb_ = task.OptRTBOnOutOfAmmo(); rtb_.params["action"]["params"]["value"] = AAM_WEAPONS
                 g.points[0].tasks.append(rtb_)
@@ -2017,10 +2040,12 @@ class MissionBuilder:
                 break
             label = f"{sq.callsign} {fno}"
             taken.add(label)
-            if base.kind == BaseKind.CARRIER:            # hot on deck: the catapults stay free for flights scheduled to launch
-                g = self.m.flight_group_from_unit(self.usa, label, spec.dcs_type, self.ship[base.id], maintask=task.CAP, start_type=StartType.Warm, group_size=2)
-                how_ = "ramp"
+            if base.kind == BaseKind.CARRIER:            # hidden until called, then on the catapult (the same queue as a runway)
+                g = self.m.flight_group_from_unit(self.usa, label, spec.dcs_type, self.ship[base.id], maintask=task.CAP, start_type=StartType.Runway, group_size=2)
+                g.late_activation = True
+                how_ = "rwy"
                 self._note_alert(label, base.name, spec.dcs_type)
+                self._rwyq.append({"g": label, "f": self._flag_n, "b": f"carrier:{base.id}"})
             else:
                 g, how_ = self._alert_group(self.usa, label, spec.dcs_type, self.apt[base.id], task.CAP, None, 2, dpt)
             if how_ == "ramp":

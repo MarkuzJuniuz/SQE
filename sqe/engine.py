@@ -735,6 +735,10 @@ class Session:
         return self.poll(path)
 
     def abort(self) -> None:
+        """Throw the built sortie away. The sortie counter goes back too (v0.41.0): it feeds the mission seed, so flying the same package again
+        rebuilds the same layout (sites, spawns, patrols), and two test runs of one package can be compared."""
+        if self.state.pending is not None and self.state.sortie_counter > 0:
+            self.state.sortie_counter -= 1
         self.state.pending = None
         self.save()
 
