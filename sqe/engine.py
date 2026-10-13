@@ -226,6 +226,9 @@ class Session:
             p.number, p.id = n, f"pkg{n}"
             for k, f in enumerate(p.flights, 1):
                 f.id = f"{p.id}-f{k}"
+        for p in pkgs:
+            if sweeps.get(id(p)):
+                p.extra["covers"] = sorted(c.number for c in sweeps[id(p)])           # the packages this Fighter Sweep goes in ahead of
         st.plan = [p.to_dict() for p in pkgs]
         self._cast_sead(pkgs)
         self.refresh_weather()
