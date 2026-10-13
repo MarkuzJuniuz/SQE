@@ -55,7 +55,12 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                  if n_def and obj.type.value != "FLEET_DEFENSE" else
                  ("" if obj.type.value == "FLEET_DEFENSE" else "No organised fighter defence is expected at the target.")),
             f"Weather: {x['weather']}." + ((" Loadouts changed for the weather: " + " ".join(x["wx_notes"])) if x.get("wx_notes") else "")]
-    if obj.type.value == "DEAD" and obj.aim == "STANDOFF":
+    if obj.type.value == "COUNTER_AIR" and obj.aim == "SWEEP":
+        sit += ["", "Fighter Sweep. Intelligence expects more enemy fighters over the target area than the strike packages' own TARCAP and escort can "
+                    "take, so you go in about 10 minutes ahead of them to clear the air. No marshal: depart, push, station, home. Your station is "
+                    "short of the target and outside live SAM cover. Shoot what comes in range; do not chase into the SAMs. Hold 15 minutes, or go "
+                    "home when your missiles are gone."]
+    elif obj.type.value == "DEAD" and obj.aim == "STANDOFF":
         from .difficulty import get as _gd3
         from .war import WarSimulator as _WS3
         _p3 = _WS3(_gd3(state.level)).sead_p(state, pkg)

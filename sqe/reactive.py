@@ -66,14 +66,14 @@ def plan_red(state, d, rng, tx, ty, base_aircraft: int, blue_fighters: int, used
 
 
 def blue_pairs(rng, red_total: int, blue_fighters: int, fleet_obj: bool, raid_in_wave: bool) -> int:
-    """How many alert pairs blue puts up (0-2)."""
+    """How many DCA alert pairs blue puts up (0-2): only against a raid on the fleet or in the wave."""
     p, n = 0.0, 0
     if fleet_obj:
         p, n = 0.70, 1 + (red_total >= 4)
     if raid_in_wave:
         p, n = max(p, 0.90), max(n, 1 + (red_total >= 4))
-    if red_total > blue_fighters:
-        p, n = max(p, 0.65), max(n, 1 + ((red_total - blue_fighters) >= 4))
+    # v0.40.2: no more pairs launched on the clock to reinforce a package's fight ("red outnumbers us"): that is the Fighter Sweep's job now,
+    # planned the day before. What is left is Defensive Counter Air: ground alert that scrambles when a raid comes at the fleet or a base.
     return min(2, n) if (n and rng.random() < p) else 0
 
 

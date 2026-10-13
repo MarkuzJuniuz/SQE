@@ -881,6 +881,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         n_lost = sum(1 for g in fl for u in g["units"] if u in lost_all)
         tot = sum(len(g["units"]) for g in fl)
         done = t_end >= m["tot_s"] + 90
+        if str(m.get("objective", "")).startswith("Fighter Sweep"):
+            dmg = None                                       # a sweep fights the air over the target area; the target itself is the strikers' job
         out["packages"].append({"number": m["number"], "objective": m["objective"], "damage": dmg, "lost": n_lost, "total": tot, "resolved": done})
         out["lines"].append(f"Package #{m['number']} ({m['objective']}): " + (f"target damage {dmg:.0%}, lost {n_lost}/{tot} aircraft" if done and dmg is not None else
                             (f"flown to the end: lost {n_lost}/{tot} aircraft" if done else "you were out of the mission before its strike; it is resolved by the war simulation")))

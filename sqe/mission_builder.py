@@ -49,6 +49,8 @@ JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known po
 DEAD_GATE_BEFORE_TGT_S = 75    # fallback: if the DEAD flight never gets close, the radars are checked this long before its planned target time
 DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
 A2G_ROLES = (Role.STRIKE, Role.SEAD, Role.CAS)
+NATIVE_ECM = {"F-15C"}         # jets whose DCS model carries a jammer the ECM script does not count (it treats the F-15C as having none)
+AAM_WEAPONS = 264241152       # DCS weapon flags: air-to-air missiles (a Fighter Sweep's RTB when out of ammo)
 # DCS weapon flags for "RTB when out of ammo": bombs (guided, iron, cluster), air-to-ground missiles (HARM, JSOW, Maverick) and rockets.
 # Not guns and not air-to-air missiles, so a flight goes home once its air-to-ground load is gone.
 A2G_WEAPONS = 14 | 240 | 768 | 4161536 | 30720
@@ -137,6 +139,7 @@ class MissionOptions:
     f14_special_names: bool = True
     weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
     reactive: bool = True               # extra enemy fighters / blue alert pairs that launch during the sortie (reactive.py)
+    ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
     carcass_weight: float = 0.25        # how much of a live unit one wreck counts toward the unit limit
     carcass_range_nm: int = 40          # only sites this close to the route get wrecks
@@ -454,7 +457,7 @@ class MissionBuilder:
             install_hook(m, st.campaign_id, manifest.sortie, package.id, despawn if o.ai_despawn_on_land else [], manifest.player_unit,
                          group=pf.callsign, calls=[(t_, x_, f"TO {pf.callsign.upper()}:" in x_.upper()) for t_, x_ in calls], wps=[], sound=sound, sound_you=sound_you, flights=self._ulabels,
                          enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" for u in g_["units"]],
-                         sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM, jams=self._jams, jamw=self._jamw)
+                         sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM, jams=(self._jams if o.ecm_script else {}), jamw=(self._jamw if o.ecm_script else {}))
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -1182,23 +1185,27 @@ class MissionBuilder:
             u.name = cs_names[i]; names.append(u.name)
             u.pylons = copy.deepcopy(load); self._note_jam(u)
         run_t0 = run_t1 = None
-        if not f.tag and not f.is_player and self._jams.get(names[0]):
+        if not f.tag and not f.is_player and (self._jams.get(names[0]) or f.aircraft in NATIVE_ECM):
             run_t0 = float(push_s)                                            # the jammers run for the attack leg only: PUSH to EGR
             run_t1 = float(next((w.eta_s for w in wps if w.name == "EGR"), (tot_s if tot_s is not None else push_s) + 900))
-            for un_ in names:
-                self._jamw[un_] = (run_t0, run_t1)
+            if o.ecm_script:
+                for un_ in names:
+                    self._jamw[un_] = (run_t0, run_t1)
             if f.is_player and f.aircraft == "F-14BU":
                 u.set_property("INSAlignmentStored", True)
         g.set_skill(Skill.High)
-        stw = next((w for w in wps if w.action in ("TARCAP", "ESCORT") and w.orbit), None)
+        stw = next((w for w in wps if w.action in ("TARCAP", "ESCORT", "SWEEPSTN") and w.orbit), None)
         hold_end = None
-        if stw is not None:                 # TARCAP: its time on station; escort: until the last ground-attack flight is off target
-            hold_end = int(stw.eta_s + TARCAP_MIN * 60) if stw.action == "TARCAP" else int(max(stw.eta_s + 120, (tot_s if tot_s is not None else stw.eta_s + 600) + ESCORT_AFTER_TOT_S))
+        if stw is not None:                 # TARCAP / sweep: their time on station; escort: until the last ground-attack flight is off target
+            hold_end = int(stw.eta_s + TARCAP_MIN * 60) if stw.action in ("TARCAP", "SWEEPSTN") else int(max(stw.eta_s + 120, (tot_s if tot_s is not None else stw.eta_s + 600) + ESCORT_AFTER_TOT_S))
         if f.tag:
             self._limit_engage(g, self.o.friendly_cap_engage_nm)
         elif stw is not None and (not f.is_player or o.player_is_ai):
             # no chasing: engage only inside a circle round the station (25 nm for the long-range shooters, 15 for the rest), until the hold ends
             self._limit_engage(g, 0, hold_end, (stw.x, stw.y, A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]))
+            if stw.action == "SWEEPSTN":    # a sweep goes home once its air-to-air missiles are gone
+                rtb_ = task.OptRTBOnOutOfAmmo(); rtb_.params["action"]["params"]["value"] = AAM_WEAPONS
+                g.points[0].tasks.append(rtb_)
         elif (not f.is_player or o.player_is_ai) and f.role in (Role.ESCORT, Role.SWEEP, Role.SEAD):
             m_ = self.o.fighter_engage_minutes
             zone = None
@@ -1294,7 +1301,10 @@ class MissionBuilder:
                 if w is wps[first]:
                     wp.tasks.append(task.OptECMUsing(task.OptECMUsing.Values.NeverUse))          # jammers off until the attack leg
                 if w.name == "PUSH":
-                    wp.tasks.append(task.OptECMUsing(task.OptECMUsing.Values.AlwaysUse))
+                    # the ECM script models jamming itself (always on over the attack leg). Without it, DCS's own ECM: the AI switches it on only
+                    # when a radar has locked it, which is close to the action. Burn-through is not modelled by DCS's AI choice; on the way in
+                    # and out it stays off, so it never gives the formation away from afar.
+                    wp.tasks.append(task.OptECMUsing(task.OptECMUsing.Values.AlwaysUse if o.ecm_script else task.OptECMUsing.Values.UseIfOnlyLockByRadar))
                 elif w.name == "EGR":
                     wp.tasks.append(task.OptECMUsing(task.OptECMUsing.Values.NeverUse))
             if o.ai_unlimited_fuel and w.name in ("PUSH", "CAP1"):
@@ -1854,6 +1864,8 @@ class MissionBuilder:
         (COUNTER_AIR) goes in as before."""
         geom.tiers, geom.stand = {}, {}
         geom.ai_player = bool(self.o.player_is_ai)
+        from .packages import is_sweep
+        geom.sweep = is_sweep(package.objective)
         pts = [geom.push, geom.ip, (tx, ty)]
         for f in package.flights:
             if f.tag:
@@ -1864,7 +1876,7 @@ class MissionBuilder:
                 geom.tiers[key] = self._pick_tier(geom, f.role, prof, tx, ty, skip)
             if key in geom.stand or not self.o.fighter_standoff or f.role not in (Role.ESCORT, Role.SWEEP):
                 continue
-            if package.objective.type in (ObjectiveType.COUNTER_AIR, ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
+            if package.objective.type in (ObjectiveType.COUNTER_AIR, ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE) and not geom.sweep:
                 continue
             # TARCAP (ESCORT role) and ESCORT (SWEEP role): a station of their own, for you and for the AI alike (v0.40.1)
             t = geom.tiers[key]

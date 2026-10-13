@@ -52,6 +52,7 @@ class Geometry:
     tiers: dict = None      # {(role, id(profile)): Tier} one per kind of flight in the package (an escort never inherits a striker's LOW)
     ai_player: bool = False  # test mode: the player's slot is flown by the AI, so the player's flight gets the AI stand-off too
     stand: dict = None      # {(role, id(profile)): (x, y, [SAM types], nm short)} sweeps and escorts that stop at the edge of SAM cover
+    sweep: bool = False     # a Fighter Sweep package: no marshal, DEP - PUSH - station - home
 
 
 STANDOFF_EGRESS_NM = 25.0  # a HARM or JSOW flight egresses this far beyond its launch point, straight back out along its own approach
@@ -131,7 +132,10 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         # that leg is clear of SAM cover (from the station otherwise). The same route for you and for the AI.
         sx_, sy_, names_, short_, egr_ok_ = st_[:5]
         why_ = f", outside {'/'.join(names_)} cover" if names_ else ""
-        if role == Role.ESCORT:
+        if g.sweep:                                            # Fighter Sweep: no marshal, straight out, station, 15 minutes or Winchester, home
+            wp = [w for w in wp if w.name != "MSHL"]
+            wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"SWEEP: station {short_:.0f} nm short of the target{why_}; clear the air, do not chase", "SWEEPSTN", orbit=True))
+        elif role == Role.ESCORT:
             wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"TARCAP: on station {short_:.0f} nm short of the target{why_}; hold and shoot, do not chase", "TARCAP", orbit=True))
         else:
             wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"ESCORT: hold {short_:.0f} nm short of the target{why_} until the strikers are off; do not chase", "ESCORT", orbit=True))
@@ -201,7 +205,7 @@ def hold_leave_s(wps: list[Wpt], push_s: float) -> float:
     return push_s
 
 
-OBJECTIVE_ACTIONS = ("BOMB", "JSOW", "SEAD", "SWEEP", "CAS", "ESCORT", "TARCAP", "CAPORBIT")
+OBJECTIVE_ACTIONS = ("BOMB", "JSOW", "SEAD", "SWEEP", "CAS", "ESCORT", "TARCAP", "SWEEPSTN", "CAPORBIT")
 
 
 def objective_wp(wps: list[Wpt]) -> Wpt | None:
