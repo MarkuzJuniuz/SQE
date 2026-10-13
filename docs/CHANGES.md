@@ -1,3 +1,8 @@
+## v0.40.9
+
+* **The ECM script counts the F-15C's jammer.** It treated the F-15C as having none (tier 0); it now has an internal self-protection set (tier 1, like the F-14 and F/A-18), for AI Eagles and for yours. With the script off (the default) nothing changes: AI F-15Cs already used DCS's own ECM when locked (v0.40.2).
+* Smoke test: the F-15C's tier.
+
 ## v0.40.8
 
 Test data, so runs can be compared.
