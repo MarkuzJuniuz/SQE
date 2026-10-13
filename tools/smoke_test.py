@@ -143,6 +143,27 @@ def main():
     _stk = [(a_[0], b_[0]) for i_, a_ in enumerate(_air) for b_ in _air[:i_] if _m3.hypot(a_[1] - b_[1], a_[2] - b_[2]) < 200 and abs(a_[3] - b_[3]) < 100]
     assert not _stk, ("airborne groups spawned on top of each other", _stk)
     assert all(v_ == 1 for v_ in _rw.values()), ("two groups on one runway / catapult", _rw)
+    # air-to-air (v0.40.1): TARCAP and escort fly to a station of their own (no IP), hold there, engage only inside a circle round it;
+    # the TARCAP has no egress; red patrols are leashed the same way; the long-range shooters fill TARCAP / escort first
+    from sqe.mission_builder import A2A_ZONE_NM as _azn, LONG_RANGE_A2A as _lra
+    from sqe.models import Role as _RlA
+    _byname = {g_["name"]: g_ for co_ in _mz["mission"]["coalition"]["blue"]["country"].values() for g_ in co_.get("plane", {}).get("group", {}).values()}
+    _nst = 0
+    for f_ in pk.flights:
+        if f_.tag or f_.role not in (_RlA.ESCORT, _RlA.SWEEP) or f_.callsign not in _byname:
+            continue
+        _g = _byname[f_.callsign]; _pts = list(_g["route"]["points"].values()); _nm = [p_.get("name") for p_ in _pts]
+        assert "IP" not in _nm and "TGT" in _nm, (f_.callsign, "station route: no IP", _nm)
+        if f_.role == _RlA.ESCORT:
+            assert "EGR" not in _nm, (f_.callsign, "a TARCAP goes home from its station", _nm)
+        if not f_.is_player:
+            _zt = [t_ for t_ in _pts[0]["task"]["params"]["tasks"].values() if t_.get("id") == "ControlledTask" and t_["params"]["task"]["id"] == "EngageTargetsInZone"]
+            assert _zt and round(_zt[0]["params"]["task"]["params"]["zoneRadius"] / 1852) == _azn[f_.aircraft in _lra], (f_.callsign, "leashed to its station")
+        _nst += 1
+    assert _nst, "no TARCAP / escort checked"
+    _rz = [g_ for co_ in _mz["mission"]["coalition"]["red"]["country"].values() for g_ in co_.get("plane", {}).get("group", {}).values() if g_["name"].startswith("Bandit")]
+    assert all(any(t_.get("id") == "EngageTargetsInZone" for t_ in list(g_["route"]["points"].values())[0]["task"]["params"]["tasks"].values()) for g_ in _rz), "red patrols: engage only round their station"
+    print(f"    {_nst} TARCAP / escort flights on their own stations (no IP, TARCAP without egress, leashed); {len(_rz)} red patrols leashed the same way")
     print(f"    spawns: {len(_air)} airborne groups apart, {len(_rw)} runway / catapult starts, one group each")
     print(f"    {_a2g} AI ground-attack flights: no air-to-air on the way in, RTB when out of A2G weapons, self-defence after the attack")
     prim2 = [g for g in man.groups if g["kind"] == "asset" and g.get("primary_pkgs")]
@@ -1137,12 +1158,13 @@ def main():
         _dk = next((p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and s.flyable(p_)), None)
         if _dk: break
     assert _dk, "no DEAD package found"
-    assert (_stg(_dk, _Rl.SWEEP), _stg(_dk, _Rl.SEAD), _stg(_dk, _Rl.ESCORT), _stg(_dk, _Rl.STRIKE)) == (-330, -300, -270, 0), "DEAD package timing"
+    assert (_stg(_dk, _Rl.SWEEP), _stg(_dk, _Rl.SEAD), _stg(_dk, _Rl.ESCORT), _stg(_dk, _Rl.STRIKE)) == (-330, -300, -480, 0), "DEAD package timing: TARCAP first, then the escort, SEAD, strikers"
     s.ai_test = True; s.fly(_dk.number, None); s.ai_test = False
     _wlr.long_range_site = _lr_real
     _zz = _zf.ZipFile(_st.pending["miz"]); _mt = _zz.read("mission").decode("utf-8", "ignore")
     assert _mt.count("SwitchWaypoint") >= 1 and _re.search(r"local GATES = \{ \{t=\d+, site=", _mt), "the AI flights carry a radar gate"
-    assert "ABORT" in _mt, "stand-off flights get a return waypoint before the landing"
+    _gg = set(_re.findall(r'grp=\\*"([^"\\]+)', _mt))
+    assert _gg and not any(f_.callsign in _gg for f_ in _dk.flights if f_.role in (_Rl.ESCORT, _Rl.SWEEP) and not f_.tag), "a TARCAP / escort on its own station is not held at the gate"
     assert {"l10n/DEFAULT/sqe_beep.wav", "l10n/DEFAULT/sqe_beep_you.wav"} <= set(_zz.namelist()), "both beeps are bundled"
     _hk = _db.lua_hook("c", 1, "p", [], "Hornet 1-1", "Hornet 1", [(10, "AWACS to HORNET 1: push.", True), (20, "X: on station.", False)], None, "a.wav", "b.wav",
                        {}, [], [{"id": "sam_x", "label": "X", "who": "W", "prim": True, "units": ["u1"], "trk": ["u1"], "srch": []}], [],
@@ -1320,7 +1342,7 @@ def main():
         _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
         assert ("GATES = { {t=" in _mz.replace("\\", "")) or True
     from sqe.mission_builder import stagger as _stg
-    assert _stg(_de, Role.ESCORT) == -30 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage keeps its escorts with it"
+    assert _stg(_de, Role.ESCORT) == -180 and _stg(_de, Role.SWEEP) == -60 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage: TARCAP 3 min ahead, the escort with the strikers"
     _wlr.long_range_site = _lr_real
     # the HARM launch point is at the edge of an SA-10's reach and the HARM task asks for ARMs; in the all-AI test your own SEAD flight gets the same tasking
     import math as _m

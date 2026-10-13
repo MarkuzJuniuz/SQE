@@ -185,3 +185,46 @@ def standoff(state, pts, alt_ft: int, margin_nm: float = STANDOFF_MARGIN_NM):
             names = sorted({v for _a, v in c}, key=lambda v: -WEIGHT.get(v, 1.0))
             return stop[0], stop[1], names, short
     return None
+
+
+STATION_SHORT_NM = 12.0         # a TARCAP / escort station with no SAM cover in the way: this far short of the target, on the run-in
+
+
+def _cover_sites(state, alt_ft, margin_nm=STANDOFF_MARGIN_NM):
+    out = []
+    for a in state.assets.values():
+        if a.kind != AssetKind.SAM or a.destroyed:
+            continue
+        r = tm.RANGE_NM.get(a.variant, 0)
+        if r > 0 and hits(a.variant, alt_ft):
+            out.append((a, (r + margin_nm) * NM))
+    return out
+
+
+def leg_clear(state, p0, p1, alt_ft) -> bool:
+    """Does the straight leg p0 -> p1 stay outside every live SAM ring (plus the margin) that reaches alt_ft?"""
+    sites = _cover_sites(state, alt_ft)
+    d = ((p1[0] - p0[0]) ** 2 + (p1[1] - p0[1]) ** 2) ** 0.5
+    n = max(1, int(d // NM))
+    for k in range(n + 1):
+        x, y = p0[0] + (p1[0] - p0[0]) * k / n, p0[1] + (p1[1] - p0[1]) * k / n
+        if any(((a.x - x) ** 2 + (a.y - y) ** 2) ** 0.5 <= reach for a, reach in sites):
+            return False
+    return True
+
+
+def station(state, pts, alt_ft: int, egr=None):
+    """A TARCAP's or an escort's own station: the stand-off point when live SAM cover is in the way, else STATION_SHORT_NM short of the
+    target on the run-in (never behind the first point). -> (x, y, [variants], nm short of the target, package egress clear from there)."""
+    so = standoff(state, pts, alt_ft)
+    if so:
+        x, y, names, short = so
+    else:
+        tx, ty = pts[-1]
+        px, py = pts[-2]
+        leg = ((tx - px) ** 2 + (ty - py) ** 2) ** 0.5 / NM
+        short = min(STATION_SHORT_NM, max(0.0, leg - 1.0)) if leg > 0 else 0.0
+        f = short / leg if leg > 0 else 0.0
+        x, y, names = tx + (px - tx) * f, ty + (py - ty) * f, []
+    ok = egr is not None and leg_clear(state, (x, y), egr, alt_ft)
+    return x, y, names, short, ok
