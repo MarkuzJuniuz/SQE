@@ -1217,6 +1217,12 @@ class MissionBuilder:
             u.name = cs_names[i]; names.append(u.name)
             u.pylons = copy.deepcopy(load); self._note_jam(u)
         run_t0 = run_t1 = None
+        if f.is_player and o.ecm_script and self._jams.get(names[0]):
+            # your jammer, until the hook can read your switch: the script counts it on over the attack leg only, PUSH to egress, like the AI's
+            p0_ = float(push_s)
+            p1_ = float(next((w.eta_s for w in wps if w.name == "EGR"), (tot_s if tot_s is not None else push_s) + 900))
+            for un_ in names:
+                self._jamw[un_] = (p0_, p1_)
         if not f.tag and not f.is_player and (self._jams.get(names[0]) or f.aircraft in NATIVE_ECM):
             run_t0 = float(push_s)                                            # the jammers run for the attack leg only: PUSH to EGR
             run_t1 = float(next((w.eta_s for w in wps if w.name == "EGR"), (tot_s if tot_s is not None else push_s) + 900))

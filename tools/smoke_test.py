@@ -1583,7 +1583,7 @@ def main():
     _mz = (_mz or "").replace('\\"', '"')
     assert "local JAMS =" in _mz and f'["{_pu}"]=2' in _mz and "jamCheck" in _mz and "local JAMW =" in _mz, "the hook knows which aircraft carry a pod"
     _jw = [l_ for l_ in _mz.splitlines() if l_.startswith("local JAMW")][0]
-    assert f'["{_pu}"]' not in _jw and "={" in _jw, "AI jammers run for the attack leg only; the player's runs throughout"
+    assert f'["{_pu}"]' in _jw and "={" in _jw, "jammers run for the attack leg only, yours too (v0.40.10)"
     import re as _re9
     _m9 = _z9.read("mission").decode()
     assert _re9.search(r'\["name"\]\s*=\s*13,\s*\["value"\]\s*=\s*3', _m9) or _re9.search(r'\["value"\]\s*=\s*3,\s*\["name"\]\s*=\s*13', _m9), "AI flights get the jammer switched on at PUSH (option 13)"
