@@ -1290,6 +1290,19 @@ def main():
                            if t_.get("id") == "ControlledTask" and t_["params"]["task"]["id"] == "AttackGroup"]
                     assert _um4.id in _q2, ("the second HARM flight waits on the umbrella too", _q2)
         print(f"[umbrella] second HARM flight {_sead2[0]} also tasked on the SA-10 {_um4.id}")
+    _hw = 0                                    # v0.41.5: after the hold, TARCAP / escort / sweep still fight what follows them home
+    for co_ in _M4["coalition"]["blue"]["country"].values():
+        for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
+            _t0 = [t_ for t_ in g_["route"]["points"][1]["task"]["params"]["tasks"].values() if t_.get("id") == "ControlledTask"]
+            _zn = [t_ for t_ in _t0 if t_["params"]["task"]["id"] == "EngageTargetsInZone" and "stopCondition" in t_["params"]]
+            if not _zn or not ({"TGT", "SWEEP"} & {p_.get("name") for p_ in g_["route"]["points"].values()}) or "SEAD" in {p_.get("name") for p_ in g_["route"]["points"].values()}:
+                continue        # the stationed fighters only (SEAD flights have their own engage window)
+            _st = _zn[0]["params"]["stopCondition"]["time"]
+            _hm = [t_ for t_ in _t0 if t_["params"]["task"]["id"] == "EngageTargets" and t_["params"].get("condition", {}).get("time") == _st]
+            assert _hm, ("a held fighter flight engages on the way home after its hold", g_["name"])
+            _hw += 1
+    assert _hw >= 2, ("TARCAP / escort flights with the homeward engage", _hw)
+    print(f"[homeward] {_hw} held fighter flights engage air within 20 nm of themselves after their hold ends")
     _off4 = abs((_brg["JSOW"] - _brg["SEAD"] + 180) % 360 - 180)
     _eg4, _hs4 = {}, []
     for co_ in _M4["coalition"]["blue"]["country"].values():

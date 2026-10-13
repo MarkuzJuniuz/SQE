@@ -40,6 +40,7 @@ TARCAP_MIN = 15               # ...and holds there this long, then goes home
 ESCORT_AFTER_TOT_S = 180      # an escort (SWEEP role) holds its station until this long after the TOT (the last ground-attack flight off target)
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
+HOMEWARD_ENGAGE_NM = 20       # v0.41.5: after its hold a TARCAP / escort / sweep still engages air within this of itself on the way home
 from .packages import LONG_RANGE_A2A     # the long-range shooters; F-16 and F/A-18 are secondary air-to-air
 A2A_ZONE_NM = {True: 25, False: 15}     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
 STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -TARCAP_LEAD_S}      # seconds relative to the strikers' push (BMS-style)
@@ -1264,6 +1265,14 @@ class MissionBuilder:
                 cx_, cy_ = sum(p_[0] for p_ in lp_) / len(lp_), sum(p_[1] for p_ in lp_) / len(lp_)
                 zone_ = (cx_, cy_, max(COVER_ZONE_NM, dist(cx_, cy_, stw.x, stw.y) / NM + 5))
             self._limit_engage(g, 0, hold_end, zone_)
+            if hold_end is not None:
+                # v0.41.5: on the way home the flight still fights what comes within HOMEWARD_ENGAGE_NM of it. In the v0.41.4 run a lone MiG-29 chased
+                # Springfield (F-14s, 5 of about 40 missiles fired) home after the hold ended and fired four R-27s while they only defended.
+                hw_ = task.ControlledTask(task.EngageTargets(int(HOMEWARD_ENGAGE_NM * 1852), [task.Targets.All.Air]))
+                hw_.start_after_time(int(hold_end)); g.points[0].tasks.insert(1, hw_)
+            rtb_a = task.OptRTBOnOutOfAmmo(); rtb_a.params["action"]["params"]["value"] = AAM_WEAPONS
+            if stw.action != "SWEEPSTN":    # (a sweep gets it below): out of air-to-air missiles, the homeward fight is over
+                g.points[0].tasks.append(rtb_a)
             # snipe: fire at maximum range, radar searching all the time (red's warning receivers light up and it turns away early). AI
             # launch behaviour still varies by type in DCS (forum reports), so the shot log is the check.
             g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))

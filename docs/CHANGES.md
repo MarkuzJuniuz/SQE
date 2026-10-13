@@ -1,3 +1,10 @@
+## v0.41.5
+
+From the v0.41.4 run: the Gudauta package came through (all four Squid JSOW jets home, the SA-10 killed by JSOW bomblets). But after Springfield's (F-14 TARCAP) hold ended, a lone MiG-29 followed them home and fired four R-27s while they only defended: three F-14s lost with about 35 missiles still on board.
+
+* **TARCAP, escort and sweep fight on the way home.** When the hold ends they still engage any aircraft within 20 nm of themselves, until they are out of air-to-air missiles (then they just go home).
+* Smoke test: every stationed fighter flight carries the homeward engage task from the end of its hold.
+
 ## v0.41.4
 
 From the v0.41.3 Gudauta Standoff DEAD: the SA-10 next to the target stayed quiet while the first HARM flight was looking for it (one HARM went at it), lit up a minute later and shot down all four Squid JSOW Hornets and Hornet 2-1. The JSOW launch point was 30.6 nm from it, as designed, but the jets were at 33,000 ft and kept closing as they released, and up there an SA-10 reaches farther.
