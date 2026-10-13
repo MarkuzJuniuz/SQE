@@ -47,7 +47,11 @@ local deaths = {}                 -- why each loss happened: last hit seen, last
 local LASTHIT = {}                -- unit name -> {by, w, t} of the last hit on it
 local SAMPLE = {}                 -- unit name -> {fuel, alt, spd, t} sampled every 30 s for every aircraft
 local JAMW = { __JAMW__ }          -- unit name -> {from, to} mission seconds the jammer runs (AI: the attack leg); absent = always on
-local JAMS = { __JAMS__ }          -- unit name -> 1 internal set, 2 ECM pod (ecm.py)
+local JAMS = { __JAMS__ }
+local ALERTS = { __ALERTS__ }       -- alert / scramble groups: g = group, f = the flag their trigger sets when called, b = field, ty = type
+local ALOG = {}                     -- group -> {called = t, air = t}
+local CFG = '__CFG__'               -- the build's settings (splash damage, ECM script), raw JSON
+local splashN, splashK = 0, 0          -- unit name -> 1 internal set, 2 ECM pod (ecm.py)
 __JAMCFG__
 local function esc(s) return (tostring(s):gsub('[%c"\\]', function(c) return string.format("\\u%04x", string.byte(c)) end)) end
 local function list(t)
@@ -89,6 +93,15 @@ local function deathsJson()
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
+local function alertsJson()
+  local o, now = {}, timer.getTime()
+  for _, a in ipairs(ALERTS) do
+    local l = ALOG[a.g] or {}
+    local stuck = (l.called ~= nil and l.air == nil and now - l.called > 300)
+    o[#o + 1] = string.format('{"g":"%s","b":"%s","ty":"%s","called":%s,"air":%s,"stuck":%s}', esc(a.g), esc(a.b), esc(a.ty), num(l.called), num(l.air), tostring(stuck))
+  end
+  return "[" .. table.concat(o, ",") .. "]"
+end
 local function gatesJson()
   local o = {}
   for _, e in ipairs(gateLog) do
@@ -100,9 +113,9 @@ end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson()))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), CFG, splashN, splashK))
   f:close()
 end
 local function nameOf(obj)
@@ -287,6 +300,7 @@ local function splashAt(p, s)
         if f > 0 then
           SPLBY[u:getName()] = { by = s.by, w = "splash:" .. s.wn, t = now }
           trigger.action.explosion(up, s.kg * SPL.pow * f * f)
+          splashN = splashN + 1
         end
       end
     end)
@@ -337,6 +351,8 @@ function H:onEvent(e)
     end
   elseif id == world.event.S_EVENT_TAKEOFF then
     if n == PLAYER and not pl.takeoff then pl.takeoff = timer.getTime(); dump() end
+    local okg, gn = pcall(function() return e.initiator:getGroup():getName() end)
+    if okg and gn and ALOG[gn] and not ALOG[gn].air then ALOG[gn].air = timer.getTime(); dump() end
   elseif id == world.event.S_EVENT_SHOT then
     logShot("shot", e, n)
     pcall(jamCheck, e, n)
@@ -361,6 +377,7 @@ function H:onEvent(e)
       local sb = tn1 and SPLBY[tn1]
       if sb and timer.getTime() - sb.t < 10 then
         n = sb.by
+        splashK = splashK + 1
         if n == PLAYER then pl.kg = pl.kg + 1; dump() end
       end
     end
@@ -433,6 +450,22 @@ timer.scheduleFunction(function(_, t)
   end
   return t + 2
 end, nil, timer.getTime() + 5)
+-- alert log (v0.40.8): when each alert / scramble group was called (its trigger's flag) and when it got airborne; one called and still on
+-- the ground 5 minutes later is reported as stuck (a taxi jam)
+for _, a in ipairs(ALERTS) do ALOG[a.g] = {} end
+if #ALERTS > 0 then
+  timer.scheduleFunction(function(_, t)
+    for _, a in ipairs(ALERTS) do
+      local l = ALOG[a.g]
+      if not l.called then
+        local v = 0
+        pcall(function() v = trigger.misc.getUserFlag(a.f) end)
+        if v > 0 then l.called = timer.getTime(); dump() end
+      end
+    end
+    return t + 10
+  end, nil, timer.getTime() + 10)
+end
 -- the runway queue (v0.40.7): alert groups at a field with no parking for their type wait hidden; when one is called (its trigger sets its
 -- flag) it is put on the runway, at least RWY_STAGGER_S after the last group that went from there, and at your own field only once you
 -- have left the runway (or 15 minutes in)
@@ -798,7 +831,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
              calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
              watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
-             rwyq: list | None = None, prwy: str = "") -> str:
+             rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
@@ -816,21 +849,23 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__JAMS__", ", ".join(f"[{_lq(k)}]={int(v)}" for k, v in (jams or {}).items()))
             .replace("__JAMW__", ", ".join(f"[{_lq(k)}]={{{float(a):.0f}, {float(b):.0f}}}" for k, (a, b) in (jamw or {}).items()))
             .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)).replace("__SPLASH__", "true" if splash else "false")
-            .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}}}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy)))
+            .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}}}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy))
+            .replace("__ALERTS__", ", ".join(f'{{g={_lq(a["g"])}, f={int(a["f"])}, b={_lq(a["b"])}, ty={_lq(a["ty"])}}}' for a in (alerts or [])))
+            .replace("__CFG__", json.dumps(cfg or {}).replace("'", "")))
 
 
 def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "",
                  group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
                  enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
                  watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
-                 rwyq: list | None = None, prwy: str = "") -> None:
+                 rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg))))
     mission.triggerrules.triggers.append(t)
 
 
@@ -1007,6 +1042,22 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         a = state.assets.get(ref)
         if a is not None:
             out["lines"].append(f"DEAD called off on {a.name}: its radars were still up when the strike flight reached the gate, so it turned back without attacking.")
+    # alert / scramble groups (v0.40.8): called, airborne, or stuck on the ground; and the build's settings, so test runs can be told apart
+    hm_ = lambda t_: f"{int(t_) // 60:d} min" if t_ is not None else "-"
+    for al in data.get("alerts", []) or []:
+        if al.get("called") is None:
+            continue
+        if al.get("air") is not None:
+            out["lines"].append(f"Alert {al['g']} ({al.get('ty', '?')}, {al.get('b', '?')}): called at {hm_(al['called'])}, airborne {int(al['air'] - al['called'])} s later")
+        else:
+            out["lines"].append(f"Alert {al['g']} ({al.get('ty', '?')}, {al.get('b', '?')}): called at {hm_(al['called'])}, " +
+                                ("NEVER GOT AIRBORNE (stuck on the ground)" if al.get("stuck") else "not airborne yet when the mission ended"))
+    cf_ = data.get("cfg") or {}
+    if cf_:
+        sp_ = data.get("splash") or {}
+        out["lines"].append(f"Settings: splash damage {'ON' if cf_.get('splash_damage') else 'off'}" +
+                            (f" ({sp_.get('blasts', 0)} blasts, {sp_.get('kills', 0)} kills)" if cf_.get("splash_damage") else "") +
+                            f", ECM script {'ON' if cf_.get('ecm_script') else 'off'}, build v{cf_.get('version', '?')}")
     # merged missions: one line per folded-in package, from what really happened (reported only if its strike time was reached)
     t_end = float(data.get("time", 0) or 0)
     out["packages"] = []

@@ -1,3 +1,11 @@
+## v0.40.8
+
+Test data, so runs can be compared.
+
+* **Alert log.** The state file now records each alert and scramble group (red alerts, red reinforcements, blue DCA): when it was called (its scramble trigger fired, or the runway queue released it), when its first jet got airborne, and "stuck" when it was called but still on the ground 5 minutes later (a taxi jam). The debrief says it: "Alert Alert 2 (Su-27, Beslan): called at 22 min, airborne 95 s later" or "... NEVER GOT AIRBORNE (stuck on the ground)".
+* **The run's settings in the state file and the debrief:** splash damage on or off (with how many blasts it set off and how many kills it caused), ECM script on or off, and the build version. "Settings: splash damage ON (7 blasts, 2 kills), ECM script off, build v0.40.8".
+* Smoke test: the hook carries the alert log and settings; the debrief reports both. The hook was also run in a mock DCS (called / airborne / stuck written correctly).
+
 ## v0.40.7
 
 * **Alert and scramble jets wait hot on the ramp and taxi when called** (red alerts, red reinforcements, blue DCA; on the carrier, hot on deck). The runway and catapults stay free for flights scheduled to take off. Replaces v0.40.6's in-air fallback, which looked odd: a pair appearing off a field that could not have parked it.
