@@ -433,6 +433,34 @@ timer.scheduleFunction(function(_, t)
   end
   return t + 2
 end, nil, timer.getTime() + 5)
+-- the runway queue (v0.40.7): alert groups at a field with no parking for their type wait hidden; when one is called (its trigger sets its
+-- flag) it is put on the runway, at least RWY_STAGGER_S after the last group that went from there, and at your own field only once you
+-- have left the runway (or 15 minutes in)
+local RWYQ = { __RWYQ__ }
+local PRWY = "__PRWY__"
+local RWY_STAGGER_S = 60
+local rwyLast = {}
+if #RWYQ > 0 then
+  timer.scheduleFunction(function(_, t)
+    local now = timer.getTime()
+    local pend = 0
+    for _, q in ipairs(RWYQ) do
+      if not q.done then
+        pend = pend + 1
+        local want = false
+        pcall(function() want = trigger.misc.getUserFlag(q.f) > 0 end)
+        local free = (not rwyLast[q.b]) or (now - rwyLast[q.b] >= RWY_STAGGER_S)
+        if q.b == PRWY and not (pl.takeoff or dead[PLAYER] or now > 900) then free = false end
+        if want and free then
+          pcall(function() local g = Group.getByName(q.g); if g then g:activate() end end)
+          rwyLast[q.b] = now; q.done = true
+        end
+      end
+    end
+    if pend == 0 then return nil end
+    return t + 5
+  end, nil, timer.getTime() + 5)
+end
 -- all packages complete: once the last TOT has passed and every AI package flight is landed, down or gone, AWACS says so, and repeats it
 -- every 5 minutes (you may have stepped away). It never ends the mission: an End Mission trigger would throw you out while still flying.
 local WATCH = { __WATCH__ }
@@ -769,7 +797,8 @@ def _umbrella_lua(x: dict) -> str:
 def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "", group: str = "",
              calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
-             watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False) -> str:
+             watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
+             rwyq: list | None = None, prwy: str = "") -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
@@ -786,20 +815,22 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
             .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__JAMS__", ", ".join(f"[{_lq(k)}]={int(v)}" for k, v in (jams or {}).items()))
             .replace("__JAMW__", ", ".join(f"[{_lq(k)}]={{{float(a):.0f}, {float(b):.0f}}}" for k, (a, b) in (jamw or {}).items()))
-            .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)).replace("__SPLASH__", "true" if splash else "false"))
+            .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)).replace("__SPLASH__", "true" if splash else "false")
+            .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}}}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy)))
 
 
 def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "",
                  group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
                  enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
-                 watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False) -> None:
+                 watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
+                 rwyq: list | None = None, prwy: str = "") -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy))))
     mission.triggerrules.triggers.append(t)
 
 

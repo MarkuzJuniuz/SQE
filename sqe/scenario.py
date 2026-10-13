@@ -73,6 +73,71 @@ def snap_assets_to_land(st) -> int:
     return n
 
 
+def _slots(terrain, airport: str, types: list) -> int | None:
+    """How many aircraft of these types the field can park: the scarcest type's DCS parking count (slots are shared). None = unknown."""
+    try:
+        from dcs import planes
+        a = terrain.airports[airport]
+        n = [len(a.free_parking_slots(getattr(planes, tp))) for tp in types if getattr(planes, tp, None) is not None]
+        return min(n) if n else None
+    except Exception:
+        return None
+
+
+def _disperse_blue(st, terrain, player_squadron=None) -> None:
+    """Squadrons at an airfield that cannot park them all: the overflow squadrons (never yours) move to the nearest friendly airfield with room
+    for their type (v0.40.7: Batumi held 32 jets on 10 slots)."""
+    used = {}
+    fields = {b.id: b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD and b.airport}
+    order = sorted(st.squadrons.values(), key=lambda q: (q.id != player_squadron, q.id))       # yours first: it keeps its field
+    for q in order:
+        b = fields.get(q.base_id)
+        if b is None:
+            continue
+        cls = AIRCRAFT[q.aircraft].dcs_class
+        def room(fb):
+            cap = _slots(terrain, fb.airport, [cls])
+            return None if cap is None else cap - used.get(fb.id, 0)
+        r = room(b)
+        if r is None or r >= q.authorized or q.id == player_squadron:
+            used[b.id] = used.get(b.id, 0) + q.authorized
+            continue
+        alt = sorted((fb for fb in fields.values() if fb.id != b.id and (room(fb) or 0) >= q.authorized),
+                     key=lambda fb: math.hypot(fb.x - b.x, fb.y - b.y))
+        if alt:
+            st.note(f"{q.name} is based at {alt[0].name}: {b.name} cannot park it.")
+            q.base_id = alt[0].id
+            used[alt[0].id] = used.get(alt[0].id, 0) + q.authorized
+        else:
+            used[b.id] = used.get(b.id, 0) + q.authorized
+
+
+def _disperse_red(st, terrain, plan_w: list) -> None:
+    """[[asset id, types, count, squadrons]]: a wing bigger than its field can park keeps what fits; the rest is dispersed to the nearest
+    enemy fields with room (as their aircraft). The total stays the same unless no field has room."""
+    cap = {}
+    for row in plan_w:
+        a = st.assets[row[0]]
+        c = _slots(terrain, a.airport, row[1]) if a.airport else None
+        cap[row[0]] = c
+    for row in sorted(plan_w, key=lambda r: -r[2]):
+        c = cap[row[0]]
+        if c is None or row[2] <= c:
+            continue
+        extra, row[2] = row[2] - max(2, c), max(2, c)
+        a = st.assets[row[0]]
+        for other in sorted(plan_w, key=lambda r: math.hypot(st.assets[r[0]].x - a.x, st.assets[r[0]].y - a.y)):
+            if extra <= 0:
+                break
+            co = cap[other[0]]
+            if other is row or co is None or other[2] >= co:
+                continue
+            k = min(extra, co - other[2])
+            other[2] += k; extra -= k
+            st.note(f"{k} enemy aircraft from {a.name} are dispersed to {st.assets[other[0]].name}: {a.name} cannot park them.")
+        row[2] += max(0, extra)                          # nowhere to go: they stay (and spawn wherever they can)
+
+
 def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str = "caucasus",
                  seed: int | None = None, start_date: str = "2006-06-12", night_ops: bool = False,
                  player_squadron: str | None = None) -> CampaignState:
@@ -101,6 +166,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         spec, base = AIRCRAFT[s.aircraft], st.bases[s.base_id]
         if spec.home != base.kind:
             raise ValueError(f"{s.name}: {spec.display} cannot be based at {base.name}")
+    _disperse_blue(st, t, player_squadron)               # a field that cannot park its squadrons sends the overflow to the nearest one that can
 
     # ---- enemy airfields + air wings -----------------------------------------------------------
     def add(id_, name_, kind, x, y, value, apt=None, variant="", tier=1, guards=""):
@@ -115,10 +181,14 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         add(aid, nm, AssetKind.AIRFIELD, p.x, p.y, val, apt, tier=FIELD_TIER.get(aid, 3))
     ww = {k: v for k, v in th["wing_weight"].items() if k in live}
     total_w = sum(ww.values())
+    plan_w = []
     for aid, w in ww.items():
         cnt = max(2, round(d.enemy_air_total * w / total_w))
         squads = max(1, round(cnt / 14))                   # several squadrons per field at the bigger levels
         types = rng.sample(d.enemy_types, k=min(len(d.enemy_types), 1 + min(2, squads)))
+        plan_w.append([aid, types, cnt, squads])
+    _disperse_red(st, t, plan_w)                          # no field holds more jets than DCS can park there
+    for aid, types, cnt, squads in plan_w:
         st.enemy_air.append(EnemyAirWing(aid, types, cnt, cnt, squads))
 
     if d.bomber_wing > 0 and th["bomber_base"] in live:       # strategic bombers live far from the front (Mozdok in the Caucasus)
