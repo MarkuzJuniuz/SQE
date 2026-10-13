@@ -231,7 +231,7 @@ class MissionBuilder:
         self.lo = loadouts or LoadoutLibrary()
         self.rng = rng or random.Random()
         self._runway_busy = set()                                      # bases whose runway / catapult already holds a group at mission start
-        self._rwyq, self._flag_n, self._prwy = [], 9000, ""             # alert groups waiting for a runway (the hook lines them up), trigger flags, your runway
+        self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []             # alert groups waiting for a runway (the hook lines them up), trigger flags, your runway
         self._air_spawns = []                                          # [(x, y, alt_m, t)]: where and when each airborne flight appears, so no two appear on top of each other
 
     # =====================================================================================================
@@ -464,7 +464,8 @@ class MissionBuilder:
                          sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM, jams=(self._jams if o.ecm_script else {}), jamw=(self._jamw if o.ecm_script else {}),
                          watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and not f_.is_player],
                          done_after=max([float(tgt.eta_s)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
-                         rwyq=self._rwyq, prwy=self._prwy)
+                         rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts,
+                         cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__})
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -597,12 +598,19 @@ class MissionBuilder:
         have left it, at your own field). -> (group, "ramp" | "rwy")"""
         g = self._from_airport(side, name, typ, ap, maintask, StartType.Warm, size, quiet=True)
         if g is not None:
+            self._note_alert(name, ap.name, typ)
             return g, "ramp"
         g = self.m.flight_group_from_airport(side, name, typ, ap, maintask=maintask, start_type=StartType.Runway, group_size=size)
         g.late_activation = True
-        self._flag_n += 1
+        self._note_alert(name, ap.name, typ)
         self._rwyq.append({"g": name, "f": self._flag_n, "b": key or f"{side.name}:{ap.name}"})
         return g, "rwy"
+
+    def _note_alert(self, name, where, typ) -> int:
+        """A trigger flag for this alert group (its scramble trigger sets it) and its line in the hook's alert log."""
+        self._flag_n += 1
+        self._alerts.append({"g": name, "f": self._flag_n, "b": where, "ty": getattr(typ, "id", str(typ))})
+        return self._flag_n
 
     def _from_airport(self, side, name, typ, ap, maintask, start, size, quiet=False):
         """None when the runway is taken and the field has no parking for this type: a second group on the runway would collide with the first."""
@@ -1860,7 +1868,9 @@ class MissionBuilder:
                 else:
                     zone = self.m.triggers.add_triggerzone(pt(tx, ty), self._scramble_radius(package, a, tx, ty, geom) * NM, True, f"detect {a.id}")
                     trig.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
-                trig.add_action(action.SetFlag(self._rwyq[-1]["f"]) if how_ == "rwy" else action.AITaskPush(g.id, 1))
+                trig.add_action(action.SetFlag(self._alerts[-1]["f"]) if how_ == "rwy" else action.AITaskPush(g.id, 1))
+                if how_ == "ramp":
+                    trig.add_action(action.SetFlag(self._alerts[-1]["f"]))
                 self.m.triggerrules.triggers.append(trig)
                 ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
                 ct.stop_after_time(int(tot_s + 3600))
@@ -1950,7 +1960,9 @@ class MissionBuilder:
                 zone = self.m.triggers.add_triggerzone(pt(tx, ty), self._scramble_radius(package, a, tx, ty, geom) * NM, True, f"reinforce {a.id} {k}")
                 trig.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
                 trig.add_condition(condition.TimeAfter(delay))
-            trig.add_action(action.SetFlag(self._rwyq[-1]["f"]) if how_ == "rwy" else action.AITaskPush(g.id, 1))
+            trig.add_action(action.SetFlag(self._alerts[-1]["f"]) if how_ == "rwy" else action.AITaskPush(g.id, 1))
+            if how_ == "ramp":
+                trig.add_action(action.SetFlag(self._alerts[-1]["f"]))
             self.m.triggerrules.triggers.append(trig)
             ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
             ct.stop_after_time(int(tot_s + 3600))
@@ -2002,6 +2014,7 @@ class MissionBuilder:
             if base.kind == BaseKind.CARRIER:            # hot on deck: the catapults stay free for flights scheduled to launch
                 g = self.m.flight_group_from_unit(self.usa, label, spec.dcs_type, self.ship[base.id], maintask=task.CAP, start_type=StartType.Warm, group_size=2)
                 how_ = "ramp"
+                self._note_alert(label, base.name, spec.dcs_type)
             else:
                 g, how_ = self._alert_group(self.usa, label, spec.dcs_type, self.apt[base.id], task.CAP, None, 2, dpt)
             if how_ == "ramp":
@@ -2013,7 +2026,9 @@ class MissionBuilder:
                 trig.add_condition(condition.PartOfCoalitionInZone("red", zone.id))
             else:
                 trig.add_condition(condition.TimeAfter(max(5, int(tot_s - 240 - nm * NM / (420 * 0.514444)))))
-            trig.add_action(action.SetFlag(self._rwyq[-1]["f"]) if how_ == "rwy" else action.AITaskPush(g.id, 1))
+            trig.add_action(action.SetFlag(self._alerts[-1]["f"]) if how_ == "rwy" else action.AITaskPush(g.id, 1))
+            if how_ == "ramp":
+                trig.add_action(action.SetFlag(self._alerts[-1]["f"]))
             self.m.triggerrules.triggers.append(trig)
             p_ = spec.profile
             ct = task.ControlledTask(task.OrbitAction(int(p_.cap_alt_ft * FT), int(p_.cap_kts * KPH)))

@@ -184,9 +184,14 @@ def main():
     t_late = max(m["tot_s"] for m in res.merged) + 200
     dead = [u for g in man.groups if g["kind"] == "asset" and res.merged[0]["id"] in g.get("primary_pkgs", []) for u in g["units"][:2]]
     ms.settings.state_file.write_text(json.dumps({"campaign": man.campaign_id, "sortie": man.sortie, "package": man.package_id, "mission_ended": True,
-        "time": t_late, "dead": dead, "ejected": [], "landed": [man.player_unit], "player": {"takeoff": 300, "landed": 2300, "ka": 0, "kg": 0, "ks": 0}}))
+        "time": t_late, "dead": dead, "ejected": [], "landed": [man.player_unit], "player": {"takeoff": 300, "landed": 2300, "ka": 0, "kg": 0, "ks": 0},
+        "alerts": [{"g": "Alert 1", "b": "Gelendzhik", "ty": "Su-27", "called": 900, "air": None, "stuck": True},
+                   {"g": "Alert 2", "b": "Sochi-Adler", "ty": "MiG-29A", "called": 900, "air": 1010, "stuck": False}],
+        "cfg": {"splash_damage": True, "ecm_script": False, "version": "x"}, "splash": {"blasts": 7, "kills": 2}}))
     st_, got, _ = ms.poll(); assert st_ == "ok"
     out = ms.apply(got)
+    assert any("NEVER GOT AIRBORNE" in ln_ and "Alert 1" in ln_ for ln_ in out["lines"]) and any("airborne 110 s later" in ln_ for ln_ in out["lines"]), "the debrief reports alert launches"
+    assert any(ln_.startswith("Settings: splash damage ON (7 blasts, 2 kills), ECM script off") for ln_ in out["lines"]), "the debrief names the run's settings"
     assert out["packages"] and out["packages"][0]["resolved"], out["packages"]
     print("    merged debrief:", [ln for ln in out["lines"] if ln.startswith("Package #")][:2])
     # ---- v0.10: earlier packages fly with you, already underway; the Missions list folds later ones into the first -----------------
@@ -1590,6 +1595,8 @@ def main():
         not _re9.search(r'\["name"\]\s*=\s*13,\s*\["value"\]\s*=\s*3', _m9b) and f'["{_pu}"]=2' not in _hk9b, "script off: DCS ECM 'use if locked' at PUSH, the hook models no jamming"
     assert "all packages complete, no further tasking today" in _hk9b and _re9.search(r'local WATCH = \{ "[^"]+', _hk9b) and "return t + 300" in _hk9b, \
         "AWACS says when every package is done (to you, by callsign), every 5 minutes"
+    assert '"ecm_script": false' in _hk9b and '"splash_damage": false' in _hk9b and "local ALERTS = {" in _hk9b and '"alerts":%s' in _hk9b, \
+        "the state file carries the alert log, the build's settings and the splash counts (v0.40.8)"
     _hq = __import__("sqe.debrief", fromlist=["x"]).lua_hook("c", 1, "p", [], "P", "G", rwyq=[{"g": "Alert 1", "f": 9001, "b": "Russia:Gelendzhik"}], prwy="USA:Senaki")
     assert 'g="Alert 1", f=9001, b="Russia:Gelendzhik"' in _hq and "RWY_STAGGER_S = 60" in _hq and "g:activate()" in _hq, "the runway queue: one group a minute, after you have left yours"
     assert "local SPLASH = false" in _hk9b and "splashTrack" in _hk9b, "splash damage is off by default"
