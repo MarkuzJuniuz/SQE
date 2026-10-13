@@ -60,7 +60,8 @@ STANDOFF_EGRESS_NM = 25.0  # a HARM or JSOW flight egresses this far beyond its 
 JSOW_AXIS_DEG = 30.0       # the JSOW flight's approach is this far off the HARM shooters' axis (side chosen by the builder, away from other SAM sites)
 JSOW_LAUNCH_NM = 20.0      # an AI JSOW flight's launch point (the AGM-154A glides about this far from 20,000 ft); it releases from there and turns home
 JSOW_HIGH_ALT_FT = 33000      # ...and when it is pushed out past JSOW_LAUNCH_NM, the flight releases from this high
-JSOW_MAX_NM = 40.0           # a JSOW launch point is never farther than this from its target (AGM-154A glide range from medium-high altitude)
+JSOW_MAX_NM = 45.0           # a JSOW launch point is never farther than this from its target (v0.41.3 run: AGM-154As released at 30-40 nm from 33,000 ft hit; was 40)
+JSOW_KEEP_HIGH_NM = 40.0     # a pushed-out JSOW flight is high, where an SA-10 reaches farther: its launch point stays this far from one (v0.41.3 run: 30.6 nm lost all four)
 HARM_LAUNCH_NM = 30.0      # an AI SEAD flight's HARM launch point: at the edge of what an SA-10 first reaches (it opened fire at about 55 km in testing); 21 nm put the launch point deep inside it
 CARRIER_DEP_NM = 10.0      # Case III: the departure circle is 10 nm from the boat, and the flight leaves on the briefed departure radial
 
@@ -121,7 +122,8 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         # v0.41.3: the JSOW launch point stays as far from every live long-range SAM as the HARM point does (the v0.41.1 runs lost whole JSOW
         # flights to the SA-10s at 13-24 nm). It moves out along its own axis, up to JSOW_MAX_NM from the target (the glide range from altitude).
         jh_ = g.hdg + 180 + JSOW_AXIS_DEG * jsow_side
-        while jsow_nm < JSOW_MAX_NM and any(dist(*offset(g.tx, g.ty, jh_, jsow_nm * NM), kx, ky) < knm * NM for kx, ky, knm in g.jsow_keep):
+        # v0.41.4: 40 nm, not the HARM shooters' 30: the JSOW jets go in at 33,000 ft and run in on their releases past the launch point.
+        while jsow_nm < JSOW_MAX_NM and any(dist(*offset(g.tx, g.ty, jh_, jsow_nm * NM), kx, ky) < max(knm, JSOW_KEEP_HIGH_NM) * NM for kx, ky, knm in g.jsow_keep):
             jsow_nm += 1.0
     if role == Role.SEAD and not human and keep_out:          # under an umbrella (an SA-10 covering the target): the HARM point stays out of its reach too
         kx, ky, knm = keep_out

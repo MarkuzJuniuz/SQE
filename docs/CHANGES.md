@@ -1,3 +1,11 @@
+## v0.41.4
+
+From the v0.41.3 Gudauta Standoff DEAD: the SA-10 next to the target stayed quiet while the first HARM flight was looking for it (one HARM went at it), lit up a minute later and shot down all four Squid JSOW Hornets and Hornet 2-1. The JSOW launch point was 30.6 nm from it, as designed, but the jets were at 33,000 ft and kept closing as they released, and up there an SA-10 reaches farther.
+
+* **JSOW launch points stay 40 nm from a live SA-10** (was 30), up to 45 nm from the target (was 40). In the run, AGM-154As released from 30-40 nm at 33,000 ft reached their targets.
+* **The second HARM flight also waits on the SA-10.** After its window on the Tors it holds HARMs for the umbrella until 7 minutes after its HARM time, so an SA-10 that switches on late still meets HARMs. The first HARM flight still opens on it.
+* Smoke test: the JSOW launch point distance and the second HARM flight's SA-10 task.
+
 ## v0.41.3
 
 From the v0.41.1 runs: whole JSOW flights were lost to the SA-10s. Their launch point sat 20 nm from the target, which put it 13-24 nm from a live SA-10, well inside its reach.
