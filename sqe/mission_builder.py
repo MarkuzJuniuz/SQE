@@ -139,6 +139,7 @@ class MissionOptions:
     f14_special_names: bool = True
     weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
     reactive: bool = True               # extra enemy fighters / blue alert pairs that launch during the sortie (reactive.py)
+    splash_damage: bool = False         # blasts on ground units near an air-to-ground weapon's impact (the hook)
     ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
     carcass_weight: float = 0.25        # how much of a live unit one wreck counts toward the unit limit
@@ -459,7 +460,7 @@ class MissionBuilder:
                          enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" for u in g_["units"]],
                          sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM, jams=(self._jams if o.ecm_script else {}), jamw=(self._jamw if o.ecm_script else {}),
                          watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and not f_.is_player],
-                         done_after=max([float(tgt.eta_s)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper())
+                         done_after=max([float(tgt.eta_s)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage))
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"

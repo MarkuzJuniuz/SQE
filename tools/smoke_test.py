@@ -1554,6 +1554,14 @@ def main():
         not _re9.search(r'\["name"\]\s*=\s*13,\s*\["value"\]\s*=\s*3', _m9b) and f'["{_pu}"]=2' not in _hk9b, "script off: DCS ECM 'use if locked' at PUSH, the hook models no jamming"
     assert "all packages complete, no further tasking today" in _hk9b and _re9.search(r'local WATCH = \{ "[^"]+', _hk9b) and "return t + 300" in _hk9b, \
         "AWACS says when every package is done (to you, by callsign), every 5 minutes"
+    assert "local SPLASH = false" in _hk9b and "splashTrack" in _hk9b, "splash damage is off by default"
+    _hks = __import__("sqe.debrief", fromlist=["x"]).lua_hook("c", 1, "p", [], "P", "G", splash=True)
+    assert "local SPLASH = true" in _hks and "trigger.action.explosion" in _hks and "SPLBY[" in _hks, "splash damage on: blasts near the impact, kills credited to the shooter"
+    try:
+        import lupa as _lus
+        assert _lus.LuaRuntime().eval("function(s) return load(s) ~= nil end")(_hks), "the hook with splash damage on loads"
+    except ImportError:
+        pass
     try:
         import lupa as _lu
         assert _lu.LuaRuntime().eval("function(s) return load(s) ~= nil end")(__import__("sqe.debrief", fromlist=["x"]).lua_hook("c", 1, "p", [], "P", "G", jams={"a": 2}))

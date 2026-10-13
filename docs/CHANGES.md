@@ -1,3 +1,8 @@
+## v0.40.4
+
+* **Splash damage** (Settings: "Splash damage", off by default). DCS often leaves a vehicle a few metres from a bomb untouched. On: when an air-to-ground weapon (bomb, rocket, air-to-ground missile, HARM included) reaches the ground, every ground unit or ship within a blast radius of 9 m x (explosive mass in kg)^(1/3) (a Mk-82 about 40 m, a 2000 lb bomb about 68 m, capped at 120 m) gets a blast of its own of 0.35 x explosive mass x (1 - distance / radius)^2. The direct hit is left to DCS. A weapon that ends in the air (a JSOW opening its dispenser, a missile shot down) does nothing, and a weapon whose DCS data gives no explosive mass is left alone. Kills it causes are credited to the shooter (DCS reports them with no killer), your ground kill count included. The numbers are a first guess, to tune from your test.
+* Smoke test: off by default; on, the hook carries it and loads.
+
 ## v0.40.3
 
 * **AWACS tells you when the day is done.** Once the last package's TOT has passed (plus 2 minutes) and every AI flight of every package in the mission is landed, shot down or gone, AWACS calls you by callsign: "OVERLORD to SPRINGFIELD 1: all packages complete, no further tasking today. Return to base." Once you have landed: "...all flights accounted for. Good work today. OVERLORD out." It repeats every 5 minutes, for when you have stepped away. It never ends the mission (an End Mission trigger would throw you to the debrief while still flying). Support flights (tanker, AWACS, HAVCAP, base CAP) and enemy aircraft do not hold it up; a late-activated flight that has not launched yet does.
