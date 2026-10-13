@@ -1948,6 +1948,11 @@ class MissionBuilder:
         geom.ai_player = bool(self.o.player_is_ai)
         from .packages import is_sweep
         geom.sweep = is_sweep(package.objective)
+        tid_ = package.objective.target_id
+        tt_ = self.state.assets.get(tid_) if tid_ else None
+        geom.jsow_keep = [(a.x, a.y, HARM_LAUNCH_NM) for a in self.state.assets.values()            # every live SA-10 near the target, itself included
+                          if tt_ is not None and a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not getattr(a, "suppressed", False)
+                          and dist(a.x, a.y, tt_.x, tt_.y) <= (tm.UMBRELLA_KM / 1.852 + HARM_LAUNCH_NM) * NM]
         pts = [geom.push, geom.ip, (tx, ty)]
         for f in package.flights:
             if f.tag:

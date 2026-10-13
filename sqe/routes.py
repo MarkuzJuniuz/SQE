@@ -53,11 +53,14 @@ class Geometry:
     ai_player: bool = False  # test mode: the player's slot is flown by the AI, so the player's flight gets the AI stand-off too
     stand: dict = None      # {(role, id(profile)): (x, y, [SAM types], nm short)} sweeps and escorts that stop at the edge of SAM cover
     sweep: bool = False     # a Fighter Sweep package: no marshal, DEP - PUSH - station - home
+    jsow_keep: list = None  # [(x, y, nm)]: live long-range SAMs a JSOW launch point stays this far from (v0.41.3)
 
 
 STANDOFF_EGRESS_NM = 25.0  # a HARM or JSOW flight egresses this far beyond its launch point, straight back out along its own approach
 JSOW_AXIS_DEG = 30.0       # the JSOW flight's approach is this far off the HARM shooters' axis (side chosen by the builder, away from other SAM sites)
 JSOW_LAUNCH_NM = 20.0      # an AI JSOW flight's launch point (the AGM-154A glides about this far from 20,000 ft); it releases from there and turns home
+JSOW_HIGH_ALT_FT = 33000      # ...and when it is pushed out past JSOW_LAUNCH_NM, the flight releases from this high
+JSOW_MAX_NM = 40.0           # a JSOW launch point is never farther than this from its target (AGM-154A glide range from medium-high altitude)
 HARM_LAUNCH_NM = 30.0      # an AI SEAD flight's HARM launch point: at the edge of what an SA-10 first reaches (it opened fire at about 55 km in testing); 21 nm put the launch point deep inside it
 CARRIER_DEP_NM = 10.0      # Case III: the departure circle is 10 nm from the boat, and the flight leaves on the briefed departure radial
 
@@ -114,6 +117,12 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     harm_nm = max(8.0, min(HARM_LAUNCH_NM, g.d / NM * 0.8 - 6))        # on short routes it still leaves the IP ahead of the base
     ip_xy = g.ip
     jsow_nm = max(8.0, min(JSOW_LAUNCH_NM, g.d / NM * 0.8 - 6))
+    if jsow and role == Role.STRIKE and not human and g.jsow_keep:
+        # v0.41.3: the JSOW launch point stays as far from every live long-range SAM as the HARM point does (the v0.41.1 runs lost whole JSOW
+        # flights to the SA-10s at 13-24 nm). It moves out along its own axis, up to JSOW_MAX_NM from the target (the glide range from altitude).
+        jh_ = g.hdg + 180 + JSOW_AXIS_DEG * jsow_side
+        while jsow_nm < JSOW_MAX_NM and any(dist(*offset(g.tx, g.ty, jh_, jsow_nm * NM), kx, ky) < knm * NM for kx, ky, knm in g.jsow_keep):
+            jsow_nm += 1.0
     if role == Role.SEAD and not human and keep_out:          # under an umbrella (an SA-10 covering the target): the HARM point stays out of its reach too
         kx, ky, knm = keep_out
         while harm_nm < HARM_LAUNCH_NM + 40 and dist(*offset(g.tx, g.ty, g.hdg + 180, harm_nm * NM), kx, ky) < knm * NM:
@@ -144,6 +153,8 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         if len(wp) + 2 > p.max_points:
             raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")
         return wp
+    if jsow and role == Role.STRIKE and not human and jsow_nm > JSOW_LAUNCH_NM:
+        ialt, irad = max(ialt, JSOW_HIGH_ALT_FT), False         # a long JSOW shot goes from high up (the glide range grows with release altitude)
     wp.append(Wpt("IP", *ip_xy, ialt, p.ip_kts, "Weapons armed, master arm", rad=irad))
     # The player's TGT is on the ground target at 0 AGL so pods, weapons and the WSO / Jester can slave to it. The wingmen follow the player, and AI-only flights
     # never get a ground-level point (they would descend to it).

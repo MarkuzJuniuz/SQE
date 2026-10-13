@@ -1,3 +1,11 @@
+## v0.41.3
+
+From the v0.41.1 runs: whole JSOW flights were lost to the SA-10s. Their launch point sat 20 nm from the target, which put it 13-24 nm from a live SA-10, well inside its reach.
+
+* **JSOW launch points stay out of every live SA-10's reach**, the same 30 nm the HARM shooters keep, counting every live, unsuppressed SA-10 near the target (the target itself included). The point moves out along the JSOW flight's own axis, up to 40 nm from the target.
+* **A pushed-out JSOW shot goes from 33,000 ft** (from the IP on), so the AGM-154A glides far enough. Unpushed shots keep the old 20 nm / 20,000 ft profile.
+* Smoke test: the built JSOW launch point is 30 nm from every SA-10 and high when it is far out (36 nm from the target, 30 nm from the SA-10 in the test campaign).
+
 ## v0.41.2
 
 DCS refused a v0.41.1 player escort mission: "Viper 3: All waypoints (5-5) have locked speed and surrounded by waypoints 4 and 5 with locked time!"
