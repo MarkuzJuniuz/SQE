@@ -42,6 +42,23 @@ class ObjectiveType(str, Enum):
     BARCAP = "BARCAP"          # defend a friendly base / the fleet
 
 
+# DEAD packages by aim. "SEAD": HARMs suppress the radars, a Close DEAD package follows. "DEAD": that Close DEAD package (GBUs, radar gate).
+# "STANDOFF": one package against a site under a long-range SAM (SA-10): HARM shooters and a Standoff DEAD flight of JSOWs, together.
+# "" : the combined package the valve falls back to after repeated failed SEAD days.
+SEAD_AIMS = ("SEAD", "STANDOFF")        # packages with HARM shooters timed on the salvo
+
+
+def task_label(f, obj) -> str:
+    """Short role label for package tables and the radio: SEAD, SO DEAD (Standoff DEAD, JSOW), DEAD (Close DEAD, GBU) or the role."""
+    if getattr(f, "tag", ""):
+        return f.tag
+    if getattr(f, "kit", "") == "JSOW":
+        return "SO DEAD" if obj.aim == "STANDOFF" else "JSOW"
+    if f.role.value == "STRIKE" and obj.type.value == "DEAD":
+        return "DEAD"
+    return f.role.value
+
+
 @dataclass
 class Base:
     id: str

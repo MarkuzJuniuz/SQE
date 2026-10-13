@@ -44,8 +44,9 @@ TEMPLATES = {
 _FLEET = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
 _TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM", Role.ESCORT: "Escort package",
          Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
-_DEAD_TASK = {Role.SEAD: "SEAD: blind the radars ahead of the DEAD flight", Role.STRIKE: "DEAD: destroy the SAM site (the SEAD package goes in ahead of you; call it off if the radars are up)"}
-_KIT_TASK = {"JSOW": "JSOW: AGM-154A on the radars' last-known positions, on the HARM salvo's time; stand-off release, then home"}
+_DEAD_TASK = {Role.SEAD: "SEAD: suppress the radars ahead of the DEAD flight", Role.STRIKE: "Close DEAD: destroy the SAM site with GBUs (the SEAD package goes in ahead of you; call it off if the radars are up)"}
+_KIT_TASK = {"JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers and covering Tors, on the HARM salvo's time; stand-off release, then home"}
+_SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
 _TAG_TASK = {"HAVCAP": "HAVCAP (guards tanker and AWACS)", "BASECAP": "Base CAP"}
 
 
@@ -184,12 +185,14 @@ class PackageBuilder:
     # ---- slot list sized to the threat ---------------------------------------------------------------------
     def _slots(self, obj, defended, n_fl) -> list:
         tmpl = TEMPLATES[obj.type]
-        if obj.type == ObjectiveType.DEAD and obj.aim == "SEAD":            # SEAD first: a package that only blinds the radars
-            # ...with JSOW slingers alongside the HARM shooters, timed so both arrive together: a radar that stays up is a HARM's target,
-            # one that shuts down is the JSOW's (aimed at where it was last seen). Optional: only Hornet and Viper squadrons fly it.
-            tmpl = [Slot(Role.SEAD, 2), Slot(Role.SEAD, 2, False), Slot(Role.STRIKE, 4, False, kit="JSOW")]
-        elif obj.type == ObjectiveType.DEAD and obj.aim == "DEAD":          # ...and the DEAD package that follows it once they are blind
+        if obj.type == ObjectiveType.DEAD and obj.aim == "SEAD":            # SEAD first: a package that only suppresses the radars...
+            tmpl = [Slot(Role.SEAD, 2), Slot(Role.SEAD, 2, False)]
+        elif obj.type == ObjectiveType.DEAD and obj.aim == "DEAD":          # ...and the Close DEAD package (GBUs) that follows once they are down
             tmpl = [Slot(Role.STRIKE, 4), Slot(Role.ESCORT, 2)]
+        elif obj.type == ObjectiveType.DEAD and obj.aim == "STANDOFF":      # under a long-range SAM: one package, HARMs and JSOWs together
+            # Two HARM flights, both required: one on the long-range radars, one on the Tors, from the same salvo (equal weight, so the Tors are
+            # busy with HARMs when the JSOWs arrive). The Standoff DEAD flight is JSOW-capable only (Hornet, Viper): no Tomcats on DEAD here.
+            tmpl = [Slot(Role.SEAD, 2), Slot(Role.STRIKE, 4, kit="JSOW"), Slot(Role.SEAD, 2)]     # the JSOW flight is picked before the second HARM flight: without it nothing is destroyed
         slots = [copy.copy(s) for s in tmpl if not (s.only_if_defended and not defended)]
         if obj.type in (ObjectiveType.STRIKE, ObjectiveType.DEAD, ObjectiveType.CAS):
             req = threat.fighters_required(n_fl)
@@ -268,7 +271,7 @@ class PackageBuilder:
             cs = _next_callsign(st, sq, used)
             pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", cs, slot.role, sq.id,
                                           sq.aircraft, count, sq.base_id,
-                                          _KIT_TASK.get(slot.kit) or _TAG_TASK.get(slot.tag) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role],
+                                          _KIT_TASK.get(slot.kit) or _TAG_TASK.get(slot.tag) or (_SO_SEAD_TASK if (obj.aim == "STANDOFF" and slot.role == Role.SEAD) else None) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role],
                                           is_pl, slot.tag, slot.kit))
         pkg.support = self._support(pkg)
         pkg.jtac = obj.type in JTAC_OBJECTIVES
