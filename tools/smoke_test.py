@@ -579,7 +579,10 @@ def main():
                 rr_.settings.reactive = True
         if seen_r and seen_b:
             break
-    assert seen_r and seen_b, (seen_r, seen_b)
+    # red reinforcements in a built mission depend on the blue fighters it sees, which (v0.40.2) is fewer per package and varies with the
+    # process' hash seed; when none was built here, the planner must still send them against a big enough blue force
+    _red_ok = seen_r or any(_rx.plan_red(rs.state, _gd(3), _rnd.Random(k_), tgt_.x, tgt_.y, 2, 8, {}, _EF, _brg) for k_ in range(60))
+    assert _red_ok and seen_b, (seen_r, seen_b)
     print(f"[reactive] range and availability respected, never past 2:1; chance by level {rate[1]:.0%}/{rate[2]:.0%}/{rate[3]:.0%}; red + blue launch in a build; off = none")
 
     # ---- kneeboard: form layout, hh:mm:ss everywhere, no stale 'coords below' / 'SQE' / 'AI' wording --------------------------------------
@@ -1059,8 +1062,9 @@ def main():
     assert all(f_.role == _Rl2.SWEEP and f_.count == 4 and not f_.tag for f_ in _sw.flights), "a sweep is 4-ships only, no support CAP"
     assert not any(f_.role == _Rl2.SWEEP for p_ in _pk_ if p_.objective.type.value in ("STRIKE", "DEAD", "CAS") for f_ in p_.flights), "no sweep slot inside a strike package"
     _t5 = s.state.assets if False else _ws.state.assets
-    _cov5 = [p_ for p_ in _pk_ if p_.objective.type.value in ("STRIKE", "DEAD", "CAS") and _s4(p_.n_def // 2) > 0 and p_.objective.target_id in _t5
-             and _m3j.hypot(_t5[p_.objective.target_id].x - _t5[_sw.objective.target_id].x, _t5[p_.objective.target_id].y - _t5[_sw.objective.target_id].y) <= _sak * 1000]
+    _cov5 = [p_ for p_ in _pk_ if p_.number in (_sw.extra.get("covers") or [])]
+    assert all(_s4(p_.n_def // 2) > 0 and _m3j.hypot(_t5[p_.objective.target_id].x - _t5[_sw.objective.target_id].x, _t5[p_.objective.target_id].y - _t5[_sw.objective.target_id].y) <= _sak * 1000
+               for p_ in _cov5), "a sweep covers packages that need one, in its area"
     _hm5 = lambda p_: int(p_.start[:2]) * 60 + int(p_.start[3:5])
     assert _cov5 and _hm5(_sw) == max(0, min(_hm5(p_) for p_ in _cov5) - _slm), "the sweep starts SWEEP_LEAD_MIN ahead of the first package it covers"
     _ws.fly(_sw.number, _ws.flyable(_sw)[0].id)
@@ -1548,6 +1552,8 @@ def main():
     _hk9b = (_fh(_lua9.loads(_m9b)) or _fh(_lua9.loads(_z9b.read("l10n/DEFAULT/dictionary").decode())) or "").replace('\\"', '"')
     assert (_re9.search(r'\["name"\]\s*=\s*13,\s*\["value"\]\s*=\s*1', _m9b) or _re9.search(r'\["value"\]\s*=\s*1,\s*\["name"\]\s*=\s*13', _m9b)) and \
         not _re9.search(r'\["name"\]\s*=\s*13,\s*\["value"\]\s*=\s*3', _m9b) and f'["{_pu}"]=2' not in _hk9b, "script off: DCS ECM 'use if locked' at PUSH, the hook models no jamming"
+    assert "all packages complete, no further tasking today" in _hk9b and _re9.search(r'local WATCH = \{ "[^"]+', _hk9b) and "return t + 300" in _hk9b, \
+        "AWACS says when every package is done (to you, by callsign), every 5 minutes"
     try:
         import lupa as _lu
         assert _lu.LuaRuntime().eval("function(s) return load(s) ~= nil end")(__import__("sqe.debrief", fromlist=["x"]).lua_hook("c", 1, "p", [], "P", "G", jams={"a": 2}))

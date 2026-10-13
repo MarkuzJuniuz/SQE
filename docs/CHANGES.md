@@ -1,3 +1,9 @@
+## v0.40.3
+
+* **AWACS tells you when the day is done.** Once the last package's TOT has passed (plus 2 minutes) and every AI flight of every package in the mission is landed, shot down or gone, AWACS calls you by callsign: "OVERLORD to SPRINGFIELD 1: all packages complete, no further tasking today. Return to base." Once you have landed: "...all flights accounted for. Good work today. OVERLORD out." It repeats every 5 minutes, for when you have stepped away. It never ends the mission (an End Mission trigger would throw you to the debrief while still flying). Support flights (tanker, AWACS, HAVCAP, base CAP) and enemy aircraft do not hold it up; a late-activated flight that has not launched yet does.
+* A Fighter Sweep records the packages it covers (package extra "covers").
+* Smoke test: the call is in the hook, addressed to you, with the flights it waits for; the reactive check no longer depends on the process' hash seed.
+
 ## v0.40.2
 
 Air-to-air rework, part 2: Fighter Sweep and Defensive Counter Air. And the ECM script becomes a setting, off by default.
