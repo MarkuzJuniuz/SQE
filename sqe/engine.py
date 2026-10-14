@@ -568,8 +568,16 @@ class Session:
         if base is not None:
             kinds.append("RAID")
         sec = raids.hot_sector(st)
+        cas_aim = ""
         if sec is not None:
-            kinds.append("CAS")
+            # v0.41.20: troops in contact under a live SA-11 / SA-10: no CAS (a DEAD comes first); under an SA-2/3/6 only with a SEAD escort
+            from types import SimpleNamespace
+            from .war import cas_cover
+            c_ = st.assets.get(f"armor_{sec + 1}") or SimpleNamespace(x=float(st.ground["centers"][sec][0]), y=float(st.ground["centers"][sec][1]))
+            cov_, hard_ = cas_cover(st, c_)
+            if not hard_:
+                kinds.append("CAS")
+                cas_aim = "SEAD" if cov_ else ""
         if not kinds:
             return None
         fighter = bool({r.value for r in spec.roles} & {"CAP", "SWEEP"})
@@ -585,7 +593,7 @@ class Session:
             from . import ground
             zi = ground.info(st, sec)
             obj = Objective(f"obj-d{st.day}-e{number}", ObjectiveType.CAS, f"armor_{sec + 1}", 12.0,
-                            f"EMERGENCY - troops in contact: {zi['name']} (enemy {zi['red']:.0f}, friendly {zi['blue']:.0f})")
+                            f"EMERGENCY - troops in contact: {zi['name']} (enemy {zi['red']:.0f}, friendly {zi['blue']:.0f})", aim=cas_aim)
             role_needed, where = "cas", zi["name"]
         pb = PackageBuilder(st, d)
         xy = pb.target_xy(obj)

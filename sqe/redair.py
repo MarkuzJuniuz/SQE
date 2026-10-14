@@ -116,6 +116,25 @@ GUARD_NM = 150                 # v0.41.11: a patrol guards a SAM site within thi
                                # local sites and the front, Sukhumi and Gudauta, went unguarded in the v0.41.10 run)
 GUARD_FWD_NM = 10              # ...from a station this far in front of the site, toward the nearest friendly (blue) field
 GUARD_VALUE = {"SA-10": 4.0, "SA-11": 3.0, "SA-6": 2.5, "SA-15": 2.0, "SA-19": 1.5, "SA-8": 1.5, "SA-3": 1.5, "SA-2": 1.2}
+# v0.41.20: no needless banzai, red's side. "commit": red fighters go after blue only with at least this quality-weighted edge (red : blue), except
+# over their own field or a SAM site blue is attacking (then at any odds). "soft": how much a raid's pick shies from a target under a full Patriot
+# (and on Hard also from your home field's HAWK): 1.0 = not at all (Easy's careless red).
+RED_DOCTRINE = {1: {"commit": 0.0, "soft": 1.0, "hawk": False}, 2: {"commit": 1.0, "soft": 0.5, "hawk": False}, 3: {"commit": 2.0, "soft": 0.25, "hawk": True}}
+RED_QUALITY = {"MiG_29A": 0.67, "MiG_29S": 0.67, "Su_27": 0.67, "MiG_21Bis": 0.5, "MiG_23MLD": 0.5, "F_4E": 0.5, "F_5E_3": 0.5}   # one blue fighter = 1.0
+
+
+def doctrine(d) -> dict:
+    return RED_DOCTRINE[max(1, min(3, int(getattr(d, "level", 1))))]
+
+
+def commits(d, red_types: list, blue_jets: int) -> bool:
+    """v0.41.20: does red take this fight? red_types: one entry per red jet; blue_jets: blue air-to-air jets in it (each weighs 1.0)."""
+    need = doctrine(d)["commit"]
+    if need <= 0 or blue_jets <= 0:
+        return True
+    return sum(RED_QUALITY.get(t, 0.6) for t in red_types) >= need * blue_jets - 1e-6
+
+
 GUARD_READ = {1: 0.25, 2: 0.5, 3: 0.75}   # how often red's "briefing" reads the day's blue targets right, by level
 
 

@@ -164,8 +164,34 @@ def pick_aim(state, d, rng: random.Random):
     ws = candidates(state, kind) or (candidates(state, "field") if kind != "field" else [])
     if not ws:
         return None
+    ws = shy(state, d, ws)
     base, aim, _ = _weighted(rng, ws)
     return base, aim
+
+
+PATRIOT_NM = 40          # v0.41.20: a full-strength field's Patriot covers its own field and what lies this close to it
+HAWK_NM = 25             # ...and your home field's HAWK battery
+
+
+def shy(state, d, ws: list) -> list:
+    """v0.41.20: no needless banzai for red's raids. On Normal and Hard a raid's pick shies from targets under a full Patriot (Hard: also under
+    your home field's HAWK); the weights drop by the level's "soft" factor. Easy's red does not care. Nothing is ruled out outright."""
+    from . import redair
+    doc = redair.doctrine(d)
+    if doc["soft"] >= 1.0:
+        return ws
+    fields = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and getattr(b, "defense", 0.0) >= 0.6]
+    home = None
+    if doc["hawk"] and state.player and state.player.squadron_id in state.squadrons:
+        home = state.bases.get(state.squadrons[state.player.squadron_id].base_id)
+    out = []
+    for base, aim, w in ws:
+        x, y = aim_xy(state, aim, base)
+        hot = any(math.hypot(b.x - x, b.y - y) <= PATRIOT_NM * NM for b in fields)
+        if home is not None and home.kind == BaseKind.AIRFIELD and math.hypot(home.x - x, home.y - y) <= HAWK_NM * NM:
+            hot = True
+        out.append((base, aim, w * (doc["soft"] if hot else 1.0)))
+    return out
 
 
 def raid_objective(base, aim: str = "", desc: str | None = None) -> Objective:

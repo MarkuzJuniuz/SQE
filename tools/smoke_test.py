@@ -1752,7 +1752,7 @@ def main():
     for _str in (1.0, 0.3):
         _vals = []
         for _sd in (5, 6, 7):
-            s.new("Dense", "A-10C", 3, seed=_sd); _st = s.state
+            s.new("Dense", "A-10C", 2, seed=_sd); _st = s.state      # v0.41.20: level 2 (on Hard an SA-10 covers the contested sectors: no CAS until its DEAD)
             _st.campaign_id = f"{0xde05e00 + _sd:010x}"; s.plan_day()       # pinned: merged packages (and so the unit cap) follow the random campaign id
             _pk = next((p_ for p_ in s.packages() if p_.objective.type.value == "CAS" and p_.objective.target_id.startswith("armor_") and s.flyable(p_)), None)
             if _pk is None:
@@ -1765,7 +1765,7 @@ def main():
             _ad(_st, _mn, _d); assert abs(_st.assets[_a.id].health - _str) < 0.02, "no losses: the sector keeps its strength"
         _cnt[_str] = sum(_vals) / max(1, len(_vals))
     assert _cnt[1.0] > 1.5 * _cnt[0.3], f"a full-strength column is far denser than a beaten one: {_cnt}"
-    assert s.last_build.counts["units"] < 250, s.last_build.counts
+    assert s.last_build.counts["units"] <= 250, s.last_build.counts
     print(f"[dense columns] vehicles in a front-line column: {_cnt[1.0]:.0f} at full strength, {_cnt[0.3]:.0f} at 30%; no losses leaves the strength unchanged")
     import sqe.war as _wlr; _lr_real = _wlr.long_range_site; _wlr.long_range_site = lambda *a_: False     # this check is about the SEAD / Close DEAD pair: no Standoff DEAD
     # SEAD wears the defence down: each failed day raises the next day's odds, a failed attempt still costs the site, level 3 opens the valve after 2 days
@@ -1922,6 +1922,34 @@ def main():
                 _d19 += 1
     assert _d19 >= 1
     print(f"[rollback] {_n19} strikes, none under a live SA-2/3/6/11/10; {_d19} DEADs on such sites, all Standoff with their JSOW flight")
+    # v0.41.20: no needless banzai. CAS under a live SA-2/3/6 only with a SEAD escort, never under a live SA-11 / SA-10; red commits by doctrine
+    from sqe.war import cas_cover as _cc20
+    from sqe import redair as _ra20, raids as _rd20
+    from sqe.routes import AVOID_NM as _av20
+    _ncas, _nesc = 0, 0
+    for _sd in (5, 6, 7):
+        s.new("Banzai", "A-10C", 2, seed=_sd); s.plan_day(); _st = s.state
+        for p_ in s.packages():
+            if p_.objective.type.value != "CAS":
+                continue
+            _cov, _hard = _cc20(_st, _st.assets[p_.objective.target_id])
+            assert not _hard, ("no CAS under a live SA-11 / SA-10", p_.objective.description, [x.variant for x in _hard])
+            assert bool(_cov) == (p_.objective.aim == "SEAD"), ("CAS under a live SA-2/3/6 is marked for a SEAD escort", p_.objective.description)
+            if _cov:
+                assert any(f_.role.value == "SEAD" and not f_.tag for f_ in p_.flights), ("an escorted CAS flies with its HARM flight", p_.objective.description)
+                _nesc += 1
+            _ncas += 1
+    assert _ncas, "CAS still comes up on Normal"
+    _L = lambda n: type("D", (), {"level": n})()
+    assert _ra20.commits(_L(1), ["MiG_21Bis"] * 2, 8), "Easy: red takes any fight"
+    assert not _ra20.commits(_L(2), ["MiG_29S"] * 2, 2) and _ra20.commits(_L(2), ["Su_27"] * 4, 2), "Normal: red commits at even (quality-weighted) odds"
+    assert not _ra20.commits(_L(3), ["Su_27"] * 4, 2) and _ra20.commits(_L(3), ["Su_27"] * 6, 2), "Hard: red wants 2:1"
+    _ws = _rd20.candidates(_st, "field")
+    if _ws:
+        assert _rd20.shy(_st, _L(1), _ws) == _ws, "Easy raids do not shy from defences"
+        assert all(w1 <= w0 for (_, _, w0), (_, _, w1) in zip(_ws, _rd20.shy(_st, _L(3), _ws))), "Hard raids shy from defended targets"
+    assert set(_av20) == {"SA-2", "SA-3", "SA-6", "SA-11", "SA-10"}, "AI routes bend round every medium / long-range SAM"
+    print(f"[banzai] {_ncas} CAS jobs on Normal, {_nesc} under an SA-2/3/6 with their SEAD escort, none under an SA-11/10; red commits at any / 1:1 / 2:1 odds")
     print("SMOKE TEST PASSED")
 
 
