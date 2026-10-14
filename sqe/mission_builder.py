@@ -130,7 +130,7 @@ def stagger(package, role) -> int:
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import SA10_AVOID_NM, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear
+from .routes import AVOID_NM, SA10_AVOID_NM, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear
 from .state import CampaignState
 
 KPH = 1.852
@@ -1591,6 +1591,14 @@ class MissionBuilder:
                 # v0.41.6: OPEN FIRE, not weapon free: only the groups tasked below (its own site, the Tors that guard it, the umbrella). Weapon free,
                 # Viper 5-2 fired at another package's SA-6 from 89 km; the radar went quiet and the HARM homed on Squid 1-4's radar instead.
                 wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
+                if package.objective.type == ObjectiveType.CAS:
+                    # v0.41.20: a CAS escort: HARMs on the SA-2/3/6 sites that cover the CAS target, through the whole CAS window
+                    from .war import covering_sams
+                    for cs_ in covering_sams(self.state, self.state.assets[package.objective.target_id]):
+                        cg_ = self.groups_by_asset.get(cs_.id)
+                        if cg_ is not None:
+                            ctc = task.ControlledTask(task.AttackGroup(cg_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                            ctc.stop_after_time(int(w.eta_s) + 900); wp.tasks.append(ctc)
                 # The package's second SEAD flight opens on the Tors that guard the site (they shoot the HARMs down, v0.39.16 run), then joins on the site.
                 seads_ = [x for x in package.flights if x.role == Role.SEAD and not x.tag]
                 if len(seads_) > 1 and any(x is f or x.id == f.id for x in seads_[1:]):
@@ -2074,11 +2082,20 @@ class MissionBuilder:
         pt = lambda x, y: mapping.Point(x, y, self.t)
         n_cap = len(self._cap_plan)                         # the planned patrol pairs that are up (redair.py); the rest of the defenders are alert aircraft
         alt, spd = 22000 * FT, 400 * KPH
+        # v0.41.20: no needless banzai for red. Blue air-to-air jets in this fight (escorts, sweeps, support CAP) against red's doctrine (redair.commits)
+        blue_aa = sum(f.count for f in package.flights if f.role in (Role.ESCORT, Role.SWEEP, Role.CAP))
+        tga_ = st.assets.get(package.objective.target_id) if package.objective.target_id else None
+        from .war import covering_sams
+        own_ = (tm.cluster_ids(tga_) | {x_.id for x_ in covering_sams(st, tga_)}) if tga_ is not None else set()   # the sites blue comes for: defended at any odds
+        self._red_held = []
         for i in range(n_fl):
             if i < n_cap:
                 pf_ = self._red_sel[i]
                 w, a = st.enemy_air_at(pf_["wing"]), st.assets[pf_["wing"]]
                 tname = pf_["type"] if pf_["type"] in w.types else r.choice([t for t in w.types if t in ENEMY_FIGHTERS])
+                if pf_["kind"] == "SWEEP" and dist(pf_["x"], pf_["y"], tx, ty) <= 60 * NM and not redair.commits(d, [tname] * 2, blue_aa):
+                    self._red_held.append({"id": pf_["id"], "why": "sweep"})      # outgunned: this sweep stays home today
+                    continue
             else:
                 near_ = [wa for wa in wings if dist(wa[1].x, wa[1].y, tx, ty) <= ALERT_REACH_NM * NM]   # v0.41.1: only fields that can reach the fight
                 if not near_:
@@ -2105,7 +2122,13 @@ class MissionBuilder:
                 g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
                 # the same rule as ours: a patrol engages inside a circle round its station, it does not chase a target home
                 self._limit_engage(g, 0, None, (gx, gy, min(A2A_ZONE_NM[True], self.o.enemy_cap_engage_nm or A2A_ZONE_NM[True])))
-                if pf_.get("gx") is not None and pf_["kind"] == "CAP":
+                callin_ = pf_.get("gx") is not None and pf_["kind"] == "CAP"
+                if callin_ and pf_.get("guard") not in own_:
+                    mates_ = [q_["type"] for q_ in self._red_sel[:n_cap] if q_.get("guard") == pf_.get("guard") and q_["kind"] == "CAP"]
+                    if not redair.commits(d, [t_ for t_ in mates_ for _ in (0, 1)], blue_aa):
+                        callin_ = False                                     # outgunned and its site is not the target: it holds its station
+                        self._red_held.append({"id": pf_["id"], "why": "callin"})
+                if callin_:
                     # v0.41.10: called in. When blue comes within RED_CALLIN_NM of the SAM site this pair guards, it is sent to fight over the site
                     g.add_trigger_action(task.EngageTargetsInZone(mapping.Vector2(pf_["gx"], pf_["gy"]), int(RED_CALLIN_ZONE_NM * NM), [task.Targets.All.Air]))
                     zc_ = self.m.triggers.add_triggerzone(pt(pf_["gx"], pf_["gy"]), RED_CALLIN_NM * NM, True, f"callin {g.name}")
@@ -2169,9 +2192,12 @@ class MissionBuilder:
                           and dist(a.x, a.y, tt_.x, tt_.y) <= (tm.UMBRELLA_KM / 1.852 + HARM_LAUNCH_NM) * NM]
         # v0.41.11: every other live SA-10 within 150 nm: AI strike / SEAD / CAS routes bend around it (routes.avoid_circles)
         um_ = tm.umbrella_site(self.state, tt_) if tt_ is not None else None             # the one the HARMs go for: the flights must come to it
-        geom.sa10_avoid = [(a.x, a.y, SA10_AVOID_NM) for a in self.state.assets.values()
-                           if a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not getattr(a, "suppressed", False)
-                           and a.id not in (tid_, getattr(um_, "id", None)) and dist(a.x, a.y, tx, ty) <= 150 * NM]
+        # v0.41.20: every live medium / long-range SAM (SA-2/3/6/11/10), each by its own reach (AVOID_NM). A site whose circle holds the target
+        # itself is the one this package comes for (its DEAD, or the site a CAS escort's HARMs keep quiet): no bending round that one
+        geom.sa10_avoid = [(a.x, a.y, AVOID_NM[a.variant]) for a in self.state.assets.values()
+                           if a.kind == AssetKind.SAM and a.variant in AVOID_NM and not a.destroyed and a.health > 0.25 and not getattr(a, "suppressed", False)
+                           and a.id not in (tid_, getattr(um_, "id", None)) and dist(a.x, a.y, tx, ty) <= 150 * NM
+                           and dist(a.x, a.y, tx, ty) > (AVOID_NM[a.variant] + 3) * NM]
         pts = [geom.push, geom.ip, (tx, ty)]
         for f in package.flights:
             if f.tag:

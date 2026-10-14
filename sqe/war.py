@@ -47,9 +47,21 @@ def covering_sams(state, a) -> list:
     for x in state.assets.values():
         if x.kind != AssetKind.SAM or x.destroyed or x.health <= 0.25 or getattr(x, "suppressed", False) or x.variant not in GATE_VARIANTS:
             continue
-        if ((x.x - a.x) ** 2 + (x.y - a.y) ** 2) ** 0.5 <= tm.RANGE_NM.get(x.variant, 0) * 1852:
+        if ((x.x - a.x) ** 2 + (x.y - a.y) ** 2) ** 0.5 <= GATE_REACH_NM.get(x.variant, tm.RANGE_NM.get(x.variant, 0)) * 1852:
             out.append(x)
     return out
+
+
+GATE_REACH_NM = {"SA-10": 35}    # v0.41.20: the SA-10's measured reach (54-57 km in the runs), not the 48 nm ring table, as everywhere else since v0.41.14
+
+
+ESCORTABLE = ("SA-2", "SA-3", "SA-6")       # v0.41.20: a HARM escort can keep these quiet over a CAS target; an SA-11 / SA-10 needs a DEAD first
+
+
+def cas_cover(state, a) -> tuple:
+    """v0.41.20: (gate SAMs covering a CAS target, the ones among them a SEAD escort cannot handle). `a` needs only x and y."""
+    cov = covering_sams(state, a)
+    return cov, [x for x in cov if x.variant not in ESCORTABLE]
 
 
 NM = 1852.0
@@ -118,7 +130,15 @@ class ObjectivePlanner:
                     pr *= 0.7 + 0.6 * zi["pressure"]                 # the harder Red is pressing, the more urgent
                     what = f"Close air support: {zi['name']} (enemy {zi['red']:.0f}, friendly {zi['blue']:.0f})"
                 bl = self._garrison_cover(state, a) if a.variant == "GARRISON" else []        # a dug-in garrison sits under its sites' umbrella: SEAD / DEAD goes first
-                cand.append((pr, Objective("", ObjectiveType.CAS, a.id, pr, what), bl, locked))
+                # v0.41.20: no needless banzai. A CAS target under a live SA-2/3/6 goes out only with a SEAD escort (aim "SEAD": packages.py
+                # requires the HARM flight or postpones the job); under a live SA-11 / SA-10 it is blocked and that site gets a DEAD first.
+                cov, hard = cas_cover(state, a)
+                bl = bl + [x for x in hard if x not in bl]
+                o_ = Objective("", ObjectiveType.CAS, a.id, pr, what)
+                if cov and not hard:
+                    o_.aim = "SEAD"
+                    o_.description += " (with a SEAD escort)"
+                cand.append((pr, o_, bl, locked))
             elif a.kind == AssetKind.AIRFIELD:
                 w = state.enemy_air_at(a.id)
                 if w and w.available > 0:

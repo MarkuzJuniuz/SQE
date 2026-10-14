@@ -212,6 +212,8 @@ class PackageBuilder:
             # Two HARM flights, both required: one on the long-range radars, one on the Tors, from the same salvo (equal weight, so the Tors are
             # busy with HARMs when the JSOWs arrive). The Standoff DEAD flight is JSOW-capable only (Hornet, Viper): no Tomcats on DEAD here.
             tmpl = [Slot(Role.SEAD, 2), Slot(Role.STRIKE, 4, kit="JSOW"), Slot(Role.SEAD, 2)]     # the JSOW flight is picked before the second HARM flight: without it nothing is destroyed
+        elif obj.type == ObjectiveType.CAS and obj.aim == "SEAD":           # v0.41.20: CAS under a live SA-2/3/6: the HARM escort is not optional
+            tmpl = [Slot(Role.CAS, 4), Slot(Role.SEAD, 2), Slot(Role.ESCORT, 2, False)]
         if is_sweep(obj):                                                    # Fighter Sweep: 4-ships only, one per 4 bandits beyond the packages' own cover
             n4 = max(1, sweep_4ships(n_fl))
             return [Slot(Role.SWEEP, 4)] + [Slot(Role.SWEEP, 4, False) for _ in range(n4 - 1)]
@@ -278,6 +280,11 @@ class PackageBuilder:
             for sl_, sq_, n_, _ in chosen:
                 ledger.free[sq_.id] += n_
             raise NoPlayerSlot("no JSOW-capable squadron free for the Standoff DEAD today")
+        if obj.type == ObjectiveType.CAS and obj.aim == "SEAD" and not any(sl_.role == Role.SEAD for sl_, *_ in chosen):
+            # v0.41.20: no HARM jets free: the CAS under a live SAM waits for another day rather than going in unescorted (no needless banzai)
+            for sl_, sq_, n_, _ in chosen:
+                ledger.free[sq_.id] += n_
+            raise NoPlayerSlot("no SEAD flight free to escort the CAS today")
 
         # support CAP (v0.41.7): TNKCAP guards the tanker (forward, on the way home: mandatory), HAVCAP the AWACS (well back), BASECAP the
         # strike/CAS flights' home field, CVCAP the carrier (from the carrier's own squadrons). One pair short: the tanker keeps its guard.

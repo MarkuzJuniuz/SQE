@@ -55,7 +55,7 @@ class Geometry:
     sweep: bool = False     # a Fighter Sweep package: no marshal, DEP - PUSH - station - home
     jsow_keep: list = None  # [(x, y, nm)]: live long-range SAMs a JSOW launch point stays this far from (v0.41.3)
     carrier: bool = False   # v0.41.12: the flight's base is a carrier (only then a DEP point after take-off)
-    sa10_avoid: list = None # [(x, y, nm)]: live long-range SAMs (not the target) an AI flight's route bends around (v0.41.11)
+    sa10_avoid: list = None # [(x, y, nm)]: live medium / long-range SAMs (not the target) an AI flight's route bends around (v0.41.11; all gate SAMs since v0.41.20)
 
 
 STANDOFF_EGRESS_NM = 25.0  # a HARM or JSOW flight egresses this far beyond its launch point, straight back out along its own approach
@@ -221,6 +221,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
 
 SA10_AVOID_NM = 35.0       # v0.41.11: an AI flight's route keeps this far from a live SA-10 that is not its target (the v0.41.10 run: two JSOW
                            # flights bound for Gudauta passed 31 nm from the Sukhumi SA-10 and were shot at from 57 km)
+AVOID_NM = {"SA-10": SA10_AVOID_NM, "SA-11": 20.0, "SA-2": 26.0, "SA-6": 16.0, "SA-3": 15.0}    # v0.41.20: every gate SAM, by its reach plus a margin
 
 
 def avoid_circles(wp: list, circles: list, max_points: int, first: int) -> list:
@@ -242,7 +243,7 @@ def avoid_circles(wp: list, circles: list, max_points: int, first: int) -> list:
                     continue
                 h = bearing(cx, cy, px, py) if d > 1 else bearing(ax, ay, bx, by) + 90
                 nx, ny = offset(cx, cy, h, (r + 2) * NM)
-                wp.insert(i, Wpt("AVD", nx, ny, max(a.alt_ft, b.alt_ft), a.speed_kts, "Around the SA-10", rad=a.rad))
+                wp.insert(i, Wpt("AVD", nx, ny, max(a.alt_ft, b.alt_ft), a.speed_kts, "Around a SAM site", rad=a.rad))
                 changed = True
                 break
             i += 1

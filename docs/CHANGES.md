@@ -1,3 +1,14 @@
+## v0.41.20
+
+No needless banzai: nobody flies into defences it can't survive unless the situation calls for it. Blue always; red by its doctrine for the level.
+
+* **CAS gate:** front-line and garrison CAS, and the emergency "troops in contact" event, are gated like strikes. Under a live SA-2, SA-3 or SA-6 the CAS goes out only with a SEAD flight (its HARMs on the covering sites through the CAS window); with no HARM jets free that day it waits. Under a live SA-11 or SA-10 there is no CAS: that site gets its Standoff DEAD first. Short-range SAMs and guns stay the CAS flight's problem, as before.
+* **Gate reach:** the SA-10 gates targets within its measured reach (35 nm), not the 48 nm ring table, as the CAP stations have since v0.41.14. Strikes and counter-air follow the same reach.
+* **Routes:** AI strike, SEAD and CAS routes bend round every live medium / long-range SAM that isn't their target (SA-2 26, SA-3 15, SA-6 16, SA-11 20, SA-10 35 nm), not only SA-10s.
+* **Red doctrine by level:** red fighters commit only with a quality-weighted edge (a MiG-29 or Su-27 counts 0.67 of a blue fighter, older types 0.5): Easy at any odds, Normal at even odds, Hard at 2:1. A patrol called in to a SAM site it guards holds its station instead when outgunned, unless that site is the one blue is attacking (then it fights at any odds). An outgunned red sweep near the fight stays home.
+* **Red raids** on Normal and Hard prefer softer targets: aims under a full-strength field's Patriot (40 nm) weigh half on Normal and a quarter on Hard; Hard also shies from your home field's HAWK (25 nm). Easy is unchanged.
+* Smoke test: no CAS under an SA-11/10, escorted CAS under an SA-2/3/6 flies with its HARM flight, red commit thresholds, raid weights.
+
 ## v0.41.19
 
 Rolling back the SAM belt. From the v0.41.14 Gudauta fuel-farm run: a strike was planned under a live SA-6 (the planner's SAM-belt rule skipped the target's own cluster), flew low because of it and lost all four jets; and Gudauta's alert pairs never got airborne.
