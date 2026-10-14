@@ -161,6 +161,8 @@ class MissionOptions:
     f14_special_names: bool = True
     weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
     reactive: bool = True               # extra enemy fighters / blue alert pairs that launch during the sortie (reactive.py)
+    ai_land_carrier: str = "always"     # v0.41.18: AI recovery short of a carrier: always | home (your deck only) | never
+    ai_land_field: str = "never"        # v0.41.18: the same for airfields
     splash_damage: bool = True          # blasts on ground units near an air-to-ground weapon's impact (the hook)
     ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
@@ -499,8 +501,7 @@ class MissionBuilder:
                          rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts,
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
-                              "cvrec": ({"cv": self.ship[pbase.id].units[0].name, "r": CV_RECOVER_NM * NM, "t": float(tgt.eta_s or 0)}
-                                        if (pbase.kind == BaseKind.CARRIER and pbase.id in self.ship and not o.player_is_ai) else None)})
+                              "cvrec": self._wing_recovery(pbase, tgt.eta_s)})
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -542,6 +543,22 @@ class MissionBuilder:
             for ct_ in h["starts"]:
                 ct_.start_after_time(new)
             h["end"] = new
+
+    def _skip_landing(self, base) -> bool:
+        """v0.41.18: does an AI flight going home to this base get recovered short of it instead of landing (Settings: AI landings)?"""
+        mode = (self.o.ai_land_carrier if base.kind == BaseKind.CARRIER else self.o.ai_land_field) or "never"
+        return mode == "always" or (mode == "home" and base.id == getattr(self, "_main_base", None))
+
+    def _wing_recovery(self, pbase, tot_s):
+        """v0.41.18: the hook's watch on your wingmen: recovered at your home base (10 nm) once you are back after your TOT, when that base type is
+        set to skip landings (always / home both apply: it is your home). None otherwise."""
+        o = self.o
+        if o.player_is_ai or not self._skip_landing(pbase):
+            return None
+        if pbase.kind == BaseKind.CARRIER:
+            return {"cv": self.ship[pbase.id].units[0].name, "r": CV_RECOVER_NM * NM, "t": float(tot_s or 0)} if pbase.id in self.ship else None
+        p = self.apt[pbase.id].position
+        return {"x": p.x, "z": p.y, "r": CV_RECOVER_NM * NM, "t": float(tot_s or 0)}
 
     @staticmethod
     def _gather_support(package, extras):
@@ -1632,11 +1649,14 @@ class MissionBuilder:
                 lp_ = g.points[-1].position
                 rb_ = bearing(base.x, base.y, lp_.x, lp_.y) + RCV_SPREAD[idx % len(RCV_SPREAD)]
                 rx_, ry_ = offset(base.x, base.y, rb_, RCV_NM * NM)
-                g.add_waypoint(pt(rx_, ry_), (3000 + 1000 * (idx % 4)) * FT, 300 * KPH, "RCV")
-            g.land_at(self.apt[base.id])
+                rcvp_ = g.add_waypoint(pt(rx_, ry_), (3000 + 1000 * (idx % 4)) * FT, 300 * KPH, "RCV")
+                if self._skip_landing(base):          # v0.41.18: recovered at its entry point instead of landing (setting "AI landings: airfields")
+                    rcvp_.tasks.append(task.RunScript(f"SQE_RECOVER('{g.name}')"))
+            if (f.is_player and not o.player_is_ai) or not self._skip_landing(base):
+                g.land_at(self.apt[base.id])
             if special:
                 g.points[-1].name = "RTBXHB"
-        elif not f.is_player or o.player_is_ai:
+        elif (not f.is_player or o.player_is_ai) and self._skip_landing(base):
             # v0.41.17: an AI flight going home to the boat is recovered at a point CV_RECOVER_NM out: it counts as landed and leaves the mission
             # (SQE_RECOVER in the hook). DCS's carrier landing queue ran an F-14 dry and stacks AI in your pattern.
             lp_ = g.points[-1].position

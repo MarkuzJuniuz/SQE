@@ -148,6 +148,16 @@ class SettingsDialog(QDialog):
         self.splash.setChecked(bool(getattr(settings, "splash_damage", True))); v.addWidget(self.splash)
         hint(v, "DCS often leaves a vehicle a few metres from a bomb untouched. On: ground units near an air-to-ground weapon's impact take a blast "
                 "of their own, scaled to the warhead and weaker with distance. Kills it causes count for the shooter.")
+        # v0.41.18: AI landings
+        _lm = [("Always skip", "always"), ("Skip at your home deck / field", "home"), ("Land for real", "never")]
+        self.land_cv, self.land_af = QComboBox(), QComboBox()
+        for cb_, key_, dflt_ in ((self.land_cv, "ai_land_carrier", "always"), (self.land_af, "ai_land_field", "never")):
+            for lab_, val_ in _lm:
+                cb_.addItem(lab_, val_)
+            cb_.setCurrentIndex(max(0, cb_.findData(str(getattr(settings, key_, dflt_)))))
+        _row = QFormLayout(); _row.addRow("AI landings, carrier", self.land_cv); _row.addRow("AI landings, airfields", self.land_af); v.addLayout(_row)
+        hint(v, "Skip: AI flights going home are recovered short of the base (10 nm from the boat, 8 nm from a field), count as landed and leave the mission, "
+                "so DCS's landing queue never runs them dry or fills your pattern. Your own wingmen are recovered too once you are back. Land for real: DCS landings.")
         self.ecm = QCheckBox("ECM script: SQE's own jamming model (experimental, off by default)")
         self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
         hint(v, "Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
@@ -274,6 +284,8 @@ class SettingsDialog(QDialog):
         self.s.ruins = bool(self.ruins.isChecked())
         self.s.ecm_script = bool(self.ecm.isChecked())
         self.s.splash_damage = bool(self.splash.isChecked())
+        self.s.ai_land_carrier = str(self.land_cv.currentData() or "always")
+        self.s.ai_land_field = str(self.land_af.currentData() or "never")
         self.s.reactive = bool(self.react.isChecked()); self.s.emergencies = bool(self.emerg.isChecked()); self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.shore_margin_m = int(self.shore.value())

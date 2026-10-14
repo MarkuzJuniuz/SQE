@@ -664,7 +664,9 @@ class Session:
         self.options.carcasses = bool(getattr(self.settings, 'carcasses', True)); self.options.carcass_weight = max(5, int(getattr(self.settings, 'carcass_weight_pct', 25))) / 100.0
         self.options.reactive = bool(getattr(self.settings, 'reactive', True))
         self.options.ecm_script = bool(getattr(self.settings, 'ecm_script', False))
-        self.options.splash_damage = bool(getattr(self.settings, 'splash_damage', False))
+        self.options.splash_damage = bool(getattr(self.settings, 'splash_damage', True))
+        self.options.ai_land_carrier = str(getattr(self.settings, 'ai_land_carrier', "always"))
+        self.options.ai_land_field = str(getattr(self.settings, 'ai_land_field', "never"))
         self.options.max_units = int(self.settings.merge_max_units)
         self.options.full_map = bool(self.full_map)
         if self.full_map:

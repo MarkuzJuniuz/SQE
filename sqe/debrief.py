@@ -823,13 +823,13 @@ function SQE_RECOVER(gname)
   dump()
   pcall(function() g:destroy() end)
 end
-if CVREC.cv and not AITEST then
+if (CVREC.cv or CVREC.x) and not AITEST then
   timer.scheduleFunction(function(_, t)
     if t < (CVREC.t or 0) then return t + 10 end
-    local cv, me = Unit.getByName(CVREC.cv), Unit.getByName(PLAYER)
-    local g = Group.getByName(PGROUP)
-    if not (cv and me and g) then return t + 10 end
-    local cp, mp = cv:getPoint(), me:getPoint()
+    local cv = CVREC.cv and Unit.getByName(CVREC.cv)
+    local me, g = Unit.getByName(PLAYER), Group.getByName(PGROUP)
+    if not (me and g) or (CVREC.cv and not cv) then return t + 10 end
+    local cp, mp = (cv and cv:getPoint()) or { x = CVREC.x, z = CVREC.z }, me:getPoint()
     local near = function(p) return math.sqrt((p.x - cp.x) ^ 2 + (p.z - cp.z) ^ 2) <= CVREC.r end
     if not near(mp) then return t + 10 end
     local left = false
@@ -900,7 +900,9 @@ def _cvrec_lua(cv) -> str:
     """v0.41.17: the carrier recovery watch for your wingmen: the carrier unit, the radius (m) and the earliest time (s)."""
     if not cv:
         return ""
-    return f'cv={_lq(cv["cv"])}, r={float(cv.get("r", 18520)):.0f}, t={float(cv.get("t", 0)):.0f}'
+    if cv.get("cv"):
+        return f'cv={_lq(cv["cv"])}, r={float(cv.get("r", 18520)):.0f}, t={float(cv.get("t", 0)):.0f}'
+    return f'x={float(cv["x"]):.1f}, z={float(cv["z"]):.1f}, r={float(cv.get("r", 18520)):.0f}, t={float(cv.get("t", 0)):.0f}'
 
 
 def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "",
