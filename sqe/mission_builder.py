@@ -1344,7 +1344,17 @@ class MissionBuilder:
                 act_s = max(0, act_raw)
                 assign_times(wps, float(act_raw), push_s)
                 if act_raw < 0:                              # its schedule began before the mission did (an earlier package folded in): it is already underway
-                    wps = in_progress(wps, (base.x, base.y))
+                    # v0.41.23: its time on station counts: the points after the station come that much later, and a flight still within its
+                    # hold starts on its station (it was placed as if it never loitered: past its station, already on its way home)
+                    leave_ = {}
+                    si_ = next((i for i, w in enumerate(wps) if w.action in ("TARCAP", "ESCORT", "SWEEPSTN") and w.orbit), None)
+                    if si_ is not None:
+                        lv_ = self._hold_end(wps[si_], tot_s)
+                        dw_ = max(0, lv_ - wps[si_].eta_s)
+                        for w in wps[si_ + 1:]:
+                            w.eta_s += dw_
+                        leave_[si_] = lv_
+                    wps = in_progress(wps, (base.x, base.y), leave_)
                     if wps is None:                          # already back on the ground
                         return None, None
                     past_push = not any(w.name == "PUSH" for w in wps)
@@ -1408,15 +1418,7 @@ class MissionBuilder:
             if lp_ is not None:
                 self._launch_pts.setdefault(package.id, []).append((lp_.x, lp_.y))
         stw = next((w for w in wps if w.action in ("TARCAP", "ESCORT", "SWEEPSTN") and w.orbit), None)
-        hold_end = None
-        if stw is not None:                 # TARCAP / sweep: their time on station; escort: until the last ground-attack flight is off target
-            t_end = (tot_s if tot_s is not None else stw.eta_s + 600)
-            if stw.action == "SWEEPSTN":
-                hold_end = int(stw.eta_s + TARCAP_MIN * 60)
-            elif stw.action == "TARCAP":
-                hold_end = int(max(stw.eta_s + TARCAP_MIN * 60 // 2, t_end + TARCAP_AFTER_TOT_S))
-            else:
-                hold_end = int(max(stw.eta_s + 120, t_end + ESCORT_AFTER_TOT_S))
+        hold_end = self._hold_end(stw, tot_s) if stw is not None else None
         if f.tag:
             self._limit_engage(g, self.o.friendly_cap_engage_nm, None, self._clear_zone(cap_zone, package))
             # v0.41.14: support CAP snipes (maximum range: the bandits turn defensive before they reach what it guards) and goes home when its
@@ -1428,6 +1430,7 @@ class MissionBuilder:
             # no chasing. A sweep engages inside a circle round its station (25 nm for the long-range shooters, 15 for the rest). A TARCAP or
             # escort covers the package: the circle is round the package's launch points (HARM / JSOW points, or the IP), COVER_ZONE_NM, and
             # always takes in its own station. Until the hold ends.
+            back_ = bearing(stw.x, stw.y, base.x, base.y)
             if stw.action == "SWEEPSTN" or not self._launch_pts.get(package.id):
                 # v0.41.10: a sweep engages within 25 nm whatever it flies (the v0.41.8 F-16 sweep, 15 nm, never fired while MiGs went past it)
                 zone_ = (stw.x, stw.y, A2A_ZONE_NM[True] if stw.action == "SWEEPSTN" else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A])
@@ -1437,10 +1440,15 @@ class MissionBuilder:
                     d10_ = min([dist(stw.x, stw.y, a.x, a.y) / NM for a in st.assets.values()
                                 if a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.25] + [999.0])
                     zone_ = (zone_[0], zone_[1], max(8.0, min(zone_[2], d10_ - SA10_REACH_NM)))
+                # v0.41.23: moved, not only shrunk: the circle's centre may shift (toward home or to either side) to keep its full size clear of
+                # SAMs, as long as it still takes in the station
+                zone_ = self._cover_circle([(stw.x, stw.y)], (stw.x, stw.y), package, zone_[2], back_)
             else:
                 lp_ = self._launch_pts[package.id]
                 cx_, cy_ = sum(p_[0] for p_ in lp_) / len(lp_), sum(p_[1] for p_ in lp_) / len(lp_)
-                zone_ = (cx_, cy_, max(COVER_ZONE_NM, dist(cx_, cy_, stw.x, stw.y) / NM + 5))
+                # v0.41.23: the TARCAP's circle covers the package's launch points and its own station, at COVER_ZONE_NM at least, placed where
+                # that circle is clear of every SAM the package is not sent against (v0.41.22 only shrank it: 44% trimmed, 9% down to 8 nm)
+                zone_ = self._cover_circle(list(lp_) + [(stw.x, stw.y)], (cx_, cy_), package, COVER_ZONE_NM, bearing(cx_, cy_, stw.x, stw.y))
             zct_ = self._limit_engage(g, 0, hold_end, self._clear_zone(zone_, package))
             hold_ = None
             if hold_end is not None:
@@ -1455,11 +1463,22 @@ class MissionBuilder:
                 # chasing a MiG north under the moving 20 nm circle ended up over Gudauta and Sochi
                 hcx_, hcy_ = (stw.x + base.x) / 2, (stw.y + base.y) / 2
                 hr_ = dist(stw.x, stw.y, base.x, base.y) / 2 + HOMEWARD_ENGAGE_NM * NM
-                hr_ = self._clear_zone((hcx_, hcy_, hr_ / NM), package, HOMEWARD_ENGAGE_NM)[2] * NM      # v0.41.22: not over a SAM either
-                hw_ = task.ControlledTask(task.EngageTargetsInZone(mapping.Vector2(hcx_, hcy_), int(hr_), [task.Targets.All.Air]))
-                hw_.start_after_time(int(hold_end)); g.points[0].tasks.insert(1, hw_)
-                if hold_ is not None:
-                    hold_["starts"].append(hw_)
+                circles_ = [(hcx_, hcy_, hr_ / NM)]
+                if self._room(hcx_, hcy_, package) < hr_ / NM - 0.5:
+                    # v0.41.23: one big circle would reach a SAM (v0.41.22 cut 136 of 320 short, 60 down to 20 nm): up to three smaller circles
+                    # along the way home instead, each HOMEWARD_ENGAGE_NM where it can be, each clear of SAMs (moved toward home if need be)
+                    leg_nm_ = dist(stw.x, stw.y, base.x, base.y) / NM
+                    n_ = max(2, min(3, math.ceil(leg_nm_ / (2 * HOMEWARD_ENGAGE_NM)) + 1))
+                    hb_ = bearing(stw.x, stw.y, base.x, base.y)
+                    circles_ = []
+                    for k_ in range(n_):
+                        px_, py_ = offset(stw.x, stw.y, hb_, leg_nm_ * k_ / (n_ - 1) * NM)
+                        circles_.append(self._cover_circle([(px_, py_)], (px_, py_), package, HOMEWARD_ENGAGE_NM, hb_))
+                for k_, (cx2_, cy2_, cr_) in enumerate(circles_):
+                    hw_ = task.ControlledTask(task.EngageTargetsInZone(mapping.Vector2(cx2_, cy2_), int(cr_ * NM), [task.Targets.All.Air]))
+                    hw_.start_after_time(int(hold_end)); g.points[0].tasks.insert(1 + k_, hw_)
+                    if hold_ is not None:
+                        hold_["starts"].append(hw_)
             rtb_a = task.OptRTBOnOutOfAmmo(); rtb_a.params["action"]["params"]["value"] = AAM_WEAPONS
             if stw.action != "SWEEPSTN":    # (a sweep gets it below): out of air-to-air missiles, the homeward fight is over
                 g.points[0].tasks.append(rtb_a)
@@ -2311,6 +2330,43 @@ class MissionBuilder:
         for sx, sy, snm in self._zone_sams(package):
             r = min(r, dist(x, y, sx, sy) / NM - snm)
         return (x, y, max(floor_nm, r))
+
+    @staticmethod
+    def _hold_end(stw, tot_s) -> int:
+        """TARCAP / sweep: their time on station; escort: until the last ground-attack flight is off target."""
+        t_end = (tot_s if tot_s is not None else stw.eta_s + 600)
+        if stw.action == "SWEEPSTN":
+            return int(stw.eta_s + TARCAP_MIN * 60)
+        if stw.action == "TARCAP":
+            return int(max(stw.eta_s + TARCAP_MIN * 60 // 2, t_end + TARCAP_AFTER_TOT_S))
+        return int(max(stw.eta_s + 120, t_end + ESCORT_AFTER_TOT_S))
+
+    def _room(self, x, y, package) -> float:
+        """v0.41.23: how far (nm) a circle centred here can reach before it touches a SAM the package is not sent against."""
+        return min([dist(x, y, sx, sy) / NM - snm for sx, sy, snm in self._zone_sams(package)] + [999.0])
+
+    COVER_SHIFTS = (0, 4, 8, 12, 16, 20, 24)                 # v0.41.23: nm the centre may move, toward our side first, then sideways
+    COVER_TURNS = (0, 30, -30, 60, -60, 90, -90)
+
+    def _cover_circle(self, pts, c0, package, want_nm, back_brg, floor_nm: float = 8.0):
+        """v0.41.23: a fight circle (x, y, radius nm) that takes in every point in `pts`, at want_nm at least, clear of every SAM the package is
+        not sent against. The centre starts at c0 and moves up to 24 nm, toward back_brg first (our side), then up to 90 degrees off it, nearest
+        first. No position covers everything: the one that covers the most points (the first ones first: launch points before the station) with
+        the most room. Never smaller than floor_nm."""
+        best = None
+        for sh in self.COVER_SHIFTS:
+            for tn in (self.COVER_TURNS if sh else (0,)):
+                cx, cy = offset(c0[0], c0[1], back_brg + tn, sh * NM) if sh else c0
+                room = self._room(cx, cy, package)
+                need = max(dist(cx, cy, px, py) / NM for px, py in pts) + 2
+                r = max(want_nm, need)
+                if room >= r:
+                    return (cx, cy, r)
+                cov = [dist(cx, cy, px, py) / NM + 2 <= room for px, py in pts]
+                score = (sum(cov), tuple(cov), room)
+                if best is None or score > best[0]:
+                    best = (score, (cx, cy, max(floor_nm, min(r, room))))
+        return best[1]
 
     def _sweep_station(self, so, tx, ty, home_xy, long_range=False):
         """v0.41.13: a Fighter Sweep's station sits INSIDE the nearest enemy field's scramble circle (5 nm in), so the alert pairs come up into the

@@ -1,3 +1,13 @@
+## v0.41.23
+
+Fight circles moved instead of shrunk, and preloaded flights placed right.
+
+* **TARCAP, sweep and escort circles:** instead of only shrinking round a fixed centre, the circle's centre moves (up to 24 nm, toward our side first, then up to 90 degrees off) to where a full-size circle is clear of every SAM the package isn't sent against. A TARCAP's circle covers the package's launch points and its own station, 20 nm at least. Measured over 12 campaigns: 94% of these circles are now full size (v0.41.22: a typical one lost a quarter of its reach, about 1 in 12 was down to 8 nm); 2% are still at 8 nm.
+* **Homeward fight:** when the one circle over the way home would reach a SAM (it did in 136 of 320), it's split into two or three smaller circles along the way home, each clear of SAMs.
+* **Preloaded flights:** a flight from an earlier package already airborne at mission start is placed counting its time on station. One still within its hold starts on its station with the rest of its hold, instead of past it on its way home.
+* Compiled Python cache files are no longer tracked in the repo.
+* Smoke test: a preloaded flight within its hold starts on its station.
+
 ## v0.41.22
 
 All blue flights stay away from SAMs they aren't sent against. A scan of about 30 sorties (some 700 AI flights) found fighters chasing bandits over SA-2s and SA-11s, JSOW flights launching 20 nm from a neighbouring SA-2, and support CAPs flying home over one.

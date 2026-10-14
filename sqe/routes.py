@@ -315,7 +315,7 @@ def terrain_clear(wps: list[Wpt]) -> int:
     return n
 
 
-def in_progress(wps: list[Wpt], home: tuple) -> list[Wpt] | None:
+def in_progress(wps: list[Wpt], home: tuple, leave: dict | None = None) -> list[Wpt] | None:
     """A flight whose schedule started BEFORE the mission did. `wps` already carries absolute times (assign_times, first point at a negative time).
     Returns the route as it stands at mission time 0: a SPAWN point where the flight is by then (interpolated along its leg, or at the hold point
     if it is still holding) followed by the points it still has to fly. None if it is already back on the ground."""
@@ -329,9 +329,10 @@ def in_progress(wps: list[Wpt], home: tuple) -> list[Wpt] | None:
     for i in range(len(wps)):
         a, b = pts[i], pts[i + 1]
         ts = a.eta_s
-        if a.action == "HOLD":
-            ts = b.eta_s - leg_seconds(a, b)                       # when it leaves the hold
-            if a.eta_s <= 0 < ts:                                  # still orbiting at the marshal point
+        if a.action == "HOLD" or (leave and i in leave):
+            # when it leaves the hold (the marshal point) or, v0.41.23, its station (the caller's leave times)
+            ts = leave[i] if (leave and i in leave) else b.eta_s - leg_seconds(a, b)
+            if a.eta_s <= 0 < ts:                                  # still orbiting there
                 return [Wpt("SPAWN", a.x, a.y, max(a.alt_ft, _floor_ft(a.x, a.y)) if a.rad else a.alt_ft, a.speed_kts)] + list(wps[i:])
         te = b.eta_s
         if ts <= 0 < te:

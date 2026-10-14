@@ -2004,6 +2004,15 @@ def main():
                         assert d_ >= _av22[a.variant] - 4, ("an AI route stays out of SAMs it is not sent against", g_["name"], a.variant, round(d_), pts_[i_].get("name"), pts_[i_ + 1].get("name"))
                 _nf22 += 1
     print(f"[sam clear] {_nf22} blue AI flights: routes outside every SAM they are not sent against; fight circles trimmed to match")
+    # v0.41.23: a preloaded flight still within its time on station starts on its station, not past it
+    from sqe.routes import Wpt as _W23, in_progress as _ip23
+    _mk23 = lambda: [_W23("PUSH", 0, 0, 20000, 400, eta_s=-900), _W23("TGT", 100000, 0, 20000, 350, "", "TARCAP", eta_s=-300, orbit=True),
+                     _W23("EGR", 100000, 80000, 20000, 400, eta_s=100)]
+    _p23a = _ip23(_mk23(), (0, 0))
+    assert _p23a and _p23a[1].name == "EGR", "without its station time it is placed past the station (the old behaviour)"
+    _p23b = _ip23(_mk23(), (0, 0), {1: 1500})
+    assert _p23b and _p23b[0].name == "SPAWN" and (round(_p23b[0].x), round(_p23b[0].y)) == (100000, 0) and _p23b[1].name == "TGT", "on station until it leaves"
+    print("[preloaded] a flight still within its hold starts on its station")
     print("SMOKE TEST PASSED")
 
 
