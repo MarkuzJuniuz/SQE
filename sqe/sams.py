@@ -7,6 +7,10 @@ Red:
 * A mobile site that has been hurt (SA-6, SA-11, SA-8, SA-15, SA-19) can pack up and move (SAM_SCOOT chance a night by level): a few nm, never
   further than MAX_DRIFT_NM from where it started, at most MAX_MOVES times. Its dug-in garrison, if any, goes with it. Old positions in an old
   tasking order are simply stale: the next day's order has the new one.
+* A badly hurt long-range site (RETREAT_HEALTH or less) can pull back from the front to recover: overnight, with a chance that grows the worse it
+  is hurt and falls with Red's supply, the site and its dug-in garrison move RETREAT_NM further from our nearest airfield. It comes back to its
+  old position once it is repaired to RETURN_HEALTH (after RETURN_MIN_DAYS at least). Its ring leaves the contested ground while it is away, but it is
+  still on the map and can be hit where it sits.
 Blue:
 * Airfield air-defence strength repairs by supply (0.10 a day at full supply, about half that with every fuel farm and depot gone), a fallen field
   does not repair until it is retaken, and a well-defended field lends a battery to the weakest one.
@@ -26,6 +30,10 @@ HURT = 0.8                    # health at or below this is "hurt" enough to move
 MAX_MOVES = 2
 MAX_DRIFT_NM = 10.0
 STEP_NM = (3.0, 6.0)
+RETREAT_HEALTH = 0.35         # a long-range site at or below this health may pull back to recover
+RETREAT_NM = (35.0, 55.0)
+RETURN_HEALTH = 0.65
+RETURN_MIN_DAYS = 2
 BLUE_REPAIR = 0.10
 LEND_FROM, LEND_TO, LEND_AMOUNT = 0.80, 0.50, 0.05
 
@@ -110,6 +118,62 @@ def relocate(state, d, rng: random.Random) -> list:
     return lines
 
 
+def _long_range(state, a) -> bool:
+    from . import threatmap as tm
+    return (a.kind == AssetKind.SAM and not a.id.startswith("fsam_") and a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10)
+
+
+def _shift(state, a, dx: float, dy: float) -> None:
+    a.x, a.y = a.x + dx, a.y + dy
+    for g in state.assets.values():                                     # the dug-in garrison goes with it
+        if g.guards == a.id:
+            g.x, g.y = g.x + dx, g.y + dy
+
+
+def retreat(state, d, rng: random.Random) -> list:
+    """A badly hurt long-range site pulls back to recover; a recovered one returns. Returns log lines."""
+    from . import ground, seacheck
+    r = _rec(state)
+    r.setdefault("pulled", {})
+    lines = []
+    for aid, rec in sorted(r["pulled"].items()):                        # first, the ones that come back
+        a = state.assets.get(aid)
+        if a is None or a.destroyed:
+            r["pulled"].pop(aid, None)                                  # destroyed where it sat: the rebuild rule takes it from here
+            continue
+        if a.health >= RETURN_HEALTH and state.day - rec["day"] >= RETURN_MIN_DAYS and rng.random() < 0.5:
+            hx, hy = rec["home"]
+            _shift(state, a, hx - a.x, hy - a.y)
+            r["pulled"].pop(aid, None)
+            lines.append(f"{a.name} is back in position")
+    fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
+    if not fields:
+        return lines
+    sup = ground.supply(state, "red") if ground.active(state) else 0.85
+    scale = float(getattr(d, "sam_retreat", 1.0))
+    for a in sorted((x for x in state.assets.values() if _long_range(state, x)), key=lambda x: x.id):
+        if a.destroyed or a.id in r["pulled"] or a.health > RETREAT_HEALTH:
+            continue
+        p = min(0.8, 0.30 + (RETREAT_HEALTH - a.health) * 1.5) * (0.6 + 0.4 * sup) * scale
+        if rng.random() >= p:
+            continue
+        nb = min(fields, key=lambda b: math.hypot(b.x - a.x, b.y - a.y))
+        away = math.atan2(a.y - nb.y, a.x - nb.x)
+        step = rng.uniform(*RETREAT_NM) * NM
+        for da in (0, 25, -25, 50, -50):
+            ang = away + math.radians(da)
+            nx, ny = seacheck.snap_to_land(a.x + step * math.cos(ang), a.y + step * math.sin(ang))
+            if math.hypot(nx - a.x, ny - a.y) >= 0.6 * step:
+                break
+        else:
+            continue
+        r["pulled"][a.id] = {"home": [a.x, a.y], "day": state.day}
+        moved = math.hypot(nx - a.x, ny - a.y) / NM
+        _shift(state, a, nx - a.x, ny - a.y)
+        lines.append(f"{a.name} ({a.health:.0%} left) pulled back about {moved:.0f} nm from the front to recover")
+    return lines
+
+
 def blue_defence(state, d) -> list:
     """Airfield defences repair by supply; a fallen field does not, and a strong field lends a battery to the weakest."""
     from . import ground
@@ -128,4 +192,4 @@ def blue_defence(state, d) -> list:
 
 
 def night(state, d, rng: random.Random) -> list:
-    return rebuild(state, d, rng) + relocate(state, d, rng) + blue_defence(state, d)
+    return rebuild(state, d, rng) + relocate(state, d, rng) + retreat(state, d, rng) + blue_defence(state, d)

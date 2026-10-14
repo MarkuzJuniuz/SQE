@@ -72,6 +72,10 @@ class AppSettings:
     merge_max_units: int = 250            # a merged mission is trimmed until it holds no more than this many units
     emergencies: bool = True              # an emergency (raid or troops in contact) can come up when you click Fly; announced and surprise raids happen either way
     reactive: bool = True                 # enemy reinforcements and blue alert pairs can launch during a sortie
+    ai_land_carrier: str = "always"       # v0.41.18: AI flights going home to a carrier: "always" recovered short of it | "home" only at your deck | "never" land
+    ai_land_field: str = "never"          # v0.41.18: the same for airfields
+    splash_damage: bool = True            # extra blast damage near bomb / missile impacts (mission hook); v0.41.13: on by default
+    ecm_script: bool = False              # SQE's own jamming model in the mission hook; off = DCS's own ECM, used by the AI when locked
     carcasses: bool = True                # burnt-out wrecks at damaged and destroyed ground sites near your route
     carcass_weight_pct: int = 25          # one wreck counts this % of a live unit toward the unit limit
     unit_cap_v2: bool = False             # the old default (150) has been moved to the new one (250) once

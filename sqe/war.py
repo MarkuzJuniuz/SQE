@@ -5,14 +5,63 @@ import math
 import random
 from . import threatmap as tm
 from . import ground, theatres
-from . import raids, sams
+from . import raids, sams, ecm, airwings
 from .raids import hit as raids_hit
 from .difficulty import Difficulty
-from .models import Objective, ObjectiveType, AssetKind, Role
+from .models import SEAD_AIMS, Objective, ObjectiveType, AssetKind, Role
 from .packages import Package
 from .state import CampaignState
 
 ROLE_WEIGHT = {Role.STRIKE: 1.0, Role.SEAD: 0.9, Role.ESCORT: 0.6, Role.SWEEP: 0.7, Role.CAP: 0.6, Role.CAS: 1.0}
+
+
+def _suppressor(f, pkg=None) -> bool:
+    """A flight that works on the radars: a SEAD flight. A JSOW flight is the DEAD strike of a Standoff DEAD package (radars, launchers and
+    Tors); in any other package (older saves: the SEAD package's JSOW slingers) it works on the radars."""
+    if getattr(f, "kit", "") == "JSOW":
+        return pkg is None or pkg.objective.aim != "STANDOFF"
+    return f.role == Role.SEAD
+
+
+GATE_VARIANTS = ("SA-2", "SA-3", "SA-6", "SA-11", "SA-10")    # v0.41.19: medium / long-range SAMs: they get a Standoff DEAD, and they gate strikes
+
+
+def long_range_site(state, site) -> bool:
+    """A site that gets a Standoff DEAD package (HARMs and JSOWs), not the SEAD then Close DEAD pair. v0.41.19: every medium / long-range site
+    (GATE_VARIANTS): a Close DEAD sends GBU jets over the site, and a radar or launcher that survives the SEAD meets them close in (the Gudauta
+    SA-6 in the v0.41.14 run). Before: only a site that is, or sits under, a live SA-10."""
+    import math
+    from . import threatmap as tm
+    if site.variant in GATE_VARIANTS and not site.destroyed:
+        return True
+    live = lambda a: a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not a.suppressed       # a suppressed SA-10 has no radars to shoot with
+    return live(site) or any(live(a) and a.id != site.id and math.hypot(a.x - site.x, a.y - site.y) <= tm.UMBRELLA_KM * 1000 for a in state.assets.values())
+
+
+def covering_sams(state, a) -> list:
+    """v0.41.19: the strike gate. Live medium / long-range SAM sites (GATE_VARIANTS, its own cluster included) whose reach covers the target and
+    that are not suppressed. While any is up, a strike on the target is not planned; the site gets a DEAD first (the SAM belt is rolled back,
+    then the targets behind it). The v0.41.14 fuel-farm strike went in under a live SA-6 and lost all four jets."""
+    from . import threatmap as tm
+    out = []
+    for x in state.assets.values():
+        if x.kind != AssetKind.SAM or x.destroyed or x.health <= 0.25 or getattr(x, "suppressed", False) or x.variant not in GATE_VARIANTS:
+            continue
+        if ((x.x - a.x) ** 2 + (x.y - a.y) ** 2) ** 0.5 <= GATE_REACH_NM.get(x.variant, tm.RANGE_NM.get(x.variant, 0)) * 1852:
+            out.append(x)
+    return out
+
+
+GATE_REACH_NM = {"SA-10": 35}    # v0.41.20: the SA-10's measured reach (54-57 km in the runs), not the 48 nm ring table, as everywhere else since v0.41.14
+
+
+ESCORTABLE = ("SA-2", "SA-3", "SA-6")       # v0.41.20: a HARM escort can keep these quiet over a CAS target; an SA-11 / SA-10 needs a DEAD first
+
+
+def cas_cover(state, a) -> tuple:
+    """v0.41.20: (gate SAMs covering a CAS target, the ones among them a SEAD escort cannot handle). `a` needs only x and y."""
+    cov = covering_sams(state, a)
+    return cov, [x for x in cov if x.variant not in ESCORTABLE]
 
 
 NM = 1852.0
@@ -60,7 +109,7 @@ class ObjectivePlanner:
             defenders = [x for x in a.defended_by if alive(x)]
             if a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT):
                 pr = a.value * a.health / (1 + 0.5 * len(defenders))
-                cand.append((pr, Objective("", ObjectiveType.STRIKE, a.id, pr, f"Strike {a.name}"), self._blockers(state, a), locked))
+                cand.append((pr, Objective("", ObjectiveType.STRIKE, a.id, pr, f"Strike {a.name}"), self._blockers(state, a) + covering_sams(state, a), locked))
             elif a.kind == AssetKind.SAM and a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10:      # short-range SAMs are CAS's problem, not a SEAD/DEAD package's
                 covered = sum(x.value for x in state.assets.values() if a.id in x.defended_by and not x.destroyed) / 3.0
                 pr = a.value * a.health + covered
@@ -81,13 +130,21 @@ class ObjectivePlanner:
                     pr *= 0.7 + 0.6 * zi["pressure"]                 # the harder Red is pressing, the more urgent
                     what = f"Close air support: {zi['name']} (enemy {zi['red']:.0f}, friendly {zi['blue']:.0f})"
                 bl = self._garrison_cover(state, a) if a.variant == "GARRISON" else []        # a dug-in garrison sits under its sites' umbrella: SEAD / DEAD goes first
-                cand.append((pr, Objective("", ObjectiveType.CAS, a.id, pr, what), bl, locked))
+                # v0.41.20: no needless banzai. A CAS target under a live SA-2/3/6 goes out only with a SEAD escort (aim "SEAD": packages.py
+                # requires the HARM flight or postpones the job); under a live SA-11 / SA-10 it is blocked and that site gets a DEAD first.
+                cov, hard = cas_cover(state, a)
+                bl = bl + [x for x in hard if x not in bl]
+                o_ = Objective("", ObjectiveType.CAS, a.id, pr, what)
+                if cov and not hard:
+                    o_.aim = "SEAD"
+                    o_.description += " (with a SEAD escort)"
+                cand.append((pr, o_, bl, locked))
             elif a.kind == AssetKind.AIRFIELD:
                 w = state.enemy_air_at(a.id)
                 if w and w.available > 0:
                     pr = a.value * 1.2 * (w.available / max(1, w.authorized))
                     cand.append((pr, Objective("", ObjectiveType.COUNTER_AIR, a.id, pr, f"Counter-air at {a.name} ({w.available} aircraft)"),
-                                 self._blockers(state, a), locked))
+                                 self._blockers(state, a) + covering_sams(state, a), locked))
         blocking = {x.id for c in cand for x in c[2]}                  # sites that stand in front of something else
         pool = []
         for pr, o, bl, locked in cand:
@@ -123,10 +180,39 @@ class ObjectivePlanner:
             if (s, o) not in picked and per.get(o.type, 0) < cap:
                 picked.append((s, o)); per[o.type] = per.get(o.type, 0) + 1
         picked.sort(key=lambda t: t[0], reverse=True)
+        picked = self._stage_dead(state, picked, limit)
         out = []
         for i, (_, o) in enumerate(picked, 1):
             o.id = f"obj-d{state.day}-{i}"
             out.append(o)
+        return out
+
+    def _stage_dead(self, state, picked: list, limit: int) -> list:
+        """SEAD first. Each SEAD / DEAD job becomes two packages for the same site: a SEAD package that blinds the radars, and a DEAD package that
+        goes in 25 minutes later and only if the radars are blind (see blinded_today). After SEAD_FAIL_VALVE failed days on the same site the
+        combined package is offered again. The pair counts against the day's package limit: the lowest-priority other jobs make room."""
+        out, extra = [], 0
+        for s_, o in picked:
+            if o.type == ObjectiveType.DEAD and not o.aim and long_range_site(state, state.assets[o.target_id]):
+                a = state.assets[o.target_id]
+                tail = f" ({a.health:.0%} left)" if a.health < 0.85 else ""
+                out.append((s_, Objective("", ObjectiveType.DEAD, o.target_id, o.priority, f"Standoff DEAD: destroy {a.name}{tail}", "STANDOFF")))
+            elif o.type == ObjectiveType.DEAD and not o.aim and sead_fail(state, o.target_id) < int(getattr(self.d, 'sead_valve', SEAD_FAIL_VALVE)):
+                a = state.assets[o.target_id]
+                tail = f" ({a.health:.0%} left)" if a.health < 0.85 else ""
+                out.append((s_, Objective("", ObjectiveType.DEAD, o.target_id, o.priority, f"SEAD: suppress {a.name}{tail}", "SEAD")))
+                out.append((s_, Objective("", ObjectiveType.DEAD, o.target_id, o.priority, f"Close DEAD: destroy {a.name}, once its radars are down", "DEAD")))
+                extra += 1
+            else:
+                out.append((s_, o))
+        while extra > 0 and len(out) > limit:
+            for k in range(len(out) - 1, -1, -1):
+                if out[k][1].type != ObjectiveType.DEAD:
+                    del out[k]
+                    break
+            else:
+                break
+            extra -= 1
         return out
 
 
@@ -140,6 +226,41 @@ def count_roll(rng, n: int, p: float, variance: float) -> int:
     if variance <= 0.001:
         return int(round(n * p))
     return sum(1 for _ in range(n) if rng.random() < p)
+
+
+SEAD_LEARN = 0.10             # each failed SEAD day on a site adds this to the next SEAD package's odds (the defence is being worn down and located)...
+SEAD_LEARN_MAX = 0.40         # ...up to this much
+SEAD_WEAR = 0.04              # health a failed SEAD still takes off the site
+SEAD_FAIL_VALVE = 3           # days of failed SEAD on the same site before the combined SEAD + DEAD package is offered again
+DEAD_STAGE_GAP_MIN = 10       # the DEAD package starts this long after the SEAD package of the same site (a radar hold covers the SEAD running late)
+
+
+def sead_fail(state, site: str) -> int:
+    return int(((state.raids or {}).get("sead_fail") or {}).get(site, 0))
+
+
+def note_sead(state, site: str, blinded: bool) -> None:
+    """Record a SEAD result for a site: today's verdict (the DEAD stage reads it) and the running count of failed days (the valve)."""
+    if state.raids is None:
+        state.raids = {}
+    state.raids.setdefault("sead", {})[site] = bool(blinded)
+    ff = state.raids.setdefault("sead_fail", {})
+    ff[site] = 0 if blinded else int(ff.get(site, 0)) + 1
+
+
+def sead_stage_in_plan(state, site: str) -> bool:
+    """Is there a SEAD package (not scrubbed) for this site in today's plan?"""
+    return any(p["objective"].get("type") == "DEAD" and p["objective"].get("aim") == "SEAD" and p["objective"].get("target_id") == site
+               and not (p.get("extra") or {}).get("scrub") for p in (state.plan or []))
+
+
+def blinded_today(state, site: str) -> bool:
+    """Are the site's radars out for the DEAD stage: blinded by a SEAD package that already went in, or by one that is in today's plan and has a
+    verdict of success (the dice are cast when the day is planned, so every part of the program reads the same answer)."""
+    a = state.assets.get(site)
+    if a is None:
+        return False
+    return bool(a.suppressed or (((state.raids or {}).get("sead") or {}).get(site) and sead_stage_in_plan(state, site)))
 
 
 class WarSimulator:
@@ -165,6 +286,37 @@ class WarSimulator:
         defense = sam + air
         return (strength / (strength + defense) if strength + defense else 0.0), strength, defense
 
+    def _resolve_sweep(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
+        """A Fighter Sweep fights the enemy fighters near its area; the target itself is not attacked. Kills come off the nearest wings, which
+        lowers the enemy air term (and so the losses) of the packages resolved after it."""
+        import math
+        d, rng = self.d, self.rng
+        t = state.assets[pkg.objective.target_id]
+        wings = sorted([w for w in state.enemy_air if w.available > 0 and w.base_asset_id in state.assets],
+                       key=lambda w: math.hypot(state.assets[w.base_asset_id].x - t.x, state.assets[w.base_asset_id].y - t.y))[:3]
+        strength = sum(f.count * ROLE_WEIGHT[f.role] for f in pkg.flights)
+        red = sum(w.available for w in wings) * (0.6 + 0.6 * d.iads) * 0.25
+        p = strength / (strength + red) if strength + red else 0.0
+        ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
+        lines = [f"{pkg.objective.description}: {'AIR CLEARED' if ok else 'CONTESTED'} (odds {p:.0%})"]
+        kills = (max(1, round(sum(f.count for f in pkg.flights) * 0.4 * p)) if ok else int(rng.random() < 0.5)) if wings else 0
+        for w in wings:
+            if kills <= 0:
+                break
+            k = min(w.available, kills); w.available -= k; kills -= k
+            if k:
+                lines.append(f"   {k} enemy fighters from {state.assets[w.base_asset_id].name} shot down")
+        loss_p = d.loss_rate * (0.6 if ok else 1.4) * (red / (strength + red) if strength + red else 0.0)
+        for f in pkg.flights:
+            lost = count_roll(rng, f.count, loss_p, d.variance)
+            if lost:
+                sq = state.squadrons[f.squadron_id]
+                sq.available = max(0, sq.available - lost)
+                lines.append(f"   {f.callsign} lost {lost} aircraft")
+        for ln in lines:
+            state.note(ln.strip())
+        return {"success": ok, "odds": p, "lines": lines, "objective": pkg.objective.description, "roll": {"success": ok}}
+
     def _resolve_raid(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         d, rng = self.d, self.rng
         bw = state.enemy_air_at(pkg.extra.get("bomber_wing", "")) if pkg.extra else None
@@ -175,9 +327,9 @@ class WarSimulator:
         lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'} (odds {p:.0%})"]
         if bw is not None and ok:
             k = min(bw.available, rng.randint(2, 4)); bw.available -= k
-            lines.append(f"   {k} bombers shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
+            lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
         elif bw is not None and pkg.extra.get("land"):
-            lines += raids_hit(state, pkg.objective.target_id, bw, rng)
+            lines += raids_hit(state, pkg.objective.target_id, bw, rng, None, pkg.objective.aim)
         elif bw is not None:
             bw.available = max(0, bw.available - 1)
             carriers = [s for s in state.squadrons.values() if state.bases[s.base_id].kind.value == "CARRIER"]
@@ -188,22 +340,43 @@ class WarSimulator:
             state.note(ln.strip())
         return {"success": ok, "odds": p, "lines": lines, "objective": pkg.objective.description, "roll": {"success": ok}}
 
+    def sead_p(self, state: CampaignState, pkg: Package) -> float:
+        """Odds that this package's SEAD flights blind the site's radars."""
+        t = state.assets[pkg.objective.target_id]
+        garrison = sum(g.health for g in state.assets.values() if g.guards == t.id and not g.destroyed)
+        site = ((1.0 + 0.8 * self.d.iads) * t.health + 0.4 * garrison) * (1.0 - ecm.SITE_CUT * ecm.package_cover(pkg))
+        s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in pkg.flights if _suppressor(f, pkg))        # JSOW slingers add to the overwhelm
+        if not s_sead:
+            return 0.0
+        return min(0.95, s_sead / (s_sead + site) + min(SEAD_LEARN_MAX, SEAD_LEARN * sead_fail(state, t.id)))
+
     def _resolve_dead(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         """SEAD and DEAD are two different jobs. The SEAD flight blinds the radars (the site is 'suppressed', not dead). The DEAD flight
         then goes in: against a blinded site it usually destroys it; against an active one it takes losses and rarely finishes it."""
         d, rng = self.d, self.rng
         t = state.assets[pkg.objective.target_id]
-        sead = [f for f in pkg.flights if f.role == Role.SEAD]
-        dead = [f for f in pkg.flights if f.role == Role.STRIKE]
+        sead = [f for f in pkg.flights if _suppressor(f, pkg) and f.count > 0]
+        dead = [f for f in pkg.flights if f.role == Role.STRIKE and not _suppressor(f, pkg) and f.count > 0]
         garrison = sum(g.health for g in state.assets.values() if g.guards == t.id and not g.destroyed)
         site = (1.0 + 0.8 * d.iads) * t.health + 0.4 * garrison
         s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in sead)
-        p_sead = s_sead / (s_sead + site) if s_sead else 0.0
-        blinded = force["blinded"] if force and "blinded" in force else chance(rng, p_sead, d.variance)
+        p_sead = self.sead_p(state, pkg)
+        if pkg.objective.aim == "DEAD" and not blinded_today(state, t.id) and not (force and force.get("blinded")):
+            line = f"{pkg.objective.description}: HELD - the radars were not suppressed, so the DEAD flight did not go in"
+            state.note(line)
+            return {"success": False, "held": True, "odds": 0.0, "lines": [line], "objective": pkg.objective.description, "roll": {"success": False, "held": True}}
+        if sead:
+            verdict = ((state.raids or {}).get("sead") or {}).get(t.id) if pkg.objective.aim in SEAD_AIMS else None
+            blinded = force["blinded"] if force and "blinded" in force else (bool(verdict) if verdict is not None else chance(rng, p_sead, d.variance))
+            note_sead(state, t.id, blinded)
+        else:
+            blinded = bool(t.suppressed) or blinded_today(state, t.id)               # the DEAD stage: the SEAD package already went in
         lines = [f"{pkg.objective.description}:"]
         if sead:
-            lines.append(f"   SEAD: {'radars blinded' if blinded else 'radars still emitting'} (odds {p_sead:.0%})")
-        if blinded:
+            lines.append(f"   SEAD: {'radars suppressed' if blinded else 'radars still emitting'} (odds {p_sead:.0%})")
+        if sead and not blinded:
+            t.health = max(0.05, t.health - SEAD_WEAR)      # a failed attempt still wears the site down
+        if blinded and sead:
             t.suppressed = True
             t.health = max(0.05, t.health - 0.2)            # the radars and a launcher or two; the battery survives
         s_dead = sum(f.count * ROLE_WEIGHT[Role.STRIKE] for f in dead)
@@ -225,11 +398,13 @@ class WarSimulator:
             if f.tag:
                 continue
             exposure = 1.0
-            if f.role == Role.STRIKE:
+            if getattr(f, "kit", "") == "JSOW" and not _suppressor(f, pkg):
+                exposure = 0.6 if blinded else 1.0          # Standoff DEAD: released outside the long-range SAM's reach
+            elif f.role == Role.STRIKE and not _suppressor(f, pkg):
                 exposure = 0.5 if blinded else 1.8          # an unsuppressed site shoots at the DEAD flight
-            elif f.role == Role.SEAD:
+            elif _suppressor(f, pkg):
                 exposure = 1.0 if blinded else 1.3
-            lp = min(0.9, loss_base * exposure * (defense / (s_dead + s_sead + defense) if (s_dead + s_sead + defense) else 0.0))
+            lp = min(0.9, loss_base * exposure * (1.0 - ecm.LOSS_CUT * ecm.package_cover(pkg)) * (defense / (s_dead + s_sead + defense) if (s_dead + s_sead + defense) else 0.0))
             n_lost = count_roll(rng, f.count, lp, d.variance)
             if n_lost:
                 sq = state.squadrons[f.squadron_id]
@@ -248,7 +423,9 @@ class WarSimulator:
                     "objective": pkg.objective.description, "roll": {"success": False}}
         if pkg.objective.type == ObjectiveType.FLEET_DEFENSE:
             return self._resolve_raid(state, pkg, force)
-        if pkg.objective.type == ObjectiveType.DEAD and any(f.role == Role.STRIKE for f in pkg.flights):
+        if pkg.objective.type == ObjectiveType.COUNTER_AIR and pkg.objective.aim == "SWEEP":
+            return self._resolve_sweep(state, pkg, force)
+        if pkg.objective.type == ObjectiveType.DEAD and (any(f.role == Role.STRIKE and not _suppressor(f, pkg) for f in pkg.flights) or pkg.objective.aim in SEAD_AIMS):
             return self._resolve_dead(state, pkg, force)
         p, strength, defense = self.odds(state, pkg)
         success = force["success"] if force and "success" in force else chance(rng, p, d.variance)
@@ -295,14 +472,16 @@ class WarSimulator:
         d = self.d
         sams.track(state)                                           # the day each SAM site went down (it can be rebuilt later)
         for sq in state.squadrons.values():
-            if sq.available < sq.authorized:
+            if sq.available < sq.authorized and not sq.reserve:
                 sq.available = min(sq.authorized, sq.available + max(1, round(sq.authorized * d.friendly_replenish)))
         for w in state.enemy_air:
             if state.assets[w.base_asset_id].destroyed:             # a cratered field cannot operate or rearm: the survivors scatter or are lost
                 w.available = int(w.available * 0.75)
                 continue
-            if w.available < w.authorized:
+            if w.available < w.authorized and not w.reserve:
                 w.available = min(w.authorized, w.available + max(1, round(w.authorized * d.enemy_replenish)))
+        for ln in airwings.step(state, d, self.rng):
+            state.note("Overnight: " + ln)
         for a in state.assets.values():
             if 0 < a.health < 1.0:
                 a.health = min(1.0, a.health + (d.sam_repair if a.kind == AssetKind.SAM else d.asset_repair))
@@ -310,7 +489,7 @@ class WarSimulator:
             a.suppressed = False                                    # blinded radars come back on overnight
         for ln in self.counterstrike(state):
             state.note("Overnight: " + ln)
-        for ln in sams.rebuild(state, d, self.rng) + sams.relocate(state, d, self.rng):
+        for ln in sams.rebuild(state, d, self.rng) + sams.relocate(state, d, self.rng) + sams.retreat(state, d, self.rng):
             state.note("Overnight: " + ln)
         for ln in raids.overnight(state, d, self.rng):               # surprise raids nobody flew: alert aircraft against the bombers
             state.note("Overnight: " + ln)
@@ -318,6 +497,8 @@ class WarSimulator:
             for ln in ground.resolve_day(state, d, self.rng):
                 state.note("Overnight: " + ln)
             ground.repair_blue(state, d)
+            for ln in ground.rebuild_blue(state, d, self.rng):
+                state.note("Overnight: " + ln)
             for bid in state.ground.get("fallen", []):
                 if bid in state.bases:
                     state.bases[bid].defense = 0.0
@@ -332,8 +513,8 @@ class WarSimulator:
 
 
 def totals(state: CampaignState) -> dict:
-    fa = sum(s.available for s in state.squadrons.values()); fz = sum(s.authorized for s in state.squadrons.values()) or 1
-    ea = sum(w.available for w in state.enemy_air); ez = sum(w.authorized for w in state.enemy_air) or 1
+    fa = sum(s.available + s.reserve for s in state.squadrons.values()); fz = sum(s.authorized for s in state.squadrons.values()) or 1
+    ea = sum(w.available + w.reserve for w in state.enemy_air); ez = sum(w.authorized for w in state.enemy_air) or 1
     ad = [a for a in state.assets.values() if a.kind in (AssetKind.SAM, AssetKind.EWR)]
     iads = sum(a.health for a in ad) / len(ad) if ad else 0.0
     arm = [a for a in state.assets.values() if a.kind == AssetKind.ARMOR and a.variant != "GARRISON"]

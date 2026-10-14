@@ -95,6 +95,7 @@ def build_blue_assets(state, rng, ap=None) -> None:
         ang = int(hashlib.md5(b.id.encode()).hexdigest()[:4], 16) % 360
         x, y = seacheck.snap_to_land(b.x + 2200 * math.cos(math.radians(ang)), b.y + 2200 * math.sin(math.radians(ang)))
         ba[f"bfuel_{b.id}"] = EnemyAsset(f"bfuel_{b.id}", f"{b.name.replace(' AB', '')} fuel farm", AssetKind.FUEL, x, y, 1.0, 5, [], None, "", 1)
+        ba[f"bgar_{b.id}"] = _blue_garrison(b)
     g = state.ground
     if g:
         c = g["centers"][min(len(g["centers"]) - 1, max(0, g["legs"][0] - 1))]
@@ -102,6 +103,71 @@ def build_blue_assets(state, rng, ap=None) -> None:
         x, y = seacheck.snap_to_land(*_lerp(c, far, 0.6))
         ba["bdepot_fwd"] = EnemyAsset("bdepot_fwd", "Forward supply depot", AssetKind.DEPOT, x, y, 1.0, 6, [], None, "", 1)
     state.blue_assets = ba
+
+
+def _blue_garrison(b) -> EnemyAsset:
+    """A friendly dug-in garrison next to an airfield: the same record as the enemy's, so it follows the same rules (raids, repair, rebuild)."""
+    from . import seacheck
+    import hashlib
+    ang = (int(hashlib.md5(b.id.encode()).hexdigest()[:4], 16) + 137) % 360
+    x, y = seacheck.snap_to_land(b.x + 3200 * math.cos(math.radians(ang)), b.y + 3200 * math.sin(math.radians(ang)))
+    return EnemyAsset(f"bgar_{b.id}", f"{b.name.replace(' AB', '')} garrison", AssetKind.ARMOR, x, y, 1.0, 5, [], None, "GARRISON", 1, b.id)
+
+
+def ensure_blue_garrisons(state) -> bool:
+    """An older campaign has no friendly garrisons: give every airfield one. Returns True when it added any."""
+    if not isinstance(getattr(state, "blue_assets", None), dict):
+        return False
+    added = False
+    for b in state.bases.values():
+        if b.kind.value == "AIRFIELD" and f"bgar_{b.id}" not in state.blue_assets:
+            state.blue_assets[f"bgar_{b.id}"] = _blue_garrison(b)
+            added = True
+    return added
+
+
+ROAD_SNAP_M = 3000.0                     # a column or supply site moves onto a road if one is this close
+
+
+def snap_roads(state) -> int:
+    """Once, as soon as a road scan exists: front-line columns, fuel farms and depots (both sides) move onto the nearest road point (<= ROAD_SNAP_M,
+    and still on land); a column's air defence and anything guarding a moved site moves with it. Garrisons stay off the road, dug in. Returns how many moved."""
+    from . import roads, seacheck
+    g = getattr(state, "ground", None)
+    if not g or g.get("roads") or not roads.available():
+        return 0
+    g["roads"] = True
+    moved = 0
+    pool = list(state.assets.values()) + list((getattr(state, "blue_assets", None) or {}).values())
+    for a in pool:
+        if not (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or (a.kind == AssetKind.ARMOR and a.variant != "GARRISON")):
+            continue
+        p = roads.snap(a.x, a.y, ROAD_SNAP_M)
+        if p is None or p == (a.x, a.y) or not seacheck.site_ok(*p):
+            continue
+        dx, dy = p[0] - a.x, p[1] - a.y
+        a.x, a.y = p
+        moved += 1
+        for c in state.assets.values():                                   # followers
+            if c.guards == a.id or (a.id.startswith("armor_") and c.id == "fsam_" + a.id[6:]):
+                c.x, c.y = c.x + dx, c.y + dy
+    if moved:
+        state.note(f"{moved} columns and supply sites now sit on roads.")
+    return moved
+
+
+def rebuild_blue(state, d, rng) -> list:
+    """Overnight: a destroyed friendly supply site or garrison is replaced with a chance that follows friendly supply (the enemy's SAM sites rebuild the same way)."""
+    out = []
+    sup = supply(state, "blue")
+    fallen = set((state.ground or {}).get("fallen", []))
+    for a in sorted(state.blue_assets.values(), key=lambda a: a.id):
+        if a.health > 0.05 or (a.guards and a.guards in fallen):
+            continue
+        if rng.random() < d.blue_rebuild * sup:
+            a.health = 0.4
+            out.append(f"{a.name} was replaced")
+    return out
 
 
 def ensure(state) -> bool:

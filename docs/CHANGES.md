@@ -1,3 +1,604 @@
+## v0.41.23
+
+Fight circles moved instead of shrunk, and preloaded flights placed right.
+
+* **TARCAP, sweep and escort circles:** instead of only shrinking round a fixed centre, the circle's centre moves (up to 24 nm, toward our side first, then up to 90 degrees off) to where a full-size circle is clear of every SAM the package isn't sent against. A TARCAP's circle covers the package's launch points and its own station, 20 nm at least. Measured over 12 campaigns: 94% of these circles are now full size (v0.41.22: a typical one lost a quarter of its reach, about 1 in 12 was down to 8 nm); 2% are still at 8 nm.
+* **Homeward fight:** when the one circle over the way home would reach a SAM (it did in 136 of 320), it's split into two or three smaller circles along the way home, each clear of SAMs.
+* **Preloaded flights:** a flight from an earlier package already airborne at mission start is placed counting its time on station. One still within its hold starts on its station with the rest of its hold, instead of past it on its way home.
+* Compiled Python cache files are no longer tracked in the repo.
+* Smoke test: a preloaded flight within its hold starts on its station.
+
+## v0.41.22
+
+All blue flights stay away from SAMs they aren't sent against. A scan of about 30 sorties (some 700 AI flights) found fighters chasing bandits over SA-2s and SA-11s, JSOW flights launching 20 nm from a neighbouring SA-2, and support CAPs flying home over one.
+
+* **Fight circles:** every blue air-to-air engage circle (sweeps, TARCAPs, escorts, SEAD, support CAP, the homeward fight) ends outside the reach of every live SA-2/3/6/11/10 that isn't the package's job, never smaller than 8 nm (homeward: 20 nm). A sweep or TARCAP can still fight on its station; it no longer follows a bandit over a SAM. Fight circles reaching into a SAM's reach went from about 300 to about 80 of 700; the rest are 8 nm circles whose edge is within a few nm of an SA-2's ring.
+* **JSOW launch points:** the Standoff DEAD's JSOW flight tries approaches 30, 50, 15 and 70 degrees either side of the HARM axis and takes the first whose launch point and IP are outside every other SAM's reach. When none is, it takes the one with the most room and the package's second HARM flight also fires on the sites still in reach.
+* **Support CAP home leg** bends round SAM sites like the strike routes.
+* Smoke test: no blue AI route inside a SAM it isn't sent against.
+
+## v0.41.21
+
+* **Carrier CAP pulled in:** the F-14s orbit 12 nm from the boat (was 22) on a 10 nm leg, and engage within 30 nm of it (was 50). Their orbit and engage circle stay outside every enemy field's scramble circle (5 nm margin), so they no longer set off red's alert pairs ahead of the package. They're there to guard the boat, not to start fights.
+* Smoke test: the carrier CAP's orbit is outside every scramble circle.
+
+## v0.41.20
+
+No needless banzai: nobody flies into defences it can't survive unless the situation calls for it. Blue always; red by its doctrine for the level.
+
+* **CAS gate:** front-line and garrison CAS, and the emergency "troops in contact" event, are gated like strikes. Under a live SA-2, SA-3 or SA-6 the CAS goes out only with a SEAD flight (its HARMs on the covering sites through the CAS window); with no HARM jets free that day it waits. Under a live SA-11 or SA-10 there is no CAS: that site gets its Standoff DEAD first. Short-range SAMs and guns stay the CAS flight's problem, as before.
+* **Gate reach:** the SA-10 gates targets within its measured reach (35 nm), not the 48 nm ring table, as the CAP stations have since v0.41.14. Strikes and counter-air follow the same reach.
+* **Routes:** AI strike, SEAD and CAS routes bend round every live medium / long-range SAM that isn't their target (SA-2 26, SA-3 15, SA-6 16, SA-11 20, SA-10 35 nm), not only SA-10s.
+* **Red doctrine by level:** red fighters commit only with a quality-weighted edge (a MiG-29 or Su-27 counts 0.67 of a blue fighter, older types 0.5): Easy at any odds, Normal at even odds, Hard at 2:1. A patrol called in to a SAM site it guards holds its station instead when outgunned, unless that site is the one blue is attacking (then it fights at any odds). An outgunned red sweep near the fight stays home.
+* **Red raids** on Normal and Hard prefer softer targets: aims under a full-strength field's Patriot (40 nm) weigh half on Normal and a quarter on Hard; Hard also shies from your home field's HAWK (25 nm). Easy is unchanged.
+* Smoke test: no CAS under an SA-11/10, escorted CAS under an SA-2/3/6 flies with its HARM flight, red commit thresholds, raid weights.
+
+## v0.41.19
+
+Rolling back the SAM belt. From the v0.41.14 Gudauta fuel-farm run: a strike was planned under a live SA-6 (the planner's SAM-belt rule skipped the target's own cluster), flew low because of it and lost all four jets; and Gudauta's alert pairs never got airborne.
+
+* **Strike gate:** a strike or counter-air package is not planned while a live medium / long-range SAM (SA-2, SA-3, SA-6, SA-11, SA-10; partly destroyed sites count while above a quarter strength) covers its target, unless that SAM is suppressed. The covering site goes up the DEAD list instead. As the belt is taken down, the targets behind it open up, and with no SAM left to hide from the strikes fly at height.
+* **Standoff DEAD by default:** every DEAD on a medium / long-range site is a Standoff DEAD (HARMs plus JSOWs). No JSOW jets free that day: it is not planned, and the planner offers it again the next day (no Close DEAD fallback).
+* **Stuck alert pairs fixed:** the smoke and fire placed at earlier strikes' ruins set off an explosion at 4 s. On an airfield that killed the airbase in DCS, which then started nobody there. Airfield ruins are smoke only now.
+* Smoke test: no strike under a live gate SAM; DEADs on such sites are Standoff with their JSOW flight.
+
+## v0.41.18
+
+* **Settings: AI landings,** one for carriers and one for airfields:
+  * **Always skip:** AI flights going home there are recovered short of the base (10 nm from the boat, at their 8 nm entry point for a field), count as landed and leave the mission.
+  * **Skip at your home deck / field:** only where you land.
+  * **Land for real:** DCS landings and ATC.
+  
+  Defaults: carrier Always skip (as v0.41.17), airfields Land for real. Your wingmen are recovered too, at your home, when its type skips.
+
+## v0.41.17
+
+* **Carrier recovery without the deck queue.** An AI flight going home to the carrier is recovered at a point 10 nm from the boat: every jet still flying counts as landed (debrief and war sim) and the group leaves the mission. DCS's carrier landing queue ran an F-14 dry and stacked AI in your pattern.
+* **Your wingmen too:** once you are back within 10 nm of the boat after your TOT, your wingmen are recovered the same way, so you trap alone. Airfields are unchanged (the AI still lands there for real).
+* Briefing: a low-level profile now reads "from the LOW point, 30 nm out" (v0.41.16 moved the descent there).
+
+## v0.41.16
+
+From the v0.41.14 Gudauta fuel-farm run: the whole Venom 7 strike flight was lost. The low-level run started at the IP, 70 nm from the target (the IP sits half way out on long routes); three F-16s flamed out (the wingmen queued at the tanker behind the lead until they were dry); the lead refuelled, bombed alone 30 min after its TOT and was shot down by a live SA-6.
+
+* **The low-level leg starts 30 nm from the target:** the flight cruises to the IP at height and descends at a new LOW point. Your kneeboard shows it.
+* **Bingo fuel for your own flight too:** your AI wingmen head home on bingo instead of waiting at the tanker until they flame out.
+* **No late attacks:** an AI strike flight only drops within 10 min of its TOT; later, it flies on to its egress and home.
+
+## v0.41.15
+
+From the v0.41.14 run: fighter flights chased MiGs north toward Gudauta and Sochi after their hold (the homeward 20 nm circle moved with the jet) and died to Sochi's alert pairs; and F-16s flying Fighter Sweeps had to get close to kill anything, which drags them toward the SAMs.
+
+* **The homeward fight stays over the way home:** after the hold, a TARCAP / escort / sweep engages inside a fixed circle covering its station-to-home leg (plus 20 nm), not a circle that moves with the jet.
+* **Fighter Sweeps fly F-15Cs and F-14s only.** No long-range fighter free: no sweep that day (the packages keep their TARCAPs). You are offered a sweep only in an F-15C or F-14.
+* **Long-range sweeps stand at the edge of the scramble circle** (2 nm in, was 5), as far back as it allows, and reach in with their missiles.
+* Smoke test: sweeps are F-15C / F-14 only; the homeward circle is fixed.
+
+## v0.41.14
+
+From the v0.41.13 run (1 jet lost, 20 red aircraft down, the target at 86%): the F-14 carrier CAP never fired, orbiting 3 nm from the boat while the SM-2s took everything; the sweep chased a MiG to 10 nm of the Sukhumi SA-10 and lost Venom 9-2.
+
+* **Support CAP stations use the measured SA-10 reach.** Orbits keep 35 nm from a live SA-10 (it never fired beyond 31 nm in the runs) and 15 nm outside every other SAM ring. The ring table's 48 nm pushed the carrier CAP back onto the boat; in the test campaign it now orbits 18 nm out.
+* **The carrier CAP engages within 50 nm of the boat** (was 35), so the Tomcats shoot ahead of the SM-2s.
+* **Support CAP snipes at maximum range and goes home when out of air-to-air missiles** (it had neither setting).
+* **The sweep's engagement circle stops short of SA-10 reach,** so it lets red come out to it instead of chasing into the SA-10.
+* Settings: the splash damage hint says on by default.
+
+## v0.41.13
+
+From the v0.41.12 runs: the Batumi sweep orbited just short of SAM cover, tripped no scramble circle and met only SAM missiles; the carrier CAP's F-14s were shot at on a station 22 nm toward Sukhumi.
+
+* **The Fighter Sweep pulls red up.** Its station sits inside the nearest enemy field's scramble circle (5 nm in), so the alert pairs launch into the sweep before the strikers arrive, while staying 35 nm from every live SA-10 and 15 nm outside every other SAM ring. It searches round the circle's edge for a clear spot.
+* **The sweep holds until the first package it covers is over the target** (plus 2 min), at most 30 min longer than before; bingo fuel or no missiles still send it home. The 10 min lead stays.
+* **Support CAP stations stay out of SAM range:** carrier CAP, tanker CAP, base CAP and HAVCAP orbits stay 15 nm outside every SAM ring, stepping back toward what they guard.
+* **Defaults:** splash damage on (the ECM script stays off). A default applies to a fresh settings file; your saved settings keep your choice.
+* Smoke test: sweep station inside the scramble circle and clear of SA-10s; the new defaults.
+
+## v0.41.12
+
+* **No DEP point from a land base.** After take-off the first point is the marshal point, for you and for AI runway starts. The DEP sat 6 nm out at 8,000 ft with PUSH about a mile on at 26,000 ft: a steep climb and a turn back over the field. The two unexplained crashes 3-5 minutes after take-off were both runway starts out of Batumi. Off the carrier the DEP stays: it is the departure radial.
+* **A sweep's PUSH is ahead of its base,** 15 nm toward its station (it was behind the base), so a sweep climbs straight out instead of turning back over its field.
+* Smoke test: no DEP from a land base, sweep PUSH ahead of the base.
+
+## v0.41.11
+
+From the v0.41.10 sweep run (73 min; good SEAD on the Sukhumi cluster, both early-warning radars down): the Sukhumi SA-10 got 4 Hornets, it fired from 50-57 km; two JSOW flights bound for Gudauta passed 31 nm from it on the way; two AI jets ran out of fuel; red's patrols guarded rear-area sites.
+
+* **AI strike, SEAD and CAS routes bend around every live SA-10 that is not their target** (or the umbrella their HARMs go for), keeping 35 nm, with a turn point where a leg would pass inside.
+* **HARM launch point 35 nm** (was 30): the SA-10 engaged the HARM shooters at 31 nm. The AI already fires from 35-38 nm.
+* **JSOW flights push 2 minutes after the HARM shooters** (was together), so they reach SA-10 range once the HARMs have landed, not while they are in the air.
+* **Bingo fuel for every AI flight** (was only fighters on station). A Viper and a Tomcat ran dry in that run.
+* **The tanker serves the whole mission:** its track starts from the middle of the fields the mission's flights fly home to, not only yours.
+* **Red patrols guard front-line SAMs:** a wing can guard any SAM site within 150 nm (was 60), so the big rear wings send their patrols forward.
+* **Kill counts count real targets only:** units and static objects, not scenery flattened by the bombs.
+* Smoke test: HARM point 35 nm; a route bends around an SA-10.
+
+Investigated, not changed: a single AI jet crashing 3-5 minutes after take-off (Colt 6-4, Venom 3-4, both 4-ships out of Batumi, low, full fuel, no shooter). Needs a look at the departure in DCS.
+
+## v0.41.10
+
+From the v0.41.8 sweep run: the F-15 TARCAPs went home 5 minutes after their own package's TOT while later packages were still coming through; the F-16 sweep never fired (15 nm circle) and one jet flamed out; two F-15 wingmen collided on the way home (the second time); red's patrols sat far north and never came to their SAMs' help.
+
+* **TARCAP and escort hold until the last package over their target area is off target** (targets within 60 km), not only their own; at most 30 minutes longer.
+* **Sweeps engage within 25 nm** of their station whatever they fly (F-16s had 15).
+* **Bingo fuel:** AI fighters on station go home on bingo instead of running dry.
+* **Missiles kept for the fight:** on the way out, TARCAP, escort and sweep shoot from halfway between maximum range and the no-escape zone (fewer, surer shots); from their station on, maximum range (snipe).
+* **Red patrols guard their SAMs.** Red has its own "briefing": each patrol pair takes a station 10 nm in front of the SAM site its wing rates likeliest to be attacked (value, closeness to our fields, recent attacks, and, by level, whether red read today's targets right: 25 / 50 / 75%). When we come within 50 nm of that site, the pair is called in to fight over it.
+* **Red patrol stations** keep 45 nm from our marshal point and fields (was 120 / 80 nm, which pushed them out of the fight once the marshal moved close to the base).
+* **Base CAP over the field red is likeliest to raid** (the raid planner's own weights: nearer and softer fields first), usually the strikers' home field.
+* **Deconfliction:** AI flights cross PUSH and EGR on their own lanes (1.5 nm apart, egress 1,000 ft apart by slot) and come home through their own entry point 8 nm from the field on their own bearing and height.
+* Smoke test: staged missile ranges and bingo option, red patrols over the sites they guard.
+
+## v0.41.9
+
+From the v0.41.8 Batumi run (you on a Fighter Sweep): no tanker CAP, HAVCAP, base CAP or carrier CAP anywhere in the mission. A sweep plans no support CAP, and the packages folded into the mission had theirs dropped (support is shared), so the tanker, the AWACS and the boat flew unguarded.
+
+* **The mission's support CAP comes from all its packages, one of each kind:** a tanker CAP, a HAVCAP, a base CAP per home field and a carrier CAP per carrier. Yours first; what yours lacks comes from the first folded package that planned it. The war sim already counts those sorties in that package's plan, so no extra jets are used.
+* Flight frequencies: when the VHF band's 1 MHz grid is full (a big mission), any free channel 0.5 MHz apart, instead of failing the build.
+* Smoke test: a sweep mission takes one of each support CAP from the packages it covers; the campaign plan is not changed.
+
+## v0.41.8
+
+From the v0.41.6 Sukhumi run: not one red alert pair was called. Gudauta's scramble circle was 29 nm round the field. The stand-off wave stayed outside it: HARM shooters about 32 nm out, now firing from their launch point (open fire) instead of drifting in after other radars, and JSOWs released 40 nm from the SA-10 next to the field. So it HARMed and bombed that SA-10 while the field slept.
+
+* **An enemy field next to a live long-range SAM sees as far as that radar.** A field with a live SA-10 within 15 nm scrambles on a 50 nm circle (at least), so a Standoff DEAD on the SA-10 brings its alert pairs up.
+* Marshal points and the forward tanker keep clear of the bigger circles too. In the test campaign the marshal points stay 15 nm behind their bases.
+* Smoke test: every field next to a live SA-10 has the 50 nm circle.
+
+## v0.41.7
+
+Protecting friendly bases and support aircraft.
+
+* **Airfield air defence**
+  * The Patriot faces the nearest enemy fighter field. It used to face a direction picked from the base's name; a Patriot radar covers about 120 degrees, so a raid from the wrong side met none.
+  * A second short-range site (Vulcan + 2 Avengers) on the other side of the field.
+  * A HAWK battery as the middle layer at your home field.
+  * A degraded field (below 0.6) keeps what it had: the Patriot with 1 launcher and one short-range site.
+* **Tanker forward, on the way home.**
+  * Its track sits between the base and the egress point, as far forward as it can while staying 15 nm outside every SAM ring and outside every enemy field's scramble circle (plus 15 nm). It moves sideways off the line if it has to, or just behind the base when nothing forward is clear.
+  * It used to sit up to about 50 nm behind the base, behind the marshal point. A second tanker sits 15 nm nearer home; the carrier recovery tanker stays with the boat.
+* **Each support aircraft gets its own guard.**
+  * Tanker CAP: required, and it gets the pair when only one is free.
+  * HAVCAP: now only the AWACS, which is back at its old distance (no longer tied to the marshal point).
+  * Each guard orbits on the side the threat comes from and engages only inside 25 nm of what it guards.
+* **Base CAP** orbits on the side the threat comes from and engages only inside 25 nm of the field. It now also flies whenever an enemy fighter field is within 130 nm of the strikers' home field.
+* **Carrier CAP:** a package off the carrier brings a 2-ship from the carrier's own squadrons, 22 nm out from the boat toward the nearest enemy field. It engages within 35 nm of the boat, while the deck still has fighters free that day.
+* Red patrol stations keep 60 nm from the forward tanker (100 nm from the AWACS's HAVCAP, as before).
+* Smoke test: Patriot heading, both short-range sites and the HAWK, tanker placement and its CAP, the HAVCAP on the AWACS, carrier CAP off its own deck.
+
+## v0.41.6
+
+From the v0.41.5 runs: the Senaki Vipers flew about 50 nm south to their marshal point and back north past their own base; and Viper 5-2's HARM killed Squid 1-4 (a JSOW Hornet on its way home).
+
+* **HARM flights fire only at what they are tasked on** (OPEN FIRE, was weapons free): their own site, the Tors that guard it and the SA-10 umbrella. The fratricide: Viper 5-2 (a Sukhumi package) fired at the *Gudauta* SA-6 radar from 89 km, the radar went quiet, and 197 s later the HARM hit Squid 1-4, whose own radar was on, 40 nm short of Gudauta.
+* **Marshal points close behind the base.** A marshal point only has to be outside every enemy field's scramble circle (plus 10 nm) and 20 nm outside every SAM ring, not a flat 90 nm from every enemy field (from before the per-field circles of v0.41.1). In the test campaign the Senaki marshal moved from 40 nm to 15 nm behind the base. Early-warning radars still see the stack; they trigger nothing.
+* The shot log keeps up to 2,000 entries (was 600; busy runs reached 595).
+* Removed an unused scramble-radius function left over from v0.41.0.
+* Smoke test: every HARM flight is OPEN FIRE at its HARM point; every marshal point is outside the scramble circles.
+
+## v0.41.5
+
+From the v0.41.4 run: the Gudauta package came through (all four Squid JSOW jets home, the SA-10 killed by JSOW bomblets). But after Springfield's (F-14 TARCAP) hold ended, a lone MiG-29 followed them home and fired four R-27s while they only defended: three F-14s lost with about 35 missiles still on board.
+
+* **TARCAP, escort and sweep fight on the way home.** When the hold ends they still engage any aircraft within 20 nm of themselves, until they are out of air-to-air missiles (then they just go home).
+* Smoke test: every stationed fighter flight carries the homeward engage task from the end of its hold.
+
+## v0.41.4
+
+From the v0.41.3 Gudauta Standoff DEAD: the SA-10 next to the target stayed quiet while the first HARM flight was looking for it (one HARM went at it), lit up a minute later and shot down all four Squid JSOW Hornets and Hornet 2-1. The JSOW launch point was 30.6 nm from it, as designed, but the jets were at 33,000 ft and kept closing as they released, and up there an SA-10 reaches farther.
+
+* **JSOW launch points stay 40 nm from a live SA-10** (was 30), up to 45 nm from the target (was 40). In the run, AGM-154As released from 30-40 nm at 33,000 ft reached their targets.
+* **The second HARM flight also waits on the SA-10.** After its window on the Tors it holds HARMs for the umbrella until 7 minutes after its HARM time, so an SA-10 that switches on late still meets HARMs. The first HARM flight still opens on it.
+* Smoke test: the JSOW launch point distance and the second HARM flight's SA-10 task.
+
+## v0.41.3
+
+From the v0.41.1 runs: whole JSOW flights were lost to the SA-10s. Their launch point sat 20 nm from the target, which put it 13-24 nm from a live SA-10, well inside its reach.
+
+* **JSOW launch points stay out of every live SA-10's reach**, the same 30 nm the HARM shooters keep, counting every live, unsuppressed SA-10 near the target (the target itself included). The point moves out along the JSOW flight's own axis, up to 40 nm from the target.
+* **A pushed-out JSOW shot goes from 33,000 ft** (from the IP on), so the AGM-154A glides far enough. Unpushed shots keep the old 20 nm / 20,000 ft profile.
+* Smoke test: the built JSOW launch point is 30 nm from every SA-10 and high when it is far out (36 nm from the target, 30 nm from the SA-10 in the test campaign).
+
+## v0.41.2
+
+DCS refused a v0.41.1 player escort mission: "Viper 3: All waypoints (5-5) have locked speed and surrounded by waypoints 4 and 5 with locked time!"
+
+* **Fighter stations (TARCAP, escort, sweep) are no longer time-locked.** Only the PUSH point and strike objectives keep a locked time, so the player's route never has a speed-locked run between two locked times.
+* **The player's landing point has no locked speed.**
+* Smoke test: every flyable player role (escort, sweep, SEAD, strike, CAP) for the F-16C, F-15C and F-14 is checked against that DCS rule.
+
+## v0.41.1
+
+From the v0.41.0 Batumi run: an earlier package already airborne near the target scrambled all 20 red alert pairs from six fields 10 s into the mission (45 radar missiles fired at us); the SA-10 killed six F-15Cs waiting on the new 62% stations (it engaged from 59-61 km); and no package had an escort (v0.40.2 had dropped the slot).
+
+* **Alert fields scramble on what their own radar sees.** Each field's trigger is a circle round the field itself (up to 60 nm, smaller for fields close to the fight), not one big circle round the target. Red reinforcements use the same circles.
+* **Only fields that can reach the fight send alert pairs:** within 130 nm of the target. The far fields (Krymsk, Gelendzhik, Maykop, Beslan for a Sukhumi target) no longer scramble at all.
+* **TARCAP arrives with the package:** no head start (was 5 minutes), so the SAM has to split its attention and its exposure ends with the HARM salvo. In DEAD packages it arrives with the HARM shooters.
+* **TARCAP and escort stations against a long-range SAM at 75% of its reach** (about 36 nm from an SA-10, was 62% / 30 nm), outside where it actually engaged.
+* **Escorts are back:** every defended strike, DEAD or CAS package carries a 2-ship escort beside its TARCAP. Escorts pick F-16s and F/A-18s first (they stay with the package and fight close); an F-15C or F-14 fills in when none is free. TARCAP and sweeps keep the F-15Cs and F-14s first.
+* Smoke test: detection circles round their own fields, the escort slot and its pick order, the new timing.
+
+## v0.41.0
+
+From the v0.40.10 run (Standoff DEAD, Sukhumi SA-10): one Su-27 alert pair from Sukhumi killed 7 ground-attack jets from 4-6 nm in two minutes; the F-15C TARCAPs never fired a missile (their stations were about 50 nm from the SA-10, 20 nm behind the HARM shooters); alert pairs took 3 to 11 minutes from the call to the air and two never made it (DCS AI taxiing).
+
+* **TARCAP and escort stations against a long-range SAM** (an SA-10 whose reach covers the target): 62% of its reach from it (about 30 nm), level with the HARM shooters, and 9 nm sideways toward the nearest enemy airfield, between the threat and the package. Against shorter-ranged SAMs the stand-off edge rule is unchanged.
+* **They cover the package, not their own station:** a TARCAP or escort engages inside a 20 nm circle round the package's launch points (HARM / JSOW points, or the IP), widened to take in its own station. Sweeps keep the circle round their station.
+* **Snipe:** TARCAP, escort and sweep fire at maximum missile range and search with their radar all the time, so red is spiked and forced defensive early. (DCS AI launch behaviour varies by type; the shot log will show the real ranges.)
+* **TARCAP on station first and for the whole attack:** it pushes 5 minutes ahead of the first flight it covers (was 3) and holds until 5 minutes after the TOT (was a fixed 15 minutes).
+* **Alert pairs no longer taxi.** Every alert pair (red and blue, airfield and carrier) waits hidden and appears on the runway or catapult 2 minutes after it is called, 60 s apart at one runway, and after you have left it at your own field. In the run the queued pairs were airborne in about 45 s from appearing.
+* **Abort rewinds the sortie counter.** The counter feeds the mission seed, so flying the same package again after Abort rebuilds the same layout (sites, spawns, patrols): two test runs of one package can be compared.
+* Smoke test: TARCAP level with the HARM points against an SA-10, the cover zone, max-range / radar options, alert pairs hidden for the runway, the new timing, Abort keeps the seed.
+
+## v0.40.10
+
+* **ECM script: your jammer follows the AI's window.** With the script on, it used to count your jammer on for the whole mission (it cannot read your switch). It now counts it on from your PUSH to your egress, like the AI's, until the cockpit-switch reading is built. With the script off (the default) nothing changes: your jammer is DCS's own and your switch decides.
+* Smoke test: your jammer window is in the hook.
+
+## v0.40.9
+
+* **The ECM script counts the F-15C's jammer.** It treated the F-15C as having none (tier 0); it now has an internal self-protection set (tier 1, like the F-14 and F/A-18), for AI Eagles and for yours. With the script off (the default) nothing changes: AI F-15Cs already used DCS's own ECM when locked (v0.40.2).
+* Smoke test: the F-15C's tier.
+
+## v0.40.8
+
+Test data, so runs can be compared.
+
+* **Alert log.** The state file now records each alert and scramble group (red alerts, red reinforcements, blue DCA): when it was called (its scramble trigger fired, or the runway queue released it), when its first jet got airborne, and "stuck" when it was called but still on the ground 5 minutes later (a taxi jam). The debrief says it: "Alert Alert 2 (Su-27, Beslan): called at 22 min, airborne 95 s later" or "... NEVER GOT AIRBORNE (stuck on the ground)".
+* **The run's settings in the state file and the debrief:** splash damage on or off (with how many blasts it set off and how many kills it caused), ECM script on or off, and the build version. "Settings: splash damage ON (7 blasts, 2 kills), ECM script off, build v0.40.8".
+* Smoke test: the hook carries the alert log and settings; the debrief reports both. The hook was also run in a mock DCS (called / airborne / stuck written correctly).
+
+## v0.40.7
+
+* **Alert and scramble jets wait hot on the ramp and taxi when called** (red alerts, red reinforcements, blue DCA; on the carrier, hot on deck). The runway and catapults stay free for flights scheduled to take off. Replaces v0.40.6's in-air fallback, which looked odd: a pair appearing off a field that could not have parked it.
+* **Runway queue.** A field with no ramp spot for the type: the group waits hidden, and when it is called the mission hook puts it on the runway, at least 60 seconds after the last group that went from that runway. At your own field it waits until you have taken off (or 15 minutes in).
+* **Dispersal (new campaigns).** No field holds more jets than DCS can park there. A red wing bigger than its field keeps what fits and its overflow goes to the nearest enemy fields with room (it joins their wings); the enemy total is unchanged. A blue squadron that does not fit moves, whole, to the nearest friendly airfield with room for its type; yours never moves. The campaign log says what moved. Fields that were over: Gelendzhik (Su-27, 3 slots), Sukhumi (Su-27, 5), Beslan (Su-24M, 5), Nalchik (15), Maykop (Su-27, 20), Batumi (blue, 10 slots for two squadrons). Existing campaigns keep their basing.
+* Smoke test: alert groups on the ramp (or hidden for the runway), the queue in the hook, no field over its parking at levels 2 and 3.
+
+## v0.40.6
+
+* **Alert groups that cannot fit a field start in the air instead of being left out.** Since v0.39.25 a second alert or reinforcement group at a field whose runway was taken and which has no parking for the type (Gelendzhik, Beslan for red's Su-27s) was dropped, so red was thinner than planned. It is now late-activated in the air 4 km off the field, 2,000 ft, heading for the target, and activated by the same trigger that would have started it on the ground (as if it had just scrambled). Blue DCA alerts at a field get the same; carrier groups are unchanged.
+* **Weather on the new-campaign dialog.** The same choice as Settings > Campaign > Weather, starting from the current setting; your pick is saved to Settings when the campaign is created.
+* Smoke test: no alert group left out for parking in the merged mission; the dialog's weather choice; ECM script and splash damage off by default.
+
+## v0.40.5
+
+* **New radio layout.** COMM1 (UHF): CH1 AWACS, CH2 tanker, CH3 JTAC (when there is one), CH4 second tanker (when there is one), CH5 divert. COMM2: CH1 your flight, CH2 the tower. The flight stays on COMM2 CH1 because DCS writes the group's frequency onto the first channel that can tune it, whatever preset is set there; putting the tower on CH1 would have had it overwritten.
+* **The tower on COMM2 is VHF for Air Force jets** at an airfield (the F-16's COMM2 tunes VHF only): the field's own VHF tower frequency. Navy jets keep the UHF tower or carrier control there (their COMM2 tunes both).
+* COMM2 presets (flight and tower) are now written to your jet as well as COMM1.
+* Kneeboard, briefing and radio calls follow: the comms card lists COMM2 CH2 as TOWER (or CVN), the RTB note and recovery line say "Tower COMM2 CH2", the tanker's on-station call names its channel, the JTAC is COMM1 CH3.
+* Not in this build: starting both radios on CH1 (COMM2 starts on the flight frequency DCS gives the group), and showing AWACS and flight calls only when you are tuned to them (needs your cockpit radio state: the dcs-bios / Export.lua research item).
+* Smoke test: layout, the F-16's VHF tower, the presets in the mission file, the briefing.
+
+## v0.40.4
+
+* **Splash damage** (Settings: "Splash damage", off by default). DCS often leaves a vehicle a few metres from a bomb untouched. On: when an air-to-ground weapon (bomb, rocket, air-to-ground missile, HARM included) reaches the ground, every ground unit or ship within a blast radius of 9 m x (explosive mass in kg)^(1/3) (a Mk-82 about 40 m, a 2000 lb bomb about 68 m, capped at 120 m) gets a blast of its own of 0.35 x explosive mass x (1 - distance / radius)^2. The direct hit is left to DCS. A weapon that ends in the air (a JSOW opening its dispenser, a missile shot down) does nothing, and a weapon whose DCS data gives no explosive mass is left alone. Kills it causes are credited to the shooter (DCS reports them with no killer), your ground kill count included. The numbers are a first guess, to tune from your test.
+* Smoke test: off by default; on, the hook carries it and loads.
+
+## v0.40.3
+
+* **AWACS tells you when the day is done.** Once the last package's TOT has passed (plus 2 minutes) and every AI flight of every package in the mission is landed, shot down or gone, AWACS calls you by callsign: "OVERLORD to SPRINGFIELD 1: all packages complete, no further tasking today. Return to base." Once you have landed: "...all flights accounted for. Good work today. OVERLORD out." It repeats every 5 minutes, for when you have stepped away. It never ends the mission (an End Mission trigger would throw you to the debrief while still flying). Support flights (tanker, AWACS, HAVCAP, base CAP) and enemy aircraft do not hold it up; a late-activated flight that has not launched yet does.
+* A Fighter Sweep records the packages it covers (package extra "covers").
+* Smoke test: the call is in the hook, addressed to you, with the flights it waits for; the reactive check no longer depends on the process' hash seed.
+
+## v0.40.2
+
+Air-to-air rework, part 2: Fighter Sweep and Defensive Counter Air. And the ECM script becomes a setting, off by default.
+
+* **Fighter Sweep package.** Where intel expects more enemy fighters at a target than its package's 4-ship TARCAP can take, the day gets a Fighter Sweep package for that area (targets within 60 km share one): one 4-ship per 4 fighters beyond the TARCAP, sized to the worst package there. It starts 10 minutes ahead of the first package it covers. You can fly it. Route: departure, push, station, home: no marshal, no IP, no egress. The station is short of the target and outside live SAM cover; the flight engages only inside 25 nm of it (15 nm for F-16 / F/A-18), holds 15 minutes, and goes home sooner when its air-to-air missiles are gone. It gets no HAVCAP or base CAP of its own.
+* **No sweep slot inside strike packages any more.** A strike, DEAD or CAS package carries its TARCAP (and SEAD, strikers); the extra fighters it used to get are the sweep now.
+* **Aircraft priority:** sweeps are built after the day's other packages, so HAVCAP, TARCAP and escort get the F-15Cs and F-14s first; a sweep takes what is left, long-range shooters first, then F-16s and F/A-18s.
+* **Unit limit:** a merged sweep is listed first among the folded-in packages, so the unit limit drops strike packages before it (wrecks, red reinforcements and alert pairs are still trimmed before any package).
+* **Unflown sweeps** (war sim): the sweep fights the fighters of the three nearest enemy wings; a win shoots down about 40% of its own number times the odds. The target is left alone. Sweeps start earlier, so they are resolved before the packages they cover, which then face fewer enemy fighters.
+* **Defensive Counter Air.** Blue's alert pairs now launch only against a raid on the fleet or a base (zone-triggered, as before). The pairs that used to launch on the clock to reinforce a package's fight when red outnumbered it are gone: that is the sweep's job.
+* A sweep leaves no ruins and its debrief line shows losses, not target damage. Its briefing and commander's intent are its own.
+* **ECM script off by default** (Settings: "ECM script", experimental). Off: SQE's own jamming model in the hook is not used (the code stays), and jammers use DCS's own ECM: AI jets with a jammer keep it off on the way in and out and, over the attack leg (PUSH to egress), switch it on only when a radar has locked them. The F-15C (which the script counts as having none) gets the same. On: as before, the hook models jamming and burn-through, jammers always on over the attack leg. The war sim's jamming cover for unflown packages is unchanged.
+* With fewer fighters per package, red reinforces a little less often (its reinforcements are sized against the blue fighters it sees).
+* Smoke test: sweep planning, timing, route, RTB on AAMs, briefing and war sim; no sweep slot in strike packages; blue alert pairs only against raids; both ECM modes. The merge, ruins and reactive checks skip or pin around the new sweep packages.
+
+## v0.40.1
+
+Air-to-air rework, part 1 (from the v0.39.24 remarks): fighters don't chase into danger, for blue and red.
+
+* **TARCAP** (the package's ESCORT flight, renamed): flies to a station of its own, short of the target and outside live SAM cover (12 nm short on the run-in when nothing is in the way). It pushes 3 minutes ahead of the first flight it covers, so it is on station first, holds there 15 minutes, then goes home from the station. No IP, no egress, for the AI and for you.
+* **ESCORT** (the package's fighter sweep, renamed): its own station the same way, held until 3 minutes after the TOT (the last ground-attack flight off target), then out with the package by its egress when that leg is clear of SAM cover, or home from the station when it isn't. No IP.
+* **No chasing.** An AI TARCAP or escort engages only inside a circle round its station: 25 nm for the long-range shooters (F-15C, F-14), 15 nm for the rest, until its hold ends. Enemy patrols are leashed the same way, 25 nm round their station (they used to chase up to 50 nm from wherever they were).
+* **Long-range shooters first.** TARCAP and escort slots go to F-15C and F-14 squadrons; an F-16 or F/A-18 squadron is picked only when no long-range shooter is within 400 nm more of the target.
+* A TARCAP or escort on its station is no longer held at a Close DEAD radar gate: it is already outside the threat.
+* Labels: TARCAP and ESCORT in package tables and briefings. A COUNTER_AIR package's sweep is still a SWEEP.
+* Not in this build: the new Fighter Sweep package (4-ships sent when intel expects heavy enemy air). Still open: how it is planned and whether you can fly it.
+* Smoke test: TARCAP and escort routes (no IP, TARCAP without egress), leash radius by type, red patrols leashed, the new timing.
+
+## v0.40.0
+
+Standoff DEAD and Close DEAD. Each DEAD job now gets one kind of DEAD flight, picked by the threat at the site.
+
+* **Standoff DEAD** (a site that is, or sits within 55 km of, a live SA-10): one package, not two. Two HARM flights and a JSOW flight (Hornets or Vipers; no Tomcats on DEAD here) go in together, and nobody flies into the SA-10's reach. The JSOW flight is now the DEAD strike: its AGM-154As go on two radars, the covering Tors and the launchers, as far as one JSOW per aim point goes. The war sim counts it as the DEAD flight (it used to count JSOWs as suppression only), released from stand-off range so it is less exposed than a GBU flight. The JSOW flight is picked before the second HARM flight, so a package short of jets keeps its DEAD flight.
+* **Equal weight on the long-range radars and the Tors.** A Standoff DEAD package always has two HARM flights: the first opens on the long-range radars, the second on the Tors, in the same salvo, so the Tors are busy with HARMs when the JSOWs arrive (v0.39.24 run: Tors shot down 10 JSOWs). Every HARM flight still ends with a second pass at the Tors.
+* **Close DEAD** (everything else): as before, a SEAD package that suppresses the radars, then a GBU package 10 minutes later behind the radar gate and hold. The SEAD package no longer carries JSOWs.
+* A suppressed SA-10 (radars out) does not count as long-range: its site and its neighbours get the SEAD / Close DEAD pair until it is repaired overnight.
+* Names: "Standoff DEAD: destroy ...", "SEAD: suppress ...", "Close DEAD: destroy ..., once its radars are down". Package tables label the JSOW flight SO DEAD; the briefing says "tasked as Standoff DEAD" or "Close DEAD". "Blinded" is now "suppressed" in the briefing, the debrief, the radio and the Missions list.
+* The war sim ignores a flight with no aircraft in it (it could take the SEAD verdict without any SEAD jets).
+* Out of HARMs or JSOWs, a flight goes home (v0.39.24's RTB when empty) and stand-off flights egress back along their approach (v0.39.22).
+* Unit counts, 129 builds against 125 before (Viper, Hornet, Tomcat, Hog; levels 1-3): DEAD missions median 221 units (was 228), level 2 median 200 (was 213), missions at the 250 cap 4 (was 6).
+* Smoke test: Standoff DEAD packages (JSOW flight, two HARM flights, no Tomcat on DEAD, JSOW counted as the DEAD strike, JSOWs on the launchers), which sites are long-range, labels. The SEAD / Close DEAD checks force the pair. The dense-column check is pinned to fixed campaign ids (it failed once on a random one).
+
+## v0.39.25
+
+Fix from the v0.39.24 run: about 9 of the 21 friendly losses were collisions in the first two minutes.
+
+* **Airborne flights no longer spawn on top of each other.** Two flights on the same route and schedule (the two SEAD flights of a package already underway when the mission starts) appeared at the same point and height: Viper 6 and 7, Viper 1 and 2, Cowboy 1 and Colt 2 flew into each other at 00:00. A flight that would appear within 2 km and 300 m of another, within 90 s of it, is now moved 2 km to the side and 1000 ft up (further if needed). Red CAP pairs and full-map patrols use the same rule.
+* **One group per runway or catapult.** Two Tomcat alert pairs were both put on the carrier's catapult (Springfield 8 and 9, three jets destroyed at 00:01). The first group at a base (your own flight first) gets the runway; every other one starts hot on the ramp or deck and taxis. A field with its runway taken and no parking for the type leaves that alert pair out (with a warning) instead of stacking it.
+* Who starts in the air and who starts on the ground is unchanged.
+* Smoke test: no stacked airborne spawns and one group per runway or catapult in a merged mission. A check over 18 missions (Viper, Hornet, Tomcat, level 3) found none.
+
+## v0.39.24
+
+Fix from the v0.39.23 run: strikers with nothing but guns left turned on fresh MiGs and Su-27s, and most of the coalition's air losses were ground-attack flights that never left after their task.
+
+* **Ground-attack flights stay on their job.** Every AI strike, DEAD, SEAD, JSOW and CAS flight now takes off with "restrict air-to-air attack" on. On the way in it evades when attacked but never turns to fight aircraft. At its attack point it goes weapons free on the ground target only.
+* **Self-defence after the attack.** At the egress point, jets carrying radar missiles (F-16, F/A-18, F-14: AIM-120 or AIM-54 on their strike loadouts) switch to return fire: they shoot back at whoever shoots at them, but don't go hunting. The A-10 stays restricted all the way home and relies on the air cover.
+* **Home when the air-to-ground load is gone.** "RTB when out of ammo" is set for bombs (guided, iron, cluster), air-to-ground missiles (HARM, JSOW, Maverick) and rockets. Not guns or air-to-air missiles, so an empty bomber with a gun and two Sidewinders still goes home.
+* Strikers that had no ROE at all (DCS default, which lets them open fire on anything) now get return fire on the way in and weapons free at the target, like the SEAD flights.
+* Your own flight is not changed: your wingmen still follow your commands.
+* Smoke test: every AI ground-attack flight in a merged mission is checked for the three options and the switch at egress.
+
+## v0.39.23
+
+* **No two flights share a name in a day.** Callsign numbers used to restart in every package, so the tasking order could list two Viper 1s in different packages. The planner now numbers flights across the whole day (Viper 1 to Viper 9). DCS flight numbers stop at 9, so a squadron flying more than nine flights in a day carries on under a spare callsign of its type that no squadron owns. An emergency package continues the day's numbering.
+* Smoke test: every planned day is checked for duplicate callsigns.
+
+## v0.39.22
+
+Fixes from the v0.39.21 run (Sukhumi SA-6 SEAD, Day 1). The run worked (both SA-10s, the SA-11, the SA-6s and both Tors suppressed or dead, the first DEAD hold that resumed), but several of our own bugs drove the losses.
+
+* **HARM and JSOW flights go home the way they came.** They now egress 25 nm (`STANDOFF_EGRESS_NM`) beyond their launch point, straight back out along their own approach. They used to fly to the package egress, which lies beyond the target for the strikers that overfly it: after a clean release the Navy JSOW Hornets crossed the Sukhumi cluster toward it and the Su-27s and MiG-29s killed about 11 jets between minutes 36 and 43.
+* **An abort after a hold clears the orbit.** The hold pushes an orbit task on top of the route; "resume" cleared it but "abort" did not, so Springfield 1 timed out at 2250 s and then circled to the end of the mission. The hook now resets the task before sending the flight to its exit.
+* **The hold is outside the SA-10's reach.** A DEAD gate now fires 60 km (`SA10_GATE_KM`) from an SA-10 target (was 40 km, inside its 55 km reach), and a gate whose target sits under a live SA-10 umbrella also fires 60 km from the SA-10. Hornet 1 held 40 km from the Sukhumi SA-6, which is 26 km from the SA-10, and lost all four jets in the orbit.
+* **The gate waits only for the target's own radars.** A covering Tor still up no longer holds the strike (Springfield 1 held 12 minutes for one surviving column Tor while the SA-10's radars were already down). The go call says "A Tor is still up on the run-in, watch it."
+* **Second pass at the Tors.** Every HARM flight now ends its task list with the Tors that cover its site, after its main targets, with whatever HARMs are left.
+* **The SEAD waves in one mission arrive together (the Navy delay).** Traced from the mission file: the AI flew the plan to within seconds; the plan itself had the Navy HARMs 220 s after the USAF ones. The planner times a SEAD package from its first SEAD flight's base (Cowboy 1, Kutaisi), but the builder lays out your package from your own base (Senaki, about 20 nm closer). The builder now syncs: each merged SEAD package on the same ground (`SEAD_WAVE_KM` 60) is shifted to reach its HARM point with your package's. In a test build the SEAD waves are within 5 s of each other (they were 30 s apart there, 220 s in your run).
+* The planner also times a carrier's SEAD packages from where the builder will put the carrier (it slides it back for the sortie). Not the cause of this delay (the carrier did not move in your runs), but it would have been on another map.
+* Smoke test: checks for each fix (egress side, built HARM times, abort reset, gate radius and umbrella, second Tor pass).
+* Untested in DCS. Check: HARM and JSOW flights turn back after firing; a held flight that aborts leaves its orbit; holds sit 60 km from an SA-10; the Navy and USAF HARMs go off together.
+* Builds on v0.39.21 (#18 and #19 are merged into the catch-up branch).
+
+## v0.39.21
+
+* **HARMs first, JSOWs right behind.** The JSOW flight now pushes with the HARM shooters (`JSOW_TRAIL_S = 0`) instead of 160 s ahead of them. The jets cross into the umbrella's reach together; the HARMs go first and force the radar to die or shut down, and the JSOWs land a few minutes later on a dead or silent site. In the v0.39.19 run the USAF JSOW flight went in alone, 4 minutes before the first HARM, and died without releasing; the Navy JSOWs, which happened to land after the Navy HARMs, hit the S-300. The sweep is back to 30 s ahead of the HARM shooters.
+* **Two axes.** The JSOW flight comes in about 30 degrees (`JSOW_AXIS_DEG`) off the HARM shooters' axis, on the side whose launch point stays farther from every other live SAM site, so the site has two directions to watch and the flights don't bunch up.
+* **Hit the umbrella first.** A SEAD target under a live SA-10's reach (55 km, `UMBRELLA_KM`) keeps its HARM point 30 nm from the SA-10 as well as from its own target, and the package's first HARM flight opens on the SA-10 (3 minutes) before its own site. In the last run the SA-6 package's flights were inside the S-300's reach before they could fire.
+* **SEAD sync on the real routes.** SEAD packages on one cluster are synced on each package's push-to-HARM-point leg, from the same marshal point, geometry and route the builder uses (umbrella keep-out included). The old estimate, a straight line from the base at 400 kt, ignored where each package marshals: the carrier's wave arrived about 3 minutes after the land-based one. In a test campaign the five SEAD packages on Sukhumi and Gudauta now reach their HARM points within 30 s of each other.
+* JSOW briefing updated: you push with the HARM shooters, on your own axis.
+* Smoke test: new saturation checks (sync within 1.5 min, umbrella first, JSOW axis 20-40 degrees off); the HARM-point check allows the umbrella keep-out; the v0.39.19 JSOW check pins its campaign id and flies a package your aircraft type can fly.
+* Untested in DCS. Check: the HARM and JSOW flights cross into the S-300's reach together; the first HARMs go at the SA-10; the JSOWs release after the HARMs are off; the Navy and USAF waves arrive together.
+* Stacked on PR #18 (v0.39.20); merge #18 first.
+
+## v0.39.20
+
+* **The Tors are part of the job.** A Tor (SA-15) battery within 12 km (`TOR_COVER_KM`) of a SEAD or DEAD target, or of the strike leg into it, is now targeted with the site. At Sukhumi both Tors cover the SA-10 (7 and 11 km). They shot down HARMs and GBUs aimed at the S-300 and killed Vipers coming in low.
+  * **HARMs:** a SEAD package's second HARM flight opens on the covering Tors (3 minutes each), then joins on the site. The first flight goes straight at the site, as before.
+  * **JSOWs:** the JSOW flight gets an aim point on each covering Tor, after the site's radars. A Hornet 4-ship (16 JSOWs) covers both; a Viper 4-ship (8) may run out before the Tors at a two-radar site like the SA-10.
+  * **Route check:** the DEAD gate now also waits for the covering Tors, not just the target's radars, and holds while one is up. The hold call says so: "<site> blind, but the Tors covering it are still up."
+* **A Tor counts as a radar.** Its radar rides on the launcher, so the Tor vehicle is now in `TRACK_RADARS`. Before, a Tor battery always looked blind to the hook. It now reads blind only when its Tors are down, and the call-outs report it.
+* Smoke test: new Tor checks on a pinned campaign; the SEAD-task checks now allow the second flight's extra Tor attacks (still ARMs, still whole groups); the SEAD/DEAD resolution check pins its campaign id and finds a matching pair instead of assuming the first SEAD package has one.
+* Untested in DCS. Check: the second HARM flight fires at the Tors; JSOWs land on the Tors; the DEAD gate holds while a covering Tor is up.
+* Stacked on PR #17 (v0.39.19); merge #16 and #17 first.
+
+## v0.39.19
+
+* **JSOW slingers fly with the SEAD packages.** Every SEAD package now has an optional 4-ship JSOW flight alongside its HARM shooters: Hornets carry 4 AGM-154A JSOW CEB each (BRU-55 doubles on 2 and 8, tanks on 3, 5 and 7), Vipers carry 2 (pylons 3 and 7). Only Hornet and Viper squadrons fill the slot.
+* **The overwhelm.** The JSOW flight pushes 160 s (`JSOW_LEAD_S`) ahead of the HARM shooters, because a JSOW's glide from 20 nm takes about three minutes against a HARM's 70 s from 30 nm. Both arrive at the radars together: a radar that keeps tracking is the HARMs' kill, one that shuts down to dodge them is still where it was last seen. The sweep moves ahead of the JSOW flight.
+* **Stand-off attack.** The AI JSOW flight flies push, IP, a JSOW launch point 20 nm out (`JSOW_LAUNCH_NM`), then home; it never overflies the site. At the launch point it gets one release per radar of the target site (search and track radars), aimed at the radar's last-known position give or take 100 m (`JSOW_AIM_ERR_M`), with its JSOWs shared between the aim points. Like the SEAD flights it only returns fire until the launch point, so it does not chase fighters.
+* **Your flight.** In a SEAD package you may now be given the JSOW slot (strike outranks SEAD in your role preference) if you fly a Hornet or a Viper. Your briefing and task say so; your loadout is the JSOW kit and your target point is the site.
+* **War simulation.** Packages you do not fly count their JSOW flight as suppression (it raises the odds of blinding the site), not as a DEAD strike on the launchers.
+* A merged SEAD package is still timed on its HARM flight, not its JSOW flight: the HARM salvo is the package's event and the JSOWs are timed to it.
+* **Cost:** each SEAD package now takes up to 4 more Hornets or Vipers, so squadrons run out sooner and a day plans fewer other packages. If that turns out too heavy, the slot can drop to a pair.
+* Smoke test: two checks that depended on the random campaign id (ruins of earlier packages, an underway package's flights already airborne) now pin it, so they give the same answer every run. Both had failed intermittently since before this version.
+* Untested in DCS. Check: the JSOW flight releases at its launch point; JSOWs land on the radars about when the HARMs do; impacts appear as hits in `SQE_state.json`; the aim points are the release tasks in the .miz.
+* Stacked on PR #16 (v0.39.18); merge #16 first.
+
+## v0.39.18
+
+* **New test option `--late-sead` (hold test).** SEAD-stage packages go in 15 minutes later (`LATE_SEAD_MIN`), so each DEAD stage, normally 10 minutes behind its SEAD, now arrives about 5 minutes ahead of it. The DEAD flight reaches its gate with the radars still up and its SEAD flights still alive, which is exactly the case the hold is for. In the last AI test every gate found the radars already down, so the hold never ran.
+* In VS Code it's in the debug dropdown as "SQE: run app (AI test + late SEAD: hold test)". The window title shows `[LATE SEAD: +15 min, from the next planned day]`.
+* It only changes days planned while it is on, and the shifted times are saved with that day. Use it on a test campaign: Skip Turn once after launching with it, or start a new campaign.
+* The hook no longer counts a SEAD flight that has not launched yet (late-activated) as gone, so the `seads-gone` abort cannot fire on a SEAD that is still on its way.
+* Untested in DCS. Check: the DEAD flight holds at the gate ("radars still up. Hold outside, rechecking."), the late SEAD suppresses the site, and the DEAD flight gets "Go, go, go" and goes in. If the SEAD fails, the hold ends with an RTB.
+
+## v0.39.17
+
+* **Aborting DEAD flights go home, not back over the target.** In the v0.39.16 run, Viper 1 got the `seads-gone` abort at 1255 s but flew on toward the Sukhumi site (39.8 km to 33.8 km in 60 s), dropped two GBU-31s and lost Viper 1-3 to the Tor. The abort pointed at the egress waypoint itself, which lies past the target. It now points at the waypoint after egress, the way home.
+* Sweeps and escorts that abort are unaffected (they carry no egress point).
+* Untested in DCS. Check: an AI strike that aborts turns onto the return leg, and its distance to the site grows in the 60 s after the abort.
+* Stacked on the catch-up branch (v0.39.16 and earlier are merged).
+
+## v0.39.16
+
+* **Briefing matches the current behaviour.** The DEAD briefing now says the DEAD package follows the SEAD by the real gap (10 minutes, read from `DEAD_STAGE_GAP_MIN`; it said a hardcoded 25). The strike briefing now describes the hold, the AWACS hold, go and RTB calls, and the abort conditions (timeout, low fuel, every SEAD flight down or gone).
+* Text only. Untested in DCS; check the briefing reads correctly on a DEAD and a SEAD flight.
+* Stacked on PR #13 (v0.39.15); merge #13 first.
+
+## v0.39.15
+
+* **Early abort when the SEADs have failed.** If every SEAD flight on a site is down or gone while its radars are still up, the DEAD flight calls "abort, RTB" straight away instead of holding until the timeout. The check runs at the gate and on every hold re-check. AWACS gives the reason: "the SEAD flights are down or gone." The player and AI get the same calls.
+* The SEAD flights are every SEAD group on the site in the mission, merged packages included. A SEAD flight counts as gone once it has no airborne unit, so a SEAD that lands and despawns counts too.
+* **Fix:** v0.39.12 to v0.39.14 had the gate code defined twice in the hook. The second copy shadowed the hold, so the hold never ran in DCS. There is now one copy, and the smoke test fails if it comes back.
+* Untested in DCS. Check: the hold actually orbits and re-checks (the v0.39.12 check was never run); the RTB call comes when the SEADs are down; the hold still goes in when blind.
+* Stacked on PR #12 (v0.39.14); merge #12 first.
+
+## v0.39.14
+
+* **Your own DEAD flight holds too, the same way AI does.** When the radars are still up at the gate, the player's DEAD flight gets the hold calls instead of an immediate turn back. AWACS calls the hold point: "Springfield 1, radars still up. Hold outside, rechecking." It re-checks each minute and calls "radars are down. Go, go, go." when the site is blind. If it times out, runs low on fuel or cannot go in, AWACS calls "abort, RTB."
+* **The hold is advisory for the player.** The game does not orbit your jet; the calls tell you when to hold, go or come home. AI DEAD flights get the same calls for immersion and still orbit and resume as before.
+* **Your call uses your beep**, the same as other player calls. AI calls use the AI beep.
+* Untested in DCS. Check: the hold call and beep come on the player's gate; the go call comes once the site is blind; the RTB call comes on timeout or low fuel.
+* Stacked on PR #11 (v0.39.13); merge #11 first.
+
+## v0.39.13
+
+* **SEAD packages on the same ground go in together.** SEAD packages whose targets lie within 60 km of each other are synchronised: each push is moved so that its estimated arrival lands on the latest arrival of the group, so the earlier flights wait rather than going in alone. In the v0.39.11 run the USAF SEAD salvo went in at about 14 minutes and the Navy's, on the same ground, at about 30. The estimate is straight-line at 400 kt; the mission builder still builds the real route.
+* **The DEAD stage goes in 10 minutes after its SEAD stage** (was 25). The v0.39.12 hold covers the case where the SEAD runs late.
+* Untested in DCS. Check: SEAD packages on the same site arrive within about a minute of each other; the DEAD stage goes in 10 minutes after the SEAD; the hold still fires when the radars are up.
+* Stacked on PR #10 (v0.39.12); merge #9 and #10 first.
+
+## v0.39.12
+
+* **An AI DEAD flight holds instead of turning back when the radars are still up.** In the v0.39.11 run Viper 1 reached the gate at about 22 minutes, found the Sukhumi radars still up and turned back, but the Navy SEAD finished blinding the site about 15 minutes later. The DEAD flight now orbits outside the threat (6 km radius at its own altitude), re-checks the radars every minute, and goes in as soon as the site is blind. It breaks off after 12 minutes (`HOLD_S = 720`) or at once if fuel falls below 30% (`HOLD_FUEL`), so it can still get home.
+* The state file logs the outcome as `hold-resumed`, `hold-timeout` or `hold-fuel`, with `held` (seconds held) on the resumed entries.
+* AI flights only. Your own flight still turns back at the gate.
+* Untested in DCS. Check: an AI DEAD flight with radars up orbits and rechecks; it goes in when the site is blind; it breaks off after the timeout.
+* Stacked on PR #9 (v0.39.11); merge #9 first.
+
+## v0.39.11
+
+* **Every shot in `SQE_state.json` now carries the target's map position (`tx`, `tz`)**: its last known spot at the time of the shot or hit. This is the first step of the JSOW strike plan: a later strike aims at where the emitters were last seen, not where the launchers are.
+* Untested in DCS. Check that `shots` entries for `AGM_88` carry `tx` and `tz`, and that the values match the site's position in the mission.
+* Stacked on PR #8 (v0.39.10); merge #8 first.
+
+## v0.39.10
+
+* **SEAD jets no longer chase fighters.** In the v0.39.9 run both Hornet SEAD flights (Hornet 1, Squid 1, four HARMs each) fought MiGs on the way in, drifted into Tor and SA-11 range (15-16 km from the site) and died 140 to 180 s before their HARM launch point without firing a HARM. AI SEAD flights (and your own flight in the AI test) now fly with hold-fire "return fire" from the start: they shoot back when shot at, and go weapons free at the HARM point, as before. On the way home they are back on return fire so they do not turn round for a kill. Support SEAD flights in strike and CAS packages get the same treatment.
+* **Every shot in `SQE_state.json` now carries `km` and `alt`**: the range to its target (km) and the shooter's altitude (m) at launch. This is the data the standoff work needs: it shows how far out the AI really fires a HARM, and how far out the S-300 really shoots at the launching jet. Before this the file had times only, so every distance was inferred.
+* Untested in DCS. Check: do the SEAD flights now arrive at the HARM point alive (Hornet 1, Squid 1 and Viper 1/2), and what are the `km` values of the `AGM_88` shots?
+
+## v0.39.9
+
+* **SEAD flights aim at the whole site.** In the v0.39.7 run (AI test, Sukhumi SA-10) the player package's SEAD pair (Viper 1/2) never fired a HARM: its task was aimed at the site's S-300 track radar, which only radiates while it is tracking, so there was nothing to shoot at. The pair fought MiGs, pressed on past the launch point and a Tor killed both 12 km from the site. The escort SEAD flight of another package (Cowboy 1) was aimed at a ground group instead, fired two HARMs from 31 nm and killed both Osa launchers it radiated against. The HARM task is now `AttackGroup` on the whole site (ARM only), as that one was. HARMs still only kill what radiates; the launchers stay the DEAD flight's job.
+* Untested in DCS. Read `shots` for `AGM_88` from the SEAD flight; if it still fires nothing, the next step is a salvo at the search radar, which radiates all the time.
+
+## v0.39.8
+
+* **AI flights climb clear of the mountains.** In the AI run, Viper 3-4 crashed at 596 s with nothing shooting at it. The ground-height scan shows why: the leg from the departure point to the marshal point (59 km, south-east of Senaki, toward the hills) crosses ridges up to 2,650 m (8,700 ft), and the departure point was at 8,000 ft. An AI flight holds the altitude of its last waypoint until it gets to the next one, so it flew the ridges at 2,300 m. Every waypoint of an AI route (and your own flight in the AI test) is now lifted to the minimum safe altitude of the leg it starts and of the leg it ends (highest ground within 5 nm of the leg, plus 1,000 ft, or 2,000 ft over mountains). On that leg the departure point goes from 8,000 to 11,500 ft. The LOW tier (it follows the ground) and ground points are left alone. Without a ground-height scan nothing changes; a person flying the flight still reads the MSA on the kneeboard.
+* Untested in DCS. Still open: the marshal point itself sits over high ground (2,100 m); it is now safe at 24,000 ft, but picking one over low ground would be better.
+
+## v0.39.7
+
+* **SEAD flights get to shoot first.** In the AI-only run on the Sukhumi SA-10 the four SEAD F-16s fired no HARM at all and all four died (the site lost nothing). Two causes, both fixed:
+  * **The HARM launch point was inside the SA-10's reach.** It was 21 nm (39 km) from the site, and the S-300 opened fire at about 55 km. SEAD flights now launch from 30 nm (55 km), with the IP 6 nm before it; on a short route the distance is pulled in so the IP stays ahead of the base. They egress from there, so the SEAD flight never flies over the site. Both SEAD flights of a package hold the same launch time, so the missiles go off together.
+  * **In the all-AI test your own flight had no SEAD tasking at all.** It was routed like a person flying it: a point on the radar itself at 0 m above ground and no attack task, so it flew straight at the site. In the AI test your flight is now routed and tasked like any AI flight (launch point, HARM task, orbit at the marshal, a strike's target point at altitude instead of on the ground). Flying it yourself is unchanged.
+  * The HARM task now asks for anti-radiation missiles (`ARM`) instead of "Auto", so the AI can't pick another weapon.
+* Untested in DCS. In particular: does the AI actually fire HARMs at the launch point (read `shots` in `SQE_state.json`: AGM_88C), and does it still manoeuvre toward the site while doing it?
+
+## v0.39.6
+
+* **HAVCAP and base CAP stay until the last flight is home.** In the AI run, Viper 4 (the HAVCAP) left 40 minutes after your TOT and landed while the merged DEAD package was still flying, so the tanker and AWACS were unguarded for the last hour. Both support CAPs now stay on station until five minutes after the latest return of any package in the mission (yours or a merged one). Fuel still applies: DCS sends an AI flight home at bingo whatever its task says, so a very long mission can still lose them (a relief pair is a later idea).
+* **The waiting window counts landings per side.** "Landed / recovered" showed 31 under Friendly when only 24 of your aircraft had landed: the hook's list also holds red aircraft that landed. It now counts your side in the Friendly column and red in the Enemy column.
+* **`SQE_state.json` explains losses.** New `deaths` list: for every unit lost, the event (`dead`, `crash` or `pilot_dead`), the last hit on it (who and with what, and how many seconds before), and the last fuel (fraction), altitude (m) and speed (kts) sampled for it (every 30 s, both sides, all aircraft) and how old that sample was. A loss with no recent hit and low fuel is a fuel or crash loss; with a recent hit it was shot. The three Viper 6 losses in the last run had no shot or kill record and could not be explained from the old file.
+* **The shot log skips scenery.** Trees, houses and power poles that bombs and wrecks hit made up about a third of the `hit` entries; they are no longer logged.
+* Untested in DCS.
+
+## v0.39.5
+
+* **The road scan only covers the places the war touches.** The v0.39.4 run in DCS showed the real cost: `getClosestPointOnRoads` takes about 90 ms whenever no road is near, so scanning the whole map (97,500 points) would take hours. The scan now covers 25 km around every airfield of the theatre (both sides) and along the front line (Sukhumi to Senaki to Kutaisi), skips water, and runs in three passes (8 km, 4 km, 2 km spacing, about 7,000 points in all). The roads file is written after each pass, so any finished pass is usable and the messages say when you can leave. Slices are 0 to 1 s of wall time per timer tick (the clock comes from a file's modification time). Theatre packs can set `road_radius_m` in the scan block. Untested in DCS.
+
+## v0.39.4
+
+* **The road scan finally gets a clock.** The DCS log of the v0.39.2 run showed `cpu_s=-1`: `os.clock` does not exist in DCS's mission environment, so every timer in the road pass had been silently off, the "0 ms" test results meant nothing, and the scan fell back to 50 calls per tick (hours for the map). The scan now reads wall time from a small file's modification time (`SQE_clock.tmp` in the SQE folder, whole seconds) and works in slices of 1 to 2 seconds per timer tick. A test call that takes 1 s or more still ends the scan without roads. Progress is shown as a percentage and every 5% is written to dcs.log (`SQE road scan:` lines with the mission and wall seconds). Untested in DCS.
+
+## v0.39.3
+
+* Road scan: 0.5 s slices and progress lines in dcs.log. Superseded by v0.39.4: it relied on `os.clock`, which DCS's mission environment does not have, so the slices never applied.
+
+## v0.39.2
+
+* **The road scan announces its first calls and skips the roads instead of freezing.** The first DCS test froze right at the start of the road pass even in time slices, so a single `getClosestPointOnRoads` call is the suspect. The scan now makes three test calls first, each announced on screen before it runs ("road test 1 of 3: calling now ... If this is the last message, DCS is stuck in that call") and logged to dcs.log with the prefix `SQE road scan:`. A call slower than 1 s ends the scan as COMPLETE without roads. The grid is coarsened until the estimate is about 20 minutes. Untested in DCS.
+
+## v0.39.1
+
+* **The road scan no longer freezes DCS.** The road pass ran 40 map columns (about 15,600 `getClosestPointOnRoads` calls) in one tick; that call is a nearest-road search and far slower than the height calls, so DCS stalled. It now works in 20 ms time slices and the progress message shows the percentage and a rough time left. If the scan is still too slow, raise `road_step` in the theatre's scan block (default 2000 m) and fly the scan again.
+
+## v0.39.0
+A full-map stress run. Untested in DCS.
+* **`--full-map` launch option**: nothing is left out of the mission. Every live enemy site, column, garrison, support site and early-warning radar is built; every friendly airfield gets its defences, garrison and supply sites; every friendly sector with troops gets its column; every planned enemy patrol is airborne at its station. The unit limit and the merge trim are off. Your package and the target are the same as in a normal run. On a Level 3 campaign one sortie went from 144 to 766 units in testing.
+* **Debug dropdown** (`.vscode/launch.json`): "SQE: run app (full map)" and "SQE: run app (AI test + full map)" next to the existing AI test entry. The window title shows [FULL MAP: no restrictions].
+* Meant to find out what DCS and your VR rig can carry. A mission this size may load slowly or not at all.
+
+## v0.38.2
+* New campaigns start in 2006 (June 12 by default, was 2004). The A-10C flew first in 2005, so 2004 never fitted; in this story the F-14 stays in service because the war needs it. The year only changes the date (daylight, kneeboard); nothing in the war reads it. Existing campaigns keep their date.
+
+## v0.38.1
+* The FC3 F-15C no longer counts as having an internal jammer: its tier is 0 (no jamming rolls, no cover in the abstract war). Its switch cannot be read later and what the real set does is not clear enough to emulate.
+
+## v0.38.0
+Road snapping, needing a new scan. Untested in DCS.
+* **The scan mission also finds roads** (`terrainprobe.py`): after the land / water and ground-height passes it asks `land.getClosestPointOnRoads('roads', x, y)` on a 2 km grid (`"road_step"` in the theatre's scan block) and writes the distinct road points (rounded to 50 m) to `SQE_roads_<theatre>.json`. This adds a minute or two to the scan. The Settings > Terrain scan page shows whether roads are loaded. Run the scan mission again to get them; the old files are still valid.
+* **Snapping** (`ground.snap_roads`, `sqe/roads.py`): once, as soon as a roads file exists (new campaigns at creation, older ones at the next day plan), front-line columns, fuel farms and depots for both sides move onto the nearest road point within 3 km, if it is still on land. A column's air defence and anything guarding a moved site moves with it. Garrisons stay off the road, dug in. No roads file means nothing changes.
+* It is a point cloud, not a road graph: things sit on a road, they do not drive along one.
+
+## v0.37.0
+The altitude choice (HIGH / MED / LOW) now counts ground anti-aircraft. Untested in DCS.
+* **Ground AA counts**: front-line columns, garrisons, support sites (fuel, depot, C2) and Red airfields carry guns and short-range SAMs (ZSU-23-4, Strela, Osa, MANPADs). Each live one within 5 nm of the route from the PUSH on counts as an AAA site, which only reaches a flight that goes LOW (0 to 10,000 ft). Vehicles and buildings within 6 km of each other count as one site (`profiles.GROUND_AA_MERGE_M`).
+* **Effect**: with enough guns beside the route or at the target, a package that would have gone LOW to dodge radar SAMs stays up instead. One or two columns do not change a clear case.
+* CAS is unaffected (its choices are 9,000 ft and LOW, both inside gun range).
+
+## v0.36.0
+Air wings that fall back to recover, the same rule for both sides. Untested in DCS.
+* **Stand-down** (`sqe/airwings.py`): an air wing (Red) or squadron (friendly) down to 30% of its aircraft or less may stand down overnight (`Difficulty.air_retreat`: 60% / 80% / 100% a night at Levels 1 / 2 / 3). Its survivors go to a rear field: they stop flying, so they are out of every patrol, raid, escort, sweep and threat count while they rest.
+* **Recovery**: twice the normal replenishment rate; the unit returns after at least 2 nights once it is back to 65% of its aircraft. The overnight log says when a unit stands down and when it returns.
+* **Left alone**: your own squadron, carrier squadrons (a ship has no rear field), the strategic bomber wing and units of fewer than 4 aircraft. A rest-base cratered while resting costs a quarter of the aircraft.
+* **Totals**: resting aircraft still count in the strength totals (victory / defeat), because they are not lost.
+* Smoke test: the raid-rate and emergency-rate checks now pin the campaign id, which is random, so those dice repeat from run to run (they could fail now and then before).
+
+## v0.35.0
+Jamming emulation. DCS gives jammers almost no effect of their own, so SQE adds one, the same for both sides and for you. Untested in DCS.
+* **Tiers** (`sqe/ecm.py`): 1 = an internal self-protection set (F-15C, F-14, F/A-18C, Red Su-24M and Tu-22M3), 2 = an ECM pod on the loadout (the F-16C presets and the A-10C CAS preset carry the ALQ-184). The numbers are judgement, not sourced.
+* **The missile roll** (in the hook): when a radar-guided missile (active or semi-active guidance; never anti-radiation missiles, IR missiles or bombs) is launched at an aircraft, the hook rolls the target's chance (20% internal, 45% pod, 30% when a pod-carrier within 2 nm covers it), scaled by launch range: none inside 12 km (burn-through), full from 40 km. A defeated missile is destroyed partway through its flight. The RWR still warns. Your flight hears "missile defeated". Every roll goes into `SQE_state.json` as `"jams"`.
+* **When it runs**: AI flights switch the jammer on at PUSH and off at EGR (the DCS option `ECM_USING` is set on those waypoints, and the hook only rolls inside that window), so the jam strobes appear when they go in. Your own jet is on throughout for now. `ecm.jammer_on` / the hook's `jamOn` is the one place a future cockpit-switch export script plugs in.
+* **The abstract war**: a package's jamming cover (pod 1.0, internal 0.4, by aircraft) cuts the site's strength in the SEAD odds by up to 20% and the package's loss chance by up to 15%.
+* Not done: a dedicated jammer support flight (no Growler in DCS); the cockpit switch.
+
+## v0.34.0
+SEAD wears the defence down, so a campaign against a strong air-defence network moves instead of stalling. Untested in DCS.
+* **Each failed SEAD day raises the next day's odds** on that site by 10 points, up to 40 (`war.SEAD_LEARN`, `SEAD_LEARN_MAX`); the failed-days count is the one the valve already kept. A success starts over.
+* **A failed SEAD still costs the site** 4% health (`war.SEAD_WEAR`), which also feeds the retreat of v0.32.
+* **The valve opens after 2 failed days at Level 3** (3 at Levels 1 and 2; `Difficulty.sead_valve`).
+* **The SEAD briefing gives the odds**: "Intelligence puts the chance of blinding this site at about 55%", and says when the site has beaten us before.
+* Queued next: a jamming emulation (event-driven missile kills near a jammer); see the notes in the chat. Not started.
+
+## v0.33.0
+* **Denser front-line columns.** The number of vehicles in an enemy front-line column now follows its sector's strength: the base mix is multiplied by 0.5 + 1.5 x strength (2x at full strength, 1x at a third, as few as half at nearly nothing). Before, the column was the base mix times strength, so a strong sector looked the same as it always had. At Level 2-3 a full-strength column is about 20-28 vehicles, a third-strength one about 12. Losses still read back as sector strength: nothing lost leaves the sector as it was, and half the column destroyed took a full-strength sector from 100% to 70% (the existing damping). Garrisons and other sites are unchanged. Tune `mission_builder.ARMOR_DENSITY`. A mission with a full-strength column was 114-140 units in the trial builds (limit 250), so VR cost goes up where the front is hot.
+
+## v0.32.0
+Retreat for badly hurt long-range SAM sites. Untested in DCS.
+* A long-range site (the kind SEAD / DEAD packages are sent to) at **35% health or less** can **pull back from the front to recover**. Each night, with a chance that grows the worse it is hurt and falls with the enemy's supply (`sams.retreat`, scaled by the level: 60% / 80% / 100%), the site and its dug-in garrison move 35-55 nm further from our nearest airfield, onto land. Its ring leaves the contested ground while it is away. It is still on the map and the planner can still send a package against it where it sits. Once it is repaired to **65%** (at least 2 days later) it returns to its old position, with a 50% chance each night. A site destroyed while pulled back is handled by the normal rebuild rule at the position it had reached.
+* The overnight log says "<site> (25% left) pulled back about 44 nm from the front to recover" and "<site> is back in position". State: `sams.pulled` in the campaign (old position, day).
+* Sites that scoot (mobile ones, up to 10 nm) are unchanged. They do not scoot while pulled back.
+* Not done: retreat of depleted air wings to a rear field (it needs a merge rule for wings), and the friendly equivalent.
+* Seen in an all-AI simulation of 40 days at Level 3: 8 pulls, 1 return and 33 held DEAD stages (the SEAD stage fails often at Level 3, which is the point of the 3-day valve); at Level 2, none (no long-range site got below 42%).
+
+## v0.31.2
+* The empty Missions pane calls it a stand-down day ("Stand-down day for you. Skip Turn takes the day.") instead of talking about the war going on without you.
+
+## v0.31.1
+* When the Missions list has nothing you can fly, the right-hand pane now says so: "No flights for <squadron> today." with the reasons that apply (too few serviceable aircraft for a pair, nothing on the tasking order for your aircraft's roles, jobs given to other squadrons or out of reach) and a quiet line: "Stand-down day for you. Skip Turn takes the day."
+
+## v0.31.0
+SEAD first. Untested in DCS.
+* **A SEAD / DEAD job is now two packages for the same site**: "SEAD: blind <site>" (SEAD flights, escorts, sweeps if the threat calls for them) and, 25 minutes later, "DEAD: destroy <site>, once its radars are blind" (strikers and their escorts). The pair counts against the day's package limit. Before this, one package carried both and the DEAD flight depended on the in-mission gate alone.
+* **The DEAD stage only commits if the radars are blind.** The dice for every SEAD package of the day are cast once, when the day is planned (seeded from the campaign, day and site), and every part of the program reads that answer: the war simulation, the built mission and the briefing. If you fly the SEAD package, what really happens replaces it (radars all destroyed = blind). In the war simulation a DEAD stage whose site is not blind is **held**: no strike, no losses ("HELD - the radars were not blinded").
+* **In a mission**: when you fly the DEAD stage and the SEAD stage succeeded, the site starts with its search and track radars already gone (launchers intact), so there is nothing to abort. When the SEAD stage failed the radars are up, and the in-mission radar gate from v0.28 still turns the DEAD flight, its escorts and sweeps back. The SEAD package has no gate. The DEAD stage's escorts and sweep now go in 30 and 60 seconds ahead of the strikers instead of the 4.5 minutes they needed when SEAD was in the same package.
+* **The valve**: after 3 failed SEAD days on the same site (`war.SEAD_FAIL_VALVE`) the old combined SEAD + DEAD package is offered again for that site. A success resets the count. `SQE_state.json` is unchanged; the count lives in the campaign (`raids.sead_fail`) with today's verdicts (`raids.sead`).
+* The debrief says what happened to the SEAD package you flew ("its radars are out; the DEAD package can go in" or "still up; the DEAD package will not commit"). The DEAD-stage briefing says a SEAD package goes in ahead of you.
+* Raid briefings now name the real raiders ("Su-25 attack aircraft") and the real target (supply site, garrison, troops).
+* Not done: retreat of battered groups, splash damage. A DEAD stage is not postponed to tomorrow when held (it is replanned with its SEAD partner).
+
+## v0.30.0
+Both sides play by the same rules a step further. Everything here is untested in DCS.
+* **Friendly garrisons.** Every friendly airfield now has a dug-in garrison next to it (`bgar_<field>`), the same kind of record as the enemy's. Older saves get them on the next plan. A garrison takes damage off its field when bombs fall on it (a quarter at full health) and is part of the raid mission when its field or the garrison itself is under attack. Size follows the level (`blue_garrison_size`: 1.0 / 0.8 / 0.7).
+* **Enemy raids have targets, not only airfields.** A raid (an "Intercept ..." package in the tasking order, announced or a surprise) can now go for a **supply site** (a friendly fuel farm or the forward depot), a **field's garrison**, or **friendly troops in a contested sector**, with the level's chances (`raid_mix`, supply / garrison / troops: 10-10-20% at Level 1, 20-15-25% at Level 2, 25-20-25% at Level 3; the rest still go for the airfield). The package, the raiders' route and the CAP station are built around the target; the thing under attack is on the map (garrison vehicles, fuel tanks and warehouses, a friendly column). When raiders get through: a supply site loses health (so friendly supply drops, as the enemy's does when you hit its depots), a garrison loses health, troops lose sector strength. Su-25s fly the raids against garrisons and troops, Su-24Ms against fields and supply sites; at Level 1 (no Su-24M) raids are now possible too.
+* **Friendly sites are replaced.** A destroyed friendly supply site or garrison comes back overnight with a chance that follows friendly supply (`blue_rebuild`: 20% / 15% / 10%), the mirror of the enemy's SAM rebuild.
+* **One daily sortie budget per enemy wing** (`redair.DAILY_SORTIES` = 2 per serviceable airframe, the same rule the friendly packages already follow). Patrols, sweeps and raids all draw on it; a raid books its aircraft once when it is picked (replanning the same day never books it twice) and a wing with nothing left sends no more raids. State: `red_air.budget` / `used`.
+* **Shot log** in `SQE_state.json` (`"shots"`): every weapon launched (`ev: "shot"`: shooter, shooter type, weapon, and the target the weapon was guided at) and every hit (`ev: "hit"`: shooter, weapon, who was hit), up to 600 entries. This is the diagnostic for why SEAD blinded nothing: it shows whether the HARMs were fired, at what, and whether they hit.
+* Wording: raid lines say "attack aircraft" and "friendly troops".
+* Not done: the SEAD-first planning rule, retreat of battered groups, and splash damage are queued. Raids on a field's garrison or supply site do not have escort SEAD; the enemy's planned CAS flights are the raids above (there is no separate enemy CAS plan).
+
+## v0.29.0
+* The enemy has an air plan for the day (new `sqe/redair.py`, stored in the campaign as `red_air`, so old saves just get one on first use). Before, the enemy's fighters were invented around your package when the mission was built: the nearest wings, a CAP in front of each of their bases, always there. Now each wing flies **patrol pairs** in time windows (the day is cut into four 6-hour waves; which waves a wing covers differs from wing to wing and day to day, so some hours have no patrol over an area), each on a station in front of its own base toward the nearest friendly airfield; one pair per wing always stays on alert. At Level 2 and 3 a pair also flies a **sweep** over a contested sector of the front for 90 minutes. How much a wing flies follows the level (patrol pairs per wing: 1 / 2 / 3; share of its aircraft: 20% / 30% / 40%) and what the wing has left, so a beaten-up wing flies less tomorrow.
+* The mission uses the plan where it overlaps your mission: a patrol is built only if its window contains your time over the target (estimated 20 minutes after the start) and its station is within 110 nm of the target or 45 nm of your route, and a wing never supplies more pairs than it has aircraft for. Those pairs are the briefed enemy patrol, airborne on station from the start and staying until their window ends. How many enemy fighters there are in all is unchanged (the package's threat size, `n_def`); patrols fill the first places and the rest are alert pairs that scramble as before. So a mission can have no patrol at all (the plan has none up in your area and hour), and then everything is alert pairs. Expect fewer briefed patrols than before.
+* The briefing says what is known: "Reported enemy patrol: a pair of MiG-29A from Sochi-Adler, 55 nm NW of the target, 0600-1220." (a sweep says "fighter sweep"). Alert pairs and reinforcements are described as before.
+* Not in this version: enemy CAS, strikes on friendly facilities, or a plan for the enemy's attack aircraft (only the raids from v0.20 and the ground push). Alert pairs are not part of the plan yet. The plan is made from the wings' strength at the start of the day.
+
 ## v0.28.3
 From the first real all-AI run of the DEAD gate (two folded DEAD packages at Nalchik: 8 of 24 friendly aircraft lost, no ground unit destroyed).
 * The radar check now fires on distance, not on the clock. It runs when the DEAD flight's lead is within 40 km of the site (`DEAD_GATE_KM`). In the test run one DEAD flight was about 3.5 minutes behind its plan, so the old fixed-time check judged it 70 km out, in the middle of the S-300 ring. The clock time (plus 5 minutes) is only a fallback for a flight that is gone. One decision per site: the escorts and sweeps of the package turn back with the DEAD flight, even though they hold far from the site. The state file's `gates` entries gain `"by": "dist"` or `"clock"`.
