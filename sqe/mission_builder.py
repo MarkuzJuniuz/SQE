@@ -747,8 +747,11 @@ class MissionBuilder:
             ok = False
         if xp.objective.type == ObjectiveType.DEAD and not roll.get("dead") and roll.get("blinded"):
             ok = False                                         # a SEAD-only package blinds the radars; it does not leave a burning site
+        # v0.41.19: an airfield's ruins are smoke only, no blast: the blast at 4 s killed the Gudauta airbase object in DCS, which then started
+        # nobody there (its alert pairs stuck in the v0.41.12 and v0.41.14 runs)
+        af_ = xp.objective.type == ObjectiveType.COUNTER_AIR or any(dist(x, y, b.x, b.y) < 6000 for b in self.state.assets.values() if b.kind == AssetKind.AIRFIELD)
         self._ruin_sites.append({"x": x, "z": y, "n": 3 if ok else 1, "r": 110 if ok else 40, "p": 2 if ok else 3, "dn": 0.9 if ok else 0.6,
-                                 "pw": 120 if ok else 40, "s": self.vrng.uniform(0, 6.28)})
+                                 "pw": 0 if af_ else (120 if ok else 40), "s": self.vrng.uniform(0, 6.28)})
         manifest.ruins.append({"id": xp.id, "number": xp.number})
 
     def _dry_pass(self) -> None:

@@ -273,6 +273,11 @@ class PackageBuilder:
             chosen.append((slot, sq, count, i == player_idx))
         if not chosen:
             raise NoPlayerSlot("no squadron could fly this objective")
+        if obj.aim == "STANDOFF" and not any(sl_.kit == "JSOW" for sl_, *_ in chosen):
+            # v0.41.19: no JSOW jets free today: the Standoff DEAD waits for another day (the planner offers it again) rather than going without them
+            for sl_, sq_, n_, _ in chosen:
+                ledger.free[sq_.id] += n_
+            raise NoPlayerSlot("no JSOW-capable squadron free for the Standoff DEAD today")
 
         # support CAP (v0.41.7): TNKCAP guards the tanker (forward, on the way home: mandatory), HAVCAP the AWACS (well back), BASECAP the
         # strike/CAS flights' home field, CVCAP the carrier (from the carrier's own squadrons). One pair short: the tanker keeps its guard.
