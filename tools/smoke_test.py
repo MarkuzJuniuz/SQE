@@ -1114,6 +1114,16 @@ def main():
     _r5 = WarSimulator(_ws.d, random.Random(3)).resolve_abstract(_st5, _Pkg.from_dict(_sw.to_dict()), {"success": True})
     assert _st5.assets[_sw.objective.target_id].health == _h5 and sum(w_.available for w_ in _st5.enemy_air) < _air5, "an unflown sweep thins red's fighters and leaves the target alone"
     print(f"[sweep] #{_sw.number} {len(_sw.flights)}x 4-ship sweep {_slm} min ahead of {len(_cov5)} package(s); flyable; no marshal; station, leash, RTB when out of AAMs; war sim: fighters, not the target")
+    # v0.41.9: with you on the sweep, the mission's support CAP comes from the packages folded in (one of each kind; base / carrier CAP per field)
+    from sqe.mission_builder import MissionBuilder as _MB9
+    _g9 = _MB9._gather_support(_sw, _cov5)
+    _t9 = [f_.tag for f_ in _g9.flights if f_.tag]
+    _want9 = {(f_.tag, f_.base_id if f_.tag in ("BASECAP", "CVCAP") else "") for p_ in _cov5 for f_ in p_.flights if f_.tag}
+    assert len(_t9) == len(_want9) and ("TNKCAP" in _t9 or not any(t_ == "TNKCAP" for t_, _ in _want9)), ("the sweep mission takes one of each support CAP from the folded packages", _t9, _want9)
+    assert len(_sw.flights) == len([f_ for f_ in _sw.flights if not f_.tag]) and len(_g9.flights) == len(_sw.flights) + len(_t9), "the plan's package is not changed"
+    assert len({f_.callsign for f_ in _g9.flights}) == len(_g9.flights), "callsigns stay unique"
+    print(f"[sweep] support CAP for a sweep mission from the folded packages: {sorted(_t9)}")
+
     # dispersal (v0.40.7): no field holds more jets than DCS can park there (a wing's overflow goes to the nearest field with room, a squadron
     # moves whole), the enemy total is kept, your squadron keeps its field
     from sqe.scenario import _slots as _sl

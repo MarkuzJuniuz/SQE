@@ -83,6 +83,11 @@ class FrequencyAllocator:
             if f not in self.used and not any(abs(f - u) < 1.0 for u in self.used):
                 self.used.add(f)
                 return f
+        for k in range(n + 1):           # v0.41.9: a busy band (support CAP from folded packages): any free channel on the grid, 0.5 MHz apart
+            f = round(lo + k * step, 3)
+            if f not in self.used:
+                self.used.add(f)
+                return f
         raise RuntimeError("frequency pool exhausted")
 
 

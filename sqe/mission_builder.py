@@ -267,6 +267,7 @@ class MissionBuilder:
         from . import terrainmask
         if not terrainmask.available():
             warns.append("ground sites were placed with the rough built-in coastline (it can be 1-3 km off, and it has no rivers): run the terrain scan once (Settings) for exact placement")
+        package = self._gather_support(package, extras)
         air_pkg = copy.copy(package)
         air_pkg.n_def = folded_n_def(package, extras, o.merge_enemy_pct)       # enemy air: the biggest package's need plus a share of the others'
         out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -498,6 +499,33 @@ class MissionBuilder:
             self._add_ship_warehouses(m)
             self._save_without_carrier_slots(m, out_path)
         return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns, self.seed_code, merged)
+
+    @staticmethod
+    def _gather_support(package, extras):
+        """v0.41.9: the mission's support CAP comes from ALL its packages, one of each: a tanker CAP, a HAVCAP, a base CAP per home field and a carrier
+        CAP per carrier. Yours first; what yours lacks comes from the first merged package that planned it. (A Fighter Sweep plans none, and merged
+        packages' support flights were dropped, so with you on a sweep the tanker, AWACS and boat flew unguarded: the v0.41.8 Batumi run.)
+        Returns a copy of the package with the extra flights added; the campaign plan is not changed."""
+        key = lambda f_: (f_.tag, f_.base_id if f_.tag in ("BASECAP", "CVCAP") else "")
+        have = {key(f_) for f_ in package.flights if f_.tag}
+        add = []
+        for x in extras:
+            for f_ in x.flights:
+                if f_.tag and key(f_) not in have:
+                    have.add(key(f_))
+                    nf = copy.deepcopy(f_); nf.is_player = False
+                    add.append(nf)
+        if not add:
+            return package
+        used = {f_.callsign for f_ in package.flights} | {f_.callsign for x in extras for f_ in x.flights if not f_.tag}
+        for nf in add:
+            nm, no = nf.callsign.rsplit(" ", 1); no = int(no)
+            while f"{nm} {no}" in used:
+                no += 1
+            nf.callsign = f"{nm} {no}"; used.add(nf.callsign)
+        pk = copy.copy(package)
+        pk.flights = list(package.flights) + add
+        return pk
 
     def _add_merged(self, anchor, extras, P0, manifest, despawn, atc, div_mhz, div_name, clock, ruins=()) -> list:
         """Fold extra packages into this mission. Their flights are AI, airborne on their own schedule (late-activated so they push at

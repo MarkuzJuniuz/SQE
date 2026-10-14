@@ -1,3 +1,11 @@
+## v0.41.9
+
+From the v0.41.8 Batumi run (you on a Fighter Sweep): no tanker CAP, HAVCAP, base CAP or carrier CAP anywhere in the mission. A sweep plans no support CAP, and the packages folded into the mission had theirs dropped (support is shared), so the tanker, the AWACS and the boat flew unguarded.
+
+* **The mission's support CAP comes from all its packages, one of each kind:** a tanker CAP, a HAVCAP, a base CAP per home field and a carrier CAP per carrier. Yours first; what yours lacks comes from the first folded package that planned it. The war sim already counts those sorties in that package's plan, so no extra jets are used.
+* Flight frequencies: when the VHF band's 1 MHz grid is full (a big mission), any free channel 0.5 MHz apart, instead of failing the build.
+* Smoke test: a sweep mission takes one of each support CAP from the packages it covers; the campaign plan is not changed.
+
 ## v0.41.8
 
 From the v0.41.6 Sukhumi run: not one red alert pair was called. Gudauta's scramble circle was 29 nm round the field. The stand-off wave stayed outside it: HARM shooters about 32 nm out, now firing from their launch point (open fire) instead of drifting in after other radars, and JSOWs released 40 nm from the SA-10 next to the field. So it HARMed and bombed that SA-10 while the field slept.
