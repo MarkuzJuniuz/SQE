@@ -1,3 +1,8 @@
+## v0.41.21
+
+* **Carrier CAP pulled in:** the F-14s orbit 12 nm from the boat (was 22) on a 10 nm leg, and engage within 30 nm of it (was 50). Their orbit and engage circle stay outside every enemy field's scramble circle (5 nm margin), so they no longer set off red's alert pairs ahead of the package. They're there to guard the boat, not to start fights.
+* Smoke test: the carrier CAP's orbit is outside every scramble circle.
+
 ## v0.41.20
 
 No needless banzai: nobody flies into defences it can't survive unless the situation calls for it. Blue always; red by its doctrine for the level.

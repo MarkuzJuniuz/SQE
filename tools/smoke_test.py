@@ -1397,6 +1397,9 @@ def main():
         assert all(f_.base_id == cv_ for f_ in cc_) and (cc_ or k_ > 0), ("a package off the carrier brings a carrier CAP from the carrier's own squadrons", p_.objective.description)
         _ncv += bool(cc_)
     assert not _cvp or _ncv >= 1
+    # v0.41.21: the carrier CAP orbits close to the boat, outside every enemy field's scramble circle
+    from sqe.mission_builder import CVCAP_NM as _cvn
+    assert _cvn <= 12, "the carrier CAP sits close to the boat"
     print(f"[bases] {_ncv} of {len(_cvp)} carrier packages with a carrier CAP off their own deck (the rest: the deck's fighters already committed that day)")
     # v0.41.8: an enemy field next to a live SA-10 sees as far as that radar: a stand-off wave on the SA-10 brings its alert pairs up
     _zr8 = {}
@@ -1950,6 +1953,28 @@ def main():
         assert all(w1 <= w0 for (_, _, w0), (_, _, w1) in zip(_ws, _rd20.shy(_st, _L(3), _ws))), "Hard raids shy from defended targets"
     assert set(_av20) == {"SA-2", "SA-3", "SA-6", "SA-11", "SA-10"}, "AI routes bend round every medium / long-range SAM"
     print(f"[banzai] {_ncas} CAS jobs on Normal, {_nesc} under an SA-2/3/6 with their SEAD escort, none under an SA-11/10; red commits at any / 1:1 / 2:1 odds")
+    # v0.41.21: the carrier CAP's orbit stays outside every enemy field's scramble circle
+    import zipfile as _zf21, dcs.lua as _lua21, math as _m21
+    from sqe import threatmap as _tm21
+    from sqe.mission_builder import CVCAP_DETECT_MARGIN_NM as _mg21
+    _chk21 = 0
+    for _sd in (3, 4, 5, 6):
+        s.new("Boat", "F-14BU", 2, seed=_sd); s.plan_day(); _st = s.state
+        _pk = next((p_ for p_ in s.packages() if any(f_.tag == "CVCAP" for f_ in p_.flights) and s.flyable(p_)), None)
+        if _pk is None:
+            continue
+        s.fly(_pk.number, s.flyable(_pk)[0].id)
+        _mz = _lua21.loads(_zf21.ZipFile(s.last_build.miz).read("mission").decode())["mission"]
+        _cs = next(f_.callsign for f_ in _pk.flights if f_.tag == "CVCAP")
+        _g = next(g_ for co_ in _mz["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values() if g_["name"] == _cs)
+        _t = _st.assets[_pk.objective.target_id] if _pk.objective.target_id in _st.assets else None
+        _txy = (_t.x, _t.y) if _t else (_g["route"]["points"][1]["x"], _g["route"]["points"][1]["y"])
+        for p_ in list(_g["route"]["points"].values())[:3]:
+            for fx_, fy_ in _tm21.fighter_bases(_st):
+                _r = _tm21.field_detect_nm((fx_, fy_), _txy, _st)
+                assert _m21.hypot(p_["x"] - fx_, p_["y"] - fy_) / 1852 >= _r, ("the carrier CAP orbits outside every scramble circle", _cs, p_.get("name"))
+        _chk21 += 1
+    print(f"[cvcap] {_chk21} carrier CAPs checked: orbit close to the boat, outside every enemy field's scramble circle")
     print("SMOKE TEST PASSED")
 
 
