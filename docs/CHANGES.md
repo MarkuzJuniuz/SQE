@@ -1,3 +1,13 @@
+## v0.41.13
+
+From the v0.41.12 runs: the Batumi sweep orbited just short of SAM cover, tripped no scramble circle and met only SAM missiles; the carrier CAP's F-14s were shot at on a station 22 nm toward Sukhumi.
+
+* **The Fighter Sweep pulls red up.** Its station sits inside the nearest enemy field's scramble circle (5 nm in), so the alert pairs launch into the sweep before the strikers arrive, while staying 35 nm from every live SA-10 and 15 nm outside every other SAM ring. It searches round the circle's edge for a clear spot.
+* **The sweep holds until the first package it covers is over the target** (plus 2 min), at most 30 min longer than before; bingo fuel or no missiles still send it home. The 10 min lead stays.
+* **Support CAP stations stay out of SAM range:** carrier CAP, tanker CAP, base CAP and HAVCAP orbits stay 15 nm outside every SAM ring, stepping back toward what they guard.
+* **Defaults:** splash damage on (the ECM script stays off). A default applies to a fresh settings file; your saved settings keep your choice.
+* Smoke test: sweep station inside the scramble circle and clear of SA-10s; the new defaults.
+
 ## v0.41.12
 
 * **No DEP point from a land base.** After take-off the first point is the marshal point, for you and for AI runway starts. The DEP sat 6 nm out at 8,000 ft with PUSH about a mile on at 26,000 ft: a steep climb and a turn back over the field. The two unexplained crashes 3-5 minutes after take-off were both runway starts out of Batumi. Off the carrier the DEP stays: it is the departure radial.

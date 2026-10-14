@@ -321,7 +321,7 @@ def main():
         assert (TMP / "gsv" / "Missions" / "SQE_TerrainScan.miz").exists()
         _nc = NewCampaignDialog(None, "rain")
         assert _nc.values()["weather_mode"] == "rain", "the new-campaign dialog offers the weather, starting from the current setting"
-        assert _d2.ecm.isChecked() is False and _d2.splash.isChecked() is False, "ECM script and splash damage are off by default"
+        assert _d2.ecm.isChecked() is False and _d2.splash.isChecked() is True, "ECM script off and splash damage on by default (v0.41.13)"
         print("[gui] settings (5 tabs, scan status) and new-campaign dialogs build; every control round-trips; scan mission button works")
     except ImportError:
         print("[gui] PySide6 not installed here; dialogs not exercised")
@@ -1117,6 +1117,17 @@ def main():
         if not f_.is_player:
             _o0w = {t_["params"]["action"]["params"]["name"]: t_["params"]["action"]["params"].get("value") for t_ in list(_gw[f_.callsign]["route"]["points"].values())[0]["task"]["params"]["tasks"].values() if t_.get("params", {}).get("action", {}).get("id") == "Option"}
             assert _o0w.get(10) == _aamw, (f_.callsign, "a sweep goes home when its air-to-air missiles are gone")
+    # v0.41.13: the sweep's station sits inside the nearest enemy field's scramble circle (or as far in as it can while clear of SAMs), 35 nm from any SA-10
+    from sqe import threatmap as _tm13
+    _sx13 = next(g_ for n_, g_ in _gw.items() if n_ == _sw.flights[0].callsign)
+    _stp = next(p_ for p_ in _sx13["route"]["points"].values() if p_.get("name") == "TGT")
+    _sa13 = [a_ for a_ in _ws.state.assets.values() if a_.variant in _tm13.UMBRELLA_VARIANTS and not a_.destroyed and a_.health > 0.25]
+    assert all(_m3j.hypot(_stp["x"] - a_.x, _stp["y"] - a_.y) / 1852 >= 34.5 for a_ in _sa13), "the sweep station is 35 nm from every SA-10"
+    _fb13 = min(_tm13.fighter_bases(_ws.state), key=lambda e_: _m3j.hypot(e_[0] - _stp["x"], e_[1] - _stp["y"]))
+    _t13 = _ws.state.assets[_sw.objective.target_id]
+    _dfld = _m3j.hypot(_fb13[0] - _stp["x"], _fb13[1] - _stp["y"]) / 1852
+    assert _dfld <= _tm13.field_detect_nm(_fb13, (_t13.x, _t13.y), _ws.state), ("the sweep orbits inside the nearest field's scramble circle", round(_dfld))
+    print(f"[sweep] station {_dfld:.0f} nm from the nearest enemy field (its scramble circle {_tm13.field_detect_nm(_fb13, (_t13.x, _t13.y), _ws.state):.0f} nm), clear of SA-10s")
     assert "Fighter Sweep" in _ws.last_build.text["situation"], "the sweep briefing"
     _st5 = CampaignState.from_dict(_ws.state.to_dict()); _h5 = _st5.assets[_sw.objective.target_id].health
     _air5 = sum(w_.available for w_ in _st5.enemy_air)
@@ -1797,11 +1808,11 @@ def main():
         not _re9.search(r'\["name"\]\s*=\s*13,\s*\["value"\]\s*=\s*3', _m9b) and f'["{_pu}"]=2' not in _hk9b, "script off: DCS ECM 'use if locked' at PUSH, the hook models no jamming"
     assert "all packages complete, no further tasking today" in _hk9b and _re9.search(r'local WATCH = \{ "[^"]+', _hk9b) and "return t + 300" in _hk9b, \
         "AWACS says when every package is done (to you, by callsign), every 5 minutes"
-    assert '"ecm_script": false' in _hk9b and '"splash_damage": false' in _hk9b and "local ALERTS = {" in _hk9b and '"alerts":%s' in _hk9b, \
+    assert '"ecm_script": false' in _hk9b and '"splash_damage": true' in _hk9b and "local ALERTS = {" in _hk9b and '"alerts":%s' in _hk9b, \
         "the state file carries the alert log, the build's settings and the splash counts (v0.40.8)"
     _hq = __import__("sqe.debrief", fromlist=["x"]).lua_hook("c", 1, "p", [], "P", "G", rwyq=[{"g": "Alert 1", "f": 9001, "b": "Russia:Gelendzhik"}], prwy="USA:Senaki")
     assert 'g="Alert 1", f=9001, b="Russia:Gelendzhik"' in _hq and "RWY_STAGGER_S = 60" in _hq and "g:activate()" in _hq, "the runway queue: one group a minute, after you have left yours"
-    assert "local SPLASH = false" in _hk9b and "splashTrack" in _hk9b, "splash damage is off by default"
+    assert "local SPLASH = true" in _hk9b and "splashTrack" in _hk9b, "splash damage is on by default (v0.41.13)"
     _hks = __import__("sqe.debrief", fromlist=["x"]).lua_hook("c", 1, "p", [], "P", "G", splash=True)
     assert "local SPLASH = true" in _hks and "trigger.action.explosion" in _hks and "SPLBY[" in _hks, "splash damage on: blasts near the impact, kills credited to the shooter"
     try:
