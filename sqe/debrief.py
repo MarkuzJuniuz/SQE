@@ -841,9 +841,13 @@ if #RECOV > 0 then
               local cv = Unit.getByName(r.cv)
               if cv then cp = cv:getPoint() end
             end
-            local u = g:getUnit(1)
-            local okp, up = pcall(function() return u and u:getPoint() end)
-            if okp and up and math.sqrt((up.x - cp.x) ^ 2 + (up.z - cp.z) ^ 2) <= r.r then
+            -- any jet of the group, not only the lead (getUnit(1) is nil once the lead is gone)
+            local near = false
+            for _, u in ipairs(g:getUnits() or {}) do
+              local okp, up = pcall(function() return u:getPoint() end)
+              if okp and up and math.sqrt((up.x - cp.x) ^ 2 + (up.z - cp.z) ^ 2) <= r.r then near = true end
+            end
+            if near then
               r.done = true
               SQE_RECOVER(r.g)
             end
