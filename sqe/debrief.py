@@ -823,6 +823,38 @@ function SQE_RECOVER(gname)
   dump()
   pcall(function() g:destroy() end)
 end
+-- v0.41.25: the recovery net. A flight sent home early (bingo, winchester) flies straight to its deck or field and never reaches its recovery
+-- point: once its lead is within r of the carrier (where the boat is now) or the field, after its work is done, it is recovered all the same.
+local RECOV = { __RECOV__ }
+if #RECOV > 0 then
+  timer.scheduleFunction(function(_, t)
+    local left = false
+    for _, r in ipairs(RECOV) do
+      if not r.done then
+        local g = Group.getByName(r.g)
+        if not g then r.done = true
+        else
+          left = true
+          if t >= r.t then
+            local cp = { x = r.x, z = r.z }
+            if r.cv ~= "" then
+              local cv = Unit.getByName(r.cv)
+              if cv then cp = cv:getPoint() end
+            end
+            local u = g:getUnit(1)
+            local okp, up = pcall(function() return u and u:getPoint() end)
+            if okp and up and math.sqrt((up.x - cp.x) ^ 2 + (up.z - cp.z) ^ 2) <= r.r then
+              r.done = true
+              SQE_RECOVER(r.g)
+            end
+          end
+        end
+      end
+    end
+    if left then return t + 15 end
+    return nil
+  end, nil, timer.getTime() + 15)
+end
 if (CVREC.cv or CVREC.x) and not AITEST then
   timer.scheduleFunction(function(_, t)
     if t < (CVREC.t or 0) then return t + 10 end
@@ -893,7 +925,14 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}}}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy))
             .replace("__ALERTS__", ", ".join(f'{{g={_lq(a["g"])}, f={int(a["f"])}, b={_lq(a["b"])}, ty={_lq(a["ty"])}}}' for a in (alerts or [])))
             .replace("__CVREC__", _cvrec_lua((cfg or {}).get("cvrec")))
-            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k != "cvrec"}).replace("'", "")))
+            .replace("__RECOV__", _recov_lua((cfg or {}).get("recov")))
+            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov")}).replace("'", "")))
+
+
+def _recov_lua(rs) -> str:
+    """v0.41.25: the recovery net's entries as a Lua list: group, carrier unit ("" for a field), x / z, radius (m), earliest time (s)."""
+    return ", ".join(f'{{ g={_lq(r["g"])}, cv={_lq(r.get("cv") or "")}, x={float(r["x"]):.1f}, z={float(r["z"]):.1f}, r={float(r["r"]):.0f}, '
+                     f't={float(r["t"]):.0f} }}' for r in (rs or []))
 
 
 def _cvrec_lua(cv) -> str:

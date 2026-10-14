@@ -394,7 +394,8 @@ class MissionBuilder:
         self._sup_cts = []                                                   # HAVCAP / base CAP orbit tasks: their stop time is extended once the merged packages are known
         self._holds = []                                                     # v0.41.10: TARCAP / escort holds, extended to the last package over their target area
         self._snipe_at = {}                                                  # v0.41.10: id(group) -> the station waypoint where max-range shots begin
-        self._callins = []                                                   # v0.41.10: red patrols called in to the SAM site they guard
+        self._callins = []
+        self._recov = []                                                     # v0.41.25: the recovery net (see _recov_net)                                                   # v0.41.10: red patrols called in to the SAM site they guard
         for idx, f in enumerate(package.flights):
             g, tot_f = self._spawn_flight(package, f, plan, geom, tanker_xy, hav_xy, push_of(f), tgt.eta_s, rtb_s, idx, manifest, despawn)
             if f.is_player:
@@ -502,7 +503,7 @@ class MissionBuilder:
                          rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts,
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
-                              "cvrec": self._wing_recovery(pbase, tgt.eta_s)})
+                              "cvrec": self._wing_recovery(pbase, tgt.eta_s), "recov": list(self._recov)})
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -1713,6 +1714,7 @@ class MissionBuilder:
                 rcvp_ = g.add_waypoint(pt(rx_, ry_), (3000 + 1000 * (idx % 4)) * FT, 300 * KPH, "RCV")
                 if self._skip_landing(base):          # v0.41.18: recovered at its entry point instead of landing (setting "AI landings: airfields")
                     rcvp_.tasks.append(task.RunScript(f"SQE_RECOVER('{g.name}')"))
+                    self._recov_net(g, f, None, base.x, base.y, wps, hold_end, stop)
             if (f.is_player and not o.player_is_ai) or not self._skip_landing(base):
                 g.land_at(self.apt[base.id])
             if special:
@@ -1724,6 +1726,7 @@ class MissionBuilder:
             rx_, ry_ = offset(base.x, base.y, bearing(base.x, base.y, lp_.x, lp_.y), CV_RECOVER_NM * NM)
             rcv_ = g.add_waypoint(pt(rx_, ry_), 2000 * FT, 300 * KPH, "RTBXHB" if special else "RTB")
             rcv_.tasks.append(task.RunScript(f"SQE_RECOVER('{g.name}')"))
+            self._recov_net(g, f, self.ship[base.id].units[0].name if base.id in self.ship else None, base.x, base.y, wps, hold_end, stop)
         else:
             rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
             rtb.type, rtb.action = "Land", PointAction.Landing
@@ -2349,8 +2352,9 @@ class MissionBuilder:
                 and all(dist(x, y, a.x, a.y) >= SA10_AVOID_NM * NM for a in self._sa10_c))
 
     def _zone_sams(self, package, fighters: bool = False):
-        """v0.41.22: the live medium / long-range SAMs a blue fight circle must stay out of: every SA-2/3/6/11/10 except the ones this package is
-        sent at (its target's cluster, the sites covering its target, the umbrella SA-10, any site whose reach takes in the target)."""
+        """v0.41.22: the live medium / long-range SAMs a blue circle or HARM point must stay out of. Fighters (v0.41.24): every SA-2/3/6/11/10.
+        Shooters: every one except the sites the package's HARMs are tasked on (v0.41.25: its target's cluster and the umbrella SA-10; for a CAS
+        escort also the sites covering the CAS target)."""
         st = self.state
         key = (getattr(package, "id", None), fighters)
         c_ = getattr(self, "_zsams_c", {})
@@ -2362,11 +2366,15 @@ class MissionBuilder:
         skip = set()
         if tga_ is not None and not fighters:      # v0.41.24: fighters never fight over the package's own target SAMs (that is the shooters' job)
             um_ = tm.umbrella_site(st, tga_)
-            skip = tm.cluster_ids(tga_) | {x.id for x in covering_sams(st, tga_)} | ({um_.id} if um_ else set())
-        tx_, ty_ = (tga_.x, tga_.y) if tga_ is not None else (None, None)
+            # v0.41.25: only the sites the package's HARMs are actually tasked on: its target's cluster and the umbrella SA-10 (and, for a CAS
+            # escort, the sites covering the CAS target). Every other site counts, even one whose reach takes in the target: the v0.41.24 run's
+            # Gudauta SA-6 package fired from 30 nm of the Sukhumi S-300, which "covered" its target and so was skipped, and lost four Hornets.
+            skip = tm.cluster_ids(tga_) | ({um_.id} if um_ else set())
+            if package.objective.type == ObjectiveType.CAS:
+                skip |= {x.id for x in covering_sams(st, tga_)}
         out = [(a.x, a.y, AVOID_NM[a.variant]) for a in st.assets.values()
                if a.kind == AssetKind.SAM and a.variant in AVOID_NM and not a.destroyed and a.health > 0.25 and not getattr(a, "suppressed", False)
-               and a.id not in skip and (fighters or tx_ is None or dist(a.x, a.y, tx_, ty_) > (AVOID_NM[a.variant] + 3) * NM)]
+               and a.id not in skip]
         c_[key] = out
         self._zsams_c = c_
         return out
@@ -2381,6 +2389,15 @@ class MissionBuilder:
         for sx, sy, snm in self._zone_sams(package, fighters):
             r = min(r, dist(x, y, sx, sy) / NM - snm)
         return (x, y, max(floor_nm, r))
+
+    RECOV_NET_NM = 12          # v0.41.25: a homebound AI flight this close to its deck / field counts as recovered, waypoint reached or not
+
+    def _recov_net(self, g, f, cv_unit, x, y, wps, hold_end, stop) -> None:
+        """v0.41.25: the safety net for SQE_RECOVER. A flight sent home early (bingo, out of missiles) flies straight to its deck or field and
+        never passes its recovery point, so it never ran SQE_RECOVER (the v0.41.24 run: Hornets circling the boat). The hook recovers the group
+        once its lead is within RECOV_NET_NM of the carrier (where it is now, not where it started) or the field, after its work is done."""
+        t_ = max(float(wps[-1].eta_s) if wps else 0.0, float(hold_end or 0), float(stop) if f.tag else 0.0)
+        self._recov.append({"g": g.name, "cv": cv_unit or "", "x": float(x), "z": float(y), "r": self.RECOV_NET_NM * NM, "t": t_})
 
     @staticmethod
     def _hold_end(stw, tot_s) -> int:

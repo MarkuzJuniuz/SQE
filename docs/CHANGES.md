@@ -1,3 +1,10 @@
+## v0.41.25
+
+From XO's second Sukhumi run (v0.41.24): 10 friendly jets lost, 4 of them the Gudauta SEAD flight to the Sukhumi S-300 again, and some Hornets never recovered at the boat.
+
+* **HARM points, properly this time:** v0.41.24 kept a HARM point clear of every SAM "not sent against", but counted any SA-10 whose reach covered the target as one the package was sent against. The Sukhumi S-300 covers the Gudauta SA-6, so the Gudauta package still fired from 30 nm of it, and nobody's HARMs were on it. Now only the sites the package's HARMs are tasked on are exempt: the target's cluster and its umbrella SA-10 (and, for a CAS escort, the sites covering the CAS target). The HARM point moves out or turns its axis to clear every other site, and if it can't, the HARMs go for that site first.
+* **Recovery net:** a flight sent home early (bingo, out of missiles) flies straight to its deck or field and skips its recovery point, so it never counted as landed and circled the boat. Every homebound AI flight is now also recovered once its lead is within 12 nm of the carrier (where the boat is at that moment, not where it started) or of its field, after its work is done.
+
 ## v0.41.24
 
 From XO's Sukhumi SA-11 Standoff DEAD run (13 friendly jets lost: 5 to SAMs, 8 in the air).
