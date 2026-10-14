@@ -45,7 +45,7 @@ CV_RECOVER_NM = 10            # v0.41.17: AI carrier flights (and your wingmen) 
 RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
 RCV_SPREAD = (0, 30, -30, 60, -60)    # ...on its own bearing (degrees off the way it comes home), by stack slot
 SA10_REACH_NM = 31            # v0.41.14: the farthest an SA-10 fired at our jets in the runs (54-57 km)
-CVCAP_ZONE_NM = 50            # v0.41.14: the carrier CAP engages within this of the boat (was 35: the SM-2s killed everything before it came in)
+CVCAP_ZONE_NM = 30            # v0.41.21: the carrier CAP engages within this of the boat (v0.41.14: 50; it reached out and set off red scrambles)
 RED_KEEP_NM = 45              # v0.41.10: red patrol stations keep this far from our marshal point and fields (was 120 / 80)
 RED_CALLIN_NM = 50            # ...and a patrol is called to the SAM site it guards when blue comes this close to that site
 RED_CALLIN_ZONE_NM = 25       # ...where it engages inside this circle round the site
@@ -53,7 +53,8 @@ HOLD_AREA_KM = 60             # v0.41.10: packages whose targets are this close 
 SWEEP_AFTER_TOT_S = 120       # v0.41.13: a sweep holds until 2 min after the first package it covers is over the target
 HOLD_EXTEND_MAX_S = 1800      # ...extended at most this much past their own package
 SUPPORT_CAP_ZONE_NM = 25      # v0.41.7: HAVCAP / tanker CAP / base CAP engage inside this circle round what they guard
-CVCAP_NM = 22                 # v0.41.7: the carrier CAP orbits this far out from the boat toward the nearest enemy field (engages within 35 nm of it)
+CVCAP_NM = 12                 # v0.41.21: the carrier CAP orbits this far out from the boat toward the nearest enemy field (v0.41.7: 22)
+CVCAP_DETECT_MARGIN_NM = 5    # v0.41.21: its orbit and engage circle stay this far outside every enemy field's scramble circle
 HOMEWARD_ENGAGE_NM = 20       # v0.41.5: after its hold a TARCAP / escort / sweep still engages air within this of itself on the way home
 from .packages import LONG_RANGE_A2A     # the long-range shooters; F-16 and F/A-18 are secondary air-to-air
 A2A_ZONE_NM = {True: 25, False: 15}     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
@@ -1302,10 +1303,23 @@ class MissionBuilder:
                 if self._sam_clear(sx, sy) or dist(sx, sy, gx_, gy_) < 2 * NM:
                     break
                 sx, sy = offset(sx, sy, bearing(sx, sy, gx_, gy_), 2 * NM)
+            leg_ = 15 * NM
+            if f.tag == "CVCAP":
+                # v0.41.21: the carrier CAP is there to guard the boat, not to start fights: its orbit (both ends) and its engage circle stay outside
+                # every enemy field's scramble circle, so it never sets off red's alert pairs ahead of the package (seen in the v0.41.19 runs)
+                leg_ = 10 * NM
+                det_ = [(fx_, fy_, tm.field_detect_nm((fx_, fy_), (geom.tx, geom.ty), st) + CVCAP_DETECT_MARGIN_NM) for fx_, fy_ in tm.fighter_bases(st)]
+                out_ = lambda x_, y_: all(dist(x_, y_, fx_, fy_) >= r_ * NM for fx_, fy_, r_ in det_)
+                for _ in range(20):
+                    if (out_(sx, sy) and out_(*offset(sx, sy, thr_ + 90, leg_))) or dist(sx, sy, gx_, gy_) < 2 * NM:
+                        break
+                    sx, sy = offset(sx, sy, bearing(sx, sy, gx_, gy_), 2 * NM)
+                room_ = min([(dist(gx_, gy_, fx_, fy_) / NM - r_) for fx_, fy_, r_ in det_] or [zr_])
+                zr_ = max(10, min(zr_, room_))                      # the circle round the boat ends short of the nearest scramble circle
             cap_zone = (gx_, gy_, min(self.o.friendly_cap_engage_nm or 999, zr_))
             p = spec.profile
             wps = [Wpt("SPAWN", sx, sy, p.cap_alt_ft, p.cap_kts), Wpt("CAP1", sx, sy, p.cap_alt_ft, p.cap_kts, "", "CAPORBIT"),
-                   Wpt("CAP2", *offset(sx, sy, thr_ + 90, 15 * NM), p.cap_alt_ft, p.cap_kts)]
+                   Wpt("CAP2", *offset(sx, sy, thr_ + 90, leg_), p.cap_alt_ft, p.cap_kts)]
             stop = int(max(tot_s + o.cap_minutes * 60, rtb_s + 300))
         else:
             sp = None
