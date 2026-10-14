@@ -40,6 +40,13 @@ TARCAP_MIN = 15               # ...and holds there this long, then goes home
 ESCORT_AFTER_TOT_S = 180      # an escort (SWEEP role) holds its station until this long after the TOT (the last ground-attack flight off target)
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
+RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
+RCV_SPREAD = (0, 30, -30, 60, -60)    # ...on its own bearing (degrees off the way it comes home), by stack slot
+RED_KEEP_NM = 45              # v0.41.10: red patrol stations keep this far from our marshal point and fields (was 120 / 80)
+RED_CALLIN_NM = 50            # ...and a patrol is called to the SAM site it guards when blue comes this close to that site
+RED_CALLIN_ZONE_NM = 25       # ...where it engages inside this circle round the site
+HOLD_AREA_KM = 60             # v0.41.10: packages whose targets are this close share their TARCAP / escort holds (the sweep area)
+HOLD_EXTEND_MAX_S = 1800      # ...extended at most this much past their own package
 SUPPORT_CAP_ZONE_NM = 25      # v0.41.7: HAVCAP / tanker CAP / base CAP engage inside this circle round what they guard
 CVCAP_NM = 22                 # v0.41.7: the carrier CAP orbits this far out from the boat toward the nearest enemy field (engages within 35 nm of it)
 HOMEWARD_ENGAGE_NM = 20       # v0.41.5: after its hold a TARCAP / escort / sweep still engages air within this of itself on the way home
@@ -304,9 +311,11 @@ class MissionBuilder:
         mshl_xy = tm.safe_marshal(st, (pbase.x, pbase.y), bearing(pbase.x, pbase.y, tx, ty), (tx, ty))
         geom = make_geometry(pbase.x, pbase.y, tx, ty, pspec.profile, mshl_xy, carrier=pbase.kind == BaseKind.CARRIER)
         # enemy CAP stations are planned first so the egress can stay clear of them too (they sit 20-25 nm in front of their own base)
-        keep0 = [(geom.mshl[0], geom.mshl[1], 120)]
+        # v0.41.10: red patrols keep RED_KEEP_NM from our marshal point and fields (was 120 / 80 nm: with the marshal 15 nm behind the base
+        # since v0.41.6, 120 nm pushed red's patrols back past Sukhumi and Gudauta, and they never came to their SAMs' help)
+        keep0 = [(geom.mshl[0], geom.mshl[1], RED_KEEP_NM)]
         for bid in dict.fromkeys(f.base_id for f in package.flights):
-            keep0.append((st.bases[bid].x, st.bases[bid].y, 130 if st.bases[bid].kind == BaseKind.CARRIER else 80))
+            keep0.append((st.bases[bid].x, st.bases[bid].y, 130 if st.bases[bid].kind == BaseKind.CARRIER else RED_KEEP_NM))
         self._cap_plan = self._plan_cap_stations(air_pkg, tx, ty, geom, keep0)
         if tgt_asset is not None:                      # steer the egress away from SAM rings and CAP
             skip = {tgt_asset.id} if package.objective.type == ObjectiveType.DEAD else set()      # a DEAD target is the one thing we are killing
@@ -374,6 +383,9 @@ class MissionBuilder:
         # ---- friendly flights --------------------------------------------------------------------------------------------
         despawn, pkg_table = [], []
         self._sup_cts = []                                                   # HAVCAP / base CAP orbit tasks: their stop time is extended once the merged packages are known
+        self._holds = []                                                     # v0.41.10: TARCAP / escort holds, extended to the last package over their target area
+        self._snipe_at = {}                                                  # v0.41.10: id(group) -> the station waypoint where max-range shots begin
+        self._callins = []                                                   # v0.41.10: red patrols called in to the SAM site they guard
         for idx, f in enumerate(package.flights):
             g, tot_f = self._spawn_flight(package, f, plan, geom, tanker_xy, hav_xy, push_of(f), tgt.eta_s, rtb_s, idx, manifest, despawn)
             if f.is_player:
@@ -385,10 +397,10 @@ class MissionBuilder:
         whois = self._datalinks(package, awacs_unit)
 
         # ---- enemy air picture (known CAP airborne from the start + alert aircraft that scramble when detected) ----
-        keep = [(geom.mshl[0], geom.mshl[1], 100)] + [(p[0], p[1], 100) for p in (hav_xy,) if p is not None] + \
+        keep = [(geom.mshl[0], geom.mshl[1], RED_KEEP_NM)] + [(p[0], p[1], 100) for p in (hav_xy,) if p is not None] + \
                [(p[0], p[1], 60) for p in (tanker_xy,) if p is not None]          # v0.41.7: the tanker is forward; 100 nm round it pushed red's patrols out of the fight
         for bid in dict.fromkeys(f.base_id for f in package.flights):
-            keep.append((st.bases[bid].x, st.bases[bid].y, 130 if st.bases[bid].kind == BaseKind.CARRIER else 80))
+            keep.append((st.bases[bid].x, st.bases[bid].y, 130 if st.bases[bid].kind == BaseKind.CARRIER else RED_KEEP_NM))
         keep += self._fleet_keepout()
         self._spawn_air_picture(air_pkg, tx, ty, tgt.eta_s, geom, manifest, keep)
         self._spawn_cas_support(package, plan, geom, manifest)
@@ -405,6 +417,7 @@ class MissionBuilder:
         for ct_ in self._sup_cts:
             if last_home > ct_.params.get("stopCondition", {}).get("time", 0):
                 ct_.stop_after_time(int(last_home))
+        self._extend_holds([((tx, ty), tgt.eta_s)] + [(m_["txy"], m_["tot_s"]) for m_ in merged if not m_.get("struck") and m_.get("txy")])
         manifest.cur_pkg = ""
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + list(self._red_intel)
         self._spawn_reactive(package, extras, tx, ty, tgt.eta_s, geom, manifest, despawn)
@@ -500,13 +513,29 @@ class MissionBuilder:
             self._save_without_carrier_slots(m, out_path)
         return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns, self.seed_code, merged)
 
+    def _extend_holds(self, events) -> None:
+        """v0.41.10: a TARCAP / escort holds until the LAST package over its target area is off target (TOT + its after-time), not just its own
+        package. The v0.41.8 sweep run: the F-15 TARCAPs went home 5 min after their own TOT while later packages were still coming through
+        (1,600-2,500 s) and only the F-14s were left. At most HOLD_EXTEND_MAX_S longer; bingo fuel sends them home anyway."""
+        for h in self._holds:
+            hx, hy = h["tgt"]
+            last = max([t_ for (ex, ey), t_ in events if t_ is not None and dist(ex, ey, hx, hy) <= HOLD_AREA_KM * 1000] + [0])
+            new = int(min(h["end"] + HOLD_EXTEND_MAX_S, max(h["end"], last + h["after"])))
+            if new <= h["end"]:
+                continue
+            for ct_ in h["cts"]:
+                ct_.stop_after_time(new)
+            for ct_ in h["starts"]:
+                ct_.start_after_time(new)
+            h["end"] = new
+
     @staticmethod
     def _gather_support(package, extras):
         """v0.41.9: the mission's support CAP comes from ALL its packages, one of each: a tanker CAP, a HAVCAP, a base CAP per home field and a carrier
         CAP per carrier. Yours first; what yours lacks comes from the first merged package that planned it. (A Fighter Sweep plans none, and merged
         packages' support flights were dropped, so with you on a sweep the tanker, AWACS and boat flew unguarded: the v0.41.8 Batumi run.)
         Returns a copy of the package with the extra flights added; the campaign plan is not changed."""
-        key = lambda f_: (f_.tag, f_.base_id if f_.tag in ("BASECAP", "CVCAP") else "")
+        key = lambda f_: (f_.tag, (getattr(f_, "guard", "") or f_.base_id) if f_.tag in ("BASECAP", "CVCAP") else "")
         have = {key(f_) for f_ in package.flights if f_.tag}
         add = []
         for x in extras:
@@ -618,7 +647,7 @@ class MissionBuilder:
                 self.cas_tot = cas_tot
                 self._spawn_cas_support(xp, plan2, geom2, manifest)
             tot = max(tots) if tots else tg2.eta_s
-            out.append({"id": xp.id, "number": xp.number, "objective": xp.objective.description, "type": xp.objective.type.value,
+            out.append({"id": xp.id, "number": xp.number, "objective": xp.objective.description, "type": xp.objective.type.value, "txy": (tx2, ty2),
                         "start": xp.start, "push": clock(P0x), "tot": clock(tot), "rtb": clock(rtb2), "tot_s": tot, "rtb_s": rtb2, "underway": P0x < 0, "struck": ruined,
                         "flights": ", ".join(f"{f.callsign} {f.count}x{f.aircraft}" for f in xp.flights)})
         return out
@@ -1224,8 +1253,9 @@ class MissionBuilder:
                 gx_, gy_ = hav_xy; thr_ = geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
             elif f.tag == "CVCAP":
                 gx_, gy_ = base.x, base.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, CVCAP_NM * NM); zr_ = CVCAP_NM + 13
-            else:           # BASECAP
-                gx_, gy_ = base.x, base.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 8 * NM); zr_ = SUPPORT_CAP_ZONE_NM
+            else:           # BASECAP: over the field it guards (v0.41.10: the one red is likeliest to raid), else its own
+                gb_ = st.bases.get(getattr(f, "guard", "") or f.base_id, base)
+                gx_, gy_ = gb_.x, gb_.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 8 * NM); zr_ = SUPPORT_CAP_ZONE_NM
             cap_zone = (gx_, gy_, min(self.o.friendly_cap_engage_nm or 999, zr_))
             p = spec.profile
             wps = [Wpt("SPAWN", sx, sy, p.cap_alt_ft, p.cap_kts), Wpt("CAP1", sx, sy, p.cap_alt_ft, p.cap_kts, "", "CAPORBIT"),
@@ -1328,23 +1358,35 @@ class MissionBuilder:
             # escort covers the package: the circle is round the package's launch points (HARM / JSOW points, or the IP), COVER_ZONE_NM, and
             # always takes in its own station. Until the hold ends.
             if stw.action == "SWEEPSTN" or not self._launch_pts.get(package.id):
-                zone_ = (stw.x, stw.y, A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A])
+                # v0.41.10: a sweep engages within 25 nm whatever it flies (the v0.41.8 F-16 sweep, 15 nm, never fired while MiGs went past it)
+                zone_ = (stw.x, stw.y, A2A_ZONE_NM[True] if stw.action == "SWEEPSTN" else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A])
             else:
                 lp_ = self._launch_pts[package.id]
                 cx_, cy_ = sum(p_[0] for p_ in lp_) / len(lp_), sum(p_[1] for p_ in lp_) / len(lp_)
                 zone_ = (cx_, cy_, max(COVER_ZONE_NM, dist(cx_, cy_, stw.x, stw.y) / NM + 5))
-            self._limit_engage(g, 0, hold_end, zone_)
+            zct_ = self._limit_engage(g, 0, hold_end, zone_)
+            hold_ = None
+            if hold_end is not None and stw.action != "SWEEPSTN":
+                hold_ = {"cts": [zct_], "starts": [], "tgt": (geom.tx, geom.ty), "end": int(hold_end),
+                         "after": TARCAP_AFTER_TOT_S if stw.action == "TARCAP" else ESCORT_AFTER_TOT_S}
+                self._holds.append(hold_)
             if hold_end is not None:
                 # v0.41.5: on the way home the flight still fights what comes within HOMEWARD_ENGAGE_NM of it. In the v0.41.4 run a lone MiG-29 chased
                 # Springfield (F-14s, 5 of about 40 missiles fired) home after the hold ended and fired four R-27s while they only defended.
                 hw_ = task.ControlledTask(task.EngageTargets(int(HOMEWARD_ENGAGE_NM * 1852), [task.Targets.All.Air]))
                 hw_.start_after_time(int(hold_end)); g.points[0].tasks.insert(1, hw_)
+                if hold_ is not None:
+                    hold_["starts"].append(hw_)
             rtb_a = task.OptRTBOnOutOfAmmo(); rtb_a.params["action"]["params"]["value"] = AAM_WEAPONS
             if stw.action != "SWEEPSTN":    # (a sweep gets it below): out of air-to-air missiles, the homeward fight is over
                 g.points[0].tasks.append(rtb_a)
             # snipe: fire at maximum range, radar searching all the time (red's warning receivers light up and it turns away early). AI
             # launch behaviour still varies by type in DCS (forum reports), so the shot log is the check.
-            g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
+            # v0.41.10: on the way out, closer shots (halfway between max range and the no-escape zone): fewer, surer missiles, kept for the
+            # station. Maximum range from the station on (set at that waypoint below). Out of fuel: home (v0.41.8 run: Venom 9-4 flamed out).
+            g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.HalfWayRMaxNoEsc))
+            g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
+            self._snipe_at[id(g)] = stw
             g.points[0].tasks.append(task.OptRadarUsing(task.OptRadarUsing.Values.UseForContinuousSearch))
             if stw.action == "SWEEPSTN":    # a sweep goes home once its air-to-air missiles are gone
                 rtb_ = task.OptRTBOnOutOfAmmo(); rtb_.params["action"]["params"]["value"] = AAM_WEAPONS
@@ -1463,8 +1505,12 @@ class MissionBuilder:
                 if f.tag:
                     self._sup_cts.append(ct)
             elif w.orbit:                                                    # fighters held short of live SAM cover / on their station
+                if self._snipe_at.get(id(g)) is w:                              # v0.41.10: on station: maximum-range shots (snipe) from here on
+                    wp.tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
                 ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH)))
                 ct.stop_after_time(hold_end if (w is stw and hold_end is not None) else stop); wp.tasks.append(ct)
+                if w is stw and self._holds and self._holds[-1]["end"] == hold_end and ct not in self._holds[-1]["cts"]:
+                    self._holds[-1]["cts"].append(ct)
             elif w.action == "BOMB":
                 wp.tasks.append(task.Bombing(pt(w.x, w.y), group_attack=True))
             elif w.action == "JSOW":
@@ -1533,6 +1579,13 @@ class MissionBuilder:
                     "ux": um_.x if um_ else None, "uz": um_.y if um_ else None, "um": SA10_GATE_KM * 1000 if um_ else None,
                     "from": n0_ + max(0, ti_ - 1) + 1, "to": to_, "ai": ai_, "dead": f.role == Role.STRIKE, "you": bool(f.is_player), "pkg": package.id}
         if base.kind == BaseKind.AIRFIELD:
+            if not f.is_player or o.player_is_ai:
+                # v0.41.10: staggered recovery. Each AI flight comes home through its own entry point, 8 nm out on its own bearing and height, so the
+                # flights do not all arrive over the field at once (two F-15 wingmen collided low and slow on the way home in two runs)
+                lp_ = g.points[-1].position
+                rb_ = bearing(base.x, base.y, lp_.x, lp_.y) + RCV_SPREAD[idx % len(RCV_SPREAD)]
+                rx_, ry_ = offset(base.x, base.y, rb_, RCV_NM * NM)
+                g.add_waypoint(pt(rx_, ry_), (3000 + 1000 * (idx % 4)) * FT, 300 * KPH, "RCV")
             g.land_at(self.apt[base.id])
             if special:
                 g.points[-1].name = "RTBXHB"
@@ -1926,6 +1979,7 @@ class MissionBuilder:
             ct.stop_after_time(max(60, int(until_s)))
             et = ct
         g.points[0].tasks.insert(0, et)
+        return et
 
     def _spawn_air_picture(self, package, tx, ty, tot_s, geom, manifest, keepout):
         """Known CAP flights are airborne from t=0 on briefed stations. The rest of the defenders are alert aircraft sitting on real
@@ -1974,6 +2028,15 @@ class MissionBuilder:
                 g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
                 # the same rule as ours: a patrol engages inside a circle round its station, it does not chase a target home
                 self._limit_engage(g, 0, None, (gx, gy, min(A2A_ZONE_NM[True], self.o.enemy_cap_engage_nm or A2A_ZONE_NM[True])))
+                if pf_.get("gx") is not None and pf_["kind"] == "CAP":
+                    # v0.41.10: called in. When blue comes within RED_CALLIN_NM of the SAM site this pair guards, it is sent to fight over the site
+                    g.add_trigger_action(task.EngageTargetsInZone(mapping.Vector2(pf_["gx"], pf_["gy"]), int(RED_CALLIN_ZONE_NM * NM), [task.Targets.All.Air]))
+                    zc_ = self.m.triggers.add_triggerzone(pt(pf_["gx"], pf_["gy"]), RED_CALLIN_NM * NM, True, f"callin {g.name}")
+                    tc_ = triggers.TriggerOnce(comment=f"call in {g.name} to {pf_.get('guard')}")
+                    tc_.add_condition(condition.PartOfCoalitionInZone("blue", zc_.id))
+                    tc_.add_action(action.AITaskPush(g.id, 1))
+                    self.m.triggerrules.triggers.append(tc_)
+                    self._callins.append({"g": g.name, "site": pf_.get("guard")})
             else:                                           # alert: on the runway, scrambles when detected
                 ap = self.t.airports.get(a.airport) if a.airport else None
                 if ap is None:

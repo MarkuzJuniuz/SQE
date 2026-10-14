@@ -134,7 +134,11 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         far = offset(g.tx, g.ty, g.hdg + 180 if role == Role.SEAD else jsow_hdg, ((harm_nm if role == Role.SEAD else jsow_nm) + 6) * NM)
         if dist(g.tx, g.ty, *far) > dist(g.tx, g.ty, *g.ip):
             ip_xy = far
-    wp.append(Wpt("PUSH", *g.push, alt, p.push_kts, "Push on time, check in with AWACS"))
+    # v0.41.10: deconfliction. AI flights cross PUSH and EGR on their own lane, 1.5 nm apart sideways by stack slot (at most 4.5 nm), so a
+    # package's flights do not all converge on one point at one height
+    lane = 0.0 if human or not stack_idx else (1 if stack_idx % 2 else -1) * min(4.5, 1.5 * ((stack_idx + 1) // 2))
+    lane_xy = lambda xy: offset(xy[0], xy[1], g.hdg + 90, lane * NM) if lane else xy
+    wp.append(Wpt("PUSH", *lane_xy(g.push), alt, p.push_kts, "Push on time, check in with AWACS"))
     st_ = (g.stand or {}).get(key) if role in (Role.ESCORT, Role.SWEEP) else None
     if st_ is not None and len(st_) >= 5:
         # TARCAP (ESCORT role) and ESCORT (SWEEP role, package escort): a station of their own, short of the target and outside live SAM cover,
@@ -186,7 +190,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         snm = (harm_nm if role == Role.SEAD else jsow_nm) + STANDOFF_EGRESS_NM
         wp.append(Wpt("EGR", *offset(g.tx, g.ty, sax, snm * NM), ialt, p.egress_kts, "Exit: back out along the approach", rad=irad))
     elif not (so and role in (Role.SWEEP, Role.ESCORT)):         # a stand-off fighter never crosses the target area: it goes home from its hold
-        wp.append(Wpt("EGR", *g.egr, ialt, p.egress_kts, "Exit threat area", rad=irad))
+        wp.append(Wpt("EGR", *lane_xy(g.egr), ialt + (1000 * (stack_idx % 3) if lane else 0), p.egress_kts, "Exit threat area", rad=irad))
     if len(wp) + 2 > p.max_points:
         raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")
     return wp

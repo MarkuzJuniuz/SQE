@@ -174,7 +174,11 @@ def main():
             assert _zt and round(_zt[0]["params"]["task"]["params"]["zoneRadius"] / 1852) >= 20, (f_.callsign, "leashed to the package's cover zone")
             _o0a = {t_["params"]["action"]["params"]["name"]: t_["params"]["action"]["params"].get("value") for t_ in _pts[0]["task"]["params"]["tasks"].values()
                     if t_.get("params", {}).get("action", {}).get("id") == "Option"}
-            assert _o0a.get(18) == 0 and _o0a.get(3) == 3, (f_.callsign, "max-range shots, radar searching all the time", _o0a)
+            assert _o0a.get(18) == 2 and _o0a.get(3) == 3 and _o0a.get(6) is True, (f_.callsign, "v0.41.10: closer shots on the way out, radar searching, bingo RTB", _o0a)
+            _st0 = next(p_ for p_ in _pts if p_.get("name") == "TGT")
+            _ost = {t_["params"]["action"]["params"]["name"]: t_["params"]["action"]["params"].get("value") for t_ in _st0["task"]["params"]["tasks"].values()
+                    if t_.get("params", {}).get("action", {}).get("id") == "Option"}
+            assert _ost.get(18) == 0, (f_.callsign, "v0.41.10: maximum-range shots from the station on", _ost)
         _nst += 1
     assert _nst, "no TARCAP / escort checked"
     _rz = [g_ for co_ in _mz["mission"]["coalition"]["red"]["country"].values() for g_ in co_.get("plane", {}).get("group", {}).values() if g_["name"].startswith("Bandit")]
@@ -1118,7 +1122,7 @@ def main():
     from sqe.mission_builder import MissionBuilder as _MB9
     _g9 = _MB9._gather_support(_sw, _cov5)
     _t9 = [f_.tag for f_ in _g9.flights if f_.tag]
-    _want9 = {(f_.tag, f_.base_id if f_.tag in ("BASECAP", "CVCAP") else "") for p_ in _cov5 for f_ in p_.flights if f_.tag}
+    _want9 = {(f_.tag, (f_.guard or f_.base_id) if f_.tag in ("BASECAP", "CVCAP") else "") for p_ in _cov5 for f_ in p_.flights if f_.tag}
     assert len(_t9) == len(_want9) and ("TNKCAP" in _t9 or not any(t_ == "TNKCAP" for t_, _ in _want9)), ("the sweep mission takes one of each support CAP from the folded packages", _t9, _want9)
     assert len(_sw.flights) == len([f_ for f_ in _sw.flights if not f_.tag]) and len(_g9.flights) == len(_sw.flights) + len(_t9), "the plan's package is not changed"
     assert len({f_.callsign for f_ in _g9.flights}) == len(_g9.flights), "callsigns stay unique"
@@ -1465,7 +1469,13 @@ def main():
     s.new("Red air", "F-16C", 3, seed=7); _st = s.state
     _p1 = {"day": _st.red_air["day"], "flights": [dict(f_) for f_ in _st.red_air["flights"]]}
     assert _p1["flights"] and {f_["kind"] for f_ in _p1["flights"]} <= {"CAP", "SWEEP"} and any(f_["kind"] == "SWEEP" for f_ in _p1["flights"]), "a plan with patrols and a sweep"
-    _st.red_air = {}; _ra.ensure(_st, _gd(3)); assert {"day": _st.red_air["day"], "flights": _st.red_air["flights"]} == _p1, "the same day plans the same"
+    _gk = ("x", "y", "guard", "gx", "gy", "read")             # v0.41.10: the guard stations are set after the day's blue objectives are known
+    _strip = lambda fl_: [{k_: v_ for k_, v_ in f_.items() if k_ not in _gk} for f_ in fl_]
+    _gd_ = [f_ for f_ in _p1["flights"] if f_.get("guard")]
+    assert _gd_ and all(_m3j.hypot(f_["x"] - f_["gx"], f_["y"] - f_["gy"]) / 1852 <= _ra.GUARD_FWD_NM + 0.5 for f_ in _gd_), "red patrols sit over the SAM site they guard"
+    assert all(_st.assets[f_["guard"]].kind.value == "SAM" for f_ in _gd_)
+    print(f"[red guard] {len(_gd_)} red patrol pairs over the SAM sites red rates likeliest to be attacked: {sorted({f_['guard'] for f_ in _gd_})}")
+    _st.red_air = {}; _ra.ensure(_st, _gd(3)); assert {"day": _st.red_air["day"], "flights": _strip(_st.red_air["flights"])} == {"day": _p1["day"], "flights": _strip(_p1["flights"])}, "the same day plans the same"
     for w_ in _st.enemy_air:
         n_ = sum(1 for f_ in _p1["flights"] if f_["wing"] == w_.base_asset_id and f_["kind"] == "CAP")
         assert n_ <= max(0, w_.available // 2 - 1), "one pair per wing always stays on alert"

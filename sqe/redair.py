@@ -21,7 +21,7 @@ from __future__ import annotations
 import hashlib
 import random
 from .loadouts import ENEMY_FIGHTERS
-from .models import BaseKind
+from .models import AssetKind, BaseKind
 from .routes import NM, bearing, dist, offset
 
 WAVES = [(0, 360), (360, 720), (720, 1080), (1080, 1440)]     # minutes of the day
@@ -110,6 +110,63 @@ def plan(state, d) -> dict:
         flights.append({"id": f"rf{state.day}-{w.base_asset_id}-s{k}", "kind": "SWEEP", "wing": w.base_asset_id, "type": rng.choice(types), "size": 2,
                         "start": lo, "end": lo + SWEEP_MIN, "x": float(c[0]), "y": float(c[1])})
     return {"day": state.day, "flights": flights, "budget": bud, "used": dict(use), "patrol_used": dict(use)}
+
+
+GUARD_NM = 60                  # v0.41.10: a patrol guards a SAM site within this of its own field
+GUARD_FWD_NM = 10              # ...from a station this far in front of the site, toward the nearest friendly (blue) field
+GUARD_VALUE = {"SA-10": 4.0, "SA-11": 3.0, "SA-6": 2.5, "SA-15": 2.0, "SA-19": 1.5, "SA-8": 1.5, "SA-3": 1.5, "SA-2": 1.2}
+GUARD_READ = {1: 0.25, 2: 0.5, 3: 0.75}   # how often red's "briefing" reads the day's blue targets right, by level
+
+
+def guard_score(state, site, blue_af, attacked: set, expected: list) -> float:
+    """Red's threat rating of one of its SAM sites: how valuable it is, how close it is to blue's fields, whether it was attacked
+    lately, and whether red expects it to be attacked today (expected: [(x, y)] of the blue targets red has read correctly)."""
+    v = GUARD_VALUE.get(site.variant, 1.0)
+    dblue = min((dist(site.x, site.y, b.x, b.y) / NM for b in blue_af), default=200.0)
+    sc = v * (1.0 + max(0.0, (150.0 - dblue) / 50.0))
+    if site.id in attacked:
+        sc += 2.0
+    if any(dist(site.x, site.y, ex, ey) <= 25 * NM for ex, ey in expected):
+        sc += 10.0
+    return sc
+
+
+def assign_guards(state, d, objectives) -> None:
+    """v0.41.10: red's own "briefing". Each planned patrol pair takes a station over the SAM site its wing rates most likely to be attacked
+    (guard_score), 10 nm in front of it toward blue, instead of a point in front of its own base: red CAP sits over its air defence and
+    comes to its help. Whether red reads today's blue targets correctly follows the level (GUARD_READ), once per wing per day."""
+    ra = getattr(state, "red_air", None)
+    if not ra:
+        return
+    lvl = max(1, min(3, int(getattr(d, "level", 1))))
+    rng = random.Random(f"{state.campaign_id}:{state.day}:redguard")
+    blue_af = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD]
+    attacked = set((state.raids or {}).get("sead", {}).keys()) | set((state.raids or {}).get("sead_fail", {}).keys())
+    tgt_xy = []
+    for o in objectives or []:
+        a = state.assets.get(getattr(o, "target_id", None) or "")
+        if a is not None:
+            tgt_xy.append((a.x, a.y))
+    sams = [a for a in state.assets.values() if a.kind == AssetKind.SAM and not a.destroyed]
+    taken = {}
+    for f in ra.get("flights", []):
+        if f.get("kind") != "CAP":
+            continue
+        a = state.assets.get(f["wing"])
+        if a is None:
+            continue
+        cands = [s for s in sams if dist(s.x, s.y, a.x, a.y) <= GUARD_NM * NM]
+        if not cands:
+            continue
+        reads = rng.random() < GUARD_READ[lvl]
+        exp = tgt_xy if reads else []
+        ranked = sorted(cands, key=lambda s: (-guard_score(state, s, blue_af, attacked, exp), s.id))
+        k = taken.get(f["wing"], 0)
+        site = ranked[min(k, len(ranked) - 1)]
+        taken[f["wing"]] = k + 1
+        nb = min(blue_af, key=lambda b: dist(site.x, site.y, b.x, b.y)) if blue_af else None
+        sx, sy = offset(site.x, site.y, bearing(site.x, site.y, nb.x, nb.y), GUARD_FWD_NM * NM) if nb else (site.x, site.y)
+        f["x"], f["y"], f["guard"], f["gx"], f["gy"], f["read"] = sx, sy, site.id, site.x, site.y, reads
 
 
 def ensure(state, d) -> dict:
