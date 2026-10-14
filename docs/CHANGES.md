@@ -1,3 +1,11 @@
+## v0.41.26
+
+From XO's Nalchik SA-6 run: the tanker was shot down in the middle of the fight, and the F-16s guarding it were timid.
+
+* **Tanker placement:** the tanker track still sits between the fight and home, where the package can use it, but now keeps a minimum distance from every danger, both ends of the racetrack included: 20 nm outside every SAM ring and every enemy field's scramble circle (was 15), 40 nm from every red patrol station, and 25 nm from the lines red fighters fly in on (each enemy field within reach to each target in the mission). Among the clear spots, one under friendly SAM cover (within 30 nm of a defended friendly field or the carrier group) wins, then the one furthest forward. Scan over 16 campaigns: 4 of 32 tankers used to sit on a red inbound line, now none; the typical tanker sits about 58 nm from the target (was 44).
+* **Tanker CAP (F-16s):** it engages anything inside 40 nm of the tanker (was 25), radar searching all the time, weapons free, firing at maximum range, and stays on its leash round the tanker.
+* Smoke test: the tanker track stays off a red inbound line.
+
 ## v0.41.25
 
 From XO's second Sukhumi run (v0.41.24): 10 friendly jets lost, 4 of them the Gudauta SEAD flight to the Sukhumi S-300 again, and some Hornets never recovered at the boat.

@@ -52,6 +52,8 @@ RED_CALLIN_ZONE_NM = 25       # ...where it engages inside this circle round the
 HOLD_AREA_KM = 60             # v0.41.10: packages whose targets are this close share their TARCAP / escort holds (the sweep area)
 SWEEP_AFTER_TOT_S = 120       # v0.41.13: a sweep holds until 2 min after the first package it covers is over the target
 HOLD_EXTEND_MAX_S = 1800      # ...extended at most this much past their own package
+TANKER_COVER_NM = 30          # v0.41.26: a tanker track this close to a friendly field's Patriot (or the carrier group) counts as under friendly SAM cover
+TNKCAP_ZONE_NM = 40           # v0.41.26: the tanker CAP engages inside this circle round the tanker (an AMRAAM's reach), never further
 SUPPORT_CAP_ZONE_NM = 25      # v0.41.7: HAVCAP / tanker CAP / base CAP engage inside this circle round what they guard
 CVCAP_NM = 12                 # v0.41.21: the carrier CAP orbits this far out from the boat toward the nearest enemy field (v0.41.7: 22)
 CVCAP_DETECT_MARGIN_NM = 5    # v0.41.21: its orbit and engage circle stay this far outside every enemy field's scramble circle
@@ -1225,6 +1227,11 @@ class MissionBuilder:
                 break
         return x, y
 
+    def _pkg_target_xy(self, package):
+        """(x, y) of a package's ground target, or None (fleet / base patrols)."""
+        a = self.state.assets.get(package.objective.target_id) if package.objective.target_id else None
+        return (a.x, a.y) if a is not None else None
+
     def _place_support(self, package, plan, g, extras=()):
         """v0.41.7: the AWACS sits well back (its own anchor: where the marshal used to be, 90 nm from every enemy field) with its HAVCAP; the
         tanker sits FORWARD, on the way home (between the base and the egress point, clear of SAM rings and the enemy fields' scramble circles),
@@ -1240,7 +1247,16 @@ class MissionBuilder:
                if not f_.tag and f_.base_id in st.bases and st.bases[f_.base_id].kind == BaseKind.AIRFIELD]
         n_ = sum(c_ for _, c_ in hf_)
         hx_, hy_ = ((sum(b_.x * c_ for b_, c_ in hf_) / n_, sum(b_.y * c_ for b_, c_ in hf_) / n_) if n_ else (g.bx, g.by))
-        fwd = tm.forward_tanker_spot(st, (hx_, hy_), g.egr, (g.tx, g.ty))
+        # v0.41.26: a minimum distance from every danger (SAMs, scramble circles, red patrols, the lines red fighters fly in on), inside
+        # friendly SAM cover where it can be (the XO's Nalchik run lost the tanker in the middle of the fight)
+        caps_ = [(c_["x"], c_["y"]) for c_ in (getattr(self, "_cap_plan", None) or [])]
+        tgts_ = [(g.tx, g.ty)] + [self._pkg_target_xy(p_) for p_ in extras if self._pkg_target_xy(p_)]
+        lanes_ = [(fx_, fy_, tx_, ty_) for fx_, fy_ in tm.fighter_bases(st) for tx_, ty_ in tgts_
+                  if dist(fx_, fy_, tx_, ty_) <= ALERT_REACH_NM * NM]
+        cover_ = [(b_.x, b_.y, TANKER_COVER_NM) for b_ in st.bases.values()
+                  if b_.kind == BaseKind.AIRFIELD and self.o.base_defenses and getattr(b_, "defense", 0) >= 0.15] + \
+                 [(b_.x, b_.y, TANKER_COVER_NM) for b_ in st.bases.values() if b_.kind == BaseKind.CARRIER]
+        fwd = tm.tanker_spot(st, (hx_, hy_), g.egr, (g.tx, g.ty), caps_, lanes_, cover_, track_hdg=g.hdg - 90)
         self._tanker_c = None
         for s in package.support:
             cls = getattr(planes, s.dcs_class)
@@ -1290,7 +1306,7 @@ class MissionBuilder:
             # a circle round it. HAVCAP: the AWACS (well back). TNKCAP: the tanker (forward, on the way home). BASECAP: the home field. CVCAP: the boat.
             tc_ = getattr(self, "_tanker_c", None)
             if f.tag == "TNKCAP" and tc_ is not None:
-                gx_, gy_ = tc_; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 5 * NM); zr_ = SUPPORT_CAP_ZONE_NM
+                gx_, gy_ = tc_; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 5 * NM); zr_ = TNKCAP_ZONE_NM
             elif f.tag in ("HAVCAP", "TNKCAP"):
                 gx_, gy_ = hav_xy; thr_ = geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
             elif f.tag == "CVCAP":
@@ -1425,6 +1441,11 @@ class MissionBuilder:
             # v0.41.14: support CAP snipes (maximum range: the bandits turn defensive before they reach what it guards) and goes home when its
             # air-to-air missiles are gone (the SAMs and the boat's SM-2s cover what it guards)
             g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
+            if f.tag == "TNKCAP":
+                # v0.41.26: the tanker CAP was timid in the XO's Nalchik run. Radar searching all the time, weapons free, so it shoots first at
+                # maximum range at anything coming at the tanker; the circle round the tanker (TNKCAP_ZONE_NM) keeps it with the tanker
+                g.points[0].tasks.append(task.OptRadarUsing(task.OptRadarUsing.Values.UseForContinuousSearch))
+                g.points[0].tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
             rtbt_ = task.OptRTBOnOutOfAmmo(); rtbt_.params["action"]["params"]["value"] = AAM_WEAPONS
             g.points[0].tasks.append(rtbt_)
         elif stw is not None and (not f.is_player or o.player_is_ai):
