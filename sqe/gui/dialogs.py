@@ -144,8 +144,8 @@ class SettingsDialog(QDialog):
         self.emerg.setChecked(bool(getattr(settings, "emergencies", True))); v.addWidget(self.emerg)
         hint(v, "Chance per sortie by difficulty (about 3%, 9%, 21%), never two sorties in a row. If your squadron can take it you are offered the scramble; "
                 "otherwise you are told, and the war settles it. Raids on our airfields (announced or not) happen whether this is on or off.")
-        self.splash = QCheckBox("Splash damage: blast damage around bomb and missile impacts (off by default)")
-        self.splash.setChecked(bool(getattr(settings, "splash_damage", False))); v.addWidget(self.splash)
+        self.splash = QCheckBox("Splash damage: blast damage around bomb and missile impacts (on by default)")
+        self.splash.setChecked(bool(getattr(settings, "splash_damage", True))); v.addWidget(self.splash)
         hint(v, "DCS often leaves a vehicle a few metres from a bomb untouched. On: ground units near an air-to-ground weapon's impact take a blast "
                 "of their own, scaled to the warhead and weaker with distance. Kills it causes count for the shooter.")
         self.ecm = QCheckBox("ECM script: SQE's own jamming model (experimental, off by default)")
