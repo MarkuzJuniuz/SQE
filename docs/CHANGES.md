@@ -1,3 +1,12 @@
+## v0.41.24
+
+From XO's Sukhumi SA-11 Standoff DEAD run (13 friendly jets lost: 5 to SAMs, 8 in the air).
+
+* **Fighters stay off the target's SAMs too.** Since v0.41.22 every fight circle was trimmed clear of SAMs, except the ones the package was sent against. That exemption is right for the HARM and JSOW shooters but not for fighters: the TARCAP's circle was centred 23 nm from the SA-11 with a 35 nm radius, and Springfield 1-1 and Hornet 3-1 chased bandits into it before the HARMs arrived. TARCAP, sweep, escort, support CAP and homeward circles now stay clear of every SAM, the target's included. In a 12-campaign scan 6% of fighter circles are still at their 8 nm minimum with the edge a few nm inside an SA-2's ring; none reaches over a site.
+* **HARM launch points clear of neighbouring SAMs.** A Gudauta SEAD flight's HARM point sat 30 nm from the Sukhumi S-300 (another package's target), and three Hornets died to it. The HARM point now stays outside the reach of every SAM the package isn't sent against, as well as the umbrella SA-10: it moves further out along its axis, and the axis may turn 15 or 30 degrees. When nothing is clear, the HARM flights fire on the neighbouring site first. Scan: 190 HARM points, none inside a neighbour's reach.
+* **Enemy air wings panel:** aircraft types show their proper names (Su-27, MiG-29S, Tu-22M3) instead of DCS's internal ones (XO).
+* `docs/GITHUB_GUIDE.md` is ignored by git; it stays local (XO).
+
 ## v0.41.23
 
 Fight circles moved instead of shrunk, and preloaded flights placed right.
