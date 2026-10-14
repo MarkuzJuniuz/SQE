@@ -809,6 +809,40 @@ timer.scheduleFunction(function(_, t)
   if left then return t + 5 end
   return nil
 end, nil, timer.getTime() + 5)
+-- v0.41.17: carrier recovery without the deck queue. An AI flight going home to the boat runs SQE_RECOVER at its recovery point 10 nm out:
+-- every jet still flying counts as landed (debrief and war sim) and the group leaves the mission. Your own wingmen do the same once you
+-- are both within CVREC.r of the boat after CVREC.t (you trap alone; DCS's carrier ATC queue is the problem, not the AI).
+local CVREC = { __CVREC__ }
+function SQE_RECOVER(gname)
+  local g = Group.getByName(gname)
+  if not g then return end
+  for _, u in ipairs(g:getUnits() or {}) do
+    local okn, un = pcall(function() return u:getName() end)
+    if okn and un and not dead[un] then landed[un] = true end
+  end
+  dump()
+  pcall(function() g:destroy() end)
+end
+if CVREC.cv and not AITEST then
+  timer.scheduleFunction(function(_, t)
+    if t < (CVREC.t or 0) then return t + 10 end
+    local cv, me = Unit.getByName(CVREC.cv), Unit.getByName(PLAYER)
+    local g = Group.getByName(PGROUP)
+    if not (cv and me and g) then return t + 10 end
+    local cp, mp = cv:getPoint(), me:getPoint()
+    local near = function(p) return math.sqrt((p.x - cp.x) ^ 2 + (p.z - cp.z) ^ 2) <= CVREC.r end
+    if not near(mp) then return t + 10 end
+    local left = false
+    for _, u in ipairs(g:getUnits() or {}) do
+      local okn, un = pcall(function() return u:getName() end)
+      if okn and un and un ~= PLAYER and not dead[un] then
+        if near(u:getPoint()) then landed[un] = true; dump(); pcall(function() u:destroy() end) else left = true end
+      end
+    end
+    if left then return t + 10 end
+    return nil
+  end, nil, timer.getTime() + 10)
+end
 dump()
 '''
 
@@ -858,7 +892,15 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)).replace("__SPLASH__", "true" if splash else "false")
             .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}}}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy))
             .replace("__ALERTS__", ", ".join(f'{{g={_lq(a["g"])}, f={int(a["f"])}, b={_lq(a["b"])}, ty={_lq(a["ty"])}}}' for a in (alerts or [])))
-            .replace("__CFG__", json.dumps(cfg or {}).replace("'", "")))
+            .replace("__CVREC__", _cvrec_lua((cfg or {}).get("cvrec")))
+            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k != "cvrec"}).replace("'", "")))
+
+
+def _cvrec_lua(cv) -> str:
+    """v0.41.17: the carrier recovery watch for your wingmen: the carrier unit, the radius (m) and the earliest time (s)."""
+    if not cv:
+        return ""
+    return f'cv={_lq(cv["cv"])}, r={float(cv.get("r", 18520)):.0f}, t={float(cv.get("t", 0)):.0f}'
 
 
 def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despawn_names: list, player_name: str = "",

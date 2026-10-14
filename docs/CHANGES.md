@@ -1,3 +1,9 @@
+## v0.41.17
+
+* **Carrier recovery without the deck queue.** An AI flight going home to the carrier is recovered at a point 10 nm from the boat: every jet still flying counts as landed (debrief and war sim) and the group leaves the mission. DCS's carrier landing queue ran an F-14 dry and stacked AI in your pattern.
+* **Your wingmen too:** once you are back within 10 nm of the boat after your TOT, your wingmen are recovered the same way, so you trap alone. Airfields are unchanged (the AI still lands there for real).
+* Briefing: a low-level profile now reads "from the LOW point, 30 nm out" (v0.41.16 moved the descent there).
+
 ## v0.41.16
 
 From the v0.41.14 Gudauta fuel-farm run: the whole Venom 7 strike flight was lost. The low-level run started at the IP, 70 nm from the target (the IP sits half way out on long routes); three F-16s flamed out (the wingmen queued at the tanker behind the lead until they were dry); the lead refuelled, bombed alone 30 min after its TOT and was shot down by a live SA-6.

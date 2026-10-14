@@ -665,7 +665,7 @@ def main():
     _ch = lambda ac, role, *v, cloud=None: _pf.choose(_st(*v), role, _P(ac), _pts, (100_000, 0), cloud)
     t_ = _ch("FA-18C", _Rl.STRIKE); assert not t_.changed and t_.alt_ft == 20000 and not t_.rad, t_
     t_ = _ch("FA-18C", _Rl.STRIKE, "SA-6"); assert not t_.changed, "one SA-6 is not enough to change the profile"
-    t_ = _ch("FA-18C", _Rl.STRIKE, "SA-11", "SA-6", "SA-2"); assert t_.changed and t_.rad and t_.alt_ft == 500 and t_.label == "LOW" and "from the IP" in t_.reason, t_
+    t_ = _ch("FA-18C", _Rl.STRIKE, "SA-11", "SA-6", "SA-2"); assert t_.changed and t_.rad and t_.alt_ft == 500 and t_.label == "LOW" and "from the LOW point, 30 nm out" in t_.reason, t_
     assert not _pf.choose(_st("SA-11", "SA-6", "SA-2"), _Rl.STRIKE, _P("FA-18C"), _pts, (100_000, 0), None, skip={"s0", "s1", "s2"}).changed, "the DEAD target itself does not push the package low"
     assert not _ch("F-15C", _Rl.STRIKE, "SA-11", "SA-6", "SA-2").changed, "the FC3 F-15C never goes LOW"
     assert not _pf.choose(_st("SA-11", "SA-6", "SA-2"), _Rl.STRIKE, _P("FA-18C"), _pts, (100_000, 0), None, skip={"nothing"}).rad, "a DEAD package never goes LOW"
@@ -1418,6 +1418,19 @@ def main():
     _seg = lambda a_, b_, cx_, cy_: min(_m.hypot(a_.x + (b_.x - a_.x) * k_ / 200 - cx_, a_.y + (b_.y - a_.y) * k_ / 200 - cy_) for k_ in range(201)) / 1852
     assert len(_r11) == 3 and min(_seg(a_, b_, 100 * 1852, 20 * 1852) for a_, b_ in zip(_r11, _r11[1:])) >= 34, ("a route bends around an SA-10", [(w_.name, round(w_.x), round(w_.y)) for w_ in _r11])
     print("[sa10 avoid] a leg that passed 20 nm from an SA-10 now clears it by 35 nm with one turn point")
+    # v0.41.17: AI flights going home to the carrier are recovered 10 nm out (SQE_RECOVER), not put in the deck queue
+    _rc17 = 0
+    for co_ in _M4["coalition"]["blue"]["country"].values():
+        for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
+            _lp17 = list(g_["route"]["points"].values())[-1]
+            _scr = [t_ for t_ in _lp17["task"]["params"]["tasks"].values() if t_.get("id") == "WrappedAction"
+                    and t_["params"]["action"].get("id") == "Script" and "SQE_RECOVER" in t_["params"]["action"]["params"].get("command", "")]
+            if _scr:
+                assert g_["name"] in _scr[0]["params"]["action"]["params"]["command"] and _lp17.get("type") != "Land", g_["name"]
+                _rc17 += 1
+    _hk17 = _zf.ZipFile(_ss.state.pending["miz"]).read("l10n/DEFAULT/dictionary").decode("utf-8", "ignore") if False else _zf.ZipFile(_ss.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
+    assert _rc17 >= 1 and "function SQE_RECOVER" in _hk17, ("carrier AI flights are recovered at 10 nm by the hook", _rc17)
+    print(f"[cv recover] {_rc17} carrier AI flights recovered 10 nm from the boat instead of joining the deck queue")
     _off4 = abs((_brg["JSOW"] - _brg["SEAD"] + 180) % 360 - 180)
     _eg4, _hs4 = {}, []
     for co_ in _M4["coalition"]["blue"]["country"].values():
