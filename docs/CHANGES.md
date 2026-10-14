@@ -1,3 +1,17 @@
+## v0.41.10
+
+From the v0.41.8 sweep run: the F-15 TARCAPs went home 5 minutes after their own package's TOT while later packages were still coming through; the F-16 sweep never fired (15 nm circle) and one jet flamed out; two F-15 wingmen collided on the way home (the second time); red's patrols sat far north and never came to their SAMs' help.
+
+* **TARCAP and escort hold until the last package over their target area is off target** (targets within 60 km), not only their own; at most 30 minutes longer.
+* **Sweeps engage within 25 nm** of their station whatever they fly (F-16s had 15).
+* **Bingo fuel:** AI fighters on station go home on bingo instead of running dry.
+* **Missiles kept for the fight:** on the way out, TARCAP, escort and sweep shoot from halfway between maximum range and the no-escape zone (fewer, surer shots); from their station on, maximum range (snipe).
+* **Red patrols guard their SAMs.** Red has its own "briefing": each patrol pair takes a station 10 nm in front of the SAM site its wing rates likeliest to be attacked (value, closeness to our fields, recent attacks, and, by level, whether red read today's targets right: 25 / 50 / 75%). When we come within 50 nm of that site, the pair is called in to fight over it.
+* **Red patrol stations** keep 45 nm from our marshal point and fields (was 120 / 80 nm, which pushed them out of the fight once the marshal moved close to the base).
+* **Base CAP over the field red is likeliest to raid** (the raid planner's own weights: nearer and softer fields first), usually the strikers' home field.
+* **Deconfliction:** AI flights cross PUSH and EGR on their own lanes (1.5 nm apart, egress 1,000 ft apart by slot) and come home through their own entry point 8 nm from the field on their own bearing and height.
+* Smoke test: staged missile ranges and bingo option, red patrols over the sites they guard.
+
 ## v0.41.9
 
 From the v0.41.8 Batumi run (you on a Fighter Sweep): no tanker CAP, HAVCAP, base CAP or carrier CAP anywhere in the mission. A sweep plans no support CAP, and the packages folded into the mission had theirs dropped (support is shared), so the tanker, the AWACS and the boat flew unguarded.

@@ -116,6 +116,7 @@ class Session:
         ground.snap_roads(st)                           # once, as soon as a road scan exists: columns and supply sites sit on a road
         redair.ensure(st, self.d)                       # the enemy's air tasking for the day
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=self.PACKAGES_PER_DAY)
+        redair.assign_guards(st, self.d, objs)          # v0.41.10: red's patrols take stations over the SAM sites it expects to be attacked
         keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry", "sead_fail")}
         if st.red_air.get("patrol_used") is not None:                 # replanning the same day never books the raids twice
             st.red_air["used"] = dict(st.red_air["patrol_used"])
