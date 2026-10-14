@@ -41,6 +41,7 @@ ESCORT_AFTER_TOT_S = 180      # an escort (SWEEP role) holds its station until t
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
 LATE_ATTACK_S = 600           # v0.41.16: an AI strike flight drops only within this of its TOT
+CV_RECOVER_NM = 10            # v0.41.17: AI carrier flights (and your wingmen) are recovered this far from the boat instead of joining the deck queue
 RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
 RCV_SPREAD = (0, 30, -30, 60, -60)    # ...on its own bearing (degrees off the way it comes home), by stack slot
 SA10_REACH_NM = 31            # v0.41.14: the farthest an SA-10 fired at our jets in the runs (54-57 km)
@@ -496,7 +497,10 @@ class MissionBuilder:
                          watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and not f_.is_player],
                          done_after=max([float(tgt.eta_s)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
                          rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts,
-                         cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__})
+                         cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
+                              # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
+                              "cvrec": ({"cv": self.ship[pbase.id].units[0].name, "r": CV_RECOVER_NM * NM, "t": float(tgt.eta_s or 0)}
+                                        if (pbase.kind == BaseKind.CARRIER and pbase.id in self.ship and not o.player_is_ai) else None)})
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -1632,6 +1636,13 @@ class MissionBuilder:
             g.land_at(self.apt[base.id])
             if special:
                 g.points[-1].name = "RTBXHB"
+        elif not f.is_player or o.player_is_ai:
+            # v0.41.17: an AI flight going home to the boat is recovered at a point CV_RECOVER_NM out: it counts as landed and leaves the mission
+            # (SQE_RECOVER in the hook). DCS's carrier landing queue ran an F-14 dry and stacks AI in your pattern.
+            lp_ = g.points[-1].position
+            rx_, ry_ = offset(base.x, base.y, bearing(base.x, base.y, lp_.x, lp_.y), CV_RECOVER_NM * NM)
+            rcv_ = g.add_waypoint(pt(rx_, ry_), 2000 * FT, 300 * KPH, "RTBXHB" if special else "RTB")
+            rcv_.tasks.append(task.RunScript(f"SQE_RECOVER('{g.name}')"))
         else:
             rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
             rtb.type, rtb.action = "Land", PointAction.Landing

@@ -143,7 +143,8 @@ def choose(state, role, p, pts, tgt, cloud_base_ft: float | None = None, skip=()
     where = "target" if any(w == "target" for _v, w in hit) else "route"
     lab = label_for(best[1], best[2])
     verb = "covers" if len({v for v, _w in hit}) == 1 else "cover"
-    return Tier(lab, best[1], best[2], f"{lab} from the IP: {names} {verb} the {where} at {label_for(base[1], base[2])} altitude.", True)
+    frm = "from the LOW point, 30 nm out" if best[2] else "from the IP"           # v0.41.16: the low leg starts 30 nm from the target
+    return Tier(lab, best[1], best[2], f"{lab} {frm}: {names} {verb} the {where} at {label_for(base[1], base[2])} altitude.", True)
 
 
 # ---- fighters stand off from live SAM cover ---------------------------------------------------------------------------------------
