@@ -14,7 +14,9 @@ from .loadouts import LoadoutLibrary
 from .models import Objective, ObjectiveType, Role
 from . import raids, redair
 from .mission_builder import MissionBuilder, MissionOptions
-from .packages import Ledger, NoPlayerSlot, Package, PackageBuilder
+from .packages import AI_ONLY, Ledger, NoPlayerSlot, Package, PackageBuilder
+
+RAID_SCRAMBLES = False      # v0.41.27: emergency raid scrambles are off while intercepts are AI-only (troops in contact stay)
 from .scenario import new_campaign
 from . import theatres
 from .settings import AppSettings
@@ -140,7 +142,7 @@ class Session:
                 for sid in ledger.free:
                     ledger.free[sid] = min(ledger.free[sid], daily[sid])
                 pkg = None
-                for fp in ((True, False) if (i - 1) in forced else (False,)):
+                for fp in ((True, False) if ((i - 1) in forced and o.type not in AI_ONLY) else (False,)):
                     try:
                         pkg = pb.build(o, i, ledger, for_player=fp, names=names)
                         break
@@ -283,14 +285,16 @@ class Session:
             if leg is None:
                 continue
             sead.append((p, st.assets[p.objective.target_id], leg))
+        # v0.41.27: connected groups (a package joins if its target is close to ANY target in the group, not only the first one's): with the
+        # carrier further out, the greedy version split the Gudauta cluster and its SA-11 package went in 15 minutes ahead of the others
         groups = []
-        for item in sead:                                             # greedy: a package joins the first group whose lead target is close enough
-            for g in groups:
-                if math.hypot(g[0][1].x - item[1].x, g[0][1].y - item[1].y) <= SEAD_SYNC_KM * 1000:
-                    g.append(item)
-                    break
-            else:
-                groups.append([item])
+        for item in sead:
+            near = [g for g in groups if any(math.hypot(o[1].x - item[1].x, o[1].y - item[1].y) <= SEAD_SYNC_KM * 1000 for o in g)]
+            merged = [item]
+            for g in near:
+                merged = g + merged
+                groups.remove(g)
+            groups.append(merged)
         for g in groups:
             if len(g) < 2:
                 continue
@@ -409,6 +413,8 @@ class Session:
         if squadron_only is None:
             squadron_only = self.settings.flight_filter != "all"
         if pkg.extra.get("scrub"):                                       # scrubbed for weather: nobody flies it, the war sim ignores it
+            return []
+        if pkg.objective.type in AI_ONLY:                                 # v0.41.27: AI-only for now (BARCAP, bomber and raid intercepts)
             return []
         opts = pkg.player_options(self.state.player.aircraft)
         return [f for f in opts if f.squadron_id == self.state.player.squadron_id] if squadron_only else opts
@@ -564,8 +570,9 @@ class Session:
         spec = AIRCRAFT[psq.aircraft]
         committed = sum(f.count for f in pkg.flights if f.squadron_id == psq.id)
         kinds = []
-        base = raids.pick_target(st, random.Random(rng.random()))
-        if base is not None:
+        base = raids.pick_target(st, random.Random(rng.random()))       # (still drawn: the same seed gives the same day)
+        # v0.41.27: no raid scrambles for you for now (an intercept is AI-only until its routes follow the SAM rules); troops in contact stay
+        if base is not None and RAID_SCRAMBLES:
             kinds.append("RAID")
         sec = raids.hot_sector(st)
         cas_aim = ""

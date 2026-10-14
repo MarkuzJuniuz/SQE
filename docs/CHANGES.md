@@ -1,3 +1,13 @@
+## v0.41.27
+
+Only the job types that have been tuned are offered to you; the rest stay in the war, flown by the AI.
+
+* **AI-only for now:** BARCAP, bomber intercepts and raid intercepts are still planned, still listed under "All squadrons" and still played out by the war sim, but they have no FLY button, you're never put in one, and they're never folded into your mission. Their routes and fight circles don't follow the SAM rules yet (in XO's run six BARCAP jets wandered inland over red without a single scramble). They come back one at a time, the bomber intercept "boss fight" first.
+* **Emergencies:** troops in contact (CAS) stay; raid scrambles are off while intercepts are AI-only.
+* **Carrier further out to sea (XO):** about 86 nm west of Batumi (was about 54 nm west of Kobuleti), so the escort ships stop swatting every red jet up the coast. New campaigns only.
+* **SEAD waves on one SAM cluster go in together again:** the packages are grouped by connected clusters (close to any target in the group, not only the first one's). With the carrier further out, the old grouping split the Gudauta cluster and its SA-11 package went in 15 minutes ahead of the others.
+* Smoke test: AI-only jobs are never offered; emergencies are troops in contact only; the land-raid build is still tested with the AI-only list lifted; the ruins check runs on level 2 (on Hard a cluster's SEAD packages now all go in together, so there are no earlier ruins); the in-mission HARM spread allows 20 s (was 15; 18 s with the carrier's longer legs).
+
 ## v0.41.26
 
 From XO's Nalchik SA-6 run: the tanker was shot down in the middle of the fight, and the F-16s guarding it were timid.

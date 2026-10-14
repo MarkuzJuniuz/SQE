@@ -42,6 +42,10 @@ TEMPLATES = {
     ObjectiveType.FLEET_DEFENSE: [Slot(Role.CAP, 4), Slot(Role.CAP, 2, False), Slot(Role.SWEEP, 2, False)],
 }
 _FLEET = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
+# v0.41.27: AI-only job types (XO). They are planned, listed under "All squadrons" and played out by the war sim, but never offered to you
+# and never folded into your mission (fleet / raid packages never were): their routes and fight circles don't follow the SAM rules yet
+# (BARCAP jets wandered inland over red without a single scramble). They come back one at a time, the bomber intercept first.
+AI_ONLY = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
 _TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM",
          Role.ESCORT: "TARCAP: on station short of the target before the package, shoot what comes in range, do not chase; 15 minutes, then home",
          Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
