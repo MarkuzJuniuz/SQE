@@ -64,6 +64,7 @@ JSOW_LAUNCH_NM = 20.0      # an AI JSOW flight's launch point (the AGM-154A glid
 JSOW_HIGH_ALT_FT = 33000      # ...and when it is pushed out past JSOW_LAUNCH_NM, the flight releases from this high
 JSOW_MAX_NM = 45.0           # a JSOW launch point is never farther than this from its target (v0.41.3 run: AGM-154As released at 30-40 nm from 33,000 ft hit; was 40)
 JSOW_KEEP_HIGH_NM = 40.0     # a pushed-out JSOW flight is high, where an SA-10 reaches farther: its launch point stays this far from one (v0.41.3 run: 30.6 nm lost all four)
+LOW_LEG_NM = 30.0          # v0.41.16: a low-level (terrain-following) attack descends this far from the target
 SWEEP_PUSH_NM = 15.0       # v0.41.12: a sweep's PUSH, this far from its base toward the target
 HARM_LAUNCH_NM = 35.0      # v0.41.11: 35 (was 30): the Sukhumi SA-10 engaged HARM shooters at 54-57 km (31 nm); the AI fires from 35-38 nm anyway.
                            # an AI SEAD flight's HARM launch point: at the edge of what an SA-10 first reaches (it opened fire at about 55 km in testing); 21 nm put the launch point deep inside it
@@ -173,7 +174,14 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         return wp
     if jsow and role == Role.STRIKE and not human and jsow_nm > JSOW_LAUNCH_NM:
         ialt, irad = max(ialt, JSOW_HIGH_ALT_FT), False         # a long JSOW shot goes from high up (the glide range grows with release altitude)
-    wp.append(Wpt("IP", *ip_xy, ialt, p.ip_kts, "Weapons armed, master arm", rad=irad))
+    if irad and dist(*ip_xy, g.tx, g.ty) > (LOW_LEG_NM + 3) * NM:
+        # v0.41.16: the low leg starts LOW_LEG_NM from the target, not at the IP. The IP sits half way out on long routes (70 nm in the v0.41.14
+        # Gudauta fuel-farm run): three of four F-16s flamed out at 500 ft before the target. Cruise to the IP, descend at "LOW".
+        wp.append(Wpt("IP", *ip_xy, alt, p.ip_kts, "Weapons armed, master arm"))
+        lx, ly = offset(g.tx, g.ty, bearing(g.tx, g.ty, *ip_xy), LOW_LEG_NM * NM)
+        wp.append(Wpt("LOW", lx, ly, ialt, p.ip_kts, "Descend: low-level run in", rad=True))
+    else:
+        wp.append(Wpt("IP", *ip_xy, ialt, p.ip_kts, "Weapons armed, master arm", rad=irad))
     # The player's TGT is on the ground target at 0 AGL so pods, weapons and the WSO / Jester can slave to it. The wingmen follow the player, and AI-only flights
     # never get a ground-level point (they would descend to it).
     if role == Role.STRIKE and jsow and not human:             # a JSOW slinger never crosses the site: it releases from its launch point and goes home
