@@ -57,7 +57,8 @@ STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -TARCAP_LEAD_S}      # 
 
 SEAD_ENGAGE_NM = 30            # a SEAD flight, or a fighter held at its stand-off point, engages only what is within this of that point
 DEAD_SEAD_LEAD_S = 300         # in a DEAD package the SEAD flight is on the site this long before the DEAD flight
-JSOW_TRAIL_S = 0               # a SEAD package's JSOW flight pushes this long after its HARM shooters: the JETS cross into the umbrella's reach together
+JSOW_TRAIL_S = 120             # v0.41.11: a Standoff DEAD's JSOW flight pushes this long after its HARM shooters, so it reaches SA-10 range once the
+                               # HARMs have landed (about 2 min of flight). Was 0 (together): the v0.41.10 run, the SA-10 fired at the JSOW jets while the HARMs were in the air
                                # (on two axes), the HARMs go first, the JSOWs land a few minutes later on a radar that is dead or has shut down.
                                # v0.39.19 had the JSOW flight 160 s ahead so the WEAPONS would land together: it went in alone and died (v0.39.19 run, Viper 2).
 JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
@@ -124,7 +125,7 @@ def stagger(package, role) -> int:
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear
+from .routes import SA10_AVOID_NM, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear
 from .state import CampaignState
 
 KPH = 1.852
@@ -353,7 +354,7 @@ class MissionBuilder:
         atc_vhf = (self.t.airports[pbase.airport].atc_radio.vhf_high_hz / 1e6) if (pbase.kind != BaseKind.CARRIER and getattr(self.t.airports[pbase.airport], "atc_radio", None)
                                                                               and self.t.airports[pbase.airport].atc_radio.vhf_high_hz) else None
         plan = build_radio_plan(package, st, atc, self.rng, o.layout, RadioCfg(o.carrier_tacan, o.carrier_link4_mhz), div_mhz, div.name, atc_vhf)
-        tanker_xy, awacs_unit, hav_xy = self._place_support(package, plan, geom)
+        tanker_xy, awacs_unit, hav_xy = self._place_support(package, plan, geom, extras)
 
         # ---- timeline: YOUR times. Roles are staggered around the strikers' push (sweep, SEAD, escorts go first) ---------
         launch_s = float(o.launch_offset_s)
@@ -1189,7 +1190,7 @@ class MissionBuilder:
                 break
         return x, y
 
-    def _place_support(self, package, plan, g):
+    def _place_support(self, package, plan, g, extras=()):
         """v0.41.7: the AWACS sits well back (its own anchor: where the marshal used to be, 90 nm from every enemy field) with its HAVCAP; the
         tanker sits FORWARD, on the way home (between the base and the egress point, clear of SAM rings and the enemy fields' scramble circles),
         with its own escort, so a flight short of fuel meets it before its own runway, not 50 nm behind it."""
@@ -1198,7 +1199,13 @@ class MissionBuilder:
         ax, ay = tm.safe_marshal(st, (g.bx, g.by), g.hdg)                   # the old flat-distance marshal spot: the AWACS's anchor
         tanker_xy, awacs_unit = None, None
         hav_xy = offset(ax, ay, g.hdg + 180, 8 * NM)
-        fwd = tm.forward_tanker_spot(st, (g.bx, g.by), g.egr, (g.tx, g.ty))
+        # v0.41.11: for the whole mission, not only your flight: from the middle of the fields the mission's flights fly home to (weighted by
+        # aircraft), toward your package's egress. The v0.41.10 run put it in front of Batumi for your sweep, 40-50 nm off the Senaki flights' way home.
+        hf_ = [(st.bases[f_.base_id], f_.count) for p_ in [package] + list(extras) for f_ in p_.flights
+               if not f_.tag and f_.base_id in st.bases and st.bases[f_.base_id].kind == BaseKind.AIRFIELD]
+        n_ = sum(c_ for _, c_ in hf_)
+        hx_, hy_ = ((sum(b_.x * c_ for b_, c_ in hf_) / n_, sum(b_.y * c_ for b_, c_ in hf_) / n_) if n_ else (g.bx, g.by))
+        fwd = tm.forward_tanker_spot(st, (hx_, hy_), g.egr, (g.tx, g.ty))
         self._tanker_c = None
         for s in package.support:
             cls = getattr(planes, s.dcs_class)
@@ -1337,6 +1344,8 @@ class MissionBuilder:
             if f.is_player and f.aircraft == "F-14BU":
                 u.set_property("INSAlignmentStored", True)
         g.set_skill(Skill.High)
+        if not f.is_player or o.player_is_ai:      # v0.41.11: every AI flight goes home on bingo fuel (two ran dry in the v0.41.10 run: a strike Viper, a Tomcat)
+            g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
         if not f.tag and f.role in (Role.SEAD, Role.STRIKE, Role.CAS):      # where this package's shooters launch: the TARCAP / escort cover zone
             lp_ = next((w for w in wps if w.action in ("SEAD", "JSOW")), None) or next((w for w in wps if w.name == "IP"), None)
             if lp_ is not None:
@@ -1385,7 +1394,6 @@ class MissionBuilder:
             # v0.41.10: on the way out, closer shots (halfway between max range and the no-escape zone): fewer, surer missiles, kept for the
             # station. Maximum range from the station on (set at that waypoint below). Out of fuel: home (v0.41.8 run: Venom 9-4 flamed out).
             g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.HalfWayRMaxNoEsc))
-            g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
             self._snipe_at[id(g)] = stw
             g.points[0].tasks.append(task.OptRadarUsing(task.OptRadarUsing.Values.UseForContinuousSearch))
             if stw.action == "SWEEPSTN":    # a sweep goes home once its air-to-air missiles are gone
@@ -2090,6 +2098,11 @@ class MissionBuilder:
         geom.jsow_keep = [(a.x, a.y, HARM_LAUNCH_NM) for a in self.state.assets.values()            # every live SA-10 near the target, itself included
                           if tt_ is not None and a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not getattr(a, "suppressed", False)
                           and dist(a.x, a.y, tt_.x, tt_.y) <= (tm.UMBRELLA_KM / 1.852 + HARM_LAUNCH_NM) * NM]
+        # v0.41.11: every other live SA-10 within 150 nm: AI strike / SEAD / CAS routes bend around it (routes.avoid_circles)
+        um_ = tm.umbrella_site(self.state, tt_) if tt_ is not None else None             # the one the HARMs go for: the flights must come to it
+        geom.sa10_avoid = [(a.x, a.y, SA10_AVOID_NM) for a in self.state.assets.values()
+                           if a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not getattr(a, "suppressed", False)
+                           and a.id not in (tid_, getattr(um_, "id", None)) and dist(a.x, a.y, tx, ty) <= 150 * NM]
         pts = [geom.push, geom.ip, (tx, ty)]
         for f in package.flights:
             if f.tag:

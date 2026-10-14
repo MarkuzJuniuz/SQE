@@ -54,6 +54,7 @@ class Geometry:
     stand: dict = None      # {(role, id(profile)): (x, y, [SAM types], nm short)} sweeps and escorts that stop at the edge of SAM cover
     sweep: bool = False     # a Fighter Sweep package: no marshal, DEP - PUSH - station - home
     jsow_keep: list = None  # [(x, y, nm)]: live long-range SAMs a JSOW launch point stays this far from (v0.41.3)
+    sa10_avoid: list = None # [(x, y, nm)]: live long-range SAMs (not the target) an AI flight's route bends around (v0.41.11)
 
 
 STANDOFF_EGRESS_NM = 25.0  # a HARM or JSOW flight egresses this far beyond its launch point, straight back out along its own approach
@@ -62,7 +63,8 @@ JSOW_LAUNCH_NM = 20.0      # an AI JSOW flight's launch point (the AGM-154A glid
 JSOW_HIGH_ALT_FT = 33000      # ...and when it is pushed out past JSOW_LAUNCH_NM, the flight releases from this high
 JSOW_MAX_NM = 45.0           # a JSOW launch point is never farther than this from its target (v0.41.3 run: AGM-154As released at 30-40 nm from 33,000 ft hit; was 40)
 JSOW_KEEP_HIGH_NM = 40.0     # a pushed-out JSOW flight is high, where an SA-10 reaches farther: its launch point stays this far from one (v0.41.3 run: 30.6 nm lost all four)
-HARM_LAUNCH_NM = 30.0      # an AI SEAD flight's HARM launch point: at the edge of what an SA-10 first reaches (it opened fire at about 55 km in testing); 21 nm put the launch point deep inside it
+HARM_LAUNCH_NM = 35.0      # v0.41.11: 35 (was 30): the Sukhumi SA-10 engaged HARM shooters at 54-57 km (31 nm); the AI fires from 35-38 nm anyway.
+                           # an AI SEAD flight's HARM launch point: at the edge of what an SA-10 first reaches (it opened fire at about 55 km in testing); 21 nm put the launch point deep inside it
 CARRIER_DEP_NM = 10.0      # Case III: the departure circle is 10 nm from the boat, and the flight leaves on the briefed departure radial
 
 
@@ -191,8 +193,43 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         wp.append(Wpt("EGR", *offset(g.tx, g.ty, sax, snm * NM), ialt, p.egress_kts, "Exit: back out along the approach", rad=irad))
     elif not (so and role in (Role.SWEEP, Role.ESCORT)):         # a stand-off fighter never crosses the target area: it goes home from its hold
         wp.append(Wpt("EGR", *lane_xy(g.egr), ialt + (1000 * (stack_idx % 3) if lane else 0), p.egress_kts, "Exit threat area", rad=irad))
+    if not human and g.sa10_avoid and role in (Role.STRIKE, Role.SEAD, Role.CAS):
+        k0 = next((k for k, w in enumerate(wp) if w.name == "PUSH"), 1)
+        avoid_circles(wp, g.sa10_avoid, p.max_points, k0 + 1)
     if len(wp) + 2 > p.max_points:
         raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")
+    return wp
+
+
+SA10_AVOID_NM = 35.0       # v0.41.11: an AI flight's route keeps this far from a live SA-10 that is not its target (the v0.41.10 run: two JSOW
+                           # flights bound for Gudauta passed 31 nm from the Sukhumi SA-10 and were shot at from 57 km)
+
+
+def avoid_circles(wp: list, circles: list, max_points: int, first: int) -> list:
+    """v0.41.11: bend the legs from index `first` on around each circle (x, y, nm): where a leg passes inside one, a turn point is put
+    2 nm outside it, on the side the leg already passes. Two passes at most; never past the airframe's waypoint limit."""
+    for _ in range(2):
+        changed = False
+        i = max(1, first)
+        while i < len(wp):
+            a, b = wp[i - 1], wp[i]
+            for cx, cy, r in circles:
+                ax, ay, bx, by = a.x, a.y, b.x, b.y
+                vx, vy = bx - ax, by - ay
+                L2 = vx * vx + vy * vy
+                t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((cx - ax) * vx + (cy - ay) * vy) / L2))
+                px, py = ax + t * vx, ay + t * vy
+                d = dist(px, py, cx, cy)
+                if d >= r * NM or t in (0.0, 1.0) or len(wp) + 3 > max_points:
+                    continue
+                h = bearing(cx, cy, px, py) if d > 1 else bearing(ax, ay, bx, by) + 90
+                nx, ny = offset(cx, cy, h, (r + 2) * NM)
+                wp.insert(i, Wpt("AVD", nx, ny, max(a.alt_ft, b.alt_ft), a.speed_kts, "Around the SA-10", rad=a.rad))
+                changed = True
+                break
+            i += 1
+        if not changed:
+            break
     return wp
 
 

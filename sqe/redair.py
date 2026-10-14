@@ -112,7 +112,8 @@ def plan(state, d) -> dict:
     return {"day": state.day, "flights": flights, "budget": bud, "used": dict(use), "patrol_used": dict(use)}
 
 
-GUARD_NM = 60                  # v0.41.10: a patrol guards a SAM site within this of its own field
+GUARD_NM = 150                 # v0.41.11: a patrol guards a SAM site within this of its own field (was 60: the big rear wings guarded only their own
+                               # local sites and the front, Sukhumi and Gudauta, went unguarded in the v0.41.10 run)
 GUARD_FWD_NM = 10              # ...from a station this far in front of the site, toward the nearest friendly (blue) field
 GUARD_VALUE = {"SA-10": 4.0, "SA-11": 3.0, "SA-6": 2.5, "SA-15": 2.0, "SA-19": 1.5, "SA-8": 1.5, "SA-3": 1.5, "SA-2": 1.2}
 GUARD_READ = {1: 0.25, 2: 0.5, 3: 0.75}   # how often red's "briefing" reads the day's blue targets right, by level
