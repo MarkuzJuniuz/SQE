@@ -33,4 +33,6 @@ jobs:
       - name: Smoke test
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python tools/smoke_test.py
+        run: |
+          set -o pipefail
+          python tools/smoke_test.py 2>&1 | tee smoke.log || { tail -n 25 smoke.log | sed 's/^/::error::/'; exit 1; }
