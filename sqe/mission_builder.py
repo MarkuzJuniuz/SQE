@@ -1408,7 +1408,11 @@ class MissionBuilder:
             if hold_end is not None:
                 # v0.41.5: on the way home the flight still fights what comes within HOMEWARD_ENGAGE_NM of it. In the v0.41.4 run a lone MiG-29 chased
                 # Springfield (F-14s, 5 of about 40 missiles fired) home after the hold ended and fired four R-27s while they only defended.
-                hw_ = task.ControlledTask(task.EngageTargets(int(HOMEWARD_ENGAGE_NM * 1852), [task.Targets.All.Air]))
+                # v0.41.15: a fixed circle over the way home (station to home field), not one that moves with the jet: the v0.41.14 run, flights
+                # chasing a MiG north under the moving 20 nm circle ended up over Gudauta and Sochi
+                hcx_, hcy_ = (stw.x + base.x) / 2, (stw.y + base.y) / 2
+                hr_ = dist(stw.x, stw.y, base.x, base.y) / 2 + HOMEWARD_ENGAGE_NM * NM
+                hw_ = task.ControlledTask(task.EngageTargetsInZone(mapping.Vector2(hcx_, hcy_), int(hr_), [task.Targets.All.Air]))
                 hw_.start_after_time(int(hold_end)); g.points[0].tasks.insert(1, hw_)
                 if hold_ is not None:
                     hold_["starts"].append(hw_)
@@ -2145,7 +2149,7 @@ class MissionBuilder:
             t = geom.tiers[key]
             geom.stand[key] = profiles.station(self.state, pts, t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000), geom.egr)
             if geom.sweep:
-                geom.stand[key] = self._sweep_station(geom.stand[key], tx, ty, pts[0])
+                geom.stand[key] = self._sweep_station(geom.stand[key], tx, ty, pts[0], f.aircraft in LONG_RANGE_A2A)
 
     def _sam_clear(self, x, y) -> bool:
         """v0.41.14: a friendly orbit is clear of SAMs: 35 nm from every live SA-10 (the reach measured in the runs; the ring table says 48 nm, which
@@ -2157,7 +2161,7 @@ class MissionBuilder:
         return (all(dist(x, y, a.x, a.y) >= r_ + 15 * NM for a, r_ in self._rings_c)
                 and all(dist(x, y, a.x, a.y) >= SA10_AVOID_NM * NM for a in self._sa10_c))
 
-    def _sweep_station(self, so, tx, ty, home_xy):
+    def _sweep_station(self, so, tx, ty, home_xy, long_range=False):
         """v0.41.13: a Fighter Sweep's station sits INSIDE the nearest enemy field's scramble circle (5 nm in), so the alert pairs come up into the
         sweep before the strikers arrive, but 35 nm from every live SA-10 and 15 nm outside every other SAM ring. The v0.41.12 run: the sweep
         orbited just short of SAM cover, tripped nothing and met only SAM missiles. First it backs out of SAM reach (toward home), then it walks
@@ -2174,6 +2178,9 @@ class MissionBuilder:
         if fb:
             ex, ey = min(fb, key=lambda e: dist(e[0], e[1], x, y))
             r = tm.field_detect_nm((ex, ey), (tx, ty), st) - 5
+            # v0.41.15: long-range shooters (F-15C, F-14) stand at the edge of the circle, as far back as it allows, and reach in with their missiles
+            if long_range:
+                r = tm.field_detect_nm((ex, ey), (tx, ty), st) - 2
             if dist(x, y, ex, ey) > r * NM:
                 # a clear point just inside the circle, nearest our side first: on the field's bearing to the station, then swinging up to 90 deg off it
                 b0 = bearing(ex, ey, x, y)
