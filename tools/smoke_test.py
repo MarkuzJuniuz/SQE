@@ -1094,6 +1094,7 @@ def main():
     assert _sw, "no Fighter Sweep planned in 19 days"
     _pk_ = _ws.packages()
     assert all(f_.role == _Rl2.SWEEP and f_.count == 4 and not f_.tag for f_ in _sw.flights), "a sweep is 4-ships only, no support CAP"
+    assert all(f_.aircraft in ("F-15C", "F-14BU") for p_ in _ws.packages() if _isw(p_.objective) for f_ in p_.flights), "v0.41.15: sweeps fly F-15Cs and F-14s only"
     _esc = [f_ for p_ in _pk_ if p_.objective.type.value in ("STRIKE", "DEAD", "CAS") for f_ in p_.flights if f_.role == _Rl2.SWEEP]
     assert _esc and all(f_.count == 2 for f_ in _esc), "a defended strike package carries a 2-ship escort (v0.41.1), the extra fighters are the sweep's"
     assert sum(f_.aircraft in ("F-16C", "FA-18C") for f_ in _esc) >= len(_esc) / 2, ("escorts: F-16 / F/A-18 first", [f_.aircraft for f_ in _esc])
@@ -1328,11 +1329,11 @@ def main():
             if not _zn or not ({"TGT", "SWEEP"} & {p_.get("name") for p_ in g_["route"]["points"].values()}) or "SEAD" in {p_.get("name") for p_ in g_["route"]["points"].values()}:
                 continue        # the stationed fighters only (SEAD flights have their own engage window)
             _st = _zn[0]["params"]["stopCondition"]["time"]
-            _hm = [t_ for t_ in _t0 if t_["params"]["task"]["id"] == "EngageTargets" and t_["params"].get("condition", {}).get("time") == _st]
+            _hm = [t_ for t_ in _t0 if t_["params"]["task"]["id"] == "EngageTargetsInZone" and t_["params"].get("condition", {}).get("time") == _st]
             assert _hm, ("a held fighter flight engages on the way home after its hold", g_["name"])
             _hw += 1
     assert _hw >= 2, ("TARCAP / escort flights with the homeward engage", _hw)
-    print(f"[homeward] {_hw} held fighter flights engage air within 20 nm of themselves after their hold ends")
+    print(f"[homeward] {_hw} held fighter flights engage air in a fixed circle over their way home after their hold ends (v0.41.15)")
     # v0.41.6: HARM flights fire only at what they are tasked on (OPEN FIRE), and marshal points sit outside the enemy fields' scramble circles
     for co_ in _M4["coalition"]["blue"]["country"].values():
         for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
@@ -1631,7 +1632,7 @@ def main():
     for _verdict in (True, False):
         s.new(f"SEAD first mission {_verdict}", "F-16C", 3, seed=11); _st = s.state
         _pk = s.packages(); _se = next(p_ for p_ in _pk if p_.objective.aim == "SEAD" and s.flyable(p_) or False) if any(p_.objective.aim == "SEAD" and s.flyable(p_) for p_ in _pk) else None
-        _de = next((p_ for p_ in _pk if p_.objective.aim == "DEAD" and s.flyable(p_)), None)
+        _de = next((p_ for p_ in _pk if p_.objective.aim == "DEAD" and any(f_.role == Role.STRIKE for f_ in s.flyable(p_))), None)
         if _de is None:
             continue
         _st.raids["sead"][_de.objective.target_id] = _verdict

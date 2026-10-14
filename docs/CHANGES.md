@@ -1,3 +1,12 @@
+## v0.41.15
+
+From the v0.41.14 run: fighter flights chased MiGs north toward Gudauta and Sochi after their hold (the homeward 20 nm circle moved with the jet) and died to Sochi's alert pairs; and F-16s flying Fighter Sweeps had to get close to kill anything, which drags them toward the SAMs.
+
+* **The homeward fight stays over the way home:** after the hold, a TARCAP / escort / sweep engages inside a fixed circle covering its station-to-home leg (plus 20 nm), not a circle that moves with the jet.
+* **Fighter Sweeps fly F-15Cs and F-14s only.** No long-range fighter free: no sweep that day (the packages keep their TARCAPs). You are offered a sweep only in an F-15C or F-14.
+* **Long-range sweeps stand at the edge of the scramble circle** (2 nm in, was 5), as far back as it allows, and reach in with their missiles.
+* Smoke test: sweeps are F-15C / F-14 only; the homeward circle is fixed.
+
 ## v0.41.14
 
 From the v0.41.13 run (1 jet lost, 20 red aircraft down, the target at 86%): the F-14 carrier CAP never fired, orbiting 3 nm from the boat while the SM-2s took everything; the sweep chased a MiG to 10 nm of the Sukhumi SA-10 and lost Venom 9-2.

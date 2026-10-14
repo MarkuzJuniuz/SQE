@@ -248,6 +248,7 @@ class PackageBuilder:
             psq = st.squadrons[pp.squadron_id]
             spec = AIRCRAFT[psq.aircraft]
             ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles and (s.kit != "JSOW" or psq.aircraft in JSOW_PER_JET)
+                  and (not is_sweep(obj) or psq.aircraft in LONG_RANGE_A2A)                    # v0.41.15: no BVR sweep in an F-16 / F/A-18
                   and self._in_range(psq.id, tx, ty) and ledger.free[psq.id] >= 2]
             if not ok:
                 raise NoPlayerSlot(f"{psq.name} cannot fly any role in: {obj.description}")
@@ -374,9 +375,11 @@ class PackageBuilder:
 
     def _pick_squadron(self, slot: Slot, tx, ty, ledger: Ledger, lead_service):
         """Prefer the lead's service; cross over only when sound (same-service option missing, or the other base is >=30% closer)."""
+        obj0_ = self._ctx[0] if self._ctx else None
+        sweep_ = obj0_ is not None and is_sweep(obj0_)            # v0.41.15: a Fighter Sweep flies long-range fighters only (F-15C, F-14)
         cands = [sq for sq in self.state.squadrons.values()
                  if slot.role in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2 and self._in_range(sq.id, tx, ty)
-                 and (slot.kit != "JSOW" or sq.aircraft in JSOW_PER_JET)]
+                 and (slot.kit != "JSOW" or sq.aircraft in JSOW_PER_JET) and (not sweep_ or sq.aircraft in LONG_RANGE_A2A)]
         if not cands:
             return None
         # TARCAP and sweep: the long-range shooters (F-15C, F-14) first, F-16 / F/A-18 behind them. The package escort (v0.41.1) the other
