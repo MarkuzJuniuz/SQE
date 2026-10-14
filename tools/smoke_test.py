@@ -171,7 +171,7 @@ def main():
             assert "EGR" not in _nm, (f_.callsign, "a TARCAP goes home from its station", _nm)
         if not f_.is_player:
             _zt = [t_ for t_ in _pts[0]["task"]["params"]["tasks"].values() if t_.get("id") == "ControlledTask" and t_["params"]["task"]["id"] == "EngageTargetsInZone"]
-            assert _zt and round(_zt[0]["params"]["task"]["params"]["zoneRadius"] / 1852) >= 20, (f_.callsign, "leashed to the package's cover zone")
+            assert _zt and round(_zt[0]["params"]["task"]["params"]["zoneRadius"] / 1852) >= 8, (f_.callsign, "leashed to the package's cover zone (v0.41.22: trimmed short of SAMs it is not sent against, 8 nm at least)", round(_zt[0]["params"]["task"]["params"]["zoneRadius"] / 1852) if _zt else None)
             _o0a = {t_["params"]["action"]["params"]["name"]: t_["params"]["action"]["params"].get("value") for t_ in _pts[0]["task"]["params"]["tasks"].values()
                     if t_.get("params", {}).get("action", {}).get("id") == "Option"}
             assert _o0a.get(18) == 2 and _o0a.get(3) == 3 and _o0a.get(6) is True, (f_.callsign, "v0.41.10: closer shots on the way out, radar searching, bingo RTB", _o0a)
@@ -1975,6 +1975,44 @@ def main():
                 assert _m21.hypot(p_["x"] - fx_, p_["y"] - fy_) / 1852 >= _r, ("the carrier CAP orbits outside every scramble circle", _cs, p_.get("name"))
         _chk21 += 1
     print(f"[cvcap] {_chk21} carrier CAPs checked: orbit close to the boat, outside every enemy field's scramble circle")
+    # v0.41.22: every blue AI flight's route stays out of the SAMs it is not sent against (a few nm of slack where no clear axis exists)
+    from sqe.war import covering_sams as _cs22
+    from sqe.routes import AVOID_NM as _av22
+    _seg22 = lambda px, py, ax, ay, bx, by: (lambda vx, vy: (lambda L2: (lambda t: _m21.hypot(ax + t * vx - px, ay + t * vy - py))(0 if L2 == 0 else max(0, min(1, ((px - ax) * vx + (py - ay) * vy) / L2))))(vx * vx + vy * vy))(bx - ax, by - ay)
+    _nf22 = 0
+    for _ac, _sd in (("F-16C", 3), ("F-15C", 4)):
+        s.new("Clear", _ac, 2, seed=_sd); s.plan_day(); _st = s.state
+        _pk = next(p_ for p_ in s.packages() if s.flyable(p_))
+        s.fly(_pk.number, s.flyable(_pk)[0].id)
+        _mz = _lua21.loads(_zf21.ZipFile(s.last_build.miz).read("mission").decode())["mission"]
+        _sams = [a for a in _st.assets.values() if a.kind.value == "SAM" and a.variant in _av22 and not a.destroyed and a.health > 0.25 and not getattr(a, "suppressed", False)]
+        for co_ in _mz["coalition"]["blue"]["country"].values():
+            for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
+                pk_ = next((q_ for q_ in s.packages() for f_ in q_.flights if f_.callsign == g_["name"]), None)
+                fl_ = next((f_ for f_ in pk_.flights if f_.callsign == g_["name"]), None) if pk_ else None
+                if fl_ is None or fl_.is_player:
+                    continue
+                t_ = _st.assets.get(pk_.objective.target_id) if pk_.objective.target_id else None
+                um_ = _tm21.umbrella_site(_st, t_) if t_ else None
+                sk_ = (_tm21.cluster_ids(t_) | {x.id for x in _cs22(_st, t_)} | ({um_.id} if um_ else set())) if t_ else set()
+                pts_ = list(g_["route"]["points"].values())
+                for a in _sams:
+                    if a.id in sk_ or (t_ and _m21.hypot(a.x - t_.x, a.y - t_.y) <= (_av22[a.variant] + 3) * 1852):
+                        continue
+                    for i_ in range(len(pts_) - 1):
+                        d_ = _seg22(a.x, a.y, pts_[i_]["x"], pts_[i_]["y"], pts_[i_ + 1]["x"], pts_[i_ + 1]["y"]) / 1852
+                        assert d_ >= _av22[a.variant] - 4, ("an AI route stays out of SAMs it is not sent against", g_["name"], a.variant, round(d_), pts_[i_].get("name"), pts_[i_ + 1].get("name"))
+                _nf22 += 1
+    print(f"[sam clear] {_nf22} blue AI flights: routes outside every SAM they are not sent against; fight circles trimmed to match")
+    # v0.41.23: a preloaded flight still within its time on station starts on its station, not past it
+    from sqe.routes import Wpt as _W23, in_progress as _ip23
+    _mk23 = lambda: [_W23("PUSH", 0, 0, 20000, 400, eta_s=-900), _W23("TGT", 100000, 0, 20000, 350, "", "TARCAP", eta_s=-300, orbit=True),
+                     _W23("EGR", 100000, 80000, 20000, 400, eta_s=100)]
+    _p23a = _ip23(_mk23(), (0, 0))
+    assert _p23a and _p23a[1].name == "EGR", "without its station time it is placed past the station (the old behaviour)"
+    _p23b = _ip23(_mk23(), (0, 0), {1: 1500})
+    assert _p23b and _p23b[0].name == "SPAWN" and (round(_p23b[0].x), round(_p23b[0].y)) == (100000, 0) and _p23b[1].name == "TGT", "on station until it leaves"
+    print("[preloaded] a flight still within its hold starts on its station")
     print("SMOKE TEST PASSED")
 
 
