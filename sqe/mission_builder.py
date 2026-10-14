@@ -363,7 +363,7 @@ class MissionBuilder:
         self._flight_plans(geom, package, tx, ty, skip1)
         pw = plan_route(pf.role, (pbase.x, pbase.y), geom, pspec.profile, is_player=True, tanker_xy=None, jsow=getattr(pf, "kit", "") == "JSOW",
                         jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package))
-        dep_s = launch_s + 60 + dist(pbase.x, pbase.y, *geom.dep) / (pspec.profile.depart_kts * 0.514444) * 1.12     # roll + climb-out to DEP
+        dep_s = launch_s + 60 + dist(pbase.x, pbase.y, pw[0].x, pw[0].y) / (pspec.profile.depart_kts * 0.514444) * 1.12     # roll + climb-out to the first point (DEP off a carrier, else the marshal)
         self._dep_s = dep_s
         assign_times(pw, dep_s)
         mshl = next((w for w in pw if w.action in ("HOLD", "CAPORBIT")), pw[-1])

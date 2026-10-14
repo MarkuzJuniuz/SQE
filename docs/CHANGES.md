@@ -1,3 +1,9 @@
+## v0.41.12
+
+* **No DEP point from a land base.** After take-off the first point is the marshal point, for you and for AI runway starts. The DEP sat 6 nm out at 8,000 ft with PUSH about a mile on at 26,000 ft: a steep climb and a turn back over the field. The two unexplained crashes 3-5 minutes after take-off were both runway starts out of Batumi. Off the carrier the DEP stays: it is the departure radial.
+* **A sweep's PUSH is ahead of its base,** 15 nm toward its station (it was behind the base), so a sweep climbs straight out instead of turning back over its field.
+* Smoke test: no DEP from a land base, sweep PUSH ahead of the base.
+
 ## v0.41.11
 
 From the v0.41.10 sweep run (73 min; good SEAD on the Sukhumi cluster, both early-warning radars down): the Sukhumi SA-10 got 4 Hornets, it fired from 50-57 km; two JSOW flights bound for Gudauta passed 31 nm from it on the way; two AI jets ran out of fuel; red's patrols guarded rear-area sites.

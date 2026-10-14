@@ -1108,7 +1108,12 @@ def main():
     _gw = {g_["name"]: g_ for co_ in _Mw["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()}
     for f_ in _sw.flights:
         _nmw = [p_.get("name") for p_ in _gw[f_.callsign]["route"]["points"].values()]
-        assert "MSHL" not in _nmw and "IP" not in _nmw and "EGR" not in _nmw and "TGT" in _nmw, (f_.callsign, "sweep route: DEP / PUSH / station / home", _nmw)
+        assert "MSHL" not in _nmw and "IP" not in _nmw and "EGR" not in _nmw and "TGT" in _nmw, (f_.callsign, "sweep route: PUSH / station / home", _nmw)
+        if _ws.state.bases[f_.base_id].kind.value == "AIRFIELD":   # v0.41.12: no DEP from a land base; the sweep's PUSH is ahead of the base, toward its station
+            _pw12 = {p_.get("name"): p_ for p_ in _gw[f_.callsign]["route"]["points"].values()}
+            _b12 = _ws.state.bases[f_.base_id]
+            assert "DEP" not in _nmw and _m3j.hypot(_pw12["TGT"]["x"] - _pw12["PUSH"]["x"], _pw12["TGT"]["y"] - _pw12["PUSH"]["y"]) < _m3j.hypot(_pw12["TGT"]["x"] - _b12.x, _pw12["TGT"]["y"] - _b12.y), \
+                (f_.callsign, "no DEP, PUSH ahead of the base", _nmw)
         if not f_.is_player:
             _o0w = {t_["params"]["action"]["params"]["name"]: t_["params"]["action"]["params"].get("value") for t_ in list(_gw[f_.callsign]["route"]["points"].values())[0]["task"]["params"]["tasks"].values() if t_.get("params", {}).get("action", {}).get("id") == "Option"}
             assert _o0w.get(10) == _aamw, (f_.callsign, "a sweep goes home when its air-to-air missiles are gone")
