@@ -75,7 +75,7 @@ First launch:
    It makes a backup (`MissionScripting.lua.sqe.bak`) and comments out the `io` and `lfs` sanitize lines.
    If your install is under *Program Files* and it says it cannot write, run VS Code (or SQE.exe) **as administrator** once,
    or edit the file by hand. **DCS updates revert it**: patch again after an update.
-3. **File > New Campaign**: name it, pick your jet (**F-14B(U), F/A-18C, F-16C, F-15C or A-10C**), a difficulty, the start month/day (year is 2004) and whether to allow night sorties, OK.
+3. **File > New Campaign**: name it, pick your jet (**F-14B(U), F/A-18C, F-16C, F-15C or A-10C**), a difficulty, the start month/day (year is 2006) and whether to allow night sorties, OK.
 
 **Playing a day**
 1. **Missions** tab: pick a tasking, then press **FLY** on the row of the flight you want to fly (green rows). SQE writes `SQE_Sortie.miz` and opens the **waiting window**. HAVCAP and base-CAP flights are AI-only.
@@ -202,7 +202,9 @@ build the loadout, save, then `python tools/capture_loadouts.py that.miz`. They 
 - The war opens over Abkhazia (tiers 1 and 2: the armour columns and the Sukhumi/Gudauta belts). The coast and north Caucasus (Sochi, Nalchik, Beslan, Mozdok) open when the front advances, and the deep rear after that. Overview shows "front: stage N of 3"; Forces > Enemy assets shows each asset's depth and whether it is still locked.
 - A DEAD objective is a SEAD flight (HARM, pushes 5 minutes ahead; the sweep and escorts keep their spacing around it) plus a DEAD flight (the strikers). HARMs go for the radars. Radars dead and launchers alive = the site is SUPPRESSED, not destroyed; it is offered again as a mop-up ("Finish off ..."). Fly either flight; the kneeboard labels them SEAD and DEAD.
 - Long-range SAM sites may have a dug-in garrison (CAS target: your troops with a JTAC advance on it). Level 2 and 3 also put short-range SAMs (SA-8/15/19) with the front-line columns.
-- Things to check in DCS: do the AI HARMs actually target the radars (AttackUnit on the first radar of the site)? Does the SEAD flight arrive about 5 minutes ahead of the DEAD flight? With a radar still alive 75 s before the target time, does the AI DEAD flight turn to its egress point (the SwitchWaypoint gate) and do you get the "abort" call with the double beep? Do the numbers feel right (tier boundaries, 30% advance threshold, 14 stall days: `war.py`, `FRONT_*`; garrison odds and SAM counts: `difficulty.py`; spawn caps: `threatmap.MAX_ROUTE_SITES` and the "two nearest defenders" line in `mission_builder._spawn_opfor_ground`)?
+- AI SEAD flights hold fire (return fire) from the start until the HARM point, so they do not chase fighters into SAM cover (v0.39.10).
+- AI SEAD flights launch their HARMs from 30 nm (the edge of what an SA-10 reaches) and go home from there; the HARM task asks for anti-radiation missiles on the whole site (v0.39.9; aimed at one track radar the AI never fired, because a track radar only radiates while tracking).
+- Things to check in DCS: do the AI HARMs actually target the radars (AttackGroup on the site; look for AGM_88 in `shots`)? Does the SEAD flight arrive about 5 minutes ahead of the DEAD flight? With a radar still alive 75 s before the target time, does the AI DEAD flight turn to its egress point (the SwitchWaypoint gate) and do you get the "abort" call with the double beep? Do the numbers feel right (tier boundaries, 30% advance threshold, 14 stall days: `war.py`, `FRONT_*`; garrison odds and SAM counts: `difficulty.py`; spawn caps: `threatmap.MAX_ROUTE_SITES` and the "two nearest defenders" line in `mission_builder._spawn_opfor_ground`)?
 
 ## 7. Troubleshooting
 
@@ -252,3 +254,42 @@ Ground sites are placed with a coastline that is only roughly right, and it know
 3. In DCS: Fly > Missions > My Missions > SQE_TerrainScan, then Fly (you start in a parked Su-25T, which is free with DCS World, so no paid aircraft is needed). Messages show the percentage; wait for "SQE terrain scan COMPLETE" (about two minutes, DCS may stutter), then leave the mission.
 4. Open or start a campaign in SQE. Settings > Terrain scan reads "loaded" and, from v0.22, a second line "Ground height: loaded ...". An older scan has no ground height: run the scan mission once more (it measures both).
 Sites then keep the Shore margin from the sea and lakes (default 1500 m) and the river margin from rivers and shallow water (default 100 m); both are in Settings. Re-running is only needed after a DCS terrain update.
+
+## The enemy's air plan
+* Each day every enemy fighter wing with at least two aircraft gets patrol pairs (one pair always stays on alert) in 6-hour waves, and at Level 2 and 3 a 90-minute sweep over a contested sector is added. The plan is in the save (`red_air`) and is the same however often you replan the day.
+* A mission picks the patrols that are up at your time over the target and near the target or route; they are briefed ("Reported enemy patrol: ...") and airborne at the start. The rest of the threat-sized defenders are alert aircraft.
+* Things to check in DCS: do the patrol pairs sit where the briefing says, and do they stay until the end of their window? Is the number of briefed patrols about right (some missions will have none)? Does a mission in the same area at a different time of day meet different patrols? Tune: `redair.DOCTRINE` (pairs and share of aircraft per level), `WAVES`, `REL_NM` / `ROUTE_NM` (how close counts as "in the area").
+
+## Raids on friendly sites and the sortie budget
+* A raid can go for an airfield, a friendly supply site (fuel farm, forward depot), a field's garrison, or friendly troops in a contested sector. The tasking order lists them as "Intercept a raid on ..." / "Intercept an air attack on ...". What is under attack is on the map; the raiders fly there from their base.
+* If the raiders get through: fields lose defence (less with a garrison), supply sites and garrisons lose health, troops lose sector strength. Friendly supply falls when fuel farms or the depot are hit, as the enemy's does when you hit its depots. Destroyed friendly sites are replaced overnight with a chance.
+* Each enemy wing can fly 2 sorties per serviceable airframe a day, shared by patrols, sweeps and raids.
+* Things to check in DCS: do the raiders fly to the thing the briefing names, and do they bomb it? Is the garrison / fuel farm / column visible and in the right place? After a raid got through, does the debrief line match? In `SQE_state.json`, read `shots` (who fired what at what), `gates` after a DEAD, and `deaths` (the last hit, fuel, altitude and speed for every unit lost).
+* Tune: `Difficulty.raid_mix`, `blue_garrison_size`, `blue_rebuild`; `raids.ASSET_HIT`, `SECTOR_HIT`, `GARRISON_SHIELD`; `redair.DAILY_SORTIES`.
+
+## SEAD first
+* Each SEAD / DEAD job appears as two packages: SEAD (blind the radars), then DEAD 25 minutes behind it. If the SEAD package was a success the DEAD stage starts with the radars gone; if not, the radars are up and the DEAD flight and its escorts turn back at the gate. In the war simulation a DEAD stage with no blind site is held.
+* Fly the SEAD package and the result is real (the debrief says whether the radars are out). Fly the DEAD stage and the SEAD package has been settled for you.
+* After 3 failed SEAD days on a site, the combined package comes back for it.
+* Things to check in DCS: does the DEAD stage start with no radars at the site when the SEAD stage "succeeded"? Does a failed one start with radars and turn back? Are the escorts with the strikers (not minutes ahead)? Tuning: `war.SEAD_FAIL_VALVE`, `war.DEAD_STAGE_GAP_MIN`.
+
+## Retreat of hurt SAM sites
+* A long-range site at 35% or less may pull back 35-55 nm overnight (with its garrison) and comes back once repaired to 65%. You see it in the overnight log. Tasking can still go against it where it sits.
+* Things to check: does the "pulled back" line appear after a site was beaten down, and does the site show at its new position the next day (map and briefing)? Tuning: `sams.RETREAT_HEALTH`, `RETURN_HEALTH`, `RETREAT_NM`, `RETURN_MIN_DAYS`, `Difficulty.sam_retreat`.
+
+## Jamming
+Aircraft with jamming gear defeat some radar-guided missiles. Internal sets (F-14, F/A-18C, Red Su-24M; not the FC3 F-15C) protect only their own jet; an ECM pod on the loadout (F-16C, A-10C CAS) is stronger and also covers aircraft within 2 nm. Chance by launch range: nothing inside 12 km, full from 40 km. AI flights jam from PUSH to EGR only; your jet jams throughout. Anti-radiation missiles are not affected. The rolls are written to `SQE_state.json` under `jams` (test guideline: fly a SEAD or strike package and check them). The tier values are SQE's own judgement.
+
+
+## Air wings that fall back
+A wing or squadron that is badly beaten up (30% of its aircraft or less) may stand down overnight to a rear field and sit out the war for a few days: no patrols, raids or escorts from it. It recovers at twice the normal rate and returns at 65% strength after at least 2 nights. The same rule covers both sides; your own squadron, carrier squadrons and the strategic bomber wing are exempt. The Campaign log shows when a unit stands down and when it comes back. If the whole enemy air arm seems to vanish, this is the reason, and it comes back.
+
+## Ground guns and the LOW decision
+When the planner weighs going LOW to get under radar SAMs, it now also counts the guns and short-range SAMs that travel with columns and garrisons and sit at support sites and airfields. Enough of them near the route or the target keep a strike package at its normal altitude, so you no longer get a LOW profile that flies straight into a column's ZSU-23-4s.
+
+## Roads
+Run the terrain scan mission again after updating: it now also records roads. A road lookup is slow in DCS (about 90 ms when no road is near), so the scan does not cover the whole map: it covers 25 km around every airfield of the theatre and along the front line, skips water, and runs in three passes (8 km, 4 km, then 2 km spacing). The roads file is written after every pass, so you can leave the mission after the first or second pass if you are in a hurry; the messages say when. Expect DCS to stutter during this part and keep the DCS window in the foreground. With the roads file, columns, fuel farms and depots are placed on roads. The Settings > Terrain scan page shows "Roads: loaded" when it worked. If it says the scan did not find roads, the mission message at the end says "roads not available" and nothing else changes.
+
+## Full-map run (stress test)
+Start SQE with `--full-map` (the VS Code debug dropdown has it, alone and combined with the AI test) and every sortie is built with everything on the map: all enemy sites and columns, all friendly garrisons, supply sites and sector columns, all planned enemy patrols, no unit limit. Use it to see what DCS and VR can carry; it is not meant for a campaign.
+

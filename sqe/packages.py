@@ -6,7 +6,7 @@ import random
 from dataclasses import dataclass, field, asdict
 from . import threat
 from . import threatmap as tm
-from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM
+from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM, JSOW_PER_JET
 from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER
 from .models import Objective, ObjectiveType, Role, BaseKind, RefuelMethod
 from .state import CampaignState
@@ -29,6 +29,7 @@ class Slot:
     required: bool = True
     only_if_defended: bool = False
     tag: str = ""                      # "" | HAVCAP | BASECAP (support flights: AI only)
+    kit: str = ""                      # "" | JSOW (a strike slot that only JSOW-capable jets fill, see loadouts.JSOW_PER_JET)
 
 
 TEMPLATES = {
@@ -41,10 +42,15 @@ TEMPLATES = {
     ObjectiveType.FLEET_DEFENSE: [Slot(Role.CAP, 4), Slot(Role.CAP, 2, False), Slot(Role.SWEEP, 2, False)],
 }
 _FLEET = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
-_TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM", Role.ESCORT: "Escort package",
+_TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM",
+         Role.ESCORT: "TARCAP: on station short of the target before the package, shoot what comes in range, do not chase; 15 minutes, then home",
          Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
-_DEAD_TASK = {Role.SEAD: "SEAD: blind the radars ahead of the DEAD flight", Role.STRIKE: "DEAD: destroy the SAM site (follow the SEAD flight in)"}
-_TAG_TASK = {"HAVCAP": "HAVCAP (guards tanker and AWACS)", "BASECAP": "Base CAP"}
+_DEAD_TASK = {Role.SEAD: "SEAD: suppress the radars ahead of the DEAD flight", Role.STRIKE: "Close DEAD: destroy the SAM site with GBUs (the SEAD package goes in ahead of you; call it off if the radars are up)"}
+_KIT_TASK = {"JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers and covering Tors, on the HARM salvo's time; stand-off release, then home"}
+_SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
+_ESC_TASK = "Escort: hold your station with the package, shoot what comes in range, do not chase; leave when the strikers are off target"
+_TAG_TASK = {"HAVCAP": "HAVCAP (guards the AWACS)", "TNKCAP": "Tanker CAP (guards the tanker)", "BASECAP": "Base CAP", "CVCAP": "Carrier CAP"}
+BASECAP_ENEMY_NM = 130     # v0.41.7: a land base gets a base CAP when an enemy fighter field is within this (an alert pair reaches it)
 
 
 @dataclass
@@ -59,6 +65,8 @@ class FlightPlan:
     task: str
     is_player: bool = False
     tag: str = ""
+    kit: str = ""                      # "JSOW": a JSOW slinger in a SEAD package (its loadout, route and attack differ from a plain strike)
+    guard: str = ""                    # v0.41.10: a base CAP's guarded field (base id), when it is not the squadron's own base
 
 
 @dataclass
@@ -109,10 +117,38 @@ class Package:
     @classmethod
     def from_dict(cls, d: dict) -> "Package":
         o = d["objective"]
-        obj = Objective(o["id"], ObjectiveType(o["type"]), o["target_id"], o["priority"], o.get("description", ""))
+        obj = Objective(o["id"], ObjectiveType(o["type"]), o["target_id"], o["priority"], o.get("description", ""), o.get("aim", ""))
         return cls(d["id"], d["number"], obj, [FlightPlan(**{**f, "role": Role(f["role"])}) for f in d["flights"]],
                    [SupportPlan(**s) for s in d["support"]], d.get("jtac", False), d.get("jtac_laser_code", 1688),
                    d.get("start", "09:00"), d.get("n_def", 0), d.get("extra", {}))
+
+
+def _next_callsign(st, sq, used: dict) -> str:
+    """The squadron's next free flight name today: Viper 1 ... Viper 9. DCS flight numbers stop at 9, so a squadron that flies more
+    than nine flights in a day carries on under a spare callsign of its type that no squadron owns (Python 1, Python 2 ...)."""
+    from .callsigns import table
+    owned = {q.callsign for q in st.squadrons.values()}
+    for nm in [sq.callsign] + [c for c in table(sq.aircraft) if c not in owned]:
+        if used.get(nm, 0) < 9:
+            used[nm] = used.get(nm, 0) + 1
+            return f"{nm} {used[nm]}"
+    used[sq.callsign] = used.get(sq.callsign, 0) + 1                  # every name taken nine times over: not reachable with real unit counts
+    return f"{sq.callsign} {used[sq.callsign]}"
+
+
+LONG_RANGE_A2A = {"F-15C", "F-14BU"}
+A2A_SECONDARY_NM = 400          # an F-16 / F/A-18 squadron is picked for TARCAP or escort only when no long-range shooter is within this much of it
+
+
+def is_sweep(obj) -> bool:
+    """A Fighter Sweep package: offensive counterair over a target area, planned when intel expects more enemy fighters there than the
+    packages' own TARCAP and escort can take (AFDP 3-01: sweeps are flown for local air superiority, as the air threat requires)."""
+    return obj.type == ObjectiveType.COUNTER_AIR and obj.aim == "SWEEP"
+
+
+def sweep_4ships(n_def_flights: int) -> int:
+    """4-ships of sweep needed for this many enemy 2-ship flights: the fighters required beyond a 4-ship TARCAP, 4 per sweep flight."""
+    return int(math.ceil(max(0, threat.fighters_required(n_def_flights) - 4) / 4))
 
 
 class Ledger:
@@ -128,6 +164,9 @@ class PackageBuilder:
     def target_xy(self, obj: Objective):
         if obj.type in _FLEET:
             b = self.state.bases[obj.target_id]
+            if obj.aim:
+                from . import raids
+                return raids.aim_xy(self.state, obj.aim, b)
             return b.x, b.y
         a = self.state.assets[obj.target_id]
         return a.x, a.y
@@ -164,19 +203,32 @@ class PackageBuilder:
 
     # ---- slot list sized to the threat ---------------------------------------------------------------------
     def _slots(self, obj, defended, n_fl) -> list:
-        slots = [copy.copy(s) for s in TEMPLATES[obj.type] if not (s.only_if_defended and not defended)]
+        tmpl = TEMPLATES[obj.type]
+        if obj.type == ObjectiveType.DEAD and obj.aim == "SEAD":            # SEAD first: a package that only suppresses the radars...
+            tmpl = [Slot(Role.SEAD, 2), Slot(Role.SEAD, 2, False)]
+        elif obj.type == ObjectiveType.DEAD and obj.aim == "DEAD":          # ...and the Close DEAD package (GBUs) that follows once they are down
+            tmpl = [Slot(Role.STRIKE, 4), Slot(Role.ESCORT, 2)]
+        elif obj.type == ObjectiveType.DEAD and obj.aim == "STANDOFF":      # under a long-range SAM: one package, HARMs and JSOWs together
+            # Two HARM flights, both required: one on the long-range radars, one on the Tors, from the same salvo (equal weight, so the Tors are
+            # busy with HARMs when the JSOWs arrive). The Standoff DEAD flight is JSOW-capable only (Hornet, Viper): no Tomcats on DEAD here.
+            tmpl = [Slot(Role.SEAD, 2), Slot(Role.STRIKE, 4, kit="JSOW"), Slot(Role.SEAD, 2)]     # the JSOW flight is picked before the second HARM flight: without it nothing is destroyed
+        elif obj.type == ObjectiveType.CAS and obj.aim == "SEAD":           # v0.41.20: CAS under a live SA-2/3/6: the HARM escort is not optional
+            tmpl = [Slot(Role.CAS, 4), Slot(Role.SEAD, 2), Slot(Role.ESCORT, 2, False)]
+        if is_sweep(obj):                                                    # Fighter Sweep: 4-ships only, one per 4 bandits beyond the packages' own cover
+            n4 = max(1, sweep_4ships(n_fl))
+            return [Slot(Role.SWEEP, 4)] + [Slot(Role.SWEEP, 4, False) for _ in range(n4 - 1)]
+        slots = [copy.copy(s) for s in tmpl if not (s.only_if_defended and not defended)]
         if obj.type in (ObjectiveType.STRIKE, ObjectiveType.DEAD, ObjectiveType.CAS):
             req = threat.fighters_required(n_fl)
             slots = [s for s in slots if s.role != Role.ESCORT]
             if req:
-                slots.append(Slot(Role.ESCORT, min(4, req), True))
-                if req > 4:
-                    slots.append(Slot(Role.SWEEP, min(4, req - 4), False))
+                slots.append(Slot(Role.ESCORT, min(4, req), True))            # the TARCAP. More bandits than it can take: a Fighter Sweep package (v0.40.2)
+                slots.append(Slot(Role.SWEEP, 2, False))                       # v0.41.1: the escort, back (v0.40.2 dropped it with the old sweep slot)
         if obj.type not in _FLEET:
             slots.append(Slot(Role.CAP, 2, False, tag="HAVCAP"))
         return slots
 
-    def build(self, obj: Objective, number: int, ledger: Ledger, *, for_player: bool) -> Package:
+    def build(self, obj: Objective, number: int, ledger: Ledger, *, for_player: bool, names: dict | None = None) -> Package:
         st = self.state
         tx, ty = self.target_xy(obj)
         self._ctx = (obj, None if obj.type in _FLEET else self.state.assets[obj.target_id])
@@ -197,7 +249,8 @@ class PackageBuilder:
         if for_player and pp:
             psq = st.squadrons[pp.squadron_id]
             spec = AIRCRAFT[psq.aircraft]
-            ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles
+            ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles and (s.kit != "JSOW" or psq.aircraft in JSOW_PER_JET)
+                  and (not is_sweep(obj) or psq.aircraft in LONG_RANGE_A2A)                    # v0.41.15: no BVR sweep in an F-16 / F/A-18
                   and self._in_range(psq.id, tx, ty) and ledger.free[psq.id] >= 2]
             if not ok:
                 raise NoPlayerSlot(f"{psq.name} cannot fly any role in: {obj.description}")
@@ -222,62 +275,91 @@ class PackageBuilder:
             chosen.append((slot, sq, count, i == player_idx))
         if not chosen:
             raise NoPlayerSlot("no squadron could fly this objective")
+        if obj.aim == "STANDOFF" and not any(sl_.kit == "JSOW" for sl_, *_ in chosen):
+            # v0.41.19: no JSOW jets free today: the Standoff DEAD waits for another day (the planner offers it again) rather than going without them
+            for sl_, sq_, n_, _ in chosen:
+                ledger.free[sq_.id] += n_
+            raise NoPlayerSlot("no JSOW-capable squadron free for the Standoff DEAD today")
+        if obj.type == ObjectiveType.CAS and obj.aim == "SEAD" and not any(sl_.role == Role.SEAD for sl_, *_ in chosen):
+            # v0.41.20: no HARM jets free: the CAS under a live SAM waits for another day rather than going in unescorted (no needless banzai)
+            for sl_, sq_, n_, _ in chosen:
+                ledger.free[sq_.id] += n_
+            raise NoPlayerSlot("no SEAD flight free to escort the CAS today")
 
-        # support CAP: HAVCAP guards the tanker/AWACS; BASECAP guards the strike/CAS flights' home field
+        # support CAP (v0.41.7): TNKCAP guards the tanker (forward, on the way home: mandatory), HAVCAP the AWACS (well back), BASECAP the
+        # strike/CAS flights' home field, CVCAP the carrier (from the carrier's own squadrons). One pair short: the tanker keeps its guard.
         prim = st.bases[chosen[0][1].base_id]
         anchor = next((st.bases[sq.base_id] for _, sq, _, pl in chosen if pl), prim)
         dnm = math.hypot(tx - prim.x, ty - prim.y) / NM
-        wanted = [("HAVCAP", anchor)] if obj.type not in _FLEET else []
-        if obj.type == ObjectiveType.CAS or (obj.type not in _FLEET and dnm < 100):
-            wanted.append(("BASECAP", prim))
+        sup_ok = obj.type not in _FLEET and not is_sweep(obj)
+        wanted = [("TNKCAP", anchor), ("HAVCAP", anchor)] if sup_ok else []
+        enemy_near = prim.kind != BaseKind.CARRIER and any(math.hypot(st.assets[w.base_asset_id].x - prim.x, st.assets[w.base_asset_id].y - prim.y) / NM <= BASECAP_ENEMY_NM
+                                                          for w in st.enemy_air if w.available > 0 and not st.assets[w.base_asset_id].destroyed)
+        # v0.41.10: the base CAP goes over the field red is most likely to raid (raids.py's own target weights: nearer and softer = likelier),
+        # which is usually, not always, the strikers' home field
+        from . import raids as _raids
+        tw_ = [(b_, w_) for b_, w_ in _raids.target_weights(st) if b_.kind != BaseKind.CARRIER]
+        bc_base = max(tw_, key=lambda bw: (bw[1], bw[0].id))[0] if tw_ else prim
+        if not is_sweep(obj) and bc_base.kind != BaseKind.CARRIER and (obj.type == ObjectiveType.CAS or (obj.type not in _FLEET and (dnm < 100 or enemy_near or tw_))):
+            wanted.append(("BASECAP", bc_base))
+        cv_ = next((st.bases[sq.base_id] for _, sq, _, _ in chosen if st.bases[sq.base_id].kind == BaseKind.CARRIER), None)
+        if cv_ is not None and obj.type not in _FLEET:
+            wanted.append(("CVCAP", cv_))
+        guards_ = {}
         for tag, base in wanted:
-            sq = self._pick_cap_near(base, ledger, lead_service) or (self._pick_cap_any(ledger, lead_service) if tag == "HAVCAP" else None)
+            if tag == "CVCAP":
+                sq = self._pick_cap_at(base, ledger, lead_service)
+            else:
+                sq = self._pick_cap_near(base, ledger, lead_service) or (self._pick_cap_any(ledger, lead_service) if tag == "TNKCAP" else None)
             if sq:
                 ledger.free[sq.id] -= 2
-                chosen.append((Slot(Role.CAP, 2, False, tag=tag), sq, 2, False))
+                sl_ = Slot(Role.CAP, 2, False, tag=tag)
+                if tag == "BASECAP":
+                    guards_[id(sl_)] = base.id
+                chosen.append((sl_, sq, 2, False))
 
-        used, n = {}, 0
+        used, n = (names if names is not None else {}), 0     # names: the day's callsign counter, shared by every package that day
         for slot, sq, count, is_pl in chosen:
             n += 1
-            used[sq.callsign] = used.get(sq.callsign, 0) + 1
-            pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", f"{sq.callsign} {used[sq.callsign]}", slot.role, sq.id,
+            cs = _next_callsign(st, sq, used)
+            pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", cs, slot.role, sq.id,
                                           sq.aircraft, count, sq.base_id,
-                                          _TAG_TASK.get(slot.tag) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role], is_pl, slot.tag))
+                                          _KIT_TASK.get(slot.kit) or _TAG_TASK.get(slot.tag) or (_SO_SEAD_TASK if (obj.aim == "STANDOFF" and slot.role == Role.SEAD) else None) or (_ESC_TASK if (slot.role == Role.SWEEP and obj.type not in (ObjectiveType.COUNTER_AIR, ObjectiveType.FLEET_DEFENSE)) else None) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role],
+                                          is_pl, slot.tag, slot.kit, guards_.get(id(slot), "")))
         pkg.support = self._support(pkg)
         pkg.jtac = obj.type in JTAC_OBJECTIVES
         return pkg
 
     def _land_raid_plan(self, number: int, obj):
-        """Su-24M raid on one of our airfields (raids.py): the raiders' field, how many, the bearing they arrive on, and escorts that can reach."""
-        from .difficulty import get as _get
+        """Air raid on one of our airfields, a supply site, a garrison or friendly troops (raids.py): the raiders' field and type, how many, where they are going,
+        the bearing they arrive on, and escorts that can reach."""
+        from . import raids
         st = self.state
         tb = st.bases[obj.target_id]
-        rnd = random.Random(f"{st.campaign_id}:{st.day}:{number}:{obj.target_id}:raid")
-        cands = []
-        for w in st.enemy_air:
-            a = st.assets[w.base_asset_id]
-            if "Su_24M" in w.types and w.available >= 2 and not a.destroyed and math.hypot(a.x - tb.x, a.y - tb.y) / NM <= ENEMY_RADIUS_NM["Su_24M"] * 0.85:
-                cands.append((math.hypot(a.x - tb.x, a.y - tb.y), w))
-        if not cands:
+        aim = getattr(obj, "aim", "") or ""
+        ax, ay = raids.aim_xy(st, aim, tb)
+        rnd = random.Random(f"{st.campaign_id}:{st.day}:{number}:{obj.target_id}:{aim}:raid")
+        r = raids._reach(st, raids.aim_kind(aim), ax, ay, budget=False)
+        if r is None:
             return None
-        bw = min(cands, key=lambda c: c[0])[1]
+        bw, raider = r[1], r[2]
         ba = st.assets[bw.base_asset_id]
         lo, hi = (self.d.raid_size if self.d else (2, 2))
         nb = max(2, min(rnd.randint(lo, hi), bw.available))
         nb -= nb % 2
         esc = None
-        for w in sorted(st.enemy_air, key=lambda w: math.hypot(st.assets[w.base_asset_id].x - tb.x, st.assets[w.base_asset_id].y - tb.y)):
+        for w in sorted(st.enemy_air, key=lambda w: math.hypot(st.assets[w.base_asset_id].x - ax, st.assets[w.base_asset_id].y - ay)):
             a = st.assets[w.base_asset_id]
             if w is bw or w.available < 2 or a.destroyed:
                 continue
-            d_nm = math.hypot(a.x - tb.x, a.y - tb.y) / NM
+            d_nm = math.hypot(a.x - ax, a.y - ay) / NM
             types = [t for t in w.types if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm]
             if types:
                 esc = (w.base_asset_id, rnd.choice(types)); break
-        brg = math.degrees(math.atan2(ba.y - tb.y, ba.x - tb.x)) % 360          # they come from where they took off
-        return {"land": True, "raider": "Su_24M", "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
+        brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360          # they come from where they took off
+        return {"land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
                 "escort_wing": esc[0] if esc else "", "escort_type": esc[1] if esc else "",
-                "escorts": (4 if nb >= 4 else 2) if esc else 0}
+                "escorts": (4 if nb >= 4 else 2) if esc else 0, "aim": aim, "dest": [ax, ay]}
 
     def _raid_plan(self, number: int, obj=None):
         """Bomber raid on the fleet: bearing it arrives on, how many bombers, and escorts that can really reach (range-limited)."""
@@ -305,11 +387,25 @@ class PackageBuilder:
 
     def _pick_squadron(self, slot: Slot, tx, ty, ledger: Ledger, lead_service):
         """Prefer the lead's service; cross over only when sound (same-service option missing, or the other base is >=30% closer)."""
+        obj0_ = self._ctx[0] if self._ctx else None
+        sweep_ = obj0_ is not None and is_sweep(obj0_)            # v0.41.15: a Fighter Sweep flies long-range fighters only (F-15C, F-14)
         cands = [sq for sq in self.state.squadrons.values()
-                 if slot.role in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2 and self._in_range(sq.id, tx, ty)]
+                 if slot.role in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2 and self._in_range(sq.id, tx, ty)
+                 and (slot.kit != "JSOW" or sq.aircraft in JSOW_PER_JET) and (not sweep_ or sq.aircraft in LONG_RANGE_A2A)]
         if not cands:
             return None
-        key = lambda sq: self._dist_nm(sq.id, tx, ty) - 40 * (ledger.free[sq.id] / max(1, sq.authorized))
+        # TARCAP and sweep: the long-range shooters (F-15C, F-14) first, F-16 / F/A-18 behind them. The package escort (v0.41.1) the other
+        # way round: F-16 / F/A-18 first (it stays with the package and fights close), an F-15C / F-14 only when none is free.
+        obj_ = self._ctx[0] if self._ctx else None
+        escort = slot.role == Role.SWEEP and obj_ is not None and not is_sweep(obj_)
+        long_first = slot.role in (Role.ESCORT, Role.SWEEP) and not escort
+        def key(sq):
+            k = self._dist_nm(sq.id, tx, ty) - 40 * (ledger.free[sq.id] / max(1, sq.authorized))
+            if long_first and sq.aircraft not in LONG_RANGE_A2A:
+                k += A2A_SECONDARY_NM
+            if escort and sq.aircraft in LONG_RANGE_A2A:
+                k += A2A_SECONDARY_NM
+            return k
         if lead_service is None:
             return min(cands, key=key)
         same = [c for c in cands if AIRCRAFT[c.aircraft].service == lead_service]
@@ -335,8 +431,13 @@ class PackageBuilder:
                 best, best_s = sq, s
         return best
 
+    def _pick_cap_at(self, base, ledger: Ledger, lead_service):
+        """v0.41.7: a fighter squadron AT this base (the carrier CAP flies off its own deck)."""
+        cands = [sq for sq in self.state.squadrons.values() if sq.base_id == base.id and Role.CAP in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2]
+        return max(cands, key=lambda sq: (AIRCRAFT[sq.aircraft].service == lead_service, ledger.free.get(sq.id, 0))) if cands else None
+
     def _pick_cap_any(self, ledger: Ledger, lead_service):
-        """HAVCAP is mandatory: any fighter will do (it stays with the tanker, which stays behind the FLOT), range aside."""
+        """The tanker CAP is mandatory: any fighter will do (it stays with the tanker, short of the scramble circles), range aside."""
         cands = [sq for sq in self.state.squadrons.values() if Role.CAP in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2]
         if not cands:
             cands = [sq for sq in self.state.squadrons.values() if Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2]

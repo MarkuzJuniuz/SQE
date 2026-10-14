@@ -20,7 +20,7 @@ def _browse(parent, line: QLineEdit, title: str):
 
 
 class NewCampaignDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, weather_mode: str = "clear"):
         super().__init__(parent); self.setWindowTitle("New Campaign"); self.setMinimumWidth(520)
         lay = QVBoxLayout(self); lay.setSpacing(12)
         t = QLabel("New Campaign"); t.setObjectName("title"); lay.addWidget(t)
@@ -49,10 +49,16 @@ class NewCampaignDialog(QDialog):
             self.month.addItem(mname, i)
         self.month.setCurrentIndex(5)
         self.day = QSpinBox(); self.day.setRange(1, 28); self.day.setValue(12)
-        row = QHBoxLayout(); row.addWidget(self.month, 1); row.addWidget(self.day); row.addWidget(QLabel("2004"))
+        row = QHBoxLayout(); row.addWidget(self.month, 1); row.addWidget(self.day); row.addWidget(QLabel("2006"))
         form.addRow("Campaign starts", row)
         self.night = QCheckBox("Allow night sorties (otherwise missions are spread through daylight)")
         form.addRow("", self.night)
+        from .. import weather as _wxn
+        self.wx = QComboBox()
+        for k, val in _wxn.MODES.items():
+            self.wx.addItem(val, k)
+        self.wx.setCurrentIndex(max(0, self.wx.findData(weather_mode)))
+        form.addRow("Weather", self.wx)                # the same setting as Settings > Campaign > Weather: it can be changed there later
         lay.addLayout(form)
         self.blurb = QLabel(); self.blurb.setWordWrap(True); self.blurb.setObjectName("dim"); lay.addWidget(self.blurb)
         self.lvl.currentIndexChanged.connect(self._b); self._b()
@@ -70,8 +76,8 @@ class NewCampaignDialog(QDialog):
 
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
-                "start_date": f"2004-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(),
-                "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus"}
+                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(),
+                "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData())}
 
 
 class SettingsDialog(QDialog):
@@ -138,6 +144,24 @@ class SettingsDialog(QDialog):
         self.emerg.setChecked(bool(getattr(settings, "emergencies", True))); v.addWidget(self.emerg)
         hint(v, "Chance per sortie by difficulty (about 3%, 9%, 21%), never two sorties in a row. If your squadron can take it you are offered the scramble; "
                 "otherwise you are told, and the war settles it. Raids on our airfields (announced or not) happen whether this is on or off.")
+        self.splash = QCheckBox("Splash damage: blast damage around bomb and missile impacts (on by default)")
+        self.splash.setChecked(bool(getattr(settings, "splash_damage", True))); v.addWidget(self.splash)
+        hint(v, "DCS often leaves a vehicle a few metres from a bomb untouched. On: ground units near an air-to-ground weapon's impact take a blast "
+                "of their own, scaled to the warhead and weaker with distance. Kills it causes count for the shooter.")
+        # v0.41.18: AI landings
+        _lm = [("Always skip", "always"), ("Skip at your home deck / field", "home"), ("Land for real", "never")]
+        self.land_cv, self.land_af = QComboBox(), QComboBox()
+        for cb_, key_, dflt_ in ((self.land_cv, "ai_land_carrier", "always"), (self.land_af, "ai_land_field", "never")):
+            for lab_, val_ in _lm:
+                cb_.addItem(lab_, val_)
+            cb_.setCurrentIndex(max(0, cb_.findData(str(getattr(settings, key_, dflt_)))))
+        _row = QFormLayout(); _row.addRow("AI landings, carrier", self.land_cv); _row.addRow("AI landings, airfields", self.land_af); v.addLayout(_row)
+        hint(v, "Skip: AI flights going home are recovered short of the base (10 nm from the boat, 8 nm from a field), count as landed and leave the mission, "
+                "so DCS's landing queue never runs them dry or fills your pattern. Your own wingmen are recovered too once you are back. Land for real: DCS landings.")
+        self.ecm = QCheckBox("ECM script: SQE's own jamming model (experimental, off by default)")
+        self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
+        hint(v, "Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
+                "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
         self.ruins = QCheckBox("Ruins: show what earlier packages already hit (smoke and fire); struck flights fly home")
         self.ruins.setChecked(bool(getattr(settings, "ruins", True))); v.addWidget(self.ruins)
         hint(v, "Earlier packages in the same area that struck before your start leave smoking ruins (at most three sites, a few plumes each). The result is "
@@ -205,6 +229,7 @@ class SettingsDialog(QDialog):
         v = page("Terrain scan")
         self.tm_status = QLabel(); self.tm_status.setWordWrap(True); v.addWidget(self.tm_status)
         self.tm_relief = QLabel(); self.tm_relief.setWordWrap(True); v.addWidget(self.tm_relief)
+        self.tm_roads = QLabel(); self.tm_roads.setWordWrap(True); v.addWidget(self.tm_roads)
         self.shore = QSpinBox(); self.shore.setRange(300, 5000); self.shore.setSingleStep(100); self.shore.setSuffix(" m"); self.shore.setValue(int(getattr(settings, "shore_margin_m", 1500)))
         self.river = QSpinBox(); self.river.setRange(0, 1000); self.river.setSingleStep(50); self.river.setSuffix(" m rivers"); self.river.setValue(int(getattr(settings, "river_margin_m", 100)))
         row(v, "Shore margin", self.shore, self.river)
@@ -223,9 +248,10 @@ class SettingsDialog(QDialog):
             self.tabs.setCurrentIndex(3)                                  # first run: the paths are what is missing
 
     def _tm_refresh(self):
-        from .. import terrainmask as _tmk, relief as _rl
+        from .. import terrainmask as _tmk, relief as _rl, roads as _rd
         _tmk.configure(self.s.sqe_dir if self.s.dcs_saves else None)
         _rl.configure(self.s.sqe_dir if self.s.dcs_saves else None)
+        _rd.configure(self.s.sqe_dir if self.s.dcs_saves else None)
         sc = _tmk.scanned(self.s.sqe_dir if self.s.dcs_saves else None)
         have = ", ".join(f"{t} (scanned {dte})" for t, dte in sc) if sc else "none yet"
         ok = bool(_tmk.available())
@@ -234,6 +260,9 @@ class SettingsDialog(QDialog):
         rok = bool(_rl.available())
         self.tm_relief.setText(("Ground height: " + _rl.info()) if rok else "Ground height: not scanned. Low flights use a flat estimate and the kneeboard has no minimum safe altitude (run the scan mission again).")
         self.tm_relief.setStyleSheet(f"color: {theme.GREEN if rok else theme.AMBER}; font-weight: 700; font-size: 15px;")
+        dok = bool(_rd.available())
+        self.tm_roads.setText(("Roads: " + _rd.info()) if dok else "Roads: not scanned. Columns and supply sites are not placed on roads (run the scan mission again).")
+        self.tm_roads.setStyleSheet(f"color: {theme.GREEN if dok else theme.AMBER}; font-weight: 700; font-size: 15px;")
         self.tm.setText("Ground sites stay this far from the sea and lakes, and the second value from rivers and shallow water (rivers need the scan). "
                         f"Terrain scans on disk: {have}.")
 
@@ -253,6 +282,10 @@ class SettingsDialog(QDialog):
         self.s.merge_back_min = int(self.mback.value())
         self.s.merge_radius_nm = int(self.mrad.value())
         self.s.ruins = bool(self.ruins.isChecked())
+        self.s.ecm_script = bool(self.ecm.isChecked())
+        self.s.splash_damage = bool(self.splash.isChecked())
+        self.s.ai_land_carrier = str(self.land_cv.currentData() or "always")
+        self.s.ai_land_field = str(self.land_af.currentData() or "never")
         self.s.reactive = bool(self.react.isChecked()); self.s.emergencies = bool(self.emerg.isChecked()); self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.shore_margin_m = int(self.shore.value())
@@ -305,7 +338,7 @@ class WaitingDialog(QDialog):
     def _fill(self, t):
         rows = [("Aircraft lost / total", f"{t['blue_air_lost']} / {t['blue_air_total']}", f"{t['red_air_lost']} / {t['red_air_total']}"),
                 ("Ground units lost / total", f"{t['blue_ground_lost']} / {t['blue_ground_total']}", f"{t['red_ground_lost']} / {t['red_ground_total']}"),
-                ("Landed / recovered", str(t["landed"]), "-")]
+                ("Landed / recovered", str(t["landed"]), str(t.get("red_landed", 0)))]
         self.tbl.setRowCount(len(rows))
         for i, r in enumerate(rows):
             for j, v in enumerate(r):

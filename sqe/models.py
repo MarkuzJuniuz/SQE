@@ -42,6 +42,27 @@ class ObjectiveType(str, Enum):
     BARCAP = "BARCAP"          # defend a friendly base / the fleet
 
 
+# DEAD packages by aim. "SEAD": HARMs suppress the radars, a Close DEAD package follows. "DEAD": that Close DEAD package (GBUs, radar gate).
+# "STANDOFF": one package against a site under a long-range SAM (SA-10): HARM shooters and a Standoff DEAD flight of JSOWs, together.
+# "" : the combined package the valve falls back to after repeated failed SEAD days.
+SEAD_AIMS = ("SEAD", "STANDOFF")        # packages with HARM shooters timed on the salvo
+
+
+def task_label(f, obj) -> str:
+    """Short role label for package tables and the radio: SEAD, SO DEAD (Standoff DEAD, JSOW), DEAD (Close DEAD, GBU) or the role."""
+    if getattr(f, "tag", ""):
+        return f.tag
+    if getattr(f, "kit", "") == "JSOW":
+        return "SO DEAD" if obj.aim == "STANDOFF" else "JSOW"
+    if f.role.value == "STRIKE" and obj.type.value == "DEAD":
+        return "DEAD"
+    if f.role.value == "ESCORT":
+        return "TARCAP"                 # the package's TARCAP: its own station, first in, 15 minutes, home
+    if f.role.value == "SWEEP" and obj.type.value not in ("COUNTER_AIR", "FLEET_DEFENSE"):
+        return "ESCORT"                 # stays with the package, leaves with it (a real sweep is a COUNTER_AIR package)
+    return f.role.value
+
+
 @dataclass
 class Base:
     id: str
@@ -62,6 +83,8 @@ class Squadron:
     authorized: int
     available: int
     callsign: str = "Viper"
+    reserve: int = 0            # aircraft pulled back to a rear field to recover (airwings.py); available is 0 while they rest
+    rest_days: int = 0
 
     @property
     def readiness(self) -> float:
@@ -96,6 +119,8 @@ class EnemyAirWing:
     authorized: int
     available: int
     squadrons: int = 1          # how many squadrons the wing is made of (display / flavour)
+    reserve: int = 0            # aircraft pulled back to a rear field to recover (airwings.py); available is 0 while they rest
+    rest_days: int = 0
 
 
 @dataclass
@@ -105,6 +130,7 @@ class Objective:
     target_id: str              # asset id (or base id for BARCAP)
     priority: float
     description: str = ""
+    aim: str = ""               # FLEET_DEFENSE raids: what the raiders are after. "" = the airfield itself, else a blue asset id ("bfuel_...", "bdepot_fwd", "bgar_...") or "sector:N"
 
     def to_dict(self):
         d = asdict(self)

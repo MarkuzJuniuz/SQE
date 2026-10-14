@@ -129,7 +129,7 @@ def render_pages(outdir, ctx: dict) -> list:
             f.row([(0, f"CH{ch}"), (4, e.label), (14, f"{e.mhz:7.3f}"), (23, ((e.callsign or e.note).replace("carrier control", "CVN")).strip()[:36])], True)
         f.band("COMM 2 (VHF)")
         for ch, e in ctx["comm2"].items():
-            f.row([(0, f"CH{ch}"), (4, e.label), (14, f"{e.mhz:7.3f}"), (23, e.callsign[:36])], True)
+            f.row([(0, f"CH{ch}"), (4, "TOWER" if e.label == "ATC" else e.label), (14, f"{e.mhz:7.3f}"), (23, ((e.callsign or e.note).replace("carrier control", "CVN")).strip()[:36])], True)
     f.band("", [(0, "WP"), (3, "NAME"), (12, "TIME"), (22, "ALT"), (29, "KTS"), (34, "HDG/NM")])
     for r in ctx["waypoints"]:
         hot = r["name"] in ("MSHL", "PUSH", "TGT", "SEAD", "CAP1")

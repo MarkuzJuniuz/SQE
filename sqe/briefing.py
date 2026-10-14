@@ -41,7 +41,9 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     if obj.type.value == "FLEET_DEFENSE" and pkg.extra:
         e = pkg.extra
         tb = state.bases.get(obj.target_id)
-        sit += ["", (f"Intelligence reports {e['bombers']} Su-24M bombers with free-fall bombs inbound toward {tb.name if tb else 'our airfield'}, "
+        rtype = {"Su_24M": "Su-24M bombers", "Su_25": "Su-25 attack aircraft"}.get(e.get("raider", "Su_24M"), "attack aircraft")
+        what = obj.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", "") if e.get("aim") else (tb.name if tb else "our airfield")
+        sit += ["", (f"Intelligence reports {e['bombers']} {rtype} with free-fall bombs inbound toward {what}, "
                      f"approaching from a bearing of about {e['brg']:.0f} degrees." if e.get("land") else
                      f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
                      f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier.")
@@ -53,10 +55,44 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                  if n_def and obj.type.value != "FLEET_DEFENSE" else
                  ("" if obj.type.value == "FLEET_DEFENSE" else "No organised fighter defence is expected at the target.")),
             f"Weather: {x['weather']}." + ((" Loadouts changed for the weather: " + " ".join(x["wx_notes"])) if x.get("wx_notes") else "")]
+    if obj.type.value == "COUNTER_AIR" and obj.aim == "SWEEP":
+        sit += ["", "Fighter Sweep. Intelligence expects more enemy fighters over the target area than the strike packages' own TARCAP and escort can "
+                    "take, so you go in about 10 minutes ahead of them to clear the air. No marshal: depart, push, station, home. Your station is "
+                    "short of the target and outside live SAM cover. Shoot what comes in range; do not chase into the SAMs. Hold 15 minutes, or go "
+                    "home when your missiles are gone."]
+    elif obj.type.value == "DEAD" and obj.aim == "STANDOFF":
+        from .difficulty import get as _gd3
+        from .war import WarSimulator as _WS3
+        _p3 = _WS3(_gd3(state.level)).sead_p(state, pkg)
+        sit += ["", "Standoff DEAD. This site is, or sits under, a long-range SAM, so it is one package: two HARM flights and a JSOW flight go in "
+                    "together. The first HARM flight takes the long-range radars, the second takes the Tors that cover the site, in the same salvo, so the "
+                    "Tors are busy with HARMs when the JSOWs arrive. The JSOW flight comes in on its own axis, about 30 degrees off the HARM shooters', "
+                    "and releases its AGM-154As on the radars, the launchers and the Tors from stand-off range. Nobody flies into the long-range SAM's "
+                    "reach: release, then back out the way you came. Out of HARMs or JSOWs, go home.",
+                f"Intelligence puts the chance of suppressing the radars at about {round(_p3 * 100 / 5) * 5:.0f}%."]
+        if getattr(pf, "kit", "") == "JSOW":
+            sit += ["", "You are the Standoff DEAD flight. A radar that keeps tracking is the HARMs' kill; one that shuts down to dodge them is still "
+                        "where it was last seen, and that is where your JSOWs land, with the rest on the launchers and the Tors."]
+    elif obj.type.value == "DEAD" and obj.aim == "DEAD":
+        sit += ["", "Close DEAD. A SEAD package goes in ahead of you to suppress this site's radars. If any search or track radar is still up when you reach the gate, "
+                    "you hold outside the threat and re-check. AWACS calls hold, go, or RTB. You break off and RTB on a timeout, on low fuel, "
+                    "or when every SEAD flight on the site is down or gone."]
+    elif obj.type.value == "DEAD" and obj.aim == "SEAD":
+        from .difficulty import get as _gd2
+        from .war import WarSimulator as _WS, sead_fail as _sf
+        _p = _WS(_gd2(state.level)).sead_p(state, pkg)
+        from .war import DEAD_STAGE_GAP_MIN as _gap
+        if getattr(pf, "kit", "") == "JSOW":
+            sit += ["", "You are the JSOW slingers. You push with the HARM shooters and come in on your own axis, about 30 degrees off theirs, so the "
+                        "site has two directions to watch. The HARMs go first; release your AGM-154As on the radars' last-known positions from stand-off "
+                        "range. A radar that keeps tracking is the HARMs' kill; one that shuts down to dodge them is still where it was last seen, and "
+                        "that is where your JSOWs land."]
+        sit += ["", f"Your job is only to suppress the radars. A Close DEAD package follows about {_gap} minutes behind you and goes in only if the radars are out. "
+                    f"Intelligence puts the chance of suppressing this site at about {round(_p * 100 / 5) * 5:.0f}%" + (f", better than it was: this site has beaten us {_sf(state, obj.target_id)} time{'s' if _sf(state, obj.target_id) != 1 else ''} running and its crews and positions are known." if _sf(state, obj.target_id) else ".")]
     if x.get("intel"):
         sit += ["", "Intelligence: " + " ".join(x["intel"])]
-    mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {'DEAD' if (pf.role.value == 'STRIKE' and obj.type.value == 'DEAD') else pf.role.value}.", f"Your task: {pf.task}."]
-    exe = ["Package (push / TOT are staggered: sweep first, then SEAD, escorts, strikers):"]
+    mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {_long_label(pf, obj)}.", f"Your task: {pf.task}."]
+    exe = ["Package (push / TOT are staggered: TARCAP first, then SEAD and escorts, then strikers):"]
     for r in x["pkg_table"]:
         f = next(ff for ff in pkg.flights if ff.callsign == r["callsign"])
         exe.append(f"  {f.callsign:<14} {f.count}x {AIRCRAFT[f.aircraft].display:<16} {r['role']:<8} push {r['push']}   TOT {r['tot']}" + ("   <- YOU" if f.is_player else ""))
@@ -68,7 +104,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     if spec.fc3:           # FC3 radios have no channels: say the frequency
         tower, jtac_at = f"ATC {plan.freq('ATC'):.3f}", None
     else:
-        tower, jtac_at = "ATC COMM1 CH1", "COMM1 CH4"
+        tower, jtac_at = f"ATC {plan.where('ATC')}", (plan.where("JTAC") or None)
     adm = [f"BINGO {x['bingo']} lb   JOKER {x['joker']} lb",
            "Recovery: " + (f"carrier Case I, TACAN 74X, ICLS 11, {tower}" if spec.home.value == "CARRIER" else f"home field, tower {tower.replace('ATC ', 'on ')}"),
            f"Divert: {x['divert']}", "Tanker track is steerpoint TKR. Bullseye is the last steerpoint."]
@@ -76,7 +112,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         com = ["Frequencies: " + " | ".join(f"{e.label} {e.mhz:.3f}" for e in list(plan.comm1.values()) + list(plan.comm2.values()))]
     else:
         com = ["COMM1 (UHF): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm1.items()),
-               "COMM2 (VHF): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm2.items())]
+               "COMM2 (VHF" + ("/UHF" if spec.service == "Navy" else "") + "): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm2.items())]
     com += [f"IFF Mode 3: {x['mode3']}    Laser code: {x['laser']}", f"Bullseye: {x['bullseye']}"]
     if x.get("link16"):
         com.append("Package aircraft share a datalink; the AWACS feeds it. Station numbers (STN) are on your kneeboard.")
@@ -90,3 +126,9 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                     f"\n\n4. ADMINISTRATION AND LOGISTICS\n{text['admin']}\n\n5. COMMAND AND SIGNAL\n{text['comms']}\n\n{credit_line()}")
     text["blue_task"] = f"{text['mission']}\n\nPUSH {tl['push']}   TOT {tl['tot']}"
     return text
+
+
+def _long_label(f, obj) -> str:
+    """The flight's job in words, for 'tasked as ...'."""
+    from .models import task_label
+    return {"SO DEAD": "Standoff DEAD", "DEAD": "Close DEAD"}.get(task_label(f, obj), task_label(f, obj))

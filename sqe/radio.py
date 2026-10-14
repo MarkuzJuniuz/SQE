@@ -1,12 +1,12 @@
 """Radio plan: your fixed preset layout, filled with unique frequencies per mission.
 
-    COMM1 (radio 1, UHF):  CH1 ATC | CH2 AWACS | CH3 TANKER | CH4 JTAC (if any) | CH5 2nd tanker (if any)
-    COMM2 (radio 2, VHF):  CH1 FLIGHT
+    COMM1 (radio 1, UHF):  CH1 AWACS | CH2 TANKER | CH3 JTAC (if any) | CH4 2nd tanker (if any) | CH5 DIVERT
+    COMM2 (radio 2, VHF):  CH1 FLIGHT | CH2 TOWER (VHF tower for Air Force jets at an airfield; UHF otherwise: Navy COMM2 tunes both)
 
 Why it is built this way
 - COMM1 entities are all UHF 225-399.975 so the F-14B(U) ARC-159 and the F-16C UHF radio can both tune them.
 - The flight frequency is VHF so DCS (which puts a group's frequency on the first radio able to tune it)
-  puts it on COMM2 and never overwrites a COMM1 preset.
+  puts it on COMM2 CH1 and never overwrites a COMM1 preset. That is also why the tower is COMM2 CH2, not CH1 (v0.40.5).
 - Only the player's own jet gets presets; AI aircraft ignore them.
 """
 from __future__ import annotations
@@ -20,9 +20,9 @@ from .models import BaseKind
 @dataclass
 @_dc
 class RadioLayout:
-    """Your fixed preset layout. CH4 (JTAC) and CH5 (second tanker) appear only when the mission has them."""
-    comm1: dict = field(default_factory=lambda: {1: "ATC", 2: "AWACS", 3: "TANKER1", 4: "JTAC", 5: "TANKER2", 6: "DIVERT"})
-    comm2: dict = field(default_factory=lambda: {1: "FLIGHT"})
+    """Your fixed preset layout. COMM1 CH3 (JTAC) and CH4 (second tanker) appear only when the mission has them."""
+    comm1: dict = field(default_factory=lambda: {1: "AWACS", 2: "TANKER1", 3: "JTAC", 4: "TANKER2", 5: "DIVERT"})
+    comm2: dict = field(default_factory=lambda: {1: "FLIGHT", 2: "ATC"})
     optional: frozenset = frozenset({"JTAC", "TANKER2"})
     comm1_radio_id: int = 1
     comm2_radio_id: int = 2
@@ -48,6 +48,14 @@ class RadioPlan:
     comm2: dict[int, RadioEntry] = field(default_factory=dict)
     tacan: dict[str, str] = field(default_factory=dict)       # label -> "51X"
     package_flights: list[RadioEntry] = field(default_factory=list)  # info only (kneeboard)
+
+    def where(self, label: str) -> str:
+        """'COMM1 CH2' for a label, '' when the plan has no such entry."""
+        for n, tbl in (("COMM1", self.comm1), ("COMM2", self.comm2)):
+            for ch, e in tbl.items():
+                if e.label == label:
+                    return f"{n} CH{ch}"
+        return ""
 
     def freq(self, label: str) -> float:
         for tbl in (self.comm1, self.comm2):
@@ -75,24 +83,26 @@ class FrequencyAllocator:
             if f not in self.used and not any(abs(f - u) < 1.0 for u in self.used):
                 self.used.add(f)
                 return f
+        for k in range(n + 1):           # v0.41.9: a busy band (support CAP from folded packages): any free channel on the grid, 0.5 MHz apart
+            f = round(lo + k * step, 3)
+            if f not in self.used:
+                self.used.add(f)
+                return f
         raise RuntimeError("frequency pool exhausted")
 
 
 def build_radio_plan(package, state, atc_mhz: float, rng: random.Random,
-                     layout: RadioLayout, mcfg: RadioCfg, divert_mhz: float | None = None, divert_name: str = "") -> RadioPlan:
+                     layout: RadioLayout, mcfg: RadioCfg, divert_mhz: float | None = None, divert_name: str = "", atc_vhf_mhz: float | None = None) -> RadioPlan:
     alloc = FrequencyAllocator(rng)
     alloc.reserve(atc_mhz)
     if divert_mhz:
         alloc.reserve(divert_mhz)
     alloc.reserve(mcfg.carrier_link4_mhz)
     plan = RadioPlan()
-    plan.comm1[1] = RadioEntry(layout.comm1[1], atc_mhz, note="Tower / carrier control")
 
     sup = {s.slot: s for s in package.support}
     tacans_used = {mcfg.carrier_tacan}
     for ch, label in layout.comm1.items():
-        if ch == 1:
-            continue
         if label == "DIVERT":
             if divert_mhz:
                 plan.comm1[ch] = RadioEntry("DIVERT", divert_mhz, divert_name[:14], "Divert tower")
@@ -118,7 +128,13 @@ def build_radio_plan(package, state, atc_mhz: float, rng: random.Random,
     player = package.player_flight
     spec = AIRCRAFT[player.aircraft]
     flt = alloc.pick(*spec.comm2_band_mhz, step=0.5)
-    plan.comm2[1] = RadioEntry(layout.comm2[1], flt, player.callsign, "Intra-flight")
+    for ch, label in layout.comm2.items():
+        if label == "FLIGHT":
+            plan.comm2[ch] = RadioEntry(label, flt, player.callsign, "Intra-flight")
+        elif label == "ATC":         # an Air Force jet's COMM2 is VHF only: the field's VHF tower. Navy COMM2 tunes UHF too (and the carrier is UHF)
+            vhf = atc_vhf_mhz if (atc_vhf_mhz and spec.service != "Navy") else None
+            cv = state.bases[player.base_id].kind == BaseKind.CARRIER
+            plan.comm2[ch] = RadioEntry(label, vhf or atc_mhz, note="Carrier control" if cv else "Tower")
     for f in package.flights:
         if f is player:
             continue
@@ -137,13 +153,19 @@ def _free_tacan(used: set, rng: random.Random) -> str:
 
 
 def apply_player_presets(unit, plan, layout) -> bool:
-    """Write COMM1 presets onto one human aircraft. COMM2 CH1 is set via group.set_frequency().
-    Returns False when pydcs has no preset table for the jet (e.g. F-15C): set those by hand from the kneeboard."""
+    """Write COMM1 and COMM2 presets onto one human aircraft (COMM2 CH1, the flight, is also set by group.set_frequency(); DCS writes the
+    group frequency there whatever the preset says). Returns False when pydcs has no preset table for the jet (e.g. F-15C): set those by
+    hand from the kneeboard."""
     try:
         if unit.radio is None:
             unit.set_radio_preset()
         for ch, e in plan.comm1.items():
             unit.set_radio_channel_preset(layout.comm1_radio_id, ch, e.mhz)
+        for ch, e in plan.comm2.items():
+            try:
+                unit.set_radio_channel_preset(layout.comm2_radio_id, ch, e.mhz)
+            except Exception:
+                pass                                                  # a COMM2 without presets: the kneeboard has the frequency
         return True
     except Exception:
         return False

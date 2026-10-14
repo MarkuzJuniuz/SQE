@@ -71,6 +71,28 @@ def covering(state, pts, tgt, skip=()) -> list:
         if tm.poly_dist(a.x, a.y, pts) <= reach:
             near_tgt = ((a.x - tgt[0]) ** 2 + (a.y - tgt[1]) ** 2) ** 0.5 <= reach
             out.append((a, a.variant, "target" if near_tgt else "route"))
+    out += _ground_aa(state, pts, tgt, skip)
+    return out
+
+
+GROUND_AA_KINDS = (AssetKind.ARMOR, AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.AIRFIELD)   # sites that carry ZSU-23-4s, Strela / Osa and MANPADs
+GROUND_AA_MERGE_M = 6000.0                                 # one cluster of vehicles and buildings counts as one AAA site
+
+
+def _ground_aa(state, pts, tgt, skip=()) -> list:
+    """Anti-aircraft that travels with columns, garrisons and the support sites. It only reaches a flight that is LOW (AAA / MANPAD envelope, 0-10,000 ft),
+    so it keeps the 'go LOW' choice honest: a column's guns beside the target outweigh a SAM that the terrain hides. -> [(site, "AAA", where)]"""
+    out, seen = [], []
+    reach = (tm.RANGE_NM.get("AAA", 3) + COVER_MARGIN_NM) * NM
+    for a in state.assets.values():
+        if a.kind not in GROUND_AA_KINDS or a.destroyed or a.id in skip or getattr(a, "health", 1.0) <= 0.15:
+            continue
+        if any(((a.x - x) ** 2 + (a.y - y) ** 2) ** 0.5 < GROUND_AA_MERGE_M for x, y in seen):
+            continue
+        if tm.poly_dist(a.x, a.y, pts) <= reach:
+            seen.append((a.x, a.y))
+            near_tgt = ((a.x - tgt[0]) ** 2 + (a.y - tgt[1]) ** 2) ** 0.5 <= reach
+            out.append((a, "AAA", "target" if near_tgt else "route"))
     return out
 
 
@@ -121,7 +143,8 @@ def choose(state, role, p, pts, tgt, cloud_base_ft: float | None = None, skip=()
     where = "target" if any(w == "target" for _v, w in hit) else "route"
     lab = label_for(best[1], best[2])
     verb = "covers" if len({v for v, _w in hit}) == 1 else "cover"
-    return Tier(lab, best[1], best[2], f"{lab} from the IP: {names} {verb} the {where} at {label_for(base[1], base[2])} altitude.", True)
+    frm = "from the LOW point, 30 nm out" if best[2] else "from the IP"           # v0.41.16: the low leg starts 30 nm from the target
+    return Tier(lab, best[1], best[2], f"{lab} {frm}: {names} {verb} the {where} at {label_for(base[1], base[2])} altitude.", True)
 
 
 # ---- fighters stand off from live SAM cover ---------------------------------------------------------------------------------------
@@ -163,3 +186,89 @@ def standoff(state, pts, alt_ft: int, margin_nm: float = STANDOFF_MARGIN_NM):
             names = sorted({v for _a, v in c}, key=lambda v: -WEIGHT.get(v, 1.0))
             return stop[0], stop[1], names, short
     return None
+
+
+STATION_SHORT_NM = 12.0
+STATION_FRAC = 0.75             # against a long-range SAM: the station sits this fraction of its reach from it (about 36 nm for an SA-10).
+                                # v0.41.1: 0.62 (30 nm) was inside where the SA-10 really engaged (59-61 km) and it killed six Eagles there
+STATION_OFFSET_NM = 9.0         # ...moved this far sideways toward the nearest enemy airfield
+LONG_RANGE_NM = 30.0            # a SAM that reaches this far counts as long-range for the station rule
+
+
+def _long_range_threat(state, tgt, alt_ft):
+    """The live long-range SAM (reach >= LONG_RANGE_NM, able to engage alt_ft) whose ring covers the target, longest reach first. -> (asset, nm) or None"""
+    best = None
+    for a in state.assets.values():
+        if a.kind != AssetKind.SAM or a.destroyed or getattr(a, "suppressed", False):
+            continue
+        r = tm.RANGE_NM.get(a.variant, 0)
+        if r < LONG_RANGE_NM or not hits(a.variant, alt_ft):
+            continue
+        if ((a.x - tgt[0]) ** 2 + (a.y - tgt[1]) ** 2) ** 0.5 > r * NM:
+            continue
+        if best is None or r > best[1]:
+            best = (a, r)
+    return best
+
+
+def _nearest_enemy_field(state, x, y):
+    fl = [a for a in state.assets.values() if a.kind == AssetKind.AIRFIELD and not a.destroyed]
+    return min(fl, key=lambda a: (a.x - x) ** 2 + (a.y - y) ** 2) if fl else None         # a TARCAP / escort station with no SAM cover in the way: this far short of the target, on the run-in
+
+
+def _cover_sites(state, alt_ft, margin_nm=STANDOFF_MARGIN_NM):
+    out = []
+    for a in state.assets.values():
+        if a.kind != AssetKind.SAM or a.destroyed:
+            continue
+        r = tm.RANGE_NM.get(a.variant, 0)
+        if r > 0 and hits(a.variant, alt_ft):
+            out.append((a, (r + margin_nm) * NM))
+    return out
+
+
+def leg_clear(state, p0, p1, alt_ft) -> bool:
+    """Does the straight leg p0 -> p1 stay outside every live SAM ring (plus the margin) that reaches alt_ft?"""
+    sites = _cover_sites(state, alt_ft)
+    d = ((p1[0] - p0[0]) ** 2 + (p1[1] - p0[1]) ** 2) ** 0.5
+    n = max(1, int(d // NM))
+    for k in range(n + 1):
+        x, y = p0[0] + (p1[0] - p0[0]) * k / n, p0[1] + (p1[1] - p0[1]) * k / n
+        if any(((a.x - x) ** 2 + (a.y - y) ** 2) ** 0.5 <= reach for a, reach in sites):
+            return False
+    return True
+
+
+def station(state, pts, alt_ft: int, egr=None):
+    """A TARCAP's or an escort's own station: the stand-off point when live SAM cover is in the way, else STATION_SHORT_NM short of the
+    target on the run-in (never behind the first point). -> (x, y, [variants], nm short of the target, package egress clear from there)."""
+    so = standoff(state, pts, alt_ft)
+    lr = _long_range_threat(state, pts[-1], alt_ft)
+    if lr is not None:
+        # v0.41.0: against a long-range SAM (an SA-10) the stand-off edge left the TARCAP ~20 nm behind the HARM shooters it covers (v0.40.10 run:
+        # the F-15Cs never fired). Now it sits STATION_FRAC of that SAM's reach from it, on our side (toward the first route point), level with
+        # the HARM shooters, and STATION_OFFSET_NM toward the nearest enemy airfield, between the threat and the package.
+        a, reach_nm = lr
+        px, py = pts[0]
+        d0 = ((px - a.x) ** 2 + (py - a.y) ** 2) ** 0.5 or 1.0
+        ux, uy = (px - a.x) / d0, (py - a.y) / d0
+        r = STATION_FRAC * reach_nm * NM
+        x, y = a.x + ux * r, a.y + uy * r
+        fld = _nearest_enemy_field(state, x, y)
+        if fld is not None:
+            vx, vy = -uy, ux                                   # perpendicular to the SAM -> station line; pick the side the field is on
+            sgn = 1.0 if ((fld.x - x) * vx + (fld.y - y) * vy) >= 0 else -1.0
+            x, y = x + sgn * vx * STATION_OFFSET_NM * NM, y + sgn * vy * STATION_OFFSET_NM * NM
+        tx, ty = pts[-1]
+        names, short = [a.variant], ((x - tx) ** 2 + (y - ty) ** 2) ** 0.5 / NM
+    elif so:
+        x, y, names, short = so
+    else:
+        tx, ty = pts[-1]
+        px, py = pts[-2]
+        leg = ((tx - px) ** 2 + (ty - py) ** 2) ** 0.5 / NM
+        short = min(STATION_SHORT_NM, max(0.0, leg - 1.0)) if leg > 0 else 0.0
+        f = short / leg if leg > 0 else 0.0
+        x, y, names = tx + (px - tx) * f, ty + (py - ty) * f, []
+    ok = egr is not None and leg_clear(state, (x, y), egr, alt_ft)
+    return x, y, names, short, ok

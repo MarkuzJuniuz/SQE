@@ -143,10 +143,21 @@ class MissionsPage(QWidget):
         self.lst.blockSignals(False)
         self.resume.setVisible(bool(st.pending))
         self.skip.setEnabled(st.status == "ACTIVE")
-        if self.pkgs:
+        if self.pkgs and any(sess.flyable(p) for p in self.pkgs):
             self.lst.setCurrentRow(0)
         else:
             self._clear_body()
+            self._idle_note(sess)
+
+    def _idle_note(self, sess: Session):
+        """Nothing to fly today: say so on the same pane, with the reasons, and a quiet pointer to Skip Turn."""
+        if not sess.state or sess.state.status != "ACTIVE":
+            return
+        self.bl.addWidget(self._label(f"No flights for {sess.state.squadrons[sess.state.player.squadron_id].name} today.", "title"))
+        for r in sess.idle_reasons():
+            self.bl.addWidget(self._label(r, "dim"))
+        self.bl.addWidget(self._label("Stand-down day for you. Skip Turn takes the day.", "small"))
+        self.bl.addStretch(1)
 
     # ---- the right-hand panel ------------------------------------------------------------------------------------------------
     def _clear_body(self):
@@ -284,7 +295,7 @@ class ForcesPage(QWidget):
         for i, a in enumerate(al):
             kind = "Garrison" if a.variant == "GARRISON" else (f"SAM {a.variant}" if a.kind.value == "SAM" else a.kind.value.title())
             if a.suppressed:
-                kind += "  (radars blinded)"
+                kind += "  (radars suppressed)"
             from .. import theatres as _th; _tl = _th.active()["tier_labels"]; tier = _tl[min(len(_tl) - 1, max(1, a.tier))]
             self.as_.setItem(i, 0, _item(a.name, theme.DIM if a.destroyed else None)); self.as_.setItem(i, 1, _item(kind))
             self.as_.setItem(i, 2, _item(tier + ("" if a.tier <= st.front + 2 else "  (locked)"), theme.DIM if a.tier > st.front + 2 else None))
@@ -391,10 +402,16 @@ class MainWindow(QMainWindow):
                 return
         if self._offer_terrain_scan():
             return
-        dlg = NewCampaignDialog(self)
+        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"))
         if dlg.exec() == QDialog.Accepted:
             try:
-                v = dlg.values(); self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], night_ops=v['night_ops'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus')); self.refresh_all()
+                v = dlg.values()
+                self.session.settings.weather_mode = v.get("weather_mode", self.session.settings.weather_mode)
+                try:
+                    self.session.settings.save()
+                except OSError:
+                    pass
+                self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], night_ops=v['night_ops'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus')); self.refresh_all()
             except Exception:
                 QMessageBox.critical(self, "Could not create campaign", traceback.format_exc())
 
@@ -536,7 +553,8 @@ class MainWindow(QMainWindow):
             pill.setText(txt)
         self.banner.setText({"ACTIVE": "Sortie pending" if st.pending else "", "VICTORY": "VICTORY", "DEFEAT": "DEFEAT"}[st.status])
         self.banner.setVisible(bool(self.banner.text()))
-        self.setWindowTitle(f"{APP_NAME} - {st.name}" + ("  [AI TEST: your flight is flown by the AI]" if getattr(self.session, "ai_test", False) else ""))
+        self.setWindowTitle(f"{APP_NAME} - {st.name}" + ("  [AI TEST: your flight is flown by the AI]" if getattr(self.session, "ai_test", False) else "") + ("  [FULL MAP: no restrictions]" if getattr(self.session, "full_map", False) else "")
+                            + (f"  [LATE SEAD: +{self.session.late_sead_min} min, from the next planned day]" if getattr(self.session, "late_sead_min", 0) else ""))
 
 
 def run():
@@ -555,6 +573,10 @@ def run():
     f = app.font(); f.setPointSize(10); app.setFont(f)
     settings = AppSettings.load(); sess = Session(settings)
     sess.ai_test = "--ai-test" in sys.argv[1:]                  # all-AI test: your flight is built as an AI flight, no player slot
+    sess.full_map = "--full-map" in sys.argv[1:]                # stress test: nothing is left out of the mission (every site, garrison, column and planned patrol)
+    if "--late-sead" in sys.argv[1:]:                           # hold test: SEAD-stage packages go in late, so the DEAD stage reaches its gate with the radars up
+        from ..engine import LATE_SEAD_MIN
+        sess.late_sead_min = LATE_SEAD_MIN
     w = MainWindow(sess); w.show()
     from .. import settings as S
     def scripting_on():
