@@ -2021,3 +2021,7 @@ if __name__ == "__main__":
         main()
     finally:
         shutil.rmtree(TMP, ignore_errors=True)
+    # Passed: exit now. The interpreter's own teardown after a full run can crash in pydcs / Pillow (segfault or malloc abort AFTER
+    # "SMOKE TEST PASSED"), which made CI report a failure for a run that passed. A failure above still raises and exits non-zero.
+    sys.stdout.flush(); sys.stderr.flush()
+    os._exit(0)
