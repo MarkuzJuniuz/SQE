@@ -40,6 +40,7 @@ TARCAP_MIN = 15               # ...and holds there this long, then goes home
 ESCORT_AFTER_TOT_S = 180      # an escort (SWEEP role) holds its station until this long after the TOT (the last ground-attack flight off target)
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
+LATE_ATTACK_S = 600           # v0.41.16: an AI strike flight drops only within this of its TOT
 RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
 RCV_SPREAD = (0, 30, -30, 60, -60)    # ...on its own bearing (degrees off the way it comes home), by stack slot
 SA10_REACH_NM = 31            # v0.41.14: the farthest an SA-10 fired at our jets in the runs (54-57 km)
@@ -1358,8 +1359,9 @@ class MissionBuilder:
             if f.is_player and f.aircraft == "F-14BU":
                 u.set_property("INSAlignmentStored", True)
         g.set_skill(Skill.High)
-        if not f.is_player or o.player_is_ai:      # v0.41.11: every AI flight goes home on bingo fuel (two ran dry in the v0.41.10 run: a strike Viper, a Tomcat)
-            g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
+        # v0.41.11: every AI flight goes home on bingo fuel; v0.41.16: your own flight too (it applies to your AI wingmen: in the v0.41.14 run they
+        # queued at the tanker until they flamed out)
+        g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
         if not f.tag and f.role in (Role.SEAD, Role.STRIKE, Role.CAS):      # where this package's shooters launch: the TARCAP / escort cover zone
             lp_ = next((w for w in wps if w.action in ("SEAD", "JSOW")), None) or next((w for w in wps if w.name == "IP"), None)
             if lp_ is not None:
@@ -1550,7 +1552,10 @@ class MissionBuilder:
                 if w is stw and self._holds and self._holds[-1]["end"] == hold_end and ct not in self._holds[-1]["cts"]:
                     self._holds[-1]["cts"].append(ct)
             elif w.action == "BOMB":
-                wp.tasks.append(task.Bombing(pt(w.x, w.y), group_attack=True))
+                # v0.41.16: the attack is only good until LATE_ATTACK_S after its TOT; later, the flight flies on to its egress and home (the
+                # v0.41.14 run: the lead, alone after its wingmen flamed out, bombed 30 min late and met a live SA-6)
+                bct_ = task.ControlledTask(task.Bombing(pt(w.x, w.y), group_attack=True))
+                bct_.stop_after_time(int(w.eta_s + LATE_ATTACK_S)); wp.tasks.append(bct_)
             elif w.action == "JSOW":
                 self._jsow_tasks(wp, f, armor, package)
             elif w.action == "CAS":

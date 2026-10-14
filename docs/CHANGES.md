@@ -1,3 +1,11 @@
+## v0.41.16
+
+From the v0.41.14 Gudauta fuel-farm run: the whole Venom 7 strike flight was lost. The low-level run started at the IP, 70 nm from the target (the IP sits half way out on long routes); three F-16s flamed out (the wingmen queued at the tanker behind the lead until they were dry); the lead refuelled, bombed alone 30 min after its TOT and was shot down by a live SA-6.
+
+* **The low-level leg starts 30 nm from the target:** the flight cruises to the IP at height and descends at a new LOW point. Your kneeboard shows it.
+* **Bingo fuel for your own flight too:** your AI wingmen head home on bingo instead of waiting at the tanker until they flame out.
+* **No late attacks:** an AI strike flight only drops within 10 min of its TOT; later, it flies on to its egress and home.
+
 ## v0.41.15
 
 From the v0.41.14 run: fighter flights chased MiGs north toward Gudauta and Sochi after their hold (the homeward 20 nm circle moved with the jet) and died to Sochi's alert pairs; and F-16s flying Fighter Sweeps had to get close to kill anything, which drags them toward the SAMs.
