@@ -2013,6 +2013,11 @@ def main():
     _p23b = _ip23(_mk23(), (0, 0), {1: 1500})
     assert _p23b and _p23b[0].name == "SPAWN" and (round(_p23b[0].x), round(_p23b[0].y)) == (100000, 0) and _p23b[1].name == "TGT", "on station until it leaves"
     print("[preloaded] a flight still within its hold starts on its station")
+    # v0.41.26: the tanker track keeps clear of red patrols and the lines red fighters fly in on, not only SAMs and scramble circles
+    from sqe import threatmap as _tm26
+    _ok26 = _tm26.tanker_spot(s.state, (0.0, 0.0), (200000.0, 0.0), (300000.0, 0.0), caps=[], lanes=[(100000.0, 50000.0, 100000.0, -50000.0)], cover=[])
+    assert _ok26 is None or _tm26._seg_nm(_ok26[0], _ok26[1], 100000.0, 50000.0, 100000.0, -50000.0) >= _tm26.TANKER_LANE_NM, "the tanker stays off a red inbound line"
+    print("[tanker] the tanker track stays clear of red patrols and inbound lines")
     print("SMOKE TEST PASSED")
 
 
