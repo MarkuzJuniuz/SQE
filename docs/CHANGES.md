@@ -1,3 +1,12 @@
+## v0.41.19
+
+Rolling back the SAM belt. From the v0.41.14 Gudauta fuel-farm run: a strike was planned under a live SA-6 (the planner's SAM-belt rule skipped the target's own cluster), flew low because of it and lost all four jets; and Gudauta's alert pairs never got airborne.
+
+* **Strike gate:** a strike or counter-air package is not planned while a live medium / long-range SAM (SA-2, SA-3, SA-6, SA-11, SA-10; partly destroyed sites count while above a quarter strength) covers its target, unless that SAM is suppressed. The covering site goes up the DEAD list instead. As the belt is taken down, the targets behind it open up, and with no SAM left to hide from the strikes fly at height.
+* **Standoff DEAD by default:** every DEAD on a medium / long-range site is a Standoff DEAD (HARMs plus JSOWs). No JSOW jets free that day: it is not planned, and the planner offers it again the next day (no Close DEAD fallback).
+* **Stuck alert pairs fixed:** the smoke and fire placed at earlier strikes' ruins set off an explosion at 4 s. On an airfield that killed the airbase in DCS, which then started nobody there. Airfield ruins are smoke only now.
+* Smoke test: no strike under a live gate SAM; DEADs on such sites are Standoff with their JSOW flight.
+
 ## v0.41.18
 
 * **Settings: AI landings,** one for carriers and one for airfields:

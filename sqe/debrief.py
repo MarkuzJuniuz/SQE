@@ -546,7 +546,7 @@ do
         local y = 0
         pcall(function() y = land.getHeight({x = x, y = z}) end)
         local v = {x = x, y = y, z = z}
-        pcall(function() trigger.action.explosion(v, r.pw) end)
+        if r.pw > 0 then pcall(function() trigger.action.explosion(v, r.pw) end) end      -- v0.41.19: none at an airfield (pw 0)
         nid = nid + 1
         pcall(function() trigger.action.effectSmokeBig(v, r.p, r.dn, "sqe_ruin_" .. nid) end)
       end
@@ -769,7 +769,7 @@ do
         local y = 0
         pcall(function() y = land.getHeight({x = x, y = z}) end)
         local v = {x = x, y = y, z = z}
-        pcall(function() trigger.action.explosion(v, r.pw) end)
+        if r.pw > 0 then pcall(function() trigger.action.explosion(v, r.pw) end) end      -- v0.41.19: none at an airfield (pw 0)
         nid = nid + 1
         pcall(function() trigger.action.effectSmokeBig(v, r.p, r.dn, "sqe_ruin_" .. nid) end)
       end

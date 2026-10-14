@@ -194,7 +194,8 @@ def main():
     print(f"    spawns: {len(_air)} airborne groups apart, {len(_rw)} runway / catapult starts, one group each")
     print(f"    {_a2g} AI ground-attack flights: no air-to-air on the way in, RTB when out of A2G weapons, self-defence after the attack")
     prim2 = [g for g in man.groups if g["kind"] == "asset" and g.get("primary_pkgs")]
-    assert any(res.merged[0]["id"] in g["primary_pkgs"] for g in prim2), "merged package has no primary target"
+    _gm = [m_ for m_ in res.merged if m_.get("type") in ("STRIKE", "DEAD", "CAS")]       # v0.41.19: the plan changed (strike gate); a ground-target merge
+    assert not _gm or any(_gm[0]["id"] in g["primary_pkgs"] for g in prim2), "merged package has no primary target"
     t_late = max(m["tot_s"] for m in res.merged) + 200
     dead = [u for g in man.groups if g["kind"] == "asset" and res.merged[0]["id"] in g.get("primary_pkgs", []) for u in g["units"][:2]]
     ms.settings.state_file.write_text(json.dumps({"campaign": man.campaign_id, "sortie": man.sortie, "package": man.package_id, "mission_ended": True,
@@ -1094,7 +1095,7 @@ def main():
     assert _sw, "no Fighter Sweep planned in 19 days"
     _pk_ = _ws.packages()
     assert all(f_.role == _Rl2.SWEEP and f_.count == 4 and not f_.tag for f_ in _sw.flights), "a sweep is 4-ships only, no support CAP"
-    assert all(f_.aircraft in ("F-15C", "F-14BU") for p_ in _ws.packages() if _isw(p_.objective) for f_ in p_.flights), "v0.41.15: sweeps fly F-15Cs and F-14s only"
+    assert all(f_.aircraft in ("F-15C", "F-14BU") for p_ in _ws.packages() if _isw(p_.objective) for f_ in p_.flights if not f_.tag), ("v0.41.15: sweeps fly F-15Cs and F-14s only", [(p_.objective.description, [(f_.aircraft, f_.tag, f_.role.value) for f_ in p_.flights]) for p_ in _ws.packages() if _isw(p_.objective)])
     _esc = [f_ for p_ in _pk_ if p_.objective.type.value in ("STRIKE", "DEAD", "CAS") for f_ in p_.flights if f_.role == _Rl2.SWEEP]
     assert _esc and all(f_.count == 2 for f_ in _esc), "a defended strike package carries a 2-ship escort (v0.41.1), the extra fighters are the sweep's"
     assert sum(f_.aircraft in ("F-16C", "FA-18C") for f_ in _esc) >= len(_esc) / 2, ("escorts: F-16 / F/A-18 first", [f_.aircraft for f_ in _esc])
@@ -1904,6 +1905,23 @@ def main():
     _ln = _js9.load(open(Path(__file__).resolve().parent.parent / ".vscode" / "launch.json"))["configurations"]
     assert any("--full-map" in c_.get("args", []) for c_ in _ln) and any(c_.get("args") == ["--ai-test", "--full-map"] for c_ in _ln), "the debug dropdown has the launch combinations"
     print(f"[full map] a normal mission has {_n0} units, the same sortie with --full-map {_n1}; every site, friendly garrison and planned patrol built; launch combinations in the debug dropdown")
+    # v0.41.19: rollback. No strike under a live medium / long-range SAM; every DEAD on such a site is a Standoff DEAD
+    from sqe.war import covering_sams as _cs19, GATE_VARIANTS as _gv19
+    _n19 = _d19 = 0
+    for sd_ in (1, 2, 3):
+        _s19 = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, flight_filter="all"))
+        _s19.new(f"Rollback {sd_}", "F-16C", 3, seed=sd_)
+        for p_ in _s19.packages():
+            o_ = p_.objective
+            if o_.type.value in ("STRIKE", "COUNTER_AIR") and o_.aim != "SWEEP" and o_.target_id in _s19.state.assets:
+                assert not _cs19(_s19.state, _s19.state.assets[o_.target_id]), ("a strike under a live SAM", o_.description)
+                _n19 += 1
+            if o_.type.value == "DEAD" and _s19.state.assets[o_.target_id].variant in _gv19:
+                assert o_.aim == "STANDOFF", ("a DEAD on a medium / long-range site is a Standoff DEAD", o_.description)
+                assert any(f_.kit == "JSOW" for f_ in p_.flights), ("a Standoff DEAD always has its JSOW flight", o_.description)
+                _d19 += 1
+    assert _d19 >= 1
+    print(f"[rollback] {_n19} strikes, none under a live SA-2/3/6/11/10; {_d19} DEADs on such sites, all Standoff with their JSOW flight")
     print("SMOKE TEST PASSED")
 
 

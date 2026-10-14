@@ -23,13 +23,33 @@ def _suppressor(f, pkg=None) -> bool:
     return f.role == Role.SEAD
 
 
+GATE_VARIANTS = ("SA-2", "SA-3", "SA-6", "SA-11", "SA-10")    # v0.41.19: medium / long-range SAMs: they get a Standoff DEAD, and they gate strikes
+
+
 def long_range_site(state, site) -> bool:
-    """A site that is, or sits under, a live long-range SAM (an SA-10): it gets a Standoff DEAD package (HARMs and JSOWs together), not the
-    SEAD then Close DEAD pair, because a GBU flight has to fly into the long-range SAM's reach."""
+    """A site that gets a Standoff DEAD package (HARMs and JSOWs), not the SEAD then Close DEAD pair. v0.41.19: every medium / long-range site
+    (GATE_VARIANTS): a Close DEAD sends GBU jets over the site, and a radar or launcher that survives the SEAD meets them close in (the Gudauta
+    SA-6 in the v0.41.14 run). Before: only a site that is, or sits under, a live SA-10."""
     import math
     from . import threatmap as tm
+    if site.variant in GATE_VARIANTS and not site.destroyed:
+        return True
     live = lambda a: a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not a.suppressed       # a suppressed SA-10 has no radars to shoot with
     return live(site) or any(live(a) and a.id != site.id and math.hypot(a.x - site.x, a.y - site.y) <= tm.UMBRELLA_KM * 1000 for a in state.assets.values())
+
+
+def covering_sams(state, a) -> list:
+    """v0.41.19: the strike gate. Live medium / long-range SAM sites (GATE_VARIANTS, its own cluster included) whose reach covers the target and
+    that are not suppressed. While any is up, a strike on the target is not planned; the site gets a DEAD first (the SAM belt is rolled back,
+    then the targets behind it). The v0.41.14 fuel-farm strike went in under a live SA-6 and lost all four jets."""
+    from . import threatmap as tm
+    out = []
+    for x in state.assets.values():
+        if x.kind != AssetKind.SAM or x.destroyed or x.health <= 0.25 or getattr(x, "suppressed", False) or x.variant not in GATE_VARIANTS:
+            continue
+        if ((x.x - a.x) ** 2 + (x.y - a.y) ** 2) ** 0.5 <= tm.RANGE_NM.get(x.variant, 0) * 1852:
+            out.append(x)
+    return out
 
 
 NM = 1852.0
@@ -77,7 +97,7 @@ class ObjectivePlanner:
             defenders = [x for x in a.defended_by if alive(x)]
             if a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT):
                 pr = a.value * a.health / (1 + 0.5 * len(defenders))
-                cand.append((pr, Objective("", ObjectiveType.STRIKE, a.id, pr, f"Strike {a.name}"), self._blockers(state, a), locked))
+                cand.append((pr, Objective("", ObjectiveType.STRIKE, a.id, pr, f"Strike {a.name}"), self._blockers(state, a) + covering_sams(state, a), locked))
             elif a.kind == AssetKind.SAM and a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10:      # short-range SAMs are CAS's problem, not a SEAD/DEAD package's
                 covered = sum(x.value for x in state.assets.values() if a.id in x.defended_by and not x.destroyed) / 3.0
                 pr = a.value * a.health + covered
@@ -104,7 +124,7 @@ class ObjectivePlanner:
                 if w and w.available > 0:
                     pr = a.value * 1.2 * (w.available / max(1, w.authorized))
                     cand.append((pr, Objective("", ObjectiveType.COUNTER_AIR, a.id, pr, f"Counter-air at {a.name} ({w.available} aircraft)"),
-                                 self._blockers(state, a), locked))
+                                 self._blockers(state, a) + covering_sams(state, a), locked))
         blocking = {x.id for c in cand for x in c[2]}                  # sites that stand in front of something else
         pool = []
         for pr, o, bl, locked in cand:
