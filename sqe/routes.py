@@ -98,7 +98,7 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, ca
 
 def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_player: bool,
                tanker_xy: tuple | None, stack_idx: int = 0, spawn: tuple | None = None, spawn_alt_ft: int = 0,
-               spawn_kts: int = 0, jsow: bool = False, jsow_side: float = 0, keep_out: tuple | None = None) -> list[Wpt]:
+               spawn_kts: int = 0, jsow: bool = False, jsow_side: float = 0, keep_out=None, harm_deg: float = 0) -> list[Wpt]:
     """Waypoints from start (takeoff for the player, an in-air 'just departed' spawn for AI) to egress. RTB is added by the builder."""
     wp: list[Wpt] = []
     bx, by = own_base
@@ -135,13 +135,15 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         # v0.41.4: 40 nm, not the HARM shooters' 30: the JSOW jets go in at 33,000 ft and run in on their releases past the launch point.
         while jsow_nm < JSOW_MAX_NM and any(dist(*offset(g.tx, g.ty, jh_, jsow_nm * NM), kx, ky) < max(knm, JSOW_KEEP_HIGH_NM) * NM for kx, ky, knm in g.jsow_keep):
             jsow_nm += 1.0
+    harm_ax = g.hdg + 180 + (harm_deg if role == Role.SEAD and not human else 0)    # v0.41.24: the builder may turn the HARM axis off a neighbouring SAM
     if role == Role.SEAD and not human and keep_out:          # under an umbrella (an SA-10 covering the target): the HARM point stays out of its reach too
-        kx, ky, knm = keep_out
-        while harm_nm < HARM_LAUNCH_NM + 40 and dist(*offset(g.tx, g.ty, g.hdg + 180, harm_nm * NM), kx, ky) < knm * NM:
+        # v0.41.24: keep_out may be a list of circles (the umbrella and every other SAM the package is not sent against)
+        kos_ = [keep_out] if isinstance(keep_out, tuple) else list(keep_out)
+        while harm_nm < HARM_LAUNCH_NM + 40 and any(dist(*offset(g.tx, g.ty, harm_ax, harm_nm * NM), kx, ky) < knm * NM for kx, ky, knm in kos_):
             harm_nm += 1.0
     jsow_hdg = g.hdg + 180 + JSOW_AXIS_DEG * jsow_side         # the JSOW flight comes in on its own axis, off the HARM shooters' (multi-axis)
     if (role == Role.SEAD or (jsow and role == Role.STRIKE)) and not human:      # the IP sits 6 nm before the launch point (farther out than the usual IP)
-        far = offset(g.tx, g.ty, g.hdg + 180 if role == Role.SEAD else jsow_hdg, ((harm_nm if role == Role.SEAD else jsow_nm) + 6) * NM)
+        far = offset(g.tx, g.ty, harm_ax if role == Role.SEAD else jsow_hdg, ((harm_nm if role == Role.SEAD else jsow_nm) + 6) * NM)
         if dist(g.tx, g.ty, *far) > dist(g.tx, g.ty, *g.ip):
             ip_xy = far
     # v0.41.10: deconfliction. AI flights cross PUSH and EGR on their own lane, 1.5 nm apart sideways by stack slot (at most 4.5 nm), so a
@@ -191,7 +193,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     elif role == Role.SEAD and human:
         wp.append(Wpt("TGT", g.tx, g.ty, 0, p.attack_kts, "SEAD site. You set standoff", "SEAD", agl=True))
     elif role == Role.SEAD:
-        wp.append(Wpt("SEAD", *offset(g.tx, g.ty, g.hdg + 180, harm_nm * NM), ialt, p.attack_kts, "HARM launch point", "SEAD", rad=irad))
+        wp.append(Wpt("SEAD", *offset(g.tx, g.ty, harm_ax, harm_nm * NM), ialt, p.attack_kts, "HARM launch point", "SEAD", rad=irad))
     elif role == Role.SWEEP and so:
         wp.append(Wpt("TGT", so[0], so[1], alt, p.cap_kts, f"SWEEP: stop here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "SWEEP", orbit=True))
     elif role == Role.SWEEP:
@@ -206,7 +208,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     if standoff:
         # a HARM or JSOW flight fires from stand-off range and goes home the way it came. The package egress lies beyond the target for the
         # strikers that overfly it: in the v0.39.21 run the JSOW Hornets released, then crossed the Sukhumi cluster to it and met the Su-27s.
-        sax = g.hdg + 180 if role == Role.SEAD else jsow_hdg
+        sax = harm_ax if role == Role.SEAD else jsow_hdg
         snm = (harm_nm if role == Role.SEAD else jsow_nm) + STANDOFF_EGRESS_NM
         wp.append(Wpt("EGR", *offset(g.tx, g.ty, sax, snm * NM), ialt, p.egress_kts, "Exit: back out along the approach", rad=irad))
     elif not (so and role in (Role.SWEEP, Role.ESCORT)):         # a stand-off fighter never crosses the target area: it goes home from its hold

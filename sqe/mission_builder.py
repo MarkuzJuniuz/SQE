@@ -370,7 +370,7 @@ class MissionBuilder:
         geom.tier = self._pick_tier(geom, pf.role, pspec.profile, tx, ty, skip1)
         self._flight_plans(geom, package, tx, ty, skip1)
         pw = plan_route(pf.role, (pbase.x, pbase.y), geom, pspec.profile, is_player=True, tanker_xy=None, jsow=getattr(pf, "kit", "") == "JSOW",
-                        jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package))
+                        jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), harm_deg=self._harm_deg(package, geom))
         dep_s = launch_s + 60 + dist(pbase.x, pbase.y, pw[0].x, pw[0].y) / (pspec.profile.depart_kts * 0.514444) * 1.12     # roll + climb-out to the first point (DEP off a carrier, else the marshal)
         self._dep_s = dep_s
         assign_times(pw, dep_s)
@@ -1322,7 +1322,7 @@ class MissionBuilder:
                    Wpt("CAP2", *offset(sx, sy, thr_ + 90, leg_), p.cap_alt_ft, p.cap_kts)]
             # v0.41.22: the way home bends round SAM sites too (the v0.41.21 scan: a tanker CAP flew home over an SA-2)
             home_ = Wpt("HOME", base.x, base.y, p.cap_alt_ft, p.cap_kts)
-            wps = avoid_circles(wps + [home_], self._zone_sams(package), p.max_points, 3)[:-1]      # the CAP1-CAP2 orbit leg stays as it is
+            wps = avoid_circles(wps + [home_], self._zone_sams(package, True), p.max_points, 3)[:-1]      # the CAP1-CAP2 orbit leg stays as it is
             stop = int(max(tot_s + o.cap_minutes * 60, rtb_s + 300))
         else:
             sp = None
@@ -1330,7 +1330,7 @@ class MissionBuilder:
                 sp = self._spawn_point(f, base, geom)
             wps = plan_route(f.role, (base.x, base.y), geom, spec.profile, is_player=f.is_player, tanker_xy=None, stack_idx=idx,
                              spawn=sp[0] if sp else None, spawn_alt_ft=sp[1] if sp else 0, spawn_kts=sp[2] if sp else 0,
-                             jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package))
+                             jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), harm_deg=self._harm_deg(package, geom))
             if not f.is_player or o.player_is_ai:
                 terrain_clear(wps)                          # an AI flight climbs on its own schedule: its altitudes must clear the ridges on each leg
             if f.is_player:
@@ -1500,7 +1500,7 @@ class MissionBuilder:
                 if zw is not None:
                     zone = (zw.x, zw.y, min(self.o.fighter_engage_nm, SEAD_ENGAGE_NM) if (zw.orbit or f.role == Role.SEAD) else self.o.fighter_engage_nm)
             self._limit_engage(g, self.o.fighter_engage_nm if f.role != Role.SEAD else 0, (tot_s + m_ * 60) if (m_ > 0 and tot_s is not None) else None,
-                               self._clear_zone(zone, package))
+                               self._clear_zone(zone, package, fighters=f.role != Role.SEAD))
 
         if f.is_player:
             u0 = g.units[0]
@@ -1629,6 +1629,12 @@ class MissionBuilder:
                 # v0.41.6: OPEN FIRE, not weapon free: only the groups tasked below (its own site, the Tors that guard it, the umbrella). Weapon free,
                 # Viper 5-2 fired at another package's SA-6 from 89 km; the radar went quiet and the HARM homed on Squid 1-4's radar instead.
                 wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
+                # v0.41.24: no clear HARM axis: the neighbouring sites still in reach of the launch point get these HARMs first
+                for nid_ in getattr(self, "_harm_threat", {}).get(package.id, []):
+                    ng_ = self.groups_by_asset.get(nid_)
+                    if ng_ is not None:
+                        cth = task.ControlledTask(task.AttackGroup(ng_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                        cth.stop_after_time(int(w.eta_s) + 300); wp.tasks.append(cth)
                 if package.objective.type == ObjectiveType.CAS:
                     # v0.41.20: a CAS escort: HARMs on the SA-2/3/6 sites that cover the CAS target, through the whole CAS window
                     from .war import covering_sams
@@ -1965,18 +1971,63 @@ class MissionBuilder:
         if sf is None:
             return None
         spec = AIRCRAFT[sf.aircraft]
-        wps = plan_route(Role.SEAD, (base.x, base.y), geom, spec.profile, is_player=False, tanker_xy=None, keep_out=self._umbrella_keep(package))
+        wps = plan_route(Role.SEAD, (base.x, base.y), geom, spec.profile, is_player=False, tanker_xy=None, keep_out=self._umbrella_keep(package), harm_deg=self._harm_deg(package, geom))
         assign_times(wps, 0.0, P0 + stagger(package, Role.SEAD))
         tw = objective_wp(wps)
         return tw.eta_s if tw is not None and tw.action == "SEAD" else None
 
     def _umbrella_keep(self, package):
-        """(x, y, nm) for plan_route's keep_out: a SEAD package whose target sits under a live SA-10 keeps its HARM point out of the SA-10's
-        reach as well (the umbrella is the first thing the wave has to beat). None when there is no umbrella."""
-        if package.objective.type != ObjectiveType.DEAD or not package.objective.target_id:
+        """plan_route's keep_out for a package's HARM point: the umbrella SA-10's reach (HARM_LAUNCH_NM) when the target sits under one and,
+        v0.41.24, every other live SA-2/3/6/11/10 the package is not sent against, by its reach (the v0.41.23 run: a Gudauta SEAD flight's HARM
+        point sat 30 nm from the Sukhumi S-300 another package was attacking, and three Hornets died to it). None when there is nothing to keep out of."""
+        if not package.objective.target_id or package.objective.target_id not in self.state.assets:
             return None
-        um = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
-        return (um.x, um.y, HARM_LAUNCH_NM) if um else None
+        out = []
+        if package.objective.type == ObjectiveType.DEAD:
+            um = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
+            if um:
+                out.append((um.x, um.y, HARM_LAUNCH_NM))
+        out += self._zone_sams(package)
+        return out or None
+
+    HARM_AXES = (0, 15, -15, 30, -30)                        # v0.41.24: degrees the HARM axis may turn off the package's own axis
+
+    def _harm_deg(self, package, geom) -> float:
+        """v0.41.24: the HARM shooters' approach, in degrees off the package axis: the first of 0, 15, 30 either side whose launch point (pushed
+        out as plan_route pushes it, up to 40 nm further) and IP clear the umbrella and every other SAM the package is not sent against. None
+        clear: the one with the most room, and the package's HARM flights also fire on the sites still in reach (self._harm_threat)."""
+        tid = package.objective.target_id
+        if not tid or tid not in self.state.assets:
+            return 0
+        c_ = getattr(self, "_harm_c", {})
+        if package.id in c_:
+            return c_[package.id]
+        kos = self._umbrella_keep(package) or []
+        h0 = max(8.0, min(HARM_LAUNCH_NM, geom.d / NM * 0.8 - 6))
+        def place(deg):
+            ax = geom.hdg + 180 + deg
+            hn = h0
+            while hn < HARM_LAUNCH_NM + 40 and any(dist(*offset(geom.tx, geom.ty, ax, hn * NM), kx, ky) < knm * NM for kx, ky, knm in kos):
+                hn += 1.0
+            pts = [offset(geom.tx, geom.ty, ax, (hn + k) * NM) for k in (0, 6)]
+            return pts, min((dist(x, y, kx, ky) / NM - knm for x, y in pts for kx, ky, knm in kos), default=999.0)
+        best = None
+        for deg in self.HARM_AXES:
+            pts, sl = place(deg)
+            if sl >= 0:
+                best = (deg, sl, pts)
+                break
+            if best is None or sl > best[1]:
+                best = (deg, sl, pts)
+        if best[1] < 0:
+            zs = self._zone_sams(package)
+            ids = [a.id for a in self.state.assets.values() if (a.x, a.y, AVOID_NM.get(a.variant)) in zs
+                   and any(dist(x, y, a.x, a.y) < AVOID_NM[a.variant] * NM for x, y in best[2])]
+            self._harm_threat = getattr(self, "_harm_threat", {})
+            self._harm_threat[package.id] = ids
+        c_[package.id] = best[0]
+        self._harm_c = c_
+        return best[0]
 
     JSOW_AXES = (30, -30, 50, -50, 15, -15, 70, -70)       # v0.41.22: degrees off the HARM shooters' axis, tried in this order
 
@@ -2297,11 +2348,11 @@ class MissionBuilder:
         return (all(dist(x, y, a.x, a.y) >= r_ + 15 * NM for a, r_ in self._rings_c)
                 and all(dist(x, y, a.x, a.y) >= SA10_AVOID_NM * NM for a in self._sa10_c))
 
-    def _zone_sams(self, package):
+    def _zone_sams(self, package, fighters: bool = False):
         """v0.41.22: the live medium / long-range SAMs a blue fight circle must stay out of: every SA-2/3/6/11/10 except the ones this package is
         sent at (its target's cluster, the sites covering its target, the umbrella SA-10, any site whose reach takes in the target)."""
         st = self.state
-        key = getattr(package, "id", None)
+        key = (getattr(package, "id", None), fighters)
         c_ = getattr(self, "_zsams_c", {})
         if key in c_:
             return c_[key]
@@ -2309,25 +2360,25 @@ class MissionBuilder:
         tid_ = package.objective.target_id
         tga_ = st.assets.get(tid_) if tid_ else None
         skip = set()
-        if tga_ is not None:
+        if tga_ is not None and not fighters:      # v0.41.24: fighters never fight over the package's own target SAMs (that is the shooters' job)
             um_ = tm.umbrella_site(st, tga_)
             skip = tm.cluster_ids(tga_) | {x.id for x in covering_sams(st, tga_)} | ({um_.id} if um_ else set())
         tx_, ty_ = (tga_.x, tga_.y) if tga_ is not None else (None, None)
         out = [(a.x, a.y, AVOID_NM[a.variant]) for a in st.assets.values()
                if a.kind == AssetKind.SAM and a.variant in AVOID_NM and not a.destroyed and a.health > 0.25 and not getattr(a, "suppressed", False)
-               and a.id not in skip and (tx_ is None or dist(a.x, a.y, tx_, ty_) > (AVOID_NM[a.variant] + 3) * NM)]
+               and a.id not in skip and (fighters or tx_ is None or dist(a.x, a.y, tx_, ty_) > (AVOID_NM[a.variant] + 3) * NM)]
         c_[key] = out
         self._zsams_c = c_
         return out
 
-    def _clear_zone(self, zone, package, floor_nm: float = 8.0):
+    def _clear_zone(self, zone, package, floor_nm: float = 8.0, fighters: bool = True):
         """v0.41.22: a blue air-to-air engage circle (x, y, radius nm) trimmed so it ends outside every SAM's reach it is not sent against
         (the v0.41.21 scan: about 300 of 700 fight circles reached into an SA-2 / SA-6 / SA-11, so a fight that started on a clean station was
         chased over a SAM). Never below floor_nm."""
         if zone is None:
             return None
         x, y, r = zone
-        for sx, sy, snm in self._zone_sams(package):
+        for sx, sy, snm in self._zone_sams(package, fighters):
             r = min(r, dist(x, y, sx, sy) / NM - snm)
         return (x, y, max(floor_nm, r))
 
@@ -2341,9 +2392,9 @@ class MissionBuilder:
             return int(max(stw.eta_s + TARCAP_MIN * 60 // 2, t_end + TARCAP_AFTER_TOT_S))
         return int(max(stw.eta_s + 120, t_end + ESCORT_AFTER_TOT_S))
 
-    def _room(self, x, y, package) -> float:
-        """v0.41.23: how far (nm) a circle centred here can reach before it touches a SAM the package is not sent against."""
-        return min([dist(x, y, sx, sy) / NM - snm for sx, sy, snm in self._zone_sams(package)] + [999.0])
+    def _room(self, x, y, package, fighters: bool = True) -> float:
+        """v0.41.23: how far (nm) a circle centred here can reach before it touches a SAM (v0.41.24: for fighters, any SAM, the target's included)."""
+        return min([dist(x, y, sx, sy) / NM - snm for sx, sy, snm in self._zone_sams(package, fighters)] + [999.0])
 
     COVER_SHIFTS = (0, 4, 8, 12, 16, 20, 24)                 # v0.41.23: nm the centre may move, toward our side first, then sideways
     COVER_TURNS = (0, 30, -30, 60, -60, 90, -90)
