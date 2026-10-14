@@ -1,3 +1,12 @@
+## v0.41.18
+
+* **Settings: AI landings,** one for carriers and one for airfields:
+  * **Always skip:** AI flights going home there are recovered short of the base (10 nm from the boat, at their 8 nm entry point for a field), count as landed and leave the mission.
+  * **Skip at your home deck / field:** only where you land.
+  * **Land for real:** DCS landings and ATC.
+  
+  Defaults: carrier Always skip (as v0.41.17), airfields Land for real. Your wingmen are recovered too, at your home, when its type skips.
+
 ## v0.41.17
 
 * **Carrier recovery without the deck queue.** An AI flight going home to the carrier is recovered at a point 10 nm from the boat: every jet still flying counts as landed (debrief and war sim) and the group leaves the mission. DCS's carrier landing queue ran an F-14 dry and stacked AI in your pattern.
