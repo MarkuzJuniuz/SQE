@@ -131,7 +131,7 @@ def stagger(package, role) -> int:
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import AVOID_NM, SA10_AVOID_NM, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear
+from .routes import AVOID_NM, SA10_AVOID_NM, avoid_circles, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear
 from .state import CampaignState
 
 KPH = 1.852
@@ -1320,6 +1320,9 @@ class MissionBuilder:
             p = spec.profile
             wps = [Wpt("SPAWN", sx, sy, p.cap_alt_ft, p.cap_kts), Wpt("CAP1", sx, sy, p.cap_alt_ft, p.cap_kts, "", "CAPORBIT"),
                    Wpt("CAP2", *offset(sx, sy, thr_ + 90, leg_), p.cap_alt_ft, p.cap_kts)]
+            # v0.41.22: the way home bends round SAM sites too (the v0.41.21 scan: a tanker CAP flew home over an SA-2)
+            home_ = Wpt("HOME", base.x, base.y, p.cap_alt_ft, p.cap_kts)
+            wps = avoid_circles(wps + [home_], self._zone_sams(package), p.max_points, 3)[:-1]      # the CAP1-CAP2 orbit leg stays as it is
             stop = int(max(tot_s + o.cap_minutes * 60, rtb_s + 300))
         else:
             sp = None
@@ -1415,7 +1418,7 @@ class MissionBuilder:
             else:
                 hold_end = int(max(stw.eta_s + 120, t_end + ESCORT_AFTER_TOT_S))
         if f.tag:
-            self._limit_engage(g, self.o.friendly_cap_engage_nm, None, cap_zone)
+            self._limit_engage(g, self.o.friendly_cap_engage_nm, None, self._clear_zone(cap_zone, package))
             # v0.41.14: support CAP snipes (maximum range: the bandits turn defensive before they reach what it guards) and goes home when its
             # air-to-air missiles are gone (the SAMs and the boat's SM-2s cover what it guards)
             g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
@@ -1438,7 +1441,7 @@ class MissionBuilder:
                 lp_ = self._launch_pts[package.id]
                 cx_, cy_ = sum(p_[0] for p_ in lp_) / len(lp_), sum(p_[1] for p_ in lp_) / len(lp_)
                 zone_ = (cx_, cy_, max(COVER_ZONE_NM, dist(cx_, cy_, stw.x, stw.y) / NM + 5))
-            zct_ = self._limit_engage(g, 0, hold_end, zone_)
+            zct_ = self._limit_engage(g, 0, hold_end, self._clear_zone(zone_, package))
             hold_ = None
             if hold_end is not None:
                 hold_ = {"cts": [zct_], "starts": [], "tgt": (geom.tx, geom.ty), "end": int(hold_end), "eta": int(stw.eta_s),
@@ -1452,6 +1455,7 @@ class MissionBuilder:
                 # chasing a MiG north under the moving 20 nm circle ended up over Gudauta and Sochi
                 hcx_, hcy_ = (stw.x + base.x) / 2, (stw.y + base.y) / 2
                 hr_ = dist(stw.x, stw.y, base.x, base.y) / 2 + HOMEWARD_ENGAGE_NM * NM
+                hr_ = self._clear_zone((hcx_, hcy_, hr_ / NM), package, HOMEWARD_ENGAGE_NM)[2] * NM      # v0.41.22: not over a SAM either
                 hw_ = task.ControlledTask(task.EngageTargetsInZone(mapping.Vector2(hcx_, hcy_), int(hr_), [task.Targets.All.Air]))
                 hw_.start_after_time(int(hold_end)); g.points[0].tasks.insert(1, hw_)
                 if hold_ is not None:
@@ -1476,7 +1480,8 @@ class MissionBuilder:
                 zw = next((w for w in wps if w.orbit), None) or next((w for w in wps if w.action == "SEAD"), None) or objective_wp(wps)
                 if zw is not None:
                     zone = (zw.x, zw.y, min(self.o.fighter_engage_nm, SEAD_ENGAGE_NM) if (zw.orbit or f.role == Role.SEAD) else self.o.fighter_engage_nm)
-            self._limit_engage(g, self.o.fighter_engage_nm if f.role != Role.SEAD else 0, (tot_s + m_ * 60) if (m_ > 0 and tot_s is not None) else None, zone)
+            self._limit_engage(g, self.o.fighter_engage_nm if f.role != Role.SEAD else 0, (tot_s + m_ * 60) if (m_ > 0 and tot_s is not None) else None,
+                               self._clear_zone(zone, package))
 
         if f.is_player:
             u0 = g.units[0]
@@ -1626,6 +1631,12 @@ class MissionBuilder:
                     if ug_ is not None and um_.id != package.objective.target_id:
                         ctu = task.ControlledTask(task.AttackGroup(ug_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                         ctu.stop_after_time(int(w.eta_s) + 420); wp.tasks.append(ctu)
+                    # v0.41.22: no clear JSOW axis: the neighbouring sites that still reach the JSOW launch point get this flight's HARMs as well
+                    for nid_ in getattr(self, "_jsow_threat", {}).get(package.id, []):
+                        ng_ = self.groups_by_asset.get(nid_)
+                        if ng_ is not None:
+                            ctn = task.ControlledTask(task.AttackGroup(ng_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                            ctn.stop_after_time(int(w.eta_s) + 420); wp.tasks.append(ctn)
                 elif seads_ and (seads_[0] is f or seads_[0].id == f.id):
                     # the first HARM flight opens on the umbrella (the SA-10 covering this target): it reaches every jet in the wave, so it goes first
                     um_ = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
@@ -1948,18 +1959,45 @@ class MissionBuilder:
         um = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
         return (um.x, um.y, HARM_LAUNCH_NM) if um else None
 
-    def _jsow_side(self, package, geom) -> int:
-        """Which side of the HARM shooters' axis the JSOW flight comes in on (+1 / -1): the side whose launch point stays farther from every
-        other live SAM site (in a cluster like Sukhumi the wrong side runs over the neighbours)."""
+    JSOW_AXES = (30, -30, 50, -50, 15, -15, 70, -70)       # v0.41.22: degrees off the HARM shooters' axis, tried in this order
+
+    def _jsow_side(self, package, geom) -> float:
+        """The JSOW flight's approach, as a multiple of JSOW_AXIS_DEG off the HARM shooters' axis. v0.41.22: the first axis (30, 50, 15 or
+        70 degrees either side) whose launch point and IP sit outside the reach of every other live SA-2/3/6/11/10 (the v0.41.21 scan: JSOW flights
+        launched 20 nm from a neighbouring SA-2 nobody was suppressing). None clear: the axis with the most room, and the package's second HARM
+        flight is also tasked on the sites still in reach (self._jsow_threat)."""
         tid = package.objective.target_id
         if package.objective.aim not in SEAD_AIMS or not tid:
             return 0
-        sams = [a for a in self.state.assets.values() if a.kind == AssetKind.SAM and not a.destroyed and a.id != tid]
+        c_ = getattr(self, "_jsow_c", {})
+        if package.id in c_:
+            return c_[package.id]
+        st = self.state
+        tga_ = st.assets[tid]
+        um_ = tm.umbrella_site(st, tga_)
+        skip = tm.cluster_ids(tga_) | ({um_.id} if um_ else set())
+        sams = [a for a in st.assets.values() if a.kind == AssetKind.SAM and a.variant in AVOID_NM and not a.destroyed and a.health > 0.25
+                and not getattr(a, "suppressed", False) and a.id not in skip]
         jn = max(8.0, min(JSOW_LAUNCH_NM, geom.d / NM * 0.8 - 6))
-        def clear(side):
-            lx, ly = offset(geom.tx, geom.ty, geom.hdg + 180 + JSOW_AXIS_DEG * side, jn * NM)
-            return min((dist(lx, ly, a.x, a.y) for a in sams), default=1e9)
-        return 1 if clear(1) >= clear(-1) else -1
+        def slack(deg):
+            pts = [offset(geom.tx, geom.ty, geom.hdg + 180 + deg, (jn + k) * NM) for k in (0, 6)]      # the launch point and the IP 6 nm before it
+            return min((dist(x, y, a.x, a.y) / NM - AVOID_NM[a.variant] for x, y in pts for a in sams), default=999.0)
+        best = None
+        for deg in self.JSOW_AXES:
+            sl = slack(deg)
+            if sl >= 0:
+                best = (deg, sl)
+                break
+            if best is None or sl > best[1]:
+                best = (deg, sl)
+        deg = best[0]
+        if best[1] < 0:
+            pts = [offset(geom.tx, geom.ty, geom.hdg + 180 + deg, (jn + k) * NM) for k in (0, 6)]
+            self._jsow_threat = getattr(self, "_jsow_threat", {})
+            self._jsow_threat[package.id] = [a.id for a in sams if any(dist(x, y, a.x, a.y) < AVOID_NM[a.variant] * NM for x, y in pts)]
+        c_[package.id] = deg / JSOW_AXIS_DEG
+        self._jsow_c = c_
+        return c_[package.id]
 
     def _cover_tors(self, package, leg=None) -> list:
         """The Tor batteries in this mission that cover the package's target site: within TOR_COVER_KM of the site, or of the strike leg into it
@@ -2239,6 +2277,40 @@ class MissionBuilder:
             self._sa10_c = [a for a in st.assets.values() if a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.25]
         return (all(dist(x, y, a.x, a.y) >= r_ + 15 * NM for a, r_ in self._rings_c)
                 and all(dist(x, y, a.x, a.y) >= SA10_AVOID_NM * NM for a in self._sa10_c))
+
+    def _zone_sams(self, package):
+        """v0.41.22: the live medium / long-range SAMs a blue fight circle must stay out of: every SA-2/3/6/11/10 except the ones this package is
+        sent at (its target's cluster, the sites covering its target, the umbrella SA-10, any site whose reach takes in the target)."""
+        st = self.state
+        key = getattr(package, "id", None)
+        c_ = getattr(self, "_zsams_c", {})
+        if key in c_:
+            return c_[key]
+        from .war import covering_sams
+        tid_ = package.objective.target_id
+        tga_ = st.assets.get(tid_) if tid_ else None
+        skip = set()
+        if tga_ is not None:
+            um_ = tm.umbrella_site(st, tga_)
+            skip = tm.cluster_ids(tga_) | {x.id for x in covering_sams(st, tga_)} | ({um_.id} if um_ else set())
+        tx_, ty_ = (tga_.x, tga_.y) if tga_ is not None else (None, None)
+        out = [(a.x, a.y, AVOID_NM[a.variant]) for a in st.assets.values()
+               if a.kind == AssetKind.SAM and a.variant in AVOID_NM and not a.destroyed and a.health > 0.25 and not getattr(a, "suppressed", False)
+               and a.id not in skip and (tx_ is None or dist(a.x, a.y, tx_, ty_) > (AVOID_NM[a.variant] + 3) * NM)]
+        c_[key] = out
+        self._zsams_c = c_
+        return out
+
+    def _clear_zone(self, zone, package, floor_nm: float = 8.0):
+        """v0.41.22: a blue air-to-air engage circle (x, y, radius nm) trimmed so it ends outside every SAM's reach it is not sent against
+        (the v0.41.21 scan: about 300 of 700 fight circles reached into an SA-2 / SA-6 / SA-11, so a fight that started on a clean station was
+        chased over a SAM). Never below floor_nm."""
+        if zone is None:
+            return None
+        x, y, r = zone
+        for sx, sy, snm in self._zone_sams(package):
+            r = min(r, dist(x, y, sx, sy) / NM - snm)
+        return (x, y, max(floor_nm, r))
 
     def _sweep_station(self, so, tx, ty, home_xy, long_range=False):
         """v0.41.13: a Fighter Sweep's station sits INSIDE the nearest enemy field's scramble circle (5 nm in), so the alert pairs come up into the

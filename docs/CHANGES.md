@@ -1,3 +1,12 @@
+## v0.41.22
+
+All blue flights stay away from SAMs they aren't sent against. A scan of about 30 sorties (some 700 AI flights) found fighters chasing bandits over SA-2s and SA-11s, JSOW flights launching 20 nm from a neighbouring SA-2, and support CAPs flying home over one.
+
+* **Fight circles:** every blue air-to-air engage circle (sweeps, TARCAPs, escorts, SEAD, support CAP, the homeward fight) ends outside the reach of every live SA-2/3/6/11/10 that isn't the package's job, never smaller than 8 nm (homeward: 20 nm). A sweep or TARCAP can still fight on its station; it no longer follows a bandit over a SAM. Fight circles reaching into a SAM's reach went from about 300 to about 80 of 700; the rest are 8 nm circles whose edge is within a few nm of an SA-2's ring.
+* **JSOW launch points:** the Standoff DEAD's JSOW flight tries approaches 30, 50, 15 and 70 degrees either side of the HARM axis and takes the first whose launch point and IP are outside every other SAM's reach. When none is, it takes the one with the most room and the package's second HARM flight also fires on the sites still in reach.
+* **Support CAP home leg** bends round SAM sites like the strike routes.
+* Smoke test: no blue AI route inside a SAM it isn't sent against.
+
 ## v0.41.21
 
 * **Carrier CAP pulled in:** the F-14s orbit 12 nm from the boat (was 22) on a 10 nm leg, and engage within 30 nm of it (was 50). Their orbit and engage circle stay outside every enemy field's scramble circle (5 nm margin), so they no longer set off red's alert pairs ahead of the package. They're there to guard the boat, not to start fights.

@@ -98,7 +98,7 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, ca
 
 def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_player: bool,
                tanker_xy: tuple | None, stack_idx: int = 0, spawn: tuple | None = None, spawn_alt_ft: int = 0,
-               spawn_kts: int = 0, jsow: bool = False, jsow_side: int = 0, keep_out: tuple | None = None) -> list[Wpt]:
+               spawn_kts: int = 0, jsow: bool = False, jsow_side: float = 0, keep_out: tuple | None = None) -> list[Wpt]:
     """Waypoints from start (takeoff for the player, an in-air 'just departed' spawn for AI) to egress. RTB is added by the builder."""
     wp: list[Wpt] = []
     bx, by = own_base
