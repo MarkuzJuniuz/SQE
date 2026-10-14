@@ -54,6 +54,8 @@ class Geometry:
     stand: dict = None      # {(role, id(profile)): (x, y, [SAM types], nm short)} sweeps and escorts that stop at the edge of SAM cover
     sweep: bool = False     # a Fighter Sweep package: no marshal, DEP - PUSH - station - home
     jsow_keep: list = None  # [(x, y, nm)]: live long-range SAMs a JSOW launch point stays this far from (v0.41.3)
+    carrier: bool = False   # v0.41.12: the flight's base is a carrier (only then a DEP point after take-off)
+    sa10_avoid: list = None # [(x, y, nm)]: live long-range SAMs (not the target) an AI flight's route bends around (v0.41.11)
 
 
 STANDOFF_EGRESS_NM = 25.0  # a HARM or JSOW flight egresses this far beyond its launch point, straight back out along its own approach
@@ -62,7 +64,9 @@ JSOW_LAUNCH_NM = 20.0      # an AI JSOW flight's launch point (the AGM-154A glid
 JSOW_HIGH_ALT_FT = 33000      # ...and when it is pushed out past JSOW_LAUNCH_NM, the flight releases from this high
 JSOW_MAX_NM = 45.0           # a JSOW launch point is never farther than this from its target (v0.41.3 run: AGM-154As released at 30-40 nm from 33,000 ft hit; was 40)
 JSOW_KEEP_HIGH_NM = 40.0     # a pushed-out JSOW flight is high, where an SA-10 reaches farther: its launch point stays this far from one (v0.41.3 run: 30.6 nm lost all four)
-HARM_LAUNCH_NM = 30.0      # an AI SEAD flight's HARM launch point: at the edge of what an SA-10 first reaches (it opened fire at about 55 km in testing); 21 nm put the launch point deep inside it
+SWEEP_PUSH_NM = 15.0       # v0.41.12: a sweep's PUSH, this far from its base toward the target
+HARM_LAUNCH_NM = 35.0      # v0.41.11: 35 (was 30): the Sukhumi SA-10 engaged HARM shooters at 54-57 km (31 nm); the AI fires from 35-38 nm anyway.
+                           # an AI SEAD flight's HARM launch point: at the edge of what an SA-10 first reaches (it opened fire at about 55 km in testing); 21 nm put the launch point deep inside it
 CARRIER_DEP_NM = 10.0      # Case III: the departure circle is 10 nm from the boat, and the flight leaves on the briefed departure radial
 
 
@@ -85,8 +89,10 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, ca
     # land base (6 for slow types), on the straight line to the marshal point and never beyond 40% of the way there.
     dep_nm = CARRIER_DEP_NM if carrier else p.dep_nm
     dep = offset(bx, by, bearing(bx, by, *mshl), min(dep_nm * NM, 0.4 * dist(bx, by, *mshl)))
-    return Geometry(bx, by, tx, ty, hdg, d, mshl, push_xy, ip_xy,
-                    offset(tx, ty, hdg + 100, p.egress_nm * NM), cap1, offset(*cap1, hdg + 90, p.cap_leg_nm * NM), dep)
+    g_ = Geometry(bx, by, tx, ty, hdg, d, mshl, push_xy, ip_xy,
+                  offset(tx, ty, hdg + 100, p.egress_nm * NM), cap1, offset(*cap1, hdg + 90, p.cap_leg_nm * NM), dep)
+    g_.carrier = bool(carrier)
+    return g_
 
 
 def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_player: bool,
@@ -95,7 +101,10 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     """Waypoints from start (takeoff for the player, an in-air 'just departed' spawn for AI) to egress. RTB is added by the builder."""
     wp: list[Wpt] = []
     bx, by = own_base
-    if is_player:
+    if is_player and g.carrier:
+        # v0.41.12: only off the carrier (the Case I/III departure radial). From a land base the first point after take-off is the marshal
+        # point: the DEP 6 nm out at 8,000 ft, with PUSH a mile on at 26,000 ft, asked for a steep climb and a turn back over the field
+        # (the two unexplained crashes 3-5 min after take-off were both runway starts out of Batumi)
         wp.append(Wpt("DEP", *g.dep, p.depart_alt_ft, p.depart_kts, "Climb out, check in with AWACS"))
     else:
         sx, sy = spawn if spawn else g.dep
@@ -149,6 +158,9 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         why_ = f", outside {'/'.join(names_)} cover" if names_ else ""
         if g.sweep:                                            # Fighter Sweep: no marshal, straight out, station, 15 minutes or Winchester, home
             wp = [w for w in wp if w.name != "MSHL"]
+            for w_ in wp:                                      # v0.41.12: its PUSH lies ahead of the base, toward the station: it climbs straight out
+                if w_.name == "PUSH":
+                    w_.x, w_.y = offset(bx, by, g.hdg, SWEEP_PUSH_NM * NM)
             wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"SWEEP: station {short_:.0f} nm short of the target{why_}; clear the air, do not chase", "SWEEPSTN", orbit=True))
         elif role == Role.ESCORT:
             wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"TARCAP: on station {short_:.0f} nm short of the target{why_}; hold and shoot, do not chase", "TARCAP", orbit=True))
@@ -191,8 +203,43 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         wp.append(Wpt("EGR", *offset(g.tx, g.ty, sax, snm * NM), ialt, p.egress_kts, "Exit: back out along the approach", rad=irad))
     elif not (so and role in (Role.SWEEP, Role.ESCORT)):         # a stand-off fighter never crosses the target area: it goes home from its hold
         wp.append(Wpt("EGR", *lane_xy(g.egr), ialt + (1000 * (stack_idx % 3) if lane else 0), p.egress_kts, "Exit threat area", rad=irad))
+    if not human and g.sa10_avoid and role in (Role.STRIKE, Role.SEAD, Role.CAS):
+        k0 = next((k for k, w in enumerate(wp) if w.name == "PUSH"), 1)
+        avoid_circles(wp, g.sa10_avoid, p.max_points, k0 + 1)
     if len(wp) + 2 > p.max_points:
         raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")
+    return wp
+
+
+SA10_AVOID_NM = 35.0       # v0.41.11: an AI flight's route keeps this far from a live SA-10 that is not its target (the v0.41.10 run: two JSOW
+                           # flights bound for Gudauta passed 31 nm from the Sukhumi SA-10 and were shot at from 57 km)
+
+
+def avoid_circles(wp: list, circles: list, max_points: int, first: int) -> list:
+    """v0.41.11: bend the legs from index `first` on around each circle (x, y, nm): where a leg passes inside one, a turn point is put
+    2 nm outside it, on the side the leg already passes. Two passes at most; never past the airframe's waypoint limit."""
+    for _ in range(2):
+        changed = False
+        i = max(1, first)
+        while i < len(wp):
+            a, b = wp[i - 1], wp[i]
+            for cx, cy, r in circles:
+                ax, ay, bx, by = a.x, a.y, b.x, b.y
+                vx, vy = bx - ax, by - ay
+                L2 = vx * vx + vy * vy
+                t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((cx - ax) * vx + (cy - ay) * vy) / L2))
+                px, py = ax + t * vx, ay + t * vy
+                d = dist(px, py, cx, cy)
+                if d >= r * NM or t in (0.0, 1.0) or len(wp) + 3 > max_points:
+                    continue
+                h = bearing(cx, cy, px, py) if d > 1 else bearing(ax, ay, bx, by) + 90
+                nx, ny = offset(cx, cy, h, (r + 2) * NM)
+                wp.insert(i, Wpt("AVD", nx, ny, max(a.alt_ft, b.alt_ft), a.speed_kts, "Around the SA-10", rad=a.rad))
+                changed = True
+                break
+            i += 1
+        if not changed:
+            break
     return wp
 
 

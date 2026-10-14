@@ -1108,7 +1108,12 @@ def main():
     _gw = {g_["name"]: g_ for co_ in _Mw["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()}
     for f_ in _sw.flights:
         _nmw = [p_.get("name") for p_ in _gw[f_.callsign]["route"]["points"].values()]
-        assert "MSHL" not in _nmw and "IP" not in _nmw and "EGR" not in _nmw and "TGT" in _nmw, (f_.callsign, "sweep route: DEP / PUSH / station / home", _nmw)
+        assert "MSHL" not in _nmw and "IP" not in _nmw and "EGR" not in _nmw and "TGT" in _nmw, (f_.callsign, "sweep route: PUSH / station / home", _nmw)
+        if _ws.state.bases[f_.base_id].kind.value == "AIRFIELD":   # v0.41.12: no DEP from a land base; the sweep's PUSH is ahead of the base, toward its station
+            _pw12 = {p_.get("name"): p_ for p_ in _gw[f_.callsign]["route"]["points"].values()}
+            _b12 = _ws.state.bases[f_.base_id]
+            assert "DEP" not in _nmw and _m3j.hypot(_pw12["TGT"]["x"] - _pw12["PUSH"]["x"], _pw12["TGT"]["y"] - _pw12["PUSH"]["y"]) < _m3j.hypot(_pw12["TGT"]["x"] - _b12.x, _pw12["TGT"]["y"] - _b12.y), \
+                (f_.callsign, "no DEP, PUSH ahead of the base", _nmw)
         if not f_.is_player:
             _o0w = {t_["params"]["action"]["params"]["name"]: t_["params"]["action"]["params"].get("value") for t_ in list(_gw[f_.callsign]["route"]["points"].values())[0]["task"]["params"]["tasks"].values() if t_.get("params", {}).get("action", {}).get("id") == "Option"}
             assert _o0w.get(10) == _aamw, (f_.callsign, "a sweep goes home when its air-to-air missiles are gone")
@@ -1277,7 +1282,7 @@ def main():
             _pt4 = _pts4[_k4]
             _brg[_k4] = _m.degrees(_m.atan2(_pt4["y"] - _t4.y, _pt4["x"] - _t4.x))
             if _k4 == "SEAD":
-                assert _m.hypot(_pt4["x"] - _um4.x, _pt4["y"] - _um4.y) / 1852 >= 29, "under an umbrella the HARM point stays out of the SA-10's reach"
+                assert _m.hypot(_pt4["x"] - _um4.x, _pt4["y"] - _um4.y) / 1852 >= 34, "under an umbrella the HARM point stays out of the SA-10's reach"
                 _seq4 = []
                 for t_ in _pt4["task"]["params"]["tasks"].values():
                     tid_, prm_ = t_.get("id"), t_.get("params", {})
@@ -1394,6 +1399,13 @@ def main():
             _n8 += 1
     assert _n8 >= 1, ("the test campaign has a field next to an SA-10", sorted(_zr8))
     print(f"[field radar] {_n8} enemy field(s) next to a live SA-10 scramble on a {_tm9.FIELD_SAM_DETECT_NM:.0f} nm circle")
+    # v0.41.11: AI routes bend around a live SA-10 that is not their target (a leg passing 20 nm from one gets a turn point 37 nm out)
+    from sqe.routes import avoid_circles as _avc, Wpt as _W11
+    _r11 = [_W11("PUSH", 0, 0, 25000, 450), _W11("IP", 200 * 1852, 0, 25000, 450)]
+    _avc(_r11, [(100 * 1852, 20 * 1852, 35.0)], 20, 1)
+    _seg = lambda a_, b_, cx_, cy_: min(_m.hypot(a_.x + (b_.x - a_.x) * k_ / 200 - cx_, a_.y + (b_.y - a_.y) * k_ / 200 - cy_) for k_ in range(201)) / 1852
+    assert len(_r11) == 3 and min(_seg(a_, b_, 100 * 1852, 20 * 1852) for a_, b_ in zip(_r11, _r11[1:])) >= 34, ("a route bends around an SA-10", [(w_.name, round(w_.x), round(w_.y)) for w_ in _r11])
+    print("[sa10 avoid] a leg that passed 20 nm from an SA-10 now clears it by 35 nm with one turn point")
     _off4 = abs((_brg["JSOW"] - _brg["SEAD"] + 180) % 360 - 180)
     _eg4, _hs4 = {}, []
     for co_ in _M4["coalition"]["blue"]["country"].values():
@@ -1479,7 +1491,7 @@ def main():
     for w_ in _st.enemy_air:
         n_ = sum(1 for f_ in _p1["flights"] if f_["wing"] == w_.base_asset_id and f_["kind"] == "CAP")
         assert n_ <= max(0, w_.available // 2 - 1), "one pair per wing always stays on alert"
-    _f0 = next(f_ for f_ in _p1["flights"] if f_["kind"] == "CAP"); _tm = (_f0["start"] + _f0["end"]) // 2
+    _f0 = next(f_ for f_ in _st.red_air["flights"] if f_["kind"] == "CAP"); _tm = (_f0["start"] + _f0["end"]) // 2
     assert any(g_["id"] == _f0["id"] for g_ in _ra.pick(_st, _tm, [], _f0["x"], _f0["y"], 99)), "a patrol is picked inside its window, near the target"
     _tout = next(t_ for t_ in range(0, 1440, 10) if not any(f_["start"] <= t_ <= f_["end"] or f_["start"] <= t_ + 1440 <= f_["end"] for f_ in _p1["flights"] if f_["id"] == _f0["id"]))
     assert not any(g_["id"] == _f0["id"] for g_ in _ra.pick(_st, _tout, [], _f0["x"], _f0["y"], 99)), "...and not outside it"
@@ -1646,8 +1658,8 @@ def main():
             _d = lambda n_: _m.hypot(_pts[n_]["x"] - _site[0], _pts[n_]["y"] - _site[1]) / 1852
             _umb = _tm9.umbrella_site(_sx.state, _sx.state.assets[_se_.objective.target_id])
             _du = (_m.hypot(_pts["SEAD"]["x"] - _umb.x, _pts["SEAD"]["y"] - _umb.y) / 1852) if _umb else None
-            assert (29 <= _d("SEAD") <= 31 if _umb is None else (_d("SEAD") >= 29 and _du >= 29)) and _d("IP") > _d("SEAD") + 5, \
-                ("HARM launch point 30 nm out (and 30 nm from an SA-10 umbrella), IP before it", _d("SEAD"), _du, _d("IP"))
+            assert (34 <= _d("SEAD") <= 36 if _umb is None else (_d("SEAD") >= 34 and _du >= 34)) and _d("IP") > _d("SEAD") + 5, \
+                ("HARM launch point 35 nm out (v0.41.11; and 35 nm from an SA-10 umbrella), IP before it", _d("SEAD"), _du, _d("IP"))
             _atk = [t_["params"]["task"]["params"]["weaponType"] for p_ in _g["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()
                     if t_["id"] == "ControlledTask" and t_["params"]["task"]["id"] in ("AttackUnit", "AttackGroup")]
             assert _atk and all(w_ == 32768 for w_ in _atk), ("the SEAD task asks for ARMs (the second flight also on the covering Tors first)", _atk)

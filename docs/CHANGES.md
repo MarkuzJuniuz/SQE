@@ -1,3 +1,24 @@
+## v0.41.12
+
+* **No DEP point from a land base.** After take-off the first point is the marshal point, for you and for AI runway starts. The DEP sat 6 nm out at 8,000 ft with PUSH about a mile on at 26,000 ft: a steep climb and a turn back over the field. The two unexplained crashes 3-5 minutes after take-off were both runway starts out of Batumi. Off the carrier the DEP stays: it is the departure radial.
+* **A sweep's PUSH is ahead of its base,** 15 nm toward its station (it was behind the base), so a sweep climbs straight out instead of turning back over its field.
+* Smoke test: no DEP from a land base, sweep PUSH ahead of the base.
+
+## v0.41.11
+
+From the v0.41.10 sweep run (73 min; good SEAD on the Sukhumi cluster, both early-warning radars down): the Sukhumi SA-10 got 4 Hornets, it fired from 50-57 km; two JSOW flights bound for Gudauta passed 31 nm from it on the way; two AI jets ran out of fuel; red's patrols guarded rear-area sites.
+
+* **AI strike, SEAD and CAS routes bend around every live SA-10 that is not their target** (or the umbrella their HARMs go for), keeping 35 nm, with a turn point where a leg would pass inside.
+* **HARM launch point 35 nm** (was 30): the SA-10 engaged the HARM shooters at 31 nm. The AI already fires from 35-38 nm.
+* **JSOW flights push 2 minutes after the HARM shooters** (was together), so they reach SA-10 range once the HARMs have landed, not while they are in the air.
+* **Bingo fuel for every AI flight** (was only fighters on station). A Viper and a Tomcat ran dry in that run.
+* **The tanker serves the whole mission:** its track starts from the middle of the fields the mission's flights fly home to, not only yours.
+* **Red patrols guard front-line SAMs:** a wing can guard any SAM site within 150 nm (was 60), so the big rear wings send their patrols forward.
+* **Kill counts count real targets only:** units and static objects, not scenery flattened by the bombs.
+* Smoke test: HARM point 35 nm; a route bends around an SA-10.
+
+Investigated, not changed: a single AI jet crashing 3-5 minutes after take-off (Colt 6-4, Venom 3-4, both 4-ships out of Batumi, low, full fuel, no shooter). Needs a look at the departure in DCS.
+
 ## v0.41.10
 
 From the v0.41.8 sweep run: the F-15 TARCAPs went home 5 minutes after their own package's TOT while later packages were still coming through; the F-16 sweep never fired (15 nm circle) and one jet flamed out; two F-15 wingmen collided on the way home (the second time); red's patrols sat far north and never came to their SAMs' help.

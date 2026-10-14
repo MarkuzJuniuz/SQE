@@ -372,6 +372,10 @@ function H:onEvent(e)
       if throttle("hit:" .. lab, 15) then say(lab .. ": direct hit.") end
     end
   elseif id == world.event.S_EVENT_KILL then
+    -- v0.41.10+: only real targets count: units and static objects (fuel tanks, bunkers), never scenery (trees, houses the bombs also flatten)
+    local okc, ocat = pcall(function() return e.target:getCategory() end)
+    local real = okc and (ocat == Object.Category.UNIT or ocat == Object.Category.STATIC)
+    if not real then return end
     if not n then                                                      -- a splash kill: DCS names no killer, the blast's shooter gets it
       local tn1 = nameOf(e.target)
       local sb = tn1 and SPLBY[tn1]
