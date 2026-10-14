@@ -1,3 +1,13 @@
+## v0.41.14
+
+From the v0.41.13 run (1 jet lost, 20 red aircraft down, the target at 86%): the F-14 carrier CAP never fired, orbiting 3 nm from the boat while the SM-2s took everything; the sweep chased a MiG to 10 nm of the Sukhumi SA-10 and lost Venom 9-2.
+
+* **Support CAP stations use the measured SA-10 reach.** Orbits keep 35 nm from a live SA-10 (it never fired beyond 31 nm in the runs) and 15 nm outside every other SAM ring. The ring table's 48 nm pushed the carrier CAP back onto the boat; in the test campaign it now orbits 18 nm out.
+* **The carrier CAP engages within 50 nm of the boat** (was 35), so the Tomcats shoot ahead of the SM-2s.
+* **Support CAP snipes at maximum range and goes home when out of air-to-air missiles** (it had neither setting).
+* **The sweep's engagement circle stops short of SA-10 reach,** so it lets red come out to it instead of chasing into the SA-10.
+* Settings: the splash damage hint says on by default.
+
 ## v0.41.13
 
 From the v0.41.12 runs: the Batumi sweep orbited just short of SAM cover, tripped no scramble circle and met only SAM missiles; the carrier CAP's F-14s were shot at on a station 22 nm toward Sukhumi.

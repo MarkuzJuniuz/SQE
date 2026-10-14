@@ -42,6 +42,8 @@ TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after th
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
 RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
 RCV_SPREAD = (0, 30, -30, 60, -60)    # ...on its own bearing (degrees off the way it comes home), by stack slot
+SA10_REACH_NM = 31            # v0.41.14: the farthest an SA-10 fired at our jets in the runs (54-57 km)
+CVCAP_ZONE_NM = 50            # v0.41.14: the carrier CAP engages within this of the boat (was 35: the SM-2s killed everything before it came in)
 RED_KEEP_NM = 45              # v0.41.10: red patrol stations keep this far from our marshal point and fields (was 120 / 80)
 RED_CALLIN_NM = 50            # ...and a patrol is called to the SAM site it guards when blue comes this close to that site
 RED_CALLIN_ZONE_NM = 25       # ...where it engages inside this circle round the site
@@ -1265,14 +1267,14 @@ class MissionBuilder:
             elif f.tag in ("HAVCAP", "TNKCAP"):
                 gx_, gy_ = hav_xy; thr_ = geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
             elif f.tag == "CVCAP":
-                gx_, gy_ = base.x, base.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, CVCAP_NM * NM); zr_ = CVCAP_NM + 13
+                gx_, gy_ = base.x, base.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, CVCAP_NM * NM); zr_ = CVCAP_ZONE_NM
             else:           # BASECAP: over the field it guards (v0.41.10: the one red is likeliest to raid), else its own
                 gb_ = st.bases.get(getattr(f, "guard", "") or f.base_id, base)
                 gx_, gy_ = gb_.x, gb_.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 8 * NM); zr_ = SUPPORT_CAP_ZONE_NM
             # v0.41.13: the orbit stays 15 nm outside every SAM ring: step it back toward what it guards (2 nm at a time) until it is clear
             # (v0.41.12 run: the carrier CAP's F-14s were shot at on a station 22 nm toward Sukhumi)
             for _ in range(20):
-                if tm.spot_slack(st, sx, sy, (geom.tx, geom.ty), 15, -999) >= 0 or dist(sx, sy, gx_, gy_) < 2 * NM:
+                if self._sam_clear(sx, sy) or dist(sx, sy, gx_, gy_) < 2 * NM:
                     break
                 sx, sy = offset(sx, sy, bearing(sx, sy, gx_, gy_), 2 * NM)
             cap_zone = (gx_, gy_, min(self.o.friendly_cap_engage_nm or 999, zr_))
@@ -1374,6 +1376,11 @@ class MissionBuilder:
                 hold_end = int(max(stw.eta_s + 120, t_end + ESCORT_AFTER_TOT_S))
         if f.tag:
             self._limit_engage(g, self.o.friendly_cap_engage_nm, None, cap_zone)
+            # v0.41.14: support CAP snipes (maximum range: the bandits turn defensive before they reach what it guards) and goes home when its
+            # air-to-air missiles are gone (the SAMs and the boat's SM-2s cover what it guards)
+            g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
+            rtbt_ = task.OptRTBOnOutOfAmmo(); rtbt_.params["action"]["params"]["value"] = AAM_WEAPONS
+            g.points[0].tasks.append(rtbt_)
         elif stw is not None and (not f.is_player or o.player_is_ai):
             # no chasing. A sweep engages inside a circle round its station (25 nm for the long-range shooters, 15 for the rest). A TARCAP or
             # escort covers the package: the circle is round the package's launch points (HARM / JSOW points, or the IP), COVER_ZONE_NM, and
@@ -1381,6 +1388,12 @@ class MissionBuilder:
             if stw.action == "SWEEPSTN" or not self._launch_pts.get(package.id):
                 # v0.41.10: a sweep engages within 25 nm whatever it flies (the v0.41.8 F-16 sweep, 15 nm, never fired while MiGs went past it)
                 zone_ = (stw.x, stw.y, A2A_ZONE_NM[True] if stw.action == "SWEEPSTN" else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A])
+                if stw.action == "SWEEPSTN":
+                    # v0.41.14: the circle stops short of every live SA-10's reach (31 nm measured): the v0.41.13 sweep chased a MiG to 10 nm of
+                    # the Sukhumi SA-10 and lost Venom 9-2. Let red come out to it.
+                    d10_ = min([dist(stw.x, stw.y, a.x, a.y) / NM for a in st.assets.values()
+                                if a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.25] + [999.0])
+                    zone_ = (zone_[0], zone_[1], max(8.0, min(zone_[2], d10_ - SA10_REACH_NM)))
             else:
                 lp_ = self._launch_pts[package.id]
                 cx_, cy_ = sum(p_[0] for p_ in lp_) / len(lp_), sum(p_[1] for p_ in lp_) / len(lp_)
@@ -2134,6 +2147,16 @@ class MissionBuilder:
             if geom.sweep:
                 geom.stand[key] = self._sweep_station(geom.stand[key], tx, ty, pts[0])
 
+    def _sam_clear(self, x, y) -> bool:
+        """v0.41.14: a friendly orbit is clear of SAMs: 35 nm from every live SA-10 (the reach measured in the runs; the ring table says 48 nm, which
+        put the carrier CAP back on the boat in v0.41.13) and 15 nm outside every other SAM ring."""
+        st = self.state
+        if getattr(self, "_rings_c", None) is None:
+            self._rings_c = [(a, r_) for a, r_ in tm.rings(st, min_range=3) if a.variant not in tm.UMBRELLA_VARIANTS]
+            self._sa10_c = [a for a in st.assets.values() if a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.25]
+        return (all(dist(x, y, a.x, a.y) >= r_ + 15 * NM for a, r_ in self._rings_c)
+                and all(dist(x, y, a.x, a.y) >= SA10_AVOID_NM * NM for a in self._sa10_c))
+
     def _sweep_station(self, so, tx, ty, home_xy):
         """v0.41.13: a Fighter Sweep's station sits INSIDE the nearest enemy field's scramble circle (5 nm in), so the alert pairs come up into the
         sweep before the strikers arrive, but 35 nm from every live SA-10 and 15 nm outside every other SAM ring. The v0.41.12 run: the sweep
@@ -2142,9 +2165,7 @@ class MissionBuilder:
         st = self.state
         x, y = so[0], so[1]
         sa10 = [a for a in st.assets.values() if a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.25]
-        rings_ = [(a, r_) for a, r_ in tm.rings(st, min_range=3) if a.variant not in tm.UMBRELLA_VARIANTS]   # SA-10s: the measured 35 nm instead of the 48 nm table ring
-        clear = lambda px, py: (all(dist(px, py, a.x, a.y) >= r_ + 15 * NM for a, r_ in rings_)
-                                and all(dist(px, py, a.x, a.y) >= SA10_AVOID_NM * NM for a in sa10))
+        clear = self._sam_clear
         for _ in range(40):
             if clear(x, y) or dist(x, y, *home_xy) < 2 * NM:
                 break
