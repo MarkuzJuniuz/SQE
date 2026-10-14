@@ -46,6 +46,7 @@ RED_KEEP_NM = 45              # v0.41.10: red patrol stations keep this far from
 RED_CALLIN_NM = 50            # ...and a patrol is called to the SAM site it guards when blue comes this close to that site
 RED_CALLIN_ZONE_NM = 25       # ...where it engages inside this circle round the site
 HOLD_AREA_KM = 60             # v0.41.10: packages whose targets are this close share their TARCAP / escort holds (the sweep area)
+SWEEP_AFTER_TOT_S = 120       # v0.41.13: a sweep holds until 2 min after the first package it covers is over the target
 HOLD_EXTEND_MAX_S = 1800      # ...extended at most this much past their own package
 SUPPORT_CAP_ZONE_NM = 25      # v0.41.7: HAVCAP / tanker CAP / base CAP engage inside this circle round what they guard
 CVCAP_NM = 22                 # v0.41.7: the carrier CAP orbits this far out from the boat toward the nearest enemy field (engages within 35 nm of it)
@@ -156,7 +157,7 @@ class MissionOptions:
     f14_special_names: bool = True
     weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
     reactive: bool = True               # extra enemy fighters / blue alert pairs that launch during the sortie (reactive.py)
-    splash_damage: bool = False         # blasts on ground units near an air-to-ground weapon's impact (the hook)
+    splash_damage: bool = True          # blasts on ground units near an air-to-ground weapon's impact (the hook)
     ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
     carcass_weight: float = 0.25        # how much of a live unit one wreck counts toward the unit limit
@@ -520,7 +521,12 @@ class MissionBuilder:
         (1,600-2,500 s) and only the F-14s were left. At most HOLD_EXTEND_MAX_S longer; bingo fuel sends them home anyway."""
         for h in self._holds:
             hx, hy = h["tgt"]
-            last = max([t_ for (ex, ey), t_ in events if t_ is not None and dist(ex, ey, hx, hy) <= HOLD_AREA_KM * 1000] + [0])
+            near_ = [t_ for (ex, ey), t_ in events if t_ is not None and dist(ex, ey, hx, hy) <= HOLD_AREA_KM * 1000]
+            if h.get("first"):
+                later_ = [t_ for t_ in near_ if t_ > h.get("eta", 0) + 60]
+                last = min(later_) if later_ else 0
+            else:
+                last = max(near_ + [0])
             new = int(min(h["end"] + HOLD_EXTEND_MAX_S, max(h["end"], last + h["after"])))
             if new <= h["end"]:
                 continue
@@ -1263,6 +1269,12 @@ class MissionBuilder:
             else:           # BASECAP: over the field it guards (v0.41.10: the one red is likeliest to raid), else its own
                 gb_ = st.bases.get(getattr(f, "guard", "") or f.base_id, base)
                 gx_, gy_ = gb_.x, gb_.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 8 * NM); zr_ = SUPPORT_CAP_ZONE_NM
+            # v0.41.13: the orbit stays 15 nm outside every SAM ring: step it back toward what it guards (2 nm at a time) until it is clear
+            # (v0.41.12 run: the carrier CAP's F-14s were shot at on a station 22 nm toward Sukhumi)
+            for _ in range(20):
+                if tm.spot_slack(st, sx, sy, (geom.tx, geom.ty), 15, -999) >= 0 or dist(sx, sy, gx_, gy_) < 2 * NM:
+                    break
+                sx, sy = offset(sx, sy, bearing(sx, sy, gx_, gy_), 2 * NM)
             cap_zone = (gx_, gy_, min(self.o.friendly_cap_engage_nm or 999, zr_))
             p = spec.profile
             wps = [Wpt("SPAWN", sx, sy, p.cap_alt_ft, p.cap_kts), Wpt("CAP1", sx, sy, p.cap_alt_ft, p.cap_kts, "", "CAPORBIT"),
@@ -1375,9 +1387,10 @@ class MissionBuilder:
                 zone_ = (cx_, cy_, max(COVER_ZONE_NM, dist(cx_, cy_, stw.x, stw.y) / NM + 5))
             zct_ = self._limit_engage(g, 0, hold_end, zone_)
             hold_ = None
-            if hold_end is not None and stw.action != "SWEEPSTN":
-                hold_ = {"cts": [zct_], "starts": [], "tgt": (geom.tx, geom.ty), "end": int(hold_end),
-                         "after": TARCAP_AFTER_TOT_S if stw.action == "TARCAP" else ESCORT_AFTER_TOT_S}
+            if hold_end is not None:
+                hold_ = {"cts": [zct_], "starts": [], "tgt": (geom.tx, geom.ty), "end": int(hold_end), "eta": int(stw.eta_s),
+                         "first": stw.action == "SWEEPSTN",           # v0.41.13: a sweep holds until the FIRST package it covers is over the target
+                         "after": SWEEP_AFTER_TOT_S if stw.action == "SWEEPSTN" else TARCAP_AFTER_TOT_S if stw.action == "TARCAP" else ESCORT_AFTER_TOT_S}
                 self._holds.append(hold_)
             if hold_end is not None:
                 # v0.41.5: on the way home the flight still fights what comes within HOMEWARD_ENGAGE_NM of it. In the v0.41.4 run a lone MiG-29 chased
@@ -2118,6 +2131,36 @@ class MissionBuilder:
             # TARCAP (ESCORT role) and ESCORT (SWEEP role): a station of their own, for you and for the AI alike (v0.40.1)
             t = geom.tiers[key]
             geom.stand[key] = profiles.station(self.state, pts, t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000), geom.egr)
+            if geom.sweep:
+                geom.stand[key] = self._sweep_station(geom.stand[key], tx, ty, pts[0])
+
+    def _sweep_station(self, so, tx, ty, home_xy):
+        """v0.41.13: a Fighter Sweep's station sits INSIDE the nearest enemy field's scramble circle (5 nm in), so the alert pairs come up into the
+        sweep before the strikers arrive, but 35 nm from every live SA-10 and 15 nm outside every other SAM ring. The v0.41.12 run: the sweep
+        orbited just short of SAM cover, tripped nothing and met only SAM missiles. First it backs out of SAM reach (toward home), then it walks
+        toward the field while it stays clear. -> the station tuple with its x, y (and nm short of the target) replaced."""
+        st = self.state
+        x, y = so[0], so[1]
+        sa10 = [a for a in st.assets.values() if a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.25]
+        rings_ = [(a, r_) for a, r_ in tm.rings(st, min_range=3) if a.variant not in tm.UMBRELLA_VARIANTS]   # SA-10s: the measured 35 nm instead of the 48 nm table ring
+        clear = lambda px, py: (all(dist(px, py, a.x, a.y) >= r_ + 15 * NM for a, r_ in rings_)
+                                and all(dist(px, py, a.x, a.y) >= SA10_AVOID_NM * NM for a in sa10))
+        for _ in range(40):
+            if clear(x, y) or dist(x, y, *home_xy) < 2 * NM:
+                break
+            x, y = offset(x, y, bearing(x, y, *home_xy), 2 * NM)
+        fb = tm.fighter_bases(st)
+        if fb:
+            ex, ey = min(fb, key=lambda e: dist(e[0], e[1], x, y))
+            r = tm.field_detect_nm((ex, ey), (tx, ty), st) - 5
+            if dist(x, y, ex, ey) > r * NM:
+                # a clear point just inside the circle, nearest our side first: on the field's bearing to the station, then swinging up to 90 deg off it
+                b0 = bearing(ex, ey, x, y)
+                pick = next(((px, py) for ang in (0, 10, -10, 20, -20, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90) for rr in (r, r - 5, r - 10)
+                             for px, py in [offset(ex, ey, b0 + ang, rr * NM)] if rr > 0 and clear(px, py)), None)
+                if pick is not None:
+                    x, y = pick
+        return (x, y, so[2], dist(x, y, tx, ty) / NM) + tuple(so[4:])
 
     def _zulu_note(self) -> str:
         tz = float(theatres.active().get("tz", 0) or 0)
