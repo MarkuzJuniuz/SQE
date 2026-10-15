@@ -10,6 +10,7 @@ Analyse XO's test runs (SQE_state.json, dcs.log, SQE_Sortie.miz, Remarks.txt), b
 Status, plans and the watch list live in the claude.ai Project "Squadron Campaign Engine":
 `claude/sqe-queue.md` (current queue), `claude/no-banzai-plan.md`, `claude/standoff-sead-plan.md`.
 Read the queue doc before starting work. Update it after each PR.
+If the session has no Project attached, ask XO to paste the queue doc. Don't guess the status.
 
 ## Standing rules
 - Build only on **Opus 5.5 or higher**. Talking and planning on any model is fine.
@@ -48,15 +49,17 @@ Read the queue doc before starting work. Update it after each PR.
 - Remote refspecs sometimes break after branches are deleted. If `git fetch` errors, reset `remote.origin.fetch` to main and crew-chief-working.
 - The GitHub CI smoke check fails on GitHub only and is dropped for now (refactor-week item).
 
-## Code map (check)
+## Code map
 - `sqe/mission_builder.py`: builds the mission; fight circles, tanker, carrier CAP, HARM/JSOW placement, recovery net.
 - `sqe/routes.py`: route planning and SAM avoidance (`AVOID_NM`).
 - `sqe/threatmap.py`: `tanker_spot` and threat geometry.
 - `sqe/war.py`, `sqe/packages.py`, `sqe/engine.py`: the war sim, package templates, daily planning (`AI_ONLY` job types).
 - `sqe/redair.py`, `sqe/raids.py`: red doctrine by level (`RED_DOCTRINE`, `RED_QUALITY`).
 - `sqe/debrief.py`: the Lua mission hook (landed/dead tables, recovery net).
+- `sqe/sams.py`, `sqe/threat.py`, `sqe/ecm.py`: SAM sites, threat model, jamming.
+- `sqe/state.py`, `sqe/settings.py`, `sqe/difficulty.py`, `sqe/gui/`: campaign state, settings, difficulty levels, the UI.
 - `sqe/data/theatres/`: theatre data (carrier position etc.).
-- `tools/smoke_test.py`: the checks.
+- `tools/smoke_test.py`: the checks. `tools/low_level_test.py`, `tools/capture_loadouts.py`: helpers.
 
 ## Levels
 1 insurgent, 2 regional power, 3 near-peer.
