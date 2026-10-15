@@ -1,3 +1,14 @@
+## v0.41.28
+
+** GUI Changes (XO): **
+
+* Removed the text 'untested in the cockpit' in the F-14B(U) setting. 
+* Capitalized the B in Mission Build tab on Settings.
+
+** Updated Readme (X): **
+
+* Wrote the contents of readme.md in my own words.
+
 ## v0.41.27
 
 Only the job types that have been tuned are offered to you; the rest stay in the war, flown by the AI.

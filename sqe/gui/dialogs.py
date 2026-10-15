@@ -120,7 +120,7 @@ class SettingsDialog(QDialog):
                 "natural pace (afterburner time). AI flights adjust automatically.")
         self.fuel = QCheckBox("AI fuel management (unlimited until the push, real fuel in the fight, unlimited again from egress)")
         self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); v.addWidget(self.fuel)
-        self.f14n = QCheckBox("F-14B(U): name waypoints with special-point codes (IP, ST, HB...) so DEST can select them (untested in the cockpit)")
+        self.f14n = QCheckBox("F-14B(U): name waypoints with special-point codes (IP, ST, HB...) so DEST can select them")
         self.f14n.setChecked(bool(settings.f14_special_names)); v.addWidget(self.f14n)
         v.addStretch(1)
 
@@ -175,7 +175,7 @@ class SettingsDialog(QDialog):
         v.addStretch(1)
 
         # ---- Mission build: merging and limits -----------------------------------------------------------------------------------
-        v = page("Mission build")
+        v = page("Mission Build")
         self.merge = QComboBox(); self.merge.addItem("Off (one package per mission)", "off"); self.merge.addItem("Same area (targets inside the radius)", "area")
         self.merge.setCurrentIndex(1 if settings.merge_mode == "area" else 0)
         self.mmax = QSpinBox(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.merge_max_units))
