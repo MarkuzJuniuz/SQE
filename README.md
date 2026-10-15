@@ -12,13 +12,13 @@ So what do I do? Fly Falcon BMS! It’s the gold standard for its dynamic campai
 
 But I want to fly the F/A-18C, the A-10C and, of course, the F-14 Tomcat! I have them on DCS World! So to get my Tomcat fix I tried some of its stock campaigns (which are GOOD but I’m not). I generate missions using DCS’ Fast Mission Generator but it only has the F-14A/B. I edit that mission using its mission editor and change it to an F-14B(U) and for some reason the waypoints are wrong. How am I gonna git gud with dropping LGBs and GBUs?
 
-Good thing there’s DCS Briefing Room. I was able to learn to make Jester point the LANTIRN into the target and designate it. Then the explosions! Felt great! OK, time to repeat the same mission?
+Good thing there’s DCS Briefing Room. I was able to learn to make Jester point the LANTIRN at the target and designate it. Then the explosions! Felt great! OK, time to repeat the same mission?
 
-I tried Digital Crew Chief (DCC) and loved it too but updates come too slowly. I tried Liberation and Retribution. They’re the closest to BMS’ dynamic campaign I could get. My problem is once the “war” gets too big so do the number of stutters per second will.
+I tried Digital Crew Chief (DCC) and loved it too but updates come too slowly. I tried Liberation and Retribution. They’re the closest to BMS’ dynamic campaign I could get. My problem is once the “war” gets too big, so does the number of stutters per second.
 
 So I remembered those Strike Fighters games. Simple randomly generated missions that can be flown each lasting the length of 1 cup of coffee. Following waypoints. Oh the triangle waypoint, targets are here. FPS through the roof.
 
-That was my original inspiration for this mod. Yes, its code is written by AI. But I’m desperate. I just want “a game” inside DCS. After dozens of prompts I was able to make a… random mission generator BUT not too random. I got the background simulation run a “war” that tracks enemy aircraft, bases, assets and along with my “squadron” and its coalition. Click FLY and I get waypoints on a kneeboard along with radio channels tuned the way I like it, similar to BMS.
+That was my original inspiration for this mod. Yes, its code is written by AI. But I’m desperate. I just want “a game” inside DCS. After dozens of prompts I was able to make a… random mission generator BUT not too random. I got the background simulation to run a “war” that tracks enemy aircraft, bases and assets, along with my “squadron” and its coalition. Click FLY and I get waypoints on a kneeboard along with radio channels tuned the way I like it, similar to BMS.
 
 <p align="center"><img src="docs/images/kneeboard/1-comms-times.png" alt="Kneeboard page 1: comms and times" width="32%"> <img src="docs/images/kneeboard/2-fuel-codes-package.png" alt="Kneeboard page 2: fuel, codes and package" width="32%"> <img src="docs/images/kneeboard/3-other-threats-intel.png" alt="Kneeboard page 3: threats and intel" width="32%"></p>
 
@@ -30,7 +30,7 @@ After a few more design changes I was able to end up with “package merging” 
 
 <p align="center"><img src="docs/images/missions.png" alt="Missions: the day's tasking order" width="100%"></p>
 
-So, yeah. I just wanted to share this to fellow DCS World flyers. I spent sleepless nights tuning the mission planner like playing an RTS game (was really fun seeing things work) to kinda eliminate banzai actions and herd hundreds of units to at least not die and have a somewhat positive debrief afterwards (it’s really hard to make the commanders happy).
+So, yeah. I just wanted to share this with fellow DCS World flyers. I spent sleepless nights tuning the mission planner like playing an RTS game (was really fun seeing things work) to kinda eliminate banzai actions and herd hundreds of units to at least not die and have a somewhat positive debrief afterwards (it’s really hard to make the commanders happy).
 
 <p align="center"><img src="docs/images/debrief.png" alt="Debrief" width="60%"></p>
 
