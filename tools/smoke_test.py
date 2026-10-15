@@ -313,7 +313,7 @@ def main():
         _gs = AppSettings(dcs_saves=str(TMP / "gsv"), persist=False)
         _dlg = SettingsDialog(_gs)
         QMessageBox.information = staticmethod(lambda *a, **k: None)
-        assert [_dlg.tabs.tabText(i) for i in range(_dlg.tabs.count())] == ["General", "Campaign", "Mission build", "DCS integration", "Terrain scan"]
+        assert [_dlg.tabs.tabText(i) for i in range(_dlg.tabs.count())] == ["General", "Campaign", "Mission Build", "DCS integration", "Terrain scan"]
         assert "Not scanned" in _dlg.tm_status.text()
         _gs.carcass_weight_pct, _gs.reactive, _gs.weather_mode, _gs.merge_radius_nm = 40, False, "rain", 35       # every moved control still round-trips
         _d2 = SettingsDialog(_gs)
