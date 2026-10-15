@@ -225,6 +225,59 @@ def forward_tanker_spot(state, base_xy, egr_xy, target_xy, field_margin_nm: floa
     return None
 
 
+TANKER_CAP_NM = 40          # v0.41.26: a tanker track stays this far from every red patrol station
+TANKER_LANE_NM = 25         # ...and this far from the line an enemy field's fighters fly to the fight
+TANKER_MARGIN_NM = 20       # ...and this far outside every SAM ring and every enemy field's scramble circle (v0.41.7: 15)
+
+
+def _seg_nm(px, py, ax, ay, bx, by) -> float:
+    vx, vy = bx - ax, by - ay
+    L2 = vx * vx + vy * vy
+    t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((px - ax) * vx + (py - ay) * vy) / L2))
+    return math.hypot(ax + t * vx - px, ay + t * vy - py) / NM
+
+
+def tanker_spot(state, base_xy, egr_xy, target_xy, caps=(), lanes=(), cover=(), half_track_nm: float = 15, track_hdg: float | None = None):
+    """v0.41.26: the tanker track centre. Between the action and home, where the package can use it, but a minimum distance from every danger:
+    TANKER_MARGIN_NM outside every SAM ring and every enemy field's scramble circle, TANKER_CAP_NM from every red patrol station (caps: [(x, y)]),
+    TANKER_LANE_NM from the lines red fighters fly in on (lanes: [(field x, y, target x, y)]), both ends of the racetrack included. Among the
+    clear spots, one inside friendly SAM cover (cover: [(x, y, nm)]) wins; then the one furthest forward. The XO's Nalchik run: the tanker sat in
+    the middle of the fight and was shot down. Falls back to behind the home field (up to 40 nm). None when nothing is clear."""
+    bx, by = base_xy
+    ex, ey = egr_xy
+    h = math.degrees(math.atan2(ey - by, ex - bx))
+    th = h + 90 if track_hdg is None else track_hdg
+    def ok(x, y):
+        ends = [(x, y), (x + half_track_nm * NM * math.cos(math.radians(th)), y + half_track_nm * NM * math.sin(math.radians(th))),
+                (x - half_track_nm * NM * math.cos(math.radians(th)), y - half_track_nm * NM * math.sin(math.radians(th)))]
+        for px, py in ends:
+            if spot_slack(state, px, py, target_xy, TANKER_MARGIN_NM, TANKER_MARGIN_NM) < 0:
+                return False
+            if any(math.hypot(px - cx, py - cy) / NM < TANKER_CAP_NM for cx, cy in caps):
+                return False
+            if any(_seg_nm(px, py, fx, fy, gx, gy) < TANKER_LANE_NM for fx, fy, gx, gy in lanes):
+                return False
+        return True
+    covered = lambda x, y: any(math.hypot(x - cx, y - cy) / NM <= cnm for cx, cy, cnm in cover)
+    clear = []
+    for k, f in enumerate((0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.05, 0.0)):
+        cx, cy = bx + (ex - bx) * f, by + (ey - by) * f
+        for side in (0, 10, -10, 20, -20, 30, -30):
+            x, y = cx + side * NM * math.cos(math.radians(h + 90)), cy + side * NM * math.sin(math.radians(h + 90))
+            if ok(x, y):
+                clear.append((0 if covered(x, y) else 1, k, abs(side), x, y))
+    if not clear:
+        for back in (5, 10, 15, 20, 25, 30, 35, 40):
+            for side in (0, 10, -10, 20, -20):
+                x = bx - back * NM * math.cos(math.radians(h)) + side * NM * math.cos(math.radians(h + 90))
+                y = by - back * NM * math.sin(math.radians(h)) + side * NM * math.sin(math.radians(h + 90))
+                if ok(x, y):
+                    return x, y
+        return None
+    clear.sort()
+    return clear[0][3], clear[0][4]
+
+
 def first_safe_egress(state, tx, ty, hdg_to_target, skip_ids=(), min_nm: float = 8, max_nm: float = 60, margin_nm: float = 4, avoid=()):
     """EGR = the FIRST safe point after the target: the closest point (8 nm and out) that is clear of every live SAM ring (plus a margin).
     Bearings that turn for home are tried first; among equals, the one farther from enemy fighter bases wins (away from their CAP).

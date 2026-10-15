@@ -1,3 +1,48 @@
+## v0.41.28
+
+** GUI Changes (XO): **
+
+* Removed the text 'untested in the cockpit' in the F-14B(U) setting. 
+* Capitalized the B in Mission Build tab on Settings.
+
+** Updated Readme (X): **
+
+* Wrote the contents of readme.md in my own words.
+
+## v0.41.27
+
+Only the job types that have been tuned are offered to you; the rest stay in the war, flown by the AI.
+
+* **AI-only for now:** BARCAP, bomber intercepts and raid intercepts are still planned, still listed under "All squadrons" and still played out by the war sim, but they have no FLY button, you're never put in one, and they're never folded into your mission. Their routes and fight circles don't follow the SAM rules yet (in XO's run six BARCAP jets wandered inland over red without a single scramble). They come back one at a time, the bomber intercept "boss fight" first.
+* **Emergencies:** troops in contact (CAS) stay; raid scrambles are off while intercepts are AI-only.
+* **Carrier further out to sea (XO):** about 86 nm west of Batumi (was about 54 nm west of Kobuleti), so the escort ships stop swatting every red jet up the coast. New campaigns only.
+* **SEAD waves on one SAM cluster go in together again:** the packages are grouped by connected clusters (close to any target in the group, not only the first one's). With the carrier further out, the old grouping split the Gudauta cluster and its SA-11 package went in 15 minutes ahead of the others.
+* Smoke test: AI-only jobs are never offered; emergencies are troops in contact only; the land-raid build is still tested with the AI-only list lifted; the ruins check runs on level 2 (on Hard a cluster's SEAD packages now all go in together, so there are no earlier ruins); the in-mission HARM spread allows 20 s (was 15; 18 s with the carrier's longer legs).
+
+## v0.41.26
+
+From XO's Nalchik SA-6 run: the tanker was shot down in the middle of the fight, and the F-16s guarding it were timid.
+
+* **Tanker placement:** the tanker track still sits between the fight and home, where the package can use it, but now keeps a minimum distance from every danger, both ends of the racetrack included: 20 nm outside every SAM ring and every enemy field's scramble circle (was 15), 40 nm from every red patrol station, and 25 nm from the lines red fighters fly in on (each enemy field within reach to each target in the mission). Among the clear spots, one under friendly SAM cover (within 30 nm of a defended friendly field or the carrier group) wins, then the one furthest forward. Scan over 16 campaigns: 4 of 32 tankers used to sit on a red inbound line, now none; the typical tanker sits about 58 nm from the target (was 44).
+* **Tanker CAP (F-16s):** it engages anything inside 40 nm of the tanker (was 25), radar searching all the time, weapons free, firing at maximum range, and stays on its leash round the tanker.
+* Smoke test: the tanker track stays off a red inbound line.
+
+## v0.41.25
+
+From XO's second Sukhumi run (v0.41.24): 10 friendly jets lost, 4 of them the Gudauta SEAD flight to the Sukhumi S-300 again, and some Hornets never recovered at the boat.
+
+* **HARM points, properly this time:** v0.41.24 kept a HARM point clear of every SAM "not sent against", but counted any SA-10 whose reach covered the target as one the package was sent against. The Sukhumi S-300 covers the Gudauta SA-6, so the Gudauta package still fired from 30 nm of it, and nobody's HARMs were on it. Now only the sites the package's HARMs are tasked on are exempt: the target's cluster and its umbrella SA-10 (and, for a CAS escort, the sites covering the CAS target). The HARM point moves out or turns its axis to clear every other site, and if it can't, the HARMs go for that site first.
+* **Recovery net:** a flight sent home early (bingo, out of missiles) flies straight to its deck or field and skips its recovery point, so it never counted as landed and circled the boat. Every homebound AI flight is now also recovered once any of its jets is within 12 nm of the carrier (where the boat is at that moment, not where it started) or of its field, after its work is done.
+
+## v0.41.24
+
+From XO's Sukhumi SA-11 Standoff DEAD run (13 friendly jets lost: 5 to SAMs, 8 in the air).
+
+* **Fighters stay off the target's SAMs too.** Since v0.41.22 every fight circle was trimmed clear of SAMs, except the ones the package was sent against. That exemption is right for the HARM and JSOW shooters but not for fighters: the TARCAP's circle was centred 23 nm from the SA-11 with a 35 nm radius, and Springfield 1-1 and Hornet 3-1 chased bandits into it before the HARMs arrived. TARCAP, sweep, escort, support CAP and homeward circles now stay clear of every SAM, the target's included. In a 12-campaign scan 6% of fighter circles are still at their 8 nm minimum with the edge a few nm inside an SA-2's ring; none reaches over a site.
+* **HARM launch points clear of neighbouring SAMs.** A Gudauta SEAD flight's HARM point sat 30 nm from the Sukhumi S-300 (another package's target), and three Hornets died to it. The HARM point now stays outside the reach of every SAM the package isn't sent against, as well as the umbrella SA-10: it moves further out along its axis, and the axis may turn 15 or 30 degrees. When nothing is clear, the HARM flights fire on the neighbouring site first. Scan: 190 HARM points, none inside a neighbour's reach.
+* **Enemy air wings panel:** aircraft types show their proper names (Su-27, MiG-29S, Tu-22M3) instead of DCS's internal ones (XO).
+* `docs/GITHUB_GUIDE.md` is ignored by git; it stays local (XO).
+
 ## v0.41.23
 
 Fight circles moved instead of shrunk, and preloaded flights placed right.
