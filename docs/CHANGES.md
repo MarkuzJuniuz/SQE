@@ -5,7 +5,7 @@
 * Removed the text 'untested in the cockpit' in the F-14B(U) setting. 
 * Capitalized the B in Mission Build tab on Settings.
 
-** Updated Readme (X): **
+** Updated Readme (XO): **
 
 * Wrote the contents of readme.md in my own words.
 
