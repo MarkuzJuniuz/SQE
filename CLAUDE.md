@@ -18,7 +18,7 @@ Read the queue doc before starting work. Update it after each PR.
 - PR label: `crew-chief`.
 - Commits end with the Co-Authored-By line for the current model and the Claude-Session URL. PR bodies end with the "Generated with Claude Code" line plus the session URL. Use the attribution given in each session's system reminder.
 - XO's rule: **no out-of-universe experience**. Only tuned job types are player-flyable. Untuned ones are AI-only.
-- Don't over-tune. XO mostly plays now. He plays Level 2.
+- Don't over-tune. XO mostly plays now. When he flies himself he plays Level 2 (for fun); his AI-only test runs are usually Level 3.
 - XO writes marketing text and the README himself. No debrief text needed.
 - Heavy builds wait for the date XO sets. Check the queue doc.
 - Talk first, then build, for anything big. Tell XO whether it is light or heavy before starting.
@@ -42,7 +42,7 @@ Read the queue doc before starting work. Update it after each PR.
 - XO is a Java/C#/JavaScript developer new to Python. Explain Python things with those comparisons.
 - Plain words over jargon. He plays the sim; he doesn't want a code tour.
 
-## Setup (Crew Chief's cloud workspace; check before relying on it)
+## Setup (Crew Chief's cloud workspace)
 - Python venv: `/home/claude/venv` (3.13); a 3.12 venv at `/home/claude/v312` matches CI.
 - Smoke test: `python tools/smoke_test.py` (takes a few minutes). A crash or abort after "SMOKE TEST PASSED" is a known pydcs/venv teardown issue, not a failure.
 - Remote refspecs sometimes break after branches are deleted. If `git fetch` errors, reset `remote.origin.fetch` to main and crew-chief-working.
