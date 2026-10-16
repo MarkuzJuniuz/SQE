@@ -819,14 +819,15 @@ def main():
             for _scr in (True, False):
                 s.new(f"Emerg {_ac}{_scr}", _ac, _lv, seed=_seed); _st = s.state
                 _p = None
-                for _day in range(10):                         # v0.41.27: only troops in contact now (raid scrambles are off): find a day with one
+                import sqe.engine as _eng
+                for _day in range(10):                         # v0.41.28: troops in contact, and raids while RAID_SCRAMBLES is on: find a day with one
                     _p = next((p_ for p_ in s.packages() if s.flyable(p_) and s.emergency_for(p_.number, None)), None)
                     if _p:
                         break
                     _st.day += 1; s.plan_day()
                 if _p is None:
                     continue
-                _ev = s.emergency_for(_p.number, None); assert _ev["kind"] == "CAS" and _ev["title"] and _ev["text"], "only troops in contact for now"
+                _ev = s.emergency_for(_p.number, None); assert _ev["kind"] in (("CAS", "RAID") if _eng.RAID_SCRAMBLES else ("CAS",)) and _ev["title"] and _ev["text"], "a raid scramble only while RAID_SCRAMBLES is on"
                 _res = s.fly(_p.number, None, scramble=_scr)
                 assert _st.pending and _res.counts["units"] > 0
                 if _scr and _ev["eligible"]:
@@ -856,7 +857,7 @@ def main():
     # v0.41.27: raid intercepts are AI-only for now; the build itself is still tested (it comes back), with the AI-only list lifted here
     import sqe.engine as _eng27
     _aio27, _eng27.AI_ONLY = _eng27.AI_ONLY, ()
-    _eng27.RAID_SCRAMBLES = True
+    _rs27, _eng27.RAID_SCRAMBLES = _eng27.RAID_SCRAMBLES, True
     s.new("Raid build", "F-16C", 2, seed=4); _st = s.state
     _rp = None
     for _day in range(10):
@@ -881,6 +882,10 @@ def main():
         s.fly(_rp.number, None)
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
     assert ("Su-24M" in _mz or "Su-25" in _mz) and "RAID-B-1" in _mz, "the raiders are in the mission"
+    # v0.41.28: the raided field is built with its defences, and the AI intercept engages only inside a circle (TARCAP rules)
+    _rb28 = _st.bases[_st.pending["package_dict"]["objective"]["target_id"]]
+    assert _rb28.kind.value != "AIRFIELD" or _rb28.defense < 0.15 or f"BASEDEF {_rb28.name}" in _mz, "the raided field has its defences"
+    assert "EngageTargetsInZone" in _mz, "the raid intercept engages only inside its circle"
     _man = s.manifest(); _rg = next(g_ for g_ in _man.groups if g_.get("raid_base"))
     _base = _st.bases[_rg["raid_base"]]; _def0 = _base.defense
     _data = {"campaign": _st.campaign_id, "sortie": _st.sortie_counter, "package": _st.pending["package_dict"]["id"], "mission_ended": True,
@@ -892,7 +897,7 @@ def main():
     _rt = _CS.from_dict(_st.to_dict()); assert _rt.raids == _st.raids
     _o = _st.to_dict(); _o.pop("raids"); assert _CS.from_dict(_o).raids == {}
     _eng27.AI_ONLY = _aio27
-    _eng27.RAID_SCRAMBLES = False
+    _eng27.RAID_SCRAMBLES = _rs27
     print("[raids] announced and surprise raids by level, repeatable emergencies (about 9% a sortie, never two in a row), scramble / stay, CAS folded in, postponement, Su-24M raid built and applied, overnight surprises")
     # alert pairs have a dispatch range like the enemy's reinforcements
     from sqe import reactive as _rv

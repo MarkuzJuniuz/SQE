@@ -347,7 +347,10 @@ class MissionBuilder:
         for a in st.assets.values():
             if a.kind == AssetKind.AIRFIELD and a.airport:
                 self.t.airports[a.airport].set_red()
-        for bid in dict.fromkeys([f.base_id for f in package.flights] + [f.base_id for x in list(extras) + list(ruins) for f in x.flights if not f.tag]):
+        # v0.41.28: a raid scramble also builds the field the raid is coming for (the XO's Kobuleti run: the raided field had no defences
+        # because nothing launched from it)
+        raided_ = [package.objective.target_id] if (package.objective.type == ObjectiveType.FLEET_DEFENSE and package.objective.target_id in st.bases) else []
+        for bid in dict.fromkeys([f.base_id for f in package.flights] + raided_ + [f.base_id for x in list(extras) + list(ruins) for f in x.flights if not f.tag]):
             self._place_base(st.bases[bid], tx, ty)
         atc = (o.carrier_atc_mhz if pbase.kind == BaseKind.CARRIER else self.t.airports[pbase.airport].atc_radio.uhf_hz / 1e6)
 
@@ -917,7 +920,14 @@ class MissionBuilder:
         if o.type == ObjectiveType.FLEET_DEFENSE:           # CAP station on the bearing the raid will arrive on
             c = self.state.bases[o.target_id]
             cx_, cy_ = package.extra.get("dest") or (c.x, c.y)
-            return offset(cx_, cy_, package.extra.get("brg", 20.0), (40 if package.extra.get("land") else 85) * NM)
+            brg_ = package.extra.get("brg", 20.0)
+            # v0.41.28: the station steps back toward what it guards (2 nm at a time, at least 10 nm out) until it is clear of red SAMs, the
+            # same rule as the support CAPs (_sam_clear): the scramblers meet the raid on our side of the SAM belt, not over it
+            for nm_ in range(40 if package.extra.get("land") else 85, 9, -2):
+                sx_, sy_ = offset(cx_, cy_, brg_, nm_ * NM)
+                if self._sam_clear(sx_, sy_):
+                    break
+            return sx_, sy_
         if o.type == ObjectiveType.BARCAP:
             b = self.state.bases[o.target_id]
             air = [a for a in self.state.assets.values() if a.kind == AssetKind.AIRFIELD and not a.destroyed]
@@ -1348,6 +1358,11 @@ class MissionBuilder:
             wps = plan_route(f.role, (base.x, base.y), geom, spec.profile, is_player=f.is_player, tanker_xy=None, stack_idx=idx,
                              spawn=sp[0] if sp else None, spawn_alt_ft=sp[1] if sp else 0, spawn_kts=sp[2] if sp else 0,
                              jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), harm_deg=self._harm_deg(package, geom))
+            if self._raid_cap(package, f):
+                # v0.41.28: a raid scramble's way out to its station bends round red SAMs like a strike's (the orbit leg stays as it is)
+                k1_ = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)
+                if k1_:
+                    wps = avoid_circles(wps[:k1_ + 1], self._zone_sams(package, True), spec.profile.max_points - (len(wps) - k1_ - 1), 1) + wps[k1_ + 1:]
             if not f.is_player or o.player_is_ai:
                 terrain_clear(wps)                          # an AI flight climbs on its own schedule: its altitudes must clear the ridges on each leg
             if f.is_player:
@@ -1523,6 +1538,22 @@ class MissionBuilder:
                     zone = (zw.x, zw.y, min(self.o.fighter_engage_nm, SEAD_ENGAGE_NM) if (zw.orbit or f.role == Role.SEAD) else self.o.fighter_engage_nm)
             self._limit_engage(g, self.o.fighter_engage_nm if f.role != Role.SEAD else 0, (tot_s + m_ * 60) if (m_ > 0 and tot_s is not None) else None,
                                self._clear_zone(zone, package, fighters=f.role != Role.SEAD))
+        elif self._raid_cap(package, f):
+            # v0.41.28: a raid scramble follows the TARCAP rules. It engages only inside a circle that takes in its station and the place the
+            # raid is going (25 nm round the long-range shooters, 15 for the rest, larger when it must reach both), moved / trimmed clear of red
+            # SAMs. No chasing (the XO's Kobuleti run: Eagles went to dogfight range and lost to Fulcrums). Max-range shots, radar on,
+            # home once its air-to-air missiles are gone.
+            cw_ = next((w for w in wps if w.action == "CAPORBIT"), None)
+            if cw_ is not None:
+                cb_ = st.bases[package.objective.target_id]
+                dx_, dy_ = package.extra.get("dest") or (cb_.x, cb_.y)
+                zone_ = self._cover_circle([(cw_.x, cw_.y), (dx_, dy_)], ((cw_.x + dx_) / 2, (cw_.y + dy_) / 2), package,
+                                           A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A], bearing(cw_.x, cw_.y, dx_, dy_))
+                self._limit_engage(g, 0, stop, self._clear_zone(zone_, package))
+            g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
+            g.points[0].tasks.append(task.OptRadarUsing(task.OptRadarUsing.Values.UseForContinuousSearch))
+            rtbr_ = task.OptRTBOnOutOfAmmo(); rtbr_.params["action"]["params"]["value"] = AAM_WEAPONS
+            g.points[0].tasks.append(rtbr_)
 
         if f.is_player:
             u0 = g.units[0]
@@ -2420,6 +2451,11 @@ class MissionBuilder:
         t_ = max(float(wps[-1].eta_s) if wps else 0.0, float(hold_end or 0), float(stop) if f.tag else 0.0)
         self._recov.append({"g": g.name, "cv": cv_unit or "", "x": float(x), "z": float(y), "r": self.RECOV_NET_NM * NM, "t": t_})
 
+    def _raid_cap(self, package, f) -> bool:
+        """v0.41.28: an AI fighter of a raid intercept (FLEET_DEFENSE, not a support CAP): TARCAP rules for its route and engage circle."""
+        return (package.objective.type == ObjectiveType.FLEET_DEFENSE and f.role == Role.CAP and not f.tag
+                and (not f.is_player or self.o.player_is_ai) and package.objective.target_id in self.state.bases)
+
     @staticmethod
     def _hold_end(stw, tot_s) -> int:
         """TARCAP / sweep: their time on station; escort: until the last ground-attack flight is off target."""
@@ -2692,6 +2728,9 @@ class MissionBuilder:
         arrive = tot_s + r.uniform(60, 150)
         path_len = dist(*poly[0], *poly[1]) + dist(*poly[1], *poly[2])
         (sx, sy), seg_i = tm.point_back_along(poly, min(232.0 * arrive, 0.97 * path_len))
+        # v0.41.28: a raid from a near field used to be put at the start of its path and flown at once, so it got to the target before our
+        # scramble was on station (the XO's Kobuleti run: bombs ~10 min before the scramble's TOT). Now it starts that much later instead.
+        raid_late_ = max(0.0, arrive - 0.97 * path_len / 232.0)
         remaining = poly[seg_i:] + [(dx, dy)]
         skill = getattr(Skill, d.enemy_skill, Skill.High)
         land = bool(ex.get("land"))
@@ -2710,6 +2749,8 @@ class MissionBuilder:
                     elif cvg is not None and cls is planes.Tu_22M3:
                         wp.tasks.append(task.AttackGroup(cvg.id))
             g.set_skill(skill)
+            if raid_late_ >= 30:
+                self._late(g, raid_late_)
             return g
 
         if land:
