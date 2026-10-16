@@ -104,6 +104,14 @@ Three kinds exist, all built in `mission_builder.py` (`_spawn_enemy`-style block
 
 **Gap (found 2026-10-16):** none of the three scramble kinds use the SAM rules (`avoid_circles`, `_zone_sams`, `_cover_circle`, `_clear_zone`). They fly a straight line to the target and orbit on it. For blue alert pairs that target can be inside a red SAM's reach. Raids by red bombers are separate (`raids.py` has `shy`, `PATRIOT_NM`, `HAWK_NM`).
 
+## 7b. How red picks targets (raids and the carrier)
+_verified v0.41.28 + PR #66, 2026-10-16 (read from the code, not run)_
+
+- **Red does not "see an opening".** Two separate systems, both score-based:
+  1. **Daily raids on our bases and assets** (`raids.py`: `candidates`, `target_weights`, `pick_aim`, `shy`): weight = nearer to a raider wing, softer defence (`base.defense`), supply/garrison value; the level's `raid_mix` picks the kind (field / supply / garrison / sector). `shy` lowers the weight of targets under Patriot (`PATRIOT_NM` 40) or HAWK (`HAWK_NM` 25). **The carrier is skipped as a "field" target** (`b.kind == BaseKind.CARRIER`).
+  2. **The carrier raid** is not chosen by red: `war.py` (search `bomber_policy`) adds a `FLEET_DEFENSE` objective "Intercept a bomber raid on <carrier>" to blue's daily pool with priority `6.0 + 0.3 * bombers available`, when a Tu-22M3 wing has 2+ jets and the level allows it: L3 `normal` (any day), L2 `desperate` (only when red `enemy_air` < 0.45 or `c2` < 0.5), L1 `none`. It then competes with the other objectives (one of each type first, 40% cap per type). Wing size: `bomber_wing` in `difficulty.py` (L2 4, L3 10).
+- A carrier-opening trigger (e.g. weak carrier CAP, recent red losses) does not exist yet.
+
 ## 7. Verify before trusting
 
 - All of the above is from reading the code. No DCS run was used to confirm each behaviour.
