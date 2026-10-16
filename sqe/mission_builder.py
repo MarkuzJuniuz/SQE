@@ -59,7 +59,14 @@ CVCAP_NM = 12                 # v0.41.21: the carrier CAP orbits this far out fr
 CVCAP_DETECT_MARGIN_NM = 5    # v0.41.21: its orbit and engage circle stay this far outside every enemy field's scramble circle
 HOMEWARD_ENGAGE_NM = 20       # v0.41.5: after its hold a TARCAP / escort / sweep still engages air within this of itself on the way home
 from .packages import LONG_RANGE_A2A     # the long-range shooters; F-16 and F/A-18 are secondary air-to-air
-A2A_ZONE_NM = {True: 25, False: 15}     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
+A2A_ZONE_NM = {True: 25, False: 15}
+RED_LONG_RANGE = {"Su_27"}    # v0.41.29: red's long-range class (XO 2026-10-16: the Su-27 only; the MiG-31 is not in rotation)
+RAID_MPS = 232.0              # a red raid's speed (450 kts), the same figure its placement always used
+RAID_PUSH_NM = 10             # v0.41.29: a raid's PUSH, this far from its marshal toward the target (blue's is up to 10 nm)
+RAID_MIN_NM = 40              # ...a raid with no time to hold starts no closer than this to its target (it is late instead)
+RAID_HOLD_MAX_S = 600         # ...and one with plenty of time appears at most 10 min before it must push
+RAID_MSHL_MIN_NM = 60         # ...its marshal is at least this far from the target (judgment call: well outside blue's Patriot reach)
+RAID_EGRESS_NM = 30           # ...off target it turns 40 degrees off its way in and leaves this far before heading home     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
 STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -TARCAP_LEAD_S}      # seconds relative to the strikers' push (BMS-style)
 
 
@@ -2298,7 +2305,7 @@ class MissionBuilder:
                                        f"{self._short(a.name)}, {dist(sx, sy, tx, ty) / NM:.0f} nm {reactive.compass(bd_)} of the target, {redair.hhmm(pf_['start'])}-{redair.hhmm(pf_['end'])}.")
                 g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
                 # the same rule as ours: a patrol engages inside a circle round its station, it does not chase a target home
-                self._limit_engage(g, 0, None, (gx, gy, min(A2A_ZONE_NM[True], self.o.enemy_cap_engage_nm or A2A_ZONE_NM[True])))
+                self._limit_engage(g, 0, None, (gx, gy, min(A2A_ZONE_NM[tname in RED_LONG_RANGE], self.o.enemy_cap_engage_nm or 999)))   # v0.41.29: by class (Su-27 25 nm, the rest 15)
                 callin_ = pf_.get("gx") is not None and pf_["kind"] == "CAP"
                 if callin_ and pf_.get("guard") not in own_:
                     mates_ = [q_["type"] for q_ in self._red_sel[:n_cap] if q_.get("guard") == pf_.get("guard") and q_["kind"] == "CAP"]
@@ -2450,6 +2457,43 @@ class MissionBuilder:
         once its lead is within RECOV_NET_NM of the carrier (where it is now, not where it started) or the field, after its work is done."""
         t_ = max(float(wps[-1].eta_s) if wps else 0.0, float(hold_end or 0), float(stop) if f.tag else 0.0)
         self._recov.append({"g": g.name, "cv": cv_unit or "", "x": float(x), "z": float(y), "r": self.RECOV_NET_NM * NM, "t": t_})
+
+    def _raid_marshal(self, ba, w1, station, dx, dy):
+        """v0.41.29: where a red raid marshals: on its way in (field -> w1 -> station), inside the cover of a live red SAM site and at least
+        RAID_MSHL_MIN_NM from its target; the one deepest on red's side. None found: just off its own field, toward the target. The mirror of
+        blue marshalling behind its own field in friendly, defended airspace."""
+        def proj(px, py, a, b):                               # the point on a-b nearest to (px, py)
+            vx, vy = b[0] - a[0], b[1] - a[1]
+            L2 = vx * vx + vy * vy
+            t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((px - a[0]) * vx + (py - a[1]) * vy) / L2))
+            return a[0] + t * vx, a[1] + t * vy
+        legs = [((ba.x, ba.y), w1), (w1, station)]
+        best = None
+        for s_ in self.state.assets.values():
+            if s_.kind != AssetKind.SAM or s_.variant not in AVOID_NM or s_.destroyed or s_.health <= 0.25:
+                continue
+            for a, b in legs:
+                q = proj(s_.x, s_.y, a, b)
+                cover = AVOID_NM[s_.variant] - 2
+                if dist(q[0], q[1], s_.x, s_.y) <= cover * NM and dist(q[0], q[1], dx, dy) >= RAID_MSHL_MIN_NM * NM:
+                    if best is None or dist(q[0], q[1], dx, dy) > dist(best[0], best[1], dx, dy):
+                        best = q
+        if best is not None:
+            return best
+        h_ = bearing(ba.x, ba.y, *w1)
+        return offset(ba.x, ba.y, h_, min(10 * NM, 0.3 * dist(ba.x, ba.y, *w1)))
+
+    def _raid_bend(self, pts, raided):
+        """v0.41.29: a red raid's legs bend round blue's Patriot fields (raids.PATRIOT_NM; the field it raids is the one it goes for, so not that
+        one). Only fields whose defences are standing (defense >= 0.15, the rule _place_base builds by). -> the points with turn points added."""
+        from .raids import PATRIOT_NM
+        circles = [(b.x, b.y, PATRIOT_NM) for b in self.state.bases.values()
+                   if b.kind == BaseKind.AIRFIELD and b.id != raided.id and b.defense >= 0.15]
+        if not circles or len(pts) < 2:
+            return list(pts)
+        wps = [Wpt("P", x, y, 20000, 450) for x, y in pts]
+        avoid_circles(wps, circles, 24, 1)
+        return [(w.x, w.y) for w in wps]
 
     def _raid_cap(self, package, f) -> bool:
         """v0.41.28: an AI fighter of a raid intercept (FLEET_DEFENSE, not a support CAP): TARCAP rules for its route and engage circle."""
@@ -2724,14 +2768,33 @@ class MissionBuilder:
         pt = lambda x, y: mapping.Point(x, y, self.t)
         station = (sx_, sy_)
         w1 = offset(dx, dy, ex["brg"], min(220 * NM, 0.9 * dist(ba.x, ba.y, dx, dy)))
-        poly = [(ba.x, ba.y), w1, station]
-        arrive = tot_s + r.uniform(60, 150)
-        path_len = dist(*poly[0], *poly[1]) + dist(*poly[1], *poly[2])
-        (sx, sy), seg_i = tm.point_back_along(poly, min(232.0 * arrive, 0.97 * path_len))
-        # v0.41.28: a raid from a near field used to be put at the start of its path and flown at once, so it got to the target before our
-        # scramble was on station (the XO's Kobuleti run: bombs ~10 min before the scramble's TOT). Now it starts that much later instead.
-        raid_late_ = max(0.0, arrive - 0.97 * path_len / 232.0)
-        remaining = poly[seg_i:] + [(dx, dy)]
+        V = RAID_MPS
+        arrive = tot_s + r.uniform(60, 150)                    # at the station: 1-2.5 min after our scramble's TOT
+        t_tgt = arrive + dist(sx_, sy_, dx, dy) / V            # the raid's own TOT
+        # v0.41.29: the raid flies blue's shape. Marshal on red's side (in a red SAM's cover along its way in, else just off its field), PUSH,
+        # ingress bent round blue's Patriot fields (not the one it is raiding), the target at its TOT, then egress and home.
+        mshl = self._raid_marshal(ba, w1, station, dx, dy)
+        lane = [mshl, offset(*mshl, bearing(*mshl, *(w1 if dist(*mshl, *w1) > 15 * NM else station)), RAID_PUSH_NM * NM)]
+        if dist(*mshl, dx, dy) > dist(*w1, dx, dy) + 15 * NM:
+            lane.append(w1)
+        lane = self._raid_bend(lane, cvb) + [station]
+        path = lane + [(dx, dy)]
+        L = sum(dist(*path[i], *path[i + 1]) for i in range(len(path) - 1))
+        t_leave = t_tgt - L / V
+        hold_until, act_ = None, 0.0
+        if t_leave >= 0:                                       # it holds at its marshal until it must push, appearing at most RAID_HOLD_MAX_S before
+            (sx, sy), remaining = path[0], path[1:]
+            hold_until, act_ = t_leave, max(0.0, t_leave - RAID_HOLD_MAX_S)
+            hit_s = t_tgt
+        else:                                                  # no time to hold: already on its way in, but never closer than RAID_MIN_NM (then it is late)
+            back_ = min(L, max(RAID_MIN_NM * NM, V * t_tgt))
+            (sx, sy), seg_i = tm.point_back_along(path, back_)
+            remaining = path[seg_i:]
+            hit_s = back_ / V
+        names_ = ["PUSH"] + ["ING"] * (len(remaining) - 2) + ["BASE" if bool(ex.get("land")) else "FLEET"] if hold_until is not None else \
+                 ["ING"] * (len(remaining) - 1) + ["BASE" if bool(ex.get("land")) else "FLEET"]
+        egr_ = offset(dx, dy, bearing(dx, dy, *remaining[-2] if len(remaining) > 1 else (sx, sy)) + 40, RAID_EGRESS_NM * NM)
+        home_ = self._raid_bend([egr_, (ba.x, ba.y)], cvb)[1:]           # turn points round blue's Patriot fields, then its own field
         skill = getattr(Skill, d.enemy_skill, Skill.High)
         land = bool(ex.get("land"))
         alt = ((12000 if ex.get("raider") == "Su_25" else 20000) if land else 30000) * FT
@@ -2739,8 +2802,12 @@ class MissionBuilder:
 
         def build_group(name, cls, count, task_cls, pos, bomber=False):
             g = self.m.flight_group(self.red, name, cls, None, pt(*pos), altitude=alt, speed=450 * KPH, maintask=task_cls, group_size=count)
+            if hold_until is not None:                         # its marshal: orbit until it must push
+                ct_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
+                ct_.stop_after_time(int(hold_until)); g.points[0].tasks.append(ct_)
+                g.points[0].name = "MSHL"
             for k, q in enumerate(remaining):
-                wp = g.add_waypoint(pt(*q), alt, 450 * KPH, "STN" if k < len(remaining) - 1 else ("BASE" if land else "FLEET"))
+                wp = g.add_waypoint(pt(*q), alt, 450 * KPH, names_[k])
                 if k == len(remaining) - 1 and bomber:
                     if land and apt is not None:
                         wp.tasks.append(task.BombingRunway(airport_id=apt.id))
@@ -2748,9 +2815,13 @@ class MissionBuilder:
                         wp.tasks.append(task.Bombing(mapping.Vector2(dx, dy)))
                     elif cvg is not None and cls is planes.Tu_22M3:
                         wp.tasks.append(task.AttackGroup(cvg.id))
+            g.add_waypoint(pt(*egr_), alt, 450 * KPH, "EGR")
+            for k, q in enumerate(home_):
+                g.add_waypoint(pt(*q), alt, 450 * KPH, "RTB" if k == len(home_) - 1 else "AVD")
+            g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
             g.set_skill(skill)
-            if raid_late_ >= 30:
-                self._late(g, raid_late_)
+            if act_ >= 30:
+                self._late(g, act_)
             return g
 
         if land:
@@ -2765,11 +2836,19 @@ class MissionBuilder:
         if not load:
             self.warns.append(f"{ex.get('raider', 'Tu-22M3')}: no bomb or missile found; the raid is unarmed.")
         manifest.add("enemy_air", ex["bomber_wing"], names, raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
-                     raid_arrive_s=float(arrive + dist(sx_, sy_, dx, dy) / 232.0))
+                     raid_arrive_s=float(hit_s))
         self._spawn_raid_target(package, cvb, aim, dx, dy, manifest)
         if ex.get("escorts"):
             back = offset(sx, sy, bearing(remaining[0][0], remaining[0][1], sx, sy), 3 * NM)
-            eg = build_group("Raid Escort 1", getattr(planes, ex["escort_type"]), ex["escorts"], task.CAP, back)
+            eg = build_group("Raid Escort 1", getattr(planes, ex["escort_type"]), ex["escorts"], task.Escort, back)
+            # v0.41.29: the escorts stay with the bombers and fight only what comes within their class's reach of them (Su-27 25 nm, the rest
+            # 15 nm), up to the bombers' egress point; home once their air-to-air missiles are gone. No chasing.
+            esc_nm_ = A2A_ZONE_NM[ex["escort_type"] in RED_LONG_RANGE]
+            eg.points[0].tasks = [t_ for t_ in eg.points[0].tasks if getattr(t_, "Id", "") != "Escort"]      # pydcs's default escort task has no group
+            eg.points[0].tasks.insert(0, task.EscortTaskAction(group_id=g.id, engagement_max_dist=int(esc_nm_ * NM), lastwpt=len(g.points) - 1 - len(home_),
+                                                                targets=[task.Targets.All.Air.id], position={"x": -1000, "y": 300, "z": 500}))
+            rtbe_ = task.OptRTBOnOutOfAmmo(); rtbe_.params["action"]["params"]["value"] = AAM_WEAPONS
+            eg.points[0].tasks.append(rtbe_)
             eload = enemy_cap_loadout(ex["escort_type"])
             en = []
             for j, u in enumerate(eg.units, 1):
