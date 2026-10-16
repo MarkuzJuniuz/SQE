@@ -9,6 +9,18 @@
 
 * Wrote the contents of readme.md in my own words.
 
+**Raid scrambles are back (XO):** `RAID_SCRAMBLES` is on again, so an emergency can scramble you against a raid on a blue field.
+
+**Raid scrambles follow the TARCAP rules (blue side):** from XO's Kobuleti run, where the Eagles went to dogfight range and lost to Fulcrums, the raid hit about 10 minutes before the scramble's TOT, and the raided field had no defences.
+
+* **Station on our side of the SAMs:** the intercept station (40 nm out on the raid's bearing, 85 nm for the fleet) steps back toward the field until it is clear of red SAMs, the same rule as the support CAPs.
+* **Route bends round red SAMs** on the way out to the station, like a strike's. The orbit itself is left as it is.
+* **Engage circle, no chasing:** AI scramblers fight only inside a circle that takes in their station and the raided field (25 nm round the long-range shooters, 15 nm for the rest, larger where it has to reach both), moved or trimmed clear of red SAMs. They shoot at maximum range with the radar searching, and go home once their air-to-air missiles are gone.
+* **Raid timing:** a raid from a nearby field used to be placed at the start of its path and flown at once, so it arrived early. Now it starts late enough to cross the station about 1 to 2.5 minutes after the scramble's TOT.
+* **Raided field defended:** the field being raided now gets its base defences in the mission, even when nothing launches from it.
+* **Merge circle on the raided field:** packages whose targets are within the merge circle round the raided field (same time window) are folded in. A raid package is still never folded into someone else's mission.
+* Smoke test: a raid scramble may be offered while `RAID_SCRAMBLES` is on, and the flag is restored after the raid test (it used to be forced off). The raid build checks the raided field's defences and the intercept's engage circle.
+
 ## v0.41.27
 
 Only the job types that have been tuned are offered to you; the rest stay in the war, flown by the AI.

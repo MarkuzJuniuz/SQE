@@ -430,6 +430,16 @@ class Session:
         a = self.state.assets.get(p.objective.target_id)
         return (a.x, a.y) if a is not None else None
 
+    def _raid_xy(self, p: Package):
+        """v0.41.28: where a land raid is going (the raided field, or the supply site / garrison it is after). Only the centre of the merge circle
+        when you fly the intercept; a raid package itself is still never folded into anyone else's mission."""
+        if p.objective.type != ObjectiveType.FLEET_DEFENSE or not p.extra.get("land"):
+            return None
+        b = self.state.bases.get(p.objective.target_id)
+        if b is None:
+            return None
+        return tuple(p.extra.get("dest") or (b.x, b.y))
+
     def _near(self, a: Package, b: Package, R: float) -> bool:
         pa, pb = self._pkg_xy(a), self._pkg_xy(b)
         return pa is not None and pb is not None and math.hypot(pa[0] - pb[0], pa[1] - pb[1]) <= R
@@ -438,7 +448,7 @@ class Session:
         """The centre of the merge circle: your target, slid inward so the whole circle stays inside the box that holds every possible target
         (destroyed sites included, so it does not shrink as the war goes on). Your own target always stays inside the circle."""
         R = self.merge_radius_m() if R is None else R
-        t = self._pkg_xy(pkg)
+        t = self._pkg_xy(pkg) or self._raid_xy(pkg)
         if t is None:
             return None
         A = list(self.state.assets.values())
