@@ -338,7 +338,7 @@ def main():
         c_ = rs2.merge_center(p_)
         if c_ is None:
             continue
-        t_ = rs2._pkg_xy(p_)
+        t_ = rs2._pkg_xy(p_) or rs2._raid_xy(p_)          # v0.41.28: a land raid is centred on the raided field
         assert _m.hypot(t_[0] - c_[0], t_[1] - c_[1]) <= _R + 1, "your own target must stay inside the circle"
         for x_ in rs2.merge_candidates(p_):
             tx_ = rs2._pkg_xy(x_)
