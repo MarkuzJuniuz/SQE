@@ -94,7 +94,7 @@ contributed has not been checked. Possible fix, not built: a
 Whether that is wanted is XO's call (a CAP that stays on real fuel at the end of its time is also "more honest").
 
 ## 6. Scrambles and reactive spawns
-_verified v0.41.28 + PR #66, 2026-10-16 (read from the code, not run)_
+_verified v0.41.28 + PR #66, 2026-10-16 (read from the code, not run; the emergency-scramble paragraph also read from a test .miz)_
 
 Three kinds exist, all built in `mission_builder.py` (`_spawn_enemy`-style block near the red alert code, and `_spawn_reactive`), planned in `sqe/reactive.py`:
 - **Red alert pairs** (on the runway or ramp, `_alert_group`): a trigger zone round the field (`_field_zone`, `FIELD_DETECT_NM`) fires when blue is detected inside it; on CAS days a clock replaces the zone (friendly troops sit on the target). Route: the start, one `INTERCEPT` waypoint at the target with an orbit until TOT + 1 h. No SAM-bending, no cover circle; only `_limit_engage(g, enemy_cap_engage_nm)`.
@@ -103,6 +103,13 @@ Three kinds exist, all built in `mission_builder.py` (`_spawn_enemy`-style block
 - Red patrols (planned picture, `CAP1`/`CAP2`) are different: they have a station and a circle (`A2A_ZONE_NM`) like ours.
 
 **Gap (found 2026-10-16):** none of the three scramble kinds use the SAM rules (`avoid_circles`, `_zone_sams`, `_cover_circle`, `_clear_zone`). They fly a straight line to the target and orbit on it. For blue alert pairs that target can be inside a red SAM's reach. Raids by red bombers are separate (`raids.py` has `shy`, `PATRIOT_NM`, `HAWK_NM`).
+
+**Emergency raid scramble and merging (read 2026-10-16 from the code and XO's Kobuleti test .miz; the test ran with `RAID_SCRAMBLES = True` only):**
+- The emergency package is built directly in `_make_emergency` (engine.py) and never goes through `flyable()`, so `FLEET_DEFENSE` can stay in `AI_ONLY`; the one switch is `RAID_SCRAMBLES` (engine.py top).
+- Blue scramble flights have `CAP1` exactly on the raid's target, so they orbit over the base (inside SA-10 reach in the test; 6 of 7 blue losses went to the Sukhumi S-300).
+- Red raid groups (bombers and escorts) are placed in the AIR at t=0, about 93 km (50 nm) from the target, at 12,000 ft, 232 m/s, with waypoints start, STN, STN, BASE: no field spawn, no marshal, no TOT. Colt 3 / Dodge 3 are clock-activated (`c_time_after` 161 / 196 s); Viper alert pairs launch from the runway when the zone trigger fires (10 s in the test).
+- Nothing folds into a raid scramble: `_pkg_xy` returns None for `BARCAP` / `FLEET_DEFENSE`, so `merge_center` is None and `merge_candidates` returns []. Only a CAS emergency folds packages in (`lead_extras`). Taking the scramble sends the package you were tasked with to the war sim (`fly`, "left to the other squadrons"), or postpones it a day (`_postpone_if_short`).
+- Merge window for packages that do fold: from `merge_back_min` (default 15) minutes before to 30 minutes after the anchor's start, inside the 50 nm merge circle, at most six.
 
 ## 7b. How red picks targets (raids and the carrier)
 _verified v0.41.28 + PR #66, 2026-10-16 (read from the code, not run)_
