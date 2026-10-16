@@ -12,6 +12,10 @@ Status, plans and the watch list live in the claude.ai Project "Squadron Campaig
 Read the queue doc before starting work. Update it after each PR.
 If the session has no Project attached, ask XO to paste the queue doc. Don't guess the status.
 
+## Design notes
+`docs/DESIGN_NOTES.md` says where things live and how each flight class is built and tasked (waypoints, tasks, fuel). Read it before
+answering a "how does X work?" question, check the code it points to, and update it in the same PR when a change alters a behaviour it describes.
+
 ## Standing rules
 - Build only on **Opus 5.5 or higher**. Talking and planning on any model is fine.
 - XO merges PRs himself. You never merge. `main` needs a PR.
