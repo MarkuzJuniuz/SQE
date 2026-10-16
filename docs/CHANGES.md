@@ -1,3 +1,15 @@
+## v0.41.29
+
+**Red raids fly blue's shape and stop rushing in (red side):** XO wants raids that stop rushing to their deaths like RTS units.
+
+* **Marshal and TOT:** a raid now marshals on red's side and orbits there until it must push. The marshal is in a red SAM's cover along its way in and at least 60 nm from the target, or just off its own field if there's no such site. From there it flies PUSH (10 nm on), its ingress, and the target at its own TOT, which is 1 to 2.5 minutes after our intercept is on station, then on to the target. It shows up at most 10 minutes before it pushes. With no time to hold, it starts on its way in but never closer than 40 nm to the target, and arrives late rather than early.
+* **Ingress bends round blue's Patriot fields** (40 nm, every field with standing defences except the one it raids).
+* **Egress and home:** off target it turns 40 degrees off its way in, leaves 30 nm, and flies home round the Patriot fields. It goes home on bingo fuel.
+* **Escorts stay with the bombers:** a real escort task tied to the bomber group, fighting only what comes within reach (Su-27 25 nm, the rest 15 nm), up to the egress point. Home once out of air-to-air missiles. No chasing.
+* **Red long-range class = Su-27 only** (XO; the MiG-31 isn't in rotation). Red patrols engage inside 25 nm of their station for the Su-27, 15 nm for the rest. Every red patrol used 25 nm before.
+* The new distances (60 nm marshal, 40 nm minimum, 30 nm egress, 10 min hold) are judgment calls, not sourced.
+* Smoke test: the raid reaches its target after our intercept's TOT, has a PUSH and an egress, and its escorts fly an escort task. Red's long-range class is the Su-27.
+
 ## v0.41.28
 
 **GUI Changes (XO):**

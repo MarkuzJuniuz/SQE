@@ -886,6 +886,13 @@ def main():
     _rb28 = _st.bases[_st.pending["package_dict"]["objective"]["target_id"]]
     assert _rb28.kind.value != "AIRFIELD" or _rb28.defense < 0.15 or f"BASEDEF {_rb28.name}" in _mz, "the raided field has its defences"
     assert "EngageTargetsInZone" in _mz, "the raid intercept engages only inside its circle"
+    # v0.41.29: the raid flies blue's shape: it never hits before the intercept's TOT, egresses and goes home, and its escorts stay with it
+    _rg29 = next(g_ for g_ in s.manifest().groups if g_.get("raid_base"))
+    assert _rg29["raid_arrive_s"] >= _st.pending["timeline"]["tot_s"], "the raid reaches its target after our intercept is on station"
+    assert '"EGR"' in _mz and '"PUSH"' in _mz, "the raid has a PUSH and an egress"
+    assert ("RAID-E-1" not in _mz) or '"Escort"' in _mz, "raid escorts fly an escort task tied to the bombers"
+    from sqe.mission_builder import RED_LONG_RANGE as _RLR
+    assert _RLR == {"Su_27"}, "red's long-range class is the Su-27 only"
     _man = s.manifest(); _rg = next(g_ for g_ in _man.groups if g_.get("raid_base"))
     _base = _st.bases[_rg["raid_base"]]; _def0 = _base.defense
     _data = {"campaign": _st.campaign_id, "sortie": _st.sortie_counter, "package": _st.pending["package_dict"]["id"], "mission_ended": True,
