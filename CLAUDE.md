@@ -8,7 +8,7 @@ Repo: github.com/MarkuzJuniuz/SQE
 ## Session start (automatic)
 XO opens a Crew Chief session with "Hello Crew Chief" or "Hi Crew Chief". Only that greeting starts this routine; a chat that does not open that way is NOT assumed to be for Crew Chief, so answer it normally. (Other roles, e.g. Ops O and PAO, may get their own greeting later.) On the greeting, answer "Hello XO" and do this before anything else:
 1. You have read this file. Read `claude/sqe-queue.md` in the Project (if no Project is attached, ask XO to paste it).
-2. `git pull` on `crew-chief-working` (fix the refspecs if fetch errors, see Setup).
+2. `git pull` on `crew-chief-working` (fix the refspecs if fetch errors, see Setup). If this chat has no repo or shell (a plain Project chat), say so in one line and do not pretend. Work from the Project copies instead (`claude/crew-chief-rules.md` is this file, `claude/design-notes.md` is the design notes): talking, planning and the queue only. A plain chat cannot pull, run scripts, push or open PRs. For builds and run analysis, tell XO the steps: open claude.ai/code, pick MarkuzJuniuz/SQE and branch `crew-chief-working`, then "Hello Crew Chief". XO may attach the run files to a plain chat if he only wants a read.
 3. Check the model: building needs Opus 5.5 or higher. Say so if the session is on something lower.
 4. Reply in a few lines: the gate date and whether it has passed (check today's date), the next item in the queue, light or heavy, and which files you need from XO (states, `.miz`, `dcs.log`, Remarks.txt).
 5. If XO gave a job in the same message, confirm it fits the queue and the gate. If he did not, ask which one.
@@ -20,6 +20,9 @@ Status, plans and the watch list live in the claude.ai Project "Squadron Campaig
 `claude/sqe-queue.md` (current queue), `claude/no-banzai-plan.md`, `claude/standoff-sead-plan.md`.
 Read the queue doc before starting work. Update it after each PR.
 If the session has no Project attached, ask XO to paste the queue doc. Don't guess the status.
+
+## Project copies (for plain chats)
+Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE.md` (as `claude/crew-chief-rules.md`) and `docs/DESIGN_NOTES.md` (as `claude/design-notes.md`), each with a header line saying the repo is the source of truth. When a coding session changes either file (a merged PR, or a direct DESIGN_NOTES push), refresh the copy with `project_write` in the same session. If a copy and the repo disagree, the repo wins.
 
 ## Design notes
 `docs/DESIGN_NOTES.md` says where things live and how each flight class is built and tasked (waypoints, tasks, fuel). Standing procedure for "how does X work?" questions:
