@@ -16,7 +16,7 @@ from . import raids, redair
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import AI_ONLY, Ledger, NoPlayerSlot, Package, PackageBuilder
 
-RAID_SCRAMBLES = False      # v0.41.27: emergency raid scrambles are off while intercepts are AI-only (troops in contact stay)
+RAID_SCRAMBLES = True      # v0.41.27: emergency raid scrambles are off while intercepts are AI-only (troops in contact stay)
 from .scenario import new_campaign
 from . import theatres
 from .settings import AppSettings
