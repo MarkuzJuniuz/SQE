@@ -16,7 +16,7 @@ If the session has no Project attached, ask XO to paste the queue doc. Don't gue
 `docs/DESIGN_NOTES.md` says where things live and how each flight class is built and tasked (waypoints, tasks, fuel). Standing procedure for "how does X work?" questions:
 1. Read the doc first. 2. Cheap check: grep the function / variable the note names; if it still matches and the section's "verified" stamp is recent, answer from the doc.
 3. If the anchor is gone or changed, or the stamp is several versions old: read the code, answer from it, and correct or remove the note.
-4. Add what you learned to the doc. Fold doc fixes into the next code PR; open a docs-only PR only when a fix matters now. Update the "verified" stamp whenever you re-check a section.
+4. Add what you learned to the doc and update the section's "verified" stamp. XO's rule (2026-10-16): fixes to `docs/DESIGN_NOTES.md` alone are pushed directly to `crew-chief-working` (no PR). Anything else, code included, still goes through a PR.
 
 ## Standing rules
 - Build only on **Opus 5.5 or higher**. Talking and planning on any model is fine.
