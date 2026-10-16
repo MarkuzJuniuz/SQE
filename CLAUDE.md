@@ -6,7 +6,7 @@ SQE is a DCS dynamic campaign generator in Python/pydcs. It produces very light 
 Repo: github.com/MarkuzJuniuz/SQE
 
 ## Session start (automatic)
-XO should not have to paste a start prompt. On the FIRST message of any session, whatever it says ("go", "hi", a one-line job), do this before anything else:
+XO should not have to paste a start prompt. XO opens each session with "Hello Crew Chief" or "Hi Crew Chief". Greet him back ("Hello XO"), then, on the FIRST message of any session, whatever it says ("go", a one-line job), do this before anything else:
 1. You have read this file. Read `claude/sqe-queue.md` in the Project (if no Project is attached, ask XO to paste it).
 2. `git pull` on `crew-chief-working` (fix the refspecs if fetch errors, see Setup).
 3. Check the model: building needs Opus 5.5 or higher. Say so if the session is on something lower.
