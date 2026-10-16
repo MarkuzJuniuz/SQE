@@ -13,8 +13,10 @@ Read the queue doc before starting work. Update it after each PR.
 If the session has no Project attached, ask XO to paste the queue doc. Don't guess the status.
 
 ## Design notes
-`docs/DESIGN_NOTES.md` says where things live and how each flight class is built and tasked (waypoints, tasks, fuel). Read it before
-answering a "how does X work?" question, check the code it points to, and update it in the same PR when a change alters a behaviour it describes.
+`docs/DESIGN_NOTES.md` says where things live and how each flight class is built and tasked (waypoints, tasks, fuel). Standing procedure for "how does X work?" questions:
+1. Read the doc first. 2. Cheap check: grep the function / variable the note names; if it still matches and the section's "verified" stamp is recent, answer from the doc.
+3. If the anchor is gone or changed, or the stamp is several versions old: read the code, answer from it, and correct or remove the note.
+4. Add what you learned to the doc. Fold doc fixes into the next code PR; open a docs-only PR only when a fix matters now. Update the "verified" stamp whenever you re-check a section.
 
 ## Standing rules
 - Build only on **Opus 5.5 or higher**. Talking and planning on any model is fine.

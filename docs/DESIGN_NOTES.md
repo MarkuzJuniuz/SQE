@@ -6,7 +6,11 @@ it is what the code says it does. When a note says "check", verify before acting
 the notes name functions, variables and comments to search for. Keep this file current: when a PR changes
 one of these behaviours, change the note in the same PR.
 
+Procedure (also in CLAUDE.md): read this first, grep the anchor a note names, answer from the doc if it still matches and the stamp is recent; otherwise
+read the code, then correct the note and update its stamp. Stamps: `verified v0.41.28 + PR #65, 2026-10-16` unless a section says otherwise.
+
 ## 1. Where to look
+_verified v0.41.28 + PR #65, 2026-10-16_
 
 | Question | File | Search for |
 |---|---|---|
@@ -27,6 +31,7 @@ one of these behaviours, change the note in the same PR.
 | The unit cap | `sqe/mission_builder.py` | `max_units`, `_counts` |
 
 ## 2. How a flight is built (outline)
+_verified v0.41.28 + PR #65, 2026-10-16_
 
 1. `engine.py` plans the day: objectives, packages, flights (role, aircraft, base, tag).
 2. `mission_builder.py` builds each blue flight: waypoints (`plan_route` or the support-CAP branch), times
@@ -37,6 +42,7 @@ one of these behaviours, change the note in the same PR.
    `SQE_RECOVER`; carrier flights are recovered `CV_RECOVER_NM` out; the player lands for real.
 
 ## 3. Flight classes: waypoints and tasks
+_verified v0.41.28 + PR #65, 2026-10-16_
 
 Roles (`sqe/models.py`): CAS, CAP, SWEEP, ESCORT, SEAD, STRIKE. Names are confusing, so note the mapping in `plan_route`:
 - **ESCORT role = TARCAP** (a station short of the target).
@@ -60,6 +66,7 @@ Roles (`sqe/models.py`): CAS, CAP, SWEEP, ESCORT, SEAD, STRIKE. Names are confus
 Common to every blue AI flight: `OptRTBOnBingoFuel(True)` on `points[0]`.
 
 ## 4. The fuel model
+_verified v0.41.28 + PR #65, 2026-10-16_
 
 - Setting `ai_unlimited_fuel` (default True): "Retribution-style", unlimited until the push, real over the combat leg,
   unlimited again from egress.
@@ -70,6 +77,7 @@ Common to every blue AI flight: `OptRTBOnBingoFuel(True)` on `points[0]`.
 - `past_push`: for a flight already underway (an earlier package folded in; `in_progress`), the start is real fuel.
 
 ## 5. Questions answered so far
+_verified v0.41.28 + PR #65, 2026-10-16_
 
 **Which classes set their waypoint actions?** See section 3. Actions come from `plan_route` (`routes.py`): `HOLD` (MSHL),
 `CAPORBIT` (CAP1), `TARCAP` / `ESCORT` / `SWEEPSTN` / `SWEEP` (stations), `BOMB`, `SEAD`, `JSOW`, `CAS` (attack points).
