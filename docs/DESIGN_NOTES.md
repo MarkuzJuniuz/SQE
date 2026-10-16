@@ -93,7 +93,18 @@ contributed has not been checked. Possible fix, not built: a
 `SetUnlimitedFuelCommand(True)` on the first waypoint after the station (or the RCV point) for classes with no EGR.
 Whether that is wanted is XO's call (a CAP that stays on real fuel at the end of its time is also "more honest").
 
-## 6. Verify before trusting
+## 6. Scrambles and reactive spawns
+_verified v0.41.28 + PR #66, 2026-10-16 (read from the code, not run)_
+
+Three kinds exist, all built in `mission_builder.py` (`_spawn_enemy`-style block near the red alert code, and `_spawn_reactive`), planned in `sqe/reactive.py`:
+- **Red alert pairs** (on the runway or ramp, `_alert_group`): a trigger zone round the field (`_field_zone`, `FIELD_DETECT_NM`) fires when blue is detected inside it; on CAS days a clock replaces the zone (friendly troops sit on the target). Route: the start, one `INTERCEPT` waypoint at the target with an orbit until TOT + 1 h. No SAM-bending, no cover circle; only `_limit_engage(g, enemy_cap_engage_nm)`.
+- **Red reinforcements** ("Reinforce k"): the same shape, plus a random delay; `reactive.plan_red` picks fields within the type's `INTERCEPT_NM`, held to a ratio of blue fighters.
+- **Blue alert pairs** (`reactive.blue_sources`, carrier or field): trigger zone of 120 nm round the target (fleet / raid objectives) or a clock for other targets; route: one `CAP` waypoint AT the target (or the raid target) with an orbit for `cap_minutes`, engage limit `friendly_cap_engage_nm`, then land or RTB.
+- Red patrols (planned picture, `CAP1`/`CAP2`) are different: they have a station and a circle (`A2A_ZONE_NM`) like ours.
+
+**Gap (found 2026-10-16):** none of the three scramble kinds use the SAM rules (`avoid_circles`, `_zone_sams`, `_cover_circle`, `_clear_zone`). They fly a straight line to the target and orbit on it. For blue alert pairs that target can be inside a red SAM's reach. Raids by red bombers are separate (`raids.py` has `shy`, `PATRIOT_NM`, `HAWK_NM`).
+
+## 7. Verify before trusting
 
 - All of the above is from reading the code. No DCS run was used to confirm each behaviour.
 - The old DCS behaviour of `SetUnlimitedFuelCommand` on a group with a human is not checked here; the player's own group
