@@ -65,6 +65,7 @@ Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE
 - Python venv: `/home/claude/venv` (3.13); a 3.12 venv at `/home/claude/v312` matches CI.
 - Smoke test: `python tools/smoke_test.py` (takes a few minutes). A crash or abort after "SMOKE TEST PASSED" is a known pydcs/venv teardown issue, not a failure.
 - Remote refspecs sometimes break after branches are deleted. If `git fetch` errors, reset `remote.origin.fetch` to main and crew-chief-working.
+- Check `git remote -v` early in a session. `origin` has silently pointed at a stale, lowercase redirect URL (`https://github.com/MarkuzJuniuz/sqe`) that `git fetch` accepts with no error but doesn't reflect recent pushes — `git log origin/crew-chief-working` then looks weeks stale (missing merged PRs) even though the real repo (`https://github.com/MarkuzJuniuz/SQE`, capital SQE) is current. This looked exactly like crew-chief-working had been reset/force-pushed backward (2026-10-16) and wasn't; it was the remote URL. If `origin/crew-chief-working` looks behind what you remember merging, run `git remote set-url origin https://github.com/MarkuzJuniuz/SQE.git`, re-check `remote.origin.fetch` per the line above, `git fetch origin`, and look again before telling XO anything got lost.
 - The GitHub CI smoke check fails on GitHub only and is dropped for now (refactor-week item).
 
 ## Code map
