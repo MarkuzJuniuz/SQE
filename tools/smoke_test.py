@@ -338,7 +338,7 @@ def main():
         c_ = rs2.merge_center(p_)
         if c_ is None:
             continue
-        t_ = rs2._pkg_xy(p_)
+        t_ = rs2._pkg_xy(p_) or rs2._raid_xy(p_)          # v0.41.28: a land raid is centred on the raided field
         assert _m.hypot(t_[0] - c_[0], t_[1] - c_[1]) <= _R + 1, "your own target must stay inside the circle"
         for x_ in rs2.merge_candidates(p_):
             tx_ = rs2._pkg_xy(x_)
@@ -819,14 +819,15 @@ def main():
             for _scr in (True, False):
                 s.new(f"Emerg {_ac}{_scr}", _ac, _lv, seed=_seed); _st = s.state
                 _p = None
-                for _day in range(10):                         # v0.41.27: only troops in contact now (raid scrambles are off): find a day with one
+                import sqe.engine as _eng
+                for _day in range(10):                         # v0.41.28: troops in contact, and raids while RAID_SCRAMBLES is on: find a day with one
                     _p = next((p_ for p_ in s.packages() if s.flyable(p_) and s.emergency_for(p_.number, None)), None)
                     if _p:
                         break
                     _st.day += 1; s.plan_day()
                 if _p is None:
                     continue
-                _ev = s.emergency_for(_p.number, None); assert _ev["kind"] == "CAS" and _ev["title"] and _ev["text"], "only troops in contact for now"
+                _ev = s.emergency_for(_p.number, None); assert _ev["kind"] in (("CAS", "RAID") if _eng.RAID_SCRAMBLES else ("CAS",)) and _ev["title"] and _ev["text"], "a raid scramble only while RAID_SCRAMBLES is on"
                 _res = s.fly(_p.number, None, scramble=_scr)
                 assert _st.pending and _res.counts["units"] > 0
                 if _scr and _ev["eligible"]:
@@ -856,7 +857,7 @@ def main():
     # v0.41.27: raid intercepts are AI-only for now; the build itself is still tested (it comes back), with the AI-only list lifted here
     import sqe.engine as _eng27
     _aio27, _eng27.AI_ONLY = _eng27.AI_ONLY, ()
-    _eng27.RAID_SCRAMBLES = True
+    _rs27, _eng27.RAID_SCRAMBLES = _eng27.RAID_SCRAMBLES, True
     s.new("Raid build", "F-16C", 2, seed=4); _st = s.state
     _rp = None
     for _day in range(10):
@@ -881,6 +882,46 @@ def main():
         s.fly(_rp.number, None)
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
     assert ("Su-24M" in _mz or "Su-25" in _mz) and "RAID-B-1" in _mz, "the raiders are in the mission"
+    # v0.41.32: a raid scramble you fly for real (not the AI test) builds your own route, trailing DIVERT/TKR/BULLS steerpoints included;
+    # the ME refuses a point with both speed and time unlocked that no locked-time point follows ("Viper 2: Waypoint 8 ...")
+    from dcs import lua as _lua31
+    _Mr31 = _lua31.loads(_mz)["mission"]
+    _pg31 = next(g_ for co_ in _Mr31["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
+                 if any(u_.get("skill") in ("Player", "Client") for u_ in g_["units"].values()))
+    _pts31 = [_pg31["route"]["points"][k_] for k_ in sorted(_pg31["route"]["points"].keys())]
+    _lk31 = [i_ for i_, p_ in enumerate(_pts31) if p_.get("ETA_locked")]                 # a both-unlocked point is fine if locked-time points bracket it (e.g. MSHL, between TakeOff and PUSH)
+    _bad31 = [i_ + 1 for i_, p_ in enumerate(_pts31) if not p_.get("ETA_locked") and not p_.get("speed_locked")
+              and not (any(j_ < i_ for j_ in _lk31) and any(j_ > i_ for j_ in _lk31))]
+    assert not _bad31, ("a player waypoint has both speed and time unlocked with no locked-time point on each side", _pg31["name"], _bad31)
+    # v0.41.28: the raided field is built with its defences, and the AI intercept engages only inside a circle (TARCAP rules)
+    _rb28 = _st.bases[_st.pending["package_dict"]["objective"]["target_id"]]
+    assert _rb28.kind.value != "AIRFIELD" or _rb28.defense < 0.15 or f"BASEDEF {_rb28.name}" in _mz, "the raided field has its defences"
+    assert _rb28.kind.value != "AIRFIELD" or _rb28.defense < 0.6 or f"BASEDEF {_rb28.name} HAWK" in _mz, "every full-strength field has a HAWK, not only yours"
+    # v0.41.30: the war sim counts the batteries: same raid, a field with its full air defence is likelier to stop it than one with none
+    from sqe import sams as _sm30
+    _f30 = next(b_ for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD")
+    _d30 = _f30.defense; _f30.defense = 1.0; _a30 = _sm30.covering_ad(_st, _f30.x, _f30.y); _f30.defense = 0.0
+    _b30 = max([_sm30.air_defence(b_) for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD" and b_ is not _f30 and ((b_.x - _f30.x) ** 2 + (b_.y - _f30.y) ** 2) ** 0.5 <= 40 * 1852] + [0.0])
+    _c30 = _sm30.covering_ad(_st, _f30.x, _f30.y); _f30.defense = _d30
+    assert _a30 == 1.0 and _c30 == _b30, ("a field's batteries cover it; a fallen field only by its neighbours", _a30, _c30, _b30)
+    assert "EngageTargetsInZone" in _mz, "the raid intercept engages only inside its circle"
+    # v0.41.29: the raid flies blue's shape: it never hits before the intercept's TOT, egresses and goes home, and its escorts stay with it
+    _rg29 = next(g_ for g_ in s.manifest().groups if g_.get("raid_base"))
+    assert _rg29["raid_arrive_s"] >= _st.pending["timeline"]["tot_s"], "the raid reaches its target after our intercept is on station"
+    assert '"EGR"' in _mz and '"PUSH"' in _mz, "the raid has a PUSH and an egress"
+    assert ("RAID-E-1" not in _mz) or '"Escort"' in _mz, "raid escorts fly an escort task tied to the bombers"
+    # v0.41.31: a raid's route bends round the carrier group (FLEET_RAID_AVOID_NM), and red's target pick shies from it like a Patriot field
+    from sqe.mission_builder import MissionBuilder as _MB31, FLEET_RAID_AVOID_NM as _FR31
+    _cv31 = next((b_ for b_ in _st.bases.values() if b_.kind.value == "CARRIER"), None)
+    if _cv31 is not None:
+        _mb31 = _MB31.__new__(_MB31); _mb31.state = _st
+        _rf31 = next(b_ for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD")
+        _p31 = _mb31._raid_bend([(_cv31.x - 150 * 1852, _cv31.y - 30 * 1852), (_cv31.x + 150 * 1852, _cv31.y - 30 * 1852)], _rf31)   # 30 nm off the boat, sea side
+        _seg = lambda a_, b_: min(((a_[0] + (b_[0] - a_[0]) * t_ / 50 - _cv31.x) ** 2 + (a_[1] + (b_[1] - a_[1]) * t_ / 50 - _cv31.y) ** 2) ** 0.5 for t_ in range(51))
+        assert len(_p31) > 2 and min(_seg(_p31[i_], _p31[i_ + 1]) for i_ in range(len(_p31) - 1)) >= (_FR31 - 1) * 1852, "a raid goes round the carrier group"
+        assert _rd.FLEET_NM == _FR31
+    from sqe.mission_builder import RED_LONG_RANGE as _RLR
+    assert _RLR == {"Su_27"}, "red's long-range class is the Su-27 only"
     _man = s.manifest(); _rg = next(g_ for g_ in _man.groups if g_.get("raid_base"))
     _base = _st.bases[_rg["raid_base"]]; _def0 = _base.defense
     _data = {"campaign": _st.campaign_id, "sortie": _st.sortie_counter, "package": _st.pending["package_dict"]["id"], "mission_ended": True,
@@ -892,7 +933,7 @@ def main():
     _rt = _CS.from_dict(_st.to_dict()); assert _rt.raids == _st.raids
     _o = _st.to_dict(); _o.pop("raids"); assert _CS.from_dict(_o).raids == {}
     _eng27.AI_ONLY = _aio27
-    _eng27.RAID_SCRAMBLES = False
+    _eng27.RAID_SCRAMBLES = _rs27
     print("[raids] announced and surprise raids by level, repeatable emergencies (about 9% a sortie, never two in a row), scramble / stay, CAS folded in, postponement, Su-24M raid built and applied, overnight surprises")
     # alert pairs have a dispatch range like the enemy's reinforcements
     from sqe import reactive as _rv
@@ -1107,6 +1148,13 @@ def main():
     for sd_ in range(1, 20):
         _ws = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="off", flight_filter="all"))
         _ws.new("Sweep", "F-15C", 3, seed=sd_)
+        # v0.41.33: a sweep goes only after red air out in the open; on day one red's patrols sit over their SAMs, so take the
+        # medium / long-range SAMs down (as SEAD / DEAD would) and plan the day again
+        for a_ in _ws.state.assets.values():
+            if a_.kind.value == "SAM" and a_.variant in ("SA-10", "SA-11", "SA-2"):
+                a_.health = 0.0
+        _ws.state.red_air = {}
+        _ws.plan_day()
         _swp = [p_ for p_ in _ws.packages() if _isw(p_.objective)]
         if _swp and any(_ws.flyable(p_) for p_ in _swp):
             _sw = next(p_ for p_ in _swp if _ws.flyable(p_)); break
@@ -1137,17 +1185,23 @@ def main():
         if not f_.is_player:
             _o0w = {t_["params"]["action"]["params"]["name"]: t_["params"]["action"]["params"].get("value") for t_ in list(_gw[f_.callsign]["route"]["points"].values())[0]["task"]["params"]["tasks"].values() if t_.get("params", {}).get("action", {}).get("id") == "Option"}
             assert _o0w.get(10) == _aamw, (f_.callsign, "a sweep goes home when its air-to-air missiles are gone")
-    # v0.41.13: the sweep's station sits inside the nearest enemy field's scramble circle (or as far in as it can while clear of SAMs), 35 nm from any SA-10
-    from sqe import threatmap as _tm13
+    # v0.41.33 (XO 2026-10-16): no baiting. The sweep goes after a known red flight out in the open (red's own air plan), from a station
+    # short of it and clear of SAMs by the sweep's margins (45 nm from an SA-10, 20 nm outside other rings), within reach of it
+    from sqe import sweep as _swm
+    _vs33 = _sw.extra.get("sweep_vs")
+    assert _vs33 and any(f_["id"] == _vs33["id"] for f_ in _ws.state.red_air["flights"]), ("the sweep names the red flight it goes after", _vs33)
+    assert _swm.in_open(_ws.state, _vs33["x"], _vs33["y"]), "the red flight a sweep goes after is out of SAM reach"
     _sx13 = next(g_ for n_, g_ in _gw.items() if n_ == _sw.flights[0].callsign)
     _stp = next(p_ for p_ in _sx13["route"]["points"].values() if p_.get("name") == "TGT")
-    _sa13 = [a_ for a_ in _ws.state.assets.values() if a_.variant in _tm13.UMBRELLA_VARIANTS and not a_.destroyed and a_.health > 0.25]
-    assert all(_m3j.hypot(_stp["x"] - a_.x, _stp["y"] - a_.y) / 1852 >= 34.5 for a_ in _sa13), "the sweep station is 35 nm from every SA-10"
-    _fb13 = min(_tm13.fighter_bases(_ws.state), key=lambda e_: _m3j.hypot(e_[0] - _stp["x"], e_[1] - _stp["y"]))
-    _t13 = _ws.state.assets[_sw.objective.target_id]
-    _dfld = _m3j.hypot(_fb13[0] - _stp["x"], _fb13[1] - _stp["y"]) / 1852
-    assert _dfld <= _tm13.field_detect_nm(_fb13, (_t13.x, _t13.y), _ws.state), ("the sweep orbits inside the nearest field's scramble circle", round(_dfld))
-    print(f"[sweep] station {_dfld:.0f} nm from the nearest enemy field (its scramble circle {_tm13.field_detect_nm(_fb13, (_t13.x, _t13.y), _ws.state):.0f} nm), clear of SA-10s")
+    assert _swm.clear_for_sweep(_ws.state, _stp["x"], _stp["y"]), "the sweep station is clear of SAMs by the sweep's margins"
+    _dvs = _m3j.hypot(_vs33["x"] - _stp["x"], _vs33["y"] - _stp["y"]) / 1852
+    assert _dvs <= _swm.REACH_NM + 5, ("the sweep station is within reach of the red flight", round(_dvs))
+    # and a sweep is never planned against red air that is under SAM cover (every sweep in every day's plan above)
+    for p_ in _ws.packages():
+        if _isw(p_.objective):
+            _v_ = p_.extra.get("sweep_vs")
+            assert _v_ and _swm.in_open(_ws.state, _v_["x"], _v_["y"]), ("a sweep only against red air in the open", p_.number)
+    print(f"[sweep] goes after red {_vs33['kind']} {_vs33['id']} in the open; station {_dvs:.0f} nm short of it, clear of SAMs by the sweep margins")
     assert "Fighter Sweep" in _ws.last_build.text["situation"], "the sweep briefing"
     _st5 = CampaignState.from_dict(_ws.state.to_dict()); _h5 = _st5.assets[_sw.objective.target_id].health
     _air5 = sum(w_.available for w_ in _st5.enemy_air)
@@ -1386,6 +1440,11 @@ def main():
     if _hb7.defense >= 0.6:
         assert any(n_ == f"BASEDEF {_hb7.name} AAA 2" for n_ in _bv), "a full-strength field has short-range sites on both sides"
         assert any(n_ == f"BASEDEF {_hb7.name} HAWK" for n_ in _bv), "your home field has a HAWK battery"
+        # v0.41.30: doctrinal batteries at every field: 8 Patriot launchers (FM 44-85), a HAWK with 6 launchers and 2 trackers
+        _pl30 = sum(1 for u_ in _pat[0]["units"].values() if u_["type"] == "Patriot ln")
+        _hk30 = next(g_ for n_, g_ in _bv.items() if n_ == f"BASEDEF {_hb7.name} HAWK")
+        assert _pl30 == 8 and sum(1 for u_ in _hk30["units"].values() if u_["type"] == "Hawk ln") == 6 \
+            and sum(1 for u_ in _hk30["units"].values() if u_["type"] == "Hawk tr") == 2, ("doctrinal Patriot and HAWK batteries", _pl30)
     _pl7 = {g_["name"]: g_ for co_ in _M4["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()}
     _tags7 = {f_.tag: f_ for f_ in _pu.flights if f_.tag}
     assert "TNKCAP" in _tags7, ("the tanker has its own CAP", sorted(_tags7))
@@ -1399,6 +1458,11 @@ def main():
     _tnk_g = _pl7[_tags7["TNKCAP"].callsign]
     _tn0 = list(_tnk_g["route"]["points"].values())[0]
     assert _m.hypot(_tn0["x"] - _tcx, _tn0["y"] - _tcy) / 1852 <= 8, "the tanker CAP orbits on the tanker"
+    # v0.41.35: no support CAP is weapons free (option 0 = 0): it engages anything in contact, over its circle (XO's runs 2026-10-16/17)
+    for t7_, f7_ in _tags7.items():
+        _roe7 = [t_["params"]["action"]["params"]["value"] for p_ in _pl7[f7_.callsign]["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()
+                 if t_.get("id") == "WrappedAction" and t_["params"]["action"].get("id") == "Option" and t_["params"]["action"]["params"].get("name") == 0]
+        assert 0 not in _roe7, ("a support CAP is weapons free", t7_, _roe7)
     if "HAVCAP" in _tags7:
         _aw7 = next(g_ for g_ in _pl7.values() if any(t_.get("id") == "AWACS" for p_ in g_["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()))
         _hv0 = list(_pl7[_tags7["HAVCAP"].callsign]["route"]["points"].values())[0]
@@ -1453,6 +1517,25 @@ def main():
     _hk17 = _zf.ZipFile(_ss.state.pending["miz"]).read("l10n/DEFAULT/dictionary").decode("utf-8", "ignore") if False else _zf.ZipFile(_ss.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
     assert _rc17 >= 1 and "function SQE_RECOVER" in _hk17, ("carrier AI flights are recovered at 10 nm by the hook", _rc17)
     print(f"[cv recover] {_rc17} carrier AI flights recovered 10 nm from the boat instead of joining the deck queue")
+    # v0.41.34: every support CAP (route with CAP1) has a pull-back entry in the hook: centred on its engage circle, radius = circle + the margin,
+    # and the route it gets again starts at CAP1 with the engage circle on it
+    import re as _re34
+    from sqe.mission_builder import PULLBACK_MARGIN_NM as _pbm
+    _code34 = next(a_["text"] for tr_ in _M4["trigrules"].values() for a_ in tr_["actions"].values() if isinstance(a_.get("text"), str) and "local PULL" in a_["text"])
+    _pull34 = {m_[0]: (float(m_[1]), float(m_[2]), float(m_[3])) for m_ in _re34.findall(r'\{ g="([^"]+)", x=(-?[\d.]+), z=(-?[\d.]+), r=(\d+), stop=', _code34)}
+    _sc34 = 0
+    for co_ in _M4["coalition"]["blue"]["country"].values():
+        for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
+            _pp34 = [g_["route"]["points"][k_] for k_ in sorted(g_["route"]["points"])]
+            if "CAP1" not in [p_.get("name") for p_ in _pp34]:
+                continue
+            _z34 = next(t_["params"] for t_ in _pp34[0]["task"]["params"]["tasks"].values() if t_.get("id") == "EngageTargetsInZone")
+            assert g_["name"] in _pull34, ("a support CAP without a pull-back entry", g_["name"])
+            _x34, _y34, _r34 = _pull34[g_["name"]]
+            assert abs(_x34 - _z34["x"]) < 1 and abs(_y34 - _z34["y"]) < 1 and abs(_r34 - (_z34["zoneRadius"] + _pbm * 1852)) < 2, ("pull-back circle", g_["name"], _r34, _z34)
+            _sc34 += 1
+    assert _sc34 >= 1 and "EngageTargetsInZone" in _code34.split("local PULL", 1)[1].split("local function hasAAM", 1)[0], "the pull-back route carries the engage circle"
+    print(f"[cap pull-back] {_sc34} support CAPs are pulled back to their orbit beyond their engage circle + {_pbm} nm")
     _off4 = abs((_brg["JSOW"] - _brg["SEAD"] + 180) % 360 - 180)
     _eg4, _hs4 = {}, []
     for co_ in _M4["coalition"]["blue"]["country"].values():

@@ -1,13 +1,89 @@
+## v0.41.35
+
+**Tanker CAP no longer weapons free.** In all three of XO's runs of 2026-10-16/17 the chasing support CAP was the tanker CAP, the only one with an explicit weapons-free ROE (v0.41.26, to make it shoot first). Weapons free means "engage any enemy group in contact" (Mission Editor docs, quoted on the DCS forum), which overrides the engage circle. In the third run the v0.41.34 pull-back fired twice (35 and 55 nm out) and Viper 1 kept going to 68 nm, firing at an Su-27 101 nm from its station, until the Sukhumi S-300 killed both jets: the ROE option outlives a new route. The base CAP, HAVCAP and carrier CAP use the default ROE and stayed home. Now the tanker CAP uses the default too; it keeps continuous radar search and maximum-range shots. Cost: it may shoot first a little less eagerly. The pull-back stays as a backstop. Smoke test: no support CAP is weapons free. Evidence is three runs pointing the same way, not proof.
+
+## v0.41.34
+
+**Support CAPs are pulled back when they chase out of their circle.** In XO's two runs of 2026-10-16 the tanker CAP left its engage circle (37 nm in one, 25 nm in the other after XO lowered the friendly CAP engage setting) and ran 50 to 78 nm out after red fighters, into the Sukhumi S-300, which killed both jets each time. DCS's engage-in-zone circle chooses targets but does not hold a flight once it is chasing one, so lowering the setting did not help.
+
+* **Backstop in the mission's Lua hook:** every 10 s, a support CAP (tanker CAP, HAVCAP, base CAP, carrier CAP) whose lead is further than its engage circle plus 10 nm (`PULLBACK_MARGIN_NM`) from the circle's centre gets its own route again from its first orbit point, with its engage circle. That drops the chase. It is then left alone for 2 min. Not pulled: a flight out of air-to-air missiles or below 25% fuel (`PULLBACK_BINGO`, it is going home), or past the end of its time on station.
+* **The CAP engage settings keep their job:** the friendly setting still sets the circle (the smaller of the setting and each CAP's own figure), and the pull-back line follows it. The enemy setting is not touched. Recommended to XO: both back to the 50 nm default (25 nm only shrank the tanker CAP's circle and did not stop the chase).
+* **Logged:** each pull-back is written to the results file (`pulls`: group, time, how far out, the limit).
+* The 10 nm margin and the 25% fuel are judgment calls, not sourced. Untested in DCS so far: whether the AI takes the new route in the middle of a fight (it should: a new route replaces the current task).
+* **Fixed (v0.41.33's sweep):** the builder's station search from the sweep's PUSH point can find no clear spot; it then backed out toward home like the old sweep (a smoke run put one 108 nm short of its red flight). The planner now stores the station it checked, and the builder uses it in that case.
+* **Smoke test:** every support CAP has a pull-back entry centred on its engage circle, at the circle plus the margin, and the route it gets carries the engage circle.
+
+## v0.41.33
+
+**Fighter Sweep: hunts known enemy air out in the open, no more baiting (XO 2026-10-16).** XO's run (Viper 1, AI only) lost two F-15Cs of the sweep Dodge 2 to the Sukhumi S-300 in the first 95 seconds: the sweep was spawned on a station 37 nm from the site (clear by the old 35 nm rule) at 30,000 ft and was shot at from 34 nm. v0.41.13 had put the station inside the nearest red field's scramble circle, at the very edge of SAM reach, to pull red up.
+
+* **Dispatch:** command sends a sweep only against a known red flight from red's own air plan for the day (a patrol pair or a red sweep) within 80 nm of the area, out in the open (12 nm outside every medium / long-range SAM's reach), with a SAM-clear station short of it, and up in the sweep's window (10 min before to 60 min after the first covered package). Otherwise no sweep: the packages' TARCAP and escorts carry the fight. The package names the flight it goes after (`extra["sweep_vs"]`).
+* **Station:** 20 nm short of that red flight, on its line toward the sweep's home (or swung up to 60 deg off it), 45 nm from every SA-10 and 20 nm outside every other SAM ring, outside red's scramble circles where it can be. The fight circle takes in both stations as far as it stays clear of SAMs. New module `sqe/sweep.py`.
+* **What it does to the campaign:** red's patrols sit over the SAMs they guard and red's sweeps sit at the S-300's edge, so on day one no sweep flies at Normal or Hard. Measured on 10 campaigns: Hard gets 9 sweeps once the SA-10s are down; Normal gets 8 once the SA-10s, SA-11s and SA-2s are down. XO: rare on Hard is fine.
+* **Doctrine:** AFDP 3-01 (Counterair) defines the sweep as an offensive mission "to seek out and destroy enemy aircraft" whose need "will depend on the air and missile threat": supports the trigger. Keeping the sweep out of SAM reach is not doctrine: a judgment call from XO's runs (DCS AI fighters do not evade SAMs). The 45 / 20 / 12 / 20 nm figures are judgment calls (the 45 from the 34 nm S-300 shot), tunable in `sqe/sweep.py`.
+* **Smoke test:** the sweep check now takes the medium / long-range SAMs down first (as SEAD / DEAD would) and checks that every sweep names a red flight in the open, its station is clear by the sweep margins and within reach of that flight.
+
+## v0.41.32
+
+**Fixed: DCS refused to save a mission ("Viper 2: Waypoint 8 have both unlocked speed and time and not surrounded by waypoints with locked time!").**
+
+* **Cause:** `_spawn_flight` forced the player's landing waypoint speed free ("so it never closes a locked-speed run"), a leftover from a different, already-fixed Mission Editor rule (v0.41.2). `_trailing_steerpoints` then appends the DIVERT/TKR/BULLS reference points after landing, none of them time-locked — so the landing point was never followed by a time-locked waypoint and broke the mirror rule: a point with both speed and time unlocked needs a locked-time point on each side. Reproduced on every player flight that gets the trailing steerpoints (not just raid scrambles).
+* **Fix:** stopped forcing the landing point's speed free (`land_at()` already leaves it locked, which is safe). `_free_locked_speeds` now also walks the tail after the last time-locked waypoint and locks the speed of any point that would otherwise be both-unlocked, so the rule holds even if more trailing points are added later.
+* **Smoke test:** the raid-scramble build (a real player flight, not the AI test) now checks every player waypoint against both ME rules (`_bad31` check). Caught nothing further.
+* XO's quick ME workaround for an already-generated mission (lock the named waypoint's speed or time, then save) still works and is no longer needed on new builds.
+
+## v0.41.31
+
+**Red raids keep clear of the carrier group:** a red raid's ingress and way home now bend round the fleet as well as round blue's Patriot fields, keeping 70 nm from the carrier unless the fleet is what it is raiding. Red's target pick (Normal / Hard doctrine) also shies from targets inside that circle. The 70 nm is measured: in XO's runs the cruiser's SM-2s killed CAP pairs 51 to 67 nm out. Smoke test: a raid leg through the fleet is bent round it.
+
+## v0.41.30
+
+**Blue air defence at doctrinal strength, every field alike (XO: "all bases are important"):**
+
+* **Every blue airfield built in a mission gets the full set:** a Patriot fire unit with 8 launchers (was 3), a HAWK battery with 6 launchers and 2 tracking radars (was 3 launchers and 1 tracker, and only at your home field), and both AAA sites. Sources: FM 44-85 App. B (Patriot fire unit = 1 radar, 1 ECS, 1 power plant, 1 antenna mast group, 8 launching stations) and the Phase III HAWK battery (6 launchers, 2 HIPIR). A damaged field (defense 0.15-0.6) keeps a reduced Patriot (launchers by its defence) and one AAA site, with no HAWK. Below 0.15 nothing stands, as before.
+* **The war sim counts the batteries:**
+  * An unflown raid on a blue target is fought by the batteries that cover it, worth up to 4 fighters for a full Patriot + HAWK.
+  * Surprise raids are stopped more often under a full battery (up to 95%), and lose more jets when they are.
+  * A raid that gets through still loses an extra jet to a full battery, and does less damage to the field.
+* **Red's raids shy from every full field's HAWK**, not only yours (Normal / Hard doctrine, as before).
+* All the numbers live in `sqe/sams.py`. The thresholds and the sim weights are judgment calls; the launcher counts are the doctrine.
+* Not tested yet: whether more launchers raise the Patriot's fire rate in DCS, or only the missiles on the rails. Count the shots in the next raid.
+* Smoke test: the doctrinal launcher counts, a HAWK at every full-strength field, and the war sim's battery cover.
+
+## v0.41.29
+
+**Red raids fly blue's shape and stop rushing in (red side):** XO wants raids that stop rushing to their deaths like RTS units.
+
+* **Marshal and TOT:** a raid now marshals on red's side and orbits there until it must push. The marshal is in a red SAM's cover along its way in and at least 60 nm from the target, or just off its own field if there's no such site. From there it flies PUSH (10 nm on), its ingress, and the target at its own TOT, which is 1 to 2.5 minutes after our intercept is on station, then on to the target. It shows up at most 10 minutes before it pushes. With no time to hold, it starts on its way in but never closer than 40 nm to the target, and arrives late rather than early.
+* **Ingress bends round blue's Patriot fields** (40 nm, every field with standing defences except the one it raids).
+* **Egress and home:** off target it turns 40 degrees off its way in, leaves 30 nm, and flies home round the Patriot fields. It goes home on bingo fuel.
+* **Escorts stay with the bombers:** a real escort task tied to the bomber group, fighting only what comes within reach (Su-27 25 nm, the rest 15 nm), up to the egress point. Home once out of air-to-air missiles. No chasing.
+* **Red long-range class = Su-27 only** (XO; the MiG-31 isn't in rotation). Red patrols engage inside 25 nm of their station for the Su-27, 15 nm for the rest. Every red patrol used 25 nm before.
+* The new distances (60 nm marshal, 40 nm minimum, 30 nm egress, 10 min hold) are judgment calls, not sourced.
+* Smoke test: the raid reaches its target after our intercept's TOT, has a PUSH and an egress, and its escorts fly an escort task. Red's long-range class is the Su-27.
+
 ## v0.41.28
 
-** GUI Changes (XO): **
+**GUI Changes (XO):**
 
 * Removed the text 'untested in the cockpit' in the F-14B(U) setting. 
 * Capitalized the B in Mission Build tab on Settings.
 
-** Updated Readme (X): **
+**Updated Readme (XO):**
 
 * Wrote the contents of readme.md in my own words.
+
+**Raid scrambles are back (XO):** `RAID_SCRAMBLES` is on again, so an emergency can scramble you against a raid on a blue field.
+
+**Raid scrambles follow the TARCAP rules (blue side):** from XO's Kobuleti run, where the Eagles went to dogfight range and lost to Fulcrums, the raid hit about 10 minutes before the scramble's TOT, and the raided field had no defences.
+
+* **Station on our side of the SAMs:** the intercept station (40 nm out on the raid's bearing, 85 nm for the fleet) steps back toward the field until it is clear of red SAMs, the same rule as the support CAPs.
+* **Route bends round red SAMs** on the way out to the station, like a strike's. The orbit itself is left as it is.
+* **Engage circle, no chasing:** AI scramblers fight only inside a circle that takes in their station and the raided field (25 nm round the long-range shooters, 15 nm for the rest, larger where it has to reach both), moved or trimmed clear of red SAMs. They shoot at maximum range with the radar searching, and go home once their air-to-air missiles are gone.
+* **Raid timing:** a raid from a nearby field used to be placed at the start of its path and flown at once, so it arrived early. Now it starts late enough to cross the station about 1 to 2.5 minutes after the scramble's TOT.
+* **Raided field defended:** the field being raided now gets its base defences in the mission, even when nothing launches from it.
+* **Merge circle on the raided field:** packages whose targets are within the merge circle round the raided field (same time window) are folded in. A raid package is still never folded into someone else's mission.
+* Smoke test: a raid scramble may be offered while `RAID_SCRAMBLES` is on, and the flag is restored after the raid test (it used to be forced off). The raid build checks the raided field's defences and the intercept's engage circle.
 
 ## v0.41.27
 

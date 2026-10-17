@@ -16,7 +16,7 @@ from . import raids, redair
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import AI_ONLY, Ledger, NoPlayerSlot, Package, PackageBuilder
 
-RAID_SCRAMBLES = False      # v0.41.27: emergency raid scrambles are off while intercepts are AI-only (troops in contact stay)
+RAID_SCRAMBLES = True      # v0.41.27: emergency raid scrambles are off while intercepts are AI-only (troops in contact stay)
 from .scenario import new_campaign
 from . import theatres
 from .settings import AppSettings
@@ -169,6 +169,10 @@ class Session:
                 else:
                     a[1].append(p)
             sp_spec = AIRCRAFT[st.squadrons[psq].aircraft] if psq else None
+            from . import sweep as sweep_
+            # v0.41.33 (XO 2026-10-16): no sweep to bait red. Only where red's own plan has a flight near the area OUT IN THE OPEN (not under
+            # SAM cover) with a SAM-clear station short of it; otherwise the packages' TARCAP and escorts carry the fight
+            areas = [a for a in areas if sweep_.candidates(st, a[0].x, a[0].y)]
             for k, (t, covered) in enumerate(areas):
                 o = Objective(f"obj-d{st.day}-sw{k + 1}", ObjectiveType.COUNTER_AIR, t.id, max(p.objective.priority for p in covered),
                               f"Fighter Sweep: clear the air over {t.name} ahead of the strikes", "SWEEP")
@@ -219,11 +223,28 @@ class Session:
         self._sync_sead(pkgs)                                        # SEAD flights on the same ground (within SEAD_SYNC_KM) arrive together, not one after another
         self._stage_times(pkgs)                                      # a DEAD stage goes in DEAD_STAGE_GAP_MIN after the SEAD stage of the same site
         self._late_sead(pkgs)                                        # test option --late-sead: the SEAD stage goes in late, so the DEAD stage holds
+        from . import sweep as sweep_
+        dropped = set()
         for p in pkgs:                                               # a Fighter Sweep starts SWEEP_LEAD_MIN ahead of the first package it covers (after every other timing step)
             cov = sweeps.get(id(p))
             if cov:
-                m = max(0, min(int(c.start[:2]) * 60 + int(c.start[3:5]) for c in cov) - SWEEP_LEAD_MIN)
+                first_ = min(int(c.start[:2]) * 60 + int(c.start[3:5]) for c in cov)
+                m = max(0, first_ - SWEEP_LEAD_MIN)
                 p.start = f"{m // 60:02d}:{m % 60:02d}"
+                # v0.41.33: the red flight it goes after must be up in its window; none: no sweep (TARCAP and escorts carry the fight)
+                t_ = st.assets.get(p.objective.target_id)
+                vs_ = sweep_.pick(st, t_.x, t_.y, first_) if t_ is not None else None
+                if vs_ is None:
+                    dropped.add(id(p))
+                else:
+                    p.extra["sweep_vs"] = {"id": vs_["id"], "x": float(vs_["x"]), "y": float(vs_["y"]), "kind": vs_["kind"]}
+                    # v0.41.34: the station the planner checked (toward the nearest friendly field); the builder falls back to it when its own
+                    # search from the flight's PUSH point finds none (the v0.41.33 smoke run: a sweep fell back to backing out, 108 nm short)
+                    sst_ = sweep_.station_for(st, (vs_["x"], vs_["y"]), sweep_._home_guess(st, vs_["x"], vs_["y"]), t_.x, t_.y)
+                    if sst_ is not None:
+                        p.extra["sweep_vs"].update(sx=float(sst_[0]), sy=float(sst_[1]))
+        if dropped:
+            pkgs = [p for p in pkgs if id(p) not in dropped]
         pkgs.sort(key=lambda p: p.start)
         for n, p in enumerate(pkgs, 1):                              # numbers follow the clock
             p.number, p.id = n, f"pkg{n}"
@@ -430,6 +451,16 @@ class Session:
         a = self.state.assets.get(p.objective.target_id)
         return (a.x, a.y) if a is not None else None
 
+    def _raid_xy(self, p: Package):
+        """v0.41.28: where a land raid is going (the raided field, or the supply site / garrison it is after). Only the centre of the merge circle
+        when you fly the intercept; a raid package itself is still never folded into anyone else's mission."""
+        if p.objective.type != ObjectiveType.FLEET_DEFENSE or not p.extra.get("land"):
+            return None
+        b = self.state.bases.get(p.objective.target_id)
+        if b is None:
+            return None
+        return tuple(p.extra.get("dest") or (b.x, b.y))
+
     def _near(self, a: Package, b: Package, R: float) -> bool:
         pa, pb = self._pkg_xy(a), self._pkg_xy(b)
         return pa is not None and pb is not None and math.hypot(pa[0] - pb[0], pa[1] - pb[1]) <= R
@@ -438,7 +469,7 @@ class Session:
         """The centre of the merge circle: your target, slid inward so the whole circle stays inside the box that holds every possible target
         (destroyed sites included, so it does not shrink as the war goes on). Your own target always stays inside the circle."""
         R = self.merge_radius_m() if R is None else R
-        t = self._pkg_xy(pkg)
+        t = self._pkg_xy(pkg) or self._raid_xy(pkg)
         if t is None:
             return None
         A = list(self.state.assets.values())
