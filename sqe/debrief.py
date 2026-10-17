@@ -43,6 +43,7 @@ local gateLog = {}
 local kills = {}
 local shots = {}
 local jams = {}
+local pulls = {}                  -- v0.41.34: support CAP pull-backs: group, time, how far out (nm) it was
 local deaths = {}                 -- why each loss happened: last hit seen, last fuel and altitude sample (so an unexplained loss still tells something)
 local LASTHIT = {}                -- unit name -> {by, w, t} of the last hit on it
 local SAMPLE = {}                 -- unit name -> {fuel, alt, spd, t} sampled every 30 s for every aircraft
@@ -102,6 +103,13 @@ local function alertsJson()
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
+local function pullsJson()
+  local o = {}
+  for _, k in ipairs(pulls) do
+    o[#o + 1] = string.format('{"g":"%s","t":%d,"nm":%d,"limit_nm":%d}', esc(k.g), k.t, k.nm, k.lim)
+  end
+  return "[" .. table.concat(o, ",") .. "]"
+end
 local function gatesJson()
   local o = {}
   for _, e in ipairs(gateLog) do
@@ -113,9 +121,9 @@ end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"pulls":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), CFG, splashN, splashK))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), pullsJson(), CFG, splashN, splashK))
   f:close()
 end
 local function nameOf(obj)
@@ -859,6 +867,56 @@ if #RECOV > 0 then
     return nil
   end, nil, timer.getTime() + 15)
 end
+-- v0.41.34: the support CAP pull-back. DCS's engage-in-zone circle chooses targets but does not hold a flight once it is chasing one: in
+-- XO's runs of 2026-10-16 a tanker CAP left its 25 nm and 37 nm circles, ran 50-78 nm out after red fighters and died to the Sukhumi S-300.
+-- Every 10 s: a support CAP whose lead is further than p.r from the centre of its circle (the circle plus PULLBACK_MARGIN_NM), with air-to-air
+-- missiles left, above bingo and before its time on station ends, gets its own route again from its first orbit point (with its engage circle),
+-- which drops the chase. Then it is left alone for 2 min. Each pull is logged in the results file ("pulls").
+local PULL = { __PULL__ }
+local function hasAAM(u)
+  local ok, am = pcall(function() return u:getAmmo() end)
+  if not ok or not am then return false end
+  for _, w in ipairs(am) do
+    local d = w.desc
+    if d and d.category == 1 and d.missileCategory == 1 and (w.count or 0) > 0 then return true end
+  end
+  return false
+end
+if #PULL > 0 then
+  timer.scheduleFunction(function(_, t)
+    local left = false
+    for _, p in ipairs(PULL) do
+      if not p.done then
+        local g = Group.getByName(p.g)
+        if not g or t >= p.stop then p.done = true
+        else
+          left = true
+          local lead
+          for _, u in ipairs(g:getUnits() or {}) do
+            local oke, ex = pcall(function() return u:isExist() end)
+            if oke and ex then lead = u; break end
+          end
+          if lead and t >= (p.nxt or 0) then
+            local okp, up = pcall(function() return lead:getPoint() end)
+            local okf, fuel = pcall(function() return lead:getFuel() end)
+            local d = (okp and up) and math.sqrt((up.x - p.x) ^ 2 + (up.z - p.z) ^ 2) or 0
+            if d > p.r and hasAAM(lead) and (not okf or not fuel or fuel > p.bingo) then
+              local okc, c = pcall(function() return g:getController() end)
+              if okc and c then
+                pcall(function() c:setTask({ id = 'Mission', params = { route = { points = p.route } } }) end)
+                pulls[#pulls + 1] = { g = p.g, t = math.floor(t), nm = math.floor(d / 1852), lim = math.floor(p.r / 1852) }
+                dump()
+              end
+              p.nxt = t + 120
+            end
+          end
+        end
+      end
+    end
+    if left then return t + 10 end
+    return nil
+  end, nil, timer.getTime() + 10)
+end
 if (CVREC.cv or CVREC.x) and not AITEST then
   timer.scheduleFunction(function(_, t)
     if t < (CVREC.t or 0) then return t + 10 end
@@ -930,13 +988,21 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__ALERTS__", ", ".join(f'{{g={_lq(a["g"])}, f={int(a["f"])}, b={_lq(a["b"])}, ty={_lq(a["ty"])}}}' for a in (alerts or [])))
             .replace("__CVREC__", _cvrec_lua((cfg or {}).get("cvrec")))
             .replace("__RECOV__", _recov_lua((cfg or {}).get("recov")))
-            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov")}).replace("'", "")))
+            .replace("__PULL__", _pull_lua((cfg or {}).get("pull")))
+            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov", "pull")}).replace("'", "")))
 
 
 def _recov_lua(rs) -> str:
     """v0.41.25: the recovery net's entries as a Lua list: group, carrier unit ("" for a field), x / z, radius (m), earliest time (s)."""
     return ", ".join(f'{{ g={_lq(r["g"])}, cv={_lq(r.get("cv") or "")}, x={float(r["x"]):.1f}, z={float(r["z"]):.1f}, r={float(r["r"]):.0f}, '
                      f't={float(r["t"]):.0f} }}' for r in (rs or []))
+
+
+def _pull_lua(ps) -> str:
+    """v0.41.34: the support CAP pull-back entries as a Lua list: group, circle centre x / z, pull-back radius (m), time on station ends (s),
+    bingo fuel fraction, and the route it gets again (already a Lua table, from MissionBuilder._pull_entries)."""
+    return ", ".join(f'{{ g={_lq(p["g"])}, x={float(p["x"]):.1f}, z={float(p["z"]):.1f}, r={float(p["r"]):.0f}, stop={float(p["stop"]):.0f}, '
+                     f'bingo={float(p["bingo"]):.2f}, route={p["route"]} }}' for p in (ps or []))
 
 
 def _cvrec_lua(cv) -> str:

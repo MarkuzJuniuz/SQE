@@ -1,3 +1,14 @@
+## v0.41.34
+
+**Support CAPs are pulled back when they chase out of their circle.** In XO's two runs of 2026-10-16 the tanker CAP left its engage circle (37 nm in one, 25 nm in the other after XO lowered the friendly CAP engage setting) and ran 50 to 78 nm out after red fighters, into the Sukhumi S-300, which killed both jets each time. DCS's engage-in-zone circle chooses targets but does not hold a flight once it is chasing one, so lowering the setting did not help.
+
+* **Backstop in the mission's Lua hook:** every 10 s, a support CAP (tanker CAP, HAVCAP, base CAP, carrier CAP) whose lead is further than its engage circle plus 10 nm (`PULLBACK_MARGIN_NM`) from the circle's centre gets its own route again from its first orbit point, with its engage circle. That drops the chase. It is then left alone for 2 min. Not pulled: a flight out of air-to-air missiles or below 25% fuel (`PULLBACK_BINGO`, it is going home), or past the end of its time on station.
+* **The CAP engage settings keep their job:** the friendly setting still sets the circle (the smaller of the setting and each CAP's own figure), and the pull-back line follows it. The enemy setting is not touched. Recommended to XO: both back to the 50 nm default (25 nm only shrank the tanker CAP's circle and did not stop the chase).
+* **Logged:** each pull-back is written to the results file (`pulls`: group, time, how far out, the limit).
+* The 10 nm margin and the 25% fuel are judgment calls, not sourced. Untested in DCS so far: whether the AI takes the new route in the middle of a fight (it should: a new route replaces the current task).
+* **Fixed (v0.41.33's sweep):** the builder's station search from the sweep's PUSH point can find no clear spot; it then backed out toward home like the old sweep (a smoke run put one 108 nm short of its red flight). The planner now stores the station it checked, and the builder uses it in that case.
+* **Smoke test:** every support CAP has a pull-back entry centred on its engage circle, at the circle plus the margin, and the route it gets carries the engage circle.
+
 ## v0.41.33
 
 **Fighter Sweep: hunts known enemy air out in the open, no more baiting (XO 2026-10-16).** XO's run (Viper 1, AI only) lost two F-15Cs of the sweep Dodge 2 to the Sukhumi S-300 in the first 95 seconds: the sweep was spawned on a station 37 nm from the site (clear by the old 35 nm rule) at 30,000 ft and was shot at from 34 nm. v0.41.13 had put the station inside the nearest red field's scramble circle, at the very edge of SAM reach, to pull red up.
