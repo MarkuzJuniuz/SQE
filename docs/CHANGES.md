@@ -1,3 +1,7 @@
+## v0.41.31
+
+**Red raids keep clear of the carrier group:** a red raid's ingress and way home now bend round the fleet as well as round blue's Patriot fields, keeping 70 nm from the carrier unless the fleet is what it is raiding. Red's target pick (Normal / Hard doctrine) also shies from targets inside that circle. The 70 nm is measured: in XO's runs the cruiser's SM-2s killed CAP pairs 51 to 67 nm out. Smoke test: a raid leg through the fleet is bent round it.
+
 ## v0.41.30
 
 **Blue air defence at doctrinal strength, every field alike (XO: "all bases are important"):**
