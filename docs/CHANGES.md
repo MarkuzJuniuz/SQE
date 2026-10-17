@@ -6,6 +6,7 @@
 * **The CAP engage settings keep their job:** the friendly setting still sets the circle (the smaller of the setting and each CAP's own figure), and the pull-back line follows it. The enemy setting is not touched. Recommended to XO: both back to the 50 nm default (25 nm only shrank the tanker CAP's circle and did not stop the chase).
 * **Logged:** each pull-back is written to the results file (`pulls`: group, time, how far out, the limit).
 * The 10 nm margin and the 25% fuel are judgment calls, not sourced. Untested in DCS so far: whether the AI takes the new route in the middle of a fight (it should: a new route replaces the current task).
+* **Fixed (v0.41.33's sweep):** the builder's station search from the sweep's PUSH point can find no clear spot; it then backed out toward home like the old sweep (a smoke run put one 108 nm short of its red flight). The planner now stores the station it checked, and the builder uses it in that case.
 * **Smoke test:** every support CAP has a pull-back entry centred on its engage circle, at the circle plus the margin, and the route it gets carries the engage circle.
 
 ## v0.41.33

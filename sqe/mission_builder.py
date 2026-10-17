@@ -2605,6 +2605,8 @@ class MissionBuilder:
         x, y = so[0], so[1]
         vs_ = (getattr(package, "extra", None) or {}).get("sweep_vs")
         p_ = sweep_.station_for(st, (vs_["x"], vs_["y"]), home_xy, tx, ty) if vs_ else None
+        if p_ is None and vs_ and vs_.get("sx") is not None:
+            p_ = (vs_["sx"], vs_["sy"])                           # v0.41.34: the station the planner checked
         if p_ is not None:
             x, y = p_
         else:

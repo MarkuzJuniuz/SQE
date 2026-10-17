@@ -238,6 +238,11 @@ class Session:
                     dropped.add(id(p))
                 else:
                     p.extra["sweep_vs"] = {"id": vs_["id"], "x": float(vs_["x"]), "y": float(vs_["y"]), "kind": vs_["kind"]}
+                    # v0.41.34: the station the planner checked (toward the nearest friendly field); the builder falls back to it when its own
+                    # search from the flight's PUSH point finds none (the v0.41.33 smoke run: a sweep fell back to backing out, 108 nm short)
+                    sst_ = sweep_.station_for(st, (vs_["x"], vs_["y"]), sweep_._home_guess(st, vs_["x"], vs_["y"]), t_.x, t_.y)
+                    if sst_ is not None:
+                        p.extra["sweep_vs"].update(sx=float(sst_[0]), sy=float(sst_[1]))
         if dropped:
             pkgs = [p for p in pkgs if id(p) not in dropped]
         pkgs.sort(key=lambda p: p.start)
