@@ -882,6 +882,17 @@ def main():
         s.fly(_rp.number, None)
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
     assert ("Su-24M" in _mz or "Su-25" in _mz) and "RAID-B-1" in _mz, "the raiders are in the mission"
+    # v0.41.31: a raid scramble you fly for real (not the AI test) builds your own route, trailing DIVERT/TKR/BULLS steerpoints included;
+    # the ME refuses a point with both speed and time unlocked that no locked-time point follows ("Viper 2: Waypoint 8 ...")
+    from dcs import lua as _lua31
+    _Mr31 = _lua31.loads(_mz)["mission"]
+    _pg31 = next(g_ for co_ in _Mr31["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
+                 if any(u_.get("skill") in ("Player", "Client") for u_ in g_["units"].values()))
+    _pts31 = [_pg31["route"]["points"][k_] for k_ in sorted(_pg31["route"]["points"].keys())]
+    _lk31 = [i_ for i_, p_ in enumerate(_pts31) if p_.get("ETA_locked")]                 # a both-unlocked point is fine if locked-time points bracket it (e.g. MSHL, between TakeOff and PUSH)
+    _bad31 = [i_ + 1 for i_, p_ in enumerate(_pts31) if not p_.get("ETA_locked") and not p_.get("speed_locked")
+              and not (any(j_ < i_ for j_ in _lk31) and any(j_ > i_ for j_ in _lk31))]
+    assert not _bad31, ("a player waypoint has both speed and time unlocked with no locked-time point on each side", _pg31["name"], _bad31)
     # v0.41.28: the raided field is built with its defences, and the AI intercept engages only inside a circle (TARCAP rules)
     _rb28 = _st.bases[_st.pending["package_dict"]["objective"]["target_id"]]
     assert _rb28.kind.value != "AIRFIELD" or _rb28.defense < 0.15 or f"BASEDEF {_rb28.name}" in _mz, "the raided field has its defences"

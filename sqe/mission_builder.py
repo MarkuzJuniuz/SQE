@@ -1790,8 +1790,11 @@ class MissionBuilder:
             rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
             rtb.type, rtb.action = "Land", PointAction.Landing
             rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
-        if f.is_player and not o.player_is_ai:
-            g.points[-1].speed_locked = False                           # your landing point: speed free, so it never closes a locked-speed run
+        # v0.41.31: used to force the player's landing point speed free here ("so it never closes a locked-speed run"), but the trailing
+        # DIVERT/TKR/BULLS steerpoints are appended later (_trailing_steerpoints) with no time lock of their own, so this point was never
+        # followed by a locked-time point and the ME refused the save ("Viper 2: Waypoint 8 ... not surrounded by waypoints with locked
+        # time!"). land_at() already leaves the landing point's speed locked, which is safe; _free_locked_speeds frees a speed lock only
+        # where the ME actually needs one, after every trailing point exists.
         if gate is not None:
             if gate["to"] is None:
                 gate["to"] = len(g.points)                              # the landing point
@@ -1837,7 +1840,10 @@ class MissionBuilder:
 
     @staticmethod
     def _free_locked_speeds(m):
-        """Mission Editor refuses to save a route where every point between two time-locked points has a locked speed. Free the first one."""
+        """Mission Editor refuses to save a route where every point between two time-locked points has a locked speed (free the first one),
+        and the mirror: any point with BOTH speed and time free needs a time-locked point on each side, so a point past the last time-locked
+        waypoint (the tail after a station, or the trailing DIVERT/TKR/BULLS steerpoints on the player's own route) can never be both-unlocked
+        (lock its speed; v0.41.31, "Viper 2: Waypoint 8 ..."). Runs last, after every point (including the trailing steerpoints) is in place."""
         for co in m.coalition.values():
             for c in co.countries.values():
                 for grp in list(c.plane_group) + list(c.helicopter_group):
@@ -1847,6 +1853,10 @@ class MissionBuilder:
                         mid = p[a + 1:b]
                         if mid and all(getattr(x, "speed_locked", False) for x in mid):
                             mid[0].speed_locked = False
+                    tail = p[(L[-1] + 1):] if L else p[1:]
+                    for x in tail:
+                        if not getattr(x, "ETA_locked", False) and not getattr(x, "speed_locked", False):
+                            x.speed_locked = True
 
     @staticmethod
     def _f14_special_namer(wps):
