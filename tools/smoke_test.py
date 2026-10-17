@@ -885,6 +885,14 @@ def main():
     # v0.41.28: the raided field is built with its defences, and the AI intercept engages only inside a circle (TARCAP rules)
     _rb28 = _st.bases[_st.pending["package_dict"]["objective"]["target_id"]]
     assert _rb28.kind.value != "AIRFIELD" or _rb28.defense < 0.15 or f"BASEDEF {_rb28.name}" in _mz, "the raided field has its defences"
+    assert _rb28.kind.value != "AIRFIELD" or _rb28.defense < 0.6 or f"BASEDEF {_rb28.name} HAWK" in _mz, "every full-strength field has a HAWK, not only yours"
+    # v0.41.30: the war sim counts the batteries: same raid, a field with its full air defence is likelier to stop it than one with none
+    from sqe import sams as _sm30
+    _f30 = next(b_ for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD")
+    _d30 = _f30.defense; _f30.defense = 1.0; _a30 = _sm30.covering_ad(_st, _f30.x, _f30.y); _f30.defense = 0.0
+    _b30 = max([_sm30.air_defence(b_) for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD" and b_ is not _f30 and ((b_.x - _f30.x) ** 2 + (b_.y - _f30.y) ** 2) ** 0.5 <= 40 * 1852] + [0.0])
+    _c30 = _sm30.covering_ad(_st, _f30.x, _f30.y); _f30.defense = _d30
+    assert _a30 == 1.0 and _c30 == _b30, ("a field's batteries cover it; a fallen field only by its neighbours", _a30, _c30, _b30)
     assert "EngageTargetsInZone" in _mz, "the raid intercept engages only inside its circle"
     # v0.41.29: the raid flies blue's shape: it never hits before the intercept's TOT, egresses and goes home, and its escorts stay with it
     _rg29 = next(g_ for g_ in s.manifest().groups if g_.get("raid_base"))
@@ -1398,6 +1406,11 @@ def main():
     if _hb7.defense >= 0.6:
         assert any(n_ == f"BASEDEF {_hb7.name} AAA 2" for n_ in _bv), "a full-strength field has short-range sites on both sides"
         assert any(n_ == f"BASEDEF {_hb7.name} HAWK" for n_ in _bv), "your home field has a HAWK battery"
+        # v0.41.30: doctrinal batteries at every field: 8 Patriot launchers (FM 44-85), a HAWK with 6 launchers and 2 trackers
+        _pl30 = sum(1 for u_ in _pat[0]["units"].values() if u_["type"] == "Patriot ln")
+        _hk30 = next(g_ for n_, g_ in _bv.items() if n_ == f"BASEDEF {_hb7.name} HAWK")
+        assert _pl30 == 8 and sum(1 for u_ in _hk30["units"].values() if u_["type"] == "Hawk ln") == 6 \
+            and sum(1 for u_ in _hk30["units"].values() if u_["type"] == "Hawk tr") == 2, ("doctrinal Patriot and HAWK batteries", _pl30)
     _pl7 = {g_["name"]: g_ for co_ in _M4["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()}
     _tags7 = {f_.tag: f_ for f_ in _pu.flights if f_.tag}
     assert "TNKCAP" in _tags7, ("the tanker has its own CAP", sorted(_tags7))

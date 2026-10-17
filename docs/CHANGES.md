@@ -1,3 +1,17 @@
+## v0.41.30
+
+**Blue air defence at doctrinal strength, every field alike (XO: "all bases are important"):**
+
+* **Every blue airfield built in a mission gets the full set:** a Patriot fire unit with 8 launchers (was 3), a HAWK battery with 6 launchers and 2 tracking radars (was 3 launchers and 1 tracker, and only at your home field), and both AAA sites. Sources: FM 44-85 App. B (Patriot fire unit = 1 radar, 1 ECS, 1 power plant, 1 antenna mast group, 8 launching stations) and the Phase III HAWK battery (6 launchers, 2 HIPIR). A damaged field (defense 0.15-0.6) keeps a reduced Patriot (launchers by its defence) and one AAA site, with no HAWK. Below 0.15 nothing stands, as before.
+* **The war sim counts the batteries:**
+  * An unflown raid on a blue target is fought by the batteries that cover it, worth up to 4 fighters for a full Patriot + HAWK.
+  * Surprise raids are stopped more often under a full battery (up to 95%), and lose more jets when they are.
+  * A raid that gets through still loses an extra jet to a full battery, and does less damage to the field.
+* **Red's raids shy from every full field's HAWK**, not only yours (Normal / Hard doctrine, as before).
+* All the numbers live in `sqe/sams.py`. The thresholds and the sim weights are judgment calls; the launcher counts are the doctrine.
+* Not tested yet: whether more launchers raise the Patriot's fire rate in DCS, or only the missiles on the rails. Count the shots in the next raid.
+* Smoke test: the doctrinal launcher counts, a HAWK at every full-strength field, and the war sim's battery cover.
+
 ## v0.41.29
 
 **Red raids fly blue's shape and stop rushing in (red side):** XO wants raids that stop rushing to their deaths like RTS units.
