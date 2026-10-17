@@ -125,3 +125,20 @@ _verified v0.41.28 + PR #66, 2026-10-16 (read from the code, not run)_
 - The old DCS behaviour of `SetUnlimitedFuelCommand` on a group with a human is not checked here; the player's own group
   is not toggled by the builder.
 - Search the code again when a PR touches `plan_route`, `_limit_engage` or the fuel block, and update this file.
+
+## 8. Mission Editor refuses the mission: waypoint lock errors
+_verified v0.41.28 + PR #69, 2026-10-16 (read from the code; the cause of the newest error is a HYPOTHESIS, not confirmed in the Mission Editor)_
+
+The Mission Editor (ME) validates every route on load/save. Three messages seen so far, all about the speed and time padlocks on a waypoint:
+- "All waypoints (5-5) have locked speed and surrounded by waypoints 4 and 5 with locked time" (v0.41.2; fixed by not time-locking fighter stations). Same family: v0.8.5 "(2-4) ... waypoints 1 and 4".
+- **"Waypoint 8 have both unlocked speed and time and not surrounded by waypoints with locked time!"** (XO, 2026-10-16, "Viper 2"). The mirror rule: a point whose speed AND time are both free needs a time-locked point on each side.
+
+How SQE sets the locks (search `_set_eta`, `_free_locked_speeds`, `speed_locked`, `ETA_locked` in `mission_builder.py`):
+- Time-locked: the first point (takeoff, `ETA = 0`), PUSH, and the objective point (not stations). Speed is locked everywhere except between PUSH and the objective, and on the point just before PUSH.
+- `_free_locked_speeds` frees the first speed in any run of speed-locked points between two time-locked ones.
+- For the player's flight the last point (landing) gets `speed_locked = False` ("your landing point: speed free, so it never closes a locked-speed run"). Its time is not locked either, and no time-locked point comes after it. **Likely cause of the error above** (waypoint 8 would be the landing point of a long route). Not verified.
+
+Quick workaround for XO in the ME (no rebuild): open the flight's waypoint named in the error and lock its speed (padlock beside speed), or lock its time (padlock beside ETA), then save.
+
+How to check a mission without the ME: unzip the `.miz`, parse `mission` with `dcs.lua.loads`, and print `ETA_locked`, `speed_locked` and `speed` for each point of the group (the 2026-10-16 script did this). Look for a point with both false that has no locked-time point on one side. Fix idea (code, a PR): keep the landing point's speed locked and free a different point, or lock the landing point's time. Test by opening a generated mission in the ME (smoke test cannot see this). Ask XO for the `.miz`.
+
