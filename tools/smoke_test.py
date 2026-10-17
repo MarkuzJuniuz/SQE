@@ -1148,6 +1148,13 @@ def main():
     for sd_ in range(1, 20):
         _ws = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="off", flight_filter="all"))
         _ws.new("Sweep", "F-15C", 3, seed=sd_)
+        # v0.41.33: a sweep goes only after red air out in the open; on day one red's patrols sit over their SAMs, so take the
+        # medium / long-range SAMs down (as SEAD / DEAD would) and plan the day again
+        for a_ in _ws.state.assets.values():
+            if a_.kind.value == "SAM" and a_.variant in ("SA-10", "SA-11", "SA-2"):
+                a_.health = 0.0
+        _ws.state.red_air = {}
+        _ws.plan_day()
         _swp = [p_ for p_ in _ws.packages() if _isw(p_.objective)]
         if _swp and any(_ws.flyable(p_) for p_ in _swp):
             _sw = next(p_ for p_ in _swp if _ws.flyable(p_)); break
@@ -1178,17 +1185,23 @@ def main():
         if not f_.is_player:
             _o0w = {t_["params"]["action"]["params"]["name"]: t_["params"]["action"]["params"].get("value") for t_ in list(_gw[f_.callsign]["route"]["points"].values())[0]["task"]["params"]["tasks"].values() if t_.get("params", {}).get("action", {}).get("id") == "Option"}
             assert _o0w.get(10) == _aamw, (f_.callsign, "a sweep goes home when its air-to-air missiles are gone")
-    # v0.41.13: the sweep's station sits inside the nearest enemy field's scramble circle (or as far in as it can while clear of SAMs), 35 nm from any SA-10
-    from sqe import threatmap as _tm13
+    # v0.41.33 (XO 2026-10-16): no baiting. The sweep goes after a known red flight out in the open (red's own air plan), from a station
+    # short of it and clear of SAMs by the sweep's margins (45 nm from an SA-10, 20 nm outside other rings), within reach of it
+    from sqe import sweep as _swm
+    _vs33 = _sw.extra.get("sweep_vs")
+    assert _vs33 and any(f_["id"] == _vs33["id"] for f_ in _ws.state.red_air["flights"]), ("the sweep names the red flight it goes after", _vs33)
+    assert _swm.in_open(_ws.state, _vs33["x"], _vs33["y"]), "the red flight a sweep goes after is out of SAM reach"
     _sx13 = next(g_ for n_, g_ in _gw.items() if n_ == _sw.flights[0].callsign)
     _stp = next(p_ for p_ in _sx13["route"]["points"].values() if p_.get("name") == "TGT")
-    _sa13 = [a_ for a_ in _ws.state.assets.values() if a_.variant in _tm13.UMBRELLA_VARIANTS and not a_.destroyed and a_.health > 0.25]
-    assert all(_m3j.hypot(_stp["x"] - a_.x, _stp["y"] - a_.y) / 1852 >= 34.5 for a_ in _sa13), "the sweep station is 35 nm from every SA-10"
-    _fb13 = min(_tm13.fighter_bases(_ws.state), key=lambda e_: _m3j.hypot(e_[0] - _stp["x"], e_[1] - _stp["y"]))
-    _t13 = _ws.state.assets[_sw.objective.target_id]
-    _dfld = _m3j.hypot(_fb13[0] - _stp["x"], _fb13[1] - _stp["y"]) / 1852
-    assert _dfld <= _tm13.field_detect_nm(_fb13, (_t13.x, _t13.y), _ws.state), ("the sweep orbits inside the nearest field's scramble circle", round(_dfld))
-    print(f"[sweep] station {_dfld:.0f} nm from the nearest enemy field (its scramble circle {_tm13.field_detect_nm(_fb13, (_t13.x, _t13.y), _ws.state):.0f} nm), clear of SA-10s")
+    assert _swm.clear_for_sweep(_ws.state, _stp["x"], _stp["y"]), "the sweep station is clear of SAMs by the sweep's margins"
+    _dvs = _m3j.hypot(_vs33["x"] - _stp["x"], _vs33["y"] - _stp["y"]) / 1852
+    assert _dvs <= _swm.REACH_NM + 5, ("the sweep station is within reach of the red flight", round(_dvs))
+    # and a sweep is never planned against red air that is under SAM cover (every sweep in every day's plan above)
+    for p_ in _ws.packages():
+        if _isw(p_.objective):
+            _v_ = p_.extra.get("sweep_vs")
+            assert _v_ and _swm.in_open(_ws.state, _v_["x"], _v_["y"]), ("a sweep only against red air in the open", p_.number)
+    print(f"[sweep] goes after red {_vs33['kind']} {_vs33['id']} in the open; station {_dvs:.0f} nm short of it, clear of SAMs by the sweep margins")
     assert "Fighter Sweep" in _ws.last_build.text["situation"], "the sweep briefing"
     _st5 = CampaignState.from_dict(_ws.state.to_dict()); _h5 = _st5.assets[_sw.objective.target_id].health
     _air5 = sum(w_.available for w_ in _st5.enemy_air)

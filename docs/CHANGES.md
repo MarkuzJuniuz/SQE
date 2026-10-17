@@ -1,3 +1,13 @@
+## v0.41.33
+
+**Fighter Sweep: hunts known enemy air out in the open, no more baiting (XO 2026-10-16).** XO's run (Viper 1, AI only) lost two F-15Cs of the sweep Dodge 2 to the Sukhumi S-300 in the first 95 seconds: the sweep was spawned on a station 37 nm from the site (clear by the old 35 nm rule) at 30,000 ft and was shot at from 34 nm. v0.41.13 had put the station inside the nearest red field's scramble circle, at the very edge of SAM reach, to pull red up.
+
+* **Dispatch:** command sends a sweep only against a known red flight from red's own air plan for the day (a patrol pair or a red sweep) within 80 nm of the area, out in the open (12 nm outside every medium / long-range SAM's reach), with a SAM-clear station short of it, and up in the sweep's window (10 min before to 60 min after the first covered package). Otherwise no sweep: the packages' TARCAP and escorts carry the fight. The package names the flight it goes after (`extra["sweep_vs"]`).
+* **Station:** 20 nm short of that red flight, on its line toward the sweep's home (or swung up to 60 deg off it), 45 nm from every SA-10 and 20 nm outside every other SAM ring, outside red's scramble circles where it can be. The fight circle takes in both stations as far as it stays clear of SAMs. New module `sqe/sweep.py`.
+* **What it does to the campaign:** red's patrols sit over the SAMs they guard and red's sweeps sit at the S-300's edge, so on day one no sweep flies at Normal or Hard. Measured on 10 campaigns: Hard gets 9 sweeps once the SA-10s are down; Normal gets 8 once the SA-10s, SA-11s and SA-2s are down. XO: rare on Hard is fine.
+* **Doctrine:** AFDP 3-01 (Counterair) defines the sweep as an offensive mission "to seek out and destroy enemy aircraft" whose need "will depend on the air and missile threat": supports the trigger. Keeping the sweep out of SAM reach is not doctrine: a judgment call from XO's runs (DCS AI fighters do not evade SAMs). The 45 / 20 / 12 / 20 nm figures are judgment calls (the 45 from the 34 nm S-300 shot), tunable in `sqe/sweep.py`.
+* **Smoke test:** the sweep check now takes the medium / long-range SAMs down first (as SEAD / DEAD would) and checks that every sweep names a red flight in the open, its station is clear by the sweep margins and within reach of that flight.
+
 ## v0.41.32
 
 **Fixed: DCS refused to save a mission ("Viper 2: Waypoint 8 have both unlocked speed and time and not surrounded by waypoints with locked time!").**
