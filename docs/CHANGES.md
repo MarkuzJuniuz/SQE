@@ -1,3 +1,12 @@
+## v0.41.32
+
+**Fixed: DCS refused to save a mission ("Viper 2: Waypoint 8 have both unlocked speed and time and not surrounded by waypoints with locked time!").**
+
+* **Cause:** `_spawn_flight` forced the player's landing waypoint speed free ("so it never closes a locked-speed run"), a leftover from a different, already-fixed Mission Editor rule (v0.41.2). `_trailing_steerpoints` then appends the DIVERT/TKR/BULLS reference points after landing, none of them time-locked — so the landing point was never followed by a time-locked waypoint and broke the mirror rule: a point with both speed and time unlocked needs a locked-time point on each side. Reproduced on every player flight that gets the trailing steerpoints (not just raid scrambles).
+* **Fix:** stopped forcing the landing point's speed free (`land_at()` already leaves it locked, which is safe). `_free_locked_speeds` now also walks the tail after the last time-locked waypoint and locks the speed of any point that would otherwise be both-unlocked, so the rule holds even if more trailing points are added later.
+* **Smoke test:** the raid-scramble build (a real player flight, not the AI test) now checks every player waypoint against both ME rules (`_bad31` check). Caught nothing further.
+* XO's quick ME workaround for an already-generated mission (lock the named waypoint's speed or time, then save) still works and is no longer needed on new builds.
+
 ## v0.41.31
 
 **Red raids keep clear of the carrier group:** a red raid's ingress and way home now bend round the fleet as well as round blue's Patriot fields, keeping 70 nm from the carrier unless the fleet is what it is raiding. Red's target pick (Normal / Hard doctrine) also shies from targets inside that circle. The 70 nm is measured: in XO's runs the cruiser's SM-2s killed CAP pairs 51 to 67 nm out. Smoke test: a raid leg through the fleet is bent round it.
