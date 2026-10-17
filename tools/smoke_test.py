@@ -1458,6 +1458,11 @@ def main():
     _tnk_g = _pl7[_tags7["TNKCAP"].callsign]
     _tn0 = list(_tnk_g["route"]["points"].values())[0]
     assert _m.hypot(_tn0["x"] - _tcx, _tn0["y"] - _tcy) / 1852 <= 8, "the tanker CAP orbits on the tanker"
+    # v0.41.35: no support CAP is weapons free (option 0 = 0): it engages anything in contact, over its circle (XO's runs 2026-10-16/17)
+    for t7_, f7_ in _tags7.items():
+        _roe7 = [t_["params"]["action"]["params"]["value"] for p_ in _pl7[f7_.callsign]["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()
+                 if t_.get("id") == "WrappedAction" and t_["params"]["action"].get("id") == "Option" and t_["params"]["action"]["params"].get("name") == 0]
+        assert 0 not in _roe7, ("a support CAP is weapons free", t7_, _roe7)
     if "HAVCAP" in _tags7:
         _aw7 = next(g_ for g_ in _pl7.values() if any(t_.get("id") == "AWACS" for p_ in g_["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()))
         _hv0 = list(_pl7[_tags7["HAVCAP"].callsign]["route"]["points"].values())[0]

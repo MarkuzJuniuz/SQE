@@ -1,3 +1,7 @@
+## v0.41.35
+
+**Tanker CAP no longer weapons free.** In all three of XO's runs of 2026-10-16/17 the chasing support CAP was the tanker CAP, the only one with an explicit weapons-free ROE (v0.41.26, to make it shoot first). Weapons free means "engage any enemy group in contact" (Mission Editor docs, quoted on the DCS forum), which overrides the engage circle. In the third run the v0.41.34 pull-back fired twice (35 and 55 nm out) and Viper 1 kept going to 68 nm, firing at an Su-27 101 nm from its station, until the Sukhumi S-300 killed both jets: the ROE option outlives a new route. The base CAP, HAVCAP and carrier CAP use the default ROE and stayed home. Now the tanker CAP uses the default too; it keeps continuous radar search and maximum-range shots. Cost: it may shoot first a little less eagerly. The pull-back stays as a backstop. Smoke test: no support CAP is weapons free. Evidence is three runs pointing the same way, not proof.
+
 ## v0.41.34
 
 **Support CAPs are pulled back when they chase out of their circle.** In XO's two runs of 2026-10-16 the tanker CAP left its engage circle (37 nm in one, 25 nm in the other after XO lowered the friendly CAP engage setting) and ran 50 to 78 nm out after red fighters, into the Sukhumi S-300, which killed both jets each time. DCS's engage-in-zone circle chooses targets but does not hold a flight once it is chasing one, so lowering the setting did not help.
