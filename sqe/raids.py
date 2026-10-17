@@ -170,6 +170,7 @@ def pick_aim(state, d, rng: random.Random):
 
 
 PATRIOT_NM = 40          # v0.41.20: a full-strength field's Patriot covers its own field and what lies this close to it
+FLEET_NM = 70            # v0.41.31: ...and the carrier group's SM-2 reach (measured: CAP pairs killed 51-67 nm out; mission_builder.FLEET_RAID_AVOID_NM)
 HAWK_NM = 25             # ...and a field's HAWK battery (v0.41.30: every full-strength field has one, not only yours)
 
 
@@ -182,12 +183,15 @@ def shy(state, d, ws: list) -> list:
         return ws
     fields = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and getattr(b, "defense", 0.0) >= 0.6]
     from .sams import blue_battery
-    hawks = [b for b in fields if blue_battery(b)["hawk"]] if doc["hawk"] else []     # v0.41.30: every field's HAWK, not only your home field's
+    hawks = [b for b in fields if blue_battery(b)["hawk"]] if doc["hawk"] else []
+    fleets = [b for b in state.bases.values() if b.kind == BaseKind.CARRIER]     # v0.41.30: every field's HAWK, not only your home field's
     out = []
     for base, aim, w in ws:
         x, y = aim_xy(state, aim, base)
         hot = any(math.hypot(b.x - x, b.y - y) <= PATRIOT_NM * NM for b in fields)
         if any(math.hypot(h.x - x, h.y - y) <= HAWK_NM * NM for h in hawks):
+            hot = True
+        if any(math.hypot(c.x - x, c.y - y) <= FLEET_NM * NM for c in fleets):      # v0.41.31: the carrier group's SM-2s count too
             hot = True
         out.append((base, aim, w * (doc["soft"] if hot else 1.0)))
     return out
