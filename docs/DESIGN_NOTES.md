@@ -127,19 +127,19 @@ _verified v0.41.28 + PR #66, 2026-10-16 (read from the code, not run)_
 - Search the code again when a PR touches `plan_route`, `_limit_engage` or the fuel block, and update this file.
 
 ## 8. Mission Editor refuses the mission: waypoint lock errors
-_verified v0.41.31 + PR #74, 2026-10-16 (read from the code; FIXED, confirmed by script, not yet reopened in the Mission Editor by XO)_
+_verified v0.41.32 + PR #74, 2026-10-16 (read from the code; FIXED, confirmed by script, not yet reopened in the Mission Editor by XO)_
 
 The Mission Editor (ME) validates every route on load/save. Messages seen so far, all about the speed and time padlocks on a waypoint:
 - "All waypoints (5-5) have locked speed and surrounded by waypoints 4 and 5 with locked time" (v0.41.2; fixed by not time-locking fighter stations). Same family: v0.8.5 "(2-4) ... waypoints 1 and 4".
-- **"Waypoint 8 have both unlocked speed and time and not surrounded by waypoints with locked time!"** (XO, 2026-10-16, "Viper 2"). The mirror rule: a point whose speed AND time are both free needs a time-locked point on each side. **Fixed in v0.41.31 (PR #74).**
+- **"Waypoint 8 have both unlocked speed and time and not surrounded by waypoints with locked time!"** (XO, 2026-10-16, "Viper 2"). The mirror rule: a point whose speed AND time are both free needs a time-locked point on each side. **Fixed in v0.41.32 (PR #74).**
 
 How SQE sets the locks (search `_set_eta`, `_free_locked_speeds`, `speed_locked`, `ETA_locked`, `_trailing_steerpoints` in `mission_builder.py`):
 - Time-locked: the first point (takeoff, `ETA = 0`), PUSH, and the objective point (not stations). Speed is locked everywhere except between PUSH and the objective, and on the point just before PUSH.
-- `_free_locked_speeds` frees the first speed in any run of speed-locked points between two time-locked ones, and (v0.41.31) also locks the speed of any point past the LAST time-locked waypoint that would otherwise be both-unlocked.
+- `_free_locked_speeds` frees the first speed in any run of speed-locked points between two time-locked ones, and (v0.41.32) also locks the speed of any point past the LAST time-locked waypoint that would otherwise be both-unlocked.
 - `land_at()` (pydcs) leaves a flight's landing point `speed_locked = True` by default; that is safe on its own.
 - **Confirmed cause of the "Viper 2" error (not a hypothesis any more):** `_spawn_flight` used to force the player's own landing point `speed_locked = False` ("your landing point: speed free, so it never closes a locked-speed run" — a leftover from the v0.41.2 fix above, which only applies when a locked-time point actually follows). `_trailing_steerpoints` (package-level, runs after every flight is built) then appends DIVERT/TKR/BULLS reference points on the player's own route — none of them time-locked (`add_waypoint` always sets `ETA_locked = False`). So the landing point was never followed by a locked-time point, and the override broke the mirror rule. Reproduced on every player flight with trailing steerpoints (not just raid scrambles): the override line is gone, and `_free_locked_speeds` now covers the tail generically instead.
 
-Quick workaround for XO in the ME on a mission generated before v0.41.31 (no rebuild): open the flight's waypoint named in the error and lock its speed (padlock beside speed), or lock its time (padlock beside ETA), then save. Not needed on builds from v0.41.31 on.
+Quick workaround for XO in the ME on a mission generated before v0.41.32 (no rebuild): open the flight's waypoint named in the error and lock its speed (padlock beside speed), or lock its time (padlock beside ETA), then save. Not needed on builds from v0.41.32 on.
 
-How to check a mission without the ME: unzip the `.miz`, parse `mission` with `dcs.lua.loads`, and for each point in a group's route check `not ETA_locked and not speed_locked` with a locked-time point bracketing it on both sides (not just "both false" — a bracketed point like MSHL, between TakeOff and PUSH, is fine). `tools/smoke_test.py`'s raid-build check (`_bad31`, builds a real player flight, not the AI test) does exactly this now. Ask XO for the `.miz` if the ME still refuses a mission after v0.41.31; it would mean a new code path adds points after the last time-locked waypoint.
+How to check a mission without the ME: unzip the `.miz`, parse `mission` with `dcs.lua.loads`, and for each point in a group's route check `not ETA_locked and not speed_locked` with a locked-time point bracketing it on both sides (not just "both false" — a bracketed point like MSHL, between TakeOff and PUSH, is fine). `tools/smoke_test.py`'s raid-build check (`_bad31`, builds a real player flight, not the AI test) does exactly this now. Ask XO for the `.miz` if the ME still refuses a mission after v0.41.32; it would mean a new code path adds points after the last time-locked waypoint.
 

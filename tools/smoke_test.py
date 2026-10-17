@@ -882,7 +882,7 @@ def main():
         s.fly(_rp.number, None)
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
     assert ("Su-24M" in _mz or "Su-25" in _mz) and "RAID-B-1" in _mz, "the raiders are in the mission"
-    # v0.41.31: a raid scramble you fly for real (not the AI test) builds your own route, trailing DIVERT/TKR/BULLS steerpoints included;
+    # v0.41.32: a raid scramble you fly for real (not the AI test) builds your own route, trailing DIVERT/TKR/BULLS steerpoints included;
     # the ME refuses a point with both speed and time unlocked that no locked-time point follows ("Viper 2: Waypoint 8 ...")
     from dcs import lua as _lua31
     _Mr31 = _lua31.loads(_mz)["mission"]
@@ -910,6 +910,16 @@ def main():
     assert _rg29["raid_arrive_s"] >= _st.pending["timeline"]["tot_s"], "the raid reaches its target after our intercept is on station"
     assert '"EGR"' in _mz and '"PUSH"' in _mz, "the raid has a PUSH and an egress"
     assert ("RAID-E-1" not in _mz) or '"Escort"' in _mz, "raid escorts fly an escort task tied to the bombers"
+    # v0.41.31: a raid's route bends round the carrier group (FLEET_RAID_AVOID_NM), and red's target pick shies from it like a Patriot field
+    from sqe.mission_builder import MissionBuilder as _MB31, FLEET_RAID_AVOID_NM as _FR31
+    _cv31 = next((b_ for b_ in _st.bases.values() if b_.kind.value == "CARRIER"), None)
+    if _cv31 is not None:
+        _mb31 = _MB31.__new__(_MB31); _mb31.state = _st
+        _rf31 = next(b_ for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD")
+        _p31 = _mb31._raid_bend([(_cv31.x - 150 * 1852, _cv31.y - 30 * 1852), (_cv31.x + 150 * 1852, _cv31.y - 30 * 1852)], _rf31)   # 30 nm off the boat, sea side
+        _seg = lambda a_, b_: min(((a_[0] + (b_[0] - a_[0]) * t_ / 50 - _cv31.x) ** 2 + (a_[1] + (b_[1] - a_[1]) * t_ / 50 - _cv31.y) ** 2) ** 0.5 for t_ in range(51))
+        assert len(_p31) > 2 and min(_seg(_p31[i_], _p31[i_ + 1]) for i_ in range(len(_p31) - 1)) >= (_FR31 - 1) * 1852, "a raid goes round the carrier group"
+        assert _rd.FLEET_NM == _FR31
     from sqe.mission_builder import RED_LONG_RANGE as _RLR
     assert _RLR == {"Su_27"}, "red's long-range class is the Su-27 only"
     _man = s.manifest(); _rg = next(g_ for g_ in _man.groups if g_.get("raid_base"))

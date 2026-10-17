@@ -148,6 +148,8 @@ F = VehicleGroup.Formation
 MAIN_TASK = {Role.CAP: task.CAP, Role.ESCORT: task.CAP, Role.SWEEP: task.FighterSweep, Role.SEAD: task.SEAD,
              Role.STRIKE: task.PinpointStrike, Role.CAS: task.CAS}
 ARMOR_DENSITY = (0.5, 1.5)    # vehicles in a front-line column = the base mix x (0.5 + 1.5 x the sector's enemy strength): 2x at full strength, 1x at 33%
+FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
+                              # killed CAP pairs 51 to 67 nm out; 70 is just past that)
 CAP_FLEET_KEEPOUT_NM = 90      # Red's known CAP stations stay at least this far from any carrier (hand-set: the cruiser's SM-2s killed CAP pairs 51 to 67 nm out)
 LASER = ["1688", "1687", "1686", "1685", "1684", "1683", "1682", "1681"]
 
@@ -1790,7 +1792,7 @@ class MissionBuilder:
             rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
             rtb.type, rtb.action = "Land", PointAction.Landing
             rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
-        # v0.41.31: used to force the player's landing point speed free here ("so it never closes a locked-speed run"), but the trailing
+        # v0.41.32: used to force the player's landing point speed free here ("so it never closes a locked-speed run"), but the trailing
         # DIVERT/TKR/BULLS steerpoints are appended later (_trailing_steerpoints) with no time lock of their own, so this point was never
         # followed by a locked-time point and the ME refused the save ("Viper 2: Waypoint 8 ... not surrounded by waypoints with locked
         # time!"). land_at() already leaves the landing point's speed locked, which is safe; _free_locked_speeds frees a speed lock only
@@ -1843,7 +1845,7 @@ class MissionBuilder:
         """Mission Editor refuses to save a route where every point between two time-locked points has a locked speed (free the first one),
         and the mirror: any point with BOTH speed and time free needs a time-locked point on each side, so a point past the last time-locked
         waypoint (the tail after a station, or the trailing DIVERT/TKR/BULLS steerpoints on the player's own route) can never be both-unlocked
-        (lock its speed; v0.41.31, "Viper 2: Waypoint 8 ..."). Runs last, after every point (including the trailing steerpoints) is in place."""
+        (lock its speed; v0.41.32, "Viper 2: Waypoint 8 ..."). Runs last, after every point (including the trailing steerpoints) is in place."""
         for co in m.coalition.values():
             for c in co.countries.values():
                 for grp in list(c.plane_group) + list(c.helicopter_group):
@@ -2495,14 +2497,20 @@ class MissionBuilder:
 
     def _raid_bend(self, pts, raided):
         """v0.41.29: a red raid's legs bend round blue's Patriot fields (raids.PATRIOT_NM; the field it raids is the one it goes for, so not that
-        one). Only fields whose defences are standing (defense >= 0.15, the rule _place_base builds by). -> the points with turn points added."""
+        one), and (v0.41.31) round the carrier group (FLEET_RAID_AVOID_NM). Only fields whose defences are standing (defense >= 0.15, the rule _place_base builds by). -> the points with turn points added."""
         from .raids import PATRIOT_NM
         circles = [(b.x, b.y, PATRIOT_NM) for b in self.state.bases.values()
                    if b.kind == BaseKind.AIRFIELD and b.id != raided.id and b.defense >= 0.15]
+        # v0.41.31: and round the carrier group (its escorts' SM-2s), unless the fleet is what it is raiding
+        circles += [(b.x, b.y, FLEET_RAID_AVOID_NM) for b in self.state.bases.values() if b.kind == BaseKind.CARRIER and b.id != raided.id]
         if not circles or len(pts) < 2:
             return list(pts)
         wps = [Wpt("P", x, y, 20000, 450) for x, y in pts]
-        avoid_circles(wps, circles, 24, 1)
+        for _ in range(4):                  # a leg straight through a big circle needs more than one turn point (two passes per call)
+            n0 = len(wps)
+            avoid_circles(wps, circles, 24, 1)
+            if len(wps) == n0:
+                break
         return [(w.x, w.y) for w in wps]
 
     def _raid_cap(self, package, f) -> bool:
