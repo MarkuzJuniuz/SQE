@@ -1472,10 +1472,12 @@ class MissionBuilder:
             # air-to-air missiles are gone (the SAMs and the boat's SM-2s cover what it guards)
             g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
             if f.tag == "TNKCAP":
-                # v0.41.26: the tanker CAP was timid in the XO's Nalchik run. Radar searching all the time, weapons free, so it shoots first at
-                # maximum range at anything coming at the tanker; the circle round the tanker (TNKCAP_ZONE_NM) keeps it with the tanker
+                # v0.41.26: the tanker CAP was timid in the XO's Nalchik run. Radar searching all the time, so it shoots first at maximum range
+                # at anything coming at the tanker; the circle round the tanker (TNKCAP_ZONE_NM) keeps it with the tanker.
+                # v0.41.35: NO explicit weapons free any more. Weapons free = "engage any enemy group in contact" (ME docs), which overrides the
+                # circle: in all three of XO's runs of 2026-10-16/17 the tanker CAP (the only support CAP with it) ran 50-78 nm out into the
+                # Sukhumi S-300, and the v0.41.34 pull-back could not stop it (the option outlives a new route). Default ROE, like the others.
                 g.points[0].tasks.append(task.OptRadarUsing(task.OptRadarUsing.Values.UseForContinuousSearch))
-                g.points[0].tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
             rtbt_ = task.OptRTBOnOutOfAmmo(); rtbt_.params["action"]["params"]["value"] = AAM_WEAPONS
             g.points[0].tasks.append(rtbt_)
         elif stw is not None and (not f.is_player or o.player_is_ai):
