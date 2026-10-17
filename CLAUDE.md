@@ -43,6 +43,7 @@ Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE
 - Talk first, then build, for anything big. Tell XO whether it is light or heavy before starting.
 - Add an entry to `docs/CHANGES.md` for each PR, and list XO's own commits in it.
 - **Docs-only changes** (CLAUDE.md, README, CHANGES.md, comments, other markdown): do not run the smoke test. Run it for anything that touches code or data.
+- (XO) Don't forget to update __init__.py for version changes.
 
 ## Doctrine and realism
 - Anything military (tactics, SAM and fighter employment, escorts, strike packaging, naval air defence, raid shapes, force ratios) must be grounded in real, public literature: doctrine manuals, open-source analysis, books and articles, official data sheets.
