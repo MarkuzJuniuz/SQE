@@ -322,6 +322,10 @@ class WarSimulator:
         bw = state.enemy_air_at(pkg.extra.get("bomber_wing", "")) if pkg.extra else None
         strength = sum(f.count * ROLE_WEIGHT[f.role] for f in pkg.flights)
         esc = pkg.extra.get("escorts", 0)
+        if pkg.extra.get("land"):           # v0.41.30: the batteries round the raid's target fight it too (sams.covering_ad, AD_RAID_WEIGHT)
+            from .sams import covering_ad, AD_RAID_WEIGHT
+            from .raids import aim_xy
+            strength += AD_RAID_WEIGHT * covering_ad(state, *aim_xy(state, pkg.objective.aim, state.bases[pkg.objective.target_id]))
         p = strength / (strength + 2.5 + 2.0 * d.iads + 0.4 * esc)
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
         lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'} (odds {p:.0%})"]

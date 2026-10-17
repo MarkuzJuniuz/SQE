@@ -37,6 +37,38 @@ RETURN_MIN_DAYS = 2
 BLUE_REPAIR = 0.10
 LEND_FROM, LEND_TO, LEND_AMOUNT = 0.80, 0.50, 0.05
 
+# v0.41.30: every blue airfield's air defence at doctrinal strength (XO 2026-10-16: "all bases are important", red-like firepower).
+# Sources: FM 44-85 App. B, a Patriot fire unit = 1 radar, 1 ECS, 1 power plant, 1 antenna mast group and 8 launching stations;
+# a Phase III HAWK battery = 1 PAR, 1 CWAR, 2 HIPIR and 6 launchers (18 missiles). The 0.6 / 0.15 thresholds are the old ones (judgment calls).
+BLUE_PATRIOT_LN = 8           # launchers in a full Patriot fire unit (FM 44-85; GlobalSecurity also says "up to 16" in one place)
+BLUE_HAWK_LN = 6              # launchers in a HAWK battery
+BLUE_HAWK_TR = 2              # HAWK tracking radars (HIPIR) per battery
+BLUE_FULL_DEF = 0.6           # a field at or above this `defense` has the full set: Patriot, HAWK, two AAA sites
+BLUE_MIN_DEF = 0.15           # below this, nothing is standing. Between: a reduced Patriot (launchers by `defense`), one AAA site, no HAWK
+AD_RAID_WEIGHT = 4.0          # a full field's air defence counts like this many fighters against a raid in the war sim (judgment call)
+
+
+def blue_battery(b) -> dict:
+    """v0.41.30: what stands at a blue airfield, by its `defense`: Patriot launchers, HAWK yes/no, AAA sites. All fields alike."""
+    dv = float(getattr(b, "defense", 0.0) or 0.0)
+    if getattr(b, "kind", None) is None or b.kind.value != "AIRFIELD" or dv < BLUE_MIN_DEF:
+        return {"patriot_ln": 0, "hawk": False, "aaa": 0}
+    if dv >= BLUE_FULL_DEF:
+        return {"patriot_ln": BLUE_PATRIOT_LN, "hawk": True, "aaa": 2}
+    return {"patriot_ln": max(2, round(BLUE_PATRIOT_LN * dv)), "hawk": False, "aaa": 1}
+
+
+def air_defence(b) -> float:
+    """v0.41.30: a field's air defence for the war sim, 0 (nothing standing) to 1 (full Patriot + HAWK), from blue_battery."""
+    bt = blue_battery(b)
+    return min(1.0, 0.7 * bt["patriot_ln"] / BLUE_PATRIOT_LN + (0.3 if bt["hawk"] else 0.0))
+
+
+def covering_ad(state, x, y, reach_nm: float = 40.0) -> float:
+    """v0.41.30: the strongest blue field air defence that covers (x, y) (within reach_nm of the field: raids.PATRIOT_NM)."""
+    return max([air_defence(b) for b in state.bases.values()
+                if b.kind.value == "AIRFIELD" and math.hypot(b.x - x, b.y - y) <= reach_nm * 1852.0] + [0.0])
+
 
 def _rec(state) -> dict:
     if not isinstance(getattr(state, "sams", None), dict):
