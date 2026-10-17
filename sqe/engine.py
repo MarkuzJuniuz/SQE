@@ -169,6 +169,10 @@ class Session:
                 else:
                     a[1].append(p)
             sp_spec = AIRCRAFT[st.squadrons[psq].aircraft] if psq else None
+            from . import sweep as sweep_
+            # v0.41.33 (XO 2026-10-16): no sweep to bait red. Only where red's own plan has a flight near the area OUT IN THE OPEN (not under
+            # SAM cover) with a SAM-clear station short of it; otherwise the packages' TARCAP and escorts carry the fight
+            areas = [a for a in areas if sweep_.candidates(st, a[0].x, a[0].y)]
             for k, (t, covered) in enumerate(areas):
                 o = Objective(f"obj-d{st.day}-sw{k + 1}", ObjectiveType.COUNTER_AIR, t.id, max(p.objective.priority for p in covered),
                               f"Fighter Sweep: clear the air over {t.name} ahead of the strikes", "SWEEP")
@@ -219,11 +223,23 @@ class Session:
         self._sync_sead(pkgs)                                        # SEAD flights on the same ground (within SEAD_SYNC_KM) arrive together, not one after another
         self._stage_times(pkgs)                                      # a DEAD stage goes in DEAD_STAGE_GAP_MIN after the SEAD stage of the same site
         self._late_sead(pkgs)                                        # test option --late-sead: the SEAD stage goes in late, so the DEAD stage holds
+        from . import sweep as sweep_
+        dropped = set()
         for p in pkgs:                                               # a Fighter Sweep starts SWEEP_LEAD_MIN ahead of the first package it covers (after every other timing step)
             cov = sweeps.get(id(p))
             if cov:
-                m = max(0, min(int(c.start[:2]) * 60 + int(c.start[3:5]) for c in cov) - SWEEP_LEAD_MIN)
+                first_ = min(int(c.start[:2]) * 60 + int(c.start[3:5]) for c in cov)
+                m = max(0, first_ - SWEEP_LEAD_MIN)
                 p.start = f"{m // 60:02d}:{m % 60:02d}"
+                # v0.41.33: the red flight it goes after must be up in its window; none: no sweep (TARCAP and escorts carry the fight)
+                t_ = st.assets.get(p.objective.target_id)
+                vs_ = sweep_.pick(st, t_.x, t_.y, first_) if t_ is not None else None
+                if vs_ is None:
+                    dropped.add(id(p))
+                else:
+                    p.extra["sweep_vs"] = {"id": vs_["id"], "x": float(vs_["x"]), "y": float(vs_["y"]), "kind": vs_["kind"]}
+        if dropped:
+            pkgs = [p for p in pkgs if id(p) not in dropped]
         pkgs.sort(key=lambda p: p.start)
         for n, p in enumerate(pkgs, 1):                              # numbers follow the clock
             p.number, p.id = n, f"pkg{n}"

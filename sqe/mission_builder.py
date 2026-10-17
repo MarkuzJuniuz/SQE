@@ -1488,7 +1488,12 @@ class MissionBuilder:
                     zone_ = (zone_[0], zone_[1], max(8.0, min(zone_[2], d10_ - SA10_REACH_NM)))
                 # v0.41.23: moved, not only shrunk: the circle's centre may shift (toward home or to either side) to keep its full size clear of
                 # SAMs, as long as it still takes in the station
-                zone_ = self._cover_circle([(stw.x, stw.y)], (stw.x, stw.y), package, zone_[2], back_)
+                # v0.41.33: a sweep's circle also takes in the red station it was sent after (sweep.station_for puts it REACH_NM away), as far
+                # as that stays clear of SAMs (its own station first)
+                vs_ = package.extra.get("sweep_vs") if stw.action == "SWEEPSTN" else None
+                cpts_ = [(stw.x, stw.y)] + ([(vs_["x"], vs_["y"])] if vs_ else [])
+                c0_ = ((stw.x + vs_["x"]) / 2, (stw.y + vs_["y"]) / 2) if vs_ else (stw.x, stw.y)
+                zone_ = self._cover_circle(cpts_, c0_, package, zone_[2], back_)
             else:
                 lp_ = self._launch_pts[package.id]
                 cx_, cy_ = sum(p_[0] for p_ in lp_) / len(lp_), sum(p_[1] for p_ in lp_) / len(lp_)
@@ -2410,7 +2415,7 @@ class MissionBuilder:
             t = geom.tiers[key]
             geom.stand[key] = profiles.station(self.state, pts, t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000), geom.egr)
             if geom.sweep:
-                geom.stand[key] = self._sweep_station(geom.stand[key], tx, ty, pts[0], f.aircraft in LONG_RANGE_A2A)
+                geom.stand[key] = self._sweep_station(geom.stand[key], tx, ty, pts[0], package)
 
     def _sam_clear(self, x, y) -> bool:
         """v0.41.14: a friendly orbit is clear of SAMs: 35 nm from every live SA-10 (the reach measured in the runs; the ring table says 48 nm, which
@@ -2555,33 +2560,24 @@ class MissionBuilder:
                     best = (score, (cx, cy, max(floor_nm, min(r, room))))
         return best[1]
 
-    def _sweep_station(self, so, tx, ty, home_xy, long_range=False):
-        """v0.41.13: a Fighter Sweep's station sits INSIDE the nearest enemy field's scramble circle (5 nm in), so the alert pairs come up into the
-        sweep before the strikers arrive, but 35 nm from every live SA-10 and 15 nm outside every other SAM ring. The v0.41.12 run: the sweep
-        orbited just short of SAM cover, tripped nothing and met only SAM missiles. First it backs out of SAM reach (toward home), then it walks
-        toward the field while it stays clear. -> the station tuple with its x, y (and nm short of the target) replaced."""
+    def _sweep_station(self, so, tx, ty, home_xy, package=None):
+        """v0.41.33 (XO 2026-10-16): a Fighter Sweep no longer baits red. v0.41.13 put its station INSIDE the nearest enemy field's scramble circle
+        at the edge of SAM reach; the 2026-10-16 run lost two F-15Cs to the Sukhumi S-300 in 95 s (34 nm, 30,000 ft). Now the station is short of
+        the known red flight the planner sent it after (package.extra["sweep_vs"], sweep.station_for): on its line toward home, clear of SAMs by the
+        sweep's wider margins, outside red's scramble circles where it can be. No such flight (an old plan): it only backs out of SAM reach toward
+        home. -> the station tuple with its x, y (and nm short of the target) replaced."""
+        from . import sweep as sweep_
         st = self.state
         x, y = so[0], so[1]
-        sa10 = [a for a in st.assets.values() if a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.25]
-        clear = self._sam_clear
-        for _ in range(40):
-            if clear(x, y) or dist(x, y, *home_xy) < 2 * NM:
-                break
-            x, y = offset(x, y, bearing(x, y, *home_xy), 2 * NM)
-        fb = tm.fighter_bases(st)
-        if fb:
-            ex, ey = min(fb, key=lambda e: dist(e[0], e[1], x, y))
-            r = tm.field_detect_nm((ex, ey), (tx, ty), st) - 5
-            # v0.41.15: long-range shooters (F-15C, F-14) stand at the edge of the circle, as far back as it allows, and reach in with their missiles
-            if long_range:
-                r = tm.field_detect_nm((ex, ey), (tx, ty), st) - 2
-            if dist(x, y, ex, ey) > r * NM:
-                # a clear point just inside the circle, nearest our side first: on the field's bearing to the station, then swinging up to 90 deg off it
-                b0 = bearing(ex, ey, x, y)
-                pick = next(((px, py) for ang in (0, 10, -10, 20, -20, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90) for rr in (r, r - 5, r - 10)
-                             for px, py in [offset(ex, ey, b0 + ang, rr * NM)] if rr > 0 and clear(px, py)), None)
-                if pick is not None:
-                    x, y = pick
+        vs_ = (getattr(package, "extra", None) or {}).get("sweep_vs")
+        p_ = sweep_.station_for(st, (vs_["x"], vs_["y"]), home_xy, tx, ty) if vs_ else None
+        if p_ is not None:
+            x, y = p_
+        else:
+            for _ in range(60):
+                if sweep_.clear_for_sweep(st, x, y) or dist(x, y, *home_xy) < 2 * NM:
+                    break
+                x, y = offset(x, y, bearing(x, y, *home_xy), 2 * NM)
         return (x, y, so[2], dist(x, y, tx, ty) / NM) + tuple(so[4:])
 
     def _zulu_note(self) -> str:

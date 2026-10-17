@@ -75,6 +75,7 @@ Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE
 - `sqe/threatmap.py`: `tanker_spot` and threat geometry.
 - `sqe/war.py`, `sqe/packages.py`, `sqe/engine.py`: the war sim, package templates, daily planning (`AI_ONLY` job types).
 - `sqe/redair.py`, `sqe/raids.py`: red doctrine by level (`RED_DOCTRINE`, `RED_QUALITY`).
+- `sqe/sweep.py`: Fighter Sweep dispatch (only against red air out in the open) and its SAM-clear station.
 - `sqe/debrief.py`: the Lua mission hook (landed/dead tables, recovery net).
 - `sqe/sams.py`, `sqe/threat.py`, `sqe/ecm.py`: SAM sites, threat model, jamming.
 - `sqe/state.py`, `sqe/settings.py`, `sqe/difficulty.py`, `sqe/gui/`: campaign state, settings, difficulty levels, the UI.
