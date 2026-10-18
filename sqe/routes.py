@@ -102,9 +102,10 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     """Waypoints from start (takeoff for the player, an in-air 'just departed' spawn for AI) to egress. RTB is added by the builder."""
     wp: list[Wpt] = []
     bx, by = own_base
-    if is_player and g.carrier:
+    if is_player:
         # v0.41.12: only off the carrier (the Case I/III departure radial). From a land base the first point after take-off is the marshal
         # point: the DEP 6 nm out at 8,000 ft, with PUSH a mile on at 26,000 ft, asked for a steep climb and a turn back over the field
+        # v0.41.36: (XO) Removed the carrier check. As long as it's a player flight it will show as DEP.
         # (the two unexplained crashes 3-5 min after take-off were both runway starts out of Batumi)
         wp.append(Wpt("DEP", *g.dep, p.depart_alt_ft, p.depart_kts, "Climb out, check in with AWACS"))
     else:
