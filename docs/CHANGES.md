@@ -1,6 +1,6 @@
 ## v0.41.36
 
-**(XO) Player SPAWN WP on Kneeboard** Fixed the issue where player flights from land bases show SPAWN.
+**(XO) Player SPAWN WP on Kneeboard** Fixed the issue where player flights from land bases show SPAWN WP.
 
 ## v0.41.35
 
