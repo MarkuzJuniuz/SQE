@@ -1,6 +1,6 @@
 ## v0.41.36
 
-**(XO) Player SPAWN WP back to DEP WP.** All Player Flights now still have DEP instead of it appearing as SPAWN on the kneeboard.
+**(XO) Player SPAWN WP on Kneeboard** Fixed the issue where player flights from land bases show SPAWN.
 
 ## v0.41.35
 
