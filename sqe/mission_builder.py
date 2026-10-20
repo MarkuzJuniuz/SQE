@@ -40,6 +40,7 @@ TARCAP_MIN = 15               # ...and holds there this long, then goes home
 ESCORT_AFTER_EGR_S = 120      # v0.41.40: an escort stays until the last striker has reached its egress point + this long (XO 2026-10-20: DEADers were left behind)
 ESCORT_AFTER_TOT_S = 180      # an escort (SWEEP role) holds its station until this long after the TOT (the last ground-attack flight off target)
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
+TARCAP_BEHIND_NM = 16         # v0.41.43: with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
@@ -2462,13 +2463,25 @@ class MissionBuilder:
             geom.stand[key] = profiles.station(self.state, pts, t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000), geom.egr)
             if geom.sweep:
                 geom.stand[key] = self._sweep_station(geom.stand[key], tx, ty, pts[0], package)
-            elif f.role == Role.SWEEP and any(getattr(x_, "kit", "") == "JSOW" for x_ in package.flights):
+            elif f.role in (Role.SWEEP, Role.ESCORT) and any(getattr(x_, "kit", "") == "JSOW" for x_ in package.flights):
                 # v0.41.42 (XO 2026-10-20): the package escort shepherds the JSOW flight, not the HARM shooters' station: it holds ESCORT_BEHIND_NM
                 # behind the JSOW launch point (on its own axis), where the JSOW jets release and turn home (the 2026-10-20 run lost all five to MiG-29s
                 # with the escort 20 nm away). Not kept out of SAM cover: that is the shepherd's risk. It leaves from the station, not by the package egress.
                 jx_, jy_ = jsow_launch_xy(geom, self._jsow_side(package, geom))
                 ax_ = bearing(tx, ty, jx_, jy_)
-                ex_, ey_ = offset(jx_, jy_, ax_, ESCORT_BEHIND_NM * NM)
+                if f.role == Role.SWEEP:
+                    ex_, ey_ = offset(jx_, jy_, ax_, ESCORT_BEHIND_NM * NM)
+                else:
+                    # v0.41.43 (XO 2026-10-20): the TARCAP overwatches from just behind the JSOW flight (where it used to turn round with the HARM shooters),
+                    # TARCAP_BEHIND_NM back, and further back (1 nm steps, at most 14 more) until it is outside every live medium / long-range SAM ring plus
+                    # the stand-off margin. The JSOW point itself is already 40 nm from every SA-10, so the SA-10 rule holds.
+                    sites_ = profiles._cover_sites(self.state, t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000))
+                    back_ = TARCAP_BEHIND_NM
+                    while True:
+                        ex_, ey_ = offset(jx_, jy_, ax_, back_ * NM)
+                        if back_ >= TARCAP_BEHIND_NM + 14 or all(dist(ex_, ey_, a_.x, a_.y) > r_ for a_, r_ in sites_):
+                            break
+                        back_ += 1.0
                 geom.stand[key] = (ex_, ey_, [], dist(ex_, ey_, tx, ty) / NM, False)
 
     def _launch_points(self, package, geom) -> list:

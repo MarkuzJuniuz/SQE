@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.43
+
+* **The TARCAP overwatches from behind the JSOW flight** (XO 2026-10-20: after the HARM shooters launch, the TARCAP turned round with them, then was out of position when red's second wave arrived; XO: that turn-round point should be the TARCAP's station). In a package with a JSOW flight the TARCAP station is `TARCAP_BEHIND_NM` (16 nm, judgment call: twice the escort's 8) behind the JSOW launch point on its axis, stepped back 1 nm at a time (at most 14 more) until it is outside every live medium / long-range SAM ring plus the stand-off margin. No 9 nm sideways step for these packages.
+* **Position tracks in `SQE_state.json`**: the Lua hook records each group's lead unit every 30 s (`"tracks": {group: [[t, x, z, alt_m], ...]}`, at most 400 points a group) so a run can show where the TARCAP, escort and strikers actually flew.
+* Not tested in DCS. Cost: a TARCAP that sits too far back to reach red fighters, or one that still chases (the tracks will show which). Not changed: the engage circle and the support-CAP pull-back.
+* Smoke test: "[shepherd]" also checks the TARCAP station.
+
 ## v0.41.42
 
 * **The JSOW flight is no longer left alone** (XO 2026-10-20: the run lost all five Standoff DEAD Hornets to Sukhumi / Gudauta MiG-29s after their JSOW release; the TARCAP and escort sat at the HARM point, 17-18 nm from the JSOW launch points, and the TARCAP's circle did not reach them). Two changes:
