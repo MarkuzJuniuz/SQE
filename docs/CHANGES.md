@@ -1,3 +1,12 @@
+# CHANGES.md
+
+## v0.41.37
+
+* **Enhanced stationing logic for TARCAP and ESCORT**:
+  - Adjusted `STATION_FRAC` to 0.85 to provide better coverage from long-range SAMs.
+  - Increased `STANDOFF_MARGIN_NM` to 15 nm to ensure effective cover from medium and short-range SAMs.
+  - Improved the stationing logic to be more robust and ensure effective air cover.
+
 ## v0.41.36
 
 **(XO) Player SPAWN WP on Kneeboard** Fixed the issue where player flights from land bases show SPAWN WP.

@@ -148,7 +148,8 @@ def choose(state, role, p, pts, tgt, cloud_base_ft: float | None = None, skip=()
 
 
 # ---- fighters stand off from live SAM cover ---------------------------------------------------------------------------------------
-STANDOFF_MARGIN_NM = 3.0        # stop this far outside the ring of the first live SAM that can reach the flight's altitude
+STANDOFF_MARGIN_NM = 15.0       # stop this far outside the ring of the first live SAM that can reach the flight's altitude
+                                # v0.41.37: 15 nm outside medium/short-range SAM rings
 STANDOFF_MIN_SHORT_NM = 4.0     # only worth moving if the stand-off point is at least this far short of the target
 
 
@@ -189,8 +190,10 @@ def standoff(state, pts, alt_ft: int, margin_nm: float = STANDOFF_MARGIN_NM):
 
 
 STATION_SHORT_NM = 12.0
-STATION_FRAC = 0.75             # against a long-range SAM: the station sits this fraction of its reach from it (about 36 nm for an SA-10).
+STATION_FRAC = 0.85             # against a long-range SAM: the station sits this fraction of its reach from it (about 36 nm for an SA-10).
                                 # v0.41.1: 0.62 (30 nm) was inside where the SA-10 really engaged (59-61 km) and it killed six Eagles there
+                                # v0.41.37: 0.85 of the long-range SAM reach (40 nm from SA-10)
+
 STATION_OFFSET_NM = 9.0         # ...moved this far sideways toward the nearest enemy airfield
 LONG_RANGE_NM = 30.0            # a SAM that reaches this far counts as long-range for the station rule
 
