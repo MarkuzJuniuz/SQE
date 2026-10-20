@@ -1305,6 +1305,9 @@ def main():
             for p_ in g_["route"]["points"].values():
                 if p_.get("name") in ("SEAD", "TGT") and g_.get("task") in ("SEAD", "CAP"):
                     _dd.setdefault(g_["task"], []).append(_m3j.hypot(p_["x"] - _sa.x, p_["y"] - _sa.y) / 1852)
+    _pats = [str(t_) for co_ in _Mc["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values() if g_.get("task") == "CAP"
+             for p_ in g_["route"]["points"].values() if p_.get("name") == "TGT" for t_ in [p_["task"]["params"]["tasks"]] if "Orbit" in str(t_)]
+    assert _pats and all("'pattern': 'Circle'" in t_ for t_ in _pats), ("v0.41.43: a station orbit is a Circle, not a race-track to RTB", _pats[:1])
     _tar = [x_ for x_ in _dd.get("CAP", []) if x_ < 45]
     _far = [x_ for x_ in _dd.get("CAP", []) if x_ >= 45]      # v0.41.43: with a JSOW flight the TARCAP holds behind the JSOW point (40+ nm from the SA-10), further out than the HARM shooters
     assert _dd.get("SEAD") and (_far and min(_far) > max(_dd["SEAD"]) + 10 if _far else _tar and all(abs(x_ - _sfr * 48) <= _son + 2 for x_ in _tar)), ("the TARCAP sits level with the HARM shooters, or behind the JSOW point", _dd)

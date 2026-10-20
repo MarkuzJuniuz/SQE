@@ -3,6 +3,7 @@
 ## v0.41.43
 
 * **The TARCAP overwatches from behind the JSOW flight** (XO 2026-10-20: after the HARM shooters launch, the TARCAP turned round with them, then was out of position when red's second wave arrived; XO: that turn-round point should be the TARCAP's station). In a package with a JSOW flight the TARCAP station is `TARCAP_BEHIND_NM` (16 nm, judgment call: twice the escort's 8) behind the JSOW launch point on its axis, stepped back 1 nm at a time (at most 14 more) until it is outside every live medium / long-range SAM ring plus the stand-off margin. No 9 nm sideways step for these packages.
+* **Station orbits are circles, not race-tracks** (XO 2026-10-20: "very long orbits, north to south"; the new tracks confirm it: Springfield 7 and Hornet 6 flew 57-60 nm from their station to RTB and back). DCS's default Race-Track orbit runs from its waypoint to the NEXT waypoint, which for a station is RTB. TARCAP, escort, sweep and SAM-held fighters now orbit in a Circle at their station. Support-CAP racetracks (CAP1 -> CAP2) are unchanged.
 * **Position tracks in `SQE_state.json`**: the Lua hook records each group's lead unit every 30 s (`"tracks": {group: [[t, x, z, alt_m], ...]}`, at most 400 points a group) so a run can show where the TARCAP, escort and strikers actually flew.
 * Not tested in DCS. Cost: a TARCAP that sits too far back to reach red fighters, or one that still chases (the tracks will show which). Not changed: the engage circle and the support-CAP pull-back.
 * Smoke test: "[shepherd]" also checks the TARCAP station.
