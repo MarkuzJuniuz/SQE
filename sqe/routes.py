@@ -53,14 +53,15 @@ class Geometry:
     ai_player: bool = False  # test mode: the player's slot is flown by the AI, so the player's flight gets the AI stand-off too
     stand: dict = None      # {(role, id(profile)): (x, y, [SAM types], nm short)} sweeps and escorts that stop at the edge of SAM cover
     sweep: bool = False     # a Fighter Sweep package: no marshal, DEP - PUSH - station - home
-    jsow_keep: list = None  # [(x, y, nm)]: live long-range SAMs a JSOW launch point stays this far from (v0.41.3)
+    jsow_keep: list = None  # [(x, y, nm)]: live SAMs a JSOW launch point stays this far from (v0.41.3; v0.41.46: nm is each entry's own ring, the target cluster's SAMs included)
     carrier: bool = False   # v0.41.12: the flight's base is a carrier (only then a DEP point after take-off)
     sa10_avoid: list = None # [(x, y, nm)]: live medium / long-range SAMs (not the target) an AI flight's route bends around (v0.41.11; all gate SAMs since v0.41.20)
 
 
 STANDOFF_EGRESS_NM = 25.0  # a HARM or JSOW flight egresses this far beyond its launch point, straight back out along its own approach
 JSOW_AXIS_DEG = 30.0       # the JSOW flight's approach is this far off the HARM shooters' axis (side chosen by the builder, away from other SAM sites)
-JSOW_LAUNCH_NM = 20.0      # an AI JSOW flight's launch point (the AGM-154A glides about this far from 20,000 ft); it releases from there and turns home
+JSOW_LAUNCH_NM = 30.0      # an AI JSOW flight's launch point. v0.41.46 (was 20): XO's 2026-10-20 run, AGM-154As released from 20,000 ft at 45-65 km (24-35 nm), and a 20 nm point sat
+                           # on the target's own SA-11 ring (about 19 nm): two Squids died to it. 30 nm is inside the release range seen and about 10 nm clear of that ring (judgment call)
 JSOW_HIGH_ALT_FT = 33000      # ...and when it is pushed out past JSOW_LAUNCH_NM, the flight releases from this high
 JSOW_MAX_NM = 45.0           # a JSOW launch point is never farther than this from its target (v0.41.3 run: AGM-154As released at 30-40 nm from 33,000 ft hit; was 40)
 JSOW_KEEP_HIGH_NM = 40.0     # a pushed-out JSOW flight is high, where an SA-10 reaches farther: its launch point stays this far from one (v0.41.3 run: 30.6 nm lost all four)
@@ -104,7 +105,7 @@ def jsow_launch_nm(g, jsow_side: float) -> float:
     nm = max(8.0, min(JSOW_LAUNCH_NM, g.d / NM * 0.8 - 6))
     if g.jsow_keep:
         jh_ = g.hdg + 180 + JSOW_AXIS_DEG * jsow_side
-        while nm < JSOW_MAX_NM and any(dist(*offset(g.tx, g.ty, jh_, nm * NM), kx, ky) < max(knm, JSOW_KEEP_HIGH_NM) * NM for kx, ky, knm in g.jsow_keep):
+        while nm < JSOW_MAX_NM and any(dist(*offset(g.tx, g.ty, jh_, nm * NM), kx, ky) < knm * NM for kx, ky, knm in g.jsow_keep):
             nm += 1.0
     return nm
 

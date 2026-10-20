@@ -967,6 +967,8 @@ def main():
     _esc = [v_ for (r_, _i), v_ in _gm.stand.items() if r_ == _Rj.SWEEP]
     assert _esc, "a Standoff DEAD package has an escort station"
     _jp = _jxy(_gm, _bs._jsow_side(_pk, _gm))
+    from sqe.routes import JSOW_LAUNCH_NM as _JLN
+    assert _jd(*_jp, _gm.tx, _gm.ty) / _JNM >= min(_JLN, _gm.d / _JNM * 0.8 - 6) - 0.5, "v0.41.46: the JSOW launch point is at least JSOW_LAUNCH_NM (30) from the target"
     assert all(abs(_jd(v_[0], v_[1], *_jp) / _JNM - _EBN) < 1.0 for v_ in _esc), "the escort holds ESCORT_BEHIND_NM behind the JSOW launch point"
     _tc = [v_ for (r_, _i), v_ in _gm.stand.items() if r_ == _Rj.ESCORT]
     assert _tc and all(_jd(v_[0], v_[1], *_jp) / _JNM >= _TBN - 1.0 for v_ in _tc), "v0.41.43: the TARCAP holds at least TARCAP_BEHIND_NM behind the JSOW launch point"
@@ -1173,6 +1175,10 @@ def main():
     s.ai_test = True; s.fly(_pj.number, s.flyable(_pj, squadron_only=False)[0].id); s.ai_test = False
     _mj = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
     assert "{AGM-154A}" in _mj and '["name"]="JSOW"' in _mj and _mj.count('["id"]="Bombing"') >= 1, "the JSOW flight is built: AGM-154A, a JSOW launch point, release tasks"
+    # v0.41.46: a JSOW flight's release tasks are time-limited (a ControlledTask wrapping each Bombing), so it turns for home after its salvo
+    import re as _re46
+    _bm = [m_ for m_ in _re46.finditer(r'\["id"\]="Bombing"', _mj)]
+    assert _bm and all('stopCondition' in _mj[max(0, m_.start() - 900):m_.start()] for m_ in _bm[:1]), "v0.41.46: the JSOW release tasks have a stop time"
     # Standoff DEAD: the JSOWs also go on the launchers; a site under a live SA-10 gets Standoff DEAD, one clear of it the SEAD / Close DEAD pair
     from dcs import lua as _luaj
     from sqe.war import long_range_site as _lrs
@@ -1181,8 +1187,9 @@ def main():
     _tgt_j = _pj.objective.target_id
     _lnx = [(u_["x"], u_["y"]) for co_ in _Mj["coalition"]["red"]["country"].values() for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()
             if g_["name"] == _tgt_j for u_ in g_["units"].values() if " ln" in u_["type"].lower()]
-    _bmb = [(t_["params"]["x"], t_["params"]["y"]) for co_ in _Mj["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
-            for p_ in g_["route"]["points"].values() for t_ in ((p_.get("task") or {}).get("params") or {}).get("tasks", {}).values() if t_.get("id") == "Bombing"]
+    _unw = lambda t_: t_["params"]["task"] if t_.get("id") == "ControlledTask" and "task" in t_.get("params", {}) else t_       # v0.41.46: the release tasks are wrapped (stop time)
+    _bmb = [(_unw(t_)["params"]["x"], _unw(t_)["params"]["y"]) for co_ in _Mj["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
+            for p_ in g_["route"]["points"].values() for t_ in ((p_.get("task") or {}).get("params") or {}).get("tasks", {}).values() if _unw(t_).get("id") == "Bombing"]
     assert _lnx and any(_m3j.hypot(bx_ - lx_, by_ - ly_) < 150 for bx_, by_ in _bmb for lx_, ly_ in _lnx), "Standoff DEAD JSOWs aim at the launchers too"
     _sa10 = [a_ for a_ in s.state.assets.values() if a_.variant == "SA-10" and not a_.destroyed]
     _far = [a_ for a_ in s.state.assets.values() if a_.kind.value == "SAM" and a_.variant != "SA-10" and all(_m3j.hypot(a_.x - b_.x, a_.y - b_.y) > 60000 for b_ in _sa10)]
