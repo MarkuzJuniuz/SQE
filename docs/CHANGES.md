@@ -1,5 +1,10 @@
 # CHANGES.md
 
+## v0.41.39
+
+* **Ground units get explicit orders** (XO 2026-10-20): every red garrison and armour column, every blue site (garrisons, sector forces) and the CAS task force now carry weapons free + alarm state red on their first waypoint (`_ground_orders` in `mission_builder.py`; `_drive` uses it too, so the CAS drive-in is unchanged). SAM sites keep their own orders. Limit: the Mission Editor has no target-priority order for ground units, so "other ground units first, then parked jets" is NOT enforced; DCS picks the target. Untested in DCS whether ground AI fires at parked aircraft at all.
+* Smoke test: new "[ground orders]" check.
+
 ## v0.41.38
 
 * **TARCAP stays at least 15 minutes, then until the last striker is off target + 5 minutes** (the 15-minute minimum is back: it had been halved to 7.5 min in `_hold_end`) (XO 2026-10-20: TARCAPs left as soon as the SEAD flight headed home). Cause: the hold ended at the TOT of the flight being built for the player plus 5 minutes (at least 7.5 minutes after arriving). When the player flew the TARCAP that TOT was the TARCAP's own station time (Day 4 mission: station 1468 s, stop 1918 s = 7.5 min); when the player flew SEAD it was the HARM time, so the TARCAP left with the SEAD flight. Now `mission_builder.py` also feeds the latest target time of the package's own strike / SEAD / CAS flights into `_extend_holds` (capped as before by `HOLD_EXTEND_MAX_S`).
