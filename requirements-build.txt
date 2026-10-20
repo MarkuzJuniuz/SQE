@@ -1,2 +1,2 @@
 -r requirements.txt
-pyinstaller>=6.3
+pyinstaller>=6.10          # 6.10 is the first release that supports Python 3.13
