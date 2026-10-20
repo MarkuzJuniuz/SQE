@@ -2573,7 +2573,7 @@ class MissionBuilder:
         if stw.action == "SWEEPSTN":
             return int(stw.eta_s + TARCAP_MIN * 60)
         if stw.action == "TARCAP":
-            return int(max(stw.eta_s + TARCAP_MIN * 60 // 2, t_end + TARCAP_AFTER_TOT_S))
+            return int(max(stw.eta_s + TARCAP_MIN * 60, t_end + TARCAP_AFTER_TOT_S))      # v0.41.38 (XO): at least TARCAP_MIN (15) min on station, then until the last striker is off + 5 min
         return int(max(stw.eta_s + 120, t_end + ESCORT_AFTER_TOT_S))
 
     def _room(self, x, y, package, fighters: bool = True) -> float:
