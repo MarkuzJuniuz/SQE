@@ -1157,9 +1157,10 @@ def main():
     from sqe.models import Role as _Rl2
     _lo = _LL()
     _h = _lo.for_role("FA-18C", _Rl2.STRIKE, "JSOW"); _v = _lo.for_role("F-16C", _Rl2.STRIKE, "JSOW")
-    assert _h[2]["CLSID"] == _h[8]["CLSID"] == "{BRU55_2*AGM-154A}" and all(_h[k]["CLSID"] == "{FPU_8A_FUEL_TANK}" for k in (3, 5, 7)), "Hornet JSOW kit: 4 AGM-154A with tanks"
+    assert (_h[2]["CLSID"] == _h[8]["CLSID"] == "{AGM-154A}" and all(_h[k]["CLSID"] == "{FPU_8A_FUEL_TANK}" for k in (3, 7))
+            and _h[5]["CLSID"] == "{A111396E-D3E8-4b9c-8AC9-2432489304D5}"), "Hornet JSOW kit (XO's ME loadout): 2 AGM-154A, 2 tanks, a Litening pod"
     assert _v[3]["CLSID"] == _v[7]["CLSID"] == "{AGM-154A}" and sum("154" in x["CLSID"] for x in _v.values()) == 2, "Viper JSOW kit: 2 AGM-154A"
-    assert _jpj == {"FA-18C": 4, "F-16C": 2}
+    assert _jpj == {"FA-18C": 2, "F-16C": 2}
     s.new("Jsow", "F-16C", 3, seed=1); s.late_sead_min = 0; s.state.campaign_id = f"{0x15a0001:010x}"; s.plan_day()     # pinned: the dice come from the campaign id
     _sp3 = [p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and p_.objective.aim == "STANDOFF"]
     _jf = [f_ for p_ in _sp3 for f_ in p_.flights if f_.kit == "JSOW"]
@@ -1191,6 +1192,11 @@ def main():
     _bmb = [(_unw(t_)["params"]["x"], _unw(t_)["params"]["y"]) for co_ in _Mj["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
             for p_ in g_["route"]["points"].values() for t_ in ((p_.get("task") or {}).get("params") or {}).get("tasks", {}).values() if _unw(t_).get("id") == "Bombing"]
     assert _lnx and any(_m3j.hypot(bx_ - lx_, by_ - ly_) < 150 for bx_, by_ in _bmb for lx_, ly_ in _lnx), "Standoff DEAD JSOWs aim at the launchers too"
+    # v0.41.47: when the release window ends, the JSOW jet's ROE goes to Return Fire (a timed Option task: name 0 = ROE, value 3 = Return Fire), so it stops hunting
+    _jt = [t_ for co_ in _Mj["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
+           for p_ in g_["route"]["points"].values() if p_.get("name") == "JSOW" for t_ in ((p_.get("task") or {}).get("params") or {}).get("tasks", {}).values()]
+    assert any(t_.get("id") == "ControlledTask" and (t_["params"].get("task") or {}).get("id") == "WrappedAction" and "time" in (t_["params"].get("condition") or {})
+               and t_["params"]["task"]["params"]["action"]["params"] == {"name": 0, "value": 3} for t_ in _jt), "v0.41.47: a timed Return Fire after the JSOW release window"
     _sa10 = [a_ for a_ in s.state.assets.values() if a_.variant == "SA-10" and not a_.destroyed]
     _far = [a_ for a_ in s.state.assets.values() if a_.kind.value == "SAM" and a_.variant != "SA-10" and all(_m3j.hypot(a_.x - b_.x, a_.y - b_.y) > 60000 for b_ in _sa10)]
     assert all(_lrs(s.state, a_) for a_ in _sa10) and (not _far or not _lrs(s.state, _far[0])), "long range: an SA-10 or under one; anything else gets the SEAD / Close DEAD pair"
