@@ -8,7 +8,7 @@ Windows + Visual Studio Code. Everything below is copy-paste. Budget about 20 mi
 
 | Need | Why | Get it |
 |---|---|---|
-| **Python 3.11 or 3.12, 64-bit** | runs SQE | python.org/downloads. **Tick "Add python.exe to PATH"** in the installer. |
+| **Python 3.12 or 3.13, 64-bit** | runs SQE | python.org/downloads. **Tick "Add python.exe to PATH"** in the installer. |
 | **Git** | the F-14B(U) lives in a pydcs *fork* that pip downloads from GitHub | git-scm.com/download/win (defaults are fine) |
 | **VS Code** + the **Python** extension (Microsoft) | editor/debugger | code.visualstudio.com, then Extensions (Ctrl+Shift+X) -> "Python" |
 | DCS World with the **F-14B(U)** (and F-16C if you want to fly Air Force) | to fly the missions | you have these |
