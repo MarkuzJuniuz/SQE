@@ -148,8 +148,8 @@ def choose(state, role, p, pts, tgt, cloud_base_ft: float | None = None, skip=()
 
 
 # ---- fighters stand off from live SAM cover ---------------------------------------------------------------------------------------
-STANDOFF_MARGIN_NM = 15.0       # stop this far outside the ring of the first live SAM that can reach the flight's altitude
-                                # v0.41.37: 15 nm outside medium/short-range SAM rings
+STANDOFF_MARGIN_NM = 5.0       # stop this far outside the ring of the first live SAM that can reach the flight's altitude
+                                # v0.41.37: 5 nm outside medium/short-range SAM rings
 STANDOFF_MIN_SHORT_NM = 4.0     # only worth moving if the stand-off point is at least this far short of the target
 
 
