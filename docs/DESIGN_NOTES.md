@@ -85,7 +85,7 @@ _verified v0.41.28 + PR #65, 2026-10-16_
 
 **Which classes set their waypoint actions?** See section 3. Actions come from `plan_route` (`routes.py`): `HOLD` (MSHL),
 `CAPORBIT` (CAP1), `TARCAP` / `ESCORT` / `SWEEPSTN` / `SWEEP` (stations), `BOMB`, `SEAD`, `JSOW`, `CAS` (attack points).
-The builder turns them into DCS tasks (orbit with `stop_after_time`, `AttackGroup`, `Bombing`, ROE, ECM, fuel).
+The builder turns them into DCS tasks (orbit with `stop_after_time`; v0.41.44: station orbits are `Circle`, because DCS's default Race-Track runs from its waypoint to the NEXT waypoint, which for a station is RTB (2026-10-20 tracks); only the support-CAP CAP1 -> CAP2 racetrack is a real race-track; `AttackGroup`, `Bombing`, ROE, ECM, fuel).
 
 **Would the CAPs still have unlimited fuel on the way home, now that they lost the egress waypoint?** No.
 Support CAPs, TARCAPs and Fighter Sweeps have no EGR (stand-off fighters were given none in v0.40.1: they go home from
