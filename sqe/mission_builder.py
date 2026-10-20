@@ -1709,7 +1709,9 @@ class MissionBuilder:
             elif w.orbit:                                                    # fighters held short of live SAM cover / on their station
                 if self._snipe_at.get(id(g)) is w:                              # v0.41.10: on station: maximum-range shots (snipe) from here on
                     wp.tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
-                ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH)))
+                # v0.41.43: a Circle, not DCS's default Race-Track. A race-track runs from this point to the NEXT waypoint, which here is RTB:
+                # 2026-10-20 tracks show Springfield 7 / Hornet 6 flying 57-60 nm from their station to RTB and back (the "north to south" orbit)
+                ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
                 ct.stop_after_time(hold_end if (w is stw and hold_end is not None) else stop); wp.tasks.append(ct)
                 if w is stw and self._holds and self._holds[-1]["end"] == hold_end and ct not in self._holds[-1]["cts"]:
                     self._holds[-1]["cts"].append(ct)
