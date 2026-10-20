@@ -67,6 +67,8 @@ Roles (`sqe/models.py`): CAS, CAP, SWEEP, ESCORT, SEAD, STRIKE. Names are confus
 
 Common to every blue AI flight: `OptRTBOnBingoFuel(True)` on `points[0]`.
 
+**Ground units (v0.41.39, 2026-10-20).** `_ground_orders(g)` in `mission_builder.py` sets `OptROE` weapons free + `OptAlarmState(2)` on point 0 of red garrisons/columns (`_spawn_site`, non-SAM), blue sites (`_spawn_blue_site` area, ~line 2822) and the CAS task force (via `_drive`). No target-priority order exists for ground units in the ME, so ground-before-parked-jets is not enforced. Untested: whether DCS ground AI shoots parked aircraft.
+
 ## 4. The fuel model
 _verified v0.41.28 + PR #65, 2026-10-16_
 

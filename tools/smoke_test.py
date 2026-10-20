@@ -934,6 +934,12 @@ def main():
     _o = _st.to_dict(); _o.pop("raids"); assert _CS.from_dict(_o).raids == {}
     _eng27.AI_ONLY = _aio27
     _eng27.RAID_SCRAMBLES = _rs27
+    from types import SimpleNamespace as _NS
+    from dcs import task as _tk
+    from sqe.mission_builder import MissionBuilder as _MBg
+    _gg = _NS(points=[_NS(tasks=[])]); _MBg._ground_orders(_gg); _MBg._ground_orders(_gg)
+    assert [type(t_).__name__ for t_ in _gg.points[0].tasks] == ["OptROE", "OptAlarmState"], "ground orders: ROE + alarm once per group"
+    print("[ground orders] weapons free + alarm red set once per ground group")
     print("[raids] announced and surprise raids by level, repeatable emergencies (about 9% a sortie, never two in a row), scramble / stay, CAS folded in, postponement, Su-24M raid built and applied, overnight surprises")
     # alert pairs have a dispatch range like the enemy's reinforcements
     from sqe import reactive as _rv

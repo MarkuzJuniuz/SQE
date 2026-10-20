@@ -1225,6 +1225,8 @@ class MissionBuilder:
             for u in gone:
                 g.units.remove(u)
             base_count = max(1, base_count - len(gone))      # the radars were already destroyed: not damage this mission caused
+        if a.kind != AssetKind.SAM:
+            self._ground_orders(g)                      # v0.41.39: armour columns and garrisons fight on explicit orders
         names = []
         for k, u in enumerate(g.units, 1):
             u.name = f"{a.id}|{k}"
@@ -2016,11 +2018,20 @@ class MissionBuilder:
         for p in g.points:
             p.position = mapping.Point(p.position.x + dx, p.position.y + dy, self.t)
 
+    @staticmethod
+    def _ground_orders(g):
+        """v0.41.39: explicit orders on a ground group: weapons free, alarm state red (radars up, guns manned). Left at the default a group may sit
+        at 'auto' and hold fire on aircraft parked in range; set here it engages whatever it sees. The Mission Editor has no target-priority
+        order for ground units, so 'other ground units before parked jets' is not enforced: DCS picks the target (usually the nearest threat)."""
+        if any(isinstance(t_, task.OptROE) for t_ in g.points[0].tasks):
+            return
+        g.points[0].tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
+        g.points[0].tasks.append(task.OptAlarmState(2))
+
     def _drive(self, g, via, speed_ms):
         for q in via:
             g.add_waypoint(mapping.Point(q[0], q[1], self.t), PointAction.OffRoad, speed_ms * 3.6)
-        g.points[0].tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
-        g.points[0].tasks.append(task.OptAlarmState(2))
+        self._ground_orders(g)
 
     def _spawn_cas_support(self, package, plan, geom, manifest):
         if not package.jtac:
@@ -2808,6 +2819,7 @@ class MissionBuilder:
         g = self._platoon(self.usa, f"Friendly {label}", comp, dx, dy, head, F.Star if kind != "sector" else F.Line, scale=scale)
         if g is None:
             return
+        self._ground_orders(g)                          # v0.41.39
         names = []
         for k, u in enumerate(g.units, 1):
             u.name = f"{aim}|{k}"; names.append(u.name)
