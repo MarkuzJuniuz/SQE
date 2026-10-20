@@ -1,5 +1,11 @@
 # CHANGES.md
 
+## v0.41.41
+
+* **Divert tower on COMM2 CH3** (XO 2026-10-20): it was COMM1 CH5. Radio presets, kneeboard and briefing follow the layout. An Air Force jet gets the divert field's VHF tower (its COMM2 is VHF only); a Navy jet gets the UHF tower. COMM1 now holds only AWACS, tanker(s) and JTAC.
+* **Link 16: the AWACS is no longer a donor or member** (XO): members are your wing; donors are the Link 16 capable flights of the SAME package (their leads), and no other package's or support aircraft. Briefing line reworded. Not tested in DCS (does the HSD/TAD show the package flights?).
+* Smoke test: radio layout check covers the divert channel.
+
 ## v0.41.40
 
 * **Escorts stick to the last striker until it is out** (XO 2026-10-20: the DEADers were left behind at the mercy of enemy air). The package escort (SWEEP role) used to leave 3 min after the last striker's time over target, about when the strikers only reached their egress point. It now stays until the last striker's egress point + 2 min (`ESCORT_AFTER_EGR_S`, a judgment call), still capped at 30 min past its own hold; the old TOT + 3 min stays as the floor. TARCAP is unchanged (minimum time, leaves last by its own rule). Merged packages count by their TOT as before (their egress is not tracked). Smoke test: new "[escort egress]" check.

@@ -1,7 +1,8 @@
 """Radio plan: your fixed preset layout, filled with unique frequencies per mission.
 
-    COMM1 (radio 1, UHF):  CH1 AWACS | CH2 TANKER | CH3 JTAC (if any) | CH4 2nd tanker (if any) | CH5 DIVERT
-    COMM2 (radio 2, VHF):  CH1 FLIGHT | CH2 TOWER (VHF tower for Air Force jets at an airfield; UHF otherwise: Navy COMM2 tunes both)
+    COMM1 (radio 1, UHF):  CH1 AWACS | CH2 TANKER | CH3 JTAC (if any) | CH4 2nd tanker (if any)
+    COMM2 (radio 2, VHF):  CH1 FLIGHT | CH2 TOWER (VHF tower for Air Force jets at an airfield; UHF otherwise: Navy COMM2 tunes both) | CH3 DIVERT
+    (v0.41.41, XO: the divert tower moved from COMM1 CH5 to COMM2 CH3; an Air Force jet gets the divert field's VHF tower, Navy its UHF)
 
 Why it is built this way
 - COMM1 entities are all UHF 225-399.975 so the F-14B(U) ARC-159 and the F-16C UHF radio can both tune them.
@@ -21,8 +22,8 @@ from .models import BaseKind
 @_dc
 class RadioLayout:
     """Your fixed preset layout. COMM1 CH3 (JTAC) and CH4 (second tanker) appear only when the mission has them."""
-    comm1: dict = field(default_factory=lambda: {1: "AWACS", 2: "TANKER1", 3: "JTAC", 4: "TANKER2", 5: "DIVERT"})
-    comm2: dict = field(default_factory=lambda: {1: "FLIGHT", 2: "ATC"})
+    comm1: dict = field(default_factory=lambda: {1: "AWACS", 2: "TANKER1", 3: "JTAC", 4: "TANKER2"})
+    comm2: dict = field(default_factory=lambda: {1: "FLIGHT", 2: "ATC", 3: "DIVERT"})
     optional: frozenset = frozenset({"JTAC", "TANKER2"})
     comm1_radio_id: int = 1
     comm2_radio_id: int = 2
@@ -92,20 +93,20 @@ class FrequencyAllocator:
 
 
 def build_radio_plan(package, state, atc_mhz: float, rng: random.Random,
-                     layout: RadioLayout, mcfg: RadioCfg, divert_mhz: float | None = None, divert_name: str = "", atc_vhf_mhz: float | None = None) -> RadioPlan:
+                     layout: RadioLayout, mcfg: RadioCfg, divert_mhz: float | None = None, divert_name: str = "", atc_vhf_mhz: float | None = None, divert_vhf_mhz: float | None = None) -> RadioPlan:
     alloc = FrequencyAllocator(rng)
     alloc.reserve(atc_mhz)
     if divert_mhz:
         alloc.reserve(divert_mhz)
+    if divert_vhf_mhz:
+        alloc.reserve(divert_vhf_mhz)
     alloc.reserve(mcfg.carrier_link4_mhz)
     plan = RadioPlan()
 
     sup = {s.slot: s for s in package.support}
     tacans_used = {mcfg.carrier_tacan}
     for ch, label in layout.comm1.items():
-        if label == "DIVERT":
-            if divert_mhz:
-                plan.comm1[ch] = RadioEntry("DIVERT", divert_mhz, divert_name[:14], "Divert tower")
+        if label == "DIVERT":                      # old layouts only; the divert tower is on COMM2 now
             continue
         if label in layout.optional and not (package.jtac if label == "JTAC" else label in sup):
             continue
@@ -131,6 +132,10 @@ def build_radio_plan(package, state, atc_mhz: float, rng: random.Random,
     for ch, label in layout.comm2.items():
         if label == "FLIGHT":
             plan.comm2[ch] = RadioEntry(label, flt, player.callsign, "Intra-flight")
+        elif label == "DIVERT":      # Air Force COMM2 is VHF only: the divert field's VHF tower; Navy COMM2 tunes UHF too
+            dv = divert_vhf_mhz if spec.service != "Navy" else (divert_mhz or divert_vhf_mhz)
+            if dv:
+                plan.comm2[ch] = RadioEntry("DIVERT", dv, divert_name[:14], "Divert tower")
         elif label == "ATC":         # an Air Force jet's COMM2 is VHF only: the field's VHF tower. Navy COMM2 tunes UHF too (and the carrier is UHF)
             vhf = atc_vhf_mhz if (atc_vhf_mhz and spec.service != "Navy") else None
             cv = state.bases[player.base_id].kind == BaseKind.CARRIER

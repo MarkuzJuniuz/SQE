@@ -378,7 +378,9 @@ class MissionBuilder:
         div_mhz = self.t.airports[div.airport].atc_radio.uhf_hz / 1e6 if div.airport else None
         atc_vhf = (self.t.airports[pbase.airport].atc_radio.vhf_high_hz / 1e6) if (pbase.kind != BaseKind.CARRIER and getattr(self.t.airports[pbase.airport], "atc_radio", None)
                                                                               and self.t.airports[pbase.airport].atc_radio.vhf_high_hz) else None
-        plan = build_radio_plan(package, st, atc, self.rng, o.layout, RadioCfg(o.carrier_tacan, o.carrier_link4_mhz), div_mhz, div.name, atc_vhf)
+        div_vhf = (self.t.airports[div.airport].atc_radio.vhf_high_hz / 1e6) if (div.airport and getattr(self.t.airports[div.airport], "atc_radio", None)
+                                                                          and self.t.airports[div.airport].atc_radio.vhf_high_hz) else None
+        plan = build_radio_plan(package, st, atc, self.rng, o.layout, RadioCfg(o.carrier_tacan, o.carrier_link4_mhz), div_mhz, div.name, atc_vhf, div_vhf)
         tanker_xy, awacs_unit, hav_xy = self._place_support(package, plan, geom, extras)
 
         # ---- timeline: YOUR times. Roles are staggered around the strikers' push (sweep, SEAD, escorts go first) ---------
@@ -426,7 +428,7 @@ class MissionBuilder:
                 self.cas_tot = tot_f
             pkg_table.append({"callsign": f.callsign, "role": task_label(f, package.objective), "push": clock(push_of(f)) if not f.tag else "-",
                               "tot": clock(tot_f) if tot_f else "-", "you": f.is_player})
-        whois = self._datalinks(package, awacs_unit)
+        whois = self._datalinks(package)
 
         # ---- enemy air picture (known CAP airborne from the start + alert aircraft that scramble when detected) ----
         keep = [(geom.mshl[0], geom.mshl[1], RED_KEEP_NM)] + [(p[0], p[1], 100) for p in (hav_xy,) if p is not None] + \
@@ -1968,7 +1970,7 @@ class MissionBuilder:
             g.add_waypoint(pt(x, y), a, (spec.profile.aar_kts if name == "TKR" else 300) * KPH, name)
 
     # ---- Link 16 / SADL: the package flies as one network ------------------------------------------------------------------
-    def _datalinks(self, package, awacs_unit) -> list:
+    def _datalinks(self, package) -> list:
         stn = {}
         whois = []
         for f, g in self.flight_groups:               # your own flight is one network: wingmen are members of each other (blue on the HSD/TAD)
@@ -2002,22 +2004,24 @@ class MissionBuilder:
             pidx = package.flights.index(f)
             whois.append({"cs": f"{f.callsign}-1..{f.count}", "ac": f.aircraft, "role": (f.tag or f.role.value)[:7],
                           "m3": f"4{package.number % 8}{pidx % 8}{(pidx + package.number) % 8}", "stn": lead_stn, "you": f.is_player})
+        # v0.41.41 (XO 2026-10-20): the AWACS is neither member nor donor. Members are your wing (above); donors are the Link 16 capable flights
+        # of the SAME package (their leads), nothing from other packages and no support aircraft
+        mine = {id(f_) for f_ in package.flights if not f_.tag}
         for f, g in self.flight_groups:
+            if id(f) not in mine:
+                continue
             for u in g.units:
                 dl = getattr(u, "datalink", None)
                 if dl is None:
                     continue
                 net = dl.network
-                if awacs_unit is not None and dl.link_type.name == "LINK16":
-                    net.add_donor(awacs_unit.id)
                 for of, og in self.flight_groups:
-                    if of is f:
+                    if of is f or id(of) not in mine:
                         continue
                     odl = getattr(og.units[0], "datalink", None)
                     if odl is None or odl.link_type != dl.link_type:
                         continue
-                    ok = bool(net.has_donors and net.add_donor(og.units[0].id))
-                    if not ok:
+                    if not net.add_donor(og.units[0].id):
                         net.add_member(og.units[0].id)
         return whois
 
