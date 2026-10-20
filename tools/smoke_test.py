@@ -940,6 +940,14 @@ def main():
     _gg = _NS(points=[_NS(tasks=[])]); _MBg._ground_orders(_gg); _MBg._ground_orders(_gg)
     assert [type(t_).__name__ for t_ in _gg.points[0].tasks] == ["OptROE", "OptAlarmState"], "ground orders: ROE + alarm once per group"
     print("[ground orders] weapons free + alarm red set once per ground group")
+    from sqe.mission_builder import MissionBuilder as _MBe, ESCORT_AFTER_EGR_S as _EAE, ESCORT_AFTER_TOT_S as _EAT, HOLD_EXTEND_MAX_S as _HEM
+    _ct = _NS(stops=[]); _ct.stop_after_time = lambda t_: _ct.stops.append(t_)
+    _be = _NS(_holds=[{"tgt": (0, 0), "end": 1000, "after": _EAT, "cts": [_ct], "starts": [], "eta": 600}])
+    _MBe._extend_holds(_be, [((0, 0), 900)], egr_events=[((0, 0), 1500)])
+    assert _be._holds[0]["end"] == 1500 + _EAE, "an escort waits for the last striker's egress + 2 min"
+    _be._holds[0].update(end=1000, after=300); _MBe._extend_holds(_be, [((0, 0), 900)], egr_events=[((0, 0), 1500)])
+    assert _be._holds[0]["end"] == 1200, "a TARCAP keeps its own rule"
+    print("[escort egress] escorts stay for the last striker's egress point + 2 min; TARCAP unchanged")
     print("[raids] announced and surprise raids by level, repeatable emergencies (about 9% a sortie, never two in a row), scramble / stay, CAS folded in, postponement, Su-24M raid built and applied, overnight surprises")
     # alert pairs have a dispatch range like the enemy's reinforcements
     from sqe import reactive as _rv
@@ -972,8 +980,8 @@ def main():
     _p = next(p_ for p_ in s.packages() if s.flyable(p_) and any(f_.role == _Rl.ESCORT for f_ in p_.flights) and p_.objective.type.value in ("STRIKE", "DEAD"))
     from sqe.mission_builder import MissionBuilder as _MBh, TARCAP_AFTER_TOT_S as _TA
     _hrec, _hext = [], _MBh._extend_holds
-    def _hwrap(self_, events_):
-        _hext(self_, events_); _hrec.append((self_._last_striker_s, [(h_["end"], h_["after"], h_["tgt"], h_["eta"]) for h_ in self_._holds]))
+    def _hwrap(self_, events_, egr_events=()):
+        _hext(self_, events_, egr_events); _hrec.append((self_._last_striker_s, [(h_["end"], h_["after"], h_["tgt"], h_["eta"]) for h_ in self_._holds]))
     _MBh._extend_holds = _hwrap
     try:
         s.fly(_p.number, None)

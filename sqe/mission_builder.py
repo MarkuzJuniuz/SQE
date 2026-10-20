@@ -37,6 +37,7 @@ TARCAP_LEAD_S = 0             # v0.41.1: a TARCAP arrives WITH the first flight 
 FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 ALERT_REACH_NM = 130          # alert pairs come only from fields this close to the target (the far ones could not arrive in time)
 TARCAP_MIN = 15               # ...and holds there this long, then goes home
+ESCORT_AFTER_EGR_S = 120      # v0.41.40: an escort stays until the last striker has reached its egress point + this long (XO 2026-10-20: DEADers were left behind)
 ESCORT_AFTER_TOT_S = 180      # an escort (SWEEP role) holds its station until this long after the TOT (the last ground-attack flight off target)
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
@@ -408,6 +409,7 @@ class MissionBuilder:
         # ---- friendly flights --------------------------------------------------------------------------------------------
         despawn, pkg_table = [], []
         self._sup_cts = []                                                   # HAVCAP / base CAP orbit tasks: their stop time is extended once the merged packages are known
+        self._striker_egr = []                                               # v0.41.40: [((x, y), egress time)] of this mission's strikers
         self._holds = []                                                     # v0.41.10: TARCAP / escort holds, extended to the last package over their target area
         self._snipe_at = {}                                                  # v0.41.10: id(group) -> the station waypoint where max-range shots begin
         self._callins = []
@@ -451,7 +453,8 @@ class MissionBuilder:
         # not just until its own station time (when the player flew the TARCAP, tgt was the TARCAP's own station: it left 7.5 min after arriving)
         own_ = [((tx, ty), max(striker_tots))] if striker_tots else []
         self._last_striker_s = max(striker_tots) if striker_tots else None
-        self._extend_holds([((tx, ty), tgt.eta_s)] + own_ + [(m_["txy"], m_["tot_s"]) for m_ in merged if not m_.get("struck") and m_.get("txy")])
+        self._extend_holds([((tx, ty), tgt.eta_s)] + own_ + [(m_["txy"], m_["tot_s"]) for m_ in merged if not m_.get("struck") and m_.get("txy")],
+                           egr_events=self._striker_egr)
         manifest.cur_pkg = ""
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + list(self._red_intel)
         self._spawn_reactive(package, extras, tx, ty, tgt.eta_s, geom, manifest, despawn)
@@ -549,7 +552,7 @@ class MissionBuilder:
             self._save_without_carrier_slots(m, out_path)
         return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns, self.seed_code, merged)
 
-    def _extend_holds(self, events) -> None:
+    def _extend_holds(self, events, egr_events=()) -> None:
         """v0.41.10: a TARCAP / escort holds until the LAST package over its target area is off target (TOT + its after-time), not just its own
         package. The v0.41.8 sweep run: the F-15 TARCAPs went home 5 min after their own TOT while later packages were still coming through
         (1,600-2,500 s) and only the F-14s were left. At most HOLD_EXTEND_MAX_S longer; bingo fuel sends them home anyway."""
@@ -561,7 +564,11 @@ class MissionBuilder:
                 last = min(later_) if later_ else 0
             else:
                 last = max(near_ + [0])
-            new = int(min(h["end"] + HOLD_EXTEND_MAX_S, max(h["end"], last + h["after"])))
+            want = last + h["after"]
+            if h["after"] == ESCORT_AFTER_TOT_S:         # an escort sticks to the last striker until it is out (egress point), like a shepherd
+                eg_ = [t_ for (ex, ey), t_ in egr_events if dist(ex, ey, hx, hy) <= HOLD_AREA_KM * 1000]
+                want = max(want, max(eg_ + [0]) + ESCORT_AFTER_EGR_S)
+            new = int(min(h["end"] + HOLD_EXTEND_MAX_S, max(h["end"], want)))
             if new <= h["end"]:
                 continue
             for ct_ in h["cts"]:
@@ -1824,6 +1831,9 @@ class MissionBuilder:
                 gate["to"] = len(g.points)                              # the landing point
             self._gates.append(gate)
         tw = None if f.tag else objective_wp(wps)
+        if tw is not None and f.role in (Role.STRIKE, Role.SEAD, Role.CAS):
+            egr_ = next((w.eta_s for w in wps if w.name == "EGR"), None)          # v0.41.40: when this striker is OUT, for the escorts to wait on
+            self._striker_egr.append(((geom.tx, geom.ty), float(egr_ if egr_ is not None else tw.eta_s + 180)))
         return g, (tw.eta_s if tw is not None else None)
 
     @staticmethod
