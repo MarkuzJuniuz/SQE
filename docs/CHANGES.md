@@ -1,5 +1,11 @@
 # CHANGES.md
 
+## v0.41.38
+
+* **TARCAP stays at least 15 minutes, then until the last striker is off target + 5 minutes** (the 15-minute minimum is back: it had been halved to 7.5 min in `_hold_end`) (XO 2026-10-20: TARCAPs left as soon as the SEAD flight headed home). Cause: the hold ended at the TOT of the flight being built for the player plus 5 minutes (at least 7.5 minutes after arriving). When the player flew the TARCAP that TOT was the TARCAP's own station time (Day 4 mission: station 1468 s, stop 1918 s = 7.5 min); when the player flew SEAD it was the HARM time, so the TARCAP left with the SEAD flight. Now `mission_builder.py` also feeds the latest target time of the package's own strike / SEAD / CAS flights into `_extend_holds` (capped as before by `HOLD_EXTEND_MAX_S`).
+* The TARCAP task text now says "at least 15 minutes and until the last strike flight is off target plus 5 minutes" (packages.py, models.py comment). Smoke test: new "[tarcap hold]" check.
+* Docs: CLAUDE.md #82 / #83 (always reset origin URL; one queue doc; Sonnet 5.5 build rule), DESIGN_NOTES update for v0.41.36/37. XO's own commits since v0.41.35: v0.41.36 and v0.41.37 below, `.gitignore` removed, version rule in CLAUDE.md.
+
 ## v0.41.37
 
 * **Enhanced stationing logic for TARCAP and ESCORT**:
