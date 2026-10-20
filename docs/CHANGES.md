@@ -4,7 +4,7 @@
 
 * **Enhanced stationing logic for TARCAP and ESCORT**:
   - Adjusted `STATION_FRAC` to 0.85 to provide better coverage from long-range SAMs.
-  - Increased `STANDOFF_MARGIN_NM` to 15 nm to ensure effective cover from medium and short-range SAMs.
+  - Increased `STANDOFF_MARGIN_NM` to 5 nm to ensure effective cover from medium and short-range SAMs.
   - Improved the stationing logic to be more robust and ensure effective air cover.
 
 ## v0.41.36
