@@ -31,7 +31,7 @@ Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE
 4. Add what you learned to the doc and update the section's "verified" stamp. XO's rule (2026-10-16): fixes to `docs/DESIGN_NOTES.md` alone are pushed directly to `crew-chief-working` (no PR). Anything else, code included, still goes through a PR.
 
 ## Standing rules
-- Build only on **Opus 5.5 or higher**. Talking and planning on any model is fine.
+- Build only on **Sonnet 5.5 or higher**. Talking and planning on any model is fine.
 - XO merges PRs himself. You never merge. `main` needs a PR.
 - Work on `crew-chief-working` (XO commits small changes straight to it). Pull before each build. PRs go into it.
 - PR label: `crew-chief`.
