@@ -211,7 +211,7 @@ def main():
     assert out["packages"] and out["packages"][0]["resolved"], out["packages"]
     print("    merged debrief:", [ln for ln in out["lines"] if ln.startswith("Package #")][:2])
     # ---- v0.10: earlier packages fly with you, already underway; the Missions list folds later ones into the first -----------------
-    bs = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all"))
+    bs = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", merge_radius_nm=50, flight_filter="all"))
     found = None
     for seed_b in range(1, 41):
         bs.new("Smoke back", "F-14BU", 2, seed=seed_b)
