@@ -47,7 +47,7 @@ _FLEET = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
 # (BARCAP jets wandered inland over red without a single scramble). They come back one at a time, the bomber intercept first.
 AI_ONLY = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
 _TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM",
-         Role.ESCORT: "TARCAP: on station short of the target before the package, shoot what comes in range, do not chase; 15 minutes, then home",
+         Role.ESCORT: "TARCAP: on station short of the target before the package, shoot what comes in range, do not chase; stay until the last strike flight is off target plus 5 minutes, then home",
          Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
 _DEAD_TASK = {Role.SEAD: "SEAD: suppress the radars ahead of the DEAD flight", Role.STRIKE: "Close DEAD: destroy the SAM site with GBUs (the SEAD package goes in ahead of you; call it off if the radars are up)"}
 _KIT_TASK = {"JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers and covering Tors, on the HARM salvo's time; stand-off release, then home"}

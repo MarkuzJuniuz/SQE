@@ -57,7 +57,7 @@ def task_label(f, obj) -> str:
     if f.role.value == "STRIKE" and obj.type.value == "DEAD":
         return "DEAD"
     if f.role.value == "ESCORT":
-        return "TARCAP"                 # the package's TARCAP: its own station, first in, 15 minutes, home
+        return "TARCAP"                 # the package's TARCAP: its own station, first in, until the last striker is off target + 5 minutes, home
     if f.role.value == "SWEEP" and obj.type.value not in ("COUNTER_AIR", "FLEET_DEFENSE"):
         return "ESCORT"                 # stays with the package, leaves with it (a real sweep is a COUNTER_AIR package)
     return f.role.value

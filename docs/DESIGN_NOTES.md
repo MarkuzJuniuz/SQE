@@ -20,7 +20,7 @@ _verified v0.41.28 + PR #65, 2026-10-16_
 | Tasks attached to waypoints / the group | `sqe/mission_builder.py` | `for w in wps[first:]`, `g.points[0].tasks` |
 | Fuel (unlimited / real) | `sqe/mission_builder.py` | `SetUnlimitedFuelCommand`, `ai_unlimited_fuel`, `past_push` |
 | Engage-zone circles, homeward fight | `sqe/mission_builder.py` | `_limit_engage`, `_cover_circle`, `_clear_zone`, `HOMEWARD_ENGAGE_NM` |
-| Hold times (TARCAP, sweep, escort) | `sqe/mission_builder.py` | `_hold_end`, `self._holds`, `_sync_sead` (in `engine.py`) |
+| Hold times (TARCAP, sweep, escort) | `sqe/mission_builder.py` | `_hold_end`, `self._holds`, `_extend_holds`, `_sync_sead` (in `engine.py`). v0.41.38: a TARCAP holds at least 7.5 min after arriving and until the LAST strike / SEAD / CAS flight of its own package (`striker_tots`) and any merged package near the target is off target + `TARCAP_AFTER_TOT_S` (5 min), at most `HOLD_EXTEND_MAX_S` past its own end; escorts +3 min, sweeps +2 min. The 15-minute figure is gone from the tasking text. _verified v0.41.38, 2026-10-20_ |
 | Recovery at the boat / field | `sqe/mission_builder.py`, `sqe/debrief.py` | `_recov_net`, `SQE_RECOVER`, `RECOV` |
 | Red patrols / sweeps / raids | `sqe/redair.py`, `sqe/raids.py`, `sqe/mission_builder.py` | `RED_DOCTRINE`, `enemy_unlimited_fuel`, `INTERCEPT` |
 | Reactive dispatch (extra pairs mid-sortie) | `sqe/reactive.py` | `plan_red`, `blue_sources`, `INTERCEPT_NM` |

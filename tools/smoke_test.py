@@ -964,7 +964,19 @@ def main():
     # in a built mission: put a live SAM site on the target and look for the limit and the hold
     s.new("Stand off", "FA-18C", 2, seed=8); _st = s.state
     _p = next(p_ for p_ in s.packages() if s.flyable(p_) and any(f_.role == _Rl.ESCORT for f_ in p_.flights) and p_.objective.type.value in ("STRIKE", "DEAD"))
-    s.fly(_p.number, None)
+    from sqe.mission_builder import MissionBuilder as _MBh, TARCAP_AFTER_TOT_S as _TA
+    _hrec, _hext = [], _MBh._extend_holds
+    def _hwrap(self_, events_):
+        _hext(self_, events_); _hrec.append((self_._last_striker_s, [(h_["end"], h_["after"], h_["tgt"]) for h_ in self_._holds]))
+    _MBh._extend_holds = _hwrap
+    try:
+        s.fly(_p.number, None)
+    finally:
+        _MBh._extend_holds = _hext
+    _ls, _hs = _hrec[-1]
+    assert _ls is not None and _hs, "a strike / SEAD / CAS package has a last striker time and TARCAP holds"
+    assert all(e_ >= _ls + _TA - 1 for e_, a_, _t in _hs if a_ == _TA), "v0.41.38: a TARCAP stays until the last striker of its package is off target + 5 min"
+    print("[tarcap hold] TARCAPs hold until the last striker of their own package is off target + 5 min (v0.41.38)")
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
     assert "EngageTargetsInZone" in _mz and "zoneRadius" in _mz, "AI escorts engage only inside a circle around their hold point"
     from sqe.mission_builder import MissionBuilder as _MB

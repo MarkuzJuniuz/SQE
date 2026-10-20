@@ -413,10 +413,13 @@ class MissionBuilder:
         self._callins = []
         self._pull = []                                                      # v0.41.34: support CAP pull-back (see _pull_entries)
         self._recov = []                                                     # v0.41.25: the recovery net (see _recov_net)                                                   # v0.41.10: red patrols called in to the SAM site they guard
+        striker_tots = []                                                    # v0.41.38: each ground-attack flight's own target time (strike / SEAD / CAS), for the TARCAP hold
         for idx, f in enumerate(package.flights):
             g, tot_f = self._spawn_flight(package, f, plan, geom, tanker_xy, hav_xy, push_of(f), tgt.eta_s, rtb_s, idx, manifest, despawn)
             if f.is_player:
                 tot_f = tgt.eta_s
+            if f.role in (Role.STRIKE, Role.SEAD, Role.CAS) and not f.tag and tot_f:
+                striker_tots.append(float(tot_f))
             if f.role == Role.CAS and tot_f:
                 self.cas_tot = tot_f
             pkg_table.append({"callsign": f.callsign, "role": task_label(f, package.objective), "push": clock(push_of(f)) if not f.tag else "-",
@@ -444,7 +447,11 @@ class MissionBuilder:
         for ct_ in self._sup_cts:
             if last_home > ct_.params.get("stopCondition", {}).get("time", 0):
                 ct_.stop_after_time(int(last_home))
-        self._extend_holds([((tx, ty), tgt.eta_s)] + [(m_["txy"], m_["tot_s"]) for m_ in merged if not m_.get("struck") and m_.get("txy")])
+        # v0.41.38 (XO 2026-10-20): a TARCAP / escort stays until the LAST ground-attack flight of its own package is off target (+ the usual after-time),
+        # not just until its own station time (when the player flew the TARCAP, tgt was the TARCAP's own station: it left 7.5 min after arriving)
+        own_ = [((tx, ty), max(striker_tots))] if striker_tots else []
+        self._last_striker_s = max(striker_tots) if striker_tots else None
+        self._extend_holds([((tx, ty), tgt.eta_s)] + own_ + [(m_["txy"], m_["tot_s"]) for m_ in merged if not m_.get("struck") and m_.get("txy")])
         manifest.cur_pkg = ""
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + list(self._red_intel)
         self._spawn_reactive(package, extras, tx, ty, tgt.eta_s, geom, manifest, despawn)
