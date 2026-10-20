@@ -2226,9 +2226,11 @@ class MissionBuilder:
         aims = radars[:3] or list(site.units)[:2]
         aims += [g_.units[0] for _, g_ in self._cover_tors(package) if g_.units]          # and the Tors that guard it (they shoot JSOWs down)
         if package.objective.aim == "STANDOFF":            # Standoff DEAD: the launchers too (the site is only dead when they are)
-            aims = aims[:2] + [u for u in aims[2:] if u not in radars[:3]]                 # two radars, the Tors...
-            aims += [u for u in site.units if u not in radars and u not in aims and " ln" in str(getattr(u, "type", "")).lower()]
-            aims = aims[:JSOW_PER_JET.get(f.aircraft, 2)]                                   # ...as far as one JSOW per aim point goes
+            # v0.41.47: two JSOWs a jet (the Hornet kit went from four to two), so two aim points: the covering Tor first (it shoots JSOWs and HARMs down), then a
+            # launcher, then the radars (the HARM flights go for those). Before: two radars, the Tors, the launchers, up to four.
+            tors_ = [g_.units[0] for _, g_ in self._cover_tors(package) if g_.units]
+            lnx_ = [u for u in site.units if u not in radars and u not in tors_ and " ln" in str(getattr(u, "type", "")).lower()]
+            aims = (tors_[:1] + lnx_[:1] + (radars[:3] or list(site.units)[:2]) + tors_[1:] + lnx_[1:])[:JSOW_PER_JET.get(f.aircraft, 2)]
         each = max(1, JSOW_PER_JET.get(f.aircraft, 2) // len(aims))
         exp = task.Expend.Four if each >= 4 else (task.Expend.Two if each >= 2 else task.Expend.One)
         rng = random.Random(f"{self.state.campaign_id}:{package.id}:{f.id}:jsow")

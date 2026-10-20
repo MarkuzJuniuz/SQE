@@ -9,7 +9,7 @@ from .models import Role
 
 # Taken from DCS's own stock presets (the lists you pick from in the Mission Editor). "=<CLSID>" is a raw weapon id; anything else is a
 # weapon-name stem looked up on the pylon. The comment above each line names the stock preset it was copied from.
-JSOW_PER_JET = {"FA-18C": 4, "F-16C": 2}      # AGM-154A JSOW CEB per jet in the JSOW kit; only these jets fly the JSOW slot of a SEAD package
+JSOW_PER_JET = {"FA-18C": 2, "F-16C": 2}      # AGM-154A JSOW CEB per jet in the JSOW kit; only these jets fly the JSOW slot of a SEAD package
 
 _D: dict = {
     "F-16C": {
@@ -25,8 +25,8 @@ _D: dict = {
         "CAS": {1: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 2: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 3: "={E6A6262A-CA08-4B3D-B030-E1A993B98452}", 4: "={F376DBEE-4CAE-41BA-ADD9-B2910AC95DEC}", 5: "=ALQ_184_Long", 6: "={F376DBEE-4CAE-41BA-ADD9-B2910AC95DEC}", 7: "={E6A6262A-CA08-4B3D-B030-E1A993B98453}", 8: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 9: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 11: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}"},
     },
     "FA-18C": {
-        # JSOW slinger (SEAD package): AIM-9X*2, AIM-120C-5*2, BRU-55 2*AGM-154A JSOW CEB on 2 and 8 (4 per jet), FUEL*3 (330 gal on 3, 5, 7)
-        "JSOW": {1: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 2: "={BRU55_2*AGM-154A}", 3: "={FPU_8A_FUEL_TANK}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={FPU_8A_FUEL_TANK}", 6: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 7: "={FPU_8A_FUEL_TANK}", 8: "={BRU55_2*AGM-154A}", 9: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}"},
+        # JSOW slinger (SEAD package), XO's own Mission Editor loadout (2026-10-20): AIM-9X*2, AIM-120C-5*2, AGM-154A on 2 and 8 (2 per jet), FUEL*2 (on 3 and 7), Litening pod on 5
+        "JSOW": {1: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 2: "={AGM-154A}", 3: "={FPU_8A_FUEL_TANK}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 6: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 7: "={FPU_8A_FUEL_TANK}", 8: "={AGM-154A}", 9: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}"},
         # stock DCS preset: AIM-9X*2, AIM-120C-5*6, FUEL*3
         "CAP": {1: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 2: "=LAU-115_2*LAU-127_AIM-120C", 3: "={FPU_8A_FUEL_TANK}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={FPU_8A_FUEL_TANK}", 6: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 7: "={FPU_8A_FUEL_TANK}", 8: "=LAU-115_2*LAU-127_AIM-120C", 9: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}"},
         # stock DCS preset: AIM-9X*2, AIM-120C-5*1, GBU-38*4, GBU-12*4, ATFLIR, FUEL

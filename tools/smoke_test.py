@@ -1157,9 +1157,10 @@ def main():
     from sqe.models import Role as _Rl2
     _lo = _LL()
     _h = _lo.for_role("FA-18C", _Rl2.STRIKE, "JSOW"); _v = _lo.for_role("F-16C", _Rl2.STRIKE, "JSOW")
-    assert _h[2]["CLSID"] == _h[8]["CLSID"] == "{BRU55_2*AGM-154A}" and all(_h[k]["CLSID"] == "{FPU_8A_FUEL_TANK}" for k in (3, 5, 7)), "Hornet JSOW kit: 4 AGM-154A with tanks"
+    assert (_h[2]["CLSID"] == _h[8]["CLSID"] == "{AGM-154A}" and all(_h[k]["CLSID"] == "{FPU_8A_FUEL_TANK}" for k in (3, 7))
+            and _h[5]["CLSID"] == "{A111396E-D3E8-4b9c-8AC9-2432489304D5}"), "Hornet JSOW kit (XO's ME loadout): 2 AGM-154A, 2 tanks, a Litening pod"
     assert _v[3]["CLSID"] == _v[7]["CLSID"] == "{AGM-154A}" and sum("154" in x["CLSID"] for x in _v.values()) == 2, "Viper JSOW kit: 2 AGM-154A"
-    assert _jpj == {"FA-18C": 4, "F-16C": 2}
+    assert _jpj == {"FA-18C": 2, "F-16C": 2}
     s.new("Jsow", "F-16C", 3, seed=1); s.late_sead_min = 0; s.state.campaign_id = f"{0x15a0001:010x}"; s.plan_day()     # pinned: the dice come from the campaign id
     _sp3 = [p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and p_.objective.aim == "STANDOFF"]
     _jf = [f_ for p_ in _sp3 for f_ in p_.flights if f_.kit == "JSOW"]
