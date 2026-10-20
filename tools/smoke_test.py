@@ -211,7 +211,7 @@ def main():
     assert out["packages"] and out["packages"][0]["resolved"], out["packages"]
     print("    merged debrief:", [ln for ln in out["lines"] if ln.startswith("Package #")][:2])
     # ---- v0.10: earlier packages fly with you, already underway; the Missions list folds later ones into the first -----------------
-    bs = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all"))
+    bs = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", merge_radius_nm=50, flight_filter="all"))
     found = None
     for seed_b in range(1, 41):
         bs.new("Smoke back", "F-14BU", 2, seed=seed_b)
@@ -331,7 +331,7 @@ def main():
     import math as _m
     rs2 = Session(AppSettings(dcs_saves=str(TMP / "rad"), persist=False)); (TMP / "rad").mkdir(exist_ok=True)
     rs2.new("dev", "F-14BU", 3, seed=1)
-    _R = rs2.merge_radius_m(); assert abs(_R - 50 * 1852.0) < 1
+    _R = rs2.merge_radius_m(); assert abs(_R - 25 * 1852.0) < 1
     _A = list(rs2.state.assets.values())
     _bx = (min(a.x for a in _A), max(a.x for a in _A), min(a.y for a in _A), max(a.y for a in _A))
     _n = 0

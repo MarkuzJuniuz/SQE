@@ -442,7 +442,7 @@ class Session:
 
     # ---- merge area: a circle around the package's target, kept inside the area where targets exist ---------------------
     def merge_radius_m(self) -> float:
-        return max(5.0, float(getattr(self.settings, "merge_radius_nm", 50))) * 1852.0
+        return max(5.0, float(getattr(self.settings, "merge_radius_nm", 25))) * 1852.0
 
     def _pkg_xy(self, p: Package):
         """The ground target of a package, or None for fleet packages (BARCAP, fleet defence), which are never folded by area."""

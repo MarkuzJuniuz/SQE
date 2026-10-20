@@ -67,7 +67,7 @@ class AppSettings:
     river_margin_m: int = 100             # ...and this far from rivers and shallow water (terrain scan only)
     weather_mode: str = "clear"            # "clear" | "procedural" | a fixed weather: scattered, broken, overcast, rain, storm
     ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
-    merge_radius_nm: int = 50             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in
+    merge_radius_nm: int = 25             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in
     merge_back_min: int = 15              # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
     merge_max_units: int = 250            # a merged mission is trimmed until it holds no more than this many units
     emergencies: bool = True              # an emergency (raid or troops in contact) can come up when you click Fly; announced and surprise raids happen either way
