@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.40
+
+* **Escorts stick to the last striker until it is out** (XO 2026-10-20: the DEADers were left behind at the mercy of enemy air). The package escort (SWEEP role) used to leave 3 min after the last striker's time over target, about when the strikers only reached their egress point. It now stays until the last striker's egress point + 2 min (`ESCORT_AFTER_EGR_S`, a judgment call), still capped at 30 min past its own hold; the old TOT + 3 min stays as the floor. TARCAP is unchanged (minimum time, leaves last by its own rule). Merged packages count by their TOT as before (their egress is not tracked). Smoke test: new "[escort egress]" check.
+
 ## v0.41.39
 
 * **Ground units get explicit orders** (XO 2026-10-20): every red garrison and armour column, every blue site (garrisons, sector forces) and the CAS task force now carry weapons free + alarm state red on their first waypoint (`_ground_orders` in `mission_builder.py`; `_drive` uses it too, so the CAS drive-in is unchanged). SAM sites keep their own orders. Limit: the Mission Editor has no target-priority order for ground units, so "other ground units first, then parked jets" is NOT enforced; DCS picks the target. Untested in DCS whether ground AI fires at parked aircraft at all.
