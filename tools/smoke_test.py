@@ -1306,7 +1306,8 @@ def main():
                 if p_.get("name") in ("SEAD", "TGT") and g_.get("task") in ("SEAD", "CAP"):
                     _dd.setdefault(g_["task"], []).append(_m3j.hypot(p_["x"] - _sa.x, p_["y"] - _sa.y) / 1852)
     _tar = [x_ for x_ in _dd.get("CAP", []) if x_ < 45]
-    assert _tar and all(abs(x_ - _sfr * 48) <= _son + 2 for x_ in _tar) and _dd.get("SEAD"), ("the TARCAP sits level with the HARM shooters", _dd)
+    _far = [x_ for x_ in _dd.get("CAP", []) if x_ >= 45]      # v0.41.43: with a JSOW flight the TARCAP holds behind the JSOW point (40+ nm from the SA-10), further out than the HARM shooters
+    assert _dd.get("SEAD") and (_far and min(_far) > max(_dd["SEAD"]) + 10 if _far else _tar and all(abs(x_ - _sfr * 48) <= _son + 2 for x_ in _tar)), ("the TARCAP sits level with the HARM shooters, or behind the JSOW point", _dd)
     _cs.abort(); _r2 = _cs.fly(_cp.number, _cs.flyable(_cp)[0].id)
     assert _r1.seed == _r2.seed, "Abort rewinds the sortie counter: the re-fly has the same seed"
     print(f"[cap v0.41] TARCAP {min(_tar):.0f} nm from the SA-10, HARM points {min(_dd['SEAD']):.0f} nm; re-fly after Abort has the same seed ({_r1.seed})")
