@@ -967,6 +967,8 @@ def main():
     _esc = [v_ for (r_, _i), v_ in _gm.stand.items() if r_ == _Rj.SWEEP]
     assert _esc, "a Standoff DEAD package has an escort station"
     _jp = _jxy(_gm, _bs._jsow_side(_pk, _gm))
+    from sqe.routes import JSOW_LAUNCH_NM as _JLN
+    assert _jd(*_jp, _gm.tx, _gm.ty) / _JNM >= min(_JLN, _gm.d / _JNM * 0.8 - 6) - 0.5, "v0.41.46: the JSOW launch point is at least JSOW_LAUNCH_NM (30) from the target"
     assert all(abs(_jd(v_[0], v_[1], *_jp) / _JNM - _EBN) < 1.0 for v_ in _esc), "the escort holds ESCORT_BEHIND_NM behind the JSOW launch point"
     _tc = [v_ for (r_, _i), v_ in _gm.stand.items() if r_ == _Rj.ESCORT]
     assert _tc and all(_jd(v_[0], v_[1], *_jp) / _JNM >= _TBN - 1.0 for v_ in _tc), "v0.41.43: the TARCAP holds at least TARCAP_BEHIND_NM behind the JSOW launch point"
@@ -1173,6 +1175,10 @@ def main():
     s.ai_test = True; s.fly(_pj.number, s.flyable(_pj, squadron_only=False)[0].id); s.ai_test = False
     _mj = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
     assert "{AGM-154A}" in _mj and '["name"]="JSOW"' in _mj and _mj.count('["id"]="Bombing"') >= 1, "the JSOW flight is built: AGM-154A, a JSOW launch point, release tasks"
+    # v0.41.46: a JSOW flight's release tasks are time-limited (a ControlledTask wrapping each Bombing), so it turns for home after its salvo
+    import re as _re46
+    _bm = [m_ for m_ in _re46.finditer(r'\["id"\]="Bombing"', _mj)]
+    assert _bm and all('stopCondition' in _mj[max(0, m_.start() - 900):m_.start()] for m_ in _bm[:1]), "v0.41.46: the JSOW release tasks have a stop time"
     # Standoff DEAD: the JSOWs also go on the launchers; a site under a live SA-10 gets Standoff DEAD, one clear of it the SEAD / Close DEAD pair
     from dcs import lua as _luaj
     from sqe.war import long_range_site as _lrs

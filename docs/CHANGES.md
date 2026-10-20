@@ -1,5 +1,15 @@
 # CHANGES.md
 
+## v0.41.46
+
+* **JSOWs are flung further out** (XO 2026-10-20: the JSOWers were still massacred; SAMs target them and enemy scrambles jump them). From XO's run (tracks + shots): 5 of 8 Squids lost, two to the Gudauta SA-11 at 14-18 nm, three to its scrambled MiG-29s. The AGM-154As released from 20,000 ft at 45-65 km (24-35 nm), but the JSOW point was 20 nm from the target, on the target's own SA-11 ring (about 19 nm), and the jets flew on to it.
+  * `JSOW_LAUNCH_NM` 20 -> 30 (judgment call: inside the release range seen, about 10 nm clear of the SA-11 ring). A launch point pushed past it still goes high (`JSOW_HIGH_ALT_FT`).
+  * The JSOW point now also keeps clear of the TARGET SITE's own live SAMs, each by its own ring (`AVOID_NM`: SA-11 20, SA-6 16, SA-2 26, SA-3 15); SA-10s keep the 40 nm they had (the loop used to force it for every entry).
+  * The JSOW release tasks are time-limited: `JSOW_ATTACK_S` (120 s) after the launch point's ETA the flight turns for home. Before, Squid 2 flew on to 14 nm of the SA-11 for a second salvo.
+  * The TARCAP and escort stations follow the new point automatically.
+  * Not tested in DCS. Cost: if the AI will not release from 30 nm the JSOWs stay on the jets and the site survives; the scrambled MiGs are not stopped, only given about 10 nm more to fly.
+* Smoke test: "[shepherd]" checks the 30 nm point; "[jsow]" checks the release tasks have a stop time.
+
 ## v0.41.45
 
 * **Default merge radius is 25 nm** (XO 2026-10-20; was 50): fewer packages fold into yours, so fewer units, but nearby packages still merge. Only the default changes: a campaign or settings file that already stores a merge radius keeps its value (change it in Settings > Package merging). Smoke test and GUIDE updated.

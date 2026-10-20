@@ -44,6 +44,7 @@ TARCAP_BEHIND_NM = 16         # v0.41.43: with a JSOW flight the TARCAP holds th
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
+JSOW_ATTACK_S = 120           # v0.41.46: a JSOW slinger's release tasks end this long after the launch point's ETA, and it turns for home (judgment call; XO's run: releases came 25-60 s before the point)
 LATE_ATTACK_S = 600           # v0.41.16: an AI strike flight drops only within this of its TOT
 CV_RECOVER_NM = 10            # v0.41.17: AI carrier flights (and your wingmen) are recovered this far from the boat instead of joining the deck queue
 RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
@@ -146,7 +147,7 @@ def stagger(package, role) -> int:
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import jsow_launch_xy, AVOID_NM, SA10_AVOID_NM, avoid_circles, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear
+from .routes import jsow_launch_xy, JSOW_KEEP_HIGH_NM, AVOID_NM, SA10_AVOID_NM, avoid_circles, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear
 from .state import CampaignState
 
 KPH = 1.852
@@ -1721,7 +1722,7 @@ class MissionBuilder:
                 bct_ = task.ControlledTask(task.Bombing(pt(w.x, w.y), group_attack=True))
                 bct_.stop_after_time(int(w.eta_s + LATE_ATTACK_S)); wp.tasks.append(bct_)
             elif w.action == "JSOW":
-                self._jsow_tasks(wp, f, armor, package)
+                self._jsow_tasks(wp, f, armor, package, w.eta_s)
             elif w.action == "CAS":
                 self._cas_tasks(wp, w, armor, tot_s)
             elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
@@ -2215,7 +2216,7 @@ class MissionBuilder:
                 out.append((a, g))
         return sorted(out, key=lambda ag: dist(ag[0].x, ag[0].y, t.x, t.y))
 
-    def _jsow_tasks(self, wp, f, site, package) -> None:
+    def _jsow_tasks(self, wp, f, site, package, eta_s=None) -> None:
         """A JSOW slinger's attack from its launch point: one release per radar of the target site (search and track radars; the first two
         vehicles of a site whose radars ride on the launchers), aimed at the radar's last-known position give or take JSOW_AIM_ERR_M. The
         flight's JSOWs are shared out between the aim points. A radar that shuts down to dodge the HARMs is still where it was last seen."""
@@ -2235,7 +2236,10 @@ class MissionBuilder:
         for u in aims:
             a, d = rng.uniform(0, 2 * math.pi), JSOW_AIM_ERR_M * math.sqrt(rng.random())
             x, y = u.position.x + math.cos(a) * d, u.position.y + math.sin(a) * d
-            wp.tasks.append(task.Bombing(mapping.Point(x, y, self.t), expend=exp, group_attack=True))
+            bt_ = task.ControlledTask(task.Bombing(mapping.Point(x, y, self.t), expend=exp, group_attack=True))
+            if eta_s is not None:                                  # v0.41.46: no pressing on for a second salvo: Squid 2 flew to 14 nm of the SA-11 for its second JSOW
+                bt_.stop_after_time(int(eta_s + JSOW_ATTACK_S))
+            wp.tasks.append(bt_)
 
     # ---- late activation helper ------------------------------------------------------------------------------------------------
     def _late(self, g, seconds):
@@ -2437,9 +2441,16 @@ class MissionBuilder:
         geom.sweep = is_sweep(package.objective)
         tid_ = package.objective.target_id
         tt_ = self.state.assets.get(tid_) if tid_ else None
-        geom.jsow_keep = [(a.x, a.y, HARM_LAUNCH_NM) for a in self.state.assets.values()            # every live SA-10 near the target, itself included
+        geom.jsow_keep = [(a.x, a.y, max(HARM_LAUNCH_NM, JSOW_KEEP_HIGH_NM)) for a in self.state.assets.values()            # every live SA-10 near the target, itself included (v0.41.46: 40 nm, as the loop used to force)
                           if tt_ is not None and a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not getattr(a, "suppressed", False)
                           and dist(a.x, a.y, tt_.x, tt_.y) <= (tm.UMBRELLA_KM / 1.852 + HARM_LAUNCH_NM) * NM]
+        # v0.41.46: the target site's own live SAMs too (SA-11 20 nm, SA-6 16, SA-2 26, SA-3 15: AVOID_NM, reach plus margin): the 2026-10-20 run's JSOW point sat
+        # 19.6 nm from the Gudauta SA-11 it was shooting at and lost two jets to it
+        if tt_ is not None:
+            own_ = tm.cluster_ids(tt_)
+            geom.jsow_keep += [(a.x, a.y, AVOID_NM[a.variant]) for a in self.state.assets.values()
+                               if a.id in own_ and a.kind == AssetKind.SAM and a.variant in AVOID_NM and a.variant not in tm.UMBRELLA_VARIANTS
+                               and not a.destroyed and a.health > 0.05 and not getattr(a, "suppressed", False)]
         # v0.41.11: every other live SA-10 within 150 nm: AI strike / SEAD / CAS routes bend around it (routes.avoid_circles)
         um_ = tm.umbrella_site(self.state, tt_) if tt_ is not None else None             # the one the HARMs go for: the flights must come to it
         # v0.41.20: every live medium / long-range SAM (SA-2/3/6/11/10), each by its own reach (AVOID_NM). A site whose circle holds the target
