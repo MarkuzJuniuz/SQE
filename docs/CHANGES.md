@@ -1,5 +1,14 @@
 # CHANGES.md
 
+## v0.41.42
+
+* **The JSOW flight is no longer left alone** (XO 2026-10-20: the run lost all five Standoff DEAD Hornets to Sukhumi / Gudauta MiG-29s after their JSOW release; the TARCAP and escort sat at the HARM point, 17-18 nm from the JSOW launch points, and the TARCAP's circle did not reach them). Two changes:
+  * **The package escort shepherds the JSOW flight**: in a Standoff DEAD (a package with a JSOW flight) the escort's station is `ESCORT_BEHIND_NM` (8 nm, judgment call) behind the JSOW launch point, on the JSOW axis, not at the HARM shooters' stand-off station. It is NOT kept out of SAM cover (that is the shepherd's risk); it leaves from its station. Packages without a JSOW flight are unchanged. `routes.jsow_launch_nm` / `jsow_launch_xy` pulled out of `plan_route` so the builder can ask where the JSOW flight will launch.
+  * **The TARCAP / escort fight circle takes in every shooter's launch point**: it is now kept out only by SA-10 reach (`_zone_sams(long_only)`), no longer by SA-2/3/6/11 rings, and may be up to `TARCAP_COVER_MAX_NM` (35 nm, judgment call). Before, the SA-11 rings pushed the circle 21 nm west of the JSOW points. The shooters' launch points are known before any flight is built (`_launch_points`), so the order flights are built in no longer matters.
+  * Kept: `STATION_OFFSET_NM` (the TARCAP station's 9 nm sideways step toward the nearest red field: it puts the TARCAP on red's approach, not a cover offset) and the STATION_FRAC / STANDOFF_MARGIN_NM SAM stand-off of the TARCAP's own station.
+  * Not tested in DCS. Cost: an escort or a TARCAP that chases into a SAM site (XO accepted this).
+* Smoke test: new "[shepherd]" check (its own session).
+
 ## v0.41.41
 
 * **Divert tower on COMM2 CH3** (XO 2026-10-20): it was COMM1 CH5. Radio presets, kneeboard and briefing follow the layout. An Air Force jet gets the divert field's VHF tower (its COMM2 is VHF only); a Navy jet gets the UHF tower. COMM1 now holds only AWACS, tanker(s) and JTAC.

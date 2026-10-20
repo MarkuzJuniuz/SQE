@@ -96,6 +96,24 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, ca
     return g_
 
 
+def jsow_launch_nm(g, jsow_side: float) -> float:
+    """How far (nm) from the target an AI JSOW flight's launch point sits on its own axis. v0.41.3: it stays as far from every live long-range SAM as
+    the HARM point does (the v0.41.1 runs lost whole JSOW flights to the SA-10s at 13-24 nm), moving out along its axis up to JSOW_MAX_NM (the glide
+    range from altitude); v0.41.4: 40 nm from an SA-10, not the HARM shooters' 30, because the JSOW jets go in at 33,000 ft.
+    v0.41.42: pulled out of plan_route so the builder can ask where the JSOW flight will launch (the escort stations itself there)."""
+    nm = max(8.0, min(JSOW_LAUNCH_NM, g.d / NM * 0.8 - 6))
+    if g.jsow_keep:
+        jh_ = g.hdg + 180 + JSOW_AXIS_DEG * jsow_side
+        while nm < JSOW_MAX_NM and any(dist(*offset(g.tx, g.ty, jh_, nm * NM), kx, ky) < max(knm, JSOW_KEEP_HIGH_NM) * NM for kx, ky, knm in g.jsow_keep):
+            nm += 1.0
+    return nm
+
+
+def jsow_launch_xy(g, jsow_side: float) -> tuple:
+    """The (x, y) of an AI JSOW flight's launch point for this geometry."""
+    return offset(g.tx, g.ty, g.hdg + 180 + JSOW_AXIS_DEG * jsow_side, jsow_launch_nm(g, jsow_side) * NM)
+
+
 def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_player: bool,
                tanker_xy: tuple | None, stack_idx: int = 0, spawn: tuple | None = None, spawn_alt_ft: int = 0,
                spawn_kts: int = 0, jsow: bool = False, jsow_side: float = 0, keep_out=None, harm_deg: float = 0) -> list[Wpt]:
@@ -128,14 +146,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     human = is_player and not g.ai_player                    # a person flies it; in the all-AI test the player's flight is routed and tasked like any AI flight
     harm_nm = max(8.0, min(HARM_LAUNCH_NM, g.d / NM * 0.8 - 6))        # on short routes it still leaves the IP ahead of the base
     ip_xy = g.ip
-    jsow_nm = max(8.0, min(JSOW_LAUNCH_NM, g.d / NM * 0.8 - 6))
-    if jsow and role == Role.STRIKE and not human and g.jsow_keep:
-        # v0.41.3: the JSOW launch point stays as far from every live long-range SAM as the HARM point does (the v0.41.1 runs lost whole JSOW
-        # flights to the SA-10s at 13-24 nm). It moves out along its own axis, up to JSOW_MAX_NM from the target (the glide range from altitude).
-        jh_ = g.hdg + 180 + JSOW_AXIS_DEG * jsow_side
-        # v0.41.4: 40 nm, not the HARM shooters' 30: the JSOW jets go in at 33,000 ft and run in on their releases past the launch point.
-        while jsow_nm < JSOW_MAX_NM and any(dist(*offset(g.tx, g.ty, jh_, jsow_nm * NM), kx, ky) < max(knm, JSOW_KEEP_HIGH_NM) * NM for kx, ky, knm in g.jsow_keep):
-            jsow_nm += 1.0
+    jsow_nm = jsow_launch_nm(g, jsow_side) if (jsow and role == Role.STRIKE and not human) else max(8.0, min(JSOW_LAUNCH_NM, g.d / NM * 0.8 - 6))
     harm_ax = g.hdg + 180 + (harm_deg if role == Role.SEAD and not human else 0)    # v0.41.24: the builder may turn the HARM axis off a neighbouring SAM
     if role == Role.SEAD and not human and keep_out:          # under an umbrella (an SA-10 covering the target): the HARM point stays out of its reach too
         # v0.41.24: keep_out may be a list of circles (the umbrella and every other SAM the package is not sent against)
