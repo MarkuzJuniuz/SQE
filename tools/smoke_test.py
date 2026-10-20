@@ -149,6 +149,7 @@ def main():
     # comms (v0.40.5): COMM1 CH1 AWACS, COMM2 CH1 flight (where DCS writes the group frequency) and CH2 the tower, VHF for an Air Force jet
     _pl5 = res.radio
     assert _pl5.comm1[1].label == "AWACS" and _pl5.comm2[1].label == "FLIGHT" and _pl5.comm2[2].label == "ATC" and not any(e_.label == "ATC" for e_ in _pl5.comm1.values()), "radio layout"
+    assert _pl5.comm2.get(3) is not None and _pl5.comm2[3].label == "DIVERT" and not any(e_.label == "DIVERT" for e_ in _pl5.comm1.values()), "v0.41.41: the divert tower is COMM2 CH3, not on COMM1"
     _pf5 = res.package.player_flight
     if _pf5.aircraft == "F-16C" and ms.state.bases[_pf5.base_id].kind.value != "CARRIER":
         assert 108 <= _pl5.comm2[2].mhz <= 152, ("an F-16's tower is on its VHF COMM2", _pl5.comm2[2].mhz)

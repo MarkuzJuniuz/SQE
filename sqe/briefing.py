@@ -115,7 +115,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                "COMM2 (VHF" + ("/UHF" if spec.service == "Navy" else "") + "): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm2.items())]
     com += [f"IFF Mode 3: {x['mode3']}    Laser code: {x['laser']}", f"Bullseye: {x['bullseye']}"]
     if x.get("link16"):
-        com.append("Package aircraft share a datalink; the AWACS feeds it. Station numbers (STN) are on your kneeboard.")
+        com.append("Link 16: your wing are members, the other Link 16 flights of your package are donors (the AWACS is not on the net). Station numbers (STN) are on your kneeboard.")
     if pkg.jtac:
         if jtac_at is None:
             jtac_at = f"{plan.freq('JTAC'):.3f}" if any(e.label == "JTAC" for e in plan.comm1.values()) else "its briefed frequency"
