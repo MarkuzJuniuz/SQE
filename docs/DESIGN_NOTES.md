@@ -26,7 +26,7 @@ _verified v0.41.28 + PR #65, 2026-10-16_
 | Reactive dispatch (extra pairs mid-sortie) | `sqe/reactive.py` | `plan_red`, `blue_sources`, `INTERCEPT_NM` |
 | Ground war (zones, strength) | `sqe/ground.py` | `zone_of`, `_advance`, `SKIRMISH` |
 | Which job types are player-flyable | `sqe/packages.py` | `AI_ONLY` |
-| SAM reach / avoidance numbers | `sqe/routes.py`, `sqe/profiles.py`, `sqe/war.py` | `AVOID_NM`, `STATION_FRAC`, `GATE_REACH_NM` |
+| SAM reach / avoidance numbers | `sqe/routes.py`, `sqe/profiles.py`, `sqe/war.py` | `AVOID_NM`, `STATION_FRAC`, `GATE_REACH_NM` (XO v0.41.37: `STATION_FRAC` 0.85 against a long-range SAM, about 40 nm for an SA-10; `STANDOFF_MARGIN_NM` 5 nm outside medium / short-range rings, both in `profiles.py`). XO v0.41.36: a player flight from a land base no longer gets a SPAWN waypoint (`routes.py`, `elif not is_player`) |
 | The Lua hook (landed/dead tables, recovery) | `sqe/debrief.py` | `lua_hook`, `RECOV` |
 | The unit cap | `sqe/mission_builder.py` | `max_units`, `_counts` |
 
