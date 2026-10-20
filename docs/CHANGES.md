@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## v0.41.47
+
+* **The JSOW flight stops hunting after its salvo** (XO 2026-10-20 18:27: the Squids lingered, moved closer after launching; all eight were lost, seven to Sukhumi / Gudauta MiGs, one to the SA-11). From the state file: the 30 nm launch point worked (first releases at 52-66 km, jets at 30 nm of the SAMs), but each Hornet then released a second and third time at 47-50 km (1354-1470 s, Squid 2's flight has ONE planned aim yet its jets fired at four different sites), so the jets crept to 21 and 16 nm of the SAMs and turned late. Cause: the JSOW waypoint sets WEAPON FREE, so a jet with JSOWs left hunts every radar and launcher it can see, closing to range; v0.41.46's stop time only ended the planned Bombing tasks.
+  * A timed Option task on the JSOW waypoint: `JSOW_ATTACK_S` (120 s) after the point's ETA the ROE goes to Return Fire, so the flight drops what it is hunting and flies its route home (EGR already sets Return Fire).
+  * Not changed: the Hornet's four-JSOW loadout (the single-JSOW Hornet CLSID is not known here: it needs a capture from XO's DCS with `tools/capture_loadouts.py`), and the planned aim points. A Hornet that has fired its planned JSOWs goes home with the rest.
+  * Not tested in DCS. Cost: if a tasked release is still pending when the window ends it is dropped (JSOWs not fired); an open question is whether DCS drops a running attack when the ROE changes.
+* Smoke test: "[jsow]" checks for the timed Return Fire.
+
 ## v0.41.46
 
 * **JSOWs are flung further out** (XO 2026-10-20: the JSOWers were still massacred; SAMs target them and enemy scrambles jump them). From XO's run (tracks + shots): 5 of 8 Squids lost, two to the Gudauta SA-11 at 14-18 nm, three to its scrambled MiG-29s. The AGM-154As released from 20,000 ft at 45-65 km (24-35 nm), but the JSOW point was 20 nm from the target, on the target's own SA-11 ring (about 19 nm), and the jets flew on to it.

@@ -1191,6 +1191,11 @@ def main():
     _bmb = [(_unw(t_)["params"]["x"], _unw(t_)["params"]["y"]) for co_ in _Mj["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
             for p_ in g_["route"]["points"].values() for t_ in ((p_.get("task") or {}).get("params") or {}).get("tasks", {}).values() if _unw(t_).get("id") == "Bombing"]
     assert _lnx and any(_m3j.hypot(bx_ - lx_, by_ - ly_) < 150 for bx_, by_ in _bmb for lx_, ly_ in _lnx), "Standoff DEAD JSOWs aim at the launchers too"
+    # v0.41.47: when the release window ends, the JSOW jet's ROE goes to Return Fire (a timed Option task: name 0 = ROE, value 3 = Return Fire), so it stops hunting
+    _jt = [t_ for co_ in _Mj["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
+           for p_ in g_["route"]["points"].values() if p_.get("name") == "JSOW" for t_ in ((p_.get("task") or {}).get("params") or {}).get("tasks", {}).values()]
+    assert any(t_.get("id") == "ControlledTask" and (t_["params"].get("task") or {}).get("id") == "WrappedAction" and "time" in (t_["params"].get("condition") or {})
+               and t_["params"]["task"]["params"]["action"]["params"] == {"name": 0, "value": 3} for t_ in _jt), "v0.41.47: a timed Return Fire after the JSOW release window"
     _sa10 = [a_ for a_ in s.state.assets.values() if a_.variant == "SA-10" and not a_.destroyed]
     _far = [a_ for a_ in s.state.assets.values() if a_.kind.value == "SAM" and a_.variant != "SA-10" and all(_m3j.hypot(a_.x - b_.x, a_.y - b_.y) > 60000 for b_ in _sa10)]
     assert all(_lrs(s.state, a_) for a_ in _sa10) and (not _far or not _lrs(s.state, _far[0])), "long range: an SA-10 or under one; anything else gets the SEAD / Close DEAD pair"

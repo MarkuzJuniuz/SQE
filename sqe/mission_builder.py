@@ -2233,6 +2233,8 @@ class MissionBuilder:
         exp = task.Expend.Four if each >= 4 else (task.Expend.Two if each >= 2 else task.Expend.One)
         rng = random.Random(f"{self.state.campaign_id}:{package.id}:{f.id}:jsow")
         wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
+        if eta_s is not None:      # v0.41.47: when the window ends the jet stops hunting: weapons free sent XO's 2026-10-20 Squids on for a third salvo at 21 nm of the SAMs
+            rf_ = task.ControlledTask(task.OptROE(task.OptROE.Values.ReturnFire)); rf_.start_after_time(int(eta_s + JSOW_ATTACK_S)); wp.tasks.append(rf_)
         for u in aims:
             a, d = rng.uniform(0, 2 * math.pi), JSOW_AIM_ERR_M * math.sqrt(rng.random())
             x, y = u.position.x + math.cos(a) * d, u.position.y + math.sin(a) * d
