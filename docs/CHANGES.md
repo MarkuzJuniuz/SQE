@@ -1,5 +1,10 @@
 # CHANGES.md
 
+## v0.41.45
+
+* **Default merge radius is 25 nm** (XO 2026-10-20; was 50): fewer packages fold into yours, so fewer units, but nearby packages still merge. Only the default changes: a campaign or settings file that already stores a merge radius keeps its value (change it in Settings > Package merging). Smoke test and GUIDE updated.
+* XO's own request, in his words: "Default merge radius to 25."
+
 ## v0.41.44
 
 * **Station orbits are circles, not race-tracks** (XO 2026-10-20: "very long orbits, north to south"; the new tracks confirm it: Springfield 7 and Hornet 6 flew 57-60 nm from their station to RTB and back). DCS's default Race-Track orbit runs from its waypoint to the NEXT waypoint, which for a station is RTB. TARCAP, escort, sweep and SAM-held fighters now orbit in a Circle at their station. Support-CAP racetracks (CAP1 -> CAP2) are unchanged.

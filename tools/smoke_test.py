@@ -331,7 +331,7 @@ def main():
     import math as _m
     rs2 = Session(AppSettings(dcs_saves=str(TMP / "rad"), persist=False)); (TMP / "rad").mkdir(exist_ok=True)
     rs2.new("dev", "F-14BU", 3, seed=1)
-    _R = rs2.merge_radius_m(); assert abs(_R - 50 * 1852.0) < 1
+    _R = rs2.merge_radius_m(); assert abs(_R - 25 * 1852.0) < 1
     _A = list(rs2.state.assets.values())
     _bx = (min(a.x for a in _A), max(a.x for a in _A), min(a.y for a in _A), max(a.y for a in _A))
     _n = 0
