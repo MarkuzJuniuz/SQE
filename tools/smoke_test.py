@@ -950,7 +950,7 @@ def main():
     assert _be._holds[0]["end"] == 1200, "a TARCAP keeps its own rule"
     print("[escort egress] escorts stay for the last striker's egress point + 2 min; TARCAP unchanged")
     # v0.41.42: in a Standoff DEAD the package escort shepherds the JSOW flight: its station is ESCORT_BEHIND_NM behind the JSOW launch point
-    from sqe.mission_builder import MissionBuilder as _MBj, ESCORT_BEHIND_NM as _EBN
+    from sqe.mission_builder import MissionBuilder as _MBj, ESCORT_BEHIND_NM as _EBN, TARCAP_BEHIND_NM as _TBN
     from sqe.routes import jsow_launch_xy as _jxy, dist as _jd, NM as _JNM
     from sqe.models import Role as _Rj
     _jrec, _jfp = [], _MBj._flight_plans
@@ -968,9 +968,11 @@ def main():
     assert _esc, "a Standoff DEAD package has an escort station"
     _jp = _jxy(_gm, _bs._jsow_side(_pk, _gm))
     assert all(abs(_jd(v_[0], v_[1], *_jp) / _JNM - _EBN) < 1.0 for v_ in _esc), "the escort holds ESCORT_BEHIND_NM behind the JSOW launch point"
+    _tc = [v_ for (r_, _i), v_ in _gm.stand.items() if r_ == _Rj.ESCORT]
+    assert _tc and all(_jd(v_[0], v_[1], *_jp) / _JNM >= _TBN - 1.0 for v_ in _tc), "v0.41.43: the TARCAP holds at least TARCAP_BEHIND_NM behind the JSOW launch point"
     _lps = _bs._launch_pts[_pk.id]
     assert len(_lps) >= 2 and any(_jd(x_, y_, *_jp) < 100 for x_, y_ in _lps), "the cover circle knows the JSOW launch point before the flights are built"
-    print("[shepherd] the escort holds 8 nm behind the JSOW launch point; the TARCAP / escort circle takes in every shooter's launch point and is kept out only by an SA-10")
+    print("[shepherd] the escort holds 8 nm and the TARCAP 16+ nm behind the JSOW launch point; the TARCAP / escort circle takes in every shooter's launch point and is kept out only by an SA-10")
     print("[raids] announced and surprise raids by level, repeatable emergencies (about 9% a sortie, never two in a row), scramble / stay, CAS folded in, postponement, Su-24M raid built and applied, overnight surprises")
     # alert pairs have a dispatch range like the enemy's reinforcements
     from sqe import reactive as _rv
