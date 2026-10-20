@@ -1310,7 +1310,7 @@ def main():
     assert _dd.get("SEAD") and (_far and min(_far) > max(_dd["SEAD"]) + 10 if _far else _tar and all(abs(x_ - _sfr * 48) <= _son + 2 for x_ in _tar)), ("the TARCAP sits level with the HARM shooters, or behind the JSOW point", _dd)
     _cs.abort(); _r2 = _cs.fly(_cp.number, _cs.flyable(_cp)[0].id)
     assert _r1.seed == _r2.seed, "Abort rewinds the sortie counter: the re-fly has the same seed"
-    print(f"[cap v0.41] TARCAP {min(_tar):.0f} nm from the SA-10, HARM points {min(_dd['SEAD']):.0f} nm; re-fly after Abort has the same seed ({_r1.seed})")
+    print(f"[cap v0.41] TARCAP {min(_tar or _far):.0f} nm from the SA-10, HARM points {min(_dd['SEAD']):.0f} nm; re-fly after Abort has the same seed ({_r1.seed})")
     # v0.41.2: DCS refuses a mission whose player route has a run of locked-speed points between two locked times (v0.41.1: the player as an
     # escort, "Viper 3: All waypoints (5-5) have locked speed and surrounded by waypoints 4 and 5 with locked time"). Every fighter role you
     # can fly is built and checked.
