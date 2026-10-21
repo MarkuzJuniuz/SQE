@@ -1,5 +1,14 @@
 # CHANGES.md
 
+## v0.41.49
+
+* **AI flights fly home above the ridges** (XO 2026-10-20 22:07 run: Venom 5-2, a lone F-16 TARCAP, went from 26,000 ft to 3,000 ft MSL about 50 nm out and flew level for 100 nm over rising ground, 914 to 1,127 m on its track, then died at 2574 s with 84% fuel and nobody shooting; every other flight went home over water at 2,000 ft). Cause, confirmed by the track: the recovery point (RCV) is added after the terrain check at a fixed 3,000-6,000 ft, and an AI flight drops to the next point's altitude right after the last one.
+  * `home_leg_ft` (routes.py): the RCV altitude is raised to what the leg from the last route point needs (ground within 5 nm of the leg + 1,000 ft, or + 2,000 ft over mountains; capped at 20,000 ft). Same rule and margin as `terrain_clear`; without a ground-height scan nothing changes.
+  * Support CAPs now run `terrain_clear` too (the support-CAP branch never did).
+  * The mission hook's death record carries the last sampled position (`x`, `z`) and the ground height under it (`ground_m`, from `land.getHeight`), so the next run says where a jet died and whether the ground was near its altitude.
+  * Not tested in DCS. Cost of a wrong guess: a flight comes home higher and steeper in its last 8 nm (RCV to the runway is not stepped).
+* Smoke test: `home_leg_ft` with and without a relief grid.
+
 ## v0.41.48
 
 * **Ground groups keep off the runways** (XO 2026-10-20 20:53: a target AAA formation lay diagonally across a runway; it could block the side's own aircraft). Sites and blue base defences are now moved sideways off any runway corridor before they are placed (`_on_runway`, `_off_runway` in `mission_builder.py`; the site centre is moved BEFORE it is stored, so the bomb point and the units agree).

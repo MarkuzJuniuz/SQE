@@ -149,7 +149,7 @@ def stagger(package, role) -> int:
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import jsow_launch_xy, JSOW_KEEP_HIGH_NM, AVOID_NM, SA10_AVOID_NM, avoid_circles, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear
+from .routes import jsow_launch_xy, JSOW_KEEP_HIGH_NM, AVOID_NM, SA10_AVOID_NM, avoid_circles, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
 from .state import CampaignState
 
 KPH = 1.852
@@ -1417,6 +1417,8 @@ class MissionBuilder:
             home_ = Wpt("HOME", base.x, base.y, p.cap_alt_ft, p.cap_kts)
             wps = avoid_circles(wps + [home_], self._zone_sams(package, True), p.max_points, 3)[:-1]      # the CAP1-CAP2 orbit leg stays as it is
             stop = int(max(tot_s + o.cap_minutes * 60, rtb_s + 300))
+            if not f.is_player or o.player_is_ai:
+                terrain_clear(wps)                          # v0.41.49: a support CAP's legs clear the ridges too (the branch never ran the terrain check)
         else:
             sp = None
             if not f.is_player:
@@ -1844,7 +1846,8 @@ class MissionBuilder:
                 lp_ = g.points[-1].position
                 rb_ = bearing(base.x, base.y, lp_.x, lp_.y) + RCV_SPREAD[idx % len(RCV_SPREAD)]
                 rx_, ry_ = offset(base.x, base.y, rb_, RCV_NM * NM)
-                rcvp_ = g.add_waypoint(pt(rx_, ry_), (3000 + 1000 * (idx % 4)) * FT, 300 * KPH, "RCV")
+                rcv_alt_ = home_leg_ft((lp_.x, lp_.y), (rx_, ry_), 3000 + 1000 * (idx % 4))      # v0.41.49: the home leg clears the ridges (was a fixed 3,000-6,000 ft)
+                rcvp_ = g.add_waypoint(pt(rx_, ry_), rcv_alt_ * FT, 300 * KPH, "RCV")
                 if self._skip_landing(base):          # v0.41.18: recovered at its entry point instead of landing (setting "AI landings: airfields")
                     rcvp_.tasks.append(task.RunScript(f"SQE_RECOVER('{g.name}')"))
                     self._recov_net(g, f, None, base.x, base.y, wps, hold_end, stop)
