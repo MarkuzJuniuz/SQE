@@ -16,8 +16,7 @@ def expected_defenders(state, tx: float, ty: float, iads: float = 0.5) -> float:
         if d > 180:
             continue
         wgt = 1.0 if d < 60 else 1.0 - 0.7 * (d - 60) / 120
-        fighters = [t for t in w.types if t in ENEMY_FIGHTERS]
-        e += w.available * (len(fighters) / max(1, len(w.types))) * 0.14 * wgt
+        e += w.available_of(ENEMY_FIGHTERS) * 0.14 * wgt                      # v0.41.53: the fighter squadrons' serviceable jets (was the wing's total x its share of fighter types)
     return e * (0.7 + 0.6 * iads)
 
 

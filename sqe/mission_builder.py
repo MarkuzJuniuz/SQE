@@ -1206,7 +1206,7 @@ class MissionBuilder:
             names = []
             for j, u in enumerate(g.units, 1):
                 u.name = f"ENM-FM-{pf['wing']}-{n}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
-            manifest.add("enemy_air", pf["wing"], names)
+            manifest.add("enemy_air", pf["wing"], names, ac=pf["type"])
 
     def _spawn_opfor_ground(self, package, tx, ty, manifest, polyline=None):
         st, obj = self.state, package.objective
@@ -2285,7 +2285,7 @@ class MissionBuilder:
     def _fighter_wings(self, tx, ty):
         st = self.state
         wings = [(w, st.assets[w.base_asset_id]) for w in st.enemy_air if w.available > 0 and not st.assets[w.base_asset_id].destroyed
-                 and any(t in ENEMY_FIGHTERS for t in w.types)]
+                 and w.fighter_types()]
         wings.sort(key=lambda p: dist(p[1].x, p[1].y, tx, ty))
         return wings
 
@@ -2379,7 +2379,7 @@ class MissionBuilder:
             if i < n_cap:
                 pf_ = self._red_sel[i]
                 w, a = st.enemy_air_at(pf_["wing"]), st.assets[pf_["wing"]]
-                tname = pf_["type"] if pf_["type"] in w.types else r.choice([t for t in w.types if t in ENEMY_FIGHTERS])
+                tname = pf_["type"] if pf_["type"] in w.types_up else r.choice(w.fighter_types())
                 if pf_["kind"] == "SWEEP" and dist(pf_["x"], pf_["y"], tx, ty) <= 60 * NM and not redair.commits(d, [tname] * 2, blue_aa):
                     self._red_held.append({"id": pf_["id"], "why": "sweep"})      # outgunned: this sweep stays home today
                     continue
@@ -2388,7 +2388,7 @@ class MissionBuilder:
                 if not near_:
                     continue
                 w, a = near_[i % len(near_)]
-                tname = r.choice([t for t in w.types if t in ENEMY_FIGHTERS])
+                tname = r.choice(w.fighter_types())
             cls = getattr(planes, tname)
             load = enemy_cap_loadout(tname)
             dd = dist(a.x, a.y, tx, ty)
@@ -2456,7 +2456,7 @@ class MissionBuilder:
                 g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
             if not load:
                 self.warns.append(f"{tname}: no air-to-air loadout found; spawned unarmed")
-            manifest.add("enemy_air", w.base_asset_id, names)
+            manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
 
     # ---- reactive dispatch: enemy reinforcements and blue alert pairs launched during the sortie ---------------------------------
     def _pick_tier(self, geom, role, profile, tx, ty, skip=()):
@@ -2774,7 +2774,7 @@ class MissionBuilder:
             g.set_skill(skill)
             if o.enemy_unlimited_fuel:
                 g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
-            manifest.add("enemy_air", a.id, names)
+            manifest.add("enemy_air", a.id, names, ac=pk["type"])
             placed_red += pk["size"]
             if a.id not in seen_src:
                 seen_src.add(a.id)
@@ -2984,7 +2984,7 @@ class MissionBuilder:
             u.name = f"RAID-B-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
         if not load:
             self.warns.append(f"{ex.get('raider', 'Tu-22M3')}: no bomb or missile found; the raid is unarmed.")
-        manifest.add("enemy_air", ex["bomber_wing"], names, raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
+        manifest.add("enemy_air", ex["bomber_wing"], names, ac=ex.get("raider", "Tu_22M3"), raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
                      raid_arrive_s=float(hit_s))
         self._spawn_raid_target(package, cvb, aim, dx, dy, manifest)
         if ex.get("escorts"):
@@ -3002,4 +3002,4 @@ class MissionBuilder:
             en = []
             for j, u in enumerate(eg.units, 1):
                 u.name = f"RAID-E-{j}"; u.pylons = copy.deepcopy(eload); en.append(u.name); self._note_jam(u)
-            manifest.add("enemy_air", ex["escort_wing"], en)
+            manifest.add("enemy_air", ex["escort_wing"], en, ac=ex["escort_type"])

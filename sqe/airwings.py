@@ -1,4 +1,5 @@
-"""Air wings that fall back to recover (v0.36.0), the same rule for both sides.
+"""Air wings that fall back to recover (v0.36.0), the same rule for both sides. Since v0.41.53 red does it per SQUADRON (a red wing is typed
+squadrons): one squadron of a wing can stand down and return while the others keep flying.
 
 A wing or squadron that is down to RETREAT_FRAC of its aircraft or less may stand down overnight: its survivors go to a rear field (they stop flying, so
 they are off every patrol, raid, escort and threat count), recover at REST_BOOST times the normal replenishment rate, and come back once they are at
@@ -31,7 +32,8 @@ def _units(state):
         if "Tu_22M3" in w.types:
             continue
         a = state.assets.get(w.base_asset_id)
-        yield "red", w, (a.name if a else w.base_asset_id), bool(a is None or a.destroyed)
+        for q in w.sqns:
+            yield "red", q, (a.name if a else w.base_asset_id) + f" ({q.aircraft.replace('_', '-')})", bool(a is None or a.destroyed)
 
 
 def step(state, d, rng) -> list:
@@ -39,7 +41,7 @@ def step(state, d, rng) -> list:
     out = []
     for side, u, name, gone in _units(state):
         rep = d.friendly_replenish if side == "blue" else d.enemy_replenish
-        what = f"{name}" if side == "blue" else f"the air wing at {name}"
+        what = f"{name}" if side == "blue" else f"the squadron at {name}"
         if resting(u):
             if gone:                                               # its rear field is no safer than a cratered one
                 u.reserve = int(u.reserve * 0.75)
