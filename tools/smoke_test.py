@@ -2147,9 +2147,11 @@ def check_47_support_cap_pull_back(c):
     assert all(_st.assets[f_["guard"]].kind.value == "SAM" for f_ in _gd_)
     print(f"[red guard] {len(_gd_)} red patrol pairs over the SAM sites red rates likeliest to be attacked: {sorted({f_['guard'] for f_ in _gd_})}")
     _st.red_air = {}; _ra.ensure(_st, _gd(3)); assert {"day": _st.red_air["day"], "flights": _strip(_st.red_air["flights"])} == {"day": _p1["day"], "flights": _strip(_p1["flights"])}, "the same day plans the same"
+    redair_budget_ = lambda w__: _ra.budget(_st, w__.base_asset_id)
     for w_ in _st.enemy_air:
         n_ = sum(1 for f_ in _p1["flights"] if f_["wing"] == w_.base_asset_id and f_["kind"] == "CAP")
-        assert n_ <= max(0, w_.available // 2 - 1), "one pair per wing always stays on alert"
+        assert 2 * n_ <= redair_budget_(w_), "a wing's patrol sorties stay inside its day budget"
+        assert len({f_["area"] for f_ in _p1["flights"] if f_["wing"] == w_.base_asset_id and f_["kind"] == "CAP"}) <= max(0, w_.available_of(__import__("sqe.loadouts", fromlist=["x"]).ENEMY_FIGHTERS) // 2 - 1), "one pair per wing always stays on alert (at most pairs - 1 areas flown)"
     _f0 = next(f_ for f_ in _st.red_air["flights"] if f_["kind"] == "CAP"); _tm = (_f0["start"] + _f0["end"]) // 2
     assert any(g_["id"] == _f0["id"] for g_ in _ra.pick(_st, _tm, [], _f0["x"], _f0["y"], 99)), "a patrol is picked inside its window, near the target"
     _tout = next(t_ for t_ in range(0, 1440, 10) if not any(f_["start"] <= t_ <= f_["end"] or f_["start"] <= t_ + 1440 <= f_["end"] for f_ in _p1["flights"] if f_["id"] == _f0["id"]))

@@ -83,10 +83,12 @@ def plan(state, d) -> dict:
             continue
         pairs = fav // 2
         bud[w.base_asset_id] = DAILY_SORTIES * w.available                # the day's sortie budget is still the whole wing's (raids share it)
-        n_cap = min(doc["pairs"], pairs - 1, max(1, round(doc["frac"] * fav / 2)))     # one pair always stays on alert
+        # v0.41.73: the patrol share is now counted in SORTIES (a 30-minute stay is one sortie, so a pair can fly several a day): the level's share of the
+        # wing's day budget, in pairs. At most one pair per area is up at a time and one pair always stays on alert, so no more areas than pairs - 1.
+        n_cap = max(1, round(doc["frac"] * bud[w.base_asset_id] / 2)) if pairs >= 2 else 0
         # v0.41.73: BARCAP rules. The wing's pairs fly the BARCAP areas of its own field (one per direction a blue base could still send something
         # from, barcap.py), in a chain: each sortie stays its airframe's time on station and its relief arrives before it leaves.
-        areas = [ar for ar in bc["red"] if ar["asset"] == w.base_asset_id]
+        areas = [ar for ar in bc["red"] if ar["asset"] == w.base_asset_id][:max(0, pairs - 1)]
         order = _wave_order(w.base_asset_id, state.day)
         per = [[] for _ in areas]
         for k in range(max(0, n_cap) if areas else 0):
@@ -101,7 +103,7 @@ def plan(state, d) -> dict:
                 flights.append({"id": f"rf{state.day}-{w.base_asset_id}-{ai}.{j}", "kind": "CAP", "wing": w.base_asset_id, "type": typs[j], "size": 2,
                                 "start": lo, "end": min(1440 + WAVE_OVERLAP_MIN, hi), "x": ar["x"], "y": ar["y"], "area": ar["id"], "bearing": ar["bearing"],
                                 "ax": ar["ax"], "ay": ar["ay"]})
-        if fav - 2 * max(0, n_cap) >= 4:
+        if fav - 2 * min(len(areas), max(0, n_cap)) >= 4:
             spare.append((w, types))
     g = state.ground or {}
     contested = [i for i, (r, b) in enumerate(zip(g.get("red", []), g.get("blue", []))) if r >= 15 and b >= 15]
