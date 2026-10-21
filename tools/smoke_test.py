@@ -2891,9 +2891,50 @@ CHECKS = [
 ]
 
 
+def _borrows(fn) -> set:
+    """The Ctx attributes a section reads (`c._M4` ...): the names it borrows from earlier sections."""
+    import inspect
+    import re
+    return set(re.findall(r"\bc\.(_?\w+)", inspect.getsource(fn)))
+
+
+def _provides(fn) -> set:
+    """The Ctx attributes a section leaves for later ones (its `c.__dict__.update(... in (names))` line)."""
+    import inspect
+    import re
+    out = set()
+    for m in re.finditer(r"c\.__dict__\.update\(\{[^}]*\bin \(([^)]*)\)", inspect.getsource(fn)):
+        out |= set(re.findall(r"'(\w+)'", m.group(1)))
+    return out
+
+
+def _with_prerequisites(run: list) -> list:
+    """`--only`: add, ahead of each chosen section, the earlier sections it borrows state from (the nearest earlier one that leaves each name),
+    so a section passes on its own. Sections still run in their normal order."""
+    keep, todo = {fn.__name__ for fn in run}, list(run)
+    while todo:
+        fn = todo.pop()
+        k = CHECKS.index(fn)
+        for attr in _borrows(fn):
+            src = next((p for p in reversed(CHECKS[:k]) if attr in _provides(p)), None)
+            if src is not None and src.__name__ not in keep:
+                keep.add(src.__name__)
+                todo.append(src)
+    return [fn for fn in CHECKS if fn.__name__ in keep]
+
+
+def _fixed_ids(name: str) -> None:
+    """Campaign ids are random (they seed the day plan and the site layouts), so a seeded check could pass or fail by luck. Each section gets
+    the same run of ids every time, whatever ran before it."""
+    import random as _r
+    import uuid as _u
+    rng = _r.Random(name)
+    _u.uuid4 = lambda: _u.UUID(int=rng.getrandbits(128), version=4)
+
+
 def main(argv=None):
-    """Run the check sections in order. Options: `--list` (names only), `--only a,b` (the setup section plus the sections whose name contains a or b;
-    a section that borrows from one you left out fails with an AttributeError naming what it needed), `--timeout SECONDS` (a section that runs longer
+    """Run the check sections in order. Options: `--list` (names only), `--only a,b` (the setup section plus the sections whose name contains a or b,
+    each with the earlier sections it borrows state from), `--timeout SECONDS` (a section that runs longer
     dumps every thread's traceback and stops the run; default 600, 0 = off)."""
     import argparse
     import faulthandler
@@ -2909,11 +2950,14 @@ def main(argv=None):
     sys.stdout.reconfigure(line_buffering=True)                  # output reaches a log file at once, so a stall shows where it is
     want = [w for w in args.only.split(",") if w]
     run = [fn for k, fn in enumerate(CHECKS) if not want or k == 0 or any(w in fn.__name__ for w in want)]
+    if want:
+        run = _with_prerequisites(run)
     c, times = Ctx(), []
     for fn in run:
         if args.timeout:
             faulthandler.dump_traceback_later(args.timeout, exit=True)
         t0 = time.time()
+        _fixed_ids(fn.__name__)
         fn(c)
         times.append((time.time() - t0, fn.__name__))
     faulthandler.cancel_dump_traceback_later()
