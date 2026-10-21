@@ -46,13 +46,20 @@ class RedAirPicture:
         tot_min = self._start_min + 20                              # the time on target is not known yet; a package is over the target about 20 minutes in
         self._red_sel = redair.pick(self.state, tot_min, [geom.push, geom.ip, (tx, ty)], tx, ty, max(1, math.ceil(n_fl / 2)))
         keepout = list(keepout) + self._fleet_keepout()
-        out = []
+        out, kept = [], []
+        pts_ = [geom.push, geom.ip, (tx, ty)]
         for f in self._red_sel:
             sx, sy = f["x"], f["y"]
             for kx, ky, knm in keepout:
                 if dist(sx, sy, kx, ky) < knm * NM:
                     sx, sy = offset(kx, ky, bearing(kx, ky, sx, sy), knm * NM)
+            # v0.41.75: the keep-out pushes a station AWAY from our marshal point, fields and carrier (130 nm round the boat): that is what put red's patrols
+            # behind the target in XO's v0.41.74 run (station 36 nm past the SA-10). A patrol that ends up behind the target is not in the fight: left out.
+            if redair.beyond_nm(sx, sy, pts_, tx, ty) > redair.BEHIND_NM:
+                continue
+            kept.append(f)
             out.append({"x": sx, "y": sy, "side": self._cap_side(sx, sy, tx, ty)})
+        self._red_sel = kept
         return out
 
     def _fleet_keepout(self) -> list:
