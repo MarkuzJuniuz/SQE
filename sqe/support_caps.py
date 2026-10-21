@@ -11,6 +11,7 @@ from . import callsigns
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
 from .models import BaseKind
+from .red_air_picture import ALERT_REACH_NM
 from .routes import FT, NM, Wpt, avoid_circles, bearing, dist, offset, terrain_clear
 from .strike_tasks import KPH
 
@@ -84,7 +85,6 @@ class SupportCaps:
         hav_xy = offset(ax, ay, g.hdg + 180, 8 * NM)
         # v0.41.11: for the whole mission, not only your flight: from the middle of the fields the mission's flights fly home to (weighted by
         # aircraft), toward your package's egress. The v0.41.10 run put it in front of Batumi for your sweep, 40-50 nm off the Senaki flights' way home.
-        from .mission_builder import ALERT_REACH_NM        # lazy, as above (moves with the red air-picture code later)
         hf_ = [(st.bases[f_.base_id], f_.count) for p_ in [package] + list(extras) for f_ in p_.flights
                if not f_.tag and f_.base_id in st.bases and st.bases[f_.base_id].kind == BaseKind.AIRFIELD]
         n_ = sum(c_ for _, c_ in hf_)
