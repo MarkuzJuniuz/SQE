@@ -12,7 +12,7 @@ from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
 from .models import Objective, ObjectiveType, Role
-from . import raids, redair
+from . import raids, redair, sams
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import AI_ONLY, Ledger, NoPlayerSlot, Package, PackageBuilder
 
@@ -115,6 +115,7 @@ class Session:
         st = self.state
         from . import ground
         ground.ensure_blue_garrisons(st)                # older saves: a friendly garrison at every airfield
+        sams.ensure_blue_sams(st)                       # v0.41.62: blue's three air-defence sites at every airfield (older saves: from the field's `defense`)
         ground.snap_roads(st)                           # once, as soon as a road scan exists: columns and supply sites sit on a road
         redair.ensure(st, self.d)                       # the enemy's air tasking for the day
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=self.PACKAGES_PER_DAY)

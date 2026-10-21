@@ -48,14 +48,99 @@ BLUE_MIN_DEF = 0.15           # below this, nothing is standing. Between: a redu
 AD_RAID_WEIGHT = 4.0          # a full field's air defence counts like this many fighters against a raid in the war sim (judgment call)
 
 
-def blue_battery(b) -> dict:
-    """v0.41.30: what stands at a blue airfield, by its `defense`: Patriot launchers, HAWK yes/no, AAA sites. All fields alike."""
-    dv = float(getattr(b, "defense", 0.0) or 0.0)
-    if getattr(b, "kind", None) is None or b.kind.value != "AIRFIELD" or dv < BLUE_MIN_DEF:
+# v0.41.62: blue's air defence is three sites per airfield, the same record as red's SAM assets (XO 2026-10-21: "I'd rather use red's because I think
+# it's tested and it's not abstract"). They live in `state.blue_sams` (not `blue_assets`, whose loops are for supply sites and garrisons), id
+# `bsam_<field>_<key>`. The site health IS the strength: `Base.defense` is only a cache of the Patriot site's health for the readers that were not
+# moved (GUI bar, war-sim score), kept in step by the helpers below. Every writer goes through `shift_field` / `set_field`.
+BLUE_SITES = {"pat": ("Patriot", "Patriot battery"), "hawk": ("HAWK", "HAWK battery"), "aaa": ("AAA", "AAA sites")}
+BLUE_SITE_VALUE = 5           # planner weight (unused until blue's sites are tasked; same default as a red garrison)
+
+
+def blue_site_id(bid: str, key: str) -> str:
+    return f"bsam_{bid}_{key}"
+
+
+def blue_sites(state, b) -> dict:
+    """{key: asset} for a blue airfield's sites, empty when it has none (a carrier)."""
+    sites = getattr(state, "blue_sams", None) or {}
+    out = {k: sites[blue_site_id(b.id, k)] for k in BLUE_SITES if blue_site_id(b.id, k) in sites}
+    return out if len(out) == len(BLUE_SITES) else {}
+
+
+def ensure_blue_sams(state) -> bool:
+    """Give every blue airfield its three sites at the health its `defense` number says (a new campaign: 1.0; an older save: whatever it had), and
+    keep `Base.defense` in step with the Patriot site. Returns True when it added any."""
+    if not isinstance(getattr(state, "blue_sams", None), dict):
+        state.blue_sams = {}
+    added = False
+    for b in state.bases.values():
+        if b.kind.value != "AIRFIELD":
+            continue
+        for k, (var, label) in BLUE_SITES.items():
+            sid = blue_site_id(b.id, k)
+            if sid not in state.blue_sams:
+                h = max(0.0, min(1.0, float(getattr(b, "defense", 1.0) or 0.0)))
+                state.blue_sams[sid] = _site(sid, f"{b.name} {label}", b, var, h)
+                added = True
+        b.defense = state.blue_sams[blue_site_id(b.id, "pat")].health
+    return added
+
+
+def _site(sid, name, b, variant, health):
+    from .models import EnemyAsset
+    return EnemyAsset(sid, name, AssetKind.SAM, b.x, b.y, health, BLUE_SITE_VALUE, [], None, variant, 1, b.id)
+
+
+def field_defence(state, b) -> float:
+    """A blue field's air-defence strength, 0..1: its Patriot site's health (the cache `Base.defense` holds the same number)."""
+    ensure_blue_sams(state)
+    sites = blue_sites(state, b)
+    return sites["pat"].health if sites else float(getattr(b, "defense", 0.0) or 0.0)
+
+
+def shift_field(state, b, delta: float) -> None:
+    """Add `delta` (negative = damage) to every site of a blue field, kept within 0..1. A carrier has no sites: its number moves."""
+    ensure_blue_sams(state)
+    sites = blue_sites(state, b)
+    if not sites:
+        b.defense = max(0.0, min(1.0, float(b.defense) + delta))
+        return
+    for a in sites.values():
+        a.health = max(0.0, min(1.0, a.health + delta))
+    b.defense = sites["pat"].health
+
+
+def set_field(state, b, value: float) -> None:
+    """Set every site of a blue field to `value` (a fallen field: 0; a test)."""
+    ensure_blue_sams(state)
+    sites = blue_sites(state, b)
+    v = max(0.0, min(1.0, float(value)))
+    for a in sites.values():
+        a.health = v
+    b.defense = v
+
+
+def blue_battery(b, state=None) -> dict:
+    """v0.41.30: what stands at a blue airfield: Patriot launchers, HAWK yes/no, AAA sites. All fields alike. v0.41.62: with `state`, read from the
+    field's three sites (each by its own health, the old thresholds); without it (or a field with no sites) from the field's `defense` number."""
+    if getattr(b, "kind", None) is None or b.kind.value != "AIRFIELD":
         return {"patriot_ln": 0, "hawk": False, "aaa": 0}
-    if dv >= BLUE_FULL_DEF:
-        return {"patriot_ln": BLUE_PATRIOT_LN, "hawk": True, "aaa": 2}
-    return {"patriot_ln": max(2, round(BLUE_PATRIOT_LN * dv)), "hawk": False, "aaa": 1}
+    sites = blue_sites(state, b) if state is not None else {}
+    if not sites:
+        dv = float(getattr(b, "defense", 0.0) or 0.0)
+        return _battery(dv, dv, dv)
+    return _battery(sites["pat"].health, sites["hawk"].health, sites["aaa"].health)
+
+
+def _battery(pat: float, hawk: float, aaa: float) -> dict:
+    """The thresholds are v0.41.30's (BLUE_FULL_DEF / BLUE_MIN_DEF, judgment calls), now applied to each site's own health."""
+    if pat < BLUE_MIN_DEF:
+        ln = 0
+    elif pat >= BLUE_FULL_DEF:
+        ln = BLUE_PATRIOT_LN
+    else:
+        ln = max(2, round(BLUE_PATRIOT_LN * pat))
+    return {"patriot_ln": ln, "hawk": hawk >= BLUE_FULL_DEF, "aaa": 2 if aaa >= BLUE_FULL_DEF else 1 if aaa >= BLUE_MIN_DEF else 0}
 
 
 def air_defence(b) -> float:
@@ -213,12 +298,12 @@ def blue_defence(state, d) -> list:
     fallen = set((state.ground or {}).get("fallen", []))
     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD" and b.id not in fallen]
     for b in fields:
-        b.defense = min(1.0, b.defense + BLUE_REPAIR * sup)
+        shift_field(state, b, BLUE_REPAIR * sup)
     lines = []
     if len(fields) >= 2:
         weak = min(fields, key=lambda b: (b.defense, b.id)); strong = max(fields, key=lambda b: (b.defense, b.id))
-        if weak.defense < LEND_TO and strong.defense >= LEND_FROM and weak is not strong:
-            strong.defense -= LEND_AMOUNT; weak.defense += LEND_AMOUNT
+        if weak.defense < LEND_TO and strong.defense >= LEND_FROM and weak is not strong:        # `defense` = the Patriot site's health (kept in step by shift_field)
+            shift_field(state, strong, -LEND_AMOUNT); shift_field(state, weak, LEND_AMOUNT)
             lines.append(f"A SAM battery moved from {strong.name} to {weak.name}")
     return lines
 

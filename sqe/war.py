@@ -504,7 +504,7 @@ class WarSimulator:
                 state.note("Overnight: " + ln)
             for bid in state.ground.get("fallen", []):
                 if bid in state.bases:
-                    state.bases[bid].defense = 0.0
+                    sams.set_field(state, state.bases[bid], 0.0)
         state.day += 1
         update_front(state)
         update_status(state)
