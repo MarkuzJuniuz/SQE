@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.78, BARCAP as planned coverage, step 3 (second slice): blue base / carrier / HAVCAP / tanker CAPs rotate
+
+* **XO's plan: "a CAP goes home only after its replacement has arrived", for blue's support CAPs too.** Until now a base CAP, carrier CAP, HAVCAP or tanker CAP sat on station for the whole mission, however short its legs (a jet that could fly 3 hours on one load). Now each sortie flies only its airframe's time on station (`barcap.endurance_min`: 30 min F-16 / Hornet and older, 2 h F-14 / F-15C / Su-27 type, 2 h for a tanker guard) and then goes home. The rest of the mission is covered by **relief sorties**: sortie k starts k x (endurance - 10 min) after mission start, so the relief is on station 10 minutes before the sortie it replaces leaves.
+* A relief is a copy of the flight with its own callsign (the same name with a free number, else another name of the type), appears 12 nm behind its station toward its base, is late-activated (a "support relief" trigger) to arrive on time, and stops at its own time; the last one stops when the mission no longer needs cover (the same "last flight of any package is home" rule as before). If the unit limit is reached the reliefs are left out and a warning says so.
+* Sources and gaps: endurance figures are XO's judgment calls; the 10 min handover and the 12 nm spawn are mine, also judgment calls (see `barcap.py` header).
+* **Not in this slice:** the background war does not track these sorties (a lost or winchester pair is not replaced yet: v0.41.79 design with XO); AWACS and tankers themselves still fly unlimited (assets step later); the player's own flight is never rotated.
+* Smoke: new `check_31g_blue_support_relief`.
+
 ## v0.41.77, BARCAP as planned coverage, step 3 (first slice): red patrols get their relief in the mission
 
 * **XO's plan, BARCAP relief: "a CAP goes home only after its replacement has arrived".** The planned chain (v0.41.73) has the next sortie of an area start 10 minutes before the one on station leaves. When that relief falls due inside the mission (up to `RELIEF_HORIZON_S` 1 h after the time on target, a judgment call) and the wing has a second pair, the relief pair is now flown: it waits on its field like an alert pair (hidden, put on the runway when called; the v0.41.0 no-taxi rule) and a timed trigger calls it early enough to reach the station when its window opens (flight time + the 2 min runway delay + a minute's slack). The pair on station stays until its own window ends. Not flown when the wing has no second pair, its field is gone, or the unit limit would be passed. The briefing gets a "Relief for that patrol" line.

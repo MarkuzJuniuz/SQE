@@ -1467,6 +1467,31 @@ def check_31f_red_relief_in_mission(c):
     assert "Relief 1" in mz and "relief Relief 1" in mz, "the relief pair is in the mission with its timed trigger"
 
 
+def check_31g_blue_support_relief(c):
+    """v0.41.78: a blue base / carrier / HAVCAP sortie flies only its airframe's time on station; the rest of the mission is covered by relief sorties
+    (new callsigns, late-activated before the sortie they replace leaves, each stopping at its own time)."""
+    import re, zipfile as zf
+    from sqe import barcap
+    assert barcap.endurance_min("F-16C") == 30 and barcap.endurance_min("FA-18C") == 30 and barcap.endurance_min("F-14B") == 120 and barcap.endurance_min("F-16C", tanker=True) == 120, "endurance by airframe"
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke support relief", "F-16C", 3, seed=7)
+    pk = next(p_ for p_ in ses.packages() if ses.flyable(p_) and any(f_.tag in ("BASECAP", "HAVCAP", "CVCAP") for f_ in p_.flights))
+    ses.fly(pk.number, ses.flyable(pk)[0].id)
+    mz = zf.ZipFile(ses.state.pending["miz"]).read("mission").decode()
+    acts = {}
+    for m_ in re.finditer(r'\["comment"\]="support relief ([^"]+)"', mz):
+        seg = mz[m_.end():m_.end() + 400]
+        sec = re.search(r'\["seconds"\]=(\d+)', seg)
+        if sec:
+            acts[m_.group(1)] = int(sec.group(1))
+    rel = acts
+    assert rel, ("a 30-minute support CAP in a long mission has relief sorties", sorted(acts))
+    assert all(t >= (30 - barcap.HANDOVER_MIN) * 60 - 300 for t in rel.values()), ("a relief appears no earlier than one sortie less the handover", rel)
+    stops = sorted({int(x) for x in re.findall(r'\["stopCondition"\]=\s*\{\s*\["time"\]=(\d+)', mz)})
+    assert len(stops) >= 3, ("each sortie has its own orbit stop time", stops)
+
+
 def check_31c_ai_skill_red_blue(c):
     """v0.41.70: AI Skill for Red and Blue: the helper, the saved settings, and what a built mission carries."""
     import zipfile as zf
@@ -2895,6 +2920,7 @@ CHECKS = [
     check_31d_barcap_areas,
     check_31e_barcap_mission_side,
     check_31f_red_relief_in_mission,
+    check_31g_blue_support_relief,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,
