@@ -177,7 +177,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
             for w_ in wp:                                      # v0.41.12: its PUSH lies ahead of the base, toward the station: it climbs straight out
                 if w_.name == "PUSH":
                     w_.x, w_.y = offset(bx, by, g.hdg, SWEEP_PUSH_NM * NM)
-            wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"SWEEP: station {short_:.0f} nm short of the target{why_}; clear the air, do not chase", "SWEEPSTN", orbit=True))
+            wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"SWEEP: station {short_:.0f} nm short of the target{why_}; clear the air, do not chase", "SWEEP", orbit=True))
         elif role == Role.TARCAP:
             wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"TARCAP: on station {short_:.0f} nm short of the target{why_}; hold and shoot, do not chase", "TARCAP", orbit=True))
         else:
@@ -208,15 +208,17 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     elif role == Role.SEAD:
         wp.append(Wpt("SEAD", *offset(g.tx, g.ty, harm_ax, harm_nm * NM), ialt, p.attack_kts, "HARM launch point", "SEAD", rad=irad))
     elif role in (Role.ESCORT, Role.SWEEP) and so:
-        wp.append(Wpt("TGT", so[0], so[1], alt, p.cap_kts, f"SWEEP: stop here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "SWEEP", orbit=True))
+        nm_ = "ESCORT" if role == Role.ESCORT else "SWEEP"        # v0.41.60: one name per job (this branch is the old 4-tuple stop-short point; no station reaches it any more)
+        wp.append(Wpt("TGT", so[0], so[1], alt, p.cap_kts, f"{nm_}: stop here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", nm_, orbit=True))
     elif role in (Role.ESCORT, Role.SWEEP):
-        wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts + 30, "SWEEP: clear the airspace", "SWEEP"))
+        nm_ = "ESCORT" if role == Role.ESCORT else "SWEEP"        # a flight with no station of its own (stand-off setting off, or fleet-defence fighters)
+        wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts + 30, f"{nm_}: " + ("cover the strikers over target" if role == Role.ESCORT else "clear the airspace"), nm_))
     elif role == Role.CAS:
         wp.append(Wpt("TGT", g.tx, g.ty, 0 if human else ialt, p.attack_kts, "CAS: check in with JTAC (COMM1 CH3)", "CAS", agl=human, rad=irad and not human))
     elif so:
-        wp.append(Wpt("TGT", so[0], so[1], ialt, p.cap_kts, f"ESCORT: hold here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "ESCORT", rad=irad, orbit=True))
+        wp.append(Wpt("TGT", so[0], so[1], ialt, p.cap_kts, f"TARCAP: hold here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "TARCAP", rad=irad, orbit=True))
     else:
-        wp.append(Wpt("TGT", g.tx, g.ty, ialt, p.attack_kts, "ESCORT: cover the strikers over target", "ESCORT", rad=irad))
+        wp.append(Wpt("TGT", g.tx, g.ty, ialt, p.attack_kts, "TARCAP: cover the strikers over target", "TARCAP", rad=irad))
     standoff = not human and (role == Role.SEAD or (jsow and role == Role.STRIKE))
     if standoff:
         # a HARM or JSOW flight fires from stand-off range and goes home the way it came. The package egress lies beyond the target for the
@@ -293,7 +295,7 @@ def hold_leave_s(wps: list[Wpt], push_s: float) -> float:
     return push_s
 
 
-OBJECTIVE_ACTIONS = ("BOMB", "JSOW", "SEAD", "SWEEP", "CAS", "ESCORT", "TARCAP", "SWEEPSTN", "CAPORBIT")
+OBJECTIVE_ACTIONS = ("BOMB", "JSOW", "SEAD", "SWEEP", "CAS", "ESCORT", "TARCAP", "CAPORBIT")
 
 
 def objective_wp(wps: list[Wpt]) -> Wpt | None:

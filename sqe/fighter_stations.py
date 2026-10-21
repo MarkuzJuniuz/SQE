@@ -139,7 +139,7 @@ class FighterStations:
     def _hold_end(stw, tot_s) -> int:
         """TARCAP / sweep: their time on station; escort: until the last ground-attack flight is off target."""
         t_end = (tot_s if tot_s is not None else stw.eta_s + 600)
-        if stw.action == "SWEEPSTN":
+        if stw.action == "SWEEP":
             return int(stw.eta_s + TARCAP_MIN * 60)
         if stw.action == "TARCAP":
             return int(max(stw.eta_s + TARCAP_MIN * 60, t_end + TARCAP_AFTER_TOT_S))      # v0.41.38 (XO): at least TARCAP_MIN (15) min on station, then until the last striker is off + 5 min
