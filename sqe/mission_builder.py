@@ -38,7 +38,7 @@ FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue come
 ALERT_REACH_NM = 130          # alert pairs come only from fields this close to the target (the far ones could not arrive in time)
 TARCAP_MIN = 15               # ...and holds there this long, then goes home
 ESCORT_AFTER_EGR_S = 120      # v0.41.40: an escort stays until the last striker has reached its egress point + this long (XO 2026-10-20: DEADers were left behind)
-ESCORT_AFTER_TOT_S = 180      # an escort (SWEEP role) holds its station until this long after the TOT (the last ground-attack flight off target)
+ESCORT_AFTER_TOT_S = 180      # an escort (ESCORT role) holds its station until this long after the TOT (the last ground-attack flight off target)
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
@@ -76,7 +76,7 @@ RAID_MIN_NM = 40              # ...a raid with no time to hold starts no closer 
 RAID_HOLD_MAX_S = 600         # ...and one with plenty of time appears at most 10 min before it must push
 RAID_MSHL_MIN_NM = 60         # ...its marshal is at least this far from the target (judgment call: well outside blue's Patriot reach)
 RAID_EGRESS_NM = 30           # ...off target it turns 40 degrees off its way in and leaves this far before heading home     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
-STAGGER = {Role.SWEEP: -90, Role.SEAD: -60, Role.ESCORT: -TARCAP_LEAD_S}      # seconds relative to the strikers' push (BMS-style)
+STAGGER = {Role.SWEEP: -90, Role.ESCORT: -90, Role.SEAD: -60, Role.TARCAP: -TARCAP_LEAD_S}      # seconds relative to the strikers' push (BMS-style)
 
 
 SEAD_ENGAGE_NM = 30            # a SEAD flight, or a fighter held at its stand-off point, engages only what is within this of that point
@@ -135,16 +135,16 @@ def stagger(package, role) -> int:
     """SEAD leads the strikers by five minutes in a DEAD package (the radars must be blind before the DEAD flight commits); the sweep and the
     escorts keep their usual 30 s spacing around it: the sweep ahead, the escorts behind."""
     if package.objective.type == ObjectiveType.DEAD and package.objective.aim == "DEAD":      # the DEAD stage: the SEAD package went in 25 min earlier
-        return {Role.SWEEP: -60, Role.ESCORT: -TARCAP_LEAD_S}.get(role, 0)
+        return {Role.SWEEP: -60, Role.ESCORT: -60, Role.TARCAP: -TARCAP_LEAD_S}.get(role, 0)
     if package.objective.type == ObjectiveType.DEAD:
         jsow = package.objective.aim in SEAD_AIMS and any(getattr(f, "kit", "") == "JSOW" for f in package.flights)
         if jsow and role == Role.STRIKE:                     # the JSOW flight (Standoff DEAD): with the HARM shooters, on its own axis
             return -DEAD_SEAD_LEAD_S + JSOW_TRAIL_S
         if role == Role.SEAD:
             return -DEAD_SEAD_LEAD_S
-        if role == Role.SWEEP:
+        if role in (Role.ESCORT, Role.SWEEP):
             return -DEAD_SEAD_LEAD_S - 30
-        if role == Role.ESCORT:                              # TARCAP: on station before anyone else
+        if role == Role.TARCAP:                              # TARCAP: on station before anyone else
             return -DEAD_SEAD_LEAD_S - TARCAP_LEAD_S
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
@@ -154,7 +154,7 @@ from .state import CampaignState
 
 KPH = 1.852
 F = VehicleGroup.Formation
-MAIN_TASK = {Role.CAP: task.CAP, Role.ESCORT: task.CAP, Role.SWEEP: task.FighterSweep, Role.SEAD: task.SEAD,
+MAIN_TASK = {Role.CAP: task.CAP, Role.TARCAP: task.CAP, Role.ESCORT: task.FighterSweep, Role.SWEEP: task.FighterSweep, Role.SEAD: task.SEAD,
              Role.STRIKE: task.PinpointStrike, Role.CAS: task.CAS}
 ARMOR_DENSITY = (0.5, 1.5)    # vehicles in a front-line column = the base mix x (0.5 + 1.5 x the sector's enemy strength): 2x at full strength, 1x at 33%
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
@@ -1610,7 +1610,7 @@ class MissionBuilder:
             if stw.action == "SWEEPSTN":    # a sweep goes home once its air-to-air missiles are gone
                 rtb_ = task.OptRTBOnOutOfAmmo(); rtb_.params["action"]["params"]["value"] = AAM_WEAPONS
                 g.points[0].tasks.append(rtb_)
-        elif (not f.is_player or o.player_is_ai) and f.role in (Role.ESCORT, Role.SWEEP, Role.SEAD):
+        elif (not f.is_player or o.player_is_ai) and f.role in (Role.TARCAP, Role.ESCORT, Role.SWEEP, Role.SEAD):
             m_ = self.o.fighter_engage_minutes
             zone = None
             if self.o.fighter_engage_nm > 0:                        # a leash: engage only what is inside a circle around the hold / SEAD point (DCS's distance limit moves with the aircraft)
@@ -1815,7 +1815,7 @@ class MissionBuilder:
             self._sead_grps.setdefault(package.objective.target_id, []).append(g.name)
         gate = None
         if (not f.tag and package.objective.type == ObjectiveType.DEAD and package.objective.aim not in SEAD_AIMS and package.objective.target_id and tot_s is not None
-                and f.role in (Role.STRIKE, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10
+                and f.role in (Role.STRIKE, Role.TARCAP, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10
                 and (f.role == Role.STRIKE or stw is None)):               # a TARCAP / escort on its own station is already outside the threat
             # radar gate: the DEAD flight, and its escorts and sweeps, break off if the site's radars are still up when the DEAD flight commits
             added = [w.name for w in wps[first:]]
@@ -2375,7 +2375,7 @@ class MissionBuilder:
         n_cap = len(self._cap_plan)                         # the planned patrol pairs that are up (redair.py); the rest of the defenders are alert aircraft
         alt, spd = 22000 * FT, 400 * KPH
         # v0.41.20: no needless banzai for red. Blue air-to-air jets in this fight (escorts, sweeps, support CAP) against red's doctrine (redair.commits)
-        blue_aa = sum(f.count for f in package.flights if f.role in (Role.ESCORT, Role.SWEEP, Role.CAP))
+        blue_aa = sum(f.count for f in package.flights if f.role in (Role.TARCAP, Role.ESCORT, Role.SWEEP, Role.CAP))
         tga_ = st.assets.get(package.objective.target_id) if package.objective.target_id else None
         from .war import covering_sams
         own_ = (tm.cluster_ids(tga_) | {x_.id for x_ in covering_sams(st, tga_)}) if tga_ is not None else set()   # the sites blue comes for: defended at any odds
@@ -2505,22 +2505,22 @@ class MissionBuilder:
             key = (f.role, id(prof))
             if key not in geom.tiers:
                 geom.tiers[key] = self._pick_tier(geom, f.role, prof, tx, ty, skip)
-            if key in geom.stand or not self.o.fighter_standoff or f.role not in (Role.ESCORT, Role.SWEEP):
+            if key in geom.stand or not self.o.fighter_standoff or f.role not in (Role.TARCAP, Role.ESCORT, Role.SWEEP):
                 continue
             if package.objective.type in (ObjectiveType.COUNTER_AIR, ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE) and not geom.sweep:
                 continue
-            # TARCAP (ESCORT role) and ESCORT (SWEEP role): a station of their own, for you and for the AI alike (v0.40.1)
+            # TARCAP and ESCORT roles: a station of their own, for you and for the AI alike (v0.40.1)
             t = geom.tiers[key]
             geom.stand[key] = profiles.station(self.state, pts, t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000), geom.egr)
             if geom.sweep:
                 geom.stand[key] = self._sweep_station(geom.stand[key], tx, ty, pts[0], package)
-            elif f.role in (Role.SWEEP, Role.ESCORT) and any(getattr(x_, "kit", "") == "JSOW" for x_ in package.flights):
+            elif f.role in (Role.ESCORT, Role.SWEEP, Role.TARCAP) and any(getattr(x_, "kit", "") == "JSOW" for x_ in package.flights):
                 # v0.41.42 (XO 2026-10-20): the package escort shepherds the JSOW flight, not the HARM shooters' station: it holds ESCORT_BEHIND_NM
                 # behind the JSOW launch point (on its own axis), where the JSOW jets release and turn home (the 2026-10-20 run lost all five to MiG-29s
                 # with the escort 20 nm away). Not kept out of SAM cover: that is the shepherd's risk. It leaves from the station, not by the package egress.
                 jx_, jy_ = jsow_launch_xy(geom, self._jsow_side(package, geom))
                 ax_ = bearing(tx, ty, jx_, jy_)
-                if f.role == Role.SWEEP:
+                if f.role == Role.ESCORT:                  # the package escort (before v0.41.50 the SWEEP role)
                     ex_, ey_ = offset(jx_, jy_, ax_, ESCORT_BEHIND_NM * NM)
                 else:
                     # v0.41.43 (XO 2026-10-20): the TARCAP overwatches from just behind the JSOW flight (where it used to turn round with the HARM shooters),
@@ -2756,7 +2756,7 @@ class MissionBuilder:
         if not o.reactive:
             return
         rr = random.Random(self.seed_code + ":react")
-        fight = {Role.CAP, Role.ESCORT, Role.SWEEP}
+        fight = {Role.CAP, Role.TARCAP, Role.ESCORT, Role.SWEEP}
         pkgs = [package] + list(extras)
         blue_f = sum(f.count for pk in pkgs for f in pk.flights if f.role in fight and not f.tag)
         used = {}

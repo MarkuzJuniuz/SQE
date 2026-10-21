@@ -42,20 +42,22 @@ _verified v0.41.28 + PR #65, 2026-10-16_
    `SQE_RECOVER`; carrier flights are recovered `CV_RECOVER_NM` out; the player lands for real.
 
 ## 3. Flight classes: waypoints and tasks
-_verified v0.41.28 + PR #65, 2026-10-16_
+_verified v0.41.50 (role rename), 2026-10-21_
 
-Roles (`sqe/models.py`): CAS, CAP, SWEEP, ESCORT, SEAD, STRIKE. Names are confusing, so note the mapping in `plan_route`:
-- **ESCORT role = TARCAP** (a station short of the target).
-- **SWEEP role = package escort** (holds on a station, leaves after the last striker is off target). When the objective
-  itself is a sweep (`g.sweep`), the flight is a **Fighter Sweep** (waypoint action `SWEEPSTN`).
+Roles (`sqe/models.py`), one name per job since v0.41.50: CAS, CAP, TARCAP, ESCORT, SWEEP, SEAD, STRIKE.
+- **TARCAP role** = a station short of the target (was `Role.ESCORT` before v0.41.50).
+- **ESCORT role** = package escort (holds on a station, leaves after the last striker is off target; was `Role.SWEEP` in a strike / DEAD / CAS package).
+- **SWEEP role** = Fighter Sweep (COUNTER_AIR package, `g.sweep`, waypoint action `SWEEPSTN`) and the fleet-defence fighters.
+- Still old in the code (rename PR B, not done): waypoint action names (`SWEEPSTN`, the fallback `SWEEP`), class names, GUI labels. `plan_route` still tests `(Role.ESCORT, Role.SWEEP)` together in the places where both fly a station.
+- Saved campaigns: format 6; `state._migrate_roles_v6` converts format-5 plan flights (ESCORT -> TARCAP; SWEEP -> ESCORT unless the objective is COUNTER_AIR / FLEET_DEFENSE).
 - Support CAPs are flights with a `tag`: HAVCAP, BASECAP, CVCAP, TNKCAP (not a separate role).
 
 | Class | Waypoints | Main tasks | EGR? | Fuel |
 |---|---|---|---|---|
 | Support CAPs (`f.tag`) | SPAWN, CAP1 (`CAPORBIT`), CAP2, then home points that bend round SAMs | engage zone around what it guards; `MaxRange` shots; RTB on out-of-AAM; bingo RTB; TNKCAP: radar continuous search (default ROE: v0.41.35 dropped WeaponFree, it chased out of the circle); **pull-back** (v0.41.34): the hook re-sends it its route from CAP1 when its lead is past the circle + `PULLBACK_MARGIN_NM` (`_pull_entries`, `PULL` in `debrief.py`) | **none** | unlimited at start; **real from CAP1 on**; never unlimited again |
-| TARCAP (ESCORT role) | SPAWN/DEP, MSHL (`HOLD`), PUSH, TGT (station, `TARCAP`, orbit; v0.41.43: in a package with a JSOW flight the station is `TARCAP_BEHIND_NM` (16) behind the JSOW launch point, stepped back until outside SAM rings) | engage zone covering launch points; homeward `EngageTargetsInZone` circles from `hold_end`; `HalfWayRMaxNoEsc` on the way out, `MaxRange` from the station; radar continuous search; RTB on out-of-AAM | **none** (goes home from the station) | real from PUSH; never unlimited again |
+| TARCAP (TARCAP role) | SPAWN/DEP, MSHL (`HOLD`), PUSH, TGT (station, `TARCAP`, orbit; v0.41.43: in a package with a JSOW flight the station is `TARCAP_BEHIND_NM` (16) behind the JSOW launch point, stepped back until outside SAM rings) | engage zone covering launch points; homeward `EngageTargetsInZone` circles from `hold_end`; `HalfWayRMaxNoEsc` on the way out, `MaxRange` from the station; radar continuous search; RTB on out-of-AAM | **none** (goes home from the station) | real from PUSH; never unlimited again |
 | Fighter Sweep | SPAWN, PUSH (ahead of the base), TGT (station, `SWEEPSTN`) | circle taking in the station and the red flight it hunts (`package.extra["sweep_vs"]`), clear of SAMs; homeward circles; RTB on out-of-AAM. Dispatch and station: see the note under this table | **none** | same as TARCAP |
-| Package escort (SWEEP role) | SPAWN/DEP, MSHL, PUSH, TGT (station, `ESCORT`; v0.41.42: in a package with a JSOW flight the station is `ESCORT_BEHIND_NM` behind the JSOW launch point, not SAM-clear) | same as TARCAP (v0.41.42: its circle covers every shooter's launch point and only SA-10 reach keeps it out: `_cover_circle(long_only=True, max_nm=TARCAP_COVER_MAX_NM)`); leaves `ESCORT_AFTER_TOT_S` after the last striker, or `ESCORT_AFTER_EGR_S` (2 min) after the last striker's egress point if later (v0.41.40, `_striker_egr`) | only if the egress leg is clear of SAM cover (`egr_ok_`) | real from PUSH; unlimited again only if it has an EGR |
+| Package escort (ESCORT role) | SPAWN/DEP, MSHL, PUSH, TGT (station, `ESCORT`; v0.41.42: in a package with a JSOW flight the station is `ESCORT_BEHIND_NM` behind the JSOW launch point, not SAM-clear) | same as TARCAP (v0.41.42: its circle covers every shooter's launch point and only SA-10 reach keeps it out: `_cover_circle(long_only=True, max_nm=TARCAP_COVER_MAX_NM)`); leaves `ESCORT_AFTER_TOT_S` after the last striker, or `ESCORT_AFTER_EGR_S` (2 min) after the last striker's egress point if later (v0.41.40, `_striker_egr`) | only if the egress leg is clear of SAM cover (`egr_ok_`) | real from PUSH; unlimited again only if it has an EGR |
 | Strike (bombs) | SPAWN/DEP, MSHL, PUSH, IP (+LOW), TGT (`BOMB`), EGR | restricted air-to-air, `ReturnFire`, `WeaponFree` at the target; RTB on out-of-A2G; ECM only PUSH to EGR; bomb tasks only until `LATE_ATTACK_S` after TOT | yes | unlimited, real PUSH to EGR, unlimited again at EGR |
 | JSOW (Strike with kit) | like Strike but a `JSOW` launch point instead of TGT (v0.41.46: `JSOW_LAUNCH_NM` 30 nm out, kept outside every ring in `g.jsow_keep`: SA-10 at `JSOW_KEEP_HIGH_NM`, the target cluster's own SAMs at their `AVOID_NM`) | stand-off release, never crosses the site; bombing tasks end `JSOW_ATTACK_S` (120 s) after the point's ETA, then a timed Return Fire (v0.41.47) stops the weapons-free hunt; two JSOWs a jet (`JSOW_PER_JET`, Hornet kit = XO's ME loadout with Litening), aim order covering Tor, a launcher, radars | yes (back along its approach) | as Strike |
 

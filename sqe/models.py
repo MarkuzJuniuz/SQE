@@ -7,8 +7,9 @@ from enum import Enum
 class Role(str, Enum):
     CAS = "CAS"
     CAP = "CAP"
-    SWEEP = "SWEEP"
-    ESCORT = "ESCORT"
+    TARCAP = "TARCAP"      # a station short of the target, first in, last out (was Role.ESCORT before v0.41.50)
+    ESCORT = "ESCORT"      # stays with the strikers and leaves with them (was Role.SWEEP in a strike / DEAD / CAS package)
+    SWEEP = "SWEEP"        # Fighter Sweep (COUNTER_AIR package) and the fleet-defence fighters
     SEAD = "SEAD"
     STRIKE = "STRIKE"
 
@@ -56,11 +57,7 @@ def task_label(f, obj) -> str:
         return "SO DEAD" if obj.aim == "STANDOFF" else "JSOW"
     if f.role.value == "STRIKE" and obj.type.value == "DEAD":
         return "DEAD"
-    if f.role.value == "ESCORT":
-        return "TARCAP"                 # the package's TARCAP: its own station, first in, at least 15 minutes and until the last striker is off target + 5 minutes, home
-    if f.role.value == "SWEEP" and obj.type.value not in ("COUNTER_AIR", "FLEET_DEFENSE"):
-        return "ESCORT"                 # stays with the package, leaves with it (a real sweep is a COUNTER_AIR package)
-    return f.role.value
+    return f.role.value                 # one name per job (v0.41.50): TARCAP, ESCORT, SWEEP, CAP, STRIKE, SEAD, CAS
 
 
 @dataclass

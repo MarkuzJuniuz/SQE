@@ -164,11 +164,11 @@ def main():
     _byname = {g_["name"]: g_ for co_ in _mz["mission"]["coalition"]["blue"]["country"].values() for g_ in co_.get("plane", {}).get("group", {}).values()}
     _nst = 0
     for f_ in pk.flights:
-        if f_.tag or f_.role not in (_RlA.ESCORT, _RlA.SWEEP) or f_.callsign not in _byname:
+        if f_.tag or f_.role not in (_RlA.TARCAP, _RlA.ESCORT, _RlA.SWEEP) or f_.callsign not in _byname:
             continue
         _g = _byname[f_.callsign]; _pts = list(_g["route"]["points"].values()); _nm = [p_.get("name") for p_ in _pts]
         assert "IP" not in _nm and "TGT" in _nm, (f_.callsign, "station route: no IP", _nm)
-        if f_.role == _RlA.ESCORT:
+        if f_.role == _RlA.TARCAP:
             assert "EGR" not in _nm, (f_.callsign, "a TARCAP goes home from its station", _nm)
         if not f_.is_player:
             _zt = [t_ for t_ in _pts[0]["task"]["params"]["tasks"].values() if t_.get("id") == "ControlledTask" and t_["params"]["task"]["id"] == "EngageTargetsInZone"]
@@ -675,7 +675,7 @@ def main():
     for _a in _stn.assets.values(): _a.health = 0.1
     assert _pf.choose(_stn, _Rl.STRIKE, _P("FA-18C"), _pts, (100_000, 0), None).rad, "sites at 10% health still count for the profile"
     assert not _ch("FA-18C", _Rl.STRIKE, "SA-11", "SA-6", "SA-2", cloud=1500).changed, "a low cloud base closes LOW"
-    assert not _ch("FA-18C", _Rl.SEAD, "SA-11", "SA-6", "SA-2").rad and not _ch("FA-18C", _Rl.ESCORT, "SA-11", "SA-6", "SA-2").rad, "SEAD and escorts never go LOW"
+    assert not _ch("FA-18C", _Rl.SEAD, "SA-11", "SA-6", "SA-2").rad and not _ch("FA-18C", _Rl.TARCAP, "SA-11", "SA-6", "SA-2").rad, "SEAD and escorts never go LOW"
     t_ = _ch("A-10C", _Rl.CAS, "SA-11", "SA-6", "SA-2"); assert t_.rad and t_.alt_ft == 300, t_
     assert not _ch("A-10C", _Rl.CAS, "AAA").rad, "AAA alone does not push a CAS flight lower"
     from sqe.routes import make_geometry as _mg2, plan_route as _pr2
@@ -714,8 +714,8 @@ def main():
     assert _pf.low_factor(_NS(x=0, y=0), "SA-11", None, 500) == _pf.LOW_RADAR_FACTOR
     # MED is dropped when it would sit under the safe altitude
     _rl.clear()
-    _ok = _pf.choose(_st("SA-8", "SA-15"), _Rl.ESCORT, _P("FA-18C"), _pts, (100_000, 0), None, (), None)
-    _no = _pf.choose(_st("SA-8", "SA-15"), _Rl.ESCORT, _P("FA-18C"), _pts, (100_000, 0), None, (), 30_000)
+    _ok = _pf.choose(_st("SA-8", "SA-15"), _Rl.TARCAP, _P("FA-18C"), _pts, (100_000, 0), None, (), None)
+    _no = _pf.choose(_st("SA-8", "SA-15"), _Rl.TARCAP, _P("FA-18C"), _pts, (100_000, 0), None, (), 30_000)
     assert not _no.changed, "MED below the minimum safe altitude is never chosen"
     # spawn floor: ground + 1,500 ft near the ridge, 6,000 ft without a scan
     from sqe.routes import _floor_ft
@@ -778,6 +778,18 @@ def main():
     _col = _st.assets["armor_2"]
     assert _gr.column_health(_st, _col, 1.0, 0.0) == 1.0 - _gr.AIR_EFFECT
     _before = _g["blue"][1]; _gr.blue_losses(_st, "armor_2", 2, 4); assert _g["blue"][1] == max(0.0, _before - _gr.BLUE_LOSS / 2)
+    # v0.41.50: a format-5 save (before the role rename) loads with TARCAP / ESCORT / SWEEP in the right places
+    _new_d = s.state.to_dict(); _was = {}
+    _flip = {"TARCAP": "ESCORT", "ESCORT": "SWEEP"}                    # what the old names were
+    _old5 = json.loads(json.dumps(_new_d)); _old5["format"] = 5
+    for _i, _pd in enumerate(_old5["plan"]):
+        for _j, _fd in enumerate(_pd["flights"]):
+            _was[(_i, _j)] = _fd["role"]
+            _fd["role"] = _flip.get(_fd["role"], _fd["role"])
+    _back = _CS.from_dict(_old5).to_dict()
+    assert all(_fd["role"] == _was[(_i, _j)] for _i, _pd in enumerate(_back["plan"]) for _j, _fd in enumerate(_pd["flights"])), "an old save's roles are converted"
+    assert any(_r in _was.values() for _r in ("TARCAP", "ESCORT")), "the test plan has TARCAP or escort flights"
+    print("[roles v0.41.50] a format-5 save is converted: ESCORT -> TARCAP, SWEEP -> ESCORT in strike / DEAD / CAS packages")
     # an old format-4 save gets a ground war
     _old = _CS.from_dict(s.state.to_dict()).to_dict(); _old["format"] = 4; _old.pop("ground"); _old.pop("blue_assets")
     _mig = _CS.from_dict(_old); assert _gr.active(_mig) and _mig.blue_assets and any("ground war" in x for x in _mig.log)
@@ -971,13 +983,13 @@ def main():
     finally:
         _MBj._flight_plans = _jfp
     _bs, _gm, _pk = _jrec[0]
-    _esc = [v_ for (r_, _i), v_ in _gm.stand.items() if r_ == _Rj.SWEEP]
+    _esc = [v_ for (r_, _i), v_ in _gm.stand.items() if r_ == _Rj.ESCORT]
     assert _esc, "a Standoff DEAD package has an escort station"
     _jp = _jxy(_gm, _bs._jsow_side(_pk, _gm))
     from sqe.routes import JSOW_LAUNCH_NM as _JLN
     assert _jd(*_jp, _gm.tx, _gm.ty) / _JNM >= min(_JLN, _gm.d / _JNM * 0.8 - 6) - 0.5, "v0.41.46: the JSOW launch point is at least JSOW_LAUNCH_NM (30) from the target"
     assert all(abs(_jd(v_[0], v_[1], *_jp) / _JNM - _EBN) < 1.0 for v_ in _esc), "the escort holds ESCORT_BEHIND_NM behind the JSOW launch point"
-    _tc = [v_ for (r_, _i), v_ in _gm.stand.items() if r_ == _Rj.ESCORT]
+    _tc = [v_ for (r_, _i), v_ in _gm.stand.items() if r_ == _Rj.TARCAP]
     assert _tc and all(_jd(v_[0], v_[1], *_jp) / _JNM >= _TBN - 1.0 for v_ in _tc), "v0.41.43: the TARCAP holds at least TARCAP_BEHIND_NM behind the JSOW launch point"
     _lps = _bs._launch_pts[_pk.id]
     assert len(_lps) >= 2 and any(_jd(x_, y_, *_jp) < 100 for x_, y_ in _lps), "the cover circle knows the JSOW launch point before the flights are built"
@@ -987,8 +999,8 @@ def main():
     from sqe import reactive as _rv
     s.new("Alert range", "FA-18C", 2, seed=4); _st = s.state
     _cv = next(b_ for b_ in _st.bases.values() if b_.kind.value == "CARRIER")
-    _near = _rv.blue_sources(_st, AIRCRAFT, {Role.CAP, Role.ESCORT, Role.SWEEP}, {}, _cv.x + 60 * 1852, _cv.y)
-    _far = _rv.blue_sources(_st, AIRCRAFT, {Role.CAP, Role.ESCORT, Role.SWEEP}, {}, _cv.x, _cv.y + 170 * 1852)
+    _near = _rv.blue_sources(_st, AIRCRAFT, {Role.CAP, Role.TARCAP, Role.ESCORT, Role.SWEEP}, {}, _cv.x + 60 * 1852, _cv.y)
+    _far = _rv.blue_sources(_st, AIRCRAFT, {Role.CAP, Role.TARCAP, Role.ESCORT, Role.SWEEP}, {}, _cv.x, _cv.y + 170 * 1852)
     assert any(c_[1].id == _cv.id for c_ in _near), "the carrier answers 60 nm away"
     assert not any(c_[1].id == _cv.id and c_[0].aircraft == "FA-18C" for c_ in _far), "no Hornet alert pair is sent 170 nm"
     assert all(c_[2] <= _rv.BLUE_DISPATCH_NM.get(c_[0].aircraft, _rv.BLUE_DISPATCH_DEFAULT_NM) for c_ in _far + _near)
@@ -1004,14 +1016,14 @@ def main():
     assert _pf.standoff(_sam(10_000), _line, 22000) is None, "a flight that already starts inside cover is left alone"
     assert _pf.standoff(_NS(assets={}), _line, 22000) is None
     _g3 = _mg3(0, 0, 140_000, 0, _P("FA-18C"), (-20_000, 0)); _g3.tier = _pf.Tier(22000, False) if False else None
-    _key = (_Rl.ESCORT, id(_P("FA-18C"))); _g3.stand = {_key: _r}
-    _w4 = {w.name: w for w in _pr3(_Rl.ESCORT, (0, 0), _g3, _P("FA-18C"), is_player=False, tanker_xy=None)}
+    _key = (_Rl.TARCAP, id(_P("FA-18C"))); _g3.stand = {_key: _r}
+    _w4 = {w.name: w for w in _pr3(_Rl.TARCAP, (0, 0), _g3, _P("FA-18C"), is_player=False, tanker_xy=None)}
     assert _w4["TGT"].orbit and "EGR" not in _w4 and abs(_w4["TGT"].x - _r[0]) < 1, "an AI escort holds at the stand-off point and goes home from it"
-    _w5 = {w.name: w for w in _pr3(_Rl.ESCORT, (0, 0), _g3, _P("FA-18C"), is_player=True, tanker_xy=None)}
+    _w5 = {w.name: w for w in _pr3(_Rl.TARCAP, (0, 0), _g3, _P("FA-18C"), is_player=True, tanker_xy=None)}
     assert not _w5["TGT"].orbit and "EGR" in _w5, "the player's own route is never cut short"
     # in a built mission: put a live SAM site on the target and look for the limit and the hold
     s.new("Stand off", "FA-18C", 2, seed=8); _st = s.state
-    _p = next(p_ for p_ in s.packages() if s.flyable(p_) and any(f_.role == _Rl.ESCORT for f_ in p_.flights) and p_.objective.type.value in ("STRIKE", "DEAD"))
+    _p = next(p_ for p_ in s.packages() if s.flyable(p_) and any(f_.role == _Rl.TARCAP for f_ in p_.flights) and p_.objective.type.value in ("STRIKE", "DEAD"))
     from sqe.mission_builder import MissionBuilder as _MBh, TARCAP_AFTER_TOT_S as _TA
     _hrec, _hext = [], _MBh._extend_holds
     def _hwrap(self_, events_, egr_events=()):
@@ -1083,7 +1095,7 @@ def main():
     print("[sams] destroyed sites are replaced after 3 days (not column SAMs, not beyond the tiers in play), hurt mobile sites move (garrison too, 2 moves, 10 nm), airfield defences repair by supply and lend a battery, save round trip")
     # v0.26.1: Red's known CAP stays out of the fleet's reach; the player's flight gets the stand-off in AI-test mode
     _g3.ai_player = True
-    _w6 = {w.name: w for w in _pr3(_Rl.ESCORT, (0, 0), _g3, _P("FA-18C"), is_player=True, tanker_xy=None)}
+    _w6 = {w.name: w for w in _pr3(_Rl.TARCAP, (0, 0), _g3, _P("FA-18C"), is_player=True, tanker_xy=None)}
     assert _w6["TGT"].orbit and "EGR" not in _w6, "AI-test mode: the player's own flight stops short too"
     from sqe import mission_builder as _mbm
     _rec_cap = []
@@ -1178,7 +1190,7 @@ def main():
         any(sum(1 for f_ in p_.flights if f_.role == _Rl2.SEAD and not f_.tag) == 2 for p_ in _sp3), "Standoff DEAD: two HARM flights (long-range radars and Tors, same salvo)"
     _pj = next(p_ for p_ in _sp3 if any(f_.kit == "JSOW" for f_ in p_.flights) and s.flyable(p_, squadron_only=False))
     assert any(f_.kit == "JSOW" for f_ in _Pkg.from_dict(_pj.to_dict()).flights), "the JSOW kit survives the save"
-    assert (_stg2(_pj, _Rl2.SWEEP), _stg2(_pj, _Rl2.STRIKE), _stg2(_pj, _Rl2.SEAD)) == (-_dl - 30, -_dl + _jl, -_dl), "JSOW jets push with the HARM shooters (v0.39.21), the sweep ahead"
+    assert (_stg2(_pj, _Rl2.ESCORT), _stg2(_pj, _Rl2.STRIKE), _stg2(_pj, _Rl2.SEAD)) == (-_dl - 30, -_dl + _jl, -_dl), "JSOW jets push with the HARM shooters (v0.39.21), the sweep ahead"
     assert not any(_sup(f_, p_) for p_ in _sp3 for f_ in p_.flights if f_.kit == "JSOW"), "the war sim counts the JSOW flight as the DEAD strike of a Standoff DEAD package"
     s.ai_test = True; s.fly(_pj.number, s.flyable(_pj, squadron_only=False)[0].id); s.ai_test = False
     _mj = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
@@ -1247,7 +1259,7 @@ def main():
     _pk_ = _ws.packages()
     assert all(f_.role == _Rl2.SWEEP and f_.count == 4 and not f_.tag for f_ in _sw.flights), "a sweep is 4-ships only, no support CAP"
     assert all(f_.aircraft in ("F-15C", "F-14BU") for p_ in _ws.packages() if _isw(p_.objective) for f_ in p_.flights if not f_.tag), ("v0.41.15: sweeps fly F-15Cs and F-14s only", [(p_.objective.description, [(f_.aircraft, f_.tag, f_.role.value) for f_ in p_.flights]) for p_ in _ws.packages() if _isw(p_.objective)])
-    _esc = [f_ for p_ in _pk_ if p_.objective.type.value in ("STRIKE", "DEAD", "CAS") for f_ in p_.flights if f_.role == _Rl2.SWEEP]
+    _esc = [f_ for p_ in _pk_ if p_.objective.type.value in ("STRIKE", "DEAD", "CAS") for f_ in p_.flights if f_.role == _Rl2.ESCORT]
     assert _esc and all(f_.count == 2 for f_ in _esc), "a defended strike package carries a 2-ship escort (v0.41.1), the extra fighters are the sweep's"
     assert sum(f_.aircraft in ("F-16C", "FA-18C") for f_ in _esc) >= len(_esc) / 2, ("escorts: F-16 / F/A-18 first", [f_.aircraft for f_ in _esc])
     _t5 = s.state.assets if False else _ws.state.assets
@@ -1367,7 +1379,7 @@ def main():
         for _pk in _ps.packages():
             for _fl in _ps.flyable(_pk, squadron_only=False):
                 _key = (_ac, _fl.role.value, _pk.objective.type.value)
-                if _key in _seen_r or _fl.role.value not in ("ESCORT", "SWEEP", "SEAD", "STRIKE", "CAP"):
+                if _key in _seen_r or _fl.role.value not in ("TARCAP", "ESCORT", "SWEEP", "SEAD", "STRIKE", "CAP"):
                     continue
                 _seen_r.add(_key)
                 _ps.fly(_pk.number, _fl.id)
@@ -1659,13 +1671,13 @@ def main():
         _dk = next((p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and s.flyable(p_)), None)
         if _dk: break
     assert _dk, "no DEAD package found"
-    assert (_stg(_dk, _Rl.SWEEP), _stg(_dk, _Rl.SEAD), _stg(_dk, _Rl.ESCORT), _stg(_dk, _Rl.STRIKE)) == (-330, -300, -300, 0), "DEAD package timing (v0.41.1): the TARCAP arrives with the SEAD, the escort just ahead, strikers"
+    assert (_stg(_dk, _Rl.ESCORT), _stg(_dk, _Rl.SEAD), _stg(_dk, _Rl.TARCAP), _stg(_dk, _Rl.STRIKE)) == (-330, -300, -300, 0), "DEAD package timing (v0.41.1): the TARCAP arrives with the SEAD, the escort just ahead, strikers"
     s.ai_test = True; s.fly(_dk.number, None); s.ai_test = False
     _wlr.long_range_site = _lr_real
     _zz = _zf.ZipFile(_st.pending["miz"]); _mt = _zz.read("mission").decode("utf-8", "ignore")
     assert _mt.count("SwitchWaypoint") >= 1 and _re.search(r"local GATES = \{ \{t=\d+, site=", _mt), "the AI flights carry a radar gate"
     _gg = set(_re.findall(r'grp=\\*"([^"\\]+)', _mt))
-    assert _gg and not any(f_.callsign in _gg for f_ in _dk.flights if f_.role in (_Rl.ESCORT, _Rl.SWEEP) and not f_.tag), "a TARCAP / escort on its own station is not held at the gate"
+    assert _gg and not any(f_.callsign in _gg for f_ in _dk.flights if f_.role in (_Rl.TARCAP, _Rl.ESCORT, _Rl.SWEEP) and not f_.tag), "a TARCAP / escort on its own station is not held at the gate"
     assert {"l10n/DEFAULT/sqe_beep.wav", "l10n/DEFAULT/sqe_beep_you.wav"} <= set(_zz.namelist()), "both beeps are bundled"
     _hk = _db.lua_hook("c", 1, "p", [], "Hornet 1-1", "Hornet 1", [(10, "AWACS to HORNET 1: push.", True), (20, "X: on station.", False)], None, "a.wav", "b.wav",
                        {}, [], [{"id": "sam_x", "label": "X", "who": "W", "prim": True, "units": ["u1"], "trk": ["u1"], "srch": []}], [],
@@ -1796,7 +1808,7 @@ def main():
     assert _se and _de and not any(p_.objective.type.value == "DEAD" and not p_.objective.aim for p_ in _pk), "SEAD / DEAD jobs come in two stages"
     for _d_ in _de:
         _s_ = next(p_ for p_ in _se if p_.objective.target_id == _d_.objective.target_id)
-        assert {f_.role for f_ in _s_.flights if not f_.tag and f_.kit != "JSOW"} <= {Role.SEAD, Role.ESCORT, Role.SWEEP} and Role.SEAD in {f_.role for f_ in _s_.flights}
+        assert {f_.role for f_ in _s_.flights if not f_.tag and f_.kit != "JSOW"} <= {Role.SEAD, Role.TARCAP, Role.ESCORT, Role.SWEEP} and Role.SEAD in {f_.role for f_ in _s_.flights}
         assert all(f_.role == Role.STRIKE for f_ in _s_.flights if f_.kit == "JSOW"), "the only strike flight in a SEAD package is its JSOW slingers"
         assert Role.STRIKE in {f_.role for f_ in _d_.flights} and Role.SEAD not in {f_.role for f_ in _d_.flights}
         assert 0 <= _hm(_d_) - _hm(_s_) <= 25 + 1, "the DEAD stage follows the SEAD stage by 25 minutes"
@@ -1849,7 +1861,7 @@ def main():
         _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
         assert ("GATES = { {t=" in _mz.replace("\\", "")) or True
     from sqe.mission_builder import stagger as _stg
-    assert _stg(_de, Role.ESCORT) == 0 and _stg(_de, Role.SWEEP) == -60 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage: TARCAP and escort with the strikers"
+    assert _stg(_de, Role.TARCAP) == 0 and _stg(_de, Role.ESCORT) == -60 and _stg(_de, Role.SWEEP) == -60 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage: TARCAP and escort with the strikers"
     _wlr.long_range_site = _lr_real
     # the HARM launch point is at the edge of an SA-10's reach and the HARM task asks for ARMs; in the all-AI test your own SEAD flight gets the same tasking
     import math as _m

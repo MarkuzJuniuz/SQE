@@ -12,6 +12,26 @@ from . import FORMAT_VERSION
 from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, PlayerProfile)
 
 
+def _migrate_roles_v6(d: dict) -> None:
+    """v0.41.50 gave every fighter job its own role name. Before, Role.ESCORT was the TARCAP and Role.SWEEP was both the package escort (in a
+    strike / DEAD / CAS package) and the Fighter Sweep. A format-5 save is converted in place: ESCORT -> TARCAP; SWEEP -> ESCORT unless the
+    package is a COUNTER_AIR or FLEET_DEFENSE one (the same rule the old task label used)."""
+    def fix(pkg):
+        if not isinstance(pkg, dict):
+            return
+        otype = (pkg.get("objective") or {}).get("type", "")
+        for f in pkg.get("flights") or []:
+            r = f.get("role")
+            if r == "ESCORT":
+                f["role"] = "TARCAP"
+            elif r == "SWEEP" and otype not in ("COUNTER_AIR", "FLEET_DEFENSE"):
+                f["role"] = "ESCORT"
+    for p in d.get("plan") or []:
+        fix(p)
+    if d.get("pending"):
+        fix(d["pending"].get("package_dict"))
+
+
 @dataclass
 class CampaignState:
     name: str
@@ -82,6 +102,8 @@ class CampaignState:
         if d.get("format", 1) < 4:
             raise ValueError("This campaign was saved by an older SQE (before depth tiers and SAM garrisons, v0.8). "
                              "The enemy order of battle changed, so it cannot be loaded; please start a new campaign.")
+        if d.get("format", 1) < 6:
+            _migrate_roles_v6(d)
         s = cls(name=d["name"], theatre=d.get("theatre", "caucasus"), level=d.get("level", 2),
                 campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1),
                 sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"),

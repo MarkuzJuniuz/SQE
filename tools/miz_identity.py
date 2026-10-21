@@ -82,7 +82,7 @@ def _canon(o, ind=0):
 
 
 def _scrub(text: str, camp_ids: set) -> str:
-    text = text.replace(str(TMP), "<TMP>")
+    text = text.replace(str(TMP), "<TMP>").replace(sqe.__version__, "<VERSION>")
     for c in camp_ids:
         if c:
             text = text.replace(c, "<CAMPAIGN>")
@@ -212,6 +212,8 @@ def main(argv):
             return 0
         old = load(base)
         old_v = (base / "VERSION").read_text() if (base / "VERSION").exists() else "?"
+        if old_v not in ("?", sqe.__version__):                  # a baseline from another version: its text still carries that version string
+            old = {k: {m: t.replace(old_v, "<VERSION>") for m, t in v.items()} for k, v in old.items()}
         n = diff(old, res, f"v{old_v}", f"v{sqe.__version__}")
         print(f"{len(res)} missions compared with the saved baseline: " + ("IDENTICAL" if not n else f"{n} DIFFERENCES"))
         return 1 if n else 0
