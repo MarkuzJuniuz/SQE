@@ -194,10 +194,6 @@ class SettingsDialog(QDialog):
         self.mpct = QSpinBox(); self.mpct.setRange(0, 100); self.mpct.setSuffix(" %"); self.mpct.setValue(int(settings.merge_enemy_pct))
         row(v, "Enemy air sum", self.mpct)
         hint(v, "When packages are folded in: enemy fighters = the biggest package's need + this share of every other folded package's need (100 = full sum).")
-        self.ecap = QSpinBox(); self.ecap.setRange(0, 300); self.ecap.setSuffix(" nm enemy"); self.ecap.setValue(int(settings.enemy_cap_engage_nm))
-        self.fcap = QSpinBox(); self.fcap.setRange(0, 300); self.fcap.setSuffix(" nm friendly"); self.fcap.setValue(int(settings.friendly_cap_engage_nm))
-        row(v, "CAP engage range", self.ecap, self.fcap)
-        hint(v, "How far patrol fighters (enemy CAP, your HAVCAP/BASECAP) chase before breaking off. 0 = unlimited. Scrambled alert fighters are not limited.")
         self.feng = QSpinBox(); self.feng.setRange(0, 300); self.feng.setSuffix(" nm"); self.feng.setValue(int(settings.fighter_engage_nm))
         self.fmin = QSpinBox(); self.fmin.setRange(0, 120); self.fmin.setSuffix(" min after TOT"); self.fmin.setValue(int(settings.fighter_engage_minutes))
         row(v, "TARCAP / escort / sweep engage range", self.feng, self.fmin)
@@ -290,7 +286,6 @@ class SettingsDialog(QDialog):
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.shore_margin_m = int(self.shore.value())
         self.s.river_margin_m = int(self.river.value())
-        self.s.enemy_cap_engage_nm = int(self.ecap.value()); self.s.friendly_cap_engage_nm = int(self.fcap.value())
         self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value()); self.s.fighter_standoff = self.fso.isChecked()
         self.s.f14_special_names = self.f14n.isChecked()
         self.s.auto_patch_scripting = self.autopatch.isChecked(); self.s.patch_asked = True
