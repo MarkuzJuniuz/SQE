@@ -1975,9 +1975,13 @@ def check_45_ai_routes_bend_around(c):
 
 
 def check_46_ai_flights_going_home(c):
-    _zf, lua, s = c._zf, c.lua, c.s
+    import math
+    import zipfile as _zf
+    from dcs import lua
+    s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))      # its own session: it borrows nothing from earlier sections
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
     # v0.41.17: AI flights going home to the carrier are recovered 10 nm out (SQE_RECOVER), not put in the deck queue
-    _rc17, _hk17 = 0, ""
+    _rc17, _hk17, _far17 = 0, "", 0.0
     for _sd17 in (3, 4, 5, 6):             # v0.41.65: its own mission with a carrier CAP (the one above only had carrier flights when a package happened to fold in: layout luck)
         s.new("Recover", "F-14BU", 2, seed=_sd17); s.plan_day()
         _pk17 = next((p_ for p_ in s.packages() if any(f_.tag == "CVCAP" for f_ in p_.flights) and s.flyable(p_)), None)
@@ -1993,9 +1997,19 @@ def check_46_ai_flights_going_home(c):
                 if _scr:
                     assert g_["name"] in _scr[0]["params"]["action"]["params"]["command"] and _lp17.get("type") != "Land", g_["name"]
                     _rc17 += 1
+                    # v0.41.71: the recovery point is 10 nm from where the BOAT will be when the flight gets there, not from where it started
+                    _cv17 = next(sg_ for co2_ in lua.loads(_hk17)["mission"]["coalition"]["blue"]["country"].values() for sg_ in ((co2_.get("ship") or {}).get("group") or {}).values()
+                                 if any(u_["type"] == "Stennis" for u_ in sg_["units"].values()))
+                    _cp17 = list(_cv17["route"]["points"].values()); _c0, _c1 = _cp17[0], _cp17[1]
+                    _hh = math.atan2(_c1["y"] - _c0["y"], _c1["x"] - _c0["x"]); _dd17 = math.hypot(_lp17["x"] - _c0["x"], _lp17["y"] - _c0["y"]) / 1852
+                    _best17 = min(abs(math.hypot(_lp17["x"] - (_c0["x"] + _c1["speed"] * t_ * math.cos(_hh)), _lp17["y"] - (_c0["y"] + _c1["speed"] * t_ * math.sin(_hh))) / 1852 - 10) for t_ in range(0, 9000, 30))
+                    assert _best17 < 0.2, ("the recovery point is 10 nm from the boat at some time in the mission", _best17)
+                    _far17 = max(_far17, _dd17)
         if _rc17:
             break
     assert _rc17 >= 1 and "function SQE_RECOVER" in _hk17, ("carrier AI flights are recovered at 10 nm by the hook", _rc17)
+    assert _far17 > 10.5, ("at least one recovery point follows the boat's course (it is more than 10 nm from where the boat started)", _far17)
+    assert "t2=" in _hk17 and "fu = math.floor(u0:getFuel()" in _hk17, "the recovery net has its stale deadline and the tracks carry fuel and speed"
     print(f"[cv recover] {_rc17} carrier AI flights recovered 10 nm from the boat instead of joining the deck queue")
 
 
