@@ -5,6 +5,12 @@
 * **Mission identity check, `tools/miz_identity.py`** (XO 2026-10-20: the refactor, the rename and the `_spawn_flight` split must not change a generated mission). `save DIR` builds 60 missions (9 campaigns, level 1-3, five jets, normal and "open skies" days with the red SAMs zeroed so strikes, counter-air, escorts and TARCAPs appear; each as your own flight and as the all-AI test), writes them out as normalised text; `check DIR` rebuilds on the changed code and prints a diff of anything that differs (exit 1); `selfcheck` builds twice on the same code and fails if the result is not repeatable. Runs in a temp folder, nothing of yours is touched, about 40 s a run. It pins campaign id, the builder's Random(), the global `random` and PYTHONHASHSEED inside the tool only. Production code unchanged. Not covered: fighter sweeps, BARCAP, bomber intercepts, and paths no case reaches (see the tool's docstring).
 * CLAUDE.md: the code map names the tool.
 
+## v0.41.51
+
+* **Support-CAP pull-back removed** (XO 2026-10-20 22:39: three runs in a row showed `pulls` empty). The Lua hook no longer re-sends a support CAP its route when it leaves its circle (PR #77, v0.41.34); `PULLBACK_MARGIN_NM`, `PULLBACK_BINGO`, `_pull_entries`, the hook's `__PULL__` block and the `pulls` list in the results file are gone. The engage circle on every support CAP stays, and the tanker CAP keeps the default ROE (v0.41.35); the position tracks (v0.41.43) show whether a CAP ever leaves its circle.
+  * Not tested in DCS. Cost of a wrong guess: a support CAP that chases out of its circle is no longer called back (none did in three runs); the tracks would show it.
+* Smoke test: the pull-back check is replaced by "[cap circle]" (no pull-back in the hook, support CAPs keep their engage circle).
+
 ## v0.41.50
 
 * **Role rename: one name per job** (XO 2026-10-20, PR A of the same-rules build). `Role.ESCORT` (the TARCAP) is now `Role.TARCAP`; `Role.SWEEP` in a strike / DEAD / CAS package (the package escort) is now `Role.ESCORT`; `Role.SWEEP` stays for Fighter Sweeps and the fleet-defence fighters. Every place that tested the old pair now tests the right new roles.

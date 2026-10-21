@@ -1618,25 +1618,19 @@ def main():
     _hk17 = _zf.ZipFile(_ss.state.pending["miz"]).read("l10n/DEFAULT/dictionary").decode("utf-8", "ignore") if False else _zf.ZipFile(_ss.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
     assert _rc17 >= 1 and "function SQE_RECOVER" in _hk17, ("carrier AI flights are recovered at 10 nm by the hook", _rc17)
     print(f"[cv recover] {_rc17} carrier AI flights recovered 10 nm from the boat instead of joining the deck queue")
-    # v0.41.34: every support CAP (route with CAP1) has a pull-back entry in the hook: centred on its engage circle, radius = circle + the margin,
-    # and the route it gets again starts at CAP1 with the engage circle on it
-    import re as _re34
-    from sqe.mission_builder import PULLBACK_MARGIN_NM as _pbm
-    _code34 = next(a_["text"] for tr_ in _M4["trigrules"].values() for a_ in tr_["actions"].values() if isinstance(a_.get("text"), str) and "local PULL" in a_["text"])
-    _pull34 = {m_[0]: (float(m_[1]), float(m_[2]), float(m_[3])) for m_ in _re34.findall(r'\{ g="([^"]+)", x=(-?[\d.]+), z=(-?[\d.]+), r=(\d+), stop=', _code34)}
+    # v0.41.51: the support CAP pull-back is gone from the hook; every support CAP (route with CAP1) still carries its engage circle on point 0
+    _code34 = next(a_["text"] for tr_ in _M4["trigrules"].values() for a_ in tr_["actions"].values() if isinstance(a_.get("text"), str) and "local TRACK" in a_["text"])
+    assert "PULL" not in _code34 and '"pulls"' not in _code34, "the pull-back is removed from the hook"
     _sc34 = 0
     for co_ in _M4["coalition"]["blue"]["country"].values():
         for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
             _pp34 = [g_["route"]["points"][k_] for k_ in sorted(g_["route"]["points"])]
             if "CAP1" not in [p_.get("name") for p_ in _pp34]:
                 continue
-            _z34 = next(t_["params"] for t_ in _pp34[0]["task"]["params"]["tasks"].values() if t_.get("id") == "EngageTargetsInZone")
-            assert g_["name"] in _pull34, ("a support CAP without a pull-back entry", g_["name"])
-            _x34, _y34, _r34 = _pull34[g_["name"]]
-            assert abs(_x34 - _z34["x"]) < 1 and abs(_y34 - _z34["y"]) < 1 and abs(_r34 - (_z34["zoneRadius"] + _pbm * 1852)) < 2, ("pull-back circle", g_["name"], _r34, _z34)
+            assert any(t_.get("id") == "EngageTargetsInZone" for t_ in _pp34[0]["task"]["params"]["tasks"].values()), ("a support CAP keeps its engage circle", g_["name"])
             _sc34 += 1
-    assert _sc34 >= 1 and "EngageTargetsInZone" in _code34.split("local PULL", 1)[1].split("local function hasAAM", 1)[0], "the pull-back route carries the engage circle"
-    print(f"[cap pull-back] {_sc34} support CAPs are pulled back to their orbit beyond their engage circle + {_pbm} nm")
+    assert _sc34 >= 1, "the mission has a support CAP to check"
+    print(f"[cap circle] {_sc34} support CAPs keep their engage circle; no pull-back in the hook")
     _off4 = abs((_brg["JSOW"] - _brg["SEAD"] + 180) % 360 - 180)
     _eg4, _hs4 = {}, []
     for co_ in _M4["coalition"]["blue"]["country"].values():

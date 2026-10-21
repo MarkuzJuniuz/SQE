@@ -60,8 +60,6 @@ HOLD_AREA_KM = 60             # v0.41.10: packages whose targets are this close 
 SWEEP_AFTER_TOT_S = 120       # v0.41.13: a sweep holds until 2 min after the first package it covers is over the target
 HOLD_EXTEND_MAX_S = 1800      # ...extended at most this much past their own package
 TANKER_COVER_NM = 30          # v0.41.26: a tanker track this close to a friendly field's Patriot (or the carrier group) counts as under friendly SAM cover
-PULLBACK_MARGIN_NM = 10       # v0.41.34: a support CAP further than its engage circle plus this from the circle's centre is sent back to its orbit (judgment call)
-PULLBACK_BINGO = 0.25         # ...unless its lead is below this fuel fraction (going home) or out of air-to-air missiles (judgment call)
 TNKCAP_ZONE_NM = 40           # v0.41.26: the tanker CAP engages inside this circle round the tanker (an AMRAAM's reach), never further
 SUPPORT_CAP_ZONE_NM = 25      # v0.41.7: HAVCAP / tanker CAP / base CAP engage inside this circle round what they guard
 CVCAP_NM = 12                 # v0.41.21: the carrier CAP orbits this far out from the boat toward the nearest enemy field (v0.41.7: 22)
@@ -421,7 +419,6 @@ class MissionBuilder:
         self._holds = []                                                     # v0.41.10: TARCAP / escort holds, extended to the last package over their target area
         self._snipe_at = {}                                                  # v0.41.10: id(group) -> the station waypoint where max-range shots begin
         self._callins = []
-        self._pull = []                                                      # v0.41.34: support CAP pull-back (see _pull_entries)
         self._recov = []                                                     # v0.41.25: the recovery net (see _recov_net)                                                   # v0.41.10: red patrols called in to the SAM site they guard
         self._launch_pts[package.id] = self._launch_points(package, geom)    # v0.41.42: known before any flight is built (an escort / TARCAP may be built first)
         striker_tots = []                                                    # v0.41.38: each ground-attack flight's own target time (strike / SEAD / CAS), for the TARCAP hold
@@ -539,7 +536,7 @@ class MissionBuilder:
                          rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts,
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
-                              "cvrec": self._wing_recovery(pbase, tgt.eta_s), "recov": list(self._recov), "pull": self._pull_entries()})
+                              "cvrec": self._wing_recovery(pbase, tgt.eta_s), "recov": list(self._recov)})
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -1522,8 +1519,6 @@ class MissionBuilder:
         if f.tag:
             czone_ = self._clear_zone(cap_zone, package)
             self._limit_engage(g, self.o.friendly_cap_engage_nm, None, czone_)
-            if czone_ is not None:
-                self._pull.append((g, czone_))                         # v0.41.34: the backstop when DCS chases out of the circle anyway
             # v0.41.14: support CAP snipes (maximum range: the bandits turn defensive before they reach what it guards) and goes home when its
             # air-to-air missiles are gone (the SAMs and the boat's SM-2s cover what it guards)
             g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
@@ -2602,34 +2597,6 @@ class MissionBuilder:
         for sx, sy, snm in self._zone_sams(package, fighters, long_only):
             r = min(r, dist(x, y, sx, sy) / NM - snm)
         return (x, y, max(floor_nm, r))
-
-    def _pull_entries(self) -> list:
-        """v0.41.34: the support CAP pull-back data for the hook. Each entry: the circle's centre, the pull-back radius (circle + PULLBACK_MARGIN_NM),
-        the time its station ends (the orbit's stop time), and the route it is given again: its own route from the first orbit point (CAP1) on,
-        as built (orbit, CAP2, way home, recovery script, landing), with the group's start tasks (engage circle, options) put on that first
-        point, since a new route drops the old one's tasks. Unlimited fuel is not copied (support CAPs are on real fuel from CAP1)."""
-        from dcs import lua as lua_
-        out = []
-        for g, (cx, cy, r_nm) in self._pull:
-            pts = [p.dict() for p in g.points]
-            i1 = next((i for i, p in enumerate(pts) if str(p.get("name") or "") == "CAP1"), None)
-            if i1 is None or i1 == 0:
-                continue
-            route = [dict(p) for p in pts[i1:]]
-            def tasks_(p):
-                return [t for _, t in sorted(((p.get("task") or {}).get("params") or {}).get("tasks", {}).items())]
-            stop = max([float((((t.get("params") or {}).get("stopCondition") or {}).get("time")) or 0) for t in tasks_(pts[i1])] + [0.0])
-            if stop <= 0:
-                continue
-            first = [t for t in tasks_(pts[0]) if (t.get("params") or {}).get("action", {}).get("id") != "SetUnlimitedFuel"] + tasks_(pts[i1])
-            for k, t in enumerate(first, 1):
-                t["number"] = k
-            route[0] = dict(route[0], task={"id": "ComboTask", "params": {"tasks": {k: t for k, t in enumerate(first, 1)}}})
-            for p in route:
-                p.pop("ETA", None); p["ETA_locked"] = False
-            out.append({"g": g.name, "x": cx, "z": cy, "r": (r_nm + PULLBACK_MARGIN_NM) * NM, "stop": stop, "bingo": PULLBACK_BINGO,
-                        "route": lua_.dumps({k: p for k, p in enumerate(route, 1)})})
-        return out
 
     RECOV_NET_NM = 12          # v0.41.25: a homebound AI flight this close to its deck / field counts as recovered, waypoint reached or not
 
