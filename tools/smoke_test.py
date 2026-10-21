@@ -22,8 +22,38 @@ from sqe.models import ObjectiveType
 from sqe.settings import AppSettings
 
 
+# Plain imports the sections share (they used to be borrowed from whichever earlier section imported them first).
+import math as _m3j, math as _mm, math as _m                                   # noqa: E401
+import random, random as _rnd, random as _rd                                    # noqa: E401
+import re as _re, tempfile as _tf, zipfile as _zf                               # noqa: E401
+from types import SimpleNamespace as _NS
+from dcs import lua, lua as _luaj
+from sqe import profiles as _pf, relief as _rl, sams as _sm, threatmap as _tm9
+from sqe import ground as _gr, war as _war
+import sqe.engine as _eng27
+from sqe.aircraft import AIRCRAFT as _AC
+from sqe.difficulty import get as _gd
+from sqe.models import AssetKind as _AK, Role, Role as _Rl, Role as _Rl2, task_label as _tl
+from sqe.packages import Package as _Pkg, is_sweep as _isw
+from sqe.routes import bearing as _brg, plan_route as _pr3
+from sqe.engine import SWEEP_LEAD_MIN as _slm
+from sqe.state import CampaignState, CampaignState as _CS
+from sqe.war import WarSimulator, long_range_site as _lrs
+
+
+mk = lambda: Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))     # a new session on the test's temp folder
+
+
 class Ctx:
     """Shared state between the check sections: a section reads what it borrows from here at the top and leaves what later sections need at the bottom."""
+
+
+def fresh_session(level=3, seed=7):
+    """A new campaign of its own for a section that needs a session (instead of borrowing setup's, which earlier sections have changed)."""
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke fresh", "F-16C", level, seed=seed)
+    return ses
 
 
 def check_00_setup(c):
@@ -100,7 +130,6 @@ def check_00_setup(c):
 
 
 def check_01_package_merging_fold_same(c):
-    lua = c.lua
     # ---- package merging: fold same-area packages into one mission, fly it, debrief all of them ---------------------------
     ms = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all"))
     ms.new("Smoke merge", "F-16C", 2, seed=5)
@@ -228,7 +257,6 @@ def check_02_alert_fields_scramble_on(c):
 
 
 def check_03_earlier_packages_fly_with(c):
-    lua = c.lua
     # ---- v0.10: earlier packages fly with you, already underway; the Missions list folds later ones into the first -----------------
     bs = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", merge_radius_nm=50, flight_filter="all"))
     found = None
@@ -480,7 +508,6 @@ def check_09_carrier_escort_routes_must(c):
 
 
 def check_10_theatre_packs_data_not(c):
-    mk = c.mk
     # ---- theatre packs: data, not code -------------------------------------------------------------
     from sqe import theatres, terrainmask as _tmk2, seacheck as _sc2
     assert "caucasus" in theatres.available()
@@ -520,7 +547,7 @@ def check_10_theatre_packs_data_not(c):
 
 
 def check_11_weather_weapons_it_allows(c):
-    mk, theatres = c.mk, c.theatres
+    theatres = c.theatres
     # ---- weather and the weapons it allows -------------------------------------------------------------
     import datetime as _dt, collections as _co
     from sqe import weather as W
@@ -583,7 +610,6 @@ def check_11_weather_weapons_it_allows(c):
 
 
 def check_12_carcasses_stable_layouts_health(c):
-    mk = c.mk
 
     # ---- carcasses: stable layouts, health -> count, weight and trim, off switch ----------------------------------------------------
     from sqe import carcass as _cc
@@ -620,7 +646,6 @@ def check_12_carcasses_stable_layouts_health(c):
 
 
 def check_13_reactive_dispatch_range_availability(c):
-    mk = c.mk
 
     # ---- reactive dispatch: range, availability, ratio, difficulty scaling, off switch -------------------------------------------------
     import random as _rnd
@@ -681,7 +706,6 @@ def check_13_reactive_dispatch_range_availability(c):
 
 
 def check_14_kneeboard_form_layout_hh(c):
-    mk = c.mk
 
     # ---- kneeboard: form layout, hh:mm:ss everywhere, no stale 'coords below' / 'SQE' / 'AI' wording --------------------------------------
     import re as _re
@@ -727,7 +751,6 @@ def check_15_dep_spacing_nm_from(c):
 
 
 def check_16_altitude_profiles_high_med(c):
-    _AC = c._AC
     # ---- altitude profiles: HIGH / MED / LOW from the SAM picture
     from types import SimpleNamespace as _NS
     from sqe import profiles as _pf
@@ -770,7 +793,7 @@ def check_16_altitude_profiles_high_med(c):
 
 
 def check_17_ground_height_msa_terrain(c):
-    _NS, _P, _Rl, _pf, _pts, _st = c._NS, c._P, c._Rl, c._pf, c._pts, c._st
+    _P, _pts, _st = c._P, c._pts, c._st
     # ---- ground height (relief): MSA, terrain masking, MED floor, spawn floor, kneeboard line
     from sqe import relief as _rl
     _rl.clear(); assert _rl.msa_ft(_pts) is None and _rl.visible_fraction((0, 0), _pts, 500, 50_000) is None, "no relief file: everything falls back"
@@ -810,7 +833,7 @@ def check_17_ground_height_msa_terrain(c):
 
 
 def check_18_ai_flight_s_recovery(c):
-    _hi, _rl, _tf, ctx_ = c._hi, c._rl, c._tf, c.ctx_
+    _hi, ctx_ = c._hi, c.ctx_
     # v0.41.49: an AI flight's recovery point (RCV) gets the altitude its home leg needs (it was a fixed 3,000-6,000 ft); no scan: unchanged
     from sqe.routes import home_leg_ft as _hl
     _rl.from_grid(0, 0, 1000.0, _hi)
@@ -834,7 +857,7 @@ def check_18_ai_flight_s_recovery(c):
 
 
 def check_19_ground_war(c):
-    s = c.s
+    s = fresh_session()
     # ---- the ground war ----
     import random as _rnd, json as _js
     from sqe import ground as _gr, war as _war
@@ -868,7 +891,7 @@ def check_19_ground_war(c):
 
 
 def check_20_format_save_loads_with(c):
-    _CS, _gd, _gr, _rnd, _war, s = c._CS, c._gd, c._gr, c._rnd, c._war, c.s
+    s = fresh_session()
     # v0.41.50: a format-5 save (before the role rename) loads with TARCAP / ESCORT / SWEEP in the right places
     _new_d = s.state.to_dict(); _was = {}
     _flip = {"TARCAP": "ESCORT", "ESCORT": "SWEEP"}                    # what the old names were
@@ -899,7 +922,7 @@ def check_20_format_save_loads_with(c):
 
 
 def check_21_raids_emergencies(c):
-    _gd, _rnd, _war, s = c._gd, c._rnd, c._war, c.s
+    s = fresh_session()
     # ---- raids and emergencies ----
     from sqe import raids as _rd
     from sqe.packages import Package as _Pk
@@ -974,7 +997,8 @@ def check_21_raids_emergencies(c):
 
 
 def check_22_raid_intercepts_ai_only(c):
-    _ev_orig, _rd, _zf, s = c._ev_orig, c._rd, c._zf, c.s
+    _ev_orig = c._ev_orig
+    s = fresh_session()
     # v0.41.27: raid intercepts are AI-only for now; the build itself is still tested (it comes back), with the AI-only list lifted here
     import sqe.engine as _eng27
     _aio27, _eng27.AI_ONLY = _eng27.AI_ONLY, ()
@@ -1003,7 +1027,8 @@ def check_22_raid_intercepts_ai_only(c):
         s.fly(_rp.number, None)
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
     assert ("Su-24M" in _mz or "Su-25" in _mz) and "RAID-B-1" in _mz, "the raiders are in the mission"
-    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_aio27', '_eng27', '_mz', '_rs27', '_st',)})
+    _s22 = s
+    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_aio27', '_eng27', '_mz', '_rs27', '_s22', '_st',)})
 
 
 def check_23_raid_scramble_you_fly(c):
@@ -1042,7 +1067,7 @@ def check_25_war_sim_counts_batteries(c):
 
 
 def check_26_raid_flies_blue_s(c):
-    _mz, _st, s = c._mz, c._st, c.s
+    _mz, _st, s = c._mz, c._st, c._s22                  # the session that built the raid mission in section 22
     # v0.41.29: the raid flies blue's shape: it never hits before the intercept's TOT, egresses and goes home, and its escorts stay with it
     _rg29 = next(g_ for g_ in s.manifest().groups if g_.get("raid_base"))
     assert _rg29["raid_arrive_s"] >= _st.pending["timeline"]["tot_s"], "the raid reaches its target after our intercept is on station"
@@ -1051,7 +1076,9 @@ def check_26_raid_flies_blue_s(c):
 
 
 def check_27_raid_s_route_bends(c):
-    _CS, _aio27, _eng27, _gd, _rd, _rnd, _rs27, _st, s = c._CS, c._aio27, c._eng27, c._gd, c._rd, c._rnd, c._rs27, c._st, c.s
+    _aio27, _rs27, _st, s = c._aio27, c._rs27, c._st, c._s22          # the session section 22 built the raid mission in
+    from sqe import raids as _rd
+
     # v0.41.31: a raid's route bends round the carrier group (FLEET_RAID_AVOID_NM), and red's target pick shies from it like a Patriot field
     from sqe.mission_builder import MissionBuilder as _MB31
     from sqe.raid_spawns import FLEET_RAID_AVOID_NM as _FR31
@@ -1062,7 +1089,8 @@ def check_27_raid_s_route_bends(c):
         _p31 = _mb31._raid_bend([(_cv31.x - 150 * 1852, _cv31.y - 30 * 1852), (_cv31.x + 150 * 1852, _cv31.y - 30 * 1852)], _rf31)   # 30 nm off the boat, sea side
         _seg = lambda a_, b_: min(((a_[0] + (b_[0] - a_[0]) * t_ / 50 - _cv31.x) ** 2 + (a_[1] + (b_[1] - a_[1]) * t_ / 50 - _cv31.y) ** 2) ** 0.5 for t_ in range(51))
         assert len(_p31) > 2 and min(_seg(_p31[i_], _p31[i_ + 1]) for i_ in range(len(_p31) - 1)) >= (_FR31 - 1) * 1852, "a raid goes round the carrier group"
-        assert _rd.FLEET_NM == _FR31
+        from sqe import raids as _raids31
+        assert _raids31.FLEET_NM == _FR31
     from sqe.red_air_picture import RED_LONG_RANGE as _RLR
     assert _RLR == {"Su_27"}, "red's long-range class is the Su-27 only"
     _man = s.manifest(); _rg = next(g_ for g_ in _man.groups if g_.get("raid_base"))
@@ -1096,7 +1124,8 @@ def check_27_raid_s_route_bends(c):
 
 
 def check_28_standoff_dead_package_escort(c):
-    Role, _AK, _NS, _P, _Rl, _pf, _zf, s = c.Role, c._AK, c._NS, c._P, c._Rl, c._pf, c._zf, c.s
+    _P = c._P
+    s = fresh_session()
     # v0.41.42: in a Standoff DEAD the package escort shepherds the JSOW flight: its station is ESCORT_BEHIND_NM behind the JSOW launch point
     from sqe.mission_builder import MissionBuilder as _MBj, ESCORT_BEHIND_NM as _EBN, TARCAP_BEHIND_NM as _TBN
     from sqe.routes import jsow_launch_xy as _jxy, dist as _jd, NM as _JNM
@@ -1184,7 +1213,7 @@ def check_28_standoff_dead_package_escort(c):
 
 
 def check_29_phase_air_defence_that(c):
-    _AK, _NS, _gd, _rnd, s = c._AK, c._NS, c._gd, c._rnd, c.s
+    s = fresh_session()
     # ---- phase 3: air defence that rebuilds and moves ----
     import math
     from sqe import sams as _sm
@@ -1227,7 +1256,7 @@ def check_29_phase_air_defence_that(c):
 
 
 def check_30_blue_s_air_defence(c):
-    _CS, _fl, _gd, _rnd, _sm, _st = c._CS, c._fl, c._gd, c._rnd, c._sm, c._st
+    _fl, _st = c._fl, c._st
     # v0.41.62: blue's air defence is three sites per airfield, the same record as red's SAM assets
     assert all(len(_sm.blue_sites(_st, b_)) == 3 for b_ in _fl), "every airfield has a Patriot, a HAWK and an AAA site"
     assert not any(a_.id.startswith("bsam_") for a_ in _st.assets.values()) and not any(a_.id.startswith("bsam_") for a_ in _st.blue_assets.values()), "blue sites stay out of the enemy and supply lists"
@@ -1485,7 +1514,8 @@ def check_31c_ai_skill_red_blue(c):
 
 
 def check_31_where_sites_sit_doctrinal(c):
-    _CS, _fl, _gd, _rnd, _sm, _st, _war, s = c._CS, c._fl, c._gd, c._rnd, c._sm, c._st, c._war, c.s
+    _fl, _st = c._fl, c._st
+    s = fresh_session()
     # v0.41.64: where the sites sit: doctrinal bearing and distance plus a seeded jitter, fixed for the campaign, different in the next
     _pp = _sm.place_blue_site(_st, _fl[0], "pat"); _mx = _sm.SITE_PLACE["pat"][1]
     _dd = ((_pp[0] - _fl[0].x) ** 2 + (_pp[1] - _fl[0].y) ** 2) ** 0.5
@@ -1503,7 +1533,8 @@ def check_31_where_sites_sit_doctrinal(c):
 
 
 def check_32_red_s_known_cap(c):
-    _P, _Rl, _g3, _gd, _mm, _pr3, _rnd, _war, _zf, s = c._P, c._Rl, c._g3, c._gd, c._mm, c._pr3, c._rnd, c._war, c._zf, c.s
+    _P, _g3 = c._P, c._g3
+    s = fresh_session()
     # v0.26.1: Red's known CAP stays out of the fleet's reach; the player's flight gets the stand-off in AI-test mode
     _g3.ai_player = True
     _w6 = {w.name: w for w in _pr3(_Rl.TARCAP, (0, 0), _g3, _P("FA-18C"), is_player=True, tanker_xy=None)}
@@ -1610,7 +1641,7 @@ def check_32_red_s_known_cap(c):
 
 
 def check_33_jsow_flight_s_release(c):
-    _m3j, _mj, _pj = c._m3j, c._mj, c._pj
+    _mj, _pj = c._mj, c._pj
     # v0.41.46: a JSOW flight's release tasks are time-limited (a ControlledTask wrapping each Bombing), so it turns for home after its salvo
     import re as _re46
     _bm = [m_ for m_ in _re46.finditer(r'\["id"\]="Bombing"', _mj)]
@@ -1631,7 +1662,8 @@ def check_33_jsow_flight_s_release(c):
 
 
 def check_34_when_release_window_ends(c):
-    _Mj, _lrs, _m3j, _pj, _tl, s = c._Mj, c._lrs, c._m3j, c._pj, c._tl, c.s
+    _Mj, _pj = c._Mj, c._pj
+    s = fresh_session()
     # v0.41.47: when the release window ends, the JSOW jet's ROE goes to Return Fire (a timed Option task: name 0 = ROE, value 3 = Return Fire), so it stops hunting
     _jt = [t_ for co_ in _Mj["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
            for p_ in g_["route"]["points"].values() if p_.get("name") == "JSOW" for t_ in ((p_.get("task") or {}).get("params") or {}).get("tasks", {}).values()]
@@ -1644,7 +1676,8 @@ def check_34_when_release_window_ends(c):
 
 
 def check_35_no_ground_group_sits(c):
-    _Mj, _Rl2, _jf, _luaj, _m3j, _sp3, _zf, s = c._Mj, c._Rl2, c._jf, c._luaj, c._m3j, c._sp3, c._zf, c.s
+    _Mj, _jf, _sp3 = c._Mj, c._jf, c._sp3
+    s = fresh_session()
     # v0.41.48: no ground group sits on a runway (it would block the side that uses it): every vehicle is outside a strip 2 km each way and 50 m either side of each runway line
     import dcs.terrain as _dt48
     _ap48 = list(_dt48.Caucasus().airports.values())
@@ -1711,7 +1744,7 @@ def check_35_no_ground_group_sits(c):
 
 
 def check_36_no_baiting_sweep_goes(c):
-    CampaignState, WarSimulator, _Pkg, _cov5, _gw, _isw, _m3j, _slm, _sw, _ws, random = c.CampaignState, c.WarSimulator, c._Pkg, c._cov5, c._gw, c._isw, c._m3j, c._slm, c._sw, c._ws, c.random
+    _cov5, _gw, _sw, _ws = c._cov5, c._gw, c._sw, c._ws
     # v0.41.33 (XO 2026-10-16): no baiting. The sweep goes after a known red flight out in the open (red's own air plan), from a station
     # short of it and clear of SAMs by the sweep's margins (45 nm from an SA-10, 20 nm outside other rings), within reach of it
     from sqe import sweep as _swm
@@ -1773,7 +1806,6 @@ def check_37_with_you_on_sweep(c):
 
 
 def check_38_against_sa_tarcap_sits(c):
-    _luaj, _m3j, _zf = c._luaj, c._m3j, c._zf
     # v0.41.0: against an SA-10 the TARCAP sits level with the HARM shooters (about 62% of its reach), not behind them; Abort rewinds the
     # sortie counter, so a re-fly of the same package has the same seed (layout)
     from sqe.profiles import STATION_FRAC as _sfr, STATION_OFFSET_NM as _son
@@ -1801,7 +1833,6 @@ def check_38_against_sa_tarcap_sits(c):
 
 
 def check_39_dcs_refuses_mission_whose(c):
-    _luaj, _re, _zf = c._luaj, c._re, c._zf
     # v0.41.2: DCS refuses a mission whose player route has a run of locked-speed points between two locked times (v0.41.1: the player as an
     # escort, "Viper 3: All waypoints (5-5) have locked speed and surrounded by waypoints 4 and 5 with locked time"). Every fighter role you
     # can fly is built and checked.
@@ -1955,7 +1986,7 @@ def check_39_dcs_refuses_mission_whose(c):
 
 
 def check_40_harm_flights_fire_only(c):
-    _M4, _m, _ss, _t4, _tm9 = c._M4, c._m, c._ss, c._t4, c._tm9
+    _M4, _ss, _t4 = c._M4, c._ss, c._t4
     # v0.41.6: HARM flights fire only at what they are tasked on (OPEN FIRE), and marshal points sit outside the enemy fields' scramble circles
     for co_ in _M4["coalition"]["blue"]["country"].values():
         for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
@@ -2020,7 +2051,7 @@ def check_41_friendly_bases_patriot_faces(c):
 
 
 def check_42_no_support_cap_weapons(c):
-    _d_base, _d_tank, _m, _pl7, _ss, _tags7 = c._d_base, c._d_tank, c._m, c._pl7, c._ss, c._tags7
+    _d_base, _d_tank, _pl7, _ss, _tags7 = c._d_base, c._d_tank, c._pl7, c._ss, c._tags7
     # v0.41.35: no support CAP is weapons free (option 0 = 0): it engages anything in contact, over its circle (XO's runs 2026-10-16/17)
     for t7_, f7_ in _tags7.items():
         _roe7 = [t_["params"]["action"]["params"]["value"] for p_ in _pl7[f7_.callsign]["route"]["points"].values() for t_ in p_["task"]["params"]["tasks"].values()
@@ -2054,7 +2085,7 @@ def check_43_carrier_cap_orbits_close(c):
 
 
 def check_44_enemy_field_next_live(c):
-    _A4, _M4, _m, _tm9 = c._A4, c._M4, c._m, c._tm9
+    _A4, _M4 = c._A4, c._M4
     # v0.41.8: an enemy field next to a live SA-10 sees as far as that radar: a stand-off wave on the SA-10 brings its alert pairs up
     _zr8 = {}
     for z_ in _M4["triggers"]["zones"].values():
@@ -2072,7 +2103,6 @@ def check_44_enemy_field_next_live(c):
 
 
 def check_45_ai_routes_bend_around(c):
-    _m = c._m
     # v0.41.11: AI routes bend around a live SA-10 that is not their target (a leg passing 20 nm from one gets a turn point 37 nm out)
     from sqe.routes import avoid_circles as _avc, Wpt as _W11
     _r11 = [_W11("PUSH", 0, 0, 25000, 450), _W11("IP", 200 * 1852, 0, 25000, 450)]
@@ -2113,7 +2143,9 @@ def check_46_ai_flights_going_home(c):
 
 
 def check_47_support_cap_pull_back(c):
-    Role, _M4, _arr, _brg, _gd, _jsc, _jsow_kp, _m, _m3j, _rnd, _sd4, _sead1, _sm, _t4, _war, _zf, lua, mk, random, s = c.Role, c._M4, c._arr, c._brg, c._gd, c._jsc, c._jsow_kp, c._m, c._m3j, c._rnd, c._sd4, c._sead1, c._sm, c._t4, c._war, c._zf, c.lua, c.mk, c.random, c.s
+    _M4, _arr, _brg, _jsc, _jsow_kp, _sd4, _sead1, _t4 = c._M4, c._arr, c._brg, c._jsc, c._jsow_kp, c._sd4, c._sead1, c._t4
+    import math as _m
+    s = fresh_session()
     # v0.41.51: the support CAP pull-back is gone from the hook; every support CAP (route with CAP1) still carries its engage circle on point 0
     _code34 = next(a_["text"] for tr_ in _M4["trigrules"].values() for a_ in tr_["actions"].values() if isinstance(a_.get("text"), str) and "local TRACK" in a_["text"])
     assert "PULL" not in _code34 and '"pulls"' not in _code34, "the pull-back is removed from the hook"
@@ -2414,7 +2446,6 @@ def check_47_support_cap_pull_back(c):
         pass
     # retreat: a badly hurt long-range site pulls back from the front with its garrison, and comes back once repaired
     import math
-    from sqe import sams as _sm
     s.new("Retreat", "F-16C", 3, seed=21); _st = s.state
     _site = next(a_ for a_ in sorted(_st.assets.values(), key=lambda a_: a_.id) if _sm._long_range(_st, a_) and not a_.destroyed)
     _gar = [g_ for g_ in _st.assets.values() if g_.guards == _site.id]
@@ -2572,7 +2603,7 @@ def check_47_support_cap_pull_back(c):
 
 
 def check_48_red_strength_per_squadron(c):
-    _CS, _st = c._CS, c._st
+    _st = c._st
     # v0.41.53: red strength is per squadron: a loss comes off the squadron that flew the type; the wing's numbers are the sums; saves from before load
     _w53 = next(w_ for w_ in _st.enemy_air if len(w_.sqns) >= 2 and len({q_.aircraft for q_ in w_.sqns}) >= 2 and all(q_.available > 3 for q_ in w_.sqns))
     _q53 = _w53.sqns[-1]; _b53 = [q_.available for q_ in _w53.sqns]; _t53 = _w53.available
@@ -2594,7 +2625,8 @@ def check_48_red_strength_per_squadron(c):
 
 
 def check_49_red_wings_cut_into(c):
-    _rt9, _st, s = c._rt9, c._st, c.s
+    _rt9, _st = c._rt9, c._st
+    s = fresh_session()
     # v0.41.52: red wings are cut into typed squadrons: ceil(jets / max) of them, none over the cap, one type each, totals unchanged, saved and loaded
     from sqe.scenario import red_squadrons as _rsq
     from sqe.difficulty import get as _get_dif52
@@ -2668,7 +2700,7 @@ def check_50_rollback_no_strike_under(c):
 
 
 def check_51_no_needless_banzai_cas(c):
-    s = c.s
+    s = fresh_session()
     # v0.41.20: no needless banzai. CAS under a live SA-2/3/6 only with a SEAD escort, never under a live SA-11 / SA-10; red commits by doctrine
     from sqe.war import cas_cover as _cc20
     from sqe import redair as _ra20, raids as _rd20
@@ -2700,7 +2732,7 @@ def check_51_no_needless_banzai_cas(c):
 
 
 def check_52_carrier_cap_s_orbit(c):
-    s = c.s
+    s = fresh_session()
     # v0.41.21: the carrier CAP's orbit stays outside every enemy field's scramble circle
     import zipfile as _zf21, dcs.lua as _lua21, math as _m21
     from sqe import threatmap as _tm21
@@ -2727,7 +2759,8 @@ def check_52_carrier_cap_s_orbit(c):
 
 
 def check_53_every_blue_ai_flight(c):
-    _lua21, _m21, _tm21, _zf21, s = c._lua21, c._m21, c._tm21, c._zf21, c.s
+    _lua21, _m21, _tm21, _zf21 = c._lua21, c._m21, c._tm21, c._zf21
+    s = fresh_session()
     # v0.41.22: every blue AI flight's route stays out of the SAMs it is not sent against (a few nm of slack where no clear axis exists)
     from sqe.war import covering_sams as _cs22
     from sqe.routes import AVOID_NM as _av22
@@ -2772,7 +2805,7 @@ def check_54_preloaded_flight_still_within(c):
 
 
 def check_55_tanker_track_keeps_clear(c):
-    s = c.s
+    s = fresh_session()
     # v0.41.26: the tanker track keeps clear of red patrols and the lines red fighters fly in on, not only SAMs and scramble circles
     from sqe import threatmap as _tm26
     _ok26 = _tm26.tanker_spot(s.state, (0.0, 0.0), (200000.0, 0.0), (300000.0, 0.0), caps=[], lanes=[(100000.0, 50000.0, 100000.0, -50000.0)], cover=[])
@@ -2781,7 +2814,7 @@ def check_55_tanker_track_keeps_clear(c):
 
 
 def check_56_barcap_intercepts_ai_only(c):
-    s = c.s
+    s = fresh_session()
     # v0.41.27: BARCAP and the intercepts are AI-only: planned and listed, never offered to you; raid scrambles off, troops in contact stay
     from sqe.packages import AI_ONLY as _AIO
     _n27 = 0
@@ -2892,9 +2925,50 @@ CHECKS = [
 ]
 
 
+def _borrows(fn) -> set:
+    """The Ctx attributes a section reads (`c._M4` ...): the names it borrows from earlier sections."""
+    import inspect
+    import re
+    return set(re.findall(r"\bc\.(_?\w+)", inspect.getsource(fn)))
+
+
+def _provides(fn) -> set:
+    """The Ctx attributes a section leaves for later ones (its `c.__dict__.update(... in (names))` line)."""
+    import inspect
+    import re
+    out = set()
+    for m in re.finditer(r"c\.__dict__\.update\(\{[^}]*\bin \(([^)]*)\)", inspect.getsource(fn)):
+        out |= set(re.findall(r"'(\w+)'", m.group(1)))
+    return out
+
+
+def _with_prerequisites(run: list) -> list:
+    """`--only`: add, ahead of each chosen section, the earlier sections it borrows state from (the nearest earlier one that leaves each name),
+    so a section passes on its own. Sections still run in their normal order."""
+    keep, todo = {fn.__name__ for fn in run}, list(run)
+    while todo:
+        fn = todo.pop()
+        k = CHECKS.index(fn)
+        for attr in _borrows(fn):
+            src = next((p for p in reversed(CHECKS[:k]) if attr in _provides(p)), None)
+            if src is not None and src.__name__ not in keep:
+                keep.add(src.__name__)
+                todo.append(src)
+    return [fn for fn in CHECKS if fn.__name__ in keep]
+
+
+def _fixed_ids(name: str) -> None:
+    """Campaign ids are random (they seed the day plan and the site layouts), so a seeded check could pass or fail by luck. Each section gets
+    the same run of ids every time, whatever ran before it."""
+    import random as _r
+    import uuid as _u
+    rng = _r.Random(name)
+    _u.uuid4 = lambda: _u.UUID(int=rng.getrandbits(128), version=4)
+
+
 def main(argv=None):
-    """Run the check sections in order. Options: `--list` (names only), `--only a,b` (the setup section plus the sections whose name contains a or b;
-    a section that borrows from one you left out fails with an AttributeError naming what it needed), `--timeout SECONDS` (a section that runs longer
+    """Run the check sections in order. Options: `--list` (names only), `--only a,b` (the setup section plus the sections whose name contains a or b,
+    each with the earlier sections it borrows state from), `--timeout SECONDS` (a section that runs longer
     dumps every thread's traceback and stops the run; default 600, 0 = off)."""
     import argparse
     import faulthandler
@@ -2910,11 +2984,14 @@ def main(argv=None):
     sys.stdout.reconfigure(line_buffering=True)                  # output reaches a log file at once, so a stall shows where it is
     want = [w for w in args.only.split(",") if w]
     run = [fn for k, fn in enumerate(CHECKS) if not want or k == 0 or any(w in fn.__name__ for w in want)]
+    if want:
+        run = _with_prerequisites(run)
     c, times = Ctx(), []
     for fn in run:
         if args.timeout:
             faulthandler.dump_traceback_later(args.timeout, exit=True)
         t0 = time.time()
+        _fixed_ids(fn.__name__)
         fn(c)
         times.append((time.time() - t0, fn.__name__))
     faulthandler.cancel_dump_traceback_later()

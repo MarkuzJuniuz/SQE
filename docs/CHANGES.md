@@ -1,11 +1,18 @@
 # CHANGES.md
 
+
 ## v0.41.77, BARCAP as planned coverage, step 3 (first slice): red patrols get their relief in the mission
 
 * **XO's plan, BARCAP relief: "a CAP goes home only after its replacement has arrived".** The planned chain (v0.41.73) has the next sortie of an area start 10 minutes before the one on station leaves. When that relief falls due inside the mission (up to `RELIEF_HORIZON_S` 1 h after the time on target, a judgment call) and the wing has a second pair, the relief pair is now flown: it waits on its field like an alert pair (hidden, put on the runway when called; the v0.41.0 no-taxi rule) and a timed trigger calls it early enough to reach the station when its window opens (flight time + the 2 min runway delay + a minute's slack). The pair on station stays until its own window ends. Not flown when the wing has no second pair, its field is gone, or the unit limit would be passed. The briefing gets a "Relief for that patrol" line.
 * **Not in this slice (needs XO's call):** blue's support CAPs (base / carrier CAP) still fly the whole package without relief; hot starts on the ramp (XO's hot-scramble item; today every alert / relief group is the runway start); SPAWN points at the player's base; HAVCAP following its asset under the BARCAP rules; replacing a pair that is lost, winchester or bingo; the background sim.
 * Smoke: new `check_31f_red_relief_in_mission`.
 
+## Smoke test step 2 (tools only, no version change): every section passes on its own
+
+* `tools/smoke_test.py`: `--only a,b` now also runs the earlier sections a chosen section borrows state from (it reads `c._name` at the top; the nearest earlier section that leaves that name runs first), so every one of the 58 sections passes by itself (`--only check_NN`). The full run is unchanged and green.
+* Campaign ids are random, so seeded checks could pass or fail by luck (`check_47` "no flyable SEAD flight", the HARM point 33.8 vs 35 nm). Each section now gets the same run of ids every time, whatever ran before it.
+* Sections that used a borrowed name that a later local import or the module-level `random` shadowed (26, 27, 47) are fixed; sections that only needed a session build their own (`fresh_session`); shared imports are at the top of the file.
+* Not done: sections still borrow from one another through `Ctx` instead of building a scenario each (the borrowing is now explicit and automatic). A full per-section scenario would mean cutting `check_47` (450 lines) into smaller pieces; left for the refactor week.
 ## v0.41.76, red's patrol stations lose the old fixed keep-outs; the ships' reach is a SAM ring
 
 * **XO 2026-10-21: "that old red rule came from the early, almost random stage; use the stay-away-from-SAMs system (and the boat's range) instead."** Red's patrol stations are no longer pushed 45 nm from our marshal point and fields and 130 nm from our carrier (`RED_KEEP_NM`, v0.41.10; the 130 nm push is what put Bandit 1 behind the SA-10 in the v0.41.74 run). Their stations are BARCAP stations (v0.41.73) that stay outside blue's SAM rings, and now outside the carrier group's real reach too: `barcap.FLEET_REACH_NM` 70 nm (measured: CAP pairs were killed 51 to 67 nm out) is a ring in the SAM-clear rule, and `CAP_FLEET_KEEPOUT_NM` (the boat's CURRENT position, it may be slid back for the sortie) is 78 nm (reach + 8 nm margin; was 90, hand-set).
