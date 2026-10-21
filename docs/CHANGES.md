@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.48
+
+* **Ground groups keep off the runways** (XO 2026-10-20 20:53: a target AAA formation lay diagonally across a runway; it could block the side's own aircraft). Sites and blue base defences are now moved sideways off any runway corridor before they are placed (`_on_runway`, `_off_runway` in `mission_builder.py`; the site centre is moved BEFORE it is stored, so the bomb point and the units agree).
+  * pydcs gives only each runway's heading, so the strip is modelled as a corridor through the airfield reference point: `RUNWAY_HALF_LEN_M` 2600 m each way, `RUNWAY_HALF_WIDTH_M` 120 m either side, plus the group's own footprint margin (judgment call; not a surveyed runway). A site that is on it moves to the nearest clear dry spot up to 2.4 km away.
+  * Not tested in DCS. Cost of a wrong guess: a strike target sits a few hundred metres from the airfield centre, or a corridor too wide pushes a defence slightly further out.
+* Smoke test: "[runway]" checks no vehicle lies on a runway strip.
+
 ## v0.41.47
 
 * **The JSOW flight stops hunting after its salvo** (XO 2026-10-20 18:27: the Squids lingered, moved closer after launching; all eight were lost, seven to Sukhumi / Gudauta MiGs, one to the SA-11). From the state file: the 30 nm launch point worked (first releases at 52-66 km, jets at 30 nm of the SAMs), but each Hornet then released a second and third time at 47-50 km (1354-1470 s, Squid 2's flight has ONE planned aim yet its jets fired at four different sites), so the jets crept to 21 and 16 nm of the SAMs and turned late. Cause: the JSOW waypoint sets WEAPON FREE, so a jet with JSOWs left hunts every radar and launcher it can see, closing to range; v0.41.46's stop time only ended the planned Bombing tasks.

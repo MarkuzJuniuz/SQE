@@ -40,6 +40,8 @@ TARCAP_MIN = 15               # ...and holds there this long, then goes home
 ESCORT_AFTER_EGR_S = 120      # v0.41.40: an escort stays until the last striker has reached its egress point + this long (XO 2026-10-20: DEADers were left behind)
 ESCORT_AFTER_TOT_S = 180      # an escort (SWEEP role) holds its station until this long after the TOT (the last ground-attack flight off target)
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
+RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
+RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
 TARCAP_BEHIND_NM = 16         # v0.41.43: with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
@@ -1044,7 +1046,7 @@ class MissionBuilder:
                 full = base.defense >= 0.6
                 bt = sams.blue_battery(base)            # v0.41.30: doctrinal batteries, every field alike (sams.py)
                 dry = lambda a0, d0: next(((px, py) for k in range(12) for px, py in [offset(p.x, p.y, a0 + (30 * ((k + 1) // 2)) * (1 if k % 2 else -1), d0)]
-                                           if seac.site_ok(px, py, 300.0)), offset(p.x, p.y, a0, d0))           # the nearest bearing that is dry land
+                                           if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0)), offset(p.x, p.y, a0, d0))           # the nearest bearing that is dry land
                 x, y = dry(ang, 4500)
                 self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
                               ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star)
@@ -1098,8 +1100,37 @@ class MissionBuilder:
             pos = offset(a.x, a.y, r.uniform(0, 360), r.uniform(0, 900))
         if a.kind != AssetKind.AIRFIELD and not seac.site_ok(pos[0], pos[1], min(600.0, seac.SITE_MARGIN)):
             pos = (a.x, a.y)                  # the random shift would put it in the sea: keep the site where it is (it is on land)
+        pos = self._off_runway(pos[0], pos[1], 150.0 + 20.0 * len(SITES.get(a.variant) or SOFT.get(a.kind) or []))      # v0.41.48
         self.site_pos[a.id] = pos
         return pos
+
+    def _on_runway(self, x, y, margin):
+        """v0.41.48: True when a group centred here (its footprint about `margin` m) would sit on a runway and block the side that uses it.
+        pydcs gives each runway only a heading, so the strip is modelled as a corridor through the airfield reference point:
+        RUNWAY_HALF_LEN_M each way, RUNWAY_HALF_WIDTH_M either side, plus the group's own margin (a judgment call, not a surveyed runway)."""
+        for ap in self.t.airports.values():
+            ax, ay = ap.position.x, ap.position.y
+            if abs(x - ax) > RUNWAY_HALF_LEN_M + margin + 500 or abs(y - ay) > RUNWAY_HALF_LEN_M + margin + 500:
+                continue
+            for rw in ap.runways:
+                h = math.radians(rw.heading)
+                dx, dy = x - ax, y - ay
+                along = dx * math.cos(h) + dy * math.sin(h)
+                across = -dx * math.sin(h) + dy * math.cos(h)
+                if abs(along) < RUNWAY_HALF_LEN_M + margin and abs(across) < RUNWAY_HALF_WIDTH_M + margin:
+                    return True
+        return False
+
+    def _off_runway(self, x, y, margin):
+        """Move a site centre sideways, off any runway corridor, to the nearest clear dry spot (unchanged when already clear)."""
+        if not self._on_runway(x, y, margin):
+            return (x, y)
+        for d in range(150, 2401, 150):
+            for ang in range(0, 360, 30):
+                px, py = offset(x, y, ang, d)
+                if not self._on_runway(px, py, margin) and seac.site_ok(px, py, min(600.0, seac.SITE_MARGIN)):
+                    return (px, py)
+        return (x, y)
 
     def _jitter_primary(self, package, tx, ty):
         o = package.objective

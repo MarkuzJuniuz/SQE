@@ -1201,6 +1201,20 @@ def main():
     _far = [a_ for a_ in s.state.assets.values() if a_.kind.value == "SAM" and a_.variant != "SA-10" and all(_m3j.hypot(a_.x - b_.x, a_.y - b_.y) > 60000 for b_ in _sa10)]
     assert all(_lrs(s.state, a_) for a_ in _sa10) and (not _far or not _lrs(s.state, _far[0])), "long range: an SA-10 or under one; anything else gets the SEAD / Close DEAD pair"
     assert {_tl(f_, _pj.objective) for f_ in _pj.flights if not f_.tag} >= {"SEAD", "SO DEAD"}, "package table labels"
+    # v0.41.48: no ground group sits on a runway (it would block the side that uses it): every vehicle is outside a strip 2 km each way and 50 m either side of each runway line
+    import dcs.terrain as _dt48
+    _ap48 = list(_dt48.Caucasus().airports.values())
+    _on48 = []
+    for co_ in list(_Mj["coalition"]["red"]["country"].values()) + list(_Mj["coalition"]["blue"]["country"].values()):
+        for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values():
+            for u_ in g_["units"].values():
+                for ap_ in _ap48:
+                    for rw_ in ap_.runways:
+                        h_ = _m3j.radians(rw_.heading); dx_, dy_ = u_["x"] - ap_.position.x, u_["y"] - ap_.position.y
+                        if abs(dx_ * _m3j.cos(h_) + dy_ * _m3j.sin(h_)) < 2000 and abs(-dx_ * _m3j.sin(h_) + dy_ * _m3j.cos(h_)) < 50:
+                            _on48.append((g_["name"], ap_.name))
+    assert not _on48, f"v0.41.48: ground units on a runway: {sorted(set(_on48))[:6]}"
+    print(f"[runway] no ground unit on a runway strip ({len(_ap48)} airfields checked)")
     print(f"[jsow] {len(_jf)} JSOW flights in {len(_sp3)} Standoff DEAD packages; Hornet 4 / Viper 2 AGM-154A; they push with the HARM shooters; built with a launch point and release tasks")
     # Fighter Sweep (v0.40.2): where intel expects more bandits than a package's TARCAP can take, a sweep package of 4-ships goes in ahead of
     # the packages there; no sweep slot inside a package any more; flyable; no marshal; station, leash, RTB when out of AAMs; the war sim
