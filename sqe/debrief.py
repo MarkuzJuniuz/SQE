@@ -90,8 +90,8 @@ local function num(x) if x then return string.format("%d", math.floor(x)) end re
 local function deathsJson()
   local o = {}
   for _, k in ipairs(deaths) do
-    o[#o + 1] = string.format('{"n":"%s","t":%d,"ev":"%s","by":"%s","w":"%s","ago":%s,"fuel":%s,"alt_m":%s,"kts":%s,"sample_age":%s}',
-      esc(k.n), k.t, esc(k.ev), esc(k.by), esc(k.w), num(k.ago), k.fuel and string.format("%.2f", k.fuel) or "null", num(k.alt), num(k.kts), num(k.sage))
+    o[#o + 1] = string.format('{"n":"%s","t":%d,"ev":"%s","by":"%s","w":"%s","ago":%s,"fuel":%s,"alt_m":%s,"kts":%s,"sample_age":%s,"x":%s,"z":%s,"ground_m":%s}',
+      esc(k.n), k.t, esc(k.ev), esc(k.by), esc(k.w), num(k.ago), k.fuel and string.format("%.2f", k.fuel) or "null", num(k.alt), num(k.kts), num(k.sage), num(k.x), num(k.z), num(k.gh))
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
@@ -363,7 +363,7 @@ function H:onEvent(e)
         local lh, sm, now = LASTHIT[n], SAMPLE[n], timer.getTime()
         local evn = (id == world.event.S_EVENT_CRASH) and "crash" or ((id == world.event.S_EVENT_PILOT_DEAD) and "pilot_dead" or "dead")
         deaths[#deaths + 1] = { n = n, t = math.floor(now), ev = evn, by = lh and lh.by or "", w = lh and lh.w or "", ago = lh and (now - lh.t) or nil,
-                                fuel = sm and sm.fuel, alt = sm and sm.alt, kts = sm and sm.spd, sage = sm and (now - sm.t) or nil }
+                                fuel = sm and sm.fuel, alt = sm and sm.alt, kts = sm and sm.spd, sage = sm and (now - sm.t) or nil, x = sm and sm.x, z = sm and sm.z, gh = sm and sm.gh }
       end
       dead[n] = true; dump(); siteDead(n)
     end
@@ -451,7 +451,8 @@ timer.scheduleFunction(function(_, t)
             local un = u:getName()
             if un and u:isExist() then
               local p, v = u:getPoint(), u:getVelocity()
-              SAMPLE[un] = { fuel = u:getFuel(), alt = p.y, spd = math.sqrt(v.x ^ 2 + v.y ^ 2 + v.z ^ 2) * 1.944, t = timer.getTime() }
+              local okh, gh = pcall(function() return land.getHeight({ x = p.x, y = p.z }) end)
+              SAMPLE[un] = { fuel = u:getFuel(), alt = p.y, spd = math.sqrt(v.x ^ 2 + v.y ^ 2 + v.z ^ 2) * 1.944, t = timer.getTime(), x = p.x, z = p.z, gh = okh and gh or nil }
             end
           end)
         end

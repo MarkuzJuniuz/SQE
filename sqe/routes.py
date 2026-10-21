@@ -330,6 +330,19 @@ def terrain_clear(wps: list[Wpt]) -> int:
     return n
 
 
+def home_leg_ft(a: tuple, b: tuple, alt_ft: float) -> int:
+    """v0.41.49: the altitude an AI flight's recovery point (RCV) needs so the leg a -> b home clears the ground. The RCV point is added after
+    terrain_clear runs, at a fixed 3,000-6,000 ft, and an AI flight drops to the next point's altitude right after the last one: XO's 2026-10-20
+    run had Venom 5-2 level at 3,000 ft MSL for 100 nm over rising ground and lost with nobody shooting. Same margin as terrain_clear (1,000 ft, 2,000 ft over
+    mountains), capped at 20,000 ft. Without a ground-height scan the altitude is unchanged."""
+    from . import relief
+    h = relief.leg_max_ft(a, b)
+    if h is None:
+        return int(alt_ft)
+    need = int(math.ceil((h + (2000 if h > 5000 else 1000)) / 500.0) * 500)
+    return int(min(20000, max(alt_ft, need)))
+
+
 def in_progress(wps: list[Wpt], home: tuple, leave: dict | None = None) -> list[Wpt] | None:
     """A flight whose schedule started BEFORE the mission did. `wps` already carries absolute times (assign_times, first point at a negative time).
     Returns the route as it stands at mission time 0: a SPAWN point where the flight is by then (interpolated along its leg, or at the hold point

@@ -729,6 +729,13 @@ def main():
     _rl.clear()
     _w = [_W("DEP", 10_000, 5_000, 8000, 400), _W("MSHL", 100_000, 5_000, 24000, 400)]
     assert _tc(_w) == 0 and _w[0].alt_ft == 8000, "no ground-height scan: nothing changes"
+    # v0.41.49: an AI flight's recovery point (RCV) gets the altitude its home leg needs (it was a fixed 3,000-6,000 ft); no scan: unchanged
+    from sqe.routes import home_leg_ft as _hl
+    _rl.from_grid(0, 0, 1000.0, _hi)
+    _hv = _hl((10_000, 5_000), (100_000, 5_000), 3000)
+    assert _hv >= int(-(-(2800 / 0.3048 + 2000) // 500) * 500) and _hv <= 20000, _hv
+    _rl.clear()
+    assert _hl((10_000, 5_000), (100_000, 5_000), 3000) == 3000, "no ground-height scan: the RCV altitude is unchanged"
     _rl.clear()
     # kneeboard: the MSA line shows when the build knows it, and is absent otherwise
     import sqe.kneeboard as _kb2
