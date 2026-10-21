@@ -1221,7 +1221,7 @@ def check_29_phase_air_defence_that(c):
     _fl = [b_ for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD"]
     for b_ in _fl: _sm.set_field(_st, b_, 0.3)
     _sm.blue_defence(_st, _gd(3)); assert all(0.31 < b_.defense <= 0.41 for b_ in _fl), "airfield defences repair by supply (at most 0.10 a day)"
-    _sm.set_field(_st, _fl[0], 0.95); _sm.set_field(_st, _fl[1], 0.2); _lines = _sm.blue_defence(_st, _gd(3)); assert _lines and _fl[0].defense < 1.0, "a strong field lends a battery to the weakest"
+    _sm.set_field(_st, _fl[0], 0.95); _sm.set_field(_st, _fl[1], 0.2); _lines = _sm.blue_defence(_st, _gd(3)); assert not _lines and _fl[0].defense >= 0.95, "v0.41.67: no whole-field lending any more (batteries are ordered per site: see [31a])"
     _st.ground["fallen"] = [_fl[1].id]; _d1 = _fl[1].defense; _sm.blue_defence(_st, _gd(3)); assert _fl[1].defense == _d1, "a fallen field does not repair"
     c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_fl', '_mm', '_sm', '_st',)})
 
