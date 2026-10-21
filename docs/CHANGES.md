@@ -5,6 +5,12 @@
 * **Mission identity check, `tools/miz_identity.py`** (XO 2026-10-20: the refactor, the rename and the `_spawn_flight` split must not change a generated mission). `save DIR` builds 60 missions (9 campaigns, level 1-3, five jets, normal and "open skies" days with the red SAMs zeroed so strikes, counter-air, escorts and TARCAPs appear; each as your own flight and as the all-AI test), writes them out as normalised text; `check DIR` rebuilds on the changed code and prints a diff of anything that differs (exit 1); `selfcheck` builds twice on the same code and fails if the result is not repeatable. Runs in a temp folder, nothing of yours is touched, about 40 s a run. It pins campaign id, the builder's Random(), the global `random` and PYTHONHASHSEED inside the tool only. Production code unchanged. Not covered: fighter sweeps, BARCAP, bomber intercepts, and paths no case reaches (see the tool's docstring).
 * CLAUDE.md: the code map names the tool.
 
+## v0.41.56
+
+* **Split step 3: the strike / SEAD / DEAD / CAS tasking moved to its own file, `sqe/strike_tasks.py`** (XO 2026-10-21; NO behaviour change). Nine methods left `MissionBuilder` (`_sead_attack_tasks`, `_dead_gate`, `_cas_tasks`, `_harm_time`, `_umbrella_keep`, `_harm_deg`, `_jsow_side`, `_cover_tors`, `_jsow_tasks`) and live in the class `StrikeTasks`, which `MissionBuilder` inherits (a mixin: like a C# partial class, the builder still calls them as `self._jsow_tasks(...)`). The constants only they use moved with them (`JSOW_ATTACK_S`, `JSOW_AIM_ERR_M`, `DEAD_GATE_*`, `SA10_GATE_KM`, `TOR_*`, `TRACK_RADARS`, `SEARCH_RADARS`, `SEAD_WAVE_KM`, `KPH`); the builder imports the ones it still uses. `mission_builder.py` 3,080 -> 2,820 lines. The smoke test imports `TRACK_RADARS` / `TOR_COVER_KM` from the new file.
+  * Checked: `tools/miz_identity.py` 60 of 60 identical; pyflakes clean (the three old warnings only); smoke test passed. Not covered by the identity check: sweeps, BARCAP, bomber intercepts (none of the moved code is theirs).
+  * Next: TARCAP / escort station code, then sweep and support CAP (with identity cases added first), then PR B (renames).
+
 ## v0.41.55
 
 * **Split step 2: the SEAD attack tasks moved out of `_attach_waypoints`** (XO 2026-10-21; NO behaviour change). The ~50-line block that gives a SEAD flight its HARM tasks (own site, neighbouring sites, covering Tors, the umbrella) is now `_sead_attack_tasks(package, f, wp, w, armor)`; `_attach_waypoints` drops from about 115 to about 65 lines. Code moved as written.
