@@ -1,6 +1,5 @@
 # CHANGES.md
 
-# CHANGES.md
 
 ## v0.41.77, BARCAP as planned coverage, step 3 (first slice): red patrols get their relief in the mission
 
