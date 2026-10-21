@@ -230,10 +230,13 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     k = 0
     for aid, nm, apt, val in fields:
         p = ap(apt)
+        placed = {True: 0, False: 0}                                        # sites placed so far in this cluster, by class
         for i in range(d.sam_sites_per_cluster):
             v = variants[k % len(variants)]
             k += 1
-            x, y = _offset(p.x, p.y, (60 + 130 * i + rng.randint(-20, 20)) % 360, 7000 + 3000 * i)
+            rng.randint(-20, 20)                                            # (the old random bearing: drawn and dropped so the campaign's other random draws stay as they were)
+            x, y = _sams_mod.place_red_site(st, aid, p.x, p.y, v in LONG_RANGE, placed[v in LONG_RANGE])    # v0.41.65: doctrinal place + seeded jitter (sams.py)
+            placed[v in LONG_RANGE] += 1
             add(f"sam_{aid[3:]}_{i}", f"{nm} {SAM_LABEL[v]}", AssetKind.SAM, x, y, SAM_VALUE[v], variant=v, tier=FIELD_TIER.get(aid, 3))
             if v in LONG_RANGE and rng.random() < d.garrison_chance:       # a dug-in garrison: a reason for CAS and armour
                 gx, gy = _offset(x, y, rng.randint(0, 359), rng.randint(1800, 3200))
