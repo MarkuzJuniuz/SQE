@@ -1027,7 +1027,8 @@ def check_22_raid_intercepts_ai_only(c):
         s.fly(_rp.number, None)
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
     assert ("Su-24M" in _mz or "Su-25" in _mz) and "RAID-B-1" in _mz, "the raiders are in the mission"
-    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_aio27', '_eng27', '_mz', '_rs27', '_st',)})
+    _s22 = s
+    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_aio27', '_eng27', '_mz', '_rs27', '_s22', '_st',)})
 
 
 def check_23_raid_scramble_you_fly(c):
@@ -1066,8 +1067,7 @@ def check_25_war_sim_counts_batteries(c):
 
 
 def check_26_raid_flies_blue_s(c):
-    _mz, _st = c._mz, c._st
-    s = fresh_session()
+    _mz, _st, s = c._mz, c._st, c._s22                  # the session that built the raid mission in section 22
     # v0.41.29: the raid flies blue's shape: it never hits before the intercept's TOT, egresses and goes home, and its escorts stay with it
     _rg29 = next(g_ for g_ in s.manifest().groups if g_.get("raid_base"))
     assert _rg29["raid_arrive_s"] >= _st.pending["timeline"]["tot_s"], "the raid reaches its target after our intercept is on station"
@@ -1076,8 +1076,9 @@ def check_26_raid_flies_blue_s(c):
 
 
 def check_27_raid_s_route_bends(c):
-    _aio27, _rs27, _st = c._aio27, c._rs27, c._st
-    s = fresh_session()
+    _aio27, _rs27, _st, s = c._aio27, c._rs27, c._st, c._s22          # the session section 22 built the raid mission in
+    from sqe import raids as _rd
+
     # v0.41.31: a raid's route bends round the carrier group (FLEET_RAID_AVOID_NM), and red's target pick shies from it like a Patriot field
     from sqe.mission_builder import MissionBuilder as _MB31
     from sqe.raid_spawns import FLEET_RAID_AVOID_NM as _FR31
@@ -1088,7 +1089,8 @@ def check_27_raid_s_route_bends(c):
         _p31 = _mb31._raid_bend([(_cv31.x - 150 * 1852, _cv31.y - 30 * 1852), (_cv31.x + 150 * 1852, _cv31.y - 30 * 1852)], _rf31)   # 30 nm off the boat, sea side
         _seg = lambda a_, b_: min(((a_[0] + (b_[0] - a_[0]) * t_ / 50 - _cv31.x) ** 2 + (a_[1] + (b_[1] - a_[1]) * t_ / 50 - _cv31.y) ** 2) ** 0.5 for t_ in range(51))
         assert len(_p31) > 2 and min(_seg(_p31[i_], _p31[i_ + 1]) for i_ in range(len(_p31) - 1)) >= (_FR31 - 1) * 1852, "a raid goes round the carrier group"
-        assert _rd.FLEET_NM == _FR31
+        from sqe import raids as _raids31
+        assert _raids31.FLEET_NM == _FR31
     from sqe.red_air_picture import RED_LONG_RANGE as _RLR
     assert _RLR == {"Su_27"}, "red's long-range class is the Su-27 only"
     _man = s.manifest(); _rg = next(g_ for g_ in _man.groups if g_.get("raid_base"))
@@ -2110,7 +2112,8 @@ def check_46_ai_flights_going_home(c):
 
 
 def check_47_support_cap_pull_back(c):
-    _M4, _arr, _jsc, _jsow_kp, _sd4, _sead1, _t4 = c._M4, c._arr, c._jsc, c._jsow_kp, c._sd4, c._sead1, c._t4
+    _M4, _arr, _brg, _jsc, _jsow_kp, _sd4, _sead1, _t4 = c._M4, c._arr, c._brg, c._jsc, c._jsow_kp, c._sd4, c._sead1, c._t4
+    import math as _m
     s = fresh_session()
     # v0.41.51: the support CAP pull-back is gone from the hook; every support CAP (route with CAP1) still carries its engage circle on point 0
     _code34 = next(a_["text"] for tr_ in _M4["trigrules"].values() for a_ in tr_["actions"].values() if isinstance(a_.get("text"), str) and "local TRACK" in a_["text"])
@@ -2412,7 +2415,6 @@ def check_47_support_cap_pull_back(c):
         pass
     # retreat: a badly hurt long-range site pulls back from the front with its garrison, and comes back once repaired
     import math
-    from sqe import sams as _sm
     s.new("Retreat", "F-16C", 3, seed=21); _st = s.state
     _site = next(a_ for a_ in sorted(_st.assets.values(), key=lambda a_: a_.id) if _sm._long_range(_st, a_) and not a_.destroyed)
     _gar = [g_ for g_ in _st.assets.values() if g_.guards == _site.id]
