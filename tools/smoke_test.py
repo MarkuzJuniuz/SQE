@@ -2143,7 +2143,7 @@ def check_47_support_cap_pull_back(c):
     _gk = ("x", "y", "guard", "gx", "gy", "read")             # v0.41.10: the guard stations are set after the day's blue objectives are known
     _strip = lambda fl_: [{k_: v_ for k_, v_ in f_.items() if k_ not in _gk} for f_ in fl_]
     _gd_ = [f_ for f_ in _p1["flights"] if f_.get("guard")]
-    assert _gd_ and all(_m3j.hypot(f_["x"] - f_["gx"], f_["y"] - f_["gy"]) / 1852 <= _ra.GUARD_FWD_NM + 0.5 for f_ in _gd_), "red patrols sit over the SAM site they guard"
+    assert _gd_ and all(_m3j.hypot(f_["x"] - f_["gx"], f_["y"] - f_["gy"]) / 1852 <= _ra.CALLIN_LINK_NM + 0.5 for f_ in _gd_), "red patrols are linked to a SAM site near their BARCAP station (v0.41.73: the station no longer moves over the site)"
     assert all(_st.assets[f_["guard"]].kind.value == "SAM" for f_ in _gd_)
     print(f"[red guard] {len(_gd_)} red patrol pairs over the SAM sites red rates likeliest to be attacked: {sorted({f_['guard'] for f_ in _gd_})}")
     _st.red_air = {}; _ra.ensure(_st, _gd(3)); assert {"day": _st.red_air["day"], "flights": _strip(_st.red_air["flights"])} == {"day": _p1["day"], "flights": _strip(_p1["flights"])}, "the same day plans the same"
