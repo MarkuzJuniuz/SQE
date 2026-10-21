@@ -404,3 +404,46 @@ def rebuild_blue_sites(state, d, rng: random.Random) -> list:
                 _sync(state, b)
             lines.append(f"A replacement {a.name} went up (half strength)")
     return lines
+
+
+# v0.41.65: where a red site sits (XO 2026-10-21: "follow doctrine and adjust as I test"). Red's clusters used to sit at random bearings round the field.
+# Now the same employment guidelines as blue's (mutual support, overlapping fires, weighted coverage toward the likely air avenue, defence in depth;
+# no distances in the public text, so every number here is a judgment call): the axis is the bearing to the nearest blue base (airfield or carrier,
+# where the attack comes from); the medium and long-range sites are the outer layer, the first on the axis and the next ones fanned out either side,
+# at 7 km and 3 km further each (the old distances); the short-range sites (AAA, MANPADS, SA-8 / 15 / 19) sit near the field either side, to cover
+# the dead zone round it. Each site gets the same seeded jitter as blue's (15 degrees, 15%), fixed for the campaign.
+RED_LONG_PLACE_DEG = (0.0, 40.0, -40.0, 80.0, -80.0)
+RED_LONG_BASE_M, RED_LONG_STEP_M = 7000.0, 3000.0
+RED_SHORT_PLACE = ((100.0, 3500.0), (-100.0, 3500.0), (150.0, 4500.0), (-150.0, 4500.0))
+
+
+def red_threat_axis(state, x: float, y: float, fallback: float = 60.0) -> float:
+    """The bearing from (x, y) to the nearest blue base, airfield or carrier (where the attack on a red field comes from)."""
+    bases = list(getattr(state, "bases", {}).values())
+    if not bases:
+        return fallback
+    b = min(bases, key=lambda e: math.hypot(e.x - x, e.y - y))
+    return math.degrees(math.atan2(b.y - y, b.x - x)) % 360
+
+
+def place_red_site(state, field_id: str, fx: float, fy: float, long_range: bool, j: int) -> tuple:
+    """The (x, y) of the j-th medium / long-range (or short-range) SAM site of red's cluster at the field (fx, fy): doctrinal bearing and distance plus
+    the seeded jitter, moved along nearby bearings until it is on dry land."""
+    import random as _random
+    from . import seacheck as seac
+    axis = red_threat_axis(state, fx, fy)
+    if long_range:
+        off, dist_m = RED_LONG_PLACE_DEG[j % len(RED_LONG_PLACE_DEG)], RED_LONG_BASE_M + RED_LONG_STEP_M * j
+    else:
+        off, dist_m = RED_SHORT_PLACE[j % len(RED_SHORT_PLACE)]
+    r = _random.Random(f"{state.campaign_id}:{field_id}:{'L' if long_range else 'S'}{j}")
+    off += r.uniform(-SITE_JITTER_DEG, SITE_JITTER_DEG)
+    dist_m *= 1.0 + r.uniform(-SITE_JITTER_FRAC, SITE_JITTER_FRAC)
+    for k in range(12):
+        ang = math.radians(axis + off + 30 * ((k + 1) // 2) * (1 if k % 2 else -1))
+        x, y = fx + dist_m * math.cos(ang), fy + dist_m * math.sin(ang)
+        if seac.site_ok(x, y, 300.0):
+            return x, y
+    ang = math.radians(axis + off)
+    return fx + dist_m * math.cos(ang), fy + dist_m * math.sin(ang)
+

@@ -1479,7 +1479,8 @@ def main():
     _A4 = _ss.state.assets; _sd4 = [p_ for p_ in _ss.packages() if p_.objective.aim in ("SEAD", "STANDOFF")]
     _arr = [int(p_.start[:2]) * 60 + int(p_.start[3:5]) + _ss._harm_leg_s(p_) / 60 for p_ in _sd4]
     assert len(_sd4) >= 2 and max(_arr) - min(_arr) <= 1.5, ("SEAD packages on one cluster reach their HARM points together", _arr)
-    _pu = next(p_ for p_ in _sd4 if _tm9.umbrella_site(_ss.state, _A4[p_.objective.target_id]) and _ss.flyable(p_) and any(f_.kit == "JSOW" for f_ in p_.flights))
+    _pus = [p_ for p_ in _sd4 if _tm9.umbrella_site(_ss.state, _A4[p_.objective.target_id]) and _ss.flyable(p_) and any(f_.kit == "JSOW" for f_ in p_.flights)]
+    _pu = next((p_ for p_ in _pus if any(_ss.state.bases[f_.base_id].kind.value == "CARRIER" for f_ in p_.flights)), _pus[0])       # v0.41.65: prefer a package with carrier flights, the [cv recover] check below needs one (it passed by luck of the layout before)
     _um4 = _tm9.umbrella_site(_ss.state, _A4[_pu.objective.target_id]); _t4 = _A4[_pu.objective.target_id]
     _ss.ai_test = True; _ss.fly(_pu.number, _ss.flyable(_pu)[0].id); _ss.ai_test = False
     _M4 = lua.loads(_zf.ZipFile(_ss.state.pending["miz"]).read("mission").decode("utf-8", "ignore"))["mission"]
@@ -1635,16 +1636,24 @@ def main():
     assert len(_r11) == 3 and min(_seg(a_, b_, 100 * 1852, 20 * 1852) for a_, b_ in zip(_r11, _r11[1:])) >= 34, ("a route bends around an SA-10", [(w_.name, round(w_.x), round(w_.y)) for w_ in _r11])
     print("[sa10 avoid] a leg that passed 20 nm from an SA-10 now clears it by 35 nm with one turn point")
     # v0.41.17: AI flights going home to the carrier are recovered 10 nm out (SQE_RECOVER), not put in the deck queue
-    _rc17 = 0
-    for co_ in _M4["coalition"]["blue"]["country"].values():
-        for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
-            _lp17 = list(g_["route"]["points"].values())[-1]
-            _scr = [t_ for t_ in _lp17["task"]["params"]["tasks"].values() if t_.get("id") == "WrappedAction"
-                    and t_["params"]["action"].get("id") == "Script" and "SQE_RECOVER" in t_["params"]["action"]["params"].get("command", "")]
-            if _scr:
-                assert g_["name"] in _scr[0]["params"]["action"]["params"]["command"] and _lp17.get("type") != "Land", g_["name"]
-                _rc17 += 1
-    _hk17 = _zf.ZipFile(_ss.state.pending["miz"]).read("l10n/DEFAULT/dictionary").decode("utf-8", "ignore") if False else _zf.ZipFile(_ss.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
+    _rc17, _hk17 = 0, ""
+    for _sd17 in (3, 4, 5, 6):             # v0.41.65: its own mission with a carrier CAP (the one above only had carrier flights when a package happened to fold in: layout luck)
+        s.new("Recover", "F-14BU", 2, seed=_sd17); s.plan_day()
+        _pk17 = next((p_ for p_ in s.packages() if any(f_.tag == "CVCAP" for f_ in p_.flights) and s.flyable(p_)), None)
+        if _pk17 is None:
+            continue
+        s.fly(_pk17.number, s.flyable(_pk17)[0].id)
+        _hk17 = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
+        for co_ in lua.loads(_hk17)["mission"]["coalition"]["blue"]["country"].values():
+            for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
+                _lp17 = list(g_["route"]["points"].values())[-1]
+                _scr = [t_ for t_ in _lp17["task"]["params"]["tasks"].values() if t_.get("id") == "WrappedAction"
+                        and t_["params"]["action"].get("id") == "Script" and "SQE_RECOVER" in t_["params"]["action"]["params"].get("command", "")]
+                if _scr:
+                    assert g_["name"] in _scr[0]["params"]["action"]["params"]["command"] and _lp17.get("type") != "Land", g_["name"]
+                    _rc17 += 1
+        if _rc17:
+            break
     assert _rc17 >= 1 and "function SQE_RECOVER" in _hk17, ("carrier AI flights are recovered at 10 nm by the hook", _rc17)
     print(f"[cv recover] {_rc17} carrier AI flights recovered 10 nm from the boat instead of joining the deck queue")
     # v0.41.51: the support CAP pull-back is gone from the hook; every support CAP (route with CAP1) still carries its engage circle on point 0
