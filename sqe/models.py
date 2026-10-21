@@ -110,14 +110,25 @@ class EnemyAsset:
 
 
 @dataclass
+class RedSquadron:
+    """One typed red squadron inside a wing (v0.41.52): one aircraft type each. Data only for now: the wing still tracks available / reserve / rest
+    for all its squadrons together; per-squadron tracking is the next step."""
+    id: str
+    name: str
+    aircraft: str               # pydcs plane class name, e.g. "MiG_29S"
+    authorized: int
+
+
+@dataclass
 class EnemyAirWing:
     base_asset_id: str
     types: list[str]            # pydcs plane class names, e.g. ["MiG_29A", "F_4E"]
     authorized: int
     available: int
-    squadrons: int = 1          # how many squadrons the wing is made of (display / flavour)
+    squadrons: int = 1          # how many squadrons the wing is made of (equals len(sqns) when sqns is filled)
     reserve: int = 0            # aircraft pulled back to a rear field to recover (airwings.py); available is 0 while they rest
     rest_days: int = 0
+    sqns: list = field(default_factory=list)   # [RedSquadron], one type each; empty in a campaign saved before v0.41.52
 
 
 @dataclass

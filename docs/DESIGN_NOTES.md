@@ -29,6 +29,7 @@ _verified v0.41.28 + PR #65, 2026-10-16_
 | SAM reach / avoidance numbers | `sqe/routes.py`, `sqe/profiles.py`, `sqe/war.py` | `AVOID_NM`, `STATION_FRAC`, `GATE_REACH_NM` (XO v0.41.37: `STATION_FRAC` 0.85 against a long-range SAM, about 40 nm for an SA-10; `STANDOFF_MARGIN_NM` 5 nm outside medium / short-range rings, both in `profiles.py`). XO v0.41.36: a player flight from a land base no longer gets a SPAWN waypoint (`routes.py`, `elif not is_player`) |
 | The Lua hook (landed/dead tables, recovery) | `sqe/debrief.py` | `lua_hook`, `RECOV` |
 | The unit cap | `sqe/mission_builder.py` | `max_units`, `_counts` |
+| Red air wings and squadrons | `sqe/models.py`, `sqe/scenario.py` | `EnemyAirWing.sqns` (`RedSquadron`: one type each), `red_squadrons`, `Difficulty.red_squadron_max` (L1 6 / L2 12 / L3 14). v0.41.52: a wing is `ceil(jets / max)` typed squadrons; availability, rest and losses are still tracked per WING (`available`, `reserve`, `rest_days`), per-squadron tracking is the next step. _verified v0.41.52, 2026-10-21_ |
 
 ## 2. How a flight is built (outline)
 _verified v0.41.28 + PR #65, 2026-10-16_

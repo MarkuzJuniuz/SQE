@@ -29,6 +29,7 @@ class Difficulty:
     friendly_scale: float                # scales squadron sizes
     enemy_cap_per_air: float             # enemy CAP flights ~ this * airframes (1..4)
     armor_columns: int = 3
+    red_squadron_max: int = 12           # v0.41.52: most jets in one red squadron; a wing is cut into ceil(jets / this) typed squadrons (judgment call, no sourced Russian figure)
     bomber_wing: int = 0                 # strategic bombers (Tu-22M3) at Mozdok
     bomber_policy: str = "none"          # none | desperate (only when losing badly) | normal
     counterstrike: float = 0.3           # daily chance (x enemy air strength) that the enemy hits a coalition base's defences
@@ -58,7 +59,7 @@ class Difficulty:
 LEVELS: dict[int, Difficulty] = {
     1: Difficulty(1, "Level 1 - Insurgent", "Irregular forces. A few old aircraft, AAA and MANPADS, scattered older SAMs. "
                   "Expect to be shot at, not hunted.",
-                  enemy_air_total=20, enemy_types=["MiG_21Bis", "Su_25", "MiG_23MLD"],
+                  enemy_air_total=20, red_squadron_max=6, enemy_types=["MiG_21Bis", "Su_25", "MiG_23MLD"],
                   sam_variants=["AAA", "MANPAD", "SA-3"], sam_sites_per_cluster=1, iads=0.15,
                   enemy_skill="Average", loss_rate=0.035, base_damage=0.45, variance=0.8,
                   friendly_replenish=0.14, enemy_replenish=0.03, asset_repair=0.03, sam_repair=0.03,
@@ -77,7 +78,7 @@ LEVELS: dict[int, Difficulty] = {
                   raid_mix=(0.20, 0.15, 0.25), blue_garrison_size=0.8, blue_rebuild=0.15, sam_retreat=0.8, sead_valve=3, air_retreat=0.8),
     3: Difficulty(3, "Level 3 - Near-Peer", "Modern fighters, long-range SAMs and an integrated air-defence network. "
                   "Every sortie is contested and attrition bites.",
-                  enemy_air_total=150, enemy_types=["MiG_29S", "Su_27", "Su_24M", "Su_25", "MiG_29A"],
+                  enemy_air_total=150, red_squadron_max=14, enemy_types=["MiG_29S", "Su_27", "Su_24M", "Su_25", "MiG_29A"],
                   sam_variants=["SA-10", "SA-11", "SA-6", "SA-15", "SA-19"], sam_sites_per_cluster=4, iads=0.9,
                   enemy_skill="High", loss_rate=0.085, base_damage=0.28, variance=0.7,
                   friendly_replenish=0.06, enemy_replenish=0.07, asset_repair=0.05, sam_repair=0.08,
