@@ -1631,6 +1631,19 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
                 self._sead_attack_tasks(package, f, wp, w, armor)
 
+    def _cv_pos_at(self, base, t_s: float):
+        """v0.41.71: the carrier's (x, y) t_s seconds into the mission, on its own course (the ship group's route: it steams the whole mission). The
+        recovery point used to sit 10 nm from where the boat STARTED: by the time a late flight came home the boat had steamed on and the point was
+        14 nm or more from it, outside the hook's 12 nm net."""
+        cv = self.ship.get(base.id)
+        try:
+            p0, p1 = cv.points[0].position, cv.points[1].position
+            run = min(self.o.carrier_speed_kts * KPH * max(0.0, t_s), dist(p0.x, p0.y, p1.x, p1.y))
+            h = bearing(p0.x, p0.y, p1.x, p1.y)
+            return offset(p0.x, p0.y, h, run)
+        except (AttributeError, IndexError, TypeError):
+            return base.x, base.y
+
     def _home_leg(self, f, g, base, wps, idx, hold_end, stop, special):
         """The way home: the recovery entry point, landing or deck recovery."""
         o = self.o
@@ -1655,7 +1668,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             # v0.41.17: an AI flight going home to the boat is recovered at a point CV_RECOVER_NM out: it counts as landed and leaves the mission
             # (SQE_RECOVER in the hook). DCS's carrier landing queue ran an F-14 dry and stacks AI in your pattern.
             lp_ = g.points[-1].position
-            rx_, ry_ = offset(base.x, base.y, bearing(base.x, base.y, lp_.x, lp_.y), CV_RECOVER_NM * NM)
+            cx_, cy_ = self._cv_pos_at(base, (float(wps[-1].eta_s) if wps else 0.0) + dist(base.x, base.y, lp_.x, lp_.y) / 200.0)       # v0.41.71: where the boat will be when it gets there
+            rx_, ry_ = offset(cx_, cy_, bearing(cx_, cy_, lp_.x, lp_.y), CV_RECOVER_NM * NM)
             rcv_ = g.add_waypoint(pt(rx_, ry_), 2000 * FT, 300 * KPH, "RTBXHB" if special else "RTB")
             rcv_.tasks.append(task.RunScript(f"SQE_RECOVER('{g.name}')"))
             self._recov_net(g, f, self.ship[base.id].units[0].name if base.id in self.ship else None, base.x, base.y, wps, hold_end, stop)
@@ -1995,6 +2009,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         back_ += 1.0
                 geom.stand[key] = (ex_, ey_, [], dist(ex_, ey_, tx, ty) / NM, False)
 
+    RECOV_STALE_S = 1500       # v0.41.71: a homebound AI flight still out this long after its work is done is recovered where it is (XO's 2026-10-21 run: nine Navy jets
+                               # followed the tanker for 15 minutes and never landed). A judgment call: the flight home is 5-10 minutes.
     RECOV_NET_NM = 12          # v0.41.25: a homebound AI flight this close to its deck / field counts as recovered, waypoint reached or not
 
     def _recov_net(self, g, f, cv_unit, x, y, wps, hold_end, stop) -> None:
@@ -2002,7 +2018,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         never passes its recovery point, so it never ran SQE_RECOVER (the v0.41.24 run: Hornets circling the boat). The hook recovers the group
         once its lead is within RECOV_NET_NM of the carrier (where it is now, not where it started) or the field, after its work is done."""
         t_ = max(float(wps[-1].eta_s) if wps else 0.0, float(hold_end or 0), float(stop) if f.tag else 0.0)
-        self._recov.append({"g": g.name, "cv": cv_unit or "", "x": float(x), "z": float(y), "r": self.RECOV_NET_NM * NM, "t": t_})
+        self._recov.append({"g": g.name, "cv": cv_unit or "", "x": float(x), "z": float(y), "r": self.RECOV_NET_NM * NM, "t": t_, "t2": t_ + self.RECOV_STALE_S})
 
     COVER_SHIFTS = (0, 4, 8, 12, 16, 20, 24)                 # v0.41.23: nm the centre may move, toward our side first, then sideways
     COVER_TURNS = (0, 30, -30, 60, -60, 90, -90)
