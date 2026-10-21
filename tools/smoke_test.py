@@ -1294,6 +1294,42 @@ def check_31a_sam_orders_by_need(c):
     assert rt.sams == st.sams, "orders save and load with the SAM record"
 
 
+def check_31b_red_sam_orders(c):
+    """v0.41.68: red's SAM orders: a destroyed site in play is replaced by a battery from a deeper-tier site of the same kind, before a new build."""
+    import random as rnd
+    from sqe import sams as sm, difficulty as dif
+    from sqe.models import AssetKind as _AK
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))      # its own campaign: it borrows nothing from earlier sections
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke red orders", "F-16C", 3, seed=7)
+    st = ses.state
+    d = dif.get(3)
+    sites = [a for a in st.assets.values() if a.kind == _AK.SAM and not a.id.startswith("fsam_")]
+    pair = next(((a, b) for a in sorted(sites, key=lambda x: x.id) for b in sorted(sites, key=lambda x: x.id)
+                 if a.variant == b.variant and a.tier <= st.front + 2 and b.tier > a.tier and a.id != b.id), None)
+    assert pair, "the theatre has a SAM kind in two tiers"
+    rcv, snd = pair
+    for x in sites:
+        x.health = 1.0
+    rcv.health = 0.0
+    r1 = sm.red_orders(st, d, rnd.Random(1))
+    assert any("ordered" in x for x in r1), r1
+    assert snd.id in st.sams["red_vacated"] or any(o["from"] != snd.id for o in st.sams["red_orders"]), "a deeper site sends it"
+    o = st.sams["red_orders"][0]
+    sender = st.assets[o["from"]]
+    assert sender.destroyed and st.assets[o["to"]].variant == sender.variant and sender.tier > st.assets[o["to"]].tier, "the sender is a deeper site of the same kind"
+    sm.track(st); st.day += sm.REBUILD_MIN_DAYS + 1
+    dr = type(d)(**{**d.__dict__, "sam_rebuild": 1.0})
+    sm.rebuild(st, dr, rnd.Random(3))
+    assert st.assets[o["to"]].destroyed, "no new build at a site a battery is on its way to"
+    st.day = st.day - sm.REBUILD_MIN_DAYS - 1 + sm.ORDER_TRANSIT_DAYS
+    r3 = sm.red_orders(st, d, rnd.Random(4))
+    assert any("arrived" in x for x in r3) and not st.assets[o["to"]].destroyed and st.assets[o["to"]].health >= 0.99, r3
+    assert not st.sams["red_orders"], "the order is done"
+    rt = type(st).from_dict(st.to_dict())
+    assert rt.sams == st.sams, "red orders save and load with the SAM record"
+
+
 def check_31_where_sites_sit_doctrinal(c):
     _CS, _fl, _gd, _rnd, _sm, _st, _war, s = c._CS, c._fl, c._gd, c._rnd, c._sm, c._st, c._war, c.s
     # v0.41.64: where the sites sit: doctrinal bearing and distance plus a seeded jitter, fixed for the campaign, different in the next
@@ -2655,6 +2691,7 @@ CHECKS = [
     check_29_phase_air_defence_that,
     check_30_blue_s_air_defence,
     check_31a_sam_orders_by_need,
+    check_31b_red_sam_orders,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,

@@ -266,7 +266,7 @@ def rebuild(state, d, rng: random.Random) -> list:
     cands = []
     for aid, day0 in r["down"].items():
         a = state.assets.get(aid)
-        if a is None or not a.destroyed or aid.startswith("fsam_") or state.day - day0 < REBUILD_MIN_DAYS:
+        if a is None or not a.destroyed or aid.startswith("fsam_") or state.day - day0 < REBUILD_MIN_DAYS or aid in _red_ordered(state):
             continue
         if a.tier > state.front + 2 or _parent_down(state, a):
             continue
@@ -280,6 +280,47 @@ def rebuild(state, d, rng: random.Random) -> list:
             a.health = REBUILT_HEALTH
             r["down"].pop(a.id, None)
             lines.append(f"The enemy put up a replacement {a.variant} site: {a.name} (half strength)")
+    return lines
+
+
+def _red_ordered(state) -> set:
+    return {o["to"] for o in _rec(state).get("red_orders", [])}
+
+
+def red_orders(state, d, rng: random.Random) -> list:
+    """v0.41.68: red's SAM orders, the same rule as blue's (blue_orders). First the batteries that arrive today; then, at most ORDERS_PER_NIGHT, a new
+    order for the shallowest-tier destroyed site that is in play (tier up to front + 2, its field still standing, value first among equals): a standing
+    site of the same kind in a DEEPER tier (health BLUE_FULL_DEF or more) sends its battery; the chance is red's supply. The sender's site goes down
+    (the usual rebuild takes it when its tier comes into play), the receiver is not rebuilt meanwhile. No spare, no order: sams.rebuild is the only
+    way. Returns log lines."""
+    from . import ground
+    track(state)
+    r = _rec(state)
+    orders, vacated = r.setdefault("red_orders", []), r.setdefault("red_vacated", [])
+    lines = []
+    for o in [o for o in orders if o["due"] <= state.day]:
+        orders.remove(o)
+        a = state.assets.get(o["to"])
+        if a is not None and (a.destroyed or a.health < o["health"]):
+            a.health = max(a.health, o["health"])
+            r["down"].pop(a.id, None)
+            lines.append(f"A {a.variant} battery arrived to replace the loss at {a.name}")
+    busy = _red_ordered(state)
+    sup = ground.supply(state, "red") if ground.active(state) else 0.85
+    sites = [x for x in state.assets.values() if x.kind == AssetKind.SAM and not x.id.startswith("fsam_")]
+    needy = sorted((a for a in sites if a.destroyed and a.tier <= state.front + 2 and not _parent_down(state, a)
+                    and a.id not in busy and a.id not in vacated), key=lambda a: (a.tier, -a.value, a.id))
+    for a in needy[:ORDERS_PER_NIGHT]:
+        donors = sorted((x for x in sites if x.variant == a.variant and not x.destroyed and x.health >= BLUE_FULL_DEF and x.tier > a.tier
+                         and x.id not in busy and not _parent_down(state, x)), key=lambda x: (-x.tier, x.id))
+        if not donors or rng.random() >= sup:
+            continue
+        src = donors[0]
+        orders.append({"to": a.id, "from": src.id, "due": state.day + ORDER_TRANSIT_DAYS, "health": round(src.health, 2)})
+        src.health = 0.0
+        vacated.append(src.id)
+        lines.append(f"The enemy ordered a {a.variant} battery from {src.name} to replace the loss at {a.name}")
+    r["red_vacated"] = [v for v in vacated if state.assets.get(v) is not None and state.assets[v].destroyed]
     return lines
 
 
