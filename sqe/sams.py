@@ -80,8 +80,12 @@ def ensure_blue_sams(state) -> bool:
             sid = blue_site_id(b.id, k)
             if sid not in state.blue_sams:
                 h = max(0.0, min(1.0, float(getattr(b, "defense", 1.0) or 0.0)))
-                state.blue_sams[sid] = _site(sid, f"{b.name} {label}", b, var, h)
+                state.blue_sams[sid] = _site(sid, f"{b.name} {label}", b, var, h, state, k)
                 added = True
+        for k in BLUE_SITES:                       # a site made before v0.41.64 sits on the field centre: give it its place
+            a = state.blue_sams[blue_site_id(b.id, k)]
+            if a.x == b.x and a.y == b.y:
+                a.x, a.y = place_blue_site(state, b, k)
         _sync(state, b)
     return added
 
@@ -93,9 +97,39 @@ def _sync(state, b) -> None:
         b.defense = sum(a.health for a in sites.values()) / len(sites)
 
 
-def _site(sid, name, b, variant, health):
+# v0.41.64: where a blue site sits (XO 2026-10-21: "doctrinal, but randomness on the exact positioning so no two campaigns are the same"). The layout is the
+# v0.41.7 one, which already follows the US Army air-defence employment guidelines (mutual support, overlapping fires, weighted coverage toward the likely
+# air avenue, defence in depth; they give no distances, the numbers below are judgment calls): the Patriot faces the threat axis (the nearest enemy
+# fighter field), the AAA sits either side to cover its dead zone, the HAWK is the outer layer. Each site gets a seeded jitter on top, fixed for the
+# campaign (campaign id + field + site), so a field looks the same every day and different in the next campaign.
+SITE_PLACE = {"pat": (0.0, 4500.0), "aaa": (120.0, 3500.0), "aaa2": (-120.0, 3500.0), "hawk": (50.0, 6000.0)}      # (bearing from the threat axis, metres from the field)
+SITE_JITTER_DEG = 15.0
+SITE_JITTER_FRAC = 0.15
+
+
+def place_blue_site(state, b, key: str) -> tuple:
+    """The (x, y) of blue site `key` ('pat', 'hawk', 'aaa' or the second AAA site 'aaa2') at airfield `b`: the doctrinal bearing and distance plus the
+    seeded jitter, moved along nearby bearings until it is on dry land (as the old layout did)."""
+    import random as _random
+    from . import seacheck as seac, threatmap as tm
+    axis = tm.nearest_threat_bearing(state, b.x, b.y, 0.0)
+    off, dist_m = SITE_PLACE[key]
+    r = _random.Random(f"{state.campaign_id}:{b.id}:{key}")
+    off += r.uniform(-SITE_JITTER_DEG, SITE_JITTER_DEG)
+    dist_m *= 1.0 + r.uniform(-SITE_JITTER_FRAC, SITE_JITTER_FRAC)
+    for k in range(12):
+        ang = math.radians(axis + off + 30 * ((k + 1) // 2) * (1 if k % 2 else -1))
+        x, y = b.x + dist_m * math.cos(ang), b.y + dist_m * math.sin(ang)
+        if seac.site_ok(x, y, 300.0):
+            return x, y
+    ang = math.radians(axis + off)
+    return b.x + dist_m * math.cos(ang), b.y + dist_m * math.sin(ang)
+
+
+def _site(sid, name, b, variant, health, state=None, key=None):
     from .models import EnemyAsset
-    return EnemyAsset(sid, name, AssetKind.SAM, b.x, b.y, health, BLUE_SITE_VALUE, [], None, variant, 1, b.id)
+    x, y = place_blue_site(state, b, key) if state is not None and key else (b.x, b.y)
+    return EnemyAsset(sid, name, AssetKind.SAM, x, y, health, BLUE_SITE_VALUE, [], None, variant, 1, b.id)
 
 
 def field_defence(state, b) -> float:

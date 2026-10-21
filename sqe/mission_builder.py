@@ -935,18 +935,23 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 ang = tm.nearest_threat_bearing(self.state, p.x, p.y, bearing(p.x, p.y, tx, ty))
                 dry = lambda a0, d0: next(((px, py) for k in range(12) for px, py in [offset(p.x, p.y, a0 + (30 * ((k + 1) // 2)) * (1 if k % 2 else -1), d0)]
                                            if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0)), offset(p.x, p.y, a0, d0))           # the nearest bearing that is dry land
-                x, y = dry(ang, 4500)
+                sites_ = sams.blue_sites(self.state, base)
+                def site_at(key, a0, d0):               # v0.41.64: the site's own position (doctrinal bearing + seeded jitter, sams.place_blue_site); the old search if it falls on a runway
+                    a_ = sites_.get(key)
+                    px, py = (a_.x, a_.y) if a_ is not None else sams.place_blue_site(self.state, base, key)
+                    return (px, py) if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0) else dry(a0, d0)
+                x, y = site_at("pat", ang, 4500)
                 if bt["patriot_ln"]:
                     self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
                                   ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star)
-                x, y = dry(ang + 120, 3500)
+                x, y = site_at("aaa", ang + 120, 3500)
                 if bt["aaa"]:
                     self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line)
                 if bt["aaa"] >= 2:
-                    x, y = dry(ang - 120, 3500)
+                    x, y = site_at("aaa2", ang - 120, 3500)
                     self._platoon(self.usa, f"BASEDEF {base.name} AAA 2", [("Vulcan", 1), ("M1097_Avenger", 2)], x, y, ang, F.Line)
                 if bt["hawk"]:
-                    x, y = dry(ang + 50, 6000)
+                    x, y = site_at("hawk", ang + 50, 6000)
                     self._platoon(self.usa, f"BASEDEF {base.name} HAWK", [("Hawk_sr", 1), ("Hawk_tr", sams.BLUE_HAWK_TR), ("Hawk_pcp", 1), ("Hawk_cwar", 1),
                                   ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star)
             return
