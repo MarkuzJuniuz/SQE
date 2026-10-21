@@ -8,7 +8,7 @@ Windows + Visual Studio Code. Everything below is copy-paste. Budget about 20 mi
 
 | Need | Why | Get it |
 |---|---|---|
-| **Python 3.11 or 3.12, 64-bit** | runs SQE | python.org/downloads. **Tick "Add python.exe to PATH"** in the installer. |
+| **Python 3.12 or 3.13, 64-bit** | runs SQE | python.org/downloads. **Tick "Add python.exe to PATH"** in the installer. |
 | **Git** | the F-14B(U) lives in a pydcs *fork* that pip downloads from GitHub | git-scm.com/download/win (defaults are fine) |
 | **VS Code** + the **Python** extension (Microsoft) | editor/debugger | code.visualstudio.com, then Extensions (Ctrl+Shift+X) -> "Python" |
 | DCS World with the **F-14B(U)** (and F-16C if you want to fly Air Force) | to fly the missions | you have these |
@@ -195,7 +195,7 @@ build the loadout, save, then `python tools/capture_loadouts.py that.miz`. They 
 
 ### Squadrons, the Missions filter and package merging (v0.7)
 - New Campaign lets you pick your squadron. Missions shows "My squadron" packages by default; switch to "All packages" to fly any flight of your jet type.
-- Settings > Package merging > "Same area" folds packages whose target is inside the Merge radius (default 50 nm, centred on your target and slid inward at the edge of the target area) into one mission: ones that start up to 30 minutes after yours, and ones that started up to "Earlier packages" minutes (default 15) before yours. An earlier package is already airborne and underway when the mission starts (it spawns along its route, or holding at its marshal point); one that has already struck and gone home by then is not flown, but its target is shown as smoking ruins (Settings > Ruins). One that has struck but is still airborne spawns on its way home, with the ruins already in place; the outcome is rolled when the mission is built and applied at the debrief. Compare the unit counts on the waiting window with merging Off to see the performance cost. Lower the unit limit if your VR system struggles.
+- Settings > Package merging > "Same area" folds packages whose target is inside the Merge radius (default 25 nm, centred on your target and slid inward at the edge of the target area) into one mission: ones that start up to 30 minutes after yours, and ones that started up to "Earlier packages" minutes (default 15) before yours. An earlier package is already airborne and underway when the mission starts (it spawns along its route, or holding at its marshal point); one that has already struck and gone home by then is not flown, but its target is shown as smoking ruins (Settings > Ruins). One that has struck but is still airborne spawns on its way home, with the ruins already in place; the outcome is rolled when the mission is built and applied at the debrief. Compare the unit counts on the waiting window with merging Off to see the performance cost. Lower the unit limit if your VR system struggles.
 - On the Missions screen, a package that another one folds in is shown inside that package's panel, each with its own flights and FLY button. The line above each table says what FLY gives you: the start time, and which other packages fly with it. Pressing FLY on a later package starts the mission at its time instead.
 
 ### Depth tiers, SEAD vs DEAD, garrisons (v0.8)

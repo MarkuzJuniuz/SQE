@@ -53,14 +53,15 @@ class Geometry:
     ai_player: bool = False  # test mode: the player's slot is flown by the AI, so the player's flight gets the AI stand-off too
     stand: dict = None      # {(role, id(profile)): (x, y, [SAM types], nm short)} sweeps and escorts that stop at the edge of SAM cover
     sweep: bool = False     # a Fighter Sweep package: no marshal, DEP - PUSH - station - home
-    jsow_keep: list = None  # [(x, y, nm)]: live long-range SAMs a JSOW launch point stays this far from (v0.41.3)
+    jsow_keep: list = None  # [(x, y, nm)]: live SAMs a JSOW launch point stays this far from (v0.41.3; v0.41.46: nm is each entry's own ring, the target cluster's SAMs included)
     carrier: bool = False   # v0.41.12: the flight's base is a carrier (only then a DEP point after take-off)
     sa10_avoid: list = None # [(x, y, nm)]: live medium / long-range SAMs (not the target) an AI flight's route bends around (v0.41.11; all gate SAMs since v0.41.20)
 
 
 STANDOFF_EGRESS_NM = 25.0  # a HARM or JSOW flight egresses this far beyond its launch point, straight back out along its own approach
 JSOW_AXIS_DEG = 30.0       # the JSOW flight's approach is this far off the HARM shooters' axis (side chosen by the builder, away from other SAM sites)
-JSOW_LAUNCH_NM = 20.0      # an AI JSOW flight's launch point (the AGM-154A glides about this far from 20,000 ft); it releases from there and turns home
+JSOW_LAUNCH_NM = 30.0      # an AI JSOW flight's launch point. v0.41.46 (was 20): XO's 2026-10-20 run, AGM-154As released from 20,000 ft at 45-65 km (24-35 nm), and a 20 nm point sat
+                           # on the target's own SA-11 ring (about 19 nm): two Squids died to it. 30 nm is inside the release range seen and about 10 nm clear of that ring (judgment call)
 JSOW_HIGH_ALT_FT = 33000      # ...and when it is pushed out past JSOW_LAUNCH_NM, the flight releases from this high
 JSOW_MAX_NM = 45.0           # a JSOW launch point is never farther than this from its target (v0.41.3 run: AGM-154As released at 30-40 nm from 33,000 ft hit; was 40)
 JSOW_KEEP_HIGH_NM = 40.0     # a pushed-out JSOW flight is high, where an SA-10 reaches farther: its launch point stays this far from one (v0.41.3 run: 30.6 nm lost all four)
@@ -96,6 +97,24 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, ca
     return g_
 
 
+def jsow_launch_nm(g, jsow_side: float) -> float:
+    """How far (nm) from the target an AI JSOW flight's launch point sits on its own axis. v0.41.3: it stays as far from every live long-range SAM as
+    the HARM point does (the v0.41.1 runs lost whole JSOW flights to the SA-10s at 13-24 nm), moving out along its axis up to JSOW_MAX_NM (the glide
+    range from altitude); v0.41.4: 40 nm from an SA-10, not the HARM shooters' 30, because the JSOW jets go in at 33,000 ft.
+    v0.41.42: pulled out of plan_route so the builder can ask where the JSOW flight will launch (the escort stations itself there)."""
+    nm = max(8.0, min(JSOW_LAUNCH_NM, g.d / NM * 0.8 - 6))
+    if g.jsow_keep:
+        jh_ = g.hdg + 180 + JSOW_AXIS_DEG * jsow_side
+        while nm < JSOW_MAX_NM and any(dist(*offset(g.tx, g.ty, jh_, nm * NM), kx, ky) < knm * NM for kx, ky, knm in g.jsow_keep):
+            nm += 1.0
+    return nm
+
+
+def jsow_launch_xy(g, jsow_side: float) -> tuple:
+    """The (x, y) of an AI JSOW flight's launch point for this geometry."""
+    return offset(g.tx, g.ty, g.hdg + 180 + JSOW_AXIS_DEG * jsow_side, jsow_launch_nm(g, jsow_side) * NM)
+
+
 def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_player: bool,
                tanker_xy: tuple | None, stack_idx: int = 0, spawn: tuple | None = None, spawn_alt_ft: int = 0,
                spawn_kts: int = 0, jsow: bool = False, jsow_side: float = 0, keep_out=None, harm_deg: float = 0) -> list[Wpt]:
@@ -105,9 +124,10 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     if is_player and g.carrier:
         # v0.41.12: only off the carrier (the Case I/III departure radial). From a land base the first point after take-off is the marshal
         # point: the DEP 6 nm out at 8,000 ft, with PUSH a mile on at 26,000 ft, asked for a steep climb and a turn back over the field
+        # v0.41.36: (XO) Fixed the issue where player flights from land bases show SPAWN
         # (the two unexplained crashes 3-5 min after take-off were both runway starts out of Batumi)
         wp.append(Wpt("DEP", *g.dep, p.depart_alt_ft, p.depart_kts, "Climb out, check in with AWACS"))
-    else:
+    elif not is_player:
         sx, sy = spawn if spawn else g.dep
         wp.append(Wpt("SPAWN", sx, sy, spawn_alt_ft or p.depart_alt_ft, spawn_kts or p.depart_kts, "Airborne start"))
 
@@ -127,14 +147,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     human = is_player and not g.ai_player                    # a person flies it; in the all-AI test the player's flight is routed and tasked like any AI flight
     harm_nm = max(8.0, min(HARM_LAUNCH_NM, g.d / NM * 0.8 - 6))        # on short routes it still leaves the IP ahead of the base
     ip_xy = g.ip
-    jsow_nm = max(8.0, min(JSOW_LAUNCH_NM, g.d / NM * 0.8 - 6))
-    if jsow and role == Role.STRIKE and not human and g.jsow_keep:
-        # v0.41.3: the JSOW launch point stays as far from every live long-range SAM as the HARM point does (the v0.41.1 runs lost whole JSOW
-        # flights to the SA-10s at 13-24 nm). It moves out along its own axis, up to JSOW_MAX_NM from the target (the glide range from altitude).
-        jh_ = g.hdg + 180 + JSOW_AXIS_DEG * jsow_side
-        # v0.41.4: 40 nm, not the HARM shooters' 30: the JSOW jets go in at 33,000 ft and run in on their releases past the launch point.
-        while jsow_nm < JSOW_MAX_NM and any(dist(*offset(g.tx, g.ty, jh_, jsow_nm * NM), kx, ky) < max(knm, JSOW_KEEP_HIGH_NM) * NM for kx, ky, knm in g.jsow_keep):
-            jsow_nm += 1.0
+    jsow_nm = jsow_launch_nm(g, jsow_side) if (jsow and role == Role.STRIKE and not human) else max(8.0, min(JSOW_LAUNCH_NM, g.d / NM * 0.8 - 6))
     harm_ax = g.hdg + 180 + (harm_deg if role == Role.SEAD and not human else 0)    # v0.41.24: the builder may turn the HARM axis off a neighbouring SAM
     if role == Role.SEAD and not human and keep_out:          # under an umbrella (an SA-10 covering the target): the HARM point stays out of its reach too
         # v0.41.24: keep_out may be a list of circles (the umbrella and every other SAM the package is not sent against)
@@ -315,6 +328,19 @@ def terrain_clear(wps: list[Wpt]) -> int:
             w.alt_ft = need
             n += 1
     return n
+
+
+def home_leg_ft(a: tuple, b: tuple, alt_ft: float) -> int:
+    """v0.41.49: the altitude an AI flight's recovery point (RCV) needs so the leg a -> b home clears the ground. The RCV point is added after
+    terrain_clear runs, at a fixed 3,000-6,000 ft, and an AI flight drops to the next point's altitude right after the last one: XO's 2026-10-20
+    run had Venom 5-2 level at 3,000 ft MSL for 100 nm over rising ground and lost with nobody shooting. Same margin as terrain_clear (1,000 ft, 2,000 ft over
+    mountains), capped at 20,000 ft. Without a ground-height scan the altitude is unchanged."""
+    from . import relief
+    h = relief.leg_max_ft(a, b)
+    if h is None:
+        return int(alt_ft)
+    need = int(math.ceil((h + (2000 if h > 5000 else 1000)) / 500.0) * 500)
+    return int(min(20000, max(alt_ft, need)))
 
 
 def in_progress(wps: list[Wpt], home: tuple, leave: dict | None = None) -> list[Wpt] | None:

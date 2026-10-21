@@ -149,6 +149,7 @@ def main():
     # comms (v0.40.5): COMM1 CH1 AWACS, COMM2 CH1 flight (where DCS writes the group frequency) and CH2 the tower, VHF for an Air Force jet
     _pl5 = res.radio
     assert _pl5.comm1[1].label == "AWACS" and _pl5.comm2[1].label == "FLIGHT" and _pl5.comm2[2].label == "ATC" and not any(e_.label == "ATC" for e_ in _pl5.comm1.values()), "radio layout"
+    assert _pl5.comm2.get(3) is not None and _pl5.comm2[3].label == "DIVERT" and not any(e_.label == "DIVERT" for e_ in _pl5.comm1.values()), "v0.41.41: the divert tower is COMM2 CH3, not on COMM1"
     _pf5 = res.package.player_flight
     if _pf5.aircraft == "F-16C" and ms.state.bases[_pf5.base_id].kind.value != "CARRIER":
         assert 108 <= _pl5.comm2[2].mhz <= 152, ("an F-16's tower is on its VHF COMM2", _pl5.comm2[2].mhz)
@@ -210,7 +211,7 @@ def main():
     assert out["packages"] and out["packages"][0]["resolved"], out["packages"]
     print("    merged debrief:", [ln for ln in out["lines"] if ln.startswith("Package #")][:2])
     # ---- v0.10: earlier packages fly with you, already underway; the Missions list folds later ones into the first -----------------
-    bs = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all"))
+    bs = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", merge_radius_nm=50, flight_filter="all"))
     found = None
     for seed_b in range(1, 41):
         bs.new("Smoke back", "F-14BU", 2, seed=seed_b)
@@ -330,7 +331,7 @@ def main():
     import math as _m
     rs2 = Session(AppSettings(dcs_saves=str(TMP / "rad"), persist=False)); (TMP / "rad").mkdir(exist_ok=True)
     rs2.new("dev", "F-14BU", 3, seed=1)
-    _R = rs2.merge_radius_m(); assert abs(_R - 50 * 1852.0) < 1
+    _R = rs2.merge_radius_m(); assert abs(_R - 25 * 1852.0) < 1
     _A = list(rs2.state.assets.values())
     _bx = (min(a.x for a in _A), max(a.x for a in _A), min(a.y for a in _A), max(a.y for a in _A))
     _n = 0
@@ -728,6 +729,13 @@ def main():
     _rl.clear()
     _w = [_W("DEP", 10_000, 5_000, 8000, 400), _W("MSHL", 100_000, 5_000, 24000, 400)]
     assert _tc(_w) == 0 and _w[0].alt_ft == 8000, "no ground-height scan: nothing changes"
+    # v0.41.49: an AI flight's recovery point (RCV) gets the altitude its home leg needs (it was a fixed 3,000-6,000 ft); no scan: unchanged
+    from sqe.routes import home_leg_ft as _hl
+    _rl.from_grid(0, 0, 1000.0, _hi)
+    _hv = _hl((10_000, 5_000), (100_000, 5_000), 3000)
+    assert _hv >= int(-(-(2800 / 0.3048 + 2000) // 500) * 500) and _hv <= 20000, _hv
+    _rl.clear()
+    assert _hl((10_000, 5_000), (100_000, 5_000), 3000) == 3000, "no ground-height scan: the RCV altitude is unchanged"
     _rl.clear()
     # kneeboard: the MSA line shows when the build knows it, and is absent otherwise
     import sqe.kneeboard as _kb2
@@ -934,6 +942,46 @@ def main():
     _o = _st.to_dict(); _o.pop("raids"); assert _CS.from_dict(_o).raids == {}
     _eng27.AI_ONLY = _aio27
     _eng27.RAID_SCRAMBLES = _rs27
+    from types import SimpleNamespace as _NS
+    from dcs import task as _tk
+    from sqe.mission_builder import MissionBuilder as _MBg
+    _gg = _NS(points=[_NS(tasks=[])]); _MBg._ground_orders(_gg); _MBg._ground_orders(_gg)
+    assert [type(t_).__name__ for t_ in _gg.points[0].tasks] == ["OptROE", "OptAlarmState"], "ground orders: ROE + alarm once per group"
+    print("[ground orders] weapons free + alarm red set once per ground group")
+    from sqe.mission_builder import MissionBuilder as _MBe, ESCORT_AFTER_EGR_S as _EAE, ESCORT_AFTER_TOT_S as _EAT, HOLD_EXTEND_MAX_S as _HEM
+    _ct = _NS(stops=[]); _ct.stop_after_time = lambda t_: _ct.stops.append(t_)
+    _be = _NS(_holds=[{"tgt": (0, 0), "end": 1000, "after": _EAT, "cts": [_ct], "starts": [], "eta": 600}])
+    _MBe._extend_holds(_be, [((0, 0), 900)], egr_events=[((0, 0), 1500)])
+    assert _be._holds[0]["end"] == 1500 + _EAE, "an escort waits for the last striker's egress + 2 min"
+    _be._holds[0].update(end=1000, after=300); _MBe._extend_holds(_be, [((0, 0), 900)], egr_events=[((0, 0), 1500)])
+    assert _be._holds[0]["end"] == 1200, "a TARCAP keeps its own rule"
+    print("[escort egress] escorts stay for the last striker's egress point + 2 min; TARCAP unchanged")
+    # v0.41.42: in a Standoff DEAD the package escort shepherds the JSOW flight: its station is ESCORT_BEHIND_NM behind the JSOW launch point
+    from sqe.mission_builder import MissionBuilder as _MBj, ESCORT_BEHIND_NM as _EBN, TARCAP_BEHIND_NM as _TBN
+    from sqe.routes import jsow_launch_xy as _jxy, dist as _jd, NM as _JNM
+    from sqe.models import Role as _Rj
+    _jrec, _jfp = [], _MBj._flight_plans
+    def _jwrap(self_, geom_, pkg_, *a_, **k_):
+        _jfp(self_, geom_, pkg_, *a_, **k_); _jrec.append((self_, geom_, pkg_))
+    _MBj._flight_plans = _jwrap
+    try:
+        _sj = Session(AppSettings(dcs_saves=str(TMP / "shep"), persist=False, flight_filter="all")); (TMP / "shep").mkdir(exist_ok=True)      # its own session: the others keep their campaign
+        _sj.new("Shepherd", "F-14BU", 3, seed=11); _pj = next(p_ for p_ in _sj.packages() if p_.objective.aim == "STANDOFF" and _sj.flyable(p_))
+        _sj.fly(_pj.number, _sj.flyable(_pj)[0].id)
+    finally:
+        _MBj._flight_plans = _jfp
+    _bs, _gm, _pk = _jrec[0]
+    _esc = [v_ for (r_, _i), v_ in _gm.stand.items() if r_ == _Rj.SWEEP]
+    assert _esc, "a Standoff DEAD package has an escort station"
+    _jp = _jxy(_gm, _bs._jsow_side(_pk, _gm))
+    from sqe.routes import JSOW_LAUNCH_NM as _JLN
+    assert _jd(*_jp, _gm.tx, _gm.ty) / _JNM >= min(_JLN, _gm.d / _JNM * 0.8 - 6) - 0.5, "v0.41.46: the JSOW launch point is at least JSOW_LAUNCH_NM (30) from the target"
+    assert all(abs(_jd(v_[0], v_[1], *_jp) / _JNM - _EBN) < 1.0 for v_ in _esc), "the escort holds ESCORT_BEHIND_NM behind the JSOW launch point"
+    _tc = [v_ for (r_, _i), v_ in _gm.stand.items() if r_ == _Rj.ESCORT]
+    assert _tc and all(_jd(v_[0], v_[1], *_jp) / _JNM >= _TBN - 1.0 for v_ in _tc), "v0.41.43: the TARCAP holds at least TARCAP_BEHIND_NM behind the JSOW launch point"
+    _lps = _bs._launch_pts[_pk.id]
+    assert len(_lps) >= 2 and any(_jd(x_, y_, *_jp) < 100 for x_, y_ in _lps), "the cover circle knows the JSOW launch point before the flights are built"
+    print("[shepherd] the escort holds 8 nm and the TARCAP 16+ nm behind the JSOW launch point; the TARCAP / escort circle takes in every shooter's launch point and is kept out only by an SA-10")
     print("[raids] announced and surprise raids by level, repeatable emergencies (about 9% a sortie, never two in a row), scramble / stay, CAS folded in, postponement, Su-24M raid built and applied, overnight surprises")
     # alert pairs have a dispatch range like the enemy's reinforcements
     from sqe import reactive as _rv
@@ -964,7 +1012,19 @@ def main():
     # in a built mission: put a live SAM site on the target and look for the limit and the hold
     s.new("Stand off", "FA-18C", 2, seed=8); _st = s.state
     _p = next(p_ for p_ in s.packages() if s.flyable(p_) and any(f_.role == _Rl.ESCORT for f_ in p_.flights) and p_.objective.type.value in ("STRIKE", "DEAD"))
-    s.fly(_p.number, None)
+    from sqe.mission_builder import MissionBuilder as _MBh, TARCAP_AFTER_TOT_S as _TA
+    _hrec, _hext = [], _MBh._extend_holds
+    def _hwrap(self_, events_, egr_events=()):
+        _hext(self_, events_, egr_events); _hrec.append((self_._last_striker_s, [(h_["end"], h_["after"], h_["tgt"], h_["eta"]) for h_ in self_._holds]))
+    _MBh._extend_holds = _hwrap
+    try:
+        s.fly(_p.number, None)
+    finally:
+        _MBh._extend_holds = _hext
+    _ls, _hs = _hrec[-1]
+    assert _ls is not None and _hs, "a strike / SEAD / CAS package has a last striker time and TARCAP holds"
+    assert all(e_ >= _ls + _TA - 1 and e_ >= eta_ + 900 - 1 for e_, a_, _t, eta_ in _hs if a_ == _TA), "v0.41.38: a TARCAP stays 15 min at least, then until the last striker of its package is off target + 5 min"
+    print("[tarcap hold] TARCAPs hold 15 min at least, then until the last striker of their own package is off target + 5 min (v0.41.38)")
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
     assert "EngageTargetsInZone" in _mz and "zoneRadius" in _mz, "AI escorts engage only inside a circle around their hold point"
     from sqe.mission_builder import MissionBuilder as _MB
@@ -1104,9 +1164,10 @@ def main():
     from sqe.models import Role as _Rl2
     _lo = _LL()
     _h = _lo.for_role("FA-18C", _Rl2.STRIKE, "JSOW"); _v = _lo.for_role("F-16C", _Rl2.STRIKE, "JSOW")
-    assert _h[2]["CLSID"] == _h[8]["CLSID"] == "{BRU55_2*AGM-154A}" and all(_h[k]["CLSID"] == "{FPU_8A_FUEL_TANK}" for k in (3, 5, 7)), "Hornet JSOW kit: 4 AGM-154A with tanks"
+    assert (_h[2]["CLSID"] == _h[8]["CLSID"] == "{AGM-154A}" and all(_h[k]["CLSID"] == "{FPU_8A_FUEL_TANK}" for k in (3, 7))
+            and _h[5]["CLSID"] == "{A111396E-D3E8-4b9c-8AC9-2432489304D5}"), "Hornet JSOW kit (XO's ME loadout): 2 AGM-154A, 2 tanks, a Litening pod"
     assert _v[3]["CLSID"] == _v[7]["CLSID"] == "{AGM-154A}" and sum("154" in x["CLSID"] for x in _v.values()) == 2, "Viper JSOW kit: 2 AGM-154A"
-    assert _jpj == {"FA-18C": 4, "F-16C": 2}
+    assert _jpj == {"FA-18C": 2, "F-16C": 2}
     s.new("Jsow", "F-16C", 3, seed=1); s.late_sead_min = 0; s.state.campaign_id = f"{0x15a0001:010x}"; s.plan_day()     # pinned: the dice come from the campaign id
     _sp3 = [p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and p_.objective.aim == "STANDOFF"]
     _jf = [f_ for p_ in _sp3 for f_ in p_.flights if f_.kit == "JSOW"]
@@ -1122,6 +1183,10 @@ def main():
     s.ai_test = True; s.fly(_pj.number, s.flyable(_pj, squadron_only=False)[0].id); s.ai_test = False
     _mj = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
     assert "{AGM-154A}" in _mj and '["name"]="JSOW"' in _mj and _mj.count('["id"]="Bombing"') >= 1, "the JSOW flight is built: AGM-154A, a JSOW launch point, release tasks"
+    # v0.41.46: a JSOW flight's release tasks are time-limited (a ControlledTask wrapping each Bombing), so it turns for home after its salvo
+    import re as _re46
+    _bm = [m_ for m_ in _re46.finditer(r'\["id"\]="Bombing"', _mj)]
+    assert _bm and all('stopCondition' in _mj[max(0, m_.start() - 900):m_.start()] for m_ in _bm[:1]), "v0.41.46: the JSOW release tasks have a stop time"
     # Standoff DEAD: the JSOWs also go on the launchers; a site under a live SA-10 gets Standoff DEAD, one clear of it the SEAD / Close DEAD pair
     from dcs import lua as _luaj
     from sqe.war import long_range_site as _lrs
@@ -1130,13 +1195,33 @@ def main():
     _tgt_j = _pj.objective.target_id
     _lnx = [(u_["x"], u_["y"]) for co_ in _Mj["coalition"]["red"]["country"].values() for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()
             if g_["name"] == _tgt_j for u_ in g_["units"].values() if " ln" in u_["type"].lower()]
-    _bmb = [(t_["params"]["x"], t_["params"]["y"]) for co_ in _Mj["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
-            for p_ in g_["route"]["points"].values() for t_ in ((p_.get("task") or {}).get("params") or {}).get("tasks", {}).values() if t_.get("id") == "Bombing"]
+    _unw = lambda t_: t_["params"]["task"] if t_.get("id") == "ControlledTask" and "task" in t_.get("params", {}) else t_       # v0.41.46: the release tasks are wrapped (stop time)
+    _bmb = [(_unw(t_)["params"]["x"], _unw(t_)["params"]["y"]) for co_ in _Mj["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
+            for p_ in g_["route"]["points"].values() for t_ in ((p_.get("task") or {}).get("params") or {}).get("tasks", {}).values() if _unw(t_).get("id") == "Bombing"]
     assert _lnx and any(_m3j.hypot(bx_ - lx_, by_ - ly_) < 150 for bx_, by_ in _bmb for lx_, ly_ in _lnx), "Standoff DEAD JSOWs aim at the launchers too"
+    # v0.41.47: when the release window ends, the JSOW jet's ROE goes to Return Fire (a timed Option task: name 0 = ROE, value 3 = Return Fire), so it stops hunting
+    _jt = [t_ for co_ in _Mj["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
+           for p_ in g_["route"]["points"].values() if p_.get("name") == "JSOW" for t_ in ((p_.get("task") or {}).get("params") or {}).get("tasks", {}).values()]
+    assert any(t_.get("id") == "ControlledTask" and (t_["params"].get("task") or {}).get("id") == "WrappedAction" and "time" in (t_["params"].get("condition") or {})
+               and t_["params"]["task"]["params"]["action"]["params"] == {"name": 0, "value": 3} for t_ in _jt), "v0.41.47: a timed Return Fire after the JSOW release window"
     _sa10 = [a_ for a_ in s.state.assets.values() if a_.variant == "SA-10" and not a_.destroyed]
     _far = [a_ for a_ in s.state.assets.values() if a_.kind.value == "SAM" and a_.variant != "SA-10" and all(_m3j.hypot(a_.x - b_.x, a_.y - b_.y) > 60000 for b_ in _sa10)]
     assert all(_lrs(s.state, a_) for a_ in _sa10) and (not _far or not _lrs(s.state, _far[0])), "long range: an SA-10 or under one; anything else gets the SEAD / Close DEAD pair"
     assert {_tl(f_, _pj.objective) for f_ in _pj.flights if not f_.tag} >= {"SEAD", "SO DEAD"}, "package table labels"
+    # v0.41.48: no ground group sits on a runway (it would block the side that uses it): every vehicle is outside a strip 2 km each way and 50 m either side of each runway line
+    import dcs.terrain as _dt48
+    _ap48 = list(_dt48.Caucasus().airports.values())
+    _on48 = []
+    for co_ in list(_Mj["coalition"]["red"]["country"].values()) + list(_Mj["coalition"]["blue"]["country"].values()):
+        for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values():
+            for u_ in g_["units"].values():
+                for ap_ in _ap48:
+                    for rw_ in ap_.runways:
+                        h_ = _m3j.radians(rw_.heading); dx_, dy_ = u_["x"] - ap_.position.x, u_["y"] - ap_.position.y
+                        if abs(dx_ * _m3j.cos(h_) + dy_ * _m3j.sin(h_)) < 2000 and abs(-dx_ * _m3j.sin(h_) + dy_ * _m3j.cos(h_)) < 50:
+                            _on48.append((g_["name"], ap_.name))
+    assert not _on48, f"v0.41.48: ground units on a runway: {sorted(set(_on48))[:6]}"
+    print(f"[runway] no ground unit on a runway strip ({len(_ap48)} airfields checked)")
     print(f"[jsow] {len(_jf)} JSOW flights in {len(_sp3)} Standoff DEAD packages; Hornet 4 / Viper 2 AGM-154A; they push with the HARM shooters; built with a launch point and release tasks")
     # Fighter Sweep (v0.40.2): where intel expects more bandits than a package's TARCAP can take, a sweep package of 4-ships goes in ahead of
     # the packages there; no sweep slot inside a package any more; flyable; no marshal; station, leash, RTB when out of AAMs; the war sim
@@ -1254,11 +1339,15 @@ def main():
             for p_ in g_["route"]["points"].values():
                 if p_.get("name") in ("SEAD", "TGT") and g_.get("task") in ("SEAD", "CAP"):
                     _dd.setdefault(g_["task"], []).append(_m3j.hypot(p_["x"] - _sa.x, p_["y"] - _sa.y) / 1852)
+    _pats = [str(p_.get("task")) for co_ in _Mc["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()
+             for p_ in g_["route"]["points"].values() if str(p_.get("name", "")).startswith("TGT") and "Orbit" in str(p_.get("task"))]
+    assert _pats and all("Race-Track" not in t_ for t_ in _pats), ("v0.41.43: a station orbit is a Circle, not a race-track to RTB", len(_pats))
     _tar = [x_ for x_ in _dd.get("CAP", []) if x_ < 45]
-    assert _tar and all(abs(x_ - _sfr * 48) <= _son + 2 for x_ in _tar) and _dd.get("SEAD"), ("the TARCAP sits level with the HARM shooters", _dd)
+    _far = [x_ for x_ in _dd.get("CAP", []) if x_ >= 45]      # v0.41.43: with a JSOW flight the TARCAP holds behind the JSOW point (40+ nm from the SA-10), further out than the HARM shooters
+    assert _dd.get("SEAD") and (_far and min(_far) > max(_dd["SEAD"]) + 10 if _far else _tar and all(abs(x_ - _sfr * 48) <= _son + 2 for x_ in _tar)), ("the TARCAP sits level with the HARM shooters, or behind the JSOW point", _dd)
     _cs.abort(); _r2 = _cs.fly(_cp.number, _cs.flyable(_cp)[0].id)
     assert _r1.seed == _r2.seed, "Abort rewinds the sortie counter: the re-fly has the same seed"
-    print(f"[cap v0.41] TARCAP {min(_tar):.0f} nm from the SA-10, HARM points {min(_dd['SEAD']):.0f} nm; re-fly after Abort has the same seed ({_r1.seed})")
+    print(f"[cap v0.41] TARCAP {min(_tar or _far):.0f} nm from the SA-10, HARM points {min(_dd['SEAD']):.0f} nm; re-fly after Abort has the same seed ({_r1.seed})")
     # v0.41.2: DCS refuses a mission whose player route has a run of locked-speed points between two locked times (v0.41.1: the player as an
     # escort, "Viper 3: All waypoints (5-5) have locked speed and surrounded by waypoints 4 and 5 with locked time"). Every fighter role you
     # can fly is built and checked.

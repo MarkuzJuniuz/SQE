@@ -37,9 +37,16 @@ TARCAP_LEAD_S = 0             # v0.41.1: a TARCAP arrives WITH the first flight 
 FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 ALERT_REACH_NM = 130          # alert pairs come only from fields this close to the target (the far ones could not arrive in time)
 TARCAP_MIN = 15               # ...and holds there this long, then goes home
+ESCORT_AFTER_EGR_S = 120      # v0.41.40: an escort stays until the last striker has reached its egress point + this long (XO 2026-10-20: DEADers were left behind)
 ESCORT_AFTER_TOT_S = 180      # an escort (SWEEP role) holds its station until this long after the TOT (the last ground-attack flight off target)
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
+RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
+RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
+TARCAP_BEHIND_NM = 16         # v0.41.43: with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
+ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
+TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
+JSOW_ATTACK_S = 120           # v0.41.46: a JSOW slinger's release tasks end this long after the launch point's ETA, and it turns for home (judgment call; XO's run: releases came 25-60 s before the point)
 LATE_ATTACK_S = 600           # v0.41.16: an AI strike flight drops only within this of its TOT
 CV_RECOVER_NM = 10            # v0.41.17: AI carrier flights (and your wingmen) are recovered this far from the boat instead of joining the deck queue
 RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
@@ -142,7 +149,7 @@ def stagger(package, role) -> int:
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import AVOID_NM, SA10_AVOID_NM, avoid_circles, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear
+from .routes import jsow_launch_xy, JSOW_KEEP_HIGH_NM, AVOID_NM, SA10_AVOID_NM, avoid_circles, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
 from .state import CampaignState
 
 KPH = 1.852
@@ -377,7 +384,9 @@ class MissionBuilder:
         div_mhz = self.t.airports[div.airport].atc_radio.uhf_hz / 1e6 if div.airport else None
         atc_vhf = (self.t.airports[pbase.airport].atc_radio.vhf_high_hz / 1e6) if (pbase.kind != BaseKind.CARRIER and getattr(self.t.airports[pbase.airport], "atc_radio", None)
                                                                               and self.t.airports[pbase.airport].atc_radio.vhf_high_hz) else None
-        plan = build_radio_plan(package, st, atc, self.rng, o.layout, RadioCfg(o.carrier_tacan, o.carrier_link4_mhz), div_mhz, div.name, atc_vhf)
+        div_vhf = (self.t.airports[div.airport].atc_radio.vhf_high_hz / 1e6) if (div.airport and getattr(self.t.airports[div.airport], "atc_radio", None)
+                                                                          and self.t.airports[div.airport].atc_radio.vhf_high_hz) else None
+        plan = build_radio_plan(package, st, atc, self.rng, o.layout, RadioCfg(o.carrier_tacan, o.carrier_link4_mhz), div_mhz, div.name, atc_vhf, div_vhf)
         tanker_xy, awacs_unit, hav_xy = self._place_support(package, plan, geom, extras)
 
         # ---- timeline: YOUR times. Roles are staggered around the strikers' push (sweep, SEAD, escorts go first) ---------
@@ -408,20 +417,25 @@ class MissionBuilder:
         # ---- friendly flights --------------------------------------------------------------------------------------------
         despawn, pkg_table = [], []
         self._sup_cts = []                                                   # HAVCAP / base CAP orbit tasks: their stop time is extended once the merged packages are known
+        self._striker_egr = []                                               # v0.41.40: [((x, y), egress time)] of this mission's strikers
         self._holds = []                                                     # v0.41.10: TARCAP / escort holds, extended to the last package over their target area
         self._snipe_at = {}                                                  # v0.41.10: id(group) -> the station waypoint where max-range shots begin
         self._callins = []
         self._pull = []                                                      # v0.41.34: support CAP pull-back (see _pull_entries)
         self._recov = []                                                     # v0.41.25: the recovery net (see _recov_net)                                                   # v0.41.10: red patrols called in to the SAM site they guard
+        self._launch_pts[package.id] = self._launch_points(package, geom)    # v0.41.42: known before any flight is built (an escort / TARCAP may be built first)
+        striker_tots = []                                                    # v0.41.38: each ground-attack flight's own target time (strike / SEAD / CAS), for the TARCAP hold
         for idx, f in enumerate(package.flights):
             g, tot_f = self._spawn_flight(package, f, plan, geom, tanker_xy, hav_xy, push_of(f), tgt.eta_s, rtb_s, idx, manifest, despawn)
             if f.is_player:
                 tot_f = tgt.eta_s
+            if f.role in (Role.STRIKE, Role.SEAD, Role.CAS) and not f.tag and tot_f:
+                striker_tots.append(float(tot_f))
             if f.role == Role.CAS and tot_f:
                 self.cas_tot = tot_f
             pkg_table.append({"callsign": f.callsign, "role": task_label(f, package.objective), "push": clock(push_of(f)) if not f.tag else "-",
                               "tot": clock(tot_f) if tot_f else "-", "you": f.is_player})
-        whois = self._datalinks(package, awacs_unit)
+        whois = self._datalinks(package)
 
         # ---- enemy air picture (known CAP airborne from the start + alert aircraft that scramble when detected) ----
         keep = [(geom.mshl[0], geom.mshl[1], RED_KEEP_NM)] + [(p[0], p[1], 100) for p in (hav_xy,) if p is not None] + \
@@ -444,7 +458,12 @@ class MissionBuilder:
         for ct_ in self._sup_cts:
             if last_home > ct_.params.get("stopCondition", {}).get("time", 0):
                 ct_.stop_after_time(int(last_home))
-        self._extend_holds([((tx, ty), tgt.eta_s)] + [(m_["txy"], m_["tot_s"]) for m_ in merged if not m_.get("struck") and m_.get("txy")])
+        # v0.41.38 (XO 2026-10-20): a TARCAP / escort stays until the LAST ground-attack flight of its own package is off target (+ the usual after-time),
+        # not just until its own station time (when the player flew the TARCAP, tgt was the TARCAP's own station: it left 7.5 min after arriving)
+        own_ = [((tx, ty), max(striker_tots))] if striker_tots else []
+        self._last_striker_s = max(striker_tots) if striker_tots else None
+        self._extend_holds([((tx, ty), tgt.eta_s)] + own_ + [(m_["txy"], m_["tot_s"]) for m_ in merged if not m_.get("struck") and m_.get("txy")],
+                           egr_events=self._striker_egr)
         manifest.cur_pkg = ""
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + list(self._red_intel)
         self._spawn_reactive(package, extras, tx, ty, tgt.eta_s, geom, manifest, despawn)
@@ -542,7 +561,7 @@ class MissionBuilder:
             self._save_without_carrier_slots(m, out_path)
         return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns, self.seed_code, merged)
 
-    def _extend_holds(self, events) -> None:
+    def _extend_holds(self, events, egr_events=()) -> None:
         """v0.41.10: a TARCAP / escort holds until the LAST package over its target area is off target (TOT + its after-time), not just its own
         package. The v0.41.8 sweep run: the F-15 TARCAPs went home 5 min after their own TOT while later packages were still coming through
         (1,600-2,500 s) and only the F-14s were left. At most HOLD_EXTEND_MAX_S longer; bingo fuel sends them home anyway."""
@@ -554,7 +573,11 @@ class MissionBuilder:
                 last = min(later_) if later_ else 0
             else:
                 last = max(near_ + [0])
-            new = int(min(h["end"] + HOLD_EXTEND_MAX_S, max(h["end"], last + h["after"])))
+            want = last + h["after"]
+            if h["after"] == ESCORT_AFTER_TOT_S:         # an escort sticks to the last striker until it is out (egress point), like a shepherd
+                eg_ = [t_ for (ex, ey), t_ in egr_events if dist(ex, ey, hx, hy) <= HOLD_AREA_KM * 1000]
+                want = max(want, max(eg_ + [0]) + ESCORT_AFTER_EGR_S)
+            new = int(min(h["end"] + HOLD_EXTEND_MAX_S, max(h["end"], want)))
             if new <= h["end"]:
                 continue
             for ct_ in h["cts"]:
@@ -1023,7 +1046,7 @@ class MissionBuilder:
                 full = base.defense >= 0.6
                 bt = sams.blue_battery(base)            # v0.41.30: doctrinal batteries, every field alike (sams.py)
                 dry = lambda a0, d0: next(((px, py) for k in range(12) for px, py in [offset(p.x, p.y, a0 + (30 * ((k + 1) // 2)) * (1 if k % 2 else -1), d0)]
-                                           if seac.site_ok(px, py, 300.0)), offset(p.x, p.y, a0, d0))           # the nearest bearing that is dry land
+                                           if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0)), offset(p.x, p.y, a0, d0))           # the nearest bearing that is dry land
                 x, y = dry(ang, 4500)
                 self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
                               ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star)
@@ -1077,8 +1100,37 @@ class MissionBuilder:
             pos = offset(a.x, a.y, r.uniform(0, 360), r.uniform(0, 900))
         if a.kind != AssetKind.AIRFIELD and not seac.site_ok(pos[0], pos[1], min(600.0, seac.SITE_MARGIN)):
             pos = (a.x, a.y)                  # the random shift would put it in the sea: keep the site where it is (it is on land)
+        pos = self._off_runway(pos[0], pos[1], 150.0 + 20.0 * len(SITES.get(a.variant) or SOFT.get(a.kind) or []))      # v0.41.48
         self.site_pos[a.id] = pos
         return pos
+
+    def _on_runway(self, x, y, margin):
+        """v0.41.48: True when a group centred here (its footprint about `margin` m) would sit on a runway and block the side that uses it.
+        pydcs gives each runway only a heading, so the strip is modelled as a corridor through the airfield reference point:
+        RUNWAY_HALF_LEN_M each way, RUNWAY_HALF_WIDTH_M either side, plus the group's own margin (a judgment call, not a surveyed runway)."""
+        for ap in self.t.airports.values():
+            ax, ay = ap.position.x, ap.position.y
+            if abs(x - ax) > RUNWAY_HALF_LEN_M + margin + 500 or abs(y - ay) > RUNWAY_HALF_LEN_M + margin + 500:
+                continue
+            for rw in ap.runways:
+                h = math.radians(rw.heading)
+                dx, dy = x - ax, y - ay
+                along = dx * math.cos(h) + dy * math.sin(h)
+                across = -dx * math.sin(h) + dy * math.cos(h)
+                if abs(along) < RUNWAY_HALF_LEN_M + margin and abs(across) < RUNWAY_HALF_WIDTH_M + margin:
+                    return True
+        return False
+
+    def _off_runway(self, x, y, margin):
+        """Move a site centre sideways, off any runway corridor, to the nearest clear dry spot (unchanged when already clear)."""
+        if not self._on_runway(x, y, margin):
+            return (x, y)
+        for d in range(150, 2401, 150):
+            for ang in range(0, 360, 30):
+                px, py = offset(x, y, ang, d)
+                if not self._on_runway(px, py, margin) and seac.site_ok(px, py, min(600.0, seac.SITE_MARGIN)):
+                    return (px, py)
+        return (x, y)
 
     def _jitter_primary(self, package, tx, ty):
         o = package.objective
@@ -1218,6 +1270,8 @@ class MissionBuilder:
             for u in gone:
                 g.units.remove(u)
             base_count = max(1, base_count - len(gone))      # the radars were already destroyed: not damage this mission caused
+        if a.kind != AssetKind.SAM:
+            self._ground_orders(g)                      # v0.41.39: armour columns and garrisons fight on explicit orders
         names = []
         for k, u in enumerate(g.units, 1):
             u.name = f"{a.id}|{k}"
@@ -1363,6 +1417,8 @@ class MissionBuilder:
             home_ = Wpt("HOME", base.x, base.y, p.cap_alt_ft, p.cap_kts)
             wps = avoid_circles(wps + [home_], self._zone_sams(package, True), p.max_points, 3)[:-1]      # the CAP1-CAP2 orbit leg stays as it is
             stop = int(max(tot_s + o.cap_minutes * 60, rtb_s + 300))
+            if not f.is_player or o.player_is_ai:
+                terrain_clear(wps)                          # v0.41.49: a support CAP's legs clear the ridges too (the branch never ran the terrain check)
         else:
             sp = None
             if not f.is_player:
@@ -1457,7 +1513,7 @@ class MissionBuilder:
         # v0.41.11: every AI flight goes home on bingo fuel; v0.41.16: your own flight too (it applies to your AI wingmen: in the v0.41.14 run they
         # queued at the tanker until they flamed out)
         g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
-        if not f.tag and f.role in (Role.SEAD, Role.STRIKE, Role.CAS):      # where this package's shooters launch: the TARCAP / escort cover zone
+        if not f.tag and f.role in (Role.SEAD, Role.STRIKE, Role.CAS) and f.is_player and not o.player_is_ai:      # where this package's shooters launch: the TARCAP / escort cover zone (AI flights: _launch_points, before the loop)
             lp_ = next((w for w in wps if w.action in ("SEAD", "JSOW")), None) or next((w for w in wps if w.name == "IP"), None)
             if lp_ is not None:
                 self._launch_pts.setdefault(package.id, []).append((lp_.x, lp_.y))
@@ -1485,6 +1541,7 @@ class MissionBuilder:
             # escort covers the package: the circle is round the package's launch points (HARM / JSOW points, or the IP), COVER_ZONE_NM, and
             # always takes in its own station. Until the hold ends.
             back_ = bearing(stw.x, stw.y, base.x, base.y)
+            cover_lo_ = False
             if stw.action == "SWEEPSTN" or not self._launch_pts.get(package.id):
                 # v0.41.10: a sweep engages within 25 nm whatever it flies (the v0.41.8 F-16 sweep, 15 nm, never fired while MiGs went past it)
                 zone_ = (stw.x, stw.y, A2A_ZONE_NM[True] if stw.action == "SWEEPSTN" else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A])
@@ -1507,8 +1564,10 @@ class MissionBuilder:
                 cx_, cy_ = sum(p_[0] for p_ in lp_) / len(lp_), sum(p_[1] for p_ in lp_) / len(lp_)
                 # v0.41.23: the TARCAP's circle covers the package's launch points and its own station, at COVER_ZONE_NM at least, placed where
                 # that circle is clear of every SAM the package is not sent against (v0.41.22 only shrank it: 44% trimmed, 9% down to 8 nm)
-                zone_ = self._cover_circle(list(lp_) + [(stw.x, stw.y)], (cx_, cy_), package, COVER_ZONE_NM, bearing(cx_, cy_, stw.x, stw.y))
-            zct_ = self._limit_engage(g, 0, hold_end, self._clear_zone(zone_, package))
+                zone_ = self._cover_circle(list(lp_) + [(stw.x, stw.y)], (cx_, cy_), package, COVER_ZONE_NM, bearing(cx_, cy_, stw.x, stw.y),
+                                           long_only=True, max_nm=TARCAP_COVER_MAX_NM)
+                cover_lo_ = True            # v0.41.42 (XO): the circle takes in the shooters first; only an SA-10 keeps it out (an SA-11 / SA-6 no longer pushes it off the launch points)
+            zct_ = self._limit_engage(g, 0, hold_end, self._clear_zone(zone_, package, long_only=cover_lo_))
             hold_ = None
             if hold_end is not None:
                 hold_ = {"cts": [zct_], "starts": [], "tgt": (geom.tx, geom.ty), "end": int(hold_end), "eta": int(stw.eta_s),
@@ -1684,7 +1743,9 @@ class MissionBuilder:
             elif w.orbit:                                                    # fighters held short of live SAM cover / on their station
                 if self._snipe_at.get(id(g)) is w:                              # v0.41.10: on station: maximum-range shots (snipe) from here on
                     wp.tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
-                ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH)))
+                # v0.41.43: a Circle, not DCS's default Race-Track. A race-track runs from this point to the NEXT waypoint, which here is RTB:
+                # 2026-10-20 tracks show Springfield 7 / Hornet 6 flying 57-60 nm from their station to RTB and back (the "north to south" orbit)
+                ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
                 ct.stop_after_time(hold_end if (w is stw and hold_end is not None) else stop); wp.tasks.append(ct)
                 if w is stw and self._holds and self._holds[-1]["end"] == hold_end and ct not in self._holds[-1]["cts"]:
                     self._holds[-1]["cts"].append(ct)
@@ -1694,7 +1755,7 @@ class MissionBuilder:
                 bct_ = task.ControlledTask(task.Bombing(pt(w.x, w.y), group_attack=True))
                 bct_.stop_after_time(int(w.eta_s + LATE_ATTACK_S)); wp.tasks.append(bct_)
             elif w.action == "JSOW":
-                self._jsow_tasks(wp, f, armor, package)
+                self._jsow_tasks(wp, f, armor, package, w.eta_s)
             elif w.action == "CAS":
                 self._cas_tasks(wp, w, armor, tot_s)
             elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
@@ -1785,7 +1846,8 @@ class MissionBuilder:
                 lp_ = g.points[-1].position
                 rb_ = bearing(base.x, base.y, lp_.x, lp_.y) + RCV_SPREAD[idx % len(RCV_SPREAD)]
                 rx_, ry_ = offset(base.x, base.y, rb_, RCV_NM * NM)
-                rcvp_ = g.add_waypoint(pt(rx_, ry_), (3000 + 1000 * (idx % 4)) * FT, 300 * KPH, "RCV")
+                rcv_alt_ = home_leg_ft((lp_.x, lp_.y), (rx_, ry_), 3000 + 1000 * (idx % 4))      # v0.41.49: the home leg clears the ridges (was a fixed 3,000-6,000 ft)
+                rcvp_ = g.add_waypoint(pt(rx_, ry_), rcv_alt_ * FT, 300 * KPH, "RCV")
                 if self._skip_landing(base):          # v0.41.18: recovered at its entry point instead of landing (setting "AI landings: airfields")
                     rcvp_.tasks.append(task.RunScript(f"SQE_RECOVER('{g.name}')"))
                     self._recov_net(g, f, None, base.x, base.y, wps, hold_end, stop)
@@ -1815,6 +1877,9 @@ class MissionBuilder:
                 gate["to"] = len(g.points)                              # the landing point
             self._gates.append(gate)
         tw = None if f.tag else objective_wp(wps)
+        if tw is not None and f.role in (Role.STRIKE, Role.SEAD, Role.CAS):
+            egr_ = next((w.eta_s for w in wps if w.name == "EGR"), None)          # v0.41.40: when this striker is OUT, for the escorts to wait on
+            self._striker_egr.append(((geom.tx, geom.ty), float(egr_ if egr_ is not None else tw.eta_s + 180)))
         return g, (tw.eta_s if tw is not None else None)
 
     @staticmethod
@@ -1949,7 +2014,7 @@ class MissionBuilder:
             g.add_waypoint(pt(x, y), a, (spec.profile.aar_kts if name == "TKR" else 300) * KPH, name)
 
     # ---- Link 16 / SADL: the package flies as one network ------------------------------------------------------------------
-    def _datalinks(self, package, awacs_unit) -> list:
+    def _datalinks(self, package) -> list:
         stn = {}
         whois = []
         for f, g in self.flight_groups:               # your own flight is one network: wingmen are members of each other (blue on the HSD/TAD)
@@ -1983,22 +2048,24 @@ class MissionBuilder:
             pidx = package.flights.index(f)
             whois.append({"cs": f"{f.callsign}-1..{f.count}", "ac": f.aircraft, "role": (f.tag or f.role.value)[:7],
                           "m3": f"4{package.number % 8}{pidx % 8}{(pidx + package.number) % 8}", "stn": lead_stn, "you": f.is_player})
+        # v0.41.41 (XO 2026-10-20): the AWACS is neither member nor donor. Members are your wing (above); donors are the Link 16 capable flights
+        # of the SAME package (their leads), nothing from other packages and no support aircraft
+        mine = {id(f_) for f_ in package.flights if not f_.tag}
         for f, g in self.flight_groups:
+            if id(f) not in mine:
+                continue
             for u in g.units:
                 dl = getattr(u, "datalink", None)
                 if dl is None:
                     continue
                 net = dl.network
-                if awacs_unit is not None and dl.link_type.name == "LINK16":
-                    net.add_donor(awacs_unit.id)
                 for of, og in self.flight_groups:
-                    if of is f:
+                    if of is f or id(of) not in mine:
                         continue
                     odl = getattr(og.units[0], "datalink", None)
                     if odl is None or odl.link_type != dl.link_type:
                         continue
-                    ok = bool(net.has_donors and net.add_donor(og.units[0].id))
-                    if not ok:
+                    if not net.add_donor(og.units[0].id):
                         net.add_member(og.units[0].id)
         return whois
 
@@ -2009,11 +2076,20 @@ class MissionBuilder:
         for p in g.points:
             p.position = mapping.Point(p.position.x + dx, p.position.y + dy, self.t)
 
+    @staticmethod
+    def _ground_orders(g):
+        """v0.41.39: explicit orders on a ground group: weapons free, alarm state red (radars up, guns manned). Left at the default a group may sit
+        at 'auto' and hold fire on aircraft parked in range; set here it engages whatever it sees. The Mission Editor has no target-priority
+        order for ground units, so 'other ground units before parked jets' is not enforced: DCS picks the target (usually the nearest threat)."""
+        if any(isinstance(t_, task.OptROE) for t_ in g.points[0].tasks):
+            return
+        g.points[0].tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
+        g.points[0].tasks.append(task.OptAlarmState(2))
+
     def _drive(self, g, via, speed_ms):
         for q in via:
             g.add_waypoint(mapping.Point(q[0], q[1], self.t), PointAction.OffRoad, speed_ms * 3.6)
-        g.points[0].tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
-        g.points[0].tasks.append(task.OptAlarmState(2))
+        self._ground_orders(g)
 
     def _spawn_cas_support(self, package, plan, geom, manifest):
         if not package.jtac:
@@ -2174,7 +2250,7 @@ class MissionBuilder:
                 out.append((a, g))
         return sorted(out, key=lambda ag: dist(ag[0].x, ag[0].y, t.x, t.y))
 
-    def _jsow_tasks(self, wp, f, site, package) -> None:
+    def _jsow_tasks(self, wp, f, site, package, eta_s=None) -> None:
         """A JSOW slinger's attack from its launch point: one release per radar of the target site (search and track radars; the first two
         vehicles of a site whose radars ride on the launchers), aimed at the radar's last-known position give or take JSOW_AIM_ERR_M. The
         flight's JSOWs are shared out between the aim points. A radar that shuts down to dodge the HARMs is still where it was last seen."""
@@ -2184,17 +2260,24 @@ class MissionBuilder:
         aims = radars[:3] or list(site.units)[:2]
         aims += [g_.units[0] for _, g_ in self._cover_tors(package) if g_.units]          # and the Tors that guard it (they shoot JSOWs down)
         if package.objective.aim == "STANDOFF":            # Standoff DEAD: the launchers too (the site is only dead when they are)
-            aims = aims[:2] + [u for u in aims[2:] if u not in radars[:3]]                 # two radars, the Tors...
-            aims += [u for u in site.units if u not in radars and u not in aims and " ln" in str(getattr(u, "type", "")).lower()]
-            aims = aims[:JSOW_PER_JET.get(f.aircraft, 2)]                                   # ...as far as one JSOW per aim point goes
+            # v0.41.47: two JSOWs a jet (the Hornet kit went from four to two), so two aim points: the covering Tor first (it shoots JSOWs and HARMs down), then a
+            # launcher, then the radars (the HARM flights go for those). Before: two radars, the Tors, the launchers, up to four.
+            tors_ = [g_.units[0] for _, g_ in self._cover_tors(package) if g_.units]
+            lnx_ = [u for u in site.units if u not in radars and u not in tors_ and " ln" in str(getattr(u, "type", "")).lower()]
+            aims = (tors_[:1] + lnx_[:1] + (radars[:3] or list(site.units)[:2]) + tors_[1:] + lnx_[1:])[:JSOW_PER_JET.get(f.aircraft, 2)]
         each = max(1, JSOW_PER_JET.get(f.aircraft, 2) // len(aims))
         exp = task.Expend.Four if each >= 4 else (task.Expend.Two if each >= 2 else task.Expend.One)
         rng = random.Random(f"{self.state.campaign_id}:{package.id}:{f.id}:jsow")
         wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
+        if eta_s is not None:      # v0.41.47: when the window ends the jet stops hunting: weapons free sent XO's 2026-10-20 Squids on for a third salvo at 21 nm of the SAMs
+            rf_ = task.ControlledTask(task.OptROE(task.OptROE.Values.ReturnFire)); rf_.start_after_time(int(eta_s + JSOW_ATTACK_S)); wp.tasks.append(rf_)
         for u in aims:
             a, d = rng.uniform(0, 2 * math.pi), JSOW_AIM_ERR_M * math.sqrt(rng.random())
             x, y = u.position.x + math.cos(a) * d, u.position.y + math.sin(a) * d
-            wp.tasks.append(task.Bombing(mapping.Point(x, y, self.t), expend=exp, group_attack=True))
+            bt_ = task.ControlledTask(task.Bombing(mapping.Point(x, y, self.t), expend=exp, group_attack=True))
+            if eta_s is not None:                                  # v0.41.46: no pressing on for a second salvo: Squid 2 flew to 14 nm of the SA-11 for its second JSOW
+                bt_.stop_after_time(int(eta_s + JSOW_ATTACK_S))
+            wp.tasks.append(bt_)
 
     # ---- late activation helper ------------------------------------------------------------------------------------------------
     def _late(self, g, seconds):
@@ -2396,9 +2479,16 @@ class MissionBuilder:
         geom.sweep = is_sweep(package.objective)
         tid_ = package.objective.target_id
         tt_ = self.state.assets.get(tid_) if tid_ else None
-        geom.jsow_keep = [(a.x, a.y, HARM_LAUNCH_NM) for a in self.state.assets.values()            # every live SA-10 near the target, itself included
+        geom.jsow_keep = [(a.x, a.y, max(HARM_LAUNCH_NM, JSOW_KEEP_HIGH_NM)) for a in self.state.assets.values()            # every live SA-10 near the target, itself included (v0.41.46: 40 nm, as the loop used to force)
                           if tt_ is not None and a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not getattr(a, "suppressed", False)
                           and dist(a.x, a.y, tt_.x, tt_.y) <= (tm.UMBRELLA_KM / 1.852 + HARM_LAUNCH_NM) * NM]
+        # v0.41.46: the target site's own live SAMs too (SA-11 20 nm, SA-6 16, SA-2 26, SA-3 15: AVOID_NM, reach plus margin): the 2026-10-20 run's JSOW point sat
+        # 19.6 nm from the Gudauta SA-11 it was shooting at and lost two jets to it
+        if tt_ is not None:
+            own_ = tm.cluster_ids(tt_)
+            geom.jsow_keep += [(a.x, a.y, AVOID_NM[a.variant]) for a in self.state.assets.values()
+                               if a.id in own_ and a.kind == AssetKind.SAM and a.variant in AVOID_NM and a.variant not in tm.UMBRELLA_VARIANTS
+                               and not a.destroyed and a.health > 0.05 and not getattr(a, "suppressed", False)]
         # v0.41.11: every other live SA-10 within 150 nm: AI strike / SEAD / CAS routes bend around it (routes.avoid_circles)
         um_ = tm.umbrella_site(self.state, tt_) if tt_ is not None else None             # the one the HARMs go for: the flights must come to it
         # v0.41.20: every live medium / long-range SAM (SA-2/3/6/11/10), each by its own reach (AVOID_NM). A site whose circle holds the target
@@ -2424,6 +2514,45 @@ class MissionBuilder:
             geom.stand[key] = profiles.station(self.state, pts, t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000), geom.egr)
             if geom.sweep:
                 geom.stand[key] = self._sweep_station(geom.stand[key], tx, ty, pts[0], package)
+            elif f.role in (Role.SWEEP, Role.ESCORT) and any(getattr(x_, "kit", "") == "JSOW" for x_ in package.flights):
+                # v0.41.42 (XO 2026-10-20): the package escort shepherds the JSOW flight, not the HARM shooters' station: it holds ESCORT_BEHIND_NM
+                # behind the JSOW launch point (on its own axis), where the JSOW jets release and turn home (the 2026-10-20 run lost all five to MiG-29s
+                # with the escort 20 nm away). Not kept out of SAM cover: that is the shepherd's risk. It leaves from the station, not by the package egress.
+                jx_, jy_ = jsow_launch_xy(geom, self._jsow_side(package, geom))
+                ax_ = bearing(tx, ty, jx_, jy_)
+                if f.role == Role.SWEEP:
+                    ex_, ey_ = offset(jx_, jy_, ax_, ESCORT_BEHIND_NM * NM)
+                else:
+                    # v0.41.43 (XO 2026-10-20): the TARCAP overwatches from just behind the JSOW flight (where it used to turn round with the HARM shooters),
+                    # TARCAP_BEHIND_NM back, and further back (1 nm steps, at most 14 more) until it is outside every live medium / long-range SAM ring plus
+                    # the stand-off margin. The JSOW point itself is already 40 nm from every SA-10, so the SA-10 rule holds.
+                    sites_ = profiles._cover_sites(self.state, t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000))
+                    back_ = TARCAP_BEHIND_NM
+                    while True:
+                        ex_, ey_ = offset(jx_, jy_, ax_, back_ * NM)
+                        if back_ >= TARCAP_BEHIND_NM + 14 or all(dist(ex_, ey_, a_.x, a_.y) > r_ for a_, r_ in sites_):
+                            break
+                        back_ += 1.0
+                geom.stand[key] = (ex_, ey_, [], dist(ex_, ey_, tx, ty) / NM, False)
+
+    def _launch_points(self, package, geom) -> list:
+        """v0.41.42: where this package's AI shooters launch (the HARM point, the JSOW launch point, else the IP), worked out from the same route
+        planning the flights use, so the TARCAP / escort cover circle knows them whatever order the flights are built in."""
+        out = []
+        for f in package.flights:
+            if f.tag or f.role not in (Role.SEAD, Role.STRIKE, Role.CAS) or (f.is_player and not self.o.player_is_ai):
+                continue
+            base = self.state.bases[f.base_id]
+            try:
+                wps = plan_route(f.role, (base.x, base.y), geom, AIRCRAFT[f.aircraft].profile, is_player=False, tanker_xy=None,
+                                 jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package),
+                                 harm_deg=self._harm_deg(package, geom))
+            except ValueError:
+                continue
+            lp_ = next((w for w in wps if w.action in ("SEAD", "JSOW")), None) or next((w for w in wps if w.name == "IP"), None)
+            if lp_ is not None:
+                out.append((lp_.x, lp_.y))
+        return out
 
     def _sam_clear(self, x, y) -> bool:
         """v0.41.14: a friendly orbit is clear of SAMs: 35 nm from every live SA-10 (the reach measured in the runs; the ring table says 48 nm, which
@@ -2435,12 +2564,12 @@ class MissionBuilder:
         return (all(dist(x, y, a.x, a.y) >= r_ + 15 * NM for a, r_ in self._rings_c)
                 and all(dist(x, y, a.x, a.y) >= SA10_AVOID_NM * NM for a in self._sa10_c))
 
-    def _zone_sams(self, package, fighters: bool = False):
+    def _zone_sams(self, package, fighters: bool = False, long_only: bool = False):
         """v0.41.22: the live medium / long-range SAMs a blue circle or HARM point must stay out of. Fighters (v0.41.24): every SA-2/3/6/11/10.
         Shooters: every one except the sites the package's HARMs are tasked on (v0.41.25: its target's cluster and the umbrella SA-10; for a CAS
         escort also the sites covering the CAS target)."""
         st = self.state
-        key = (getattr(package, "id", None), fighters)
+        key = (getattr(package, "id", None), fighters, long_only)
         c_ = getattr(self, "_zsams_c", {})
         if key in c_:
             return c_[key]
@@ -2458,19 +2587,19 @@ class MissionBuilder:
                 skip |= {x.id for x in covering_sams(st, tga_)}
         out = [(a.x, a.y, AVOID_NM[a.variant]) for a in st.assets.values()
                if a.kind == AssetKind.SAM and a.variant in AVOID_NM and not a.destroyed and a.health > 0.25 and not getattr(a, "suppressed", False)
-               and a.id not in skip]
+               and a.id not in skip and (not long_only or a.variant in tm.UMBRELLA_VARIANTS)]      # v0.41.42: long_only = only the SA-10s keep a shooter-cover circle out
         c_[key] = out
         self._zsams_c = c_
         return out
 
-    def _clear_zone(self, zone, package, floor_nm: float = 8.0, fighters: bool = True):
+    def _clear_zone(self, zone, package, floor_nm: float = 8.0, fighters: bool = True, long_only: bool = False):
         """v0.41.22: a blue air-to-air engage circle (x, y, radius nm) trimmed so it ends outside every SAM's reach it is not sent against
         (the v0.41.21 scan: about 300 of 700 fight circles reached into an SA-2 / SA-6 / SA-11, so a fight that started on a clean station was
         chased over a SAM). Never below floor_nm."""
         if zone is None:
             return None
         x, y, r = zone
-        for sx, sy, snm in self._zone_sams(package, fighters):
+        for sx, sy, snm in self._zone_sams(package, fighters, long_only):
             r = min(r, dist(x, y, sx, sy) / NM - snm)
         return (x, y, max(floor_nm, r))
 
@@ -2566,17 +2695,17 @@ class MissionBuilder:
         if stw.action == "SWEEPSTN":
             return int(stw.eta_s + TARCAP_MIN * 60)
         if stw.action == "TARCAP":
-            return int(max(stw.eta_s + TARCAP_MIN * 60 // 2, t_end + TARCAP_AFTER_TOT_S))
+            return int(max(stw.eta_s + TARCAP_MIN * 60, t_end + TARCAP_AFTER_TOT_S))      # v0.41.38 (XO): at least TARCAP_MIN (15) min on station, then until the last striker is off + 5 min
         return int(max(stw.eta_s + 120, t_end + ESCORT_AFTER_TOT_S))
 
-    def _room(self, x, y, package, fighters: bool = True) -> float:
+    def _room(self, x, y, package, fighters: bool = True, long_only: bool = False) -> float:
         """v0.41.23: how far (nm) a circle centred here can reach before it touches a SAM (v0.41.24: for fighters, any SAM, the target's included)."""
-        return min([dist(x, y, sx, sy) / NM - snm for sx, sy, snm in self._zone_sams(package, fighters)] + [999.0])
+        return min([dist(x, y, sx, sy) / NM - snm for sx, sy, snm in self._zone_sams(package, fighters, long_only)] + [999.0])
 
     COVER_SHIFTS = (0, 4, 8, 12, 16, 20, 24)                 # v0.41.23: nm the centre may move, toward our side first, then sideways
     COVER_TURNS = (0, 30, -30, 60, -60, 90, -90)
 
-    def _cover_circle(self, pts, c0, package, want_nm, back_brg, floor_nm: float = 8.0):
+    def _cover_circle(self, pts, c0, package, want_nm, back_brg, floor_nm: float = 8.0, long_only: bool = False, max_nm: float = 999.0):
         """v0.41.23: a fight circle (x, y, radius nm) that takes in every point in `pts`, at want_nm at least, clear of every SAM the package is
         not sent against. The centre starts at c0 and moves up to 24 nm, toward back_brg first (our side), then up to 90 degrees off it, nearest
         first. No position covers everything: the one that covers the most points (the first ones first: launch points before the station) with
@@ -2585,7 +2714,7 @@ class MissionBuilder:
         for sh in self.COVER_SHIFTS:
             for tn in (self.COVER_TURNS if sh else (0,)):
                 cx, cy = offset(c0[0], c0[1], back_brg + tn, sh * NM) if sh else c0
-                room = self._room(cx, cy, package)
+                room = min(self._room(cx, cy, package, long_only=long_only), max_nm)
                 need = max(dist(cx, cy, px, py) / NM for px, py in pts) + 2
                 r = max(want_nm, need)
                 if room >= r:
@@ -2801,6 +2930,7 @@ class MissionBuilder:
         g = self._platoon(self.usa, f"Friendly {label}", comp, dx, dy, head, F.Star if kind != "sector" else F.Line, scale=scale)
         if g is None:
             return
+        self._ground_orders(g)                          # v0.41.39
         names = []
         for k, u in enumerate(g.units, 1):
             u.name = f"{aim}|{k}"; names.append(u.name)

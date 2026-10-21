@@ -43,6 +43,7 @@ local gateLog = {}
 local kills = {}
 local shots = {}
 local jams = {}
+local TRACK = {}                  -- v0.41.43: group name -> {{t, x, z, alt_m}, ...} the lead's position every 30 s (flights and red patrols), for finding where a flight really went
 local pulls = {}                  -- v0.41.34: support CAP pull-backs: group, time, how far out (nm) it was
 local deaths = {}                 -- why each loss happened: last hit seen, last fuel and altitude sample (so an unexplained loss still tells something)
 local LASTHIT = {}                -- unit name -> {by, w, t} of the last hit on it
@@ -89,8 +90,8 @@ local function num(x) if x then return string.format("%d", math.floor(x)) end re
 local function deathsJson()
   local o = {}
   for _, k in ipairs(deaths) do
-    o[#o + 1] = string.format('{"n":"%s","t":%d,"ev":"%s","by":"%s","w":"%s","ago":%s,"fuel":%s,"alt_m":%s,"kts":%s,"sample_age":%s}',
-      esc(k.n), k.t, esc(k.ev), esc(k.by), esc(k.w), num(k.ago), k.fuel and string.format("%.2f", k.fuel) or "null", num(k.alt), num(k.kts), num(k.sage))
+    o[#o + 1] = string.format('{"n":"%s","t":%d,"ev":"%s","by":"%s","w":"%s","ago":%s,"fuel":%s,"alt_m":%s,"kts":%s,"sample_age":%s,"x":%s,"z":%s,"ground_m":%s}',
+      esc(k.n), k.t, esc(k.ev), esc(k.by), esc(k.w), num(k.ago), k.fuel and string.format("%.2f", k.fuel) or "null", num(k.alt), num(k.kts), num(k.sage), num(k.x), num(k.z), num(k.gh))
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
@@ -110,6 +111,15 @@ local function pullsJson()
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
+local function tracksJson()
+  local o = {}
+  for gn, pts in pairs(TRACK) do
+    local q = {}
+    for _, e in ipairs(pts) do q[#q + 1] = string.format("[%d,%d,%d,%d]", e[1], e[2], e[3], e[4]) end
+    o[#o + 1] = string.format('"%s":[%s]', esc(gn), table.concat(q, ","))
+  end
+  return "{" .. table.concat(o, ",") .. "}"
+end
 local function gatesJson()
   local o = {}
   for _, e in ipairs(gateLog) do
@@ -121,9 +131,9 @@ end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"pulls":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"pulls":%s,"tracks":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), pullsJson(), CFG, splashN, splashK))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), pullsJson(), tracksJson(), CFG, splashN, splashK))
   f:close()
 end
 local function nameOf(obj)
@@ -353,7 +363,7 @@ function H:onEvent(e)
         local lh, sm, now = LASTHIT[n], SAMPLE[n], timer.getTime()
         local evn = (id == world.event.S_EVENT_CRASH) and "crash" or ((id == world.event.S_EVENT_PILOT_DEAD) and "pilot_dead" or "dead")
         deaths[#deaths + 1] = { n = n, t = math.floor(now), ev = evn, by = lh and lh.by or "", w = lh and lh.w or "", ago = lh and (now - lh.t) or nil,
-                                fuel = sm and sm.fuel, alt = sm and sm.alt, kts = sm and sm.spd, sage = sm and (now - sm.t) or nil }
+                                fuel = sm and sm.fuel, alt = sm and sm.alt, kts = sm and sm.spd, sage = sm and (now - sm.t) or nil, x = sm and sm.x, z = sm and sm.z, gh = sm and sm.gh }
       end
       dead[n] = true; dump(); siteDead(n)
     end
@@ -425,12 +435,24 @@ timer.scheduleFunction(function(_, t)
     if okg and groups then
       for _, g in ipairs(groups) do
         local oku, units = pcall(function() return g:getUnits() end)
+        pcall(function()                                  -- v0.41.43: the lead's track (first unit that exists), at most 400 points a group
+          for _, u0 in ipairs((oku and units) or {}) do
+            if u0:isExist() then
+              local gn, p0 = g:getName(), u0:getPoint()
+              local tr = TRACK[gn] or {}
+              TRACK[gn] = tr
+              if #tr < 400 then tr[#tr + 1] = { math.floor(timer.getTime()), math.floor(p0.x), math.floor(p0.z), math.floor(p0.y) } end
+              break
+            end
+          end
+        end)
         for _, u in ipairs((oku and units) or {}) do
           pcall(function()
             local un = u:getName()
             if un and u:isExist() then
               local p, v = u:getPoint(), u:getVelocity()
-              SAMPLE[un] = { fuel = u:getFuel(), alt = p.y, spd = math.sqrt(v.x ^ 2 + v.y ^ 2 + v.z ^ 2) * 1.944, t = timer.getTime() }
+              local okh, gh = pcall(function() return land.getHeight({ x = p.x, y = p.z }) end)
+              SAMPLE[un] = { fuel = u:getFuel(), alt = p.y, spd = math.sqrt(v.x ^ 2 + v.y ^ 2 + v.z ^ 2) * 1.944, t = timer.getTime(), x = p.x, z = p.z, gh = okh and gh or nil }
             end
           end)
         end

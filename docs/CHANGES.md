@@ -1,3 +1,99 @@
+# CHANGES.md
+
+## v0.41.49
+
+* **AI flights fly home above the ridges** (XO 2026-10-20 22:07 run: Venom 5-2, a lone F-16 TARCAP, went from 26,000 ft to 3,000 ft MSL about 50 nm out and flew level for 100 nm over rising ground, 914 to 1,127 m on its track, then died at 2574 s with 84% fuel and nobody shooting; every other flight went home over water at 2,000 ft). Cause, confirmed by the track: the recovery point (RCV) is added after the terrain check at a fixed 3,000-6,000 ft, and an AI flight drops to the next point's altitude right after the last one.
+  * `home_leg_ft` (routes.py): the RCV altitude is raised to what the leg from the last route point needs (ground within 5 nm of the leg + 1,000 ft, or + 2,000 ft over mountains; capped at 20,000 ft). Same rule and margin as `terrain_clear`; without a ground-height scan nothing changes.
+  * Support CAPs now run `terrain_clear` too (the support-CAP branch never did).
+  * The mission hook's death record carries the last sampled position (`x`, `z`) and the ground height under it (`ground_m`, from `land.getHeight`), so the next run says where a jet died and whether the ground was near its altitude.
+  * Not tested in DCS. Cost of a wrong guess: a flight comes home higher and steeper in its last 8 nm (RCV to the runway is not stepped).
+* Smoke test: `home_leg_ft` with and without a relief grid.
+
+## v0.41.48
+
+* **Ground groups keep off the runways** (XO 2026-10-20 20:53: a target AAA formation lay diagonally across a runway; it could block the side's own aircraft). Sites and blue base defences are now moved sideways off any runway corridor before they are placed (`_on_runway`, `_off_runway` in `mission_builder.py`; the site centre is moved BEFORE it is stored, so the bomb point and the units agree).
+  * pydcs gives only each runway's heading, so the strip is modelled as a corridor through the airfield reference point: `RUNWAY_HALF_LEN_M` 2600 m each way, `RUNWAY_HALF_WIDTH_M` 120 m either side, plus the group's own footprint margin (judgment call; not a surveyed runway). A site that is on it moves to the nearest clear dry spot up to 2.4 km away.
+  * Not tested in DCS. Cost of a wrong guess: a strike target sits a few hundred metres from the airfield centre, or a corridor too wide pushes a defence slightly further out.
+* Smoke test: "[runway]" checks no vehicle lies on a runway strip.
+
+## v0.41.47
+
+* **The JSOW flight stops hunting after its salvo** (XO 2026-10-20 18:27: the Squids lingered, moved closer after launching; all eight were lost, seven to Sukhumi / Gudauta MiGs, one to the SA-11). From the state file: the 30 nm launch point worked (first releases at 52-66 km, jets at 30 nm of the SAMs), but each Hornet then released a second and third time at 47-50 km (1354-1470 s, Squid 2's flight has ONE planned aim yet its jets fired at four different sites), so the jets crept to 21 and 16 nm of the SAMs and turned late. Cause: the JSOW waypoint sets WEAPON FREE, so a jet with JSOWs left hunts every radar and launcher it can see, closing to range; v0.41.46's stop time only ended the planned Bombing tasks.
+  * A timed Option task on the JSOW waypoint: `JSOW_ATTACK_S` (120 s) after the point's ETA the ROE goes to Return Fire, so the flight drops what it is hunting and flies its route home (EGR already sets Return Fire).
+  * **The Hornet JSOW kit is XO's own Mission Editor loadout** (captured from his `.miz` 2026-10-20): AGM-154A on stations 2 and 8 (TWO per jet, was four in two BRU-55s), AIM-9X on 1 and 9, AIM-120C-5 on 4 and 6, fuel tanks on 3 and 7, a Litening pod on 5 (was a third tank). `JSOW_PER_JET` FA-18C 4 -> 2 (the Viper kit already has two and a pod). XO: send more jets and lose fewer of them; later packages mop up.
+  * **Two aim points a jet**: in a Standoff DEAD the JSOW flight now aims the covering Tor first (it shoots JSOWs and HARMs down), then a launcher, then the radars (the HARM flights go for those). Before: two radars, the Tors, the launchers, up to four.
+  * Not tested in DCS. Cost: if a tasked release is still pending when the window ends it is dropped (JSOWs not fired); an open question is whether DCS drops a running attack when the ROE changes.
+* Smoke test: "[jsow]" checks for the timed Return Fire and the new Hornet kit.
+
+## v0.41.46
+
+* **JSOWs are flung further out** (XO 2026-10-20: the JSOWers were still massacred; SAMs target them and enemy scrambles jump them). From XO's run (tracks + shots): 5 of 8 Squids lost, two to the Gudauta SA-11 at 14-18 nm, three to its scrambled MiG-29s. The AGM-154As released from 20,000 ft at 45-65 km (24-35 nm), but the JSOW point was 20 nm from the target, on the target's own SA-11 ring (about 19 nm), and the jets flew on to it.
+  * `JSOW_LAUNCH_NM` 20 -> 30 (judgment call: inside the release range seen, about 10 nm clear of the SA-11 ring). A launch point pushed past it still goes high (`JSOW_HIGH_ALT_FT`).
+  * The JSOW point now also keeps clear of the TARGET SITE's own live SAMs, each by its own ring (`AVOID_NM`: SA-11 20, SA-6 16, SA-2 26, SA-3 15); SA-10s keep the 40 nm they had (the loop used to force it for every entry).
+  * The JSOW release tasks are time-limited: `JSOW_ATTACK_S` (120 s) after the launch point's ETA the flight turns for home. Before, Squid 2 flew on to 14 nm of the SA-11 for a second salvo.
+  * The TARCAP and escort stations follow the new point automatically.
+  * Not tested in DCS. Cost: if the AI will not release from 30 nm the JSOWs stay on the jets and the site survives; the scrambled MiGs are not stopped, only given about 10 nm more to fly.
+* Smoke test: "[shepherd]" checks the 30 nm point; "[jsow]" checks the release tasks have a stop time.
+
+## v0.41.45
+
+* **Default merge radius is 25 nm** (XO 2026-10-20; was 50): fewer packages fold into yours, so fewer units, but nearby packages still merge. Only the default changes: a campaign or settings file that already stores a merge radius keeps its value (change it in Settings > Package merging). Smoke test and GUIDE updated.
+* XO's own request, in his words: "Default merge radius to 25."
+
+## v0.41.44
+
+* **Station orbits are circles, not race-tracks** (XO 2026-10-20: "very long orbits, north to south"; the new tracks confirm it: Springfield 7 and Hornet 6 flew 57-60 nm from their station to RTB and back). DCS's default Race-Track orbit runs from its waypoint to the NEXT waypoint, which for a station is RTB. TARCAP, escort, sweep and SAM-held fighters now orbit in a Circle at their station. Support-CAP racetracks (CAP1 -> CAP2) are unchanged.
+* Smoke test: the TARCAP check also asserts no station orbit is a Race-Track.
+
+## v0.41.43
+
+* **The TARCAP overwatches from behind the JSOW flight** (XO 2026-10-20: after the HARM shooters launch, the TARCAP turned round with them, then was out of position when red's second wave arrived; XO: that turn-round point should be the TARCAP's station). In a package with a JSOW flight the TARCAP station is `TARCAP_BEHIND_NM` (16 nm, judgment call: twice the escort's 8) behind the JSOW launch point on its axis, stepped back 1 nm at a time (at most 14 more) until it is outside every live medium / long-range SAM ring plus the stand-off margin. No 9 nm sideways step for these packages.
+* **Position tracks in `SQE_state.json`**: the Lua hook records each group's lead unit every 30 s (`"tracks": {group: [[t, x, z, alt_m], ...]}`, at most 400 points a group) so a run can show where the TARCAP, escort and strikers actually flew.
+* Not tested in DCS. Cost: a TARCAP that sits too far back to reach red fighters, or one that still chases (the tracks will show which). Not changed: the engage circle and the support-CAP pull-back.
+* Smoke test: "[shepherd]" also checks the TARCAP station.
+
+## v0.41.42
+
+* **The JSOW flight is no longer left alone** (XO 2026-10-20: the run lost all five Standoff DEAD Hornets to Sukhumi / Gudauta MiG-29s after their JSOW release; the TARCAP and escort sat at the HARM point, 17-18 nm from the JSOW launch points, and the TARCAP's circle did not reach them). Two changes:
+  * **The package escort shepherds the JSOW flight**: in a Standoff DEAD (a package with a JSOW flight) the escort's station is `ESCORT_BEHIND_NM` (8 nm, judgment call) behind the JSOW launch point, on the JSOW axis, not at the HARM shooters' stand-off station. It is NOT kept out of SAM cover (that is the shepherd's risk); it leaves from its station. Packages without a JSOW flight are unchanged. `routes.jsow_launch_nm` / `jsow_launch_xy` pulled out of `plan_route` so the builder can ask where the JSOW flight will launch.
+  * **The TARCAP / escort fight circle takes in every shooter's launch point**: it is now kept out only by SA-10 reach (`_zone_sams(long_only)`), no longer by SA-2/3/6/11 rings, and may be up to `TARCAP_COVER_MAX_NM` (35 nm, judgment call). Before, the SA-11 rings pushed the circle 21 nm west of the JSOW points. The shooters' launch points are known before any flight is built (`_launch_points`), so the order flights are built in no longer matters.
+  * Kept: `STATION_OFFSET_NM` (the TARCAP station's 9 nm sideways step toward the nearest red field: it puts the TARCAP on red's approach, not a cover offset) and the STATION_FRAC / STANDOFF_MARGIN_NM SAM stand-off of the TARCAP's own station.
+  * Not tested in DCS. Cost: an escort or a TARCAP that chases into a SAM site (XO accepted this).
+* Smoke test: new "[shepherd]" check (its own session).
+
+## v0.41.41
+
+* **Divert tower on COMM2 CH3** (XO 2026-10-20): it was COMM1 CH5. Radio presets, kneeboard and briefing follow the layout. An Air Force jet gets the divert field's VHF tower (its COMM2 is VHF only); a Navy jet gets the UHF tower. COMM1 now holds only AWACS, tanker(s) and JTAC.
+* **Link 16: the AWACS is no longer a donor or member** (XO): members are your wing; donors are the Link 16 capable flights of the SAME package (their leads), and no other package's or support aircraft. Briefing line reworded. Not tested in DCS (does the HSD/TAD show the package flights?).
+* Smoke test: radio layout check covers the divert channel.
+
+## v0.41.40
+
+* **Escorts stick to the last striker until it is out** (XO 2026-10-20: the DEADers were left behind at the mercy of enemy air). The package escort (SWEEP role) used to leave 3 min after the last striker's time over target, about when the strikers only reached their egress point. It now stays until the last striker's egress point + 2 min (`ESCORT_AFTER_EGR_S`, a judgment call), still capped at 30 min past its own hold; the old TOT + 3 min stays as the floor. TARCAP is unchanged (minimum time, leaves last by its own rule). Merged packages count by their TOT as before (their egress is not tracked). Smoke test: new "[escort egress]" check.
+
+## v0.41.39
+
+* **Ground units get explicit orders** (XO 2026-10-20): every red garrison and armour column, every blue site (garrisons, sector forces) and the CAS task force now carry weapons free + alarm state red on their first waypoint (`_ground_orders` in `mission_builder.py`; `_drive` uses it too, so the CAS drive-in is unchanged). SAM sites keep their own orders. Limit: the Mission Editor has no target-priority order for ground units, so "other ground units first, then parked jets" is NOT enforced; DCS picks the target. Untested in DCS whether ground AI fires at parked aircraft at all.
+* Smoke test: new "[ground orders]" check.
+
+## v0.41.38
+
+* **TARCAP stays at least 15 minutes, then until the last striker is off target + 5 minutes** (the 15-minute minimum is back: it had been halved to 7.5 min in `_hold_end`) (XO 2026-10-20: TARCAPs left as soon as the SEAD flight headed home). Cause: the hold ended at the TOT of the flight being built for the player plus 5 minutes (at least 7.5 minutes after arriving). When the player flew the TARCAP that TOT was the TARCAP's own station time (Day 4 mission: station 1468 s, stop 1918 s = 7.5 min); when the player flew SEAD it was the HARM time, so the TARCAP left with the SEAD flight. Now `mission_builder.py` also feeds the latest target time of the package's own strike / SEAD / CAS flights into `_extend_holds` (capped as before by `HOLD_EXTEND_MAX_S`).
+* The TARCAP task text now says "at least 15 minutes and until the last strike flight is off target plus 5 minutes" (packages.py, models.py comment). Smoke test: new "[tarcap hold]" check.
+* Build: docs/GUIDE.md now says "Python 3.12 or 3.13" (was 3.11 or 3.12). The release workflow now builds with Python 3.13 (was 3.12) to match XO's machine and the Crew Chief workspace (smoke test passes on 3.13); `requirements-build.txt` needs PyInstaller 6.10 or newer. Not tested: the Windows release build itself.
+* Docs: CLAUDE.md #82 / #83 (always reset origin URL; one queue doc; Sonnet 5.5 build rule), DESIGN_NOTES update for v0.41.36/37. XO's own commits since v0.41.35: v0.41.36 and v0.41.37 below, `.gitignore` removed, version rule in CLAUDE.md.
+
+## v0.41.37
+
+* **Enhanced stationing logic for TARCAP and ESCORT**:
+  - Adjusted `STATION_FRAC` to 0.85 to provide better coverage from long-range SAMs.
+  - Increased `STANDOFF_MARGIN_NM` to 5 nm to ensure effective cover from medium and short-range SAMs.
+  - Improved the stationing logic to be more robust and ensure effective air cover.
+
+## v0.41.36
+
+**(XO) Player SPAWN WP on Kneeboard** Fixed the issue where player flights from land bases show SPAWN WP.
+
 ## v0.41.35
 
 **Tanker CAP no longer weapons free.** In all three of XO's runs of 2026-10-16/17 the chasing support CAP was the tanker CAP, the only one with an explicit weapons-free ROE (v0.41.26, to make it shoot first). Weapons free means "engage any enemy group in contact" (Mission Editor docs, quoted on the DCS forum), which overrides the engage circle. In the third run the v0.41.34 pull-back fired twice (35 and 55 nm out) and Viper 1 kept going to 68 nm, firing at an Su-27 101 nm from its station, until the Sukhumi S-300 killed both jets: the ROE option outlives a new route. The base CAP, HAVCAP and carrier CAP use the default ROE and stayed home. Now the tanker CAP uses the default too; it keeps continuous radar search and maximum-range shots. Cost: it may shoot first a little less eagerly. The pull-back stays as a backstop. Smoke test: no support CAP is weapons free. Evidence is three runs pointing the same way, not proof.
