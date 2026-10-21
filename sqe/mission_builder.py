@@ -913,7 +913,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _carrier_heading(self, x, y, prefer):
         return carrier_heading(x, y, prefer)
 
-    def _platoon(self, country, name, comp, x, y, heading, formation, scale=1.0):
+    def _platoon(self, country, name, comp, x, y, heading, formation, scale=1.0, spacing=None):
         types = []
         for vname, n in comp:
             vt = _vt(vname)
@@ -923,7 +923,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             types += [vt] * max(1, round(n * scale))
         if not types:
             return None
-        return self.m.vehicle_group_platoon(country, name, types, mapping.Point(x, y, self.t), heading=int(heading) % 360, formation=formation)
+        g = self.m.vehicle_group_platoon(country, name, types, mapping.Point(x, y, self.t), heading=int(heading) % 360, formation=formation)
+        if spacing and formation == F.Star:                  # pydcs lays a star out 20 m apart; a wider one for SAM batteries
+            g.formation_star(int(heading) % 360, spacing)
+        return g
 
     def _place_base(self, base, tx, ty):
         o = self.o
@@ -946,7 +949,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 x, y = site_at("pat", ang, 4500)
                 if bt["patriot_ln"]:
                     self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
-                                  ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star)
+                                  ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M)
                 x, y = site_at("aaa", ang + 120, 3500)
                 if bt["aaa"]:
                     self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line)
@@ -956,7 +959,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if bt["hawk"]:
                     x, y = site_at("hawk", ang + 50, 6000)
                     self._platoon(self.usa, f"BASEDEF {base.name} HAWK", [("Hawk_sr", 1), ("Hawk_tr", sams.BLUE_HAWK_TR), ("Hawk_pcp", 1), ("Hawk_cwar", 1),
-                                  ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star)
+                                  ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M)
             return
         hdg = getattr(self, '_cv_hdg', {}).get(base.id)
         if hdg is None:

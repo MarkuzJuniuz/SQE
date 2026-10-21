@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.69, blue Patriot and HAWK batteries stand apart
+
+* **XO's 2026-10-21 AI run (Standoff DEAD, Sukhumi SA-11):** at 673 s a Senaki Patriot launcher fired at a Su-27 and the launch hit the 11 units around it (launchers, radar, ECS, command post, power plant: `hit` events by the site's own units), and one launcher was lost at 701 s with no enemy near it. Cause: the battery was laid out by pydcs's star formation, 20 m between units. Now a blue Patriot or HAWK battery has `BLUE_SPACING_M` (80 m, a judgment call, no public figure found) between units (`_platoon(..., spacing=)`, then `formation_star`). The ring-2 units of the 12-unit Patriot sit 160 m out, so the battery is about 400 m across. Red's sites are not changed (no such event seen). Smoke check: the unit spacing in `[41]`. The same run: Senaki's Patriot killed three red MiGs and the Stennis SM-2 one; no blue jet was lost to a SAM.
+
 ## v0.41.68, red SAM orders by need
 
 * **Red orders SAM batteries by the same rule as blue** (XO 2026-10-21: "SAMs can be ordered by both sides"). Each night, at most one order: the shallowest-tier destroyed SAM site that is in play (tier up to front + 2, its field standing, higher value first among equals) is replaced by a battery of the same kind from a DEEPER tier (a standing site, health 0.6 or more); the chance it goes is red's supply. It arrives 2 days later (a new build needs 3) at the sender's health; the receiver is not rebuilt meanwhile; the sender's site goes down and the usual rebuild takes it when its tier comes into play. No spare, no order: `sams.rebuild` stays the only way. Same judgment calls as blue's (transit days, one order a night, the 0.6 spare level); the "deeper tier sends" rule is the red form of "the least-threatened field sends". Forward mobile sites (`fsam_`) are left out. Orders save in the SAM record (`red_orders`, `red_vacated`). Smoke check `[31b]`.
