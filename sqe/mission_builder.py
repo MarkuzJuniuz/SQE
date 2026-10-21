@@ -56,7 +56,6 @@ CV_RECOVER_NM = 10            # v0.41.17: AI carrier flights (and your wingmen) 
 RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
 RCV_SPREAD = (0, 30, -30, 60, -60)    # ...on its own bearing (degrees off the way it comes home), by stack slot
 SA10_REACH_NM = 31            # v0.41.14: the farthest an SA-10 fired at our jets in the runs (54-57 km)
-RED_KEEP_NM = 45              # v0.41.10: red patrol stations keep this far from our marshal point and fields (was 120 / 80)
 SWEEP_AFTER_TOT_S = 120       # v0.41.13: a sweep holds until 2 min after the first package it covers is over the target
 HOMEWARD_ENGAGE_NM = 20       # v0.41.5: after its hold a TARCAP / escort / sweep still engages air within this of itself on the way home
 from .packages import LONG_RANGE_A2A     # the long-range shooters; F-16 and F/A-18 are secondary air-to-air
@@ -311,11 +310,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         mshl_xy = tm.safe_marshal(st, (pbase.x, pbase.y), bearing(pbase.x, pbase.y, tx, ty), (tx, ty))
         geom = make_geometry(pbase.x, pbase.y, tx, ty, pspec.profile, mshl_xy, carrier=pbase.kind == BaseKind.CARRIER)
         # enemy CAP stations are planned first so the egress can stay clear of them too (they sit 20-25 nm in front of their own base)
-        # v0.41.10: red patrols keep RED_KEEP_NM from our marshal point and fields (was 120 / 80 nm: with the marshal 15 nm behind the base
-        # since v0.41.6, 120 nm pushed red's patrols back past Sukhumi and Gudauta, and they never came to their SAMs' help)
-        keep0 = [(geom.mshl[0], geom.mshl[1], RED_KEEP_NM)]
-        for bid in dict.fromkeys(f.base_id for f in package.flights):
-            keep0.append((st.bases[bid].x, st.bases[bid].y, 130 if st.bases[bid].kind == BaseKind.CARRIER else RED_KEEP_NM))
+        # v0.41.76: no fixed keep-outs round our marshal point, fields or carrier any more (v0.41.10: 45 / 130 nm): red's patrol stations are BARCAP
+        # stations (barcap.py), clear of blue's SAM rings and the ships' reach (CAP_FLEET_KEEPOUT_NM, applied in `_plan_cap_stations`).
+        keep0 = []
         self._cap_plan = self._plan_cap_stations(air_pkg, tx, ty, geom, keep0)
         if tgt_asset is not None:                      # steer the egress away from SAM rings and CAP
             skip = {tgt_asset.id} if package.objective.type == ObjectiveType.DEAD else set()      # a DEAD target is the one thing we are killing
@@ -408,10 +405,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         whois = self._datalinks(package)
 
         # ---- enemy air picture (known CAP airborne from the start + alert aircraft that scramble when detected) ----
-        keep = [(geom.mshl[0], geom.mshl[1], RED_KEEP_NM)] + [(p[0], p[1], 100) for p in (hav_xy,) if p is not None] + \
-               [(p[0], p[1], 60) for p in (tanker_xy,) if p is not None]          # v0.41.7: the tanker is forward; 100 nm round it pushed red's patrols out of the fight
-        for bid in dict.fromkeys(f.base_id for f in package.flights):
-            keep.append((st.bases[bid].x, st.bases[bid].y, 130 if st.bases[bid].kind == BaseKind.CARRIER else RED_KEEP_NM))
+        keep = [(p[0], p[1], 100) for p in (hav_xy,) if p is not None]          # v0.41.76: only the AWACS anchor / HAVCAP is kept clear of red's patrols (the tanker picks its own spot clear of them, threatmap.tanker_spot)
         keep += self._fleet_keepout()
         self._spawn_air_picture(air_pkg, tx, ty, tgt.eta_s, geom, manifest, keep)
         self._spawn_cas_support(package, plan, geom, manifest)

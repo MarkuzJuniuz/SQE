@@ -1355,6 +1355,8 @@ def check_31d_barcap_areas(c):
     for a in bc["red"] + bc["blue"]:
         assert dist(a["x"], a["y"], a["ax"], a["ay"]) <= barcap.STATION_MAX_NM * NM + 1, f"{a['id']}: station too far from its asset"
     rings = barcap._enemy_rings(st, "red")
+    cvr = [r for r in rings if abs(r[2] - barcap.FLEET_REACH_NM * NM) < 1]
+    assert cvr and len(cvr) == len([b for b in st.bases.values() if b.kind.value == "CARRIER"]), "the carrier group's SM-2 reach is a ring red's stations stay out of"
     assert not any(a["in_ring"] for a in bc["red"]) or rings, "a red station is inside a blue SAM ring only when it had no way out"
     cvs = [a for a in bc["blue"] if a["asset"].startswith("cvn")]
     assert cvs and all(abs(dist(a["x"], a["y"], a["ax"], a["ay"]) / NM - barcap.STATION_FLEET_NM) < 1.5 for a in cvs), "carrier stations sit about 15 mi from the group"
