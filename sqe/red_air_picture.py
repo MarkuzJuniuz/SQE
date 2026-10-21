@@ -12,7 +12,7 @@ from dcs.unit import Skill
 from . import reactive, redair
 from . import threatmap as tm
 from .difficulty import ai_skill
-from .loadouts import enemy_cap_loadout
+from .loadouts import ENEMY_FIGHTERS, enemy_cap_loadout
 from .models import BaseKind, ObjectiveType, Role
 from .routes import FT, NM, bearing, dist, offset
 from .strike_tasks import KPH
@@ -21,6 +21,7 @@ RED_LONG_RANGE = {"Su_27"}    # v0.41.29: red's long-range class (XO 2026-10-16:
 RED_CALLIN_ZONE_NM = 25       # ...where it engages inside this circle round the site
 RED_CALLIN_NM = 50            # ...and a patrol is called to the SAM site it guards when blue comes this close to that site
 CAP_FLEET_KEEPOUT_NM = 78      # Red's known CAP stations stay at least this far from any carrier: the ships' SM-2 reach 70 nm (measured: CAP pairs killed 51 to 67 nm out) + 8 nm margin (v0.41.76: was 90, hand-set)
+RELIEF_HORIZON_S = 3600       # v0.41.77: a patrol's relief is flown in this mission when it is due within this long after the time on target (judgment call)
 ALERT_REACH_NM = 130          # alert pairs come only from fields this close to the target (the far ones could not arrive in time)
 A2A_ZONE_NM = {True: 25, False: 15}
 
@@ -61,6 +62,50 @@ class RedAirPicture:
             out.append({"x": sx, "y": sy, "side": self._cap_side(sx, sy, tx, ty)})
         self._red_sel = kept
         return out
+
+    def _spawn_red_relief(self, pf, cp, i, manifest, skill, tot_s, tx, ty, alt, spd) -> None:
+        """v0.41.77, BARCAP step 3: a patrol's RELIEF. The planned chain (barcap.chain) has the next sortie of the same area start 10 minutes before the
+        one on station leaves; when that falls inside this mission, the relief pair is flown: it waits on its field like an alert pair (hidden, put on the
+        runway when called) and a timed trigger calls it so it reaches the station when its window opens. The pair on station stays until its own window
+        ends, so the station is never empty. Not flown when the wing has no second pair, the airfield is gone, or the unit limit is reached."""
+        st = self.state
+        nxt = min((f for f in (st.red_air or {}).get("flights", []) if f.get("area") and f["area"] == pf.get("area") and f["kind"] == "CAP"
+                   and f["id"] != pf["id"] and pf["start"] < f["start"] <= pf["end"]), key=lambda f: f["start"], default=None)
+        if nxt is None:
+            return
+        t_arr = (nxt["start"] - self._start_min) * 60
+        if t_arr <= 60 or t_arr > tot_s + RELIEF_HORIZON_S:
+            return
+        w, a = st.enemy_air_at(nxt["wing"]), st.assets.get(nxt["wing"])
+        if w is None or a is None or a.destroyed or w.available_of(ENEMY_FIGHTERS) < 4 or self._counts()["units"] + 2 > self.o.max_units:
+            return
+        ap = self.t.airports.get(a.airport) if a.airport else None
+        if ap is None:
+            return
+        tname = nxt["type"] if nxt["type"] in w.types_up else self.vrng.choice(w.fighter_types())
+        load = enemy_cap_loadout(tname)
+        pt = lambda x, y: mapping.Point(x, y, self.t)
+        sx, sy = cp["x"], cp["y"]
+        g, _how = self._alert_group(self.red, f"Relief {i + 1}", getattr(planes, tname), ap, task.CAP, None, 2, (sx, sy))
+        t_go = int(max(30, t_arr - dist(a.x, a.y, sx, sy) / spd - 120 - 90))          # flight time + the taxi the runway start no longer does + a minute's slack
+        trig = triggers.TriggerOnce(comment=f"relief {g.name}")
+        trig.add_condition(condition.TimeAfter(t_go))
+        trig.add_action(action.SetFlag(self._alerts[-1]["f"]))
+        self.m.triggerrules.triggers.append(trig)
+        ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
+        ct.stop_after_time(int(max(t_arr + 300, (nxt["end"] - self._start_min) * 60)))
+        g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
+        g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
+        gx, gy = sx, sy
+        self._limit_engage(g, 0, None, (gx, gy, min(A2A_ZONE_NM[tname in RED_LONG_RANGE], self.o.enemy_cap_engage_nm or 999)))
+        names = []
+        for j, u in enumerate(g.units, 1):
+            u.name = f"ENM-{a.id}-R{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+        g.set_skill(skill)
+        if self.o.enemy_unlimited_fuel:
+            g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
+        manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
+        self._red_intel.append(f"Relief for that patrol: a pair of {tname.replace('_', '-')} from {self._short(a.name)} on station {redair.hhmm(nxt['start'])}.")
 
     def _fleet_keepout(self) -> list:
         """Every carrier in the campaign, whichever package uses it: the escorts' SM-2s reach well past 50 nm, so Red's known CAP stays out of it."""
@@ -179,3 +224,5 @@ class RedAirPicture:
             if not load:
                 self.warns.append(f"{tname}: no air-to-air loadout found; spawned unarmed")
             manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
+            if i < n_cap and pf_["kind"] == "CAP":
+                self._spawn_red_relief(pf_, self._cap_plan[i], i, manifest, skill, tot_s, tx, ty, alt, spd)
