@@ -107,6 +107,40 @@ class RedAirPicture:
         manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
         self._red_intel.append(f"Relief for that patrol: a pair of {tname.replace('_', '-')} from {self._short(a.name)} on station {redair.hhmm(nxt['start'])}.")
 
+    def _spawn_red_standby(self, pf, cp, i, gname, bf, wings, manifest, skill, tot_s, tx, ty, alt, spd) -> None:
+        """v0.41.79: the standby of a red patrol. The hook watches the pair (a jet down, winchester or bingo: the pair leaves) and COVER_DELAY_S later calls
+        the NEAREST red field that has a spare pair (XO: "nearest field replaces"): it waits hidden like an alert pair, appears on the runway when
+        called and flies to the patrol's station for the rest of its window. Not built when no field within reach has four fighters, or at the unit limit
+        (the pair is still watched and sent home)."""
+        sx, sy = cp["x"], cp["y"]
+        end_s = int(max(tot_s + 300, (pf["end"] - self._start_min) * 60))
+        ent = {"g": gname, "n": 2, "bf": bf, "rf": 0, "u": float(end_s)}
+        self._cover.append(ent)
+        cands = sorted(((dist(a_.x, a_.y, sx, sy), w_, a_) for w_, a_ in wings if w_.available_of(ENEMY_FIGHTERS) >= 4 and a_.airport), key=lambda c_: c_[0])
+        if not cands or cands[0][0] > ALERT_REACH_NM * NM or self._counts()["units"] + 2 > self.o.max_units:
+            return
+        _d, w, a = cands[0]
+        ap = self.t.airports.get(a.airport)
+        if ap is None:
+            return
+        tname = pf["type"] if pf["type"] in w.types_up else self.vrng.choice(w.fighter_types())
+        load = enemy_cap_loadout(tname)
+        pt = lambda x, y: mapping.Point(x, y, self.t)
+        g, _how = self._alert_group(self.red, f"Standby {i + 1}", getattr(planes, tname), ap, task.CAP, None, 2, (sx, sy))
+        ent["rf"] = self._alerts[-1]["f"]
+        ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
+        ct.stop_after_time(end_s + 900)
+        g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
+        g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
+        self._limit_engage(g, 0, None, (sx, sy, min(A2A_ZONE_NM[tname in RED_LONG_RANGE], self.o.enemy_cap_engage_nm or 999)))
+        names = []
+        for j, u in enumerate(g.units, 1):
+            u.name = f"ENM-{a.id}-S{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+        g.set_skill(skill)
+        if self.o.enemy_unlimited_fuel:
+            g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
+        manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
+
     def _fleet_keepout(self) -> list:
         """Every carrier in the campaign, whichever package uses it: the escorts' SM-2s reach well past 50 nm, so Red's known CAP stays out of it."""
         return [(b.x, b.y, CAP_FLEET_KEEPOUT_NM) for b in self.state.bases.values() if b.kind == BaseKind.CARRIER]
@@ -169,6 +203,8 @@ class RedAirPicture:
                 g = self.m.flight_group(self.red, f"Bandit {i + 1}", cls, None, pt(gx, gy), altitude=galt, speed=spd, maintask=task.CAP, group_size=2)
                 ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
                 ct.stop_after_time(int(max(tot_s + 300, (pf_["end"] - self._start_min) * 60)))       # on station until its planned window ends
+                self._flag_n += 1; bf_ = self._flag_n
+                ct.stop_if_user_flag(bf_, True)                                                       # v0.41.79: the hook sends a pair home that lost a jet / is winchester / bingo
                 g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
                 bd_ = bearing(tx, ty, sx, sy)
                 self._red_intel.append(f"Reported enemy {'fighter sweep' if pf_['kind'] == 'SWEEP' else 'patrol'}: a pair of {tname.replace('_', '-')} from "
@@ -226,3 +262,4 @@ class RedAirPicture:
             manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
             if i < n_cap and pf_["kind"] == "CAP":
                 self._spawn_red_relief(pf_, self._cap_plan[i], i, manifest, skill, tot_s, tx, ty, alt, spd)
+                self._spawn_red_standby(pf_, self._cap_plan[i], i, g.name, bf_, wings, manifest, skill, tot_s, tx, ty, alt, spd)

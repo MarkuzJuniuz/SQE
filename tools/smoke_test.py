@@ -1498,6 +1498,30 @@ def check_31g_blue_support_relief(c):
     assert len(stops) >= 3, ("each sortie has its own orbit stop time", stops)
 
 
+def check_31h_cap_replacement(c):
+    """v0.41.79: a covered CAP pair is watched by the hook (a jet down, winchester, bingo: the pair leaves on a user flag and, after a short delay, the
+    standby is called): blue support CAPs get a hidden standby behind the station, red patrols one from the nearest field."""
+    import re, zipfile as zf
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke replace", "F-16C", 3, seed=7)
+    pk = next(p_ for p_ in ses.packages() if ses.flyable(p_) and any(f_.tag in ("BASECAP", "HAVCAP", "CVCAP") for f_ in p_.flights))
+    ses.fly(pk.number, ses.flyable(pk)[0].id)
+    z = zf.ZipFile(ses.state.pending["miz"])
+    mz = z.read("mission").decode()
+    hook = mz
+    cov = re.findall(r'\{g=\\*"([^"\\]+)\\*", n=(\d+), bf=(\d+), rf=(\d+), u=(\d+)\}', hook)
+    cov = sorted(set(cov))
+    assert cov, "the hook watches covered pairs"
+    blue = [x for x in cov if not x[0].startswith("Bandit")]
+    assert blue and any(int(x[3]) > 0 for x in blue), ("every support CAP has a standby flag when the unit cap allows", blue)
+    assert re.search(r"support replacement ", mz), "a standby waits hidden for its flag"
+    flags = {x[2] for x in cov}
+    assert all(('["userFlag"]="%s"' % f) in mz for f in flags), "each watched pair's orbit stops on its flag"
+    assert "COVER_DELAY_S" in hook and "BINGO_FUEL" in hook, "the watcher is in the hook"
+    print(f"[cap replacement] {len(cov)} watched pairs, {sum(1 for x in cov if int(x[3]) > 0)} with a standby")
+
+
 def check_31c_ai_skill_red_blue(c):
     """v0.41.70: AI Skill for Red and Blue: the helper, the saved settings, and what a built mission carries."""
     import zipfile as zf
@@ -2927,6 +2951,7 @@ CHECKS = [
     check_31e_barcap_mission_side,
     check_31f_red_relief_in_mission,
     check_31g_blue_support_relief,
+    check_31h_cap_replacement,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,

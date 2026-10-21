@@ -386,6 +386,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # ---- friendly flights --------------------------------------------------------------------------------------------
         despawn, pkg_table = [], []
         self._sup_cts = []                                                   # HAVCAP / base CAP orbit tasks: their stop time is extended once the merged packages are known
+        self._cover = []                                                     # v0.41.79: [{g, n, bf, rf, u}] the CAP pairs the hook watches (debrief.py COVER)
         self._relief_src = {}                                                # v0.41.78: callsign -> what _spawn_flight needs to build that support CAP's relief sorties
         self._relief_names = []                                              # relief flights built so far (their callsigns are taken)
         self._ct_flight = {}                                                 # id(orbit task) -> callsign of the support CAP it belongs to
@@ -434,6 +435,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 ct_.stop_after_time(full_)
             else:
                 self._spawn_reliefs(src_, full_, manifest, despawn)          # v0.41.78: the rest of the time is flown by relief sorties
+            self._spawn_replacement(src_, min(full_, src_["end"]), full_, manifest, despawn)         # v0.41.79: one standby pair per support CAP
         # v0.41.38 (XO 2026-10-20): a TARCAP / escort stays until the LAST ground-attack flight of its own package is off target (+ the usual after-time),
         # not just until its own station time (when the player flew the TARCAP, tgt was the TARCAP's own station: it left 7.5 min after arriving)
         own_ = [((tx, ty), max(striker_tots))] if striker_tots else []
@@ -512,7 +514,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM, jams=(self._jams if o.ecm_script else {}), jamw=(self._jamw if o.ecm_script else {}),
                          watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and not f_.is_player],
                          done_after=max([float(tgt.eta_s)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
-                         rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts,
+                         rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts, cover=self._cover,
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
                               "cvrec": self._wing_recovery(pbase, tgt.eta_s), "recov": list(self._recov)})
@@ -1281,10 +1283,35 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if back > 0:
                 s0.x, s0.y = offset(s0.x, s0.y, bearing(s0.x, s0.y, base.x, base.y), back)
             lead = int(back / NM / max(1.0, s0.speed_kts) * 3600) + 30
+            if rel.get("flag"):                                               # v0.41.79: a replacement is called by the hook, not by the clock
+                return int(rel["end"]), 0
             return int(rel["end"]), max(1, int(rel["start"]) - lead)
         e_ = int(barcap.endurance_min(f.aircraft, f.tag == "TNKCAP") * 60)
-        self._relief_src[f.callsign] = {"package": package, "f": f, "ctx": ctx, "full": int(full_stop), "end": min(int(full_stop), e_), "E": e_}
+        self._flag_n += 1
+        self._relief_src[f.callsign] = {"package": package, "f": f, "ctx": ctx, "full": int(full_stop), "end": min(int(full_stop), e_), "E": e_, "bf": self._flag_n}
         return min(int(full_stop), e_), 0
+
+    def _spawn_replacement(self, src, end_s, full, manifest, despawn):
+        """v0.41.79: the standby for one support CAP's first sortie. The hook watches the pair: a jet down, winchester or bingo sends the whole pair
+        home and, COVER_DELAY_S later, calls this copy of the flight (a pair that appears RELIEF_BACK_NM behind the station, as a relief does) to take
+        the station for the rest of the sortie plus the handover. One standby per CAP (the chain's later sorties are watched for nothing yet).
+        Not built when the unit limit is reached: the pair is still watched and sent home, only nothing replaces it."""
+        f0 = src["f"]
+        ent = {"g": f0.callsign, "n": int(f0.count), "bf": src["bf"], "rf": 0, "u": float(end_s)}
+        used = {x.callsign for x in src["package"].flights} | {x.callsign for x in self._relief_names}
+        free = next((f"{c_} {n}" for c_ in [f0.callsign.rsplit(" ", 1)[0]] + [c for c in callsigns.table(f0.aircraft)] for n in range(1, 10) if f"{c_} {n}" not in used), None)
+        if free is not None and self._counts()["units"] + f0.count <= self.o.max_units:
+            self._flag_n += 1
+            nf = copy.deepcopy(f0)
+            nf.callsign, nf.is_player = free, False
+            nf.relief = {"k": 0, "start": 0, "end": int(min(full, end_s + barcap.HANDOVER_MIN * 60)), "flag": self._flag_n}
+            self._relief_names.append(nf)
+            plan, geom, tanker_xy, hav_xy, push_s, tot_s, rtb_s, idx = src["ctx"]
+            self._spawn_flight(src["package"], nf, plan, geom, tanker_xy, hav_xy, push_s, tot_s, rtb_s, idx, manifest, despawn)
+            ent["rf"] = self._flag_n
+        else:
+            self.warns.append(f"{f0.callsign}: no standby pair (unit limit or no free callsign)")
+        self._cover.append(ent)
 
     def _spawn_reliefs(self, src, full, manifest, despawn):
         """v0.41.78: the relief sorties of one support CAP: sortie k starts k * (E - HANDOVER_MIN) after the mission began and flies E minutes (the last
@@ -1385,6 +1412,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             first = 1
         if (not f.tag or getattr(f, "relief", None)) and not f.is_player and act_s > 0:
             self._late(g, act_s, "support relief" if f.tag else "activate")                                # they 'depart' on their own schedule, not at mission start
+        if getattr(f, "relief", None) and f.relief.get("flag") and not f.is_player:
+            self._late_flag(g, f.relief["flag"])                # v0.41.79: a replacement waits hidden until the hook calls it
         if first == 1 and (not f.tag or getattr(f, "relief", None)):   # face the way they are going (in-flight groups spawn pointing north)
             nxt = next((w for w in wps[1:] if dist(wps[0].x, wps[0].y, w.x, w.y) > 100), None)
             if nxt is not None:
@@ -1668,6 +1697,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if f.tag and not getattr(f, "relief", None):
                     self._sup_cts.append(ct)
                     self._ct_flight[id(ct)] = f.callsign
+                    bf_ = (self._relief_src.get(f.callsign) or {}).get("bf")
+                    if bf_:
+                        ct.stop_if_user_flag(bf_, True)              # v0.41.79: the hook sends a pair home when it loses a jet / is winchester / bingo
             elif w.orbit:                                                    # fighters held short of live SAM cover / on their station
                 if self._snipe_at.get(id(g)) is w:                              # v0.41.10: on station: maximum-range shots (snipe) from here on
                     wp.tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
@@ -1970,6 +2002,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     JSOW_AXES = (30, -30, 50, -50, 15, -15, 70, -70)       # v0.41.22: degrees off the HARM shooters' axis, tried in this order
 
     # ---- late activation helper ------------------------------------------------------------------------------------------------
+    def _late_flag(self, g, flag):
+        g.late_activation = True
+        trig = triggers.TriggerOnce(comment=f"support replacement {g.name}")
+        trig.add_condition(condition.FlagIsTrue(int(flag)))
+        trig.add_action(action.ActivateGroup(g.id))
+        self.m.triggerrules.triggers.append(trig)
+
     def _late(self, g, seconds, label="activate"):
         g.late_activation = True
         trig = triggers.TriggerOnce(comment=f"{label} {g.name}")
