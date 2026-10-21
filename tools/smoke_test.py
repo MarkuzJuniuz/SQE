@@ -1109,6 +1109,13 @@ def main():
     _bh.health = 0.0; _st.ground["fallen"] = [_fl[0].id]; _sm.track(_st); _st.day += 5
     assert not _sm.rebuild_blue_sites(_st, _dr, _rnd.Random(5)) and _bh.destroyed, "nothing is rebuilt at a fallen field"
     _st.ground["fallen"] = []; _sm.set_field(_st, _fl[0], 1.0)
+    # v0.41.64: where the sites sit: doctrinal bearing and distance plus a seeded jitter, fixed for the campaign, different in the next
+    _pp = _sm.place_blue_site(_st, _fl[0], "pat"); _mx = _sm.SITE_PLACE["pat"][1]
+    _dd = ((_pp[0] - _fl[0].x) ** 2 + (_pp[1] - _fl[0].y) ** 2) ** 0.5
+    assert _pp == _sm.place_blue_site(_st, _fl[0], "pat") and _mx * (1 - _sm.SITE_JITTER_FRAC) - 1 <= _dd <= _mx * (1 + _sm.SITE_JITTER_FRAC) + 1, ("a site's place is fixed and within the jitter", _dd)
+    _cid0 = _st.campaign_id; _st.campaign_id = "ffffffffff"; _pq = _sm.place_blue_site(_st, _fl[0], "pat"); _st.campaign_id = _cid0
+    assert _pq != _pp, "a different campaign puts the site somewhere else"
+    assert (_st.blue_sams[_sm.blue_site_id(_fl[0].id, "pat")].x, _st.blue_sams[_sm.blue_site_id(_fl[0].id, "pat")].y) == _pp, "the stored site sits at its place, not on the field centre"
     _o = _st.to_dict(); _o.pop("blue_sams"); _o2 = _CS.from_dict(_o); assert _o2.blue_sams == {} and _sm.ensure_blue_sams(_o2) and abs(_sm.field_defence(_o2, _o2.bases[_fl[0].id]) - _o2.bases[_fl[0].id].defense) < 1e-9, "an older save gets its sites from each field's defense number"
     _rt = _CS.from_dict(_st.to_dict()); assert _rt.sams == _st.sams
     _o = _st.to_dict(); _o.pop("sams"); assert _CS.from_dict(_o).sams == {}
