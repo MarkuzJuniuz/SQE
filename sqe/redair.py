@@ -20,6 +20,7 @@ Pure planning, no pydcs.
 from __future__ import annotations
 import hashlib
 import random
+from . import barcap
 from .loadouts import ENEMY_FIGHTERS
 from .models import AssetKind, BaseKind
 from .routes import NM, bearing, dist, offset
@@ -70,6 +71,7 @@ def plan(state, d) -> dict:
     rng = random.Random(f"{state.campaign_id}:{state.day}:redair")
     doc = DOCTRINE[max(1, min(3, int(getattr(d, "level", 1))))]
     blue_af = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD]
+    bc = barcap.ensure(state)
     flights, spare = [], []
     use, bud = {}, {}
     wings = sorted(state.enemy_air, key=lambda w: w.base_asset_id)
@@ -81,23 +83,27 @@ def plan(state, d) -> dict:
             continue
         pairs = fav // 2
         bud[w.base_asset_id] = DAILY_SORTIES * w.available                # the day's sortie budget is still the whole wing's (raids share it)
-        n_cap = min(doc["pairs"], pairs - 1, max(1, round(doc["frac"] * fav / 2)))     # one pair always stays on alert
-        tgt = min(blue_af, key=lambda b: dist(a.x, a.y, b.x, b.y)) if blue_af else None
+        # v0.41.73: the patrol share is now counted in SORTIES (a 30-minute stay is one sortie, so a pair can fly several a day): the level's share of the
+        # wing's day budget, in pairs. At most one pair per area is up at a time and one pair always stays on alert, so no more areas than pairs - 1.
+        n_cap = max(1, round(doc["frac"] * bud[w.base_asset_id] / 2)) if pairs >= 2 else 0
+        # v0.41.73: BARCAP rules. The wing's pairs fly the BARCAP areas of its own field (one per direction a blue base could still send something
+        # from, barcap.py), in a chain: each sortie stays its airframe's time on station and its relief arrives before it leaves.
+        areas = [ar for ar in bc["red"] if ar["asset"] == w.base_asset_id][:max(0, pairs - 1)]
         order = _wave_order(w.base_asset_id, state.day)
-        for k in range(max(0, n_cap)):
-            if use.get(w.base_asset_id, 0) + 2 > bud[w.base_asset_id]:
-                break
-            use[w.base_asset_id] = use.get(w.base_asset_id, 0) + 2
-            if tgt is not None and dist(a.x, a.y, tgt.x, tgt.y) < 35 * NM:
-                sx, sy = offset(a.x, a.y, bearing(a.x, a.y, tgt.x, tgt.y), 0.5 * dist(a.x, a.y, tgt.x, tgt.y))
-            elif tgt is not None:
-                sx, sy = offset(a.x, a.y, bearing(a.x, a.y, tgt.x, tgt.y) + rng.uniform(-12, 12), rng.uniform(20, 25) * NM)
-            else:
-                sx, sy = a.x, a.y
-            lo, hi = WAVES[order[k]]
-            flights.append({"id": f"rf{state.day}-{w.base_asset_id}-{k}", "kind": "CAP", "wing": w.base_asset_id, "type": rng.choice(types), "size": 2,
-                            "start": lo, "end": min(1440 + WAVE_OVERLAP_MIN, hi + WAVE_OVERLAP_MIN), "x": sx, "y": sy})
-        if fav - 2 * max(0, n_cap) >= 4:
+        per = [[] for _ in areas]
+        for k in range(max(0, n_cap) if areas else 0):
+            per[k % len(areas)].append(k)
+        for ai, ar in enumerate(areas):
+            t0 = WAVES[order[ai % 4]][0]
+            typs = [rng.choice(types) for _ in per[ai]]
+            for j, (lo, hi) in enumerate(barcap.chain(t0, len(per[ai]), [barcap.endurance_min(t) for t in typs])):
+                if use.get(w.base_asset_id, 0) + 2 > bud[w.base_asset_id] or lo >= 1440:
+                    break
+                use[w.base_asset_id] = use.get(w.base_asset_id, 0) + 2
+                flights.append({"id": f"rf{state.day}-{w.base_asset_id}-{ai}.{j}", "kind": "CAP", "wing": w.base_asset_id, "type": typs[j], "size": 2,
+                                "start": lo, "end": min(1440 + WAVE_OVERLAP_MIN, hi), "x": ar["x"], "y": ar["y"], "area": ar["id"], "bearing": ar["bearing"],
+                                "ax": ar["ax"], "ay": ar["ay"]})
+        if fav - 2 * min(len(areas), max(0, n_cap)) >= 4:
             spare.append((w, types))
     g = state.ground or {}
     contested = [i for i, (r, b) in enumerate(zip(g.get("red", []), g.get("blue", []))) if r >= 15 and b >= 15]
@@ -115,6 +121,7 @@ def plan(state, d) -> dict:
 
 GUARD_NM = 150                 # v0.41.11: a patrol guards a SAM site within this of its own field (was 60: the big rear wings guarded only their own
                                # local sites and the front, Sukhumi and Gudauta, went unguarded in the v0.41.10 run)
+CALLIN_LINK_NM = 40            # v0.41.73: a patrol is linked to (and called in to) the best-rated SAM site within this of its BARCAP station (judgment call)
 GUARD_FWD_NM = 10              # ...from a station this far in front of the site, toward the nearest friendly (blue) field
 GUARD_VALUE = {"SA-10": 4.0, "SA-11": 3.0, "SA-6": 2.5, "SA-15": 2.0, "SA-19": 1.5, "SA-8": 1.5, "SA-3": 1.5, "SA-2": 1.2}
 # v0.41.20: no needless banzai, red's side. "commit": red fighters go after blue only with at least this quality-weighted edge (red : blue), except
@@ -153,9 +160,9 @@ def guard_score(state, site, blue_af, attacked: set, expected: list) -> float:
 
 
 def assign_guards(state, d, objectives) -> None:
-    """v0.41.10: red's own "briefing". Each planned patrol pair takes a station over the SAM site its wing rates most likely to be attacked
-    (guard_score), 10 nm in front of it toward blue, instead of a point in front of its own base: red CAP sits over its air defence and
-    comes to its help. Whether red reads today's blue targets correctly follows the level (GUARD_READ), once per wing per day."""
+    """v0.41.10 / v0.41.73: red's own "briefing". Each planned patrol pair is linked to the SAM site near its BARCAP station that its wing rates most
+    likely to be attacked (guard_score) and is called in to it when blue comes close (the station itself no longer moves: it is a BARCAP station,
+    barcap.py). Whether red reads today's blue targets correctly follows the level (GUARD_READ), once per flight."""
     ra = getattr(state, "red_air", None)
     if not ra:
         return
@@ -176,18 +183,14 @@ def assign_guards(state, d, objectives) -> None:
         a = state.assets.get(f["wing"])
         if a is None:
             continue
-        cands = [s for s in sams if dist(s.x, s.y, a.x, a.y) <= GUARD_NM * NM]
+        cands = [s for s in sams if dist(s.x, s.y, f["x"], f["y"]) <= CALLIN_LINK_NM * NM]       # v0.41.73: the station is a BARCAP station now; it only calls in to a site near it
         if not cands:
             continue
         reads = rng.random() < GUARD_READ[lvl]
         exp = tgt_xy if reads else []
         ranked = sorted(cands, key=lambda s: (-guard_score(state, s, blue_af, attacked, exp), s.id))
-        k = taken.get(f["wing"], 0)
-        site = ranked[min(k, len(ranked) - 1)]
-        taken[f["wing"]] = k + 1
-        nb = min(blue_af, key=lambda b: dist(site.x, site.y, b.x, b.y)) if blue_af else None
-        sx, sy = offset(site.x, site.y, bearing(site.x, site.y, nb.x, nb.y), GUARD_FWD_NM * NM) if nb else (site.x, site.y)
-        f["x"], f["y"], f["guard"], f["gx"], f["gy"], f["read"] = sx, sy, site.id, site.x, site.y, reads
+        site = ranked[0]
+        f["guard"], f["gx"], f["gy"], f["read"] = site.id, site.x, site.y, reads
 
 
 def ensure(state, d) -> dict:

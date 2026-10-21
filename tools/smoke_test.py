@@ -1330,6 +1330,52 @@ def check_31b_red_sam_orders(c):
     assert rt.sams == st.sams, "red orders save and load with the SAM record"
 
 
+def check_31d_barcap_areas(c):
+    """v0.41.73: BARCAP as planned coverage (barcap.py): sectors, stations, times on station, relief chains, and red's patrols flying them."""
+    from sqe import barcap
+    from sqe.routes import NM, dist, offset
+    assert barcap.endurance_min("F-14BU") == 120 and barcap.endurance_min("F-15C") == 120 and barcap.endurance_min("Su_27") == 120, "long legs: 2 h"
+    assert barcap.endurance_min("F-16C") == 30 and barcap.endurance_min("FA-18C") == 30 and barcap.endurance_min("MiG_29S") == 30, "short legs: 30 min"
+    assert barcap.endurance_min("F-16C", tanker=True) == 120, "guarding a tanker: 2 h whatever the airframe"
+    assert barcap.sectors(0, 0, [(offset(0, 0, 90, 100 * NM)), (offset(0, 0, 110, 100 * NM)), (offset(0, 0, 270, 100 * NM))]) == [97.0, 270.0] or \
+        len(barcap.sectors(0, 0, [offset(0, 0, 90, 100 * NM), offset(0, 0, 110, 100 * NM), offset(0, 0, 270, 100 * NM)])) == 2, "two bases 20 degrees apart share one area, the third is its own"
+    assert barcap.sectors(0, 0, [offset(0, 0, 90, 400 * NM)]) == [], "a base beyond reach is no direction"
+    ch = barcap.chain(60, 3, [30, 120, 30])
+    assert ch == [(60, 90), (80, 200), (190, 220)], f"each relief arrives {barcap.HANDOVER_MIN} min before the last one leaves: {ch}"
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke barcap", "F-16C", 3, seed=7)
+    st = ses.state
+    st.red_air = {}
+    st.barcap = {}
+    from sqe import redair
+    redair.ensure(st, ses.d)
+    bc = st.barcap
+    assert bc["day"] == st.day and bc["red"] and bc["blue"], "both sides have BARCAP areas"
+    for a in bc["red"] + bc["blue"]:
+        assert dist(a["x"], a["y"], a["ax"], a["ay"]) <= barcap.STATION_MAX_NM * NM + 1, f"{a['id']}: station too far from its asset"
+    rings = barcap._enemy_rings(st, "red")
+    assert not any(a["in_ring"] for a in bc["red"]) or rings, "a red station is inside a blue SAM ring only when it had no way out"
+    cvs = [a for a in bc["blue"] if a["asset"].startswith("cvn")]
+    assert cvs and all(abs(dist(a["x"], a["y"], a["ax"], a["ay"]) / NM - barcap.STATION_FLEET_NM) < 1.5 for a in cvs), "carrier stations sit about 15 mi from the group"
+    caps = [f for f in st.red_air["flights"] if f["kind"] == "CAP"]
+    assert caps and all(f.get("area") for f in caps), "red's patrols fly BARCAP areas"
+    ids = {a["id"]: a for a in bc["red"]}
+    for f in caps:
+        assert dist(f["x"], f["y"], ids[f["area"]]["x"], ids[f["area"]]["y"]) < 1, "a patrol's station is its area's station"
+    by_area = {}
+    for f in caps:
+        by_area.setdefault(f["area"], []).append(f)
+    for k, fl in by_area.items():
+        fl.sort(key=lambda f: f["start"])
+        for p_, n_ in zip(fl, fl[1:]):
+            assert n_["start"] == p_["end"] - barcap.HANDOVER_MIN or p_["end"] >= 1440, f"{k}: the relief arrives before the last one leaves"
+    import json
+    from sqe.state import CampaignState
+    again = CampaignState.from_dict(json.loads(json.dumps(st.to_dict())))
+    assert again.barcap == st.barcap, "the areas survive a save"
+
+
 def check_31c_ai_skill_red_blue(c):
     """v0.41.70: AI Skill for Red and Blue: the helper, the saved settings, and what a built mission carries."""
     import zipfile as zf
@@ -2097,13 +2143,15 @@ def check_47_support_cap_pull_back(c):
     _gk = ("x", "y", "guard", "gx", "gy", "read")             # v0.41.10: the guard stations are set after the day's blue objectives are known
     _strip = lambda fl_: [{k_: v_ for k_, v_ in f_.items() if k_ not in _gk} for f_ in fl_]
     _gd_ = [f_ for f_ in _p1["flights"] if f_.get("guard")]
-    assert _gd_ and all(_m3j.hypot(f_["x"] - f_["gx"], f_["y"] - f_["gy"]) / 1852 <= _ra.GUARD_FWD_NM + 0.5 for f_ in _gd_), "red patrols sit over the SAM site they guard"
+    assert _gd_ and all(_m3j.hypot(f_["x"] - f_["gx"], f_["y"] - f_["gy"]) / 1852 <= _ra.CALLIN_LINK_NM + 0.5 for f_ in _gd_), "red patrols are linked to a SAM site near their BARCAP station (v0.41.73: the station no longer moves over the site)"
     assert all(_st.assets[f_["guard"]].kind.value == "SAM" for f_ in _gd_)
     print(f"[red guard] {len(_gd_)} red patrol pairs over the SAM sites red rates likeliest to be attacked: {sorted({f_['guard'] for f_ in _gd_})}")
     _st.red_air = {}; _ra.ensure(_st, _gd(3)); assert {"day": _st.red_air["day"], "flights": _strip(_st.red_air["flights"])} == {"day": _p1["day"], "flights": _strip(_p1["flights"])}, "the same day plans the same"
+    redair_budget_ = lambda w__: _ra.budget(_st, w__.base_asset_id)
     for w_ in _st.enemy_air:
         n_ = sum(1 for f_ in _p1["flights"] if f_["wing"] == w_.base_asset_id and f_["kind"] == "CAP")
-        assert n_ <= max(0, w_.available // 2 - 1), "one pair per wing always stays on alert"
+        assert 2 * n_ <= redair_budget_(w_), "a wing's patrol sorties stay inside its day budget"
+        assert len({f_["area"] for f_ in _p1["flights"] if f_["wing"] == w_.base_asset_id and f_["kind"] == "CAP"}) <= max(0, w_.available_of(__import__("sqe.loadouts", fromlist=["x"]).ENEMY_FIGHTERS) // 2 - 1), "one pair per wing always stays on alert (at most pairs - 1 areas flown)"
     _f0 = next(f_ for f_ in _st.red_air["flights"] if f_["kind"] == "CAP"); _tm = (_f0["start"] + _f0["end"]) // 2
     assert any(g_["id"] == _f0["id"] for g_ in _ra.pick(_st, _tm, [], _f0["x"], _f0["y"], 99)), "a patrol is picked inside its window, near the target"
     _tout = next(t_ for t_ in range(0, 1440, 10) if not any(f_["start"] <= t_ <= f_["end"] or f_["start"] <= t_ + 1440 <= f_["end"] for f_ in _p1["flights"] if f_["id"] == _f0["id"]))
@@ -2749,6 +2797,7 @@ CHECKS = [
     check_31a_sam_orders_by_need,
     check_31b_red_sam_orders,
     check_31c_ai_skill_red_blue,
+    check_31d_barcap_areas,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,
