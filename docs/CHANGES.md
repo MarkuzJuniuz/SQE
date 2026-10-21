@@ -5,6 +5,15 @@
 * **Mission identity check, `tools/miz_identity.py`** (XO 2026-10-20: the refactor, the rename and the `_spawn_flight` split must not change a generated mission). `save DIR` builds 60 missions (9 campaigns, level 1-3, five jets, normal and "open skies" days with the red SAMs zeroed so strikes, counter-air, escorts and TARCAPs appear; each as your own flight and as the all-AI test), writes them out as normalised text; `check DIR` rebuilds on the changed code and prints a diff of anything that differs (exit 1); `selfcheck` builds twice on the same code and fails if the result is not repeatable. Runs in a temp folder, nothing of yours is touched, about 40 s a run. It pins campaign id, the builder's Random(), the global `random` and PYTHONHASHSEED inside the tool only. Production code unchanged. Not covered: fighter sweeps, BARCAP, bomber intercepts, and paths no case reaches (see the tool's docstring).
 * CLAUDE.md: the code map names the tool.
 
+## v0.41.50
+
+* **Role rename: one name per job** (XO 2026-10-20, PR A of the same-rules build). `Role.ESCORT` (the TARCAP) is now `Role.TARCAP`; `Role.SWEEP` in a strike / DEAD / CAS package (the package escort) is now `Role.ESCORT`; `Role.SWEEP` stays for Fighter Sweeps and the fleet-defence fighters. Every place that tested the old pair now tests the right new roles.
+  * Saved campaigns: `FORMAT_VERSION` 5 -> 6. `_migrate_roles_v6` converts plan and pending flights on load (ESCORT -> TARCAP; SWEEP -> ESCORT unless the objective is COUNTER_AIR / FLEET_DEFENSE).
+  * Behaviour is unchanged. Checked with `tools/miz_identity.py`: 60 of 60 missions identical to v0.41.49 once the text that shows the role name is mapped back. Expected differences only: the version string and the role name printed on the kneeboard fuel-code images (TARCAP / ESCORT instead of ESCORT / SWEEP).
+  * Not done (PR B, with the `_spawn_flight` split): waypoint action names (`SWEEPSTN`, the fallback `SWEEP`), class names, GUI labels.
+* Smoke test: aliased `Role` uses updated, "[roles v0.41.50]" checks a format-5 state migrates.
+* `tools/miz_identity.py`: the version string is scrubbed, so a baseline from another version compares cleanly.
+
 ## v0.41.49
 
 * **AI flights fly home above the ridges** (XO 2026-10-20 22:07 run: Venom 5-2, a lone F-16 TARCAP, went from 26,000 ft to 3,000 ft MSL about 50 nm out and flew level for 100 nm over rising ground, 914 to 1,127 m on its track, then died at 2574 s with 84% fuel and nobody shooting; every other flight went home over water at 2,000 ft). Cause, confirmed by the track: the recovery point (RCV) is added after the terrain check at a fixed 3,000-6,000 ft, and an AI flight drops to the next point's altitude right after the last one.

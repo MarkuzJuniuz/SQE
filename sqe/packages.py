@@ -14,7 +14,7 @@ from .state import CampaignState
 NM = 1852.0
 MAX_FLIGHT = 4
 CARRIER_PLAYER_FLIGHT_MAX = 2        # catapult spots are limited; keep the player's cat-start flight small
-PLAYER_ROLE_PREFERENCE = {Role.STRIKE: 5, Role.SEAD: 4, Role.ESCORT: 3, Role.SWEEP: 2, Role.CAP: 1, Role.CAS: 0}
+PLAYER_ROLE_PREFERENCE = {Role.STRIKE: 5, Role.SEAD: 4, Role.TARCAP: 3, Role.ESCORT: 2, Role.SWEEP: 2, Role.CAP: 1, Role.CAS: 0}
 JTAC_OBJECTIVES = {ObjectiveType.CAS}
 
 
@@ -33,12 +33,12 @@ class Slot:
 
 
 TEMPLATES = {
-    ObjectiveType.STRIKE: [Slot(Role.STRIKE, 4), Slot(Role.ESCORT, 2), Slot(Role.SEAD, 2, False, True)],
+    ObjectiveType.STRIKE: [Slot(Role.STRIKE, 4), Slot(Role.TARCAP, 2), Slot(Role.SEAD, 2, False, True)],
     # SEAD only blinds the radars; the DEAD flight (the strikers) kills the site right behind it. Both fly in the same package.
-    ObjectiveType.DEAD: [Slot(Role.SEAD, 2), Slot(Role.STRIKE, 4), Slot(Role.ESCORT, 2)],
+    ObjectiveType.DEAD: [Slot(Role.SEAD, 2), Slot(Role.STRIKE, 4), Slot(Role.TARCAP, 2)],
     ObjectiveType.COUNTER_AIR: [Slot(Role.SWEEP, 4), Slot(Role.STRIKE, 2, False)],
     ObjectiveType.BARCAP: [Slot(Role.CAP, 2), Slot(Role.CAP, 2, False)],
-    ObjectiveType.CAS: [Slot(Role.CAS, 4), Slot(Role.ESCORT, 2, False), Slot(Role.SEAD, 2, False, True)],
+    ObjectiveType.CAS: [Slot(Role.CAS, 4), Slot(Role.TARCAP, 2, False), Slot(Role.SEAD, 2, False, True)],
     ObjectiveType.FLEET_DEFENSE: [Slot(Role.CAP, 4), Slot(Role.CAP, 2, False), Slot(Role.SWEEP, 2, False)],
 }
 _FLEET = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
@@ -47,12 +47,13 @@ _FLEET = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
 # (BARCAP jets wandered inland over red without a single scramble). They come back one at a time, the bomber intercept first.
 AI_ONLY = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
 _TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM",
-         Role.ESCORT: "TARCAP: on station short of the target before the package, shoot what comes in range, do not chase; stay at least 15 minutes and until the last strike flight is off target plus 5 minutes, then home",
+         Role.TARCAP: "TARCAP: on station short of the target before the package, shoot what comes in range, do not chase; stay at least 15 minutes and until the last strike flight is off target plus 5 minutes, then home",
          Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
 _DEAD_TASK = {Role.SEAD: "SEAD: suppress the radars ahead of the DEAD flight", Role.STRIKE: "Close DEAD: destroy the SAM site with GBUs (the SEAD package goes in ahead of you; call it off if the radars are up)"}
 _KIT_TASK = {"JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers and covering Tors, on the HARM salvo's time; stand-off release, then home"}
 _SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
 _ESC_TASK = "Escort: hold your station with the package, shoot what comes in range, do not chase; leave when the strikers are off target"
+_TASK[Role.ESCORT] = _ESC_TASK
 _TAG_TASK = {"HAVCAP": "HAVCAP (guards the AWACS)", "TNKCAP": "Tanker CAP (guards the tanker)", "BASECAP": "Base CAP", "CVCAP": "Carrier CAP"}
 BASECAP_ENEMY_NM = 130     # v0.41.7: a land base gets a base CAP when an enemy fighter field is within this (an alert pair reaches it)
 
@@ -211,23 +212,23 @@ class PackageBuilder:
         if obj.type == ObjectiveType.DEAD and obj.aim == "SEAD":            # SEAD first: a package that only suppresses the radars...
             tmpl = [Slot(Role.SEAD, 2), Slot(Role.SEAD, 2, False)]
         elif obj.type == ObjectiveType.DEAD and obj.aim == "DEAD":          # ...and the Close DEAD package (GBUs) that follows once they are down
-            tmpl = [Slot(Role.STRIKE, 4), Slot(Role.ESCORT, 2)]
+            tmpl = [Slot(Role.STRIKE, 4), Slot(Role.TARCAP, 2)]
         elif obj.type == ObjectiveType.DEAD and obj.aim == "STANDOFF":      # under a long-range SAM: one package, HARMs and JSOWs together
             # Two HARM flights, both required: one on the long-range radars, one on the Tors, from the same salvo (equal weight, so the Tors are
             # busy with HARMs when the JSOWs arrive). The Standoff DEAD flight is JSOW-capable only (Hornet, Viper): no Tomcats on DEAD here.
             tmpl = [Slot(Role.SEAD, 2), Slot(Role.STRIKE, 4, kit="JSOW"), Slot(Role.SEAD, 2)]     # the JSOW flight is picked before the second HARM flight: without it nothing is destroyed
         elif obj.type == ObjectiveType.CAS and obj.aim == "SEAD":           # v0.41.20: CAS under a live SA-2/3/6: the HARM escort is not optional
-            tmpl = [Slot(Role.CAS, 4), Slot(Role.SEAD, 2), Slot(Role.ESCORT, 2, False)]
+            tmpl = [Slot(Role.CAS, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
         if is_sweep(obj):                                                    # Fighter Sweep: 4-ships only, one per 4 bandits beyond the packages' own cover
             n4 = max(1, sweep_4ships(n_fl))
             return [Slot(Role.SWEEP, 4)] + [Slot(Role.SWEEP, 4, False) for _ in range(n4 - 1)]
         slots = [copy.copy(s) for s in tmpl if not (s.only_if_defended and not defended)]
         if obj.type in (ObjectiveType.STRIKE, ObjectiveType.DEAD, ObjectiveType.CAS):
             req = threat.fighters_required(n_fl)
-            slots = [s for s in slots if s.role != Role.ESCORT]
+            slots = [s for s in slots if s.role != Role.TARCAP]
             if req:
-                slots.append(Slot(Role.ESCORT, min(4, req), True))            # the TARCAP. More bandits than it can take: a Fighter Sweep package (v0.40.2)
-                slots.append(Slot(Role.SWEEP, 2, False))                       # v0.41.1: the escort, back (v0.40.2 dropped it with the old sweep slot)
+                slots.append(Slot(Role.TARCAP, min(4, req), True))            # the TARCAP. More bandits than it can take: a Fighter Sweep package (v0.40.2)
+                slots.append(Slot(Role.ESCORT, 2, False))                      # v0.41.1: the escort, back (v0.40.2 dropped it with the old sweep slot)
         if obj.type not in _FLEET:
             slots.append(Slot(Role.CAP, 2, False, tag="HAVCAP"))
         return slots
@@ -328,7 +329,7 @@ class PackageBuilder:
             cs = _next_callsign(st, sq, used)
             pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", cs, slot.role, sq.id,
                                           sq.aircraft, count, sq.base_id,
-                                          _KIT_TASK.get(slot.kit) or _TAG_TASK.get(slot.tag) or (_SO_SEAD_TASK if (obj.aim == "STANDOFF" and slot.role == Role.SEAD) else None) or (_ESC_TASK if (slot.role == Role.SWEEP and obj.type not in (ObjectiveType.COUNTER_AIR, ObjectiveType.FLEET_DEFENSE)) else None) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role],
+                                          _KIT_TASK.get(slot.kit) or _TAG_TASK.get(slot.tag) or (_SO_SEAD_TASK if (obj.aim == "STANDOFF" and slot.role == Role.SEAD) else None) or (_ESC_TASK if slot.role == Role.ESCORT else None) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role],
                                           is_pl, slot.tag, slot.kit, guards_.get(id(slot), "")))
         pkg.support = self._support(pkg)
         pkg.jtac = obj.type in JTAC_OBJECTIVES
@@ -401,8 +402,8 @@ class PackageBuilder:
         # TARCAP and sweep: the long-range shooters (F-15C, F-14) first, F-16 / F/A-18 behind them. The package escort (v0.41.1) the other
         # way round: F-16 / F/A-18 first (it stays with the package and fights close), an F-15C / F-14 only when none is free.
         obj_ = self._ctx[0] if self._ctx else None
-        escort = slot.role == Role.SWEEP and obj_ is not None and not is_sweep(obj_)
-        long_first = slot.role in (Role.ESCORT, Role.SWEEP) and not escort
+        escort = slot.role in (Role.ESCORT, Role.SWEEP) and obj_ is not None and not is_sweep(obj_)
+        long_first = slot.role in (Role.TARCAP, Role.ESCORT, Role.SWEEP) and not escort
         def key(sq):
             k = self._dist_nm(sq.id, tx, ty) - 40 * (ledger.free[sq.id] / max(1, sq.authorized))
             if long_first and sq.aircraft not in LONG_RANGE_A2A:
