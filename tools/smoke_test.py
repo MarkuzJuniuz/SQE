@@ -732,7 +732,6 @@ def main():
     # v0.41.49: an AI flight's recovery point (RCV) gets the altitude its home leg needs (it was a fixed 3,000-6,000 ft); no scan: unchanged
     from sqe.routes import home_leg_ft as _hl
     _rl.from_grid(0, 0, 1000.0, _hi)
-    assert _hl((10_000, 5_000), (100_000, 5_000), 3000) == int(-(-(2800 / 0.3048 + 2000) // 500) * 500) and _hl((140_000, 5_000), (160_000, 5_000), 3000) == 3000 or True
     _hv = _hl((10_000, 5_000), (100_000, 5_000), 3000)
     assert _hv >= int(-(-(2800 / 0.3048 + 2000) // 500) * 500) and _hv <= 20000, _hv
     _rl.clear()
