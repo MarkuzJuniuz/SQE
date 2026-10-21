@@ -2070,6 +2070,22 @@ def main():
     assert _back and _n9 >= _aw.RETURN_MIN_DAYS - 1 and _w9.available >= _aw.RETURN_FRAC * _w9.authorized - 1, "it returns after resting, at strength"
     _rt9 = _CS.from_dict(_st.to_dict()); assert [w_.reserve for w_ in _rt9.enemy_air] == [w_.reserve for w_ in _st.enemy_air], "saved and loaded"
     print("[air rest] depleted wings and squadrons stand down, recover faster and return; your squadron, carriers and the bomber wing are left alone; saved")
+    # v0.41.52: red wings are cut into typed squadrons: ceil(jets / max) of them, none over the cap, one type each, totals unchanged, saved and loaded
+    from sqe.scenario import red_squadrons as _rsq
+    from sqe.difficulty import get as _get_dif52
+    from sqe.loadouts import ENEMY_FIGHTERS as _EF
+    import random as _rnd52
+    for _jets52, _max52, _n52 in ((5, 6, 1), (15, 6, 3), (17, 14, 2), (33, 14, 3), (10, 12, 1), (90, 12, 8)):
+        _q52 = _rsq("x", "X", ["MiG_29S", "Su_24M"], _jets52, _max52, ["MiG_29S"], _rnd52.Random(1))
+        assert len(_q52) == _n52 and sum(q_.authorized for q_ in _q52) == _jets52 and max(q_.authorized for q_ in _q52) <= _max52 and max(q_.authorized for q_ in _q52) - min(q_.authorized for q_ in _q52) <= 1, (_jets52, _max52, [q_.authorized for q_ in _q52])
+        if _n52 > 1:
+            assert any(q_.aircraft in _EF for q_ in _q52) and any(q_.aircraft not in _EF for q_ in _q52), "a mixed wing of 2+ squadrons keeps a fighter and an attack squadron"
+    assert [q_.aircraft for q_ in _rsq("x", "X", ["Su_25", "Su_24M"], 20, 12, ["MiG_29S"])][0] == "MiG_29S", "a wing with no fighter gets one"
+    for _w52 in _st.enemy_air:
+        assert _w52.sqns and _w52.squadrons == len(_w52.sqns) and sum(q_.authorized for q_ in _w52.sqns) == _w52.authorized and set(_w52.types) == {q_.aircraft for q_ in _w52.sqns}, ("wing squadrons", _w52.base_asset_id)
+        assert all(q_.authorized <= _get_dif52(_st.level).red_squadron_max for q_ in _w52.sqns) if "Tu_22M3" not in _w52.types else len(_w52.sqns) == 1, "squadron size cap; the bomber wing is one squadron"
+    assert [[(q_.aircraft, q_.authorized) for q_ in w_.sqns] for w_ in _rt9.enemy_air] == [[(q_.aircraft, q_.authorized) for q_ in w_.sqns] for w_ in _st.enemy_air], "squadrons saved and loaded"
+    print("[red squadrons] wings are cut into typed squadrons (ceil(jets / max), even split, one type each, a fighter squadron in every mixed wing); the bomber wing is one; saved and loaded")
     # roads: the scan file's points, nearest-point snapping, columns and supply sites moved onto a road once (garrisons stay off it)
     from sqe import roads as _rdm, ground as _grd9
     _rdm.clear(); assert not _rdm.available() and _rdm.snap(0, 0) is None, "no road scan: no snapping"

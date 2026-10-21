@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
 from . import FORMAT_VERSION
-from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, PlayerProfile)
+from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, RedSquadron, PlayerProfile)
 
 
 def _migrate_roles_v6(d: dict) -> None:
@@ -113,7 +113,7 @@ class CampaignState:
         s.bases = {k: Base(**{**v, "kind": BaseKind(v["kind"])}) for k, v in d["bases"].items()}
         s.squadrons = {k: Squadron(**v) for k, v in d["squadrons"].items()}
         s.assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in d["assets"].items()}
-        s.enemy_air = [EnemyAirWing(**w) for w in d["enemy_air"]]
+        s.enemy_air = [EnemyAirWing(**{**w, "sqns": [RedSquadron(**q) for q in w.get("sqns") or []]}) for w in d["enemy_air"]]
         s.ground = d.get("ground") or {}
         s.raids = d.get("raids") or {}
         s.sams = d.get("sams") or {}
