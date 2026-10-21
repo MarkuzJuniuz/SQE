@@ -2299,6 +2299,30 @@ def main():
                     assert not any(f_.is_player for f_ in p_.flights), "nobody is put in an AI-only job"
     assert _n27, "AI-only jobs are still planned"
     print(f"[ai-only] {_n27} BARCAP / intercept jobs planned and played by the AI, none offered to you")
+    # v0.41.66: pydcs's scattered formation never finishes when its ring is too small for the group (a mission build could freeze); the patched one always does
+    import random as _rn66, threading as _th66
+    from dcs import mapping as _mp66
+    from dcs.terrain import caucasus as _cc66
+    from dcs.unit import Vehicle as _Vh66
+    from dcs.unitgroup import VehicleGroup as _VG66
+    from sqe import pydcs_patch as _pp66
+    _t66 = _cc66.Caucasus()
+    def _grp66(n_):
+        g_ = _VG66(1, "x")
+        for k_ in range(n_):
+            u_ = _Vh66(k_ + 1, "u", "T-72B"); u_.position = _mp66.Point(0, 0, _t66); g_.add_unit(u_)
+        return g_
+    assert _VG66.formation_scattered is _pp66.formation_scattered, "the patched scattered formation is installed (importing the mission builder does it)"
+    for sd_ in range(40):                                                    # where pydcs finishes, the same numbers give the same layout
+        _rn66.seed(sd_); a_ = _grp66(4); _pp66.ORIGINAL(a_, 0)
+        _rn66.seed(sd_); b_ = _grp66(4); _pp66.formation_scattered(b_, 0)
+        assert [(u.position.x, u.position.y) for u in a_.units] == [(u.position.x, u.position.y) for u in b_.units], ("same layout as pydcs where pydcs finishes", sd_)
+    def _many66():
+        for sd_ in range(300):                                               # 12 vehicles in a 15 m ring: pydcs loops forever here
+            _rn66.seed(sd_); _pp66.formation_scattered(_grp66(12), 0, 15)
+    _w66 = _th66.Thread(target=_many66, daemon=True); _w66.start(); _w66.join(60)
+    assert not _w66.is_alive(), "a scattered group always finishes (it used to hang the build)"
+    print("[scatter] pydcs's scattered formation: the same layout where it finishes, and 300 groups of 12 in a 15 m ring all finish (they hung before)")
     print("SMOKE TEST PASSED")
 
 

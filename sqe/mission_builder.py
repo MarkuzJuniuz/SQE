@@ -25,6 +25,7 @@ from dcs.unitgroup import VehicleGroup
 
 from . import briefing as brief, callsigns, carcass, ground, profiles, relief, sams
 from . import seacheck as seac
+from . import pydcs_patch
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
 from .debrief import Manifest, install_hook
@@ -37,6 +38,8 @@ from .strike_tasks import StrikeTasks, DEAD_GATE_KM, SEAD_WAVE_KM, TRACK_RADARS,
 from .kneeboard import latlon, render_pages
 from .loadouts import LoadoutLibrary, enemy_cap_loadout, ENEMY_FIGHTERS
 from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType, Role, task_label
+pydcs_patch.install()           # v0.41.66: pydcs's scattered formation could loop forever and freeze a build (sqe/pydcs_patch.py)
+
 TARCAP_LEAD_S = 0             # v0.41.1: a TARCAP arrives WITH the first flight it covers (the HARM shooters): the SAM has to split its attention,
                               # and its exposure ends with the HARM salvo. v0.41.0's 5-minute head start let the SA-10 kill six waiting Eagles.
 FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
