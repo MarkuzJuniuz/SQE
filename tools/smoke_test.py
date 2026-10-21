@@ -2537,7 +2537,6 @@ def check_56_barcap_intercepts_ai_only(c):
                     assert not any(f_.is_player for f_ in p_.flights), "nobody is put in an AI-only job"
     assert _n27, "AI-only jobs are still planned"
     print(f"[ai-only] {_n27} BARCAP / intercept jobs planned and played by the AI, none offered to you")
-    print("SMOKE TEST PASSED")
 
 
 CHECKS = [
@@ -2601,10 +2600,35 @@ CHECKS = [
 ]
 
 
-def main():
-    c = Ctx()
-    for fn in CHECKS:
+def main(argv=None):
+    """Run the check sections in order. Options: `--list` (names only), `--only a,b` (the setup section plus the sections whose name contains a or b;
+    a section that borrows from one you left out fails with an AttributeError naming what it needed), `--timeout SECONDS` (a section that runs longer
+    dumps every thread's traceback and stops the run; default 600, 0 = off)."""
+    import argparse
+    import faulthandler
+    import time
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--list", action="store_true")
+    ap.add_argument("--only", default="")
+    ap.add_argument("--timeout", type=int, default=600)
+    args = ap.parse_args(argv)
+    if args.list:
+        print("\n".join(fn.__name__ for fn in CHECKS))
+        return
+    sys.stdout.reconfigure(line_buffering=True)                  # output reaches a log file at once, so a stall shows where it is
+    want = [w for w in args.only.split(",") if w]
+    run = [fn for k, fn in enumerate(CHECKS) if not want or k == 0 or any(w in fn.__name__ for w in want)]
+    c, times = Ctx(), []
+    for fn in run:
+        if args.timeout:
+            faulthandler.dump_traceback_later(args.timeout, exit=True)
+        t0 = time.time()
         fn(c)
+        times.append((time.time() - t0, fn.__name__))
+    faulthandler.cancel_dump_traceback_later()
+    print("slowest sections: " + ", ".join(f"{n} {t:.0f} s" for t, n in sorted(times, reverse=True)[:5]))
+    if not want:
+        print("SMOKE TEST PASSED")
 
 
 
