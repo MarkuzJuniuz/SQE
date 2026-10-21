@@ -186,7 +186,8 @@ def main():
     assert all(any(t_.get("id") == "EngageTargetsInZone" for t_ in list(g_["route"]["points"].values())[0]["task"]["params"]["tasks"].values()) for g_ in _rz), "red patrols: engage only round their station"
     print(f"    {_nst} TARCAP / escort flights on their own stations (no IP, TARCAP without egress, leashed); {len(_rz)} red patrols leashed the same way")
     # v0.41.1: alert fields scramble on a circle round the FIELD, and only fields within reach of the fight send pairs
-    from sqe.mission_builder import ALERT_REACH_NM as _arn, FIELD_DETECT_NM as _fdn
+    from sqe.mission_builder import FIELD_DETECT_NM as _fdn
+    from sqe.red_air_picture import ALERT_REACH_NM as _arn
     _tz = [z_ for z_ in _mz["mission"]["triggers"]["zones"].values() if z_["name"].startswith("detect ")]
     for z_ in _tz:
         _fa = ms.state.assets[z_["name"].split(" ", 1)[1]]
@@ -931,7 +932,8 @@ def main():
     assert '"EGR"' in _mz and '"PUSH"' in _mz, "the raid has a PUSH and an egress"
     assert ("RAID-E-1" not in _mz) or '"Escort"' in _mz, "raid escorts fly an escort task tied to the bombers"
     # v0.41.31: a raid's route bends round the carrier group (FLEET_RAID_AVOID_NM), and red's target pick shies from it like a Patriot field
-    from sqe.mission_builder import MissionBuilder as _MB31, FLEET_RAID_AVOID_NM as _FR31
+    from sqe.mission_builder import MissionBuilder as _MB31
+    from sqe.raid_spawns import FLEET_RAID_AVOID_NM as _FR31
     _cv31 = next((b_ for b_ in _st.bases.values() if b_.kind.value == "CARRIER"), None)
     if _cv31 is not None:
         _mb31 = _MB31.__new__(_MB31); _mb31.state = _st
@@ -940,7 +942,7 @@ def main():
         _seg = lambda a_, b_: min(((a_[0] + (b_[0] - a_[0]) * t_ / 50 - _cv31.x) ** 2 + (a_[1] + (b_[1] - a_[1]) * t_ / 50 - _cv31.y) ** 2) ** 0.5 for t_ in range(51))
         assert len(_p31) > 2 and min(_seg(_p31[i_], _p31[i_ + 1]) for i_ in range(len(_p31) - 1)) >= (_FR31 - 1) * 1852, "a raid goes round the carrier group"
         assert _rd.FLEET_NM == _FR31
-    from sqe.mission_builder import RED_LONG_RANGE as _RLR
+    from sqe.red_air_picture import RED_LONG_RANGE as _RLR
     assert _RLR == {"Su_27"}, "red's long-range class is the Su-27 only"
     _man = s.manifest(); _rg = next(g_ for g_ in _man.groups if g_.get("raid_base"))
     _base = _st.bases[_rg["raid_base"]]; _def0 = _base.defense
@@ -1116,7 +1118,7 @@ def main():
                 s.fly(_p.number, None)
     finally:
         _mbm.MissionBuilder._plan_cap_stations = _orig_pcs
-    assert _rec_cap and min(_rec_cap) >= _mbm.CAP_FLEET_KEEPOUT_NM - 1.0, f"Red CAP stations stay 90 nm from every carrier ({min(_rec_cap):.0f})"
+    assert _rec_cap and min(_rec_cap) >= __import__("sqe.red_air_picture", fromlist=["x"]).CAP_FLEET_KEEPOUT_NM - 1.0, f"Red CAP stations stay 90 nm from every carrier ({min(_rec_cap):.0f})"
     print(f"[fleet keep-out] {len(_rec_cap)} known CAP stations, the nearest {min(_rec_cap):.0f} nm from a carrier (limit 90); AI-test mode gives your flight the stand-off")
     # the ground-war map draws (sector numbers and strength bars, no overlapping figures)
     import os as _os; _os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

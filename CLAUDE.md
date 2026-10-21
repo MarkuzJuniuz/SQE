@@ -74,6 +74,7 @@ Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE
 - `sqe/strike_tasks.py`: `StrikeTasks`, the strike / SEAD / DEAD / CAS tasking (HARM and JSOW tasks, DEAD gate, CAS tasks), inherited by `MissionBuilder`.
 - `sqe/fighter_stations.py`: `FighterStations`, the TARCAP / escort / sweep station rules (engage circles, SAM-clear stations, hold times), inherited by `MissionBuilder`.
 - `sqe/support_caps.py`: `SupportCaps`, the tanker / HAVCAP / base CAP / carrier CAP (which ones, where they sit, their route), inherited by `MissionBuilder`.
+- `sqe/red_air_picture.py`: `RedAirPicture`, red's known CAP stations and alert aircraft in a mission, inherited by `MissionBuilder`. `sqe/raid_spawns.py`: `RaidSpawns`, red raids and reactive spawns, inherited by `MissionBuilder`.
 - `sqe/mission_builder.py`: builds the mission; fight circles, tanker, carrier CAP, HARM/JSOW placement, recovery net.
 - `sqe/routes.py`: route planning and SAM avoidance (`AVOID_NM`).
 - `sqe/threatmap.py`: `tanker_spot` and threat geometry.
