@@ -2047,14 +2047,15 @@ def main():
     # air wings that fall back: a badly depleted wing or squadron stands down, recovers faster, returns; the player's squadron and carriers never
     from sqe import airwings as _aw
     s.new("Air rest", "F-16C", 3, seed=11); _st = s.state; _d9 = type(_gd(3))(**{**_gd(3).__dict__, "air_retreat": 1.0})
-    _w9 = next(w_ for w_ in _st.enemy_air if "Tu_22M3" not in w_.types and w_.authorized >= 8); _w9.available = 2
+    _w9 = next(w_ for w_ in _st.enemy_air if "Tu_22M3" not in w_.types and len(w_.sqns) >= 2 and all(q_.authorized >= _aw.MIN_AUTHORIZED for q_ in w_.sqns)); _q9 = _w9.sqns[0]; _q9.available = 2; _oth9 = [q_.available for q_ in _w9.sqns[1:]]
     _bs = [sq_ for sq_ in _st.squadrons.values() if sq_.id != _st.player.squadron_id and _st.bases[sq_.base_id].kind.value != "CARRIER"]
     _psq = _st.squadrons[_st.player.squadron_id]; _psq.available = 1
     for _b9 in _bs:
         _b9.available = 1
     _ea0 = _war.totals(_st)["ea"]; _rng9 = _rnd.Random(1)
     _l9 = _aw.step(_st, _d9, _rng9)
-    assert _w9.available == 0 and _w9.reserve == 2 and any("air wing" in x_ for x_ in _l9), "a depleted wing stands down"
+    assert _q9.available == 0 and _q9.reserve == 2 and _w9.reserve == 2 and any("squadron at" in x_ for x_ in _l9), "a depleted squadron stands down"
+    assert [q_.available for q_ in _w9.sqns[1:]] == _oth9 and not any(q_.reserve for q_ in _w9.sqns[1:]), "the wing's other squadrons keep flying (v0.41.53)"
     assert _psq.available == 1 and _psq.reserve == 0, "your own squadron is never pulled"
     assert all(b_.reserve == 1 for b_ in _bs if b_.authorized >= _aw.MIN_AUTHORIZED), "the other friendly squadrons follow the same rule"
     assert _war.totals(_st)["ea"] == _ea0, "resting aircraft still count in the strength totals"
@@ -2064,11 +2065,28 @@ def main():
     _sim9 = _war.WarSimulator(_d9, _rnd.Random(2)); _back = False
     for _n9 in range(30):
         _sim9.end_day(_st)
-        if _w9.reserve == 0 and _w9.available > 0:
+        if _q9.reserve == 0 and _q9.available > 0:
             _back = True; break
-        assert _w9.available == 0, "a resting wing does not fly"
-    assert _back and _n9 >= _aw.RETURN_MIN_DAYS - 1 and _w9.available >= _aw.RETURN_FRAC * _w9.authorized - 1, "it returns after resting, at strength"
+        assert _q9.available == 0, "a resting squadron does not fly"
+    assert _back and _n9 >= _aw.RETURN_MIN_DAYS - 1 and _q9.available >= _aw.RETURN_FRAC * _q9.authorized - 1, "it returns after resting, at strength"
     _rt9 = _CS.from_dict(_st.to_dict()); assert [w_.reserve for w_ in _rt9.enemy_air] == [w_.reserve for w_ in _st.enemy_air], "saved and loaded"
+    # v0.41.53: red strength is per squadron: a loss comes off the squadron that flew the type; the wing's numbers are the sums; saves from before load
+    _w53 = next(w_ for w_ in _st.enemy_air if len(w_.sqns) >= 2 and len({q_.aircraft for q_ in w_.sqns}) >= 2 and all(q_.available > 3 for q_ in w_.sqns))
+    _q53 = _w53.sqns[-1]; _b53 = [q_.available for q_ in _w53.sqns]; _t53 = _w53.available
+    assert _w53.lose(_q53.aircraft, 2) == 2 and _q53.available == _b53[-1] - 2 and [q_.available for q_ in _w53.sqns[:-1]] == _b53[:-1], "a loss comes off the squadron of that type"
+    assert _w53.available == _t53 - 2 and _w53.authorized == sum(q_.authorized for q_ in _w53.sqns), "the wing's totals are the sums"
+    _w53.available = _w53.available - 3; assert _w53.available == _t53 - 5, "assigning the wing total spreads over squadrons"
+    _w53.replenish(99); assert all(q_.available == q_.authorized for q_ in _w53.sqns if not q_.reserve), "replenishment fills every squadron that is not resting"
+    _q53.available = 1; assert _q53.aircraft not in _w53.types_up, "a squadron with no pair serviceable offers no type"
+    _old53 = _st.to_dict()
+    for _x53 in _old53["enemy_air"]:                                   # a save from v0.41.52: totals on the wing, none on the squadrons
+        _x53["authorized"] = sum(q_["authorized"] for q_ in _x53["sqns"]); _x53["available"] = _x53["authorized"] - 3; _x53["reserve"] = 0; _x53["rest_days"] = 0
+        for _q in _x53["sqns"]:
+            for _k in ("available", "reserve", "rest_days"): _q.pop(_k, None)
+    _lo53 = _CS.from_dict(_old53); assert all(w_.available == w_.authorized - 3 for w_ in _lo53.enemy_air), "a v0.41.52 save loads with the wing's strength spread over its squadrons"
+    for _x53 in _old53["enemy_air"]:                                   # a save from v0.41.51: no squadrons at all
+        _x53.pop("sqns", None)
+    _lo53 = _CS.from_dict(_old53); assert all(w_.sqns and w_.available == w_.authorized - 3 for w_ in _lo53.enemy_air), "a v0.41.51 save loads one squadron per type"
     print("[air rest] depleted wings and squadrons stand down, recover faster and return; your squadron, carriers and the bomber wing are left alone; saved")
     # v0.41.52: red wings are cut into typed squadrons: ceil(jets / max) of them, none over the cap, one type each, totals unchanged, saved and loaded
     from sqe.scenario import red_squadrons as _rsq

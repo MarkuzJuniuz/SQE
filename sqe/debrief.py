@@ -1126,7 +1126,7 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         elif g["kind"] == "enemy_air":
             w = state.enemy_air_at(g["ref"])
             if w and dead:
-                w.available = max(0, w.available - len(dead))
+                w.lose(g.get("ac"), len(dead))                    # v0.41.53: the loss comes off the squadron that flew that type
                 out["red_air_lost"] += len(dead)
                 out["lines"].append(f"{len(dead)} enemy aircraft from {state.assets[g['ref']].name} destroyed")
     # a raid you were sent to stop: bombers still alive when they reached their base got through
@@ -1142,14 +1142,14 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 from . import raids as _rd
                 import random as _rnd
                 out["lines"].append(f"Raid on {where}: {len(alive)} attack aircraft got through")
-                out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, _rnd.Random(f"{state.campaign_id}:{state.day}:through"), len(alive), g.get("raid_aim", ""))]
+                out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, _rnd.Random(f"{state.campaign_id}:{state.day}:through"), len(alive), g.get("raid_aim", ""), g.get("ac"))]
             elif alive:
                 from . import raids as _rd
                 import random as _rnd
                 rr = _rnd.Random(f"{state.campaign_id}:{state.day}:early")
                 if rr.random() < 0.5:
                     out["lines"].append(f"Raid: you left before the raiders arrived; {len(alive)} got through to {where}")
-                    out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, rr, len(alive), g.get("raid_aim", ""))]
+                    out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, rr, len(alive), g.get("raid_aim", ""), g.get("ac"))]
                 else:
                     out["lines"].append("Raid: you left before the raiders arrived; the defences stopped them")
             else:

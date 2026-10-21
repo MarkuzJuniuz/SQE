@@ -37,7 +37,7 @@ def raider_wings(state, kind: str = "field", budget: bool = True) -> list:
         a = state.assets.get(w.base_asset_id)
         if w.available < 2 or a is None or a.destroyed or (budget and not redair.can(state, w.base_asset_id, 2)):
             continue
-        t = next((t for t in pref if t in w.types), None)
+        t = next((t for t in pref if t in w.types_up), None)        # v0.41.53: a squadron of that type with a pair serviceable
         if t:
             out.append((w, t))
     return out
@@ -228,14 +228,14 @@ def todays_raids(state, d, rng: random.Random) -> tuple:
     return warned, surprise
 
 
-def hit(state, base_id: str, wing, rng: random.Random, through: int | None = None, aim: str = "") -> list:
+def hit(state, base_id: str, wing, rng: random.Random, through: int | None = None, aim: str = "", ac: str | None = None) -> list:
     """Bombs fall on one of our airfields, a supply site, a garrison or on friendly troops. The raiders lose a jet to the defences. Log lines."""
     b = state.bases[base_id]
     k = through if through is not None else rng.randint(1, 3)
     from .sams import covering_ad
     ad = covering_ad(state, *aim_xy(state, aim, b))
     if wing is not None:                                # v0.41.30: a full Patriot + HAWK takes a second jet (was always one)
-        wing.available = max(0, wing.available - 1 - (round(ad) if through is None else 0))    # (a flown raid's real kills are counted by the debrief)
+        wing.lose(ac, 1 + (round(ad) if through is None else 0))    # (a flown raid's real kills are counted by the debrief)
     kind = aim_kind(aim)
     if kind == "sector":
         g, i = state.ground, int(aim.split(":")[1])
@@ -280,11 +280,11 @@ def overnight(state, d, rng: random.Random) -> list:
         what = {"field": b.name, "supply": state.blue_assets[aim].name if aim in state.blue_assets else "", "garrison": state.blue_assets[aim].name if aim in state.blue_assets else "",
                 "sector": "friendly troops in " + state.ground["names"][int(aim.split(":")[1])] if aim.startswith("sector:") else ""}[aim_kind(aim)]
         if rng.random() < p_stop:
-            k = min(wing.available, rng.randint(1, 3 + round(covering_ad(state, x, y)))); wing.available -= k
+            k = wing.lose(r[2], rng.randint(1, 3 + round(covering_ad(state, x, y))))
             lines.append(f"Surprise raid on {what}: alert aircraft got up in time; {k} attack aircraft shot down")
         else:
             lines.append(f"Surprise raid on {what}: nobody was warned and the aircraft got through")
-            lines += [x_.strip() for x_ in hit(state, b.id, wing, rng, None, aim)]
+            lines += [x_.strip() for x_ in hit(state, b.id, wing, rng, None, aim, r[2])]
     if state.raids is not None:
         state.raids["surprise"] = 0
     return lines

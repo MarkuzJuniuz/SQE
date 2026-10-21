@@ -74,13 +74,14 @@ def plan(state, d) -> dict:
     use, bud = {}, {}
     wings = sorted(state.enemy_air, key=lambda w: w.base_asset_id)
     for w in wings:
-        types = [t for t in w.types if t in ENEMY_FIGHTERS]
+        types = [t for t in w.types_up if t in ENEMY_FIGHTERS]            # v0.41.53: only a fighter squadron with a pair serviceable flies patrols
         a = state.assets.get(w.base_asset_id)
-        if not types or a is None or a.destroyed or w.available < 2:
+        fav = w.available_of(ENEMY_FIGHTERS)                              # ...and the patrols are cut from its fighters, not from attack squadrons
+        if not types or a is None or a.destroyed or fav < 2:
             continue
-        pairs = w.available // 2
-        bud[w.base_asset_id] = DAILY_SORTIES * w.available
-        n_cap = min(doc["pairs"], pairs - 1, max(1, round(doc["frac"] * w.available / 2)))     # one pair always stays on alert
+        pairs = fav // 2
+        bud[w.base_asset_id] = DAILY_SORTIES * w.available                # the day's sortie budget is still the whole wing's (raids share it)
+        n_cap = min(doc["pairs"], pairs - 1, max(1, round(doc["frac"] * fav / 2)))     # one pair always stays on alert
         tgt = min(blue_af, key=lambda b: dist(a.x, a.y, b.x, b.y)) if blue_af else None
         order = _wave_order(w.base_asset_id, state.day)
         for k in range(max(0, n_cap)):
@@ -96,7 +97,7 @@ def plan(state, d) -> dict:
             lo, hi = WAVES[order[k]]
             flights.append({"id": f"rf{state.day}-{w.base_asset_id}-{k}", "kind": "CAP", "wing": w.base_asset_id, "type": rng.choice(types), "size": 2,
                             "start": lo, "end": min(1440 + WAVE_OVERLAP_MIN, hi + WAVE_OVERLAP_MIN), "x": sx, "y": sy})
-        if w.available - 2 * max(0, n_cap) >= 4:
+        if fav - 2 * max(0, n_cap) >= 4:
             spare.append((w, types))
     g = state.ground or {}
     contested = [i for i, (r, b) in enumerate(zip(g.get("red", []), g.get("blue", []))) if r >= 15 and b >= 15]
@@ -209,7 +210,7 @@ def pick(state, tot_min: float, pts: list, tx: float, ty: float, limit: int) -> 
             continue
         w = state.enemy_air_at(f["wing"])
         a = state.assets.get(f["wing"])
-        if w is None or a is None or a.destroyed or w.available // 2 <= used.get(f["wing"], 0):
+        if w is None or a is None or a.destroyed or w.available_of(ENEMY_FIGHTERS) // 2 <= used.get(f["wing"], 0):
             continue
         if not (dist(f["x"], f["y"], tx, ty) <= REL_NM * NM or any(dist(f["x"], f["y"], px, py) <= ROUTE_NM * NM for px, py in pts)):
             continue

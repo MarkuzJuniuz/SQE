@@ -330,12 +330,12 @@ class WarSimulator:
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
         lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'} (odds {p:.0%})"]
         if bw is not None and ok:
-            k = min(bw.available, rng.randint(2, 4)); bw.available -= k
+            k = bw.lose(pkg.extra.get("raider"), rng.randint(2, 4))
             lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
         elif bw is not None and pkg.extra.get("land"):
-            lines += raids_hit(state, pkg.objective.target_id, bw, rng, None, pkg.objective.aim)
+            lines += raids_hit(state, pkg.objective.target_id, bw, rng, None, pkg.objective.aim, pkg.extra.get("raider"))
         elif bw is not None:
-            bw.available = max(0, bw.available - 1)
+            bw.lose(pkg.extra.get("raider"), 1)
             carriers = [s for s in state.squadrons.values() if state.bases[s.base_id].kind.value == "CARRIER"]
             if carriers:
                 sq = rng.choice(carriers); lost = rng.randint(1, 3); sq.available = max(0, sq.available - lost)
@@ -480,10 +480,9 @@ class WarSimulator:
                 sq.available = min(sq.authorized, sq.available + max(1, round(sq.authorized * d.friendly_replenish)))
         for w in state.enemy_air:
             if state.assets[w.base_asset_id].destroyed:             # a cratered field cannot operate or rearm: the survivors scatter or are lost
-                w.available = int(w.available * 0.75)
+                w.scatter(0.75)
                 continue
-            if w.available < w.authorized and not w.reserve:
-                w.available = min(w.authorized, w.available + max(1, round(w.authorized * d.enemy_replenish)))
+            w.replenish(max(1, round(w.authorized * d.enemy_replenish)))       # new jets for the squadrons that are not resting (v0.41.53)
         for ln in airwings.step(state, d, self.rng):
             state.note("Overnight: " + ln)
         for a in state.assets.values():

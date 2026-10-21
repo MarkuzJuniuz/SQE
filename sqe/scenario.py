@@ -218,11 +218,11 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     _disperse_red(st, t, plan_w)                          # no field holds more jets than DCS can park there
     for aid, types, cnt, squads in plan_w:
         sqns = red_squadrons(aid, st.assets[aid].name, types, cnt, d.red_squadron_max, d.enemy_types, random.Random(f"{st.campaign_id}:{aid}"))      # v0.41.52: typed squadrons; the wing's types are the ones they fly
-        st.enemy_air.append(EnemyAirWing(aid, list(dict.fromkeys(q.aircraft for q in sqns)), cnt, cnt, len(sqns), sqns=sqns))
+        st.enemy_air.append(EnemyAirWing(aid, list(dict.fromkeys(q.aircraft for q in sqns)), len(sqns), sqns))
 
     if d.bomber_wing > 0 and th["bomber_base"] in live:       # strategic bombers live far from the front (Mozdok in the Caucasus)
-        st.enemy_air.append(EnemyAirWing(th["bomber_base"], ["Tu_22M3"], d.bomber_wing, d.bomber_wing,
-                                         sqns=[RedSquadron(f"{th['bomber_base']}_1", f"{st.assets[th['bomber_base']].name} 1", "Tu_22M3", d.bomber_wing)]))     # one squadron (judgment call)
+        st.enemy_air.append(EnemyAirWing(th["bomber_base"], ["Tu_22M3"], 1,
+                                         [RedSquadron(f"{th['bomber_base']}_1", f"{st.assets[th['bomber_base']].name} 1", "Tu_22M3", d.bomber_wing)]))     # one squadron (judgment call)
 
     # ---- air defence clusters ----------------------------------------------------------------------
     variants = d.sam_variants
