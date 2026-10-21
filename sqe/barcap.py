@@ -29,6 +29,7 @@ STATION_MAX_NM = 30            # never further from the asset than this, even wh
 SAM_MARGIN_NM = 8              # a station stays this far outside an enemy SAM ring (judgment call)
 SECTOR_MERGE_DEG = 40          # hostile bases within this many degrees of each other share one area (judgment call)
 MAX_SECTORS = 3
+FLEET_REACH_NM = 70            # a carrier group's SM-2 reach (measured: red CAP pairs were killed 51-67 nm out; raids.FLEET_NM)
 THREAT_REACH_NM = 300          # a hostile base further than this cannot send anything at the asset (judgment call)
 
 
@@ -82,7 +83,10 @@ def _enemy_rings(state, side: str) -> list:
     """[(x, y, reach_m)] of the SAM sites that would shoot at `side`'s CAP: blue's sites for red's patrols, red's for blue's."""
     from .threatmap import RANGE_NM, SERIOUS_NM
     sites = state.blue_sams.values() if side == "red" else (a for a in state.assets.values() if a.kind == AssetKind.SAM)
-    return [(s.x, s.y, RANGE_NM.get(s.variant, 0) * NM) for s in sites if not s.destroyed and RANGE_NM.get(s.variant, 0) >= SERIOUS_NM]
+    rings = [(s.x, s.y, RANGE_NM.get(s.variant, 0) * NM) for s in sites if not s.destroyed and RANGE_NM.get(s.variant, 0) >= SERIOUS_NM]
+    if side == "red":                                       # v0.41.76: the ships' reach is a ring too (it replaces the old fixed 130 nm keep-out round the boat)
+        rings += [(b.x, b.y, FLEET_REACH_NM * NM) for b in state.bases.values() if b.kind == BaseKind.CARRIER]
+    return rings
 
 
 def station(state, side: str, ax: float, ay: float, brg: float, out_nm: float) -> tuple:

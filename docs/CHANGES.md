@@ -1,5 +1,11 @@
 # CHANGES.md
 
+## v0.41.76, red's patrol stations lose the old fixed keep-outs; the ships' reach is a SAM ring
+
+* **XO 2026-10-21: "that old red rule came from the early, almost random stage; use the stay-away-from-SAMs system (and the boat's range) instead."** Red's patrol stations are no longer pushed 45 nm from our marshal point and fields and 130 nm from our carrier (`RED_KEEP_NM`, v0.41.10; the 130 nm push is what put Bandit 1 behind the SA-10 in the v0.41.74 run). Their stations are BARCAP stations (v0.41.73) that stay outside blue's SAM rings, and now outside the carrier group's real reach too: `barcap.FLEET_REACH_NM` 70 nm (measured: CAP pairs were killed 51 to 67 nm out) is a ring in the SAM-clear rule, and `CAP_FLEET_KEEPOUT_NM` (the boat's CURRENT position, it may be slid back for the sortie) is 78 nm (reach + 8 nm margin; was 90, hand-set).
+* **Kept on purpose:** the 100 nm bubble round the AWACS anchor / HAVCAP (the AWACS does not check red stations when it picks its spot; revisit when the HAVCAP rules follow BARCAP in PR 3); the behind-the-target test from v0.41.75. **Dropped:** the 60 nm bubble round the tanker: the tanker picks its spot 40 nm from every red station and 25 nm from red's lanes (`threatmap.tanker_spot`), which is the rule that protects it.
+* Smoke: `check_31d_barcap_areas` checks the carrier ring.
+
 ## v0.41.75, red patrols pushed behind the target by the keep-out are left out
 
 * **XO's v0.41.74 run (Standoff DEAD, Gudauta SA-10):** Bandit 1's station sat 36 nm PAST the SA-10 site (and Bandit 2 27 nm past), although v0.41.74 drops patrols whose BARCAP station is behind the target. Cause: `_plan_cap_stations` then pushes every station away from our marshal point, fields and the carrier (`RED_KEEP_NM`, 130 nm round the boat), and that push moved a station that was fine into the back of the target. The behind-the-target test (`redair.beyond_nm`, 20 nm, `BEHIND_NM`) now also runs AFTER the keep-out push; a patrol that ends up behind the target is left out of the mission (it is not in the fight), and its place goes to the alert aircraft. `pick` uses the same helper.
