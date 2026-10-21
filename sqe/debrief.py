@@ -51,6 +51,8 @@ local JAMW = { __JAMW__ }          -- unit name -> {from, to} mission seconds th
 local JAMS = { __JAMS__ }
 local ALERTS = { __ALERTS__ }       -- alert / scramble groups: g = group, f = the flag their trigger sets when called, b = field, ty = type
 local ALOG = {}                     -- group -> {called = t, air = t}
+local COVER = { __COVER__ }          -- v0.41.79: CAP pairs with a standby: g = group, n = jets, bf = flag that sends the pair home (its orbit stops), rf = flag that calls the replacement, u = planned end (s)
+local COVERLOG = {}                 -- group -> {why, t, replaced}
 local CFG = '__CFG__'               -- the build's settings (splash damage, ECM script), raw JSON
 local splashN, splashK = 0, 0          -- unit name -> 1 internal set, 2 ECM pod (ecm.py)
 __JAMCFG__
@@ -103,6 +105,14 @@ local function alertsJson()
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
+local function coverJson()
+  local o = {}
+  for _, c in ipairs(COVER) do
+    local l = COVERLOG[c.g]
+    if l then o[#o + 1] = string.format('{"g":"%s","why":"%s","t":%d,"replaced":%s}', esc(c.g), esc(l.why), l.t, tostring(l.replaced and true or false)) end
+  end
+  return "[" .. table.concat(o, ",") .. "]"
+end
 local function tracksJson()
   local o = {}
   for gn, pts in pairs(TRACK) do
@@ -123,9 +133,9 @@ end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"tracks":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"tracks":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), tracksJson(), CFG, splashN, splashK))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), tracksJson(), CFG, splashN, splashK))
   f:close()
 end
 local function nameOf(obj)
@@ -496,6 +506,72 @@ if #ALERTS > 0 then
     end
     return t + 10
   end, nil, timer.getTime() + 10)
+end
+-- v0.41.79: CAP replacement. A covered pair (a red patrol, a blue base / carrier / HAVCAP / tanker CAP) is watched: if a jet of it is down, or its air-to-air
+-- missiles are all gone (winchester), or a jet is at bingo fuel, the whole pair leaves (its orbit stops on the bf flag: a pair does not stay one jet short,
+-- XO: "if one is shot down they bug out") and COVER_DELAY_S later the replacement is called (the rf flag; the nearest field's pair, or a pair that appears
+-- behind the station). Nothing is called when the sortie is nearly over anyway (COVER_MIN_LEFT_S).
+local COVER_DELAY_S = 150           -- the short delay between the pair leaving and the replacement being called (judgment call)
+local COVER_MIN_LEFT_S = 600
+local BINGO_FUEL = 0.20             -- fraction of internal fuel left (judgment call; DCS's own bingo is type-dependent)
+local function aamCount(u)
+  local n = 0
+  pcall(function()
+    for _, a in ipairs(u:getAmmo() or {}) do
+      local d = a.desc or {}
+      if d.category == 1 and d.missileCategory == 1 then n = n + (a.count or 0) end
+    end
+  end)
+  return n
+end
+if #COVER > 0 then
+  timer.scheduleFunction(function(_, t)
+    local now, left = timer.getTime(), false
+    for _, c in ipairs(COVER) do
+      if not c.done then
+        left = true
+        local l = COVERLOG[c.g]
+        if not l and now > c.u - COVER_MIN_LEFT_S then
+          c.done = true                                  -- the sortie is nearly over: a pair that lands now is not a loss
+        elseif not l then
+          local g = Group.getByName(c.g)
+          if g then
+            local alive, why, aam = 0, nil, 0
+            for _, u in ipairs(g:getUnits() or {}) do
+              local ok, ex = pcall(function() return u:isExist() and u:getLife() > 0 end)
+              if ok and ex then
+                alive = alive + 1
+                aam = aam + aamCount(u)
+                local okf, fu = pcall(function() return u:getFuel() end)
+                if okf and fu and fu < BINGO_FUEL and not why then why = "bingo" end
+              end
+            end
+            if alive < c.n and not why then why = "lost" end
+            if c.armed and alive > 0 and aam == 0 and not why then why = "winchester" end
+            if aam > 0 then c.armed = true end
+            if why and now > 120 then
+              COVERLOG[c.g] = { why = why, t = math.floor(now), replaced = false }
+              pcall(function() trigger.action.setUserFlag(c.bf, true) end)
+              dump()
+            end
+          end
+        else
+          if not l.replaced and now - l.t >= COVER_DELAY_S then
+            if c.rf > 0 and now <= c.u - COVER_MIN_LEFT_S then
+              pcall(function() trigger.action.setUserFlag(c.rf, true) end)
+              l.replaced = true
+              dump()
+            else
+              c.done = true
+            end
+          end
+          if l.replaced then c.done = true end
+        end
+      end
+    end
+    if left then return t + 10 end
+    return nil
+  end, nil, timer.getTime() + 20)
 end
 -- the runway queue (v0.40.7): alert groups at a field with no parking for their type wait hidden; when one is called (its trigger sets its
 -- flag) it is put on the runway, at least RWY_STAGGER_S after the last group that went from there, and at your own field only once you
@@ -940,7 +1016,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
              calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
              watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
-             rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None) -> str:
+             rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
@@ -959,6 +1035,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__JAMW__", ", ".join(f"[{_lq(k)}]={{{float(a):.0f}, {float(b):.0f}}}" for k, (a, b) in (jamw or {}).items()))
             .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)).replace("__SPLASH__", "true" if splash else "false")
             .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}}}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy))
+            .replace("__COVER__", ", ".join(f'{{g={_lq(c["g"])}, n={int(c["n"])}, bf={int(c["bf"])}, rf={int(c["rf"])}, u={float(c["u"]):.0f}}}' for c in (cover or [])))
             .replace("__ALERTS__", ", ".join(f'{{g={_lq(a["g"])}, f={int(a["f"])}, b={_lq(a["b"])}, ty={_lq(a["ty"])}}}' for a in (alerts or [])))
             .replace("__CVREC__", _cvrec_lua((cfg or {}).get("cvrec")))
             .replace("__RECOV__", _recov_lua((cfg or {}).get("recov")))
@@ -984,14 +1061,14 @@ def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despaw
                  group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
                  enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
                  watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
-                 rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None) -> None:
+                 rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover))))
     mission.triggerrules.triggers.append(t)
 
 
