@@ -60,6 +60,8 @@ AD_RAID_WEIGHT = 4.0          # a full field's air defence counts like this many
 # `bsam_<field>_<key>`. The site health IS the strength: `Base.defense` is only a cache of the Patriot site's health for the readers that were not
 # moved (GUI bar, war-sim score), kept in step by the helpers below. Every writer goes through `shift_field` / `set_field`.
 BLUE_SITES = {"pat": ("Patriot", "Patriot battery"), "hawk": ("HAWK", "HAWK battery"), "aaa": ("AAA", "AAA sites")}
+BLUE_SPACING_M = 80.0         # v0.41.69: metres between the units of a blue Patriot or HAWK battery (pydcs's default is 20 m). XO's 2026-10-21 run: a Patriot launcher's
+                              # launch hit the 11 units round it (all 20 m apart) and one launcher died with no enemy near. 80 m is a judgment call (no public figure found).
 BLUE_SITE_VALUE = 5           # planner weight (unused until blue's sites are tasked; same default as a red garrison)
 
 

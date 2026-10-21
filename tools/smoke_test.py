@@ -1826,6 +1826,7 @@ def check_40_harm_flights_fire_only(c):
 
 def check_41_friendly_bases_patriot_faces(c):
     _M4, _m, _pu, _ss, _t4, _tm9 = c._M4, c._m, c._pu, c._ss, c._t4, c._tm9
+    from sqe.sams import BLUE_SPACING_M as _sm_spacing
     # v0.41.7: friendly bases. The Patriot faces the nearest enemy fighter field, short-range sites on both sides, a HAWK battery at your home field;
     # the tanker forward (on the way home, clear of SAM rings and scramble circles) with its own CAP; the AWACS back with the HAVCAP; carrier CAP
     _bv = {g_["name"]: g_ for co_ in _M4["coalition"]["blue"]["country"].values() for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()}
@@ -1844,6 +1845,10 @@ def check_41_friendly_bases_patriot_faces(c):
         _hk30 = next(g_ for n_, g_ in _bv.items() if n_ == f"BASEDEF {_hb7.name} HAWK")
         assert _pl30 == 8 and sum(1 for u_ in _hk30["units"].values() if u_["type"] == "Hawk ln") == 6 \
             and sum(1 for u_ in _hk30["units"].values() if u_["type"] == "Hawk tr") == 2, ("doctrinal Patriot and HAWK batteries", _pl30)
+        # v0.41.69: the units of a battery stand apart (a launch hit the units round it when they were 20 m apart)
+        for _bg in (_pat[0], _hk30):
+            _us = list(_bg["units"].values())
+            assert min(_m.hypot(a_["x"] - b_["x"], a_["y"] - b_["y"]) for i_, a_ in enumerate(_us) for b_ in _us[i_ + 1:]) >= _sm_spacing - 1, "SAM battery units are spaced out"
     _pl7 = {g_["name"]: g_ for co_ in _M4["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()}
     _tags7 = {f_.tag: f_ for f_ in _pu.flights if f_.tag}
     assert "TNKCAP" in _tags7, ("the tanker has its own CAP", sorted(_tags7))
