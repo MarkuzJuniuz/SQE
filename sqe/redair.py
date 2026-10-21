@@ -19,6 +19,7 @@ Pure planning, no pydcs.
 """
 from __future__ import annotations
 import hashlib
+import math
 import random
 from . import barcap
 from .loadouts import ENEMY_FIGHTERS
@@ -29,6 +30,7 @@ WAVES = [(0, 360), (360, 720), (720, 1080), (1080, 1440)]     # minutes of the d
 WAVE_OVERLAP_MIN = 20                                          # a pair stays up this long into the next wave (no gap at the boundary)
 SWEEP_MIN = 90
 REL_NM = 110                                                   # a patrol station this close to the target counts as "in the area"
+BEHIND_NM = 20                                                 # v0.41.74: a patrol whose station lies further than this BEYOND the target (along the way in) is not in the fight: it guards its own rear field
 ROUTE_NM = 45                                                  # ...or this close to a point on the route
 # per level: share of a wing's aircraft flying patrols, most patrol pairs per wing, sweeps per day
 DAILY_SORTIES = 2                                              # per serviceable airframe per day: the same rule the friendly packages follow (engine.plan_day)
@@ -217,6 +219,11 @@ def pick(state, tot_min: float, pts: list, tx: float, ty: float, limit: int) -> 
             continue
         if not (dist(f["x"], f["y"], tx, ty) <= REL_NM * NM or any(dist(f["x"], f["y"], px, py) <= ROUTE_NM * NM for px, py in pts)):
             continue
+        if len(pts) >= 2 and dist(pts[1][0], pts[1][1], tx, ty) > 1:         # pts[1] is the IP: the way in runs IP -> target
+            hdg = math.radians(bearing(pts[1][0], pts[1][1], tx, ty))
+            beyond = ((f["x"] - tx) * math.cos(hdg) + (f["y"] - ty) * math.sin(hdg)) / NM          # x = north, y = east: how far past the target the station sits
+            if beyond > BEHIND_NM:
+                continue
         used[f["wing"]] = used.get(f["wing"], 0) + 1
         out.append(f)
     return out

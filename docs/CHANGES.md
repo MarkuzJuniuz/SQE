@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.74, BARCAP as planned coverage, step 2: the mission side (the checkpoint)
+
+* **XO's same-rules plan, BARCAP, PR 2 of 3.** Blue's carrier CAP and base CAP no longer face "the nearest enemy field": each takes the BARCAP area (v0.41.73) of its asset that faces the mission's target (the area whose direction is closest to the bearing from the asset to the target; with merged targets this is the main target's, a judgment call). The station is 13 nm from the boat (the boat's current position: it may have been slid back for the sortie) or 12 nm from a field, in the area's direction, and still steps back out of every SAM ring and the scramble circles as before. An asset with no area today (no hostile base can reach it) keeps the old placement.
+* **Red patrols behind the target are left out.** `redair.pick` drops a planned patrol whose station sits more than 20 nm BEYOND the target along the way in (IP to target): it is guarding its own rear field, not the fight. 20 nm is a judgment call (`BEHIND_NM`). Together with v0.41.73 (stations on the side of the base facing blue) this is the fix for red's CAPs flying around the back of the target (XO's 2026-10-21 run: pairs 35 to 60 nm beyond the SA-11 site).
+* **Unit cap:** unchanged. Support CAPs are one per field and boat, red patrols are bounded by the package's threat size, and wrecks are still trimmed first; nothing here adds enough units to need a new trim rule.
+* Smoke: new `check_31e_barcap_mission_side`.
+
 ## v0.41.73, BARCAP as planned coverage, step 1: planning and state (red's patrols fly it)
 
 * **XO's same-rules plan, BARCAP (claude/barcap-plan.md), PR 1 of 3.** New `sqe/barcap.py` (pure planning). Every defended asset gets BARCAP areas: red's fighter fields and blue's fields and carriers. One area per DIRECTION a hostile base could still send something from (hostile fields and carriers with jets left, within 300 nm; bases within 40 degrees share an area; at most 3). The station sits close to the asset on that side (12 nm for a field, 13 nm for a carrier group, XO's "about 15 mi") and is pushed out of every enemy SAM ring plus 8 nm, never further than 30 nm from the asset. Today's areas for both sides are kept in the campaign (`state.barcap`, saved).

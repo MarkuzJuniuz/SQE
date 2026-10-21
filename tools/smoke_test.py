@@ -1376,6 +1376,37 @@ def check_31d_barcap_areas(c):
     assert again.barcap == st.barcap, "the areas survive a save"
 
 
+def check_31e_barcap_mission_side(c):
+    """v0.41.74: BARCAP in the mission: blue's base and carrier CAPs take the area facing the target; red's patrols behind the target are not picked."""
+    from sqe import barcap, redair
+    from sqe.routes import NM, bearing, dist, offset
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke barcap 2", "F-16C", 3, seed=7)
+    st = ses.state
+    redair.ensure(st, ses.d)
+    multi = [aid for aid in {a["asset"] for a in st.barcap["blue"]} if len([a for a in st.barcap["blue"] if a["asset"] == aid]) >= 2]
+    assert multi, "a blue asset with two directions exists in this campaign"
+    aid = multi[0]
+    areas = [a for a in st.barcap["blue"] if a["asset"] == aid]
+    for a in areas:                                                 # a target straight along one area's direction picks that area
+        tx, ty = offset(a["ax"], a["ay"], a["bearing"], 150 * NM)
+        assert barcap.facing_area(st, "blue", aid, (tx, ty))["id"] == a["id"], "the area facing the target is the one chosen"
+    assert barcap.facing_area(st, "blue", "no_such_asset", (0, 0)) is None, "no area: the old rule stays"
+    f = next(f_ for f_ in st.red_air["flights"] if f_["kind"] == "CAP")
+    tm_ = (f["start"] + f["end"]) // 2
+    ip = offset(f["x"], f["y"], 180, 40 * NM)
+    # a target 60 nm short of the station (along the way in): the station is 60 nm BEYOND the target -> not in the fight
+    tx, ty = offset(f["x"], f["y"], 180, 60 * NM)
+    hdg_in = bearing(ip[0], ip[1], tx, ty)
+    far = offset(tx, ty, hdg_in, 60 * NM)
+    f2 = dict(f); f2["x"], f2["y"] = far
+    st.red_air["flights"] = [f2]
+    assert not redair.pick(st, tm_, [ip, ip, (tx, ty)], tx, ty, 9), "a patrol 60 nm beyond the target is left out"
+    f2["x"], f2["y"] = offset(tx, ty, hdg_in + 180, 30 * NM)
+    assert redair.pick(st, tm_, [ip, ip, (tx, ty)], tx, ty, 9), "a patrol short of the target is kept"
+
+
 def check_31c_ai_skill_red_blue(c):
     """v0.41.70: AI Skill for Red and Blue: the helper, the saved settings, and what a built mission carries."""
     import zipfile as zf
@@ -2798,6 +2829,7 @@ CHECKS = [
     check_31b_red_sam_orders,
     check_31c_ai_skill_red_blue,
     check_31d_barcap_areas,
+    check_31e_barcap_mission_side,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,

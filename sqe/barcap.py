@@ -141,6 +141,17 @@ def chain(first_start: int, n: int, endurances: list) -> list:
     return out
 
 
+def facing_area(state, side: str, asset_id: str, toward_xy: tuple):
+    """The BARCAP area of one asset that faces the mission: the area whose direction is closest to the bearing from the asset to `toward_xy`
+    (the target; XO: an area is built into the mission when its station lies on the side facing the targets). None when the asset has no area
+    today (no hostile base can reach it): the caller keeps its old placement."""
+    areas = [a for a in ensure(state)[side] if a["asset"] == asset_id]
+    if not areas:
+        return None
+    want = bearing(areas[0]["ax"], areas[0]["ay"], toward_xy[0], toward_xy[1])
+    return min(areas, key=lambda a: (_angdiff(a["bearing"], want), a["id"]))
+
+
 def ensure(state) -> dict:
     """Today's BARCAP areas for both sides (made once a day, kept in state.barcap; an old save gets them on first use)."""
     bc = getattr(state, "barcap", None)

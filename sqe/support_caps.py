@@ -7,7 +7,7 @@ import copy
 
 from dcs import mapping, planes
 
-from . import callsigns
+from . import barcap, callsigns
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
 from .models import BaseKind
@@ -145,10 +145,18 @@ class SupportCaps:
         elif f.tag in ("HAVCAP", "TNKCAP"):
             gx_, gy_ = hav_xy; thr_ = geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
         elif f.tag == "CVCAP":
-            gx_, gy_ = base.x, base.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, CVCAP_NM * NM); zr_ = CVCAP_ZONE_NM
+            # v0.41.74: the BARCAP area of the boat that faces the target (barcap.py); the boat may have been slid back for this sortie, so the
+            # area's direction is used from where the boat is now. No area today (no hostile base reaches it): the old rule, toward the nearest enemy field.
+            ar_ = barcap.facing_area(st, "blue", f.base_id, (geom.tx, geom.ty))
+            gx_, gy_ = base.x, base.y
+            thr_ = ar_["bearing"] if ar_ else tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg)
+            sx, sy = offset(gx_, gy_, thr_, (barcap.STATION_FLEET_NM if ar_ else CVCAP_NM) * NM); zr_ = CVCAP_ZONE_NM
         else:           # BASECAP: over the field it guards (v0.41.10: the one red is likeliest to raid), else its own
             gb_ = st.bases.get(getattr(f, "guard", "") or f.base_id, base)
-            gx_, gy_ = gb_.x, gb_.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 8 * NM); zr_ = SUPPORT_CAP_ZONE_NM
+            ar_ = barcap.facing_area(st, "blue", gb_.id, (geom.tx, geom.ty))                   # v0.41.74: its BARCAP area facing the target
+            gx_, gy_ = gb_.x, gb_.y
+            thr_ = ar_["bearing"] if ar_ else tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg)
+            sx, sy = offset(gx_, gy_, thr_, (barcap.STATION_BASE_NM if ar_ else 8) * NM); zr_ = SUPPORT_CAP_ZONE_NM
         # v0.41.13: the orbit stays 15 nm outside every SAM ring: step it back toward what it guards (2 nm at a time) until it is clear
         # (v0.41.12 run: the carrier CAP's F-14s were shot at on a station 22 nm toward Sukhumi)
         for _ in range(20):
