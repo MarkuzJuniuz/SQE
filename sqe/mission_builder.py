@@ -1364,99 +1364,149 @@ class MissionBuilder:
         return tanker_xy, awacs_unit, hav_xy
 
     # ---- friendly flights -------------------------------------------------------------------------------------------------
+    def _pt(self, x, y):
+        """A map point in this theatre's coordinates (was a lambda inside _spawn_flight)."""
+        return mapping.Point(x, y, self.t)
+
     def _spawn_flight(self, package, f, plan, geom, tanker_xy, hav_xy, push_s, tot_s, rtb_s, idx, manifest, despawn):
         st, o = self.state, self.o
         spec = AIRCRAFT[f.aircraft]
         base = st.bases[f.base_id]
-        pt = lambda x, y: mapping.Point(x, y, self.t)
         past_push, act_s = False, 0
         csname, fno = f.callsign.rsplit(" ", 1)
         fno = int(fno)
 
         cap_zone = None
         if f.tag:       # support CAP: airborne on station for the whole package
-            # v0.41.7: each guards one thing, from the side the threat comes from (the nearest enemy fighter field), and fights only inside
-            # a circle round it. HAVCAP: the AWACS (well back). TNKCAP: the tanker (forward, on the way home). BASECAP: the home field. CVCAP: the boat.
-            tc_ = getattr(self, "_tanker_c", None)
-            if f.tag == "TNKCAP" and tc_ is not None:
-                gx_, gy_ = tc_; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 5 * NM); zr_ = TNKCAP_ZONE_NM
-            elif f.tag in ("HAVCAP", "TNKCAP"):
-                gx_, gy_ = hav_xy; thr_ = geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
-            elif f.tag == "CVCAP":
-                gx_, gy_ = base.x, base.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, CVCAP_NM * NM); zr_ = CVCAP_ZONE_NM
-            else:           # BASECAP: over the field it guards (v0.41.10: the one red is likeliest to raid), else its own
-                gb_ = st.bases.get(getattr(f, "guard", "") or f.base_id, base)
-                gx_, gy_ = gb_.x, gb_.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 8 * NM); zr_ = SUPPORT_CAP_ZONE_NM
-            # v0.41.13: the orbit stays 15 nm outside every SAM ring: step it back toward what it guards (2 nm at a time) until it is clear
-            # (v0.41.12 run: the carrier CAP's F-14s were shot at on a station 22 nm toward Sukhumi)
+            cap_zone, wps, stop = self._support_cap_route(package, f, geom, hav_xy, tot_s, rtb_s)
+        else:
+            r_ = self._flight_route(package, f, geom, idx, push_s, tot_s)
+            if r_ is None:
+                return None, None                          # already back on the ground
+            wps, act_s, past_push, stop = r_
+
+        g, first, cs_names = self._make_group(f, spec, base, wps, act_s, csname, fno)
+        names, run_t0 = self._dress_group(package, f, spec, g, wps, push_s, tot_s, cs_names)
+        stw = next((w for w in wps if w.action in ("TARCAP", "ESCORT", "SWEEPSTN") and w.orbit), None)
+        hold_end = self._hold_end(stw, tot_s) if stw is not None else None
+        self._engage_tasks(package, f, g, wps, stw, hold_end, cap_zone, stop, tot_s, geom, base)
+        self._crew_setup(f, spec, g, names, plan, manifest, despawn, past_push)
+        self._announce(package, f, g, names, wps, push_s, manifest)
+        armor, ai_sead, ai_a2g = self._roe_defaults(package, f, g)
+        special = self._f14_special_namer(wps) if (f.is_player and f.aircraft == "F-14BU" and o.f14_special_names) else None
+        self._attach_waypoints(package, f, g, wps, first, ai_a2g, ai_sead, run_t0, push_s, tot_s, stop, hold_end, stw, armor, special)
+        if f.role == Role.SEAD and package.objective.target_id:
+            self._sead_grps.setdefault(package.objective.target_id, []).append(g.name)
+        gate = self._dead_gate(package, f, g, wps, first, stw, tot_s, base)
+        self._home_leg(f, g, base, wps, idx, hold_end, stop, special)
+        if gate is not None:
+            if gate["to"] is None:
+                gate["to"] = len(g.points)                              # the landing point
+            self._gates.append(gate)
+        tw = None if f.tag else objective_wp(wps)
+        if tw is not None and f.role in (Role.STRIKE, Role.SEAD, Role.CAS):
+            egr_ = next((w.eta_s for w in wps if w.name == "EGR"), None)          # v0.41.40: when this striker is OUT, for the escorts to wait on
+            self._striker_egr.append(((geom.tx, geom.ty), float(egr_ if egr_ is not None else tw.eta_s + 180)))
+        return g, (tw.eta_s if tw is not None else None)
+
+    def _support_cap_route(self, package, f, geom, hav_xy, tot_s, rtb_s):
+        """A support CAP's route: airborne on station for the whole package, one thing to guard. -> (cap_zone, wps, stop). Moved out of _spawn_flight in v0.41.54, unchanged."""
+        st, o = self.state, self.o
+        spec = AIRCRAFT[f.aircraft]
+        base = st.bases[f.base_id]
+        # v0.41.7: each guards one thing, from the side the threat comes from (the nearest enemy fighter field), and fights only inside
+        # a circle round it. HAVCAP: the AWACS (well back). TNKCAP: the tanker (forward, on the way home). BASECAP: the home field. CVCAP: the boat.
+        tc_ = getattr(self, "_tanker_c", None)
+        if f.tag == "TNKCAP" and tc_ is not None:
+            gx_, gy_ = tc_; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 5 * NM); zr_ = TNKCAP_ZONE_NM
+        elif f.tag in ("HAVCAP", "TNKCAP"):
+            gx_, gy_ = hav_xy; thr_ = geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
+        elif f.tag == "CVCAP":
+            gx_, gy_ = base.x, base.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, CVCAP_NM * NM); zr_ = CVCAP_ZONE_NM
+        else:           # BASECAP: over the field it guards (v0.41.10: the one red is likeliest to raid), else its own
+            gb_ = st.bases.get(getattr(f, "guard", "") or f.base_id, base)
+            gx_, gy_ = gb_.x, gb_.y; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 8 * NM); zr_ = SUPPORT_CAP_ZONE_NM
+        # v0.41.13: the orbit stays 15 nm outside every SAM ring: step it back toward what it guards (2 nm at a time) until it is clear
+        # (v0.41.12 run: the carrier CAP's F-14s were shot at on a station 22 nm toward Sukhumi)
+        for _ in range(20):
+            if self._sam_clear(sx, sy) or dist(sx, sy, gx_, gy_) < 2 * NM:
+                break
+            sx, sy = offset(sx, sy, bearing(sx, sy, gx_, gy_), 2 * NM)
+        leg_ = 15 * NM
+        if f.tag == "CVCAP":
+            # v0.41.21: the carrier CAP is there to guard the boat, not to start fights: its orbit (both ends) and its engage circle stay outside
+            # every enemy field's scramble circle, so it never sets off red's alert pairs ahead of the package (seen in the v0.41.19 runs)
+            leg_ = 10 * NM
+            det_ = [(fx_, fy_, tm.field_detect_nm((fx_, fy_), (geom.tx, geom.ty), st) + CVCAP_DETECT_MARGIN_NM) for fx_, fy_ in tm.fighter_bases(st)]
+            out_ = lambda x_, y_: all(dist(x_, y_, fx_, fy_) >= r_ * NM for fx_, fy_, r_ in det_)
             for _ in range(20):
-                if self._sam_clear(sx, sy) or dist(sx, sy, gx_, gy_) < 2 * NM:
+                if (out_(sx, sy) and out_(*offset(sx, sy, thr_ + 90, leg_))) or dist(sx, sy, gx_, gy_) < 2 * NM:
                     break
                 sx, sy = offset(sx, sy, bearing(sx, sy, gx_, gy_), 2 * NM)
-            leg_ = 15 * NM
-            if f.tag == "CVCAP":
-                # v0.41.21: the carrier CAP is there to guard the boat, not to start fights: its orbit (both ends) and its engage circle stay outside
-                # every enemy field's scramble circle, so it never sets off red's alert pairs ahead of the package (seen in the v0.41.19 runs)
-                leg_ = 10 * NM
-                det_ = [(fx_, fy_, tm.field_detect_nm((fx_, fy_), (geom.tx, geom.ty), st) + CVCAP_DETECT_MARGIN_NM) for fx_, fy_ in tm.fighter_bases(st)]
-                out_ = lambda x_, y_: all(dist(x_, y_, fx_, fy_) >= r_ * NM for fx_, fy_, r_ in det_)
-                for _ in range(20):
-                    if (out_(sx, sy) and out_(*offset(sx, sy, thr_ + 90, leg_))) or dist(sx, sy, gx_, gy_) < 2 * NM:
-                        break
-                    sx, sy = offset(sx, sy, bearing(sx, sy, gx_, gy_), 2 * NM)
-                room_ = min([(dist(gx_, gy_, fx_, fy_) / NM - r_) for fx_, fy_, r_ in det_] or [zr_])
-                zr_ = max(10, min(zr_, room_))                      # the circle round the boat ends short of the nearest scramble circle
-            cap_zone = (gx_, gy_, min(self.o.friendly_cap_engage_nm or 999, zr_))
-            p = spec.profile
-            wps = [Wpt("SPAWN", sx, sy, p.cap_alt_ft, p.cap_kts), Wpt("CAP1", sx, sy, p.cap_alt_ft, p.cap_kts, "", "CAPORBIT"),
-                   Wpt("CAP2", *offset(sx, sy, thr_ + 90, leg_), p.cap_alt_ft, p.cap_kts)]
-            # v0.41.22: the way home bends round SAM sites too (the v0.41.21 scan: a tanker CAP flew home over an SA-2)
-            home_ = Wpt("HOME", base.x, base.y, p.cap_alt_ft, p.cap_kts)
-            wps = avoid_circles(wps + [home_], self._zone_sams(package, True), p.max_points, 3)[:-1]      # the CAP1-CAP2 orbit leg stays as it is
-            stop = int(max(tot_s + o.cap_minutes * 60, rtb_s + 300))
-            if not f.is_player or o.player_is_ai:
-                terrain_clear(wps)                          # v0.41.49: a support CAP's legs clear the ridges too (the branch never ran the terrain check)
-        else:
-            sp = None
-            if not f.is_player:
-                sp = self._spawn_point(f, base, geom)
-            wps = plan_route(f.role, (base.x, base.y), geom, spec.profile, is_player=f.is_player, tanker_xy=None, stack_idx=idx,
-                             spawn=sp[0] if sp else None, spawn_alt_ft=sp[1] if sp else 0, spawn_kts=sp[2] if sp else 0,
-                             jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), harm_deg=self._harm_deg(package, geom))
-            if self._raid_cap(package, f):
-                # v0.41.28: a raid scramble's way out to its station bends round red SAMs like a strike's (the orbit leg stays as it is)
-                k1_ = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)
-                if k1_:
-                    wps = avoid_circles(wps[:k1_ + 1], self._zone_sams(package, True), spec.profile.max_points - (len(wps) - k1_ - 1), 1) + wps[k1_ + 1:]
-            if not f.is_player or o.player_is_ai:
-                terrain_clear(wps)                          # an AI flight climbs on its own schedule: its altitudes must clear the ridges on each leg
-            if f.is_player:
-                assign_times(wps, self._dep_s, push_s)
-                act_s = 0
-            else:
-                assign_times(wps, 0.0)                      # natural pace from the spawn
-                hold_i = next((i for i, w in enumerate(wps) if w.action == "HOLD"), None)
-                nat = wps[hold_i + 1].eta_s if hold_i is not None else next((w.eta_s for w in wps if w.action == "CAPORBIT"), wps[-1].eta_s)
-                act_raw = int(push_s - nat - (120 if hold_i is not None else 60))      # arrive ~2 min early, hold, push on time
-                act_s = max(0, act_raw)
-                assign_times(wps, float(act_raw), push_s)
-                if act_raw < 0:                              # its schedule began before the mission did (an earlier package folded in): it is already underway
-                    # v0.41.23: its time on station counts: the points after the station come that much later, and a flight still within its
-                    # hold starts on its station (it was placed as if it never loitered: past its station, already on its way home)
-                    leave_ = {}
-                    si_ = next((i for i, w in enumerate(wps) if w.action in ("TARCAP", "ESCORT", "SWEEPSTN") and w.orbit), None)
-                    if si_ is not None:
-                        lv_ = self._hold_end(wps[si_], tot_s)
-                        dw_ = max(0, lv_ - wps[si_].eta_s)
-                        for w in wps[si_ + 1:]:
-                            w.eta_s += dw_
-                        leave_[si_] = lv_
-                    wps = in_progress(wps, (base.x, base.y), leave_)
-                    if wps is None:                          # already back on the ground
-                        return None, None
-                    past_push = not any(w.name == "PUSH" for w in wps)
-            stop = int(tot_s + o.cap_minutes * 60)
+            room_ = min([(dist(gx_, gy_, fx_, fy_) / NM - r_) for fx_, fy_, r_ in det_] or [zr_])
+            zr_ = max(10, min(zr_, room_))                      # the circle round the boat ends short of the nearest scramble circle
+        cap_zone = (gx_, gy_, min(self.o.friendly_cap_engage_nm or 999, zr_))
+        p = spec.profile
+        wps = [Wpt("SPAWN", sx, sy, p.cap_alt_ft, p.cap_kts), Wpt("CAP1", sx, sy, p.cap_alt_ft, p.cap_kts, "", "CAPORBIT"),
+               Wpt("CAP2", *offset(sx, sy, thr_ + 90, leg_), p.cap_alt_ft, p.cap_kts)]
+        # v0.41.22: the way home bends round SAM sites too (the v0.41.21 scan: a tanker CAP flew home over an SA-2)
+        home_ = Wpt("HOME", base.x, base.y, p.cap_alt_ft, p.cap_kts)
+        wps = avoid_circles(wps + [home_], self._zone_sams(package, True), p.max_points, 3)[:-1]      # the CAP1-CAP2 orbit leg stays as it is
+        stop = int(max(tot_s + o.cap_minutes * 60, rtb_s + 300))
+        if not f.is_player or o.player_is_ai:
+            terrain_clear(wps)                          # v0.41.49: a support CAP's legs clear the ridges too (the branch never ran the terrain check)
+        return cap_zone, wps, stop
 
+    def _flight_route(self, package, f, geom, idx, push_s, tot_s):
+        """Everyone else's route: plan_route, terrain, times. -> (wps, act_s, past_push, stop), or None when the flight is already back on the ground. Moved out of _spawn_flight in v0.41.54, unchanged."""
+        o = self.o
+        spec = AIRCRAFT[f.aircraft]
+        base = self.state.bases[f.base_id]
+        past_push, act_s = False, 0
+        sp = None
+        if not f.is_player:
+            sp = self._spawn_point(f, base, geom)
+        wps = plan_route(f.role, (base.x, base.y), geom, spec.profile, is_player=f.is_player, tanker_xy=None, stack_idx=idx,
+                         spawn=sp[0] if sp else None, spawn_alt_ft=sp[1] if sp else 0, spawn_kts=sp[2] if sp else 0,
+                         jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), harm_deg=self._harm_deg(package, geom))
+        if self._raid_cap(package, f):
+            # v0.41.28: a raid scramble's way out to its station bends round red SAMs like a strike's (the orbit leg stays as it is)
+            k1_ = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)
+            if k1_:
+                wps = avoid_circles(wps[:k1_ + 1], self._zone_sams(package, True), spec.profile.max_points - (len(wps) - k1_ - 1), 1) + wps[k1_ + 1:]
+        if not f.is_player or o.player_is_ai:
+            terrain_clear(wps)                          # an AI flight climbs on its own schedule: its altitudes must clear the ridges on each leg
+        if f.is_player:
+            assign_times(wps, self._dep_s, push_s)
+            act_s = 0
+        else:
+            assign_times(wps, 0.0)                      # natural pace from the spawn
+            hold_i = next((i for i, w in enumerate(wps) if w.action == "HOLD"), None)
+            nat = wps[hold_i + 1].eta_s if hold_i is not None else next((w.eta_s for w in wps if w.action == "CAPORBIT"), wps[-1].eta_s)
+            act_raw = int(push_s - nat - (120 if hold_i is not None else 60))      # arrive ~2 min early, hold, push on time
+            act_s = max(0, act_raw)
+            assign_times(wps, float(act_raw), push_s)
+            if act_raw < 0:                              # its schedule began before the mission did (an earlier package folded in): it is already underway
+                # v0.41.23: its time on station counts: the points after the station come that much later, and a flight still within its
+                # hold starts on its station (it was placed as if it never loitered: past its station, already on its way home)
+                leave_ = {}
+                si_ = next((i for i, w in enumerate(wps) if w.action in ("TARCAP", "ESCORT", "SWEEPSTN") and w.orbit), None)
+                if si_ is not None:
+                    lv_ = self._hold_end(wps[si_], tot_s)
+                    dw_ = max(0, lv_ - wps[si_].eta_s)
+                    for w in wps[si_ + 1:]:
+                        w.eta_s += dw_
+                    leave_[si_] = lv_
+                wps = in_progress(wps, (base.x, base.y), leave_)
+                if wps is None:                          # already back on the ground
+                    return None
+                past_push = not any(w.name == "PUSH" for w in wps)
+        stop = int(tot_s + o.cap_minutes * 60)
+        return wps, act_s, past_push, stop
+
+    def _make_group(self, f, spec, base, wps, act_s, csname, fno):
+        """The DCS group: hot on the runway for your own flight, already airborne for an AI flight, facing its way; callsigns. -> (g, first, cs_names)."""
+        pt = self._pt
         if f.is_player:       # hot on the runway / catapult
             if base.kind == BaseKind.CARRIER:
                 g = self.m.flight_group_from_unit(self.usa, f.callsign, spec.dcs_type, self.ship[base.id], maintask=MAIN_TASK[f.role],
@@ -1482,6 +1532,11 @@ class MissionBuilder:
                 for u_ in g.units:
                     u_.heading = hdg
         cs_names = callsigns.apply(g, csname, fno, callsigns.table(f.aircraft))
+        return g, first, cs_names
+
+    def _dress_group(self, package, f, spec, g, wps, push_s, tot_s, cs_names):
+        """Loadout (weather-adapted), unit names, jammer windows, skill, bingo return, and where this package's shooters launch. -> (names, run_t0)."""
+        o = self.o
         load = self.lo.for_role(f.aircraft, f.role, getattr(f, "kit", ""))
         if self.wx.mode != "clear":
             load, wnotes, _k, _d = weather.adapt(spec.dcs_type, load, self.wx)
@@ -1514,8 +1569,11 @@ class MissionBuilder:
             lp_ = next((w for w in wps if w.action in ("SEAD", "JSOW")), None) or next((w for w in wps if w.name == "IP"), None)
             if lp_ is not None:
                 self._launch_pts.setdefault(package.id, []).append((lp_.x, lp_.y))
-        stw = next((w for w in wps if w.action in ("TARCAP", "ESCORT", "SWEEPSTN") and w.orbit), None)
-        hold_end = self._hold_end(stw, tot_s) if stw is not None else None
+        return names, run_t0
+
+    def _engage_tasks(self, package, f, g, wps, stw, hold_end, cap_zone, stop, tot_s, geom, base):
+        """How the flight fights: the engage circles, hold and homeward fight, ROE and range options. One branch for support CAPs, one for stations, one for other AI fighters, one for raid scrambles."""
+        st, o = self.state, self.o
         if f.tag:
             czone_ = self._clear_zone(cap_zone, package)
             self._limit_engage(g, self.o.friendly_cap_engage_nm, None, czone_)
@@ -1631,6 +1689,9 @@ class MissionBuilder:
             rtbr_ = task.OptRTBOnOutOfAmmo(); rtbr_.params["action"]["params"]["value"] = AAM_WEAPONS
             g.points[0].tasks.append(rtbr_)
 
+    def _crew_setup(self, f, spec, g, names, plan, manifest, despawn, past_push):
+        """Your own seat and radio presets, or an AI flight's frequency, despawn on landing and fuel."""
+        o = self.o
         if f.is_player:
             u0 = g.units[0]
             if not o.player_is_ai:                              # test mode: the slot stays an AI aircraft, so nothing has to be changed in the editor
@@ -1651,6 +1712,9 @@ class MissionBuilder:
                 despawn.extend(names)
             if o.ai_unlimited_fuel:
                 g.points[0].tasks.append(task.SetUnlimitedFuelCommand(not past_push))      # already past its PUSH point: the combat leg burns real fuel
+
+    def _announce(self, package, f, g, names, wps, push_s, manifest):
+        """Record the flight in the manifest and queue the radio calls (on station / pushing / egressing)."""
         manifest.add("friendly", f.id, names, squadron=f.squadron_id, callsign=f.callsign, player=f.is_player)
         self.flight_groups.append((f, g))
         # who speaks: every AI aircraft (your own wingmen included, never you) is announced by callsign; extra packages carry a package prefix
@@ -1675,6 +1739,9 @@ class MissionBuilder:
                     if egr is not None and egr > 10:
                         self._fcalls.append((float(egr), f"{lab}: off target, egressing."))
 
+    def _roe_defaults(self, package, f, g):
+        """Rules of engagement for ground-attack and SEAD jets (restricted, return fire, out-of-ammo return). -> (armor, ai_sead, ai_a2g)."""
+        o = self.o
         armor = self.groups_by_asset.get(package.objective.target_id)
         ai_sead = (f.role == Role.SEAD or getattr(f, "kit", "") == "JSOW") and not f.tag and (not f.is_player or o.player_is_ai)
         if ai_sead:         # a SEAD (or JSOW) jet's job is the radar, not the fighters: v0.39.9 run, both Hornet SEAD flights chased MiGs into Tor and SA-11 range and died 150 s before their HARM point
@@ -1690,7 +1757,12 @@ class MissionBuilder:
             g.points[0].tasks.append(rtb)
             if not ai_sead:
                 g.points[0].tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))    # weapons free again at the attack point (below)
-        special = self._f14_special_namer(wps) if (f.is_player and f.aircraft == "F-14BU" and o.f14_special_names) else None
+        return armor, ai_sead, ai_a2g
+
+    def _attach_waypoints(self, package, f, g, wps, first, ai_a2g, ai_sead, run_t0, push_s, tot_s, stop, hold_end, stw, armor, special):
+        """Add each route point to the group with its tasks: ETAs, ROE, ECM, fuel, orbits, bombs, JSOW, CAS, SEAD attacks."""
+        o = self.o
+        pt = self._pt
         for w in wps[first:]:
             wp = g.add_waypoint(pt(w.x, w.y), w.alt_ft * FT, w.speed_kts * KPH, w.name)
             if w.rad:
@@ -1806,8 +1878,11 @@ class MissionBuilder:
                 for _, tg_ in self._cover_tors(package):            # a second pass at the Tors that guard the site, with whatever HARMs are left
                     ct2 = task.ControlledTask(task.AttackGroup(tg_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                     ct2.stop_after_time(int(w.eta_s) + 780); wp.tasks.append(ct2)
-        if f.role == Role.SEAD and package.objective.target_id:
-            self._sead_grps.setdefault(package.objective.target_id, []).append(g.name)
+
+    def _dead_gate(self, package, f, g, wps, first, stw, tot_s, base):
+        """The radar gate for a Close DEAD package's strikers and covering fighters. -> the gate dict, or None."""
+        st, o = self.state, self.o
+        pt = self._pt
         gate = None
         if (not f.tag and package.objective.type == ObjectiveType.DEAD and package.objective.aim not in SEAD_AIMS and package.objective.target_id and tot_s is not None
                 and f.role in (Role.STRIKE, Role.TARCAP, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10
@@ -1834,6 +1909,12 @@ class MissionBuilder:
             gate = {"t": tot_s - DEAD_GATE_BEFORE_TGT_S, "site": package.objective.target_id, "grp": g.name, "also": also_, "gm": gm_ * 1000,
                     "ux": um_.x if um_ else None, "uz": um_.y if um_ else None, "um": SA10_GATE_KM * 1000 if um_ else None,
                     "from": n0_ + max(0, ti_ - 1) + 1, "to": to_, "ai": ai_, "dead": f.role == Role.STRIKE, "you": bool(f.is_player), "pkg": package.id}
+        return gate
+
+    def _home_leg(self, f, g, base, wps, idx, hold_end, stop, special):
+        """The way home: the recovery entry point, landing or deck recovery."""
+        o = self.o
+        pt = self._pt
         if base.kind == BaseKind.AIRFIELD:
             if not f.is_player or o.player_is_ai:
                 # v0.41.10: staggered recovery. Each AI flight comes home through its own entry point, 8 nm out on its own bearing and height, so the
@@ -1867,15 +1948,6 @@ class MissionBuilder:
         # followed by a locked-time point and the ME refused the save ("Viper 2: Waypoint 8 ... not surrounded by waypoints with locked
         # time!"). land_at() already leaves the landing point's speed locked, which is safe; _free_locked_speeds frees a speed lock only
         # where the ME actually needs one, after every trailing point exists.
-        if gate is not None:
-            if gate["to"] is None:
-                gate["to"] = len(g.points)                              # the landing point
-            self._gates.append(gate)
-        tw = None if f.tag else objective_wp(wps)
-        if tw is not None and f.role in (Role.STRIKE, Role.SEAD, Role.CAS):
-            egr_ = next((w.eta_s for w in wps if w.name == "EGR"), None)          # v0.41.40: when this striker is OUT, for the escorts to wait on
-            self._striker_egr.append(((geom.tx, geom.ty), float(egr_ if egr_ is not None else tw.eta_s + 180)))
-        return g, (tw.eta_s if tw is not None else None)
 
     @staticmethod
     def _add_ship_warehouses(m):

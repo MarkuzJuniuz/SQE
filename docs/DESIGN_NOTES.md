@@ -32,7 +32,9 @@ _verified v0.41.28 + PR #65, 2026-10-16_
 | Red air wings and squadrons | `sqe/models.py`, `sqe/scenario.py` | `EnemyAirWing.sqns` (`RedSquadron`: one type each), `red_squadrons`, `Difficulty.red_squadron_max` (L1 6 / L2 12 / L3 14). v0.41.52: a wing is `ceil(jets / max)` typed squadrons. v0.41.53: strength is per SQUADRON (`available`, `reserve`, `rest_days` on `RedSquadron`); the wing's numbers are sums, `wing.available = n` spreads a change, `wing.lose(type, n)` takes typed losses (manifest groups carry `ac`), `types_up` / `fighter_types()` / `available_of()` say what can fly today; rest, return and replenishment run per squadron (`airwings.py`, `war.end_day`). Old saves load via `models.wing_from_dict`. _verified v0.41.53, 2026-10-21_ |
 
 ## 2. How a flight is built (outline)
-_verified v0.41.28 + PR #65, 2026-10-16_
+_verified v0.41.54, 2026-10-21_
+
+Since v0.41.54 `_spawn_flight` (mission_builder.py) is a list of stage calls; to change one part of a flight, go to its stage: route `_support_cap_route` / `_flight_route`; group `_make_group`; loadout, names, jammers `_dress_group`; engage circles, holds, ROE and range options `_engage_tasks`; seat, radio presets, AI frequency and fuel `_crew_setup`; manifest and radio calls `_announce`; ground-attack ROE `_roe_defaults`; each point's tasks `_attach_waypoints`; radar gate `_dead_gate`; recovery and landing `_home_leg`.
 
 1. `engine.py` plans the day: objectives, packages, flights (role, aircraft, base, tag).
 2. `mission_builder.py` builds each blue flight: waypoints (`plan_route` or the support-CAP branch), times
