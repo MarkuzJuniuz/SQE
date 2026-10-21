@@ -16,7 +16,7 @@ _verified v0.41.28 + PR #65, 2026-10-16_
 |---|---|---|
 | Which waypoints does a flight get? | `sqe/routes.py` | `plan_route`, `Wpt(` |
 | What are a waypoint's names / actions? | `sqe/routes.py`, `sqe/mission_builder.py` | `class Wpt`, `OBJECTIVE_ACTIONS` (routes), `STATION_ACTIONS` (builder) |
-| Support CAP waypoints (HAVCAP, BASECAP, CVCAP, TNKCAP) | `sqe/mission_builder.py` | `f.tag`, `Wpt("CAP1"`, `CVCAP_NM`, `tanker_spot` |
+| Support CAP waypoints (HAVCAP, BASECAP, CVCAP, TNKCAP) | `sqe/support_caps.py` (class `SupportCaps`, inherited by `MissionBuilder`; `_support_cap_route`, `_place_support`, `_gather_support`, `_pull_back_carriers`, the `CVCAP_*` / `TNKCAP_*` constants) and `sqe/mission_builder.py` (the tasks, `_attach_waypoints`) _(verified v0.41.58, 2026-10-21)_ | `f.tag`, `Wpt("CAP1"`, `CVCAP_NM`, `tanker_spot` |
 | Tasks attached to waypoints / the group | `sqe/mission_builder.py` (`_attach_waypoints`); HARM / JSOW / bombing / CAS / DEAD-gate tasks in `sqe/strike_tasks.py` (class `StrikeTasks`, inherited by `MissionBuilder`) | `for w in wps[first:]`, `g.points[0].tasks`, `_sead_attack_tasks`, `_jsow_tasks`, `_dead_gate` _(verified v0.41.56, 2026-10-21)_ |
 | Fuel (unlimited / real) | `sqe/mission_builder.py` | `SetUnlimitedFuelCommand`, `ai_unlimited_fuel`, `past_push` |
 | Engage-zone circles, homeward fight | `sqe/fighter_stations.py` (class `FighterStations`, inherited by `MissionBuilder`; `HOMEWARD_ENGAGE_NM` stays in the builder) | `_limit_engage`, `_cover_circle`, `_clear_zone`, `_zone_sams`, `_launch_points`, `HOMEWARD_ENGAGE_NM` _(verified v0.41.57, 2026-10-21)_ |

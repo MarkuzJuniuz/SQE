@@ -1583,7 +1583,7 @@ def main():
         _ncv += bool(cc_)
     assert not _cvp or _ncv >= 1
     # v0.41.21: the carrier CAP orbits close to the boat, outside every enemy field's scramble circle
-    from sqe.mission_builder import CVCAP_NM as _cvn
+    from sqe.support_caps import CVCAP_NM as _cvn
     assert _cvn <= 12, "the carrier CAP sits close to the boat"
     print(f"[bases] {_ncv} of {len(_cvp)} carrier packages with a carrier CAP off their own deck (the rest: the deck's fighters already committed that day)")
     # v0.41.8: an enemy field next to a live SA-10 sees as far as that radar: a stand-off wave on the SA-10 brings its alert pairs up
@@ -2188,7 +2188,7 @@ def main():
     # v0.41.21: the carrier CAP's orbit stays outside every enemy field's scramble circle
     import zipfile as _zf21, dcs.lua as _lua21, math as _m21
     from sqe import threatmap as _tm21
-    from sqe.mission_builder import CVCAP_DETECT_MARGIN_NM as _mg21
+    from sqe.support_caps import CVCAP_DETECT_MARGIN_NM as _mg21
     _chk21 = 0
     for _sd in (3, 4, 5, 6):
         s.new("Boat", "F-14BU", 2, seed=_sd); s.plan_day(); _st = s.state
