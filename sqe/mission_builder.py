@@ -926,21 +926,22 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         o = self.o
         if base.kind == BaseKind.AIRFIELD:
             self.apt[base.id] = self.t.airports[base.airport]
-            if o.base_defenses and base.defense >= sams.BLUE_MIN_DEF:
+            bt = sams.blue_battery(base, self.state)            # v0.41.30: doctrinal batteries, every field alike; v0.41.62: read from the field's three sites (sams.py)
+            if o.base_defenses and (bt["patriot_ln"] or bt["aaa"] or bt["hawk"]):
                 p = self.apt[base.id].position
                 # v0.41.7: the Patriot faces the threat (the nearest enemy fighter field; was a direction picked from the base's name: a Patriot
                 # radar covers about 120 degrees, so a raid from the wrong side met none). Short-range sites on both sides of the field, and a
                 # HAWK battery as the middle layer at your home field. A degraded field (below 0.6) keeps the Patriot with 1 launcher and one site.
                 ang = tm.nearest_threat_bearing(self.state, p.x, p.y, bearing(p.x, p.y, tx, ty))
-                full = base.defense >= 0.6
-                bt = sams.blue_battery(base)            # v0.41.30: doctrinal batteries, every field alike (sams.py)
                 dry = lambda a0, d0: next(((px, py) for k in range(12) for px, py in [offset(p.x, p.y, a0 + (30 * ((k + 1) // 2)) * (1 if k % 2 else -1), d0)]
                                            if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0)), offset(p.x, p.y, a0, d0))           # the nearest bearing that is dry land
                 x, y = dry(ang, 4500)
-                self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
-                              ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star)
+                if bt["patriot_ln"]:
+                    self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
+                                  ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star)
                 x, y = dry(ang + 120, 3500)
-                self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line)
+                if bt["aaa"]:
+                    self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line)
                 if bt["aaa"] >= 2:
                     x, y = dry(ang - 120, 3500)
                     self._platoon(self.usa, f"BASEDEF {base.name} AAA 2", [("Vulcan", 1), ("M1097_Avenger", 2)], x, y, ang, F.Line)

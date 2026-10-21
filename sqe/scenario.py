@@ -11,6 +11,7 @@ from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWi
 from .state import CampaignState
 from .aircraft import AIRCRAFT
 from . import ground, theatres
+from . import sams as _sams_mod
 
 def THEATRES() -> dict:
     """{id: name} of the installed theatre packs."""
@@ -253,6 +254,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
 
     # ---- the ground push toward Senaki (CAS targets) ------------------------------------------------------------
     ground.build(st, th, d, rng, ap)                                # the sectors of the front, a Red column in each, Blue's supply sites
+    _sams_mod.ensure_blue_sams(st)                                       # v0.41.62: blue's Patriot, HAWK and AAA sites at every airfield
     for i, v in enumerate(d.forward_sams):                          # short-range air defence travels with the column
         col = st.assets.get(f"armor_{i + 1}")
         if col is None:

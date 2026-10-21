@@ -1,5 +1,10 @@
 # CHANGES.md
 
+## v0.41.62
+
+* **Blue's air defence is three sites per airfield, in red's record** (XO 2026-10-21: "I'd rather use red's because I think it's tested and it's not abstract"). Every blue airfield now has `bsam_<field>_pat`, `_hawk` and `_aaa`: the same `EnemyAsset` record as red's SAM sites (variant, health, parent field), kept in their own list `state.blue_sams` so the supply and garrison loops over `blue_assets` never touch them. The site health IS the strength; `Base.defense` is only a cache of the Patriot site's health for the readers not moved (GUI bar, war-sim score). Every writer goes through `sams.shift_field` / `sams.set_field` (raid damage, the overrun hit, a fallen field, nightly repair by supply, the lent battery). The mission builder reads the three sites (`sams.blue_battery(base, state)`; Patriot launchers by its health, HAWK stands at 0.6 or more, AAA 2 sites at 0.6, 1 at 0.15: the v0.41.30 thresholds, judgment calls, now per site). No behaviour change: all three sites move together for now, so missions are identical (identity check 79/79). An older save builds its sites from each field's `defense` number on load (no format bump; an older SQE opening a new save just ignores the list). Smoke test: checks for the sites, a hurt HAWK dropping out alone, round trip and old-save migration.
+* Next (not in this PR): per-site damage, blue rebuild / scoot / retreat like red's, orders by need, doctrinal placement.
+
 ## v0.41.61
 
 * **The "CAP engage range" boxes are gone from the settings page** (XO 2026-10-21: "Remove and take the defaults first. We'll be tuning CAPs later."). The enemy and friendly 50 nm values are now fixed in the mission options (`enemy_cap_engage_nm`, `friendly_cap_engage_nm`, both 50), so missions are unchanged. The two settings fields are removed; an old `settings.json` that still has them loads fine (unknown keys are ignored). The mission-side BARCAP / patrol rules will replace these limits.

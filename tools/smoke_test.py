@@ -1088,10 +1088,18 @@ def main():
     _fx = next(a_ for a_ in _st.assets.values() if a_.kind == _AK.SAM and a_.variant not in _sm.MOBILE and not a_.id.startswith("fsam_") and not a_.destroyed)
     _fx.health = 0.4; _px = (_fx.x, _fx.y); _sm.relocate(_st, _ds, _rnd.Random(7)); assert (_fx.x, _fx.y) == _px, "fixed sites (SA-2, SA-3, SA-10) never move"
     _fl = [b_ for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD"]
-    for b_ in _fl: b_.defense = 0.3
+    for b_ in _fl: _sm.set_field(_st, b_, 0.3)
     _sm.blue_defence(_st, _gd(3)); assert all(0.31 < b_.defense <= 0.41 for b_ in _fl), "airfield defences repair by supply (at most 0.10 a day)"
-    _fl[0].defense = 0.95; _fl[1].defense = 0.2; _lines = _sm.blue_defence(_st, _gd(3)); assert _lines and _fl[0].defense < 1.0, "a strong field lends a battery to the weakest"
+    _sm.set_field(_st, _fl[0], 0.95); _sm.set_field(_st, _fl[1], 0.2); _lines = _sm.blue_defence(_st, _gd(3)); assert _lines and _fl[0].defense < 1.0, "a strong field lends a battery to the weakest"
     _st.ground["fallen"] = [_fl[1].id]; _d1 = _fl[1].defense; _sm.blue_defence(_st, _gd(3)); assert _fl[1].defense == _d1, "a fallen field does not repair"
+    # v0.41.62: blue's air defence is three sites per airfield, the same record as red's SAM assets
+    assert all(len(_sm.blue_sites(_st, b_)) == 3 for b_ in _fl), "every airfield has a Patriot, a HAWK and an AAA site"
+    assert not any(a_.id.startswith("bsam_") for a_ in _st.assets.values()) and not any(a_.id.startswith("bsam_") for a_ in _st.blue_assets.values()), "blue sites stay out of the enemy and supply lists"
+    _sm.set_field(_st, _fl[0], 1.0); _hk = _st.blue_sams[_sm.blue_site_id(_fl[0].id, "hawk")]; _hk.health = 0.4
+    assert _sm.blue_battery(_fl[0], _st)["hawk"] is False and _sm.blue_battery(_fl[0], _st)["patriot_ln"] == _sm.BLUE_PATRIOT_LN, "a hurt HAWK site drops out on its own; the Patriot stands"
+    _hk.health = 1.0; _sm.shift_field(_st, _fl[0], -0.5); assert abs(_sm.field_defence(_st, _fl[0]) - 0.5) < 1e-9 and _fl[0].defense == _sm.field_defence(_st, _fl[0]), "damage moves every site and the cached number"
+    _rt = _CS.from_dict(_st.to_dict()); assert {k: v.health for k, v in _rt.blue_sams.items()} == {k: v.health for k, v in _st.blue_sams.items()}, "blue sites save and load"
+    _o = _st.to_dict(); _o.pop("blue_sams"); _o2 = _CS.from_dict(_o); assert _o2.blue_sams == {} and _sm.ensure_blue_sams(_o2) and abs(_sm.field_defence(_o2, _o2.bases[_fl[0].id]) - _o2.bases[_fl[0].id].defense) < 1e-9, "an older save gets its sites from each field's defense number"
     _rt = _CS.from_dict(_st.to_dict()); assert _rt.sams == _st.sams
     _o = _st.to_dict(); _o.pop("sams"); assert _CS.from_dict(_o).sams == {}
     s.new("Sams night", "FA-18C", 3, seed=12); _st = s.state; _st.status = "ACTIVE"
@@ -1782,8 +1790,8 @@ def main():
     _fld = next(b_ for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD")
     _rd2.hit(_st, _fld.id, None, _r2.Random(1), 2, f"sector:{_zi}"); assert _st.ground["blue"][_zi] < _b0 or _b0 == 0
     _g1 = _st.blue_assets[f"bgar_{_fld.id}"]; _f1 = _st.bases[_fld.id]
-    _g1.health = 1.0; _f1.defense = 1.0; _rd2.hit(_st, _fld.id, None, _r2.Random(2), 2); _with = 1.0 - _f1.defense
-    _g1.health = 0.0; _f1.defense = 1.0; _rd2.hit(_st, _fld.id, None, _r2.Random(2), 2); _without = 1.0 - _f1.defense
+    _g1.health = 1.0; _sm.set_field(_st, _f1, 1.0); _rd2.hit(_st, _fld.id, None, _r2.Random(2), 2); _with = 1.0 - _f1.defense
+    _g1.health = 0.0; _sm.set_field(_st, _f1, 1.0); _rd2.hit(_st, _fld.id, None, _r2.Random(2), 2); _without = 1.0 - _f1.defense
     assert _with < _without, "a garrison takes damage off the field's defences"
     _fu.health = 0.0; _sd = _gd(1); _sd = type(_sd)(**{**_sd.__dict__, "blue_rebuild": 1.0})
     assert _gr2.rebuild_blue(_st, _sd, _r2.Random(1)) and _fu.health > 0, "destroyed friendly sites are replaced overnight"

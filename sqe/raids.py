@@ -183,7 +183,7 @@ def shy(state, d, ws: list) -> list:
         return ws
     fields = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and getattr(b, "defense", 0.0) >= 0.6]
     from .sams import blue_battery
-    hawks = [b for b in fields if blue_battery(b)["hawk"]] if doc["hawk"] else []
+    hawks = [b for b in fields if blue_battery(b, state)["hawk"]] if doc["hawk"] else []
     fleets = [b for b in state.bases.values() if b.kind == BaseKind.CARRIER]     # v0.41.30: every field's HAWK, not only your home field's
     out = []
     for base, aim, w in ws:
@@ -248,7 +248,8 @@ def hit(state, base_id: str, wing, rng: random.Random, through: int | None = Non
     gar = state.blue_assets.get(f"bgar_{base_id}") if getattr(state, "blue_assets", None) else None
     shield = 1.0 - GARRISON_SHIELD * (gar.health if gar is not None and not gar.destroyed else 0.0)
     if b.kind != BaseKind.CARRIER:
-        b.defense = max(0.0, b.defense - BASE_LOSS * k * shield * (1.0 - 0.4 * ad))     # v0.41.30: batteries soak part of the damage (judgment call)
+        from .sams import shift_field
+        shift_field(state, b, -BASE_LOSS * k * shield * (1.0 - 0.4 * ad))     # v0.41.30: batteries soak part of the damage (judgment call)
     sqs = sorted((s for s in state.squadrons.values() if s.base_id == base_id and s.available > 0), key=lambda s: -s.available)
     lines = [f"   bombs fell on {b.name}: its defences are down to {b.defense:.0%}" if b.kind != BaseKind.CARRIER else f"   missiles hit {b.name}"]
     if sqs:

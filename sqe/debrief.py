@@ -1105,7 +1105,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
                     if fields:
                         nb = min(fields, key=lambda b: (b.x - a0.x) ** 2 + (b.y - a0.y) ** 2)
-                        nb.defense = max(0.0, nb.defense - 0.10)
+                        from . import sams as _sams
+                        _sams.shift_field(state, nb, -0.10)
                         out["lines"].append(f"The position was overrun; the column presses on toward {nb.name}")
         elif g["kind"] == "asset":
             a = state.assets[g["ref"]]

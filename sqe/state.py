@@ -60,6 +60,7 @@ class CampaignState:
     red_air: dict = field(default_factory=dict)    # the enemy's air tasking for the day (redair.py): patrol and sweep pairs, windows, stations
     sams: dict = field(default_factory=dict)       # air defence that rebuilds and moves (sams.py): day each site went down, moves made, original positions
     blue_assets: dict = field(default_factory=dict)  # Blue supply sites (fuel farms, forward depot): same record as the enemy assets
+    blue_sams: dict = field(default_factory=dict)    # v0.41.62: Blue's air defence sites (bsam_<field>_pat / hawk / aaa): the same record as red's SAM assets (sams.py)
 
     # ---- helpers ------------------------------------------------------------------------
     def campaign_date(self):
@@ -92,6 +93,7 @@ class CampaignState:
             "sams": self.sams,
             "red_air": self.red_air,
             "blue_assets": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.blue_assets.items()},
+            "blue_sams": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.blue_sams.items()},
             "plan": self.plan, "pending": self.pending, "history": self.history[-300:], "log": self.log[-400:],
         }
 
@@ -119,6 +121,7 @@ class CampaignState:
         s.sams = d.get("sams") or {}
         s.red_air = d.get("red_air") or {}
         s.blue_assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_assets") or {}).items()}
+        s.blue_sams = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_sams") or {}).items()}      # missing in an older save: sams.ensure_blue_sams builds them from each field's `defense`
         s.plan, s.pending = d.get("plan", []), d.get("pending")
         s.history, s.log = d.get("history", []), d.get("log", [])
         if not s.ground:                           # a campaign from before the ground war (format 4): give it one for its level

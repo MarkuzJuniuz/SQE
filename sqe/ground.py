@@ -412,7 +412,8 @@ def check_falls(state) -> list:
 
 def apply_fall(state, bid: str) -> list:
     b = state.bases[bid]
-    b.defense = 0.0
+    from . import sams
+    sams.set_field(state, b, 0.0)
     others = [x for x in state.bases.values() if x.kind.value == "AIRFIELD" and x.id != bid and x.id not in state.ground["fallen"]]
     lines = [f"{b.name} HAS FALLEN: the front reached it. Its defences are gone"]
     if not others:
