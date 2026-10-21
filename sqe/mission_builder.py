@@ -23,7 +23,7 @@ from . import theatres, weather
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import briefing as brief, callsigns, carcass, ground, profiles, relief, sams
+from . import barcap, briefing as brief, callsigns, carcass, ground, profiles, relief, sams
 from . import seacheck as seac
 from . import pydcs_patch
 from . import threatmap as tm
@@ -76,6 +76,7 @@ AAM_WEAPONS = 264241152       # DCS weapon flags: air-to-air missiles (a Fighter
 A2G_WEAPONS = 14 | 240 | 768 | 4161536 | 30720
 # Air-to-ground jets whose loadouts carry radar missiles (AIM-120, AIM-54; checked in loadouts.py): after the attack they may shoot back.
 SHOOTS_BACK = {"F-16C", "FA-18C", "F-14BU"}
+RELIEF_BACK_NM = 12            # v0.41.78: a relief sortie appears this far behind its station (toward its base) and flies up to it (judgment call)
 SPAWN_SEP_M = 2000            # airborne flights never appear closer than this to each other (same height band, same minute)
 
 
@@ -385,6 +386,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # ---- friendly flights --------------------------------------------------------------------------------------------
         despawn, pkg_table = [], []
         self._sup_cts = []                                                   # HAVCAP / base CAP orbit tasks: their stop time is extended once the merged packages are known
+        self._relief_src = {}                                                # v0.41.78: callsign -> what _spawn_flight needs to build that support CAP's relief sorties
+        self._relief_names = []                                              # relief flights built so far (their callsigns are taken)
+        self._ct_flight = {}                                                 # id(orbit task) -> callsign of the support CAP it belongs to
         self._striker_egr = []                                               # v0.41.40: [((x, y), egress time)] of this mission's strikers
         self._holds = []                                                     # v0.41.10: TARCAP / escort holds, extended to the last package over their target area
         self._snipe_at = {}                                                  # v0.41.10: id(group) -> the station waypoint where max-range shots begin
@@ -420,8 +424,16 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # (they used to leave 40 min after your TOT, so later merged packages flew with the tanker and AWACS unguarded)
         last_home = max([m_["rtb_s"] for m_ in merged if not m_.get("struck")] + [rtb_s]) + 300
         for ct_ in self._sup_cts:
-            if last_home > ct_.params.get("stopCondition", {}).get("time", 0):
-                ct_.stop_after_time(int(last_home))
+            src_ = self._relief_src.get(self._ct_flight.get(id(ct_)))
+            if src_ is None:
+                if last_home > ct_.params.get("stopCondition", {}).get("time", 0):
+                    ct_.stop_after_time(int(last_home))
+                continue
+            full_ = int(max(src_["full"], last_home))
+            if full_ <= src_["end"]:                                         # its first sortie covers the whole mission
+                ct_.stop_after_time(full_)
+            else:
+                self._spawn_reliefs(src_, full_, manifest, despawn)          # v0.41.78: the rest of the time is flown by relief sorties
         # v0.41.38 (XO 2026-10-20): a TARCAP / escort stays until the LAST ground-attack flight of its own package is off target (+ the usual after-time),
         # not just until its own station time (when the player flew the TARCAP, tgt was the TARCAP's own station: it left 7.5 min after arriving)
         own_ = [((tx, ty), max(striker_tots))] if striker_tots else []
@@ -1226,6 +1238,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         cap_zone = None
         if f.tag:       # support CAP: airborne on station for the whole package
             cap_zone, wps, stop = self._support_cap_route(package, f, geom, hav_xy, tot_s, rtb_s)
+            stop, act_s = self._support_sortie(package, f, wps, stop, (plan, geom, tanker_xy, hav_xy, push_s, tot_s, rtb_s, idx))
         else:
             r_ = self._flight_route(package, f, geom, idx, push_s, tot_s)
             if r_ is None:
@@ -1255,6 +1268,54 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             egr_ = next((w.eta_s for w in wps if w.name == "EGR"), None)          # v0.41.40: when this striker is OUT, for the escorts to wait on
             self._striker_egr.append(((geom.tx, geom.ty), float(egr_ if egr_ is not None else tw.eta_s + 180)))
         return g, (tw.eta_s if tw is not None else None)
+
+    def _support_sortie(self, package, f, wps, full_stop, ctx):
+        """v0.41.78: a support CAP sortie flies only its airframe's time on station (barcap.endurance_min); the rest of the mission is covered by relief
+        sorties built after the merged packages are known (_spawn_reliefs). -> (stop, act_s) for THIS sortie. A relief (f.relief set) is air-spawned
+        RELIEF_BACK_NM behind its station and late-activated so it arrives on station HANDOVER_MIN before the sortie it replaces leaves."""
+        rel = getattr(f, "relief", None)
+        if rel is not None:
+            base = self.state.bases[f.base_id]
+            s0 = wps[0]
+            back = min(RELIEF_BACK_NM * NM, max(0.0, dist(s0.x, s0.y, base.x, base.y) - 2 * NM))
+            if back > 0:
+                s0.x, s0.y = offset(s0.x, s0.y, bearing(s0.x, s0.y, base.x, base.y), back)
+            lead = int(back / NM / max(1.0, s0.speed_kts) * 3600) + 30
+            return int(rel["end"]), max(1, int(rel["start"]) - lead)
+        e_ = int(barcap.endurance_min(f.aircraft, f.tag == "TNKCAP") * 60)
+        self._relief_src[f.callsign] = {"package": package, "f": f, "ctx": ctx, "full": int(full_stop), "end": min(int(full_stop), e_), "E": e_}
+        return min(int(full_stop), e_), 0
+
+    def _spawn_reliefs(self, src, full, manifest, despawn):
+        """v0.41.78: the relief sorties of one support CAP: sortie k starts k * (E - HANDOVER_MIN) after the mission began and flies E minutes (the last
+        one only to `full`, the time the mission needs cover until). Each is a copy of the flight with its own callsign, late-activated, on the same
+        station. The background war does not track these (no replacement of losses yet: v0.41.79)."""
+        f0, package, E = src["f"], src["package"], src["E"]
+        step = E - barcap.HANDOVER_MIN * 60
+        used = {x.callsign for x in package.flights} | {x.callsign for x in getattr(self, "_relief_names", [])}
+        names = getattr(self, "_relief_names", None)
+        if names is None:
+            names = self._relief_names = []
+        k, start = 1, step
+        while start < full - 300:
+            if self._counts()["units"] + f0.count > self.o.max_units:
+                self.warns.append(f"{f0.callsign}: relief sorties left out to stay under the {self.o.max_units}-unit limit")
+                break
+            nf = copy.deepcopy(f0)
+            nm, no = f0.callsign.rsplit(" ", 1)
+            alln = used | {x.callsign for x in names}
+            free = next((f"{c_} {n}" for c_ in [nm] + [c for c in callsigns.table(f0.aircraft) if c != nm] for n in range(1, 10) if f"{c_} {n}" not in alln), None)
+            if free is None:                                              # every name of the type taken nine times over: not reachable with real flight counts
+                self.warns.append(f"{f0.callsign}: no free callsign for its relief")
+                break
+            nf.callsign = free
+            nf.is_player = False
+            nf.relief = {"k": k, "start": int(start), "end": int(min(start + E, full))}
+            names.append(nf)
+            plan, geom, tanker_xy, hav_xy, push_s, tot_s, rtb_s, idx = src["ctx"]
+            self._spawn_flight(package, nf, plan, geom, tanker_xy, hav_xy, push_s, tot_s, rtb_s, idx, manifest, despawn)
+            k += 1
+            start += step
 
     def _flight_route(self, package, f, geom, idx, push_s, tot_s):
         """Everyone else's route: plan_route, terrain, times. -> (wps, act_s, past_push, stop), or None when the flight is already back on the ground. Moved out of _spawn_flight in v0.41.54, unchanged."""
@@ -1322,9 +1383,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g = self.m.flight_group(self.usa, f.callsign, spec.dcs_type, None, pt(s0.x, s0.y), altitude=s0.alt_ft * FT,
                                     speed=s0.speed_kts * KPH, maintask=MAIN_TASK[f.role], group_size=f.count)
             first = 1
-        if not f.tag and not f.is_player and act_s > 0:
-            self._late(g, act_s)                                # they 'depart' on their own schedule, not at mission start
-        if first == 1 and not f.tag:                            # face the way they are going (in-flight groups spawn pointing north)
+        if (not f.tag or getattr(f, "relief", None)) and not f.is_player and act_s > 0:
+            self._late(g, act_s, "support relief" if f.tag else "activate")                                # they 'depart' on their own schedule, not at mission start
+        if first == 1 and (not f.tag or getattr(f, "relief", None)):   # face the way they are going (in-flight groups spawn pointing north)
             nxt = next((w for w in wps[1:] if dist(wps[0].x, wps[0].y, w.x, w.y) > 100), None)
             if nxt is not None:
                 hdg = bearing(wps[0].x, wps[0].y, nxt.x, nxt.y)
@@ -1604,8 +1665,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             elif w.action == "CAPORBIT":
                 ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH)))
                 ct.stop_after_time(stop); wp.tasks.append(ct)
-                if f.tag:
+                if f.tag and not getattr(f, "relief", None):
                     self._sup_cts.append(ct)
+                    self._ct_flight[id(ct)] = f.callsign
             elif w.orbit:                                                    # fighters held short of live SAM cover / on their station
                 if self._snipe_at.get(id(g)) is w:                              # v0.41.10: on station: maximum-range shots (snipe) from here on
                     wp.tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
@@ -1908,9 +1970,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     JSOW_AXES = (30, -30, 50, -50, 15, -15, 70, -70)       # v0.41.22: degrees off the HARM shooters' axis, tried in this order
 
     # ---- late activation helper ------------------------------------------------------------------------------------------------
-    def _late(self, g, seconds):
+    def _late(self, g, seconds, label="activate"):
         g.late_activation = True
-        trig = triggers.TriggerOnce(comment=f"activate {g.name}")
+        trig = triggers.TriggerOnce(comment=f"{label} {g.name}")
         trig.add_condition(condition.TimeAfter(int(seconds)))
         trig.add_action(action.ActivateGroup(g.id))
         self.m.triggerrules.triggers.append(trig)

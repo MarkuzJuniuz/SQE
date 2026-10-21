@@ -142,13 +142,15 @@ def check_01_package_merging_fold_same(c):
     z = zipfile.ZipFile(ms.settings.sortie_miz); lua.loads(z.read("mission").decode())
     _mz = lua.loads(z.read("mission").decode())
     _tags = {f.callsign for f in pk.flights if f.tag}
+    import re as _re
+    _tags |= set(_re.findall(r'\["comment"\]="support relief ([^"]+)"', z.read("mission").decode()))     # v0.41.78: the chain of relief sorties covers the rest of the time
     _stops = []
     for _c in _mz["mission"]["coalition"].values():
         for _cn in _c["country"].values():
             for _g in _cn.get("plane", {}).get("group", {}).values():
                 if _g["name"] in _tags:
                     _stops += [t_["params"]["stopCondition"]["time"] for t_ in _g["route"]["points"][2]["task"]["params"]["tasks"].values() if t_["params"].get("stopCondition")]
-    assert _tags and _stops and min(_stops) >= max(m["rtb_s"] for m in res.merged) + 300 - 1, ("HAVCAP / base CAP outlast the merged packages", _stops)
+    assert _tags and _stops and max(_stops) >= max(m["rtb_s"] for m in res.merged) + 300 - 1, ("HAVCAP / base CAP (with their reliefs) outlast the merged packages", _stops)
     print(f"[merge] #{pk.number} {pk.objective.type.value} + {[(m['number'], m['type']) for m in res.merged]}: {res.counts['groups']} groups / {res.counts['units']} units")
     # every AI ground-attack flight stays on its job: no air-to-air on the way in, home when the air-to-ground load is gone, self-defence after the attack
     from sqe.mission_builder import A2G_WEAPONS as _A2GW
@@ -170,11 +172,15 @@ def check_01_package_merging_fold_same(c):
     # nobody spawns on top of anybody: airborne groups 2 km apart (or 300 m in height), one group per runway / catapult
     import math as _m3, collections as _co3
     _air, _rw = [], _co3.Counter()
+    import re as _re2
+    _rel_names = set(_re2.findall(r'\["comment"\]="support relief ([^"]+)"', z.read("mission").decode()))
     for _side in ("blue", "red"):
         for _cn in _mz["mission"]["coalition"][_side]["country"].values():
             for _g in _cn.get("plane", {}).get("group", {}).values():
                 _p0 = list(_g["route"]["points"].values())[0]
-                if _p0["type"] == "Turning Point":
+                if _p0["type"] == "Turning Point" and _g["name"] in _rel_names:            # v0.41.78: a relief appears later, on its own schedule (spaced by time in _sep)
+                    pass
+                elif _p0["type"] == "Turning Point":
                     _air.append((_g["name"], _p0["x"], _p0["y"], _p0["alt"]))
                 elif _p0["type"] == "TakeOff" and not _g.get("lateActivation"):           # a late one waits for the runway (the hook's queue)
                     _rw[(_side, _p0.get("airdromeId"), _p0.get("linkUnit"))] += 1
@@ -1465,6 +1471,31 @@ def check_31f_red_relief_in_mission(c):
     ses.fly(pk.number, ses.flyable(pk)[0].id)
     mz = zf.ZipFile(st.pending["miz"]).read("mission").decode()
     assert "Relief 1" in mz and "relief Relief 1" in mz, "the relief pair is in the mission with its timed trigger"
+
+
+def check_31g_blue_support_relief(c):
+    """v0.41.78: a blue base / carrier / HAVCAP sortie flies only its airframe's time on station; the rest of the mission is covered by relief sorties
+    (new callsigns, late-activated before the sortie they replace leaves, each stopping at its own time)."""
+    import re, zipfile as zf
+    from sqe import barcap
+    assert barcap.endurance_min("F-16C") == 30 and barcap.endurance_min("FA-18C") == 30 and barcap.endurance_min("F-14B") == 120 and barcap.endurance_min("F-16C", tanker=True) == 120, "endurance by airframe"
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke support relief", "F-16C", 3, seed=7)
+    pk = next(p_ for p_ in ses.packages() if ses.flyable(p_) and any(f_.tag in ("BASECAP", "HAVCAP", "CVCAP") for f_ in p_.flights))
+    ses.fly(pk.number, ses.flyable(pk)[0].id)
+    mz = zf.ZipFile(ses.state.pending["miz"]).read("mission").decode()
+    acts = {}
+    for m_ in re.finditer(r'\["comment"\]="support relief ([^"]+)"', mz):
+        seg = mz[m_.end():m_.end() + 400]
+        sec = re.search(r'\["seconds"\]=(\d+)', seg)
+        if sec:
+            acts[m_.group(1)] = int(sec.group(1))
+    rel = acts
+    assert rel, ("a 30-minute support CAP in a long mission has relief sorties", sorted(acts))
+    assert all(t >= (30 - barcap.HANDOVER_MIN) * 60 - 300 for t in rel.values()), ("a relief appears no earlier than one sortie less the handover", rel)
+    stops = sorted({int(x) for x in re.findall(r'\["stopCondition"\]=\s*\{\s*\["time"\]=(\d+)', mz)})
+    assert len(stops) >= 3, ("each sortie has its own orbit stop time", stops)
 
 
 def check_31c_ai_skill_red_blue(c):
@@ -2895,6 +2926,7 @@ CHECKS = [
     check_31d_barcap_areas,
     check_31e_barcap_mission_side,
     check_31f_red_relief_in_mission,
+    check_31g_blue_support_relief,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,
