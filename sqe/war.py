@@ -510,9 +510,9 @@ class WarSimulator:
         update_status(state)
 
     def counterstrike(self, state: CampaignState) -> list:
-        """Our airfield air defences repair (by supply; see sams.blue_defence) and a strong field lends a battery to the weakest. (The old random
+        """Our airfield air defences repair (by supply; see sams.blue_defence) destroyed sites are ordered or rebuilt (sams.blue_orders). (The old random
         overnight air strike is gone: Red raids are planned now, see raids.py.) Returns log lines."""
-        return sams.blue_defence(state, self.d) + sams.rebuild_blue_sites(state, self.d, self.rng)
+        return sams.blue_defence(state, self.d) + sams.blue_orders(state, self.d, self.rng) + sams.rebuild_blue_sites(state, self.d, self.rng)
 
 
 def totals(state: CampaignState) -> dict:
