@@ -1826,58 +1826,62 @@ class MissionBuilder:
             elif w.action == "CAS":
                 self._cas_tasks(wp, w, armor, tot_s)
             elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
-                # The whole site, not one radar: an S-300 track radar only radiates while it is tracking, so a HARM task aimed at it
-                # has nothing to shoot at (v0.39.7 run: the SEAD pair never fired). Aimed at the group, the AI fires at whatever radiates (an escort CAS SEAD did).
-                # The launchers are still the DEAD flight's job: HARMs only kill what radiates.
-                # v0.41.6: OPEN FIRE, not weapon free: only the groups tasked below (its own site, the Tors that guard it, the umbrella). Weapon free,
-                # Viper 5-2 fired at another package's SA-6 from 89 km; the radar went quiet and the HARM homed on Squid 1-4's radar instead.
-                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
-                # v0.41.24: no clear HARM axis: the neighbouring sites still in reach of the launch point get these HARMs first
-                for nid_ in getattr(self, "_harm_threat", {}).get(package.id, []):
-                    ng_ = self.groups_by_asset.get(nid_)
-                    if ng_ is not None:
-                        cth = task.ControlledTask(task.AttackGroup(ng_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
-                        cth.stop_after_time(int(w.eta_s) + 300); wp.tasks.append(cth)
-                if package.objective.type == ObjectiveType.CAS:
-                    # v0.41.20: a CAS escort: HARMs on the SA-2/3/6 sites that cover the CAS target, through the whole CAS window
-                    from .war import covering_sams
-                    for cs_ in covering_sams(self.state, self.state.assets[package.objective.target_id]):
-                        cg_ = self.groups_by_asset.get(cs_.id)
-                        if cg_ is not None:
-                            ctc = task.ControlledTask(task.AttackGroup(cg_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
-                            ctc.stop_after_time(int(w.eta_s) + 900); wp.tasks.append(ctc)
-                # The package's second SEAD flight opens on the Tors that guard the site (they shoot the HARMs down, v0.39.16 run), then joins on the site.
-                seads_ = [x for x in package.flights if x.role == Role.SEAD and not x.tag]
-                if len(seads_) > 1 and any(x is f or x.id == f.id for x in seads_[1:]):
-                    for _, tg_ in self._cover_tors(package):
-                        ctt = task.ControlledTask(task.AttackGroup(tg_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
-                        ctt.stop_after_time(int(w.eta_s) + 180); wp.tasks.append(ctt)
-                    # v0.41.4: ...then it waits on the umbrella too. In the v0.41.3 run the Gudauta SA-10 stayed quiet through the first HARM flight's
-                    # window (one HARM went at it), lit up a minute later and killed the whole JSOW flight; a second flight still holding HARMs for it covers that.
-                    um_ = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
-                    ug_ = self.groups_by_asset.get(um_.id) if um_ else None
-                    if ug_ is not None and um_.id != package.objective.target_id:
-                        ctu = task.ControlledTask(task.AttackGroup(ug_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
-                        ctu.stop_after_time(int(w.eta_s) + 420); wp.tasks.append(ctu)
-                    # v0.41.22: no clear JSOW axis: the neighbouring sites that still reach the JSOW launch point get this flight's HARMs as well
-                    for nid_ in getattr(self, "_jsow_threat", {}).get(package.id, []):
-                        ng_ = self.groups_by_asset.get(nid_)
-                        if ng_ is not None:
-                            ctn = task.ControlledTask(task.AttackGroup(ng_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
-                            ctn.stop_after_time(int(w.eta_s) + 420); wp.tasks.append(ctn)
-                elif seads_ and (seads_[0] is f or seads_[0].id == f.id):
-                    # the first HARM flight opens on the umbrella (the SA-10 covering this target): it reaches every jet in the wave, so it goes first
-                    um_ = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
-                    ug_ = self.groups_by_asset.get(um_.id) if um_ else None
-                    if ug_ is not None:
-                        ctu = task.ControlledTask(task.AttackGroup(ug_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
-                        ctu.stop_after_time(int(w.eta_s) + 180); wp.tasks.append(ctu)
-                ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.ARM, group_attack=True))
-                ct.stop_after_time(int(w.eta_s) + 600)
-                wp.tasks.append(ct)
-                for _, tg_ in self._cover_tors(package):            # a second pass at the Tors that guard the site, with whatever HARMs are left
-                    ct2 = task.ControlledTask(task.AttackGroup(tg_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
-                    ct2.stop_after_time(int(w.eta_s) + 780); wp.tasks.append(ct2)
+                self._sead_attack_tasks(package, f, wp, w, armor)
+
+    def _sead_attack_tasks(self, package, f, wp, w, armor):
+        """The HARM attack tasks of a SEAD flight's attack waypoint: its own site, neighbouring sites, covering Tors, the umbrella."""
+        # The whole site, not one radar: an S-300 track radar only radiates while it is tracking, so a HARM task aimed at it
+        # has nothing to shoot at (v0.39.7 run: the SEAD pair never fired). Aimed at the group, the AI fires at whatever radiates (an escort CAS SEAD did).
+        # The launchers are still the DEAD flight's job: HARMs only kill what radiates.
+        # v0.41.6: OPEN FIRE, not weapon free: only the groups tasked below (its own site, the Tors that guard it, the umbrella). Weapon free,
+        # Viper 5-2 fired at another package's SA-6 from 89 km; the radar went quiet and the HARM homed on Squid 1-4's radar instead.
+        wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
+        # v0.41.24: no clear HARM axis: the neighbouring sites still in reach of the launch point get these HARMs first
+        for nid_ in getattr(self, "_harm_threat", {}).get(package.id, []):
+            ng_ = self.groups_by_asset.get(nid_)
+            if ng_ is not None:
+                cth = task.ControlledTask(task.AttackGroup(ng_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                cth.stop_after_time(int(w.eta_s) + 300); wp.tasks.append(cth)
+        if package.objective.type == ObjectiveType.CAS:
+            # v0.41.20: a CAS escort: HARMs on the SA-2/3/6 sites that cover the CAS target, through the whole CAS window
+            from .war import covering_sams
+            for cs_ in covering_sams(self.state, self.state.assets[package.objective.target_id]):
+                cg_ = self.groups_by_asset.get(cs_.id)
+                if cg_ is not None:
+                    ctc = task.ControlledTask(task.AttackGroup(cg_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                    ctc.stop_after_time(int(w.eta_s) + 900); wp.tasks.append(ctc)
+        # The package's second SEAD flight opens on the Tors that guard the site (they shoot the HARMs down, v0.39.16 run), then joins on the site.
+        seads_ = [x for x in package.flights if x.role == Role.SEAD and not x.tag]
+        if len(seads_) > 1 and any(x is f or x.id == f.id for x in seads_[1:]):
+            for _, tg_ in self._cover_tors(package):
+                ctt = task.ControlledTask(task.AttackGroup(tg_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                ctt.stop_after_time(int(w.eta_s) + 180); wp.tasks.append(ctt)
+            # v0.41.4: ...then it waits on the umbrella too. In the v0.41.3 run the Gudauta SA-10 stayed quiet through the first HARM flight's
+            # window (one HARM went at it), lit up a minute later and killed the whole JSOW flight; a second flight still holding HARMs for it covers that.
+            um_ = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
+            ug_ = self.groups_by_asset.get(um_.id) if um_ else None
+            if ug_ is not None and um_.id != package.objective.target_id:
+                ctu = task.ControlledTask(task.AttackGroup(ug_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                ctu.stop_after_time(int(w.eta_s) + 420); wp.tasks.append(ctu)
+            # v0.41.22: no clear JSOW axis: the neighbouring sites that still reach the JSOW launch point get this flight's HARMs as well
+            for nid_ in getattr(self, "_jsow_threat", {}).get(package.id, []):
+                ng_ = self.groups_by_asset.get(nid_)
+                if ng_ is not None:
+                    ctn = task.ControlledTask(task.AttackGroup(ng_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                    ctn.stop_after_time(int(w.eta_s) + 420); wp.tasks.append(ctn)
+        elif seads_ and (seads_[0] is f or seads_[0].id == f.id):
+            # the first HARM flight opens on the umbrella (the SA-10 covering this target): it reaches every jet in the wave, so it goes first
+            um_ = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
+            ug_ = self.groups_by_asset.get(um_.id) if um_ else None
+            if ug_ is not None:
+                ctu = task.ControlledTask(task.AttackGroup(ug_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                ctu.stop_after_time(int(w.eta_s) + 180); wp.tasks.append(ctu)
+        ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+        ct.stop_after_time(int(w.eta_s) + 600)
+        wp.tasks.append(ct)
+        for _, tg_ in self._cover_tors(package):            # a second pass at the Tors that guard the site, with whatever HARMs are left
+            ct2 = task.ControlledTask(task.AttackGroup(tg_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+            ct2.stop_after_time(int(w.eta_s) + 780); wp.tasks.append(ct2)
 
     def _dead_gate(self, package, f, g, wps, first, stw, tot_s, base):
         """The radar gate for a Close DEAD package's strikers and covering fighters. -> the gate dict, or None."""
