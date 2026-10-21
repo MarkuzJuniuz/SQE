@@ -702,6 +702,8 @@ class Session:
         self.options.hold_minutes = int(self.settings.hold_minutes)
         self.options.launch_offset_s = int(self.settings.takeoff_buffer_s)
         self.options.ai_unlimited_fuel = bool(self.settings.ai_unlimited_fuel)
+        self.options.ai_skill_red = str(getattr(self.settings, "ai_skill_red", "level"))
+        self.options.ai_skill_blue = str(getattr(self.settings, "ai_skill_blue", "level"))
         self.options.fighter_engage_nm = int(self.settings.fighter_engage_nm)
         self.options.fighter_engage_minutes = int(self.settings.fighter_engage_minutes)
         self.options.player_is_ai = bool(self.ai_test)

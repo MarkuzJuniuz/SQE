@@ -91,3 +91,22 @@ LEVELS: dict[int, Difficulty] = {
 
 def get(level: int) -> Difficulty:
     return LEVELS[max(1, min(3, int(level)))]
+
+
+# v0.41.70: "AI Skill", one for Red and one for Blue (XO 2026-10-21: DCS AI at the top skill cheats, so he wants a say on both sides). Set on the New Campaign
+# page and in Settings > Campaign (the same two settings, like the weather). "level" = what the game did before: red follows the difficulty level
+# (`enemy_skill`: Average / Good / High), blue's AI aircraft fly at High; the four named values set that side's AI directly. Skill only: the war
+# sim's numbers (`base_damage`, `loss_rate`) are not touched. Blue's ground units (base defences) are left at DCS's default under "level".
+SKILL_CHOICES = {"level": "Level default", "Average": "Average", "Good": "Good", "High": "High", "Excellent": "Excellent"}
+SKILL_NAMES = ("Average", "Good", "High", "Excellent")
+
+
+def ai_skill(opts, side: str, d, ground: bool = False):
+    """The DCS skill name for a side's AI: the setting (`ai_skill_red` / `ai_skill_blue` on the options) when it names one, else the level's.
+    None means "leave DCS's default" (blue ground units under "level")."""
+    v = getattr(opts, "ai_skill_" + side, "level")
+    if v in SKILL_NAMES:
+        return v
+    if side == "red":
+        return d.enemy_skill
+    return None if ground else "High"

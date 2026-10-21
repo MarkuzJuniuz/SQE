@@ -14,6 +14,7 @@ from dcs.unitgroup import VehicleGroup
 
 from . import callsigns, reactive
 from . import threatmap as tm
+from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
 from .loadouts import ENEMY_FIGHTERS, enemy_bomber_loadout, enemy_cap_loadout, enemy_strike_loadout
 from .models import AssetKind, BaseKind, ObjectiveType, Role
@@ -95,7 +96,7 @@ class RaidSpawns:
         base_n = sum(used.values())
         fleet_obj = package.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
         picks = reactive.plan_red(st, d, rr, tx, ty, base_n, blue_f, used, ENEMY_FIGHTERS, bearing) if not fleet_obj else []
-        skill = getattr(Skill, d.enemy_skill, Skill.High)
+        skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
         pt = lambda x, y: mapping.Point(x, y, self.t)
         alt, spd = 22000 * FT, 400 * KPH
         placed_red, seen_src = 0, set()
@@ -210,7 +211,7 @@ class RaidSpawns:
             names = []
             for i, u in enumerate(g.units):
                 u.name = cs[i]; u.pylons = copy.deepcopy(load); names.append(u.name); self._ulabels[u.name] = u.name.upper(); self._note_jam(u)
-            g.set_skill(Skill.High)
+            g.set_skill(getattr(Skill, ai_skill(self.o, "blue", self.d), Skill.High))
             g.set_frequency(130.0)
             manifest.add("friendly", f"alert_{sq.id}_{fno}", names, squadron=sq.id, callsign=label, player=False)
             if self.o.ai_despawn_on_land:
@@ -305,7 +306,7 @@ class RaidSpawns:
                  ["ING"] * (len(remaining) - 1) + ["BASE" if bool(ex.get("land")) else "FLEET"]
         egr_ = offset(dx, dy, bearing(dx, dy, *remaining[-2] if len(remaining) > 1 else (sx, sy)) + 40, RAID_EGRESS_NM * NM)
         home_ = self._raid_bend([egr_, (ba.x, ba.y)], cvb)[1:]           # turn points round blue's Patriot fields, then its own field
-        skill = getattr(Skill, d.enemy_skill, Skill.High)
+        skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
         land = bool(ex.get("land"))
         alt = ((12000 if ex.get("raider") == "Su_25" else 20000) if land else 30000) * FT
         apt = self.t.airports.get(cvb.airport) if (land and cvb.airport and not aim) else None

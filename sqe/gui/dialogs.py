@@ -20,7 +20,7 @@ def _browse(parent, line: QLineEdit, title: str):
 
 
 class NewCampaignDialog(QDialog):
-    def __init__(self, parent=None, weather_mode: str = "clear"):
+    def __init__(self, parent=None, weather_mode: str = "clear", skill_red: str = "level", skill_blue: str = "level"):
         super().__init__(parent); self.setWindowTitle("New Campaign"); self.setMinimumWidth(520)
         lay = QVBoxLayout(self); lay.setSpacing(12)
         t = QLabel("New Campaign"); t.setObjectName("title"); lay.addWidget(t)
@@ -59,6 +59,14 @@ class NewCampaignDialog(QDialog):
             self.wx.addItem(val, k)
         self.wx.setCurrentIndex(max(0, self.wx.findData(weather_mode)))
         form.addRow("Weather", self.wx)                # the same setting as Settings > Campaign > Weather: it can be changed there later
+        from ..difficulty import SKILL_CHOICES as _SK
+        self.skr, self.skb = QComboBox(), QComboBox()
+        for cb_, cur_ in ((self.skr, skill_red), (self.skb, skill_blue)):
+            for k, val in _SK.items():
+                cb_.addItem(val, k)
+            cb_.setCurrentIndex(max(0, cb_.findData(cur_)))
+        form.addRow("AI Skill, Red", self.skr)          # the same two settings as Settings > Campaign > AI Skill: they can be changed there later
+        form.addRow("AI Skill, Blue", self.skb)
         lay.addLayout(form)
         self.blurb = QLabel(); self.blurb.setWordWrap(True); self.blurb.setObjectName("dim"); lay.addWidget(self.blurb)
         self.lvl.currentIndexChanged.connect(self._b); self._b()
@@ -77,7 +85,8 @@ class NewCampaignDialog(QDialog):
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
                 "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(),
-                "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData())}
+                "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData()),
+                "ai_skill_red": str(self.skr.currentData() or "level"), "ai_skill_blue": str(self.skb.currentData() or "level")}
 
 
 class SettingsDialog(QDialog):
@@ -132,6 +141,17 @@ class SettingsDialog(QDialog):
             self.wxm.addItem(val, k)
         self.wxm.setCurrentIndex(max(0, self.wxm.findData(getattr(settings, "weather_mode", "clear"))))
         row(v, "Weather", self.wxm)
+        from ..difficulty import SKILL_CHOICES as _SK
+        self.skr, self.skb = QComboBox(), QComboBox()
+        for cb_, key_ in ((self.skr, "ai_skill_red"), (self.skb, "ai_skill_blue")):
+            for k, val in _SK.items():
+                cb_.addItem(val, k)
+            cb_.setCurrentIndex(max(0, cb_.findData(getattr(settings, key_, "level"))))
+        row(v, "AI Skill, Red", self.skr)
+        row(v, "AI Skill, Blue", self.skb)
+        hint(v, "How good the AI pilots are, one setting for each side (Red's ground units follow the Red setting; Blue's base defences follow the Blue setting once it is set). "
+                "Level default is what SQE always did: Red follows the difficulty level (Average, Good, High) and Blue's AI flights fly at High. DCS's top skill "
+                "levels can feel like cheating; lower one side if it does. It changes the AI's skill only, not how the campaign's numbers run. It applies from your next mission.")
         hint(v, "Procedural follows the theatre's climate for the month and changes slowly from day to day (never clear to storm in an afternoon); each sortie "
                 "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
                 "that cannot attack at all is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
@@ -284,6 +304,7 @@ class SettingsDialog(QDialog):
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
         self.s.reactive = bool(self.react.isChecked()); self.s.emergencies = bool(self.emerg.isChecked()); self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
+        self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
         self.s.shore_margin_m = int(self.shore.value())
         self.s.river_margin_m = int(self.river.value())
         self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value()); self.s.fighter_standoff = self.fso.isChecked()

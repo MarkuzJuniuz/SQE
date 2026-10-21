@@ -1330,6 +1330,52 @@ def check_31b_red_sam_orders(c):
     assert rt.sams == st.sams, "red orders save and load with the SAM record"
 
 
+def check_31c_ai_skill_red_blue(c):
+    """v0.41.70: AI Skill for Red and Blue: the helper, the saved settings, and what a built mission carries."""
+    import zipfile as zf
+    from dcs import lua as dlua
+    from sqe import difficulty as dif
+    from sqe.mission_builder import MissionOptions
+    o = MissionOptions()
+    assert dif.ai_skill(o, "red", dif.get(1)) == "Average" and dif.ai_skill(o, "red", dif.get(3)) == "High", "Level default: red follows the level"
+    assert dif.ai_skill(o, "blue", dif.get(2)) == "High" and dif.ai_skill(o, "blue", dif.get(2), ground=True) is None, "Level default: blue AI flights High, its ground units left alone"
+    o.ai_skill_red, o.ai_skill_blue = "Excellent", "Average"
+    assert dif.ai_skill(o, "red", dif.get(1)) == "Excellent" and dif.ai_skill(o, "blue", dif.get(3), ground=True) == "Average", "a named skill wins on its side"
+    o.ai_skill_red = "nonsense"
+    assert dif.ai_skill(o, "red", dif.get(3)) == "High", "an unknown value falls back to the level"
+    st = AppSettings(dcs_saves=str(TMP / "saves"), persist=False, ai_skill_red="Good", ai_skill_blue="Excellent")
+    assert (st.ai_skill_red, st.ai_skill_blue) == ("Good", "Excellent") and AppSettings().ai_skill_red == "level", "the settings exist and default to Level default"
+    def skills(ses):
+        z = zf.ZipFile(ses.settings.sortie_miz)
+        m = dlua.loads(z.read("mission").decode("utf-8", "ignore"))["mission"]
+        out = {}
+        for side in ("red", "blue"):
+            seen = set()
+            for co in m["coalition"][side]["country"].values():
+                for g in ((co.get("plane") or {}).get("group") or {}).values():
+                    seen |= {u.get("skill") for u in g["units"].values()}
+            out[side] = seen
+        return out
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, ai_skill_red="Excellent", ai_skill_blue="Average"))
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke skill", "F-16C", 3, seed=7)
+    pk = next(p for p in ses.packages() if ses.flyable(p))
+    ses.fly(pk.number, ses.flyable(pk)[0].id)
+    got = skills(ses)
+    print(f"[ai skill] Red {sorted(got['red']) or '(no red aircraft in this mission)'}, Blue {sorted(got['blue'])}")
+    assert "High" not in got["blue"] and "Average" in got["blue"], ("blue AI at the Blue setting", got["blue"])
+    assert not got["red"] or got["red"] == {"Excellent"}, ("red at the Red setting", got["red"])
+    ses.settings.ai_skill_red = ses.settings.ai_skill_blue = "level"
+    ses.fly(pk.number, ses.flyable(pk)[0].id)
+    got = skills(ses)
+    assert "High" in got["blue"], ("Level default: blue AI at High", got["blue"])
+    assert not got["red"] or got["red"] == {"High"}, ("Level default: red follows the level (3 = High)", got["red"])
+    from sqe.gui import dialogs as _dg                              # both screens carry the two controls (a headless Qt build, as the other UI checks)
+    import inspect
+    src = inspect.getsource(_dg)
+    assert src.count("AI Skill, Red") >= 2 and src.count("AI Skill, Blue") >= 2, "New Campaign and Settings both show AI Skill, Red and Blue"
+
+
 def check_31_where_sites_sit_doctrinal(c):
     _CS, _fl, _gd, _rnd, _sm, _st, _war, s = c._CS, c._fl, c._gd, c._rnd, c._sm, c._st, c._war, c.s
     # v0.41.64: where the sites sit: doctrinal bearing and distance plus a seeded jitter, fixed for the campaign, different in the next
@@ -2697,6 +2743,7 @@ CHECKS = [
     check_30_blue_s_air_defence,
     check_31a_sam_orders_by_need,
     check_31b_red_sam_orders,
+    check_31c_ai_skill_red_blue,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,
