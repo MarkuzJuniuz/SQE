@@ -11,6 +11,7 @@ from dcs.unit import Skill
 
 from . import reactive, redair
 from . import threatmap as tm
+from .difficulty import ai_skill
 from .loadouts import enemy_cap_loadout
 from .models import BaseKind, ObjectiveType, Role
 from .routes import FT, NM, bearing, dist, offset
@@ -79,7 +80,7 @@ class RedAirPicture:
         wings = self._fighter_wings(tx, ty)
         if not wings:
             return
-        skill = getattr(Skill, d.enemy_skill, Skill.High)
+        skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
         pt = lambda x, y: mapping.Point(x, y, self.t)
         n_cap = len(self._cap_plan)                         # the planned patrol pairs that are up (redair.py); the rest of the defenders are alert aircraft
         alt, spd = 22000 * FT, 400 * KPH

@@ -402,11 +402,12 @@ class MainWindow(QMainWindow):
                 return
         if self._offer_terrain_scan():
             return
-        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"))
+        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"), getattr(self.session.settings, "ai_skill_red", "level"), getattr(self.session.settings, "ai_skill_blue", "level"))
         if dlg.exec() == QDialog.Accepted:
             try:
                 v = dlg.values()
                 self.session.settings.weather_mode = v.get("weather_mode", self.session.settings.weather_mode)
+                self.session.settings.ai_skill_red = v.get("ai_skill_red", self.session.settings.ai_skill_red); self.session.settings.ai_skill_blue = v.get("ai_skill_blue", self.session.settings.ai_skill_blue)
                 try:
                     self.session.settings.save()
                 except OSError:

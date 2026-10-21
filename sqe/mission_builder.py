@@ -29,7 +29,7 @@ from . import pydcs_patch
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
 from .debrief import Manifest, install_hook
-from .difficulty import Difficulty
+from .difficulty import Difficulty, ai_skill
 from .fighter_stations import FighterStations, ESCORT_AFTER_TOT_S, TARCAP_AFTER_TOT_S
 from .support_caps import SupportCaps
 from .red_air_picture import RedAirPicture, A2A_ZONE_NM
@@ -143,6 +143,8 @@ class MissionOptions:
     ai_unlimited_fuel: bool = True      # Retribution-style: ON until the push, OFF for the combat leg, ON again from egress
     enemy_unlimited_fuel: bool = False
     ai_despawn_on_land: bool = True
+    ai_skill_red: str = "level"            # v0.41.70: see difficulty.ai_skill
+    ai_skill_blue: str = "level"
     base_defenses: bool = True
     carrier_escorts: bool = True
     enemy_cap_engage_nm: int = 50       # enemy patrol fighters chase no further than this (0 = unlimited); v0.41.61: fixed, no settings box
@@ -926,6 +928,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         g = self.m.vehicle_group_platoon(country, name, types, mapping.Point(x, y, self.t), heading=int(heading) % 360, formation=formation)
         if spacing and formation == F.Star:                  # pydcs lays a star out 20 m apart; a wider one for SAM batteries
             g.formation_star(int(heading) % 360, spacing)
+        bs = ai_skill(self.o, "blue", self.d, ground=True) if country is self.usa else None      # v0.41.70: blue base defences follow the Blue skill when it is set
+        if bs:
+            g.set_skill(getattr(Skill, bs, Skill.High))
         return g
 
     def _place_base(self, base, tx, ty):
@@ -1096,7 +1101,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if v > 0 and i < len(g.get("centers", [])):
                     c = g["centers"][i]
                     self._spawn_raid_target(package, home, f"sector:{i}", float(c[0]), float(c[1]), manifest)
-        skill = getattr(Skill, d.enemy_skill, Skill.High)
+        skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
         pt = lambda x, y: mapping.Point(x, y, self.t)
         for n, pf in enumerate((st.red_air or {}).get("flights", [])):
             a = st.assets.get(pf["wing"])
@@ -1146,7 +1151,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _spawn_site(self, a, comp, manifest, primary):
         """ONE group per site: a SAM battery needs its search/track radars, launchers and command post together."""
         r = self.vrng
-        skill = getattr(Skill, self.d.enemy_skill, Skill.High)
+        skill = getattr(Skill, ai_skill(self.o, "red", self.d), Skill.High)
         garrison = a.kind == AssetKind.ARMOR and a.variant == "GARRISON"
         comp = (self._garrison_comp() if garrison else self._armor_comp()) if a.kind == AssetKind.ARMOR else self._vary_comp(a, comp)
         cx, cy = self._site_center(a)
@@ -1359,7 +1364,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     self._jamw[un_] = (run_t0, run_t1)
             if f.is_player and f.aircraft == "F-14BU":
                 u.set_property("INSAlignmentStored", True)
-        g.set_skill(Skill.High)
+        g.set_skill(getattr(Skill, ai_skill(self.o, "blue", self.d), Skill.High))
         # v0.41.11: every AI flight goes home on bingo fuel; v0.41.16: your own flight too (it applies to your AI wingmen: in the v0.41.14 run they
         # queued at the tanker until they flamed out)
         g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
