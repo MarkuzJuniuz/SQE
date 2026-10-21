@@ -1321,6 +1321,165 @@ def check_31a_sam_orders_by_need(c):
     assert rt.sams == st.sams, "orders save and load with the SAM record"
 
 
+def check_31b_red_sam_orders(c):
+    """v0.41.68: red's SAM orders: a destroyed site in play is replaced by a battery from a deeper-tier site of the same kind, before a new build."""
+    import random as rnd
+    from sqe import sams as sm, difficulty as dif
+    from sqe.models import AssetKind as _AK
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))      # its own campaign: it borrows nothing from earlier sections
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke red orders", "F-16C", 3, seed=7)
+    st = ses.state
+    d = dif.get(3)
+    sites = [a for a in st.assets.values() if a.kind == _AK.SAM and not a.id.startswith("fsam_")]
+    pair = next(((a, b) for a in sorted(sites, key=lambda x: x.id) for b in sorted(sites, key=lambda x: x.id)
+                 if a.variant == b.variant and a.tier <= st.front + 2 and b.tier > a.tier and a.id != b.id), None)
+    assert pair, "the theatre has a SAM kind in two tiers"
+    rcv, snd = pair
+    for x in sites:
+        x.health = 1.0
+    rcv.health = 0.0
+    r1 = sm.red_orders(st, d, rnd.Random(1))
+    assert any("ordered" in x for x in r1), r1
+    assert snd.id in st.sams["red_vacated"] or any(o["from"] != snd.id for o in st.sams["red_orders"]), "a deeper site sends it"
+    o = st.sams["red_orders"][0]
+    sender = st.assets[o["from"]]
+    assert sender.destroyed and st.assets[o["to"]].variant == sender.variant and sender.tier > st.assets[o["to"]].tier, "the sender is a deeper site of the same kind"
+    sm.track(st); st.day += sm.REBUILD_MIN_DAYS + 1
+    dr = type(d)(**{**d.__dict__, "sam_rebuild": 1.0})
+    sm.rebuild(st, dr, rnd.Random(3))
+    assert st.assets[o["to"]].destroyed, "no new build at a site a battery is on its way to"
+    st.day = st.day - sm.REBUILD_MIN_DAYS - 1 + sm.ORDER_TRANSIT_DAYS
+    r3 = sm.red_orders(st, d, rnd.Random(4))
+    assert any("arrived" in x for x in r3) and not st.assets[o["to"]].destroyed and st.assets[o["to"]].health >= 0.99, r3
+    assert not st.sams["red_orders"], "the order is done"
+    rt = type(st).from_dict(st.to_dict())
+    assert rt.sams == st.sams, "red orders save and load with the SAM record"
+
+
+def check_31d_barcap_areas(c):
+    """v0.41.73: BARCAP as planned coverage (barcap.py): sectors, stations, times on station, relief chains, and red's patrols flying them."""
+    from sqe import barcap
+    from sqe.routes import NM, dist, offset
+    assert barcap.endurance_min("F-14BU") == 120 and barcap.endurance_min("F-15C") == 120 and barcap.endurance_min("Su_27") == 120, "long legs: 2 h"
+    assert barcap.endurance_min("F-16C") == 30 and barcap.endurance_min("FA-18C") == 30 and barcap.endurance_min("MiG_29S") == 30, "short legs: 30 min"
+    assert barcap.endurance_min("F-16C", tanker=True) == 120, "guarding a tanker: 2 h whatever the airframe"
+    assert barcap.sectors(0, 0, [(offset(0, 0, 90, 100 * NM)), (offset(0, 0, 110, 100 * NM)), (offset(0, 0, 270, 100 * NM))]) == [97.0, 270.0] or \
+        len(barcap.sectors(0, 0, [offset(0, 0, 90, 100 * NM), offset(0, 0, 110, 100 * NM), offset(0, 0, 270, 100 * NM)])) == 2, "two bases 20 degrees apart share one area, the third is its own"
+    assert barcap.sectors(0, 0, [offset(0, 0, 90, 400 * NM)]) == [], "a base beyond reach is no direction"
+    ch = barcap.chain(60, 3, [30, 120, 30])
+    assert ch == [(60, 90), (80, 200), (190, 220)], f"each relief arrives {barcap.HANDOVER_MIN} min before the last one leaves: {ch}"
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke barcap", "F-16C", 3, seed=7)
+    st = ses.state
+    st.red_air = {}
+    st.barcap = {}
+    from sqe import redair
+    redair.ensure(st, ses.d)
+    bc = st.barcap
+    assert bc["day"] == st.day and bc["red"] and bc["blue"], "both sides have BARCAP areas"
+    for a in bc["red"] + bc["blue"]:
+        assert dist(a["x"], a["y"], a["ax"], a["ay"]) <= barcap.STATION_MAX_NM * NM + 1, f"{a['id']}: station too far from its asset"
+    rings = barcap._enemy_rings(st, "red")
+    assert not any(a["in_ring"] for a in bc["red"]) or rings, "a red station is inside a blue SAM ring only when it had no way out"
+    cvs = [a for a in bc["blue"] if a["asset"].startswith("cvn")]
+    assert cvs and all(abs(dist(a["x"], a["y"], a["ax"], a["ay"]) / NM - barcap.STATION_FLEET_NM) < 1.5 for a in cvs), "carrier stations sit about 15 mi from the group"
+    caps = [f for f in st.red_air["flights"] if f["kind"] == "CAP"]
+    assert caps and all(f.get("area") for f in caps), "red's patrols fly BARCAP areas"
+    ids = {a["id"]: a for a in bc["red"]}
+    for f in caps:
+        assert dist(f["x"], f["y"], ids[f["area"]]["x"], ids[f["area"]]["y"]) < 1, "a patrol's station is its area's station"
+    by_area = {}
+    for f in caps:
+        by_area.setdefault(f["area"], []).append(f)
+    for k, fl in by_area.items():
+        fl.sort(key=lambda f: f["start"])
+        for p_, n_ in zip(fl, fl[1:]):
+            assert n_["start"] == p_["end"] - barcap.HANDOVER_MIN or p_["end"] >= 1440, f"{k}: the relief arrives before the last one leaves"
+    import json
+    from sqe.state import CampaignState
+    again = CampaignState.from_dict(json.loads(json.dumps(st.to_dict())))
+    assert again.barcap == st.barcap, "the areas survive a save"
+
+
+def check_31e_barcap_mission_side(c):
+    """v0.41.74: BARCAP in the mission: blue's base and carrier CAPs take the area facing the target; red's patrols behind the target are not picked."""
+    from sqe import barcap, redair
+    from sqe.routes import NM, bearing, dist, offset
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke barcap 2", "F-16C", 3, seed=7)
+    st = ses.state
+    redair.ensure(st, ses.d)
+    multi = [aid for aid in {a["asset"] for a in st.barcap["blue"]} if len([a for a in st.barcap["blue"] if a["asset"] == aid]) >= 2]
+    assert multi, "a blue asset with two directions exists in this campaign"
+    aid = multi[0]
+    areas = [a for a in st.barcap["blue"] if a["asset"] == aid]
+    for a in areas:                                                 # a target straight along one area's direction picks that area
+        tx, ty = offset(a["ax"], a["ay"], a["bearing"], 150 * NM)
+        assert barcap.facing_area(st, "blue", aid, (tx, ty))["id"] == a["id"], "the area facing the target is the one chosen"
+    assert barcap.facing_area(st, "blue", "no_such_asset", (0, 0)) is None, "no area: the old rule stays"
+    f = next(f_ for f_ in st.red_air["flights"] if f_["kind"] == "CAP")
+    tm_ = (f["start"] + f["end"]) // 2
+    ip = offset(f["x"], f["y"], 180, 40 * NM)
+    # a target 60 nm short of the station (along the way in): the station is 60 nm BEYOND the target -> not in the fight
+    tx, ty = offset(f["x"], f["y"], 180, 60 * NM)
+    hdg_in = bearing(ip[0], ip[1], tx, ty)
+    far = offset(tx, ty, hdg_in, 60 * NM)
+    f2 = dict(f); f2["x"], f2["y"] = far
+    st.red_air["flights"] = [f2]
+    assert not redair.pick(st, tm_, [ip, ip, (tx, ty)], tx, ty, 9), "a patrol 60 nm beyond the target is left out"
+    f2["x"], f2["y"] = offset(tx, ty, hdg_in + 180, 30 * NM)
+    assert redair.pick(st, tm_, [ip, ip, (tx, ty)], tx, ty, 9), "a patrol short of the target is kept"
+
+
+def check_31c_ai_skill_red_blue(c):
+    """v0.41.70: AI Skill for Red and Blue: the helper, the saved settings, and what a built mission carries."""
+    import zipfile as zf
+    from dcs import lua as dlua
+    from sqe import difficulty as dif
+    from sqe.mission_builder import MissionOptions
+    o = MissionOptions()
+    assert dif.ai_skill(o, "red", dif.get(1)) == "Average" and dif.ai_skill(o, "red", dif.get(3)) == "High", "Level default: red follows the level"
+    assert dif.ai_skill(o, "blue", dif.get(2)) == "High" and dif.ai_skill(o, "blue", dif.get(2), ground=True) is None, "Level default: blue AI flights High, its ground units left alone"
+    o.ai_skill_red, o.ai_skill_blue = "Excellent", "Average"
+    assert dif.ai_skill(o, "red", dif.get(1)) == "Excellent" and dif.ai_skill(o, "blue", dif.get(3), ground=True) == "Average", "a named skill wins on its side"
+    o.ai_skill_red = "nonsense"
+    assert dif.ai_skill(o, "red", dif.get(3)) == "High", "an unknown value falls back to the level"
+    st = AppSettings(dcs_saves=str(TMP / "saves"), persist=False, ai_skill_red="Good", ai_skill_blue="Excellent")
+    assert (st.ai_skill_red, st.ai_skill_blue) == ("Good", "Excellent") and AppSettings().ai_skill_red == "level", "the settings exist and default to Level default"
+    def skills(ses):
+        z = zf.ZipFile(ses.settings.sortie_miz)
+        m = dlua.loads(z.read("mission").decode("utf-8", "ignore"))["mission"]
+        out = {}
+        for side in ("red", "blue"):
+            seen = set()
+            for co in m["coalition"][side]["country"].values():
+                for g in ((co.get("plane") or {}).get("group") or {}).values():
+                    seen |= {u.get("skill") for u in g["units"].values()}
+            out[side] = seen
+        return out
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, ai_skill_red="Excellent", ai_skill_blue="Average"))
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke skill", "F-16C", 3, seed=7)
+    pk = next(p for p in ses.packages() if ses.flyable(p))
+    ses.fly(pk.number, ses.flyable(pk)[0].id)
+    got = skills(ses)
+    print(f"[ai skill] Red {sorted(got['red']) or '(no red aircraft in this mission)'}, Blue {sorted(got['blue'])}")
+    assert "High" not in got["blue"] and "Average" in got["blue"], ("blue AI at the Blue setting", got["blue"])
+    assert not got["red"] or got["red"] == {"Excellent"}, ("red at the Red setting", got["red"])
+    ses.settings.ai_skill_red = ses.settings.ai_skill_blue = "level"
+    ses.fly(pk.number, ses.flyable(pk)[0].id)
+    got = skills(ses)
+    assert "High" in got["blue"], ("Level default: blue AI at High", got["blue"])
+    assert not got["red"] or got["red"] == {"High"}, ("Level default: red follows the level (3 = High)", got["red"])
+    from sqe.gui import dialogs as _dg                              # both screens carry the two controls (a headless Qt build, as the other UI checks)
+    import inspect
+    src = inspect.getsource(_dg)
+    assert src.count("AI Skill, Red") >= 2 and src.count("AI Skill, Blue") >= 2, "New Campaign and Settings both show AI Skill, Red and Blue"
+
+
 def check_31_where_sites_sit_doctrinal(c):
     _fl, _st = c._fl, c._st
     s = fresh_session()
@@ -1818,7 +1977,8 @@ def check_40_harm_flights_fire_only(c):
 
 
 def check_41_friendly_bases_patriot_faces(c):
-    _M4, _pu, _ss, _t4 = c._M4, c._pu, c._ss, c._t4
+    _M4, _m, _pu, _ss, _t4, _tm9 = c._M4, c._m, c._pu, c._ss, c._t4, c._tm9
+    from sqe.sams import BLUE_SPACING_M as _sm_spacing
     # v0.41.7: friendly bases. The Patriot faces the nearest enemy fighter field, short-range sites on both sides, a HAWK battery at your home field;
     # the tanker forward (on the way home, clear of SAM rings and scramble circles) with its own CAP; the AWACS back with the HAVCAP; carrier CAP
     _bv = {g_["name"]: g_ for co_ in _M4["coalition"]["blue"]["country"].values() for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()}
@@ -1837,6 +1997,10 @@ def check_41_friendly_bases_patriot_faces(c):
         _hk30 = next(g_ for n_, g_ in _bv.items() if n_ == f"BASEDEF {_hb7.name} HAWK")
         assert _pl30 == 8 and sum(1 for u_ in _hk30["units"].values() if u_["type"] == "Hawk ln") == 6 \
             and sum(1 for u_ in _hk30["units"].values() if u_["type"] == "Hawk tr") == 2, ("doctrinal Patriot and HAWK batteries", _pl30)
+        # v0.41.69: the units of a battery stand apart (a launch hit the units round it when they were 20 m apart)
+        for _bg in (_pat[0], _hk30):
+            _us = list(_bg["units"].values())
+            assert min(_m.hypot(a_["x"] - b_["x"], a_["y"] - b_["y"]) for i_, a_ in enumerate(_us) for b_ in _us[i_ + 1:]) >= _sm_spacing - 1, "SAM battery units are spaced out"
     _pl7 = {g_["name"]: g_ for co_ in _M4["coalition"]["blue"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()}
     _tags7 = {f_.tag: f_ for f_ in _pu.flights if f_.tag}
     assert "TNKCAP" in _tags7, ("the tanker has its own CAP", sorted(_tags7))
@@ -1916,7 +2080,11 @@ def check_45_ai_routes_bend_around(c):
 
 
 def check_46_ai_flights_going_home(c):
-    s = fresh_session()
+    import math
+    import zipfile as _zf
+    from dcs import lua
+    s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))      # its own session: it borrows nothing from earlier sections
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
     # v0.41.17: AI flights going home to the carrier are recovered 10 nm out (SQE_RECOVER), not put in the deck queue
     _rc17, _hk17 = 0, ""
     for _sd17 in (3, 4, 5, 6):             # v0.41.65: its own mission with a carrier CAP (the one above only had carrier flights when a package happened to fold in: layout luck)
@@ -1926,18 +2094,19 @@ def check_46_ai_flights_going_home(c):
             continue
         s.fly(_pk17.number, s.flyable(_pk17)[0].id)
         _hk17 = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
-        for co_ in lua.loads(_hk17)["mission"]["coalition"]["blue"]["country"].values():
+        _bl17 = lua.loads(_hk17)["mission"]["coalition"]["blue"]
+        _cvid17 = next(u_["unitId"] for co2_ in _bl17["country"].values() for sg_ in ((co2_.get("ship") or {}).get("group") or {}).values() for u_ in sg_["units"].values() if u_["type"] == "Stennis")
+        for co_ in _bl17["country"].values():
             for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
                 _lp17 = list(g_["route"]["points"].values())[-1]
-                _scr = [t_ for t_ in _lp17["task"]["params"]["tasks"].values() if t_.get("id") == "WrappedAction"
-                        and t_["params"]["action"].get("id") == "Script" and "SQE_RECOVER" in t_["params"]["action"]["params"].get("command", "")]
-                if _scr:
-                    assert g_["name"] in _scr[0]["params"]["action"]["params"]["command"] and _lp17.get("type") != "Land", g_["name"]
+                # v0.41.72: an AI carrier flight lands for real on the boat (the Land point is tied to the ship); the hook removes it after the pattern laps
+                if _lp17.get("type") == "Land" and _lp17.get("linkUnit") == _cvid17 and f'g="{g_["name"]}", cv="' in _hk17.replace('\\"', '"') and "dwell=90" in _hk17:
                     _rc17 += 1
         if _rc17:
             break
-    assert _rc17 >= 1 and "function SQE_RECOVER" in _hk17, ("carrier AI flights are recovered at 10 nm by the hook", _rc17)
-    print(f"[cv recover] {_rc17} carrier AI flights recovered 10 nm from the boat instead of joining the deck queue")
+    assert _rc17 >= 1 and "function SQE_RECOVER" in _hk17, ("carrier AI flights land on the boat and the hook removes them after the pattern", _rc17)
+    assert "t2=" in _hk17 and "fu = math.floor(u0:getFuel()" in _hk17 and "r.since" in _hk17, "the recovery net has its stale deadline and its dwell, and the tracks carry fuel and speed"
+    print(f"[cv recover] {_rc17} carrier AI flights land on the boat (Land point tied to the ship), removed after the pattern")
 
 
 def check_47_support_cap_pull_back(c):
@@ -2034,13 +2203,15 @@ def check_47_support_cap_pull_back(c):
     _gk = ("x", "y", "guard", "gx", "gy", "read")             # v0.41.10: the guard stations are set after the day's blue objectives are known
     _strip = lambda fl_: [{k_: v_ for k_, v_ in f_.items() if k_ not in _gk} for f_ in fl_]
     _gd_ = [f_ for f_ in _p1["flights"] if f_.get("guard")]
-    assert _gd_ and all(_m3j.hypot(f_["x"] - f_["gx"], f_["y"] - f_["gy"]) / 1852 <= _ra.GUARD_FWD_NM + 0.5 for f_ in _gd_), "red patrols sit over the SAM site they guard"
+    assert _gd_ and all(_m3j.hypot(f_["x"] - f_["gx"], f_["y"] - f_["gy"]) / 1852 <= _ra.CALLIN_LINK_NM + 0.5 for f_ in _gd_), "red patrols are linked to a SAM site near their BARCAP station (v0.41.73: the station no longer moves over the site)"
     assert all(_st.assets[f_["guard"]].kind.value == "SAM" for f_ in _gd_)
     print(f"[red guard] {len(_gd_)} red patrol pairs over the SAM sites red rates likeliest to be attacked: {sorted({f_['guard'] for f_ in _gd_})}")
     _st.red_air = {}; _ra.ensure(_st, _gd(3)); assert {"day": _st.red_air["day"], "flights": _strip(_st.red_air["flights"])} == {"day": _p1["day"], "flights": _strip(_p1["flights"])}, "the same day plans the same"
+    redair_budget_ = lambda w__: _ra.budget(_st, w__.base_asset_id)
     for w_ in _st.enemy_air:
         n_ = sum(1 for f_ in _p1["flights"] if f_["wing"] == w_.base_asset_id and f_["kind"] == "CAP")
-        assert n_ <= max(0, w_.available // 2 - 1), "one pair per wing always stays on alert"
+        assert 2 * n_ <= redair_budget_(w_), "a wing's patrol sorties stay inside its day budget"
+        assert len({f_["area"] for f_ in _p1["flights"] if f_["wing"] == w_.base_asset_id and f_["kind"] == "CAP"}) <= max(0, w_.available_of(__import__("sqe.loadouts", fromlist=["x"]).ENEMY_FIGHTERS) // 2 - 1), "one pair per wing always stays on alert (at most pairs - 1 areas flown)"
     _f0 = next(f_ for f_ in _st.red_air["flights"] if f_["kind"] == "CAP"); _tm = (_f0["start"] + _f0["end"]) // 2
     assert any(g_["id"] == _f0["id"] for g_ in _ra.pick(_st, _tm, [], _f0["x"], _f0["y"], 99)), "a patrol is picked inside its window, near the target"
     _tout = next(t_ for t_ in range(0, 1440, 10) if not any(f_["start"] <= t_ <= f_["end"] or f_["start"] <= t_ + 1440 <= f_["end"] for f_ in _p1["flights"] if f_["id"] == _f0["id"]))
@@ -2686,6 +2857,10 @@ CHECKS = [
     check_29_phase_air_defence_that,
     check_30_blue_s_air_defence,
     check_31a_sam_orders_by_need,
+    check_31b_red_sam_orders,
+    check_31c_ai_skill_red_blue,
+    check_31d_barcap_areas,
+    check_31e_barcap_mission_side,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,

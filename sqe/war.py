@@ -492,7 +492,7 @@ class WarSimulator:
             a.suppressed = False                                    # blinded radars come back on overnight
         for ln in self.counterstrike(state):
             state.note("Overnight: " + ln)
-        for ln in sams.rebuild(state, d, self.rng) + sams.relocate(state, d, self.rng) + sams.retreat(state, d, self.rng):
+        for ln in sams.red_orders(state, d, self.rng) + sams.rebuild(state, d, self.rng) + sams.relocate(state, d, self.rng) + sams.retreat(state, d, self.rng):
             state.note("Overnight: " + ln)
         for ln in raids.overnight(state, d, self.rng):               # surprise raids nobody flew: alert aircraft against the bombers
             state.note("Overnight: " + ln)

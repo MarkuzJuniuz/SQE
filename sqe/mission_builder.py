@@ -29,7 +29,7 @@ from . import pydcs_patch
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
 from .debrief import Manifest, install_hook
-from .difficulty import Difficulty
+from .difficulty import Difficulty, ai_skill
 from .fighter_stations import FighterStations, ESCORT_AFTER_TOT_S, TARCAP_AFTER_TOT_S
 from .support_caps import SupportCaps
 from .red_air_picture import RedAirPicture, A2A_ZONE_NM
@@ -50,6 +50,8 @@ ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD st
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
 LATE_ATTACK_S = 600           # v0.41.16: an AI strike flight drops only within this of its TOT
+CV_PATTERN_NM = 6             # v0.41.72: an AI carrier flight within this of the boat...
+CV_PATTERN_S = 90             # ...for this long (about two laps of the pattern) is recovered
 CV_RECOVER_NM = 10            # v0.41.17: AI carrier flights (and your wingmen) are recovered this far from the boat instead of joining the deck queue
 RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
 RCV_SPREAD = (0, 30, -30, 60, -60)    # ...on its own bearing (degrees off the way it comes home), by stack slot
@@ -143,6 +145,8 @@ class MissionOptions:
     ai_unlimited_fuel: bool = True      # Retribution-style: ON until the push, OFF for the combat leg, ON again from egress
     enemy_unlimited_fuel: bool = False
     ai_despawn_on_land: bool = True
+    ai_skill_red: str = "level"            # v0.41.70: see difficulty.ai_skill
+    ai_skill_blue: str = "level"
     base_defenses: bool = True
     carrier_escorts: bool = True
     enemy_cap_engage_nm: int = 50       # enemy patrol fighters chase no further than this (0 = unlimited); v0.41.61: fixed, no settings box
@@ -913,7 +917,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _carrier_heading(self, x, y, prefer):
         return carrier_heading(x, y, prefer)
 
-    def _platoon(self, country, name, comp, x, y, heading, formation, scale=1.0):
+    def _platoon(self, country, name, comp, x, y, heading, formation, scale=1.0, spacing=None):
         types = []
         for vname, n in comp:
             vt = _vt(vname)
@@ -923,7 +927,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             types += [vt] * max(1, round(n * scale))
         if not types:
             return None
-        return self.m.vehicle_group_platoon(country, name, types, mapping.Point(x, y, self.t), heading=int(heading) % 360, formation=formation)
+        g = self.m.vehicle_group_platoon(country, name, types, mapping.Point(x, y, self.t), heading=int(heading) % 360, formation=formation)
+        if spacing and formation == F.Star:                  # pydcs lays a star out 20 m apart; a wider one for SAM batteries
+            g.formation_star(int(heading) % 360, spacing)
+        bs = ai_skill(self.o, "blue", self.d, ground=True) if country is self.usa else None      # v0.41.70: blue base defences follow the Blue skill when it is set
+        if bs:
+            g.set_skill(getattr(Skill, bs, Skill.High))
+        return g
 
     def _place_base(self, base, tx, ty):
         o = self.o
@@ -946,7 +956,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 x, y = site_at("pat", ang, 4500)
                 if bt["patriot_ln"]:
                     self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
-                                  ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star)
+                                  ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M)
                 x, y = site_at("aaa", ang + 120, 3500)
                 if bt["aaa"]:
                     self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line)
@@ -956,7 +966,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if bt["hawk"]:
                     x, y = site_at("hawk", ang + 50, 6000)
                     self._platoon(self.usa, f"BASEDEF {base.name} HAWK", [("Hawk_sr", 1), ("Hawk_tr", sams.BLUE_HAWK_TR), ("Hawk_pcp", 1), ("Hawk_cwar", 1),
-                                  ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star)
+                                  ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M)
             return
         hdg = getattr(self, '_cv_hdg', {}).get(base.id)
         if hdg is None:
@@ -1093,7 +1103,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if v > 0 and i < len(g.get("centers", [])):
                     c = g["centers"][i]
                     self._spawn_raid_target(package, home, f"sector:{i}", float(c[0]), float(c[1]), manifest)
-        skill = getattr(Skill, d.enemy_skill, Skill.High)
+        skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
         pt = lambda x, y: mapping.Point(x, y, self.t)
         for n, pf in enumerate((st.red_air or {}).get("flights", [])):
             a = st.assets.get(pf["wing"])
@@ -1143,7 +1153,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _spawn_site(self, a, comp, manifest, primary):
         """ONE group per site: a SAM battery needs its search/track radars, launchers and command post together."""
         r = self.vrng
-        skill = getattr(Skill, self.d.enemy_skill, Skill.High)
+        skill = getattr(Skill, ai_skill(self.o, "red", self.d), Skill.High)
         garrison = a.kind == AssetKind.ARMOR and a.variant == "GARRISON"
         comp = (self._garrison_comp() if garrison else self._armor_comp()) if a.kind == AssetKind.ARMOR else self._vary_comp(a, comp)
         cx, cy = self._site_center(a)
@@ -1356,7 +1366,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     self._jamw[un_] = (run_t0, run_t1)
             if f.is_player and f.aircraft == "F-14BU":
                 u.set_property("INSAlignmentStored", True)
-        g.set_skill(Skill.High)
+        g.set_skill(getattr(Skill, ai_skill(self.o, "blue", self.d), Skill.High))
         # v0.41.11: every AI flight goes home on bingo fuel; v0.41.16: your own flight too (it applies to your AI wingmen: in the v0.41.14 run they
         # queued at the tanker until they flamed out)
         g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
@@ -1644,13 +1654,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if special:
                 g.points[-1].name = "RTBXHB"
         elif (not f.is_player or o.player_is_ai) and self._skip_landing(base):
-            # v0.41.17: an AI flight going home to the boat is recovered at a point CV_RECOVER_NM out: it counts as landed and leaves the mission
-            # (SQE_RECOVER in the hook). DCS's carrier landing queue ran an F-14 dry and stacks AI in your pattern.
-            lp_ = g.points[-1].position
-            rx_, ry_ = offset(base.x, base.y, bearing(base.x, base.y, lp_.x, lp_.y), CV_RECOVER_NM * NM)
-            rcv_ = g.add_waypoint(pt(rx_, ry_), 2000 * FT, 300 * KPH, "RTBXHB" if special else "RTB")
-            rcv_.tasks.append(task.RunScript(f"SQE_RECOVER('{g.name}')"))
-            self._recov_net(g, f, self.ship[base.id].units[0].name if base.id in self.ship else None, base.x, base.y, wps, hold_end, stop)
+            # v0.41.72 (XO 2026-10-21: "pretend they still land, but if the don't-land switch is on they are despawned after a few rounds on their
+            # pattern"): an AI flight going home to the boat gets the real Land waypoint tied to the ship, so DCS homes on the moving boat itself (the
+            # fixed RTB point of v0.41.17 missed a boat that had steamed on). The hook removes it, counted as landed, once it has been within
+            # CV_PATTERN_NM of the boat for CV_PATTERN_S seconds, and a flight that never gets there is recovered after RECOV_STALE_S.
+            rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
+            rtb.type, rtb.action = "Land", PointAction.Landing
+            rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
+            self._recov_net(g, f, self.ship[base.id].units[0].name if base.id in self.ship else None, base.x, base.y, wps, hold_end, stop,
+                            r_nm=CV_PATTERN_NM, dwell_s=CV_PATTERN_S)
         else:
             rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
             rtb.type, rtb.action = "Land", PointAction.Landing
@@ -1987,14 +1999,16 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         back_ += 1.0
                 geom.stand[key] = (ex_, ey_, [], dist(ex_, ey_, tx, ty) / NM, False)
 
+    RECOV_STALE_S = 1500       # v0.41.71: a homebound AI flight still out this long after its work is done is recovered where it is (XO's 2026-10-21 run: nine Navy jets
+                               # followed the tanker for 15 minutes and never landed). A judgment call: the flight home is 5-10 minutes.
     RECOV_NET_NM = 12          # v0.41.25: a homebound AI flight this close to its deck / field counts as recovered, waypoint reached or not
 
-    def _recov_net(self, g, f, cv_unit, x, y, wps, hold_end, stop) -> None:
+    def _recov_net(self, g, f, cv_unit, x, y, wps, hold_end, stop, r_nm=None, dwell_s=0) -> None:
         """v0.41.25: the safety net for SQE_RECOVER. A flight sent home early (bingo, out of missiles) flies straight to its deck or field and
         never passes its recovery point, so it never ran SQE_RECOVER (the v0.41.24 run: Hornets circling the boat). The hook recovers the group
         once its lead is within RECOV_NET_NM of the carrier (where it is now, not where it started) or the field, after its work is done."""
         t_ = max(float(wps[-1].eta_s) if wps else 0.0, float(hold_end or 0), float(stop) if f.tag else 0.0)
-        self._recov.append({"g": g.name, "cv": cv_unit or "", "x": float(x), "z": float(y), "r": self.RECOV_NET_NM * NM, "t": t_})
+        self._recov.append({"g": g.name, "cv": cv_unit or "", "x": float(x), "z": float(y), "r": (r_nm or self.RECOV_NET_NM) * NM, "t": t_, "t2": t_ + self.RECOV_STALE_S, "dwell": float(dwell_s)})
 
     COVER_SHIFTS = (0, 4, 8, 12, 16, 20, 24)                 # v0.41.23: nm the centre may move, toward our side first, then sideways
     COVER_TURNS = (0, 30, -30, 60, -60, 90, -90)

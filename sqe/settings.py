@@ -65,6 +65,8 @@ class AppSettings:
     merge_mode: str = "area"              # "off" | "area" (default): fold packages in the same area, starting within 30 min, into one mission
     shore_margin_m: int = 1500            # ground sites keep this far from the sea and lakes
     river_margin_m: int = 100             # ...and this far from rivers and shallow water (terrain scan only)
+    ai_skill_red: str = "level"            # v0.41.70: "level" (the difficulty level decides) or Average / Good / High / Excellent: Red's pilots and ground units
+    ai_skill_blue: str = "level"           # ...and Blue's AI flights ("level" = High); see difficulty.ai_skill
     weather_mode: str = "clear"            # "clear" | "procedural" | a fixed weather: scattered, broken, overcast, rain, storm
     ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
     merge_radius_nm: int = 25             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in
