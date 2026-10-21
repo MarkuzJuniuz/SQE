@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.61
+
+* **The "CAP engage range" boxes are gone from the settings page** (XO 2026-10-21: "Remove and take the defaults first. We'll be tuning CAPs later."). The enemy and friendly 50 nm values are now fixed in the mission options (`enemy_cap_engage_nm`, `friendly_cap_engage_nm`, both 50), so missions are unchanged. The two settings fields are removed; an old `settings.json` that still has them loads fine (unknown keys are ignored). The mission-side BARCAP / patrol rules will replace these limits.
+
 ## Unreleased (tools only, no version bump), identity check covers AI-only packages
 
 * **`tools/miz_identity.py` now also builds the packages nobody can fly** (XO 2026-10-21, before the per-job code split): per case, one BARCAP, one fleet-defence (bomber / raid intercept) and one Fighter Sweep package, where the day's plan has them, built as the all-AI test with the package's first flight standing in for yours (key `aionly`). 19 extra missions, 79 in all (about 100 s a run); `selfcheck` repeatable; a change to the sweep station reach shows up as a difference. Baselines saved before this change must be saved again. Production code unchanged.
