@@ -1393,7 +1393,7 @@ def main():
     # the DEAD gate waits for them (route check), and the Tor vehicle counts as a radar
     import math as _m3
     from dcs import lua as _lua3
-    from sqe.mission_builder import TRACK_RADARS as _TR, TOR_COVER_KM as _tck
+    from sqe.strike_tasks import TRACK_RADARS as _TR, TOR_COVER_KM as _tck
     from sqe import threatmap as _tm9
     assert "Tor 9A331" in _TR, "a Tor's radar rides on the launcher: the vehicle counts as a radar"
     _ts = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, flight_filter="all"))
