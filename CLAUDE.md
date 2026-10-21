@@ -72,6 +72,7 @@ Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE
 ## Code map
 - Before touching `ETA_locked` / `speed_locked` on any waypoint (anywhere a route is built, not just `_spawn_flight`), read `docs/DESIGN_NOTES.md` section 8 first. The Mission Editor's two lock rules are easy to re-break by accident (v0.41.2's fix and the v0.41.32 "Viper 2: Waypoint 8" fix are mirror images of each other): `_free_locked_speeds` now enforces both generically at the end of the build, so a new route shape should lean on that rather than hand-setting a lock on a specific point.
 - `sqe/strike_tasks.py`: `StrikeTasks`, the strike / SEAD / DEAD / CAS tasking (HARM and JSOW tasks, DEAD gate, CAS tasks), inherited by `MissionBuilder`.
+- `sqe/fighter_stations.py`: `FighterStations`, the TARCAP / escort / sweep station rules (engage circles, SAM-clear stations, hold times), inherited by `MissionBuilder`.
 - `sqe/mission_builder.py`: builds the mission; fight circles, tanker, carrier CAP, HARM/JSOW placement, recovery net.
 - `sqe/routes.py`: route planning and SAM avoidance (`AVOID_NM`).
 - `sqe/threatmap.py`: `tanker_spot` and threat geometry.

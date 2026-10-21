@@ -960,7 +960,8 @@ def main():
     _gg = _NS(points=[_NS(tasks=[])]); _MBg._ground_orders(_gg); _MBg._ground_orders(_gg)
     assert [type(t_).__name__ for t_ in _gg.points[0].tasks] == ["OptROE", "OptAlarmState"], "ground orders: ROE + alarm once per group"
     print("[ground orders] weapons free + alarm red set once per ground group")
-    from sqe.mission_builder import MissionBuilder as _MBe, ESCORT_AFTER_EGR_S as _EAE, ESCORT_AFTER_TOT_S as _EAT, HOLD_EXTEND_MAX_S as _HEM
+    from sqe.mission_builder import MissionBuilder as _MBe
+    from sqe.fighter_stations import ESCORT_AFTER_EGR_S as _EAE, ESCORT_AFTER_TOT_S as _EAT, HOLD_EXTEND_MAX_S as _HEM
     _ct = _NS(stops=[]); _ct.stop_after_time = lambda t_: _ct.stops.append(t_)
     _be = _NS(_holds=[{"tgt": (0, 0), "end": 1000, "after": _EAT, "cts": [_ct], "starts": [], "eta": 600}])
     _MBe._extend_holds(_be, [((0, 0), 900)], egr_events=[((0, 0), 1500)])
@@ -1024,7 +1025,8 @@ def main():
     # in a built mission: put a live SAM site on the target and look for the limit and the hold
     s.new("Stand off", "FA-18C", 2, seed=8); _st = s.state
     _p = next(p_ for p_ in s.packages() if s.flyable(p_) and any(f_.role == _Rl.TARCAP for f_ in p_.flights) and p_.objective.type.value in ("STRIKE", "DEAD"))
-    from sqe.mission_builder import MissionBuilder as _MBh, TARCAP_AFTER_TOT_S as _TA
+    from sqe.mission_builder import MissionBuilder as _MBh
+    from sqe.fighter_stations import TARCAP_AFTER_TOT_S as _TA
     _hrec, _hext = [], _MBh._extend_holds
     def _hwrap(self_, events_, egr_events=()):
         _hext(self_, events_, egr_events); _hrec.append((self_._last_striker_s, [(h_["end"], h_["after"], h_["tgt"], h_["eta"]) for h_ in self_._holds]))
