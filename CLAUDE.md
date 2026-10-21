@@ -85,7 +85,7 @@ Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE
 - `sqe/sams.py`, `sqe/threat.py`, `sqe/ecm.py`: SAM sites, threat model, jamming.
 - `sqe/state.py`, `sqe/settings.py`, `sqe/difficulty.py`, `sqe/gui/`: campaign state, settings, difficulty levels, the UI.
 - `sqe/data/theatres/`: theatre data (carrier position etc.).
-- `tools/smoke_test.py`: the checks. `tools/miz_identity.py`: builds about 80 missions (including BARCAP, intercept and sweep packages) and compares them with a saved baseline: run `save DIR` before a no-behaviour-change refactor (rename, function split) and `check DIR` after; exit 0 = identical missions. `tools/low_level_test.py`, `tools/capture_loadouts.py`: helpers.
+- `tools/smoke_test.py`: the checks. `tools/miz_identity.py`: builds about 80 missions (including BARCAP, intercept and sweep packages) and compares them with a saved baseline: run `save DIR` before a no-behaviour-change refactor (rename, function split) and `check DIR` after; exit 0 = identical missions. `SQE_IDENT_NO_STANDOFF=1` builds the same set with the stand-off setting off (a second baseline). `tools/low_level_test.py`, `tools/capture_loadouts.py`: helpers.
 
 ## Levels
 1 insurgent, 2 regional power, 3 near-peer.

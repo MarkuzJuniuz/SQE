@@ -65,7 +65,6 @@ JSOW_TRAIL_S = 120             # v0.41.11: a Standoff DEAD's JSOW flight pushes 
                                # (on two axes), the HARMs go first, the JSOWs land a few minutes later on a radar that is dead or has shut down.
                                # v0.39.19 had the JSOW flight 160 s ahead so the WEAPONS would land together: it went in alone and died (v0.39.19 run, Viper 2).
 A2G_ROLES = (Role.STRIKE, Role.SEAD, Role.CAS)
-STATION_ACTIONS = ("TARCAP", "ESCORT", "SWEEPSTN")       # fighter stations (v0.40.1 / v0.40.2): held, not flown to a time
 NATIVE_ECM = {"F-15C"}         # jets with a jammer that switch DCS's ECM on over the attack leg (the ECM script counts the F-15C too since v0.40.9)
 AAM_WEAPONS = 264241152       # DCS weapon flags: air-to-air missiles (a Fighter Sweep's RTB when out of ammo)
 # DCS weapon flags for "RTB when out of ammo": bombs (guided, iron, cluster), air-to-ground missiles (HARM, JSOW, Maverick) and rockets.
@@ -1222,7 +1221,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
         g, first, cs_names = self._make_group(f, spec, base, wps, act_s, csname, fno)
         names, run_t0 = self._dress_group(package, f, spec, g, wps, push_s, tot_s, cs_names)
-        stw = next((w for w in wps if w.action in ("TARCAP", "ESCORT", "SWEEPSTN") and w.orbit), None)
+        stw = next((w for w in wps if w.action in ("TARCAP", "ESCORT", "SWEEP") and w.orbit), None)
         hold_end = self._hold_end(stw, tot_s) if stw is not None else None
         self._engage_tasks(package, f, g, wps, stw, hold_end, cap_zone, stop, tot_s, geom, base)
         self._crew_setup(f, spec, g, names, plan, manifest, despawn, past_push)
@@ -1277,7 +1276,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 # v0.41.23: its time on station counts: the points after the station come that much later, and a flight still within its
                 # hold starts on its station (it was placed as if it never loitered: past its station, already on its way home)
                 leave_ = {}
-                si_ = next((i for i, w in enumerate(wps) if w.action in ("TARCAP", "ESCORT", "SWEEPSTN") and w.orbit), None)
+                si_ = next((i for i, w in enumerate(wps) if w.action in ("TARCAP", "ESCORT", "SWEEP") and w.orbit), None)
                 if si_ is not None:
                     lv_ = self._hold_end(wps[si_], tot_s)
                     dw_ = max(0, lv_ - wps[si_].eta_s)
@@ -1382,10 +1381,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             # always takes in its own station. Until the hold ends.
             back_ = bearing(stw.x, stw.y, base.x, base.y)
             cover_lo_ = False
-            if stw.action == "SWEEPSTN" or not self._launch_pts.get(package.id):
+            if stw.action == "SWEEP" or not self._launch_pts.get(package.id):
                 # v0.41.10: a sweep engages within 25 nm whatever it flies (the v0.41.8 F-16 sweep, 15 nm, never fired while MiGs went past it)
-                zone_ = (stw.x, stw.y, A2A_ZONE_NM[True] if stw.action == "SWEEPSTN" else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A])
-                if stw.action == "SWEEPSTN":
+                zone_ = (stw.x, stw.y, A2A_ZONE_NM[True] if stw.action == "SWEEP" else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A])
+                if stw.action == "SWEEP":
                     # v0.41.14: the circle stops short of every live SA-10's reach (31 nm measured): the v0.41.13 sweep chased a MiG to 10 nm of
                     # the Sukhumi SA-10 and lost Venom 9-2. Let red come out to it.
                     d10_ = min([dist(stw.x, stw.y, a.x, a.y) / NM for a in st.assets.values()
@@ -1395,7 +1394,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 # SAMs, as long as it still takes in the station
                 # v0.41.33: a sweep's circle also takes in the red station it was sent after (sweep.station_for puts it REACH_NM away), as far
                 # as that stays clear of SAMs (its own station first)
-                vs_ = package.extra.get("sweep_vs") if stw.action == "SWEEPSTN" else None
+                vs_ = package.extra.get("sweep_vs") if stw.action == "SWEEP" else None
                 cpts_ = [(stw.x, stw.y)] + ([(vs_["x"], vs_["y"])] if vs_ else [])
                 c0_ = ((stw.x + vs_["x"]) / 2, (stw.y + vs_["y"]) / 2) if vs_ else (stw.x, stw.y)
                 zone_ = self._cover_circle(cpts_, c0_, package, zone_[2], back_)
@@ -1411,8 +1410,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             hold_ = None
             if hold_end is not None:
                 hold_ = {"cts": [zct_], "starts": [], "tgt": (geom.tx, geom.ty), "end": int(hold_end), "eta": int(stw.eta_s),
-                         "first": stw.action == "SWEEPSTN",           # v0.41.13: a sweep holds until the FIRST package it covers is over the target
-                         "after": SWEEP_AFTER_TOT_S if stw.action == "SWEEPSTN" else TARCAP_AFTER_TOT_S if stw.action == "TARCAP" else ESCORT_AFTER_TOT_S}
+                         "first": stw.action == "SWEEP",           # v0.41.13: a sweep holds until the FIRST package it covers is over the target
+                         "after": SWEEP_AFTER_TOT_S if stw.action == "SWEEP" else TARCAP_AFTER_TOT_S if stw.action == "TARCAP" else ESCORT_AFTER_TOT_S}
                 self._holds.append(hold_)
             if hold_end is not None:
                 # v0.41.5: on the way home the flight still fights what comes within HOMEWARD_ENGAGE_NM of it. In the v0.41.4 run a lone MiG-29 chased
@@ -1438,7 +1437,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     if hold_ is not None:
                         hold_["starts"].append(hw_)
             rtb_a = task.OptRTBOnOutOfAmmo(); rtb_a.params["action"]["params"]["value"] = AAM_WEAPONS
-            if stw.action != "SWEEPSTN":    # (a sweep gets it below): out of air-to-air missiles, the homeward fight is over
+            if stw.action != "SWEEP":    # (a sweep gets it below): out of air-to-air missiles, the homeward fight is over
                 g.points[0].tasks.append(rtb_a)
             # snipe: fire at maximum range, radar searching all the time (red's warning receivers light up and it turns away early). AI
             # launch behaviour still varies by type in DCS (forum reports), so the shot log is the check.
@@ -1447,7 +1446,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.HalfWayRMaxNoEsc))
             self._snipe_at[id(g)] = stw
             g.points[0].tasks.append(task.OptRadarUsing(task.OptRadarUsing.Values.UseForContinuousSearch))
-            if stw.action == "SWEEPSTN":    # a sweep goes home once its air-to-air missiles are gone
+            if stw.action == "SWEEP":    # a sweep goes home once its air-to-air missiles are gone
                 rtb_ = task.OptRTBOnOutOfAmmo(); rtb_.params["action"]["params"]["value"] = AAM_WEAPONS
                 g.points[0].tasks.append(rtb_)
         elif (not f.is_player or o.player_is_ai) and f.role in (Role.TARCAP, Role.ESCORT, Role.SWEEP, Role.SEAD):
@@ -1740,7 +1739,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # v0.41.2: a TARCAP / escort / sweep station is not time-locked. Its route goes PUSH -> station -> home, so a locked station put the
         # landing point (speed locked) straight after a locked time, and DCS refused the mission ("Viper 3: All waypoints (5-5) have locked
         # speed and surrounded by waypoints 4 and 5 with locked time"). PUSH stays locked: that is the time you have to hit.
-        locked = w.name == "PUSH" or (w.action in OBJECTIVE_ACTIONS and w.action not in STATION_ACTIONS)
+        # v0.41.60: "a station" is a waypoint that orbits (TARCAP / ESCORT / SWEEP stations) or a TARCAP's own point; before the rename this was the action list
+        # ("TARCAP", "ESCORT", "SWEEPSTN"). A flight with no station of its own (stand-off setting off, fleet-defence fighters) still flies its ESCORT / SWEEP point to a time.
+        locked = w.name == "PUSH" or (w.action in OBJECTIVE_ACTIONS and not (w.orbit or w.action == "TARCAP"))
         wp.ETA_locked = locked
         idx = {x.name: i for i, x in enumerate(wps)}
         lo = idx.get("PUSH"); hi = next((i for i, x in enumerate(wps) if x.action in OBJECTIVE_ACTIONS), None)
