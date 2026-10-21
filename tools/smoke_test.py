@@ -1411,6 +1411,33 @@ def check_31e_barcap_mission_side(c):
     assert redair.beyond_nm(far[0], far[1], [ip], tx, ty) == 0.0, "no known way in: nothing is behind"
 
 
+def check_31f_red_relief_in_mission(c):
+    """v0.41.77: a red patrol whose relief is due during the mission gets that relief: a pair waiting on its field, called by a timed trigger."""
+    import zipfile as zf
+    from sqe import redair
+    from sqe.routes import NM, offset
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke relief", "F-16C", 3, seed=7)
+    st = ses.state
+    pk = next((p for p in ses.packages() if ses.flyable(p) and p.n_def >= 2 and p.objective.target_id in st.assets), None)
+    assert pk is not None, "a flyable package with enemy fighters exists"
+    sm = int(pk.start[:2]) * 60 + int(pk.start[3:5])
+    tgt = st.assets[pk.objective.target_id]
+    base = st.bases[pk.flights[0].base_id]
+    f = next(f_ for f_ in st.red_air["flights"] if f_["kind"] == "CAP")
+    w = st.enemy_air_at(f["wing"])
+    assert w.available_of(__import__("sqe.loadouts", fromlist=["x"]).ENEMY_FIGHTERS) >= 4, "the wing has a second pair"
+    from sqe.routes import bearing as _b
+    sx, sy = offset(tgt.x, tgt.y, _b(tgt.x, tgt.y, base.x, base.y), 20 * NM)       # on the blue side of the target
+    f.update(start=sm - 30, end=sm + 30, x=sx, y=sy, area="smoke-area")
+    nxt = dict(f, id="rf-smoke-relief", start=sm + 20, end=sm + 80)
+    st.red_air["flights"] = [f, nxt]
+    ses.fly(pk.number, ses.flyable(pk)[0].id)
+    mz = zf.ZipFile(st.pending["miz"]).read("mission").decode()
+    assert "Relief 1" in mz and "relief Relief 1" in mz, "the relief pair is in the mission with its timed trigger"
+
+
 def check_31c_ai_skill_red_blue(c):
     """v0.41.70: AI Skill for Red and Blue: the helper, the saved settings, and what a built mission carries."""
     import zipfile as zf
@@ -2834,6 +2861,7 @@ CHECKS = [
     check_31c_ai_skill_red_blue,
     check_31d_barcap_areas,
     check_31e_barcap_mission_side,
+    check_31f_red_relief_in_mission,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,
