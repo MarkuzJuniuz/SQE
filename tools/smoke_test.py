@@ -1221,7 +1221,7 @@ def check_29_phase_air_defence_that(c):
     _fl = [b_ for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD"]
     for b_ in _fl: _sm.set_field(_st, b_, 0.3)
     _sm.blue_defence(_st, _gd(3)); assert all(0.31 < b_.defense <= 0.41 for b_ in _fl), "airfield defences repair by supply (at most 0.10 a day)"
-    _sm.set_field(_st, _fl[0], 0.95); _sm.set_field(_st, _fl[1], 0.2); _lines = _sm.blue_defence(_st, _gd(3)); assert _lines and _fl[0].defense < 1.0, "a strong field lends a battery to the weakest"
+    _sm.set_field(_st, _fl[0], 0.95); _sm.set_field(_st, _fl[1], 0.2); _lines = _sm.blue_defence(_st, _gd(3)); assert not _lines and _fl[0].defense >= 0.95, "v0.41.67: no whole-field lending any more (batteries are ordered per site: see [31a])"
     _st.ground["fallen"] = [_fl[1].id]; _d1 = _fl[1].defense; _sm.blue_defence(_st, _gd(3)); assert _fl[1].defense == _d1, "a fallen field does not repair"
     c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_fl', '_mm', '_sm', '_st',)})
 
@@ -1245,6 +1245,53 @@ def check_30_blue_s_air_defence(c):
     _bh.health = 0.0; _st.ground["fallen"] = [_fl[0].id]; _sm.track(_st); _st.day += 5
     assert not _sm.rebuild_blue_sites(_st, _dr, _rnd.Random(5)) and _bh.destroyed, "nothing is rebuilt at a fallen field"
     _st.ground["fallen"] = []; _sm.set_field(_st, _fl[0], 1.0)
+
+
+def check_31a_sam_orders_by_need(c):
+    """v0.41.67: blue's SAM orders: a destroyed site is replaced by a battery from the least-threatened field that has one, before a new build."""
+    import random as rnd
+    from sqe import sams as sm, difficulty as dif
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))      # its own campaign: it borrows nothing from earlier sections
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke orders", "F-16C", 3, seed=7)
+    st = ses.state
+    sm.ensure_blue_sams(st)
+    d = dif.get(3)
+    fl = [b for b in st.bases.values() if b.kind.value == "AIRFIELD"]
+    assert len(fl) >= 3, "need three airfields"
+    fl.sort(key=lambda b: (sm._threat_nm(st, b), b.id))
+    near, far = fl[0], fl[-1]
+    assert sm._threat_nm(st, far) - sm._threat_nm(st, near) >= sm.ORDER_MIN_GAP_NM, "the test theatre has a rear field"
+    sm.set_field(st, near, 1.0); sm.set_field(st, far, 1.0)
+    nid, fid = sm.blue_site_id(near.id, "pat"), sm.blue_site_id(far.id, "pat")
+    for b in fl:
+        if b is not near:
+            sm.set_field(st, b, 1.0)
+    st.blue_sams[nid].health = 0.0
+    r1 = sm.blue_orders(st, d, rnd.Random(1))
+    assert any("ordered" in x for x in r1), r1
+    donor = max((b for b in fl if b is not near), key=lambda b: (sm._threat_nm(st, b), b.id))
+    assert st.blue_sams[sm.blue_site_id(donor.id, "pat")].destroyed and sm.blue_site_id(donor.id, "pat") in st.sams["vacated"], "the sender's site goes down"
+    st.day += sm.REBUILD_MIN_DAYS + 1; sm.track(st)
+    assert sm.blue_site_id(near.id, "pat") in sm._ordered(st), "a battery is on its way"
+    dr = type(d)(**{**d.__dict__, "blue_rebuild": 1.0})
+    sm.rebuild_blue_sites(st, dr, rnd.Random(3))
+    assert st.blue_sams[nid].destroyed or not st.sams["orders"], "no new build at a site a battery is on its way to"
+    st.day += sm.ORDER_TRANSIT_DAYS
+    r3 = sm.blue_orders(st, d, rnd.Random(4))
+    assert any("arrived" in x for x in r3) and not st.blue_sams[nid].destroyed and st.blue_sams[nid].health >= 0.99, r3
+    assert not st.sams["orders"], "the order is done"
+    # nothing to spare: no field has a standing Patriot site further back, so nothing is ordered and the usual rebuild is left
+    for b in fl:
+        sm.set_field(st, b, 1.0)
+    st.sams["vacated"] = []
+    st.blue_sams[nid].health = 0.0
+    for b in fl:
+        if b is not near:
+            st.blue_sams[sm.blue_site_id(b.id, "pat")].health = 0.3
+    assert not sm.blue_orders(st, d, rnd.Random(5)) and not st.sams["orders"], "no spare battery: no order"
+    rt = type(st).from_dict(st.to_dict())
+    assert rt.sams == st.sams, "orders save and load with the SAM record"
 
 
 def check_31_where_sites_sit_doctrinal(c):
@@ -2607,6 +2654,7 @@ CHECKS = [
     check_28_standoff_dead_package_escort,
     check_29_phase_air_defence_that,
     check_30_blue_s_air_defence,
+    check_31a_sam_orders_by_need,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,

@@ -35,7 +35,14 @@ RETREAT_NM = (35.0, 55.0)
 RETURN_HEALTH = 0.65
 RETURN_MIN_DAYS = 2
 BLUE_REPAIR = 0.10
-LEND_FROM, LEND_TO, LEND_AMOUNT = 0.80, 0.50, 0.05
+# v0.41.67: SAM orders by need (XO 2026-10-21: "SAMs can be ordered by both sides should the need arise"; "move first, build if nothing to spare").
+# A destroyed blue site is in need. The least-threatened field that has a standing site of the same kind (health at or above BLUE_FULL_DEF) sends it;
+# it arrives ORDER_TRANSIT_DAYS later (faster than the REBUILD_MIN_DAYS of a new build), and the field it left is rebuilt by the usual rule. When no
+# field has one to spare, the usual rebuild (3 days, supply) is the only way. Doctrine: JP 3-01 defended asset list (the most threatened, most valuable
+# asset first); no public figures for transit time or odds, so every number here is a judgment call.
+ORDER_TRANSIT_DAYS = 2
+ORDER_MIN_GAP_NM = 20.0       # the sender must sit this much further from the nearest enemy fighter field than the receiver
+ORDERS_PER_NIGHT = 1
 
 # v0.41.30: every blue airfield's air defence at doctrinal strength (XO 2026-10-16: "all bases are important", red-like firepower).
 # Sources: FM 44-85 App. B, a Patriot fire unit = 1 radar, 1 ECS, 1 power plant, 1 antenna mast group and 8 launching stations;
@@ -361,24 +368,74 @@ def retreat(state, d, rng: random.Random) -> list:
 
 
 def blue_defence(state, d) -> list:
-    """Airfield defences repair by supply; a fallen field does not, and a strong field lends a battery to the weakest."""
+    """Airfield defences repair by supply; a fallen field does not. (v0.41.67: the old "lend a battery" is gone: see blue_orders.)"""
     from . import ground
     sup = ground.supply(state, "blue") if ground.active(state) else 1.0
     fallen = set((state.ground or {}).get("fallen", []))
     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD" and b.id not in fallen]
     for b in fields:
         shift_field(state, b, BLUE_REPAIR * sup)          # every standing site; a destroyed one waits for rebuild_blue_sites
-    lines = []
-    if len(fields) >= 2:
-        weak = min(fields, key=lambda b: (b.defense, b.id)); strong = max(fields, key=lambda b: (b.defense, b.id))
-        if weak.defense < LEND_TO and strong.defense >= LEND_FROM and weak is not strong:        # `defense` = the Patriot site's health (kept in step by shift_field)
-            shift_field(state, strong, -LEND_AMOUNT); shift_field(state, weak, LEND_AMOUNT)
-            lines.append(f"A SAM battery moved from {strong.name} to {weak.name}")
-    return lines
+    return []
 
 
 def night(state, d, rng: random.Random) -> list:
     return rebuild(state, d, rng) + relocate(state, d, rng) + retreat(state, d, rng) + blue_defence(state, d)
+
+
+def _threat_nm(state, b) -> float:
+    """Distance from a blue field to the nearest enemy fighter field, in nm (smaller = more threatened); 9999 when red has none."""
+    from . import threatmap as tm
+    fb = tm.fighter_bases(state)
+    return min(math.hypot(ex - b.x, ey - b.y) for ex, ey in fb) / NM if fb else 9999.0
+
+
+def _ordered(state) -> set:
+    """Ids of the sites a battery is on its way to: the rebuild rule leaves them alone."""
+    return {blue_site_id(o["to"], o["key"]) for o in _rec(state).get("orders", [])}
+
+
+def blue_orders(state, d, rng: random.Random) -> list:
+    """v0.41.67: blue's SAM orders. First the batteries that arrive today; then, at most ORDERS_PER_NIGHT, a new order for the most threatened
+    field with a destroyed site: the least-threatened field with a standing site of that kind sends it (needs the supply to move it: the chance is
+    blue's supply). The sender's site goes down and is rebuilt by the usual rule, and a site emptied by an order is not itself in need. Returns log lines."""
+    from . import ground
+    track(state)
+    ensure_blue_sams(state)
+    r = _rec(state)
+    orders, vacated = r.setdefault("orders", []), r.setdefault("vacated", [])
+    lines = []
+    for o in [o for o in orders if o["due"] <= state.day]:
+        orders.remove(o)
+        a, b = state.blue_sams.get(blue_site_id(o["to"], o["key"])), state.bases.get(o["to"])
+        if a is None or b is None:
+            continue
+        if a.destroyed or a.health < o["health"]:
+            a.health = max(a.health, o["health"])
+            r["down"].pop(a.id, None)
+            _sync(state, b)
+            lines.append(f"A {BLUE_SITES[o['key']][0]} battery from {o['from_name']} arrived at {b.name}")
+    fallen = set((state.ground or {}).get("fallen", []))
+    fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD" and b.id not in fallen and blue_sites(state, b)]
+    busy = _ordered(state)
+    sup = ground.supply(state, "blue") if ground.active(state) else 1.0
+    needy = sorted(((_threat_nm(state, b), b.id, k, b) for b in fields for k in BLUE_SITES
+                    if blue_sites(state, b)[k].destroyed and blue_site_id(b.id, k) not in busy and blue_site_id(b.id, k) not in vacated),
+                   key=lambda t: t[:3])
+    for thr, _bid, k, b in needy[:ORDERS_PER_NIGHT]:
+        donors = sorted(((_threat_nm(state, f), f.id, f) for f in fields if f.id != b.id
+                         and blue_sites(state, f)[k].health >= BLUE_FULL_DEF and blue_site_id(f.id, k) not in busy
+                         and _threat_nm(state, f) >= thr + ORDER_MIN_GAP_NM), key=lambda t: (-t[0], t[1]))
+        if not donors or rng.random() >= sup:
+            continue
+        f = donors[0][2]
+        src = blue_sites(state, f)[k]
+        orders.append({"key": k, "to": b.id, "from": f.id, "from_name": f.name, "due": state.day + ORDER_TRANSIT_DAYS, "health": round(src.health, 2)})
+        src.health = 0.0
+        vacated.append(src.id)
+        _sync(state, f)
+        lines.append(f"A {BLUE_SITES[k][0]} battery was ordered from {f.name} to {b.name}")
+    r["vacated"] = [v for v in vacated if state.blue_sams.get(v) is not None and state.blue_sams[v].destroyed]
+    return lines
 
 
 def rebuild_blue_sites(state, d, rng: random.Random) -> list:
@@ -389,8 +446,9 @@ def rebuild_blue_sites(state, d, rng: random.Random) -> list:
     r = _rec(state)
     fallen = set((state.ground or {}).get("fallen", []))
     p = float(getattr(d, "blue_rebuild", 0.0)) * (ground.supply(state, "blue") if ground.active(state) else 1.0)
+    busy = _ordered(state)                                                     # a battery is on its way there: no new build
     cands = sorted((a for aid, day0 in r["down"].items() for a in [state.blue_sams.get(aid)]
-                    if a is not None and a.destroyed and state.day - day0 >= REBUILD_MIN_DAYS and a.guards not in fallen), key=lambda a: a.id)
+                    if a is not None and a.destroyed and state.day - day0 >= REBUILD_MIN_DAYS and a.guards not in fallen and aid not in busy), key=lambda a: a.id)
     rng.shuffle(cands)
     lines = []
     for a in cands:
