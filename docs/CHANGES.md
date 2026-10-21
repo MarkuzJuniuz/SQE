@@ -1,5 +1,10 @@
 # CHANGES.md
 
+## v0.41.75, red patrols pushed behind the target by the keep-out are left out
+
+* **XO's v0.41.74 run (Standoff DEAD, Gudauta SA-10):** Bandit 1's station sat 36 nm PAST the SA-10 site (and Bandit 2 27 nm past), although v0.41.74 drops patrols whose BARCAP station is behind the target. Cause: `_plan_cap_stations` then pushes every station away from our marshal point, fields and the carrier (`RED_KEEP_NM`, 130 nm round the boat), and that push moved a station that was fine into the back of the target. The behind-the-target test (`redair.beyond_nm`, 20 nm, `BEHIND_NM`) now also runs AFTER the keep-out push; a patrol that ends up behind the target is left out of the mission (it is not in the fight), and its place goes to the alert aircraft. `pick` uses the same helper.
+* Smoke: `check_31e_barcap_mission_side` also checks `beyond_nm`.
+
 ## v0.41.74, BARCAP as planned coverage, step 2: the mission side (the checkpoint)
 
 * **XO's same-rules plan, BARCAP, PR 2 of 3.** Blue's carrier CAP and base CAP no longer face "the nearest enemy field": each takes the BARCAP area (v0.41.73) of its asset that faces the mission's target (the area whose direction is closest to the bearing from the asset to the target; with merged targets this is the main target's, a judgment call). The station is 13 nm from the boat (the boat's current position: it may have been slid back for the sortie) or 12 nm from a field, in the area's direction, and still steps back out of every SAM ring and the scramble circles as before. An asset with no area today (no hostile base can reach it) keeps the old placement.

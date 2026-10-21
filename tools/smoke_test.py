@@ -1405,6 +1405,8 @@ def check_31e_barcap_mission_side(c):
     assert not redair.pick(st, tm_, [ip, ip, (tx, ty)], tx, ty, 9), "a patrol 60 nm beyond the target is left out"
     f2["x"], f2["y"] = offset(tx, ty, hdg_in + 180, 30 * NM)
     assert redair.pick(st, tm_, [ip, ip, (tx, ty)], tx, ty, 9), "a patrol short of the target is kept"
+    assert redair.beyond_nm(far[0], far[1], [ip, ip, (tx, ty)], tx, ty) > 55 and redair.beyond_nm(f2["x"], f2["y"], [ip, ip, (tx, ty)], tx, ty) < -25, "beyond_nm: positive behind the target"
+    assert redair.beyond_nm(far[0], far[1], [ip], tx, ty) == 0.0, "no known way in: nothing is behind"
 
 
 def check_31c_ai_skill_red_blue(c):

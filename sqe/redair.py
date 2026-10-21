@@ -203,6 +203,15 @@ def ensure(state, d) -> dict:
     return ra
 
 
+def beyond_nm(x: float, y: float, pts: list, tx: float, ty: float) -> float:
+    """How far (nm) the point (x, y) lies PAST the target along the way in (IP -> target; pts = [push, ip, target]): positive = behind the target as
+    blue comes in. 0 when the way in is not known."""
+    if len(pts) < 2 or dist(pts[1][0], pts[1][1], tx, ty) <= 1:
+        return 0.0
+    hdg = math.radians(bearing(pts[1][0], pts[1][1], tx, ty))
+    return ((x - tx) * math.cos(hdg) + (y - ty) * math.sin(hdg)) / NM
+
+
 def pick(state, tot_min: float, pts: list, tx: float, ty: float, limit: int) -> list:
     """The planned patrol flights that are up at the time on target and near the target or the route, nearest the target first.
     A wing never supplies more pairs than it has aircraft for right now."""
@@ -219,11 +228,8 @@ def pick(state, tot_min: float, pts: list, tx: float, ty: float, limit: int) -> 
             continue
         if not (dist(f["x"], f["y"], tx, ty) <= REL_NM * NM or any(dist(f["x"], f["y"], px, py) <= ROUTE_NM * NM for px, py in pts)):
             continue
-        if len(pts) >= 2 and dist(pts[1][0], pts[1][1], tx, ty) > 1:         # pts[1] is the IP: the way in runs IP -> target
-            hdg = math.radians(bearing(pts[1][0], pts[1][1], tx, ty))
-            beyond = ((f["x"] - tx) * math.cos(hdg) + (f["y"] - ty) * math.sin(hdg)) / NM          # x = north, y = east: how far past the target the station sits
-            if beyond > BEHIND_NM:
-                continue
+        if beyond_nm(f["x"], f["y"], pts, tx, ty) > BEHIND_NM:
+            continue
         used[f["wing"]] = used.get(f["wing"], 0) + 1
         out.append(f)
     return out
