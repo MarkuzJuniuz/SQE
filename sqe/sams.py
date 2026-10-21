@@ -82,8 +82,15 @@ def ensure_blue_sams(state) -> bool:
                 h = max(0.0, min(1.0, float(getattr(b, "defense", 1.0) or 0.0)))
                 state.blue_sams[sid] = _site(sid, f"{b.name} {label}", b, var, h)
                 added = True
-        b.defense = state.blue_sams[blue_site_id(b.id, "pat")].health
+        _sync(state, b)
     return added
+
+
+def _sync(state, b) -> None:
+    """`Base.defense` (the cache for the GUI bar, the war-sim score and the raid rules) = the mean health of the field's three sites."""
+    sites = blue_sites(state, b)
+    if sites:
+        b.defense = sum(a.health for a in sites.values()) / len(sites)
 
 
 def _site(sid, name, b, variant, health):
@@ -92,22 +99,25 @@ def _site(sid, name, b, variant, health):
 
 
 def field_defence(state, b) -> float:
-    """A blue field's air-defence strength, 0..1: its Patriot site's health (the cache `Base.defense` holds the same number)."""
+    """A blue field's air-defence strength, 0..1: the mean health of its three sites (the cache `Base.defense` holds the same number)."""
     ensure_blue_sams(state)
     sites = blue_sites(state, b)
-    return sites["pat"].health if sites else float(getattr(b, "defense", 0.0) or 0.0)
+    return sum(a.health for a in sites.values()) / len(sites) if sites else float(getattr(b, "defense", 0.0) or 0.0)
 
 
 def shift_field(state, b, delta: float) -> None:
-    """Add `delta` (negative = damage) to every site of a blue field, kept within 0..1. A carrier has no sites: its number moves."""
+    """Add `delta` to every site of a blue field, kept within 0..1 (repair and a lent battery: a destroyed site is not revived by it, only rebuilt).
+    A carrier has no sites: its number moves."""
     ensure_blue_sams(state)
     sites = blue_sites(state, b)
     if not sites:
         b.defense = max(0.0, min(1.0, float(b.defense) + delta))
         return
     for a in sites.values():
+        if delta > 0 and a.destroyed:
+            continue
         a.health = max(0.0, min(1.0, a.health + delta))
-    b.defense = sites["pat"].health
+    _sync(state, b)
 
 
 def set_field(state, b, value: float) -> None:
@@ -117,7 +127,32 @@ def set_field(state, b, value: float) -> None:
     v = max(0.0, min(1.0, float(value)))
     for a in sites.values():
         a.health = v
-    b.defense = v
+    _sync(state, b)
+
+
+HIT_ORDER = ("hawk", "pat", "aaa")        # damage takes the outer layer first (judgment call: defence in depth, the HAWK sits furthest out at 6 km)
+
+
+def hit_field(state, b, amount: float) -> list:
+    """v0.41.63: damage to a blue field's air defence. `amount` is the drop in the field's mean strength (what shift_field(-amount) did to the one
+    number), spread over the three sites outside-in: the HAWK goes first, then the Patriot, then the AAA. Returns the names of sites it destroyed."""
+    ensure_blue_sams(state)
+    sites = blue_sites(state, b)
+    if not sites:
+        b.defense = max(0.0, float(b.defense) - amount)
+        return []
+    pool, gone = amount * len(sites), []
+    for k in HIT_ORDER:
+        a = sites[k]
+        if pool <= 0:
+            break
+        was = a.destroyed
+        take = min(a.health, pool)
+        a.health -= take; pool -= take
+        if a.destroyed and not was:
+            gone.append(BLUE_SITES[k][1])
+    _sync(state, b)
+    return gone
 
 
 def blue_battery(b, state=None) -> dict:
@@ -143,15 +178,15 @@ def _battery(pat: float, hawk: float, aaa: float) -> dict:
     return {"patriot_ln": ln, "hawk": hawk >= BLUE_FULL_DEF, "aaa": 2 if aaa >= BLUE_FULL_DEF else 1 if aaa >= BLUE_MIN_DEF else 0}
 
 
-def air_defence(b) -> float:
-    """v0.41.30: a field's air defence for the war sim, 0 (nothing standing) to 1 (full Patriot + HAWK), from blue_battery."""
-    bt = blue_battery(b)
+def air_defence(b, state=None) -> float:
+    """v0.41.30: a field's air defence for the war sim, 0 (nothing standing) to 1 (full Patriot + HAWK), from blue_battery (v0.41.63: from the sites with `state`)."""
+    bt = blue_battery(b, state)
     return min(1.0, 0.7 * bt["patriot_ln"] / BLUE_PATRIOT_LN + (0.3 if bt["hawk"] else 0.0))
 
 
 def covering_ad(state, x, y, reach_nm: float = 40.0) -> float:
     """v0.41.30: the strongest blue field air defence that covers (x, y) (within reach_nm of the field: raids.PATRIOT_NM)."""
-    return max([air_defence(b) for b in state.bases.values()
+    return max([air_defence(b, state) for b in state.bases.values()
                 if b.kind.value == "AIRFIELD" and math.hypot(b.x - x, b.y - y) <= reach_nm * 1852.0] + [0.0])
 
 
@@ -171,9 +206,9 @@ def _parent_down(state, a) -> bool:
 
 
 def track(state) -> None:
-    """Remember the day each SAM site went down; forget the ones that are back up."""
+    """Remember the day each SAM site went down; forget the ones that are back up. (v0.41.63: blue's sites too.)"""
     r = _rec(state)
-    for a in state.assets.values():
+    for a in list(state.assets.values()) + list((getattr(state, "blue_sams", None) or {}).values()):
         if a.kind != AssetKind.SAM:
             continue
         if a.destroyed:
@@ -298,7 +333,7 @@ def blue_defence(state, d) -> list:
     fallen = set((state.ground or {}).get("fallen", []))
     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD" and b.id not in fallen]
     for b in fields:
-        shift_field(state, b, BLUE_REPAIR * sup)
+        shift_field(state, b, BLUE_REPAIR * sup)          # every standing site; a destroyed one waits for rebuild_blue_sites
     lines = []
     if len(fields) >= 2:
         weak = min(fields, key=lambda b: (b.defense, b.id)); strong = max(fields, key=lambda b: (b.defense, b.id))
@@ -310,3 +345,28 @@ def blue_defence(state, d) -> list:
 
 def night(state, d, rng: random.Random) -> list:
     return rebuild(state, d, rng) + relocate(state, d, rng) + retreat(state, d, rng) + blue_defence(state, d)
+
+
+def rebuild_blue_sites(state, d, rng: random.Random) -> list:
+    """v0.41.63: red's rebuild rule for blue's destroyed air-defence sites: after REBUILD_MIN_DAYS a replacement can go up (the level's `blue_rebuild`
+    chance a night, scaled by blue's supply, at most REBUILD_PER_DAY a night) at REBUILT_HEALTH, never at a field that has fallen. Returns log lines."""
+    from . import ground
+    track(state)
+    r = _rec(state)
+    fallen = set((state.ground or {}).get("fallen", []))
+    p = float(getattr(d, "blue_rebuild", 0.0)) * (ground.supply(state, "blue") if ground.active(state) else 1.0)
+    cands = sorted((a for aid, day0 in r["down"].items() for a in [state.blue_sams.get(aid)]
+                    if a is not None and a.destroyed and state.day - day0 >= REBUILD_MIN_DAYS and a.guards not in fallen), key=lambda a: a.id)
+    rng.shuffle(cands)
+    lines = []
+    for a in cands:
+        if len(lines) >= REBUILD_PER_DAY:
+            break
+        if rng.random() < p:
+            a.health = REBUILT_HEALTH
+            r["down"].pop(a.id, None)
+            b = state.bases.get(a.guards)
+            if b is not None:
+                _sync(state, b)
+            lines.append(f"A replacement {a.name} went up (half strength)")
+    return lines

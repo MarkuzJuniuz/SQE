@@ -921,9 +921,9 @@ def main():
     # v0.41.30: the war sim counts the batteries: same raid, a field with its full air defence is likelier to stop it than one with none
     from sqe import sams as _sm30
     _f30 = next(b_ for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD")
-    _d30 = _f30.defense; _f30.defense = 1.0; _a30 = _sm30.covering_ad(_st, _f30.x, _f30.y); _f30.defense = 0.0
-    _b30 = max([_sm30.air_defence(b_) for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD" and b_ is not _f30 and ((b_.x - _f30.x) ** 2 + (b_.y - _f30.y) ** 2) ** 0.5 <= 40 * 1852] + [0.0])
-    _c30 = _sm30.covering_ad(_st, _f30.x, _f30.y); _f30.defense = _d30
+    _d30 = _sm30.field_defence(_st, _f30); _sm30.set_field(_st, _f30, 1.0); _a30 = _sm30.covering_ad(_st, _f30.x, _f30.y); _sm30.set_field(_st, _f30, 0.0)
+    _b30 = max([_sm30.air_defence(b_, _st) for b_ in _st.bases.values() if b_.kind.value == "AIRFIELD" and b_ is not _f30 and ((b_.x - _f30.x) ** 2 + (b_.y - _f30.y) ** 2) ** 0.5 <= 40 * 1852] + [0.0])
+    _c30 = _sm30.covering_ad(_st, _f30.x, _f30.y); _sm30.set_field(_st, _f30, _d30)
     assert _a30 == 1.0 and _c30 == _b30, ("a field's batteries cover it; a fallen field only by its neighbours", _a30, _c30, _b30)
     assert "EngageTargetsInZone" in _mz, "the raid intercept engages only inside its circle"
     # v0.41.29: the raid flies blue's shape: it never hits before the intercept's TOT, egresses and goes home, and its escorts stay with it
@@ -1099,6 +1099,16 @@ def main():
     assert _sm.blue_battery(_fl[0], _st)["hawk"] is False and _sm.blue_battery(_fl[0], _st)["patriot_ln"] == _sm.BLUE_PATRIOT_LN, "a hurt HAWK site drops out on its own; the Patriot stands"
     _hk.health = 1.0; _sm.shift_field(_st, _fl[0], -0.5); assert abs(_sm.field_defence(_st, _fl[0]) - 0.5) < 1e-9 and _fl[0].defense == _sm.field_defence(_st, _fl[0]), "damage moves every site and the cached number"
     _rt = _CS.from_dict(_st.to_dict()); assert {k: v.health for k, v in _rt.blue_sams.items()} == {k: v.health for k, v in _st.blue_sams.items()}, "blue sites save and load"
+    _sm.set_field(_st, _fl[0], 1.0); _gn = _sm.hit_field(_st, _fl[0], 0.40)           # v0.41.63: damage takes the HAWK first, then the Patriot, then the AAA
+    _bh, _bp, _ba = (_st.blue_sams[_sm.blue_site_id(_fl[0].id, k_)] for k_ in ("hawk", "pat", "aaa"))
+    assert _gn == ["HAWK battery"] and _bh.destroyed and abs(_bp.health - 0.8) < 1e-9 and _ba.health == 1.0 and abs(_fl[0].defense - 0.6) < 1e-9, ("outer layer first", _gn, _bh.health, _bp.health, _ba.health)
+    _sm.shift_field(_st, _fl[0], 0.3); assert _bh.destroyed, "repair does not revive a destroyed site"
+    _bh.health = 0.0; _st.day += 3; _sm.track(_st); _st.day += 3
+    _dr = type(_gd(3))(**{**_gd(3).__dict__, "blue_rebuild": 1.0}); _rl = _sm.rebuild_blue_sites(_st, _dr, _rnd.Random(5))
+    assert _rl and abs(_bh.health - _sm.REBUILT_HEALTH) < 1e-9 and "HAWK" in _rl[0], "a destroyed blue site is rebuilt after the minimum days, at half strength"
+    _bh.health = 0.0; _st.ground["fallen"] = [_fl[0].id]; _sm.track(_st); _st.day += 5
+    assert not _sm.rebuild_blue_sites(_st, _dr, _rnd.Random(5)) and _bh.destroyed, "nothing is rebuilt at a fallen field"
+    _st.ground["fallen"] = []; _sm.set_field(_st, _fl[0], 1.0)
     _o = _st.to_dict(); _o.pop("blue_sams"); _o2 = _CS.from_dict(_o); assert _o2.blue_sams == {} and _sm.ensure_blue_sams(_o2) and abs(_sm.field_defence(_o2, _o2.bases[_fl[0].id]) - _o2.bases[_fl[0].id].defense) < 1e-9, "an older save gets its sites from each field's defense number"
     _rt = _CS.from_dict(_st.to_dict()); assert _rt.sams == _st.sams
     _o = _st.to_dict(); _o.pop("sams"); assert _CS.from_dict(_o).sams == {}
