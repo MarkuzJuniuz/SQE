@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## Smoke test step 2 (tools only, no version change): every section passes on its own
+
+* `tools/smoke_test.py`: `--only a,b` now also runs the earlier sections a chosen section borrows state from (it reads `c._name` at the top; the nearest earlier section that leaves that name runs first), so every one of the 58 sections passes by itself (`--only check_NN`). The full run is unchanged and green.
+* Campaign ids are random, so seeded checks could pass or fail by luck (`check_47` "no flyable SEAD flight", the HARM point 33.8 vs 35 nm). Each section now gets the same run of ids every time, whatever ran before it.
+* Sections that used a borrowed name that a later local import or the module-level `random` shadowed (26, 27, 47) are fixed; sections that only needed a session build their own (`fresh_session`); shared imports are at the top of the file.
+* Not done: sections still borrow from one another through `Ctx` instead of building a scenario each (the borrowing is now explicit and automatic). A full per-section scenario would mean cutting `check_47` (450 lines) into smaller pieces; left for the refactor week.
+
 ## v0.41.74, BARCAP as planned coverage, step 2: the mission side (the checkpoint)
 
 * **XO's same-rules plan, BARCAP, PR 2 of 3.** Blue's carrier CAP and base CAP no longer face "the nearest enemy field": each takes the BARCAP area (v0.41.73) of its asset that faces the mission's target (the area whose direction is closest to the bearing from the asset to the target; with merged targets this is the main target's, a judgment call). The station is 13 nm from the boat (the boat's current position: it may have been slid back for the sortie) or 12 nm from a field, in the area's direction, and still steps back out of every SAM ring and the scramble circles as before. An asset with no area today (no hostile base can reach it) keeps the old placement.
