@@ -20,7 +20,7 @@ from .strike_tasks import KPH
 RED_LONG_RANGE = {"Su_27"}    # v0.41.29: red's long-range class (XO 2026-10-16: the Su-27 only; the MiG-31 is not in rotation)
 RED_CALLIN_ZONE_NM = 25       # ...where it engages inside this circle round the site
 RED_CALLIN_NM = 50            # ...and a patrol is called to the SAM site it guards when blue comes this close to that site
-CAP_FLEET_KEEPOUT_NM = 90      # Red's known CAP stations stay at least this far from any carrier (hand-set: the cruiser's SM-2s killed CAP pairs 51 to 67 nm out)
+CAP_FLEET_KEEPOUT_NM = 78      # Red's known CAP stations stay at least this far from any carrier: the ships' SM-2 reach 70 nm (measured: CAP pairs killed 51 to 67 nm out) + 8 nm margin (v0.41.76: was 90, hand-set)
 ALERT_REACH_NM = 130          # alert pairs come only from fields this close to the target (the far ones could not arrive in time)
 A2A_ZONE_NM = {True: 25, False: 15}
 
@@ -46,13 +46,20 @@ class RedAirPicture:
         tot_min = self._start_min + 20                              # the time on target is not known yet; a package is over the target about 20 minutes in
         self._red_sel = redair.pick(self.state, tot_min, [geom.push, geom.ip, (tx, ty)], tx, ty, max(1, math.ceil(n_fl / 2)))
         keepout = list(keepout) + self._fleet_keepout()
-        out = []
+        out, kept = [], []
+        pts_ = [geom.push, geom.ip, (tx, ty)]
         for f in self._red_sel:
             sx, sy = f["x"], f["y"]
             for kx, ky, knm in keepout:
                 if dist(sx, sy, kx, ky) < knm * NM:
                     sx, sy = offset(kx, ky, bearing(kx, ky, sx, sy), knm * NM)
+            # v0.41.75: the keep-out pushes a station AWAY from our marshal point, fields and carrier (130 nm round the boat): that is what put red's patrols
+            # behind the target in XO's v0.41.74 run (station 36 nm past the SA-10). A patrol that ends up behind the target is not in the fight: left out.
+            if redair.beyond_nm(sx, sy, pts_, tx, ty) > redair.BEHIND_NM:
+                continue
+            kept.append(f)
             out.append({"x": sx, "y": sy, "side": self._cap_side(sx, sy, tx, ty)})
+        self._red_sel = kept
         return out
 
     def _fleet_keepout(self) -> list:

@@ -1384,6 +1384,8 @@ def check_31d_barcap_areas(c):
     for a in bc["red"] + bc["blue"]:
         assert dist(a["x"], a["y"], a["ax"], a["ay"]) <= barcap.STATION_MAX_NM * NM + 1, f"{a['id']}: station too far from its asset"
     rings = barcap._enemy_rings(st, "red")
+    cvr = [r for r in rings if abs(r[2] - barcap.FLEET_REACH_NM * NM) < 1]
+    assert cvr and len(cvr) == len([b for b in st.bases.values() if b.kind.value == "CARRIER"]), "the carrier group's SM-2 reach is a ring red's stations stay out of"
     assert not any(a["in_ring"] for a in bc["red"]) or rings, "a red station is inside a blue SAM ring only when it had no way out"
     cvs = [a for a in bc["blue"] if a["asset"].startswith("cvn")]
     assert cvs and all(abs(dist(a["x"], a["y"], a["ax"], a["ay"]) / NM - barcap.STATION_FLEET_NM) < 1.5 for a in cvs), "carrier stations sit about 15 mi from the group"
@@ -1434,6 +1436,8 @@ def check_31e_barcap_mission_side(c):
     assert not redair.pick(st, tm_, [ip, ip, (tx, ty)], tx, ty, 9), "a patrol 60 nm beyond the target is left out"
     f2["x"], f2["y"] = offset(tx, ty, hdg_in + 180, 30 * NM)
     assert redair.pick(st, tm_, [ip, ip, (tx, ty)], tx, ty, 9), "a patrol short of the target is kept"
+    assert redair.beyond_nm(far[0], far[1], [ip, ip, (tx, ty)], tx, ty) > 55 and redair.beyond_nm(f2["x"], f2["y"], [ip, ip, (tx, ty)], tx, ty) < -25, "beyond_nm: positive behind the target"
+    assert redair.beyond_nm(far[0], far[1], [ip], tx, ty) == 0.0, "no known way in: nothing is behind"
 
 
 def check_31c_ai_skill_red_blue(c):
