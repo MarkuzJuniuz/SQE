@@ -1981,7 +1981,7 @@ def check_46_ai_flights_going_home(c):
     s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))      # its own session: it borrows nothing from earlier sections
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
     # v0.41.17: AI flights going home to the carrier are recovered 10 nm out (SQE_RECOVER), not put in the deck queue
-    _rc17, _hk17, _far17 = 0, "", 0.0
+    _rc17, _hk17 = 0, ""
     for _sd17 in (3, 4, 5, 6):             # v0.41.65: its own mission with a carrier CAP (the one above only had carrier flights when a package happened to fold in: layout luck)
         s.new("Recover", "F-14BU", 2, seed=_sd17); s.plan_day()
         _pk17 = next((p_ for p_ in s.packages() if any(f_.tag == "CVCAP" for f_ in p_.flights) and s.flyable(p_)), None)
@@ -1989,28 +1989,19 @@ def check_46_ai_flights_going_home(c):
             continue
         s.fly(_pk17.number, s.flyable(_pk17)[0].id)
         _hk17 = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
-        for co_ in lua.loads(_hk17)["mission"]["coalition"]["blue"]["country"].values():
+        _bl17 = lua.loads(_hk17)["mission"]["coalition"]["blue"]
+        _cvid17 = next(u_["unitId"] for co2_ in _bl17["country"].values() for sg_ in ((co2_.get("ship") or {}).get("group") or {}).values() for u_ in sg_["units"].values() if u_["type"] == "Stennis")
+        for co_ in _bl17["country"].values():
             for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
                 _lp17 = list(g_["route"]["points"].values())[-1]
-                _scr = [t_ for t_ in _lp17["task"]["params"]["tasks"].values() if t_.get("id") == "WrappedAction"
-                        and t_["params"]["action"].get("id") == "Script" and "SQE_RECOVER" in t_["params"]["action"]["params"].get("command", "")]
-                if _scr:
-                    assert g_["name"] in _scr[0]["params"]["action"]["params"]["command"] and _lp17.get("type") != "Land", g_["name"]
+                # v0.41.72: an AI carrier flight lands for real on the boat (the Land point is tied to the ship); the hook removes it after the pattern laps
+                if _lp17.get("type") == "Land" and _lp17.get("linkUnit") == _cvid17 and f'g="{g_["name"]}", cv="' in _hk17.replace('\\"', '"') and "dwell=90" in _hk17:
                     _rc17 += 1
-                    # v0.41.71: the recovery point is 10 nm from where the BOAT will be when the flight gets there, not from where it started
-                    _cv17 = next(sg_ for co2_ in lua.loads(_hk17)["mission"]["coalition"]["blue"]["country"].values() for sg_ in ((co2_.get("ship") or {}).get("group") or {}).values()
-                                 if any(u_["type"] == "Stennis" for u_ in sg_["units"].values()))
-                    _cp17 = list(_cv17["route"]["points"].values()); _c0, _c1 = _cp17[0], _cp17[1]
-                    _hh = math.atan2(_c1["y"] - _c0["y"], _c1["x"] - _c0["x"]); _dd17 = math.hypot(_lp17["x"] - _c0["x"], _lp17["y"] - _c0["y"]) / 1852
-                    _best17 = min(abs(math.hypot(_lp17["x"] - (_c0["x"] + _c1["speed"] * t_ * math.cos(_hh)), _lp17["y"] - (_c0["y"] + _c1["speed"] * t_ * math.sin(_hh))) / 1852 - 10) for t_ in range(0, 9000, 30))
-                    assert _best17 < 0.2, ("the recovery point is 10 nm from the boat at some time in the mission", _best17)
-                    _far17 = max(_far17, _dd17)
         if _rc17:
             break
-    assert _rc17 >= 1 and "function SQE_RECOVER" in _hk17, ("carrier AI flights are recovered at 10 nm by the hook", _rc17)
-    assert _far17 > 10.5, ("at least one recovery point follows the boat's course (it is more than 10 nm from where the boat started)", _far17)
-    assert "t2=" in _hk17 and "fu = math.floor(u0:getFuel()" in _hk17, "the recovery net has its stale deadline and the tracks carry fuel and speed"
-    print(f"[cv recover] {_rc17} carrier AI flights recovered 10 nm from the boat instead of joining the deck queue")
+    assert _rc17 >= 1 and "function SQE_RECOVER" in _hk17, ("carrier AI flights land on the boat and the hook removes them after the pattern", _rc17)
+    assert "t2=" in _hk17 and "fu = math.floor(u0:getFuel()" in _hk17 and "r.since" in _hk17, "the recovery net has its stale deadline and its dwell, and the tracks carry fuel and speed"
+    print(f"[cv recover] {_rc17} carrier AI flights land on the boat (Land point tied to the ship), removed after the pattern")
 
 
 def check_47_support_cap_pull_back(c):

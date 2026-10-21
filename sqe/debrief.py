@@ -874,7 +874,12 @@ if #RECOV > 0 then
               local okp, up = pcall(function() return u:getPoint() end)
               if okp and up and math.sqrt((up.x - cp.x) ^ 2 + (up.z - cp.z) ^ 2) <= r.r then near = true end
             end
-            if near or (r.t2 and t >= r.t2) then      -- v0.41.71: a flight that is still out STALE_S after its work was done is recovered where it is
+            if near then                              -- v0.41.72: near the boat for r.dwell seconds (the pattern laps), then it counts as landed
+              r.since = r.since or t
+            else
+              r.since = nil
+            end
+            if (near and t - r.since >= (r.dwell or 0)) or (r.t2 and t >= r.t2) then      -- v0.41.71: or still out STALE_S after its work was done
               r.done = true
               SQE_RECOVER(r.g)
             end
@@ -963,7 +968,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
 def _recov_lua(rs) -> str:
     """v0.41.25: the recovery net's entries as a Lua list: group, carrier unit ("" for a field), x / z, radius (m), earliest time (s)."""
     return ", ".join(f'{{ g={_lq(r["g"])}, cv={_lq(r.get("cv") or "")}, x={float(r["x"]):.1f}, z={float(r["z"]):.1f}, r={float(r["r"]):.0f}, '
-                     f't={float(r["t"]):.0f}, t2={float(r.get("t2", r["t"] + 1e6)):.0f} }}' for r in (rs or []))
+                     f't={float(r["t"]):.0f}, t2={float(r.get("t2", r["t"] + 1e6)):.0f}, dwell={float(r.get("dwell", 0)):.0f} }}' for r in (rs or []))
 
 
 def _cvrec_lua(cv) -> str:

@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.72, AI boat flights land for real; the hook removes them after the pattern
+
+* **XO 2026-10-21: "pretend they still land, but if the don't-land switch is on they are despawned after a few rounds on their pattern."** With Settings > AI landings set to "always" (or "home" at your deck), an AI flight going home to the carrier used to fly to a fixed RTB point (10 nm from the boat, v0.41.17; v0.41.71 moved it to where the boat would be). Now it gets the real Land waypoint tied to the ship (as when AI landings is off), so DCS homes on the moving boat itself. The hook removes it, counted as landed, once it has been within `CV_PATTERN_NM` (6 nm) of the boat for `CV_PATTERN_S` (90 s, about two laps of the pattern); both are judgment calls. A flight that traps first lands normally. A flight that never gets there is still recovered by the 25-minute stale deadline (v0.41.71). The predicted-boat-position code (`_cv_pos_at`) is gone; the tracks with fuel and speed stay. Airfields are unchanged (recovered at the entry point as before). Risks: a busy deck can stack AI in your pattern (why v0.41.17 recovered short of the boat), and a flight held in a stack farther than 6 nm out waits for the stale deadline. Smoke `[46]`: every AI carrier flight's last point is a Land point tied to the ship, and the hook entry has the 90 s dwell.
+
 ## v0.41.71, Navy flights are recovered near the boat that has steamed on
 
 * **XO's 2026-10-21 run (Standoff DEAD, Gudauta SA-10, 20 of 52 blue aircraft lost, 8 landed):** nine Navy flights (Squids, Uzis, Hornets 3 and 5) were still flying at 2520 s, 71 km from the boat, at 20,000 ft. The tracks show them joining the tanker Texaco 1 from about 1800 s and flying its racetrack with it; they never reached their RTB point. Why they chose the tanker is not known from the files (the tracks had no fuel or speed). Three changes:

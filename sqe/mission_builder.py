@@ -50,6 +50,8 @@ ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD st
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
 LATE_ATTACK_S = 600           # v0.41.16: an AI strike flight drops only within this of its TOT
+CV_PATTERN_NM = 6             # v0.41.72: an AI carrier flight within this of the boat...
+CV_PATTERN_S = 90             # ...for this long (about two laps of the pattern) is recovered
 CV_RECOVER_NM = 10            # v0.41.17: AI carrier flights (and your wingmen) are recovered this far from the boat instead of joining the deck queue
 RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
 RCV_SPREAD = (0, 30, -30, 60, -60)    # ...on its own bearing (degrees off the way it comes home), by stack slot
@@ -1631,19 +1633,6 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
                 self._sead_attack_tasks(package, f, wp, w, armor)
 
-    def _cv_pos_at(self, base, t_s: float):
-        """v0.41.71: the carrier's (x, y) t_s seconds into the mission, on its own course (the ship group's route: it steams the whole mission). The
-        recovery point used to sit 10 nm from where the boat STARTED: by the time a late flight came home the boat had steamed on and the point was
-        14 nm or more from it, outside the hook's 12 nm net."""
-        cv = self.ship.get(base.id)
-        try:
-            p0, p1 = cv.points[0].position, cv.points[1].position
-            run = min(self.o.carrier_speed_kts * KPH * max(0.0, t_s), dist(p0.x, p0.y, p1.x, p1.y))
-            h = bearing(p0.x, p0.y, p1.x, p1.y)
-            return offset(p0.x, p0.y, h, run)
-        except (AttributeError, IndexError, TypeError):
-            return base.x, base.y
-
     def _home_leg(self, f, g, base, wps, idx, hold_end, stop, special):
         """The way home: the recovery entry point, landing or deck recovery."""
         o = self.o
@@ -1665,14 +1654,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if special:
                 g.points[-1].name = "RTBXHB"
         elif (not f.is_player or o.player_is_ai) and self._skip_landing(base):
-            # v0.41.17: an AI flight going home to the boat is recovered at a point CV_RECOVER_NM out: it counts as landed and leaves the mission
-            # (SQE_RECOVER in the hook). DCS's carrier landing queue ran an F-14 dry and stacks AI in your pattern.
-            lp_ = g.points[-1].position
-            cx_, cy_ = self._cv_pos_at(base, (float(wps[-1].eta_s) if wps else 0.0) + dist(base.x, base.y, lp_.x, lp_.y) / 200.0)       # v0.41.71: where the boat will be when it gets there
-            rx_, ry_ = offset(cx_, cy_, bearing(cx_, cy_, lp_.x, lp_.y), CV_RECOVER_NM * NM)
-            rcv_ = g.add_waypoint(pt(rx_, ry_), 2000 * FT, 300 * KPH, "RTBXHB" if special else "RTB")
-            rcv_.tasks.append(task.RunScript(f"SQE_RECOVER('{g.name}')"))
-            self._recov_net(g, f, self.ship[base.id].units[0].name if base.id in self.ship else None, base.x, base.y, wps, hold_end, stop)
+            # v0.41.72 (XO 2026-10-21: "pretend they still land, but if the don't-land switch is on they are despawned after a few rounds on their
+            # pattern"): an AI flight going home to the boat gets the real Land waypoint tied to the ship, so DCS homes on the moving boat itself (the
+            # fixed RTB point of v0.41.17 missed a boat that had steamed on). The hook removes it, counted as landed, once it has been within
+            # CV_PATTERN_NM of the boat for CV_PATTERN_S seconds, and a flight that never gets there is recovered after RECOV_STALE_S.
+            rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
+            rtb.type, rtb.action = "Land", PointAction.Landing
+            rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
+            self._recov_net(g, f, self.ship[base.id].units[0].name if base.id in self.ship else None, base.x, base.y, wps, hold_end, stop,
+                            r_nm=CV_PATTERN_NM, dwell_s=CV_PATTERN_S)
         else:
             rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTBXHB" if special else "RTB")
             rtb.type, rtb.action = "Land", PointAction.Landing
@@ -2013,12 +2003,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                                # followed the tanker for 15 minutes and never landed). A judgment call: the flight home is 5-10 minutes.
     RECOV_NET_NM = 12          # v0.41.25: a homebound AI flight this close to its deck / field counts as recovered, waypoint reached or not
 
-    def _recov_net(self, g, f, cv_unit, x, y, wps, hold_end, stop) -> None:
+    def _recov_net(self, g, f, cv_unit, x, y, wps, hold_end, stop, r_nm=None, dwell_s=0) -> None:
         """v0.41.25: the safety net for SQE_RECOVER. A flight sent home early (bingo, out of missiles) flies straight to its deck or field and
         never passes its recovery point, so it never ran SQE_RECOVER (the v0.41.24 run: Hornets circling the boat). The hook recovers the group
         once its lead is within RECOV_NET_NM of the carrier (where it is now, not where it started) or the field, after its work is done."""
         t_ = max(float(wps[-1].eta_s) if wps else 0.0, float(hold_end or 0), float(stop) if f.tag else 0.0)
-        self._recov.append({"g": g.name, "cv": cv_unit or "", "x": float(x), "z": float(y), "r": self.RECOV_NET_NM * NM, "t": t_, "t2": t_ + self.RECOV_STALE_S})
+        self._recov.append({"g": g.name, "cv": cv_unit or "", "x": float(x), "z": float(y), "r": (r_nm or self.RECOV_NET_NM) * NM, "t": t_, "t2": t_ + self.RECOV_STALE_S, "dwell": float(dwell_s)})
 
     COVER_SHIFTS = (0, 4, 8, 12, 16, 20, 24)                 # v0.41.23: nm the centre may move, toward our side first, then sideways
     COVER_TURNS = (0, 30, -30, 60, -60, 90, -90)
