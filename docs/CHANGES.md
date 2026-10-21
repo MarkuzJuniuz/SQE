@@ -1,5 +1,13 @@
 # CHANGES.md
 
+# CHANGES.md
+
+## v0.41.77, BARCAP as planned coverage, step 3 (first slice): red patrols get their relief in the mission
+
+* **XO's plan, BARCAP relief: "a CAP goes home only after its replacement has arrived".** The planned chain (v0.41.73) has the next sortie of an area start 10 minutes before the one on station leaves. When that relief falls due inside the mission (up to `RELIEF_HORIZON_S` 1 h after the time on target, a judgment call) and the wing has a second pair, the relief pair is now flown: it waits on its field like an alert pair (hidden, put on the runway when called; the v0.41.0 no-taxi rule) and a timed trigger calls it early enough to reach the station when its window opens (flight time + the 2 min runway delay + a minute's slack). The pair on station stays until its own window ends. Not flown when the wing has no second pair, its field is gone, or the unit limit would be passed. The briefing gets a "Relief for that patrol" line.
+* **Not in this slice (needs XO's call):** blue's support CAPs (base / carrier CAP) still fly the whole package without relief; hot starts on the ramp (XO's hot-scramble item; today every alert / relief group is the runway start); SPAWN points at the player's base; HAVCAP following its asset under the BARCAP rules; replacing a pair that is lost, winchester or bingo; the background sim.
+* Smoke: new `check_31f_red_relief_in_mission`.
+
 ## Smoke test step 2 (tools only, no version change): every section passes on its own
 
 * `tools/smoke_test.py`: `--only a,b` now also runs the earlier sections a chosen section borrows state from (it reads `c._name` at the top; the nearest earlier section that leaves that name runs first), so every one of the 58 sections passes by itself (`--only check_NN`). The full run is unchanged and green.
