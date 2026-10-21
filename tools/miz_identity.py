@@ -11,8 +11,9 @@ twice: as your own flight and as the all-AI test (`ai_test`), which gives your f
 compared by hash. Everything runs in a temp folder (like tools/smoke_test.py): your settings and campaigns are never touched.
 `python tools/miz_identity.py selfcheck` builds twice on the same code and fails if the result is not repeatable
 (if it is not, the check is useless and the noise has to be removed first).
-Coverage (60 missions, about 80 s a run): CAS, DEAD, strike and counter-air packages with their SEAD / JSOW / TARCAP / escort / support-CAP / red patrol and
-alert flights. NOT covered: fighter sweeps, BARCAP and bomber intercepts (AI-only), and code paths no case reaches (for example `STATION_FRAC`
+Coverage (about 60 missions plus the AI-only extras, about 100 s a run): CAS, DEAD, strike and counter-air packages with their SEAD / JSOW / TARCAP / escort / support-CAP / red patrol and
+alert flights; and, one BARCAP, one fleet-defence (bomber / raid intercept) and one Fighter Sweep package per case where the plan has them (key `aionly`: built as the
+all-AI test with the package's first flight standing in for yours). NOT covered: code paths no case reaches (for example `STATION_FRAC`
 changed from 0.85 to 0.80 shows no difference). If a refactor touches such a path, add a case here first. The check pins what is random
 per run (campaign id, the builder's Random(), the global `random`, PYTHONHASHSEED) only inside this tool."""
 import os
@@ -39,11 +40,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import sqe
 from sqe import raids as _raids
 from sqe.engine import Session
+from sqe.models import ObjectiveType
 from sqe.settings import AppSettings
 
 # (campaign name, aircraft, level, seed, open skies): a spread of jets and levels so every flight class turns up. On day 1 every strike target
 # sits under a SAM, so only CAS and DEAD packages exist; "open skies" cases zero the red SAM sites before the day is planned, which brings
-# out strikes, counter-air with its escort / TARCAP flights and more CAS. Not covered (AI-only or rare): BARCAP, bomber intercepts, fighter sweeps.
+# out strikes, counter-air with its escort / TARCAP flights and more CAS. BARCAP, fleet-defence intercepts and sweeps are added as `aionly` extras below.
 CASES = [("IdA", "F-16C", 3, 7, False), ("IdB", "FA-18C", 2, 11, False), ("IdC", "F-15C", 3, 3, False), ("IdD", "A-10C", 1, 5, False), ("IdE", "F-14BU", 2, 9, False),
          ("IdF", "F-16C", 3, 7, True), ("IdG", "F-15C", 3, 3, True), ("IdH", "FA-18C", 2, 11, True), ("IdI", "F-14BU", 3, 9, True)]
 MAX_PER_CASE = 7                       # packages built per case and mode (distinct objective types first)
@@ -89,10 +91,10 @@ def _scrub(text: str, camp_ids: set) -> str:
     return text
 
 
-def _build(session, st, pkg, ai: bool):
+def _build(session, st, pkg, ai: bool, flight_id=None):
     session.ai_test = ai
-    fl = session.flyable(pkg)[0]
-    session.fly(pkg.number, fl.id)
+    fl_id = flight_id or session.flyable(pkg)[0].id
+    session.fly(pkg.number, fl_id)
     z = zipfile.ZipFile(session.settings.sortie_miz)
     from dcs import lua
     out = {}
@@ -144,6 +146,22 @@ def run() -> dict:
                     res[key] = _build(s, st, p, ai)
                 except Exception as e:                         # a build that raises is part of the result, not a crash
                     res[key] = {"ERROR": f"{type(e).__name__}: {e}"}
+        # AI-only packages (BARCAP, fleet defence = bomber / raid intercepts) and Fighter Sweeps nobody can fly: built as the all-AI test with
+        # the package's first flight standing in for yours, so their route, station and task code is covered too.
+        extra, kinds = [], set()
+        for p in s.packages():
+            kind = (p.objective.type, p.objective.aim if p.objective.aim == "SWEEP" else "")
+            if kind in kinds or s.flyable(p) or not p.flights:
+                continue
+            if p.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE) or kind[1] == "SWEEP":
+                kinds.add(kind); extra.append(p)
+        for p in extra:
+            key = f"{name}/{aircraft}/L{level}/s{seed}/aionly/{p.number}-{p.objective.type.value}{'-sweep' if p.objective.aim == 'SWEEP' else ''}"
+            random.seed(key)
+            try:
+                res[key] = _build(s, st, p, True, p.flights[0].id)
+            except Exception as e:
+                res[key] = {"ERROR": f"{type(e).__name__}: {e}"}
     return res
 
 
