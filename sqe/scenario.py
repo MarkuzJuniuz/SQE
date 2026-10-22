@@ -224,6 +224,10 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     if d.bomber_wing > 0 and th["bomber_base"] in live:       # strategic bombers live far from the front (Mozdok in the Caucasus)
         st.enemy_air.append(EnemyAirWing(th["bomber_base"], ["Tu_22M3"], 1,
                                          [RedSquadron(f"{th['bomber_base']}_1", f"{st.assets[th['bomber_base']].name} 1", "Tu_22M3", d.bomber_wing)]))     # one squadron (judgment call)
+        if d.bomber_escort_wing > 0:                                      # v0.41.106: a dedicated Su-27 escort squadron on the same field, escort-only
+            bwing = st.enemy_air[-1]
+            bwing.sqns.append(RedSquadron(f"{th['bomber_base']}_2", f"{st.assets[th['bomber_base']].name} escorts", "Su_27", d.bomber_escort_wing, role="escort"))
+            bwing.types = ["Tu_22M3", "Su_27"]; bwing.squadrons = len(bwing.sqns)
 
     # ---- air defence clusters ----------------------------------------------------------------------
     variants = d.sam_variants

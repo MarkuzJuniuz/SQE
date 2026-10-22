@@ -120,6 +120,7 @@ class RedSquadron:
     available: int = -1         # serviceable jets (-1 = all of them, set in __post_init__)
     reserve: int = 0            # jets pulled back to a rear field to recover; available is 0 while they rest
     rest_days: int = 0
+    role: str = ""              # v0.41.106: "escort" = the Mozdok escort squadron: escorts, Mozdok patrols and scrambles only, never sent afield as reinforcement
 
     def __post_init__(self):
         if self.available < 0:
@@ -198,6 +199,10 @@ class EnemyAirWing:
         from .loadouts import ENEMY_FIGHTERS
         return [t for t in self.types_up if t in ENEMY_FIGHTERS] or [t for t in self.types if t in ENEMY_FIGHTERS]
 
+    def general_types_up(self) -> list:
+        """Like `types_up` but without the escort-only squadron: the types red may send afield as reinforcements."""
+        return list(dict.fromkeys(q.aircraft for q in self.sqns if q.available >= 2 and q.role != "escort"))
+
     def replenish(self, n: int) -> None:
         """New jets for the squadrons that are not resting, one at a time to the one furthest below strength."""
         for _ in range(max(0, n)):
@@ -239,7 +244,7 @@ def wing_from_dict(w: dict) -> "EnemyAirWing":
         av = _spread(int(w.get("available", sum(auth))), [a - r for a, r in zip(auth, res)])
         for q, a, r in zip(sq, av, res):
             q["available"], q["reserve"], q["rest_days"] = a, r, (int(w.get("rest_days", 0)) if r else 0)
-    keep = {"id", "name", "aircraft", "authorized", "available", "reserve", "rest_days"}
+    keep = {"id", "name", "aircraft", "authorized", "available", "reserve", "rest_days", "role"}
     sqns = [RedSquadron(**{k: v for k, v in q.items() if k in keep}) for q in sq]
     return EnemyAirWing(w["base_asset_id"], types, len(sqns), sqns)
 

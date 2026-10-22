@@ -1,6 +1,17 @@
 # CHANGES.md
 
 
+## v0.41.106, Mozdok's own escort squadron (bomber trump card, step 2)
+
+XO: "Mozdok fighters for now" / a dedicated escort squadron that sits "down the queue for taskings".
+- Red's Mozdok wing now holds a second squadron: Su-27s flagged `role="escort"` (L1 none, L2 8, L3 16; `Difficulty.bomber_escort_wing`, a judgment call: 2 escorts per bomber for the biggest L2 raid, 8 bombers' worth at L3; no source for the size). A new campaign gets it; old saves keep working without it.
+- What it does: escorts the carrier raid (`bombers.escort_options` counts it and picks it FIRST when it can cover a 4-ship raid, the other fields are the fallback), flies Mozdok's own patrols and scrambles like any fighter squadron on its field. What it does NOT do: red reinforcements never take it (`general_types_up`), land-raid escorts skip it, it never stands down overnight (the wing is exempt, as before).
+- The bomber count now reads only the Tu-22M3s (`available_of`), so the escort jets are never counted as bombers.
+- 100-day L3 sims (8 seeds): 0 to 7 carrier raids a run, bombers stay at 10, the escort squadron ends at 13 to 16 of 16. L2: one raid before victory around day 30.
+- Not done: the Mozdok SAM question (second SA-10 or not; fighters first, XO's call) and the mission-side raid.
+- Smoke: new `check_31za_mozdok_escorts`.
+
+
 ## v0.41.105, red's bombers are a trump card (step 1: background sim)
 
 XO: "No 2 ships raids, ever. Those bombers are expensive" / "2 escorts per bomber" / "Mozdok under attack ... a good weight, not the main factor".
