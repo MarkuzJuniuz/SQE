@@ -40,18 +40,22 @@ def _carrier(state):
 
 
 def escort_options(state, bw, cv):
-    """[(jets that can reach the carrier, wing, type)] best first: serviceable jets of one fighter type whose radius (x 0.85) reaches the carrier."""
+    """[(jets that can reach the carrier, wing, type)] best first: serviceable jets of one fighter type whose radius (x 0.85) reaches the carrier.
+    v0.41.106: Mozdok's own escort squadron (role "escort", the bomber wing's fighters) is counted and goes FIRST when it can cover a minimum raid;
+    the other fields are the fallback and the top-up."""
     out = []
     for w in state.enemy_air:
         a = state.assets[w.base_asset_id]
-        if w is bw or a.destroyed:
+        if a.destroyed:
             continue
         d_nm = math.hypot(a.x - cv.x, a.y - cv.y) / NM
-        for t in dict.fromkeys(q.aircraft for q in w.sqns):
+        sq = [q for q in w.sqns if q.role == "escort"] if w is bw else w.sqns
+        for t in dict.fromkeys(q.aircraft for q in sq):
             if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm:
-                out.append((w.available_of({t}), w, t))
-    out.sort(key=lambda r: (-r[0], r[1].base_asset_id, r[2]))
-    return out
+                out.append((sum(q.available for q in sq if q.aircraft == t), w, t))
+    own = [r for r in out if r[1] is bw and r[0] >= MIN_RAID * ESCORT_PER_BOMBER]
+    rest = sorted((r for r in out if r not in own), key=lambda r: (-r[0], r[1].base_asset_id, r[2]))
+    return own + rest
 
 
 def mozdok_pressure(state, bw) -> float:
@@ -96,7 +100,7 @@ def decide(state, d) -> dict:
     bw, cv = _bomber_wing(state), _carrier(state)
     if getattr(d, "bomber_policy", "none") == "none" or bw is None or cv is None:
         return hold("no bomber wing or no carrier")
-    avail = bw.available
+    avail = bw.available_of({"Tu_22M3"})                         # the wing also holds the escort squadron (v0.41.106)
     opts = escort_options(state, bw, cv)
     jets, ew, et = opts[0] if opts else (0, None, "")
     n_max = min(avail, jets // ESCORT_PER_BOMBER, MAX_RAID)

@@ -1972,6 +1972,36 @@ def check_31z_bomber_trump_card(c):
         assert bombers.decide(st, d)["mode"] == "hold", "cooldown must hold the next day"
 
 
+def check_31za_mozdok_escorts(c):
+    """v0.41.106: Mozdok holds a dedicated escort-only Su-27 squadron (L2 8, L3 16, L1 none); bomber counts ignore it, reinforcements skip it, and the
+    carrier raid takes its escorts from it first."""
+    from sqe import bombers
+    from sqe.difficulty import get as _get
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    for lvl, n in ((1, 0), (2, 8), (3, 16)):
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+        ses.new("Escorts", "F-16C", lvl, seed=3)
+        st = ses.state
+        mw = st.enemy_air_at("ab_mozdok")
+        esc = [q for q in mw.sqns if q.role == "escort"] if mw else []
+        assert sum(q.authorized for q in esc) == (n if mw else 0), (lvl, n, esc)
+        if n:
+            assert "Su_27" not in mw.general_types_up()
+            assert mw.available_of({"Tu_22M3"}) == _get(lvl).bomber_wing
+            cv = bombers._carrier(st)
+            opts = bombers.escort_options(st, mw, cv)
+            assert opts and opts[0][1] is mw and opts[0][2] == "Su_27", opts[:2]
+            for q in esc:
+                q.available = 0
+            assert all(o[1] is not mw or o[0] == 0 for o in bombers.escort_options(st, mw, cv))
+        # a saved game round-trips the role
+        from sqe.models import wing_from_dict
+        import dataclasses
+        if mw:
+            w2 = wing_from_dict(dataclasses.asdict(mw))
+            assert [q.role for q in w2.sqns] == [q.role for q in mw.sqns]
+
+
 def check_31y_unit_cap_merged(c):
     """v0.41.104: the Settings unit limit counts only the BASE mission; the units merged packages bring do not count against it, and the only upper bound for
     the whole mission is the ceiling in sqe/data/limits.json (the base mission is still trimmed to the limit, merged packages are not dropped for it)."""
@@ -2405,7 +2435,7 @@ def check_37_with_you_on_sweep(c):
         _tt = _thx.terrain()
         for w_ in _sd.enemy_air:
             _c = _sl(_tt, _sd.assets[w_.base_asset_id].airport, w_.types) if _sd.assets[w_.base_asset_id].airport else None
-            assert _c is None or w_.authorized <= max(2, _c) or w_.types == ["Tu_22M3"], (_sd.assets[w_.base_asset_id].name, w_.authorized, _c)
+            assert _c is None or w_.authorized <= max(2, _c) or "Tu_22M3" in w_.types, (_sd.assets[w_.base_asset_id].name, w_.authorized, _c)
         _use = {}
         for q_ in _sd.squadrons.values():
             b_ = _sd.bases[q_.base_id]
@@ -3257,7 +3287,7 @@ def check_49_red_wings_cut_into(c):
     assert [q_.aircraft for q_ in _rsq("x", "X", ["Su_25", "Su_24M"], 20, 12, ["MiG_29S"])][0] == "MiG_29S", "a wing with no fighter gets one"
     for _w52 in _st.enemy_air:
         assert _w52.sqns and _w52.squadrons == len(_w52.sqns) and sum(q_.authorized for q_ in _w52.sqns) == _w52.authorized and set(_w52.types) == {q_.aircraft for q_ in _w52.sqns}, ("wing squadrons", _w52.base_asset_id)
-        assert all(q_.authorized <= _get_dif52(_st.level).red_squadron_max for q_ in _w52.sqns) if "Tu_22M3" not in _w52.types else len(_w52.sqns) == 1, "squadron size cap; the bomber wing is one squadron"
+        assert all(q_.authorized <= _get_dif52(_st.level).red_squadron_max for q_ in _w52.sqns) if "Tu_22M3" not in _w52.types else len(_w52.sqns) == 1 + (1 if _get_dif52(_st.level).bomber_escort_wing else 0), "squadron size cap; the bomber wing is one bomber squadron (+ the escort squadron)"
     assert [[(q_.aircraft, q_.authorized) for q_ in w_.sqns] for w_ in _rt9.enemy_air] == [[(q_.aircraft, q_.authorized) for q_ in w_.sqns] for w_ in _st.enemy_air], "squadrons saved and loaded"
     print("[red squadrons] wings are cut into typed squadrons (ceil(jets / max), even split, one type each, a fighter squadron in every mixed wing); the bomber wing is one; saved and loaded")
     # roads: the scan file's points, nearest-point snapping, columns and supply sites moved onto a road once (garrisons stay off it)
@@ -3525,6 +3555,7 @@ CHECKS = [
     check_31x_forward_garrisons,
     check_31y_unit_cap_merged,
     check_31z_bomber_trump_card,
+    check_31za_mozdok_escorts,
     check_31o_support_assets,
     check_31p_guard_chains,
     check_31q_red_patrols_spread,

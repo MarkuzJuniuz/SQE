@@ -340,7 +340,7 @@ class PackageBuilder:
             if w is bw or w.available < 2 or a.destroyed:
                 continue
             d_nm = math.hypot(a.x - ax, a.y - ay) / NM
-            types = [t for t in w.types_up if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm]
+            types = [t for t in w.general_types_up() if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm]
             if types:
                 esc = (w.base_asset_id, rnd.choice(types)); break
         brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360          # they come from where they took off
