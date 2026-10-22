@@ -1648,6 +1648,9 @@ def check_31m_blue_barcap_plan(c):
         assert all(f.tag != "BASECAP" and f.tag != "CVCAP" or not f.is_player for p in s.packages() for f in p.flights), "never player-flyable"
         assert st.barcap["blue_cover"], "coverage kept per area"
     assert n[3] > n[1], "a harder level plans more patrol sorties"
+    from sqe import blue_barcap as _bb89
+    _sl = _bb89.status_lines(st)
+    assert _sl and _sl[0].startswith("BARCAP cover today") and any("%" in x_ for x_ in _sl), ("the status line", _sl)
 
 
 def check_31n_blue_patrol_vs_raids(c):

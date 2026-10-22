@@ -77,7 +77,8 @@ class OverviewPage(QWidget):
         self.cards["ad"].set(f"{t['iads']:.0%}", "SAM / radar sites operational")
         self.cards["ar"].set(f"{t['armor']:.0%}", "column strength")
         from .. import ground as _g
-        self.gsum.setText("\n".join(_g.summary(st)) if _g.active(st) else "")
+        from .. import blue_barcap as _bb
+        self.gsum.setText("\n".join((_g.summary(st) if _g.active(st) else []) + _bb.status_lines(st)))
         self.map.set_state(st)
 
 
