@@ -71,8 +71,14 @@ def check_00_setup(c):
         if not spec.player_flyable:
             continue
         s.new(f"Smoke {aircraft}", aircraft, 3, seed=7)         # level 3 so the bomber raid objective exists too
-        _cs = [f.callsign for p in s.packages() for f in p.flights]
+        _cs = [f.callsign for p in s.packages() for f in p.flights if f.tag not in ("BASECAP", "CVCAP")]      # v0.41.85: one planned base / carrier CAP sortie is carried by every package it covers
         assert len(_cs) == len(set(_cs)), f"no two flights share a callsign in a day: {sorted(c for c in _cs if _cs.count(c) > 1)}"
+        _bc = {}
+        for p in s.packages():
+            for f in p.flights:
+                if f.tag in ("BASECAP", "CVCAP"):
+                    assert _bc.setdefault(f.callsign, (f.tag, f.squadron_id, f.base_id, f.guard)) == (f.tag, f.squadron_id, f.base_id, f.guard), "a planned CAP sortie keeps one identity"
+        assert not (set(_bc) & set(_cs)), "a CAP callsign is never also a package flight's"
         opts = [p for p in s.packages() if s.flyable(p)]
         if not opts:
             print(f"[{aircraft}] no flyable package today (fine for niche jets like the A-10)"); continue
@@ -1615,6 +1621,35 @@ def check_31l_red_arm(c):
         eng.AI_ONLY, eng.RAID_SCRAMBLES = aio, rs
 
 
+def check_31m_blue_barcap_plan(c):
+    """v0.41.85: blue's base / carrier CAP are a daily plan paid before the packages, and a package carries the planned sortie that faces it."""
+    from sqe import blue_barcap as bb
+    n = {}
+    for lvl in (1, 3):
+        s = fresh_session()
+        s.new("Blue BARCAP", "F-14BU", lvl, seed=7); st = s.state
+        bf = st.barcap["blue_flights"]
+        n[lvl] = len(bf)
+        assert bf and all(bb.DAY_START <= f["start"] < 1440 and f["end"] <= 1440 and f["size"] == 2 for f in bf), "planned sorties lie in the day"
+        by_id = {f["callsign"]: f for f in bf if f["callsign"]}
+        paid = {}
+        for f in bf:
+            paid[f["squadron"]] = paid.get(f["squadron"], 0) + f["size"]
+        for sid, q in st.squadrons.items():
+            flown = sum(f.count for p in s.packages() for f in p.flights if f.squadron_id == sid and not f.tag)
+            assert paid.get(sid, 0) + flown <= 2 * q.available, f"{sid}: patrols and packages stay inside the daily sorties"
+        for p in s.packages():
+            s0 = int(p.start[:2]) * 60 + int(p.start[3:5])
+            for f in p.flights:
+                if f.tag in ("BASECAP", "CVCAP"):
+                    pf = by_id.get(f.callsign)
+                    assert pf is not None and pf["kind"] == f.tag and pf["start"] <= s0 + bb.PACKAGE_WINDOW_MIN and pf["end"] >= s0 - bb.LEAD_MIN, \
+                        "a package's CAP is a planned sortie that is up while it flies"
+        assert all(f.tag != "BASECAP" and f.tag != "CVCAP" or not f.is_player for p in s.packages() for f in p.flights), "never player-flyable"
+        assert st.barcap["blue_cover"], "coverage kept per area"
+    assert n[3] > n[1], "a harder level plans more patrol sorties"
+
+
 def check_31j_borrow_switches(c):
     """v0.41.81: the Experimental tab's per-side borrowing switches: off, that side's SAM orders do not run overnight; on (default), they do."""
     from sqe import sams, war
@@ -3070,6 +3105,7 @@ CHECKS = [
     check_31j_borrow_switches,
     check_31k_salvo_size,
     check_31l_red_arm,
+    check_31m_blue_barcap_plan,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,
