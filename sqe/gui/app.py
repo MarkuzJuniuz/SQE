@@ -90,7 +90,7 @@ class MissionsPage(QWidget):
         self.day = QLabel(); self.day.setObjectName("h2"); left.addWidget(self.day)
         frow = QHBoxLayout(); fl = QLabel("Show"); fl.setObjectName("small"); frow.addWidget(fl)
         self.flt = QComboBox(); self.flt.addItem("My squadron", "squadron"); self.flt.addItem("All packages", "all")
-        self.flt.setToolTip("My squadron: only packages with a flight from your squadron.  All: every package of the day.")
+        self.flt.setToolTip("My squadron: only packages with a flight from your squadron.  All: every package of the day, for looking only: you can fly only your own squadron's flights.")
         frow.addWidget(self.flt, 1); left.addLayout(frow)
         self.flt.currentIndexChanged.connect(self._filter_changed)
         self.lst = QListWidget(); left.addWidget(self.lst, 1); self.lst.currentRowChanged.connect(self._show)
@@ -112,7 +112,7 @@ class MissionsPage(QWidget):
     def _filter_changed(self):
         if getattr(self, "sess", None) is None or getattr(self, "_loading", False):
             return
-        self.sess.settings.flight_filter = self.flt.currentData()
+        self.sess.settings.list_filter = self.flt.currentData()
         try:
             self.sess.settings.save()
         except OSError:
@@ -122,9 +122,9 @@ class MissionsPage(QWidget):
     def refresh(self, sess: Session):
         st = sess.state; self.sess = sess
         self._loading = True
-        self.flt.setCurrentIndex(0 if sess.settings.flight_filter != "all" else 1)
+        self.flt.setCurrentIndex(0 if sess.settings.list_filter != "all" else 1)
         self._loading = False
-        mine_only = sess.settings.flight_filter != "all"
+        mine_only = sess.settings.list_filter != "all"
         visible = [p for p in sess.packages() if (bool(sess.flyable(p)) or not mine_only)]
         groups = sess.collapse(visible)                     # a package that another one folds in is shown inside it, not as its own row
         self.pkgs = [h for h, _ in groups]; self.members = {h.number: m for h, m in groups}
@@ -521,11 +521,13 @@ class MainWindow(QMainWindow):
 
     def skip_turn(self):
         sess = self.session
-        msg = "Skip today? Every package on the tasking order (including the ones you could fly) is resolved by the war simulation and the date advances."
-        if sess.state.pending:
-            msg += "\n\nThe sortie you built and have not finished will be discarded."
-        if QMessageBox.question(self, "Skip Turn", msg) != QMessageBox.Yes:
-            return
+        stand_down = not sess.state.pending and not any(sess.flyable(p) for p in sess.packages())
+        if not stand_down:                                       # v0.41.93: a stand-down day has nothing to choose, so no "are you sure"
+            msg = "Skip today? Every package on the tasking order (including the ones you could fly) is resolved by the war simulation and the date advances."
+            if sess.state.pending:
+                msg += "\n\nThe sortie you built and have not finished will be discarded."
+            if QMessageBox.question(self, "Skip Turn", msg) != QMessageBox.Yes:
+                return
         out = sess.skip_day(); self.refresh_all()
         lines = [f"{'+' if r['success'] else '-'} {r['objective']}" for r in out["results"]]
         end = {"VICTORY": "\n\nVICTORY. The enemy has been broken.", "DEFEAT": "\n\nDEFEAT. The coalition position has collapsed."}.get(out["status"], "")

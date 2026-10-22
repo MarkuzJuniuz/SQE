@@ -64,7 +64,8 @@ class AppSettings:
     hot_ramp_scrambles: bool = False      # v0.41.80: scramble pairs at LAND fields wait hot on the ramp and taxi out (experimental); off = hidden, put on the runway when called
     takeoff_buffer_s: int = 60            # seconds between mission start and the briefed takeoff (negative = you must be quicker than the plan)
     hold_minutes: int = 2                 # slack at the marshal point before PUSH (minutes; negative = hurry)
-    flight_filter: str = "squadron"      # Missions page: "squadron" (only flights of YOUR squadron) or "all" (any flight your jet can fly)
+    flight_filter: str = "squadron"      # who you may fly: "squadron" (only flights of YOUR squadron). "all" is for tests and tools only: a saved file never turns it on (v0.41.93)
+    list_filter: str = "squadron"        # v0.41.93: the Missions page list: "squadron" (packages with a flight of yours) or "all" (every package, for looking only)
     merge_mode: str = "area"              # "off" | "area" (default): fold packages in the same area, starting within 30 min, into one mission
     shore_margin_m: int = 1500            # ground sites keep this far from the sea and lakes
     river_margin_m: int = 100             # ...and this far from rivers and shallow water (terrain scan only)
@@ -144,6 +145,9 @@ class AppSettings:
                     s.patch_asked = True          # a settings file from before the question existed: the choice stands
             except (OSError, ValueError):
                 pass
+        if getattr(s, "flight_filter", "squadron") != "squadron":
+            s.list_filter = "all"                     # v0.41.93: an older file's "all" was the list choice; it no longer lets you fly other squadrons' jets
+            s.flight_filter = "squadron"
         s.dcs_install = native(s.dcs_install or _detect_install())
         s.dcs_saves = native(s.dcs_saves or _detect_saves())
         s.last_campaign = native(s.last_campaign)
