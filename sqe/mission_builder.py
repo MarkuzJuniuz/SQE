@@ -142,6 +142,7 @@ class MissionOptions:
     launch_offset_s: int = 60           # takeoff buffer: you are on the cat/runway at start; the briefed takeoff is this many SECONDS in (negative = hurry)
     hold_minutes: int = 2               # slack at MARSHAL before PUSH, minutes. Negative = you must be quicker than the natural pace
     cap_minutes: int = 40               # time on station for CAP flights
+    hot_ramp_scrambles: bool = False    # v0.41.80: alert / scramble pairs at land fields start hot on the ramp (see _alert_group)
     ai_unlimited_fuel: bool = True      # Retribution-style: ON until the push, OFF for the combat leg, ON again from egress
     enemy_unlimited_fuel: bool = False
     ai_despawn_on_land: bool = True
@@ -667,11 +668,31 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # v0.41.0: no taxiing. The v0.40.10 run's ramp starts took 3 to 11 minutes from the call to the air and two pairs at Sukhumi never
         # made it (DCS AI taxiing); the runway-queued pairs were airborne in about 45 s. Every alert pair now waits hidden and appears on the
         # runway ALERT_TAXI_S after it is called (the taxi it would have done), RWY_STAGGER_S apart at one runway.
+        # v0.41.80 (XO's experiment, optional setting): at a LAND field the pair may instead wait hot on the ramp, uncontrolled, and taxi when called
+        # (AITaskPush StartCommand). Not at your own field (your ramp start is there), and only when the field has parking for the type; otherwise
+        # the hidden runway start above.
+        if getattr(self.o, "hot_ramp_scrambles", False) and not key and self._prwy != f"{self.usa.name}:{ap.name}":
+            g = self._from_airport(side, name, typ, ap, maintask, StartType.Warm, size, quiet=True)
+            if g is not None:
+                self._note_alert(name, ap.name, typ)
+                return g, "ramp"
         g = self.m.flight_group_from_airport(side, name, typ, ap, maintask=maintask, start_type=StartType.Runway, group_size=size)
         g.late_activation = True
         self._note_alert(name, ap.name, typ)
         self._rwyq.append({"g": name, "f": self._flag_n, "b": key or f"{side.name}:{ap.name}"})
         return g, "rwy"
+
+    def _call_by_flag(self, g, how, flag) -> None:
+        """v0.41.80: a pair the hook calls by a flag (a relief, a standby): on the hidden runway start the hook puts it on the runway itself; a hot ramp
+        pair is started by a trigger when the flag is set."""
+        if how != "ramp":
+            return
+        g.add_trigger_action(task.StartCommand())
+        g.uncontrolled = True
+        trig = triggers.TriggerOnce(comment=f"start {g.name}")
+        trig.add_condition(condition.FlagIsTrue(int(flag)))
+        trig.add_action(action.AITaskPush(g.id, 1))
+        self.m.triggerrules.triggers.append(trig)
 
     def _note_alert(self, name, where, typ) -> int:
         """A trigger flag for this alert group (its scramble trigger sets it) and its line in the hook's alert log."""

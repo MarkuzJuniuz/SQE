@@ -92,6 +92,7 @@ class RedAirPicture:
         trig.add_condition(condition.TimeAfter(t_go))
         trig.add_action(action.SetFlag(self._alerts[-1]["f"]))
         self.m.triggerrules.triggers.append(trig)
+        self._call_by_flag(g, _how, self._alerts[-1]["f"])
         ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
         ct.stop_after_time(int(max(t_arr + 300, (nxt["end"] - self._start_min) * 60)))
         g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
@@ -128,6 +129,7 @@ class RedAirPicture:
         pt = lambda x, y: mapping.Point(x, y, self.t)
         g, _how = self._alert_group(self.red, f"Standby {i + 1}", getattr(planes, tname), ap, task.CAP, None, 2, (sx, sy))
         ent["rf"] = self._alerts[-1]["f"]
+        self._call_by_flag(g, _how, ent["rf"])
         ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
         ct.stop_after_time(end_s + 900)
         g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)

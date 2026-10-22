@@ -1522,6 +1522,34 @@ def check_31h_cap_replacement(c):
     print(f"[cap replacement] {len(cov)} watched pairs, {sum(1 for x in cov if int(x[3]) > 0)} with a standby")
 
 
+def check_31i_hot_ramp_scrambles(c):
+    """v0.41.80: with the setting on, scramble pairs at land fields wait hot on the ramp (uncontrolled, started by a trigger); with it off they stay hidden
+    for the runway queue. Your own field and the carrier keep the runway start."""
+    import zipfile as zf
+    from dcs import lua as dlua
+    def groups(on):
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, hot_ramp_scrambles=on))
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses.new("Smoke hot ramp", "F-16C", 3, seed=7)
+        pk = next(p_ for p_ in ses.packages() if ses.flyable(p_) and p_.n_def >= 2)
+        ses.fly(pk.number, ses.flyable(pk)[0].id)
+        m = dlua.loads(zf.ZipFile(ses.state.pending["miz"]).read("mission").decode())["mission"]
+        out = []
+        for side in ("red", "blue"):
+            for co in m["coalition"][side]["country"].values():
+                for g in ((co.get("plane") or {}).get("group") or {}).values():
+                    p0 = list(g["route"]["points"].values())[0]
+                    out.append((g["name"], p0.get("action"), bool(g.get("uncontrolled")), bool(g.get("lateActivation")), side))
+        return out
+    off, on = groups(False), groups(True)
+    ramp_off = [x for x in off if x[1] == "From Parking Area Hot" and x[2]]
+    ramp_on = [x for x in on if x[1] == "From Parking Area Hot" and x[2]]
+    assert not ramp_off, ("setting off: no hot-ramp scramble groups", ramp_off)
+    assert ramp_on, ("setting on: scramble pairs wait hot on the ramp", [x for x in on if x[0].startswith(("Alert", "Standby", "Relief", "Reinforce"))])
+    assert all(not x[3] for x in ramp_on), "a hot ramp pair is not late-activated (it exists, held, from the start)"
+    print(f"[hot ramp] {len(ramp_on)} pairs on the ramp with the setting on, {len(ramp_off)} off")
+
+
 def check_31c_ai_skill_red_blue(c):
     """v0.41.70: AI Skill for Red and Blue: the helper, the saved settings, and what a built mission carries."""
     import zipfile as zf
@@ -2952,6 +2980,7 @@ CHECKS = [
     check_31f_red_relief_in_mission,
     check_31g_blue_support_relief,
     check_31h_cap_replacement,
+    check_31i_hot_ramp_scrambles,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,
