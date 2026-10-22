@@ -2009,6 +2009,8 @@ def check_31zb_raid_setpiece(c):
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
     real = bombers.desperation
     bombers.desperation = lambda st, bw: 5.0                    # red is desperate: the raid is on at once
+    q_ = bombers.QUIET_DAYS
+    bombers.QUIET_DAYS = 0                                      # (the quiet day before it has its own check)
     try:
         res = {}
         for ac in ("F-14BU", "A-10C"):
@@ -2037,6 +2039,49 @@ def check_31zb_raid_setpiece(c):
         assert not mine_a, "an A-10 cannot"
         assert "Skip Turn" in " ".join(narrative.setpiece_text(ses_a.state, pa, False, "A-10C"))
         assert "Skip Turn" not in " ".join(narrative.setpiece_text(ses.state, p, True, "F-14BU"))
+    finally:
+        bombers.desperation = real
+        bombers.QUIET_DAYS = q_
+
+
+def check_31zc_raid_quiet_and_hit(c):
+    """v0.41.109: the quiet day before the carrier raid (no raids, no surprise raids, an Overview line), the raid the next day, the carrier CAP on the
+    setpiece, the big hit at Level 3 only, and the damaged deck."""
+    import random
+    from sqe import bombers, carrier_hit
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    real = bombers.desperation
+    bombers.desperation = lambda st, bw: 5.0
+    try:
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+        ses.new("Quiet", "F-14BU", 3, seed=3)
+        st = ses.state
+        assert bombers.is_quiet(st), "day 1 is the quiet day"
+        assert (st.raids or {}).get("bomber_stage", {}).get("launch") == st.day + 1
+        assert st.raids["surprise"] == 0 and not any(p.extra.get("land") for p in ses.packages()), "no raids on the quiet day"
+        assert not any(p.extra.get("setpiece") for p in ses.packages()), "the carrier raid is not today"
+        assert any("unusually quiet" in x for x in bombers.status_lines(st))
+        ses.skip_day()
+        st = ses.state
+        assert not bombers.is_quiet(st), "the day after is not quiet"
+        sp = [p for p in ses.packages() if p.extra.get("setpiece")]
+        assert sp, "the staged raid launches the next day"
+        assert sp[0].extra["bombers"] >= 4 and sp[0].extra["escorts"] >= 2 * sp[0].extra["bombers"]
+        assert any(f.tag == "CVCAP" for f in sp[0].flights) or not (st.barcap.get("blue_flights") or []), "the carrier CAP in its window flies with the setpiece"
+        # the hit: Level 3 only, then the deck is out
+        d3, d2 = ses.d, __import__("sqe.difficulty", fromlist=["get"]).get(2)
+        assert carrier_hit.big(st, d2, random.Random(1)) is None
+        for k in range(60):
+            lines = carrier_hit.big(st, d3, random.Random(k))
+            if lines:
+                break
+        assert lines and st.raids["deck_out_to"] == st.day + 2
+        assert carrier_hit.deck_factor(st) == 1.0
+        st.day += 1
+        assert carrier_hit.deck_factor(st) == 0.0
+        st.day += 1
+        assert carrier_hit.deck_factor(st) == 0.5
+        print(f"[raid quiet day] day 1 quiet (no raids), day 2 raid {sp[0].extra['bombers']} bombers / {sp[0].extra['escorts']} escorts; big hit then deck factor 0 / 0.5")
     finally:
         bombers.desperation = real
 
@@ -3596,6 +3641,7 @@ CHECKS = [
     check_31z_bomber_trump_card,
     check_31za_mozdok_escorts,
     check_31zb_raid_setpiece,
+    check_31zc_raid_quiet_and_hit,
     check_31o_support_assets,
     check_31p_guard_chains,
     check_31q_red_patrols_spread,

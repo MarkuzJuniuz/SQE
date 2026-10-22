@@ -20,6 +20,7 @@ NM = 1852.0
 MIN_RAID = 4                  # never fewer bombers than this ("no 2-ship raids, ever", XO)
 ESCORT_PER_BOMBER = 2         # escorts per bomber (XO's rule; no source)
 MAX_RAID = 12                 # the biggest all-in raid
+QUIET_DAYS = 1                # days red goes quiet before a staged raid launches (XO: "mysteriously quiet for a day or two"; 0 = no quiet day)
 COOLDOWN_SAFE = 8
 COOLDOWN_DESPERATE = 5
 DESPERATE_AT = 1.0            # desperation score that sends everything
@@ -95,7 +96,8 @@ def estimated_stop(state, d, n, cv) -> float:
 
 def decide(state, d) -> dict:
     """Today's call on the carrier raid: {"mode": "hold" | "safe" | "desperate", "n": bombers, "escorts", "wing", "type", "why"}. Pure: the same state gives
-    the same answer, so the planner and the raid plan agree. A raid already decided today (recorded in raids["bomber_days"]) stays decided."""
+    the same answer, so the planner and the raid plan agree. v0.41.109: a raid is STAGED the day before (QUIET_DAYS): the day red decides to go it only
+    holds ("quiet": True, "stage": {...}; the planner records it with `note_stage`), and the raid launches on the staged day."""
     hold = lambda why: {"mode": "hold", "n": 0, "escorts": 0, "wing": "", "type": "", "why": why}
     bw, cv = _bomber_wing(state), _carrier(state)
     if getattr(d, "bomber_policy", "none") == "none" or bw is None or cv is None:
@@ -103,8 +105,19 @@ def decide(state, d) -> dict:
     avail = bw.available_of({"Tu_22M3"})                         # the wing also holds the escort squadron (v0.41.106)
     opts = escort_options(state, bw, cv)
     jets, ew, et = opts[0] if opts else (0, None, "")
-    n_max = min(avail, jets // ESCORT_PER_BOMBER, MAX_RAID)
+    n_max = min(avail, jets // ESCORT_PER_BOMBER, MAX_RAID if getattr(d, "level", 3) >= 3 else 4)      # L2: the raid is 4 bombers and 8 escorts, always
     n_max -= n_max % 2
+    go = lambda mode, n, desp: {"mode": mode, "n": n, "escorts": ESCORT_PER_BOMBER * n, "wing": ew.base_asset_id, "type": et,
+                                "why": f"{mode}: {n} bombers, {ESCORT_PER_BOMBER * n} escorts (desperation {desp:.2f})"}
+    stage = (state.raids or {}).get("bomber_stage") or {}
+    if QUIET_DAYS > 0 and stage.get("launch") == state.day:      # the staged day: the raid goes if it still has its escorts
+        n = min(int(stage.get("n", 0)), n_max)
+        n -= n % 2
+        if n < MIN_RAID:
+            return hold(f"the staged raid is off: only {avail} bombers and {jets} escorts left")
+        return go(stage.get("mode", "safe"), n, 0.0)
+    if QUIET_DAYS > 0 and stage.get("launch", -1) > state.day:
+        return {**hold("quiet day before the raid"), "quiet": True}
     if n_max < MIN_RAID:
         return hold(f"only {avail} bombers and {jets} escorts: not enough for a {MIN_RAID}-ship raid with {ESCORT_PER_BOMBER} escorts each")
     days = [x for x in ((state.raids or {}).get("bomber_days") or [])]
@@ -121,8 +134,37 @@ def decide(state, d) -> dict:
                 mode, n = "safe", MIN_RAID
     if mode == "hold":
         return hold(f"holding the wing (desperation {desp:.2f})")
-    return {"mode": mode, "n": n, "escorts": ESCORT_PER_BOMBER * n, "wing": ew.base_asset_id, "type": et,
-            "why": f"{mode}: {n} bombers, {ESCORT_PER_BOMBER * n} escorts (desperation {desp:.2f})"}
+    if QUIET_DAYS > 0 and state.day not in days:                 # decided today: red goes quiet, the raid launches QUIET_DAYS from now
+        return {**hold(f"quiet day: the raid ({mode}, {n} bombers) is staged"), "quiet": True, "stage": {"launch": state.day + QUIET_DAYS, "mode": mode, "n": n}}
+    return go(mode, n, desp)
+
+
+def note_stage(state, dec) -> None:
+    """The planner records a staged raid once (a replan the same day finds it and keeps it)."""
+    if not dec.get("stage"):
+        return
+    if state.raids is None:
+        state.raids = {}
+    cur = state.raids.get("bomber_stage") or {}
+    if cur.get("launch", -1) < state.day:
+        state.raids["bomber_stage"] = dict(dec["stage"])
+
+
+def is_quiet(state) -> bool:
+    """Is today the quiet day before a staged raid? Red flies its patrols only: no strikes, raids or surprise raids."""
+    return QUIET_DAYS > 0 and ((state.raids or {}).get("bomber_stage") or {}).get("launch", -1) > state.day
+
+
+def status_lines(state) -> list:
+    """Overview lines: the quiet day, and a carrier deck that is out of action."""
+    out = []
+    if is_quiet(state):
+        out.append("Red air is unusually quiet today: no strikes or raids, only patrols. Something is being prepared.")
+    from . import carrier_hit
+    f = carrier_hit.deck_factor(state)
+    if f < 1.0:
+        out.append("The carrier's flight deck is damaged: " + ("no launches today." if f <= 0 else f"launches cut to {f:.0%} today."))
+    return out
 
 
 def note_launch(state) -> None:

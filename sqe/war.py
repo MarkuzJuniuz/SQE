@@ -168,6 +168,8 @@ class ObjectivePlanner:
                 pr = (12.0 if dec["mode"] == "desperate" else 7.0) + 0.3 * dec["n"]
                 bombers.note_launch(state)
                 pool.append((pr, Objective("", ObjectiveType.FLEET_DEFENSE, fleet.id, pr, f"Intercept a bomber raid on {fleet.name}")))
+            else:
+                bombers.note_stage(state, dec)                       # v0.41.109: the quiet day before the raid
         if fleet:
             tot = sum(x.available for x in state.enemy_air)
             auth = sum(x.authorized for x in state.enemy_air) or 1
@@ -356,8 +358,12 @@ class WarSimulator:
             lines += raids_hit(state, pkg.objective.target_id, bw, rng, None, pkg.objective.aim, pkg.extra.get("raider"))
         elif bw is not None:
             bw.lose(pkg.extra.get("raider"), 1)
+            from . import carrier_hit
             carriers = [s for s in state.squadrons.values() if state.bases[s.base_id].kind.value == "CARRIER"]
-            if carriers:
+            big_ = carrier_hit.big(state, d, rng)                        # v0.41.109: Level 3, the raid nobody flew: usually a very big deal
+            if big_:
+                lines += big_
+            elif carriers:
                 sq = rng.choice(carriers); lost = rng.randint(1, 3); sq.available = max(0, sq.available - lost)
                 lines.append(f"   missiles hit the fleet: {lost} aircraft lost on deck ({sq.name})")
         for ln in lines:

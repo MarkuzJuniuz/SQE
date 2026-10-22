@@ -1,6 +1,18 @@
 # CHANGES.md
 
 
+## v0.41.109, the quiet day, the carrier CAP on the setpiece, and the big hit (part 3 of 3)
+
+XO: red goes "mysteriously quiet" before the raid; the setpiece should have its base CAP, AWACS and tanker guards; not flown at L3 it is "a super duper big deal".
+- QUIET DAY: red now STAGES the carrier raid (`bombers.decide` -> `stage`, `QUIET_DAYS` = 1). The day it decides, red flies patrols only: no announced raids, no surprise raids, no emergencies, and the Overview says "Red air is unusually quiet today". The raid launches the next day if it still has its escorts. Judgment call: one quiet day (XO said a day or two).
+- L2: the raid is exactly 4 bombers and 8 escorts (never more).
+- The carrier raid setpiece gets the carrier CAP and the AWACS / tanker guards that are planned up in its window (`blue_barcap.attach` used to skip every fleet package).
+- BIG HIT (new `sqe/carrier_hit.py`): a raid nobody flew that gets through, at Level 3, is the big one with chance 0.8: each carrier squadron loses 15 to 35 % of its serviceable aircraft on deck, the group's air defence drops 25 points, no launches the next day and half the sorties the day after (packages and patrols). Level 2 keeps the old small loss; a flown raid keeps counting what really reached the boat. All numbers are judgment calls.
+- 100-day L3 sims (8 seeds): 0 to 5 carrier raids a run, blue air strength 0.80 to 1.0 at the end, two victories (days 95 and 99); L2 unchanged (one raid before victory about day 30).
+- DESIGN_NOTES section 12 describes the whole setpiece.
+- Smoke: new `check_31zc_raid_quiet_and_hit`; `check_31zb` runs without the quiet day.
+
+
 ## v0.41.108, the carrier raid in the mission: big raids are several groups (part 2 of 3)
 
 XO: the raid is a setpiece with "lotsa planes up and more booms"; pydcs makes one group of at most 4, so a 12-bomber raid used to show as 4.

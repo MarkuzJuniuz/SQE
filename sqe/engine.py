@@ -11,7 +11,7 @@ from .aircraft import AIRCRAFT
 from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
-from .models import Objective, ObjectiveType, Role
+from .models import BaseKind, Objective, ObjectiveType, Role
 from . import raids, redair, sams
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import AI_ONLY, ai_only, carrier_raid, Ledger, NoPlayerSlot, Package, PackageBuilder
@@ -123,7 +123,7 @@ class Session:
         redair.ensure(st, self.d)                       # the enemy's air tasking for the day
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=self.PACKAGES_PER_DAY)
         redair.assign_guards(st, self.d, objs)          # v0.41.10: red's patrols take stations over the SAM sites it expects to be attacked
-        keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry", "sead_fail", "bomber_days")}
+        keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry", "sead_fail", "bomber_days", "bomber_stage", "deck_out_to")}
         if st.red_air.get("patrol_used") is not None:                 # replanning the same day never books the raids twice
             st.red_air["used"] = dict(st.red_air["patrol_used"])
         warned, n_surprise = raids.todays_raids(st, self.d, self._rng(71))
@@ -144,6 +144,12 @@ class Session:
             # Packages launch at different times of day, so an aircraft can fly more than one sortie: each package sees every
             # serviceable airframe, but no squadron is asked for more than two sorties per airframe per day.
             daily = {sid: max(0, 2 * q.available - bp["used"].get(sid, 0)) for sid, q in st.squadrons.items()}
+            from . import carrier_hit
+            _df = carrier_hit.deck_factor(st)                       # v0.41.109: a carrier deck torn up by a raid launches less (0 the day after, half the day after that)
+            if _df < 1.0:
+                for sid, q in st.squadrons.items():
+                    if st.bases[q.base_id].kind == BaseKind.CARRIER:
+                        daily[sid] = int(daily[sid] * _df)
             out, names = [], {}          # callsign counter for the whole day: Enfield 1, Enfield 2 ... never two Enfield 1s
             for i, o in sorted(enumerate(objs, 1), key=lambda t: not carrier_raid(st, t[1])):      # v0.41.107: the setpiece is built FIRST (it is rare and needs the carrier squadrons), numbers unchanged
                 ledger = Ledger(st)

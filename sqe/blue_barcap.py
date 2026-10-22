@@ -49,7 +49,9 @@ def plan(state, d) -> dict:
     "used": {squadron id: jet-sorties}, "cover": {area id: minutes covered}}."""
     bc = barcap.ensure(state)
     level = max(1, min(3, int(getattr(d, "level", 1))))
-    free = {sid: DAILY_SORTIES * sq.available for sid, sq in state.squadrons.items()}
+    from . import carrier_hit
+    _df = carrier_hit.deck_factor(state)                                    # v0.41.109: a damaged flight deck launches fewer patrols too
+    free = {sid: int(DAILY_SORTIES * sq.available * (_df if state.bases[sq.base_id].kind == BaseKind.CARRIER else 1.0)) for sid, sq in state.squadrons.items()}
     used = {}
     flights, cover = [], {}
     _plan_guards(state, level, free, used, flights)                      # v0.41.88: the AWACS and tanker guards first (the tanker's is not optional)
@@ -179,16 +181,23 @@ def attach(state, pkgs: list) -> None:
     base_cap = max(tw, key=lambda bw: (bw[1], bw[0].id))[0] if tw else None
     for p in pkgs:
         obj = p.objective
-        if obj.type in _FLEET or is_sweep(obj) or obj.target_id not in state.assets:
+        setp = bool(p.extra.get("setpiece"))                              # v0.41.109: the carrier raid setpiece gets the carrier CAP and the guards too
+        if (obj.type in _FLEET and not setp) or is_sweep(obj) or (obj.target_id not in state.assets and not setp):
             continue
         s0 = _minute(p.start)
         lo, hi = s0 - LEAD_MIN, s0 + PACKAGE_WINDOW_MIN
-        txy = target_point(state, obj)
+        if setp:
+            ba_ = state.assets.get(p.extra.get("bomber_wing", ""))
+            txy = (ba_.x, ba_.y) if ba_ is not None else (state.bases[obj.target_id].x, state.bases[obj.target_id].y)
+        else:
+            txy = target_point(state, obj)
         assets = []
-        if base_cap is not None:
+        if base_cap is not None and not setp:
             assets.append(base_cap)
         cv = next((state.bases[state.squadrons[f.squadron_id].base_id] for f in p.flights if not f.tag and f.squadron_id in state.squadrons
                    and state.bases[state.squadrons[f.squadron_id].base_id].kind == BaseKind.CARRIER), None)
+        if cv is None and setp:
+            cv = state.bases[obj.target_id]
         if cv is not None:
             assets.append(cv)
         have = {f.tag for f in p.flights if f.tag in ("BASECAP", "CVCAP")}
