@@ -8,6 +8,12 @@ XO: in the 8-day runs red scrambles outnumbered the basecaps, a lone 2-ship wait
 - MORE PATROL SORTIES: the red share of a wing's day (`redair.DOCTRINE` frac) goes L2 0.30 -> 0.40 and L3 0.40 -> 0.55 (L1 unchanged). Judgment calls, to be tuned from XO's runs. 5-day sims (4 seeds): L2 about 140 -> 195 patrol pairs, 19 -> 27 pair-hours a day; L3 about 335 -> 465, 70 -> 95.
 - Not done yet (step 2, high effort): BASECAPs called in to the hotspot when the scramblers launch and sent back to station afterwards, both sides. A second pair per area at L3 is also left out.
 
+## Tools only (no version bump): AWACS tuning probe
+
+XO: AWACS tactical messages should only show when the player is tuned to the AWACS. Step one is a test, not a feature.
+- New `tools/awacs_probe.py`: builds one tiny Caucasus test mission per jet (F-16C, F/A-18C, F-14B, A-10C, F-15C), one Player slot at Kutaisi plus an E-3A on 251.0 AM. Mission Editor "cockpit parameter" triggers try about 36 guessed parameter names in three units (MHz, kHz, Hz); each fires once as an on-screen message and a `SQEPROBE` line in dcs.log. Also a looping radio transmission with a subtitle on 251.0 AM to see whether the text shows only to a tuned pilot.
+- No campaign code touched, so no smoke test and no version bump. The probe is a guess list: the real parameter names per jet are unverified until XO flies it.
+
 ## v0.41.109, the quiet day, the carrier CAP on the setpiece, and the big hit (part 3 of 3)
 
 XO: red goes "mysteriously quiet" before the raid; the setpiece should have its base CAP, AWACS and tanker guards; not flown at L3 it is "a super duper big deal".
