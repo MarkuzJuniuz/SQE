@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.101, in-universe scramble text, and raid scrambles fold into your mission
+
+XO: "an in-universe message like 'our A-10Cs have been dispatched to help' ... if those scrambles happen I suppose they're close to the time I picked to fly so shouldn't they be merged ... on the -15 to 30 minutes merge?"
+- An emergency you cannot take no longer says why ("the F-16 doesn't do CAS", "no free pair"). The popup and the campaign note say who answers it: "Our A-10Cs from Kobuleti have been dispatched to help." (troops in contact) or "Our F-14Bs from ... are scrambling to intercept." (raid). New `Session.dispatch_line`.
+- A raid scramble you do not fly now folds into your mission as AI, like a troops-in-contact call already did, when the raided field is inside your merge circle (same -15 / +30 minute window, same six-package and unit limits; merge mode "area" only). Scramblers and raiders (RAID-B) both appear. Not folded when your own tasking is itself a raid intercept (the raiders' names would clash). Otherwise the war sim settles it as before.
+- `MissionBuilder._add_merged` can now take a raid package (target is a field, not an asset): no ground opfor or egress search for it, and `_spawn_raid` is called with the scramble's station and TOT.
+- Smoke: new `check_31w_raid_scramble_merge`.
+
 ## v0.41.100, tankers and AWACS on the Forces page, blue air defences per site
 
 XO: "put the awacs and tankers on the GUI ... dunno if the GUI needs adjusting to show that blue has assets too".

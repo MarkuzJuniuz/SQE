@@ -1881,6 +1881,38 @@ def check_31v_hot_runway(c):
     print(f"[hot runway] {len(ents)} AI flights released from runways, a minute apart per runway; off: none; your field: {len(own)} released after your takeoff")
 
 
+def check_31w_raid_scramble_merge(c):
+    """v0.41.101: a raid scramble you do not take (and that is not planned on your own tasking) is folded into your mission as AI when the raided field lies inside
+    the merge circle: the scramblers and the raiders are both in the mission. The popup / note text is in-universe (who was dispatched), never the reason."""
+    import zipfile
+    from sqe import raids as rd
+    keep = rd.emergency_happens
+    rd.emergency_happens = lambda a, b, c_: True
+    try:
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=400))
+        ses.new("Raid merge", "F-16C", 2, seed=4)
+        st = ses.state
+        for _ in range(40):
+            for p in ses.packages():
+                if not ses.flyable(p):
+                    continue
+                ev = ses.emergency_for(p.number, None)
+                if ev and ev["kind"] == "RAID" and ses._inside_merge(p, ev["package"]):
+                    line = ses.dispatch_line(ev["package"])
+                    assert line.startswith("Our ") and "cannot" not in line.lower(), line
+                    ses.fly(p.number, None, scramble=False)
+                    assert any(m["type"] == "FLEET_DEFENSE" for m in st.pending["merged"]), "the raid scramble is folded in"
+                    txt = zipfile.ZipFile(st.pending["miz"]).read("mission").decode("utf8", "ignore")
+                    assert "RAID-B-1" in txt, "the raiders are in the mission"
+                    return
+            st.day += 1
+            ses.plan_day()
+        raise AssertionError("no raid scramble inside the merge circle in 40 days")
+    finally:
+        rd.emergency_happens = keep
+
+
 def check_31o_support_assets(c):
     """v0.41.87: tankers and AWACS are assets: airframe counts, daily windows, a package keeps only what is on orbit, losses and returns."""
     import random
@@ -3406,6 +3438,7 @@ CHECKS = [
     check_31m_blue_barcap_plan,
     check_31n_blue_patrol_vs_raids,
     check_31v_hot_runway,
+    check_31w_raid_scramble_merge,
     check_31o_support_assets,
     check_31p_guard_chains,
     check_31q_red_patrols_spread,

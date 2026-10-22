@@ -539,13 +539,14 @@ class MainWindow(QMainWindow):
             box.setInformativeText(f"Your squadron can answer it: {epkg.objective.description}.\n\nIf you scramble, the package you were tasked with "
                                    f"(#{number}) is left to the other squadrons and is settled by the war simulation (or postponed a day if there are not "
                                    f"enough aircraft for both). If you stay with your tasking, the emergency is settled without you"
-                                   + (" or flown by AI inside your mission." if epkg.objective.type.value == "CAS" else "."))
+                                   + (" or flown by AI inside your mission." if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else "."))
             go = box.addButton("Scramble", QMessageBox.AcceptRole); box.addButton("Stay with my tasking", QMessageBox.RejectRole)
             box.exec()
             return box.clickedButton() is go
         box.setText(f"<b>{ev['title']}</b><br>{ev['text']}")
-        box.setInformativeText(f"You cannot take this one: {ev['reason']}.\n\nOther squadrons are answering it; "
-                               + ("if it lies inside your mission area it is joined to your mission as AI, otherwise the war simulation settles it." if epkg.objective.type.value == "CAS" else "the war simulation settles it.")
+        box.setInformativeText(f"{self.session.dispatch_line(epkg)}\n\n"
+                               + ("If it lies inside your mission area it is joined to your mission as AI; otherwise the war simulation settles it."
+                                  if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else "The war simulation settles it.")
                                + " Your own tasking goes ahead as planned.")
         box.addButton("Understood", QMessageBox.AcceptRole); box.exec()
         return False
