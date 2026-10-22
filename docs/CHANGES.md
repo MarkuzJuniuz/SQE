@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## Docs: audit of stale text (no version change)
+
+XO: "check all docs for fellow CCs if they're updated and nothing is stale."
+- `docs/GUIDE.md`: Settings now lists six tabs (Experimental, hot starts at the ramp in General); the Missions "All packages" line says the list is display-only (v0.41.93); the AI-only patrol line names all four support patrols.
+- `sqe/gui/dialogs.py`: the SettingsDialog docstring says six tabs. `CLAUDE.md`: the plan-doc list names all five plan docs.
+- `docs/DESIGN_NOTES.md` section 10 (AI start types, hot runway starts, v0.41.96 to .98) was pushed directly.
+
+
 ## v0.41.98, hot runway starts move to Experimental
 
 XO: "the same runway hotstarts can be put on experimental for now."

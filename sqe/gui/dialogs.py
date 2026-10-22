@@ -90,8 +90,8 @@ class NewCampaignDialog(QDialog):
 
 
 class SettingsDialog(QDialog):
-    """Five tabs: General (flight timing), Campaign (what the world does), Mission build (merging, limits), DCS integration (paths, the
-    scripting patch) and Terrain scan (with a plain scanned / not scanned status). Every control keeps the name it always had."""
+    """Six tabs: General (flight timing), Campaign (what the world does), Mission build (merging, limits), DCS integration (paths, the
+    scripting patch), Terrain scan (with a plain scanned / not scanned status) and Experimental (features still being tested). Every control keeps the name it always had."""
     def __init__(self, settings: S.AppSettings, parent=None):
         super().__init__(parent); self.s = settings; self.setWindowTitle("Settings"); self.setMinimumWidth(720); self.setMinimumHeight(560); self.resize(780, 700)
         lay = QVBoxLayout(self); lay.setSpacing(10)

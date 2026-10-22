@@ -17,7 +17,7 @@ Do not start building until XO says go.
 ## Your job
 Analyse XO's test runs (SQE_state.json, dcs.log, SQE_Sortie.miz, Remarks.txt), build fixes, open PRs, and keep the queue doc current.
 Status, plans and the watch list live in the claude.ai Project "Squadron Campaign Engine":
-`claude/sqe-queue.md` (current queue), `claude/no-banzai-plan.md`, `claude/standoff-sead-plan.md`.
+`claude/sqe-queue.md` (current queue), plus the plan docs `claude/barcap-plan.md`, `claude/same-rules-plan.md`, `claude/red-arm-plan.md`, `claude/no-banzai-plan.md`, `claude/standoff-sead-plan.md`.
 Read the queue doc before starting work. Update it after each PR. There is exactly ONE queue doc, `claude/sqe-queue.md` (XO 2026-10-20): never create a supplement, "next" or addendum queue doc; put new items and status into it (read it, edit, write the full file back) and delete any stray extra queue doc.
 If the session has no Project attached, ask XO to paste the queue doc. Don't guess the status.
 
