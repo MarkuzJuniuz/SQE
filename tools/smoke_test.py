@@ -1855,7 +1855,20 @@ def check_31v_hot_runway(c):
                     assert len(pts) > 3, f"{grp['name']}: a full route after takeoff"
     assert seen == len(names), "every released flight is in the mission"
     assert all(dup[n] == 1 for n in names), "a released flight's group name is unique (the hook finds it by name)"
-    print(f"[hot runway] {len(ents)} AI flights released from runways, a minute apart per runway; off: none")
+    # v0.41.97: your own field: released only after you are rolling (takeoff buffer + a minute), and the hook holds them while you are inbound
+    ses2 = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, hot_runway_starts=True))
+    ses2.new("Hot runway own field", "F-16C", 2, seed=3)
+    pk2 = next(p for p in ses2.packages() if ses2.flyable(p))
+    pf2 = ses2.flyable(pk2)[0]
+    r2 = ses2.fly(pk2.number, pf2.id)
+    txt2 = zipfile.ZipFile(r2.miz).read("mission").decode("utf8", "ignore")
+    ents2 = sorted(set(re.findall(r'\{g=\\*"([^"\\]*)\\*", f=\d+, b=\\*"([^"\\]*)\\*", t=(\d+)\}', txt2)))
+    pbn = ses2.state.bases[pf2.base_id].name.split(" ")[0]
+    own = [(g, int(t)) for g, b, t in ents2 if pbn in b]
+    assert own, "an AI flight at your own field starts on the runway too"
+    assert all(t >= ses2.settings.takeoff_buffer_s + 60 for _g, t in own), f"own field: nothing before you are rolling {own}"
+    assert "local PHOME = { x =" in txt2 and "playerInbound()" in txt2, "the hook knows your field and holds releases while you are inbound"
+    print(f"[hot runway] {len(ents)} AI flights released from runways, a minute apart per runway; off: none; your field: {len(own)} released after your takeoff")
 
 
 def check_31o_support_assets(c):
