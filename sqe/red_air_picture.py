@@ -169,10 +169,11 @@ class RedAirPicture:
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
         manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
 
-    def _arm_callin(self, g, ap, st_xy, hot_xy, zone_nm, alt, spd, end_s, tot_s, bf_, cp, tx, ty) -> None:
+    def _arm_callin(self, g, ap, st_xy, hot_xy, zone_nm, alt, spd, end_s, tot_s, bf_, cp, tx, ty, cap2=None, land=None) -> None:
         """v0.41.111: adds the hotspot leg AFTER the landing point of a patrol route: HOTSPOT (orbit, engages inside its own circle), BACK (orbit on the
         station until the shift ends), the racetrack leg and a second landing. Nothing flies it unless a SwitchWaypoint (SQE_CALLIN) jumps the pair onto
-        it. A pair sent home by the hook (bf_) ends both orbits at once and goes home."""
+        it. A pair sent home by the hook (bf_) ends both orbits at once and goes home. v0.41.112 (blue): `cap2` is the racetrack leg's end point and
+        `land` the way home, when the caller has its own (a carrier deck, a staggered recovery point)."""
         pt = lambda x, y: mapping.Point(x, y, self.t)
         sx, sy = st_xy
         hx, hy = hot_xy
@@ -187,9 +188,12 @@ class RedAirPicture:
         cb.stop_after_time(int(end_s))
         cb.stop_if_user_flag(bf_, True)
         g.add_waypoint(pt(sx, sy), alt, spd, "BACK").tasks.append(cb)
-        g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
-        self._land_home(g, ap)
-        stay = int(dist(sx, sy, hx, hy) / max(spd, 1.0)) + CALLIN_STAY_S
+        g.add_waypoint(pt(*(cap2 or offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM))), alt, spd, "CAP2")
+        if land is not None:
+            land(g)
+        else:
+            self._land_home(g, ap)
+        stay = int(dist(sx, sy, hx, hy) / max(spd / 3.6, 1.0)) + CALLIN_STAY_S       # v0.41.112: `spd` is km/h, the distance metres: the transit was a third of the real one (it left the hotspot early)
         self._hot_calls.append({"g": g.name, "hot": hot_idx, "back": hot_idx + 1, "stay": stay, "bf": bf_})
 
     @staticmethod
@@ -210,6 +214,7 @@ class RedAirPicture:
         t0.add_condition(condition.TimeAfter(1))
         t0.add_action(action.DoScript(String(CALLIN_LUA)))
         self.m.triggerrules.triggers.append(t0)
+        self._callin_lua = True
         t1 = triggers.TriggerOnce(comment="call in the patrols")
         if self._hot_flag:
             t1.add_condition(condition.FlagIsTrue(self._hot_flag))

@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.112, blue BASECAPs called in with the alert pairs (step 2 of 2, blue side) and a fix to red's stay time
+
+XO: the same call-in for blue, in the missions where the alert pairs are called.
+- BLUE CALL-IN (`RaidSpawns._blue_callins`): in a defensive mission (a raid scramble folded into yours, or a package that defends the fleet) every blue base CAP and carrier CAP (relief and standby pairs too) that can answer gets the same extended route as red's: after its home leg, HOTSPOT, BACK, the racetrack leg and a second way home (landing, recovery point or the deck). The hotspot is the station a blue alert pair takes (`scramble.blue_station`: forward of the target, under our own air defence, clear of red's SAM rings). One trigger on red entering the 120 nm circle round the target (the alert pairs' own trigger) runs the same `SQE_CALLIN` Lua. Base CAPs answer from 10 to 110 nm, the carrier CAP from 10 to 60 nm so the boat is not left bare (`BLUE_CALLIN_CV_NM`, judgment call). The tanker and AWACS guards stay with their asset. A relief that is not yet airborne when the call goes out is not called.
+- FIX (red, from #172): the time a called pair stays was worked out with the speed in km/h against a distance in metres, so the flight to the hotspot counted a third of its real length and the pair would have left again early. Fixed for both sides.
+- Blue alert pairs already fly home on a clock (the time on target plus the sortie time); no change there.
+- Judgment calls: the 60 nm limit for the carrier CAP; all other numbers are red's (`CALLIN_REACH_NM` 110, `CALLIN_MIN_NM` 10, `CALLIN_STAY_S` 480). Not done: a call-in in blue's offensive missions (the base CAPs stay home there), a second pair per area. Untested in DCS. Smoke check_31ze.
+
 ## v0.41.111, red BASECAPs called in with the scramblers (step 2 of 2, red side)
 
 XO: red's lone 2-ship waited for the strike while the rest of the wing sat on the ramp. The patrols should be called to the hotspot when the scramblers are called, and fly back to their station afterwards. Blue follows in the next part.
