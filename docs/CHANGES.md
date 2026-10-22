@@ -1,6 +1,17 @@
 # CHANGES.md
 
 
+## v0.41.108, the carrier raid in the mission: big raids are several groups (part 2 of 3)
+
+XO: the raid is a setpiece with "lotsa planes up and more booms"; pydcs makes one group of at most 4, so a 12-bomber raid used to show as 4.
+- A raid of more than 4 bombers (or escorts) is now several groups of nearly equal size (12 = 4+4+4, 6 = 3+3). The bomber groups follow the same route one minute apart (`RAID_GROUP_GAP_S`, judgment call); their TOT and the debrief's "got through" check follow each group. Unit names run on (RAID-B-1 to RAID-B-12), so the debrief and the hook see every aircraft. The old "shown with at most 4 aircraft" warning is gone.
+- Escorts: with 3 or more escort groups, half fly a Fighter Sweep on the same route `RAID_SWEEP_LEAD_S` (90 s, judgment call) ahead of the bombers and fight what they meet; the rest escort the bomber groups, spread over them (Escort task tied to that group). A small raid keeps its single escort group.
+- Land raids (Su-24M, Su-25) use the same code and are unchanged when small.
+- Unit limit: the raid is part of the base mission, never trimmed; wrecks and optional flights are trimmed first (existing rules). Nothing is merged into the setpiece.
+- Not changed (open): where the Backfires fire. They still fly to the carrier with the Kh-22 attack task; a launch point outside the escort ships' SM-2 ring needs a doctrine lookup (Kh-22 reach vs SM-2) before it is moved.
+- Smoke: `check_31zb_raid_setpiece` now builds the mission and checks every bomber and escort is in it, the group split and the sweep.
+
+
 ## v0.41.107, the carrier raid is a flyable setpiece (part 1 of 3: package, list and right pane)
 
 XO: "a tasking like any other except it's not hidden like scrambles ... a setpiece, no merged packages ... on the right it will contain all of the flights participating ... A-10: greyed out, in-universe text, press Skip".
