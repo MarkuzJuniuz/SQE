@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## Tools only (no version bump): call-in probe, second version
+
+XO's first run showed the pairs leaving their stations before the call-in (my probe spawned them exactly on the station point). `tools/callin_probe.py` now spawns each pair 8 nm short of its station like the real patrols, adds a control pair V0 that is never called in, and logs the heading. The first run's hint: V3 (flag-released orbit, hotspot waypoint, waypoint back) did return; the pushed tasks were inconclusive.
+
 ## Tools only (no version bump): call-in probe
 
 XO: BASECAPs should be called to the hotspot when the scramblers launch, then go back to station. Step 2a is a test of the DCS mechanics, not the feature.
