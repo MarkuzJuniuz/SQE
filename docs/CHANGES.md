@@ -1,6 +1,12 @@
 # CHANGES.md
 
 
+## Tools only (no version bump): call-in probe
+
+XO: BASECAPs should be called to the hotspot when the scramblers launch, then go back to station. Step 2a is a test of the DCS mechanics, not the feature.
+- New `tools/callin_probe.py`: one AI-only test mission with three red Su-27 pairs on station, each with an immortal blue tanker on a hotspot 40 nm away. At t = 60 s they are called in three ways: V1 a pushed `EngageTargetsInZone` with a 240 s stop, V2 the same pushed task without a stop (what the red SAM-guard call-in does today), V3 a route with a flag-released orbit, a hotspot waypoint, and a waypoint back. Each pair logs its distance to station and hotspot every 20 s as `SQEPROBE2` lines in dcs.log.
+- No campaign code touched, no smoke test, no version bump. Whether DCS sends the pairs back is unverified until XO flies it.
+
 ## v0.41.110, red patrols first (step 1 of 2)
 
 XO: in the 8-day runs red scrambles outnumbered the basecaps, a lone 2-ship waited for the strike and the rest of the wing sat on the ramp, which made SEAD / DEAD too easy. The wide scramble net is working as intended.
