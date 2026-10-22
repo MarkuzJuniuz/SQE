@@ -1768,6 +1768,29 @@ def check_31s_scramble_timing_fuel(c):
     print("[fuel] " + fl[0])
 
 
+def check_31t_all_list_is_display_only(c):
+    """v0.41.93: the Missions page's "All packages" list is for looking: you may fly only your own squadron's flights, whatever the list shows (an old
+    settings file's "all" becomes the list choice, never the right to fly other squadrons' jets)."""
+    import json as _j
+    import sqe.settings as _S
+    s = fresh_session()
+    s.new("Squadron only", "F-16C", 2, seed=7)
+    assert s.settings.flight_filter == "squadron" and hasattr(s.settings, "list_filter")
+    s.settings.list_filter = "all"
+    for p_ in s.packages():
+        assert all(f_.squadron_id == s.state.player.squadron_id for f_ in s.flyable(p_)), "only your squadron's flights are offered"
+    cfg = TMP / "cfg_old"; cfg.mkdir(exist_ok=True)
+    old_cd = _S.config_dir
+    _S.config_dir = lambda: cfg
+    try:
+        (cfg / "settings.json").write_text(_j.dumps({"flight_filter": "all"}))
+        ld = _S.AppSettings.load()
+    finally:
+        _S.config_dir = old_cd
+    assert ld.flight_filter == "squadron" and ld.list_filter == "all", (ld.flight_filter, ld.list_filter)
+    print("[fly] the all-packages list is display only; an old 'all' setting no longer lets you fly other squadrons")
+
+
 def check_31o_support_assets(c):
     """v0.41.87: tankers and AWACS are assets: airframe counts, daily windows, a package keeps only what is on orbit, losses and returns."""
     import random
@@ -3297,6 +3320,7 @@ CHECKS = [
     check_31q_red_patrols_spread,
     check_31r_scramble_stations,
     check_31s_scramble_timing_fuel,
+    check_31t_all_list_is_display_only,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,

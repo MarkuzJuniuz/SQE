@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.93, "All packages" is display only; no "are you sure" on a stand-down day
+
+XO: "All squadrons list is just for display ... I shouldn't be able to fly non-squadron planes." / "On stand down days the confirmation ... should not appear anymore."
+- The Missions page list choice (My squadron / All packages) now only decides what the list shows. It is saved as the new setting `list_filter`; `flight_filter` (who you may fly) is always "squadron" in the app: an older settings file whose `flight_filter` was "all" becomes `list_filter` "all" on load and no longer lets you fly other squadrons' jets. `flight_filter="all"` stays for the smoke tests and tools.
+- Skip Turn on a stand-down day (nothing you may fly and no sortie pending) skips at once, with no confirmation; the question stays when you could fly something or have a sortie built.
+- Smoke: `check_31t_all_list_is_display_only`.
+
 ## v0.41.92, hot-ramp scramblers launch earlier; fuel lines in the debrief
 
 XO: "Begin 1 & 2." (scramblers get in the air too late; are the MiG-29s going home bingo?)
