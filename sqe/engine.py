@@ -496,7 +496,7 @@ class Session:
         """Is `other`'s target inside the merge circle around `anchor`'s?"""
         if self.settings.merge_mode != "area":
             return False
-        c, t = self.merge_center(anchor), self._pkg_xy(other)
+        c, t = self.merge_center(anchor), self._pkg_xy(other) or self._raid_xy(other)
         return c is not None and t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= self.merge_radius_m()
 
     def _postpone_if_short(self, orig: Package, emerg: Package) -> None:
@@ -678,6 +678,19 @@ class Session:
         return {"kind": kind, "eligible": bool(ok), "reason": "" if ok else why, "title": title, "text": text, "pkg": epkg.to_dict(),
                 "where": where, "number": number}
 
+    def dispatch_line(self, epkg: Package) -> str:
+        """v0.41.101: the in-universe line for an emergency you are not flying ("Our A-10Cs from Kobuleti have been dispatched to help"): who is
+        answering it, never the out-of-universe reason (your jet cannot do the job, no free pair)."""
+        st = self.state
+        fl = [f for f in epkg.flights if not f.tag] or list(epkg.flights)
+        names = list(dict.fromkeys(AIRCRAFT[f.aircraft].display + "s" for f in fl if f.aircraft in AIRCRAFT))
+        bases = list(dict.fromkeys(st.bases[f.base_id].name for f in fl if f.base_id in st.bases))
+        who = " and ".join(names) if names else "Other crews"
+        frm = f" from {' and '.join(bases)}" if bases else ""
+        if epkg.objective.type == ObjectiveType.CAS:
+            return f"Our {who}{frm} have been dispatched to help."
+        return f"Our {who}{frm} are scrambling to intercept."
+
     # ---- fly ---------------------------------------------------------------------------------------
     def fly(self, package_number: int, flight_id: str | None, scramble: bool = False):
         """Build the sortie. If an emergency came up for this package (emergency_for) and `scramble` is True and your squadron can take it, you fly the
@@ -704,8 +717,8 @@ class Session:
                 self._postpone_if_short(orig, epkg)
                 st.note(f"EMERGENCY: you were scrambled to {ev['where']} ({ev['kind'].lower()}); package #{orig.number} is left to the other squadrons.")
             else:
-                st.note(f"EMERGENCY at {ev['where']}: " + ("you stayed with your tasking." if ev["eligible"] else ev["reason"] + ".") + " The war handles it.")
-                if epkg.objective.type == ObjectiveType.CAS and self._inside_merge(pkg, epkg):
+                st.note(f"EMERGENCY at {ev['where']}: " + ("you stayed with your tasking." if ev["eligible"] else self.dispatch_line(epkg)) + " The war handles it.")
+                if epkg.objective.type in (ObjectiveType.CAS, ObjectiveType.FLEET_DEFENSE) and pkg.objective.type != ObjectiveType.FLEET_DEFENSE and self._inside_merge(pkg, epkg):
                     lead_extras = [epkg]
         PackageBuilder(st, self.d).assign_player(pkg, flight_id)
         self.options.hold_minutes = int(self.settings.hold_minutes)

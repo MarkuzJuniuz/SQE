@@ -591,12 +591,16 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             base2, spec2 = st.bases[lead.base_id], AIRCRAFT[lead.aircraft]
             tx2, ty2 = self._target_xy(xp)
             tx2, ty2 = self._jitter_primary(xp, tx2, ty2)
-            tgt2 = st.assets[xp.objective.target_id]
+            raid2 = xp.objective.type == ObjectiveType.FLEET_DEFENSE            # v0.41.101: a raid scramble folded in: its target is a field, not an asset
+            tgt2 = st.assets.get(xp.objective.target_id) if raid2 else st.assets[xp.objective.target_id]
+            if tgt2 is None:
+                tgt2 = SimpleNamespace(id=xp.objective.target_id, x=tx2, y=ty2)
             mshl2 = tm.safe_marshal(st, (base2.x, base2.y), bearing(base2.x, base2.y, tx2, ty2), (tx2, ty2))
             geom2 = make_geometry(base2.x, base2.y, tx2, ty2, spec2.profile, mshl2, carrier=base2.kind == BaseKind.CARRIER)
             skip = {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else set()
-            geom2.egr = (tm.first_safe_egress(st, tx2, ty2, geom2.hdg, skip) or
-                         tm.safe_egress(st, tx2, ty2, geom2.hdg, spec2.profile.egress_nm, tm.cluster_ids(tgt2)) or geom2.egr)
+            if not raid2:
+                geom2.egr = (tm.first_safe_egress(st, tx2, ty2, geom2.hdg, skip) or
+                             tm.safe_egress(st, tx2, ty2, geom2.hdg, spec2.profile.egress_nm, tm.cluster_ids(tgt2)) or geom2.egr)
             # timeline: this package pushes (start difference) minutes after yours. An EARLIER package has a negative offset: it is already underway when the mission starts.
             P0x = P0 + (hm(xp) - hm(anchor)) * 60.0
             geom2.tier = self._pick_tier(geom2, lead.role, spec2.profile, tx2, ty2, {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else ())
@@ -638,7 +642,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if xp.id not in ruin_ids:
                     self.warns.append(f"package #{xp.number} had already finished before your start and is not in this mission")
                 continue
-            if not ruined:
+            if not ruined and not raid2:
                 self._spawn_opfor_ground(xp, tx2, ty2, manifest, [(base2.x, base2.y), geom2.mshl, geom2.push, geom2.ip, (tx2, ty2), geom2.egr])
             freqs = [SimpleNamespace(callsign=f.callsign, mhz=round(128.0 + 0.5 * ((k * 7 + i * 3) % 18), 1)) for i, f in enumerate(xp.flights)]
             plan2 = SimpleNamespace(package_flights=freqs, freq=lambda slot, _k=k: 252.0 + 3.5 * (_k + 1))
@@ -651,6 +655,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     tots.append(tot_f)
                 if f.role == Role.CAS and tot_f:
                     cas_tot = tot_f
+            if raid2:
+                self._spawn_raid(xp, tx2, ty2, tg2.eta_s, geom2, manifest)       # the raiders themselves, timed to the scramble's station
             if xp.objective.type == ObjectiveType.CAS and xp.jtac:
                 self.armor_id = xp.objective.target_id
                 self.armor_center = self.site_pos.get(self.armor_id)
