@@ -2027,6 +2027,12 @@ def check_31zb_raid_setpiece(c):
         assert mine, "a Tomcat squadron can fly the setpiece"
         r = ses.fly(p.number, mine[0].id)                       # the mission builds with the raid in it (the group-splitting comes in the next part)
         assert r is not None and ses.state.pending, "flying the setpiece builds a mission"
+        import zipfile, re
+        mz = zipfile.ZipFile(next((TMP / "saves").glob("**/SQE_Sortie.miz"))).read("mission").decode()
+        nb_, ne_ = p.extra["bombers"], p.extra["escorts"]
+        assert len(set(re.findall(r'"(RAID-B-\d+)"', mz))) == nb_ and len(set(re.findall(r'"(RAID-E-\d+)"', mz))) == ne_, "every bomber and escort is in the mission"
+        assert (nb_ <= 4) or "Raid Bomber 2" in mz, "a raid of more than 4 bombers is several groups"
+        assert (ne_ <= 8) or "Raid Sweep 1" in mz, "a big raid sends a sweep ahead of the bombers"
         ses_a, pa, mine_a = res["A-10C"]
         assert not mine_a, "an A-10 cannot"
         assert "Skip Turn" in " ".join(narrative.setpiece_text(ses_a.state, pa, False, "A-10C"))

@@ -4,6 +4,7 @@ A mixin: `MissionBuilder` inherits these methods (like a C# partial class). They
 """
 from __future__ import annotations
 import copy
+import math
 import random
 
 from dcs import action, condition, mapping, planes, statics, task, triggers
@@ -27,6 +28,8 @@ RAID_PUSH_NM = 10             # v0.41.29: a raid's PUSH, this far from its marsh
 RAID_MSHL_MIN_NM = 60         # ...its marshal is at least this far from the target (judgment call: well outside blue's Patriot reach)
 RAID_MPS = 232.0              # a red raid's speed (450 kts), the same figure its placement always used
 RAID_MIN_NM = 40              # ...a raid with no time to hold starts no closer than this to its target (it is late instead)
+RAID_GROUP_GAP_S = 60         # v0.41.108: the bomber groups of a big raid follow each other, this far apart (judgment call)
+RAID_SWEEP_LEAD_S = 90        # ...and the raid's sweep escorts fly this far ahead of the first bomber group (judgment call)
 RAID_HOLD_MAX_S = 600         # ...and one with plenty of time appears at most 10 min before it must push
 RAID_EGRESS_NM = 30           # ...off target it turns 40 degrees off its way in and leaves this far before heading home     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
 ARM_LAUNCH_NM = 40            # v0.41.84: a red SEAD pair fires its Kh-31P this far from the field (judgment call: inside the 60 nm the Kh-31 page gives, with margin for a low launch)
@@ -366,8 +369,6 @@ class RaidSpawns:
             (sx, sy), seg_i = tm.point_back_along(path, back_)
             remaining = path[seg_i:]
             hit_s = back_ / V
-        names_ = ["PUSH"] + ["ING"] * (len(remaining) - 2) + ["BASE" if bool(ex.get("land")) else "FLEET"] if hold_until is not None else \
-                 ["ING"] * (len(remaining) - 1) + ["BASE" if bool(ex.get("land")) else "FLEET"]
         egr_ = offset(dx, dy, bearing(dx, dy, *remaining[-2] if len(remaining) > 1 else (sx, sy)) + 40, RAID_EGRESS_NM * NM)
         home_ = self._raid_bend([egr_, (ba.x, ba.y)], cvb)[1:]           # turn points round blue's Patriot fields, then its own field
         skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
@@ -375,15 +376,30 @@ class RaidSpawns:
         alt = ((12000 if ex.get("raider") == "Su_25" else 20000) if land else 30000) * FT
         apt = self.t.airports.get(cvb.airport) if (land and cvb.airport and not aim) else None
 
-        def build_group(name, cls, count, task_cls, pos, bomber=False):
+        fin_ = "BASE" if bool(ex.get("land")) else "FLEET"
+        back0 = 0.0 if hold_until is not None else back_
+        def start_at(shift_s):
+            """Where a group starts and which points it still has to fly, `shift_s` seconds later (+) or earlier (-) than the raid's lead."""
+            if hold_until is not None:
+                h = max(0.0, hold_until + shift_s)
+                return path[0], path[1:], h, max(0.0, h - RAID_HOLD_MAX_S)
+            b = min(L, max(RAID_MIN_NM * NM * 0.5, back0 + shift_s * V))
+            p_, si = tm.point_back_along(path, b)
+            return p_, path[si:], None, 0.0
+
+        def build_group(name, cls, count, task_cls, bomber=False, shift=0.0, behind_nm=0.0):
+            pos, rem, hold, act = start_at(shift)
+            if behind_nm and rem:
+                pos = offset(pos[0], pos[1], bearing(rem[0][0], rem[0][1], pos[0], pos[1]), behind_nm * NM)
+            nm_ = (["PUSH"] + ["ING"] * (len(rem) - 2) + [fin_]) if hold is not None else (["ING"] * (len(rem) - 1) + [fin_])
             g = self.m.flight_group(self.red, name, cls, None, pt(*pos), altitude=alt, speed=450 * KPH, maintask=task_cls, group_size=count)
-            if hold_until is not None:                         # its marshal: orbit until it must push
+            if hold is not None:                               # its marshal: orbit until it must push
                 ct_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
-                ct_.stop_after_time(int(hold_until)); g.points[0].tasks.append(ct_)
+                ct_.stop_after_time(int(hold)); g.points[0].tasks.append(ct_)
                 g.points[0].name = "MSHL"
-            for k, q in enumerate(remaining):
-                wp = g.add_waypoint(pt(*q), alt, 450 * KPH, names_[k])
-                if k == len(remaining) - 1 and bomber:
+            for k, q in enumerate(rem):
+                wp = g.add_waypoint(pt(*q), alt, 450 * KPH, nm_[k])
+                if k == len(rem) - 1 and bomber:
                     if land and apt is not None:
                         wp.tasks.append(task.BombingRunway(airport_id=apt.id))
                     elif land and aim:
@@ -395,42 +411,61 @@ class RaidSpawns:
                 g.add_waypoint(pt(*q), alt, 450 * KPH, "RTB" if k == len(home_) - 1 else "AVD")
             g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
             g.set_skill(skill)
-            if act_ >= 30:
-                self._late(g, act_)
+            if act >= 30:
+                self._late(g, act)
             return g
 
+        def sizes(n):
+            """pydcs makes one group of at most 4: a bigger raid is several groups of nearly equal size (12 -> 4+4+4, 6 -> 3+3)."""
+            k = max(1, math.ceil(n / 4))
+            return [n // k + (1 if i < n % k else 0) for i in range(k)]
+
         if land:
-            g = build_group("Raid Bomber 1", getattr(planes, ex.get("raider", "Su_24M")), ex["bombers"], task.GroundAttack if aim else task.RunwayAttack, (sx, sy), bomber=True)
+            cls_b, task_b = getattr(planes, ex.get("raider", "Su_24M")), (task.GroundAttack if aim else task.RunwayAttack)
             load = enemy_strike_loadout(ex.get("raider", "Su_24M"))
         else:
-            g = build_group("Raid Bomber 1", planes.Tu_22M3, ex["bombers"], task.AntishipStrike, (sx, sy), bomber=True)
+            cls_b, task_b = planes.Tu_22M3, task.AntishipStrike
             load = enemy_bomber_loadout("Tu_22M3")
-        if ex.get("bombers", 0) > 4 or ex.get("escorts", 0) > 4:       # pydcs makes one group of at most 4: the big raid is split into several groups in the boss-fight mission step
-            self.warns.append(f"raid of {ex.get('bombers')} bombers and {ex.get('escorts', 0)} escorts shown with at most 4 aircraft per group")
-        names = []
-        for j, u in enumerate(g.units, 1):
-            u.name = f"RAID-B-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
         if not load:
             self.warns.append(f"{ex.get('raider', 'Tu-22M3')}: no bomb or missile found; the raid is unarmed.")
-        manifest.add("enemy_air", ex["bomber_wing"], names, ac=ex.get("raider", "Tu_22M3"), raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
-                     raid_arrive_s=float(hit_s))
+        bomber_gs, nb_ = [], 0
+        for gi, n_ in enumerate(sizes(ex["bombers"])):         # v0.41.108: a big raid is several groups, a minute apart on the same route
+            g = build_group(f"Raid Bomber {gi + 1}", cls_b, n_, task_b, bomber=True, shift=gi * RAID_GROUP_GAP_S)
+            names = []
+            for u in g.units:
+                nb_ += 1
+                u.name = f"RAID-B-{nb_}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+            manifest.add("enemy_air", ex["bomber_wing"], names, ac=ex.get("raider", "Tu_22M3"), raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
+                         raid_arrive_s=float(hit_s + gi * RAID_GROUP_GAP_S))
+            bomber_gs.append(g)
         self._spawn_raid_target(package, cvb, aim, dx, dy, manifest)
         if land and ex.get("arm") and not aim:
             self._spawn_raid_arm(package, ex, cvb, path, V, t_tgt, alt, skill, home_, dx, dy, manifest)
         if ex.get("escorts"):
-            back = offset(sx, sy, bearing(remaining[0][0], remaining[0][1], sx, sy), 3 * NM)
-            eg = build_group("Raid Escort 1", getattr(planes, ex["escort_type"]), ex["escorts"], task.Escort, back)
-            # v0.41.29: the escorts stay with the bombers and fight only what comes within their class's reach of them (Su-27 25 nm, the rest
-            # 15 nm), up to the bombers' egress point; home once their air-to-air missiles are gone. No chasing.
-            esc_nm_ = A2A_ZONE_NM[ex["escort_type"] in RED_LONG_RANGE]
-            eg.points[0].tasks = [t_ for t_ in eg.points[0].tasks if getattr(t_, "Id", "") != "Escort"]      # pydcs's default escort task has no group
-            eg.points[0].tasks.insert(0, task.EscortTaskAction(group_id=g.id, engagement_max_dist=int(esc_nm_ * NM), lastwpt=len(g.points) - 1 - len(home_),
-                                                                targets=[task.Targets.All.Air.id], position={"x": -1000, "y": 300, "z": 500}))
-            from .mission_builder import AAM_WEAPONS            # lazy: the builder's module imports this one
-            rtbe_ = task.OptRTBOnOutOfAmmo(); rtbe_.params["action"]["params"]["value"] = AAM_WEAPONS
-            eg.points[0].tasks.append(rtbe_)
+            # v0.41.108: the escorts of a big raid split in two jobs. Half (at least 3 groups) fly a sweep RAID_SWEEP_LEAD_S ahead of the bombers on the same
+            # route and fight what they meet; the rest escort the bomber groups (spread over them). A small raid keeps its single escort group.
+            esz = sizes(ex["escorts"])
+            n_sweep = len(esz) // 2 if len(esz) >= 3 else 0
             eload = enemy_cap_loadout(ex["escort_type"])
-            en = []
-            for j, u in enumerate(eg.units, 1):
-                u.name = f"RAID-E-{j}"; u.pylons = copy.deepcopy(eload); en.append(u.name); self._note_jam(u)
-            manifest.add("enemy_air", ex["escort_wing"], en, ac=ex["escort_type"])
+            from .mission_builder import AAM_WEAPONS            # lazy: the builder's module imports this one
+            esc_nm_ = A2A_ZONE_NM[ex["escort_type"] in RED_LONG_RANGE]
+            ne_ = 0
+            for ei, n_ in enumerate(esz):
+                if ei < n_sweep:
+                    eg = build_group(f"Raid Sweep {ei + 1}", getattr(planes, ex["escort_type"]), n_, task.FighterSweep, shift=-RAID_SWEEP_LEAD_S - 15 * ei)
+                else:
+                    ci = ei - n_sweep
+                    bg = bomber_gs[ci * len(bomber_gs) // max(1, len(esz) - n_sweep)]
+                    eg = build_group(f"Raid Escort {ci + 1}", getattr(planes, ex["escort_type"]), n_, task.Escort, shift=bomber_gs.index(bg) * RAID_GROUP_GAP_S, behind_nm=3)
+                    # v0.41.29: the escorts stay with the bombers and fight only what comes within their class's reach of them (Su-27 25 nm, the rest
+                    # 15 nm), up to the bombers' egress point; home once their air-to-air missiles are gone. No chasing.
+                    eg.points[0].tasks = [t_ for t_ in eg.points[0].tasks if getattr(t_, "Id", "") != "Escort"]      # pydcs's default escort task has no group
+                    eg.points[0].tasks.insert(0, task.EscortTaskAction(group_id=bg.id, engagement_max_dist=int(esc_nm_ * NM), lastwpt=len(bg.points) - 1 - len(home_),
+                                                                        targets=[task.Targets.All.Air.id], position={"x": -1000, "y": 300, "z": 500}))
+                rtbe_ = task.OptRTBOnOutOfAmmo(); rtbe_.params["action"]["params"]["value"] = AAM_WEAPONS
+                eg.points[0].tasks.append(rtbe_)
+                en = []
+                for u in eg.units:
+                    ne_ += 1
+                    u.name = f"RAID-E-{ne_}"; u.pylons = copy.deepcopy(eload); en.append(u.name); self._note_jam(u)
+                manifest.add("enemy_air", ex["escort_wing"], en, ac=ex["escort_type"])
