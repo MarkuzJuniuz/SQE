@@ -13,6 +13,7 @@ from .state import CampaignState
 
 NM = 1852.0
 MAX_FLIGHT = 4
+CLUSTER_NM, SALVO_4_NEIGHBOURS, SALVO_8_NEIGHBOURS = 25, 2, 4     # judgment calls (v0.41.82): radius, neighbours for a 4-ship first / both HARM flights
 CARRIER_PLAYER_FLIGHT_MAX = 2        # catapult spots are limited; keep the player's cat-start flight small
 PLAYER_ROLE_PREFERENCE = {Role.STRIKE: 5, Role.SEAD: 4, Role.TARCAP: 3, Role.ESCORT: 2, Role.SWEEP: 2, Role.CAP: 1, Role.CAS: 0}
 JTAC_OBJECTIVES = {ObjectiveType.CAS}
@@ -200,6 +201,13 @@ class PackageBuilder:
             return False
         return True
 
+    def _cluster_sites(self, obj) -> int:
+        """Live SAM sites other than the target within CLUSTER_NM of it (v0.41.82)."""
+        a = self.state.assets.get(obj.target_id)
+        if a is None:
+            return 0
+        return sum(1 for o, _ in tm.rings(self.state) if o.id != a.id and math.hypot(o.x - a.x, o.y - a.y) / NM <= CLUSTER_NM)
+
     def _defended(self, obj) -> bool:
         if obj.type in _FLEET:
             return False
@@ -216,7 +224,10 @@ class PackageBuilder:
         elif obj.type == ObjectiveType.DEAD and obj.aim == "STANDOFF":      # under a long-range SAM: one package, HARMs and JSOWs together
             # Two HARM flights, both required: one on the long-range radars, one on the Tors, from the same salvo (equal weight, so the Tors are
             # busy with HARMs when the JSOWs arrive). The Standoff DEAD flight is JSOW-capable only (Hornet, Viper): no Tomcats on DEAD here.
-            tmpl = [Slot(Role.SEAD, 2), Slot(Role.STRIKE, 4, kit="JSOW"), Slot(Role.SEAD, 2)]     # the JSOW flight is picked before the second HARM flight: without it nothing is destroyed
+            # v0.41.82: the HARM flights grow with the live SAM sites around the target (judgment call, no source: a bigger cluster needs a bigger salvo)
+            nb = self._cluster_sites(obj)
+            tmpl = [Slot(Role.SEAD, 4 if nb >= SALVO_4_NEIGHBOURS else 2), Slot(Role.STRIKE, 4, kit="JSOW"),
+                    Slot(Role.SEAD, 4 if nb >= SALVO_8_NEIGHBOURS else 2)]     # the JSOW flight is picked before the second HARM flight: without it nothing is destroyed
         elif obj.type == ObjectiveType.CAS and obj.aim == "SEAD":           # v0.41.20: CAS under a live SA-2/3/6: the HARM escort is not optional
             tmpl = [Slot(Role.CAS, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
         if is_sweep(obj):                                                    # Fighter Sweep: 4-ships only, one per 4 bandits beyond the packages' own cover

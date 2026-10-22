@@ -1550,6 +1550,27 @@ def check_31i_hot_ramp_scrambles(c):
     print(f"[hot ramp] {len(ramp_on)} pairs on the ramp with the setting on, {len(ramp_off)} off")
 
 
+def check_31k_salvo_size(c):
+    """v0.41.82: the Standoff DEAD's HARM flights grow with the live SAM sites around the target (2 / 4+2 / 4+4)."""
+    from sqe import packages as pk
+    seen = set()
+    for seed in (3, 7, 11, 19, 23):
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses.new("Smoke salvo", "F-16C", 3, seed=seed)
+        for p_ in ses.packages():
+            o = p_.objective
+            if o.type.value != "DEAD" or o.aim != "STANDOFF":
+                continue
+            planner = pk.PackageBuilder(ses.state)
+            nb = planner._cluster_sites(o)
+            sl = [x for x in planner._slots(o, True, 0) if x.role.value == "SEAD"]
+            want = (4 if nb >= pk.SALVO_4_NEIGHBOURS else 2, 4 if nb >= pk.SALVO_8_NEIGHBOURS else 2)
+            assert tuple(x.size for x in sl) == want, (nb, [x.size for x in sl])
+            seen.add(want)
+    assert seen, "no Standoff DEAD package in the sample"
+
+
 def check_31j_borrow_switches(c):
     """v0.41.81: the Experimental tab's per-side borrowing switches: off, that side's SAM orders do not run overnight; on (default), they do."""
     from sqe import sams, war
@@ -3003,6 +3024,7 @@ CHECKS = [
     check_31h_cap_replacement,
     check_31i_hot_ramp_scrambles,
     check_31j_borrow_switches,
+    check_31k_salvo_size,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,

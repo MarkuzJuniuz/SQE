@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.82, HARM salvo scales with the SAM cluster (Standoff DEAD)
+
+XO: "Is it out of doctrine to always have 4 ships for harms and jsows? Maybe it's the reason why the sams aren't saturated enough?"
+- The Standoff DEAD package's HARM flights were always 2 + 2 jets whatever surrounded the target. Now the count of live serious SAM sites within 25 nm of the target sets the size: 0-1 neighbours 2 + 2, 2-3 neighbours 4 + 2, 4 or more 4 + 4. The JSOW flight stays at 4.
+- All thresholds (25 nm, 2, 4) are judgment calls, no public source. Short of jets in the squadron pool, the flight is built smaller as before.
+- Smoke check `check_31k_salvo_size`.
+
 ## v0.41.81, Experimental settings tab: borrowing per side
 
 * **XO: "a setting that lets me turn borrowing on and off per side, on its own Experimental tab; the ECM script goes there too."** Settings has a new last tab, **Experimental**: *Red borrowing*, *Blue borrowing* (new, `borrow_red` / `borrow_blue`, both on = today's behaviour), the **ECM script** (moved from Mission Build) and **Hot ramp scrambles** (v0.41.80, moved from General).
