@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.92, hot-ramp scramblers launch earlier; fuel lines in the debrief
+
+XO: "Begin 1 & 2." (scramblers get in the air too late; are the MiG-29s going home bingo?)
+- Read from XO's 2026-10-21 runs (`alerts` called / airborne times): with hot ramp on, a pair took 324 to 566 s from the call to the air at Gudauta and 283 to 369 s at Nalchik; the hidden runway start is about 2 minutes (`ALERT_TAXI_S`). So the late scramblers are the taxi, not the detection range.
+- With the hot-ramp setting on, every alert field's scramble circle is wider by `RAMP_LEAD_NM` 30 nm (what blue covers in about 4 extra minutes at 500 kt; judgment call from those runs), never past 0.85 x the field's distance from the fight + 15 nm (`threatmap.field_detect_nm`, `set_ramp_lead`). The marshal, sweep and carrier CAP keep-outs read the same radius, so planning stays consistent (the lead is set from the setting at `plan_day` and at every build). With the setting off nothing changes.
+- The debrief now has a "Fuel:" line for every AI group that was airborne and ended the mission at 35 % fuel or less (from the hook's 30-second tracks; `BINGO_REPORT_PCT`), with the time it reached bingo (20 %, the hook's own `BINGO_FUEL`). No hook change.
+- Finding: none of the red pairs in those runs were near bingo (fuel 52 to 81 % at the end). The MiG-29 pairs that went home (Bandit 3 landed at 33 minutes with 52 % fuel) were patrols whose planned window ended with their relief already on station, not fuel.
+- Smoke: `check_31s_scramble_timing_fuel`.
+
 ## v0.41.91, scramblers take a station and fly a complete route
 
 XO: "I pretty much think scramblers really should mirror fighter sweep tasks ... stick forward towards the attackers but stay over SAM protection ... the waypoints should be complete like the normal TARCAPs, escorts or something."

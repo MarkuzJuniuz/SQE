@@ -989,6 +989,8 @@ if (CVREC.cv or CVREC.x) and not AITEST then
 end
 dump()
 '''
+BINGO_PCT = 20            # v0.41.92: the hook's bingo for pairs (BINGO_FUEL in the Lua below); the debrief fuel lines use it
+BINGO_REPORT_PCT = 35      # ...and report a flight that ended the mission at or under this much fuel
 
 
 def _jamcfg() -> str:
@@ -1262,6 +1264,19 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         else:
             out["lines"].append(f"Alert {al['g']} ({al.get('ty', '?')}, {al.get('b', '?')}): called at {hm_(al['called'])}, " +
                                 ("NEVER GOT AIRBORNE (stuck on the ground)" if al.get("stuck") else "not airborne yet when the mission ended"))
+    # v0.41.92: fuel. The lead's fuel is tracked every 30 s (`tracks`: [t, x, z, alt_m, fuel_%, kts]); a flight that ended the mission low explains the
+    # pairs that went home early (bingo). Reported for every AI group that was airborne and ended at BINGO_REPORT_PCT or less.
+    ty_ = {a_["g"]: a_.get("ty", "") for a_ in (data.get("alerts") or [])}
+    for gn_, tr_ in sorted((data.get("tracks") or {}).items()):
+        fl_ = [p_ for p_ in tr_ if len(p_) >= 6 and p_[3] > 300 and p_[5] > 120 and 0 <= p_[4] <= 100]
+        if len(fl_) < 4:
+            continue
+        last_ = fl_[-1]
+        if last_[4] > BINGO_REPORT_PCT:
+            continue
+        cross_ = next((p_ for p_ in fl_ if p_[4] <= BINGO_PCT), None)
+        out["lines"].append(f"Fuel: {gn_}{' (' + ty_[gn_] + ')' if ty_.get(gn_) else ''} airborne {int(fl_[0][0]) // 60}-{int(last_[0]) // 60} min, fuel {fl_[0][4]}% to {last_[4]}%"
+                            + (f", at bingo ({BINGO_PCT}%) from {int(cross_[0]) // 60} min" if cross_ else ""))
     cf_ = data.get("cfg") or {}
     if cf_:
         sp_ = data.get("splash") or {}
