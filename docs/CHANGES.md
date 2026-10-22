@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.99, hot runway starts at your own field become a sub-setting
+
+XO: "a subsetting ... The main setting is for those not of same base. Then the subsetting is the one where it does it even on same base ... If main setting is off then the subsetting cannot be on."
+- New `hot_runway_own_field` (Settings > Experimental, "...also at my own field", off by default), indented under "Hot starts on the runway (AI flights)". The main setting now covers only the other fields; the own-field rules of v0.41.97 (release after your takeoff, none in the last 10 min before your planned landing, hook holds while you are inbound) run only with the sub-setting.
+- The sub-setting is greyed out and cleared while the main one is off; the settings loader and `engine` also force it off, so it can never be on alone.
+- Not built yet (XO's "dupes"): the runway-plus-airborne copy of each own-field flight so a flight can still air-start when you are about to land; until then a flight caught by the inbound check is delayed.
+- Smoke: `check_31v_hot_runway` checks that the main setting alone releases nothing at your field and that the sub-setting is ignored without the main one.
+
+
 ## Docs: audit of stale text (no version change)
 
 XO: "check all docs for fellow CCs if they're updated and nothing is stale."

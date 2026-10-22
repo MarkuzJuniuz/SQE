@@ -144,6 +144,7 @@ class MissionOptions:
     cap_minutes: int = 40               # time on station for CAP flights
     hot_ramp_scrambles: bool = False    # v0.41.80: alert / scramble pairs at land fields start hot on the ramp (see _alert_group)
     hot_runway_starts: bool = False     # v0.41.96: AI package flights from land fields other than yours start on the runway (see _hot_slot)
+    hot_runway_own_field: bool = False  # v0.41.99: with hot_runway_starts: also flights at the player's own field (see _hot_slot)
     ai_unlimited_fuel: bool = True      # Retribution-style: ON until the push, OFF for the combat leg, ON again from egress
     enemy_unlimited_fuel: bool = False
     ai_despawn_on_land: bool = True
@@ -1439,6 +1440,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if base.id not in self.apt or act_raw < 0:
             return None
         own = base.id == getattr(self, "_main_base", None)
+        if own and not getattr(self.o, "hot_runway_own_field", False):
+            return None                  # v0.41.99: your own field only with the sub-setting
         p_launch, p_rtb = getattr(self, "_p_times", (0.0, 1e9))
         if any(x is not f and x.callsign == f.callsign for x in package.flights):
             return None                  # a guard shares this callsign (v0.41.88): the hook finds a group by name, so it stays an airborne spawn
