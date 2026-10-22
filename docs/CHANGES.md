@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.111, red BASECAPs called in with the scramblers (step 2 of 2, red side)
+
+XO: red's lone 2-ship waited for the strike while the rest of the wing sat on the ramp. The patrols should be called to the hotspot when the scramblers are called, and fly back to their station afterwards. Blue follows in the next part.
+- CALL-IN: a red CAP patrol that can answer (hotspot 10 to 110 nm from its station, clear of every carrier's reach, red not outgunned) now has a hotspot leg on its route, placed AFTER its landing point: HOTSPOT (orbit, engages inside its own circle), BACK (orbit on the station to the end of the shift), the racetrack leg and a second landing. The hotspot is the station an alert pair of its own field would take (`scramble.red_station`: over a covering SAM, else the covered point nearest the target, else over the field).
+- THE CALL: every alert trigger also sets a flag; one trigger fires when it is set (or, with no alert pair in the mission, when blue enters the detection circle of the nearest red field) and runs `SQE_CALLIN` for each armed patrol. It sends the pair to the hotspot with a Lua `SwitchWaypoint`, and `CALLIN_STAY_S` (8 minutes) plus the flight time later sends it back to the BACK waypoint. A pair already sent home by the hook (lost a jet, winchester, bingo) is left alone. The SAM-guard call-in of v0.41.10 now uses the same leg (the old pushed engage task never came back: probe runs of 2026-10-22).
+- Scrambled alert pairs now fly home `ALERT_STAY_AFTER_TOT_S` (20 minutes) after the time on target instead of an hour.
+- What the probe runs showed (tools/callin_probe.py, PRs #168 to #171): a flag-released orbit works but a pair whose shift ends would fly it too; a pushed `EngageTargetsInZone` wanders and does not return; `GoToWaypoint` is not supported by DCS ("No state creator"); `SwitchWaypoint` works, at once with from = 1 and only after the current leg with from = the current waypoint. All of it from one run each: judgment calls until XO has flown it.
+- Judgment calls: `CALLIN_REACH_NM` 110 (the existing "in the area" radius), `CALLIN_MIN_NM` 10, `CALLIN_STAY_S` 480. Not done: blue's patrols (next part), the fight-over return (it is time-based), a second pair per area.
+
 ## Tools only (no version bump): call-in probe, fourth version
 
 XO's third run: a control pair that is never called holds a 20 nm racetrack; a flag-released route (V3) flew to the hotspot, orbited and came home; pushed engage tasks (today's red SAM-guard call-in) did not come back. Problem with the flag route: a pair whose shift ends, or that bugs out, would also fly the hotspot leg. `tools/callin_probe.py` now tests jumping to the hotspot leg only when called: a Lua `SwitchWaypoint` command (V4), the same with a wrong `from` index (V6), and a pushed `GoToWaypoint` task (V5), against the never-called control. Speeds are now km/h like pydcs wants (the old probe flew at 220 km/h).

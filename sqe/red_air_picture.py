@@ -7,6 +7,7 @@ import copy
 import math
 
 from dcs import action, condition, mapping, planes, task, triggers
+from dcs.translation import String
 from dcs.unit import Skill
 
 from . import reactive, redair, scramble
@@ -24,6 +25,29 @@ CAP_FLEET_KEEPOUT_NM = 78      # Red's known CAP stations stay at least this far
 RELIEF_HORIZON_S = 3600       # v0.41.77: a patrol's relief is flown in this mission when it is due within this long after the time on target (judgment call)
 ALERT_REACH_NM = 130          # alert pairs come only from fields this close to the target (the far ones could not arrive in time)
 A2A_ZONE_NM = {True: 25, False: 15}
+# v0.41.111, the BASECAP call-in (XO 2026-10-22): when the scramblers are called, the patrols that can reach the hotspot are called to it too, stay a while, then
+# fly back to their station. The route has a hotspot leg AFTER the landing point and a Lua SwitchWaypoint jumps a CALLED pair onto it (probe runs of 2026-10-22:
+# a flag-released orbit works but sends every pair there at the end of its shift; a pushed engage task never came back; GoToWaypoint is not supported by DCS;
+# SwitchWaypoint worked, immediately with from = 1, only after the leg with from = the current waypoint).
+CALLIN_REACH_NM = 110         # a patrol answers a hotspot at most this far from its station (judgment call)
+CALLIN_MIN_NM = 10            # ...and it is not worth a call when the hotspot is this close already
+CALLIN_STAY_S = 480           # how long a called pair stays at the hotspot before it flies back (judgment call: 8 minutes)
+ALERT_STAY_AFTER_TOT_S = 1200   # a scrambled pair flies home this long after the time on target (was an hour, i.e. never in the sortie)
+CALLIN_LUA = (
+    "SQE_CALLED = SQE_CALLED or {}; "
+    "function SQE_CALLIN(n, hot, back, stay, bf) "
+    "if SQE_CALLED[n] then return end; "
+    "local g = Group.getByName(n); if not g or not g:isExist() then return end; "
+    "if trigger.misc.getUserFlag(tostring(bf)) == 1 then return end; "
+    "SQE_CALLED[n] = true; "
+    "pcall(function() g:getController():setCommand({id='SwitchWaypoint', params={fromWaypointIndex=1, goToWaypointIndex=hot}}) end); "
+    "env.info('SQECALLIN ' .. n .. ' called at ' .. math.floor(timer.getTime())); "
+    "timer.scheduleFunction(function() local gg = Group.getByName(n); "
+    "if gg and gg:isExist() and trigger.misc.getUserFlag(tostring(bf)) ~= 1 then "
+    "pcall(function() gg:getController():setCommand({id='SwitchWaypoint', params={fromWaypointIndex=1, goToWaypointIndex=back}}) end); "
+    "env.info('SQECALLIN ' .. n .. ' back to station at ' .. math.floor(timer.getTime())) end end, nil, timer.getTime() + stay) "
+    "end"
+)
 
 
 class RedAirPicture:
@@ -145,6 +169,59 @@ class RedAirPicture:
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
         manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
 
+    def _arm_callin(self, g, ap, st_xy, hot_xy, zone_nm, alt, spd, end_s, tot_s, bf_, cp, tx, ty) -> None:
+        """v0.41.111: adds the hotspot leg AFTER the landing point of a patrol route: HOTSPOT (orbit, engages inside its own circle), BACK (orbit on the
+        station until the shift ends), the racetrack leg and a second landing. Nothing flies it unless a SwitchWaypoint (SQE_CALLIN) jumps the pair onto
+        it. A pair sent home by the hook (bf_) ends both orbits at once and goes home."""
+        pt = lambda x, y: mapping.Point(x, y, self.t)
+        sx, sy = st_xy
+        hx, hy = hot_xy
+        w_h = g.add_waypoint(pt(hx, hy), alt, spd, "HOTSPOT")
+        hot_idx = len(g.points)
+        w_h.tasks.append(task.EngageTargetsInZone(mapping.Vector2(hx, hy), int(zone_nm * NM), [task.Targets.All.Air]))
+        ch = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
+        ch.stop_after_time(int(tot_s + 7200))
+        ch.stop_if_user_flag(bf_, True)
+        w_h.tasks.append(ch)
+        cb = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
+        cb.stop_after_time(int(end_s))
+        cb.stop_if_user_flag(bf_, True)
+        g.add_waypoint(pt(sx, sy), alt, spd, "BACK").tasks.append(cb)
+        g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
+        self._land_home(g, ap)
+        stay = int(dist(sx, sy, hx, hy) / max(spd, 1.0)) + CALLIN_STAY_S
+        self._hot_calls.append({"g": g.name, "hot": hot_idx, "back": hot_idx + 1, "stay": stay, "bf": bf_})
+
+    @staticmethod
+    def _callin_call(c) -> str:
+        return f"SQE_CALLIN('{c['g']}',{c['hot']},{c['back']},{c['stay']},{c['bf']})"
+
+    def _hot_flag_get(self) -> int:
+        """The flag every alert-pair scramble trigger also sets: 'the scramblers have been called' (v0.41.111)."""
+        if not self._hot_flag:
+            self._flag_n += 1
+            self._hot_flag = self._flag_n
+        return self._hot_flag
+
+    def _wire_callins(self, wings, tx, ty) -> None:
+        """v0.41.111: the call itself. One trigger defines SQE_CALLIN at the start; one fires when the scramblers are called (the flag the alert triggers set,
+        or, when the mission has no alert pair, the detection circle of the nearest red field) and calls every armed patrol."""
+        t0 = triggers.TriggerOnce(comment="define SQE_CALLIN")
+        t0.add_condition(condition.TimeAfter(1))
+        t0.add_action(action.DoScript(String(CALLIN_LUA)))
+        self.m.triggerrules.triggers.append(t0)
+        t1 = triggers.TriggerOnce(comment="call in the patrols")
+        if self._hot_flag:
+            t1.add_condition(condition.FlagIsTrue(self._hot_flag))
+        else:
+            wa = min(wings, key=lambda w_: dist(w_[1].x, w_[1].y, tx, ty))
+            zx_, zy_, zr_ = self._field_zone(wa[1], tx, ty)
+            zone = self.m.triggers.add_triggerzone(mapping.Point(zx_, zy_, self.t), zr_ * NM, True, f"callin {wa[1].id}")
+            t1.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
+        for c in self._hot_calls:
+            t1.add_action(action.DoScript(String(self._callin_call(c))))
+        self.m.triggerrules.triggers.append(t1)
+
     @staticmethod
     def _land_home(g, ap) -> None:
         """v0.41.91: every red patrol / alert route ends with a landing at its own field (before: the last point was an orbit or the station, and a
@@ -187,6 +264,7 @@ class RedAirPicture:
         from .war import covering_sams
         own_ = (tm.cluster_ids(tga_) | {x_.id for x_ in covering_sams(st, tga_)}) if tga_ is not None else set()   # the sites blue comes for: defended at any odds
         self._red_held = []
+        self._hot_calls, self._hot_flag = [], 0
         for i in range(n_fl):
             if i < n_cap:
                 pf_ = self._red_sel[i]
@@ -230,13 +308,26 @@ class RedAirPicture:
                     if not redair.commits(d, [t_ for t_ in mates_ for _ in (0, 1)], blue_aa):
                         callin_ = False                                     # outgunned and its site is not the target: it holds its station
                         self._red_held.append({"id": pf_["id"], "why": "callin"})
-                if callin_:
-                    # v0.41.10: called in. When blue comes within RED_CALLIN_NM of the SAM site this pair guards, it is sent to fight over the site
-                    g.add_trigger_action(task.EngageTargetsInZone(mapping.Vector2(pf_["gx"], pf_["gy"]), int(RED_CALLIN_ZONE_NM * NM), [task.Targets.All.Air]))
+                ap_home = self.t.airports.get(a.airport) if a.airport else None
+                end_s_ = int(max(tot_s + 300, (pf_["end"] - self._start_min) * 60))
+                # v0.41.111: called in with the scramblers, to the station an alert pair of its own field would take (a pair that is outgunned stays home:
+                # `callin_` is already false for one that guards a site which is not the target; a patrol with no site link is checked here)
+                hot_xy, zone_nm = None, A2A_ZONE_NM[tname in RED_LONG_RANGE]
+                if pf_["kind"] == "CAP" and (callin_ or (pf_.get("gx") is None and redair.commits(d, [tname] * 2, blue_aa))):
+                    (hx_, hy_), _why = scramble.red_station(st, (a.x, a.y), tx, ty)
+                    if CALLIN_MIN_NM <= dist(sx, sy, hx_, hy_) / NM <= CALLIN_REACH_NM and not any(dist(hx_, hy_, kx, ky) < knm * NM for kx, ky, knm in self._fleet_keepout()):
+                        hot_xy = (hx_, hy_)
+                if hot_xy is None and callin_:
+                    hot_xy, zone_nm = (pf_["gx"], pf_["gy"]), RED_CALLIN_ZONE_NM       # v0.41.10: the site it guards
+                if hot_xy is not None:
+                    self._arm_callin(g, ap_home, (sx, sy), hot_xy, zone_nm, alt, spd, end_s_, tot_s, bf_, cp, tx, ty)
+                if callin_ and hot_xy is not None:
+                    # v0.41.10: when blue comes within RED_CALLIN_NM of the SAM site this pair guards it is called as well (v0.41.111: by the hotspot leg of
+                    # its route, so it comes back to its station; the pushed engage task never did)
                     zc_ = self.m.triggers.add_triggerzone(pt(pf_["gx"], pf_["gy"]), RED_CALLIN_NM * NM, True, f"callin {g.name}")
                     tc_ = triggers.TriggerOnce(comment=f"call in {g.name} to {pf_.get('guard')}")
                     tc_.add_condition(condition.PartOfCoalitionInZone("blue", zc_.id))
-                    tc_.add_action(action.AITaskPush(g.id, 1))
+                    tc_.add_action(action.DoScript(String(self._callin_call(self._hot_calls[-1]))))
                     self.m.triggerrules.triggers.append(tc_)
                     self._callins.append({"g": g.name, "site": pf_.get("guard")})
             else:                                           # alert: on the runway, scrambles when detected
@@ -259,9 +350,11 @@ class RedAirPicture:
                 trig.add_action(action.SetFlag(self._alerts[-1]["f"]) if how_ == "rwy" else action.AITaskPush(g.id, 1))
                 if how_ == "ramp":
                     trig.add_action(action.SetFlag(self._alerts[-1]["f"]))
+                if self._hot_calls:
+                    trig.add_action(action.SetFlag(self._hot_flag_get()))      # v0.41.111: the patrols are called with the scramblers
                 self.m.triggerrules.triggers.append(trig)
                 ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
-                ct.stop_after_time(int(tot_s + 3600))
+                ct.stop_after_time(int(tot_s + ALERT_STAY_AFTER_TOT_S))                  # v0.41.111: was an hour (= never in the sortie)
                 (ix_, iy_), _why = scramble.red_station(st, (a.x, a.y), tx, ty)          # v0.41.91: a defensive station, not the target itself
                 g.add_waypoint(pt(ix_, iy_), alt, spd, "INTERCEPT").tasks.append(ct)
                 self._land_home(g, ap)
@@ -277,3 +370,5 @@ class RedAirPicture:
             if i < n_cap and pf_["kind"] == "CAP":
                 self._spawn_red_relief(pf_, self._cap_plan[i], i, manifest, skill, tot_s, tx, ty, alt, spd)
                 self._spawn_red_standby(pf_, self._cap_plan[i], i, g.name, bf_, wings, manifest, skill, tot_s, tx, ty, alt, spd)
+        if self._hot_calls:
+            self._wire_callins(wings, tx, ty)

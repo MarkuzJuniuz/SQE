@@ -2086,6 +2086,69 @@ def check_31zc_raid_quiet_and_hit(c):
         bombers.desperation = real
 
 
+def check_31zd_red_callin(c):
+    """v0.41.111: the BASECAP call-in. A red patrol that can answer the hotspot has its route extended AFTER the landing point (HOTSPOT, BACK, racetrack leg,
+    a second landing), the mission defines SQE_CALLIN and calls it from a trigger, the call's waypoint numbers match the route, a pair outgunned or out of
+    reach is left alone, and the Lua itself does what it should (called once, comes back after the stay, a pair already sent home is not touched)."""
+    import random
+    import re as _re
+    import zipfile as _zf
+    import dcs.lua as dlua
+    from sqe import red_air_picture as rap
+    found = None
+    for lvl, seed in ((3, 3), (3, 7), (2, 5), (3, 11), (2, 9), (3, 13), (3, 17), (3, 19)):
+        random.seed(seed)
+        s = fresh_session(lvl, seed)
+        for day in range(5):
+            for pk in [p_ for p_ in s.packages() if s.flyable(p_)][:4]:
+                s.fly(pk.number, s.flyable(pk)[0].id)
+                raw = _zf.ZipFile(s.settings.sortie_miz).read("mission").decode("utf-8", "ignore")
+                calls = set(_re.findall(r"SQE_CALLIN\('([^']+)',(\d+),(\d+),(\d+),(\d+)\)", raw))
+                s.state.pending = None
+                if calls:
+                    found = (raw, calls)
+                    break
+            if found:
+                break
+            s.skip_day()
+        if found:
+            break
+    assert found, "some mission has a red patrol answering a hotspot"
+    raw, calls = found
+    m = dlua.loads(raw)["mission"]
+    grp = {}
+    for co in m["coalition"]["red"]["country"].values():
+        for g in ((co.get("plane") or {}).get("group") or {}).values():
+            grp[g["name"]] = g
+    assert "define SQE_CALLIN" in raw and "SwitchWaypoint" in raw
+    for n, hot, back, stay, bf in calls:
+        pts = grp[n]["route"]["points"]
+        hot, back = int(hot), int(back)
+        kinds = [pts[i].get("type") for i in range(1, len(pts) + 1)]
+        assert kinds[hot - 2] == "Land" and kinds[-1] == "Land" and len(pts) == hot + 3 and back == hot + 1, (n, kinds, hot, back)
+        assert 0 < int(stay) < 3600
+    # the Lua, run in a mock DCS (lupa)
+    try:
+        from lupa import LuaRuntime
+    except ImportError:
+        LuaRuntime = None
+    if LuaRuntime:
+        L = LuaRuntime(unpack_returned_tuples=True)
+        L.execute("cmds={}; LOGS={}; flags={}; sched={}; env={info=function(s) table.insert(LOGS,s) end}; "
+                  "trigger={misc={getUserFlag=function(f) return flags[f] or 0 end}}; "
+                  "timer={getTime=function() return 100 end, scheduleFunction=function(fn,a,t) table.insert(sched,{fn,t}) end}; "
+                  "Group={getByName=function(n) if n=='gone' then return nil end return {isExist=function() return true end, "
+                  "getController=function() return {setCommand=function(self,c) table.insert(cmds,c.params.goToWaypointIndex) end} end} end}")
+        L.execute(rap.CALLIN_LUA)
+        L.execute("SQE_CALLIN('A',5,6,480,9005); SQE_CALLIN('A',5,6,480,9005); SQE_CALLIN('gone',5,6,480,9006)")
+        assert list(L.eval("cmds").values()) == [5] and len(L.eval("sched")) == 1, "called once, one return scheduled"
+        L.execute("sched[1][1]()")
+        assert list(L.eval("cmds").values()) == [5, 6], "back to the station after the stay"
+        L.execute("flags['9007']=1; SQE_CALLIN('B',5,6,480,9007)")
+        assert list(L.eval("cmds").values()) == [5, 6], "a pair already sent home is not called"
+    print(f"[red call-in] {len(calls)} patrol route(s) armed (hotspot leg after the landing, second landing at the end); SQE_CALLIN called from triggers; Lua checked" + ("" if LuaRuntime else " (no lupa: Lua not run)"))
+
+
 def check_31y_unit_cap_merged(c):
     """v0.41.104: the Settings unit limit counts only the BASE mission; the units merged packages bring do not count against it, and the only upper bound for
     the whole mission is the ceiling in sqe/data/limits.json (the base mission is still trimmed to the limit, merged packages are not dropped for it)."""
@@ -3642,6 +3705,7 @@ CHECKS = [
     check_31za_mozdok_escorts,
     check_31zb_raid_setpiece,
     check_31zc_raid_quiet_and_hit,
+    check_31zd_red_callin,
     check_31o_support_assets,
     check_31p_guard_chains,
     check_31q_red_patrols_spread,
