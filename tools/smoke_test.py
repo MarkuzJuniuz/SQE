@@ -1412,7 +1412,7 @@ def check_31d_barcap_areas(c):
     for k, fl in by_area.items():
         fl.sort(key=lambda f: f["start"])
         for p_, n_ in zip(fl, fl[1:]):
-            assert n_["start"] == p_["end"] - barcap.HANDOVER_MIN or p_["end"] >= 1440, f"{k}: the relief arrives before the last one leaves"
+            assert n_["start"] >= p_["end"] - barcap.HANDOVER_MIN or p_["end"] >= 1440, f"{k}: a relief never arrives more than the handover before the last one leaves (v0.41.90: sorties are spread, a gap is fine)"
     import json
     from sqe.state import CampaignState
     again = CampaignState.from_dict(json.loads(json.dumps(st.to_dict())))
@@ -1675,6 +1675,26 @@ def check_31n_blue_patrol_vs_raids(c):
         assert bb.patrol_fight(st, random.Random(1), sq.id) and sq.available == before - 1, "a fighting patrol can lose a jet"
     finally:
         bb.PATROL_LOSS_P = old
+
+
+def check_31q_red_patrols_spread(c):
+    """v0.41.90: red's patrol sorties are spread through the day: no area has all its sorties in one 6-hour wave, and L2 / L3 have a patrol up in most hours."""
+    for lvl, min_hours in ((2, 12), (3, 20)):
+        s = fresh_session()
+        s.new("Red spread", "F-16C", lvl, seed=3)
+        fl = [f for f in s.state.red_air["flights"] if f["kind"] == "CAP"]
+        by = {}
+        for f in fl:
+            by.setdefault(f["area"], []).append(f["start"])
+        multi = [v for v in by.values() if len(v) >= 2]
+        assert multi and all(max(v) - min(v) >= 300 for v in multi), ("an area's sorties are spread, not bunched", lvl, by)
+        mins = [0] * 1500
+        for f in fl:
+            for m in range(f["start"], min(1500, f["end"])):
+                mins[m] += 1
+        hours = sum(1 for h in range(24) if any(mins[h * 60:h * 60 + 60]))
+        assert hours >= min_hours, ("hours with a red patrol up", lvl, hours)
+    print(f"[red spread] red patrols are up in {hours} of 24 hours at level 3; no area's day sits in one wave")
 
 
 def check_31o_support_assets(c):
@@ -2554,6 +2574,9 @@ def check_47_support_cap_pull_back(c):
     _old = _st.to_dict(); _old.pop("red_air"); from sqe.state import CampaignState as _CS
     assert _ra.ensure(_CS.from_dict(_old), _gd(3))["flights"], "an old save without a plan gets one"
     _seen = []
+    for f_ in _st.red_air["flights"]:                      # v0.41.90: patrols are spread through the day now: this check is about the briefing line, so keep every patrol up
+        if f_["kind"] == "CAP":
+            f_["start"], f_["end"] = 0, 1440
     for p_ in s.packages():
         if s.flyable(p_) and p_.n_def:
             _res = s.fly(p_.number, s.flyable(p_)[0].id); _seen += [l_ for l_ in _res.text["full"].splitlines() if "Reported enemy" in l_]
@@ -3200,6 +3223,7 @@ CHECKS = [
     check_31n_blue_patrol_vs_raids,
     check_31o_support_assets,
     check_31p_guard_chains,
+    check_31q_red_patrols_spread,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,

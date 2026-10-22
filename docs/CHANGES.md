@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.90, red's base CAPs are spread through the day
+
+XO: "I think red don't have BaseCAPs." (three days of runs, all starting 06:10 to 06:35)
+- Cause: each red patrol area flew its day's sorties back to back from the start of one 6-hour wave (`redair.plan`), so a field's whole day of patrols sat in one to three hours (Sukhumi 00:00 to 00:50, for example) and a morning mission found most areas empty. Same number of sorties, bad spread.
+- Now an area's sorties are spread evenly through the 24 hours (the wave and a dice roll pick where in its gap the area starts; many sorties still chain back to back with the 10 minute handover). Same sortie count and budget as before; blue's patrols already worked this way. Level 2 seed 3: patrols up in 20 of 24 hours (was 14 on the old plan), level 3 in 24.
+- Expect red patrols in your morning missions more often, and a harder time at level 3.
+- Smoke: `check_31q_red_patrols_spread`.
+
 ## v0.41.89, BARCAP status line and shorter Experimental settings
 
 XO: "You can go with the BARCAP status line." / "The setting headers don't wrap."

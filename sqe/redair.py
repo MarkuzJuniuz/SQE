@@ -98,7 +98,18 @@ def plan(state, d) -> dict:
         for ai, ar in enumerate(areas):
             t0 = WAVES[order[ai % 4]][0]
             typs = [rng.choice(types) for _ in per[ai]]
-            for j, (lo, hi) in enumerate(barcap.chain(t0, len(per[ai]), [barcap.endurance_min(t) for t in typs])):
+            # v0.41.90: the area's sorties are spread through the whole day (the wave and a dice roll pick the offset), like blue's patrols. Before, they were
+            # chained back to back from the wave's start, so a field's day of patrols sat in one hour or two and most of the day was empty.
+            ends = [barcap.endurance_min(t) for t in typs]
+            gap = 1440 // max(1, len(per[ai]))
+            first = (t0 + rng.randrange(gap)) % gap                          # the wave and a dice roll pick where in its gap the area starts
+            sched = []
+            for j in range(len(per[ai])):
+                lo = first + j * gap
+                if sched and lo < sched[-1][1] - barcap.HANDOVER_MIN:      # a short gap (many sorties): back to back, handing over
+                    lo = sched[-1][1] - barcap.HANDOVER_MIN
+                sched.append((lo, lo + ends[j % len(ends)]))
+            for j, (lo, hi) in enumerate(sched):
                 if use.get(w.base_asset_id, 0) + 2 > bud[w.base_asset_id] or lo >= 1440:
                     break
                 use[w.base_asset_id] = use.get(w.base_asset_id, 0) + 2
