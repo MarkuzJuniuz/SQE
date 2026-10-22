@@ -579,6 +579,21 @@ end
 local RWYQ = { __RWYQ__ }
 local PRWY = "__PRWY__"
 local RWY_STAGGER_S = 60
+local PHOME = __PHOME__             -- v0.41.97: your own field (nil off a carrier): a hot release there waits while you are on your way in to land
+local HOME_NM = 10
+local function playerInbound()
+  if not PHOME or not pl.takeoff or pl.landed or dead[PLAYER] then return false end
+  local inb = false
+  pcall(function()
+    local u = Unit.getByName(PLAYER)
+    if not u or not u:isExist() then return end
+    local p = u:getPoint()
+    local d = math.sqrt((p.x - PHOME.x) ^ 2 + (p.z - PHOME.z) ^ 2)
+    local agl = p.y - land.getHeight({ x = p.x, y = p.z })
+    inb = d < HOME_NM * 1852 and agl < 1500 and (timer.getTime() - pl.takeoff) > 300
+  end)
+  return inb
+end
 local ALERT_TAXI_S = 120          -- v0.41.0: an alert pair appears on the runway this long after it is called (the taxi it no longer does)
 local rwyLast = {}
 if #RWYQ > 0 then
@@ -598,6 +613,7 @@ if #RWYQ > 0 then
         end
         local free = (not rwyLast[q.b]) or (now - rwyLast[q.b] >= RWY_STAGGER_S)
         if q.b == PRWY and not (pl.takeoff or dead[PLAYER] or now > 900) then free = false end
+        if q.t and q.b == PRWY and playerInbound() then free = false end
         if want and free then
           pcall(function() local g = Group.getByName(q.g); if g then g:activate() end end)
           rwyLast[q.b] = now; q.done = true
@@ -1043,6 +1059,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}' + (f', t={int(q["t"])}' if q.get("t") is not None else '') + '}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy))
             .replace("__COVER__", ", ".join(f'{{g={_lq(c["g"])}, n={int(c["n"])}, bf={int(c["bf"])}, rf={int(c["rf"])}, u={float(c["u"]):.0f}}}' for c in (cover or [])))
             .replace("__ALERTS__", ", ".join(f'{{g={_lq(a["g"])}, f={int(a["f"])}, b={_lq(a["b"])}, ty={_lq(a["ty"])}}}' for a in (alerts or [])))
+            .replace("__PHOME__", ("{ x = %.1f, z = %.1f }" % tuple((cfg or {})["phome"])) if (cfg or {}).get("phome") else "nil")
             .replace("__CVREC__", _cvrec_lua((cfg or {}).get("cvrec")))
             .replace("__RECOV__", _recov_lua((cfg or {}).get("recov")))
             .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov")}).replace("'", "")))

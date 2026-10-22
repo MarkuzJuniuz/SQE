@@ -136,7 +136,7 @@ class SettingsDialog(QDialog):
         self.hotrwy = QCheckBox("Hot starts on the runway (AI flights)")
         self.hotrwy.setChecked(bool(getattr(settings, "hot_runway_starts", False))); v.addWidget(self.hotrwy)
         hint(v, "Land fields other than yours. On: AI package flights wait hidden and appear on the runway in time to make their push, one runway release a minute apart. "
-                "A flight that cannot be released in time (the package is already underway at the start) still appears airborne. Your own field and the carrier keep the airborne start. Off: all AI flights appear airborne.")
+                "A flight that cannot be released in time (the package is already underway at the start) still appears airborne. At your own field they appear only after you have taken off, never in the last ten minutes before your planned landing, and wait while you are on your way in to land. The carrier keeps the airborne start. Off: all AI flights appear airborne.")
         self.f14n = QCheckBox("F-14B(U): name waypoints with special-point codes (IP, ST, HB...) so DEST can select them")
         self.f14n.setChecked(bool(settings.f14_special_names)); v.addWidget(self.f14n)
         v.addStretch(1)

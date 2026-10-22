@@ -62,7 +62,7 @@ class AppSettings:
     borrow_red: bool = False              # v0.41.81 (Experimental tab): red moves SAM batteries to where they are needed (sams.red_orders); off = only the usual rebuild
     borrow_blue: bool = False             # the same for blue (sams.blue_orders)
     hot_ramp_scrambles: bool = False      # v0.41.80: scramble pairs at LAND fields wait hot on the ramp and taxi out (experimental); off = hidden, put on the runway when called
-    hot_runway_starts: bool = False       # v0.41.96: AI package flights from LAND fields other than yours start on the runway (queued by the hook) instead of airborne, when the schedule allows
+    hot_runway_starts: bool = False       # v0.41.96: AI package flights from LAND fields other than yours start on the runway (queued by the hook) instead of airborne, when the schedule allows (v0.41.97: your own field too, after your takeoff)
     takeoff_buffer_s: int = 60            # seconds between mission start and the briefed takeoff (negative = you must be quicker than the plan)
     hold_minutes: int = 2                 # slack at the marshal point before PUSH (minutes; negative = hurry)
     flight_filter: str = "squadron"      # who you may fly: "squadron" (only flights of YOUR squadron). "all" is for tests and tools only: a saved file never turns it on (v0.41.93)

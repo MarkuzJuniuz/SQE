@@ -388,6 +388,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         tgt = objective_wp(pw) or pw[-1]
         egr = next((w for w in pw if w.name == "EGR"), pw[-1])
         rtb_s = egr.eta_s + leg_seconds(egr, Wpt("RTB", pbase.x, pbase.y, 0, 300))
+        self._p_times = (float(launch_s), float(rtb_s))                 # v0.41.97: your takeoff and landing, for the hot starts at your own field
         tl = {"launch": clock(launch_s), "marshal": clock(mshl.eta_s), "push": clock(player_push), "tot": clock(tgt.eta_s),
               "egress": clock(egr.eta_s), "rtb": clock(rtb_s), "push_s": player_push, "tot_s": tgt.eta_s, "rtb_s": rtb_s}
 
@@ -525,7 +526,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts, cover=self._cover,
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
-                              "cvrec": self._wing_recovery(pbase, tgt.eta_s), "recov": list(self._recov)})
+                              "cvrec": self._wing_recovery(pbase, tgt.eta_s), "recov": list(self._recov),
+                              "phome": ([self._pt(pbase.x, pbase.y).x, self._pt(pbase.x, pbase.y).y] if pbase.kind == BaseKind.AIRFIELD else None)})
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -1423,6 +1425,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     HOT_ROLL_S = 45          # v0.41.96: runway start to wheels up (alert pairs measured about 45 s in v0.41.0 runs); judgment call for full packages
     HOT_CLIMB_KTS = 300      # average speed from the runway to the pretend-DEP point (climbing), judgment call
+    HOT_HOME_S = 600         # v0.41.97: no runway release at your own field this close to your planned landing (judgment call)
     RWY_GAP_S = 60           # the hook's RWY_STAGGER_S: releases from one runway are at least this far apart
 
     def _hot_slot(self, package, f, base, wps, act_raw, held):
@@ -1433,8 +1436,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         that margin. Anything that cannot be released in time stays an airborne spawn. -> {"t", "b"} or None"""
         if not getattr(self.o, "hot_runway_starts", False) or f.is_player or f.tag or base.kind != BaseKind.AIRFIELD:
             return None
-        if base.id == getattr(self, "_main_base", None) or base.id not in self.apt or act_raw < 0:
+        if base.id not in self.apt or act_raw < 0:
             return None
+        own = base.id == getattr(self, "_main_base", None)
+        p_launch, p_rtb = getattr(self, "_p_times", (0.0, 1e9))
         if any(x is not f and x.callsign == f.callsign for x in package.flights):
             return None                  # a guard shares this callsign (v0.41.88): the hook finds a group by name, so it stays an airborne spawn
         lead = self.HOT_ROLL_S + 15 + dist(base.x, base.y, wps[0].x, wps[0].y) / NM / self.HOT_CLIMB_KTS * 3600
@@ -1442,7 +1447,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         want = act_raw - lead
         used = self._rwy_rel.setdefault(base.id, [])
         t = max(0.0, want)
+        if own:
+            # v0.41.97: your own field. Nothing is released before you are rolling (the hook also waits until you have taken off) and nothing
+            # in the last HOT_HOME_S before you land: that one stays an airborne spawn.
+            if not used:
+                used.append(p_launch)
+            t = max(t, p_launch + self.RWY_GAP_S)
         while t <= want + slack + 1e-6:
+            if own and t > p_rtb - self.HOT_HOME_S:
+                return None
             if all(abs(t - u) >= self.RWY_GAP_S for u in used):
                 used.append(t)
                 return {"t": int(t), "b": f"{self.usa.name}:{self.apt[base.id].name}"}

@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.97, hot runway starts at your own field (phase 2)
+
+XO: "OK, let's do 2."
+- With "Hot starts on the runway (AI flights)" on, AI flights from YOUR field start on the runway too, but only after you are rolling: the earliest release is your takeoff time + 60 s (the 60 s stagger), and the hook (existing `PRWY` rule) also waits until you have actually taken off.
+- "About to land, air start again": no release in the last 10 min (`HOT_HOME_S`, judgment call) before your planned landing; a flight due then keeps the old airborne spawn. In the air the hook adds a second guard: while you are within 10 nm of your field, under 1500 m above the ground, more than 5 min after your takeoff and not yet landed (`playerInbound`), runway releases at your field wait (they go once you are on the ground or leave the area). The hook cannot switch a hidden runway group to an air start on the fly, so a flight caught by the live check is delayed, not air-started; only the planned check air-starts. Say if a twin (runway and airborne copy, the hook picks one) is worth the extra units.
+- The hook gets your field's position (`PHOME`, nil off a carrier). Carriers still use the airborne start.
+- Smoke: `check_31v_hot_runway` also checks your own field.
+
+
 ## v0.41.96, hot starts on the runway for AI flights (phase 1)
 
 XO: "Can we start the hot on runway starts phase 1?"
