@@ -112,6 +112,8 @@ Three kinds exist, all built in `mission_builder.py` (`_spawn_enemy`-style block
 - **Blue alert pairs** (`reactive.blue_sources`, carrier or field): trigger zone of 120 nm round the target (fleet / raid objectives) or a clock for other targets; route: one `CAP` waypoint AT the target (or the raid target) with an orbit for `cap_minutes`, engage limit `friendly_cap_engage_nm`, then land or RTB.
 - Red patrols (planned picture, `CAP1`/`CAP2`) are different: they have a station and a circle (`A2A_ZONE_NM`) like ours.
 
+**Red SEAD pair (v0.41.84, verified 2026-10-21):** a Su-24M land raid on a field with a live Patriot / HAWK may carry `extra["arm"] = 2` (`PackageBuilder._land_raid_plan`, odds `Difficulty.raid_arm`). `RaidSpawns._spawn_raid_arm` builds group "Raid SEAD 1" (Kh-31P, `loadouts.enemy_arm_loadout`): same way in as the bombers, `AttackGroup` ARM on the field's Patriot group (`MissionBuilder.base_ad`, filled in `_place_base`) from `ARM_LAUNCH_NM`, `ARM_LEAD_S` before the bombers' TOT. Unflown raids: `raids.overnight` halves the battery cover (`ARM_AD_FACTOR`).
+
 **Gap (found 2026-10-16):** none of the three scramble kinds use the SAM rules (`avoid_circles`, `_zone_sams`, `_cover_circle`, `_clear_zone`). They fly a straight line to the target and orbit on it. For blue alert pairs that target can be inside a red SAM's reach. Raids by red bombers are separate (`raids.py` has `shy`, `PATRIOT_NM`, `HAWK_NM`).
 
 **Emergency raid scramble and merging (read 2026-10-16 from the code and XO's Kobuleti test .miz; the test ran with `RAID_SCRAMBLES = True` only):**

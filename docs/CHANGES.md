@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.84, red anti-radiation missiles, step 1: a Su-24M SEAD pair ahead of a field raid
+
+XO: "Put red anti-rad and standoffs on top" (shooters Su-24M only, Patriot / HAWK first, L1 none / L2 rare / L3 normal).
+- A Su-24M raid on one of our airfields that has a live Patriot or HAWK may bring a pair of Su-24M with Kh-31P (`raid_arm`: Level 1 never, Level 2 20 %, Level 3 60 %; judgment calls). The pair needs two jets more than the raid in the wing, so it never takes the bombers' jets. Raids by Su-25 never bring one (the plain Su-25 has no ARM in DCS).
+- In the mission "Raid SEAD 1" flies the raid's way in, fires at the field's Patriot (else HAWK) from 40 nm, 150 s before the bombers' TOT, then turns away 20 nm and goes home. 40 nm and 150 s are judgment calls; the Kh-31P's 60 nm is the Wikipedia figure (launch altitude lowers it). It counts as part of the raid's wing in the debrief (`RAID-S-n`).
+- Unflown (surprise) raids on a field: the batteries' cover counts half when the raid brings a SEAD pair (`ARM_AD_FACTOR` 0.5, judgment call).
+- Not yet: Kh-58 / Kh-25MP, Su-25T, ship radars, stand-off weapons (Kh-29 / Kh-59), raids on supply sites / garrisons. Untested in DCS: whether the Patriot shuts its radar down for an inbound ARM.
+- Smoke check `check_31l_red_arm`.
+
 ## v0.41.83, SAM borrowing defaults to off
 
 XO: "put the borrowing of sams default off". The Experimental tab's Red / Blue borrowing switches now start unticked; tick them to get SAM orders by need (v0.41.67 / .68). Saved settings keep whatever was stored.
