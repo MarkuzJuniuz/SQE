@@ -34,7 +34,7 @@ BEHIND_NM = 20                                                 # v0.41.74: a pat
 ROUTE_NM = 45                                                  # ...or this close to a point on the route
 # per level: share of a wing's aircraft flying patrols, most patrol pairs per wing, sweeps per day
 DAILY_SORTIES = 2                                              # per serviceable airframe per day: the same rule the friendly packages follow (engine.plan_day)
-DOCTRINE = {1: {"frac": 0.20, "pairs": 1, "sweeps": 0}, 2: {"frac": 0.30, "pairs": 2, "sweeps": 1}, 3: {"frac": 0.40, "pairs": 3, "sweeps": 2}}
+DOCTRINE = {1: {"frac": 0.20, "pairs": 1, "sweeps": 0}, 2: {"frac": 0.40, "pairs": 2, "sweeps": 1}, 3: {"frac": 0.55, "pairs": 3, "sweeps": 2}}   # v0.41.110: L2 0.30 -> 0.40, L3 0.40 -> 0.55 (judgment call, XO 2026-10-22)
 
 
 def budget(state, wing_id: str) -> int:

@@ -7,6 +7,13 @@ XO: BASECAPs should be called to the hotspot when the scramblers launch, then go
 - New `tools/callin_probe.py`: one AI-only test mission with three red Su-27 pairs on station, each with an immortal blue tanker on a hotspot 40 nm away. At t = 60 s they are called in three ways: V1 a pushed `EngageTargetsInZone` with a 240 s stop, V2 the same pushed task without a stop (what the red SAM-guard call-in does today), V3 a route with a flag-released orbit, a hotspot waypoint, and a waypoint back. Each pair logs its distance to station and hotspot every 20 s as `SQEPROBE2` lines in dcs.log.
 - No campaign code touched, no smoke test, no version bump. Whether DCS sends the pairs back is unverified until XO flies it.
 
+## v0.41.110, red patrols first (step 1 of 2)
+
+XO: in the 8-day runs red scrambles outnumbered the basecaps, a lone 2-ship waited for the strike and the rest of the wing sat on the ramp, which made SEAD / DEAD too easy. The wide scramble net is working as intended.
+- PATROLS FIRST: `reactive.plan_red` now holds one pair per BARCAP area a wing flies today out of the reinforcement draw. A scramble can no longer take the airframes the day's patrols need. Blue already worked this way (`blue_barcap.plan` is paid before the packages).
+- MORE PATROL SORTIES: the red share of a wing's day (`redair.DOCTRINE` frac) goes L2 0.30 -> 0.40 and L3 0.40 -> 0.55 (L1 unchanged). Judgment calls, to be tuned from XO's runs. 5-day sims (4 seeds): L2 about 140 -> 195 patrol pairs, 19 -> 27 pair-hours a day; L3 about 335 -> 465, 70 -> 95.
+- Not done yet (step 2, high effort): BASECAPs called in to the hotspot when the scramblers launch and sent back to station afterwards, both sides. A second pair per area at L3 is also left out.
+
 ## Tools only (no version bump): AWACS tuning probe
 
 XO: AWACS tactical messages should only show when the player is tuned to the AWACS. Step one is a test, not a feature.
