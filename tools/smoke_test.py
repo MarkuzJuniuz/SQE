@@ -1953,6 +1953,25 @@ def check_31x_forward_garrisons(c):
     assert any(a.startswith("bfwd_") for _, a, _ in ws), "a forward garrison can be raided"
 
 
+def check_31z_bomber_trump_card(c):
+    """v0.41.105: red's bomber wing is a trump card: no raid under 4 bombers, 2 escorts per bomber, L1 never, a launch starts a cooldown."""
+    from sqe import bombers
+    from sqe.difficulty import get as _get
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    ses.new("Bombers", "F-16C", 3, seed=3)
+    st = ses.state
+    d = _get(3)
+    dec = bombers.decide(st, d)
+    assert dec["mode"] in ("hold", "safe", "desperate"), dec
+    if dec["mode"] != "hold":
+        assert dec["n"] >= 4 and dec["escorts"] >= 2 * dec["n"], dec
+    assert bombers.decide(st, _get(1))["mode"] == "hold"
+    if dec["mode"] != "hold":
+        bombers.note_launch(st)
+        assert bombers.decide(st, d)["mode"] == "hold", "cooldown must hold the next day"
+
+
 def check_31y_unit_cap_merged(c):
     """v0.41.104: the Settings unit limit counts only the BASE mission; the units merged packages bring do not count against it, and the only upper bound for
     the whole mission is the ceiling in sqe/data/limits.json (the base mission is still trimmed to the limit, merged packages are not dropped for it)."""
@@ -3505,6 +3524,7 @@ CHECKS = [
     check_31w_raid_scramble_merge,
     check_31x_forward_garrisons,
     check_31y_unit_cap_merged,
+    check_31z_bomber_trump_card,
     check_31o_support_assets,
     check_31p_guard_chains,
     check_31q_red_patrols_spread,

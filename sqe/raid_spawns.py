@@ -405,6 +405,8 @@ class RaidSpawns:
         else:
             g = build_group("Raid Bomber 1", planes.Tu_22M3, ex["bombers"], task.AntishipStrike, (sx, sy), bomber=True)
             load = enemy_bomber_loadout("Tu_22M3")
+        if ex.get("bombers", 0) > 4 or ex.get("escorts", 0) > 4:       # pydcs makes one group of at most 4: the big raid is split into several groups in the boss-fight mission step
+            self.warns.append(f"raid of {ex.get('bombers')} bombers and {ex.get('escorts', 0)} escorts shown with at most 4 aircraft per group")
         names = []
         for j, u in enumerate(g.units, 1):
             u.name = f"RAID-B-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)

@@ -31,7 +31,8 @@ class Difficulty:
     armor_columns: int = 3
     red_squadron_max: int = 12           # v0.41.52: most jets in one red squadron; a wing is cut into ceil(jets / this) typed squadrons (judgment call, no sourced Russian figure)
     bomber_wing: int = 0                 # strategic bombers (Tu-22M3) at Mozdok
-    bomber_policy: str = "none"          # none | desperate (only when losing badly) | normal
+    bomber_policy: str = "none"          # none | desperate | normal (v0.41.105: see bombers.py; "none" = the wing never raids)
+    bomber_safe_p: float = 0.0           # v0.41.105: red sends a 4-ship raid only if its estimate of blue stopping it is at most this (0 = only when desperate); judgment calls
     counterstrike: float = 0.3           # daily chance (x enemy air strength) that the enemy hits a coalition base's defences
     forward_sams: tuple = ()             # short-range SAMs that travel with the front-line columns (one per entry)
     garrison_chance: float = 0.0         # chance that a long-range SAM site has a dug-in ground garrison
@@ -73,7 +74,7 @@ LEVELS: dict[int, Difficulty] = {
                   sam_variants=["SA-2", "SA-3", "SA-6", "SA-11", "AAA"], sam_sites_per_cluster=3, iads=0.55,
                   enemy_skill="Good", loss_rate=0.06, base_damage=0.35, variance=0.8,
                   friendly_replenish=0.08, enemy_replenish=0.05, asset_repair=0.04, sam_repair=0.06,
-                  friendly_scale=1.0, enemy_cap_per_air=0.15, counterstrike=0.30, bomber_wing=4, bomber_policy="desperate",
+                  friendly_scale=1.0, enemy_cap_per_air=0.15, counterstrike=0.30, bomber_wing=4, bomber_policy="desperate", bomber_safe_p=0.06,
                   forward_sams=("SA-8", "SA-8"), garrison_chance=0.6, garrison_size=0.8, react_chance=0.35, react_ratio=(0.6, 1.1),
                   ground_red=(70, 55, 15, 0, 0), ground_blue=(0, 15, 60, 70, 50), red_attack=0.45, red_reinf=7.5, blue_reinf=4.0, raid_rate=0.4, raid_arm=0.2, raid_surprise=0.35, emerg_chance=0.09, raid_size=(2, 4), sam_rebuild=0.04, sam_scoot=0.30,
                   raid_mix=(0.20, 0.15, 0.25), blue_garrison_size=0.8, blue_rebuild=0.15, sam_retreat=0.8, sead_valve=3, air_retreat=0.8),
@@ -83,7 +84,7 @@ LEVELS: dict[int, Difficulty] = {
                   sam_variants=["SA-10", "SA-11", "SA-6", "SA-15", "SA-19"], sam_sites_per_cluster=4, iads=0.9,
                   enemy_skill="High", loss_rate=0.085, base_damage=0.28, variance=0.7,
                   friendly_replenish=0.06, enemy_replenish=0.07, asset_repair=0.05, sam_repair=0.08,
-                  friendly_scale=0.85, enemy_cap_per_air=0.20, counterstrike=0.55, bomber_wing=10, bomber_policy="normal",
+                  friendly_scale=0.85, enemy_cap_per_air=0.20, counterstrike=0.55, bomber_wing=10, bomber_policy="normal", bomber_safe_p=0.12,
                   forward_sams=("SA-15", "SA-8", "SA-19"), garrison_chance=1.0, garrison_size=1.0, react_chance=0.55, react_ratio=(1.0, 1.6),
                   ground_red=(90, 80, 35, 0, 0), ground_blue=(0, 10, 45, 55, 40), red_attack=0.55, red_reinf=7.0, blue_reinf=4.0, raid_rate=0.7, raid_arm=0.6, raid_surprise=0.45, emerg_chance=0.21, raid_size=(4, 4), sam_rebuild=0.07, sam_scoot=0.50,
                   raid_mix=(0.25, 0.20, 0.25), blue_garrison_size=0.7, blue_rebuild=0.10, sam_retreat=1.0, sead_valve=2, air_retreat=1.0),
