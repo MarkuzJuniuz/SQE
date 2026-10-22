@@ -129,6 +129,10 @@ class SettingsDialog(QDialog):
                 "natural pace (afterburner time). AI flights adjust automatically.")
         self.fuel = QCheckBox("AI fuel management (unlimited until the push, real fuel in the fight, unlimited again from egress)")
         self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); v.addWidget(self.fuel)
+        self.hotramp = QCheckBox("Hot starts at the ramp (scramble pairs)")
+        self.hotramp.setChecked(bool(getattr(settings, "hot_ramp_scrambles", False))); v.addWidget(self.hotramp)
+        hint(v, "Land fields only. On: alert pairs at land fields wait hot on the ramp and taxi out when called. Off: they wait hidden and appear on the runway (the older, steadier way). "
+                "The carrier always keeps the hidden deck start, and so does your own field.")
         self.f14n = QCheckBox("F-14B(U): name waypoints with special-point codes (IP, ST, HB...) so DEST can select them")
         self.f14n.setChecked(bool(settings.f14_special_names)); v.addWidget(self.f14n)
         v.addStretch(1)
@@ -140,10 +144,6 @@ class SettingsDialog(QDialog):
         self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
         hint(v, "SQE's own jamming model; off by default. Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
                 "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
-        self.hotramp = QCheckBox("Hot ramp scrambles")
-        self.hotramp.setChecked(bool(getattr(settings, "hot_ramp_scrambles", False))); v.addWidget(self.hotramp)
-        hint(v, "Land fields only. On: alert pairs at land fields wait hot on the ramp and taxi out when called. Off: they wait hidden and appear on the runway (the older, steadier way). "
-                "The carrier always keeps the hidden deck start, and so does your own field.")
         self.borrow_red = QCheckBox("Red SAM borrowing")
         self.borrow_red.setChecked(bool(getattr(settings, "borrow_red", False))); v.addWidget(self.borrow_red)
         self.borrow_blue = QCheckBox("Blue SAM borrowing")
