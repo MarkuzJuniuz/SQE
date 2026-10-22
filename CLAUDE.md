@@ -81,6 +81,8 @@ Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE
 - `sqe/war.py`, `sqe/packages.py`, `sqe/engine.py`: the war sim, package templates, daily planning (`AI_ONLY` job types).
 - `sqe/redair.py`, `sqe/raids.py`: red doctrine by level (`RED_DOCTRINE`, `RED_QUALITY`).
 - `sqe/sweep.py`: Fighter Sweep dispatch (only against red air out in the open) and its SAM-clear station.
+- `sqe/blue_barcap.py`: blue's planned patrols and the HAVCAP / TNKCAP guard chains, how packages pick them up (`attach`), the Overview status lines. `sqe/support_assets.py`: tankers and AWACS as assets (airframes, daily windows, losses). `sqe/barcap.py`: the BARCAP areas and chains both sides use.
+- `sqe/scramble.py`: where scrambled (alert) pairs station themselves, for both sides.
 - `sqe/debrief.py`: the Lua mission hook (landed/dead tables, recovery net).
 - `sqe/sams.py`, `sqe/threat.py`, `sqe/ecm.py`: SAM sites, threat model, jamming.
 - `sqe/state.py`, `sqe/settings.py`, `sqe/difficulty.py`, `sqe/gui/`: campaign state, settings, difficulty levels, the UI.

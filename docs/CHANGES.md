@@ -1,6 +1,11 @@
 # CHANGES.md
 
 
+## Docs: CLAUDE.md code map (no version change)
+
+XO: "OK, update docs."
+- CLAUDE.md's code map lists `blue_barcap.py`, `support_assets.py`, `barcap.py` and `scramble.py`. `docs/DESIGN_NOTES.md` got section 9 (planned air cover, support assets and scrambles, v0.41.85 to v0.41.94; pushed directly). The Project's `barcap-plan.md`, `red-arm-plan.md` and the design notes copy were refreshed.
+
 ## v0.41.94, red's SEAD group is sized like blue's salvo
 
 XO: "Do SEAD pair sizing."
