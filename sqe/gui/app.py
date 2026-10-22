@@ -264,8 +264,9 @@ class ForcesPage(QWidget):
         self.sq = _tbl(["Squadron", "Aircraft", "Service", "Based at", "Serviceable", "Readiness"])
         self.ea = _tbl(["Enemy air wing", "Types", "Serviceable", "Strength"])
         self.as_ = _tbl(["Enemy asset", "Type", "Depth", "Condition"])
-        self.bs = _tbl(["Coalition base", "Type", "Air defences (Patriot + AAA)"])
-        for t, n in ((self.sq, "Coalition squadrons"), (self.bs, "Coalition bases"), (self.ea, "Enemy air wings"), (self.as_, "Enemy assets")):
+        self.bs = _tbl(["Coalition base", "Type", "Patriot", "HAWK", "AAA"])
+        self.sup = _tbl(["Support aircraft", "Type", "Based at", "Serviceable", "Cycle", "Cover today", "Strength"])
+        for t, n in ((self.sq, "Coalition squadrons"), (self.sup, "Tankers and AWACS"), (self.bs, "Coalition bases"), (self.ea, "Enemy air wings"), (self.as_, "Enemy assets")):
             self.tabs.addTab(t, n)
 
     @staticmethod
@@ -285,13 +286,43 @@ class ForcesPage(QWidget):
             for j, v in enumerate((st.assets[w.base_asset_id].name + (f"  ({w.squadrons} squadrons)" if w.squadrons > 1 else ""), ", ".join(f"{q.aircraft.replace('_', '-')} {q.available}/{q.authorized}" + (f" (resting, {q.reserve})" if q.reserve else "") for q in w.sqns), f"{w.available} / {w.authorized}")):
                 self.ea.setItem(i, j, _item(v))
             self.ea.setCellWidget(i, 3, self._bar(w.available / max(1, w.authorized), theme.RED))
+        from .. import sams as _sams, support_assets as _sa
         bl = list(st.bases.values()); self.bs.setRowCount(len(bl))
+        col = lambda h: theme.GREEN if h > 0.6 else theme.AMBER if h > 0.25 else theme.RED
         for i, b in enumerate(bl):
             self.bs.setItem(i, 0, _item(b.name)); self.bs.setItem(i, 1, _item("Carrier (escorted)" if b.kind.value == "CARRIER" else "Airfield"))
             if b.kind.value == "AIRFIELD":
-                self.bs.setCellWidget(i, 2, self._bar(b.defense, theme.GREEN if b.defense > 0.6 else theme.AMBER if b.defense > 0.25 else theme.RED))
+                sites = _sams.blue_sites(st, b)                       # v0.41.100: one bar per site (an older save without sites shows its single defence figure on the Patriot)
+                for j, k in enumerate(("pat", "hawk", "aaa")):
+                    h = sites[k].health if sites else (b.defense if k == "pat" else None)
+                    if h is None:
+                        self.bs.setItem(i, 2 + j, _item("-", theme.DIM))
+                    else:
+                        self.bs.setCellWidget(i, 2 + j, self._bar(h, col(h)))
             else:
                 self.bs.setItem(i, 2, _item("Cruiser + 2 escorts", theme.DIM))
+                for j in (3, 4):
+                    self.bs.setItem(i, j, _item("", theme.DIM))
+        # tankers and AWACS (v0.41.100): the support assets, with the hours an aircraft of the type is on orbit today
+        nice = {"bl_e3": "E-3A AWACS", "bl_e2": "E-2C AWACS (carrier)", "bl_kc135": "KC-135 tanker (boom)", "bl_kc135mprs": "KC-135 MPRS tanker (probe)",
+                "bl_s3": "S-3B tanker (carrier)", "rd_a50": "A-50 AWACS (enemy, not flying yet)"}
+        sa = _sa.ensure(st)
+        fl = (getattr(st, "barcap", None) or {}).get("support_flights") or {}
+        self.sup.setRowCount(len(sa))
+        for i, (k, a) in enumerate(sorted(sa.items(), key=lambda kv: (kv[1]["side"] != "blue", kv[0]))):
+            red = a["side"] != "blue"
+            base = st.bases.get(a["base_id"]) or st.assets.get(a["base_id"])
+            mins = 0; hi = 0
+            for s0, e0 in sorted(fl.get(k, [])):                       # union of today's windows
+                s0 = max(s0, hi); mins += max(0, e0 - s0); hi = max(hi, e0)
+            cover = "-" if red else f"{mins / 60:.1f} h of 24"
+            cyc = f"{a['sortie_min'] / 60:g} h on orbit, {a['turnaround_min'] / 60:g} h turnaround"
+            dim = theme.DIM if red else None
+            for j, v in enumerate((f"{a['label']}" + ("  (red)" if red else ""), nice.get(k, a["dcs_class"]), getattr(base, "name", a["base_id"]),
+                                   f"{a['available']} / {a['authorized']}", cyc, cover)):
+                self.sup.setItem(i, j, _item(v, dim))
+            fr = a["available"] / max(1, a["authorized"])
+            self.sup.setCellWidget(i, 6, self._bar(fr, theme.DIM if red else col(fr)))
         al = sorted(st.assets.values(), key=lambda a: (a.kind.value, a.name)); self.as_.setRowCount(len(al))
         for i, a in enumerate(al):
             kind = "Garrison" if a.variant == "GARRISON" else (f"SAM {a.variant}" if a.kind.value == "SAM" else a.kind.value.title())
