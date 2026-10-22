@@ -1,6 +1,11 @@
 # CHANGES.md
 
 
+## v0.41.95, hot-ramp setting moves to General
+
+XO: "move the hot starts on ramp to its actual and appropriate spot on the settings."
+- The hot-start checkbox moves from Settings > Experimental to Settings > General (next to the other "how a sortie runs" options) and is retitled "Hot starts at the ramp (scramble pairs)". Same setting (`hot_ramp_scrambles`), same hint text, no behaviour change.
+
 ## Docs: CLAUDE.md code map (no version change)
 
 XO: "OK, update docs."
