@@ -1,6 +1,16 @@
 # CHANGES.md
 
 
+## v0.41.104, the unit limit counts only the base mission; merged packages are bounded by the radius and a fixed ceiling
+
+XO: "for package merging only the radius along with additional units that were merged is used ... the unit cap of default 250 would only be used for setpiece missions" / "the ceiling in the json instead of a user adjustable value" / "the smoother version first".
+- Settings > Mission Build "units max" (default 250) now counts the BASE mission only (your package, its support, its sites, the reliefs, standby and alert pairs, reinforcements). The units that merged packages bring (their flights, their own sites, ruins) do not count against it and are never dropped for it. Wrecks and the optional flights above are still trimmed to the base limit, furthest wrecks first.
+- The only bound on the whole mission is a ceiling in the new `sqe/data/limits.json` (`unit_ceiling`, 500, a judgment call; edit the file, not a setting). Over the ceiling the existing trim order applies: ruins first, then merged packages, last one first. Full-map mode stays unlimited.
+- New `sqe/limits.py` (reads the JSON once), `MissionBuilder._units_room`, `_merged_units` tracked in `_add_merged`; the old per-site checks (wrecks, reliefs, standby, reinforcements, alert pairs) use it. The trim message now says "ceiling".
+- Not measured: how this plays in VR with several merged packages (XO reports mostly two packages in the air at once at 25 nm). If it stutters, lower the merge radius or the ceiling.
+- Smoke: new `check_31y_unit_cap_merged`.
+
+
 ## v0.41.103, the ground war on the Forces page
 
 XO: "forward garrisons ... along with the GUI changes."

@@ -77,7 +77,7 @@ class AppSettings:
     ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
     merge_radius_nm: int = 25             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in
     merge_back_min: int = 15              # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
-    merge_max_units: int = 250            # a merged mission is trimmed until it holds no more than this many units
+    merge_max_units: int = 250            # the base mission (without merged packages' units) is trimmed to this many units; the total ceiling is in sqe/data/limits.json
     emergencies: bool = True              # an emergency (raid or troops in contact) can come up when you click Fly; announced and surprise raids happen either way
     reactive: bool = True                 # enemy reinforcements and blue alert pairs can launch during a sortie
     ai_land_carrier: str = "always"       # v0.41.18: AI flights going home to a carrier: "always" recovered short of it | "home" only at your deck | "never" land

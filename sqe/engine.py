@@ -750,7 +750,8 @@ class Session:
         extras = lead_extras + [x for x in self.merge_candidates(pkg) if all(x.number != y.number for y in lead_extras)]
         ruins = self.ruin_candidates(pkg, extras)
         pre = self._preroll(list(extras) + ruins) if (ruins or extras) and getattr(self.settings, "ruins", True) else {}
-        cap = 10 ** 6 if self.full_map else int(self.settings.merge_max_units)
+        from . import limits
+        cap = 10 ** 6 if self.full_map else limits.unit_ceiling()          # v0.41.104: the ceiling bounds the whole mission; the Settings limit counts only the base mission (builder _room)
         while True:
             with contextlib.redirect_stdout(io.StringIO()):      # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
                 res = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz, extras, ruins, pre)
@@ -760,7 +761,7 @@ class Session:
                 ruins = ruins[:-1]                               # returning flights first
             else:
                 extras = extras[:-1]                             # too heavy for VR: drop the last package and rebuild
-            res.warnings.append(f"merged mission trimmed to fit the {cap}-unit limit")
+            res.warnings.append(f"merged mission trimmed to fit the {cap}-unit ceiling")
         st.sortie_counter += 1
         st.pending = {"package": package_number, "flight": pkg.player_flight.id, "manifest": res.manifest.to_dict(),
                       "built_at": time.time(), "miz": str(res.miz), "timeline": res.timeline,

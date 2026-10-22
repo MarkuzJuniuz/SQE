@@ -1953,6 +1953,30 @@ def check_31x_forward_garrisons(c):
     assert any(a.startswith("bfwd_") for _, a, _ in ws), "a forward garrison can be raided"
 
 
+def check_31y_unit_cap_merged(c):
+    """v0.41.104: the Settings unit limit counts only the BASE mission; the units merged packages bring do not count against it, and the only upper bound for
+    the whole mission is the ceiling in sqe/data/limits.json (the base mission is still trimmed to the limit, merged packages are not dropped for it)."""
+    from sqe import limits
+    assert limits.unit_ceiling() == 500, limits.unit_ceiling()
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    def build(limit):
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=60, merge_max_units=limit))
+        ses.new("Unit cap", "F-16C", 3, seed=4)
+        for _ in range(6):
+            for p in ses.packages():
+                if ses.flyable(p) and ses.merge_candidates(p):
+                    r = ses.fly(p.number, None)
+                    return r, len(ses.state.pending.get("merged") or [])
+            ses.state.day += 1
+            ses.plan_day()
+        raise AssertionError("no package with a merge candidate in 6 days")
+    r0, m0 = build(250)
+    assert m0 >= 1, "a package merged in"
+    r1, m1 = build(60)                                   # a tiny base limit: the base mission is trimmed hard, but the merged packages stay
+    assert m1 == m0, ("merged packages are not dropped for the base limit", m0, m1)
+    assert r1.counts["units"] <= limits.unit_ceiling() + 1, r1.counts
+
+
 def check_31o_support_assets(c):
     """v0.41.87: tankers and AWACS are assets: airframe counts, daily windows, a package keeps only what is on orbit, losses and returns."""
     import random
@@ -3480,6 +3504,7 @@ CHECKS = [
     check_31v_hot_runway,
     check_31w_raid_scramble_merge,
     check_31x_forward_garrisons,
+    check_31y_unit_cap_merged,
     check_31o_support_assets,
     check_31p_guard_chains,
     check_31q_red_patrols_spread,
