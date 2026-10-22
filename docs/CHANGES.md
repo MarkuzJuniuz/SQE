@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.94, red's SEAD group is sized like blue's salvo
+
+XO: "Do SEAD pair sizing."
+- `raids.arm_jets`: red's Su-24M SEAD group against a field is 2 jets (4 Kh-31P) for a Patriot or a HAWK alone, 4 jets (8 missiles) when both are live or the Patriot is at full strength (`BLUE_PATRIOT_LN` launchers); never more than the Su-24Ms the wing has left beyond its bombers (a short wing falls back to a pair, none left means no SEAD); 0 against a field with neither battery. Thresholds mirror blue's HARM salvo (v0.41.83) and are judgment calls; 2 Kh-31P per Su-24M is from Wikipedia (Kh-31).
+- In a flown mission four jets against both batteries fly as two pairs ("Raid SEAD 1" on the Patriot, "Raid SEAD 2" on the HAWK, the second 600 m higher: they share a route); four against a lone full-strength Patriot fly as one group of four on it. Unit names are now `RAID-S-<group>-<jet>`.
+- Unflown (background) raids: a four-jet group takes more of the batteries' cover, `ARM_AD_FACTOR_4` 0.3 (a pair keeps 0.5), judgment call.
+- Chance of a SEAD group at all (`raid_arm`: L1 none, L2 0.2, L3 0.6) is unchanged.
+- Smoke: `check_31u_red_sead_size`; `check_31l_red_arm` also builds a four-jet group.
+
 ## v0.41.93, "All packages" is display only; no "are you sure" on a stand-down day
 
 XO: "All squadrons list is just for display ... I shouldn't be able to fly non-squadron planes." / "On stand down days the confirmation ... should not appear anymore."

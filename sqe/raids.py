@@ -170,6 +170,20 @@ def pick_aim(state, d, rng: random.Random):
 
 
 ARM_AD_FACTOR = 0.5     # v0.41.84: a field raid with a red SEAD pair meets half the battery cover in the unflown (background) raids (judgment call)
+ARM_AD_FACTOR_4 = 0.3     # v0.41.94: ...and a four-jet SEAD group (both a Patriot and a HAWK live, or a full-strength Patriot) takes more of it (judgment call)
+
+
+def arm_jets(state, base, available: int, nb: int) -> int:
+    """v0.41.94: the size of red's Su-24M SEAD group against this field's batteries, like blue's salvo sizing: 2 jets (4 Kh-31P) for a Patriot or a HAWK
+    alone, 4 (8 missiles) when both are live or the Patriot is at full strength. At most the Su-24Ms the wing has left beyond its `nb` bombers
+    (a short wing falls back to a pair), 0 when the field has neither battery. Thresholds are judgment calls (Kh-31P: 2 per Su-24M, Wikipedia)."""
+    from . import sams
+    bt = sams.blue_battery(base, state)
+    if not (bt["patriot_ln"] or bt["hawk"]):
+        return 0
+    want = 4 if ((bt["patriot_ln"] and bt["hawk"]) or bt["patriot_ln"] >= sams.BLUE_PATRIOT_LN) else 2
+    free = available - nb
+    return want if free >= want else (2 if free >= 2 else 0)
 PATRIOT_NM = 40          # v0.41.20: a full-strength field's Patriot covers its own field and what lies this close to it
 FLEET_NM = 70            # v0.41.31: ...and the carrier group's SM-2 reach (measured: CAP pairs killed 51-67 nm out; mission_builder.FLEET_RAID_AVOID_NM)
 HAWK_NM = 25             # ...and a field's HAWK battery (v0.41.30: every full-strength field has one, not only yours)
@@ -281,8 +295,10 @@ def overnight(state, d, rng: random.Random) -> list:
         from .sams import covering_ad
         ad_ = covering_ad(state, x, y)
         arm_ = aim_kind(aim) == "field" and r[2] == "Su_24M" and d.raid_arm > 0 and rng.random() < d.raid_arm      # v0.41.84: red SEAD ahead of the bombers
+        n_arm_ = arm_jets(state, b, wing.available_of({"Su_24M"}) if hasattr(wing, "available_of") else wing.available, int(d.raid_size[1])) if arm_ else 0
+        arm_ = arm_ and n_arm_ > 0
         if arm_:
-            ad_ *= ARM_AD_FACTOR
+            ad_ *= ARM_AD_FACTOR_4 if n_arm_ >= 4 else ARM_AD_FACTOR
         p_stop = min(0.95, 0.2 + 0.45 * ad_ + 0.3 * alert)       # v0.41.30: the batteries that cover the target (was the field's defense number)
         what = {"field": b.name, "supply": state.blue_assets[aim].name if aim in state.blue_assets else "", "garrison": state.blue_assets[aim].name if aim in state.blue_assets else "",
                 "sector": "friendly troops in " + state.ground["names"][int(aim.split(":")[1])] if aim.startswith("sector:") else ""}[aim_kind(aim)]

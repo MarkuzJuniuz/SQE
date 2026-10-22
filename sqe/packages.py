@@ -345,11 +345,10 @@ class PackageBuilder:
                 esc = (w.base_asset_id, rnd.choice(types)); break
         brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360          # they come from where they took off
         arm = 0
-        if self.d and getattr(self.d, "raid_arm", 0) > 0 and not aim and raider == "Su_24M" and bw.available >= nb + 2:    # v0.41.84: a SEAD pair ahead of the bombers
-            from . import sams
-            bt_ = sams.blue_battery(tb, st)
-            if (bt_["patriot_ln"] or bt_["hawk"]) and rnd.random() < self.d.raid_arm:
-                arm = 2
+        if self.d and getattr(self.d, "raid_arm", 0) > 0 and not aim and raider == "Su_24M" and bw.available >= nb + 2:    # v0.41.84: a SEAD group ahead of the bombers
+            n_ = raids.arm_jets(st, tb, bw.available, nb)                  # v0.41.94: sized like blue's salvo: 2 jets, or 4 against Patriot + HAWK / a full Patriot
+            if n_ and rnd.random() < self.d.raid_arm:
+                arm = n_
         return {"arm": arm, "land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
                 "escort_wing": esc[0] if esc else "", "escort_type": esc[1] if esc else "",
                 "escorts": (4 if nb >= 4 else 2) if esc else 0, "aim": aim, "dest": [ax, ay]}
