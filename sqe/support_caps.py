@@ -8,6 +8,7 @@ import copy
 from dcs import mapping, planes
 
 from . import barcap, callsigns
+from .support_assets import BY_CLASS as BY_CLASS_
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
 from .models import BaseKind
@@ -109,6 +110,7 @@ class SupportCaps:
                 grp = self.m.awacs_flight(self.usa, f"{s.label} 1", cls, None, pt(x, y), race_distance=40 * NM, heading=int(g.hdg + 90) % 360,
                                           altitude=alt, speed=spd, frequency=freq)
                 callsigns.apply(grp, s.label, 1, callsigns.AWACS); grp.units[0].name = f"{s.label} 1-1"
+                self._support_units[BY_CLASS_.get(s.dcs_class, s.slot)] = grp.units[0].name
                 awacs_unit = grp.units[0]
             else:
                 if s.from_carrier:                                           # the recovery tanker stays with the boat
@@ -128,6 +130,7 @@ class SupportCaps:
                 grp = self.m.refuel_flight(self.usa, f"{s.label} 1", cls, None, pt(x, y), race_distance=race, heading=int(g.hdg + 90) % 360,
                                            altitude=alt, speed=spd, frequency=freq, tacanchannel=plan.tacan[s.slot])
                 callsigns.apply(grp, s.label, 1, callsigns.TANKER); grp.units[0].name = f"{s.label} 1-1"
+                self._support_units[BY_CLASS_.get(s.dcs_class, s.slot)] = grp.units[0].name
                 if s.slot == "TANKER1":
                     tanker_xy = offset(x, y, g.hdg + 90, race / 2)
         return tanker_xy, awacs_unit, hav_xy

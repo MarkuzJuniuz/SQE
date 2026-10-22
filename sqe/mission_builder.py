@@ -325,6 +325,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         manifest = Manifest(st.campaign_id, st.sortie_counter + 1, package.id, st.day)
         manifest.cur_pkg = package.id
         self.groups_by_asset, self.flight_groups = {}, []
+        self._support_units = {}                       # v0.41.87: support asset key -> its aircraft's unit name in this mission
         self.base_ad = {}                              # v0.41.84: base id -> {"pat": group, "hawk": group} (blue field air defence, the targets of a red SEAD pair)
 
         # ---- bases, base defenses, carrier + escorts --------------------------------------------------------
@@ -359,6 +360,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                                                                           and self.t.airports[div.airport].atc_radio.vhf_high_hz) else None
         plan = build_radio_plan(package, st, atc, self.rng, o.layout, RadioCfg(o.carrier_tacan, o.carrier_link4_mhz), div_mhz, div.name, atc_vhf, div_vhf)
         tanker_xy, awacs_unit, hav_xy = self._place_support(package, plan, geom, extras)
+        for key_, nm_ in self._support_units.items():                          # v0.41.87: a support aircraft shot down comes off its asset (debrief)
+            manifest.add("support", key_, [nm_], label=nm_.rsplit(" ", 1)[0])
 
         # ---- timeline: YOUR times. Roles are staggered around the strikers' push (sweep, SEAD, escorts go first) ---------
         launch_s = float(o.launch_offset_s)

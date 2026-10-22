@@ -132,6 +132,8 @@ class Session:
         from . import blue_barcap
         bp = blue_barcap.plan(st, self.d)                # v0.41.85: blue's standing patrols are planned (and paid for) before the packages
         st.barcap["blue_flights"], st.barcap["blue_cover"] = bp["flights"], bp["cover"]
+        from . import support_assets
+        support_assets.plan(st)                          # v0.41.87: when each AWACS / tanker type has an aircraft on orbit today
 
         sweeps = {}                                     # id(sweep package) -> the packages it goes in ahead of
 
@@ -249,6 +251,8 @@ class Session:
                         p.extra["sweep_vs"].update(sx=float(sst_[0]), sy=float(sst_[1]))
         if dropped:
             pkgs = [p for p in pkgs if id(p) not in dropped]
+        for p in pkgs:
+            p.support = pb._support(p)                                   # v0.41.87: with the start times known, only the AWACS / tankers that are on orbit while it flies
         blue_barcap.attach(st, pkgs)                                 # v0.41.85: the planned base CAP / carrier CAP sortie that faces each package and is up while it flies
         pkgs.sort(key=lambda p: p.start)
         for n, p in enumerate(pkgs, 1):                              # numbers follow the clock

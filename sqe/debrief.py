@@ -1211,6 +1211,12 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             if a.kind.value == "SAM" and rad and all(u in lost for u in rad) and not a.destroyed:
                 a.suppressed = True               # SEAD worked: the radars are gone, but the launchers are still there
                 out["lines"].append(f"{a.name}: radars destroyed, launchers intact. SUPPRESSED, not dead: it needs a DEAD strike to finish it.")
+        elif g["kind"] == "support":                              # v0.41.87: a tanker / AWACS shot down comes off its asset
+            if dead:
+                from . import support_assets as _sa
+                ln = _sa.lose(state, g.get("label", ""), len(dead))
+                if ln:
+                    out["lines"].append(ln)
         elif g["kind"] == "enemy_air":
             w = state.enemy_air_at(g["ref"])
             if w and dead:

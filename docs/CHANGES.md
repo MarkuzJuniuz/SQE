@@ -1,6 +1,16 @@
 # CHANGES.md
 
 
+## v0.41.87, tankers and AWACS as assets (step 1: airframes, windows, losses)
+
+XO: "Take the most educated guess on the numbers of these assets."
+- New `sqe/support_assets.py`, saved in `state.support_assets` (older saves get it on first use). Blue: E-3 "Overlord" 6 airframes (USAF has about 30 E-3s, 26 at Tinker over four squadrons; Wikipedia), E-2C "Magic" 4 on the carrier (a VAW squadron has four, globalsecurity.org), KC-135 "Arco" 8 (the 465th ARS operates eight KC-135Rs, globalsecurity.org), KC-135MPRS "Texaco" 8 (judgment call), recovery S-3B "Shell" 4 on the carrier (judgment call). Red: A-50 "Mainstay" 16 (Wikipedia, Ivanovo Severny, about 2011), data only. Time on orbit per sortie and turnaround (E-3 8 h / 12 h; E-2C 4 h / 6 h; tankers 4 h / 8 h; S-3B 2 h / 4 h) are judgment calls (the E-3's "more than 8 hours" is from Wikipedia).
+- Each day plans when every blue type has an aircraft on orbit: back-to-back sorties by the airframes that are ready, each handing over 10 minutes early, an airframe flying again after its turnaround (`state.barcap["support_flights"]`). At full strength the whole day is covered, so nothing changes for you until airframes are lost.
+- A package gets its AWACS / tanker only if one is on orbit from its start to 70 minutes after (`UP_WINDOW_MIN`, judgment call); the supports are recomputed once the start times are known and again when you pick a flight.
+- A support aircraft shot down in a flown mission comes off its asset (the debrief says so); each missing airframe is back overnight with chance 0.34 (about three days; judgment call).
+- Not yet: HAVCAP and the tanker CAP as planned chains of their own, red's A-50 flying, the status line.
+- Smoke check `check_31o_support_assets`.
+
 ## v0.41.86, blue's patrols count in the background raids (BARCAP background sim, step 2)
 
 - A base patrol on station now matters to raids nobody flies. `blue_barcap.patrol_up` draws, once per raid, whether a pair is up over the raided field on the side the raid comes from: the chance is the area's covered minutes of the day over 1440 (`state.barcap["blue_cover"]`; the patrols fly 06:00-22:00, so at most two thirds, and the night is open).

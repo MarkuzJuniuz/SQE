@@ -497,6 +497,9 @@ class WarSimulator:
             w.replenish(max(1, round(w.authorized * d.enemy_replenish)))       # new jets for the squadrons that are not resting (v0.41.53)
         for ln in airwings.step(state, d, self.rng):
             state.note("Overnight: " + ln)
+        from . import support_assets
+        for ln in support_assets.step(state, self.rng):                  # v0.41.87: missing AWACS / tanker airframes come back
+            state.note("Overnight: " + ln)
         for a in state.assets.values():
             if 0 < a.health < 1.0:
                 a.health = min(1.0, a.health + (d.sam_repair if a.kind == AssetKind.SAM else d.asset_repair))
