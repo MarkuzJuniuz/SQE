@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## Tools only (no version bump): call-in probe, fourth version
+
+XO's third run: a control pair that is never called holds a 20 nm racetrack; a flag-released route (V3) flew to the hotspot, orbited and came home; pushed engage tasks (today's red SAM-guard call-in) did not come back. Problem with the flag route: a pair whose shift ends, or that bugs out, would also fly the hotspot leg. `tools/callin_probe.py` now tests jumping to the hotspot leg only when called: a Lua `SwitchWaypoint` command (V4), the same with a wrong `from` index (V6), and a pushed `GoToWaypoint` task (V5), against the never-called control. Speeds are now km/h like pydcs wants (the old probe flew at 220 km/h).
+
 ## Tools only (no version bump): call-in probe, third version
 
 XO's second run: all four pairs, even the control, chased the visible bait tanker on their own, so the call-in could not be told apart. The bait is now AI-invisible. What the run did show: a CAP pair goes about 40 nm out for a visible air target by itself, and the survivors turn back to their station afterwards.
