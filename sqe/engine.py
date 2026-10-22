@@ -14,7 +14,7 @@ from .loadouts import LoadoutLibrary
 from .models import Objective, ObjectiveType, Role
 from . import raids, redair, sams
 from .mission_builder import MissionBuilder, MissionOptions
-from .packages import AI_ONLY, Ledger, NoPlayerSlot, Package, PackageBuilder
+from .packages import AI_ONLY, ai_only, carrier_raid, Ledger, NoPlayerSlot, Package, PackageBuilder
 
 RAID_SCRAMBLES = True      # v0.41.27: emergency raid scrambles are off while intercepts are AI-only (troops in contact stay)
 from .scenario import new_campaign
@@ -145,12 +145,12 @@ class Session:
             # serviceable airframe, but no squadron is asked for more than two sorties per airframe per day.
             daily = {sid: max(0, 2 * q.available - bp["used"].get(sid, 0)) for sid, q in st.squadrons.items()}
             out, names = [], {}          # callsign counter for the whole day: Enfield 1, Enfield 2 ... never two Enfield 1s
-            for i, o in enumerate(objs, 1):
+            for i, o in sorted(enumerate(objs, 1), key=lambda t: not carrier_raid(st, t[1])):      # v0.41.107: the setpiece is built FIRST (it is rare and needs the carrier squadrons), numbers unchanged
                 ledger = Ledger(st)
                 for sid in ledger.free:
                     ledger.free[sid] = min(ledger.free[sid], daily[sid])
                 pkg = None
-                for fp in ((True, False) if ((i - 1) in forced and o.type not in AI_ONLY) else (False,)):
+                for fp in ((True, False) if (((i - 1) in forced or carrier_raid(st, o)) and not ai_only(st, o)) else (False,)):
                     try:
                         pkg = pb.build(o, i, ledger, for_player=fp, names=names)
                         break
@@ -161,6 +161,7 @@ class Session:
                 for f in pkg.flights:
                     daily[f.squadron_id] -= f.count
                 out.append(pkg)
+            out.sort(key=lambda p: p.number)
             # Fighter Sweep (v0.40.2): where intel expects more enemy fighters than the packages' own TARCAP and escort can take, a sweep
             # package of 4-ships goes in ahead of them. One per area (targets within SWEEP_AREA_KM), sized to the worst package there.
             from .packages import is_sweep, sweep_4ships
@@ -446,7 +447,7 @@ class Session:
             squadron_only = self.settings.flight_filter != "all"
         if pkg.extra.get("scrub"):                                       # scrubbed for weather: nobody flies it, the war sim ignores it
             return []
-        if pkg.objective.type in AI_ONLY:                                 # v0.41.27: AI-only for now (BARCAP, bomber and raid intercepts)
+        if pkg.objective.type in AI_ONLY and not pkg.extra.get("setpiece"):    # v0.41.27: AI-only for now (BARCAP, land-raid intercepts); v0.41.107: the carrier raid is a flyable setpiece
             return []
         opts = pkg.player_options(self.state.player.aircraft)
         return [f for f in opts if f.squadron_id == self.state.player.squadron_id] if squadron_only else opts

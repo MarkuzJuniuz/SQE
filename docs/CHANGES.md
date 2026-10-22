@@ -1,6 +1,17 @@
 # CHANGES.md
 
 
+## v0.41.107, the carrier raid is a flyable setpiece (part 1 of 3: package, list and right pane)
+
+XO: "a tasking like any other except it's not hidden like scrambles ... a setpiece, no merged packages ... on the right it will contain all of the flights participating ... A-10: greyed out, in-universe text, press Skip".
+- The red bomber raid on the carrier (FLEET_DEFENSE aimed at the carrier) is no longer AI-only. `packages.carrier_raid` / `ai_only`: BARCAP and land-raid intercepts stay AI-only. The package carries `extra["setpiece"]`.
+- Its flights: CAP flights of 4 from every fighter squadron in radius, nearest first (the boat's squadrons, then land fighters), about one blue fighter per raider (3 flights per 4 bombers, `SETPIECE_RATIO`, judgment call) plus an optional 2-ship sweep. Tasks read in universe ("Intercept: kill the Backfires before they reach launch range...").
+- Built FIRST in the day's plan (numbers unchanged) so the carrier squadrons are not used up, and your squadron always gets a flight in it when it can reach the raid. Nothing merges into it or out of it.
+- Missions page: the right pane lists every flight; the ones you cannot fly are greyed out ("On alert (AI)"); in-universe text above (raid size, bearing); for an A-10 (or any squadron out of reach) a second paragraph says several fighter groups are on alert and Skip Turn settles it. No threat lines for the setpiece.
+- Not yet: the mission side (groups over 4, route, escorts out front) = part 2; the quiet day, big-deal consequences and L2 sizing = part 3. Until part 2 the raid in the mission still shows at most 4 bombers per group.
+- Smoke: new `check_31zb_raid_setpiece` (planned, F-14 can fly, A-10 cannot, no merging, the mission builds).
+
+
 ## v0.41.106, Mozdok's own escort squadron (bomber trump card, step 2)
 
 XO: "Mozdok fighters for now" / a dedicated escort squadron that sits "down the queue for taskings".

@@ -199,12 +199,13 @@ class MissionsPage(QWidget):
         hh.resizeSection(5, 100)
         t.setRowCount(len(p.flights)); t.setFixedHeight(64 + 42 * len(p.flights))
         opts = {f.id for f in self.sess.flyable(p)}
+        sp = bool(p.extra.get("setpiece"))                  # v0.41.107: the carrier raid: every flight listed, those you cannot fly greyed out
         active = st.status == "ACTIVE"
         for i, f in enumerate(p.flights):
             spec = AIRCRAFT[f.aircraft]; yours = f.id in opts
             vals = (f.callsign, spec.display, f.count, f.task, st.bases[f.base_id].name.replace(" AB", ""))
             for j, v in enumerate(vals):
-                t.setItem(i, j, _item(v, theme.GREEN if (yours and j == 0) else (theme.DIM if f.tag else None), center=(j == 2)))
+                t.setItem(i, j, _item(v, theme.GREEN if (yours and j == 0) else (theme.DIM if (f.tag or (sp and not yours)) else None), center=(j == 2)))
             if yours:
                 b = QPushButton("FLY"); b.setObjectName("fly"); b.setEnabled(active); b.setFixedSize(84, 30)
                 b.setToolTip(self._fly_note(p))
@@ -212,7 +213,7 @@ class MissionsPage(QWidget):
                 cont = QWidget(); cl = QHBoxLayout(cont); cl.setContentsMargins(4, 4, 4, 4); cl.addWidget(b, 0, Qt.AlignCenter)
                 t.setCellWidget(i, 5, cont)
             else:
-                t.setItem(i, 5, _item("AI support" if f.tag else f"AI {spec.service}", theme.DIM))
+                t.setItem(i, 5, _item("AI support" if f.tag else ("On alert (AI)" if sp else f"AI {spec.service}"), theme.DIM))
         return t, bool(opts)
 
     def _show(self, row):
@@ -229,8 +230,13 @@ class MissionsPage(QWidget):
             self.bl.addWidget(self._label("SCRUBBED: " + p.extra["scrub"] + ". Nobody flies this package and the war simulation leaves its target alone.", None, theme.RED))
         for _n in p.extra.get("wx_notes", []):
             self.bl.addWidget(self._label("Weather loadout: " + _n, "small", theme.AMBER))
-        self.bl.addWidget(self._label(narrative.intent_for(st, p), "dim"))
+        sp = bool(p.extra.get("setpiece"))
         tbl, yours = self._flight_table(p)
+        if sp:
+            for i_, para in enumerate(narrative.setpiece_text(st, p, yours, AIRCRAFT[st.player.aircraft].display)):
+                self.bl.addWidget(self._label(para, "dim" if i_ else None))
+        else:
+            self.bl.addWidget(self._label(narrative.intent_for(st, p), "dim"))
         if yours:
             self.bl.addWidget(self._label(self._fly_note(p), "small"))
         self.bl.addWidget(tbl)
@@ -249,6 +255,9 @@ class MissionsPage(QWidget):
         if ex and yours:
             sup += "  |  Merged mission: also flies " + ", ".join(f"#{x.number}" for x in ex)
         self.bl.addWidget(self._label(sup, "dim"))
+        if sp:
+            self.bl.addStretch(1)
+            return
         tx, ty = PackageBuilder(st).target_xy(p.objective)
         th = threat_lines(st, tx, ty)[:4]
         nd = folded_n_def(p, ex, self.sess.settings.merge_enemy_pct)

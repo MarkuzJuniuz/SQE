@@ -47,6 +47,22 @@ _FLEET = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
 # and never folded into your mission (fleet / raid packages never were): their routes and fight circles don't follow the SAM rules yet
 # (BARCAP jets wandered inland over red without a single scramble). They come back one at a time, the bomber intercept first.
 AI_ONLY = (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
+
+
+def carrier_raid(st, obj) -> bool:
+    """v0.41.107: the bomber raid on the carrier (target is the carrier itself): the one fleet job that is a flyable SETPIECE (XO 2026-10-22)."""
+    b = st.bases.get(obj.target_id)
+    return obj.type == ObjectiveType.FLEET_DEFENSE and b is not None and b.kind == BaseKind.CARRIER
+
+
+def ai_only(st, obj) -> bool:
+    """Is this job AI-only? BARCAP and land-raid intercepts are; the carrier raid is a setpiece the player can fly."""
+    return obj.type in AI_ONLY and not carrier_raid(st, obj)
+
+
+SETPIECE_RATIO = 0.75       # blue CAP flights of 4 per bomber: 3 flights for 4 bombers + 8 escorts, i.e. about one blue fighter per raider (judgment call, XO: "overwhelming")
+_SETPIECE_TASK = {Role.CAP: "Intercept: kill the Backfires before they reach launch range, then the escorts",
+                  Role.SWEEP: "Sweep ahead of the fleet: engage the raid's escorts so the interceptors get at the bombers"}
 _TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM",
          Role.TARCAP: "TARCAP: on station short of the target before the package, shoot what comes in range, do not chase; stay at least 15 minutes and until the last strike flight is off target plus 5 minutes, then home",
          Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
@@ -230,6 +246,9 @@ class PackageBuilder:
                     Slot(Role.SEAD, 4 if nb >= SALVO_8_NEIGHBOURS else 2)]     # the JSOW flight is picked before the second HARM flight: without it nothing is destroyed
         elif obj.type == ObjectiveType.CAS and obj.aim == "SEAD":           # v0.41.20: CAS under a live SA-2/3/6: the HARM escort is not optional
             tmpl = [Slot(Role.CAS, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
+        if carrier_raid(self.state, obj):                                    # v0.41.107: the setpiece: every fighter flight in reach, about one blue fighter per raider
+            k = max(2, math.ceil(SETPIECE_RATIO * n_fl))              # n_fl = bombers; raiders = bombers x 3 (2 escorts each) -> k flights of 4
+            return [Slot(Role.CAP, 4), Slot(Role.CAP, 4)] + [Slot(Role.CAP, 4, False) for _ in range(k - 2)] + [Slot(Role.SWEEP, 2, False)]
         if is_sweep(obj):                                                    # Fighter Sweep: 4-ships only, one per 4 bandits beyond the packages' own cover
             n4 = max(1, sweep_4ships(n_fl))
             return [Slot(Role.SWEEP, 4)] + [Slot(Role.SWEEP, 4, False) for _ in range(n4 - 1)]
@@ -253,6 +272,8 @@ class PackageBuilder:
         if obj.type == ObjectiveType.FLEET_DEFENSE:
             extra = self._raid_plan(number, obj) or {}
             n_fl = extra.get("escorts", 0) // 2
+            if extra and carrier_raid(st, obj):
+                extra = {**extra, "setpiece": True}                          # v0.41.107: flown from the Missions page like any job, no merging, every flight listed
         elif obj.type == ObjectiveType.BARCAP:       # a fleet patrol meets a probing enemy flight if the enemy still has fighters
             n_fl = 1 if any(w.available > 0 for w in st.enemy_air) else 0
         else:
@@ -311,7 +332,7 @@ class PackageBuilder:
             cs = _next_callsign(st, sq, used)
             pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", cs, slot.role, sq.id,
                                           sq.aircraft, count, sq.base_id,
-                                          _KIT_TASK.get(slot.kit) or _TAG_TASK.get(slot.tag) or (_SO_SEAD_TASK if (obj.aim == "STANDOFF" and slot.role == Role.SEAD) else None) or (_ESC_TASK if slot.role == Role.ESCORT else None) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role],
+                                          _KIT_TASK.get(slot.kit) or _TAG_TASK.get(slot.tag) or (_SO_SEAD_TASK if (obj.aim == "STANDOFF" and slot.role == Role.SEAD) else None) or (_ESC_TASK if slot.role == Role.ESCORT else None) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or (_SETPIECE_TASK.get(slot.role) if pkg.extra.get("setpiece") else None) or _TASK[slot.role],
                                           is_pl, slot.tag, slot.kit, ""))
         pkg.support = self._support(pkg)
         pkg.jtac = obj.type in JTAC_OBJECTIVES
