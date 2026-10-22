@@ -113,6 +113,8 @@ class Session:
 
     def plan_day(self) -> list:
         st = self.state
+        from . import threatmap as _tm
+        _tm.set_ramp_lead(bool(getattr(self.settings, "hot_ramp_scrambles", False)))      # v0.41.92: planning keep-outs use the same scramble circles as the build
         from . import ground
         ground.ensure_blue_garrisons(st)                # older saves: a friendly garrison at every airfield
         sams.ensure_blue_sams(st)                       # v0.41.62: blue's three air-defence sites at every airfield (older saves: from the field's `defense`)

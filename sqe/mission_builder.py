@@ -257,6 +257,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """extras: other packages (AI only) folded into this mission: same area, starting at or after yours. They share the ground world,
         the support aircraft and the enemy air picture, and fly live with their own push, TOT and stagger."""
         o = self.o
+        tm.set_ramp_lead(bool(getattr(o, "hot_ramp_scrambles", False)))          # v0.41.92: bigger scramble circles when the pairs taxi from the ramp
         st = self.state = copy.copy(self.state)                       # a private view: the carrier may be moved back for this sortie only
         st.bases = {k: copy.copy(v) for k, v in st.bases.items()}
         pf = package.player_flight

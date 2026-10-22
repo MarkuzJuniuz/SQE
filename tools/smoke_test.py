@@ -1742,6 +1742,32 @@ def check_31r_scramble_stations(c):
     print(f"[scramble] red covered target = station, no cover = over the field, blue forward <= {sc.STICK_NM:.0f} nm under cover; {n_red} red CAP / alert routes, all end in a landing")
 
 
+def check_31s_scramble_timing_fuel(c):
+    """v0.41.92: hot-ramp pairs scramble from a larger circle (they take minutes to taxi), the planning keep-outs read the same radius, and the debrief
+    reports a flight that ended the mission low on fuel."""
+    from sqe import threatmap as tm
+    from sqe.debrief import Manifest, apply_debrief
+    f, tg = (0.0, 0.0), (100 * 1852.0, 0.0)
+    try:
+        tm.set_ramp_lead(False); r0 = tm.field_detect_nm(f, tg)
+        tm.set_ramp_lead(True); r1 = tm.field_detect_nm(f, tg)
+        near = tm.field_detect_nm(f, (30 * 1852.0, 0.0))
+        tm.set_ramp_lead(False); near0 = tm.field_detect_nm(f, (30 * 1852.0, 0.0))
+    finally:
+        tm.set_ramp_lead(False)
+    assert r1 > r0 and r1 - r0 <= tm.RAMP_LEAD_NM + 1e-6, ("the ramp lead widens the circle by at most the lead", r0, r1)
+    assert near >= near0 and near <= 0.85 * 30 + 15 + 1e-6, ("a field close to the fight is never widened past what its distance justifies", near0, near)
+    s = fresh_session()
+    s.new("Fuel lines", "F-16C", 2, seed=7); st = s.state
+    m = Manifest(st.campaign_id, 1, "pkg1", st.day)
+    trk = {"Alert 7": [[30 * i, 0, 0, 7000, 100 - 4 * i, 400] for i in range(1, 22)], "Bandit 1": [[30 * i, 0, 0, 7000, 90, 400] for i in range(1, 12)],
+           "Alert 9": [[30, 0, 0, 20, 100, 0]] * 10}
+    out = apply_debrief(st, m, {"dead": [], "landed": [], "time": 700, "tracks": trk, "alerts": [{"g": "Alert 7", "b": "X", "ty": "MiG-29S", "called": 10, "air": 40}]})
+    fl = [ln for ln in out["lines"] if ln.startswith("Fuel:")]
+    assert len(fl) == 1 and "Alert 7 (MiG-29S)" in fl[0] and "bingo (20%)" in fl[0], fl
+    print("[fuel] " + fl[0])
+
+
 def check_31o_support_assets(c):
     """v0.41.87: tankers and AWACS are assets: airframe counts, daily windows, a package keeps only what is on orbit, losses and returns."""
     import random
@@ -3270,6 +3296,7 @@ CHECKS = [
     check_31p_guard_chains,
     check_31q_red_patrols_spread,
     check_31r_scramble_stations,
+    check_31s_scramble_timing_fuel,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,
