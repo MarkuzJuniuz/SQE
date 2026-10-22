@@ -129,10 +129,26 @@ class SettingsDialog(QDialog):
                 "natural pace (afterburner time). AI flights adjust automatically.")
         self.fuel = QCheckBox("AI fuel management (unlimited until the push, real fuel in the fight, unlimited again from egress)")
         self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); v.addWidget(self.fuel)
-        self.hotramp = QCheckBox("Hot ramp scrambles at land fields (experimental: alert pairs wait on the ramp and taxi out; carriers keep the hidden deck start)")
-        self.hotramp.setChecked(bool(getattr(settings, "hot_ramp_scrambles", False))); v.addWidget(self.hotramp)
         self.f14n = QCheckBox("F-14B(U): name waypoints with special-point codes (IP, ST, HB...) so DEST can select them")
         self.f14n.setChecked(bool(settings.f14_special_names)); v.addWidget(self.f14n)
+        v.addStretch(1)
+
+        # ---- Experimental: features still being tested; each one can be switched off --------------------------------------
+        v = page("Experimental")
+        hint(v, "Features still being tried out. Each one can be switched off if it misbehaves; the defaults are the safe ones.")
+        self.ecm = QCheckBox("ECM script: SQE's own jamming model (experimental, off by default)")
+        self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
+        hint(v, "Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
+                "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
+        self.hotramp = QCheckBox("Hot ramp scrambles at land fields (experimental: alert pairs wait on the ramp and taxi out; carriers keep the hidden deck start)")
+        self.hotramp.setChecked(bool(getattr(settings, "hot_ramp_scrambles", False))); v.addWidget(self.hotramp)
+        hint(v, "On: alert pairs at land fields wait hot on the ramp and taxi out when called. Off: they wait hidden and appear on the runway (the older, steadier way). "
+                "The carrier always keeps the hidden deck start, and so does your own field.")
+        self.borrow_red = QCheckBox("Red borrowing: red moves SAM batteries from quiet sites to threatened ones")
+        self.borrow_red.setChecked(bool(getattr(settings, "borrow_red", True))); v.addWidget(self.borrow_red)
+        self.borrow_blue = QCheckBox("Blue borrowing: blue moves SAM batteries from quiet fields to threatened ones")
+        self.borrow_blue.setChecked(bool(getattr(settings, "borrow_blue", True))); v.addWidget(self.borrow_blue)
+        hint(v, "Off: that side only rebuilds destroyed sites the slow way (by supply). Orders already on their way wait until you switch it back on. Takes effect at the next overnight update.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
@@ -180,10 +196,6 @@ class SettingsDialog(QDialog):
         _row = QFormLayout(); _row.addRow("AI landings, carrier", self.land_cv); _row.addRow("AI landings, airfields", self.land_af); v.addLayout(_row)
         hint(v, "Skip: AI flights going home are recovered short of the base (10 nm from the boat, 8 nm from a field), count as landed and leave the mission, "
                 "so DCS's landing queue never runs them dry or fills your pattern. Your own wingmen are recovered too once you are back. Land for real: DCS landings.")
-        self.ecm = QCheckBox("ECM script: SQE's own jamming model (experimental, off by default)")
-        self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
-        hint(v, "Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
-                "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
         self.ruins = QCheckBox("Ruins: show what earlier packages already hit (smoke and fire); struck flights fly home")
         self.ruins.setChecked(bool(getattr(settings, "ruins", True))); v.addWidget(self.ruins)
         hint(v, "Earlier packages in the same area that struck before your start leave smoking ruins (at most three sites, a few plumes each). The result is "
@@ -260,6 +272,7 @@ class SettingsDialog(QDialog):
         v.addStretch(1)
         self._tm_refresh()
 
+        self.tabs.tabBar().moveTab(1, self.tabs.count() - 1)                  # Experimental last
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); bb.accepted.connect(self._save)
         bb.rejected.connect(self.reject); lay.addWidget(bb)
         if not settings.dcs_saves or not Path(settings.dcs_saves).exists():
@@ -296,6 +309,8 @@ class SettingsDialog(QDialog):
         self.s.takeoff_buffer_s = int(self.tob.value())
         self.s.ai_unlimited_fuel = self.fuel.isChecked()
         self.s.hot_ramp_scrambles = self.hotramp.isChecked()
+        self.s.borrow_red = self.borrow_red.isChecked()
+        self.s.borrow_blue = self.borrow_blue.isChecked()
         self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())
         self.s.merge_enemy_pct = int(self.mpct.value())
         self.s.merge_back_min = int(self.mback.value())

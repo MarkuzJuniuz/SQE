@@ -1,6 +1,12 @@
 # CHANGES.md
 
 
+## v0.41.81, Experimental settings tab: borrowing per side
+
+* **XO: "a setting that lets me turn borrowing on and off per side, on its own Experimental tab; the ECM script goes there too."** Settings has a new last tab, **Experimental**: *Red borrowing*, *Blue borrowing* (new, `borrow_red` / `borrow_blue`, both on = today's behaviour), the **ECM script** (moved from Mission Build) and **Hot ramp scrambles** (v0.41.80, moved from General).
+* "Borrowing" = the SAM orders by need (`sams.red_orders` / `sams.blue_orders`: a battery is moved from the least-threatened site to a threatened one). Off for a side: its orders do not run overnight (orders already on their way wait until you switch it back on) and only the slow rebuild by supply replaces destroyed sites. The engine builds every war simulator through `Session._sim` which applies the switches.
+* Smoke: new `check_31j_borrow_switches`; the Settings tab-list check expects the new tab.
+
 ## v0.41.80, hot ramp scrambles at land fields (experimental, off by default)
 
 * **XO's experiment: "hot ramp starts for scramblers, land fields first".** New setting (Settings, "Hot ramp scrambles at land fields", off by default; `hot_ramp_scrambles`). On: scramble pairs at land fields (red alert pairs, red reinforcements, blue alert pairs, the red relief and standby pairs) start hot on the ramp, uncontrolled, and a trigger starts them when called (the v0.40.x path, kept in the callers all along; `_alert_group` now creates it). Off: the hidden runway start of v0.41.0, unchanged.
