@@ -2002,6 +2002,39 @@ def check_31za_mozdok_escorts(c):
             assert [q.role for q in w2.sqns] == [q.role for q in mw.sqns]
 
 
+def check_31zb_raid_setpiece(c):
+    """v0.41.107: the carrier raid is a flyable SETPIECE: every fighter flight in reach is listed, a fighter squadron can fly it, an A-10 cannot, nothing
+    merges into it, and the GUI text is in universe."""
+    from sqe import bombers, narrative
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    real = bombers.desperation
+    bombers.desperation = lambda st, bw: 5.0                    # red is desperate: the raid is on at once
+    try:
+        res = {}
+        for ac in ("F-14BU", "A-10C"):
+            ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+            ses.new("Setpiece", ac, 3, seed=3)
+            sp = [p for p in ses.packages() if p.extra.get("setpiece")]
+            assert sp, "no carrier raid setpiece was planned"
+            p = sp[0]
+            assert p.objective.type.value == "FLEET_DEFENSE" and ses.state.bases[p.objective.target_id].kind.value == "CARRIER"
+            caps = [f for f in p.flights if f.role.value == "CAP"]
+            assert len(caps) >= 2 and sum(f.count for f in caps) >= p.extra["bombers"], (len(caps), p.extra)
+            assert not ses.merge_candidates(p)
+            mine = ses.flyable(p, squadron_only=False)
+            res[ac] = (ses, p, mine)
+        ses, p, mine = res["F-14BU"]
+        assert mine, "a Tomcat squadron can fly the setpiece"
+        r = ses.fly(p.number, mine[0].id)                       # the mission builds with the raid in it (the group-splitting comes in the next part)
+        assert r is not None and ses.state.pending, "flying the setpiece builds a mission"
+        ses_a, pa, mine_a = res["A-10C"]
+        assert not mine_a, "an A-10 cannot"
+        assert "Skip Turn" in " ".join(narrative.setpiece_text(ses_a.state, pa, False, "A-10C"))
+        assert "Skip Turn" not in " ".join(narrative.setpiece_text(ses.state, p, True, "F-14BU"))
+    finally:
+        bombers.desperation = real
+
+
 def check_31y_unit_cap_merged(c):
     """v0.41.104: the Settings unit limit counts only the BASE mission; the units merged packages bring do not count against it, and the only upper bound for
     the whole mission is the ceiling in sqe/data/limits.json (the base mission is still trimmed to the limit, merged packages are not dropped for it)."""
@@ -3556,6 +3589,7 @@ CHECKS = [
     check_31y_unit_cap_merged,
     check_31z_bomber_trump_card,
     check_31za_mozdok_escorts,
+    check_31zb_raid_setpiece,
     check_31o_support_assets,
     check_31p_guard_chains,
     check_31q_red_patrols_spread,
