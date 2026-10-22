@@ -278,6 +278,11 @@ class RaidSpawns:
         tg = ad.get("pat") or ad.get("hawk")
         if tg is None:
             return
+        # v0.41.94: four jets against both batteries fly as two pairs, the first on the Patriot, the second on the HAWK; four against a lone (full) Patriot
+        # fly as one group of four on it (8 Kh-31P)
+        pairs = [(tg, int(ex["arm"]))]
+        if int(ex["arm"]) >= 4 and ad.get("pat") and ad.get("hawk"):
+            pairs = [(ad["pat"], 2), (ad["hawk"], 2)]
         pt = lambda x, y: mapping.Point(x, y, self.t)
         tgt = (dx, dy)
         pts = list(path[:-1])
@@ -296,32 +301,33 @@ class RaidSpawns:
             (sx, sy), seg_i = tm.point_back_along(pa, min(L, max((ARM_LAUNCH_NM + 10) * NM, V * t_arm)))
             remaining = pa[seg_i:]
         alt = alt
-        g = self.m.flight_group(self.red, "Raid SEAD 1", planes.Su_24M, None, pt(sx, sy), altitude=alt, speed=450 * KPH, maintask=task.SEAD, group_size=ex["arm"])
-        if hold_until is not None:
-            ct_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
-            ct_.stop_after_time(int(hold_until)); g.points[0].tasks.append(ct_)
-            g.points[0].name = "MSHL"
-        for k, q in enumerate(remaining):
-            wp = g.add_waypoint(pt(*q), alt, 450 * KPH, "ARM" if k == len(remaining) - 1 else "ING")
-            if k == len(remaining) - 1:
-                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
-                ca_ = task.ControlledTask(task.AttackGroup(tg.id, weapon_type=task.WeaponType.ARM, group_attack=True))
-                ca_.stop_after_time(int(t_arm) + ARM_WINDOW_S); wp.tasks.append(ca_)
-        back_ = offset(*launch, bearing(*launch, *pts[-1]), 20 * NM)          # off the launch point away from the field, then home
-        g.add_waypoint(pt(*back_), alt, 450 * KPH, "EGR")
-        for k, q in enumerate(home_):
-            g.add_waypoint(pt(*q), alt, 450 * KPH, "RTB" if k == len(home_) - 1 else "AVD")
-        g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
-        g.set_skill(skill)
-        if act_ >= 30:
-            self._late(g, act_)
-        load = enemy_arm_loadout("Su_24M")
-        names = []
-        for j, u in enumerate(g.units, 1):
-            u.name = f"RAID-S-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
-        if not load:
-            self.warns.append("Su-24M: no Kh-31P found; the red SEAD pair is unarmed.")
-        manifest.add("enemy_air", ex["bomber_wing"], names, ac="Su_24M")
+        for gi, (tgt_, n_jets) in enumerate(pairs):
+            g = self.m.flight_group(self.red, f"Raid SEAD {gi + 1}", planes.Su_24M, None, pt(sx, sy), altitude=alt + gi * 600, speed=450 * KPH, maintask=task.SEAD, group_size=n_jets)     # the second pair 600 m higher: they share a route
+            if hold_until is not None:
+                ct_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
+                ct_.stop_after_time(int(hold_until)); g.points[0].tasks.append(ct_)
+                g.points[0].name = "MSHL"
+            for k, q in enumerate(remaining):
+                wp = g.add_waypoint(pt(*q), alt + gi * 600, 450 * KPH, "ARM" if k == len(remaining) - 1 else "ING")
+                if k == len(remaining) - 1:
+                    wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
+                    ca_ = task.ControlledTask(task.AttackGroup(tgt_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                    ca_.stop_after_time(int(t_arm) + ARM_WINDOW_S); wp.tasks.append(ca_)
+            back_ = offset(*launch, bearing(*launch, *pts[-1]), 20 * NM)          # off the launch point away from the field, then home
+            g.add_waypoint(pt(*back_), alt, 450 * KPH, "EGR")
+            for k, q in enumerate(home_):
+                g.add_waypoint(pt(*q), alt, 450 * KPH, "RTB" if k == len(home_) - 1 else "AVD")
+            g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
+            g.set_skill(skill)
+            if act_ >= 30:
+                self._late(g, act_)
+            load = enemy_arm_loadout("Su_24M")
+            names = []
+            for j, u in enumerate(g.units, 1):
+                u.name = f"RAID-S-{gi + 1}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+            if not load:
+                self.warns.append("Su-24M: no Kh-31P found; the red SEAD pair is unarmed.")
+            manifest.add("enemy_air", ex["bomber_wing"], names, ac="Su_24M")
 
     # ---- bomber raid on the fleet: already en route from the first second, along a real path from their base ----------------
     def _spawn_raid(self, package, sx_, sy_, tot_s, geom, manifest):

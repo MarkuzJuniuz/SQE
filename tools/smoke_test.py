@@ -1608,9 +1608,11 @@ def check_31l_red_arm(c):
                 st.day += 1; s.plan_day()
             if rp is None:
                 continue
+            rp.extra["arm"] = 4                                                # v0.41.94: a four-jet group: one group of four, or two pairs (Patriot, HAWK)
             s.fly(rp.number, None)
             mz = _zf.ZipFile(st.pending["miz"]).read("mission").decode()
-            assert "RAID-S-1" in mz and "RAID-S-2" in mz and "Raid SEAD 1" in mz, "the SEAD pair is in the mission"
+            assert "RAID-S-1-1" in mz and "RAID-S-1-2" in mz and "Raid SEAD 1" in mz, "the SEAD pair is in the mission"
+            assert "RAID-S-1-4" in mz or "RAID-S-2-2" in mz, "four SEAD jets: a group of four on the Patriot, or a second pair on the HAWK"
             assert "D8F2C90B-887B-4B9E-9FE2-996BC9E9AF03" in mz, "it carries Kh-31P"
             assert "RAID-B-1" in mz, "the bombers still fly"
             return
@@ -1789,6 +1791,29 @@ def check_31t_all_list_is_display_only(c):
         _S.config_dir = old_cd
     assert ld.flight_filter == "squadron" and ld.list_filter == "all", (ld.flight_filter, ld.list_filter)
     print("[fly] the all-packages list is display only; an old 'all' setting no longer lets you fly other squadrons")
+
+
+def check_31u_red_sead_size(c):
+    """v0.41.94: red's SEAD group is sized like blue's salvo: 2 jets against a Patriot or a HAWK alone, 4 against both or a full Patriot, never more
+    than the Su-24Ms the wing has left beyond its bombers, 0 against a field with neither."""
+    from sqe import raids, sams
+    s = fresh_session()
+    s.new("Red SEAD size", "F-15C", 3, seed=7); st = s.state
+    b = next(b_ for b_ in st.bases.values() if b_.kind.value == "AIRFIELD")
+    sites = sams.blue_sites(st, b)
+    def setp(pat, hawk):
+        sites["pat"].health, sites["hawk"].health = pat, hawk
+    full = sams.BLUE_FULL_DEF
+    setp(1.0, 1.0); assert raids.arm_jets(st, b, 12, 4) == 4, "Patriot + HAWK: four"
+    setp(1.0, 0.0); assert raids.arm_jets(st, b, 12, 4) == 4, "a full-strength Patriot: four"
+    setp(max(0.0, full - 0.2), 0.0)
+    if sams.blue_battery(b, st)["patriot_ln"]:
+        assert raids.arm_jets(st, b, 12, 4) == 2, "a weakened Patriot alone: a pair"
+    setp(0.0, 1.0); assert raids.arm_jets(st, b, 12, 4) == 2, "a HAWK alone: a pair"
+    setp(1.0, 1.0); assert raids.arm_jets(st, b, 6, 4) == 2, "a short wing falls back to a pair"
+    assert raids.arm_jets(st, b, 5, 4) == 0, "no Su-24M left over: none"
+    setp(0.0, 0.0); assert raids.arm_jets(st, b, 12, 4) == 0, "no battery: none"
+    print("[red sead size] Patriot + HAWK or full Patriot 4, a lone weaker battery 2, short wing 2, nothing standing 0")
 
 
 def check_31o_support_assets(c):
@@ -3321,6 +3346,7 @@ CHECKS = [
     check_31r_scramble_stations,
     check_31s_scramble_timing_fuel,
     check_31t_all_list_is_display_only,
+    check_31u_red_sead_size,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,
