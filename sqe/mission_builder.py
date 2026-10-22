@@ -325,6 +325,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         manifest = Manifest(st.campaign_id, st.sortie_counter + 1, package.id, st.day)
         manifest.cur_pkg = package.id
         self.groups_by_asset, self.flight_groups = {}, []
+        self.base_ad = {}                              # v0.41.84: base id -> {"pat": group, "hawk": group} (blue field air defence, the targets of a red SEAD pair)
 
         # ---- bases, base defenses, carrier + escorts --------------------------------------------------------
         self.ship, self.apt = {}, {}
@@ -984,7 +985,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     return (px, py) if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0) else dry(a0, d0)
                 x, y = site_at("pat", ang, 4500)
                 if bt["patriot_ln"]:
-                    self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
+                    self.base_ad.setdefault(base.id, {})["pat"] = self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
                                   ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M)
                 x, y = site_at("aaa", ang + 120, 3500)
                 if bt["aaa"]:
@@ -994,7 +995,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     self._platoon(self.usa, f"BASEDEF {base.name} AAA 2", [("Vulcan", 1), ("M1097_Avenger", 2)], x, y, ang, F.Line)
                 if bt["hawk"]:
                     x, y = site_at("hawk", ang + 50, 6000)
-                    self._platoon(self.usa, f"BASEDEF {base.name} HAWK", [("Hawk_sr", 1), ("Hawk_tr", sams.BLUE_HAWK_TR), ("Hawk_pcp", 1), ("Hawk_cwar", 1),
+                    self.base_ad.setdefault(base.id, {})["hawk"] = self._platoon(self.usa, f"BASEDEF {base.name} HAWK", [("Hawk_sr", 1), ("Hawk_tr", sams.BLUE_HAWK_TR), ("Hawk_pcp", 1), ("Hawk_cwar", 1),
                                   ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M)
             return
         hdg = getattr(self, '_cv_hdg', {}).get(base.id)

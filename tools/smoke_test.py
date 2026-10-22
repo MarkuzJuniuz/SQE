@@ -1571,6 +1571,50 @@ def check_31k_salvo_size(c):
     assert seen, "no Standoff DEAD package in the sample"
 
 
+def check_31l_red_arm(c):
+    """v0.41.84: a Su-24M raid on a field with a live Patriot / HAWK may bring a Kh-31P SEAD pair (L1 never; L2 rare; L3 normal)."""
+    import sqe.engine as eng
+    from sqe import difficulty as df
+    from sqe.difficulty import LEVELS
+    assert LEVELS[1].raid_arm == 0 and 0 < LEVELS[2].raid_arm < LEVELS[3].raid_arm, "red ARM by level"
+    aio, eng.AI_ONLY = eng.AI_ONLY, ()
+    rs, eng.RAID_SCRAMBLES = eng.RAID_SCRAMBLES, True
+    from sqe import raids as _rd
+    old, pick0 = (LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise), _rd.pick_aim
+    LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise = 1.0, 3.0, 0.0       # every day brings announced raids
+    def _su24(st_, d_, rng_):                                         # always a field raid that Su-24Ms can reach
+        for b_, a_, w_ in _rd.candidates(st_, "field"):
+            r_ = _rd._reach(st_, "field", *_rd.aim_xy(st_, a_, b_))
+            if r_ is not None and r_[2] == "Su_24M":
+                return b_, a_
+        return None
+    _rd.pick_aim = _su24
+    try:
+        for seed in (12, 16, 4, 20):
+            s = fresh_session()
+            s.new("Red ARM", "F-15C", 3, seed=seed); st = s.state
+            rp = None
+            for _day in range(10):
+                rp = next((p_ for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land") and not p_.extra.get("aim")
+                           and p_.extra.get("arm") and s.flyable(p_)), None)
+                if rp:
+                    break
+                st.day += 1; s.plan_day()
+            if rp is None:
+                continue
+            s.fly(rp.number, None)
+            mz = _zf.ZipFile(st.pending["miz"]).read("mission").decode()
+            assert "RAID-S-1" in mz and "RAID-S-2" in mz and "Raid SEAD 1" in mz, "the SEAD pair is in the mission"
+            assert "D8F2C90B-887B-4B9E-9FE2-996BC9E9AF03" in mz, "it carries Kh-31P"
+            assert "RAID-B-1" in mz, "the bombers still fly"
+            return
+        raise AssertionError("no raid with a SEAD pair in four seeds")
+    finally:
+        LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise = old
+        _rd.pick_aim = pick0
+        eng.AI_ONLY, eng.RAID_SCRAMBLES = aio, rs
+
+
 def check_31j_borrow_switches(c):
     """v0.41.81: the Experimental tab's per-side borrowing switches: off, that side's SAM orders do not run overnight; on (default), they do."""
     from sqe import sams, war
@@ -3025,6 +3069,7 @@ CHECKS = [
     check_31i_hot_ramp_scrambles,
     check_31j_borrow_switches,
     check_31k_salvo_size,
+    check_31l_red_arm,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,

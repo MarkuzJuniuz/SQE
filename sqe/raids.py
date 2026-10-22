@@ -169,6 +169,7 @@ def pick_aim(state, d, rng: random.Random):
     return base, aim
 
 
+ARM_AD_FACTOR = 0.5     # v0.41.84: a field raid with a red SEAD pair meets half the battery cover in the unflown (background) raids (judgment call)
 PATRIOT_NM = 40          # v0.41.20: a full-strength field's Patriot covers its own field and what lies this close to it
 FLEET_NM = 70            # v0.41.31: ...and the carrier group's SM-2 reach (measured: CAP pairs killed 51-67 nm out; mission_builder.FLEET_RAID_AVOID_NM)
 HAWK_NM = 25             # ...and a field's HAWK battery (v0.41.30: every full-strength field has one, not only yours)
@@ -278,14 +279,18 @@ def overnight(state, d, rng: random.Random) -> list:
         redair.spend(state, wing.base_asset_id, int(d.raid_size[1]))
         alert = sum(s.available for s in state.squadrons.values() if s.base_id == b.id) / max(1, sum(s.authorized for s in state.squadrons.values() if s.base_id == b.id))
         from .sams import covering_ad
-        p_stop = min(0.95, 0.2 + 0.45 * covering_ad(state, x, y) + 0.3 * alert)       # v0.41.30: the batteries that cover the target (was the field's defense number)
+        ad_ = covering_ad(state, x, y)
+        arm_ = aim_kind(aim) == "field" and r[2] == "Su_24M" and d.raid_arm > 0 and rng.random() < d.raid_arm      # v0.41.84: red SEAD ahead of the bombers
+        if arm_:
+            ad_ *= ARM_AD_FACTOR
+        p_stop = min(0.95, 0.2 + 0.45 * ad_ + 0.3 * alert)       # v0.41.30: the batteries that cover the target (was the field's defense number)
         what = {"field": b.name, "supply": state.blue_assets[aim].name if aim in state.blue_assets else "", "garrison": state.blue_assets[aim].name if aim in state.blue_assets else "",
                 "sector": "friendly troops in " + state.ground["names"][int(aim.split(":")[1])] if aim.startswith("sector:") else ""}[aim_kind(aim)]
         if rng.random() < p_stop:
             k = wing.lose(r[2], rng.randint(1, 3 + round(covering_ad(state, x, y))))
             lines.append(f"Surprise raid on {what}: alert aircraft got up in time; {k} attack aircraft shot down")
         else:
-            lines.append(f"Surprise raid on {what}: nobody was warned and the aircraft got through")
+            lines.append(f"Surprise raid on {what}: nobody was warned and the aircraft got through" + (" (red anti-radiation missiles suppressed the batteries)" if arm_ else ""))
             lines += [x_.strip() for x_ in hit(state, b.id, wing, rng, None, aim, r[2])]
     if state.raids is not None:
         state.raids["surprise"] = 0

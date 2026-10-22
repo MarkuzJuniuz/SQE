@@ -16,7 +16,7 @@ from . import callsigns, reactive
 from . import threatmap as tm
 from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
-from .loadouts import ENEMY_FIGHTERS, enemy_bomber_loadout, enemy_cap_loadout, enemy_strike_loadout
+from .loadouts import ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_strike_loadout
 from .models import AssetKind, BaseKind, ObjectiveType, Role
 from .red_air_picture import A2A_ZONE_NM, RED_LONG_RANGE
 from .routes import AVOID_NM, FT, NM, Wpt, avoid_circles, bearing, dist, offset
@@ -29,6 +29,9 @@ RAID_MPS = 232.0              # a red raid's speed (450 kts), the same figure it
 RAID_MIN_NM = 40              # ...a raid with no time to hold starts no closer than this to its target (it is late instead)
 RAID_HOLD_MAX_S = 600         # ...and one with plenty of time appears at most 10 min before it must push
 RAID_EGRESS_NM = 30           # ...off target it turns 40 degrees off its way in and leaves this far before heading home     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
+ARM_LAUNCH_NM = 40            # v0.41.84: a red SEAD pair fires its Kh-31P this far from the field (judgment call: inside the 60 nm the Kh-31 page gives, with margin for a low launch)
+ARM_LEAD_S = 150              # ...and the bombers reach the target this long after the launch point (judgment call)
+ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
 
 
@@ -265,6 +268,58 @@ class RaidSpawns:
             u.name = f"{aim}|{k}"; names.append(u.name)
         manifest.add("blue_site", aim, names, label=label)
 
+    def _spawn_raid_arm(self, package, ex, cvb, path, V, t_tgt, alt, skill, home_, dx, dy, manifest):
+        """v0.41.84: a Kh-31P SEAD pair flies the raid's way in, fires at the field's Patriot (else HAWK) from ARM_LAUNCH_NM, then turns away.
+        It reaches the launch point ARM_LEAD_S ahead of the bombers' TOT."""
+        ad = self.base_ad.get(cvb.id) or {}
+        tg = ad.get("pat") or ad.get("hawk")
+        if tg is None:
+            return
+        pt = lambda x, y: mapping.Point(x, y, self.t)
+        tgt = (dx, dy)
+        pts = list(path[:-1])
+        while len(pts) > 1 and dist(*pts[-1], *tgt) <= (ARM_LAUNCH_NM + 10) * NM:
+            pts.pop()
+        launch = offset(dx, dy, bearing(dx, dy, *pts[-1]), ARM_LAUNCH_NM * NM)
+        pa = pts + [launch]
+        L = sum(dist(*pa[i], *pa[i + 1]) for i in range(len(pa) - 1))
+        t_arm = t_tgt - ARM_LEAD_S
+        t_leave = t_arm - L / V
+        hold_until, act_ = None, 0.0
+        if t_leave >= 0:
+            (sx, sy), remaining = pa[0], pa[1:]
+            hold_until, act_ = t_leave, max(0.0, t_leave - RAID_HOLD_MAX_S)
+        else:
+            (sx, sy), seg_i = tm.point_back_along(pa, min(L, max((ARM_LAUNCH_NM + 10) * NM, V * t_arm)))
+            remaining = pa[seg_i:]
+        alt = alt
+        g = self.m.flight_group(self.red, "Raid SEAD 1", planes.Su_24M, None, pt(sx, sy), altitude=alt, speed=450 * KPH, maintask=task.SEAD, group_size=ex["arm"])
+        if hold_until is not None:
+            ct_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
+            ct_.stop_after_time(int(hold_until)); g.points[0].tasks.append(ct_)
+            g.points[0].name = "MSHL"
+        for k, q in enumerate(remaining):
+            wp = g.add_waypoint(pt(*q), alt, 450 * KPH, "ARM" if k == len(remaining) - 1 else "ING")
+            if k == len(remaining) - 1:
+                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
+                ca_ = task.ControlledTask(task.AttackGroup(tg.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                ca_.stop_after_time(int(t_arm) + ARM_WINDOW_S); wp.tasks.append(ca_)
+        back_ = offset(*launch, bearing(*launch, *pts[-1]), 20 * NM)          # off the launch point away from the field, then home
+        g.add_waypoint(pt(*back_), alt, 450 * KPH, "EGR")
+        for k, q in enumerate(home_):
+            g.add_waypoint(pt(*q), alt, 450 * KPH, "RTB" if k == len(home_) - 1 else "AVD")
+        g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
+        g.set_skill(skill)
+        if act_ >= 30:
+            self._late(g, act_)
+        load = enemy_arm_loadout("Su_24M")
+        names = []
+        for j, u in enumerate(g.units, 1):
+            u.name = f"RAID-S-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+        if not load:
+            self.warns.append("Su-24M: no Kh-31P found; the red SEAD pair is unarmed.")
+        manifest.add("enemy_air", ex["bomber_wing"], names, ac="Su_24M")
+
     # ---- bomber raid on the fleet: already en route from the first second, along a real path from their base ----------------
     def _spawn_raid(self, package, sx_, sy_, tot_s, geom, manifest):
         st, d, r = self.state, self.d, self.vrng
@@ -349,6 +404,8 @@ class RaidSpawns:
         manifest.add("enemy_air", ex["bomber_wing"], names, ac=ex.get("raider", "Tu_22M3"), raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
                      raid_arrive_s=float(hit_s))
         self._spawn_raid_target(package, cvb, aim, dx, dy, manifest)
+        if land and ex.get("arm") and not aim:
+            self._spawn_raid_arm(package, ex, cvb, path, V, t_tgt, alt, skill, home_, dx, dy, manifest)
         if ex.get("escorts"):
             back = offset(sx, sy, bearing(remaining[0][0], remaining[0][1], sx, sy), 3 * NM)
             eg = build_group("Raid Escort 1", getattr(planes, ex["escort_type"]), ex["escorts"], task.Escort, back)
