@@ -1,6 +1,12 @@
 # CHANGES.md
 
 
+## v0.41.98, hot runway starts move to Experimental
+
+XO: "the same runway hotstarts can be put on experimental for now."
+- "Hot starts on the runway (AI flights)" moves from Settings > General to Settings > Experimental. Same setting, still off by default, no behaviour change. (Builds on #151.)
+
+
 ## v0.41.97, hot runway starts at your own field (phase 2)
 
 XO: "OK, let's do 2."
