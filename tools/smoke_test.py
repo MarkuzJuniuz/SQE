@@ -1697,6 +1697,51 @@ def check_31q_red_patrols_spread(c):
     print(f"[red spread] red patrols are up in {hours} of 24 hours at level 3; no area's day sits in one wave")
 
 
+def check_31r_scramble_stations(c):
+    """v0.41.91: scrambled pairs take a station, not the target: red holds the covered point nearest the target (the target when covered, else over its
+    own field); blue sticks forward of the target under its own cover and clear of red's SAM rings; every red patrol / alert route ends in a landing."""
+    import math as _m
+    import zipfile as _zf
+    import dcs.lua as dlua
+    from sqe import scramble as sc
+    from sqe.routes import NM as _NM
+    s = fresh_session()
+    s.new("Scramble stations", "F-16C", 2, seed=7); st = s.state
+    fields = [a for a in st.assets.values() if a.kind.value == "AIRBASE" or a.id.startswith("ab_")]
+    sams = [a for a in st.assets.values() if a.kind.value == "SAM" and not a.destroyed and a.variant in sc.tm.RANGE_NM and sc.tm.RANGE_NM[a.variant] >= 3]
+    assert sams, "red has SAM sites"
+    a0 = sams[0]
+    # red: a target under a live SAM is the station; one far from every SAM falls back to the field side
+    (x, y), why = sc.red_station(st, (a0.x + 200 * _NM, a0.y), a0.x, a0.y)
+    assert why == "target" and (x, y) == (a0.x, a0.y), ("a covered target is the station", why)
+    far = (a0.x + 900 * _NM, a0.y + 900 * _NM)
+    (x, y), why = sc.red_station(st, (far[0] + 100 * _NM, far[1]), far[0], far[1])
+    assert why == "field" and _m.hypot(x - (far[0] + 100 * _NM), y - far[1]) <= sc.FIELD_HOLD_NM * _NM + 1, ("no cover: over its own field", why)
+    # blue: never further than STICK_NM from the target, and clear of red's SAM rings when it moves
+    from sqe.sweep import clear_for_sweep
+    for b in [b_ for b_ in st.bases.values() if b_.kind.value == "AIRFIELD"][:3]:
+        org = (b.x + 120 * _NM, b.y + 40 * _NM)
+        (x, y), why = sc.blue_station(st, b.x, b.y, org)
+        assert _m.hypot(x - b.x, y - b.y) <= sc.STICK_NM * _NM + 1, ("blue sticks forward by no more than STICK_NM", why)
+        assert why in ("target", "forward", "clear")
+    # missions: every red fighter group built for the sortie ends its route with a landing
+    n_red = n_land = 0
+    for pk in [p_ for p_ in s.packages() if s.flyable(p_)][:4]:
+        res = s.fly(pk.number, s.flyable(pk)[0].id)
+        m = dlua.loads(_zf.ZipFile(s.settings.sortie_miz).read("mission").decode("utf-8", "ignore"))["mission"]
+        for co in m["coalition"]["red"]["country"].values():
+            for g in ((co.get("plane") or {}).get("group") or {}).values():
+                if g.get("task") != "CAP":
+                    continue
+                n_red += 1
+                last = g["route"]["points"][len(g["route"]["points"])]
+                if last.get("type") == "Land" or last.get("action") == "Landing":
+                    n_land += 1
+        s.state.pending = None
+    assert n_red == n_land, ("every red CAP / alert route ends in a landing", n_red, n_land)
+    print(f"[scramble] red covered target = station, no cover = over the field, blue forward <= {sc.STICK_NM:.0f} nm under cover; {n_red} red CAP / alert routes, all end in a landing")
+
+
 def check_31o_support_assets(c):
     """v0.41.87: tankers and AWACS are assets: airframe counts, daily windows, a package keeps only what is on orbit, losses and returns."""
     import random
@@ -3224,6 +3269,7 @@ CHECKS = [
     check_31o_support_assets,
     check_31p_guard_chains,
     check_31q_red_patrols_spread,
+    check_31r_scramble_stations,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,

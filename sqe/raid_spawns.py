@@ -12,7 +12,7 @@ from dcs.point import PointAction
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import callsigns, reactive
+from . import callsigns, reactive, scramble
 from . import threatmap as tm
 from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
@@ -132,7 +132,9 @@ class RaidSpawns:
             self.m.triggerrules.triggers.append(trig)
             ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
             ct.stop_after_time(int(tot_s + 3600))
-            g.add_waypoint(pt(tx, ty), alt, spd, "INTERCEPT").tasks.append(ct)
+            (ix_, iy_), _why = scramble.red_station(st, (a.x, a.y), tx, ty)              # v0.41.91: a defensive station, then home
+            g.add_waypoint(pt(ix_, iy_), alt, spd, "INTERCEPT").tasks.append(ct)
+            self._land_home(g, ap)
             self._limit_engage(g, o.enemy_cap_engage_nm)
             names = []
             for j, u in enumerate(g.units, 1):
@@ -201,7 +203,8 @@ class RaidSpawns:
             p_ = spec.profile
             ct = task.ControlledTask(task.OrbitAction(int(p_.cap_alt_ft * FT), int(p_.cap_kts * KPH)))
             ct.stop_after_time(int(tot_s + o.cap_minutes * 60))
-            g.add_waypoint(pt(*dpt), p_.cap_alt_ft * FT, p_.cap_kts * KPH, "CAP").tasks.append(ct)
+            sx_, sy_ = scramble.blue_station(st, dpt[0], dpt[1], scramble.raid_origin(st, raid_x or package, dpt[0], dpt[1]))[0]    # v0.41.91: forward, under our own cover
+            g.add_waypoint(pt(sx_, sy_), p_.cap_alt_ft * FT, p_.cap_kts * KPH, "CAP").tasks.append(ct)
             self._limit_engage(g, o.friendly_cap_engage_nm, (tot_s + (o.fighter_engage_minutes + 5) * 60) if o.fighter_engage_minutes > 0 else None)
             if base.kind == BaseKind.AIRFIELD:
                 g.land_at(self.apt[base.id])

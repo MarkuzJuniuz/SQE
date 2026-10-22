@@ -9,7 +9,7 @@ import math
 from dcs import action, condition, mapping, planes, task, triggers
 from dcs.unit import Skill
 
-from . import reactive, redair
+from . import reactive, redair, scramble
 from . import threatmap as tm
 from .difficulty import ai_skill
 from .loadouts import ENEMY_FIGHTERS, enemy_cap_loadout
@@ -97,6 +97,7 @@ class RedAirPicture:
         ct.stop_after_time(int(max(t_arr + 300, (nxt["end"] - self._start_min) * 60)))
         g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
         g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
+        self._land_home(g, ap)
         gx, gy = sx, sy
         self._limit_engage(g, 0, None, (gx, gy, min(A2A_ZONE_NM[tname in RED_LONG_RANGE], self.o.enemy_cap_engage_nm or 999)))
         names = []
@@ -134,6 +135,7 @@ class RedAirPicture:
         ct.stop_after_time(end_s + 900)
         g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
         g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
+        self._land_home(g, ap)
         self._limit_engage(g, 0, None, (sx, sy, min(A2A_ZONE_NM[tname in RED_LONG_RANGE], self.o.enemy_cap_engage_nm or 999)))
         names = []
         for j, u in enumerate(g.units, 1):
@@ -142,6 +144,13 @@ class RedAirPicture:
         if self.o.enemy_unlimited_fuel:
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
         manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
+
+    @staticmethod
+    def _land_home(g, ap) -> None:
+        """v0.41.91: every red patrol / alert route ends with a landing at its own field (before: the last point was an orbit or the station, and a
+        pair that ran short was left to DCS). No-op when the field is not on the map."""
+        if ap is not None:
+            g.land_at(ap)
 
     def _fleet_keepout(self) -> list:
         """Every carrier in the campaign, whichever package uses it: the escorts' SM-2s reach well past 50 nm, so Red's known CAP stays out of it."""
@@ -212,6 +221,7 @@ class RedAirPicture:
                 self._red_intel.append(f"Reported enemy {'fighter sweep' if pf_['kind'] == 'SWEEP' else 'patrol'}: a pair of {tname.replace('_', '-')} from "
                                        f"{self._short(a.name)}, {dist(sx, sy, tx, ty) / NM:.0f} nm {reactive.compass(bd_)} of the target, {redair.hhmm(pf_['start'])}-{redair.hhmm(pf_['end'])}.")
                 g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
+                self._land_home(g, self.t.airports.get(a.airport) if a.airport else None)
                 # the same rule as ours: a patrol engages inside a circle round its station, it does not chase a target home
                 self._limit_engage(g, 0, None, (gx, gy, min(A2A_ZONE_NM[tname in RED_LONG_RANGE], self.o.enemy_cap_engage_nm or 999)))   # v0.41.29: by class (Su-27 25 nm, the rest 15)
                 callin_ = pf_.get("gx") is not None and pf_["kind"] == "CAP"
@@ -252,7 +262,9 @@ class RedAirPicture:
                 self.m.triggerrules.triggers.append(trig)
                 ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
                 ct.stop_after_time(int(tot_s + 3600))
-                g.add_waypoint(pt(tx, ty), alt, spd, "INTERCEPT").tasks.append(ct)
+                (ix_, iy_), _why = scramble.red_station(st, (a.x, a.y), tx, ty)          # v0.41.91: a defensive station, not the target itself
+                g.add_waypoint(pt(ix_, iy_), alt, spd, "INTERCEPT").tasks.append(ct)
+                self._land_home(g, ap)
             names = []
             for j, u in enumerate(g.units, 1):
                 u.name = f"ENM-{a.id}-{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)

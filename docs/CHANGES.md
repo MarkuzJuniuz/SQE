@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.91, scramblers take a station and fly a complete route
+
+XO: "I pretty much think scramblers really should mirror fighter sweep tasks ... stick forward towards the attackers but stay over SAM protection ... the waypoints should be complete like the normal TARCAPs, escorts or something."
+- Read first (runs of 2026-10-21): red alert / reinforcement pairs had one `INTERCEPT` point ON the target with an orbit and nothing after it; red patrols (Bandit, Relief, Standby) ended at `CAP2`; blue alert pairs had a `CAP` point exactly on the raid's target (inside red SAM reach in the 2026-10-16 test) and then landed. MiG-29s seen going home were probably bingo: no route home was flown.
+- New `sqe/scramble.py` (planning only). Red: the station is the target when a live red SAM covers it, else the covered point nearest the target on the line from its field (at most as far as the line goes), else 15 nm out from its own field. Blue: on the line from the target toward where the raid comes from (the bomber wing, else the nearest red fighter wing), as far forward as 30 nm (`STICK_NM`) while it is still under blue's own field air defence (Patriot / HAWK, 25 nm of a field with air defence 0.3 or more) AND clear of red's SAM rings (the sweep's `clear_for_sweep`); else on the target when that is clear, else the nearest clear point back. Doctrine: fighter / missile / joint engagement zones (JP 3-01 terms, definitions from a summary card); the stick distance, the step, the cover margins and the 15 nm field hold are judgment calls.
+- Every red patrol and alert route now ends in a landing at its own field (Bandit, Relief, Standby, Alert, Reinforce; `RedAirPicture._land_home`). A pair the hook sends home (jet down, winchester, bingo) now has a landing to fly to.
+- Engage limits are unchanged. Not done: scramble launch time (detection range), a bingo / fuel line in the debrief.
+- Smoke: `check_31r_scramble_stations`.
+
 ## v0.41.90, red's base CAPs are spread through the day
 
 XO: "I think red don't have BaseCAPs." (three days of runs, all starting 06:10 to 06:35)
