@@ -129,6 +129,13 @@ class ObjectivePlanner:
                         continue
                     pr *= 0.7 + 0.6 * zi["pressure"]                 # the harder Red is pressing, the more urgent
                     what = f"Close air support: {zi['name']} (enemy {zi['red']:.0f}, friendly {zi['blue']:.0f})"
+                sz = ground.sector_of(state, a.id)
+                if sz is not None:                                   # v0.41.102: a red forward garrison: the harder Red presses in its sector, the more it matters
+                    zi = ground.info(state, sz)
+                    if zi["blue"] < ground.MIN_FORCE or zi["red"] < ground.MIN_FORCE:      # nothing of ours near it, or red does not hold the sector: not a job for today
+                        continue
+                    pr *= 0.7 + 0.6 * zi["pressure"]
+                    what = f"Close air support: dislodge the enemy forward position, {zi['name']}"
                 bl = self._garrison_cover(state, a) if a.variant == "GARRISON" else []        # a dug-in garrison sits under its sites' umbrella: SEAD / DEAD goes first
                 # v0.41.20: no needless banzai. A CAS target under a live SA-2/3/6 goes out only with a SEAD escort (aim "SEAD": packages.py
                 # requires the HARM flight or postpones the job); under a live SA-11 / SA-10 it is blocked and that site gets a DEAD first.

@@ -1,6 +1,18 @@
 # CHANGES.md
 
 
+## v0.41.102, forward garrisons (both sides, every sector)
+
+XO: "forward garrisons ... mirroring red ... every sector ... they should have effect in the background sim."
+- Every sector now has a dug-in forward garrison for each side: red `rfwd_N` (state.assets) and blue `bfwd_N` (state.blue_assets), 3 km either side of the sector centre. New campaigns get them at build; older saves get them at the next planning (`ground.ensure_forward_garrisons`).
+- Background sim: a forward garrison lost since yesterday takes 15% x the health lost off its side's force in that sector (`FWD_SHARE`); a standing one lifts the defender factor from 1.25 up to 1.5 (`FWD_EXTRA`). A destroyed red one is dug in again with a daily chance while red holds the sector (blue's come back through the existing rebuild).
+- Blue tasking: red's forward garrison is a CAS job ("dislodge the enemy forward position, Sector N") where both sides hold the sector, weighted by the sector's pressure; under a live long-range SAM umbrella the SEAD / DEAD goes first, as for any garrison. Friendly troops at the JTAC are sized from the sector.
+- Red tasking: red raids can aim at a blue forward garrison (counted as a garrison raid) where blue still holds the sector, more often where red presses. A hit lowers its health, which the sim turns into force loss.
+- In missions: red's is built when it is the CAS target; blue's when it is a raid target (and in the full-map test). Sector sizes and effects are judgment calls inside the range of open sources (see DESIGN_NOTES section 11); tune on XO's runs.
+- Smoke: new `check_31x_forward_garrisons`; the old garrison-CAS check ignores forward positions (they have no SAM site to wait for).
+- Not yet: Forces-page rows for the forward garrisons (next PR).
+
+
 ## v0.41.101, in-universe scramble text, and raid scrambles fold into your mission
 
 XO: "an in-universe message like 'our A-10Cs have been dispatched to help' ... if those scrambles happen I suppose they're close to the time I picked to fly so shouldn't they be merged ... on the -15 to 30 minutes merge?"

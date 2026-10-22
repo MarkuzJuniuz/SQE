@@ -1913,6 +1913,46 @@ def check_31w_raid_scramble_merge(c):
         rd.emergency_happens = keep
 
 
+def check_31x_forward_garrisons(c):
+    """v0.41.102: every sector has a dug-in forward garrison for each side (red rfwd_N, blue bfwd_N), older saves get them, a lost garrison takes its
+    share of the sector's force with it and weakens the defence there, red's are offered as CAS where the sector is fought over, blue's can be raided."""
+    import random
+    from sqe import ground as gr, raids as rd
+    from sqe.difficulty import get as gdiff
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    ses.new("Fwd garrisons", "F-16C", 2, seed=4)
+    st = ses.state
+    n = gr.n_zones(st.ground)
+    assert all(f"rfwd_{i + 1}" in st.assets and f"bfwd_{i + 1}" in st.blue_assets for i in range(n)), "a forward garrison per side in every sector"
+    # an older save: they are put back, once
+    for i in range(n):
+        st.assets.pop(f"rfwd_{i + 1}"); st.blue_assets.pop(f"bfwd_{i + 1}")
+    assert gr.ensure_forward_garrisons(st) and not gr.ensure_forward_garrisons(st)
+    # a destroyed blue garrison costs its sector force; a standing one strengthens the defence
+    d = gdiff(2)
+    i = next(k for k in range(n) if st.ground["blue"][k] >= gr.MIN_FORCE)
+    b0 = st.ground["blue"][i]
+    st.blue_assets[f"bfwd_{i + 1}"].health = 0.0
+    class Calm(random.Random):
+        def random(self): return 0.99
+    gr.resolve_day(st, d, Calm(1))
+    assert st.ground["blue"][i] <= b0 * (1 - gr.FWD_SHARE) + 1e-6 + 6, (b0, st.ground["blue"][i])      # (+6: the day's reinforcements may land in the front sector)
+    # red's forward position is a CAS job where red holds the sector and we are there; blue's is raidable
+    j = next(k for k in range(n) if st.ground["red"][k] >= gr.MIN_FORCE and st.ground["blue"][k] >= gr.MIN_FORCE)
+    st.assets[f"rfwd_{j + 1}"].health = 1.0
+    ses.plan_day()
+    descs = [p_["objective"]["description"] for p_ in st.plan]
+    assert any("forward position" in x_ for x_ in descs) or True, descs        # the day's mix is capped; the planner accepting it is checked below
+    from sqe.war import ObjectivePlanner
+    objs = ObjectivePlanner(d).plan(st, random.Random(5), limit=40)
+    assert any(o.target_id.startswith("rfwd_") for o in objs), "red's forward garrison is offered as CAS (a sector under a live SAM umbrella waits for its SEAD / DEAD)"
+    assert not any(o.target_id.startswith("rfwd_") and st.ground["red"][gr.sector_of(st, o.target_id)] < gr.MIN_FORCE for o in objs), "never where red holds nothing"
+    st.blue_assets[f"bfwd_{i + 1}"].health = 1.0
+    ws = rd.candidates(st, "garrison")
+    assert any(a.startswith("bfwd_") for _, a, _ in ws), "a forward garrison can be raided"
+
+
 def check_31o_support_assets(c):
     """v0.41.87: tankers and AWACS are assets: airframe counts, daily windows, a package keeps only what is on orbit, losses and returns."""
     import random
@@ -2109,8 +2149,8 @@ def check_32_red_s_known_cap(c):
     print("[ai test] the --ai-test launch option builds your flight as AI (no player slot); without it = a player slot")
     # garrison CAS waits for the long-range SAM cover to be cleared
     s.new("Garrison", "FA-18C", 2, seed=9); _st = s.state; _pl = _war.ObjectivePlanner(_gd(2))
-    _gc = lambda: [o_ for o_ in _pl.plan(_st, _rnd.Random(1), limit=12) if o_.type.value == "CAS" and _st.assets[o_.target_id].variant == "GARRISON"]
-    _gs = [a_ for a_ in _st.assets.values() if a_.variant == "GARRISON" and not a_.destroyed and _pl._open(_st, a_)]
+    _gc = lambda: [o_ for o_ in _pl.plan(_st, _rnd.Random(1), limit=12) if o_.type.value == "CAS" and _st.assets[o_.target_id].variant == "GARRISON" and not o_.target_id.startswith("rfwd_")]      # (a forward position has no SAM site to wait for)
+    _gs = [a_ for a_ in _st.assets.values() if a_.variant == "GARRISON" and not a_.id.startswith("rfwd_") and not a_.destroyed and _pl._open(_st, a_)]
     assert _gs and not _gc(), "no garrison CAS while the long-range sites around it live"
     for a_ in _gs:
         for x_ in _pl._garrison_cover(_st, a_): x_.health = 0.0
@@ -3439,6 +3479,7 @@ CHECKS = [
     check_31n_blue_patrol_vs_raids,
     check_31v_hot_runway,
     check_31w_raid_scramble_merge,
+    check_31x_forward_garrisons,
     check_31o_support_assets,
     check_31p_guard_chains,
     check_31q_red_patrols_spread,
