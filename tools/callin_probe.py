@@ -46,6 +46,7 @@ def build(out_dir: Path) -> Path:
         ot = task.ControlledTask(task.OrbitAction(int(ALT), int(SPD))); ot.stop_after_time(7200)
         t.add_waypoint(pt(hx, hy), ALT, SPD, "BAIT").tasks.append(ot)
         t.points[0].tasks.append(task.SetImmortalCommand(True))
+        t.points[0].tasks.append(task.SetInvisibleCommand(True))     # v3: invisible to the AI, so nothing pulls a pair out on its own (the v2 run: all four pairs, even the control, chased the bait)
         # the pair
         g = m.flight_group(red, f"PROBE-{key}", planes.Su_27, None, pt(sx, sy - 8 * NM), altitude=ALT, speed=SPD, maintask=task.CAP, group_size=2)   # spawns 8 nm short of the station, like the real patrols
         g.set_skill(Skill.High)

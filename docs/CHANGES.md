@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## Tools only (no version bump): call-in probe, third version
+
+XO's second run: all four pairs, even the control, chased the visible bait tanker on their own, so the call-in could not be told apart. The bait is now AI-invisible. What the run did show: a CAP pair goes about 40 nm out for a visible air target by itself, and the survivors turn back to their station afterwards.
+
 ## Tools only (no version bump): call-in probe, second version
 
 XO's first run showed the pairs leaving their stations before the call-in (my probe spawned them exactly on the station point). `tools/callin_probe.py` now spawns each pair 8 nm short of its station like the real patrols, adds a control pair V0 that is never called in, and logs the heading. The first run's hint: V3 (flag-released orbit, hotspot waypoint, waypoint back) did return; the pushed tasks were inconclusive.
