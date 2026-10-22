@@ -133,6 +133,10 @@ class SettingsDialog(QDialog):
         self.hotramp.setChecked(bool(getattr(settings, "hot_ramp_scrambles", False))); v.addWidget(self.hotramp)
         hint(v, "Land fields only. On: alert pairs at land fields wait hot on the ramp and taxi out when called. Off: they wait hidden and appear on the runway (the older, steadier way). "
                 "The carrier always keeps the hidden deck start, and so does your own field.")
+        self.hotrwy = QCheckBox("Hot starts on the runway (AI flights)")
+        self.hotrwy.setChecked(bool(getattr(settings, "hot_runway_starts", False))); v.addWidget(self.hotrwy)
+        hint(v, "Land fields other than yours. On: AI package flights wait hidden and appear on the runway in time to make their push, one runway release a minute apart. "
+                "A flight that cannot be released in time (the package is already underway at the start) still appears airborne. Your own field and the carrier keep the airborne start. Off: all AI flights appear airborne.")
         self.f14n = QCheckBox("F-14B(U): name waypoints with special-point codes (IP, ST, HB...) so DEST can select them")
         self.f14n.setChecked(bool(settings.f14_special_names)); v.addWidget(self.f14n)
         v.addStretch(1)
@@ -309,6 +313,7 @@ class SettingsDialog(QDialog):
         self.s.takeoff_buffer_s = int(self.tob.value())
         self.s.ai_unlimited_fuel = self.fuel.isChecked()
         self.s.hot_ramp_scrambles = self.hotramp.isChecked()
+        self.s.hot_runway_starts = self.hotrwy.isChecked()
         self.s.borrow_red = self.borrow_red.isChecked()
         self.s.borrow_blue = self.borrow_blue.isChecked()
         self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())
