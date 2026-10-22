@@ -327,12 +327,23 @@ class WarSimulator:
             from .sams import covering_ad, AD_RAID_WEIGHT
             from .raids import aim_xy
             strength += AD_RAID_WEIGHT * covering_ad(state, *aim_xy(state, pkg.objective.aim, state.bases[pkg.objective.target_id]))
+        up_, psq_ = False, None
+        from . import blue_barcap
+        if pkg.extra.get("land") and pkg.extra.get("bomber_wing"):        # v0.41.86: a base patrol on station on the side the raid comes from adds a pair
+            wa_ = state.assets.get(pkg.extra["bomber_wing"])
+            fb_ = state.bases.get(pkg.objective.target_id)
+            if wa_ is not None and fb_ is not None and fb_.kind.value != "CARRIER":
+                up_, psq_ = blue_barcap.patrol_up(state, rng, fb_, (wa_.x, wa_.y))
+                if up_:
+                    strength += blue_barcap.PATROL_RAID_WEIGHT * ROLE_WEIGHT[Role.CAP]
         p = strength / (strength + 2.5 + 2.0 * d.iads + 0.4 * esc)
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
         lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'} (odds {p:.0%})"]
         if bw is not None and ok:
             k = bw.lose(pkg.extra.get("raider"), rng.randint(2, 4))
             lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
+            if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
+                lines.append(ln_)
         elif bw is not None and pkg.extra.get("land"):
             lines += raids_hit(state, pkg.objective.target_id, bw, rng, None, pkg.objective.aim, pkg.extra.get("raider"))
         elif bw is not None:

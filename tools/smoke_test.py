@@ -1650,6 +1650,30 @@ def check_31m_blue_barcap_plan(c):
     assert n[3] > n[1], "a harder level plans more patrol sorties"
 
 
+def check_31n_blue_patrol_vs_raids(c):
+    """v0.41.86: a base patrol on station adds to the stop chance of an unflown raid and can lose a jet; the night (no patrol) is open."""
+    import random
+    from sqe import blue_barcap as bb, raids as rd
+    def surprises(full):                                              # a fresh campaign each time: 30 raids use up the red wings
+        s = fresh_session()
+        s.new("Patrol vs raid", "F-16C", 3, seed=7); st = s.state
+        assert st.barcap["blue_cover"], "coverage kept per area"
+        for k in st.barcap["blue_cover"]:
+            st.barcap["blue_cover"][k] = 1440 if full else 0
+        st.raids["surprise"] = 30
+        return rd.overnight(st, s.d, random.Random(5)), s
+    assert not any("base patrol" in ln for ln in surprises(False)[0]), "no patrol up: nothing from it"
+    lines, s = surprises(True); st = s.state
+    assert any("the base patrol and" in ln for ln in lines), "a patrol up joins the stand"
+    sq = next(q for q in st.squadrons.values() if q.available > 0)
+    before, old = sq.available, bb.PATROL_LOSS_P
+    bb.PATROL_LOSS_P = 1.0
+    try:
+        assert bb.patrol_fight(st, random.Random(1), sq.id) and sq.available == before - 1, "a fighting patrol can lose a jet"
+    finally:
+        bb.PATROL_LOSS_P = old
+
+
 def check_31j_borrow_switches(c):
     """v0.41.81: the Experimental tab's per-side borrowing switches: off, that side's SAM orders do not run overnight; on (default), they do."""
     from sqe import sams, war
@@ -3106,6 +3130,7 @@ CHECKS = [
     check_31k_salvo_size,
     check_31l_red_arm,
     check_31m_blue_barcap_plan,
+    check_31n_blue_patrol_vs_raids,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,
