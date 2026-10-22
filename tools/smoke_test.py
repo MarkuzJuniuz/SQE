@@ -1674,6 +1674,44 @@ def check_31n_blue_patrol_vs_raids(c):
         bb.PATROL_LOSS_P = old
 
 
+def check_31o_support_assets(c):
+    """v0.41.87: tankers and AWACS are assets: airframe counts, daily windows, a package keeps only what is on orbit, losses and returns."""
+    import random
+    from sqe import support_assets as sa
+    from sqe.debrief import Manifest, apply_debrief
+    s = fresh_session()
+    s.new("Support assets", "F-14BU", 3, seed=7); st = s.state
+    assets = st.support_assets
+    assert {"bl_e3", "bl_e2", "bl_kc135", "bl_kc135mprs", "bl_s3", "rd_a50"} <= set(assets), "the table"
+    assert all(a["available"] == a["authorized"] > 0 and a["source"] for a in assets.values()), "full strength, with a source note each"
+    assert all(sa.covers(st, k, 0, 1440) for k in assets if assets[k]["side"] == "blue"), "full cover with the default airframes"
+    assert all("AWACS" in [x.slot for x in p.support] for p in s.packages()), "every package has its AWACS while cover is full"
+    # no E-3 airframe left: replan the day, no package has an AWACS of that class; the E-2C is not affected
+    for k in ("bl_e3", "bl_e2", "bl_kc135", "bl_kc135mprs", "bl_s3"):
+        assets[k]["available"] = 0
+    s.plan_day()
+    assert all(not p.support for p in s.packages()), "no airframes, no support"
+    for k in ("bl_e3", "bl_e2", "bl_kc135", "bl_kc135mprs", "bl_s3"):
+        assets[k]["available"] = assets[k]["authorized"]
+    s.plan_day()
+    assert all(p.support for p in s.packages()), "back at strength"
+    # one airframe: windows with gaps (sortie 8 h, turnaround 12 h)
+    a = dict(assets["bl_e3"]); a["available"] = 1
+    w = sa.windows(a)
+    assert w[0] == (0, 480) and w[1][0] == 480 + 720 and len(w) == 2, w
+    # a loss in a flown mission comes off the asset; the overnight step brings airframes back
+    m = Manifest(st.campaign_id, 1, "pkg1", st.day)
+    m.add("support", "bl_e3", ["Overlord 1-1"], label="Overlord")
+    out = apply_debrief(st, m, {"dead": ["Overlord 1-1"], "landed": []})
+    assert assets["bl_e3"]["available"] == assets["bl_e3"]["authorized"] - 1 and any("Overlord" in ln for ln in out["lines"]), out["lines"]
+    rng = random.Random(1)
+    for _ in range(40):
+        sa.step(st, rng)
+    assert assets["bl_e3"]["available"] == assets["bl_e3"]["authorized"], "missing airframes return"
+    st2 = type(st).from_dict(st.to_dict())
+    assert st2.support_assets == st.support_assets, "saved and loaded"
+
+
 def check_31j_borrow_switches(c):
     """v0.41.81: the Experimental tab's per-side borrowing switches: off, that side's SAM orders do not run overnight; on (default), they do."""
     from sqe import sams, war
@@ -3131,6 +3169,7 @@ CHECKS = [
     check_31l_red_arm,
     check_31m_blue_barcap_plan,
     check_31n_blue_patrol_vs_raids,
+    check_31o_support_assets,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,

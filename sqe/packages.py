@@ -455,6 +455,7 @@ class PackageBuilder:
         lead = pkg.player_flight or next((f for f in pkg.flights if not f.tag), pkg.flights[0])
         lead_home = AIRCRAFT[lead.aircraft].home
         awacs = AWACS_FOR[lead_home]          # E-2C for Navy leads (F-14 Link-4), E-3 for USAF leads
+        from . import support_assets as sa_
         out = [SupportPlan("AWACS", awacs.dcs_class, awacs.label, awacs.altitude_ft, awacs.speed_kts)]
         methods: list = []
         for f in sorted((f for f in pkg.flights if not f.tag), key=lambda f: f is not lead):
@@ -471,7 +472,7 @@ class PackageBuilder:
             r = RECOVERY_TANKER
             out.append(SupportPlan("TANKER2", r.dcs_class, r.label, r.altitude_ft, r.speed_kts,
                                    RefuelMethod.BASKET.value, from_carrier=True))
-        return out
+        return [x for x in out if sa_.up_for(self.state, x.dcs_class, pkg.start)]      # v0.41.87: only what has an aircraft on orbit while the package flies
 
     def assign_player(self, pkg: Package, flight_id: str | None = None):
         pp = self.state.player
