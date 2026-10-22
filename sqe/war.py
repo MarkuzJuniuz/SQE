@@ -161,11 +161,12 @@ class ObjectivePlanner:
                 pr *= 1.8                                              # clear the belt first
             pool.append((pr, o))
         fleet = next((b for b in state.bases.values() if b.kind.value == "CARRIER"), None)
-        bw = next((x for x in state.enemy_air if "Tu_22M3" in x.types and x.available >= 2 and not state.assets[x.base_asset_id].destroyed), None)
-        if fleet and bw and self.d is not None and self.d.bomber_policy != "none":
-            t = totals(state)
-            if self.d.bomber_policy == "normal" or t["enemy_air"] < 0.45 or t["c2"] < 0.5:     # regional powers use bombers only when losing badly
-                pr = 6.0 + 0.3 * bw.available
+        if fleet and self.d is not None and self.d.bomber_policy != "none":
+            from . import bombers                                    # v0.41.105: the bomber wing is a trump card: safe window or desperation, never fewer than 4, 2 escorts each
+            dec = bombers.decide(state, self.d)
+            if dec["mode"] != "hold":
+                pr = (12.0 if dec["mode"] == "desperate" else 7.0) + 0.3 * dec["n"]
+                bombers.note_launch(state)
                 pool.append((pr, Objective("", ObjectiveType.FLEET_DEFENSE, fleet.id, pr, f"Intercept a bomber raid on {fleet.name}")))
         if fleet:
             tot = sum(x.available for x in state.enemy_air)
@@ -347,7 +348,7 @@ class WarSimulator:
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
         lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'} (odds {p:.0%})"]
         if bw is not None and ok:
-            k = bw.lose(pkg.extra.get("raider"), rng.randint(2, 4))
+            k = bw.lose(pkg.extra.get("raider"), rng.randint(2, 4) if pkg.extra.get("land") else max(1, round(pkg.extra.get("bombers", 4) * rng.uniform(0.4, 0.8))))
             lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)

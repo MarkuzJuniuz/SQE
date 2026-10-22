@@ -123,7 +123,7 @@ class Session:
         redair.ensure(st, self.d)                       # the enemy's air tasking for the day
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=self.PACKAGES_PER_DAY)
         redair.assign_guards(st, self.d, objs)          # v0.41.10: red's patrols take stations over the SAM sites it expects to be attacked
-        keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry", "sead_fail")}
+        keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry", "sead_fail", "bomber_days")}
         if st.red_air.get("patrol_used") is not None:                 # replanning the same day never books the raids twice
             st.red_air["used"] = dict(st.red_air["patrol_used"])
         warned, n_surprise = raids.todays_raids(st, self.d, self._rng(71))

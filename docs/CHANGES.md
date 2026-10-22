@@ -1,6 +1,16 @@
 # CHANGES.md
 
 
+## v0.41.105, red's bombers are a trump card (step 1: background sim)
+
+XO: "No 2 ships raids, ever. Those bombers are expensive" / "2 escorts per bomber" / "Mozdok under attack ... a good weight, not the main factor".
+- New `sqe/bombers.py`: one `decide` for the day. Red launches the Tu-22M3 carrier raid only (a) in a window it judges safe (estimated chance the raid is stopped under `bomber_safe_p`: L3 0.12, L2 0.06, L1 never), cooldown 8 days, or (b) when desperate (air/command losing, Mozdok under attack weighted 0.5, front in its last stage), cooldown 5 days, everything it can escort.
+- Never fewer than 4 bombers (max 12), 2 escorts per bomber; if red cannot field the escorts it holds. Wired into the planner (war.py) and the raid plan (packages.py).
+- 100-day background sims at L3 (8 seeds): 0 to 5 carrier raids per run (before: 25 to 37). L2: 1 to 2 raids before blue wins around day 30. Frequency is a judgment call; doctrine caveats are in the bombers.py docstring (Soviet doctrine massed raids and accepted heavy losses; "only when safe" is XO's design).
+- Not done: the Mozdok escort squadron (step 2) and the mission-side boss fight.
+- Smoke: new `check_31z_bomber_trump_card`.
+
+
 ## v0.41.104, the unit limit counts only the base mission; merged packages are bounded by the radius and a fixed ceiling
 
 XO: "for package merging only the radius along with additional units that were merged is used ... the unit cap of default 250 would only be used for setpiece missions" / "the ceiling in the json instead of a user adjustable value" / "the smoother version first".

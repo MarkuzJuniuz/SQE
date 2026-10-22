@@ -358,24 +358,14 @@ class PackageBuilder:
         st = self.state
         if obj is not None and obj.target_id in st.bases and st.bases[obj.target_id].kind != BaseKind.CARRIER:
             return self._land_raid_plan(number, obj)
-        bw = next((w for w in st.enemy_air if "Tu_22M3" in w.types and w.available >= 2 and not st.assets[w.base_asset_id].destroyed), None)
+        from . import bombers
         cv = next((b for b in st.bases.values() if b.kind == BaseKind.CARRIER), None)
-        if bw is None or cv is None:
+        dec = bombers.decide(st, self.d) if self.d is not None else {"mode": "hold"}
+        if cv is None or dec["mode"] == "hold":
             return None
         rnd = random.Random(f"{st.campaign_id}:{st.day}:{number}:raid")
-        nb = 4 if bw.available >= 6 else 2
-        esc = None
-        for w in sorted(st.enemy_air, key=lambda w: math.hypot(st.assets[w.base_asset_id].x - cv.x, st.assets[w.base_asset_id].y - cv.y)):
-            a = st.assets[w.base_asset_id]
-            if w is bw or w.available < 2 or a.destroyed:
-                continue
-            d_nm = math.hypot(a.x - cv.x, a.y - cv.y) / NM
-            types = [t for t in w.types_up if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm]
-            if types:
-                esc = (w.base_asset_id, rnd.choice(types)); break
-        return {"brg": round(rnd.uniform(8, 40), 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
-                "escort_wing": esc[0] if esc else "", "escort_type": esc[1] if esc else "",
-                "escorts": (4 if nb >= 4 else 2) if esc else 0}
+        return {"brg": round(rnd.uniform(8, 40), 1), "bombers": dec["n"], "bomber_wing": next(w.base_asset_id for w in st.enemy_air if "Tu_22M3" in w.types),
+                "escort_wing": dec["wing"], "escort_type": dec["type"], "escorts": dec["escorts"], "mode": dec["mode"]}
 
     def _pick_squadron(self, slot: Slot, tx, ty, ledger: Ledger, lead_service):
         """Prefer the lead's service; cross over only when sound (same-service option missing, or the other base is >=30% closer)."""
