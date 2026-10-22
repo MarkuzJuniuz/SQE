@@ -233,6 +233,9 @@ def _commit(state, d, base, aim: str) -> None:
 
 def todays_raids(state, d, rng: random.Random) -> tuple:
     """-> (objectives of the announced raids, number of surprise raids). One draw per day; the same seed gives the same answer."""
+    from . import bombers
+    if bombers.is_quiet(state):                             # v0.41.109: the quiet day before the carrier raid
+        return [], 0
     rate = float(d.raid_rate)
     n = int(rate) + (1 if rng.random() < rate - int(rate) else 0)
     warned, surprise = [], 0
@@ -335,6 +338,9 @@ def emergency_seed(state, package_number: int, flight_id) -> random.Random:
 def emergency_happens(state, d, rng: random.Random) -> bool:
     """The per-sortie dice, with the cap: none right after a sortie that had one."""
     if (state.raids or {}).get("last_emerg", -9) == state.sortie_counter:
+        return False
+    from . import bombers
+    if bombers.is_quiet(state):
         return False
     return rng.random() < d.emerg_chance
 
