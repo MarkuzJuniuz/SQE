@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.86, blue's patrols count in the background raids (BARCAP background sim, step 2)
+
+- A base patrol on station now matters to raids nobody flies. `blue_barcap.patrol_up` draws, once per raid, whether a pair is up over the raided field on the side the raid comes from: the chance is the area's covered minutes of the day over 1440 (`state.barcap["blue_cover"]`; the patrols fly 06:00-22:00, so at most two thirds, and the night is open).
+- Surprise raids (`raids.overnight`): a pair up adds PATROL_STOP 0.25 to the chance the raid is stopped; the log line says "the base patrol and alert aircraft got up in time".
+- Announced raids the war sim resolves (`war._resolve_raid`, land raids): a pair up adds PATROL_RAID_WEIGHT 2.0 CAP-weighted jets to blue's side of the odds.
+- A patrol that fought a stopped raid loses one jet with PATROL_LOSS_P 0.15 (its squadron's serviceable count drops; the log says so).
+- All three numbers are judgment calls. Red patrols meeting blue patrols in the background are not simulated. Raids on the carrier are not affected (carrier CAP counts only in flown missions).
+- Smoke check `check_31n_blue_patrol_vs_raids`.
+
 ## v0.41.85, blue's base CAP and carrier CAP are a daily plan (BARCAP in the background sim, step 1)
 
 XO: "Basecaps and carrier caps are planned separately from packages so I don't think they should be attached to a package", AI only for good, the same budget share by level as red but lower at Levels 1 and 2.

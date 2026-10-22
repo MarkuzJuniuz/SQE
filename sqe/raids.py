@@ -286,9 +286,16 @@ def overnight(state, d, rng: random.Random) -> list:
         p_stop = min(0.95, 0.2 + 0.45 * ad_ + 0.3 * alert)       # v0.41.30: the batteries that cover the target (was the field's defense number)
         what = {"field": b.name, "supply": state.blue_assets[aim].name if aim in state.blue_assets else "", "garrison": state.blue_assets[aim].name if aim in state.blue_assets else "",
                 "sector": "friendly troops in " + state.ground["names"][int(aim.split(":")[1])] if aim.startswith("sector:") else ""}[aim_kind(aim)]
+        from . import blue_barcap
+        wa_ = state.assets.get(wing.base_asset_id)
+        up_, psq_ = blue_barcap.patrol_up(state, rng, b, (wa_.x, wa_.y)) if (wa_ is not None and b.kind != BaseKind.CARRIER) else (False, None)       # v0.41.86: a pair on station
+        if up_:
+            p_stop = min(0.95, p_stop + blue_barcap.PATROL_STOP)
         if rng.random() < p_stop:
             k = wing.lose(r[2], rng.randint(1, 3 + round(covering_ad(state, x, y))))
-            lines.append(f"Surprise raid on {what}: alert aircraft got up in time; {k} attack aircraft shot down")
+            lines.append(f"Surprise raid on {what}: " + ("the base patrol and " if up_ else "") + f"alert aircraft got up in time; {k} attack aircraft shot down")
+            if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
+                lines.append(ln_)
         else:
             lines.append(f"Surprise raid on {what}: nobody was warned and the aircraft got through" + (" (red anti-radiation missiles suppressed the batteries)" if arm_ else ""))
             lines += [x_.strip() for x_ in hit(state, b.id, wing, rng, None, aim, r[2])]

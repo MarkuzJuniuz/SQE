@@ -21,6 +21,9 @@ DAILY_SORTIES = 2              # per serviceable airframe per day: the rule the 
 SHARE = {1: 0.10, 2: 0.20, 3: 0.40}   # judgment call: red's patrol share is 0.20 / 0.30 / 0.40 (redair.DOCTRINE); blue's is lower at L1 / L2 (XO plays the sorties himself)
 DAY_START, DAY_END = 6 * 60, 22 * 60   # the patrols are spread through these hours (minutes of the day)
 PACKAGE_WINDOW_MIN = 100       # a package is out about this long after its start (judgment call)
+PATROL_STOP = 0.25             # an unflown raid that meets a pair on station is stopped this much more often (judgment call)
+PATROL_RAID_WEIGHT = 2.0       # ...and in an announced raid's odds the pair on station counts as this many CAP-weighted jets (a pair; judgment call)
+PATROL_LOSS_P = 0.15           # a patrol that fights a raid loses a jet this often (judgment call)
 LEAD_MIN = 10                  # a sortie that comes on station this soon after the package's start still covers it
 
 
@@ -143,3 +146,25 @@ def attach(state, pkgs: list) -> None:
             p.flights.append(FlightPlan(f"{p.id}-f{len(p.flights) + 1}", pf["callsign"], Role.CAP, sq.id, sq.aircraft, pf["size"], sq.base_id,
                                         _TAG_TASK[kind], False, kind, "", b.id if b.id != sq.base_id else ""))
             have.add(kind)
+
+
+def patrol_up(state, rng, base, from_xy) -> tuple:
+    """-> (is a pair on station over `base` on the side the raid comes from right now?, the squadron that flies it). The draw is the share of the day
+    the area is covered (`state.barcap["blue_cover"]`, minutes of 1440: the patrols fly 06:00-22:00 only, so the night is open)."""
+    ar = barcap.facing_area(state, "blue", base.id, from_xy)
+    if ar is None:
+        return False, None
+    mins = ((getattr(state, "barcap", None) or {}).get("blue_cover") or {}).get(ar["id"], 0)
+    if mins <= 0 or rng.random() >= min(1.0, mins / 1440.0):
+        return False, None
+    sq = next((f["squadron"] for f in (state.barcap.get("blue_flights") or []) if f["area"] == ar["id"]), None)
+    return True, sq
+
+
+def patrol_fight(state, rng, sq_id) -> str:
+    """A patrol that fought a raid may lose a jet. -> a log line or ''."""
+    sq = state.squadrons.get(sq_id) if sq_id else None
+    if sq is None or sq.available <= 0 or rng.random() >= PATROL_LOSS_P:
+        return ""
+    sq.available -= 1
+    return f"   the base patrol lost a jet in the fight ({sq.name}: {sq.available}/{sq.authorized} left)"
