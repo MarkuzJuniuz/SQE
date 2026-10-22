@@ -306,32 +306,16 @@ class PackageBuilder:
         # strike/CAS flights' home field, CVCAP the carrier (from the carrier's own squadrons). One pair short: the tanker keeps its guard.
         prim = st.bases[chosen[0][1].base_id]
         anchor = next((st.bases[sq.base_id] for _, sq, _, pl in chosen if pl), prim)
-        dnm = math.hypot(tx - prim.x, ty - prim.y) / NM
         sup_ok = obj.type not in _FLEET and not is_sweep(obj)
         wanted = [("TNKCAP", anchor), ("HAVCAP", anchor)] if sup_ok else []
-        enemy_near = prim.kind != BaseKind.CARRIER and any(math.hypot(st.assets[w.base_asset_id].x - prim.x, st.assets[w.base_asset_id].y - prim.y) / NM <= BASECAP_ENEMY_NM
-                                                          for w in st.enemy_air if w.available > 0 and not st.assets[w.base_asset_id].destroyed)
-        # v0.41.10: the base CAP goes over the field red is most likely to raid (raids.py's own target weights: nearer and softer = likelier),
-        # which is usually, not always, the strikers' home field
-        from . import raids as _raids
-        tw_ = [(b_, w_) for b_, w_ in _raids.target_weights(st) if b_.kind != BaseKind.CARRIER]
-        bc_base = max(tw_, key=lambda bw: (bw[1], bw[0].id))[0] if tw_ else prim
-        if not is_sweep(obj) and bc_base.kind != BaseKind.CARRIER and (obj.type == ObjectiveType.CAS or (obj.type not in _FLEET and (dnm < 100 or enemy_near or tw_))):
-            wanted.append(("BASECAP", bc_base))
-        cv_ = next((st.bases[sq.base_id] for _, sq, _, _ in chosen if st.bases[sq.base_id].kind == BaseKind.CARRIER), None)
-        if cv_ is not None and obj.type not in _FLEET:
-            wanted.append(("CVCAP", cv_))
+        # v0.41.85: the base CAP and the carrier CAP are no longer package slots: they are planned each day from the BARCAP areas (blue_barcap.py)
+        # and attached to the packages they cover once the start times are known (engine.plan_day). TNKCAP and HAVCAP stay with the package for now.
         guards_ = {}
         for tag, base in wanted:
-            if tag == "CVCAP":
-                sq = self._pick_cap_at(base, ledger, lead_service)
-            else:
-                sq = self._pick_cap_near(base, ledger, lead_service) or (self._pick_cap_any(ledger, lead_service) if tag == "TNKCAP" else None)
+            sq = self._pick_cap_near(base, ledger, lead_service) or (self._pick_cap_any(ledger, lead_service) if tag == "TNKCAP" else None)
             if sq:
                 ledger.free[sq.id] -= 2
                 sl_ = Slot(Role.CAP, 2, False, tag=tag)
-                if tag == "BASECAP":
-                    guards_[id(sl_)] = base.id
                 chosen.append((sl_, sq, 2, False))
 
         used, n = (names if names is not None else {}), 0     # names: the day's callsign counter, shared by every package that day

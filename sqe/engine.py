@@ -129,6 +129,9 @@ class Session:
         st.raids = {**keep, "day": st.day, "surprise": n_surprise, "carry": []}
         pb = PackageBuilder(st, self.d)
         psq = st.player.squadron_id if st.player else None
+        from . import blue_barcap
+        bp = blue_barcap.plan(st, self.d)                # v0.41.85: blue's standing patrols are planned (and paid for) before the packages
+        st.barcap["blue_flights"], st.barcap["blue_cover"] = bp["flights"], bp["cover"]
 
         sweeps = {}                                     # id(sweep package) -> the packages it goes in ahead of
 
@@ -136,7 +139,7 @@ class Session:
             sweeps.clear()
             # Packages launch at different times of day, so an aircraft can fly more than one sortie: each package sees every
             # serviceable airframe, but no squadron is asked for more than two sorties per airframe per day.
-            daily = {sid: 2 * q.available for sid, q in st.squadrons.items()}
+            daily = {sid: max(0, 2 * q.available - bp["used"].get(sid, 0)) for sid, q in st.squadrons.items()}
             out, names = [], {}          # callsign counter for the whole day: Enfield 1, Enfield 2 ... never two Enfield 1s
             for i, o in enumerate(objs, 1):
                 ledger = Ledger(st)
@@ -246,6 +249,7 @@ class Session:
                         p.extra["sweep_vs"].update(sx=float(sst_[0]), sy=float(sst_[1]))
         if dropped:
             pkgs = [p for p in pkgs if id(p) not in dropped]
+        blue_barcap.attach(st, pkgs)                                 # v0.41.85: the planned base CAP / carrier CAP sortie that faces each package and is up while it flies
         pkgs.sort(key=lambda p: p.start)
         for n, p in enumerate(pkgs, 1):                              # numbers follow the clock
             p.number, p.id = n, f"pkg{n}"

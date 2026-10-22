@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.85, blue's base CAP and carrier CAP are a daily plan (BARCAP in the background sim, step 1)
+
+XO: "Basecaps and carrier caps are planned separately from packages so I don't think they should be attached to a package", AI only for good, the same budget share by level as red but lower at Levels 1 and 2.
+- New `sqe/blue_barcap.py`. Each day plans, per blue field or boat that has a BARCAP area, a few sorties of a fighter pair through 06:00-22:00 (airframe endurance as in barcap.py: 30 min F-16 / Hornet, 2 h F-14 / F-15C). The count is a share of the base's daily sortie budget: Level 1 10 %, Level 2 20 %, Level 3 40 % (red's patrols take 20 / 30 / 40 %; the blue shares are judgment calls). The sorties are paid out of the squadrons' two-sorties-a-day budget BEFORE the packages are built, so patrols and packages compete for jets.
+- The base CAP and carrier CAP are no longer slots of a package. Once the start times are known, a package carries the planned sortie of the area that faces its target and is up while it flies (LEAD_MIN 10, PACKAGE_WINDOW_MIN 100, judgment calls); with none up it flies without one. A planned sortie keeps one callsign in every package that carries it (a merged mission builds it once). Tanker CAP and HAVCAP stay package slots until the tanker / AWACS assets step.
+- State: `state.barcap["blue_flights"]` (the plan) and `["blue_cover"]` (minutes covered per area, for a later status line). Old saves get the plan the next time the day is planned.
+- Not yet: the effect on unflown raids and patrol losses (PR B), the BARCAP status line.
+- Smoke check `check_31m_blue_barcap_plan`; check 00's callsign test allows the shared CAP sortie.
+
 ## v0.41.84, red anti-radiation missiles, step 1: a Su-24M SEAD pair ahead of a field raid
 
 XO: "Put red anti-rad and standoffs on top" (shooters Su-24M only, Patriot / HAWK first, L1 none / L2 rare / L3 normal).
