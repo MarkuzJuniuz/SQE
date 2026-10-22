@@ -41,6 +41,7 @@ Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE
 - XO writes marketing text and the README himself. No debrief text needed.
 - Heavy builds wait for the date XO sets. Check the queue doc.
 - Talk first, then build, for anything big. Tell XO whether it is light or heavy before starting.
+- **ASK PERMISSION BEFORE EVERY CODE CHANGE (XO 2026-10-22).** Before editing any code or data file (anything that is not docs-only), say what you plan to change, whether it is light, medium or heavy, and what a wrong guess would cost, then wait for XO's yes. He sets the model's effort level from that. A "go" for a named job is the yes for that job; a new or wider change needs a new yes. Docs-only changes (and the DESIGN_NOTES direct pushes) still follow their own rules above; investigation, sims and probes that change no files need no permission.
 - Add an entry to `docs/CHANGES.md` for each PR, and list XO's own commits in it.
 - **Docs-only changes** (CLAUDE.md, README, CHANGES.md, comments, other markdown): do not run the smoke test. Run it for anything that touches code or data.
 - (XO) Don't forget to update __init__.py for version changes.
