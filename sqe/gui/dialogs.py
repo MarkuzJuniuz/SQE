@@ -147,7 +147,17 @@ class SettingsDialog(QDialog):
         self.hotrwy = QCheckBox("Hot starts on the runway (AI flights)")
         self.hotrwy.setChecked(bool(getattr(settings, "hot_runway_starts", False))); v.addWidget(self.hotrwy)
         hint(v, "Land fields other than yours. On: AI package flights wait hidden and appear on the runway in time to make their push, one runway release a minute apart. "
-                "A flight that cannot be released in time (the package is already underway at the start) still appears airborne. At your own field they appear only after you have taken off, never in the last ten minutes before your planned landing, and wait while you are on your way in to land. The carrier keeps the airborne start. Off: all AI flights appear airborne.")
+                "A flight that cannot be released in time (the package is already underway at the start) still appears airborne. The carrier keeps the airborne start. Off: all AI flights appear airborne.")
+        self.hotrwy_own = QCheckBox("    ...also at my own field")
+        self.hotrwy_own.setChecked(bool(getattr(settings, "hot_runway_own_field", False)) and self.hotrwy.isChecked()); v.addWidget(self.hotrwy_own)
+        hint(v, "Needs the setting above. AI flights at your own field appear on the runway only after you have taken off, never in the last ten minutes before your planned landing, "
+                "and wait while you are on your way in to land.")
+        self.hotrwy_own.setEnabled(self.hotrwy.isChecked())
+        def _own_gate(on):
+            self.hotrwy_own.setEnabled(bool(on))
+            if not on:
+                self.hotrwy_own.setChecked(False)
+        self.hotrwy.toggled.connect(_own_gate)
         self.borrow_red = QCheckBox("Red SAM borrowing")
         self.borrow_red.setChecked(bool(getattr(settings, "borrow_red", False))); v.addWidget(self.borrow_red)
         self.borrow_blue = QCheckBox("Blue SAM borrowing")
@@ -314,6 +324,7 @@ class SettingsDialog(QDialog):
         self.s.ai_unlimited_fuel = self.fuel.isChecked()
         self.s.hot_ramp_scrambles = self.hotramp.isChecked()
         self.s.hot_runway_starts = self.hotrwy.isChecked()
+        self.s.hot_runway_own_field = self.hotrwy.isChecked() and self.hotrwy_own.isChecked()
         self.s.borrow_red = self.borrow_red.isChecked()
         self.s.borrow_blue = self.borrow_blue.isChecked()
         self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())

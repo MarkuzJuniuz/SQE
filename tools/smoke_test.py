@@ -1826,7 +1826,10 @@ def check_31v_hot_runway(c):
         (TMP / "saves").mkdir(parents=True, exist_ok=True)
         ses.new("Hot runway", "F-16C", 2, seed=7)
         pk = next(p for p in ses.packages() if ses.flyable(p))
-        r = ses.fly(pk.number, ses.flyable(pk)[0].id)
+        pfl = ses.flyable(pk)[0]
+        pbase = ses.state.bases[pfl.base_id].name.split(" ")[0]
+        r = ses.fly(pk.number, pfl.id)
+        r.pbase = pbase
         z = zipfile.ZipFile(r.miz)
         txt = z.read("mission").decode("utf8", "ignore")
         ents = sorted(set(re.findall(r'\{g=\\*"([^"\\]*)\\*", f=\d+, b=\\*"([^"\\]*)\\*", t=(\d+)\}', txt)))
@@ -1836,6 +1839,7 @@ def check_31v_hot_runway(c):
     assert not ents, f"setting off: no scheduled runway releases ({ents})"
     ses, r, ents, m = build(True)
     assert ents, "setting on: at least one AI flight is released from a runway"
+    assert not [e for e in ents if r.pbase in e[1]], f"main setting alone: nothing is released at your own field ({ents})"
     per = {}
     for g, b, t in ents:
         per.setdefault(b, []).append(int(t))
@@ -1856,7 +1860,7 @@ def check_31v_hot_runway(c):
     assert seen == len(names), "every released flight is in the mission"
     assert all(dup[n] == 1 for n in names), "a released flight's group name is unique (the hook finds it by name)"
     # v0.41.97: your own field: released only after you are rolling (takeoff buffer + a minute), and the hook holds them while you are inbound
-    ses2 = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, hot_runway_starts=True))
+    ses2 = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, hot_runway_starts=True, hot_runway_own_field=True))
     ses2.new("Hot runway own field", "F-16C", 2, seed=3)
     pk2 = next(p for p in ses2.packages() if ses2.flyable(p))
     pf2 = ses2.flyable(pk2)[0]
@@ -1867,6 +1871,12 @@ def check_31v_hot_runway(c):
     own = [(g, int(t)) for g, b, t in ents2 if pbn in b]
     assert own, "an AI flight at your own field starts on the runway too"
     assert all(t >= ses2.settings.takeoff_buffer_s + 60 for _g, t in own), f"own field: nothing before you are rolling {own}"
+    # the sub-setting needs the main one (load rule): own field off whenever the main setting is off
+    s3 = AppSettings(dcs_saves=str(TMP / "saves"), persist=False, hot_runway_starts=False, hot_runway_own_field=True)
+    ses3 = Session(s3)
+    ses3.new("Hot runway sub off", "F-16C", 2, seed=3)
+    ses3.fly(next(p for p in ses3.packages() if ses3.flyable(p)).number, ses3.flyable(next(p for p in ses3.packages() if ses3.flyable(p)))[0].id)
+    assert ses3.options.hot_runway_own_field is False, "sub-setting is ignored while the main setting is off"
     assert "local PHOME = { x =" in txt2 and "playerInbound()" in txt2, "the hook knows your field and holds releases while you are inbound"
     print(f"[hot runway] {len(ents)} AI flights released from runways, a minute apart per runway; off: none; your field: {len(own)} released after your takeoff")
 

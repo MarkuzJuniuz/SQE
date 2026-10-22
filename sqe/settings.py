@@ -63,6 +63,7 @@ class AppSettings:
     borrow_blue: bool = False             # the same for blue (sams.blue_orders)
     hot_ramp_scrambles: bool = False      # v0.41.80: scramble pairs at LAND fields wait hot on the ramp and taxi out (experimental); off = hidden, put on the runway when called
     hot_runway_starts: bool = False       # v0.41.96: AI package flights from LAND fields other than yours start on the runway (queued by the hook) instead of airborne, when the schedule allows (v0.41.97: your own field too, after your takeoff)
+    hot_runway_own_field: bool = False    # v0.41.99: sub-setting of hot_runway_starts: also AI flights at YOUR field (after your takeoff); only counts while hot_runway_starts is on
     takeoff_buffer_s: int = 60            # seconds between mission start and the briefed takeoff (negative = you must be quicker than the plan)
     hold_minutes: int = 2                 # slack at the marshal point before PUSH (minutes; negative = hurry)
     flight_filter: str = "squadron"      # who you may fly: "squadron" (only flights of YOUR squadron). "all" is for tests and tools only: a saved file never turns it on (v0.41.93)
@@ -146,6 +147,8 @@ class AppSettings:
                     s.patch_asked = True          # a settings file from before the question existed: the choice stands
             except (OSError, ValueError):
                 pass
+        if not getattr(s, "hot_runway_starts", False):
+            s.hot_runway_own_field = False            # v0.41.99: the sub-setting cannot be on without the main one
         if getattr(s, "flight_filter", "squadron") != "squadron":
             s.list_filter = "all"                     # v0.41.93: an older file's "all" was the list choice; it no longer lets you fly other squadrons' jets
             s.flight_filter = "squadron"
