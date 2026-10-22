@@ -360,7 +360,7 @@ class Session:
         from .war import WarSimulator, chance
         st = self.state
         st.raids.setdefault("sead", {})
-        sim = WarSimulator(self.d)
+        sim = self._sim()
         from .models import SEAD_AIMS
         for p in pkgs:
             if p.objective.type == ObjectiveType.DEAD and p.objective.aim in SEAD_AIMS:
@@ -551,7 +551,7 @@ class Session:
         import copy
         out = {}
         for p in pkgs:
-            sim = WarSimulator(self.d, self._rng(55 + p.number))
+            sim = self._sim(self._rng(55 + p.number))
             try:
                 out[p.id] = sim.resolve_abstract(copy.deepcopy(self.state), Package.from_dict(p.to_dict()))["roll"]
             except Exception:
@@ -752,12 +752,19 @@ class Session:
         return res
 
     # ---- skip the day ---------------------------------------------------------------------------------
+    def _sim(self, rng=None):
+        """The war simulator with the Experimental switches from the settings (borrow_red / borrow_blue)."""
+        from .war import WarSimulator
+        sim = WarSimulator(self.d, rng)
+        sim.borrow = {"red": bool(getattr(self.settings, "borrow_red", True)), "blue": bool(getattr(self.settings, "borrow_blue", True))}
+        return sim
+
     def skip_day(self) -> dict:
         """Skip Turn: any pending sortie is discarded and EVERY package of the day (even ones you could have flown) is resolved
         by the war simulation. The date advances, the war replans."""
         st = self.state
         st.pending = None
-        sim = WarSimulator(self.d, self._rng(44))
+        sim = self._sim(self._rng(44))
         results = [sim.resolve_abstract(st, Package.from_dict(pd)) for pd in st.plan]
         st.note(f"Day {st.day}: you stood down. The war went on without you ({sum(1 for r in results if r['success'])} of {sum(1 for r in results if not r.get('scrubbed'))} packages succeeded"
                 f"{'; ' + str(sum(1 for r in results if r.get('scrubbed'))) + ' scrubbed for weather' if any(r.get('scrubbed') for r in results) else ''}).")
@@ -814,7 +821,7 @@ class Session:
         out["objective"], out["objective_type"] = pend["objective"], pend["objective_type"]
         rng = self._rng(33)
         out["story"] = narrative.debrief_story(out, st, rng)
-        sim = WarSimulator(self.d, rng)
+        sim = self._sim(rng)
         meanwhile = []
         t_end = float(data.get("time", 0) or 0)
         real = {m["number"] for m in pend.get("merged", []) if t_end >= m["tot_s"] + 90}    # their strike was really flown; the rest are dice

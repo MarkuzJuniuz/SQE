@@ -377,7 +377,7 @@ def check_06_gui_dialogs_build_scan(c):
         _gs = AppSettings(dcs_saves=str(TMP / "gsv"), persist=False)
         _dlg = SettingsDialog(_gs)
         QMessageBox.information = staticmethod(lambda *a, **k: None)
-        assert [_dlg.tabs.tabText(i) for i in range(_dlg.tabs.count())] == ["General", "Campaign", "Mission Build", "DCS integration", "Terrain scan"]
+        assert [_dlg.tabs.tabText(i) for i in range(_dlg.tabs.count())] == ["General", "Campaign", "Mission Build", "DCS integration", "Terrain scan", "Experimental"]
         assert "Not scanned" in _dlg.tm_status.text()
         _gs.carcass_weight_pct, _gs.reactive, _gs.weather_mode, _gs.merge_radius_nm = 40, False, "rain", 35       # every moved control still round-trips
         _d2 = SettingsDialog(_gs)
@@ -1548,6 +1548,27 @@ def check_31i_hot_ramp_scrambles(c):
     assert ramp_on, ("setting on: scramble pairs wait hot on the ramp", [x for x in on if x[0].startswith(("Alert", "Standby", "Relief", "Reinforce"))])
     assert all(not x[3] for x in ramp_on), "a hot ramp pair is not late-activated (it exists, held, from the start)"
     print(f"[hot ramp] {len(ramp_on)} pairs on the ramp with the setting on, {len(ramp_off)} off")
+
+
+def check_31j_borrow_switches(c):
+    """v0.41.81: the Experimental tab's per-side borrowing switches: off, that side's SAM orders do not run overnight; on (default), they do."""
+    from sqe import sams, war
+    from sqe.war import WarSimulator
+    calls = []
+    real_r, real_b = sams.red_orders, sams.blue_orders
+    sams.red_orders = lambda *a, **k: (calls.append("red"), [])[1]
+    sams.blue_orders = lambda *a, **k: (calls.append("blue"), [])[1]
+    try:
+        for red, blue in ((True, True), (False, True), (True, False), (False, False)):
+            ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, borrow_red=red, borrow_blue=blue))
+            (TMP / "saves").mkdir(parents=True, exist_ok=True)
+            ses.new("Smoke borrow", "F-16C", 3, seed=7)
+            calls.clear()
+            ses.skip_day()
+            assert ("red" in calls) == red and ("blue" in calls) == blue, ((red, blue), calls)
+    finally:
+        sams.red_orders, sams.blue_orders = real_r, real_b
+    assert AppSettings().borrow_red and AppSettings().borrow_blue, "both default on (today's behaviour)"
 
 
 def check_31c_ai_skill_red_blue(c):
@@ -2981,6 +3002,7 @@ CHECKS = [
     check_31g_blue_support_relief,
     check_31h_cap_replacement,
     check_31i_hot_ramp_scrambles,
+    check_31j_borrow_switches,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,

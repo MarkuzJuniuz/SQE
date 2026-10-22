@@ -266,6 +266,7 @@ def blinded_today(state, site: str) -> bool:
 class WarSimulator:
     def __init__(self, d: Difficulty, rng: random.Random | None = None):
         self.d, self.rng = d, rng or random.Random()
+        self.borrow = {"red": True, "blue": True}                  # v0.41.81: the Experimental switches (engine sets them from the settings)
 
     def odds(self, state: CampaignState, pkg: Package) -> tuple:
         obj = pkg.objective
@@ -492,7 +493,7 @@ class WarSimulator:
             a.suppressed = False                                    # blinded radars come back on overnight
         for ln in self.counterstrike(state):
             state.note("Overnight: " + ln)
-        for ln in sams.red_orders(state, d, self.rng) + sams.rebuild(state, d, self.rng) + sams.relocate(state, d, self.rng) + sams.retreat(state, d, self.rng):
+        for ln in (sams.red_orders(state, d, self.rng) if self.borrow["red"] else []) + sams.rebuild(state, d, self.rng) + sams.relocate(state, d, self.rng) + sams.retreat(state, d, self.rng):
             state.note("Overnight: " + ln)
         for ln in raids.overnight(state, d, self.rng):               # surprise raids nobody flew: alert aircraft against the bombers
             state.note("Overnight: " + ln)
@@ -512,7 +513,7 @@ class WarSimulator:
     def counterstrike(self, state: CampaignState) -> list:
         """Our airfield air defences repair (by supply; see sams.blue_defence) destroyed sites are ordered or rebuilt (sams.blue_orders). (The old random
         overnight air strike is gone: Red raids are planned now, see raids.py.) Returns log lines."""
-        return sams.blue_defence(state, self.d) + sams.blue_orders(state, self.d, self.rng) + sams.rebuild_blue_sites(state, self.d, self.rng)
+        return sams.blue_defence(state, self.d) + (sams.blue_orders(state, self.d, self.rng) if self.borrow["blue"] else []) + sams.rebuild_blue_sites(state, self.d, self.rng)
 
 
 def totals(state: CampaignState) -> dict:
