@@ -1,0 +1,4 @@
+{
+  "_note": "Edit and restart SQE. unit_ceiling = most units in one mission, merged packages included (judgment call, 500). The Settings unit limit (250) counts only the base mission, not the packages merged into it.",
+  "unit_ceiling": 500
+}

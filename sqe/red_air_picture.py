@@ -77,7 +77,7 @@ class RedAirPicture:
         if t_arr <= 60 or t_arr > tot_s + RELIEF_HORIZON_S:
             return
         w, a = st.enemy_air_at(nxt["wing"]), st.assets.get(nxt["wing"])
-        if w is None or a is None or a.destroyed or w.available_of(ENEMY_FIGHTERS) < 4 or self._counts()["units"] + 2 > self.o.max_units:
+        if w is None or a is None or a.destroyed or w.available_of(ENEMY_FIGHTERS) < 4 or 2 > self._units_room():
             return
         ap = self.t.airports.get(a.airport) if a.airport else None
         if ap is None:
@@ -119,7 +119,7 @@ class RedAirPicture:
         ent = {"g": gname, "n": 2, "bf": bf, "rf": 0, "u": float(end_s)}
         self._cover.append(ent)
         cands = sorted(((dist(a_.x, a_.y, sx, sy), w_, a_) for w_, a_ in wings if w_.available_of(ENEMY_FIGHTERS) >= 4 and a_.airport), key=lambda c_: c_[0])
-        if not cands or cands[0][0] > ALERT_REACH_NM * NM or self._counts()["units"] + 2 > self.o.max_units:
+        if not cands or cands[0][0] > ALERT_REACH_NM * NM or 2 > self._units_room():
             return
         _d, w, a = cands[0]
         ap = self.t.airports.get(a.airport)

@@ -169,7 +169,8 @@ class MissionOptions:
     carcass_weight: float = 0.25        # how much of a live unit one wreck counts toward the unit limit
     carcass_range_nm: int = 40          # only sites this close to the route get wrecks
     full_map: bool = False              # stress test: build everything that exists (see _spawn_everything); the unit limit is off
-    max_units: int = 250                # the mission's unit limit (wrecks are trimmed, furthest first, to fit under it)
+    max_units: int = 250                # the unit limit of the BASE mission (wrecks are trimmed, furthest first, to fit under it); merged packages' units do not count (v0.41.104)
+    unit_ceiling: int = 0               # most units in total, merged packages included (0 = sqe/data/limits.json, 500); a runaway guard
     merge_enemy_pct: int = 100          # folded packages: biggest enemy-air need + this % of the others'
     carrier_min_enemy_nm: int = 150     # the carrier group is moved back along the line of retreat until it is at least this far from the fight
     player_is_client: bool = False
@@ -575,7 +576,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         used = {f.callsign for f in anchor.flights}
         out = []
         ruin_ids = {x.id for x in ruins}
+        self._merged_units = getattr(self, "_merged_units", 0)
+        prev_ = self._counts()["units"]
         for k, x in enumerate(list(extras) + [r for r in ruins if r.id not in {e.id for e in extras}]):
+            now_ = self._counts()["units"]                  # what the previous package brought (flights, its sites, ruins) is exempt from the base limit
+            self._merged_units += now_ - prev_
+            prev_ = now_
             xp = copy.deepcopy(x)
             xp.flights = [f for f in xp.flights if not f.tag]
             for f in xp.flights:
@@ -666,6 +672,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             out.append({"id": xp.id, "number": xp.number, "objective": xp.objective.description, "type": xp.objective.type.value, "txy": (tx2, ty2),
                         "start": xp.start, "push": clock(P0x), "tot": clock(tot), "rtb": clock(rtb2), "tot_s": tot, "rtb_s": rtb2, "underway": P0x < 0, "struck": ruined,
                         "flights": ", ".join(f"{f.callsign} {f.count}x{f.aircraft}" for f in xp.flights)})
+        self._merged_units += self._counts()["units"] - prev_
         return out
 
     def _start_for(self, key) -> StartType:
@@ -868,6 +875,16 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         except Exception as ex:
             self.warns.append(f"could not set the weather ({ex}); the mission keeps pydcs's clear default")
 
+    def _units_room(self) -> float:
+        """Units still free (v0.41.104): the base mission's limit counts everything except what merged packages brought (self._merged_units), and the
+        total never goes past the ceiling in sqe/data/limits.json."""
+        from . import limits
+        u = self._counts()["units"]
+        ceil_ = self.o.unit_ceiling or limits.unit_ceiling()
+        if self.o.max_units >= 10 ** 5:                            # full-map stress test: no limit at all
+            return float(10 ** 9)
+        return min(self.o.max_units - (u - getattr(self, "_merged_units", 0)), ceil_ - u)
+
     def _counts(self) -> dict:
         """Units for the VR budget. A dead static (wreck) is cheap, so it counts `carcass_weight` of a unit; 'wrecks' is how many there are."""
         g = u = w = 0
@@ -888,7 +905,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if not o.carcasses:
             return
         w = max(0.05, float(o.carcass_weight))
-        budget = int(max(0, o.max_units - self._counts()["units"]) / w)
+        budget = int(max(0, self._units_room()) / w)
         if budget <= 0:
             return
         ok = lambda x, y: seac.site_ok(x, y, 60.0)
@@ -1338,7 +1355,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         ent = {"g": f0.callsign, "n": int(f0.count), "bf": src["bf"], "rf": 0, "u": float(end_s)}
         used = {x.callsign for x in src["package"].flights} | {x.callsign for x in self._relief_names} | {x.callsign for x, _g in self.flight_groups}
         free = next((f"{c_} {n}" for c_ in [f0.callsign.rsplit(" ", 1)[0]] + [c for c in callsigns.table(f0.aircraft)] for n in range(1, 10) if f"{c_} {n}" not in used), None)
-        if free is not None and self._counts()["units"] + f0.count <= self.o.max_units:
+        if free is not None and f0.count <= self._units_room():
             self._flag_n += 1
             nf = copy.deepcopy(f0)
             nf.callsign, nf.is_player = free, False
@@ -1363,7 +1380,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             names = self._relief_names = []
         k, start = 1, step
         while start < full - 300:
-            if self._counts()["units"] + f0.count > self.o.max_units:
+            if f0.count > self._units_room():
                 self.warns.append(f"{f0.callsign}: relief sorties left out to stay under the {self.o.max_units}-unit limit")
                 break
             nf = copy.deepcopy(f0)

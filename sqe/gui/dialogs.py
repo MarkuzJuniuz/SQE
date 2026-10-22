@@ -229,7 +229,7 @@ class SettingsDialog(QDialog):
         self.mmax = QSpinBox(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.merge_max_units))
         row(v, "Package merging", self.merge, self.mmax)
         hint(v, "Packages inside the radius that start within 30 minutes after yours fly in the same mission (AI-flown, one shared ground "
-                "world and support). The waiting window shows the unit count so you can compare performance. Trimmed to the unit limit.")
+                "world and support). The waiting window shows the unit count so you can compare performance. The unit limit counts only your own mission: the units merged packages bring do not count against it (a fixed ceiling in sqe/data/limits.json is the only upper bound).")
         self.mrad = QSpinBox(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "merge_radius_nm", 25)))
         row(v, "Merge radius", self.mrad)
         hint(v, "Packages whose target is inside this circle fly in the same mission (within the time windows below). The circle is centred on your target, "

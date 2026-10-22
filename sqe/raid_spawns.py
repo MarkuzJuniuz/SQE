@@ -104,7 +104,7 @@ class RaidSpawns:
         alt, spd = 22000 * FT, 400 * KPH
         placed_red, seen_src = 0, set()
         for k, pk in enumerate(picks, 1):
-            if self._counts()["units"] + pk["size"] > o.max_units:
+            if pk["size"] > self._units_room():
                 self.warns.append("enemy reinforcements left out to stay under the unit limit")
                 break
             a = st.assets[pk["base"]]
@@ -163,7 +163,7 @@ class RaidSpawns:
             if not srcs:
                 break
             sq, base, nm, free = srcs[0]
-            if self._counts()["units"] + 2 > o.max_units:
+            if 2 > self._units_room():
                 self.warns.append("blue alert aircraft left out to stay under the unit limit")
                 break
             if base.kind == BaseKind.CARRIER:
