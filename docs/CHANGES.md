@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.103, the ground war on the Forces page
+
+XO: "forward garrisons ... along with the GUI changes."
+- Forces > new tab "Ground war": one row per sector with the enemy and friendly force as bars and the forward garrison each side holds there (a dash where that side holds nothing in the sector). The garrisons were already in the Enemy assets list as "Garrison".
+- Builds on v0.41.102 (forward garrisons); merge that first.
+
+
 ## v0.41.102, forward garrisons (both sides, every sector)
 
 XO: "forward garrisons ... mirroring red ... every sector ... they should have effect in the background sim."
