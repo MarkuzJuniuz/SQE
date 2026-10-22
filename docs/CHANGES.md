@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.80, hot ramp scrambles at land fields (experimental, off by default)
+
+* **XO's experiment: "hot ramp starts for scramblers, land fields first".** New setting (Settings, "Hot ramp scrambles at land fields", off by default; `hot_ramp_scrambles`). On: scramble pairs at land fields (red alert pairs, red reinforcements, blue alert pairs, the red relief and standby pairs) start hot on the ramp, uncontrolled, and a trigger starts them when called (the v0.40.x path, kept in the callers all along; `_alert_group` now creates it). Off: the hidden runway start of v0.41.0, unchanged.
+* **Fallbacks:** the pair stays on the hidden runway start at your own field, at a field with no parking for its type, and on the carrier (hidden deck start until land works, XO).
+* **Why it was removed in v0.41.0:** DCS AI taxiing made some pairs take 3 to 11 minutes from the call to the air and two never got airborne. This run is the test: the state file's `alerts` list (called / air / stuck) shows it. Turn it off if pairs get stuck.
+* **Not done:** the ruins rule (a field with ruins starts hot on the runway), carriers, the player's own field.
+* Smoke: new `check_31i_hot_ramp_scrambles` (13 ramp pairs on with the setting, none off).
+
 ## v0.41.79, BARCAP as planned coverage, step 3 (third slice): a CAP pair that loses a jet, goes winchester or hits bingo is replaced
 
 * **XO's rules:** if one jet is shot down, goes winchester (no air-to-air missiles left) or is at bingo fuel, the whole pair bugs out; the nearest field replaces it after a short delay; the cost is whatever the background war computes for the next sortie from the real result (the mission does nothing extra: only the jets that really die or use up count).
