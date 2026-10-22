@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.100, tankers and AWACS on the Forces page, blue air defences per site
+
+XO: "put the awacs and tankers on the GUI ... dunno if the GUI needs adjusting to show that blue has assets too".
+- Forces > new tab "Tankers and AWACS": each support asset (E-3A, E-2C, KC-135, KC-135 MPRS, S-3B; the red A-50 dimmed, "not flying yet"), its type, base, serviceable / authorized airframes, cycle (time on orbit and turnaround), hours of cover today (from `state.barcap["support_flights"]`) and a strength bar. Read-only; tankers and AWACS are assets of their own, not squadrons.
+- Forces > Coalition bases: the single blended "Air defences" bar is now three bars, Patriot / HAWK / AAA, one per blue site (`state.blue_sams`); a carrier shows its escorts; an older save without sites shows its one figure on the Patriot.
+
+
 ## v0.41.99, hot runway starts at your own field become a sub-setting
 
 XO: "a subsetting ... The main setting is for those not of same base. Then the subsetting is the one where it does it even on same base ... If main setting is off then the subsetting cannot be on."
