@@ -265,8 +265,9 @@ class ForcesPage(QWidget):
         self.ea = _tbl(["Enemy air wing", "Types", "Serviceable", "Strength"])
         self.as_ = _tbl(["Enemy asset", "Type", "Depth", "Condition"])
         self.bs = _tbl(["Coalition base", "Type", "Patriot", "HAWK", "AAA"])
+        self.gw = _tbl(["Sector", "Enemy force", "Friendly force", "Enemy forward garrison", "Friendly forward garrison"])
         self.sup = _tbl(["Support aircraft", "Type", "Based at", "Serviceable", "Cycle", "Cover today", "Strength"])
-        for t, n in ((self.sq, "Coalition squadrons"), (self.sup, "Tankers and AWACS"), (self.bs, "Coalition bases"), (self.ea, "Enemy air wings"), (self.as_, "Enemy assets")):
+        for t, n in ((self.sq, "Coalition squadrons"), (self.sup, "Tankers and AWACS"), (self.bs, "Coalition bases"), (self.gw, "Ground war"), (self.ea, "Enemy air wings"), (self.as_, "Enemy assets")):
             self.tabs.addTab(t, n)
 
     @staticmethod
@@ -323,6 +324,24 @@ class ForcesPage(QWidget):
                 self.sup.setItem(i, j, _item(v, dim))
             fr = a["available"] / max(1, a["authorized"])
             self.sup.setCellWidget(i, 6, self._bar(fr, theme.DIM if red else col(fr)))
+        # the ground war (v0.41.102): each sector's two forces and the dug-in forward garrison each side holds there
+        from .. import ground as _gr
+        if _gr.active(st):
+            n_ = _gr.n_zones(st.ground); self.gw.setRowCount(n_)
+            for i in range(n_):
+                zi = _gr.info(st, i)
+                self.gw.setItem(i, 0, _item(zi["name"] + ("  (contested)" if zi["contested"] else "")))
+                for j, (v, c) in enumerate(((zi["red"], theme.RED), (zi["blue"], theme.BLUE))):
+                    self.gw.setCellWidget(i, 1 + j, self._bar(min(1.0, v / _gr.MAX_FORCE), c))
+                for j, side in enumerate(("red", "blue")):
+                    h = _gr.fwd_health(st, side, i)
+                    held = (zi["red"] if side == "red" else zi["blue"]) >= _gr.MIN_FORCE
+                    if (st.assets if side == "red" else st.blue_assets).get(_gr.fwd_id(side, i)) is None or not held:
+                        self.gw.setItem(i, 3 + j, _item("-", theme.DIM))
+                    else:
+                        self.gw.setCellWidget(i, 3 + j, self._bar(h, col(h)))
+        else:
+            self.gw.setRowCount(0)
         al = sorted(st.assets.values(), key=lambda a: (a.kind.value, a.name)); self.as_.setRowCount(len(al))
         for i, a in enumerate(al):
             kind = "Garrison" if a.variant == "GARRISON" else (f"SAM {a.variant}" if a.kind.value == "SAM" else a.kind.value.title())
