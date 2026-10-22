@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.83, SAM borrowing defaults to off
+
+XO: "put the borrowing of sams default off". The Experimental tab's Red / Blue borrowing switches now start unticked; tick them to get SAM orders by need (v0.41.67 / .68). Saved settings keep whatever was stored.
+
 ## v0.41.82, HARM salvo scales with the SAM cluster (Standoff DEAD)
 
 XO: "Is it out of doctrine to always have 4 ships for harms and jsows? Maybe it's the reason why the sams aren't saturated enough?"

@@ -1589,7 +1589,7 @@ def check_31j_borrow_switches(c):
             assert ("red" in calls) == red and ("blue" in calls) == blue, ((red, blue), calls)
     finally:
         sams.red_orders, sams.blue_orders = real_r, real_b
-    assert AppSettings().borrow_red and AppSettings().borrow_blue, "both default on (today's behaviour)"
+    assert not AppSettings().borrow_red and not AppSettings().borrow_blue, "both default off (v0.41.83)"
 
 
 def check_31c_ai_skill_red_blue(c):

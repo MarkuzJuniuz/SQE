@@ -756,7 +756,7 @@ class Session:
         """The war simulator with the Experimental switches from the settings (borrow_red / borrow_blue)."""
         from .war import WarSimulator
         sim = WarSimulator(self.d, rng)
-        sim.borrow = {"red": bool(getattr(self.settings, "borrow_red", True)), "blue": bool(getattr(self.settings, "borrow_blue", True))}
+        sim.borrow = {"red": bool(getattr(self.settings, "borrow_red", False)), "blue": bool(getattr(self.settings, "borrow_blue", False))}
         return sim
 
     def skip_day(self) -> dict:

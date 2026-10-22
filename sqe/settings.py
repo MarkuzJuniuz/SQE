@@ -59,8 +59,8 @@ class AppSettings:
     dcs_saves: str = ""
     last_campaign: str = ""
     ai_unlimited_fuel: bool = True        # AI flights: unlimited fuel until the push, real fuel for the combat leg, unlimited again from egress
-    borrow_red: bool = True               # v0.41.81 (Experimental tab): red moves SAM batteries to where they are needed (sams.red_orders); off = only the usual rebuild
-    borrow_blue: bool = True              # the same for blue (sams.blue_orders)
+    borrow_red: bool = False              # v0.41.81 (Experimental tab): red moves SAM batteries to where they are needed (sams.red_orders); off = only the usual rebuild
+    borrow_blue: bool = False             # the same for blue (sams.blue_orders)
     hot_ramp_scrambles: bool = False      # v0.41.80: scramble pairs at LAND fields wait hot on the ramp and taxi out (experimental); off = hidden, put on the runway when called
     takeoff_buffer_s: int = 60            # seconds between mission start and the briefed takeoff (negative = you must be quicker than the plan)
     hold_minutes: int = 2                 # slack at the marshal point before PUSH (minutes; negative = hurry)

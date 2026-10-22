@@ -145,9 +145,9 @@ class SettingsDialog(QDialog):
         hint(v, "On: alert pairs at land fields wait hot on the ramp and taxi out when called. Off: they wait hidden and appear on the runway (the older, steadier way). "
                 "The carrier always keeps the hidden deck start, and so does your own field.")
         self.borrow_red = QCheckBox("Red borrowing: red moves SAM batteries from quiet sites to threatened ones")
-        self.borrow_red.setChecked(bool(getattr(settings, "borrow_red", True))); v.addWidget(self.borrow_red)
+        self.borrow_red.setChecked(bool(getattr(settings, "borrow_red", False))); v.addWidget(self.borrow_red)
         self.borrow_blue = QCheckBox("Blue borrowing: blue moves SAM batteries from quiet fields to threatened ones")
-        self.borrow_blue.setChecked(bool(getattr(settings, "borrow_blue", True))); v.addWidget(self.borrow_blue)
+        self.borrow_blue.setChecked(bool(getattr(settings, "borrow_blue", False))); v.addWidget(self.borrow_blue)
         hint(v, "Off: that side only rebuilds destroyed sites the slow way (by supply). Orders already on their way wait until you switch it back on. Takes effect at the next overnight update.")
         v.addStretch(1)
 
