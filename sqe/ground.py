@@ -75,6 +75,7 @@ def build(state, th, d, rng, ap) -> None:
         state.assets[f"armor_{i + 1}"] = EnemyAsset(f"armor_{i + 1}", f"Armor column {chr(65 + i)}", AssetKind.ARMOR, cx, cy, 1.0, 6 + min(i, 2), [], None, "ARMOR", 1)
     push(state)
     build_blue_assets(state, rng, ap)
+    ensure_forward_garrisons(state)
 
 
 def _initial(d, n) -> tuple:
@@ -112,6 +113,68 @@ def _blue_garrison(b) -> EnemyAsset:
     ang = (int(hashlib.md5(b.id.encode()).hexdigest()[:4], 16) + 137) % 360
     x, y = seacheck.snap_to_land(b.x + 3200 * math.cos(math.radians(ang)), b.y + 3200 * math.sin(math.radians(ang)))
     return EnemyAsset(f"bgar_{b.id}", f"{b.name.replace(' AB', '')} garrison", AssetKind.ARMOR, x, y, 1.0, 5, [], None, "GARRISON", 1, b.id)
+
+
+# v0.41.102: forward garrisons, one dug-in position per sector for each side (red `rfwd_N` in state.assets, blue `bfwd_N` in state.blue_assets), 
+# a few km either side of the sector centre, red toward the enemy end of the axis (sector 1) and blue toward ours. Numbers are JUDGMENT CALLS inside the
+# range open sources give (Dupuy Institute: a prepared defence is worth about x1.3 to over x3 depending on preparation and terrain; US planning ratios about
+# 3:1 against a prepared defender, 2.5:1 against a hasty one; positional defence keeps at least two-thirds of the force forward in platoon / company
+# strongpoints). Tune on XO's runs.
+FWD_OFFSET_M = 3000.0         # each garrison sits this far either side of the sector centre
+FWD_EXTRA = 0.25              # defender factor added by a full-health garrison in the sector: DEFENDER 1.25 -> 1.5 (a standing garrison, still inside the sourced range)
+FWD_SHARE = 0.15              # share of its side's sector strength lost when the garrison is destroyed (scaled by the health it lost)
+FWD_REBUILD = 0.25            # daily chance (scaled by supply) that a lost forward garrison is re-established while its side still holds the sector
+
+
+def fwd_id(side: str, i: int) -> str:
+    return f"{'r' if side == 'red' else 'b'}fwd_{i + 1}"
+
+
+def fwd_pos(g, i: int, side: str) -> tuple:
+    from . import seacheck
+    c, n = g["centers"], len(g["centers"])
+    cx, cy = c[i]
+    a, b = c[max(i - 1, 0)], c[min(i + 1, n - 1)]
+    vx, vy = a[0] - b[0], a[1] - b[1]                  # from the higher-numbered neighbour toward the lower one: toward the enemy
+    L = math.hypot(vx, vy) or 1.0
+    k = (1.0 if side == "red" else -1.0) * FWD_OFFSET_M / L
+    return seacheck.snap_to_land(cx + vx * k, cy + vy * k)
+
+
+def ensure_forward_garrisons(state) -> bool:
+    """Every sector gets a dug-in garrison for each side (new campaigns and older saves). Returns True when it added any."""
+    g = getattr(state, "ground", None)
+    if not g or not g.get("centers") or not isinstance(getattr(state, "blue_assets", None), dict):
+        return False
+    added = False
+    for i in range(n_zones(g)):
+        for side, pool in (("red", state.assets), ("blue", state.blue_assets)):
+            aid = fwd_id(side, i)
+            if aid in pool:
+                continue
+            x, y = fwd_pos(g, i, side)
+            nm = f"{'Enemy' if side == 'red' else 'Friendly'} forward position, {g['names'][i]}"
+            pool[aid] = EnemyAsset(aid, nm, AssetKind.ARMOR, x, y, 1.0, 5, [], None, "GARRISON", 1)
+            added = True
+    if added:
+        g.setdefault("fwd", {"r": [1.0] * n_zones(g), "b": [1.0] * n_zones(g)})
+    return added
+
+
+def sector_of(state, asset_id: str):
+    """Sector index of a forward garrison ('rfwd_N' / 'bfwd_N'), or None."""
+    if not active(state) or not (asset_id.startswith("rfwd_") or asset_id.startswith("bfwd_")):
+        return None
+    try:
+        i = int(asset_id[5:]) - 1
+    except ValueError:
+        return None
+    return i if 0 <= i < n_zones(state.ground) else None
+
+
+def fwd_health(state, side: str, i: int) -> float:
+    a = (state.assets if side == "red" else getattr(state, "blue_assets", {})).get(fwd_id(side, i))
+    return 0.0 if a is None else max(0.0, a.health)
 
 
 def ensure_blue_garrisons(state) -> bool:
@@ -225,6 +288,8 @@ def blue_scale(state, asset_id: str) -> float:
     """How big the friendly task force at this column's JTAC is, against the 1.0 it always was: from the zone's Blue strength."""
     i = zone_of(state, asset_id)
     if i is None:
+        i = sector_of(state, asset_id)                  # v0.41.102: a forward garrison is as big as its sector
+    if i is None:
         return 1.0
     return max(0.5, min(1.5, blue_strength(state, i) / 50.0))
 
@@ -309,6 +374,14 @@ def resolve_day(state, d, rng) -> list:
     red, blue, n = g["red"], g["blue"], n_zones(g)
     sr, sb = supply(state, "red"), supply(state, "blue")
     lines = []
+    fw = g.setdefault("fwd", {"r": [1.0] * n, "b": [1.0] * n})
+    for key, side, force in (("r", "red", red), ("b", "blue", blue)):
+        for i in range(n):
+            h = fwd_health(state, side, i)
+            drop = fw[key][i] - h
+            if drop > 0.01 and force[i] > 0:                    # a garrison lost since yesterday takes its share of the sector's force with it
+                force[i] = max(0.0, force[i] * (1.0 - FWD_SHARE * min(1.0, drop)))
+            fw[key][i] = h
     for i in range(n):
         R, B = red[i], blue[i]
         if R >= MIN_FORCE and B >= MIN_FORCE:
@@ -328,7 +401,8 @@ def resolve_day(state, d, rng) -> list:
             if att:
                 a_is_red = att == "red"
                 pa = (red[i] * sr) if a_is_red else (blue[i] * sb)
-                pd = DEFENDER * ((blue[i] * sb) if a_is_red else (red[i] * sr))
+                dh = fwd_health(state, "blue" if a_is_red else "red", i)               # a standing forward garrison strengthens the defence (v0.41.102)
+                pd = (DEFENDER + FWD_EXTRA * dh) * ((blue[i] * sb) if a_is_red else (red[i] * sr))
                 if pa > DECISIVE * pd:
                     _rout(g, i, "blue" if a_is_red else "red")
                     _advance(g, i, "red" if a_is_red else "blue")
@@ -357,6 +431,12 @@ def resolve_day(state, d, rng) -> list:
     bz = min((i for i in range(n) if blue[i] >= MIN_FORCE), default=n - 1)
     red[rz] = min(MAX_FORCE, red[rz] + getattr(d, "red_reinf", 5.0) * sr)
     blue[bz] = min(MAX_FORCE, blue[bz] + getattr(d, "blue_reinf", 5.0) * sb)
+    for i in range(n):                                   # a lost red forward garrison is re-established where red still holds the sector (blue's come back through rebuild_blue)
+        a = state.assets.get(fwd_id("red", i))
+        if a is not None and a.health <= 0.05 and red[i] >= MIN_FORCE and rng.random() < FWD_REBUILD * sr:
+            a.health = 0.4
+            fw["r"][i] = 0.4
+            lines.append(f"{g['names'][i]}: Enemy forces dug in a new forward position")
     km0 = g.get("line_km", 0.0)
     g["line_km"] = line_km(g)
     if abs(g["line_km"] - km0) >= 1.0:

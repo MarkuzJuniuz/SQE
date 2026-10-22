@@ -117,6 +117,7 @@ class Session:
         _tm.set_ramp_lead(bool(getattr(self.settings, "hot_ramp_scrambles", False)))      # v0.41.92: planning keep-outs use the same scramble circles as the build
         from . import ground
         ground.ensure_blue_garrisons(st)                # older saves: a friendly garrison at every airfield
+        ground.ensure_forward_garrisons(st)             # v0.41.102: a forward garrison for each side in every sector (older saves too)
         sams.ensure_blue_sams(st)                       # v0.41.62: blue's three air-defence sites at every airfield (older saves: from the field's `defense`)
         ground.snap_roads(st)                           # once, as soon as a road scan exists: columns and supply sites sit on a road
         redair.ensure(st, self.d)                       # the enemy's air tasking for the day

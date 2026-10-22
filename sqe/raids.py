@@ -57,7 +57,7 @@ def aim_xy(state, aim: str, base):
 
 
 def aim_kind(aim: str) -> str:
-    return "field" if not aim else "sector" if aim.startswith("sector:") else "garrison" if aim.startswith("bgar_") else "supply"
+    return "field" if not aim else "sector" if aim.startswith("sector:") else "garrison" if aim.startswith(("bgar_", "bfwd_")) else "supply"
 
 
 def describe(state, base, aim: str = "") -> str:
@@ -105,15 +105,22 @@ def candidates(state, kind: str) -> list:
         for a in sorted(getattr(state, "blue_assets", {}).values(), key=lambda a: a.id):
             if a.destroyed:
                 continue
-            if (kind == "garrison") != (a.id.startswith("bgar_")):
+            if (kind == "garrison") != (a.id.startswith(("bgar_", "bfwd_"))):
                 continue
+            wt_ = 1.0
+            if a.id.startswith("bfwd_"):                                  # v0.41.102: a forward garrison is raided where friendly troops still hold the sector, more where the pressure is
+                from . import ground
+                i_ = ground.sector_of(state, a.id)
+                if i_ is None or ground.blue_strength(state, i_) < ground.MIN_FORCE:
+                    continue
+                wt_ = 0.5 + ground.info(state, i_)["pressure"]
             home = state.bases.get(a.id.split("_", 1)[1]) if a.id.split("_", 1)[1] in state.bases else _nearest_field(state, a.x, a.y)
             if home is None or home.id in fallen:
                 continue
             r = _reach(state, kind, a.x, a.y)
             if r is None:
                 continue
-            out.append((home, a.id, max(0.15, 1.0 - r[0] / 330.0) * (0.5 + 0.5 * a.health) * (a.value / 5.0)))
+            out.append((home, a.id, max(0.15, 1.0 - r[0] / 330.0) * (0.5 + 0.5 * a.health) * (a.value / 5.0) * wt_))
     elif kind == "sector":
         from . import ground
         if ground.active(state):
