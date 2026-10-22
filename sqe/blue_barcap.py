@@ -223,6 +223,31 @@ def attach(state, pkgs: list) -> None:
             have.add(kind)
 
 
+def status_lines(state) -> list:
+    """The campaign status lines for blue's patrols: the share of today's 24 h each area has a pair up (planned, `blue_cover`; the patrols fly
+    06:00-22:00 only, so 67 % is the most), plus how many guard sorties watch the tankers and AWACS. [] when there is no plan yet."""
+    bc = getattr(state, "barcap", None) or {}
+    cover = bc.get("blue_cover") or {}
+    if not bc.get("blue_flights"):
+        return []
+    dirs = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+    parts = []
+    for ar in barcap.plan_areas(state, "blue"):
+        if ar["id"] in cover:
+            parts.append((ar["name"], dirs[int(((ar.get("bearing", 0) % 360) + 22.5) // 45) % 8], round(100 * cover[ar["id"]] / 1440)))
+    parts.sort(key=lambda t: (t[0], t[1]))
+    by = {}
+    for n, d, pc in parts:
+        by.setdefault(n, []).append(f"{d} {pc}%")
+    g = [f for f in bc["blue_flights"] if f["kind"] in ("HAVCAP", "TNKCAP")]
+    out = ["BARCAP cover today (share of 24 h with a pair up):"] + [f"   {n}: " + ", ".join(v) for n, v in by.items()]
+    if not by:
+        out[0] = "BARCAP cover today: none planned"
+    if g:
+        out.append(f"Tanker / AWACS guards: {sum(1 for f in g if f['kind'] == 'TNKCAP')} tanker, {sum(1 for f in g if f['kind'] == 'HAVCAP')} AWACS sorties planned")
+    return out
+
+
 def patrol_up(state, rng, base, from_xy) -> tuple:
     """-> (is a pair on station over `base` on the side the raid comes from right now?, the squadron that flies it). The draw is the share of the day
     the area is covered (`state.barcap["blue_cover"]`, minutes of 1440: the patrols fly 06:00-22:00 only, so the night is open)."""

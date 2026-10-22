@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.89, BARCAP status line and shorter Experimental settings
+
+XO: "You can go with the BARCAP status line." / "The setting headers don't wrap."
+- The Overview's theatre summary now ends with "BARCAP cover today", one line per base or carrier (the share of today's 24 h each blue area, by direction, has a pair up, from the plan in `state.barcap["blue_cover"]`; the patrols fly 06:00 to 22:00, so 67 % is the most) and a line with the planned tanker / AWACS guard sorties (`blue_barcap.status_lines`). Display only.
+- Settings, Experimental tab: the checkbox titles are short (they do not wrap) and the explanation moved into the text underneath.
+- Smoke: `check_31m_blue_barcap_plan` also builds the status lines.
+
 ## v0.41.88, HAVCAP and tanker CAP are planned chains of their own
 
 XO: "Merged and I would love it if you did."

@@ -136,19 +136,19 @@ class SettingsDialog(QDialog):
         # ---- Experimental: features still being tested; each one can be switched off --------------------------------------
         v = page("Experimental")
         hint(v, "Features still being tried out. Each one can be switched off if it misbehaves; the defaults are the safe ones.")
-        self.ecm = QCheckBox("ECM script: SQE's own jamming model (experimental, off by default)")
+        self.ecm = QCheckBox("ECM script (SQE's own jamming)")
         self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
-        hint(v, "Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
+        hint(v, "SQE's own jamming model; off by default. Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
                 "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
-        self.hotramp = QCheckBox("Hot ramp scrambles at land fields (experimental: alert pairs wait on the ramp and taxi out; carriers keep the hidden deck start)")
+        self.hotramp = QCheckBox("Hot ramp scrambles")
         self.hotramp.setChecked(bool(getattr(settings, "hot_ramp_scrambles", False))); v.addWidget(self.hotramp)
-        hint(v, "On: alert pairs at land fields wait hot on the ramp and taxi out when called. Off: they wait hidden and appear on the runway (the older, steadier way). "
+        hint(v, "Land fields only. On: alert pairs at land fields wait hot on the ramp and taxi out when called. Off: they wait hidden and appear on the runway (the older, steadier way). "
                 "The carrier always keeps the hidden deck start, and so does your own field.")
-        self.borrow_red = QCheckBox("Red borrowing: red moves SAM batteries from quiet sites to threatened ones")
+        self.borrow_red = QCheckBox("Red SAM borrowing")
         self.borrow_red.setChecked(bool(getattr(settings, "borrow_red", False))); v.addWidget(self.borrow_red)
-        self.borrow_blue = QCheckBox("Blue borrowing: blue moves SAM batteries from quiet fields to threatened ones")
+        self.borrow_blue = QCheckBox("Blue SAM borrowing")
         self.borrow_blue.setChecked(bool(getattr(settings, "borrow_blue", False))); v.addWidget(self.borrow_blue)
-        hint(v, "Off: that side only rebuilds destroyed sites the slow way (by supply). Orders already on their way wait until you switch it back on. Takes effect at the next overnight update.")
+        hint(v, "On: that side moves SAM batteries from quiet sites to threatened ones. Off: that side only rebuilds destroyed sites the slow way (by supply). Orders already on their way wait until you switch it back on. Takes effect at the next overnight update.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
