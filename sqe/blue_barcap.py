@@ -52,6 +52,7 @@ def plan(state, d) -> dict:
     free = {sid: DAILY_SORTIES * sq.available for sid, sq in state.squadrons.items()}
     used = {}
     flights, cover = [], {}
+    _plan_guards(state, level, free, used, flights)                      # v0.41.88: the AWACS and tanker guards first (the tanker's is not optional)
     for b in sorted((b for b in state.bases.values() if b.kind in (BaseKind.AIRFIELD, BaseKind.CARRIER)), key=lambda b: b.id):
         areas = [a for a in bc["blue"] if a["asset"] == b.id]
         sqs = _cap_squadrons(state, b)
@@ -83,6 +84,55 @@ def plan(state, d) -> dict:
     return {"flights": flights, "used": used, "cover": cover}
 
 
+# the guard of each support asset: key -> (tag, whether the guard sortie is the tanker's long stay)
+GUARDS = {"bl_kc135": "TNKCAP", "bl_kc135mprs": "TNKCAP", "bl_e3": "HAVCAP", "bl_e2": "HAVCAP"}      # tankers first: their guard is not optional
+
+
+def _guard_squadrons(state, base) -> list:
+    """The fighters that guard an asset based at `base`: the base's own; else the nearest within reach; else any capable squadron (the tanker's
+    guard is not optional). The player's squadron is left to the packages."""
+    pl = state.player.squadron_id if getattr(state, "player", None) else None
+    sqs = [q for q in _cap_squadrons(state, base) if q.id != pl]
+    if sqs:
+        return sqs
+    cands = [sq for sq in state.squadrons.values() if sq.id != pl and Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2]
+    return sorted(cands, key=lambda q: (-q.available, q.id))[:1]
+
+
+def _plan_guards(state, level, free, used, flights) -> None:
+    """Chains of guard sorties along the windows the AWACS / tanker types are on orbit (support_assets.plan). A share of the full cover
+    (SHARE by level, the patrols' share), at least one sortie when the asset is up at all."""
+    from . import support_assets as sa
+    wins = (getattr(state, "barcap", None) or {}).get("support_flights") or {}
+    for key, tag in GUARDS.items():
+        a = (getattr(state, "support_assets", None) or {}).get(key)
+        if a is None or not wins.get(key) or a["base_id"] not in state.bases:
+            continue
+        sqs = _guard_squadrons(state, state.bases[a["base_id"]])
+        if not sqs:
+            continue
+        tanker = True                                                     # both guards stay long (a pair on a tanker / AWACS track flies 2 h, like red's tanker guard)
+        e = barcap.endurance_min(sqs[0].aircraft, tanker)
+        up = _union_minutes([(max(a_, DAY_START), min(b_, DAY_END)) for a_, b_ in wins[key] if min(b_, DAY_END) > max(a_, DAY_START)])
+        step = max(1, e - barcap.HANDOVER_MIN)
+        full = max(1, math.ceil(up / step))
+        n = max(1, round(SHARE[level] * full))
+        spans = sorted((tuple(w) for w in wins[key]))
+        span_lo, span_hi = max(spans[0][0], DAY_START), min(spans[-1][1], DAY_END)
+        gap = max(step, (span_hi - span_lo) // n)
+        for j in range(n):
+            sq = max((q for q in sqs if free[q.id] >= 2), key=lambda q: (free[q.id], q.id), default=None)
+            if sq is None:
+                break
+            lo = span_lo + j * gap
+            if lo >= 1440:
+                break
+            free[sq.id] -= 2
+            used[sq.id] = used.get(sq.id, 0) + 2
+            flights.append({"id": f"bg{state.day}-{key}.{j}", "kind": tag, "asset": key, "area": "", "squadron": sq.id, "aircraft": sq.aircraft,
+                            "size": 2, "start": lo, "end": min(1440, lo + barcap.endurance_min(sq.aircraft, tanker)), "callsign": ""})
+
+
 def _union_minutes(spans: list) -> int:
     tot, cur_lo, cur_hi = 0, None, None
     for lo, hi in sorted(spans):
@@ -97,6 +147,17 @@ def _union_minutes(spans: list) -> int:
 
 def _minute(hhmm: str) -> int:
     return int(hhmm[:2]) * 60 + int(hhmm[3:5])
+
+
+def _support_keys(p) -> list:
+    """The support assets a package has that get a guard: its AWACS and its first tanker."""
+    from .support_assets import BY_CLASS
+    out = []
+    for x in p.support:
+        k = BY_CLASS.get(x.dcs_class)
+        if k in GUARDS and (x.slot == "AWACS" or x.slot == "TANKER1") and k not in out:
+            out.append(k)
+    return out
 
 
 def attach(state, pkgs: list) -> None:
@@ -131,6 +192,20 @@ def attach(state, pkgs: list) -> None:
         if cv is not None:
             assets.append(cv)
         have = {f.tag for f in p.flights if f.tag in ("BASECAP", "CVCAP")}
+        for key in _support_keys(p):                                      # v0.41.88: the guard of each AWACS / tanker the package has
+            tag = GUARDS[key]
+            if tag in have:
+                continue
+            hit = [f for f in planned if f["kind"] == tag and f["asset"] == key and f["start"] <= hi and f["end"] >= lo]
+            if not hit:
+                continue
+            pf = max(hit, key=lambda f: (min(f["end"], hi) - max(f["start"], lo), -f["start"]))
+            sq = state.squadrons[pf["squadron"]]
+            if not pf["callsign"]:
+                pf["callsign"] = _next_callsign(state, sq, used)
+            p.flights.append(FlightPlan(f"{p.id}-f{len(p.flights) + 1}", pf["callsign"], Role.CAP, sq.id, sq.aircraft, pf["size"], sq.base_id,
+                                        _TAG_TASK[tag], False, tag, "", ""))
+            have.add(tag)
         for b in assets:
             kind = "CVCAP" if b.kind == BaseKind.CARRIER else "BASECAP"
             ar = barcap.facing_area(state, "blue", b.id, txy)

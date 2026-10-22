@@ -1,6 +1,16 @@
 # CHANGES.md
 
 
+## v0.41.88, HAVCAP and tanker CAP are planned chains of their own
+
+XO: "Merged and I would love it if you did."
+- HAVCAP and TNKCAP are no longer package slots. `blue_barcap._plan_guards` plans them each day, one chain per tanker (KC-135, KC-135MPRS) and AWACS (E-3, E-2C) type, along the hours `support_assets` says that type is on orbit (06:00 to 22:00). Pairs stay two hours (the tanker-guard endurance); the number is the same patrol share by level as the BARCAP (10 / 20 / 40 % of full cover), at least one sortie per asset. Tankers are planned first, since the tanker's guard is not optional.
+- Guards come from the asset's base squadron, else the nearest capable one, else any fighter squadron; your squadron is never drafted for them. They are paid from the same daily budget as the patrols, before the packages.
+- `blue_barcap.attach` gives a package the guard sortie of its AWACS / tanker that is up while it flies; one sortie keeps one callsign in every package that carries it. Station and route stay per mission (`support_caps`); only existence, timing, squadron and cost are planned.
+- Changed behaviour: a tanker can now fly without its guard on a day when no planned guard sortie is up (before, the guard was mandatory).
+- Engine order: `support_assets.plan` runs before `blue_barcap.plan`.
+- Smoke: `check_31p_guard_chains`; the callsign check excludes shared guards; the raid S-route check always uses the scramble path (a planned raid package resolves overnight).
+
 ## v0.41.87, tankers and AWACS as assets (step 1: airframes, windows, losses)
 
 XO: "Take the most educated guess on the numbers of these assets."

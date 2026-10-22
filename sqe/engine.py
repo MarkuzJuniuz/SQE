@@ -129,11 +129,10 @@ class Session:
         st.raids = {**keep, "day": st.day, "surprise": n_surprise, "carry": []}
         pb = PackageBuilder(st, self.d)
         psq = st.player.squadron_id if st.player else None
-        from . import blue_barcap
-        bp = blue_barcap.plan(st, self.d)                # v0.41.85: blue's standing patrols are planned (and paid for) before the packages
+        from . import blue_barcap, support_assets
+        support_assets.plan(st)                          # v0.41.87: when each AWACS / tanker type has an aircraft on orbit today (before the guards, v0.41.88)
+        bp = blue_barcap.plan(st, self.d)                # v0.41.85: blue's standing patrols and guards are planned (and paid for) before the packages
         st.barcap["blue_flights"], st.barcap["blue_cover"] = bp["flights"], bp["cover"]
-        from . import support_assets
-        support_assets.plan(st)                          # v0.41.87: when each AWACS / tanker type has an aircraft on orbit today
 
         sweeps = {}                                     # id(sweep package) -> the packages it goes in ahead of
 

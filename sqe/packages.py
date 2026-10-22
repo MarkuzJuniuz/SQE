@@ -302,21 +302,8 @@ class PackageBuilder:
                 ledger.free[sq_.id] += n_
             raise NoPlayerSlot("no SEAD flight free to escort the CAS today")
 
-        # support CAP (v0.41.7): TNKCAP guards the tanker (forward, on the way home: mandatory), HAVCAP the AWACS (well back), BASECAP the
-        # strike/CAS flights' home field, CVCAP the carrier (from the carrier's own squadrons). One pair short: the tanker keeps its guard.
-        prim = st.bases[chosen[0][1].base_id]
-        anchor = next((st.bases[sq.base_id] for _, sq, _, pl in chosen if pl), prim)
-        sup_ok = obj.type not in _FLEET and not is_sweep(obj)
-        wanted = [("TNKCAP", anchor), ("HAVCAP", anchor)] if sup_ok else []
-        # v0.41.85: the base CAP and the carrier CAP are no longer package slots: they are planned each day from the BARCAP areas (blue_barcap.py)
-        # and attached to the packages they cover once the start times are known (engine.plan_day). TNKCAP and HAVCAP stay with the package for now.
-        guards_ = {}
-        for tag, base in wanted:
-            sq = self._pick_cap_near(base, ledger, lead_service) or (self._pick_cap_any(ledger, lead_service) if tag == "TNKCAP" else None)
-            if sq:
-                ledger.free[sq.id] -= 2
-                sl_ = Slot(Role.CAP, 2, False, tag=tag)
-                chosen.append((sl_, sq, 2, False))
+        # support CAP: all four kinds (TNKCAP, HAVCAP, BASECAP, CVCAP) are planned chains now (blue_barcap.py), attached after the start times are known
+        # v0.41.88: TNKCAP and HAVCAP are planned too (blue_barcap.py): chains per tanker / AWACS asset, attached once the start times are known.
 
         used, n = (names if names is not None else {}), 0     # names: the day's callsign counter, shared by every package that day
         for slot, sq, count, is_pl in chosen:
@@ -325,7 +312,7 @@ class PackageBuilder:
             pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", cs, slot.role, sq.id,
                                           sq.aircraft, count, sq.base_id,
                                           _KIT_TASK.get(slot.kit) or _TAG_TASK.get(slot.tag) or (_SO_SEAD_TASK if (obj.aim == "STANDOFF" and slot.role == Role.SEAD) else None) or (_ESC_TASK if slot.role == Role.ESCORT else None) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or _TASK[slot.role],
-                                          is_pl, slot.tag, slot.kit, guards_.get(id(slot), "")))
+                                          is_pl, slot.tag, slot.kit, ""))
         pkg.support = self._support(pkg)
         pkg.jtac = obj.type in JTAC_OBJECTIVES
         return pkg

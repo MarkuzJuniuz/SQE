@@ -71,7 +71,7 @@ def check_00_setup(c):
         if not spec.player_flyable:
             continue
         s.new(f"Smoke {aircraft}", aircraft, 3, seed=7)         # level 3 so the bomber raid objective exists too
-        _cs = [f.callsign for p in s.packages() for f in p.flights if f.tag not in ("BASECAP", "CVCAP")]      # v0.41.85: one planned base / carrier CAP sortie is carried by every package it covers
+        _cs = [f.callsign for p in s.packages() for f in p.flights if f.tag not in ("BASECAP", "CVCAP", "HAVCAP", "TNKCAP")]      # v0.41.85: one planned base / carrier CAP sortie is carried by every package it covers
         assert len(_cs) == len(set(_cs)), f"no two flights share a callsign in a day: {sorted(c for c in _cs if _cs.count(c) > 1)}"
         _bc = {}
         for p in s.packages():
@@ -1018,7 +1018,7 @@ def check_22_raid_intercepts_ai_only(c):
     s.new("Raid build", "F-16C", 2, seed=4); _st = s.state
     _rp = None
     for _day in range(10):
-        _rp = next((p_ for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land") and s.flyable(p_)), None)
+        _rp = None       # v0.41.88: always the scramble path (a planned raid package resolves overnight, not at the debrief)
         if _rp:
             break
         _st.day += 1; s.plan_day()
@@ -1711,6 +1711,32 @@ def check_31o_support_assets(c):
     st2 = type(st).from_dict(st.to_dict())
     assert st2.support_assets == st.support_assets, "saved and loaded"
 
+
+
+def check_31p_guard_chains(c):
+    """v0.41.88: HAVCAP and tanker CAP are planned chains of their own: none is a package slot, a package carries the one that covers its tanker /
+    AWACS, one planned sortie keeps one callsign, the player's squadron is never drafted, and no asset (no airframes) means no guard."""
+    from sqe import blue_barcap as bb, packages as pk
+    s = fresh_session()
+    s.new("Guard chains", "F-14BU", 2, seed=7); st = s.state
+    fl = st.barcap["blue_flights"]
+    g = [f for f in fl if f["kind"] in ("HAVCAP", "TNKCAP")]
+    assert {f["kind"] for f in g} == {"HAVCAP", "TNKCAP"}, "both guards are planned"
+    pl = st.player.squadron_id
+    assert all(f["squadron"] != pl and f["asset"] in bb.GUARDS and f["area"] == "" for f in g), "guards come from other squadrons, per asset"
+    tags = {}
+    for p in s.packages():
+        for f in p.flights:
+            if f.tag in ("HAVCAP", "TNKCAP"):
+                assert any(x.slot in ("AWACS", "TANKER1") for x in p.support), "a guard rides only with the asset it guards"
+                assert tags.setdefault(f.callsign, (f.tag, f.squadron_id)) == (f.tag, f.squadron_id), "a planned guard sortie keeps one identity"
+    assert tags, "some package carries a guard"
+    st.support_assets["bl_kc135"]["available"] = st.support_assets["bl_kc135mprs"]["available"] = 0
+    st.support_assets["bl_e3"]["available"] = st.support_assets["bl_e2"]["available"] = 0
+    s.plan_day()
+    assert not [f for f in st.barcap["blue_flights"] if f["kind"] in ("HAVCAP", "TNKCAP")], "no tanker or AWACS airframe, no guard"
+    print(f"[guards] {len(g)} guard sorties planned ({sum(1 for f in g if f['kind'] == 'TNKCAP')} tanker, {sum(1 for f in g if f['kind'] == 'HAVCAP')} AWACS), "
+          f"{len(tags)} carried by packages; none from your squadron")
 
 def check_31j_borrow_switches(c):
     """v0.41.81: the Experimental tab's per-side borrowing switches: off, that side's SAM orders do not run overnight; on (default), they do."""
@@ -3170,6 +3196,7 @@ CHECKS = [
     check_31m_blue_barcap_plan,
     check_31n_blue_patrol_vs_raids,
     check_31o_support_assets,
+    check_31p_guard_chains,
     check_31_where_sites_sit_doctrinal,
     check_32_red_s_known_cap,
     check_33_jsow_flight_s_release,

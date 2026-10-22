@@ -4,7 +4,7 @@ Until now a package always got an AWACS and a tanker out of thin air. Now blue h
 judgment calls named), each day plans when each type has an aircraft on orbit (sorties that fly their time on station, then spend a turnaround
 on the ground before they can fly again), and a package gets the AWACS / tanker only if it is up while the package flies. A support aircraft
 shot down in a flown mission leaves the count; missing airframes come back slowly. Red's A-50 is kept as data only (decoration, XO 2026-10-20).
-The guards (HAVCAP, tanker CAP) are still package slots; planning them as chains of their own is the next step.
+The guards (HAVCAP, tanker CAP) are planned chains from v0.41.88 (blue_barcap._plan_guards).
 
 Saved in `state.support_assets` (older saves get the table on first use) and today's windows in `state.barcap["support_flights"]`.
 """
