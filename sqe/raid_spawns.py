@@ -8,6 +8,7 @@ import math
 import random
 
 from dcs import action, condition, mapping, planes, statics, task, triggers
+from dcs.translation import String
 from dcs.mission import StartType
 from dcs.point import PointAction
 from dcs.unit import Skill
@@ -19,11 +20,14 @@ from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
 from .loadouts import ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_strike_loadout
 from .models import AssetKind, BaseKind, ObjectiveType, Role
-from .red_air_picture import A2A_ZONE_NM, RED_LONG_RANGE
+from .red_air_picture import A2A_ZONE_NM, CALLIN_LUA, CALLIN_MIN_NM, CALLIN_REACH_NM, RED_LONG_RANGE
+from .support_caps import SUPPORT_CAP_ZONE_NM
 from .routes import AVOID_NM, FT, NM, Wpt, avoid_circles, bearing, dist, offset
 from .strike_tasks import KPH
 
 F = VehicleGroup.Formation
+BLUE_CALLIN_TAGS = ("BASECAP", "CVCAP")    # v0.41.112: the blue patrols that are called in with the alert pairs (the tanker / AWACS guards stay with their asset)
+BLUE_CALLIN_CV_NM = 60        # the carrier CAP answers a hotspot at most this far from its station: the boat is not left bare (judgment call)
 RAID_PUSH_NM = 10             # v0.41.29: a raid's PUSH, this far from its marshal toward the target (blue's is up to 10 nm)
 RAID_MSHL_MIN_NM = 60         # ...its marshal is at least this far from the target (judgment call: well outside blue's Patriot reach)
 RAID_MPS = 232.0              # a red raid's speed (450 kts), the same figure its placement always used
@@ -153,6 +157,7 @@ class RaidSpawns:
 
         # ---- blue alert pairs ---------------------------------------------------------------------------------------------------
         raid_x = next((x for x in extras if x.objective.type == ObjectiveType.FLEET_DEFENSE), None)
+        self._blue_callins(package, raid_x, fleet_obj, tx, ty, tot_s)
         n_pairs = reactive.blue_pairs(rr, base_n + placed_red, blue_f, fleet_obj, raid_x is not None)
         if not n_pairs:
             return
@@ -228,6 +233,76 @@ class RaidSpawns:
             committed[sq.id] = committed.get(sq.id, 0) + 2
             srcs = reactive.blue_sources(st, AIRCRAFT, fight, committed, *dpt)
             self._intel.append(f"Alert fighters of {sq.name} ({self._short(base.name)}) are on cockpit alert and may launch to help.")
+
+    def _blue_callins(self, package, raid_x, fleet_obj, tx, ty, tot_s) -> None:
+        """v0.41.112 (XO 2026-10-22): the BASECAP call-in, blue side. In a defensive mission (a raid on blue, or the fleet under attack) the blue
+        base and carrier CAPs that can reach the hotspot (where the alert pairs would station themselves) are called to it when red comes within
+        120 nm of the target (the alert pairs' own trigger), stay a while, then fly back to their station until their shift ends. Same Lua call as
+        red's (red_air_picture.py): the route has a hotspot leg AFTER the home leg, a SwitchWaypoint jumps the pair onto it."""
+        if not (fleet_obj or raid_x is not None):
+            return
+        st, o = self.state, self.o
+        dpt = (tx, ty) if (fleet_obj or raid_x is None) else self._target_xy(raid_x)
+        (hx, hy), _why = scramble.blue_station(st, dpt[0], dpt[1], scramble.raid_origin(st, raid_x or package, dpt[0], dpt[1]))
+        calls = []
+        for f, g in list(self.flight_groups):
+            if f.tag not in BLUE_CALLIN_TAGS or f.is_player or len(g.points) < 3:
+                continue
+            c1 = next((p_ for p_ in g.points if p_.name == "CAP1"), None)
+            c2 = next((p_ for p_ in g.points if p_.name == "CAP2"), None)
+            ct = next((t_ for t_ in (c1.tasks if c1 is not None else []) if isinstance(t_, task.ControlledTask)), None)
+            if c2 is None or ct is None:
+                continue
+            sx, sy = c1.position.x, c1.position.y
+            reach = BLUE_CALLIN_CV_NM if f.tag == "CVCAP" else CALLIN_REACH_NM
+            if not (CALLIN_MIN_NM <= dist(sx, sy, hx, hy) / NM <= reach):
+                continue
+            sc = ct.params.get("stopCondition", {})
+            end_s = int(sc.get("time", tot_s + o.cap_minutes * 60))
+            if sc.get("userFlag"):
+                bf_ = int(sc["userFlag"])
+            else:                                                  # a relief has no watch flag of its own: one that is never set
+                self._flag_n += 1
+                bf_ = self._flag_n
+            base = st.bases[f.base_id]
+            alt, spd = c1.alt, c1.speed * 3.6                      # pydcs keeps the speed in m/s; _arm_callin takes km/h
+            n0 = len(self._hot_calls)
+            self._arm_callin(g, None, (sx, sy), (hx, hy), SUPPORT_CAP_ZONE_NM, alt, spd, end_s, tot_s, bf_, {}, tx, ty,
+                             cap2=(c2.position.x, c2.position.y), land=lambda g_, b_=base: self._blue_back_home(g_, b_))
+            calls.append(self._hot_calls.pop())
+            assert len(self._hot_calls) == n0
+        if not calls:
+            return
+        pt = lambda x, y: mapping.Point(x, y, self.t)
+        if not self._callin_lua:
+            t0 = triggers.TriggerOnce(comment="define SQE_CALLIN")
+            t0.add_condition(condition.TimeAfter(1))
+            t0.add_action(action.DoScript(String(CALLIN_LUA)))
+            self.m.triggerrules.triggers.append(t0)
+            self._callin_lua = True
+        t1 = triggers.TriggerOnce(comment="call in the blue patrols")
+        zone = self.m.triggers.add_triggerzone(pt(*dpt), 120 * NM, True, "callin blue")
+        t1.add_condition(condition.PartOfCoalitionInZone("red", zone.id))
+        for c in calls:
+            t1.add_action(action.DoScript(String(self._callin_call(c))))
+        self.m.triggerrules.triggers.append(t1)
+
+    def _blue_back_home(self, g, base) -> None:
+        """The second way home of a called-in blue patrol (after its shift): the field's landing, or its recovery entry point when this base type
+        skips landings; the boat's deck. The recovery net of the first home leg still covers the group."""
+        pt = lambda x, y: mapping.Point(x, y, self.t)
+        if base.kind == BaseKind.AIRFIELD:
+            if self._skip_landing(base):
+                lp_ = g.points[-1].position
+                rx_, ry_ = offset(base.x, base.y, bearing(base.x, base.y, lp_.x, lp_.y), 8 * NM)
+                rcv = g.add_waypoint(pt(rx_, ry_), 3000 * FT, 300 * KPH, "RCV")
+                rcv.tasks.append(task.RunScript(f"SQE_RECOVER('{g.name}')"))
+            else:
+                g.land_at(self.apt[base.id])
+        else:
+            rtb = g.add_waypoint(pt(base.x, base.y), 600, 300 * KPH, "RTB")
+            rtb.type, rtb.action = "Land", PointAction.Landing
+            rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
 
     # ---- what the raiders are going for: the friendly garrison, supply site or troops they will bomb ---------------------------
     def _spawn_raid_target(self, package, base, aim, dx, dy, manifest):

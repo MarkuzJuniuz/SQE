@@ -2149,6 +2149,66 @@ def check_31zd_red_callin(c):
     print(f"[red call-in] {len(calls)} patrol route(s) armed (hotspot leg after the landing, second landing at the end); SQE_CALLIN called from triggers; Lua checked" + ("" if LuaRuntime else " (no lupa: Lua not run)"))
 
 
+def check_31ze_blue_callin(c):
+    """v0.41.112: the BASECAP call-in, blue side. In a mission defending against a raid, a blue base / carrier CAP that can reach the hotspot has the same
+    extended route as red's (HOTSPOT, BACK, racetrack leg, second landing), the mission calls it from a trigger on red entering the 120 nm circle, and
+    the waypoint numbers in the call match the route."""
+    import random
+    import re as _re
+    import zipfile as _zf
+    import dcs.lua as dlua
+    from sqe import raids as rd
+    found = None
+    keep = rd.emergency_happens
+    rd.emergency_happens = lambda a, b, c_: True
+    try:
+        for jet, lvl, seed in (("F-16C", 2, 4), ("F-16C", 3, 7), ("FA-18C", 2, 5), ("F-15C", 3, 11), ("F-16C", 2, 13), ("F-14BU", 3, 3), ("FA-18C", 3, 17), ("F-15C", 2, 19)):
+            random.seed(seed)
+            (TMP / "saves").mkdir(parents=True, exist_ok=True)
+            s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=400))
+            s.new("Blue call-in", jet, lvl, seed=seed)
+            for _day in range(25):
+                for pk in [p_ for p_ in s.packages() if s.flyable(p_)]:
+                    ev = s.emergency_for(pk.number, None)
+                    if not (ev and ev["kind"] == "RAID" and s._inside_merge(pk, ev["package"])):
+                        continue
+                    s.fly(pk.number, None, scramble=False)
+                    raw = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
+                    calls = set(_re.findall(r"SQE_CALLIN\('([^']+)',(\d+),(\d+),(\d+),(\d+)\)", raw))
+                    s.state.pending = None
+                    if calls:
+                        found = (raw, calls)
+                        break
+                if found:
+                    break
+                s.state.day += 1
+                s.plan_day()
+            if found:
+                break
+    finally:
+        rd.emergency_happens = keep
+    assert found, "some raid-defence mission has a blue patrol answering the hotspot"
+    raw, calls = found
+    m = dlua.loads(raw)["mission"]
+    grp = {}
+    for co in m["coalition"]["blue"]["country"].values():
+        for g in ((co.get("plane") or {}).get("group") or {}).values():
+            grp[g["name"]] = g
+    assert "define SQE_CALLIN" in raw and "SwitchWaypoint" in raw
+    n_ok = 0
+    for n, hot, back, stay, bf in calls:
+        if n not in grp:
+            continue                                                     # a red call in the same mission
+        pts = grp[n]["route"]["points"]
+        hot, back = int(hot), int(back)
+        kinds = [pts[i].get("type") for i in range(1, len(pts) + 1)]
+        assert kinds[-1] == "Land" or pts[len(pts)].get("name") == "RCV", (n, kinds)
+        assert len(pts) in (hot + 3, hot + 4) and back == hot + 1 and 0 < int(stay) < 4000, (n, kinds, hot, back, stay)
+        n_ok += 1
+    assert n_ok, "a blue group is called"
+    print(f"[blue call-in] {n_ok} blue patrol route(s) armed (hotspot leg after the home leg, second way home); SQE_CALLIN called from the red-in-circle trigger")
+
+
 def check_31y_unit_cap_merged(c):
     """v0.41.104: the Settings unit limit counts only the BASE mission; the units merged packages bring do not count against it, and the only upper bound for
     the whole mission is the ceiling in sqe/data/limits.json (the base mission is still trimmed to the limit, merged packages are not dropped for it)."""
@@ -3706,6 +3766,7 @@ CHECKS = [
     check_31zb_raid_setpiece,
     check_31zc_raid_quiet_and_hit,
     check_31zd_red_callin,
+    check_31ze_blue_callin,
     check_31o_support_assets,
     check_31p_guard_chains,
     check_31q_red_patrols_spread,
