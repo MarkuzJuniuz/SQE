@@ -1,6 +1,17 @@
 # CHANGES.md
 
 
+## v0.41.96, hot starts on the runway for AI flights (phase 1)
+
+XO: "Can we start the hot on runway starts phase 1?"
+- New setting, Settings > General, "Hot starts on the runway (AI flights)", **off by default**. On: AI package flights from LAND fields other than yours no longer appear airborne. They wait hidden on the runway and the mission hook releases them at a set time (`RWYQ` entries with a time `t`; the same queue the alert pairs use, never taxiing).
+- Timing: a flight is due at its first route point (the pretend DEP, 4 to 23 nm out) at the old activation time. The release is earlier by the roll (45 s, from the v0.41.0 alert-pair runs) + 15 s + the climb-out to that point at 300 kt (judgment call). The flight's margin before the push (2 min with a hold, 1 min without) still absorbs up to margin minus 30 s of lateness.
+- Stagger: releases from one runway are at least 60 s apart (the hook's `RWY_STAGGER_S`). A flight whose release would be later than its margin allows, or whose package is already underway at mission start, keeps the airborne spawn. So L3's early packages stay airborne; later ones go hot.
+- Not changed: your own field (phase 2: start hot once you are airborne, back to air start when you are about to land), carriers, support/guard flights.
+- Fix: a relief or standby sortie could pick the same callsign as a flight of a merged package (two groups named "Enfield 1"); it now avoids every flight already built. DCS and the hook find groups by name.
+- Smoke: `check_31v_hot_runway`.
+
+
 ## v0.41.95, hot-ramp setting moves to General
 
 XO: "move the hot starts on ramp to its actual and appropriate spot on the settings."

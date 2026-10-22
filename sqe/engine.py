@@ -712,6 +712,7 @@ class Session:
         self.options.launch_offset_s = int(self.settings.takeoff_buffer_s)
         self.options.ai_unlimited_fuel = bool(self.settings.ai_unlimited_fuel)
         self.options.hot_ramp_scrambles = bool(getattr(self.settings, "hot_ramp_scrambles", False))
+        self.options.hot_runway_starts = bool(getattr(self.settings, "hot_runway_starts", False))
         self.options.ai_skill_red = str(getattr(self.settings, "ai_skill_red", "level"))
         self.options.ai_skill_blue = str(getattr(self.settings, "ai_skill_blue", "level"))
         self.options.fighter_engage_nm = int(self.settings.fighter_engage_nm)

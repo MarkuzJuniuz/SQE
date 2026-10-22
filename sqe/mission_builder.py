@@ -143,6 +143,7 @@ class MissionOptions:
     hold_minutes: int = 2               # slack at MARSHAL before PUSH, minutes. Negative = you must be quicker than the natural pace
     cap_minutes: int = 40               # time on station for CAP flights
     hot_ramp_scrambles: bool = False    # v0.41.80: alert / scramble pairs at land fields start hot on the ramp (see _alert_group)
+    hot_runway_starts: bool = False     # v0.41.96: AI package flights from land fields other than yours start on the runway (see _hot_slot)
     ai_unlimited_fuel: bool = True      # Retribution-style: ON until the push, OFF for the combat leg, ON again from egress
     enemy_unlimited_fuel: bool = False
     ai_despawn_on_land: bool = True
@@ -249,6 +250,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self.rng = rng or random.Random()
         self._runway_busy = set()                                      # bases whose runway / catapult already holds a group at mission start
         self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []
+        self._rwy_rel, self._hot = {}, None                            # v0.41.96: release times already given per runway; the hot-runway slot of the flight being built
         self._launch_pts = {}                                          # package id -> [(x, y)] where its HARM / JSOW / strike flights launch (the cover zone)             # alert groups waiting for a runway (the hook lines them up), trigger flags, your runway
         self._air_spawns = []                                          # [(x, y, alt_m, t)]: where and when each airborne flight appears, so no two appear on top of each other
 
@@ -1260,6 +1262,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         spec = AIRCRAFT[f.aircraft]
         base = st.bases[f.base_id]
         past_push, act_s = False, 0
+        self._hot = None
         csname, fno = f.callsign.rsplit(" ", 1)
         fno = int(fno)
 
@@ -1324,7 +1327,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         Not built when the unit limit is reached: the pair is still watched and sent home, only nothing replaces it."""
         f0 = src["f"]
         ent = {"g": f0.callsign, "n": int(f0.count), "bf": src["bf"], "rf": 0, "u": float(end_s)}
-        used = {x.callsign for x in src["package"].flights} | {x.callsign for x in self._relief_names}
+        used = {x.callsign for x in src["package"].flights} | {x.callsign for x in self._relief_names} | {x.callsign for x, _g in self.flight_groups}
         free = next((f"{c_} {n}" for c_ in [f0.callsign.rsplit(" ", 1)[0]] + [c for c in callsigns.table(f0.aircraft)] for n in range(1, 10) if f"{c_} {n}" not in used), None)
         if free is not None and self._counts()["units"] + f0.count <= self.o.max_units:
             self._flag_n += 1
@@ -1345,7 +1348,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         station. The background war does not track these (no replacement of losses yet: v0.41.79)."""
         f0, package, E = src["f"], src["package"], src["E"]
         step = E - barcap.HANDOVER_MIN * 60
-        used = {x.callsign for x in package.flights} | {x.callsign for x in getattr(self, "_relief_names", [])}
+        used = {x.callsign for x in package.flights} | {x.callsign for x in getattr(self, "_relief_names", [])} | {x.callsign for x, _g in self.flight_groups}
         names = getattr(self, "_relief_names", None)
         if names is None:
             names = self._relief_names = []
@@ -1399,6 +1402,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             act_raw = int(push_s - nat - (120 if hold_i is not None else 60))      # arrive ~2 min early, hold, push on time
             act_s = max(0, act_raw)
             assign_times(wps, float(act_raw), push_s)
+            self._hot = self._hot_slot(package, f, base, wps, act_raw, hold_i is not None)
             if act_raw < 0:                              # its schedule began before the mission did (an earlier package folded in): it is already underway
                 # v0.41.23: its time on station counts: the points after the station come that much later, and a flight still within its
                 # hold starts on its station (it was placed as if it never loitered: past its station, already on its way home)
@@ -1417,6 +1421,40 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         stop = int(tot_s + o.cap_minutes * 60)
         return wps, act_s, past_push, stop
 
+    HOT_ROLL_S = 45          # v0.41.96: runway start to wheels up (alert pairs measured about 45 s in v0.41.0 runs); judgment call for full packages
+    HOT_CLIMB_KTS = 300      # average speed from the runway to the pretend-DEP point (climbing), judgment call
+    RWY_GAP_S = 60           # the hook's RWY_STAGGER_S: releases from one runway are at least this far apart
+
+    def _hot_slot(self, package, f, base, wps, act_raw, held):
+        """v0.41.96: may this AI flight start on the runway instead of airborne, and when is it released? Only package flights from LAND fields
+        other than yours, with the setting on. The flight is due at its first point (the pretend DEP) at act_raw; the runway start adds the roll
+        and the climb-out to it, so it is released that much earlier. The route already has a margin before the push (2 min with a hold, 1 min
+        without; the flight arrives early and waits), and up to margin - 30 s of lateness (a runway shared with an earlier release) is taken out of
+        that margin. Anything that cannot be released in time stays an airborne spawn. -> {"t", "b"} or None"""
+        if not getattr(self.o, "hot_runway_starts", False) or f.is_player or f.tag or base.kind != BaseKind.AIRFIELD:
+            return None
+        if base.id == getattr(self, "_main_base", None) or base.id not in self.apt or act_raw < 0:
+            return None
+        if any(x is not f and x.callsign == f.callsign for x in package.flights):
+            return None                  # a guard shares this callsign (v0.41.88): the hook finds a group by name, so it stays an airborne spawn
+        lead = self.HOT_ROLL_S + 15 + dist(base.x, base.y, wps[0].x, wps[0].y) / NM / self.HOT_CLIMB_KTS * 3600
+        slack = (120 if held else 60) - 30
+        want = act_raw - lead
+        used = self._rwy_rel.setdefault(base.id, [])
+        t = max(0.0, want)
+        while t <= want + slack + 1e-6:
+            if all(abs(t - u) >= self.RWY_GAP_S for u in used):
+                used.append(t)
+                return {"t": int(t), "b": f"{self.usa.name}:{self.apt[base.id].name}"}
+            t += 5
+        return None
+
+    def _hot_group(self, f, spec, base):
+        """The runway-start group for a hot-runway flight, or None (no room: it spawns airborne after all). Built once per flight."""
+        if self._hot.get("g") is None:
+            self._hot["g"] = self._from_airport(self.usa, f.callsign, spec.dcs_type, self.apt[base.id], MAIN_TASK[f.role], StartType.Runway, f.count, quiet=True) or False
+        return self._hot["g"] or None
+
     def _make_group(self, f, spec, base, wps, act_s, csname, fno):
         """The DCS group: hot on the runway for your own flight, already airborne for an AI flight, facing its way; callsigns. -> (g, first, cs_names)."""
         pt = self._pt
@@ -1430,13 +1468,18 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             self._runway_busy.add(("blue", base.id))
             self._prwy = f"{self.usa.name}:{self.apt[base.id].name}" if base.kind != BaseKind.CARRIER else f"carrier:{base.id}"
             first = 0
+        elif self._hot is not None and self._hot_group(f, spec, base) is not None:
+            g = self._hot_group(f, spec, base)             # v0.41.96: hot on the runway; the hook puts it there at its release time
+            g.late_activation = True
+            self._rwyq.append({"g": f.callsign, "f": 0, "t": self._hot["t"], "b": self._hot["b"]})
+            first = 0
         else:                 # already airborne
             s0 = wps[0]
             self._clear_spawn(s0, wps, act_s)
             g = self.m.flight_group(self.usa, f.callsign, spec.dcs_type, None, pt(s0.x, s0.y), altitude=s0.alt_ft * FT,
                                     speed=s0.speed_kts * KPH, maintask=MAIN_TASK[f.role], group_size=f.count)
             first = 1
-        if (not f.tag or getattr(f, "relief", None)) and not f.is_player and act_s > 0:
+        if (not f.tag or getattr(f, "relief", None)) and not f.is_player and act_s > 0 and not (self._hot is not None and g.late_activation):
             self._late(g, act_s, "support relief" if f.tag else "activate")                                # they 'depart' on their own schedule, not at mission start
         if getattr(f, "relief", None) and f.relief.get("flag") and not f.is_player:
             self._late_flag(g, f.relief["flag"])                # v0.41.79: a replacement waits hidden until the hook calls it

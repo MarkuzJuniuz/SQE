@@ -1816,6 +1816,48 @@ def check_31u_red_sead_size(c):
     print("[red sead size] Patriot + HAWK or full Patriot 4, a lone weaker battery 2, short wing 2, nothing standing 0")
 
 
+def check_31v_hot_runway(c):
+    """v0.41.96: with the setting on, AI package flights from land fields other than yours start on the runway (late-activated, released by the hook
+    at a set time, one a minute apart per runway); off, none do. Your own field and the carrier keep the airborne start."""
+    import re, zipfile
+    import dcs.lua as dlua
+    def build(on):
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, hot_runway_starts=on))
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses.new("Hot runway", "F-16C", 2, seed=7)
+        pk = next(p for p in ses.packages() if ses.flyable(p))
+        r = ses.fly(pk.number, ses.flyable(pk)[0].id)
+        z = zipfile.ZipFile(r.miz)
+        txt = z.read("mission").decode("utf8", "ignore")
+        ents = sorted(set(re.findall(r'\{g=\\*"([^"\\]*)\\*", f=\d+, b=\\*"([^"\\]*)\\*", t=(\d+)\}', txt)))
+        m = dlua.loads(txt)["mission"]
+        return ses, r, ents, m
+    _s, _r, ents, _m = build(False)
+    assert not ents, f"setting off: no scheduled runway releases ({ents})"
+    ses, r, ents, m = build(True)
+    assert ents, "setting on: at least one AI flight is released from a runway"
+    per = {}
+    for g, b, t in ents:
+        per.setdefault(b, []).append(int(t))
+    for b, ts in per.items():
+        ts.sort()
+        assert all(ts[i + 1] - ts[i] >= 60 for i in range(len(ts) - 1)), f"{b}: releases less than a minute apart {ts}"
+    names = {g for g, _b, _t in ents}
+    seen, dup = 0, {}
+    for coal in m["coalition"].values():
+        for ctry in coal["country"].values():
+            for grp in ctry.get("plane", {}).get("group", {}).values():
+                dup[grp["name"]] = dup.get(grp["name"], 0) + 1
+                if grp["name"] in names:
+                    seen += 1
+                    pts = grp["route"]["points"]
+                    assert pts[1]["type"] == "TakeOff" and grp.get("lateActivation"), f"{grp['name']}: runway start, late-activated"
+                    assert len(pts) > 3, f"{grp['name']}: a full route after takeoff"
+    assert seen == len(names), "every released flight is in the mission"
+    assert all(dup[n] == 1 for n in names), "a released flight's group name is unique (the hook finds it by name)"
+    print(f"[hot runway] {len(ents)} AI flights released from runways, a minute apart per runway; off: none")
+
+
 def check_31o_support_assets(c):
     """v0.41.87: tankers and AWACS are assets: airframe counts, daily windows, a package keeps only what is on orbit, losses and returns."""
     import random
@@ -3340,6 +3382,7 @@ CHECKS = [
     check_31l_red_arm,
     check_31m_blue_barcap_plan,
     check_31n_blue_patrol_vs_raids,
+    check_31v_hot_runway,
     check_31o_support_assets,
     check_31p_guard_chains,
     check_31q_red_patrols_spread,
