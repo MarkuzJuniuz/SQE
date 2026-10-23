@@ -42,6 +42,8 @@ ARM_TARCAP_BEHIND_NM = 8      # v0.41.116: the SEAD package's TARCAP holds this 
 ARM_TARCAP_LEAD_S = 120       # ...in on station this long before the missiles go (blue's TARCAP_LEAD_S)...
 ARM_TARCAP_STAY_S = 600       # ...and holds this long after (the missiles are flying; judgment call)
 DEAD_HOLD_NM = 48             # v0.41.117: the red DEAD flights hold this far out (8 nm outside the Patriot's 40 nm reach, raids.PATRIOT_NM) until the battery's radars are down (judgment call)
+DEAD_GATE_CLEAR_NM = 8        # v0.41.128: the gate sits at least this far outside every live battery's reach (the same 8 nm as the field's own)
+DEAD_HOLD_MAX_NM = 110        # ...but no farther out than this from the field (judgment call)
 DEAD_HOLD_LAG_S = 60          # ...they reach the hold this long after the Kh-31P launch...
 DEAD_GATE_WAIT_S = 1200       # ...and if the radars are not all dead this long after the launch (20 min, judgment call; blue's DEAD hold is 12 min, debrief.HOLD_S), they abort and go home
 DEAD_ATTACK_WINDOW_S = 600    # ...the attack task runs this long once they go in
@@ -412,7 +414,24 @@ class RaidSpawns:
         pts = self._arm_pts(path, dx, dy)
         self._flag_n += 1
         t_arm = t_tgt - ARM_LEAD_S
-        return {"flag": self._flag_n, "radars": radars, "hold": offset(dx, dy, bearing(dx, dy, *pts[-1]), DEAD_HOLD_NM * NM),
+        # v0.41.128 (XO's run: the gate sat 28 nm from the NEIGHBOUR field's Patriot and shot the held bombers): out along the way in until the point is clear
+        # of every live battery, DEAD_GATE_CLEAR_NM outside its reach (Patriot / HAWK reach from raids), at most DEAD_HOLD_MAX_NM from the field
+        from .raids import HAWK_NM, PATRIOT_NM
+        from .sams import blue_battery
+        bats = []
+        for b_ in self.state.bases.values():
+            if b_.kind == BaseKind.AIRFIELD:
+                bt_ = blue_battery(b_, self.state)
+                r_ = max(PATRIOT_NM if bt_["patriot_ln"] else 0, HAWK_NM if bt_["hawk"] else 0)
+                if r_:
+                    bats.append((b_.x, b_.y, r_))
+        brg_, nm_ = bearing(dx, dy, *pts[-1]), DEAD_HOLD_NM
+        while nm_ < DEAD_HOLD_MAX_NM:
+            hx_, hy_ = offset(dx, dy, brg_, nm_ * NM)
+            if all(dist(hx_, hy_, bx_, by_) >= (r_ + DEAD_GATE_CLEAR_NM) * NM for bx_, by_, r_ in bats):
+                break
+            nm_ += 4
+        return {"flag": self._flag_n, "radars": radars, "hold": offset(dx, dy, brg_, nm_ * NM), "nm": nm_,
                 "t_abort": t_arm + DEAD_GATE_WAIT_S, "calls": [], "names": [], "n": 0}
 
     def _raid_gate_join(self, gate, g, wp, fighter_nm=None):
@@ -523,7 +542,7 @@ class RaidSpawns:
         if n > 4:
             tgts.append((ad.get("hawk") or ad.get("pat") or tgts[0][0], n - 4))
         hold = gate["hold"]
-        pa = [q for q in pts if dist(*q, dx, dy) > DEAD_HOLD_NM * NM] + [hold]
+        pa = [q for q in pts if dist(*q, dx, dy) > gate["nm"] * NM] + [hold]
         Lp = sum(dist(*pa[i], *pa[i + 1]) for i in range(len(pa) - 1))
         t_hold = t_arm + DEAD_HOLD_LAG_S
         t_abort = gate["t_abort"]
@@ -532,7 +551,7 @@ class RaidSpawns:
             (sx, sy), remaining = pa[0], pa[1:]
             hold_until, act_ = t_go, max(0.0, t_go - RAID_HOLD_MAX_S)
         else:
-            (sx, sy), seg_i = tm.point_back_along(pa, min(Lp, max(DEAD_HOLD_NM * NM * 0.5, V * t_hold)))
+            (sx, sy), seg_i = tm.point_back_along(pa, min(Lp, max(gate["nm"] * NM * 0.5, V * t_hold)))
             remaining, hold_until, act_ = pa[seg_i:], None, 0.0
         if not remaining:
             remaining = [pa[-1]]
@@ -568,7 +587,7 @@ class RaidSpawns:
                 u.name = f"RAID-D-{gi + 1}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", ex["bomber_wing"], names, ac="Su_24M")
         if ex.get("dead_cover") and ex.get("escort_type"):
-            tar_ = offset(dx, dy, bearing(dx, dy, *pts[-1]), (DEAD_HOLD_NM + ARM_TARCAP_BEHIND_NM) * NM)          # the TARCAP: back along the way in from the hold
+            tar_ = offset(dx, dy, bearing(dx, dy, *pts[-1]), (gate["nm"] + ARM_TARCAP_BEHIND_NM) * NM)          # the TARCAP: back along the way in from the hold
             self._spawn_arm_cover(ex, path, pts, hold, V, t_hold, alt, skill, home_, manifest, dx, dy, jobs=("Raid DEAD Escort", "Raid DEAD TARCAP"), pfx=("DE", "DT"),
                                   on_s=t_hold - ARM_TARCAP_LEAD_S, off_s=t_abort + 300, sta_tarcap=tar_)
 
@@ -688,7 +707,7 @@ class RaidSpawns:
             gi_, at_gate = None, False
             if gated and gate is not None:
                 # v0.41.126: the way in has a GATE point DEAD_HOLD_NM out, before the first point inside that circle; a group that would appear inside it starts at the gate
-                gd_ = DEAD_HOLD_NM * NM
+                gd_ = gate["nm"] * NM
                 if dist(pos[0], pos[1], dx, dy) <= gd_:
                     pos, at_gate = gate["hold"], True
                 else:
@@ -748,7 +767,7 @@ class RaidSpawns:
                 nb_ += 1
                 u.name = f"RAID-B-{nb_}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", ex["bomber_wing"], names, ac=ex.get("raider", "Tu_22M3"), raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
-                         raid_arrive_s=float(hit_s + gi * RAID_GROUP_GAP_S), raid_group=g.name, **({"raid_gate_s": DEAD_HOLD_NM * NM / V} if gate is not None else {}))
+                         raid_arrive_s=float(hit_s + gi * RAID_GROUP_GAP_S), raid_group=g.name, **({"raid_gate_s": gate["nm"] * NM / V} if gate is not None else {}))
             bomber_gs.append(g)
         self._spawn_raid_target(package, cvb, aim, dx, dy, manifest)
         if land and ex.get("arm") and not aim:

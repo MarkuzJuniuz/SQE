@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.128, the raid gate sits clear of the neighbouring fields' SAMs too
+
+XO's run (v0.41.126): the gate worked (abort at 1294 s, DEAD flights and the escort turned home), but the bombers were shot at the gate. The raid was on Kutaisi; the gate, 48 nm from Kutaisi, lay 28 nm from Senaki's Patriot, which killed RAID-B-3 at 90 s and RAID-D-2-1 at 354 s. In this theatre the fields are 20 nm apart, so a gate measured from the raided field alone is inside a neighbour's reach.
+- `_raid_gate_new`: the gate moves out along the way in (4 nm steps, from 48 nm, at most `DEAD_HOLD_MAX_NM` 110) until it is `DEAD_GATE_CLEAR_NM` (8) outside the reach of every live Patriot (40) and HAWK (25) of any field. The gate distance is `gate["nm"]` for the bombers, sweep, escorts, DEAD flights, their TARCAP and the debrief's arrival delay.
+- Not changed, to look at next: the gate still opens on the raided field's radars only, and the SEAD / DEAD flights only hit that field. A neighbour's battery that covers the last 20 nm in still shoots at the bombers after the gate opens. Every field here has a neighbour in reach, so planning the SEAD against all covering batteries (or refusing the raid) is the real fix; not done in this light PR.
+- Smoke: `check_31l_red_arm` checks the gate is clear of every battery. Full smoke passed. Untested in DCS.
+
 ## v0.41.127, carrier flights keep their height until 30 nm from the boat
 
 XO's F-14 flight (Uzi 3) flew the last 65 nm home at 2,000 ft over the sea: its home waypoint (the boat, 600 m) is the next point after the target, and DCS descends to the next point's height at once. Hornets and Tomcats on every carrier return did the same.
