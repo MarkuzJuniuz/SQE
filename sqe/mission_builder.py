@@ -46,6 +46,7 @@ FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue come
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
 TARCAP_BEHIND_NM = 8          # v0.41.43 (16; v0.41.115: 8, XO 2026-10-22: it sat 56 nm from red's patrols, too far to snipe): with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
+TARCAP_FWD_NM = 20           # v0.41.120: the TARCAP's engage circle tries to reach this far past its station toward red (judgment call: red's alert pairs held 24 nm from the station in XO's 2026-10-23 run)
 TARCAP_NEAR_NM = 16          # v0.41.118: ...then it moves in toward the middle of the shooters' launch points until it is this far from it (judgment call: AIM-54 / AIM-120 reach covers the HARM point from there; still outside the SAM rings and TARCAP_BEHIND_NM from the JSOW point)
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
@@ -1618,7 +1619,14 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 cx_, cy_ = sum(p_[0] for p_ in lp_) / len(lp_), sum(p_[1] for p_ in lp_) / len(lp_)
                 # v0.41.23: the TARCAP's circle covers the package's launch points and its own station, at COVER_ZONE_NM at least, placed where
                 # that circle is clear of every SAM the package is not sent against (v0.41.22 only shrank it: 44% trimmed, 9% down to 8 nm)
-                zone_ = self._cover_circle(list(lp_) + [(stw.x, stw.y)], (cx_, cy_), package, COVER_ZONE_NM, bearing(cx_, cy_, stw.x, stw.y),
+                # v0.41.120 (XO 2026-10-23 run: red's pairs held 24 nm from the F-14 station, outside its 15 nm circle, and nobody fired): the circle also tries to
+                # reach TARCAP_FWD_NM past the station toward red's nearest patrol station or fighter base (last in the list: the launch points and the station
+                # come first, and the circle is never bigger than TARCAP_COVER_MAX_NM)
+                fpts_ = []
+                thr_ = self._red_approach(stw.x, stw.y) if stw.action == "TARCAP" else None
+                if thr_ is not None and dist(stw.x, stw.y, *thr_) > TARCAP_FWD_NM * NM:
+                    fpts_ = [offset(stw.x, stw.y, bearing(stw.x, stw.y, *thr_), TARCAP_FWD_NM * NM)]
+                zone_ = self._cover_circle(list(lp_) + [(stw.x, stw.y)] + fpts_, (cx_, cy_), package, COVER_ZONE_NM, bearing(cx_, cy_, stw.x, stw.y),
                                            long_only=True, max_nm=TARCAP_COVER_MAX_NM)
                 cover_lo_ = True            # v0.41.42 (XO): the circle takes in the shooters first; only an SA-10 keeps it out (an SA-11 / SA-6 no longer pushes it off the launch points)
             zct_ = self._limit_engage(g, 0, hold_end, self._clear_zone(zone_, package, long_only=cover_lo_))

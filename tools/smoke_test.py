@@ -2176,6 +2176,20 @@ def check_31zd_red_callin(c):
             grp[g["name"]] = g
     assert "define SQE_CALLIN" in raw and "SwitchWaypoint" in raw
     _callin_triggers_wait(m, "red")
+    # v0.41.120: every red alert pair's station waypoint has its own engage circle (it was an orbit alone: the pair never fought); a pair close enough also has a
+    # second, timed trigger that waits at least ALERT_CLOCK_MIN_S, and the two share a "done" flag so only one of them acts
+    for g_ in grp.values():
+        if not str(g_["name"]).startswith("Alert"):
+            continue
+        wp_ = next((p_ for p_ in g_["route"]["points"].values() if p_.get("name") == "INTERCEPT"), None)
+        if wp_ is not None:
+            ids_ = [t_["id"] for t_ in wp_["task"]["params"]["tasks"].values()]
+            assert "EngageTargetsInZone" in ids_, ("an alert pair's station has an engage circle", g_["name"], ids_)
+    for t_ in m["trigrules"].values():
+        if str(t_.get("comment", "")).endswith("on the clock"):
+            tt_ = [r_.get("seconds", 0) for r_ in t_["rules"].values() if r_.get("predicate") == "c_time_after"]
+            assert tt_ and min(tt_) >= rap.ALERT_CLOCK_MIN_S, ("an alert clock call is not made at the start", t_["comment"], tt_)
+            assert any(r_.get("predicate") == "c_flag_is_false" for r_ in t_["rules"].values()), "the clock call checks the done flag"
     # v0.41.115: the call waits for the strike (the pair reaches its hotspot shortly before the TOT), it is not made at once
     _calls_t = [min(r.get("seconds", 0) for r in t["rules"].values() if r.get("predicate") == "c_time_after")
                 for t in m["trigrules"].values() if str(t.get("comment", "")).startswith("call in")]     # v0.41.118: the site-guard triggers ("call in Bandit N to ...") too

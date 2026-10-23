@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.120, red alert pairs fight at their station and are called in time; the TARCAP circle reaches toward red
+
+XO (2026-10-23 run, Standoff DEAD, v0.41.119): no air-to-air again. Tracks: two alert pairs (Su-27 Sochi, MiG-29A Gudauta) were called at 1040 / 950 s and airborne at 1248 / 1286 s, 140 to 175 s after the TOT (1111 s); they orbited at 22,000 ft 24 nm from the F-14 TARCAP (Uzi 1, 26,000 ft) for about 12 minutes. No shots on either side.
+- ENGAGE CIRCLE (`red_air_picture`): the alert pair's `INTERCEPT` waypoint carried only the orbit, so the "engage air" order of its first point was gone after that waypoint (DCS replaces the order list per waypoint; this reading is from the mission file, not confirmed in DCS). It now carries an `EngageTargetsInZone` round the station, `ALERT_ZONE_NM` 40 (the call-in hotspot's size, capped by the CAP engage limit). Probably the reason for "red's pairs watch the missiles blow up" since v0.41.91.
+- CALLED BY THE CLOCK TOO: a pair whose station is within `CALLIN_REACH_NM` (110) of its field is also called at `TOT - ALERT_ON_STATION_S (420) - lag - flight to the station`, lag `ALERT_RAMP_LAG_S` 300 (hot ramp; XO's runs 200 to 340 s) or `ALERT_RWY_LAG_S` 120. The detection-circle trigger stays; whichever fires first sets a "done" flag and the other stays quiet (`FlagIsFalse`). A clock call earlier than `ALERT_CLOCK_MIN_S` (60 s) is not made (it would turn the pair into a patrol). Far fields keep the zone trigger only. All numbers judgment calls.
+- BLUE TARCAP CIRCLE (`mission_builder`): the circle round the shooters' launch points now also tries to take in a point `TARCAP_FWD_NM` (20) past the station toward red's nearest patrol station or fighter base, last in the list and never bigger than `TARCAP_COVER_MAX_NM` (35). The old circle (about 15 nm) ended 24 nm short of red's station.
+- Smoke: `check_31zd` (station engage circle, clock trigger time and done flag).
+- Untested in DCS. Open: no red patrols were planned for that window (14:50, L3): cause not found without the campaign save.
+
 ## v0.41.119, contest: TARCAP on the threat axis, red guards fight for their sites, red's stations reach forward
 
 XO (2026-10-22 runs, Standoff DEAD Sukhumi): blue always gets lucky, red hums along while its SAMs are destroyed; the F-14 TARCAP sat on the sea side about 90 degrees off the way red comes; red's short-range pairs park over their base and watch the missiles blow up underneath, and some arrive after the time on target.
