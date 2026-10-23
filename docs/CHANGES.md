@@ -1,6 +1,12 @@
 # CHANGES.md
 
 
+## v0.41.122, state file: missiles left on the shooter
+
+XO (2026-10-23): "if there's anything you need to track easier you could add it on the state file". Logging only; no mission behaviour changes.
+- `debrief` (Lua): every `shot` record gets `left`, the air-to-air missiles the shooter still carries (`getAmmo`, missile category, summed; inside `pcall`). Read it as about one high: DCS may count the missile just fired. Shows when a pair goes winchester. `km`, `alt`, `tg`, `tx`, `tz` were already logged for shots; "hit" records have no range.
+- Smoke: Lua syntax check (lupa) and a string check in the hook section. Untested in DCS.
+
 ## v0.41.121, a scramble you take brings along the packages that were hidden in your original
 
 XO (2026-10-23): taking an emergency scramble built the mission around the scramble: its merge circle and time window are centred on the raided field and the scramble's start, so the packages listed inside the package you were tasked with never got built.
