@@ -75,9 +75,11 @@ class AppSettings:
     ai_skill_blue: str = "level"           # ...and Blue's AI flights ("level" = High); see difficulty.ai_skill
     weather_mode: str = "clear"            # "clear" | "procedural" | a fixed weather: scattered, broken, overcast, rain, storm
     ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
-    merge_radius_nm: int = 25             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in
+    merge_radius_nm: int = 15             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in (v0.41.131: 15, was 25)
+    merge_fwd_min: int = 30               # v0.41.131: packages that start up to this many minutes AFTER yours fly with you (5 minute steps in Settings, 0 to 60)
+    merge_v131: bool = False
     merge_back_min: int = 15              # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
-    merge_max_units: int = 250            # the base mission (without merged packages' units) is trimmed to this many units; the total ceiling is in sqe/data/limits.json
+    merge_max_units: int = 250            # v0.41.131: the unit limit counts the WHOLE mission again, merged packages included (ruins go first, then the latest-starting package); the 500 ceiling in sqe/data/limits.json is dormant
     emergencies: bool = True              # an emergency (raid or troops in contact) can come up when you click Fly; announced and surprise raids happen either way
     reactive: bool = True                 # enemy reinforcements and blue alert pairs can launch during a sortie
     ai_land_carrier: str = "always"       # v0.41.18: AI flights going home to a carrier: "always" recovered short of it | "home" only at your deck | "never" land
@@ -143,6 +145,10 @@ class AppSettings:
                     if raw.get("merge_max_units") == 150:
                         s.merge_max_units = 250   # still on the old default: move to the new one (an explicit different value is kept)
                     s.unit_cap_v2 = True
+                if not raw.get("merge_v131"):
+                    if raw.get("merge_radius_nm") == 25:
+                        s.merge_radius_nm = 15    # still on the old default: move to the new one
+                    s.merge_v131 = True
                 if "patch_asked" not in raw and "auto_patch_scripting" in raw:
                     s.patch_asked = True          # a settings file from before the question existed: the choice stands
             except (OSError, ValueError):

@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.131, the unit limit counts the whole mission again; merge radius 15; "later packages" setting
+
+XO (2026-10-23): "put back the unit limit", radius 15, the +30 minutes adjustable in 5 minute steps, drop the latest-starting package first.
+- `merge_max_units` (250) counts the WHOLE mission, merged packages included (v0.41.104 had exempted them). The 500 ceiling in `sqe/data/limits.json` stays in the code but is dormant (250 is lower).
+- Over the limit (`Session.fly`): returning (ruin) flights go first; then `Session._drop_one`: the package that starts latest, a tie by the one further from the centre; a Fighter Sweep or a folded raid scramble (FLEET_DEFENSE) last; the mission is rebuilt each time. Wrecks are trimmed by the builder as before (furthest first), now against the whole count. Your own flight is never dropped; a base mission already over the limit just stays over it.
+- Default merge radius 15 nm (was 25; a settings file still on 25 moves to 15 once).
+- New setting `merge_fwd_min` ("Later packages", default 30, 0 to 60, 5 minute steps) replaces the fixed 30 in `merge_candidates` and the emergency scramble's hidden-package window; "Earlier packages" also steps by 5.
+- Smoke: `check_31n` rewritten (drop order, tiny limit, later window, defaults). Untested in DCS.
+
 ## v0.41.129, red SEAD covers every battery that covers the target
 
 XO (2026-10-23): close the gap left by v0.41.128 (the neighbour's Patriot still shot the bombers after the gate opened). In Georgia the fields are about 20 nm apart: Kutaisi is covered by Senaki's and Kobuleti's batteries too.
