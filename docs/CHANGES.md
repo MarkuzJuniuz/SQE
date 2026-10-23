@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.125, red raids: SEAD first, no dice
+
+XO (2026-10-23): "we minimize dice rolls now and stick to intelligent mission planning"; red should not attempt a target under SAM cover it cannot suppress. Red raids on fields had a 60 % (L3) / 20 % (L2) roll for the SEAD group, so many raids flew straight into the Patriot / HAWK (XO's Senaki raid: 4 of 4 bombers shot down, no SEAD).
+- `raids.sead_plan` / `cover_field` / `reach_for`: a target within `PATRIOT_NM` (40) of a live Patriot or `HAWK_NM` (25) of a live HAWK is raided only by a Su-24M wing that can field the SEAD group (`arm_jets`, sized by the field's batteries as before). Covered supply sites, garrisons and sectors are not tried (no SEAD is built for them); Su-25 raids do not go in under cover. Uncovered targets need none.
+- No roll: `Difficulty.raid_arm` is now on / off (L1 0, L2 and L3 1.0). `pick_aim` and `pick_target` (announced, surprise and scramble raids) drop what red cannot support; `_land_raid_plan` returns no raid for a covered target it has no SEAD for.
+- L2 (`arm_cap` 2, `arm_cap_free` 8, judgment calls): the SEAD group is a pair (a DEAD pair behind it) unless the wing has 8 jets spare beyond the bombers, then the full sizing. L3: as v0.41.116 / .117. L1: never raids a covered target (docile).
+- 40-day sims, 2 seeds, raids in the log (before -> after): L1 2 -> 0, L2 23 -> 11, L3 38 -> 25 (announced + surprise). Red raids less often and with SEAD.
+- Smoke: `check_31wd_red_sead_first`; two older checks adjusted (the raid-kinds build check bypasses the cover rule). Full smoke passed. Untested in DCS. Not in this PR: holding the bombers until the radars are down (the next step).
+
 ## v0.41.124, a scramble you do not take is folded in wherever it is
 
 XO (2026-10-23): the mirror of v0.41.121. The mission is built around the package you picked (its circle and window); every unit of the scramble that started in its window comes along, rooted on that package's time.

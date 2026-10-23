@@ -619,7 +619,7 @@ class Session:
         spec = AIRCRAFT[psq.aircraft]
         committed = sum(f.count for f in pkg.flights if f.squadron_id == psq.id)
         kinds = []
-        base = raids.pick_target(st, random.Random(rng.random()))       # (still drawn: the same seed gives the same day)
+        base = raids.pick_target(st, random.Random(rng.random()), d)       # (still drawn: the same seed gives the same day)
         # v0.41.27: no raid scrambles for you for now (an intercept is AI-only until its routes follow the SAM rules); troops in contact stay
         if base is not None and RAID_SCRAMBLES:
             kinds.append("RAID")

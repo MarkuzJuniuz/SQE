@@ -1603,7 +1603,7 @@ def check_31l_red_arm(c):
     import sqe.engine as eng
     from sqe import difficulty as df
     from sqe.difficulty import LEVELS
-    assert LEVELS[1].raid_arm == 0 and 0 < LEVELS[2].raid_arm < LEVELS[3].raid_arm, "red ARM by level"
+    assert LEVELS[1].raid_arm == 0 and LEVELS[2].raid_arm > 0 and LEVELS[3].raid_arm > 0 and LEVELS[2].arm_cap == 2 and LEVELS[3].arm_cap == 8, "red SEAD by level (v0.41.125: no dice, L2 a pair)"
     aio, eng.AI_ONLY = eng.AI_ONLY, ()
     rs, eng.RAID_SCRAMBLES = eng.RAID_SCRAMBLES, True
     from sqe import raids as _rd
@@ -1954,6 +1954,29 @@ def check_31w_raid_scramble_merge(c):
         raise AssertionError("no raid scramble inside the merge circle in 40 days")
     finally:
         rd.emergency_happens = keep
+
+
+def check_31wd_red_sead_first(c):
+    """v0.41.125: no dice. Red raids a target under live Patriot / HAWK cover only when it can field the SEAD group (Su-24M wing, jets spare): L3 sizes it by the
+    batteries, L2 caps it at a pair unless 8 jets are spare, L1 never; an uncovered target needs none; Su-25s and covered sites / garrisons / sectors are not tried."""
+    from types import SimpleNamespace as NS
+    from sqe import raids
+    from sqe.difficulty import LEVELS
+    s = fresh_session(3, 5)
+    st = s.state
+    fld = next(b for b in st.bases.values() if b.kind.value == "AIRFIELD")
+    assert raids.cover_field(st, fld.x, fld.y) is not None, "a fresh blue field has a live Patriot / HAWK"
+    wing = lambda n: NS(available_of=lambda ts, n=n: n, available=n)
+    d1, d2, d3 = LEVELS[1], LEVELS[2], LEVELS[3]
+    ok, n = raids.sead_plan(st, d3, fld, "", wing(14), "Su_24M"); assert ok and n >= 2, ("L3 with spare jets", ok, n)
+    ok, n = raids.sead_plan(st, d3, fld, "", wing(5), "Su_24M"); assert not ok, "L3: no spare jets, no raid on a covered field"
+    ok, n = raids.sead_plan(st, d3, fld, "", wing(14), "Su_25"); assert not ok, "a Su-25 raid does not go in under cover"
+    ok, n = raids.sead_plan(st, d2, fld, "", wing(10), "Su_24M"); assert ok and n == 2, ("L2: a pair", ok, n)
+    ok, n = raids.sead_plan(st, d2, fld, "", wing(12), "Su_24M"); assert ok and n >= 4, ("L2 with 8 spare: the full sizing", ok, n)
+    ok, n = raids.sead_plan(st, d1, fld, "", wing(14), "Su_24M"); assert not ok, "L1 never raids a covered field"
+    far = next((a for a in st.assets.values() if raids.cover_field(st, a.x, a.y) is None), None)
+    assert raids.arm_jets(st, fld, 10, 4, cap=2, cap_free=8) == 2 and raids.arm_jets(st, fld, 12, 4, cap=2, cap_free=8) >= 4, "arm_jets cap and the spare-jet lift"
+    print("[red SEAD first] covered target: L3 SEAD by batteries, L2 a pair (full with 8 spare), L1 and Su-25 none; no spare jets: no raid")
 
 
 def check_31wc_scramble_folds_outside_circle(c):
@@ -3271,6 +3294,7 @@ def check_47_support_cap_pull_back(c):
         _st.blue_assets.pop(f"bgar_{_fields[0]}"); s.plan_day(); assert f"bgar_{_fields[0]}" in _st.blue_assets, "an older save gets its garrisons back"
         _u0 = dict(_st.red_air["used"]); s.plan_day(); assert _st.red_air["used"] == _u0, "replanning the same day never books the raids twice"
     s.new("Aims build", "F-16C", 3, seed=14); _st = s.state; _d3 = _gd(3)
+    _cf0, _rd2.cover_field = _rd2.cover_field, (lambda st_, x_, y_: None)      # v0.41.125: this section tests the build of every aim kind; whether red would try a covered target is check_31wd
     _kinds = set()
     for _kind in ("field", "supply", "garrison", "sector"):
         _ws = _rd2.candidates(_st, _kind)
@@ -3294,6 +3318,7 @@ def check_47_support_cap_pull_back(c):
         assert _rg["raid_aim"] == _aim and _rg["raid_label"], "the manifest carries the aim"
         _kinds.add(_kind)
     assert {"field", "garrison", "sector"} <= _kinds, f"kinds exercised: {_kinds}"
+    _rd2.cover_field = _cf0
     # what a raid that gets through does, by aim
     import random as _r2
     s.new("Aims hit", "F-16C", 3, seed=15); _st = s.state
@@ -3905,6 +3930,7 @@ CHECKS = [
     check_31w_raid_scramble_merge,
     check_31wb_scramble_takes_hidden_packages,
     check_31wc_scramble_folds_outside_circle,
+    check_31wd_red_sead_first,
     check_31x_forward_garrisons,
     check_31y_unit_cap_merged,
     check_31z_bomber_trump_card,
