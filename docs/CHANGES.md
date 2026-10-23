@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.116, red's SEAD package: 4 + 4 Kh-31P jets with an escort and a TARCAP (step 1 of 2: the DEAD package and its gate come next)
+
+XO (2026-10-22): red's attack groups should follow blue's shape: SEAD 4 + SEAD 4 + TARCAP + Escort, then a DEAD package that waits for the gate.
+- SIZE (`raids.arm_jets`): a full-strength Patriot AND a HAWK live: 8 Su-24M, two four-jet flights (16 Kh-31P); the first on the Patriot, the second on the HAWK. Before: at most 4. A short wing steps down 8, 4, 2, none. The sizing for a lone battery is unchanged (2, or 4 against both / a full Patriot). The background (unflown) raids meet `ARM_AD_FACTOR_8` (0.2) of the battery cover for an 8-jet group (judgment call).
+- COVER (`RaidSpawns._spawn_arm_cover`): a SEAD group of four or more brings its own fighters (`arm_cover`, 4 jets of the raid's escort type): a pair on the Kh-31P launch point ("Raid SEAD Escort") and a pair `ARM_TARCAP_BEHIND_NM` (8) back along the way in ("Raid SEAD TARCAP"). Both are on station `ARM_TARCAP_LEAD_S` (120 s) before the missiles go, engage air inside their class's circle, stay `ARM_TARCAP_STAY_S` (600 s) after, and go home when out of air-to-air missiles. The numbers are blue's TARCAP numbers (v0.41.115); judgment calls.
+- Not done (next PR): red's DEAD package (4 + 4 bombers with its own TARCAP and escort) that waits for the gate (the radar suppressed). Red stand-off weapons are a later PR. Untested in DCS.
+
 ## v0.41.115, red patrols called in at the right time and place; fighters in first and closer
 
 XO (2026-10-22 run, no air-to-air at all): red's three patrols were called at 42 s and flew home at 600-1055 s, before the HARMs flew (1093 s). Their circle (25 nm) did not reach the SEAD shooters 36 nm away. The blue TARCAPs sat 56 nm from red's patrols, the escort 32 nm.

@@ -370,7 +370,8 @@ class PackageBuilder:
             n_ = raids.arm_jets(st, tb, bw.available, nb)                  # v0.41.94: sized like blue's salvo: 2 jets, or 4 against Patriot + HAWK / a full Patriot
             if n_ and rnd.random() < self.d.raid_arm:
                 arm = n_
-        return {"arm": arm, "land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
+        arm_cover = 4 if (arm >= 4 and esc) else 0       # v0.41.116: a SEAD group of four or more brings its own fighters: a pair of escorts and a pair on a TARCAP station
+        return {"arm": arm, "arm_cover": arm_cover, "land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
                 "escort_wing": esc[0] if esc else "", "escort_type": esc[1] if esc else "",
                 "escorts": (4 if nb >= 4 else 2) if esc else 0, "aim": aim, "dest": [ax, ay]}
 
