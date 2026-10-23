@@ -2133,6 +2133,10 @@ def check_31zd_red_callin(c):
             grp[g["name"]] = g
     assert "define SQE_CALLIN" in raw and "SwitchWaypoint" in raw
     _callin_triggers_wait(m, "red")
+    # v0.41.115: the call waits for the strike (the pair reaches its hotspot shortly before the TOT), it is not made at once
+    _calls_t = [min(r.get("seconds", 0) for r in t["rules"].values() if r.get("predicate") == "c_time_after")
+                for t in m["trigrules"].values() if t.get("comment") == "call in the patrols"]
+    assert _calls_t and all(x > 30 for x in _calls_t), ("the red call-in must wait for the strike", _calls_t)
     for n, hot, back, stay, bf in calls:
         pts = grp[n]["route"]["points"]
         hot, back = int(hot), int(back)
@@ -3048,7 +3052,7 @@ def check_47_support_cap_pull_back(c):
     # DEAD abort gate: SEAD leads by 5 min (sweep and escorts keep their 30 s spacing around it), the AI flights carry a radar check, calls to you sound different
     import re as _re
     from sqe import debrief as _db
-    from sqe.mission_builder import stagger as _stg
+    from sqe.mission_builder import stagger as _stg, TARCAP_LEAD_S as _TLS
     from sqe.models import Role as _Rl
     import sqe.war as _wlr; _lr_real = _wlr.long_range_site; _wlr.long_range_site = lambda *a_: False     # this check is about the SEAD / Close DEAD pair: no Standoff DEAD
     for sd_ in range(1, 40):
@@ -3057,7 +3061,7 @@ def check_47_support_cap_pull_back(c):
         _dk = next((p_ for p_ in s.packages() if p_.objective.type.value == "DEAD" and s.flyable(p_)), None)
         if _dk: break
     assert _dk, "no DEAD package found"
-    assert (_stg(_dk, _Rl.ESCORT), _stg(_dk, _Rl.SEAD), _stg(_dk, _Rl.TARCAP), _stg(_dk, _Rl.STRIKE)) == (-330, -300, -300, 0), "DEAD package timing (v0.41.1): the TARCAP arrives with the SEAD, the escort just ahead, strikers"
+    assert (_stg(_dk, _Rl.ESCORT), _stg(_dk, _Rl.SEAD), _stg(_dk, _Rl.TARCAP), _stg(_dk, _Rl.STRIKE)) == (-330, -300, -300 - _TLS, 0), "DEAD package timing (v0.41.115): the TARCAP arrives TARCAP_LEAD_S before the SEAD, the escort just ahead of it, strikers"
     s.ai_test = True; s.fly(_dk.number, None); s.ai_test = False
     _wlr.long_range_site = _lr_real
     _zz = _zf.ZipFile(_st.pending["miz"]); _mt = _zz.read("mission").decode("utf-8", "ignore")
@@ -3252,7 +3256,8 @@ def check_47_support_cap_pull_back(c):
         _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
         assert ("GATES = { {t=" in _mz.replace("\\", "")) or True
     from sqe.mission_builder import stagger as _stg
-    assert _stg(_de, Role.TARCAP) == 0 and _stg(_de, Role.ESCORT) == -60 and _stg(_de, Role.SWEEP) == -60 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage: TARCAP and escort with the strikers"
+    from sqe.mission_builder import TARCAP_LEAD_S as _TLS2
+    assert _stg(_de, Role.TARCAP) == -_TLS2 and _stg(_de, Role.ESCORT) == -60 and _stg(_de, Role.SWEEP) == -60 and _stg(_de, Role.STRIKE) == 0, "the DEAD stage: the TARCAP TARCAP_LEAD_S ahead, the escort and sweep 60 s ahead of the strikers"
     _wlr.long_range_site = _lr_real
     # the HARM launch point is at the edge of an SA-10's reach and the HARM task asks for ARMs; in the all-AI test your own SEAD flight gets the same tasking
     import math as _m

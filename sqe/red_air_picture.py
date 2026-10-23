@@ -32,6 +32,11 @@ A2A_ZONE_NM = {True: 25, False: 15}
 CALLIN_REACH_NM = 110         # a patrol answers a hotspot at most this far from its station (judgment call)
 CALLIN_MIN_NM = 10            # ...and it is not worth a call when the hotspot is this close already
 CALLIN_LUA_DELAY_S = 5         # v0.41.114: the call triggers wait this long, so the Lua that defines SQE_CALLIN (TimeAfter 1) has run
+CALLIN_ZONE_NM = 40           # v0.41.115: a called pair engages inside this circle round its hotspot (was 25: the SEAD shooters launched about 36 nm out and never came inside); still capped by the CAP engage limit (judgment call)
+CALLIN_FWD_NM = 12            # ...the hotspot is moved this far toward the blue shooters' launch point at most, and only while it stays under a live red SAM (judgment call)
+CALLIN_SHOOTER_NM = 30        # ...stopping this far from that launch point (about AMRAAM-class reach, judgment call)
+CALLIN_ARRIVE_BEFORE_S = 420  # the call waits so the pair reaches its hotspot this long before the package's time on target (the SEAD shooters launch about then; judgment call). XO 2026-10-22: the run called them at 42 s, they left at 600-1055 s, the HARMs flew at 1093 s
+CALLIN_AFTER_TOT_S = 300      # ...and stays this long after the time on target (the HARMs are still flying; judgment call)
 CALLIN_STAY_S = 480           # how long a called pair stays at the hotspot before it flies back (judgment call: 8 minutes)
 ALERT_STAY_AFTER_TOT_S = 1200   # a scrambled pair flies home this long after the time on target (was an hour, i.e. never in the sortie)
 CALLIN_LUA = (
@@ -197,6 +202,20 @@ class RedAirPicture:
         stay = int(dist(sx, sy, hx, hy) / max(spd / 3.6, 1.0)) + CALLIN_STAY_S       # v0.41.112: `spd` is km/h, the distance metres: the transit was a third of the real one (it left the hotspot early)
         self._hot_calls.append({"g": g.name, "hot": hot_idx, "back": hot_idx + 1, "stay": stay, "bf": bf_})
 
+    def _hotspot_fwd(self, st, hx, hy, package):
+        """v0.41.115: moves a red hotspot toward the nearest blue shooter launch point (at most CALLIN_FWD_NM, stopping CALLIN_SHOOTER_NM short of it)
+        while the new point is still under a live red SAM; else it stays. The launch points are the ones the TARCAP / escort use."""
+        lps = (getattr(self, "_launch_pts", None) or {}).get(package.id) or []
+        if not lps:
+            return hx, hy
+        lx, ly = min(lps, key=lambda q: dist(hx, hy, q[0], q[1]))
+        d = dist(hx, hy, lx, ly) / NM
+        step = min(CALLIN_FWD_NM, d - CALLIN_SHOOTER_NM)
+        if step <= 0:
+            return hx, hy
+        cand = offset(hx, hy, bearing(hx, hy, lx, ly), step * NM)
+        return cand if scramble.red_covered(st, *cand) else (hx, hy)
+
     @staticmethod
     def _callin_call(c) -> str:
         return f"SQE_CALLIN('{c['g']}',{c['hot']},{c['back']},{c['stay']},{c['bf']})"
@@ -224,7 +243,11 @@ class RedAirPicture:
             zx_, zy_, zr_ = self._field_zone(wa[1], tx, ty)
             zone = self.m.triggers.add_triggerzone(mapping.Point(zx_, zy_, self.t), zr_ * NM, True, f"callin {wa[1].id}")
             t1.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
-        t1.add_condition(condition.TimeAfter(CALLIN_LUA_DELAY_S))      # v0.41.114: never before SQE_CALLIN is defined (blue already inside the zone at time 0 gave a script error)
+        at_ = min([c["at"] for c in self._hot_calls if "at" in c] or [CALLIN_LUA_DELAY_S])
+        for c in self._hot_calls:                                      # v0.41.115: the stay runs from the call: until CALLIN_AFTER_TOT_S after the TOT
+            if "end" in c:
+                c["stay"] = max(c["tr"] + 120, c["end"] - at_)
+        t1.add_condition(condition.TimeAfter(max(CALLIN_LUA_DELAY_S, at_)))      # v0.41.114: never before SQE_CALLIN is defined (blue already inside the zone at time 0 gave a script error)
         for c in self._hot_calls:
             t1.add_action(action.DoScript(String(self._callin_call(c))))
         self.m.triggerrules.triggers.append(t1)
@@ -319,15 +342,18 @@ class RedAirPicture:
                 end_s_ = int(max(tot_s + 300, (pf_["end"] - self._start_min) * 60))
                 # v0.41.111: called in with the scramblers, to the station an alert pair of its own field would take (a pair that is outgunned stays home:
                 # `callin_` is already false for one that guards a site which is not the target; a patrol with no site link is checked here)
-                hot_xy, zone_nm = None, A2A_ZONE_NM[tname in RED_LONG_RANGE]
+                hot_xy, zone_nm = None, max(A2A_ZONE_NM[tname in RED_LONG_RANGE], min(CALLIN_ZONE_NM, self.o.enemy_cap_engage_nm or 999))
                 if pf_["kind"] == "CAP" and (callin_ or (pf_.get("gx") is None and redair.commits(d, [tname] * 2, blue_aa))):
                     (hx_, hy_), _why = scramble.red_station(st, (a.x, a.y), tx, ty)
+                    hx_, hy_ = self._hotspot_fwd(st, hx_, hy_, package)
                     if CALLIN_MIN_NM <= dist(sx, sy, hx_, hy_) / NM <= CALLIN_REACH_NM and not any(dist(hx_, hy_, kx, ky) < knm * NM for kx, ky, knm in self._fleet_keepout()):
                         hot_xy = (hx_, hy_)
                 if hot_xy is None and callin_:
                     hot_xy, zone_nm = (pf_["gx"], pf_["gy"]), RED_CALLIN_ZONE_NM       # v0.41.10: the site it guards
                 if hot_xy is not None:
                     self._arm_callin(g, ap_home, (sx, sy), hot_xy, zone_nm, alt, spd, end_s_, tot_s, bf_, cp, tx, ty)
+                    tr_ = dist(sx, sy, *hot_xy) / max(spd / 3.6, 1.0)           # v0.41.115: called so it is at the hotspot CALLIN_ARRIVE_BEFORE_S before the TOT
+                    self._hot_calls[-1].update(at=max(CALLIN_LUA_DELAY_S, int(tot_s - CALLIN_ARRIVE_BEFORE_S - tr_)), tr=int(tr_), end=int(tot_s + CALLIN_AFTER_TOT_S))
                 if callin_ and hot_xy is not None:
                     # v0.41.10: when blue comes within RED_CALLIN_NM of the SAM site this pair guards it is called as well (v0.41.111: by the hotspot leg of
                     # its route, so it comes back to its station; the pushed engage task never did)
