@@ -76,6 +76,7 @@ local function shotsJson()
     local more = ""
     if k.km then more = string.format(',"km":%.1f,"alt":%d', k.km, math.floor(k.alt or 0)) end        -- shooter-to-target range (km) and shooter altitude (m) at launch
     if k.tx and k.tz then more = more .. string.format(',"tx":%d,"tz":%d', math.floor(k.tx), math.floor(k.tz)) end        -- the target's map position: its last known spot
+    if k.left then more = more .. string.format(',"left":%d', k.left) end        -- v0.41.122: air-to-air missiles still on the shooter
     o[#o + 1] = string.format('{"t":%d,"ev":"%s","by":"%s","bt":"%s","w":"%s","tg":"%s","tt":"%s"%s}', k.t, k.ev, esc(k.by), esc(k.bt), esc(k.w), esc(k.tg), esc(k.tt), more)
   end
   return "[" .. table.concat(o, ",") .. "]"
@@ -218,6 +219,17 @@ local function logShot(ev, e, by)
       end
     end
   end
+  local left = nil                                            -- v0.41.122: air-to-air missiles the shooter still carries after this shot (to see when a pair goes winchester)
+  if ev == "shot" and e.initiator then
+    local oka, am = pcall(function() return e.initiator:getAmmo() end)
+    if oka and am then
+      left = 0
+      for _, a in ipairs(am) do
+        local d = a.desc
+        if d and d.category == 1 and d.missileCategory == 1 then left = left + (a.count or 0) end
+      end
+    end
+  end
   if ev == "hit" and e.target then
     local okc, cat = pcall(function() return e.target:getCategory() end)
     if okc and cat == Object.Category.SCENERY then return end        -- trees, houses, poles: pure noise in the log
@@ -227,7 +239,7 @@ local function logShot(ev, e, by)
   end
   if ev == "hit" and tg ~= "" then LASTHIT[tg] = { by = by or "?", w = w, t = timer.getTime() } end
   if #shots >= 2000 then return end   -- v0.41.6: was 600; busy runs reached 595
-  shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt, km = km, alt = salt, tx = tx, tz = tz }
+  shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt, km = km, alt = salt, tx = tx, tz = tz, left = left }
 end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
 local function jamOn(name)                  -- future: the player's cockpit switch (export script) feeds this
