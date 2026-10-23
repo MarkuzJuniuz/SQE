@@ -1,6 +1,12 @@
 # CHANGES.md
 
 
+## v0.41.127, carrier flights keep their height until 30 nm from the boat
+
+XO's F-14 flight (Uzi 3) flew the last 65 nm home at 2,000 ft over the sea: its home waypoint (the boat, 600 m) is the next point after the target, and DCS descends to the next point's height at once. Hornets and Tomcats on every carrier return did the same.
+- `mission_builder._home_leg`: a flight going home to a carrier gets an RCV point `CV_RCV_NM` (30, judgment call) from the boat on its way in, at `CV_RCV_FT` (10,000 ft, judgment call), then the Land point as before. Skipped when the last route point is already within 40 nm. Airfield recoveries are unchanged.
+- Smoke: `check_31wf_carrier_return_height`. Full smoke passed. Untested in DCS.
+
 ## v0.41.126, red bombers wait outside the Patriot's reach until the radars are down
 
 XO (2026-10-23): red plans like blue; a raid with SEAD in front of it does not fly into the Patriot / HAWK until the SEAD (and DEAD) have taken the radars down. Hold the bombers at a gate, abort if the radars stay up.

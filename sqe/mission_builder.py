@@ -55,6 +55,8 @@ LATE_ATTACK_S = 600           # v0.41.16: an AI strike flight drops only within 
 CV_PATTERN_NM = 6             # v0.41.72: an AI carrier flight within this of the boat...
 CV_PATTERN_S = 90             # ...for this long (about two laps of the pattern) is recovered
 CV_RECOVER_NM = 10            # v0.41.17: AI carrier flights (and your wingmen) are recovered this far from the boat instead of joining the deck queue
+CV_RCV_NM = 30            # v0.41.127 (XO 2026-10-23: F-14s flew 65 nm home at 2,000 ft): a flight going home to the boat keeps its height to a point this far out, then descends (judgment call)
+CV_RCV_FT = 10000         # ...and crosses that point at this height (the Marshal stack is lower; judgment call)
 RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
 RCV_SPREAD = (0, 30, -30, 60, -60)    # ...on its own bearing (degrees off the way it comes home), by stack slot
 SA10_REACH_NM = 31            # v0.41.14: the farthest an SA-10 fired at our jets in the runs (54-57 km)
@@ -1861,6 +1863,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 g.land_at(self.apt[base.id])
             if special:
                 g.points[-1].name = "RTBXHB"
+        if base.kind != BaseKind.AIRFIELD and base.id in self.ship:
+            lp_ = g.points[-1].position
+            if dist(base.x, base.y, lp_.x, lp_.y) > (CV_RCV_NM + 10) * NM:          # else it is already close: no extra point
+                cx_, cy_ = offset(base.x, base.y, bearing(base.x, base.y, lp_.x, lp_.y), CV_RCV_NM * NM)
+                g.add_waypoint(pt(cx_, cy_), CV_RCV_FT * FT, 300 * KPH, "RCV")
+        if base.kind == BaseKind.AIRFIELD:
+            pass
         elif (not f.is_player or o.player_is_ai) and self._skip_landing(base):
             # v0.41.72 (XO 2026-10-21: "pretend they still land, but if the don't-land switch is on they are despawned after a few rounds on their
             # pattern"): an AI flight going home to the boat gets the real Land waypoint tied to the ship, so DCS homes on the moving boat itself (the
