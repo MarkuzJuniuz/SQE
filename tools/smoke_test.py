@@ -2133,6 +2133,10 @@ def check_31zd_red_callin(c):
             grp[g["name"]] = g
     assert "define SQE_CALLIN" in raw and "SwitchWaypoint" in raw
     _callin_triggers_wait(m, "red")
+    # v0.41.115: the call waits for the strike (the pair reaches its hotspot shortly before the TOT), it is not made at once
+    _calls_t = [min(r.get("seconds", 0) for r in t["rules"].values() if r.get("predicate") == "c_time_after")
+                for t in m["trigrules"].values() if t.get("comment") == "call in the patrols"]
+    assert _calls_t and all(x > 30 for x in _calls_t), ("the red call-in must wait for the strike", _calls_t)
     for n, hot, back, stay, bf in calls:
         pts = grp[n]["route"]["points"]
         hot, back = int(hot), int(back)

@@ -40,12 +40,12 @@ from .loadouts import LoadoutLibrary, enemy_cap_loadout, ENEMY_FIGHTERS
 from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType, Role, task_label
 pydcs_patch.install()           # v0.41.66: pydcs's scattered formation could loop forever and freeze a build (sqe/pydcs_patch.py)
 
-TARCAP_LEAD_S = 0             # v0.41.1: a TARCAP arrives WITH the first flight it covers (the HARM shooters): the SAM has to split its attention,
-                              # and its exposure ends with the HARM salvo. v0.41.0's 5-minute head start let the SA-10 kill six waiting Eagles.
+TARCAP_LEAD_S = 120           # v0.41.115 (was 0; XO 2026-10-22: fighters in first, BMS-style): a TARCAP arrives this long before the first flight it covers. 2 min, not
+                              # v0.41.0's 5-minute head start, which let the SA-10 kill six waiting Eagles (judgment call). v0.41.1 had it arrive WITH the HARM shooters.
 FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
-TARCAP_BEHIND_NM = 16         # v0.41.43: with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
+TARCAP_BEHIND_NM = 8          # v0.41.43 (16; v0.41.115: 8, XO 2026-10-22: it sat 56 nm from red's patrols, too far to snipe): with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)

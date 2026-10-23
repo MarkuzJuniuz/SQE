@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.115, red patrols called in at the right time and place; fighters in first and closer
+
+XO (2026-10-22 run, no air-to-air at all): red's three patrols were called at 42 s and flew home at 600-1055 s, before the HARMs flew (1093 s). Their circle (25 nm) did not reach the SEAD shooters 36 nm away. The blue TARCAPs sat 56 nm from red's patrols, the escort 32 nm.
+- RED CALL TIMING: the call waits so the pair reaches its hotspot `CALLIN_ARRIVE_BEFORE_S` (7 min) before the package's time on target, and stays until `CALLIN_AFTER_TOT_S` (5 min) after it. The detection / alert flag still has to be set too (both must hold).
+- RED HOTSPOT: moved up to `CALLIN_FWD_NM` (12 nm) toward the nearest blue shooter launch point, stopping `CALLIN_SHOOTER_NM` (30 nm) short of it, and only while it is still under a live red SAM. Its engage circle is `CALLIN_ZONE_NM` (40 nm, was 25), capped by the CAP engage limit.
+- BLUE: `TARCAP_BEHIND_NM` 16 to 8 (the TARCAP holds closer behind the JSOW launch point; still SAM-clear). `TARCAP_LEAD_S` 0 to 120: the TARCAP is on station 2 minutes ahead of the strikers (sweeps and escorts already led by 90 s). A 5-minute lead let the SA-10 kill six Eagles in v0.41.0, so 2 minutes.
+- All numbers are judgment calls. The red fighter stations (TARCAP-equivalents) do not change. Untested in DCS. Smoke check_31zd asserts the call waits.
+
 ## v0.41.114, blue defensive missions: stations up the raid's way in, a base CAP for the intercept, and a fix to the call-in script error
 
 XO (Kobuleti run, 2026-10-22): the CAPs sat on top of the bases and nothing was there to call in. Also his mission-load error `attempt to call global 'SQE_CALLIN' (a nil value)`.
