@@ -20,6 +20,7 @@ TANKER_COVER_NM = 30          # v0.41.26: a tanker track this close to a friendl
 SUPPORT_CAP_ZONE_NM = 25      # v0.41.7: HAVCAP / tanker CAP / base CAP engage inside this circle round what they guard
 TNKCAP_ZONE_NM = 40           # v0.41.26: the tanker CAP engages inside this circle round the tanker (an AMRAAM's reach), never further
 CVCAP_ZONE_NM = 30            # v0.41.21: the carrier CAP engages within this of the boat (v0.41.14: 50; it reached out and set off red scrambles)
+CAP_REACH_BEYOND_NM = 25     # v0.41.113: a base / carrier CAP's engage circle reaches this far past its station (judgment call)
 CVCAP_NM = 12                 # v0.41.21: the carrier CAP orbits this far out from the boat toward the nearest enemy field (v0.41.7: 22)
 CVCAP_DETECT_MARGIN_NM = 5    # v0.41.21: its orbit and engage circle stay this far outside every enemy field's scramble circle
 
@@ -166,6 +167,10 @@ class SupportCaps:
             if self._sam_clear(sx, sy) or dist(sx, sy, gx_, gy_) < 2 * NM:
                 break
             sx, sy = offset(sx, sy, bearing(sx, sy, gx_, gy_), 2 * NM)
+        if f.tag in ("BASECAP", "CVCAP") and ar_:
+            # v0.41.113: the engage circle is round the thing it guards, so a station pushed 25-35 nm out would sit at or past the circle's edge and the
+            # pair could not shoot at the range that is the point of going forward: the circle reaches CAP_REACH_BEYOND_NM past the station (judgment call)
+            zr_ = max(zr_, dist(sx, sy, gx_, gy_) / NM + CAP_REACH_BEYOND_NM)
         leg_ = 15 * NM
         if f.tag == "CVCAP":
             # v0.41.21: the carrier CAP is there to guard the boat, not to start fights: its orbit (both ends) and its engage circle stay outside

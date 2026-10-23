@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.113, BARCAP stations pushed forward
+
+XO (2026-10-22 runs): the base CAPs sat too safe, so no air-to-air happened between the bases. The orbit centre moves out toward the threat so the two sides can snipe at long range while the defender is still inside its own SAM cover.
+- `STATION_BASE_NM` 12 to 25 (the HAWK ring edge, well inside the Patriot's 40), `STATION_FLEET_NM` 13 to 35 (inside the ships' 70 nm SM-2 ring), `STATION_MAX_NM` (the do-not-exceed distance when a red SAM ring pushes a station out) 30 to 50. Both sides' patrols use the same areas.
+- The engage circle of a blue base / carrier CAP is round what it guards, so a forward station sat at or past its edge: it now reaches `CAP_REACH_BEYOND_NM` (25) past the station, but never beyond the fixed 50 nm CAP engage limit in the mission options (the carrier CAP reaches 15 nm past its station).
+- All three numbers and the 25 are judgment calls, from the game's SAM rings (HAWK 25, Patriot 40, SM-2 70) and AMRAAM-class reach (25 to 40 nm). Untested in DCS.
+
 ## v0.41.112, blue BASECAPs called in with the alert pairs (step 2 of 2, blue side) and a fix to red's stay time
 
 XO: the same call-in for blue, in the missions where the alert pairs are called.
