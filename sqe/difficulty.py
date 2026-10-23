@@ -47,6 +47,8 @@ class Difficulty:
     blue_reinf: float = 5.0              # the same for Blue
     raid_rate: float = 0.40              # Red raids on our airfields per day (raids.py); some are announced, the rest are surprises
     raid_arm: float = 0.0                # v0.41.84: chance a Su-24M raid on a field with a live Patriot / HAWK brings a Kh-31P SEAD pair (judgment call: L1 none, L2 rare, L3 normal)
+    arm_cap: int = 8                     # v0.41.125: most Su-24M in red's SEAD group (L2: a pair, judgment call) ...
+    arm_cap_free: int = 8                # ... unless the wing has this many spare jets beyond the bombers (then the full sizing)
     raid_surprise: float = 0.35          # share of the raids that are surprises (nobody warned us)
     emerg_chance: float = 0.09           # chance per sortie that something breaks out while you are about to fly (an emergency)
     sam_rebuild: float = 0.04            # nightly chance (x Red supply) that a destroyed SAM site is replaced (sams.py)
@@ -77,7 +79,7 @@ LEVELS: dict[int, Difficulty] = {
                   friendly_replenish=0.08, enemy_replenish=0.05, asset_repair=0.04, sam_repair=0.06,
                   friendly_scale=1.0, enemy_cap_per_air=0.15, counterstrike=0.30, bomber_wing=4, bomber_escort_wing=8, bomber_policy="desperate", bomber_safe_p=0.06,
                   forward_sams=("SA-8", "SA-8"), garrison_chance=0.6, garrison_size=0.8, react_chance=0.35, react_ratio=(0.6, 1.1),
-                  ground_red=(70, 55, 15, 0, 0), ground_blue=(0, 15, 60, 70, 50), red_attack=0.45, red_reinf=7.5, blue_reinf=4.0, raid_rate=0.4, raid_arm=0.2, raid_surprise=0.35, emerg_chance=0.09, raid_size=(2, 4), sam_rebuild=0.04, sam_scoot=0.30,
+                  ground_red=(70, 55, 15, 0, 0), ground_blue=(0, 15, 60, 70, 50), red_attack=0.45, red_reinf=7.5, blue_reinf=4.0, raid_rate=0.4, raid_arm=1.0, arm_cap=2, arm_cap_free=8, raid_surprise=0.35, emerg_chance=0.09, raid_size=(2, 4), sam_rebuild=0.04, sam_scoot=0.30,
                   raid_mix=(0.20, 0.15, 0.25), blue_garrison_size=0.8, blue_rebuild=0.15, sam_retreat=0.8, sead_valve=3, air_retreat=0.8),
     3: Difficulty(3, "Level 3 - Near-Peer", "Modern fighters, long-range SAMs and an integrated air-defence network. "
                   "Every sortie is contested and attrition bites.",
@@ -87,7 +89,7 @@ LEVELS: dict[int, Difficulty] = {
                   friendly_replenish=0.06, enemy_replenish=0.07, asset_repair=0.05, sam_repair=0.08,
                   friendly_scale=0.85, enemy_cap_per_air=0.20, counterstrike=0.55, bomber_wing=10, bomber_escort_wing=16, bomber_policy="normal", bomber_safe_p=0.12,
                   forward_sams=("SA-15", "SA-8", "SA-19"), garrison_chance=1.0, garrison_size=1.0, react_chance=0.55, react_ratio=(1.0, 1.6),
-                  ground_red=(90, 80, 35, 0, 0), ground_blue=(0, 10, 45, 55, 40), red_attack=0.55, red_reinf=7.0, blue_reinf=4.0, raid_rate=0.7, raid_arm=0.6, raid_surprise=0.45, emerg_chance=0.21, raid_size=(4, 4), sam_rebuild=0.07, sam_scoot=0.50,
+                  ground_red=(90, 80, 35, 0, 0), ground_blue=(0, 10, 45, 55, 40), red_attack=0.55, red_reinf=7.0, blue_reinf=4.0, raid_rate=0.7, raid_arm=1.0, raid_surprise=0.45, emerg_chance=0.21, raid_size=(4, 4), sam_rebuild=0.07, sam_scoot=0.50,
                   raid_mix=(0.25, 0.20, 0.25), blue_garrison_size=0.7, blue_rebuild=0.10, sam_retreat=1.0, sead_valve=2, air_retreat=1.0),
 }
 

@@ -70,11 +70,13 @@ def describe(state, base, aim: str = "") -> str:
     return f"Intercept an air attack on the {a.name}" if k == "garrison" else f"Intercept a raid on the {a.name}"
 
 
-def _reach(state, kind: str, x: float, y: float, budget: bool = True):
-    """(distance nm, wing, type) of the nearest wing that can reach (x, y) with a raid of this kind, or None."""
+def _reach(state, kind: str, x: float, y: float, budget: bool = True, only: str | None = None):
+    """(distance nm, wing, type) of the nearest wing that can reach (x, y) with a raid of this kind, or None. v0.41.125: `only` restricts the aircraft type."""
     from .loadouts import ENEMY_RADIUS_NM
     best = None
     for w, t in raider_wings(state, kind, budget):
+        if only and t != only:
+            continue
         a = state.assets[w.base_asset_id]
         nm = math.hypot(a.x - x, a.y - y) / NM
         if nm <= ENEMY_RADIUS_NM[t] * 0.85 and (best is None or nm < best[0]):
@@ -152,8 +154,10 @@ def _weighted(rng: random.Random, ws: list):
     return ws[-1]
 
 
-def pick_target(state, rng: random.Random):
+def pick_target(state, rng: random.Random, d=None):
     ws = target_weights(state)
+    if d is not None:                               # v0.41.125: only a field red can suppress (see `sead_plan`)
+        ws = [(b, w) for b, w in ws if (r_ := reach_for(state, "field", b.x, b.y)) is not None and sead_plan(state, d, b, "", r_[1], r_[2])[0]]
     return _weighted(rng, ws)[0] if ws else None
 
 
@@ -168,7 +172,15 @@ def pick_aim(state, d, rng: random.Random):
         if r < acc:
             kind = k
             break
-    ws = candidates(state, kind) or (candidates(state, "field") if kind != "field" else [])
+    def can_(ws_):                                  # v0.41.125: red does not start a raid on a covered target it cannot suppress
+        out_ = []
+        for b_, aim_, w_ in ws_:
+            x_, y_ = aim_xy(state, aim_, b_)
+            r_ = reach_for(state, aim_kind(aim_), x_, y_)
+            if r_ is not None and sead_plan(state, d, b_, aim_, r_[1], r_[2])[0]:
+                out_.append((b_, aim_, w_))
+        return out_
+    ws = can_(candidates(state, kind)) or (can_(candidates(state, "field")) if kind != "field" else [])
     if not ws:
         return None
     ws = shy(state, d, ws)
@@ -181,10 +193,11 @@ ARM_AD_FACTOR_8 = 0.2     # v0.41.116: ...and two four-jet flights (8 Su-24M, 16
 ARM_AD_FACTOR_4 = 0.3     # v0.41.94: ...and a four-jet SEAD group (both a Patriot and a HAWK live, or a full-strength Patriot) takes more of it (judgment call)
 
 
-def arm_jets(state, base, available: int, nb: int) -> int:
+def arm_jets(state, base, available: int, nb: int, cap: int = 8, cap_free: int = 8) -> int:
     """v0.41.94: the size of red's Su-24M SEAD group against this field's batteries, like blue's salvo sizing: 2 jets (4 Kh-31P) for a Patriot or a HAWK
-    alone, 4 (8 missiles) when both are live or the Patriot is at full strength, 8 (two four-jet flights, v0.41.116) when a full Patriot and a HAWK are both live. At most the Su-24Ms the wing has left beyond its `nb` bombers
-    (a short wing falls back to a pair), 0 when the field has neither battery. Thresholds are judgment calls (Kh-31P: 2 per Su-24M, Wikipedia)."""
+    alone, 4 (8 missiles) when both are live or the Patriot is at full strength, 8 (two four-jet flights, v0.41.116) when a full Patriot and a HAWK are both live. At most the Su-24Ms the wing has left beyond its `nb` bom
+    (a short wing falls back to a pair), 0 when the field has neither battery. Thresholds are judgment calls (Kh-31P: 2 per Su-24M, Wikipedia).
+    v0.41.125: `cap` (the level's `arm_cap`; L2 a pair) lowers the size unless the wing has `cap_free` jets spare."""
     from . import sams
     bt = sams.blue_battery(base, state)
     if not (bt["patriot_ln"] or bt["hawk"]):
@@ -192,6 +205,8 @@ def arm_jets(state, base, available: int, nb: int) -> int:
     full_ = bt["patriot_ln"] >= sams.BLUE_PATRIOT_LN
     want = 8 if (bt["patriot_ln"] and bt["hawk"] and full_) else (4 if ((bt["patriot_ln"] and bt["hawk"]) or full_) else 2)     # v0.41.116: a full Patriot AND a HAWK: two four-jet flights (XO 2026-10-22: 4 + 4)
     free = available - nb
+    if free < cap_free:
+        want = min(want, cap)
     for n_ in (want, 4, 2):                                  # a short wing steps down: 8, 4, 2, none
         if n_ <= want and free >= n_:
             return n_
@@ -199,6 +214,41 @@ def arm_jets(state, base, available: int, nb: int) -> int:
 PATRIOT_NM = 40          # v0.41.20: a full-strength field's Patriot covers its own field and what lies this close to it
 FLEET_NM = 70            # v0.41.31: ...and the carrier group's SM-2 reach (measured: CAP pairs killed 51-67 nm out; mission_builder.FLEET_RAID_AVOID_NM)
 HAWK_NM = 25             # ...and a field's HAWK battery (v0.41.30: every full-strength field has one, not only yours)
+
+
+def cover_field(state, x: float, y: float):
+    """v0.41.125: the nearest airfield whose live Patriot (PATRIOT_NM) or HAWK (HAWK_NM) covers (x, y), or None."""
+    from .sams import blue_battery
+    best = None
+    for b in state.bases.values():
+        if b.kind != BaseKind.AIRFIELD:
+            continue
+        bt = blue_battery(b, state)
+        dn = math.hypot(b.x - x, b.y - y) / NM
+        if (bt["patriot_ln"] and dn <= PATRIOT_NM) or (bt["hawk"] and dn <= HAWK_NM):
+            if best is None or dn < best[0]:
+                best = (dn, b)
+    return best[1] if best else None
+
+
+def reach_for(state, kind: str, x: float, y: float, budget: bool = True):
+    """v0.41.125: like `_reach`, but a target under live Patriot / HAWK cover is raided only by a Su-24M wing (the type that carries the SEAD group)."""
+    return _reach(state, kind, x, y, budget, only="Su_24M" if cover_field(state, x, y) is not None else None)
+
+
+def sead_plan(state, d, base, aim: str, wing, ac: str):
+    """v0.41.125 (XO 2026-10-23: no dice, intelligent planning): -> (ok, n_arm). A target under live Patriot / HAWK cover is raided only by a Su-24M wing
+    that can field the SEAD group (sized by `arm_jets`, capped by the level: L2 a pair unless the wing has plenty spare; L1 none); an uncovered target
+    needs none. Raids on covered supply sites, garrisons and sectors are not attempted (no SEAD is built for them)."""
+    x, y = aim_xy(state, aim, base)
+    cf = cover_field(state, x, y)
+    if cf is None:
+        return True, 0
+    if aim_kind(aim) != "field" or ac != "Su_24M" or getattr(d, "raid_arm", 0) <= 0:
+        return False, 0
+    avail = wing.available_of({"Su_24M"}) if hasattr(wing, "available_of") else wing.available
+    n = arm_jets(state, cf, avail, int(d.raid_size[1]), int(getattr(d, "arm_cap", 8)), int(getattr(d, "arm_cap_free", 8)))
+    return n > 0, n
 
 
 def shy(state, d, ws: list) -> list:
@@ -231,7 +281,7 @@ def raid_objective(base, aim: str = "", desc: str | None = None) -> Objective:
 def _commit(state, d, base, aim: str) -> None:
     """Book the raid's aircraft against the nearest capable wing's daily sortie budget."""
     x, y = aim_xy(state, aim, base)
-    r = _reach(state, aim_kind(aim), x, y)
+    r = reach_for(state, aim_kind(aim), x, y)
     if r is not None:
         redair.spend(state, r[1].base_asset_id, int(d.raid_size[1]))
 
@@ -301,7 +351,7 @@ def overnight(state, d, rng: random.Random) -> list:
             continue
         b, aim = pa
         x, y = aim_xy(state, aim, b)
-        r = _reach(state, aim_kind(aim), x, y)
+        r = reach_for(state, aim_kind(aim), x, y)
         if r is None:
             continue
         wing = r[1]
@@ -309,9 +359,10 @@ def overnight(state, d, rng: random.Random) -> list:
         alert = sum(s.available for s in state.squadrons.values() if s.base_id == b.id) / max(1, sum(s.authorized for s in state.squadrons.values() if s.base_id == b.id))
         from .sams import covering_ad
         ad_ = covering_ad(state, x, y)
-        arm_ = aim_kind(aim) == "field" and r[2] == "Su_24M" and d.raid_arm > 0 and rng.random() < d.raid_arm      # v0.41.84: red SEAD ahead of the bombers
-        n_arm_ = arm_jets(state, b, wing.available_of({"Su_24M"}) if hasattr(wing, "available_of") else wing.available, int(d.raid_size[1])) if arm_ else 0
-        arm_ = arm_ and n_arm_ > 0
+        ok_, n_arm_ = sead_plan(state, d, b, aim, wing, r[2])      # v0.41.125: no dice: a covered target is raided only with its SEAD group
+        if not ok_:
+            continue
+        arm_ = n_arm_ > 0
         if arm_:
             ad_ *= ARM_AD_FACTOR_8 if n_arm_ >= 8 else (ARM_AD_FACTOR_4 if n_arm_ >= 4 else ARM_AD_FACTOR)
         p_stop = min(0.95, 0.2 + 0.45 * ad_ + 0.3 * alert)       # v0.41.30: the batteries that cover the target (was the field's defense number)
