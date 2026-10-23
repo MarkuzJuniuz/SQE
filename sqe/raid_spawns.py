@@ -38,6 +38,9 @@ RAID_HOLD_MAX_S = 600         # ...and one with plenty of time appears at most 1
 RAID_EGRESS_NM = 30           # ...off target it turns 40 degrees off its way in and leaves this far before heading home     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
 ARM_LAUNCH_NM = 40            # v0.41.84: a red SEAD pair fires its Kh-31P this far from the field (judgment call: inside the 60 nm the Kh-31 page gives, with margin for a low launch)
 ARM_LEAD_S = 150              # ...and the bombers reach the target this long after the launch point (judgment call)
+ARM_TARCAP_BEHIND_NM = 8      # v0.41.116: the SEAD package's TARCAP holds this far back along the way in from the Kh-31P launch point (blue's TARCAP_BEHIND_NM; judgment call)...
+ARM_TARCAP_LEAD_S = 120       # ...in on station this long before the missiles go (blue's TARCAP_LEAD_S)...
+ARM_TARCAP_STAY_S = 600       # ...and holds this long after (the missiles are flying; judgment call)
 ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
 
@@ -375,7 +378,9 @@ class RaidSpawns:
         # v0.41.94: four jets against both batteries fly as two pairs, the first on the Patriot, the second on the HAWK; four against a lone (full) Patriot
         # fly as one group of four on it (8 Kh-31P)
         pairs = [(tg, int(ex["arm"]))]
-        if int(ex["arm"]) >= 4 and ad.get("pat") and ad.get("hawk"):
+        if int(ex["arm"]) >= 8:                                  # v0.41.116: two four-jet flights, the first on the Patriot, the second on the HAWK
+            pairs = [(ad.get("pat") or tg, 4), (ad.get("hawk") or ad.get("pat") or tg, 4)]
+        elif int(ex["arm"]) >= 4 and ad.get("pat") and ad.get("hawk"):
             pairs = [(ad["pat"], 2), (ad["hawk"], 2)]
         pt = lambda x, y: mapping.Point(x, y, self.t)
         tgt = (dx, dy)
@@ -422,6 +427,61 @@ class RaidSpawns:
             if not load:
                 self.warns.append("Su-24M: no Kh-31P found; the red SEAD pair is unarmed.")
             manifest.add("enemy_air", ex["bomber_wing"], names, ac="Su_24M")
+        if ex.get("arm_cover") and ex.get("escort_type"):
+            self._spawn_arm_cover(ex, path, pts, launch, V, t_arm, alt, skill, home_, manifest, dx, dy)
+
+    def _spawn_arm_cover(self, ex, path, pts, launch, V, t_arm, alt, skill, home_, manifest, dx, dy) -> None:
+        """v0.41.116 (XO 2026-10-22: red's SEAD package is blue's shape: the HARM flights, a TARCAP and an escort): two fighters (the escort) hold a station
+        on the Kh-31P launch point, two (the TARCAP) one ARM_TARCAP_BEHIND_NM back along the way in. Both fly the SEAD flights' route, are in on station
+        ARM_TARCAP_LEAD_S before the missiles go, engage air inside their class's circle, and stay until ARM_TARCAP_STAY_S after (out of AAMs: home).
+        A real EscortTaskAction on the SEAD group is not used: the SEAD flights are late-activated and shift with the hold, so a plain station is steadier."""
+        pt = lambda x, y: mapping.Point(x, y, self.t)
+        cls = getattr(planes, ex["escort_type"])
+        load = enemy_cap_loadout(ex["escort_type"])
+        zone_nm = A2A_ZONE_NM[ex["escort_type"] in RED_LONG_RANGE]
+        from .mission_builder import AAM_WEAPONS            # lazy: the builder's module imports this one
+        bk = offset(*launch, bearing(*launch, *pts[-1]), ARM_TARCAP_BEHIND_NM * NM)           # the TARCAP station: back along the way in
+        t_on = max(0.0, t_arm - ARM_TARCAP_LEAD_S)
+        for job in ("Raid SEAD Escort", "Raid SEAD TARCAP"):
+            pa = [q for q in pts] + [bk if job.endswith("TARCAP") else launch]
+            if job.endswith("TARCAP"):
+                pa = [q for q in pts if dist(*q, dx, dy) > dist(*bk, dx, dy)] + [bk] or [bk]
+            Lp = sum(dist(*pa[i], *pa[i + 1]) for i in range(len(pa) - 1))
+            t_go = t_on - Lp / V
+            if t_go >= 0:
+                (sx, sy), remaining = pa[0], pa[1:]
+                hold_until, act_ = t_go, max(0.0, t_go - RAID_HOLD_MAX_S)
+            else:
+                (sx, sy), seg_i = tm.point_back_along(pa, min(Lp, max(ARM_LAUNCH_NM * NM * 0.5, V * t_on)))
+                remaining, hold_until, act_ = pa[seg_i:], None, 0.0
+            if not remaining:
+                remaining = [pa[-1]]
+            g = self.m.flight_group(self.red, job, cls, None, pt(sx, sy), altitude=alt + 300, speed=450 * KPH, maintask=task.CAP, group_size=2)
+            if hold_until is not None:
+                ct_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
+                ct_.stop_after_time(int(hold_until)); g.points[0].tasks.append(ct_)
+                g.points[0].name = "MSHL"
+            for k, q in enumerate(remaining):
+                last = k == len(remaining) - 1
+                wp = g.add_waypoint(pt(*q), alt + 300, 450 * KPH, ("TARCAP" if job.endswith("TARCAP") else "ESCORT") if last else "ING")
+                if last:
+                    wp.tasks.append(task.EngageTargetsInZone(mapping.Vector2(*q), int(zone_nm * NM), [task.Targets.All.Air]))
+                    oc_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH)))
+                    oc_.stop_after_time(int(t_arm + ARM_TARCAP_STAY_S)); wp.tasks.append(oc_)
+            back_ = offset(*launch, bearing(*launch, *pts[-1]), 20 * NM)
+            g.add_waypoint(pt(*back_), alt, 450 * KPH, "EGR")
+            for k, q in enumerate(home_):
+                g.add_waypoint(pt(*q), alt, 450 * KPH, "RTB" if k == len(home_) - 1 else "AVD")
+            g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
+            rtbe_ = task.OptRTBOnOutOfAmmo(); rtbe_.params["action"]["params"]["value"] = AAM_WEAPONS
+            g.points[0].tasks.append(rtbe_)
+            g.set_skill(skill)
+            if act_ >= 30:
+                self._late(g, act_)
+            names = []
+            for j, u in enumerate(g.units, 1):
+                u.name = f"RAID-{'SE' if job.endswith('Escort') else 'ST'}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+            manifest.add("enemy_air", ex["escort_wing"], names, ac=ex["escort_type"])
 
     # ---- bomber raid on the fleet: already en route from the first second, along a real path from their base ----------------
     def _spawn_raid(self, package, sx_, sy_, tot_s, geom, manifest):

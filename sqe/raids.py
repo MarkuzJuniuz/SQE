@@ -177,20 +177,25 @@ def pick_aim(state, d, rng: random.Random):
 
 
 ARM_AD_FACTOR = 0.5     # v0.41.84: a field raid with a red SEAD pair meets half the battery cover in the unflown (background) raids (judgment call)
+ARM_AD_FACTOR_8 = 0.2     # v0.41.116: ...and two four-jet flights (8 Su-24M, 16 Kh-31P) take more again (judgment call)
 ARM_AD_FACTOR_4 = 0.3     # v0.41.94: ...and a four-jet SEAD group (both a Patriot and a HAWK live, or a full-strength Patriot) takes more of it (judgment call)
 
 
 def arm_jets(state, base, available: int, nb: int) -> int:
     """v0.41.94: the size of red's Su-24M SEAD group against this field's batteries, like blue's salvo sizing: 2 jets (4 Kh-31P) for a Patriot or a HAWK
-    alone, 4 (8 missiles) when both are live or the Patriot is at full strength. At most the Su-24Ms the wing has left beyond its `nb` bombers
+    alone, 4 (8 missiles) when both are live or the Patriot is at full strength, 8 (two four-jet flights, v0.41.116) when a full Patriot and a HAWK are both live. At most the Su-24Ms the wing has left beyond its `nb` bombers
     (a short wing falls back to a pair), 0 when the field has neither battery. Thresholds are judgment calls (Kh-31P: 2 per Su-24M, Wikipedia)."""
     from . import sams
     bt = sams.blue_battery(base, state)
     if not (bt["patriot_ln"] or bt["hawk"]):
         return 0
-    want = 4 if ((bt["patriot_ln"] and bt["hawk"]) or bt["patriot_ln"] >= sams.BLUE_PATRIOT_LN) else 2
+    full_ = bt["patriot_ln"] >= sams.BLUE_PATRIOT_LN
+    want = 8 if (bt["patriot_ln"] and bt["hawk"] and full_) else (4 if ((bt["patriot_ln"] and bt["hawk"]) or full_) else 2)     # v0.41.116: a full Patriot AND a HAWK: two four-jet flights (XO 2026-10-22: 4 + 4)
     free = available - nb
-    return want if free >= want else (2 if free >= 2 else 0)
+    for n_ in (want, 4, 2):                                  # a short wing steps down: 8, 4, 2, none
+        if n_ <= want and free >= n_:
+            return n_
+    return 0
 PATRIOT_NM = 40          # v0.41.20: a full-strength field's Patriot covers its own field and what lies this close to it
 FLEET_NM = 70            # v0.41.31: ...and the carrier group's SM-2 reach (measured: CAP pairs killed 51-67 nm out; mission_builder.FLEET_RAID_AVOID_NM)
 HAWK_NM = 25             # ...and a field's HAWK battery (v0.41.30: every full-strength field has one, not only yours)
@@ -308,7 +313,7 @@ def overnight(state, d, rng: random.Random) -> list:
         n_arm_ = arm_jets(state, b, wing.available_of({"Su_24M"}) if hasattr(wing, "available_of") else wing.available, int(d.raid_size[1])) if arm_ else 0
         arm_ = arm_ and n_arm_ > 0
         if arm_:
-            ad_ *= ARM_AD_FACTOR_4 if n_arm_ >= 4 else ARM_AD_FACTOR
+            ad_ *= ARM_AD_FACTOR_8 if n_arm_ >= 8 else (ARM_AD_FACTOR_4 if n_arm_ >= 4 else ARM_AD_FACTOR)
         p_stop = min(0.95, 0.2 + 0.45 * ad_ + 0.3 * alert)       # v0.41.30: the batteries that cover the target (was the field's defense number)
         what = {"field": b.name, "supply": state.blue_assets[aim].name if aim in state.blue_assets else "", "garrison": state.blue_assets[aim].name if aim in state.blue_assets else "",
                 "sector": "friendly troops in " + state.ground["names"][int(aim.split(":")[1])] if aim.startswith("sector:") else ""}[aim_kind(aim)]

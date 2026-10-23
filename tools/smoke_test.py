@@ -1608,11 +1608,12 @@ def check_31l_red_arm(c):
                 st.day += 1; s.plan_day()
             if rp is None:
                 continue
-            rp.extra["arm"] = 4                                                # v0.41.94: a four-jet group: one group of four, or two pairs (Patriot, HAWK)
+            rp.extra["arm"], rp.extra["arm_cover"] = 8, 4                      # v0.41.116: two four-jet flights (Patriot, HAWK) with an escort pair and a TARCAP pair
             s.fly(rp.number, None)
             mz = _zf.ZipFile(st.pending["miz"]).read("mission").decode()
-            assert "RAID-S-1-1" in mz and "RAID-S-1-2" in mz and "Raid SEAD 1" in mz, "the SEAD pair is in the mission"
-            assert "RAID-S-1-4" in mz or "RAID-S-2-2" in mz, "four SEAD jets: a group of four on the Patriot, or a second pair on the HAWK"
+            assert "RAID-S-1-1" in mz and "RAID-S-1-2" in mz and "Raid SEAD 1" in mz, "the SEAD flight is in the mission"
+            assert "RAID-S-1-4" in mz and "RAID-S-2-4" in mz and "Raid SEAD 2" in mz, "8 SEAD jets: two flights of four"
+            assert "Raid SEAD Escort" in mz and "Raid SEAD TARCAP" in mz and "RAID-SE-2" in mz and "RAID-ST-2" in mz, "the SEAD package brings an escort pair and a TARCAP pair"
             assert "D8F2C90B-887B-4B9E-9FE2-996BC9E9AF03" in mz, "it carries Kh-31P"
             assert "RAID-B-1" in mz, "the bombers still fly"
             return
@@ -1804,13 +1805,13 @@ def check_31u_red_sead_size(c):
     def setp(pat, hawk):
         sites["pat"].health, sites["hawk"].health = pat, hawk
     full = sams.BLUE_FULL_DEF
-    setp(1.0, 1.0); assert raids.arm_jets(st, b, 12, 4) == 4, "Patriot + HAWK: four"
+    setp(1.0, 1.0); assert raids.arm_jets(st, b, 12, 4) == 8, "full Patriot + HAWK: 4 + 4 (v0.41.116)"
+    assert raids.arm_jets(st, b, 8, 4) == 4 and raids.arm_jets(st, b, 6, 4) == 2, "a short wing steps down 8, 4, 2"
     setp(1.0, 0.0); assert raids.arm_jets(st, b, 12, 4) == 4, "a full-strength Patriot: four"
     setp(max(0.0, full - 0.2), 0.0)
     if sams.blue_battery(b, st)["patriot_ln"]:
         assert raids.arm_jets(st, b, 12, 4) == 2, "a weakened Patriot alone: a pair"
     setp(0.0, 1.0); assert raids.arm_jets(st, b, 12, 4) == 2, "a HAWK alone: a pair"
-    setp(1.0, 1.0); assert raids.arm_jets(st, b, 6, 4) == 2, "a short wing falls back to a pair"
     assert raids.arm_jets(st, b, 5, 4) == 0, "no Su-24M left over: none"
     setp(0.0, 0.0); assert raids.arm_jets(st, b, 12, 4) == 0, "no battery: none"
     print("[red sead size] Patriot + HAWK or full Patriot 4, a lone weaker battery 2, short wing 2, nothing standing 0")
