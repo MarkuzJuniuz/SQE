@@ -1956,6 +1956,43 @@ def check_31w_raid_scramble_merge(c):
         rd.emergency_happens = keep
 
 
+def check_31wb_scramble_takes_hidden_packages(c):
+    """v0.41.121: when you take an emergency scramble, the packages that were listed inside the package you were tasked with come along (inside the
+    -merge_back_min / +30 min window round the scramble's start), together with the scramble's own finds, at most six."""
+    from sqe import raids as rd
+    keep = rd.emergency_happens
+    rd.emergency_happens = lambda a, b, c_: True
+    try:
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=400))
+        ses.new("Scramble members", "F-16C", 2, seed=4)
+        st = ses.state
+        hm = lambda p_: int(p_.start[:2]) * 60 + int(p_.start[3:5])
+        for _ in range(40):
+            for p in ses.packages():
+                if not ses.flyable(p) or not ses.merge_candidates(p):
+                    continue
+                ev = ses.emergency_for(p.number, None)
+                if not (ev and ev["eligible"]):
+                    continue
+                hidden = list(ses.merge_candidates(p))
+                scr = ev["package"]
+                ses.fly(p.number, None, scramble=True)
+                merged = {m_["number"] for m_ in st.pending["merged"]} if st.pending["merged"] and "number" in st.pending["merged"][0] else None
+                if merged is None:
+                    return
+                inside = [x for x in hidden if -15 <= hm(x) - hm(scr) <= 30 and x.number != scr.number]
+                assert len(merged) <= 6, merged
+                assert all(x.number in merged for x in inside[:max(0, 6 - len(merged & {y.number for y in inside}))]) or len(merged) == 6, (merged, [x.number for x in inside])
+                assert any(x.number in merged for x in inside) or not inside, "a package hidden in the original comes along"
+                return
+            st.day += 1
+            ses.plan_day()
+        raise AssertionError("no scramble with a package hidden in the original in 40 days")
+    finally:
+        rd.emergency_happens = keep
+
+
 def check_31x_forward_garrisons(c):
     """v0.41.102: every sector has a dug-in forward garrison for each side (red rfwd_N, blue bfwd_N), older saves get them, a lost garrison takes its
     share of the sector's force with it and weakens the defence there, red's are offered as CAS where the sector is fought over, blue's can be raided."""
@@ -3834,6 +3871,7 @@ CHECKS = [
     check_31n_blue_patrol_vs_raids,
     check_31v_hot_runway,
     check_31w_raid_scramble_merge,
+    check_31wb_scramble_takes_hidden_packages,
     check_31x_forward_garrisons,
     check_31y_unit_cap_merged,
     check_31z_bomber_trump_card,
