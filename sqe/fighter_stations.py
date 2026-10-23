@@ -16,6 +16,25 @@ ESCORT_AFTER_TOT_S = 180      # an escort (ESCORT role) holds its station until 
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
 HOLD_AREA_KM = 60             # v0.41.10: packages whose targets are this close share their TARCAP / escort holds (the sweep area)
 HOLD_EXTEND_MAX_S = 1800      # ...extended at most this much past their own package
+TARCAP_AXIS_SWINGS = tuple(v for k in range(0, 13) for v in ((0,) if k == 0 else (15 * k, -15 * k)))   # v0.41.119: degrees the TARCAP station may swing off the threat axis when SAM rings block it, smallest first, up to 180 (judgment call: a Sukhumi SA-10 sat on the axis in the 2026-10-22 probes, so the station takes the clear point nearest the axis; the old station is kept when that is no nearer)
+
+
+def axis_station(centre, threat, jsow_xy, near_nm, min_jsow_nm, clear, cur=None):
+    """v0.41.119 (XO 2026-10-22: the TARCAP sat on the sea side, about 90 degrees off red's approach): the station `near_nm` from the middle of the shooters'
+    launch points (`centre`) on the bearing toward `threat` (where red's fighters come from), swung off that bearing by the smallest of
+    TARCAP_AXIS_SWINGS that is `clear(x, y)` of SAM rings and at least `min_jsow_nm` from the JSOW launch point. With `cur` (the station it would
+    replace) it returns None unless the new point is nearer the axis than `cur`. -> (x, y) or None."""
+    b0 = bearing(centre[0], centre[1], threat[0], threat[1])
+    cur_dev = abs((bearing(centre[0], centre[1], cur[0], cur[1]) - b0 + 180) % 360 - 180) if cur is not None else 999.0
+    for sw in TARCAP_AXIS_SWINGS:
+        if abs(sw) >= cur_dev:
+            return None
+        x, y = offset(centre[0], centre[1], b0 + sw, near_nm * NM)
+        if jsow_xy is not None and dist(x, y, jsow_xy[0], jsow_xy[1]) < min_jsow_nm * NM:
+            continue
+        if clear(x, y):
+            return (x, y)
+    return None
 
 
 class FighterStations:
@@ -85,6 +104,12 @@ class FighterStations:
             if lp_ is not None:
                 out.append((lp_.x, lp_.y))
         return out
+
+    def _red_approach(self, cx, cy):
+        """v0.41.119: where red's fighters most likely come from, seen from (cx, cy): the nearest of red's planned patrol stations and its live
+        fighter bases. None when there is neither."""
+        pts = [(c_["x"], c_["y"]) for c_ in (getattr(self, "_cap_plan", None) or [])] + list(tm.fighter_bases(self.state))
+        return min(pts, key=lambda q: dist(cx, cy, q[0], q[1])) if pts else None
 
     def _sam_clear(self, x, y) -> bool:
         """v0.41.14: a friendly orbit is clear of SAMs: 35 nm from every live SA-10 (the reach measured in the runs; the ring table says 48 nm, which

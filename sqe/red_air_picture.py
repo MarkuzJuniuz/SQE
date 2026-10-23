@@ -33,8 +33,7 @@ CALLIN_REACH_NM = 110         # a patrol answers a hotspot at most this far from
 CALLIN_MIN_NM = 10            # ...and it is not worth a call when the hotspot is this close already
 CALLIN_LUA_DELAY_S = 5         # v0.41.114: the call triggers wait this long, so the Lua that defines SQE_CALLIN (TimeAfter 1) has run
 CALLIN_ZONE_NM = 40           # v0.41.115: a called pair engages inside this circle round its hotspot (was 25: the SEAD shooters launched about 36 nm out and never came inside); still capped by the CAP engage limit (judgment call)
-CALLIN_FWD_NM = 12            # ...the hotspot is moved this far toward the blue shooters' launch point at most, and only while it stays under a live red SAM (judgment call)
-CALLIN_SHOOTER_NM = 30        # ...stopping this far from that launch point (about AMRAAM-class reach, judgment call)
+CONTEST_NM = 40               # v0.41.119 (XO 2026-10-22: red hums along while its SAMs are destroyed): a patrol guarding a SAM site is called in whatever the odds when blue's shooters (or the target) come this close to that site (judgment call: about the HARM launch distance, 36-40 nm in the runs)
 CALLIN_ARRIVE_BEFORE_S = 420  # the call waits so the pair reaches its hotspot this long before the package's time on target (the SEAD shooters launch about then; judgment call). XO 2026-10-22: the run called them at 42 s, they left at 600-1055 s, the HARMs flew at 1093 s
 CALLIN_AFTER_TOT_S = 300      # ...and stays this long after the time on target (the HARMs are still flying; judgment call)
 CALLIN_STAY_S = 480           # how long a called pair stays at the hotspot before it flies back (judgment call: 8 minutes)
@@ -202,19 +201,15 @@ class RedAirPicture:
         stay = int(dist(sx, sy, hx, hy) / max(spd / 3.6, 1.0)) + CALLIN_STAY_S       # v0.41.112: `spd` is km/h, the distance metres: the transit was a third of the real one (it left the hotspot early)
         self._hot_calls.append({"g": g.name, "hot": hot_idx, "back": hot_idx + 1, "stay": stay, "bf": bf_})
 
-    def _hotspot_fwd(self, st, hx, hy, package):
-        """v0.41.115: moves a red hotspot toward the nearest blue shooter launch point (at most CALLIN_FWD_NM, stopping CALLIN_SHOOTER_NM short of it)
-        while the new point is still under a live red SAM; else it stays. The launch points are the ones the TARCAP / escort use."""
-        lps = (getattr(self, "_launch_pts", None) or {}).get(package.id) or []
-        if not lps:
-            return hx, hy
-        lx, ly = min(lps, key=lambda q: dist(hx, hy, q[0], q[1]))
-        d = dist(hx, hy, lx, ly) / NM
-        step = min(CALLIN_FWD_NM, d - CALLIN_SHOOTER_NM)
-        if step <= 0:
-            return hx, hy
-        cand = offset(hx, hy, bearing(hx, hy, lx, ly), step * NM)
-        return cand if scramble.red_covered(st, *cand) else (hx, hy)
+    def _red_threat(self, package, geom, x, y):
+        """v0.41.119: the blue shooters' launch point nearest (x, y) (the points the TARCAP / escort use), else None."""
+        lps = (getattr(self, "_launch_pts", None) or {}).get(package.id) or self._launch_points(package, geom)
+        return min(lps, key=lambda q: dist(x, y, q[0], q[1])) if lps else None
+
+    def _contested(self, site_xy, tx, ty, package, geom) -> bool:
+        """v0.41.119: is the SAM site a red patrol guards within CONTEST_NM of blue's shooters' launch points or of the target?"""
+        lps = (getattr(self, "_launch_pts", None) or {}).get(package.id) or self._launch_points(package, geom)
+        return any(dist(site_xy[0], site_xy[1], q[0], q[1]) <= CONTEST_NM * NM for q in list(lps) + [(tx, ty)])
 
     @staticmethod
     def _callin_call(c) -> str:
@@ -293,7 +288,7 @@ class RedAirPicture:
         tga_ = st.assets.get(package.objective.target_id) if package.objective.target_id else None
         from .war import covering_sams
         own_ = (tm.cluster_ids(tga_) | {x_.id for x_ in covering_sams(st, tga_)}) if tga_ is not None else set()   # the sites blue comes for: defended at any odds
-        self._red_held = []
+        self._red_held, self._red_contest = [], []
         self._hot_calls, self._hot_flag = [], 0
         for i in range(n_fl):
             if i < n_cap:
@@ -335,7 +330,9 @@ class RedAirPicture:
                 callin_ = pf_.get("gx") is not None and pf_["kind"] == "CAP"
                 if callin_ and pf_.get("guard") not in own_:
                     mates_ = [q_["type"] for q_ in self._red_sel[:n_cap] if q_.get("guard") == pf_.get("guard") and q_["kind"] == "CAP"]
-                    if not redair.commits(d, [t_ for t_ in mates_ for _ in (0, 1)], blue_aa):
+                    if self._contested((pf_["gx"], pf_["gy"]), tx, ty, package, geom):
+                        self._red_contest.append(pf_["id"])                 # v0.41.119: blue's shooters are at its site: it fights whatever the odds
+                    elif not redair.commits(d, [t_ for t_ in mates_ for _ in (0, 1)], blue_aa):
                         callin_ = False                                     # outgunned and its site is not the target: it holds its station
                         self._red_held.append({"id": pf_["id"], "why": "callin"})
                 ap_home = self.t.airports.get(a.airport) if a.airport else None
@@ -344,8 +341,8 @@ class RedAirPicture:
                 # `callin_` is already false for one that guards a site which is not the target; a patrol with no site link is checked here)
                 hot_xy, zone_nm = None, max(A2A_ZONE_NM[tname in RED_LONG_RANGE], min(CALLIN_ZONE_NM, self.o.enemy_cap_engage_nm or 999))
                 if pf_["kind"] == "CAP" and (callin_ or (pf_.get("gx") is None and redair.commits(d, [tname] * 2, blue_aa))):
-                    (hx_, hy_), _why = scramble.red_station(st, (a.x, a.y), tx, ty)
-                    hx_, hy_ = self._hotspot_fwd(st, hx_, hy_, package)
+                    # v0.41.119: forward toward the shooters (the longer-range type works further beyond its SAM cover)
+                    (hx_, hy_), _why = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), tname in RED_LONG_RANGE)
                     if CALLIN_MIN_NM <= dist(sx, sy, hx_, hy_) / NM <= CALLIN_REACH_NM and not any(dist(hx_, hy_, kx, ky) < knm * NM for kx, ky, knm in self._fleet_keepout()):
                         hot_xy = (hx_, hy_)
                 if hot_xy is None and callin_:
@@ -391,7 +388,7 @@ class RedAirPicture:
                 self.m.triggerrules.triggers.append(trig)
                 ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
                 ct.stop_after_time(int(tot_s + ALERT_STAY_AFTER_TOT_S))                  # v0.41.111: was an hour (= never in the sortie)
-                (ix_, iy_), _why = scramble.red_station(st, (a.x, a.y), tx, ty)          # v0.41.91: a defensive station, not the target itself
+                (ix_, iy_), _why = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), tname in RED_LONG_RANGE)   # v0.41.91: a defensive station, not the target itself; v0.41.119: forward toward the shooters
                 g.add_waypoint(pt(ix_, iy_), alt, spd, "INTERCEPT").tasks.append(ct)
                 self._land_home(g, ap)
             names = []
