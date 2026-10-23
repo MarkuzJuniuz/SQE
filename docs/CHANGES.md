@@ -1,6 +1,12 @@
 # CHANGES.md
 
 
+## v0.41.121, a scramble you take brings along the packages that were hidden in your original
+
+XO (2026-10-23): taking an emergency scramble built the mission around the scramble: its merge circle and time window are centred on the raided field and the scramble's start, so the packages listed inside the package you were tasked with never got built.
+- `engine.fly`: when you take the scramble, the packages `merge_candidates` listed for your original package (same circle, same list as the Missions panel) are added to the scramble mission if their start is inside the usual window round the scramble's start (-`merge_back_min` / +30 min). The scramble's own finds come first; six packages at most; the usual unit cap trims the furthest. Your original package still goes to the war sim (the AI flies it; later flights are recomputed in the background). Members keep their own start times.
+- Smoke: `check_31wb_scramble_takes_hidden_packages`. Untested in DCS.
+
 ## v0.41.120, red alert pairs fight at their station and are called in time; the TARCAP circle reaches toward red
 
 XO (2026-10-23 run, Standoff DEAD, v0.41.119): no air-to-air again. Tracks: two alert pairs (Su-27 Sochi, MiG-29A Gudauta) were called at 1040 / 950 s and airborne at 1248 / 1286 s, 140 to 175 s after the TOT (1111 s); they orbited at 22,000 ft 24 nm from the F-14 TARCAP (Uzi 1, 26,000 ft) for about 12 minutes. No shots on either side.

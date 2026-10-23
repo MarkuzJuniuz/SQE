@@ -713,6 +713,7 @@ class Session:
         pkg = next(p for p in self.packages() if p.number == package_number)
         ev = self.emergency_for(package_number, flight_id)
         lead_extras = []
+        hidden_in = None                                                                      # v0.41.121: the package you were tasked with, when you take the scramble instead
         if ev:
             epkg = ev["package"]
             st.plan.append(epkg.to_dict())
@@ -724,6 +725,7 @@ class Session:
                 scramble = False                                                              # weather scrubs it: nothing flies
             if scramble and ev["eligible"]:
                 orig, pkg, flight_id = pkg, epkg, None
+                hidden_in = orig
                 self._postpone_if_short(orig, epkg)
                 st.note(f"EMERGENCY: you were scrambled to {ev['where']} ({ev['kind'].lower()}); package #{orig.number} is left to the other squadrons.")
             else:
@@ -757,6 +759,14 @@ class Session:
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
         extras = lead_extras + [x for x in self.merge_candidates(pkg) if all(x.number != y.number for y in lead_extras)]
+        if hidden_in is not None:
+            # v0.41.121 (XO 2026-10-23): the packages that were listed inside the package you were tasked with come along into the scramble mission, as long as their
+            # start is inside the usual window round the scramble's (-merge_back_min / +30 min). The mission's own circle and window found only what lay near the
+            # raided field. Your original package itself still goes to the war sim; at most six packages in all (the scramble's own finds first).
+            hm_ = lambda p_: int(p_.start[:2]) * 60 + int(p_.start[3:5])
+            back_ = max(0, int(getattr(self.settings, "merge_back_min", 15)))
+            have_ = {x.number for x in extras} | {pkg.number, hidden_in.number}
+            extras = (extras + [x for x in self.merge_candidates(hidden_in) if x.number not in have_ and -back_ <= hm_(x) - hm_(pkg) <= 30])[:6]
         ruins = self.ruin_candidates(pkg, extras)
         pre = self._preroll(list(extras) + ruins) if (ruins or extras) and getattr(self.settings, "ruins", True) else {}
         from . import limits
