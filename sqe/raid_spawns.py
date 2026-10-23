@@ -18,7 +18,7 @@ from . import callsigns, reactive, scramble
 from . import threatmap as tm
 from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
-from .loadouts import ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_strike_loadout
+from .loadouts import ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_dead_loadout, enemy_strike_loadout
 from .models import AssetKind, BaseKind, ObjectiveType, Role
 from .red_air_picture import A2A_ZONE_NM, CALLIN_LUA, CALLIN_LUA_DELAY_S, CALLIN_MIN_NM, CALLIN_REACH_NM, RED_LONG_RANGE
 from .support_caps import SUPPORT_CAP_ZONE_NM
@@ -41,6 +41,20 @@ ARM_LEAD_S = 150              # ...and the bombers reach the target this long af
 ARM_TARCAP_BEHIND_NM = 8      # v0.41.116: the SEAD package's TARCAP holds this far back along the way in from the Kh-31P launch point (blue's TARCAP_BEHIND_NM; judgment call)...
 ARM_TARCAP_LEAD_S = 120       # ...in on station this long before the missiles go (blue's TARCAP_LEAD_S)...
 ARM_TARCAP_STAY_S = 600       # ...and holds this long after (the missiles are flying; judgment call)
+DEAD_HOLD_NM = 48             # v0.41.117: the red DEAD flights hold this far out (8 nm outside the Patriot's 40 nm reach, raids.PATRIOT_NM) until the battery's radars are down (judgment call)
+DEAD_HOLD_LAG_S = 60          # ...they reach the hold this long after the Kh-31P launch...
+DEAD_GATE_WAIT_S = 1200       # ...and if the radars are not all dead this long after the launch (20 min, judgment call; blue's DEAD hold is 12 min, debrief.HOLD_S), they abort and go home
+DEAD_ATTACK_WINDOW_S = 600    # ...the attack task runs this long once they go in
+GOTO_LUA_DELAY_S = 5          # the abort trigger waits for the Lua that defines SQE_GOTO (TimeAfter 1), like the call-in
+GOTO_LUA = (
+    "function SQE_GOTO(n, from, to)\n"
+    "  local g = Group.getByName(n)\n"
+    "  if g and g:getSize() > 0 then\n"
+    "    pcall(function() g:getController():setCommand({id='SwitchWaypoint', params={fromWaypointIndex=from, goToWaypointIndex=to}}) end)\n"
+    "    env.info('SQEGOTO ' .. n .. ' aborted at ' .. math.floor(timer.getTime()))\n"
+    "  end\n"
+    "end\n"
+)
 ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
 
@@ -374,7 +388,7 @@ class RaidSpawns:
         ad = self.base_ad.get(cvb.id) or {}
         tg = ad.get("pat") or ad.get("hawk")
         if tg is None:
-            return
+            return None
         # v0.41.94: four jets against both batteries fly as two pairs, the first on the Patriot, the second on the HAWK; four against a lone (full) Patriot
         # fly as one group of four on it (8 Kh-31P)
         pairs = [(tg, int(ex["arm"]))]
@@ -429,8 +443,98 @@ class RaidSpawns:
             manifest.add("enemy_air", ex["bomber_wing"], names, ac="Su_24M")
         if ex.get("arm_cover") and ex.get("escort_type"):
             self._spawn_arm_cover(ex, path, pts, launch, V, t_arm, alt, skill, home_, manifest, dx, dy)
+        return {"pts": pts, "launch": launch, "t_arm": t_arm, "ad": ad}
 
-    def _spawn_arm_cover(self, ex, path, pts, launch, V, t_arm, alt, skill, home_, manifest, dx, dy) -> None:
+    def _spawn_raid_dead(self, ex, geo, path, V, alt, skill, home_, dx, dy, manifest) -> None:
+        """v0.41.117 (XO 2026-10-22: red's DEAD package, 4 + 4 Su-24M with their own escort and TARCAP, waiting for the gate): flights of KAB-500Kr (TV-guided
+        500 kg bomb, seeker 15 to 17 km: Wikipedia) fly the SEAD flights' way in to a GATE point DEAD_HOLD_NM from the field, outside the Patriot's reach, and
+        orbit there until the field's air-defence radars (Patriot str, HAWK tr) are all dead (a user flag the mission sets). Then they go in on the
+        Patriot / HAWK groups (AttackGroup, guided bombs). If the radars are not all dead DEAD_GATE_WAIT_S after the Kh-31P launch, a Lua SwitchWaypoint
+        (SQE_GOTO) sends them to their egress and home: no banzai. The first flight takes the Patriot, the second the HAWK (or the Patriot)."""
+        pt = lambda x, y: mapping.Point(x, y, self.t)
+        ad, pts, t_arm = geo["ad"], geo["pts"], geo["t_arm"]
+        n = int(ex["dead"])
+        tgts = [(ad.get("pat") or ad.get("hawk"), min(4, n))]
+        if n > 4:
+            tgts.append((ad.get("hawk") or ad.get("pat") or tgts[0][0], n - 4))
+        radars = [u for k_ in ("pat", "hawk") if ad.get(k_) is not None for u in ad[k_].units if u.type in ("Patriot str", "Hawk tr")]
+        if not radars:
+            return
+        self._flag_n += 1
+        gate_flag = self._flag_n
+        hold = offset(dx, dy, bearing(dx, dy, *pts[-1]), DEAD_HOLD_NM * NM)
+        pa = [q for q in pts if dist(*q, dx, dy) > DEAD_HOLD_NM * NM] + [hold]
+        Lp = sum(dist(*pa[i], *pa[i + 1]) for i in range(len(pa) - 1))
+        t_hold = t_arm + DEAD_HOLD_LAG_S
+        t_abort = t_arm + DEAD_GATE_WAIT_S
+        t_go = t_hold - Lp / V
+        if t_go >= 0:
+            (sx, sy), remaining = pa[0], pa[1:]
+            hold_until, act_ = t_go, max(0.0, t_go - RAID_HOLD_MAX_S)
+        else:
+            (sx, sy), seg_i = tm.point_back_along(pa, min(Lp, max(DEAD_HOLD_NM * NM * 0.5, V * t_hold)))
+            remaining, hold_until, act_ = pa[seg_i:], None, 0.0
+        if not remaining:
+            remaining = [pa[-1]]
+        load = enemy_dead_loadout("Su_24M")
+        if not load:
+            self.warns.append("Su-24M: no KAB-500Kr found; the red DEAD flights are unarmed.")
+        calls = []
+        for gi, (tg_, nj) in enumerate(tgts):
+            gname = f"Raid DEAD {gi + 1}"
+            g = self.m.flight_group(self.red, gname, planes.Su_24M, None, pt(sx, sy), altitude=alt - 900 - gi * 600, speed=450 * KPH, maintask=task.GroundAttack, group_size=nj)
+            if hold_until is not None:
+                ct_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
+                ct_.stop_after_time(int(hold_until)); g.points[0].tasks.append(ct_)
+                g.points[0].name = "MSHL"
+            for k, q in enumerate(remaining):
+                wp = g.add_waypoint(pt(*q), alt - gi * 600, 450 * KPH, "GATE" if k == len(remaining) - 1 else "ING")
+                if k == len(remaining) - 1:
+                    og_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
+                    og_.stop_if_user_flag(gate_flag, True); wp.tasks.append(og_)         # holds here until the radars are down
+            w_t = g.add_waypoint(pt(tg_.units[0].position.x, tg_.units[0].position.y), max(3000.0, alt * 0.5) - gi * 600, 450 * KPH, "DEAD")       # the TV bombs go in at about 10,000 ft
+            w_t.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
+            ca_ = task.ControlledTask(task.AttackGroup(tg_.id, weapon_type=task.WeaponType.GuidedBombs, group_attack=True))
+            ca_.stop_after_time(int(t_abort + DEAD_ATTACK_WINDOW_S)); w_t.tasks.append(ca_)
+            back_ = offset(dx, dy, bearing(dx, dy, *pts[-1]), 20 * NM)
+            g.add_waypoint(pt(*back_), alt, 450 * KPH, "EGR")
+            egr_idx = len(g.points)
+            for k, q in enumerate(home_):
+                g.add_waypoint(pt(*q), alt, 450 * KPH, "RTB" if k == len(home_) - 1 else "AVD")
+            g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
+            g.set_skill(skill)
+            if act_ >= 30:
+                self._late(g, act_)
+            names = []
+            for j, u in enumerate(g.units, 1):
+                u.name = f"RAID-D-{gi + 1}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+            manifest.add("enemy_air", ex["bomber_wing"], names, ac="Su_24M")
+            calls.append((gname, egr_idx))
+        # the gate: every radar dead opens it; not opened in time, the flights abort
+        tg_open = triggers.TriggerOnce(comment="red DEAD gate open")
+        for u in radars:
+            tg_open.add_condition(condition.UnitDead(u.id))
+        tg_open.add_action(action.SetFlag(gate_flag))
+        self.m.triggerrules.triggers.append(tg_open)
+        if not getattr(self, "_goto_lua", False):
+            t0 = triggers.TriggerOnce(comment="define SQE_GOTO")
+            t0.add_condition(condition.TimeAfter(1))
+            t0.add_action(action.DoScript(String(GOTO_LUA)))
+            self.m.triggerrules.triggers.append(t0)
+            self._goto_lua = True
+        ta = triggers.TriggerOnce(comment="red DEAD gate abort")
+        ta.add_condition(condition.TimeAfter(max(GOTO_LUA_DELAY_S, int(t_abort))))
+        ta.add_condition(condition.FlagIsFalse(gate_flag))
+        for gname, egr_idx in calls:
+            ta.add_action(action.DoScript(String(f"SQE_GOTO('{gname}',1,{egr_idx})")))
+        self.m.triggerrules.triggers.append(ta)
+        if ex.get("dead_cover") and ex.get("escort_type"):
+            tar_ = offset(dx, dy, bearing(dx, dy, *pts[-1]), (DEAD_HOLD_NM + ARM_TARCAP_BEHIND_NM) * NM)          # the TARCAP: back along the way in from the hold
+            self._spawn_arm_cover(ex, path, pts, hold, V, t_hold, alt, skill, home_, manifest, dx, dy, jobs=("Raid DEAD Escort", "Raid DEAD TARCAP"), pfx=("DE", "DT"),
+                                  on_s=t_hold - ARM_TARCAP_LEAD_S, off_s=t_abort + 300, sta_tarcap=tar_)
+
+    def _spawn_arm_cover(self, ex, path, pts, launch, V, t_arm, alt, skill, home_, manifest, dx, dy, jobs=("Raid SEAD Escort", "Raid SEAD TARCAP"),
+                         pfx=("SE", "ST"), on_s=None, off_s=None, sta_tarcap=None) -> None:
         """v0.41.116 (XO 2026-10-22: red's SEAD package is blue's shape: the HARM flights, a TARCAP and an escort): two fighters (the escort) hold a station
         on the Kh-31P launch point, two (the TARCAP) one ARM_TARCAP_BEHIND_NM back along the way in. Both fly the SEAD flights' route, are in on station
         ARM_TARCAP_LEAD_S before the missiles go, engage air inside their class's circle, and stay until ARM_TARCAP_STAY_S after (out of AAMs: home).
@@ -440,9 +544,9 @@ class RaidSpawns:
         load = enemy_cap_loadout(ex["escort_type"])
         zone_nm = A2A_ZONE_NM[ex["escort_type"] in RED_LONG_RANGE]
         from .mission_builder import AAM_WEAPONS            # lazy: the builder's module imports this one
-        bk = offset(*launch, bearing(*launch, *pts[-1]), ARM_TARCAP_BEHIND_NM * NM)           # the TARCAP station: back along the way in
-        t_on = max(0.0, t_arm - ARM_TARCAP_LEAD_S)
-        for job in ("Raid SEAD Escort", "Raid SEAD TARCAP"):
+        bk = sta_tarcap or offset(*launch, bearing(*launch, *pts[-1]), ARM_TARCAP_BEHIND_NM * NM)           # the TARCAP station: back along the way in
+        t_on = max(0.0, (t_arm - ARM_TARCAP_LEAD_S) if on_s is None else on_s)                  # v0.41.117: the DEAD package's cover passes its own times and stations
+        for job in jobs:
             pa = [q for q in pts] + [bk if job.endswith("TARCAP") else launch]
             if job.endswith("TARCAP"):
                 pa = [q for q in pts if dist(*q, dx, dy) > dist(*bk, dx, dy)] + [bk] or [bk]
@@ -467,7 +571,7 @@ class RaidSpawns:
                 if last:
                     wp.tasks.append(task.EngageTargetsInZone(mapping.Vector2(*q), int(zone_nm * NM), [task.Targets.All.Air]))
                     oc_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH)))
-                    oc_.stop_after_time(int(t_arm + ARM_TARCAP_STAY_S)); wp.tasks.append(oc_)
+                    oc_.stop_after_time(int(off_s if off_s is not None else t_arm + ARM_TARCAP_STAY_S)); wp.tasks.append(oc_)
             back_ = offset(*launch, bearing(*launch, *pts[-1]), 20 * NM)
             g.add_waypoint(pt(*back_), alt, 450 * KPH, "EGR")
             for k, q in enumerate(home_):
@@ -480,7 +584,7 @@ class RaidSpawns:
                 self._late(g, act_)
             names = []
             for j, u in enumerate(g.units, 1):
-                u.name = f"RAID-{'SE' if job.endswith('Escort') else 'ST'}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+                u.name = f"RAID-{pfx[0] if job.endswith('Escort') else pfx[1]}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", ex["escort_wing"], names, ac=ex["escort_type"])
 
     # ---- bomber raid on the fleet: already en route from the first second, along a real path from their base ----------------
@@ -591,7 +695,9 @@ class RaidSpawns:
             bomber_gs.append(g)
         self._spawn_raid_target(package, cvb, aim, dx, dy, manifest)
         if land and ex.get("arm") and not aim:
-            self._spawn_raid_arm(package, ex, cvb, path, V, t_tgt, alt, skill, home_, dx, dy, manifest)
+            geo_ = self._spawn_raid_arm(package, ex, cvb, path, V, t_tgt, alt, skill, home_, dx, dy, manifest)
+            if geo_ and ex.get("dead"):                       # v0.41.117: the DEAD package, gated on the battery's radars
+                self._spawn_raid_dead(ex, geo_, path, V, alt, skill, home_, dx, dy, manifest)
         if ex.get("escorts"):
             # v0.41.108: the escorts of a big raid split in two jobs. Half (at least 3 groups) fly a sweep RAID_SWEEP_LEAD_S ahead of the bombers on the same
             # route and fight what they meet; the rest escort the bomber groups (spread over them). A small raid keeps its single escort group.

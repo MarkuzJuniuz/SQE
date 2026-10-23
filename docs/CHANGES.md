@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.117, red's DEAD package: 4 + 4 Su-24M KAB-500Kr, gated on the battery's radars (step 2 of 2)
+
+XO (2026-10-22): after the SEAD package, a DEAD package of 4 + 4 with its own TARCAP and escort that waits for the gate to open.
+- PLAN (`PackageBuilder._land_raid_plan`): behind a SEAD group of 4+ jets, `extra["dead"]` = 8 (behind 8 SEAD jets, if the wing has 8 more Su-24M beyond the bombers and the SEAD group), else 4 (if it has 4), else 0; `dead_cover` = 4 fighters of the raid's escort type.
+- FLIGHTS (`RaidSpawns._spawn_raid_dead`): "Raid DEAD 1/2", Su-24M with KAB-500Kr (`loadouts.enemy_dead_loadout`: TV-guided 500 kg bomb, seeker 15 to 17 km; Wikipedia), flights of 4. They fly the SEAD flights' way in to a GATE point `DEAD_HOLD_NM` (48) from the field, 8 nm outside the Patriot's 40 nm reach, in `DEAD_HOLD_LAG_S` (60 s) after the Kh-31P launch, and orbit there. The first flight attacks the Patriot group, the second the HAWK group (or the Patriot again), `AttackGroup` with guided bombs.
+- THE GATE: a trigger sets a flag when every Patriot search-and-track radar (`Patriot str`) and HAWK tracking radar (`Hawk tr`) of the field is dead (`UnitDead`); the orbit at the gate ends on that flag and the flights go in. If the flag is not set `DEAD_GATE_WAIT_S` (20 min) after the Kh-31P launch, a second trigger runs the Lua `SQE_GOTO` (a `SwitchWaypoint`, the call-in's mechanism) and the flights go to their egress and home: no banzai. Both are judgment calls (the 20 minutes; blue's own DEAD hold is 12).
+- COVER: "Raid DEAD Escort" on the gate point and "Raid DEAD TARCAP" 8 nm back, on station 2 minutes before the flights, until 5 minutes after the abort time (the `_spawn_arm_cover` of v0.41.116, now with its own times and stations).
+- Not done: the bomber groups keep their own timing (they do not wait for the gate); the war sim does not model the DEAD package in unflown raids; red stand-off weapons (Kh-58, Kh-29/59, Su-25T, ship radars). Untested in DCS.
+
 ## v0.41.116, red's SEAD package: 4 + 4 Kh-31P jets with an escort and a TARCAP (step 1 of 2: the DEAD package and its gate come next)
 
 XO (2026-10-22): red's attack groups should follow blue's shape: SEAD 4 + SEAD 4 + TARCAP + Escort, then a DEAD package that waits for the gate.
