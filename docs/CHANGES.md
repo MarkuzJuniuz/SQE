@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.123, alert pairs: the clock call is no longer dropped, and they dash to the station
+
+XO (2026-10-23 runs, v0.41.122, Standoff DEAD): 0 air-to-air again. Tracks: red alert pairs came within 19 to 28 nm of the F-14 TARCAP and nobody fired (ROE is the DCS default on both sides; not the cause). The pairs were late: Sochi pairs called at 850 to 890 s (detection circle) and on station about 1530 s; Nalchik pairs (120 nm out) took off at 450 s and needed about 1,000 s at 400 kt, arriving after the JSOW release (1333 s).
+- `red_air_picture`: a clock call that fell below `ALERT_CLOCK_MIN_S` (60 s) was dropped, so a pair with an early TOT waited for the detection circle. It is now made at the floor time instead.
+- The alert pair's INTERCEPT leg is flown at `ALERT_DASH_KT` 500 (was 400), and the clock lead uses the same speed. Judgment call.
+- Smoke: `check_31zd` (existing asserts still hold). Untested in DCS.
+
 ## v0.41.122, state file: missiles left on the shooter
 
 XO (2026-10-23): "if there's anything you need to track easier you could add it on the state file". Logging only; no mission behaviour changes.
