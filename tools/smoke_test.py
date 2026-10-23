@@ -1166,6 +1166,24 @@ def check_28_standoff_dead_package_escort(c):
     from sqe.mission_builder import TARCAP_NEAR_NM as _TNN
     assert all(_jd(v_[0], v_[1], _mx, _my) / _JNM <= _TNN + 2.0 for v_ in _tc), "v0.41.118: the TARCAP moves in to about TARCAP_NEAR_NM from the middle of the shooters' launch points (it sat 22 to 34 nm out)"
     assert len(_lps) >= 2 and any(_jd(x_, y_, *_jp) < 100 for x_, y_ in _lps), "the cover circle knows the JSOW launch point before the flights are built"
+    # v0.41.119: the TARCAP sits on the threat side (nearer the bearing from the shooters' middle toward red's nearest patrol station / fighter base),
+    # or keeps its old station when the rings leave no such point; the contest rule reads the distance from a guarded site to the shooters or the target
+    import math as _mth
+    from sqe.routes import bearing as _jb
+    from sqe.fighter_stations import axis_station as _axs
+    _thr = _bs._red_approach(_mx, _my)
+    assert _thr is not None, "red has a patrol station or a fighter base to come from"
+    _b0 = _jb(_mx, _my, *_thr)
+    _dev = [abs((_jb(_mx, _my, v_[0], v_[1]) - _b0 + 180) % 360 - 180) for v_ in _tc]
+    assert all(d_ < 137 for d_ in _dev), ("v0.41.119: the TARCAP is no further than the old station was from the threat axis", _dev)
+    _o = _axs((0.0, 0.0), (100 * _JNM, 0.0), None, 16, 8, lambda x_, y_: True)
+    assert _o is not None and _jd(0.0, 0.0, *_o) / _JNM > 15.9 and abs(_o[1]) < 1, ("axis_station: due north is clear, no swing", _o)
+    _o = _axs((0.0, 0.0), (100 * _JNM, 0.0), None, 16, 8, lambda x_, y_: _jb(0.0, 0.0, x_, y_) % 360 > 20 and _jb(0.0, 0.0, x_, y_) % 360 < 180)
+    assert _o is not None and 20 < _jb(0.0, 0.0, *_o) % 360 <= 60, ("axis_station: swings off a blocked axis by the smallest clear step", _o)
+    assert _axs((0.0, 0.0), (100 * _JNM, 0.0), None, 16, 8, lambda x_, y_: False) is None, "axis_station: nothing clear = no move"
+    _lp0 = _lps[0]
+    assert _bs._contested((_lp0[0] + 10 * _JNM, _lp0[1]), _gm.tx, _gm.ty, _pk, _gm), "a site 10 nm from a launch point is contested"
+    assert not _bs._contested((_lp0[0] + 400 * _JNM, _lp0[1]), _gm.tx, _gm.ty, _pk, _gm), "a site 400 nm away is not"
     print("[shepherd] the escort holds 8 nm and the TARCAP 16+ nm behind the JSOW launch point; the TARCAP / escort circle takes in every shooter's launch point and is kept out only by an SA-10")
     print("[raids] announced and surprise raids by level, repeatable emergencies (about 9% a sortie, never two in a row), scramble / stay, CAS folded in, postponement, Su-24M raid built and applied, overnight surprises")
     # alert pairs have a dispatch range like the enemy's reinforcements
@@ -1731,6 +1749,19 @@ def check_31r_scramble_stations(c):
     far = (a0.x + 900 * _NM, a0.y + 900 * _NM)
     (x, y), why = sc.red_station(st, (far[0] + 100 * _NM, far[1]), far[0], far[1])
     assert why == "field" and _m.hypot(x - (far[0] + 100 * _NM), y - far[1]) <= sc.FIELD_HOLD_NM * _NM + 1, ("no cover: over its own field", why)
+    # v0.41.119: red's station reaches forward toward the shooters, under cover (a long-range type further), never closer than RED_GAP_NM, at most RED_FWD_MAX_NM
+    (bx_, by_), bwhy = sc.red_station(st, (a0.x + 200 * _NM, a0.y), a0.x, a0.y)
+    thr_ = (a0.x - 70 * _NM, a0.y)
+    for lr in (False, True):
+        (fx_, fy_), fwhy = sc.red_station_vs(st, (a0.x + 200 * _NM, a0.y), a0.x, a0.y, thr_, lr)
+        assert sc.red_covered(st, fx_, fy_, extra_nm=sc.RED_EXTRA_NM[lr]), ("the forward station is under cover", lr)
+        assert _m.hypot(fx_ - bx_, fy_ - by_) <= sc.RED_FWD_MAX_NM * _NM + 1, ("no further forward than RED_FWD_MAX_NM", lr)
+        assert _m.hypot(fx_ - thr_[0], fy_ - thr_[1]) >= sc.RED_GAP_NM * _NM - 1, ("stops RED_GAP_NM short of the shooters", lr)
+    (f0_, g0_), _ = sc.red_station_vs(st, (a0.x + 200 * _NM, a0.y), a0.x, a0.y, thr_, False)
+    (f1_, g1_), _ = sc.red_station_vs(st, (a0.x + 200 * _NM, a0.y), a0.x, a0.y, thr_, True)
+    assert _m.hypot(f1_ - thr_[0], g1_ - thr_[1]) <= _m.hypot(f0_ - thr_[0], g0_ - thr_[1]) + 1, "the long-range type reaches at least as far forward"
+    assert sc.red_station_vs(st, (a0.x + 200 * _NM, a0.y), a0.x, a0.y, None) == sc.red_station(st, (a0.x + 200 * _NM, a0.y), a0.x, a0.y), "no threat = the old station"
+    assert sc.red_station_vs(st, (far[0] + 100 * _NM, far[1]), far[0], far[1], (far[0] - 80 * _NM, far[1]))[1] == "field", "no cover: it stays over its field"
     # blue: never further than STICK_NM from the target, and clear of red's SAM rings when it moves
     from sqe.sweep import clear_for_sweep
     for b in [b_ for b_ in st.bases.values() if b_.kind.value == "AIRFIELD"][:3]:

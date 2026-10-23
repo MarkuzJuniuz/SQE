@@ -29,13 +29,13 @@ BLUE_COVER_PAT_AD = 0.65   # v0.41.114: a field at Patriot strength (sams.air_de
 BLUE_COVER_PAT_NM = 30.0   # ...covers this far, 10 nm inside the Patriot's 40 (raids.PATRIOT_NM): a station "well inside SAM support" (XO 2026-10-22; judgment call)
 
 
-def red_covered(state, x, y) -> bool:
-    """Is (x, y) inside the reach of a live red SAM of 3 nm or more (an SA-10 by its practical umbrella)?"""
+def red_covered(state, x, y, extra_nm: float = 0.0) -> bool:
+    """Is (x, y) inside the reach of a live red SAM of 3 nm or more (an SA-10 by its practical umbrella), plus `extra_nm` of room beyond it?"""
     for a in state.assets.values():
         if a.kind != AssetKind.SAM or a.destroyed or a.health <= 0.25 or getattr(a, "suppressed", False):
             continue
         reach = tm.UMBRELLA_KM / 1.852 if a.variant in tm.UMBRELLA_VARIANTS else tm.RANGE_NM.get(a.variant, 0)
-        if reach >= 3 and dist(x, y, a.x, a.y) <= reach * NM:
+        if reach >= 3 and dist(x, y, a.x, a.y) <= (reach + extra_nm) * NM:
             return True
     return False
 
@@ -80,6 +80,30 @@ def raid_origin(state, pkg, tx, ty):
 
 STATION_SA10_NM = 35.0      # judgment call (v0.41.114): a defender sits under its own cover, so it keeps less room from red's SA-10 than a sweep (45)
 STATION_RING_MARGIN_NM = 3.0  # judgment call: the sweep uses 20 nm outside the other rings; 3 keeps a CAP off a point-defence SAM's ring only
+
+
+RED_FWD_MAX_NM = 30.0     # v0.41.119 (XO 2026-10-22: red's pairs park over their base and watch the missiles blow up): a red station moves at most this far toward the incoming shooters (judgment call)
+RED_GAP_NM = 20.0         # ...and stops this far short of them (judgment call: about the reach of an R-27 / R-77 shot at a shooter that turned round)
+RED_EXTRA_NM = {True: 15.0, False: 0.0}   # ...a long-range type (the Su-27) may work this far beyond its SAM cover, the MiG-29A not at all (judgment call)
+
+
+def red_station_vs(state, field_xy, tx, ty, threat_xy, long_range: bool = False, fwd_nm: float = RED_FWD_MAX_NM, gap_nm: float = RED_GAP_NM):
+    """v0.41.119: `red_station`, then forward toward `threat_xy` (the blue shooters' launch point): the furthest point, `fwd_nm` at most and `gap_nm` short of the
+    threat, that is under red's SAM cover (plus RED_EXTRA_NM for a long-range type). With no cover (a station over the field) or no threat it is
+    `red_station`. -> ((x, y), why) with why 'fwd' when it moved."""
+    base, why = red_station(state, field_xy, tx, ty)
+    if threat_xy is None or why == "field":
+        return base, why
+    top = min(fwd_nm, dist(*base, *threat_xy) / NM - gap_nm)
+    if top < STEP_NM:
+        return base, why
+    extra = RED_EXTRA_NM[bool(long_range)]
+    b = bearing(*base, *threat_xy)
+    for i in range(int(top // STEP_NM), 0, -1):                 # furthest forward first
+        p = offset(base[0], base[1], b, i * STEP_NM * NM)
+        if red_covered(state, *p, extra_nm=extra):
+            return p, "fwd"
+    return base, why
 
 
 def clear_for_station(state, x, y) -> bool:
