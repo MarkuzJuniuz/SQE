@@ -360,8 +360,10 @@ class RedAirPicture:
                     zc_ = self.m.triggers.add_triggerzone(pt(pf_["gx"], pf_["gy"]), RED_CALLIN_NM * NM, True, f"callin {g.name}")
                     tc_ = triggers.TriggerOnce(comment=f"call in {g.name} to {pf_.get('guard')}")
                     tc_.add_condition(condition.PartOfCoalitionInZone("blue", zc_.id))
-                    tc_.add_condition(condition.TimeAfter(CALLIN_LUA_DELAY_S))
-                    tc_.add_action(action.DoScript(String(self._callin_call(self._hot_calls[-1]))))
+                    hc_ = dict(self._hot_calls[-1])                         # v0.41.118: this trigger waits for the strike too (XO 2026-10-22 run: it called the patrols at 5 and 42 s)
+                    hc_["stay"] = max(hc_["tr"] + 120, hc_["end"] - hc_["at"])
+                    tc_.add_condition(condition.TimeAfter(max(CALLIN_LUA_DELAY_S, hc_["at"])))
+                    tc_.add_action(action.DoScript(String(self._callin_call(hc_))))
                     self.m.triggerrules.triggers.append(tc_)
                     self._callins.append({"g": g.name, "site": pf_.get("guard")})
             else:                                           # alert: on the runway, scrambles when detected

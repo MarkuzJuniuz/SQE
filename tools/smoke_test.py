@@ -1162,6 +1162,9 @@ def check_28_standoff_dead_package_escort(c):
     _tc = [v_ for (r_, _i), v_ in _gm.stand.items() if r_ == _Rj.TARCAP]
     assert _tc and all(_jd(v_[0], v_[1], *_jp) / _JNM >= _TBN - 1.0 for v_ in _tc), "v0.41.43: the TARCAP holds at least TARCAP_BEHIND_NM behind the JSOW launch point"
     _lps = _bs._launch_pts[_pk.id]
+    _mx, _my = sum(q_[0] for q_ in _lps) / len(_lps), sum(q_[1] for q_ in _lps) / len(_lps)
+    from sqe.mission_builder import TARCAP_NEAR_NM as _TNN
+    assert all(_jd(v_[0], v_[1], _mx, _my) / _JNM <= _TNN + 2.0 for v_ in _tc), "v0.41.118: the TARCAP moves in to about TARCAP_NEAR_NM from the middle of the shooters' launch points (it sat 22 to 34 nm out)"
     assert len(_lps) >= 2 and any(_jd(x_, y_, *_jp) < 100 for x_, y_ in _lps), "the cover circle knows the JSOW launch point before the flights are built"
     print("[shepherd] the escort holds 8 nm and the TARCAP 16+ nm behind the JSOW launch point; the TARCAP / escort circle takes in every shooter's launch point and is kept out only by an SA-10")
     print("[raids] announced and surprise raids by level, repeatable emergencies (about 9% a sortie, never two in a row), scramble / stay, CAS folded in, postponement, Su-24M raid built and applied, overnight surprises")
@@ -2144,7 +2147,7 @@ def check_31zd_red_callin(c):
     _callin_triggers_wait(m, "red")
     # v0.41.115: the call waits for the strike (the pair reaches its hotspot shortly before the TOT), it is not made at once
     _calls_t = [min(r.get("seconds", 0) for r in t["rules"].values() if r.get("predicate") == "c_time_after")
-                for t in m["trigrules"].values() if t.get("comment") == "call in the patrols"]
+                for t in m["trigrules"].values() if str(t.get("comment", "")).startswith("call in")]     # v0.41.118: the site-guard triggers ("call in Bandit N to ...") too
     assert _calls_t and all(x > 30 for x in _calls_t), ("the red call-in must wait for the strike", _calls_t)
     for n, hot, back, stay, bf in calls:
         pts = grp[n]["route"]["points"]

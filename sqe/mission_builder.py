@@ -46,6 +46,7 @@ FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue come
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
 TARCAP_BEHIND_NM = 8          # v0.41.43 (16; v0.41.115: 8, XO 2026-10-22: it sat 56 nm from red's patrols, too far to snipe): with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
+TARCAP_NEAR_NM = 16          # v0.41.118: ...then it moves in toward the middle of the shooters' launch points until it is this far from it (judgment call: AIM-54 / AIM-120 reach covers the HARM point from there; still outside the SAM rings and TARCAP_BEHIND_NM from the JSOW point)
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
@@ -126,7 +127,7 @@ def stagger(package, role) -> int:
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import jsow_launch_xy, JSOW_KEEP_HIGH_NM, AVOID_NM, avoid_circles, HARM_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
+from .routes import jsow_launch_xy, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, AVOID_NM, avoid_circles, HARM_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
 from .state import CampaignState
 
 F = VehicleGroup.Formation
@@ -2203,6 +2204,18 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         if back_ >= TARCAP_BEHIND_NM + 14 or all(dist(ex_, ey_, a_.x, a_.y) > r_ for a_, r_ in sites_):
                             break
                         back_ += 1.0
+                    # v0.41.118 (XO 2026-10-22 run: a red Su-27 pair killed two Hornets at the HARM point 36 nm from the TARCAP and was not engaged for 150 s):
+                    # from there the TARCAP moves toward the middle of the shooters' launch points, 1 nm at a time, until it is TARCAP_NEAR_NM from it, never
+                    # closer than TARCAP_BEHIND_NM to the JSOW point and never into a SAM ring (the step back's rings, but an SA-10 at SA10_AVOID_NM (35 nm, the reach measured in
+                    # the runs) instead of its 48 nm table ring + 5, which held the TARCAP 53 nm from the SA-10 while the HARM point is 36 nm from it)
+                    lps_ = self._launch_pts.get(package.id) or self._launch_points(package, geom)       # the stations are planned before _launch_pts is filled in
+                    if lps_:
+                        mx_, my_ = sum(q_[0] for q_ in lps_) / len(lps_), sum(q_[1] for q_ in lps_) / len(lps_)
+                        while dist(ex_, ey_, mx_, my_) > TARCAP_NEAR_NM * NM:
+                            nx_, ny_ = offset(ex_, ey_, bearing(ex_, ey_, mx_, my_), 1.0 * NM)
+                            if dist(nx_, ny_, jx_, jy_) < TARCAP_BEHIND_NM * NM or not all(dist(nx_, ny_, a_.x, a_.y) > (SA10_AVOID_NM * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_):
+                                break
+                            ex_, ey_ = nx_, ny_
                 geom.stand[key] = (ex_, ey_, [], dist(ex_, ey_, tx, ty) / NM, False)
 
     RECOV_STALE_S = 1500       # v0.41.71: a homebound AI flight still out this long after its work is done is recovered where it is (XO's 2026-10-21 run: nine Navy jets
