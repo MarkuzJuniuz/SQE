@@ -37,6 +37,11 @@ CONTEST_NM = 40               # v0.41.119 (XO 2026-10-22: red hums along while i
 CALLIN_ARRIVE_BEFORE_S = 420  # the call waits so the pair reaches its hotspot this long before the package's time on target (the SEAD shooters launch about then; judgment call). XO 2026-10-22: the run called them at 42 s, they left at 600-1055 s, the HARMs flew at 1093 s
 CALLIN_AFTER_TOT_S = 300      # ...and stays this long after the time on target (the HARMs are still flying; judgment call)
 CALLIN_STAY_S = 480           # how long a called pair stays at the hotspot before it flies back (judgment call: 8 minutes)
+ALERT_ZONE_NM = 40               # v0.41.120: an alert pair engages inside this circle round its station (the call-in hotspot's size; judgment call)
+ALERT_ON_STATION_S = 420         # ...and is called by the clock so that it is on station this long before the TOT (as the call-in patrols, CALLIN_ARRIVE_BEFORE_S)
+ALERT_RAMP_LAG_S = 300           # ...allowing this from the call to the air for a hot-ramp pair (XO's runs: 200 to 340 s) and
+ALERT_CLOCK_MIN_S = 60          # ...and only when that call time is at least this far into the mission
+ALERT_RWY_LAG_S = 120            # ...this for a pair that waits for the runway (about 2 minutes)
 ALERT_STAY_AFTER_TOT_S = 1200   # a scrambled pair flies home this long after the time on target (was an hour, i.e. never in the sortie)
 CALLIN_LUA = (
     "SQE_CALLED = SQE_CALLED or {}; "
@@ -288,7 +293,7 @@ class RedAirPicture:
         tga_ = st.assets.get(package.objective.target_id) if package.objective.target_id else None
         from .war import covering_sams
         own_ = (tm.cluster_ids(tga_) | {x_.id for x_ in covering_sams(st, tga_)}) if tga_ is not None else set()   # the sites blue comes for: defended at any odds
-        self._red_held, self._red_contest = [], []
+        self._red_held, self._red_contest, self._alert_clock = [], [], []
         self._hot_calls, self._hot_flag = [], 0
         for i in range(n_fl):
             if i < n_cap:
@@ -372,6 +377,7 @@ class RedAirPicture:
                     g.add_trigger_action(task.StartCommand())
                     g.uncontrolled = True
                 trig = triggers.TriggerOnce(comment=f"scramble {g.name}")
+                clock_ = None                                  # v0.41.120: a second, timed trigger (below) for a field close enough to be useful
                 if package.flights and any(fl.role == Role.CAS for fl in package.flights):
                     # friendly ground troops sit on the target, so a zone there would fire at once: scramble on a clock instead
                     t_go = max(5, int(tot_s - 120 - 90 - dd / (430 * 0.514444)))
@@ -380,16 +386,39 @@ class RedAirPicture:
                     zx_, zy_, zr_ = self._field_zone(a, tx, ty)
                     zone = self.m.triggers.add_triggerzone(pt(zx_, zy_), zr_ * NM, True, f"detect {a.id}")
                     trig.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
+                    (ix0_, iy0_), _w0 = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), tname in RED_LONG_RANGE)
+                    far_nm_ = dist(a.x, a.y, ix0_, iy0_) / NM
+                    t_clk = tot_s - ALERT_ON_STATION_S - (ALERT_RAMP_LAG_S if how_ == "ramp" else ALERT_RWY_LAG_S) - far_nm_ * NM / max(spd / 3.6, 1.0)
+                    if far_nm_ <= CALLIN_REACH_NM and t_clk >= ALERT_CLOCK_MIN_S:      # a clock that would fire at the start would make it a patrol: the zone trigger only
+                        # v0.41.120 (XO 2026-10-23 run: both alert pairs were called 160 s before the TOT and airborne 140 to 175 s after it): the pair is also called
+                        # on a clock, early enough to be on station ALERT_ON_STATION_S before the TOT: ramp / runway delay + the flight to the station. Whichever
+                        # trigger fires first sets the done flag, the other then stays quiet.
+                        self._flag_n += 1; done_ = self._flag_n
+                        clock_ = (done_, int(t_clk))
+                        trig.add_condition(condition.FlagIsFalse(done_))
                 trig.add_action(action.SetFlag(self._alerts[-1]["f"]) if how_ == "rwy" else action.AITaskPush(g.id, 1))
                 if how_ == "ramp":
                     trig.add_action(action.SetFlag(self._alerts[-1]["f"]))
                 if self._hot_calls:
                     trig.add_action(action.SetFlag(self._hot_flag_get()))      # v0.41.111: the patrols are called with the scramblers
+                if clock_ is not None:
+                    trig.add_action(action.SetFlag(clock_[0]))
+                    tk_ = triggers.TriggerOnce(comment=f"scramble {g.name} on the clock")
+                    tk_.add_condition(condition.TimeAfter(clock_[1]))
+                    tk_.add_condition(condition.FlagIsFalse(clock_[0]))
+                    for act_ in trig.actions:
+                        tk_.add_action(act_)
+                    self.m.triggerrules.triggers.append(tk_)
+                    self._alert_clock.append({"g": g.name, "t": clock_[1]})
                 self.m.triggerrules.triggers.append(trig)
                 ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
                 ct.stop_after_time(int(tot_s + ALERT_STAY_AFTER_TOT_S))                  # v0.41.111: was an hour (= never in the sortie)
                 (ix_, iy_), _why = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), tname in RED_LONG_RANGE)   # v0.41.91: a defensive station, not the target itself; v0.41.119: forward toward the shooters
-                g.add_waypoint(pt(ix_, iy_), alt, spd, "INTERCEPT").tasks.append(ct)
+                wi_ = g.add_waypoint(pt(ix_, iy_), alt, spd, "INTERCEPT")
+                wi_.tasks.append(ct)
+                # v0.41.120 (XO 2026-10-23 run: two pairs orbited 24 nm from the F-14 TARCAP for 12 minutes and never fired): the station waypoint carried only the
+                # orbit, so the "engage air" order of the first point was gone. It now has its own engage circle round the station, like a patrol's.
+                wi_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(ix_, iy_), int(max(A2A_ZONE_NM[tname in RED_LONG_RANGE], min(ALERT_ZONE_NM, self.o.enemy_cap_engage_nm or 999)) * NM), [task.Targets.All.Air]))
                 self._land_home(g, ap)
             names = []
             for j, u in enumerate(g.units, 1):
