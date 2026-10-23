@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.132, no RCV point on the player's own carrier flight
+
+XO (2026-10-23): the v0.41.127 RCV point (30 nm from the boat, 10,000 ft) was added to every flight going home to the carrier, the player's too. It is now added to AI flights only (and to the player's flight when the AI flies it, the all-AI test), as the land-field recovery point already was. `mission_builder._home_leg`. Smoke: carrier-return section.
+
 ## v0.41.131, the unit limit counts the whole mission again; merge radius 15; "later packages" setting
 
 XO (2026-10-23): "put back the unit limit", radius 15, the +30 minutes adjustable in 5 minute steps, drop the latest-starting package first.

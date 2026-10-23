@@ -1863,7 +1863,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 g.land_at(self.apt[base.id])
             if special:
                 g.points[-1].name = "RTBXHB"
-        if base.kind != BaseKind.AIRFIELD and base.id in self.ship:
+        if base.kind != BaseKind.AIRFIELD and base.id in self.ship and (not f.is_player or o.player_is_ai):          # v0.41.132: the player's own flight keeps its route
             lp_ = g.points[-1].position
             if dist(base.x, base.y, lp_.x, lp_.y) > (CV_RCV_NM + 10) * NM:          # else it is already close: no extra point
                 cx_, cy_ = offset(base.x, base.y, bearing(base.x, base.y, lp_.x, lp_.y), CV_RCV_NM * NM)
