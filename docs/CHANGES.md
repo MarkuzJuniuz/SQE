@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.118, TARCAP in closer to the shooters; red site-guard call-in waits for the strike
+
+XO (2026-10-22 run, Standoff DEAD, Sukhumi SA-10): a red Su-27 pair (Bandit 3, called in) killed two Hornets (SEAD Hornet 1-1 and the JSOW Hornet 3-1) at the HARM point and was unopposed for about 150 s: its first P-27 shot at 1141 s, our first reply at 1289 s, the F-14 TARCAP (Uzi 3, 36 nm from the HARM point) never fired. XO's marks on the map put the TARCAP about 24 nm from the SEAD / DEAD jets.
+- TARCAP STATION (`mission_builder._plan_stations`, the TARCAP branch): after the step back it now moves toward the middle of the shooters' launch points, 1 nm at a time, until it is `TARCAP_NEAR_NM` (16) from it, never closer than `TARCAP_BEHIND_NM` (8) to the JSOW point and never into a SAM ring. The blocker was the SA-10: the step test holds fighters 53 nm from it (the 48 nm table ring plus the 5 nm margin) while the HARM point is 36 nm from it. For this move only, an SA-10 counts at `SA10_AVOID_NM` (35 nm, the reach measured in the runs; the friendly orbits use the same figure). The other rings keep their margins. In the test mission the TARCAP went from 13 nm behind the JSOW point and 22 to 34 nm from the shooters' centre to 8 nm and about 15.5 nm. 16 and the 35 are judgment calls.
+- RED CALL-IN: the site-guard triggers ("call in Bandit N to the SAM site it guards") were missed by v0.41.115: they still fired at 5 s and 42 s with the old stay (558 to 992 s), so the patrols left again before the strike. They now wait until the pair can reach the hotspot 7 minutes before the time on target and stay until 5 minutes after, like the other call.
+- Untested in DCS.
+
 ## v0.41.117, red's DEAD package: 4 + 4 Su-24M KAB-500Kr, gated on the battery's radars (step 2 of 2)
 
 XO (2026-10-22): after the SEAD package, a DEAD package of 4 + 4 with its own TARCAP and escort that waits for the gate to open.
