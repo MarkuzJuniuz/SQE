@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.126, red bombers wait outside the Patriot's reach until the radars are down
+
+XO (2026-10-23): red plans like blue; a raid with SEAD in front of it does not fly into the Patriot / HAWK until the SEAD (and DEAD) have taken the radars down. Hold the bombers at a gate, abort if the radars stay up.
+- One gate per SEAD raid (`raid_spawns._raid_gate_new`): a point `DEAD_HOLD_NM` (48) from the field on the way in, one mission flag set when every `Patriot str` / `Hawk tr` of the field is dead, and an abort time `DEAD_GATE_WAIT_S` (1200 s, judgment call) after the Kh-31P launch. The bomber groups, the raid's sweep and its escorts get a "GATE" waypoint there and orbit (`stop_if_user_flag`) until the flag is set, each 250 m above the one before (`GATE_ALT_STEP_M`); the sweep and escorts engage air in their class's circle meanwhile. A group that would appear inside the gate circle (a late raid) starts at the gate instead. The DEAD flights use the same gate (flag, trigger) as before. Raids on the fleet (Tu-22M3) and raids with no SEAD are unchanged.
+- The abort now sends every held group to the first leg home, past the EGR point. (v0.41.117's DEAD abort sent them to the EGR point, which sits 20 nm from the field: they would have flown toward the Patriot first. Fixed for them too.)
+- Debrief: the Lua (`SQE_GOTO`, new `SQE_GATE_OPEN`) records per group when the gate opened or the group was sent home (`SQE_RGATE`, written to the state file as `rgate`). `apply_debrief`: bombers sent home, or still held when the mission ended, report "turned back at the gate / still held outside the defences; no bombs fell" and the field takes no hit; a gate that opened late delays the arrival by the leg in (`raid_gate_s`).
+- Smoke: `check_31we_red_gate_debrief`; `check_31l_red_arm` also checks the shared flag and the abort for the bombers. Full smoke passed. Untested in DCS (the first thing to look at: do the held groups orbit at the GATE point and does the sweep still fight there; does the abort turn them home).
+
 ## v0.41.125, red raids: SEAD first, no dice
 
 XO (2026-10-23): "we minimize dice rolls now and stick to intelligent mission planning"; red should not attempt a target under SAM cover it cannot suppress. Red raids on fields had a 60 % (L3) / 20 % (L2) roll for the SEAD group, so many raids flew straight into the Patriot / HAWK (XO's Senaki raid: 4 of 4 bombers shot down, no SEAD).

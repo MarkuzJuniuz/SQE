@@ -1645,6 +1645,16 @@ def check_31l_red_arm(c):
             assert "red DEAD gate open" in _mzr and "red DEAD gate abort" in _mzr and "c_unit_dead" in _mzr and "c_flag_is_false" in _mzr, "the gate: radars dead opens it, else the abort trigger"
             assert "SQE_GOTO('Raid DEAD 1'" in _mzr and "function SQE_GOTO" in _mzr and "SwitchWaypoint" in _mzr, "the abort sends the flights to their egress"
             assert "RAID-B-1" in mz, "the bombers still fly"
+            # v0.41.126: the bombers (and the sweep / escorts) hold at the same gate and turn home with the DEAD flights if the radars stay up
+            for _gn in ("Raid Bomber 1", "Raid DEAD 1"):
+                assert f"SQE_GOTO('{_gn}'" in _mzr, f"the abort covers {_gn}"
+            assert "SQE_GATE_OPEN" in _mzr and "Raid Bomber 1" in _mzr.split("SQE_GATE_OPEN(")[1].split(")")[0], "the open trigger tells the Lua which groups were held"
+            assert _mzr.count('"GATE"') >= 3, "bombers and DEAD flights have a GATE waypoint"
+            import re as _re
+            _gf = _re.findall(r"c_flag_is_false\((\d+)\)", mz)
+            assert _gf, "the abort trigger reads the gate flag"
+            assert mz.count(f'["userFlag"]="{_gf[0]}"') >= 3, "the bomber group and the two DEAD flights all orbit at the gate until that flag is set"
+            assert _mzr.count("SQE_GOTO(") >= 3, "every held group has an abort"
             return
         raise AssertionError("no raid with a SEAD pair in four seeds")
     finally:
@@ -1954,6 +1964,33 @@ def check_31w_raid_scramble_merge(c):
         raise AssertionError("no raid scramble inside the merge circle in 40 days")
     finally:
         rd.emergency_happens = keep
+
+
+def check_31we_red_gate_debrief(c):
+    """v0.41.126: a red raid that held at the gate and turned back (or was still held when the mission ended) is 'stopped, no bombs fell'; one whose gate
+    opened at time T reaches the field no sooner than T plus the leg in; and the Lua hook writes the gate record."""
+    from sqe import debrief as db
+    s = fresh_session(3, 5); st = s.state
+    base = next(b_ for b_ in st.bases.values() if b_.kind.value == "AIRFIELD")
+    wing = st.enemy_air[0]
+    def run(rgate, t_now, gate_s=384.0):
+        man = db.Manifest(campaign_id=st.campaign_id, sortie=1, package_id="x", day=st.day, player_unit="P1")
+        man.add("enemy_air", wing.base_asset_id, ["RAID-B-1", "RAID-B-2"], ac="Su_24M", raid_base=base.id, raid_aim="", raid_label="Test field",
+                raid_arrive_s=1000.0, raid_group="Raid Bomber 1", raid_gate_s=gate_s)
+        data = {"campaign": st.campaign_id, "sortie": 1, "package": "x", "mission_ended": True, "time": t_now, "dead": [], "ejected": [], "landed": ["P1"],
+                "player": {"takeoff": 60, "landed": 3000, "ka": 0, "kg": 0, "ks": 0}, "kills": [], "rgate": rgate}
+        return " | ".join(db.apply_debrief(st, man, data)["lines"])
+    assert "turned back at the gate" in run({"Raid Bomber 1": {"open": None, "abort": 1900}}, 3000), "an aborted raid is stopped"
+    assert "still held outside" in run({}, 3000), "a raid never let in is stopped"
+    assert "still held outside" in run({}, 500), "...even when the player left early"
+    assert "attack aircraft got through" not in run({"Raid Bomber 1": {"open": 1800, "abort": None}}, 2000), "gate opened at 1800: it cannot arrive by 2000"
+    assert "attack aircraft got through" in run({"Raid Bomber 1": {"open": 1800, "abort": None}}, 2300), "...and does by 2300"
+    assert "attack aircraft got through" in run({"Raid Bomber 1": {"open": 600, "abort": None}}, 1100), "an early opening changes nothing: its own arrival time holds"
+    hook = db.lua_hook("c", 1, "p", [], "P1")
+    assert "rgateJson" in hook and '"rgate":%s' in hook, "the hook writes the gate record"
+    from sqe.raid_spawns import GOTO_LUA
+    assert "SQE_GATE_OPEN" in GOTO_LUA and "SQE_RGATE[n].abort" in GOTO_LUA
+    print("[red gate] aborted / held raids are stopped; an opened gate delays the arrival; the hook records it")
 
 
 def check_31wd_red_sead_first(c):
@@ -3931,6 +3968,7 @@ CHECKS = [
     check_31wb_scramble_takes_hidden_packages,
     check_31wc_scramble_folds_outside_circle,
     check_31wd_red_sead_first,
+    check_31we_red_gate_debrief,
     check_31x_forward_garrisons,
     check_31y_unit_cap_merged,
     check_31z_bomber_trump_card,

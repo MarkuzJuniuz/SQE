@@ -131,12 +131,21 @@ local function gatesJson()
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
+local function rgateJson()
+  local o = {}
+  if SQE_RGATE then
+    for n, e in pairs(SQE_RGATE) do
+      o[#o + 1] = string.format('"%s":{"open":%s,"abort":%s}', esc(n), num(e.open), num(e.abort))
+    end
+  end
+  return "{" .. table.concat(o, ",") .. "}"
+end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"tracks":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"tracks":%s,"rgate":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), tracksJson(), CFG, splashN, splashK))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), tracksJson(), rgateJson(), CFG, splashN, splashK))
   f:close()
 end
 local function nameOf(obj)
@@ -1267,7 +1276,15 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             wing = state.enemy_air_at(g["ref"])
             if len(alive) < len(g["units"]):
                 out["lines"].append(f"Raid: {len(g['units']) - len(alive)} of {len(g['units'])} attack aircraft shot down")
-            if alive and t_now >= g.get("raid_arrive_s", 0.0):
+            rg_ = (data.get("rgate") or {}).get(g.get("raid_group", ""), {}) if g.get("raid_gate_s") is not None else {}
+            arrive_ = g.get("raid_arrive_s", 0.0)
+            if rg_.get("open") is not None:                       # v0.41.126: held at the gate until the radars went down: it can arrive no sooner than that plus the leg in
+                arrive_ = max(arrive_, float(rg_["open"]) + float(g["raid_gate_s"]))
+            if alive and g.get("raid_gate_s") is not None and rg_.get("abort") is not None and rg_.get("open") is None:
+                out["lines"].append(f"Raid on {where}: the radars were still up, so the attack aircraft turned back at the gate; no bombs fell")
+            elif alive and g.get("raid_gate_s") is not None and rg_.get("open") is None:
+                out["lines"].append(f"Raid on {where}: the attack aircraft were still held outside the defences; no bombs fell")
+            elif alive and t_now >= arrive_:
                 from . import raids as _rd
                 import random as _rnd
                 out["lines"].append(f"Raid on {where}: {len(alive)} attack aircraft got through")
