@@ -1,5 +1,681 @@
 # CHANGES.md
 
+
+## v0.41.132, no RCV point on the player's own carrier flight
+
+XO (2026-10-23): the v0.41.127 RCV point (30 nm from the boat, 10,000 ft) was added to every flight going home to the carrier, the player's too. It is now added to AI flights only (and to the player's flight when the AI flies it, the all-AI test), as the land-field recovery point already was. `mission_builder._home_leg`. Smoke: carrier-return section.
+
+## v0.41.131, the unit limit counts the whole mission again; merge radius 15; "later packages" setting
+
+XO (2026-10-23): "put back the unit limit", radius 15, the +30 minutes adjustable in 5 minute steps, drop the latest-starting package first.
+- `merge_max_units` (250) counts the WHOLE mission, merged packages included (v0.41.104 had exempted them). The 500 ceiling in `sqe/data/limits.json` stays in the code but is dormant (250 is lower).
+- Over the limit (`Session.fly`): returning (ruin) flights go first; then `Session._drop_one`: the package that starts latest, a tie by the one further from the centre; a Fighter Sweep or a folded raid scramble (FLEET_DEFENSE) last; the mission is rebuilt each time. Wrecks are trimmed by the builder as before (furthest first), now against the whole count. Your own flight is never dropped; a base mission already over the limit just stays over it.
+- Default merge radius 15 nm (was 25; a settings file still on 25 moves to 15 once).
+- New setting `merge_fwd_min` ("Later packages", default 30, 0 to 60, 5 minute steps) replaces the fixed 30 in `merge_candidates` and the emergency scramble's hidden-package window; "Earlier packages" also steps by 5.
+- Smoke: `check_31n` rewritten (drop order, tiny limit, later window, defaults). Untested in DCS.
+
+## v0.41.130, Overview: ground-war text moved left, blue SAM rings, damage-aware rings
+
+XO (2026-10-23): give the map its space back and let the rings show what is changing.
+- The ground-war sector lines, BARCAP cover lines and bomber lines moved from above the map to a "GROUND WAR AND PATROLS" card under the conflict text on the left.
+- Map: blue Patriot (40 nm) and HAWK (25 nm) rings from `state.blue_sams` in blue (same ranges as the red raid planning, `raids.PATRIOT_NM` / `HAWK_NM`); one checkbox, "SAM rings (red / blue)". A damaged site's ring is fainter (health, floor 25 %); a destroyed site has no ring. Ring sizes are still fixed per site type. A "moved" marker is not built: the state does not keep a site's earlier position.
+- GUI only. Smoke: UI sections only.
+
+## v0.41.129, red SEAD covers every battery that covers the target
+
+XO (2026-10-23): close the gap left by v0.41.128 (the neighbour's Patriot still shot the bombers after the gate opened). In Georgia the fields are about 20 nm apart: Kutaisi is covered by Senaki's and Kobuleti's batteries too.
+- `raids.covering_fields` (every field whose live Patriot, 40 nm, or HAWK, 25 nm, covers a point, nearest first) and `raids.sead_groups`: one SEAD group per covering field. Each gets a pair (4 Kh-31P to blind its radars; judgment call); the wing's spare jets (`available` less the bombers) top the nearest fields up to their `arm_jets` size, nearest first, at most `ARM_MAX_TOTAL` 12 jets in all (judgment call). A wing that cannot spare a pair for each field does not raid that target. `arm_cap` (L2: a pair) now caps one group; the L2 lift at `arm_cap_free` 8 spare jets is as before. `sead_plan`, `pick_aim`, `pick_target`, `overnight` and `packages._land_raid_plan` use it; the package carries `arm_fields` ([[field id, jets]]).
+- `raid_spawns._spawn_raid_arm`: a group (or two flights of four for an eight) per covering field, firing from `ARM_LAUNCH_NM` from that field, 600 m apart, names `Raid SEAD n`. The escort / TARCAP cover and the DEAD flights stay with the raided field. A package without `arm_fields` (an older save) sends all its jets at the raided field.
+- The gate (`_raid_gate_new`) now opens when the radars of every covering field are dead.
+- 40-day sims, 2 seeds, announced raid packages: L1 0, L2 11, L3 9 (the SEAD force is 12 jets at L3). Red raids a clustered field only when it has the jets for all of it; L2 needs 8 spare, L3 six beyond the bombers.
+- Smoke: `check_31wg_sead_every_covering_battery`; `check_31wd_red_sead_first` rewritten for the per-field sizing. Full smoke passed. Untested in DCS.
+
+## v0.41.128, the raid gate sits clear of the neighbouring fields' SAMs too
+
+XO's run (v0.41.126): the gate worked (abort at 1294 s, DEAD flights and the escort turned home), but the bombers were shot at the gate. The raid was on Kutaisi; the gate, 48 nm from Kutaisi, lay 28 nm from Senaki's Patriot, which killed RAID-B-3 at 90 s and RAID-D-2-1 at 354 s. In this theatre the fields are 20 nm apart, so a gate measured from the raided field alone is inside a neighbour's reach.
+- `_raid_gate_new`: the gate moves out along the way in (4 nm steps, from 48 nm, at most `DEAD_HOLD_MAX_NM` 110) until it is `DEAD_GATE_CLEAR_NM` (8) outside the reach of every live Patriot (40) and HAWK (25) of any field. The gate distance is `gate["nm"]` for the bombers, sweep, escorts, DEAD flights, their TARCAP and the debrief's arrival delay.
+- Not changed, to look at next: the gate still opens on the raided field's radars only, and the SEAD / DEAD flights only hit that field. A neighbour's battery that covers the last 20 nm in still shoots at the bombers after the gate opens. Every field here has a neighbour in reach, so planning the SEAD against all covering batteries (or refusing the raid) is the real fix; not done in this light PR.
+- Smoke: `check_31l_red_arm` checks the gate is clear of every battery. Full smoke passed. Untested in DCS.
+
+## v0.41.127, carrier flights keep their height until 30 nm from the boat
+
+XO's F-14 flight (Uzi 3) flew the last 65 nm home at 2,000 ft over the sea: its home waypoint (the boat, 600 m) is the next point after the target, and DCS descends to the next point's height at once. Hornets and Tomcats on every carrier return did the same.
+- `mission_builder._home_leg`: a flight going home to a carrier gets an RCV point `CV_RCV_NM` (30, judgment call) from the boat on its way in, at `CV_RCV_FT` (10,000 ft, judgment call), then the Land point as before. Skipped when the last route point is already within 40 nm. Airfield recoveries are unchanged.
+- Smoke: `check_31wf_carrier_return_height`. Full smoke passed. Untested in DCS.
+
+## v0.41.126, red bombers wait outside the Patriot's reach until the radars are down
+
+XO (2026-10-23): red plans like blue; a raid with SEAD in front of it does not fly into the Patriot / HAWK until the SEAD (and DEAD) have taken the radars down. Hold the bombers at a gate, abort if the radars stay up.
+- One gate per SEAD raid (`raid_spawns._raid_gate_new`): a point `DEAD_HOLD_NM` (48) from the field on the way in, one mission flag set when every `Patriot str` / `Hawk tr` of the field is dead, and an abort time `DEAD_GATE_WAIT_S` (1200 s, judgment call) after the Kh-31P launch. The bomber groups, the raid's sweep and its escorts get a "GATE" waypoint there and orbit (`stop_if_user_flag`) until the flag is set, each 250 m above the one before (`GATE_ALT_STEP_M`); the sweep and escorts engage air in their class's circle meanwhile. A group that would appear inside the gate circle (a late raid) starts at the gate instead. The DEAD flights use the same gate (flag, trigger) as before. Raids on the fleet (Tu-22M3) and raids with no SEAD are unchanged.
+- The abort now sends every held group to the first leg home, past the EGR point. (v0.41.117's DEAD abort sent them to the EGR point, which sits 20 nm from the field: they would have flown toward the Patriot first. Fixed for them too.)
+- Debrief: the Lua (`SQE_GOTO`, new `SQE_GATE_OPEN`) records per group when the gate opened or the group was sent home (`SQE_RGATE`, written to the state file as `rgate`). `apply_debrief`: bombers sent home, or still held when the mission ended, report "turned back at the gate / still held outside the defences; no bombs fell" and the field takes no hit; a gate that opened late delays the arrival by the leg in (`raid_gate_s`).
+- Smoke: `check_31we_red_gate_debrief`; `check_31l_red_arm` also checks the shared flag and the abort for the bombers. Full smoke passed. Untested in DCS (the first thing to look at: do the held groups orbit at the GATE point and does the sweep still fight there; does the abort turn them home).
+
+## v0.41.125, red raids: SEAD first, no dice
+
+XO (2026-10-23): "we minimize dice rolls now and stick to intelligent mission planning"; red should not attempt a target under SAM cover it cannot suppress. Red raids on fields had a 60 % (L3) / 20 % (L2) roll for the SEAD group, so many raids flew straight into the Patriot / HAWK (XO's Senaki raid: 4 of 4 bombers shot down, no SEAD).
+- `raids.sead_plan` / `cover_field` / `reach_for`: a target within `PATRIOT_NM` (40) of a live Patriot or `HAWK_NM` (25) of a live HAWK is raided only by a Su-24M wing that can field the SEAD group (`arm_jets`, sized by the field's batteries as before). Covered supply sites, garrisons and sectors are not tried (no SEAD is built for them); Su-25 raids do not go in under cover. Uncovered targets need none.
+- No roll: `Difficulty.raid_arm` is now on / off (L1 0, L2 and L3 1.0). `pick_aim` and `pick_target` (announced, surprise and scramble raids) drop what red cannot support; `_land_raid_plan` returns no raid for a covered target it has no SEAD for.
+- L2 (`arm_cap` 2, `arm_cap_free` 8, judgment calls): the SEAD group is a pair (a DEAD pair behind it) unless the wing has 8 jets spare beyond the bombers, then the full sizing. L3: as v0.41.116 / .117. L1: never raids a covered target (docile).
+- 40-day sims, 2 seeds, raids in the log (before -> after): L1 2 -> 0, L2 23 -> 11, L3 38 -> 25 (announced + surprise). Red raids less often and with SEAD.
+- Smoke: `check_31wd_red_sead_first`; two older checks adjusted (the raid-kinds build check bypasses the cover rule). Full smoke passed. Untested in DCS. Not in this PR: holding the bombers until the radars are down (the next step).
+
+## v0.41.124, a scramble you do not take is folded in wherever it is
+
+XO (2026-10-23): the mirror of v0.41.121. The mission is built around the package you picked (its circle and window); every unit of the scramble that started in its window comes along, rooted on that package's time.
+- `engine.fly`: the CAS / raid emergency is folded into your mission without the merge-circle test (`_inside_merge`). Not when your own tasking is a fleet defence / raid. Unit cap and six-package limit unchanged (the cap trims the furthest units first).
+- Smoke: `check_31wc_scramble_folds_outside_circle`; two older checks adjusted (the unit-cap count pins emergencies off, the red call-in check picks a mission with a red call-in: a folded scramble can carry blue call-ins only). Full smoke passed. Untested in DCS.
+
+## v0.41.123, alert pairs: the clock call is no longer dropped, and they dash to the station
+
+XO (2026-10-23 runs, v0.41.122, Standoff DEAD): 0 air-to-air again. Tracks: red alert pairs came within 19 to 28 nm of the F-14 TARCAP and nobody fired (ROE is the DCS default on both sides; not the cause). The pairs were late: Sochi pairs called at 850 to 890 s (detection circle) and on station about 1530 s; Nalchik pairs (120 nm out) took off at 450 s and needed about 1,000 s at 400 kt, arriving after the JSOW release (1333 s).
+- `red_air_picture`: a clock call that fell below `ALERT_CLOCK_MIN_S` (60 s) was dropped, so a pair with an early TOT waited for the detection circle. It is now made at the floor time instead.
+- The alert pair's INTERCEPT leg is flown at `ALERT_DASH_KT` 500 (was 400), and the clock lead uses the same speed. Judgment call.
+- Smoke: `check_31zd` (existing asserts still hold). Untested in DCS.
+
+## v0.41.122, state file: missiles left on the shooter
+
+XO (2026-10-23): "if there's anything you need to track easier you could add it on the state file". Logging only; no mission behaviour changes.
+- `debrief` (Lua): every `shot` record gets `left`, the air-to-air missiles the shooter still carries (`getAmmo`, missile category, summed; inside `pcall`). Read it as about one high: DCS may count the missile just fired. Shows when a pair goes winchester. `km`, `alt`, `tg`, `tx`, `tz` were already logged for shots; "hit" records have no range.
+- Smoke: Lua syntax check (lupa) and a string check in the hook section. Untested in DCS.
+
+## v0.41.121, a scramble you take brings along the packages that were hidden in your original
+
+XO (2026-10-23): taking an emergency scramble built the mission around the scramble: its merge circle and time window are centred on the raided field and the scramble's start, so the packages listed inside the package you were tasked with never got built.
+- `engine.fly`: when you take the scramble, the packages `merge_candidates` listed for your original package (same circle, same list as the Missions panel) are added to the scramble mission if their start is inside the usual window round the scramble's start (-`merge_back_min` / +30 min). The scramble's own finds come first; six packages at most; the usual unit cap trims the furthest. Your original package still goes to the war sim (the AI flies it; later flights are recomputed in the background). Members keep their own start times.
+- Smoke: `check_31wb_scramble_takes_hidden_packages`. Untested in DCS.
+
+## v0.41.120, red alert pairs fight at their station and are called in time; the TARCAP circle reaches toward red
+
+XO (2026-10-23 run, Standoff DEAD, v0.41.119): no air-to-air again. Tracks: two alert pairs (Su-27 Sochi, MiG-29A Gudauta) were called at 1040 / 950 s and airborne at 1248 / 1286 s, 140 to 175 s after the TOT (1111 s); they orbited at 22,000 ft 24 nm from the F-14 TARCAP (Uzi 1, 26,000 ft) for about 12 minutes. No shots on either side.
+- ENGAGE CIRCLE (`red_air_picture`): the alert pair's `INTERCEPT` waypoint carried only the orbit, so the "engage air" order of its first point was gone after that waypoint (DCS replaces the order list per waypoint; this reading is from the mission file, not confirmed in DCS). It now carries an `EngageTargetsInZone` round the station, `ALERT_ZONE_NM` 40 (the call-in hotspot's size, capped by the CAP engage limit). Probably the reason for "red's pairs watch the missiles blow up" since v0.41.91.
+- CALLED BY THE CLOCK TOO: a pair whose station is within `CALLIN_REACH_NM` (110) of its field is also called at `TOT - ALERT_ON_STATION_S (420) - lag - flight to the station`, lag `ALERT_RAMP_LAG_S` 300 (hot ramp; XO's runs 200 to 340 s) or `ALERT_RWY_LAG_S` 120. The detection-circle trigger stays; whichever fires first sets a "done" flag and the other stays quiet (`FlagIsFalse`). A clock call earlier than `ALERT_CLOCK_MIN_S` (60 s) is not made (it would turn the pair into a patrol). Far fields keep the zone trigger only. All numbers judgment calls.
+- BLUE TARCAP CIRCLE (`mission_builder`): the circle round the shooters' launch points now also tries to take in a point `TARCAP_FWD_NM` (20) past the station toward red's nearest patrol station or fighter base, last in the list and never bigger than `TARCAP_COVER_MAX_NM` (35). The old circle (about 15 nm) ended 24 nm short of red's station.
+- Smoke: `check_31zd` (station engage circle, clock trigger time and done flag).
+- Untested in DCS. Open: no red patrols were planned for that window (14:50, L3): cause not found without the campaign save.
+
+## v0.41.119, contest: TARCAP on the threat axis, red guards fight for their sites, red's stations reach forward
+
+XO (2026-10-22 runs, Standoff DEAD Sukhumi): blue always gets lucky, red hums along while its SAMs are destroyed; the F-14 TARCAP sat on the sea side about 90 degrees off the way red comes; red's short-range pairs park over their base and watch the missiles blow up underneath, and some arrive after the time on target.
+- TARCAP AXIS (`fighter_stations.axis_station`, used in `mission_builder`'s TARCAP branch after the v0.41.118 pull-in): the station is `TARCAP_NEAR_NM` (16) from the middle of the shooters' launch points on the bearing toward red's nearest planned patrol station or live fighter base (`_red_approach`), swung off that bearing by the smallest step (15 degrees, up to 180) that is outside the SAM rings (SA-10 at 35 nm, as in v0.41.118) and at least `TARCAP_BEHIND_NM` (8) from the JSOW point. The old station stays when no clear point is nearer the axis. In the probe missions the Sukhumi SA-10 sits right on the axis, so the F-14 TARCAP moved from 159 degrees off to the flank (about 75 degrees off); with an SA-10 all round (seed 3, seed 8) nothing nearer is clear and the station is unchanged. 16 nm, the 15 degree step and "nearest clear point" are judgment calls.
+- CONTEST RULE (`RedAirPicture._contested`, `CONTEST_NM` 40): a red CAP patrol that guards a SAM site (it has a site link) is called in whatever the odds when the site is within 40 nm of blue's shooters' launch points or of the target. Before, a patrol that was outgunned and not guarding the target's own cluster stayed on its station (`_red_held` "callin"). Patrols with no site link keep the old outgunned rule. 40 nm is a judgment call (about the HARM launch distance, 36 to 40 nm in the runs). Recorded in `_red_contest`.
+- RED FORWARD STATIONS (`scramble.red_station_vs`): the call-in hotspot and the alert pair's INTERCEPT station start from `red_station` as before, then move toward the nearest blue shooter launch point, at most `RED_FWD_MAX_NM` (30), stopping `RED_GAP_NM` (20) short of it, to the furthest point still under a live red SAM. A long-range type (the Su-27) may work `RED_EXTRA_NM` (15 nm) beyond its SAM cover; the MiG-29A not at all. With no cover (a station over the field) or no shooter point nothing changes. Replaces v0.41.115's `_hotspot_fwd` (12 nm, stop 30 nm short). All four numbers are judgment calls. The raid alert pairs in `raid_spawns` (red raids on blue) are unchanged.
+- NOT done: the alert pairs from the far east fields still launch late (their scramble is the detection circle of their own field); gating red's bombers on the DEAD gate.
+- Smoke: `red_station_vs` (under cover, at most 30 nm forward, 20 nm gap, long-range at least as far, no threat = old station, no cover = field), `axis_station` (clear, blocked, none), `_contested`, the TARCAP no further off the axis than before.
+- Untested in DCS.
+
+## v0.41.118, TARCAP in closer to the shooters; red site-guard call-in waits for the strike
+
+XO (2026-10-22 run, Standoff DEAD, Sukhumi SA-10): a red Su-27 pair (Bandit 3, called in) killed two Hornets (SEAD Hornet 1-1 and the JSOW Hornet 3-1) at the HARM point and was unopposed for about 150 s: its first P-27 shot at 1141 s, our first reply at 1289 s, the F-14 TARCAP (Uzi 3, 36 nm from the HARM point) never fired. XO's marks on the map put the TARCAP about 24 nm from the SEAD / DEAD jets.
+- TARCAP STATION (`mission_builder._plan_stations`, the TARCAP branch): after the step back it now moves toward the middle of the shooters' launch points, 1 nm at a time, until it is `TARCAP_NEAR_NM` (16) from it, never closer than `TARCAP_BEHIND_NM` (8) to the JSOW point and never into a SAM ring. The blocker was the SA-10: the step test holds fighters 53 nm from it (the 48 nm table ring plus the 5 nm margin) while the HARM point is 36 nm from it. For this move only, an SA-10 counts at `SA10_AVOID_NM` (35 nm, the reach measured in the runs; the friendly orbits use the same figure). The other rings keep their margins. In the test mission the TARCAP went from 13 nm behind the JSOW point and 22 to 34 nm from the shooters' centre to 8 nm and about 15.5 nm. 16 and the 35 are judgment calls.
+- RED CALL-IN: the site-guard triggers ("call in Bandit N to the SAM site it guards") were missed by v0.41.115: they still fired at 5 s and 42 s with the old stay (558 to 992 s), so the patrols left again before the strike. They now wait until the pair can reach the hotspot 7 minutes before the time on target and stay until 5 minutes after, like the other call.
+- Untested in DCS.
+
+## v0.41.117, red's DEAD package: 4 + 4 Su-24M KAB-500Kr, gated on the battery's radars (step 2 of 2)
+
+XO (2026-10-22): after the SEAD package, a DEAD package of 4 + 4 with its own TARCAP and escort that waits for the gate to open.
+- PLAN (`PackageBuilder._land_raid_plan`): behind a SEAD group of 4+ jets, `extra["dead"]` = 8 (behind 8 SEAD jets, if the wing has 8 more Su-24M beyond the bombers and the SEAD group), else 4 (if it has 4), else 0; `dead_cover` = 4 fighters of the raid's escort type.
+- FLIGHTS (`RaidSpawns._spawn_raid_dead`): "Raid DEAD 1/2", Su-24M with KAB-500Kr (`loadouts.enemy_dead_loadout`: TV-guided 500 kg bomb, seeker 15 to 17 km; Wikipedia), flights of 4. They fly the SEAD flights' way in to a GATE point `DEAD_HOLD_NM` (48) from the field, 8 nm outside the Patriot's 40 nm reach, in `DEAD_HOLD_LAG_S` (60 s) after the Kh-31P launch, and orbit there. The first flight attacks the Patriot group, the second the HAWK group (or the Patriot again), `AttackGroup` with guided bombs.
+- THE GATE: a trigger sets a flag when every Patriot search-and-track radar (`Patriot str`) and HAWK tracking radar (`Hawk tr`) of the field is dead (`UnitDead`); the orbit at the gate ends on that flag and the flights go in. If the flag is not set `DEAD_GATE_WAIT_S` (20 min) after the Kh-31P launch, a second trigger runs the Lua `SQE_GOTO` (a `SwitchWaypoint`, the call-in's mechanism) and the flights go to their egress and home: no banzai. Both are judgment calls (the 20 minutes; blue's own DEAD hold is 12).
+- COVER: "Raid DEAD Escort" on the gate point and "Raid DEAD TARCAP" 8 nm back, on station 2 minutes before the flights, until 5 minutes after the abort time (the `_spawn_arm_cover` of v0.41.116, now with its own times and stations).
+- Not done: the bomber groups keep their own timing (they do not wait for the gate); the war sim does not model the DEAD package in unflown raids; red stand-off weapons (Kh-58, Kh-29/59, Su-25T, ship radars). Untested in DCS.
+
+## v0.41.116, red's SEAD package: 4 + 4 Kh-31P jets with an escort and a TARCAP (step 1 of 2: the DEAD package and its gate come next)
+
+XO (2026-10-22): red's attack groups should follow blue's shape: SEAD 4 + SEAD 4 + TARCAP + Escort, then a DEAD package that waits for the gate.
+- SIZE (`raids.arm_jets`): a full-strength Patriot AND a HAWK live: 8 Su-24M, two four-jet flights (16 Kh-31P); the first on the Patriot, the second on the HAWK. Before: at most 4. A short wing steps down 8, 4, 2, none. The sizing for a lone battery is unchanged (2, or 4 against both / a full Patriot). The background (unflown) raids meet `ARM_AD_FACTOR_8` (0.2) of the battery cover for an 8-jet group (judgment call).
+- COVER (`RaidSpawns._spawn_arm_cover`): a SEAD group of four or more brings its own fighters (`arm_cover`, 4 jets of the raid's escort type): a pair on the Kh-31P launch point ("Raid SEAD Escort") and a pair `ARM_TARCAP_BEHIND_NM` (8) back along the way in ("Raid SEAD TARCAP"). Both are on station `ARM_TARCAP_LEAD_S` (120 s) before the missiles go, engage air inside their class's circle, stay `ARM_TARCAP_STAY_S` (600 s) after, and go home when out of air-to-air missiles. The numbers are blue's TARCAP numbers (v0.41.115); judgment calls.
+- Not done (next PR): red's DEAD package (4 + 4 bombers with its own TARCAP and escort) that waits for the gate (the radar suppressed). Red stand-off weapons are a later PR. Untested in DCS.
+
+## v0.41.115, red patrols called in at the right time and place; fighters in first and closer
+
+XO (2026-10-22 run, no air-to-air at all): red's three patrols were called at 42 s and flew home at 600-1055 s, before the HARMs flew (1093 s). Their circle (25 nm) did not reach the SEAD shooters 36 nm away. The blue TARCAPs sat 56 nm from red's patrols, the escort 32 nm.
+- RED CALL TIMING: the call waits so the pair reaches its hotspot `CALLIN_ARRIVE_BEFORE_S` (7 min) before the package's time on target, and stays until `CALLIN_AFTER_TOT_S` (5 min) after it. The detection / alert flag still has to be set too (both must hold).
+- RED HOTSPOT: moved up to `CALLIN_FWD_NM` (12 nm) toward the nearest blue shooter launch point, stopping `CALLIN_SHOOTER_NM` (30 nm) short of it, and only while it is still under a live red SAM. Its engage circle is `CALLIN_ZONE_NM` (40 nm, was 25), capped by the CAP engage limit.
+- BLUE: `TARCAP_BEHIND_NM` 16 to 8 (the TARCAP holds closer behind the JSOW launch point; still SAM-clear). `TARCAP_LEAD_S` 0 to 120: the TARCAP is on station 2 minutes ahead of the strikers (sweeps and escorts already led by 90 s). A 5-minute lead let the SA-10 kill six Eagles in v0.41.0, so 2 minutes.
+- All numbers are judgment calls. The red fighter stations (TARCAP-equivalents) do not change. Untested in DCS. Smoke check_31zd asserts the call waits.
+
+## v0.41.114, blue defensive missions: stations up the raid's way in, a base CAP for the intercept, and a fix to the call-in script error
+
+XO (Kobuleti run, 2026-10-22): the CAPs sat on top of the bases and nothing was there to call in. Also his mission-load error `attempt to call global 'SQE_CALLIN' (a nil value)`.
+- FIX: the call-in triggers (red, red SAM guard, blue) fired at mission time 0 when the target side was already inside the zone, before the trigger that defines `SQE_CALLIN` had run. All three now wait `CALLIN_LUA_DELAY_S` (5 s). Smoke checks 31zd / 31ze assert it.
+- STATIONS: the raid scramble's package CAP (CAP1/CAP2, for an airfield target) now sits on `scramble.blue_station` (forward on the raid's line, under our air defence) instead of on the line from the player's base. Alert pairs use the same point.
+- COVER: a point counts as covered also when a full-strength Patriot (0.65 air defence) is within `BLUE_COVER_PAT_NM` (30 nm); before, only the 25 nm HAWK-class reach counted.
+- CLEARANCE: blue stations use `scramble.clear_for_station` (SA-10 35 nm, other rings +3 nm) instead of the sweep's rule (45 nm, +20 nm), which rejected even the target field and sent the pair 10 nm BEHIND it.
+- ATTACH: an airfield raid-intercept package (FLEET_DEFENSE on a field) now gets the field's BASECAP, and a raid scramble made by the emergency path (`_make_emergency`) gets its guards too, if a patrol is planned in that window.
+- Judgment calls: 30 nm / 0.65, 35 nm, 3 nm (all mine, no source). Untested in DCS.
+
+## v0.41.113, BARCAP stations pushed forward
+
+XO (2026-10-22 runs): the base CAPs sat too safe, so no air-to-air happened between the bases. The orbit centre moves out toward the threat so the two sides can snipe at long range while the defender is still inside its own SAM cover.
+- `STATION_BASE_NM` 12 to 25 (the HAWK ring edge, well inside the Patriot's 40), `STATION_FLEET_NM` 13 to 35 (inside the ships' 70 nm SM-2 ring), `STATION_MAX_NM` (the do-not-exceed distance when a red SAM ring pushes a station out) 30 to 50. Both sides' patrols use the same areas.
+- The engage circle of a blue base / carrier CAP is round what it guards, so a forward station sat at or past its edge: it now reaches `CAP_REACH_BEYOND_NM` (25) past the station, but never beyond the fixed 50 nm CAP engage limit in the mission options (the carrier CAP reaches 15 nm past its station).
+- All three numbers and the 25 are judgment calls, from the game's SAM rings (HAWK 25, Patriot 40, SM-2 70) and AMRAAM-class reach (25 to 40 nm). Untested in DCS.
+
+## v0.41.112, blue BASECAPs called in with the alert pairs (step 2 of 2, blue side) and a fix to red's stay time
+
+XO: the same call-in for blue, in the missions where the alert pairs are called.
+- BLUE CALL-IN (`RaidSpawns._blue_callins`): in a defensive mission (a raid scramble folded into yours, or a package that defends the fleet) every blue base CAP and carrier CAP (relief and standby pairs too) that can answer gets the same extended route as red's: after its home leg, HOTSPOT, BACK, the racetrack leg and a second way home (landing, recovery point or the deck). The hotspot is the station a blue alert pair takes (`scramble.blue_station`: forward of the target, under our own air defence, clear of red's SAM rings). One trigger on red entering the 120 nm circle round the target (the alert pairs' own trigger) runs the same `SQE_CALLIN` Lua. Base CAPs answer from 10 to 110 nm, the carrier CAP from 10 to 60 nm so the boat is not left bare (`BLUE_CALLIN_CV_NM`, judgment call). The tanker and AWACS guards stay with their asset. A relief that is not yet airborne when the call goes out is not called.
+- FIX (red, from #172): the time a called pair stays was worked out with the speed in km/h against a distance in metres, so the flight to the hotspot counted a third of its real length and the pair would have left again early. Fixed for both sides.
+- Blue alert pairs already fly home on a clock (the time on target plus the sortie time); no change there.
+- Judgment calls: the 60 nm limit for the carrier CAP; all other numbers are red's (`CALLIN_REACH_NM` 110, `CALLIN_MIN_NM` 10, `CALLIN_STAY_S` 480). Not done: a call-in in blue's offensive missions (the base CAPs stay home there), a second pair per area. Untested in DCS. Smoke check_31ze.
+
+## v0.41.111, red BASECAPs called in with the scramblers (step 2 of 2, red side)
+
+XO: red's lone 2-ship waited for the strike while the rest of the wing sat on the ramp. The patrols should be called to the hotspot when the scramblers are called, and fly back to their station afterwards. Blue follows in the next part.
+- CALL-IN: a red CAP patrol that can answer (hotspot 10 to 110 nm from its station, clear of every carrier's reach, red not outgunned) now has a hotspot leg on its route, placed AFTER its landing point: HOTSPOT (orbit, engages inside its own circle), BACK (orbit on the station to the end of the shift), the racetrack leg and a second landing. The hotspot is the station an alert pair of its own field would take (`scramble.red_station`: over a covering SAM, else the covered point nearest the target, else over the field).
+- THE CALL: every alert trigger also sets a flag; one trigger fires when it is set (or, with no alert pair in the mission, when blue enters the detection circle of the nearest red field) and runs `SQE_CALLIN` for each armed patrol. It sends the pair to the hotspot with a Lua `SwitchWaypoint`, and `CALLIN_STAY_S` (8 minutes) plus the flight time later sends it back to the BACK waypoint. A pair already sent home by the hook (lost a jet, winchester, bingo) is left alone. The SAM-guard call-in of v0.41.10 now uses the same leg (the old pushed engage task never came back: probe runs of 2026-10-22).
+- Scrambled alert pairs now fly home `ALERT_STAY_AFTER_TOT_S` (20 minutes) after the time on target instead of an hour.
+- What the probe runs showed (tools/callin_probe.py, PRs #168 to #171): a flag-released orbit works but a pair whose shift ends would fly it too; a pushed `EngageTargetsInZone` wanders and does not return; `GoToWaypoint` is not supported by DCS ("No state creator"); `SwitchWaypoint` works, at once with from = 1 and only after the current leg with from = the current waypoint. All of it from one run each: judgment calls until XO has flown it.
+- Judgment calls: `CALLIN_REACH_NM` 110 (the existing "in the area" radius), `CALLIN_MIN_NM` 10, `CALLIN_STAY_S` 480. Not done: blue's patrols (next part), the fight-over return (it is time-based), a second pair per area.
+
+## Tools only (no version bump): call-in probe, fourth version
+
+XO's third run: a control pair that is never called holds a 20 nm racetrack; a flag-released route (V3) flew to the hotspot, orbited and came home; pushed engage tasks (today's red SAM-guard call-in) did not come back. Problem with the flag route: a pair whose shift ends, or that bugs out, would also fly the hotspot leg. `tools/callin_probe.py` now tests jumping to the hotspot leg only when called: a Lua `SwitchWaypoint` command (V4), the same with a wrong `from` index (V6), and a pushed `GoToWaypoint` task (V5), against the never-called control. Speeds are now km/h like pydcs wants (the old probe flew at 220 km/h).
+
+## Tools only (no version bump): call-in probe, third version
+
+XO's second run: all four pairs, even the control, chased the visible bait tanker on their own, so the call-in could not be told apart. The bait is now AI-invisible. What the run did show: a CAP pair goes about 40 nm out for a visible air target by itself, and the survivors turn back to their station afterwards.
+
+## Tools only (no version bump): call-in probe, second version
+
+XO's first run showed the pairs leaving their stations before the call-in (my probe spawned them exactly on the station point). `tools/callin_probe.py` now spawns each pair 8 nm short of its station like the real patrols, adds a control pair V0 that is never called in, and logs the heading. The first run's hint: V3 (flag-released orbit, hotspot waypoint, waypoint back) did return; the pushed tasks were inconclusive.
+
+## Tools only (no version bump): call-in probe
+
+XO: BASECAPs should be called to the hotspot when the scramblers launch, then go back to station. Step 2a is a test of the DCS mechanics, not the feature.
+- New `tools/callin_probe.py`: one AI-only test mission with three red Su-27 pairs on station, each with an immortal blue tanker on a hotspot 40 nm away. At t = 60 s they are called in three ways: V1 a pushed `EngageTargetsInZone` with a 240 s stop, V2 the same pushed task without a stop (what the red SAM-guard call-in does today), V3 a route with a flag-released orbit, a hotspot waypoint, and a waypoint back. Each pair logs its distance to station and hotspot every 20 s as `SQEPROBE2` lines in dcs.log.
+- No campaign code touched, no smoke test, no version bump. Whether DCS sends the pairs back is unverified until XO flies it.
+
+## v0.41.110, red patrols first (step 1 of 2)
+
+XO: in the 8-day runs red scrambles outnumbered the basecaps, a lone 2-ship waited for the strike and the rest of the wing sat on the ramp, which made SEAD / DEAD too easy. The wide scramble net is working as intended.
+- PATROLS FIRST: `reactive.plan_red` now holds one pair per BARCAP area a wing flies today out of the reinforcement draw. A scramble can no longer take the airframes the day's patrols need. Blue already worked this way (`blue_barcap.plan` is paid before the packages).
+- MORE PATROL SORTIES: the red share of a wing's day (`redair.DOCTRINE` frac) goes L2 0.30 -> 0.40 and L3 0.40 -> 0.55 (L1 unchanged). Judgment calls, to be tuned from XO's runs. 5-day sims (4 seeds): L2 about 140 -> 195 patrol pairs, 19 -> 27 pair-hours a day; L3 about 335 -> 465, 70 -> 95.
+- Not done yet (step 2, high effort): BASECAPs called in to the hotspot when the scramblers launch and sent back to station afterwards, both sides. A second pair per area at L3 is also left out.
+
+## Tools only (no version bump): AWACS tuning probe
+
+XO: AWACS tactical messages should only show when the player is tuned to the AWACS. Step one is a test, not a feature.
+- New `tools/awacs_probe.py`: builds one tiny Caucasus test mission per jet (F-16C, F/A-18C, F-14B, A-10C, F-15C), one Player slot at Kutaisi plus an E-3A on 251.0 AM. Mission Editor "cockpit parameter" triggers try about 36 guessed parameter names in three units (MHz, kHz, Hz); each fires once as an on-screen message and a `SQEPROBE` line in dcs.log. Also a looping radio transmission with a subtitle on 251.0 AM to see whether the text shows only to a tuned pilot.
+- No campaign code touched, so no smoke test and no version bump. The probe is a guess list: the real parameter names per jet are unverified until XO flies it.
+
+## v0.41.109, the quiet day, the carrier CAP on the setpiece, and the big hit (part 3 of 3)
+
+XO: red goes "mysteriously quiet" before the raid; the setpiece should have its base CAP, AWACS and tanker guards; not flown at L3 it is "a super duper big deal".
+- QUIET DAY: red now STAGES the carrier raid (`bombers.decide` -> `stage`, `QUIET_DAYS` = 1). The day it decides, red flies patrols only: no announced raids, no surprise raids, no emergencies, and the Overview says "Red air is unusually quiet today". The raid launches the next day if it still has its escorts. Judgment call: one quiet day (XO said a day or two).
+- L2: the raid is exactly 4 bombers and 8 escorts (never more).
+- The carrier raid setpiece gets the carrier CAP and the AWACS / tanker guards that are planned up in its window (`blue_barcap.attach` used to skip every fleet package).
+- BIG HIT (new `sqe/carrier_hit.py`): a raid nobody flew that gets through, at Level 3, is the big one with chance 0.8: each carrier squadron loses 15 to 35 % of its serviceable aircraft on deck, the group's air defence drops 25 points, no launches the next day and half the sorties the day after (packages and patrols). Level 2 keeps the old small loss; a flown raid keeps counting what really reached the boat. All numbers are judgment calls.
+- 100-day L3 sims (8 seeds): 0 to 5 carrier raids a run, blue air strength 0.80 to 1.0 at the end, two victories (days 95 and 99); L2 unchanged (one raid before victory about day 30).
+- DESIGN_NOTES section 12 describes the whole setpiece.
+- Smoke: new `check_31zc_raid_quiet_and_hit`; `check_31zb` runs without the quiet day.
+
+
+## v0.41.108, the carrier raid in the mission: big raids are several groups (part 2 of 3)
+
+XO: the raid is a setpiece with "lotsa planes up and more booms"; pydcs makes one group of at most 4, so a 12-bomber raid used to show as 4.
+- A raid of more than 4 bombers (or escorts) is now several groups of nearly equal size (12 = 4+4+4, 6 = 3+3). The bomber groups follow the same route one minute apart (`RAID_GROUP_GAP_S`, judgment call); their TOT and the debrief's "got through" check follow each group. Unit names run on (RAID-B-1 to RAID-B-12), so the debrief and the hook see every aircraft. The old "shown with at most 4 aircraft" warning is gone.
+- Escorts: with 3 or more escort groups, half fly a Fighter Sweep on the same route `RAID_SWEEP_LEAD_S` (90 s, judgment call) ahead of the bombers and fight what they meet; the rest escort the bomber groups, spread over them (Escort task tied to that group). A small raid keeps its single escort group.
+- Land raids (Su-24M, Su-25) use the same code and are unchanged when small.
+- Unit limit: the raid is part of the base mission, never trimmed; wrecks and optional flights are trimmed first (existing rules). Nothing is merged into the setpiece.
+- Not changed (open): where the Backfires fire. They still fly to the carrier with the Kh-22 attack task; a launch point outside the escort ships' SM-2 ring needs a doctrine lookup (Kh-22 reach vs SM-2) before it is moved.
+- Smoke: `check_31zb_raid_setpiece` now builds the mission and checks every bomber and escort is in it, the group split and the sweep.
+
+
+## v0.41.107, the carrier raid is a flyable setpiece (part 1 of 3: package, list and right pane)
+
+XO: "a tasking like any other except it's not hidden like scrambles ... a setpiece, no merged packages ... on the right it will contain all of the flights participating ... A-10: greyed out, in-universe text, press Skip".
+- The red bomber raid on the carrier (FLEET_DEFENSE aimed at the carrier) is no longer AI-only. `packages.carrier_raid` / `ai_only`: BARCAP and land-raid intercepts stay AI-only. The package carries `extra["setpiece"]`.
+- Its flights: CAP flights of 4 from every fighter squadron in radius, nearest first (the boat's squadrons, then land fighters), about one blue fighter per raider (3 flights per 4 bombers, `SETPIECE_RATIO`, judgment call) plus an optional 2-ship sweep. Tasks read in universe ("Intercept: kill the Backfires before they reach launch range...").
+- Built FIRST in the day's plan (numbers unchanged) so the carrier squadrons are not used up, and your squadron always gets a flight in it when it can reach the raid. Nothing merges into it or out of it.
+- Missions page: the right pane lists every flight; the ones you cannot fly are greyed out ("On alert (AI)"); in-universe text above (raid size, bearing); for an A-10 (or any squadron out of reach) a second paragraph says several fighter groups are on alert and Skip Turn settles it. No threat lines for the setpiece.
+- Not yet: the mission side (groups over 4, route, escorts out front) = part 2; the quiet day, big-deal consequences and L2 sizing = part 3. Until part 2 the raid in the mission still shows at most 4 bombers per group.
+- Smoke: new `check_31zb_raid_setpiece` (planned, F-14 can fly, A-10 cannot, no merging, the mission builds).
+
+
+## v0.41.106, Mozdok's own escort squadron (bomber trump card, step 2)
+
+XO: "Mozdok fighters for now" / a dedicated escort squadron that sits "down the queue for taskings".
+- Red's Mozdok wing now holds a second squadron: Su-27s flagged `role="escort"` (L1 none, L2 8, L3 16; `Difficulty.bomber_escort_wing`, a judgment call: 2 escorts per bomber for the biggest L2 raid, 8 bombers' worth at L3; no source for the size). A new campaign gets it; old saves keep working without it.
+- What it does: escorts the carrier raid (`bombers.escort_options` counts it and picks it FIRST when it can cover a 4-ship raid, the other fields are the fallback), flies Mozdok's own patrols and scrambles like any fighter squadron on its field. What it does NOT do: red reinforcements never take it (`general_types_up`), land-raid escorts skip it, it never stands down overnight (the wing is exempt, as before).
+- The bomber count now reads only the Tu-22M3s (`available_of`), so the escort jets are never counted as bombers.
+- 100-day L3 sims (8 seeds): 0 to 7 carrier raids a run, bombers stay at 10, the escort squadron ends at 13 to 16 of 16. L2: one raid before victory around day 30.
+- Not done: the Mozdok SAM question (second SA-10 or not; fighters first, XO's call) and the mission-side raid.
+- Smoke: new `check_31za_mozdok_escorts`.
+
+
+## v0.41.105, red's bombers are a trump card (step 1: background sim)
+
+XO: "No 2 ships raids, ever. Those bombers are expensive" / "2 escorts per bomber" / "Mozdok under attack ... a good weight, not the main factor".
+- New `sqe/bombers.py`: one `decide` for the day. Red launches the Tu-22M3 carrier raid only (a) in a window it judges safe (estimated chance the raid is stopped under `bomber_safe_p`: L3 0.12, L2 0.06, L1 never), cooldown 8 days, or (b) when desperate (air/command losing, Mozdok under attack weighted 0.5, front in its last stage), cooldown 5 days, everything it can escort.
+- Never fewer than 4 bombers (max 12), 2 escorts per bomber; if red cannot field the escorts it holds. Wired into the planner (war.py) and the raid plan (packages.py).
+- 100-day background sims at L3 (8 seeds): 0 to 5 carrier raids per run (before: 25 to 37). L2: 1 to 2 raids before blue wins around day 30. Frequency is a judgment call; doctrine caveats are in the bombers.py docstring (Soviet doctrine massed raids and accepted heavy losses; "only when safe" is XO's design).
+- Not done: the Mozdok escort squadron (step 2) and the mission-side boss fight.
+- Smoke: new `check_31z_bomber_trump_card`.
+
+
+## v0.41.104, the unit limit counts only the base mission; merged packages are bounded by the radius and a fixed ceiling
+
+XO: "for package merging only the radius along with additional units that were merged is used ... the unit cap of default 250 would only be used for setpiece missions" / "the ceiling in the json instead of a user adjustable value" / "the smoother version first".
+- Settings > Mission Build "units max" (default 250) now counts the BASE mission only (your package, its support, its sites, the reliefs, standby and alert pairs, reinforcements). The units that merged packages bring (their flights, their own sites, ruins) do not count against it and are never dropped for it. Wrecks and the optional flights above are still trimmed to the base limit, furthest wrecks first.
+- The only bound on the whole mission is a ceiling in the new `sqe/data/limits.json` (`unit_ceiling`, 500, a judgment call; edit the file, not a setting). Over the ceiling the existing trim order applies: ruins first, then merged packages, last one first. Full-map mode stays unlimited.
+- New `sqe/limits.py` (reads the JSON once), `MissionBuilder._units_room`, `_merged_units` tracked in `_add_merged`; the old per-site checks (wrecks, reliefs, standby, reinforcements, alert pairs) use it. The trim message now says "ceiling".
+- Not measured: how this plays in VR with several merged packages (XO reports mostly two packages in the air at once at 25 nm). If it stutters, lower the merge radius or the ceiling.
+- Smoke: new `check_31y_unit_cap_merged`.
+
+
+## v0.41.103, the ground war on the Forces page
+
+XO: "forward garrisons ... along with the GUI changes."
+- Forces > new tab "Ground war": one row per sector with the enemy and friendly force as bars and the forward garrison each side holds there (a dash where that side holds nothing in the sector). The garrisons were already in the Enemy assets list as "Garrison".
+- Builds on v0.41.102 (forward garrisons); merge that first.
+
+
+## v0.41.102, forward garrisons (both sides, every sector)
+
+XO: "forward garrisons ... mirroring red ... every sector ... they should have effect in the background sim."
+- Every sector now has a dug-in forward garrison for each side: red `rfwd_N` (state.assets) and blue `bfwd_N` (state.blue_assets), 3 km either side of the sector centre. New campaigns get them at build; older saves get them at the next planning (`ground.ensure_forward_garrisons`).
+- Background sim: a forward garrison lost since yesterday takes 15% x the health lost off its side's force in that sector (`FWD_SHARE`); a standing one lifts the defender factor from 1.25 up to 1.5 (`FWD_EXTRA`). A destroyed red one is dug in again with a daily chance while red holds the sector (blue's come back through the existing rebuild).
+- Blue tasking: red's forward garrison is a CAS job ("dislodge the enemy forward position, Sector N") where both sides hold the sector, weighted by the sector's pressure; under a live long-range SAM umbrella the SEAD / DEAD goes first, as for any garrison. Friendly troops at the JTAC are sized from the sector.
+- Red tasking: red raids can aim at a blue forward garrison (counted as a garrison raid) where blue still holds the sector, more often where red presses. A hit lowers its health, which the sim turns into force loss.
+- In missions: red's is built when it is the CAS target; blue's when it is a raid target (and in the full-map test). Sector sizes and effects are judgment calls inside the range of open sources (see DESIGN_NOTES section 11); tune on XO's runs.
+- Smoke: new `check_31x_forward_garrisons`; the old garrison-CAS check ignores forward positions (they have no SAM site to wait for).
+- Not yet: Forces-page rows for the forward garrisons (next PR).
+
+
+## v0.41.101, in-universe scramble text, and raid scrambles fold into your mission
+
+XO: "an in-universe message like 'our A-10Cs have been dispatched to help' ... if those scrambles happen I suppose they're close to the time I picked to fly so shouldn't they be merged ... on the -15 to 30 minutes merge?"
+- An emergency you cannot take no longer says why ("the F-16 doesn't do CAS", "no free pair"). The popup and the campaign note say who answers it: "Our A-10Cs from Kobuleti have been dispatched to help." (troops in contact) or "Our F-14Bs from ... are scrambling to intercept." (raid). New `Session.dispatch_line`.
+- A raid scramble you do not fly now folds into your mission as AI, like a troops-in-contact call already did, when the raided field is inside your merge circle (same -15 / +30 minute window, same six-package and unit limits; merge mode "area" only). Scramblers and raiders (RAID-B) both appear. Not folded when your own tasking is itself a raid intercept (the raiders' names would clash). Otherwise the war sim settles it as before.
+- `MissionBuilder._add_merged` can now take a raid package (target is a field, not an asset): no ground opfor or egress search for it, and `_spawn_raid` is called with the scramble's station and TOT.
+- Smoke: new `check_31w_raid_scramble_merge`.
+
+## v0.41.100, tankers and AWACS on the Forces page, blue air defences per site
+
+XO: "put the awacs and tankers on the GUI ... dunno if the GUI needs adjusting to show that blue has assets too".
+- Forces > new tab "Tankers and AWACS": each support asset (E-3A, E-2C, KC-135, KC-135 MPRS, S-3B; the red A-50 dimmed, "not flying yet"), its type, base, serviceable / authorized airframes, cycle (time on orbit and turnaround), hours of cover today (from `state.barcap["support_flights"]`) and a strength bar. Read-only; tankers and AWACS are assets of their own, not squadrons.
+- Forces > Coalition bases: the single blended "Air defences" bar is now three bars, Patriot / HAWK / AAA, one per blue site (`state.blue_sams`); a carrier shows its escorts; an older save without sites shows its one figure on the Patriot.
+
+
+## v0.41.99, hot runway starts at your own field become a sub-setting
+
+XO: "a subsetting ... The main setting is for those not of same base. Then the subsetting is the one where it does it even on same base ... If main setting is off then the subsetting cannot be on."
+- New `hot_runway_own_field` (Settings > Experimental, "...also at my own field", off by default), indented under "Hot starts on the runway (AI flights)". The main setting now covers only the other fields; the own-field rules of v0.41.97 (release after your takeoff, none in the last 10 min before your planned landing, hook holds while you are inbound) run only with the sub-setting.
+- The sub-setting is greyed out and cleared while the main one is off; the settings loader and `engine` also force it off, so it can never be on alone.
+- Not built yet (XO's "dupes"): the runway-plus-airborne copy of each own-field flight so a flight can still air-start when you are about to land; until then a flight caught by the inbound check is delayed.
+- Smoke: `check_31v_hot_runway` checks that the main setting alone releases nothing at your field and that the sub-setting is ignored without the main one.
+
+
+## Docs: audit of stale text (no version change)
+
+XO: "check all docs for fellow CCs if they're updated and nothing is stale."
+- `docs/GUIDE.md`: Settings now lists six tabs (Experimental, hot starts at the ramp in General); the Missions "All packages" line says the list is display-only (v0.41.93); the AI-only patrol line names all four support patrols.
+- `sqe/gui/dialogs.py`: the SettingsDialog docstring says six tabs. `CLAUDE.md`: the plan-doc list names all five plan docs.
+- `docs/DESIGN_NOTES.md` section 10 (AI start types, hot runway starts, v0.41.96 to .98) was pushed directly.
+
+
+## v0.41.98, hot runway starts move to Experimental
+
+XO: "the same runway hotstarts can be put on experimental for now."
+- "Hot starts on the runway (AI flights)" moves from Settings > General to Settings > Experimental. Same setting, still off by default, no behaviour change. (Builds on #151.)
+
+
+## v0.41.97, hot runway starts at your own field (phase 2)
+
+XO: "OK, let's do 2."
+- With "Hot starts on the runway (AI flights)" on, AI flights from YOUR field start on the runway too, but only after you are rolling: the earliest release is your takeoff time + 60 s (the 60 s stagger), and the hook (existing `PRWY` rule) also waits until you have actually taken off.
+- "About to land, air start again": no release in the last 10 min (`HOT_HOME_S`, judgment call) before your planned landing; a flight due then keeps the old airborne spawn. In the air the hook adds a second guard: while you are within 10 nm of your field, under 1500 m above the ground, more than 5 min after your takeoff and not yet landed (`playerInbound`), runway releases at your field wait (they go once you are on the ground or leave the area). The hook cannot switch a hidden runway group to an air start on the fly, so a flight caught by the live check is delayed, not air-started; only the planned check air-starts. Say if a twin (runway and airborne copy, the hook picks one) is worth the extra units.
+- The hook gets your field's position (`PHOME`, nil off a carrier). Carriers still use the airborne start.
+- Smoke: `check_31v_hot_runway` also checks your own field.
+
+
+## v0.41.96, hot starts on the runway for AI flights (phase 1)
+
+XO: "Can we start the hot on runway starts phase 1?"
+- New setting, Settings > General, "Hot starts on the runway (AI flights)", **off by default**. On: AI package flights from LAND fields other than yours no longer appear airborne. They wait hidden on the runway and the mission hook releases them at a set time (`RWYQ` entries with a time `t`; the same queue the alert pairs use, never taxiing).
+- Timing: a flight is due at its first route point (the pretend DEP, 4 to 23 nm out) at the old activation time. The release is earlier by the roll (45 s, from the v0.41.0 alert-pair runs) + 15 s + the climb-out to that point at 300 kt (judgment call). The flight's margin before the push (2 min with a hold, 1 min without) still absorbs up to margin minus 30 s of lateness.
+- Stagger: releases from one runway are at least 60 s apart (the hook's `RWY_STAGGER_S`). A flight whose release would be later than its margin allows, or whose package is already underway at mission start, keeps the airborne spawn. So L3's early packages stay airborne; later ones go hot.
+- Not changed: your own field (phase 2: start hot once you are airborne, back to air start when you are about to land), carriers, support/guard flights.
+- Fix: a relief or standby sortie could pick the same callsign as a flight of a merged package (two groups named "Enfield 1"); it now avoids every flight already built. DCS and the hook find groups by name.
+- Smoke: `check_31v_hot_runway`.
+
+
+## v0.41.95, hot-ramp setting moves to General
+
+XO: "move the hot starts on ramp to its actual and appropriate spot on the settings."
+- The hot-start checkbox moves from Settings > Experimental to Settings > General (next to the other "how a sortie runs" options) and is retitled "Hot starts at the ramp (scramble pairs)". Same setting (`hot_ramp_scrambles`), same hint text, no behaviour change.
+
+## Docs: CLAUDE.md code map (no version change)
+
+XO: "OK, update docs."
+- CLAUDE.md's code map lists `blue_barcap.py`, `support_assets.py`, `barcap.py` and `scramble.py`. `docs/DESIGN_NOTES.md` got section 9 (planned air cover, support assets and scrambles, v0.41.85 to v0.41.94; pushed directly). The Project's `barcap-plan.md`, `red-arm-plan.md` and the design notes copy were refreshed.
+
+## v0.41.94, red's SEAD group is sized like blue's salvo
+
+XO: "Do SEAD pair sizing."
+- `raids.arm_jets`: red's Su-24M SEAD group against a field is 2 jets (4 Kh-31P) for a Patriot or a HAWK alone, 4 jets (8 missiles) when both are live or the Patriot is at full strength (`BLUE_PATRIOT_LN` launchers); never more than the Su-24Ms the wing has left beyond its bombers (a short wing falls back to a pair, none left means no SEAD); 0 against a field with neither battery. Thresholds mirror blue's HARM salvo (v0.41.83) and are judgment calls; 2 Kh-31P per Su-24M is from Wikipedia (Kh-31).
+- In a flown mission four jets against both batteries fly as two pairs ("Raid SEAD 1" on the Patriot, "Raid SEAD 2" on the HAWK, the second 600 m higher: they share a route); four against a lone full-strength Patriot fly as one group of four on it. Unit names are now `RAID-S-<group>-<jet>`.
+- Unflown (background) raids: a four-jet group takes more of the batteries' cover, `ARM_AD_FACTOR_4` 0.3 (a pair keeps 0.5), judgment call.
+- Chance of a SEAD group at all (`raid_arm`: L1 none, L2 0.2, L3 0.6) is unchanged.
+- Smoke: `check_31u_red_sead_size`; `check_31l_red_arm` also builds a four-jet group.
+
+## v0.41.93, "All packages" is display only; no "are you sure" on a stand-down day
+
+XO: "All squadrons list is just for display ... I shouldn't be able to fly non-squadron planes." / "On stand down days the confirmation ... should not appear anymore."
+- The Missions page list choice (My squadron / All packages) now only decides what the list shows. It is saved as the new setting `list_filter`; `flight_filter` (who you may fly) is always "squadron" in the app: an older settings file whose `flight_filter` was "all" becomes `list_filter` "all" on load and no longer lets you fly other squadrons' jets. `flight_filter="all"` stays for the smoke tests and tools.
+- Skip Turn on a stand-down day (nothing you may fly and no sortie pending) skips at once, with no confirmation; the question stays when you could fly something or have a sortie built.
+- Smoke: `check_31t_all_list_is_display_only`.
+
+## v0.41.92, hot-ramp scramblers launch earlier; fuel lines in the debrief
+
+XO: "Begin 1 & 2." (scramblers get in the air too late; are the MiG-29s going home bingo?)
+- Read from XO's 2026-10-21 runs (`alerts` called / airborne times): with hot ramp on, a pair took 324 to 566 s from the call to the air at Gudauta and 283 to 369 s at Nalchik; the hidden runway start is about 2 minutes (`ALERT_TAXI_S`). So the late scramblers are the taxi, not the detection range.
+- With the hot-ramp setting on, every alert field's scramble circle is wider by `RAMP_LEAD_NM` 30 nm (what blue covers in about 4 extra minutes at 500 kt; judgment call from those runs), never past 0.85 x the field's distance from the fight + 15 nm (`threatmap.field_detect_nm`, `set_ramp_lead`). The marshal, sweep and carrier CAP keep-outs read the same radius, so planning stays consistent (the lead is set from the setting at `plan_day` and at every build). With the setting off nothing changes.
+- The debrief now has a "Fuel:" line for every AI group that was airborne and ended the mission at 35 % fuel or less (from the hook's 30-second tracks; `BINGO_REPORT_PCT`), with the time it reached bingo (20 %, the hook's own `BINGO_FUEL`). No hook change.
+- Finding: none of the red pairs in those runs were near bingo (fuel 52 to 81 % at the end). The MiG-29 pairs that went home (Bandit 3 landed at 33 minutes with 52 % fuel) were patrols whose planned window ended with their relief already on station, not fuel.
+- Smoke: `check_31s_scramble_timing_fuel`.
+
+## v0.41.91, scramblers take a station and fly a complete route
+
+XO: "I pretty much think scramblers really should mirror fighter sweep tasks ... stick forward towards the attackers but stay over SAM protection ... the waypoints should be complete like the normal TARCAPs, escorts or something."
+- Read first (runs of 2026-10-21): red alert / reinforcement pairs had one `INTERCEPT` point ON the target with an orbit and nothing after it; red patrols (Bandit, Relief, Standby) ended at `CAP2`; blue alert pairs had a `CAP` point exactly on the raid's target (inside red SAM reach in the 2026-10-16 test) and then landed. MiG-29s seen going home were probably bingo: no route home was flown.
+- New `sqe/scramble.py` (planning only). Red: the station is the target when a live red SAM covers it, else the covered point nearest the target on the line from its field (at most as far as the line goes), else 15 nm out from its own field. Blue: on the line from the target toward where the raid comes from (the bomber wing, else the nearest red fighter wing), as far forward as 30 nm (`STICK_NM`) while it is still under blue's own field air defence (Patriot / HAWK, 25 nm of a field with air defence 0.3 or more) AND clear of red's SAM rings (the sweep's `clear_for_sweep`); else on the target when that is clear, else the nearest clear point back. Doctrine: fighter / missile / joint engagement zones (JP 3-01 terms, definitions from a summary card); the stick distance, the step, the cover margins and the 15 nm field hold are judgment calls.
+- Every red patrol and alert route now ends in a landing at its own field (Bandit, Relief, Standby, Alert, Reinforce; `RedAirPicture._land_home`). A pair the hook sends home (jet down, winchester, bingo) now has a landing to fly to.
+- Engage limits are unchanged. Not done: scramble launch time (detection range), a bingo / fuel line in the debrief.
+- Smoke: `check_31r_scramble_stations`.
+
+## v0.41.90, red's base CAPs are spread through the day
+
+XO: "I think red don't have BaseCAPs." (three days of runs, all starting 06:10 to 06:35)
+- Cause: each red patrol area flew its day's sorties back to back from the start of one 6-hour wave (`redair.plan`), so a field's whole day of patrols sat in one to three hours (Sukhumi 00:00 to 00:50, for example) and a morning mission found most areas empty. Same number of sorties, bad spread.
+- Now an area's sorties are spread evenly through the 24 hours (the wave and a dice roll pick where in its gap the area starts; many sorties still chain back to back with the 10 minute handover). Same sortie count and budget as before; blue's patrols already worked this way. Level 2 seed 3: patrols up in 20 of 24 hours (was 14 on the old plan), level 3 in 24.
+- Expect red patrols in your morning missions more often, and a harder time at level 3.
+- Smoke: `check_31q_red_patrols_spread`.
+
+## v0.41.89, BARCAP status line and shorter Experimental settings
+
+XO: "You can go with the BARCAP status line." / "The setting headers don't wrap."
+- The Overview's theatre summary now ends with "BARCAP cover today", one line per base or carrier (the share of today's 24 h each blue area, by direction, has a pair up, from the plan in `state.barcap["blue_cover"]`; the patrols fly 06:00 to 22:00, so 67 % is the most) and a line with the planned tanker / AWACS guard sorties (`blue_barcap.status_lines`). Display only.
+- Settings, Experimental tab: the checkbox titles are short (they do not wrap) and the explanation moved into the text underneath.
+- Smoke: `check_31m_blue_barcap_plan` also builds the status lines.
+
+## v0.41.88, HAVCAP and tanker CAP are planned chains of their own
+
+XO: "Merged and I would love it if you did."
+- HAVCAP and TNKCAP are no longer package slots. `blue_barcap._plan_guards` plans them each day, one chain per tanker (KC-135, KC-135MPRS) and AWACS (E-3, E-2C) type, along the hours `support_assets` says that type is on orbit (06:00 to 22:00). Pairs stay two hours (the tanker-guard endurance); the number is the same patrol share by level as the BARCAP (10 / 20 / 40 % of full cover), at least one sortie per asset. Tankers are planned first, since the tanker's guard is not optional.
+- Guards come from the asset's base squadron, else the nearest capable one, else any fighter squadron; your squadron is never drafted for them. They are paid from the same daily budget as the patrols, before the packages.
+- `blue_barcap.attach` gives a package the guard sortie of its AWACS / tanker that is up while it flies; one sortie keeps one callsign in every package that carries it. Station and route stay per mission (`support_caps`); only existence, timing, squadron and cost are planned.
+- Changed behaviour: a tanker can now fly without its guard on a day when no planned guard sortie is up (before, the guard was mandatory).
+- Engine order: `support_assets.plan` runs before `blue_barcap.plan`.
+- Smoke: `check_31p_guard_chains`; the callsign check excludes shared guards; the raid S-route check always uses the scramble path (a planned raid package resolves overnight).
+
+## v0.41.87, tankers and AWACS as assets (step 1: airframes, windows, losses)
+
+XO: "Take the most educated guess on the numbers of these assets."
+- New `sqe/support_assets.py`, saved in `state.support_assets` (older saves get it on first use). Blue: E-3 "Overlord" 6 airframes (USAF has about 30 E-3s, 26 at Tinker over four squadrons; Wikipedia), E-2C "Magic" 4 on the carrier (a VAW squadron has four, globalsecurity.org), KC-135 "Arco" 8 (the 465th ARS operates eight KC-135Rs, globalsecurity.org), KC-135MPRS "Texaco" 8 (judgment call), recovery S-3B "Shell" 4 on the carrier (judgment call). Red: A-50 "Mainstay" 16 (Wikipedia, Ivanovo Severny, about 2011), data only. Time on orbit per sortie and turnaround (E-3 8 h / 12 h; E-2C 4 h / 6 h; tankers 4 h / 8 h; S-3B 2 h / 4 h) are judgment calls (the E-3's "more than 8 hours" is from Wikipedia).
+- Each day plans when every blue type has an aircraft on orbit: back-to-back sorties by the airframes that are ready, each handing over 10 minutes early, an airframe flying again after its turnaround (`state.barcap["support_flights"]`). At full strength the whole day is covered, so nothing changes for you until airframes are lost.
+- A package gets its AWACS / tanker only if one is on orbit from its start to 70 minutes after (`UP_WINDOW_MIN`, judgment call); the supports are recomputed once the start times are known and again when you pick a flight.
+- A support aircraft shot down in a flown mission comes off its asset (the debrief says so); each missing airframe is back overnight with chance 0.34 (about three days; judgment call).
+- Not yet: HAVCAP and the tanker CAP as planned chains of their own, red's A-50 flying, the status line.
+- Smoke check `check_31o_support_assets`.
+
+## v0.41.86, blue's patrols count in the background raids (BARCAP background sim, step 2)
+
+- A base patrol on station now matters to raids nobody flies. `blue_barcap.patrol_up` draws, once per raid, whether a pair is up over the raided field on the side the raid comes from: the chance is the area's covered minutes of the day over 1440 (`state.barcap["blue_cover"]`; the patrols fly 06:00-22:00, so at most two thirds, and the night is open).
+- Surprise raids (`raids.overnight`): a pair up adds PATROL_STOP 0.25 to the chance the raid is stopped; the log line says "the base patrol and alert aircraft got up in time".
+- Announced raids the war sim resolves (`war._resolve_raid`, land raids): a pair up adds PATROL_RAID_WEIGHT 2.0 CAP-weighted jets to blue's side of the odds.
+- A patrol that fought a stopped raid loses one jet with PATROL_LOSS_P 0.15 (its squadron's serviceable count drops; the log says so).
+- All three numbers are judgment calls. Red patrols meeting blue patrols in the background are not simulated. Raids on the carrier are not affected (carrier CAP counts only in flown missions).
+- Smoke check `check_31n_blue_patrol_vs_raids`.
+
+## v0.41.85, blue's base CAP and carrier CAP are a daily plan (BARCAP in the background sim, step 1)
+
+XO: "Basecaps and carrier caps are planned separately from packages so I don't think they should be attached to a package", AI only for good, the same budget share by level as red but lower at Levels 1 and 2.
+- New `sqe/blue_barcap.py`. Each day plans, per blue field or boat that has a BARCAP area, a few sorties of a fighter pair through 06:00-22:00 (airframe endurance as in barcap.py: 30 min F-16 / Hornet, 2 h F-14 / F-15C). The count is a share of the base's daily sortie budget: Level 1 10 %, Level 2 20 %, Level 3 40 % (red's patrols take 20 / 30 / 40 %; the blue shares are judgment calls). The sorties are paid out of the squadrons' two-sorties-a-day budget BEFORE the packages are built, so patrols and packages compete for jets.
+- The base CAP and carrier CAP are no longer slots of a package. Once the start times are known, a package carries the planned sortie of the area that faces its target and is up while it flies (LEAD_MIN 10, PACKAGE_WINDOW_MIN 100, judgment calls); with none up it flies without one. A planned sortie keeps one callsign in every package that carries it (a merged mission builds it once). Tanker CAP and HAVCAP stay package slots until the tanker / AWACS assets step.
+- State: `state.barcap["blue_flights"]` (the plan) and `["blue_cover"]` (minutes covered per area, for a later status line). Old saves get the plan the next time the day is planned.
+- Not yet: the effect on unflown raids and patrol losses (PR B), the BARCAP status line.
+- Smoke check `check_31m_blue_barcap_plan`; check 00's callsign test allows the shared CAP sortie.
+
+## v0.41.84, red anti-radiation missiles, step 1: a Su-24M SEAD pair ahead of a field raid
+
+XO: "Put red anti-rad and standoffs on top" (shooters Su-24M only, Patriot / HAWK first, L1 none / L2 rare / L3 normal).
+- A Su-24M raid on one of our airfields that has a live Patriot or HAWK may bring a pair of Su-24M with Kh-31P (`raid_arm`: Level 1 never, Level 2 20 %, Level 3 60 %; judgment calls). The pair needs two jets more than the raid in the wing, so it never takes the bombers' jets. Raids by Su-25 never bring one (the plain Su-25 has no ARM in DCS).
+- In the mission "Raid SEAD 1" flies the raid's way in, fires at the field's Patriot (else HAWK) from 40 nm, 150 s before the bombers' TOT, then turns away 20 nm and goes home. 40 nm and 150 s are judgment calls; the Kh-31P's 60 nm is the Wikipedia figure (launch altitude lowers it). It counts as part of the raid's wing in the debrief (`RAID-S-n`).
+- Unflown (surprise) raids on a field: the batteries' cover counts half when the raid brings a SEAD pair (`ARM_AD_FACTOR` 0.5, judgment call).
+- Not yet: Kh-58 / Kh-25MP, Su-25T, ship radars, stand-off weapons (Kh-29 / Kh-59), raids on supply sites / garrisons. Untested in DCS: whether the Patriot shuts its radar down for an inbound ARM.
+- Smoke check `check_31l_red_arm`.
+
+## v0.41.83, SAM borrowing defaults to off
+
+XO: "put the borrowing of sams default off". The Experimental tab's Red / Blue borrowing switches now start unticked; tick them to get SAM orders by need (v0.41.67 / .68). Saved settings keep whatever was stored.
+
+## v0.41.82, HARM salvo scales with the SAM cluster (Standoff DEAD)
+
+XO: "Is it out of doctrine to always have 4 ships for harms and jsows? Maybe it's the reason why the sams aren't saturated enough?"
+- The Standoff DEAD package's HARM flights were always 2 + 2 jets whatever surrounded the target. Now the count of live serious SAM sites within 25 nm of the target sets the size: 0-1 neighbours 2 + 2, 2-3 neighbours 4 + 2, 4 or more 4 + 4. The JSOW flight stays at 4.
+- All thresholds (25 nm, 2, 4) are judgment calls, no public source. Short of jets in the squadron pool, the flight is built smaller as before.
+- Smoke check `check_31k_salvo_size`.
+
+## v0.41.81, Experimental settings tab: borrowing per side
+
+* **XO: "a setting that lets me turn borrowing on and off per side, on its own Experimental tab; the ECM script goes there too."** Settings has a new last tab, **Experimental**: *Red borrowing*, *Blue borrowing* (new, `borrow_red` / `borrow_blue`, both on = today's behaviour), the **ECM script** (moved from Mission Build) and **Hot ramp scrambles** (v0.41.80, moved from General).
+* "Borrowing" = the SAM orders by need (`sams.red_orders` / `sams.blue_orders`: a battery is moved from the least-threatened site to a threatened one). Off for a side: its orders do not run overnight (orders already on their way wait until you switch it back on) and only the slow rebuild by supply replaces destroyed sites. The engine builds every war simulator through `Session._sim` which applies the switches.
+* Smoke: new `check_31j_borrow_switches`; the Settings tab-list check expects the new tab.
+
+## v0.41.80, hot ramp scrambles at land fields (experimental, off by default)
+
+* **XO's experiment: "hot ramp starts for scramblers, land fields first".** New setting (Settings, "Hot ramp scrambles at land fields", off by default; `hot_ramp_scrambles`). On: scramble pairs at land fields (red alert pairs, red reinforcements, blue alert pairs, the red relief and standby pairs) start hot on the ramp, uncontrolled, and a trigger starts them when called (the v0.40.x path, kept in the callers all along; `_alert_group` now creates it). Off: the hidden runway start of v0.41.0, unchanged.
+* **Fallbacks:** the pair stays on the hidden runway start at your own field, at a field with no parking for its type, and on the carrier (hidden deck start until land works, XO).
+* **Why it was removed in v0.41.0:** DCS AI taxiing made some pairs take 3 to 11 minutes from the call to the air and two never got airborne. This run is the test: the state file's `alerts` list (called / air / stuck) shows it. Turn it off if pairs get stuck.
+* **Not done:** the ruins rule (a field with ruins starts hot on the runway), carriers, the player's own field.
+* Smoke: new `check_31i_hot_ramp_scrambles` (13 ramp pairs on with the setting, none off).
+
+## v0.41.79, BARCAP as planned coverage, step 3 (third slice): a CAP pair that loses a jet, goes winchester or hits bingo is replaced
+
+* **XO's rules:** if one jet is shot down, goes winchester (no air-to-air missiles left) or is at bingo fuel, the whole pair bugs out; the nearest field replaces it after a short delay; the cost is whatever the background war computes for the next sortie from the real result (the mission does nothing extra: only the jets that really die or use up count).
+* **The hook watches every covered pair** (`COVER` in `sqe/debrief.py`, checked every 10 s): a jet missing, all missiles gone (only once the pair was seen armed), or fuel under `BINGO_FUEL` (20 %, judgment call). It sets the pair's **bug-out flag**: the pair's CAP orbit carries a `stopCondition` user flag (`ControlledTask.stop_if_user_flag`), so the pair leaves along its own route home exactly as it does when its window ends. `COVER_DELAY_S` (150 s, "short delay": a judgment call) later it sets the **replacement flag**. Nothing is called when the sortie has less than 10 min left (`COVER_MIN_LEFT_S`); a pair that lands at the end of its window is not counted as a loss. What happened is saved in SQE_state.json as `cover` ({g, why, t, replaced}).
+* **Red patrols** (`_spawn_red_standby`): the standby is the nearest red field within reach that has four fighters (a pair beyond the one it gave); it waits hidden like an alert pair, appears on the runway when called (the same ALERT_TAXI_S queue) and flies to the patrol's station until its window ends (+15 min).
+* **Blue base / carrier / HAVCAP / tanker CAPs** (`_spawn_replacement`): one standby per CAP's first sortie, a copy of the flight with a new callsign that appears 12 nm behind the station (as the v0.41.78 reliefs) when its flag is set; it stays until the replaced sortie's end plus the 10 min handover (or the end of the mission cover). Relief sorties of the chain (k >= 1) are not watched yet.
+* **Not in this slice:** TARCAP / escort / sweep and in-package flights are not covered; red SWEEP patrols are not covered; the replacement's cost is not charged in advance; the unit cap is respected (no standby when it would exceed it: a warning, the pair is still watched and sent home).
+* Smoke: new `check_31h_cap_replacement` (the hook watches the pairs, standbys wait for their flag, each orbit stops on its flag). The watcher's logic was also run against a mock of the DCS API (loss, winchester, late sortie, delay).
+
+## v0.41.78, BARCAP as planned coverage, step 3 (second slice): blue base / carrier / HAVCAP / tanker CAPs rotate
+
+* **XO's plan: "a CAP goes home only after its replacement has arrived", for blue's support CAPs too.** Until now a base CAP, carrier CAP, HAVCAP or tanker CAP sat on station for the whole mission, however short its legs (a jet that could fly 3 hours on one load). Now each sortie flies only its airframe's time on station (`barcap.endurance_min`: 30 min F-16 / Hornet and older, 2 h F-14 / F-15C / Su-27 type, 2 h for a tanker guard) and then goes home. The rest of the mission is covered by **relief sorties**: sortie k starts k x (endurance - 10 min) after mission start, so the relief is on station 10 minutes before the sortie it replaces leaves.
+* A relief is a copy of the flight with its own callsign (the same name with a free number, else another name of the type), appears 12 nm behind its station toward its base, is late-activated (a "support relief" trigger) to arrive on time, and stops at its own time; the last one stops when the mission no longer needs cover (the same "last flight of any package is home" rule as before). If the unit limit is reached the reliefs are left out and a warning says so.
+* Sources and gaps: endurance figures are XO's judgment calls; the 10 min handover and the 12 nm spawn are mine, also judgment calls (see `barcap.py` header).
+* **Not in this slice:** the background war does not track these sorties (a lost or winchester pair is not replaced yet: v0.41.79 design with XO); AWACS and tankers themselves still fly unlimited (assets step later); the player's own flight is never rotated.
+* Smoke: new `check_31g_blue_support_relief`.
+
+## v0.41.77, BARCAP as planned coverage, step 3 (first slice): red patrols get their relief in the mission
+
+* **XO's plan, BARCAP relief: "a CAP goes home only after its replacement has arrived".** The planned chain (v0.41.73) has the next sortie of an area start 10 minutes before the one on station leaves. When that relief falls due inside the mission (up to `RELIEF_HORIZON_S` 1 h after the time on target, a judgment call) and the wing has a second pair, the relief pair is now flown: it waits on its field like an alert pair (hidden, put on the runway when called; the v0.41.0 no-taxi rule) and a timed trigger calls it early enough to reach the station when its window opens (flight time + the 2 min runway delay + a minute's slack). The pair on station stays until its own window ends. Not flown when the wing has no second pair, its field is gone, or the unit limit would be passed. The briefing gets a "Relief for that patrol" line.
+* **Not in this slice (needs XO's call):** blue's support CAPs (base / carrier CAP) still fly the whole package without relief; hot starts on the ramp (XO's hot-scramble item; today every alert / relief group is the runway start); SPAWN points at the player's base; HAVCAP following its asset under the BARCAP rules; replacing a pair that is lost, winchester or bingo; the background sim.
+* Smoke: new `check_31f_red_relief_in_mission`.
+
+## Smoke test step 2 (tools only, no version change): every section passes on its own
+
+* `tools/smoke_test.py`: `--only a,b` now also runs the earlier sections a chosen section borrows state from (it reads `c._name` at the top; the nearest earlier section that leaves that name runs first), so every one of the 58 sections passes by itself (`--only check_NN`). The full run is unchanged and green.
+* Campaign ids are random, so seeded checks could pass or fail by luck (`check_47` "no flyable SEAD flight", the HARM point 33.8 vs 35 nm). Each section now gets the same run of ids every time, whatever ran before it.
+* Sections that used a borrowed name that a later local import or the module-level `random` shadowed (26, 27, 47) are fixed; sections that only needed a session build their own (`fresh_session`); shared imports are at the top of the file.
+* Not done: sections still borrow from one another through `Ctx` instead of building a scenario each (the borrowing is now explicit and automatic). A full per-section scenario would mean cutting `check_47` (450 lines) into smaller pieces; left for the refactor week.
+## v0.41.76, red's patrol stations lose the old fixed keep-outs; the ships' reach is a SAM ring
+
+* **XO 2026-10-21: "that old red rule came from the early, almost random stage; use the stay-away-from-SAMs system (and the boat's range) instead."** Red's patrol stations are no longer pushed 45 nm from our marshal point and fields and 130 nm from our carrier (`RED_KEEP_NM`, v0.41.10; the 130 nm push is what put Bandit 1 behind the SA-10 in the v0.41.74 run). Their stations are BARCAP stations (v0.41.73) that stay outside blue's SAM rings, and now outside the carrier group's real reach too: `barcap.FLEET_REACH_NM` 70 nm (measured: CAP pairs were killed 51 to 67 nm out) is a ring in the SAM-clear rule, and `CAP_FLEET_KEEPOUT_NM` (the boat's CURRENT position, it may be slid back for the sortie) is 78 nm (reach + 8 nm margin; was 90, hand-set).
+* **Kept on purpose:** the 100 nm bubble round the AWACS anchor / HAVCAP (the AWACS does not check red stations when it picks its spot; revisit when the HAVCAP rules follow BARCAP in PR 3); the behind-the-target test from v0.41.75. **Dropped:** the 60 nm bubble round the tanker: the tanker picks its spot 40 nm from every red station and 25 nm from red's lanes (`threatmap.tanker_spot`), which is the rule that protects it.
+* Smoke: `check_31d_barcap_areas` checks the carrier ring.
+
+## v0.41.75, red patrols pushed behind the target by the keep-out are left out
+
+* **XO's v0.41.74 run (Standoff DEAD, Gudauta SA-10):** Bandit 1's station sat 36 nm PAST the SA-10 site (and Bandit 2 27 nm past), although v0.41.74 drops patrols whose BARCAP station is behind the target. Cause: `_plan_cap_stations` then pushes every station away from our marshal point, fields and the carrier (`RED_KEEP_NM`, 130 nm round the boat), and that push moved a station that was fine into the back of the target. The behind-the-target test (`redair.beyond_nm`, 20 nm, `BEHIND_NM`) now also runs AFTER the keep-out push; a patrol that ends up behind the target is left out of the mission (it is not in the fight), and its place goes to the alert aircraft. `pick` uses the same helper.
+* Smoke: `check_31e_barcap_mission_side` also checks `beyond_nm`.
+
+## v0.41.74, BARCAP as planned coverage, step 2: the mission side (the checkpoint)
+
+* **XO's same-rules plan, BARCAP, PR 2 of 3.** Blue's carrier CAP and base CAP no longer face "the nearest enemy field": each takes the BARCAP area (v0.41.73) of its asset that faces the mission's target (the area whose direction is closest to the bearing from the asset to the target; with merged targets this is the main target's, a judgment call). The station is 13 nm from the boat (the boat's current position: it may have been slid back for the sortie) or 12 nm from a field, in the area's direction, and still steps back out of every SAM ring and the scramble circles as before. An asset with no area today (no hostile base can reach it) keeps the old placement.
+* **Red patrols behind the target are left out.** `redair.pick` drops a planned patrol whose station sits more than 20 nm BEYOND the target along the way in (IP to target): it is guarding its own rear field, not the fight. 20 nm is a judgment call (`BEHIND_NM`). Together with v0.41.73 (stations on the side of the base facing blue) this is the fix for red's CAPs flying around the back of the target (XO's 2026-10-21 run: pairs 35 to 60 nm beyond the SA-11 site).
+* **Unit cap:** unchanged. Support CAPs are one per field and boat, red patrols are bounded by the package's threat size, and wrecks are still trimmed first; nothing here adds enough units to need a new trim rule.
+* Smoke: new `check_31e_barcap_mission_side`.
+
+## v0.41.73, BARCAP as planned coverage, step 1: planning and state (red's patrols fly it)
+
+* **XO's same-rules plan, BARCAP (claude/barcap-plan.md), PR 1 of 3.** New `sqe/barcap.py` (pure planning). Every defended asset gets BARCAP areas: red's fighter fields and blue's fields and carriers. One area per DIRECTION a hostile base could still send something from (hostile fields and carriers with jets left, within 300 nm; bases within 40 degrees share an area; at most 3). The station sits close to the asset on that side (12 nm for a field, 13 nm for a carrier group, XO's "about 15 mi") and is pushed out of every enemy SAM ring plus 8 nm, never further than 30 nm from the asset. Today's areas for both sides are kept in the campaign (`state.barcap`, saved).
+* **Time on station and relief.** A sortie stays 2 h for the long-legged (F-14, F-15C, Su-27, XO), 30 min for the short-legged (F-16, F/A-18, MiG-29 and older, XO), 2 h guarding a tanker. Sorties of one area chain back to back: the relief is on station 10 min before the one it replaces leaves.
+* **Red's patrols now fly these areas.** `redair.plan` no longer puts a pair 20 to 25 nm in front of its base in one 6-hour window: each pair takes an area of its own field and a slot in that area's chain. `assign_guards` no longer MOVES the station over a SAM site; it only links the pair to the best-rated site within 40 nm of its station for the call-in. Blue's areas are planned and saved but not flown yet (PR 2 and 3).
+* **Patrol share counted in sorties.** A 30-minute stay is one sortie, so a pair can fly several a day: a wing's patrol sorties are the level's share (`DOCTRINE["frac"]`) of its day budget (in pairs), flown over at most pairs - 1 areas (one pair always stays on alert). Without this the first cut left red with almost no patrol up during a mission (the smoke briefing check caught it). Short-legged wings still have gaps in the day; the long-legged cover more. `frac` is the knob.
+* **Sources:** only the outline is public (a CAP sits between the threat and the asset, 1 to 2 h without tankers, relief as the last one runs low, the AFIT thesis' 20 / 40 / 60 minute stays). No source gives a station distance, a handover overlap or a sector width; those, and the 300 nm reach, are judgment calls (listed in the module header).
+* Smoke: new `check_31d_barcap_areas`.
+
+## v0.41.72, AI boat flights land for real; the hook removes them after the pattern
+
+* **XO 2026-10-21: "pretend they still land, but if the don't-land switch is on they are despawned after a few rounds on their pattern."** With Settings > AI landings set to "always" (or "home" at your deck), an AI flight going home to the carrier used to fly to a fixed RTB point (10 nm from the boat, v0.41.17; v0.41.71 moved it to where the boat would be). Now it gets the real Land waypoint tied to the ship (as when AI landings is off), so DCS homes on the moving boat itself. The hook removes it, counted as landed, once it has been within `CV_PATTERN_NM` (6 nm) of the boat for `CV_PATTERN_S` (90 s, about two laps of the pattern); both are judgment calls. A flight that traps first lands normally. A flight that never gets there is still recovered by the 25-minute stale deadline (v0.41.71). The predicted-boat-position code (`_cv_pos_at`) is gone; the tracks with fuel and speed stay. Airfields are unchanged (recovered at the entry point as before). Risks: a busy deck can stack AI in your pattern (why v0.41.17 recovered short of the boat), and a flight held in a stack farther than 6 nm out waits for the stale deadline. Smoke `[46]`: every AI carrier flight's last point is a Land point tied to the ship, and the hook entry has the 90 s dwell.
+
+## v0.41.71, Navy flights are recovered near the boat that has steamed on
+
+* **XO's 2026-10-21 run (Standoff DEAD, Gudauta SA-10, 20 of 52 blue aircraft lost, 8 landed):** nine Navy flights (Squids, Uzis, Hornets 3 and 5) were still flying at 2520 s, 71 km from the boat, at 20,000 ft. The tracks show them joining the tanker Texaco 1 from about 1800 s and flying its racetrack with it; they never reached their RTB point. Why they chose the tanker is not known from the files (the tracks had no fuel or speed). Three changes:
+  * **The recovery point follows the boat.** An AI carrier flight's RTB point (where `SQE_RECOVER` runs) was 10 nm from where the carrier STARTED; the carrier steams away at 15 kn, so a flight that came home 30 minutes later found the point 14 nm or more from the boat, outside the hook's 12 nm net as well. Now it sits 10 nm from where the boat will be when the flight gets there (`_cv_pos_at`: the ship's own route and speed, at the last waypoint's time plus the leg to the boat at 200 m/s, a rough estimate).
+  * **Tracks carry fuel and speed.** Each track point is now `[t, x, z, alt, fuel %, kts]` (the lead's, every 30 s; -1 if unknown), so the next state file shows whether the flights were low on fuel when they went to the tanker.
+  * **A stale deadline.** A homebound AI flight still out `RECOV_STALE_S` (25 min, a judgment call: the way home is 5 to 10 minutes) after its work is done is recovered where it is and counts as landed, so no flight flies for ever. This is generous (a flight that was going nowhere counts as saved); I judged it better than a flight that never lands.
+* Smoke check in `[46]`: the recovery point is 10 nm from the boat at some time in the mission, at least one is more than 10 nm from where the boat started, the net has `t2` and the tracks carry fuel. The section now builds its own session.
+
+## v0.41.70, AI Skill for Red and Blue
+
+* **New "AI Skill, Red" and "AI Skill, Blue" settings** (XO 2026-10-21: "DCS is kinda iffy when the AI is set pretty high, like they cheat"), on the New Campaign page and in Settings > Campaign (the same two settings, like Weather; they apply from the next mission). Values: Level default, Average, Good, High, Excellent. Level default is what the game did before: Red follows the difficulty level (L1 Average, L2 Good, L3 High, `enemy_skill`), Blue's AI aircraft fly at High (they were hard-set to High). A named value sets that side directly: Red's pilots (CAP, raids, reactive spawns, red air picture) and Red's ground units and SAM sites; Blue's AI flights and alert pairs, and Blue's base defences (Patriot, HAWK, AAA; under Level default these stay at DCS's default as before). Skill only: the war sim's numbers (`base_damage`, `loss_rate`) are untouched. `difficulty.ai_skill(opts, side, d, ground)` is the one place that decides. Your own flight keeps "Player". Not done: a "Random" value, per-unit-type skill. Smoke check `[31c]` builds missions at each setting and reads the skill back from the .miz.
+
+## v0.41.69, blue Patriot and HAWK batteries stand apart
+
+* **XO's 2026-10-21 AI run (Standoff DEAD, Sukhumi SA-11):** at 673 s a Senaki Patriot launcher fired at a Su-27 and the launch hit the 11 units around it (launchers, radar, ECS, command post, power plant: `hit` events by the site's own units), and one launcher was lost at 701 s with no enemy near it. Cause: the battery was laid out by pydcs's star formation, 20 m between units. Now a blue Patriot or HAWK battery has `BLUE_SPACING_M` (80 m, a judgment call, no public figure found) between units (`_platoon(..., spacing=)`, then `formation_star`). The ring-2 units of the 12-unit Patriot sit 160 m out, so the battery is about 400 m across. Red's sites are not changed (no such event seen). Smoke check: the unit spacing in `[41]`. The same run: Senaki's Patriot killed three red MiGs and the Stennis SM-2 one; no blue jet was lost to a SAM.
+
+## v0.41.68, red SAM orders by need
+
+* **Red orders SAM batteries by the same rule as blue** (XO 2026-10-21: "SAMs can be ordered by both sides"). Each night, at most one order: the shallowest-tier destroyed SAM site that is in play (tier up to front + 2, its field standing, higher value first among equals) is replaced by a battery of the same kind from a DEEPER tier (a standing site, health 0.6 or more); the chance it goes is red's supply. It arrives 2 days later (a new build needs 3) at the sender's health; the receiver is not rebuilt meanwhile; the sender's site goes down and the usual rebuild takes it when its tier comes into play. No spare, no order: `sams.rebuild` stays the only way. Same judgment calls as blue's (transit days, one order a night, the 0.6 spare level); the "deeper tier sends" rule is the red form of "the least-threatened field sends". Forward mobile sites (`fsam_`) are left out. Orders save in the SAM record (`red_orders`, `red_vacated`). Smoke check `[31b]`.
+
+## v0.41.67, blue SAM orders by need
+
+* **A destroyed blue SAM site is replaced by a battery MOVED from the least-threatened field first, and built only if none is spare** (XO 2026-10-21: "SAMs can be ordered by both sides should the need arise"; "move first, build if nothing to spare"). Each night, at most one order: the most threatened field (nearest to an enemy fighter field) with a destroyed site asks for a battery of that kind; the sender is the field furthest from the front that has a standing one (health 0.6 or more) and sits at least 20 nm further back than the receiver; the chance it goes is blue's supply. The battery arrives 2 days later (a new build needs 3) at the sender's health; the receiving site is not rebuilt meanwhile, and the sender's site goes down and is rebuilt by the usual rule (a site emptied by an order does not itself ask for one, so batteries do not chain backward). No spare, no order: the usual 3-day rebuild stays. The old whole-field "lend a battery" is gone (`LEND_*`). Judgment calls: transit time, the 20 nm gap, one order a night, the 0.6 spare level (JP 3-01 gives the defended-asset-list idea, no figures). New orders save with the SAM record. Blue has no mobile SAMs in the data (Patriot, HAWK, AAA per field), so scoot has nothing to move yet; blue's retreat is the order itself. Red's orders come in the next PR. Smoke check `[31a]`.
+
+## Unreleased (tools only, no version bump), smoke test split into sections
+
+* **`tools/smoke_test.py`: `main()` is now 58 named section functions** (XO 2026-10-21: "prioritize the smoke test refactoring... sometimes it's the only trouble that blocks PRs"). Step 1, no change to what is checked: the 2,300-line function is cut at its version-tagged blocks; what a section borrows from an earlier one is listed at its top (`a, b = c.a, c.b`) and what it leaves for later at its bottom, through a shared `Ctx`. Same 526 asserts and the same sequence of section tags as before; a deliberate break (blue repair 0.10 -> 0.30) failed in `check_29_phase_air_defence_that...`. Runner: `--list` (section names), `--only a,b` (the setup section plus sections whose name contains a or b; a section that borrows from one you left out fails naming what it needed), `--timeout SECONDS` (default 600; a section that runs longer dumps every thread's traceback and stops, so a hang says where: that is how the v0.41.66 pydcs freeze was found), line-buffered output, and the five slowest sections at the end. Next (step 2): the sections that borrow a mission from an earlier one get their own scenario, so a change to a layout cannot break an unrelated check.
+
+## v0.41.66
+
+* **A mission build can no longer freeze in pydcs's scattered formation** (found 2026-10-21 through the smoke test, which stalled about one run in three; XO: "prioritize the smoke test"). pydcs's `VehicleGroup.formation_scattered` retries each vehicle's random point with `while True` and its ring is random and can be too small for the group (a group of 12 with a ring under about 25 m has no clear point): the build never returned. Measured: 4 of 300 groups of 12 vehicles hung; groups of 8 or fewer never did. The smoke test's stall was this, caught by the new section watchdog (a traceback in `formation_scattered`, called from `_platoon` for a red site). `sqe/pydcs_patch.py` swaps in the same algorithm with the same random draws, plus one line: after every 100 failed tries the ring widens by 10 m. Where pydcs finishes the layout is identical (checked for 40 seeds); where it would have hung, the build now finishes. Installed when the mission builder is imported. New smoke check `[scatter]`.
+
+## v0.41.65
+
+* **Red's SAM clusters follow the same placement doctrine as blue's** (PR 4 of the SAM build; XO 2026-10-21: "follow doctrine and adjust as I test"). The old layout put each red site at a random bearing round its field. Now (`sams.place_red_site`): the axis is the bearing to the nearest blue base (airfield or carrier); the medium and long-range sites (SA-2 / 3 / 6 / 10 / 11) are the outer layer, the first on the axis and the next ones fanned out to +40, -40, +80 degrees, at 7 km and 3 km further each (the old distances); the short-range sites (AAA, MANPADS, SA-8 / 15 / 19) sit 3.5 to 4.5 km out either side (+/-100 degrees, then +/-150) to cover the dead zone round the field. The same seeded jitter as blue's (15 degrees, 15%), fixed for the campaign. Source: the US Army air-defence employment guidelines (mutual support, overlapping fires, weighted coverage toward the likely air avenue, defence in depth); the public text gives no distances, so every number is a judgment call. A site that would sit in the sea moves along nearby bearings, so coastal fields (Sochi, Gudauta, Gelendzhik) show some sites far off the axis. New campaigns only (positions are stored); a fresh campaign differs from before only in the SAM sites and their dug-in garrisons (same ids, variants, guards and every other asset unchanged, checked old against new for six campaigns). `tools/red_sam_report.py [level] [seed]` prints each site's bearing from the axis and distance for eyeballing.
+* Next: orders by need (both sides), with blue scoot / retreat now that blue positions mean something.
+
+## v0.41.64
+
+* **Blue's air-defence sites sit at their own place, doctrinal with a seeded jitter** (PR 3 of the blue SAM build; XO 2026-10-21: "doctrinal, but randomness on the exact positioning so no two campaigns will be exactly the same"). Each blue site now stores its position (`sams.place_blue_site`): the v0.41.7 layout (Patriot toward the threat axis, the nearest enemy fighter field, at 4.5 km; AAA either side at +/-120 degrees, 3.5 km; HAWK the outer layer at +50 degrees, 6 km) plus a jitter of up to 15 degrees in bearing and 15% in distance, seeded by campaign id + field + site, so a field looks the same every day and different in the next campaign. The layout follows the US Army air-defence employment guidelines (mutual support, overlapping fires, weighted coverage toward the likely air avenue, defence in depth); they give no distances, so the numbers and the jitter are judgment calls. The mission builder places each BASEDEF group at its stored site, falling back to the old search when it lands on a runway or the sea. Older saves give their sites a place on load. With the jitter set to zero the 79 identity missions are IDENTICAL to v0.41.59; with it on, only the BASEDEF positions differ (new identity baseline saved for the next refactor).
+* Next: red's placement by the same rule (own PR), then orders by need with blue scoot / retreat.
+
+## v0.41.63
+
+* **Blue's air-defence sites are damaged, repaired and rebuilt one by one, like red's** (PR 2 of the blue SAM build; XO 2026-10-21). Raid damage and the overrun hit now go through `sams.hit_field`: the drop in the field's mean strength is spread over the three sites outside-in (HAWK first, then Patriot, then AAA; outside-in is a judgment call, defence in depth), so a battered field loses its HAWK first, then its Patriot launchers, and the raid report names a site that was destroyed. `Base.defense` is now the mean health of the three sites. Nightly repair (supply-scaled, 0.10 a day) and the lent battery only touch standing sites: a destroyed site (health 0.05 or less) is not repaired but REBUILT, with red's rule (`sams.rebuild_blue_sites`: at least 3 days down, then the level's `blue_rebuild` chance a night times blue's supply, one a night, half health, never at a fallen field; a retaken field's defences rebuild too). `sams.air_defence` / `covering_ad` read the sites. Missions of a fresh campaign are unchanged (identity 79/79); what changes is how a hit field wears down and recovers over days.
+* Not in this PR: scoot / retreat for blue (a site's position is not used by the mission builder yet: that comes with doctrinal placement), orders by need.
+
+## v0.41.62
+
+* **Blue's air defence is three sites per airfield, in red's record** (XO 2026-10-21: "I'd rather use red's because I think it's tested and it's not abstract"). Every blue airfield now has `bsam_<field>_pat`, `_hawk` and `_aaa`: the same `EnemyAsset` record as red's SAM sites (variant, health, parent field), kept in their own list `state.blue_sams` so the supply and garrison loops over `blue_assets` never touch them. The site health IS the strength; `Base.defense` is only a cache of the Patriot site's health for the readers not moved (GUI bar, war-sim score). Every writer goes through `sams.shift_field` / `sams.set_field` (raid damage, the overrun hit, a fallen field, nightly repair by supply, the lent battery). The mission builder reads the three sites (`sams.blue_battery(base, state)`; Patriot launchers by its health, HAWK stands at 0.6 or more, AAA 2 sites at 0.6, 1 at 0.15: the v0.41.30 thresholds, judgment calls, now per site). No behaviour change: all three sites move together for now, so missions are identical (identity check 79/79). An older save builds its sites from each field's `defense` number on load (no format bump; an older SQE opening a new save just ignores the list). Smoke test: checks for the sites, a hurt HAWK dropping out alone, round trip and old-save migration.
+* Next (not in this PR): per-site damage, blue rebuild / scoot / retreat like red's, orders by need, doctrinal placement.
+
+## v0.41.61
+
+* **The "CAP engage range" boxes are gone from the settings page** (XO 2026-10-21: "Remove and take the defaults first. We'll be tuning CAPs later."). The enemy and friendly 50 nm values are now fixed in the mission options (`enemy_cap_engage_nm`, `friendly_cap_engage_nm`, both 50), so missions are unchanged. The two settings fields are removed; an old `settings.json` that still has them loads fine (unknown keys are ignored). The mission-side BARCAP / patrol rules will replace these limits.
+
+## Unreleased (tools only, no version bump), identity check covers AI-only packages
+
+* **`tools/miz_identity.py` now also builds the packages nobody can fly** (XO 2026-10-21, before the per-job code split): per case, one BARCAP, one fleet-defence (bomber / raid intercept) and one Fighter Sweep package, where the day's plan has them, built as the all-AI test with the package's first flight standing in for yours (key `aionly`). 19 extra missions, 79 in all (about 100 s a run); `selfcheck` repeatable; a change to the sweep station reach shows up as a difference. Baselines saved before this change must be saved again. Production code unchanged.
+
+## Unreleased (tools only, no version bump)
+
+* **Mission identity check, `tools/miz_identity.py`** (XO 2026-10-20: the refactor, the rename and the `_spawn_flight` split must not change a generated mission). `save DIR` builds 60 missions (9 campaigns, level 1-3, five jets, normal and "open skies" days with the red SAMs zeroed so strikes, counter-air, escorts and TARCAPs appear; each as your own flight and as the all-AI test), writes them out as normalised text; `check DIR` rebuilds on the changed code and prints a diff of anything that differs (exit 1); `selfcheck` builds twice on the same code and fails if the result is not repeatable. Runs in a temp folder, nothing of yours is touched, about 40 s a run. It pins campaign id, the builder's Random(), the global `random` and PYTHONHASHSEED inside the tool only. Production code unchanged. Not covered: fighter sweeps, BARCAP, bomber intercepts, and paths no case reaches (see the tool's docstring).
+* CLAUDE.md: the code map names the tool.
+
+## v0.41.60
+
+* **PR B: one name per job in the waypoint actions and the settings screen** (XO 2026-10-21; no change to what flies). Waypoint actions now follow the role: the Fighter Sweep station is `SWEEP` (was `SWEEPSTN`); a package escort with no station of its own is `ESCORT` (was `SWEEP`) and a TARCAP with none is `TARCAP` (was `ESCORT`); their kneeboard notes say the same. A station is now recognised by `w.orbit` (or a TARCAP's own point) instead of an action-name list, so the lock rule in `_set_eta` keeps its old result (`STATION_ACTIONS` is gone). Settings: "TARCAP / escort / sweep engage range" and "AI TARCAPs, escorts and sweeps stop short of live SAM cover". There are no per-job flight classes (the job code lives in the mixin files from v0.41.56 to .59), so no class renames.
+  * Checked: `tools/miz_identity.py` 79 of 79 identical with the default settings. A first try differed in four COUNTER_AIR missions (a SWEEP point became a "station" by name and lost its time lock); fixed as above. New variant `SQE_IDENT_NO_STANDOFF=1` (stand-off setting off, so the no-station routes are built): `mission` identical in all 79; only the kneeboard comms / times page differs (its waypoint notes were renamed), as expected. Smoke test passed.
+
+## v0.41.59
+
+* **Split step 6: the red air picture and the raid / reactive spawns moved to their own files** (XO 2026-10-21; NO behaviour change). Two more mixins that `MissionBuilder` inherits (like `StrikeTasks`, `FighterStations`, `SupportCaps`):
+  * `sqe/red_air_picture.py`, class `RedAirPicture`: `_spawn_air_picture`, `_plan_cap_stations`, `_fleet_keepout`, `_cap_side`, `_fighter_wings` (red's known CAP stations from its daily air plan, the alert aircraft that scramble from enemy fields), with `RED_LONG_RANGE`, `RED_CALLIN_*`, `CAP_FLEET_KEEPOUT_NM`, `ALERT_REACH_NM`, `A2A_ZONE_NM`.
+  * `sqe/raid_spawns.py`, class `RaidSpawns`: `_spawn_reactive`, `_spawn_raid`, `_spawn_raid_target`, `_raid_marshal`, `_raid_bend`, `_raid_cap` (red bomber raids and the extra pairs that launch mid-mission), with the `RAID_*` constants and `FLEET_RAID_AVOID_NM`.
+  * `mission_builder.py` 2,490 -> 1,995 lines (3,080 before the split began). `ALERT_REACH_NM` no longer needs an import inside a method. The smoke test imports the moved constants from the new files.
+  * Checked: `tools/miz_identity.py` 79 of 79 identical against a fresh v0.41.58 baseline; pyflakes finds no undefined name in `sqe/`; smoke test passed.
+  * One name (`AAM_WEAPONS`) is still imported inside a raid method (the builder's file imports that one). Next: PR B, the renames (waypoint action names, class names, GUI labels).
+
+## v0.41.58
+
+* **Split step 5: the support-CAP code moved to its own file, `sqe/support_caps.py`** (XO 2026-10-21; NO behaviour change). Four methods left `MissionBuilder` (`_gather_support`, `_place_support`, `_pull_back_carriers`, `_support_cap_route`) and live in the class `SupportCaps` (a mixin, like `StrikeTasks` and `FighterStations`): which tanker CAP / HAVCAP / base CAP / carrier CAP a mission has, where the tanker and AWACS sit, the support CAP's route, and moving the carrier group out of the fight. The constants only they use moved with them (`TANKER_COVER_NM`, `SUPPORT_CAP_ZONE_NM`, `TNKCAP_ZONE_NM`, `CVCAP_ZONE_NM`, `CVCAP_NM`, `CVCAP_DETECT_MARGIN_NM`). `mission_builder.py` 2,650 -> 2,490 lines. Two names are imported inside the methods (`carrier_station`, `ALERT_REACH_NM`) because the builder's file imports this one; `ALERT_REACH_NM` moves with the red air-picture code in the next step. The smoke test imports `CVCAP_NM` and `CVCAP_DETECT_MARGIN_NM` from the new file.
+  * Checked: `tools/miz_identity.py` 79 of 79 identical against a fresh v0.41.57 baseline; pyflakes clean; smoke test passed.
+  * Next: the red air picture (`_spawn_air_picture`, `_plan_cap_stations`, ...) and the raid / reactive spawns, then PR B (renames).
+
+## v0.41.57
+
+* **Split step 4: the fighter-station rules moved to their own file, `sqe/fighter_stations.py`** (XO 2026-10-21; NO behaviour change). Ten methods left `MissionBuilder` (`_limit_engage`, `_launch_points`, `_sam_clear`, `_zone_sams`, `_clear_zone`, `_cover_circle`, `_hold_end`, `_extend_holds`, `_room`, `_sweep_station`) and live in the class `FighterStations` (a mixin the builder inherits, as `StrikeTasks` since v0.41.56). These are the engage circles, the SAM-clear stations and the hold times that TARCAP, escort and Fighter Sweep share. The constants only they use moved with them (`TARCAP_MIN`, `TARCAP_AFTER_TOT_S`, `ESCORT_AFTER_TOT_S`, `ESCORT_AFTER_EGR_S`, `HOLD_AREA_KM`, `HOLD_EXTEND_MAX_S`). `mission_builder.py` 2,820 -> 2,650 lines. The smoke test imports those constants from the new file.
+  * Checked: `tools/miz_identity.py` 79 of 79 identical (the 19 `aionly` BARCAP / intercept / sweep missions included, against a fresh v0.41.56 baseline); pyflakes clean; smoke test passed on the second run (the first run hit the known flaky DEAD-stage check, `_de` None, listed in the queue; it passes on rerun).
+  * Not moved on purpose: `_engage_tasks` (117 lines) and `_attach_waypoints` serve every job with role checks inside; they stay stages of the builder. Next: the support-CAP pieces, then PR B (renames).
+
+## v0.41.56
+
+* **Split step 3: the strike / SEAD / DEAD / CAS tasking moved to its own file, `sqe/strike_tasks.py`** (XO 2026-10-21; NO behaviour change). Nine methods left `MissionBuilder` (`_sead_attack_tasks`, `_dead_gate`, `_cas_tasks`, `_harm_time`, `_umbrella_keep`, `_harm_deg`, `_jsow_side`, `_cover_tors`, `_jsow_tasks`) and live in the class `StrikeTasks`, which `MissionBuilder` inherits (a mixin: like a C# partial class, the builder still calls them as `self._jsow_tasks(...)`). The constants only they use moved with them (`JSOW_ATTACK_S`, `JSOW_AIM_ERR_M`, `DEAD_GATE_*`, `SA10_GATE_KM`, `TOR_*`, `TRACK_RADARS`, `SEARCH_RADARS`, `SEAD_WAVE_KM`, `KPH`); the builder imports the ones it still uses. `mission_builder.py` 3,080 -> 2,820 lines. The smoke test imports `TRACK_RADARS` / `TOR_COVER_KM` from the new file.
+  * Checked: `tools/miz_identity.py` 60 of 60 identical; pyflakes clean (the three old warnings only); smoke test passed. Not covered by the identity check: sweeps, BARCAP, bomber intercepts (none of the moved code is theirs).
+  * Next: TARCAP / escort station code, then sweep and support CAP (with identity cases added first), then PR B (renames).
+
+## v0.41.55
+
+* **Split step 2: the SEAD attack tasks moved out of `_attach_waypoints`** (XO 2026-10-21; NO behaviour change). The ~50-line block that gives a SEAD flight its HARM tasks (own site, neighbouring sites, covering Tors, the umbrella) is now `_sead_attack_tasks(package, f, wp, w, armor)`; `_attach_waypoints` drops from about 115 to about 65 lines. Code moved as written.
+  * Checked with `tools/miz_identity.py` against the v0.41.53 baseline: 60 of 60 missions identical; pyflakes clean (only the three old warnings); smoke test passed.
+  * Next: the per-job classes, then PR B (renames).
+
+## v0.41.54
+
+* **`_spawn_flight` cut into named stages** (XO 2026-10-21, step 1 of the refactor; NO behaviour change). The 500-line `_spawn_flight` in `mission_builder.py` is now a short list of calls, each a method with a one-line docstring: `_support_cap_route` / `_flight_route` (the route), `_make_group`, `_dress_group` (loadout, names, jammers), `_engage_tasks` (engage circles, hold, homeward fight, ROE and range options), `_crew_setup` (your seat and radio, or an AI flight's frequency and fuel), `_announce` (manifest and radio calls), `_roe_defaults`, `_attach_waypoints` (each point's tasks), `_dead_gate`, `_home_leg`; `_pt` replaces the local lambda. The code inside is moved as written; only the inputs it needs became parameters and what later stages use is returned.
+  * Checked with `tools/miz_identity.py` against v0.41.53: 60 of 60 missions identical; pyflakes finds no undefined name; smoke test passed. Not covered by the identity check: fighter sweeps, BARCAP and bomber intercepts (AI-only); their code is moved the same way and pyflakes passes.
+  * Not done (later steps): the stages are still methods of the one `MissionBuilder` class, `_attach_waypoints` is still about 115 lines (the SEAD attack tasks inside it are the next piece), and the per-job classes (strike, SEAD, TARCAP, escort, sweep, support CAP) and the waypoint action / class / GUI renames (PR B) come after.
+
+## v0.41.53
+
+* **Red strength is tracked per squadron** (XO 2026-10-21, step 2 of the typed red squadrons). Each `RedSquadron` now has its own `available`, `reserve` and `rest_days`; the wing's `authorized` / `available` / `reserve` / `rest_days` are sums over its squadrons (`EnemyAirWing` properties). Assigning the wing's `available` still works and spreads over the squadrons (a loss comes off the strongest squadron, a gain goes to the one furthest below strength that is not resting), so code that only knows the wing is unchanged.
+  * **Losses by type.** Mission groups record the aircraft type (`ac`), and the debrief takes dead jets off the squadron that flew that type (`EnemyAirWing.lose`); abstract raid losses (`raids.hit`, the war sim's raid resolution) take them off the raider's type first.
+  * **Rest and return per squadron** (`airwings.py`): a red squadron at 30% or less stands down on its own and returns after resting; the rest of the wing keeps flying. Messages read "the squadron at <field> (<type>)". The wing used to rest as one block.
+  * **Replenishment per squadron** (`war.end_day`): the wing's daily amount (unchanged) goes to the squadrons furthest below strength that are not resting. A cratered field scatters each squadron (x0.75).
+  * **Types by what is serviceable.** A type counts as available only while a squadron of that type has a pair serviceable (`EnemyAirWing.types_up`). Raids (`raider_wings`), red patrol planning and sweeps (`redair`: pairs are cut from the FIGHTER squadrons' jets, not the wing total), red reactive pairs, escort picks for raids (`packages`) and the expected-defenders estimate (`threat.expected_defenders`: serviceable fighter jets) use it. The day's sortie budget is still the whole wing's.
+  * Saves: v0.41.52 and v0.41.51 saves load (the wing's strength is spread over its squadrons in proportion; v0.41.51 saves get one squadron per type). No format bump. The waiting-room table shows each squadron as "MiG-29S 7/9" and marks resting ones.
+  * Effect (40-day all-skip simulation, 12 seeds each, v0.41.52 vs this): L2 won in 22.2 vs 23.0 days, red raid packages 5.8 vs 6.8 per campaign; L3 raid packages 38.0 vs 42.5, red air left 0.56 vs 0.52. A red attack squadron that is shot up or resting no longer lets its fighter squadron's jets raid, and the reverse. Not tested in DCS.
+* Smoke test: the air-rest check is per squadron; "[red squadrons]" gained checks for typed losses, sums, spreading, replenishment, `types_up` and loading v0.41.52 / v0.41.51 saves.
+
+## v0.41.52
+
+* **Red wings are cut into typed squadrons** (XO 2026-10-20 / 21, step 1 of the same-rules build: data only). Each `EnemyAirWing` now carries `sqns`, a list of `RedSquadron` (id, name, one aircraft type, authorized jets). The rule (XO's, sizes are judgment calls): `ceil(wing jets / max size)` squadrons, split as evenly as possible, never over the cap; max size L1 6, L2 12, L3 14 (`Difficulty.red_squadron_max`). The Tu-22M3 wing stays one squadron (L2 4, L3 10).
+  * **Types.** The wing still draws its old mixed type pool (same random draws, so the world is laid out as before); `red_squadrons()` (scenario.py) deals it into squadrons: a wing of 2+ squadrons gets fighter, attack, fighter ... so it keeps one of each; a one-squadron mixed wing flies an attack type with the chance (attack types / pool types) from a Random of its own, otherwise a fighter. A wing whose pool has no fighter gets one. The wing's `types` are now the types its squadrons fly.
+  * **Effect on red (XO chose "keep raid strength").** One-squadron wings can no longer hold both a fighter and an attack type, so fewer wings can raid: over 20 test seeds, wings with a Su-24M or Su-25 went from 118 to 79 of 160 (L2) and from 126 to 106 of 160 (L3); about 26 (L2) and 18 (L3) of 160 wings are attack-only and have no fighter squadron (no alert pair from them). Judgment call; if red feels too tame or too soft, the dealing in `red_squadrons` is the one place to change.
+  * Not changed in this step: availability, losses, rest and replenishment are still tracked per wing (`available`, `reserve`, `rest_days`); per-squadron tracking is step 2. Saved campaigns from v0.41.51 still load (`sqns` empty; no format bump). The waiting-room GUI table shows each wing's squadrons ("MiG-29S x9, Su-24M x8").
+* Smoke test: "[red squadrons]" checks the rule (sizes, cap, even split, mixed wing keeps both kinds), that every wing's squadrons add up to the wing, that the bomber wing is one squadron, and save / load.
+
+## v0.41.51
+
+* **Support-CAP pull-back removed** (XO 2026-10-20 22:39: three runs in a row showed `pulls` empty). The Lua hook no longer re-sends a support CAP its route when it leaves its circle (PR #77, v0.41.34); `PULLBACK_MARGIN_NM`, `PULLBACK_BINGO`, `_pull_entries`, the hook's `__PULL__` block and the `pulls` list in the results file are gone. The engage circle on every support CAP stays, and the tanker CAP keeps the default ROE (v0.41.35); the position tracks (v0.41.43) show whether a CAP ever leaves its circle.
+  * Not tested in DCS. Cost of a wrong guess: a support CAP that chases out of its circle is no longer called back (none did in three runs); the tracks would show it.
+* Smoke test: the pull-back check is replaced by "[cap circle]" (no pull-back in the hook, support CAPs keep their engage circle).
+
+## v0.41.50
+
+* **Role rename: one name per job** (XO 2026-10-20, PR A of the same-rules build). `Role.ESCORT` (the TARCAP) is now `Role.TARCAP`; `Role.SWEEP` in a strike / DEAD / CAS package (the package escort) is now `Role.ESCORT`; `Role.SWEEP` stays for Fighter Sweeps and the fleet-defence fighters. Every place that tested the old pair now tests the right new roles.
+  * Saved campaigns: `FORMAT_VERSION` 5 -> 6. `_migrate_roles_v6` converts plan and pending flights on load (ESCORT -> TARCAP; SWEEP -> ESCORT unless the objective is COUNTER_AIR / FLEET_DEFENSE).
+  * Behaviour is unchanged. Checked with `tools/miz_identity.py`: 60 of 60 missions identical to v0.41.49 once the text that shows the role name is mapped back. Expected differences only: the version string and the role name printed on the kneeboard fuel-code images (TARCAP / ESCORT instead of ESCORT / SWEEP).
+  * Not done (PR B, with the `_spawn_flight` split): waypoint action names (`SWEEPSTN`, the fallback `SWEEP`), class names, GUI labels.
+* Smoke test: aliased `Role` uses updated, "[roles v0.41.50]" checks a format-5 state migrates.
+* `tools/miz_identity.py`: the version string is scrubbed, so a baseline from another version compares cleanly.
+
 ## v0.41.49
 
 * **AI flights fly home above the ridges** (XO 2026-10-20 22:07 run: Venom 5-2, a lone F-16 TARCAP, went from 26,000 ft to 3,000 ft MSL about 50 nm out and flew level for 100 nm over rising ground, 914 to 1,127 m on its track, then died at 2574 s with 84% fuel and nobody shooting; every other flight went home over water at 2,000 ft). Cause, confirmed by the track: the recovery point (RCV) is added after the terrain check at a fixed 3,000-6,000 ft, and an AI flight drops to the next point's altitude right after the last one.

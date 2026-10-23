@@ -78,7 +78,7 @@ First launch:
 3. **File > New Campaign**: name it, pick your jet (**F-14B(U), F/A-18C, F-16C, F-15C or A-10C**), a difficulty, the start month/day (year is 2006) and whether to allow night sorties, OK.
 
 **Playing a day**
-1. **Missions** tab: pick a tasking, then press **FLY** on the row of the flight you want to fly (green rows). SQE writes `SQE_Sortie.miz` and opens the **waiting window**. HAVCAP and base-CAP flights are AI-only.
+1. **Missions** tab: pick a tasking, then press **FLY** on the row of the flight you want to fly (green rows). SQE writes `SQE_Sortie.miz` and opens the **waiting window**. Base, carrier, tanker and AWACS cover patrols (BASECAP, CVCAP, TNKCAP, HAVCAP) are planned each day and are AI-only.
 2. Start DCS, **Mission > Open > Missions > SQE_Sortie.miz**, fly it. The kneeboard has two pages: (1) comms + waypoints numbered the way your jet's cockpit numbers them, (2) timeline, bingo/joker, IFF Mode 3, laser code, package who's-who with Link 16 STNs, threats, bullseye. Last steerpoints: RTB, DIVERT, TKR (tanker), BULLS (bullseye).
 3. The waiting window updates live (aircraft lost, ground units destroyed, landings). When DCS reports the mission ended it turns green.
    * **Accept results** applies exactly what you see.
@@ -99,7 +99,7 @@ The front is five sectors along the Sukhumi to Senaki axis, each with a Red and 
 A destroyed Red SAM site can be replaced from its fourth day down (half strength, slower when Red's depots and fuel farms are hit); a hurt SA-6 / SA-11 / SA-8 / SA-15 / SA-19 can move a few nm overnight with its garrison. Fixed sites (SA-2, SA-3, SA-10) and the column air defence never move. Blue's airfield defences repair by supply and a strong field lends a battery to the weakest. See CHANGES v0.26.0 for the numbers; the rates are Difficulty.sam_rebuild and sam_scoot.
 
 ## Settings (v0.18)
-Five tabs. General: takeoff buffer, marshal slack, AI fuel, F-14 names. Campaign: weather, reactive dispatch, ruins, carcasses. Mission build: merging, radius, unit limit, CAP ranges. DCS integration: folders and the scripting patch. Terrain scan: the green / amber status, margins, the scan mission and Re-check.
+Six tabs. General: takeoff buffer, marshal slack, AI fuel, hot starts at the ramp (scramble pairs), F-14 names. Campaign: weather, reactive dispatch, ruins, carcasses. Mission build: merging, radius, unit limit, CAP ranges. DCS integration: folders and the scripting patch. Terrain scan: the green / amber status, margins, the scan mission and Re-check. Experimental: features still being tried, each can be switched off (SQE's own ECM script, hot starts on the runway for AI flights, red / blue SAM borrowing).
 
 ## Reactive dispatch (v0.17)
 Random enemy reinforcements (other wings, only within the type's intercept radius, only aircraft the wing really has) and blue alert pairs (carrier or nearby bases, only aircraft the mission is not using). Scaled by difficulty, capped at 2:1 against your fighters, and skipped first when a mission is near the unit limit. The briefing's Intelligence line hints at them. Settings: Reactive dispatch on/off.
@@ -194,7 +194,7 @@ build the loadout, save, then `python tools/capture_loadouts.py that.miz`. They 
 ---------------------------------------------------------------------------------------------------
 
 ### Squadrons, the Missions filter and package merging (v0.7)
-- New Campaign lets you pick your squadron. Missions shows "My squadron" packages by default; switch to "All packages" to fly any flight of your jet type.
+- New Campaign lets you pick your squadron. Missions shows "My squadron" packages by default; "All packages" only widens the list for display (you can still only fly your own squadron's flights, and a stand-down day for your squadron stays a stand-down day).
 - Settings > Package merging > "Same area" folds packages whose target is inside the Merge radius (default 25 nm, centred on your target and slid inward at the edge of the target area) into one mission: ones that start up to 30 minutes after yours, and ones that started up to "Earlier packages" minutes (default 15) before yours. An earlier package is already airborne and underway when the mission starts (it spawns along its route, or holding at its marshal point); one that has already struck and gone home by then is not flown, but its target is shown as smoking ruins (Settings > Ruins). One that has struck but is still airborne spawns on its way home, with the ruins already in place; the outcome is rolled when the mission is built and applied at the debrief. Compare the unit counts on the waiting window with merging Off to see the performance cost. Lower the unit limit if your VR system struggles.
 - On the Missions screen, a package that another one folds in is shown inside that package's panel, each with its own flights and FLY button. The line above each table says what FLY gives you: the start time, and which other packages fly with it. Pressing FLY on a later package starts the mission at its time instead.
 

@@ -9,7 +9,27 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
 from . import FORMAT_VERSION
-from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, PlayerProfile)
+from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, wing_from_dict, PlayerProfile)
+
+
+def _migrate_roles_v6(d: dict) -> None:
+    """v0.41.50 gave every fighter job its own role name. Before, Role.ESCORT was the TARCAP and Role.SWEEP was both the package escort (in a
+    strike / DEAD / CAS package) and the Fighter Sweep. A format-5 save is converted in place: ESCORT -> TARCAP; SWEEP -> ESCORT unless the
+    package is a COUNTER_AIR or FLEET_DEFENSE one (the same rule the old task label used)."""
+    def fix(pkg):
+        if not isinstance(pkg, dict):
+            return
+        otype = (pkg.get("objective") or {}).get("type", "")
+        for f in pkg.get("flights") or []:
+            r = f.get("role")
+            if r == "ESCORT":
+                f["role"] = "TARCAP"
+            elif r == "SWEEP" and otype not in ("COUNTER_AIR", "FLEET_DEFENSE"):
+                f["role"] = "ESCORT"
+    for p in d.get("plan") or []:
+        fix(p)
+    if d.get("pending"):
+        fix(d["pending"].get("package_dict"))
 
 
 @dataclass
@@ -38,8 +58,11 @@ class CampaignState:
     ground: dict = field(default_factory=dict)     # the ground war (ground.py): sectors, strengths, the line, fallen fields
     raids: dict = field(default_factory=dict)      # Red raids and emergencies (raids.py): today's surprise raids, the emergency in play, postponed packages
     red_air: dict = field(default_factory=dict)    # the enemy's air tasking for the day (redair.py): patrol and sweep pairs, windows, stations
+    barcap: dict = field(default_factory=dict)     # v0.41.73: today's BARCAP areas for both sides (barcap.py): stations per defended asset and direction
     sams: dict = field(default_factory=dict)       # air defence that rebuilds and moves (sams.py): day each site went down, moves made, original positions
     blue_assets: dict = field(default_factory=dict)  # Blue supply sites (fuel farms, forward depot): same record as the enemy assets
+    support_assets: dict = field(default_factory=dict)   # v0.41.87: tankers and AWACS as assets with airframe counts (support_assets.py)
+    blue_sams: dict = field(default_factory=dict)    # v0.41.62: Blue's air defence sites (bsam_<field>_pat / hawk / aaa): the same record as red's SAM assets (sams.py)
 
     # ---- helpers ------------------------------------------------------------------------
     def campaign_date(self):
@@ -71,7 +94,10 @@ class CampaignState:
             "raids": self.raids,
             "sams": self.sams,
             "red_air": self.red_air,
+            "barcap": self.barcap,
+            "support_assets": self.support_assets,
             "blue_assets": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.blue_assets.items()},
+            "blue_sams": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.blue_sams.items()},
             "plan": self.plan, "pending": self.pending, "history": self.history[-300:], "log": self.log[-400:],
         }
 
@@ -82,6 +108,8 @@ class CampaignState:
         if d.get("format", 1) < 4:
             raise ValueError("This campaign was saved by an older SQE (before depth tiers and SAM garrisons, v0.8). "
                              "The enemy order of battle changed, so it cannot be loaded; please start a new campaign.")
+        if d.get("format", 1) < 6:
+            _migrate_roles_v6(d)
         s = cls(name=d["name"], theatre=d.get("theatre", "caucasus"), level=d.get("level", 2),
                 campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1),
                 sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"),
@@ -91,12 +119,15 @@ class CampaignState:
         s.bases = {k: Base(**{**v, "kind": BaseKind(v["kind"])}) for k, v in d["bases"].items()}
         s.squadrons = {k: Squadron(**v) for k, v in d["squadrons"].items()}
         s.assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in d["assets"].items()}
-        s.enemy_air = [EnemyAirWing(**w) for w in d["enemy_air"]]
+        s.enemy_air = [wing_from_dict(w) for w in d["enemy_air"]]
         s.ground = d.get("ground") or {}
         s.raids = d.get("raids") or {}
         s.sams = d.get("sams") or {}
         s.red_air = d.get("red_air") or {}
+        s.barcap = d.get("barcap") or {}
+        s.support_assets = d.get("support_assets") or {}                 # missing in an older save: support_assets.ensure
         s.blue_assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_assets") or {}).items()}
+        s.blue_sams = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_sams") or {}).items()}      # missing in an older save: sams.ensure_blue_sams builds them from each field's `defense`
         s.plan, s.pending = d.get("plan", []), d.get("pending")
         s.history, s.log = d.get("history", []), d.get("log", [])
         if not s.ground:                           # a campaign from before the ground war (format 4): give it one for its level

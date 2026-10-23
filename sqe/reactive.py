@@ -51,12 +51,19 @@ def plan_red(state, d, rng, tx, ty, base_aircraft: int, blue_fighters: int, used
         if a is None or a.destroyed:
             continue
         nm = math.hypot(a.x - tx, a.y - ty) / NM
-        types = [t for t in w.types if t in fighters and INTERCEPT_NM.get(t, 120) >= nm]
+        types = [t for t in w.general_types_up() if t in fighters and INTERCEPT_NM.get(t, 120) >= nm]
         if types:
             cands.append((w, a, nm, types))
+    # v0.41.110: the day's patrols come first. Each BARCAP area a wing flies today keeps one pair out of the reinforcement draw (XO 2026-10-22: scrambles
+    # outnumbered the basecaps and the rest of the wing sat on the ramp). Judgment call: counted for the whole day, even if that patrol is not in this mission.
+    hold = {}
+    for f in ((getattr(state, "red_air", None) or {}).get("flights") or []):
+        if f.get("kind") == "CAP" and f.get("area"):
+            hold.setdefault(f["wing"], set()).add(f["area"])
+    hold = {k: 2 * len(v) for k, v in hold.items()}
     out = []
     for _ in range(pairs):
-        free = [c for c in cands if c[0].available - used.get(c[0].base_asset_id, 0) >= 2]
+        free = [c for c in cands if c[0].available_of(c[3]) - used.get(c[0].base_asset_id, 0) - hold.get(c[0].base_asset_id, 0) >= 2]
         if not free:
             break
         w, a, nm, types = rng.choices(free, weights=[1.0 / max(30.0, c[2]) for c in free])[0]      # nearer fields are likelier

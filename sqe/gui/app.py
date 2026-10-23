@@ -52,6 +52,9 @@ class OverviewPage(QWidget):
         c.layout().addWidget(self.phase)
         self.txt = QTextBrowser(); self.txt.setFrameShape(QFrame.NoFrame); self.txt.setStyleSheet("background:transparent;border:none;")
         c.layout().addWidget(self.txt, 1)
+        gc = card(); left.addWidget(gc)                                   # v0.41.130: the ground-war / patrol lines moved here from above the map
+        gh = QLabel("GROUND WAR AND PATROLS"); gh.setObjectName("small"); gc.layout().addWidget(gh)
+        self.gsum = QLabel(); self.gsum.setWordWrap(True); self.gsum.setObjectName("small"); gc.layout().addWidget(self.gsum)
         right = QVBoxLayout(); root.addLayout(right, 6)
         g = QGridLayout(); g.setSpacing(12); right.addLayout(g)
         self.cards = {"fa": StatCard("Coalition air", theme.BLUE), "ea": StatCard("Enemy air", theme.RED),
@@ -61,8 +64,7 @@ class OverviewPage(QWidget):
         mc = card(); right.addWidget(mc, 1)
         top = QHBoxLayout(); mc.layout().addLayout(top)
         t = QLabel("THEATRE"); t.setObjectName("small"); top.addWidget(t); top.addStretch(1)
-        self.rings = QCheckBox("SAM threat rings"); self.rings.setChecked(True); top.addWidget(self.rings)
-        self.gsum = QLabel(); self.gsum.setWordWrap(True); self.gsum.setObjectName("small"); mc.layout().addWidget(self.gsum)
+        self.rings = QCheckBox("SAM rings (red / blue)"); self.rings.setChecked(True); top.addWidget(self.rings)
         self.map = MapView(); mc.layout().addWidget(self.map, 1)
         self.rings.toggled.connect(self.map.set_rings)
 
@@ -77,7 +79,8 @@ class OverviewPage(QWidget):
         self.cards["ad"].set(f"{t['iads']:.0%}", "SAM / radar sites operational")
         self.cards["ar"].set(f"{t['armor']:.0%}", "column strength")
         from .. import ground as _g
-        self.gsum.setText("\n".join(_g.summary(st)) if _g.active(st) else "")
+        from .. import blue_barcap as _bb, bombers as _bomb
+        self.gsum.setText("\n".join((_g.summary(st) if _g.active(st) else []) + _bb.status_lines(st) + _bomb.status_lines(st)))
         self.map.set_state(st)
 
 
@@ -89,7 +92,7 @@ class MissionsPage(QWidget):
         self.day = QLabel(); self.day.setObjectName("h2"); left.addWidget(self.day)
         frow = QHBoxLayout(); fl = QLabel("Show"); fl.setObjectName("small"); frow.addWidget(fl)
         self.flt = QComboBox(); self.flt.addItem("My squadron", "squadron"); self.flt.addItem("All packages", "all")
-        self.flt.setToolTip("My squadron: only packages with a flight from your squadron.  All: every package of the day.")
+        self.flt.setToolTip("My squadron: only packages with a flight from your squadron.  All: every package of the day, for looking only: you can fly only your own squadron's flights.")
         frow.addWidget(self.flt, 1); left.addLayout(frow)
         self.flt.currentIndexChanged.connect(self._filter_changed)
         self.lst = QListWidget(); left.addWidget(self.lst, 1); self.lst.currentRowChanged.connect(self._show)
@@ -111,7 +114,7 @@ class MissionsPage(QWidget):
     def _filter_changed(self):
         if getattr(self, "sess", None) is None or getattr(self, "_loading", False):
             return
-        self.sess.settings.flight_filter = self.flt.currentData()
+        self.sess.settings.list_filter = self.flt.currentData()
         try:
             self.sess.settings.save()
         except OSError:
@@ -121,9 +124,9 @@ class MissionsPage(QWidget):
     def refresh(self, sess: Session):
         st = sess.state; self.sess = sess
         self._loading = True
-        self.flt.setCurrentIndex(0 if sess.settings.flight_filter != "all" else 1)
+        self.flt.setCurrentIndex(0 if sess.settings.list_filter != "all" else 1)
         self._loading = False
-        mine_only = sess.settings.flight_filter != "all"
+        mine_only = sess.settings.list_filter != "all"
         visible = [p for p in sess.packages() if (bool(sess.flyable(p)) or not mine_only)]
         groups = sess.collapse(visible)                     # a package that another one folds in is shown inside it, not as its own row
         self.pkgs = [h for h, _ in groups]; self.members = {h.number: m for h, m in groups}
@@ -198,12 +201,13 @@ class MissionsPage(QWidget):
         hh.resizeSection(5, 100)
         t.setRowCount(len(p.flights)); t.setFixedHeight(64 + 42 * len(p.flights))
         opts = {f.id for f in self.sess.flyable(p)}
+        sp = bool(p.extra.get("setpiece"))                  # v0.41.107: the carrier raid: every flight listed, those you cannot fly greyed out
         active = st.status == "ACTIVE"
         for i, f in enumerate(p.flights):
             spec = AIRCRAFT[f.aircraft]; yours = f.id in opts
             vals = (f.callsign, spec.display, f.count, f.task, st.bases[f.base_id].name.replace(" AB", ""))
             for j, v in enumerate(vals):
-                t.setItem(i, j, _item(v, theme.GREEN if (yours and j == 0) else (theme.DIM if f.tag else None), center=(j == 2)))
+                t.setItem(i, j, _item(v, theme.GREEN if (yours and j == 0) else (theme.DIM if (f.tag or (sp and not yours)) else None), center=(j == 2)))
             if yours:
                 b = QPushButton("FLY"); b.setObjectName("fly"); b.setEnabled(active); b.setFixedSize(84, 30)
                 b.setToolTip(self._fly_note(p))
@@ -211,7 +215,7 @@ class MissionsPage(QWidget):
                 cont = QWidget(); cl = QHBoxLayout(cont); cl.setContentsMargins(4, 4, 4, 4); cl.addWidget(b, 0, Qt.AlignCenter)
                 t.setCellWidget(i, 5, cont)
             else:
-                t.setItem(i, 5, _item("AI support" if f.tag else f"AI {spec.service}", theme.DIM))
+                t.setItem(i, 5, _item("AI support" if f.tag else ("On alert (AI)" if sp else f"AI {spec.service}"), theme.DIM))
         return t, bool(opts)
 
     def _show(self, row):
@@ -228,8 +232,13 @@ class MissionsPage(QWidget):
             self.bl.addWidget(self._label("SCRUBBED: " + p.extra["scrub"] + ". Nobody flies this package and the war simulation leaves its target alone.", None, theme.RED))
         for _n in p.extra.get("wx_notes", []):
             self.bl.addWidget(self._label("Weather loadout: " + _n, "small", theme.AMBER))
-        self.bl.addWidget(self._label(narrative.intent_for(st, p), "dim"))
+        sp = bool(p.extra.get("setpiece"))
         tbl, yours = self._flight_table(p)
+        if sp:
+            for i_, para in enumerate(narrative.setpiece_text(st, p, yours, AIRCRAFT[st.player.aircraft].display)):
+                self.bl.addWidget(self._label(para, "dim" if i_ else None))
+        else:
+            self.bl.addWidget(self._label(narrative.intent_for(st, p), "dim"))
         if yours:
             self.bl.addWidget(self._label(self._fly_note(p), "small"))
         self.bl.addWidget(tbl)
@@ -248,6 +257,9 @@ class MissionsPage(QWidget):
         if ex and yours:
             sup += "  |  Merged mission: also flies " + ", ".join(f"#{x.number}" for x in ex)
         self.bl.addWidget(self._label(sup, "dim"))
+        if sp:
+            self.bl.addStretch(1)
+            return
         tx, ty = PackageBuilder(st).target_xy(p.objective)
         th = threat_lines(st, tx, ty)[:4]
         nd = folded_n_def(p, ex, self.sess.settings.merge_enemy_pct)
@@ -263,8 +275,10 @@ class ForcesPage(QWidget):
         self.sq = _tbl(["Squadron", "Aircraft", "Service", "Based at", "Serviceable", "Readiness"])
         self.ea = _tbl(["Enemy air wing", "Types", "Serviceable", "Strength"])
         self.as_ = _tbl(["Enemy asset", "Type", "Depth", "Condition"])
-        self.bs = _tbl(["Coalition base", "Type", "Air defences (Patriot + AAA)"])
-        for t, n in ((self.sq, "Coalition squadrons"), (self.bs, "Coalition bases"), (self.ea, "Enemy air wings"), (self.as_, "Enemy assets")):
+        self.bs = _tbl(["Coalition base", "Type", "Patriot", "HAWK", "AAA"])
+        self.gw = _tbl(["Sector", "Enemy force", "Friendly force", "Enemy forward garrison", "Friendly forward garrison"])
+        self.sup = _tbl(["Support aircraft", "Type", "Based at", "Serviceable", "Cycle", "Cover today", "Strength"])
+        for t, n in ((self.sq, "Coalition squadrons"), (self.sup, "Tankers and AWACS"), (self.bs, "Coalition bases"), (self.gw, "Ground war"), (self.ea, "Enemy air wings"), (self.as_, "Enemy assets")):
             self.tabs.addTab(t, n)
 
     @staticmethod
@@ -281,16 +295,64 @@ class ForcesPage(QWidget):
             self.sq.setCellWidget(i, 5, self._bar(s.readiness, theme.BLUE))
         self.ea.setRowCount(len(st.enemy_air))
         for i, w in enumerate(st.enemy_air):
-            for j, v in enumerate((st.assets[w.base_asset_id].name + (f"  ({w.squadrons} squadrons)" if w.squadrons > 1 else ""), ", ".join(t.replace("_", "-") for t in w.types), f"{w.available} / {w.authorized}")):
+            for j, v in enumerate((st.assets[w.base_asset_id].name + (f"  ({w.squadrons} squadrons)" if w.squadrons > 1 else ""), ", ".join(f"{q.aircraft.replace('_', '-')} {q.available}/{q.authorized}" + (f" (resting, {q.reserve})" if q.reserve else "") for q in w.sqns), f"{w.available} / {w.authorized}")):
                 self.ea.setItem(i, j, _item(v))
             self.ea.setCellWidget(i, 3, self._bar(w.available / max(1, w.authorized), theme.RED))
+        from .. import sams as _sams, support_assets as _sa
         bl = list(st.bases.values()); self.bs.setRowCount(len(bl))
+        col = lambda h: theme.GREEN if h > 0.6 else theme.AMBER if h > 0.25 else theme.RED
         for i, b in enumerate(bl):
             self.bs.setItem(i, 0, _item(b.name)); self.bs.setItem(i, 1, _item("Carrier (escorted)" if b.kind.value == "CARRIER" else "Airfield"))
             if b.kind.value == "AIRFIELD":
-                self.bs.setCellWidget(i, 2, self._bar(b.defense, theme.GREEN if b.defense > 0.6 else theme.AMBER if b.defense > 0.25 else theme.RED))
+                sites = _sams.blue_sites(st, b)                       # v0.41.100: one bar per site (an older save without sites shows its single defence figure on the Patriot)
+                for j, k in enumerate(("pat", "hawk", "aaa")):
+                    h = sites[k].health if sites else (b.defense if k == "pat" else None)
+                    if h is None:
+                        self.bs.setItem(i, 2 + j, _item("-", theme.DIM))
+                    else:
+                        self.bs.setCellWidget(i, 2 + j, self._bar(h, col(h)))
             else:
                 self.bs.setItem(i, 2, _item("Cruiser + 2 escorts", theme.DIM))
+                for j in (3, 4):
+                    self.bs.setItem(i, j, _item("", theme.DIM))
+        # tankers and AWACS (v0.41.100): the support assets, with the hours an aircraft of the type is on orbit today
+        nice = {"bl_e3": "E-3A AWACS", "bl_e2": "E-2C AWACS (carrier)", "bl_kc135": "KC-135 tanker (boom)", "bl_kc135mprs": "KC-135 MPRS tanker (probe)",
+                "bl_s3": "S-3B tanker (carrier)", "rd_a50": "A-50 AWACS (enemy, not flying yet)"}
+        sa = _sa.ensure(st)
+        fl = (getattr(st, "barcap", None) or {}).get("support_flights") or {}
+        self.sup.setRowCount(len(sa))
+        for i, (k, a) in enumerate(sorted(sa.items(), key=lambda kv: (kv[1]["side"] != "blue", kv[0]))):
+            red = a["side"] != "blue"
+            base = st.bases.get(a["base_id"]) or st.assets.get(a["base_id"])
+            mins = 0; hi = 0
+            for s0, e0 in sorted(fl.get(k, [])):                       # union of today's windows
+                s0 = max(s0, hi); mins += max(0, e0 - s0); hi = max(hi, e0)
+            cover = "-" if red else f"{mins / 60:.1f} h of 24"
+            cyc = f"{a['sortie_min'] / 60:g} h on orbit, {a['turnaround_min'] / 60:g} h turnaround"
+            dim = theme.DIM if red else None
+            for j, v in enumerate((f"{a['label']}" + ("  (red)" if red else ""), nice.get(k, a["dcs_class"]), getattr(base, "name", a["base_id"]),
+                                   f"{a['available']} / {a['authorized']}", cyc, cover)):
+                self.sup.setItem(i, j, _item(v, dim))
+            fr = a["available"] / max(1, a["authorized"])
+            self.sup.setCellWidget(i, 6, self._bar(fr, theme.DIM if red else col(fr)))
+        # the ground war (v0.41.102): each sector's two forces and the dug-in forward garrison each side holds there
+        from .. import ground as _gr
+        if _gr.active(st):
+            n_ = _gr.n_zones(st.ground); self.gw.setRowCount(n_)
+            for i in range(n_):
+                zi = _gr.info(st, i)
+                self.gw.setItem(i, 0, _item(zi["name"] + ("  (contested)" if zi["contested"] else "")))
+                for j, (v, c) in enumerate(((zi["red"], theme.RED), (zi["blue"], theme.BLUE))):
+                    self.gw.setCellWidget(i, 1 + j, self._bar(min(1.0, v / _gr.MAX_FORCE), c))
+                for j, side in enumerate(("red", "blue")):
+                    h = _gr.fwd_health(st, side, i)
+                    held = (zi["red"] if side == "red" else zi["blue"]) >= _gr.MIN_FORCE
+                    if (st.assets if side == "red" else st.blue_assets).get(_gr.fwd_id(side, i)) is None or not held:
+                        self.gw.setItem(i, 3 + j, _item("-", theme.DIM))
+                    else:
+                        self.gw.setCellWidget(i, 3 + j, self._bar(h, col(h)))
+        else:
+            self.gw.setRowCount(0)
         al = sorted(st.assets.values(), key=lambda a: (a.kind.value, a.name)); self.as_.setRowCount(len(al))
         for i, a in enumerate(al):
             kind = "Garrison" if a.variant == "GARRISON" else (f"SAM {a.variant}" if a.kind.value == "SAM" else a.kind.value.title())
@@ -402,11 +464,12 @@ class MainWindow(QMainWindow):
                 return
         if self._offer_terrain_scan():
             return
-        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"))
+        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"), getattr(self.session.settings, "ai_skill_red", "level"), getattr(self.session.settings, "ai_skill_blue", "level"))
         if dlg.exec() == QDialog.Accepted:
             try:
                 v = dlg.values()
                 self.session.settings.weather_mode = v.get("weather_mode", self.session.settings.weather_mode)
+                self.session.settings.ai_skill_red = v.get("ai_skill_red", self.session.settings.ai_skill_red); self.session.settings.ai_skill_blue = v.get("ai_skill_blue", self.session.settings.ai_skill_blue)
                 try:
                     self.session.settings.save()
                 except OSError:
@@ -506,24 +569,27 @@ class MainWindow(QMainWindow):
             box.setInformativeText(f"Your squadron can answer it: {epkg.objective.description}.\n\nIf you scramble, the package you were tasked with "
                                    f"(#{number}) is left to the other squadrons and is settled by the war simulation (or postponed a day if there are not "
                                    f"enough aircraft for both). If you stay with your tasking, the emergency is settled without you"
-                                   + (" or flown by AI inside your mission." if epkg.objective.type.value == "CAS" else "."))
+                                   + (" or flown by AI inside your mission." if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else "."))
             go = box.addButton("Scramble", QMessageBox.AcceptRole); box.addButton("Stay with my tasking", QMessageBox.RejectRole)
             box.exec()
             return box.clickedButton() is go
         box.setText(f"<b>{ev['title']}</b><br>{ev['text']}")
-        box.setInformativeText(f"You cannot take this one: {ev['reason']}.\n\nOther squadrons are answering it; "
-                               + ("if it lies inside your mission area it is joined to your mission as AI, otherwise the war simulation settles it." if epkg.objective.type.value == "CAS" else "the war simulation settles it.")
+        box.setInformativeText(f"{self.session.dispatch_line(epkg)}\n\n"
+                               + ("If it lies inside your mission area it is joined to your mission as AI; otherwise the war simulation settles it."
+                                  if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else "The war simulation settles it.")
                                + " Your own tasking goes ahead as planned.")
         box.addButton("Understood", QMessageBox.AcceptRole); box.exec()
         return False
 
     def skip_turn(self):
         sess = self.session
-        msg = "Skip today? Every package on the tasking order (including the ones you could fly) is resolved by the war simulation and the date advances."
-        if sess.state.pending:
-            msg += "\n\nThe sortie you built and have not finished will be discarded."
-        if QMessageBox.question(self, "Skip Turn", msg) != QMessageBox.Yes:
-            return
+        stand_down = not sess.state.pending and not any(sess.flyable(p) for p in sess.packages())
+        if not stand_down:                                       # v0.41.93: a stand-down day has nothing to choose, so no "are you sure"
+            msg = "Skip today? Every package on the tasking order (including the ones you could fly) is resolved by the war simulation and the date advances."
+            if sess.state.pending:
+                msg += "\n\nThe sortie you built and have not finished will be discarded."
+            if QMessageBox.question(self, "Skip Turn", msg) != QMessageBox.Yes:
+                return
         out = sess.skip_day(); self.refresh_all()
         lines = [f"{'+' if r['success'] else '-'} {r['objective']}" for r in out["results"]]
         end = {"VICTORY": "\n\nVICTORY. The enemy has been broken.", "DEFEAT": "\n\nDEFEAT. The coalition position has collapsed."}.get(out["status"], "")

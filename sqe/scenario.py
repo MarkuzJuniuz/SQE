@@ -7,10 +7,11 @@ from __future__ import annotations
 import math
 import random
 from .difficulty import Difficulty, get as get_difficulty
-from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, PlayerProfile)
+from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, RedSquadron, PlayerProfile)
 from .state import CampaignState
 from .aircraft import AIRCRAFT
 from . import ground, theatres
+from . import sams as _sams_mod
 
 def THEATRES() -> dict:
     """{id: name} of the installed theatre packs."""
@@ -112,6 +113,34 @@ def _disperse_blue(st, terrain, player_squadron=None) -> None:
             used[b.id] = used.get(b.id, 0) + q.authorized
 
 
+def red_squadrons(aid: str, wing_name: str, types: list, jets: int, max_size: int, pool: list | None = None, rng=None) -> list:
+    """v0.41.52: cut a wing into typed squadrons. ceil(jets / max_size) squadrons, split as evenly as possible (never over max_size), one aircraft
+    type each. `types` is the wing's old mixed type pool; it is kept in force so red raids as before (XO 2026-10-21: keep raid strength):
+    - 2+ squadrons: the types are dealt fighter, attack, fighter, attack ... so a mixed wing keeps one of each; every wing has a fighter squadron.
+    - 1 squadron, mixed pool: it flies an attack type with the chance (attack types / pool types), from `rng` (a wing of its own, no draw from the world's).
+    Attack = not in ENEMY_FIGHTERS (Su-24M, Su-25)."""
+    from .loadouts import ENEMY_FIGHTERS
+    n = max(1, -(-jets // max(1, max_size)))                    # ceil without math
+    fig = [t for t in types if t in ENEMY_FIGHTERS]
+    atk = [t for t in types if t not in ENEMY_FIGHTERS]
+    if n == 1 and fig and atk and rng is not None:
+        order = [atk[0]] if rng.random() < len(atk) / len(types) else [fig[0]]
+    elif n == 1:
+        order = [(fig or atk)[0]]
+    else:
+        order = []
+        for k in range(max(len(fig), len(atk))):
+            order += fig[k:k + 1] + atk[k:k + 1]
+    if not any(t in ENEMY_FIGHTERS for t in order):             # every wing keeps a fighter squadron: swap in the level's first fighter type
+        fighter = next((t for t in (pool or []) if t in ENEMY_FIGHTERS), None)
+        if fighter and n > 1:
+            order = [fighter] + order[1:]
+        elif fighter and not fig:
+            order = [fighter]
+    base, extra = divmod(jets, n)
+    return [RedSquadron(f"{aid}_{i + 1}", f"{wing_name} {i + 1}", order[i % len(order)], base + (1 if i < extra else 0)) for i in range(n)]
+
+
 def _disperse_red(st, terrain, plan_w: list) -> None:
     """[[asset id, types, count, squadrons]]: a wing bigger than its field can park keeps what fits; the rest is dispersed to the nearest
     enemy fields with room (as their aircraft). The total stays the same unless no field has room."""
@@ -189,20 +218,29 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         plan_w.append([aid, types, cnt, squads])
     _disperse_red(st, t, plan_w)                          # no field holds more jets than DCS can park there
     for aid, types, cnt, squads in plan_w:
-        st.enemy_air.append(EnemyAirWing(aid, types, cnt, cnt, squads))
+        sqns = red_squadrons(aid, st.assets[aid].name, types, cnt, d.red_squadron_max, d.enemy_types, random.Random(f"{st.campaign_id}:{aid}"))      # v0.41.52: typed squadrons; the wing's types are the ones they fly
+        st.enemy_air.append(EnemyAirWing(aid, list(dict.fromkeys(q.aircraft for q in sqns)), len(sqns), sqns))
 
     if d.bomber_wing > 0 and th["bomber_base"] in live:       # strategic bombers live far from the front (Mozdok in the Caucasus)
-        st.enemy_air.append(EnemyAirWing(th["bomber_base"], ["Tu_22M3"], d.bomber_wing, d.bomber_wing))
+        st.enemy_air.append(EnemyAirWing(th["bomber_base"], ["Tu_22M3"], 1,
+                                         [RedSquadron(f"{th['bomber_base']}_1", f"{st.assets[th['bomber_base']].name} 1", "Tu_22M3", d.bomber_wing)]))     # one squadron (judgment call)
+        if d.bomber_escort_wing > 0:                                      # v0.41.106: a dedicated Su-27 escort squadron on the same field, escort-only
+            bwing = st.enemy_air[-1]
+            bwing.sqns.append(RedSquadron(f"{th['bomber_base']}_2", f"{st.assets[th['bomber_base']].name} escorts", "Su_27", d.bomber_escort_wing, role="escort"))
+            bwing.types = ["Tu_22M3", "Su_27"]; bwing.squadrons = len(bwing.sqns)
 
     # ---- air defence clusters ----------------------------------------------------------------------
     variants = d.sam_variants
     k = 0
     for aid, nm, apt, val in fields:
         p = ap(apt)
+        placed = {True: 0, False: 0}                                        # sites placed so far in this cluster, by class
         for i in range(d.sam_sites_per_cluster):
             v = variants[k % len(variants)]
             k += 1
-            x, y = _offset(p.x, p.y, (60 + 130 * i + rng.randint(-20, 20)) % 360, 7000 + 3000 * i)
+            rng.randint(-20, 20)                                            # (the old random bearing: drawn and dropped so the campaign's other random draws stay as they were)
+            x, y = _sams_mod.place_red_site(st, aid, p.x, p.y, v in LONG_RANGE, placed[v in LONG_RANGE])    # v0.41.65: doctrinal place + seeded jitter (sams.py)
+            placed[v in LONG_RANGE] += 1
             add(f"sam_{aid[3:]}_{i}", f"{nm} {SAM_LABEL[v]}", AssetKind.SAM, x, y, SAM_VALUE[v], variant=v, tier=FIELD_TIER.get(aid, 3))
             if v in LONG_RANGE and rng.random() < d.garrison_chance:       # a dug-in garrison: a reason for CAS and armour
                 gx, gy = _offset(x, y, rng.randint(0, 359), rng.randint(1800, 3200))
@@ -223,6 +261,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
 
     # ---- the ground push toward Senaki (CAS targets) ------------------------------------------------------------
     ground.build(st, th, d, rng, ap)                                # the sectors of the front, a Red column in each, Blue's supply sites
+    _sams_mod.ensure_blue_sams(st)                                       # v0.41.62: blue's Patriot, HAWK and AAA sites at every airfield
     for i, v in enumerate(d.forward_sams):                          # short-range air defence travels with the column
         col = st.assets.get(f"armor_{i + 1}")
         if col is None:

@@ -17,7 +17,7 @@ Do not start building until XO says go.
 ## Your job
 Analyse XO's test runs (SQE_state.json, dcs.log, SQE_Sortie.miz, Remarks.txt), build fixes, open PRs, and keep the queue doc current.
 Status, plans and the watch list live in the claude.ai Project "Squadron Campaign Engine":
-`claude/sqe-queue.md` (current queue), `claude/no-banzai-plan.md`, `claude/standoff-sead-plan.md`.
+`claude/sqe-queue.md` (current queue), plus the plan docs `claude/barcap-plan.md`, `claude/same-rules-plan.md`, `claude/red-arm-plan.md`, `claude/no-banzai-plan.md`, `claude/standoff-sead-plan.md`.
 Read the queue doc before starting work. Update it after each PR. There is exactly ONE queue doc, `claude/sqe-queue.md` (XO 2026-10-20): never create a supplement, "next" or addendum queue doc; put new items and status into it (read it, edit, write the full file back) and delete any stray extra queue doc.
 If the session has no Project attached, ask XO to paste the queue doc. Don't guess the status.
 
@@ -41,6 +41,7 @@ Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE
 - XO writes marketing text and the README himself. No debrief text needed.
 - Heavy builds wait for the date XO sets. Check the queue doc.
 - Talk first, then build, for anything big. Tell XO whether it is light or heavy before starting.
+- **ASK PERMISSION BEFORE EVERY CODE CHANGE (XO 2026-10-22).** Before editing any code or data file (anything that is not docs-only), say what you plan to change, whether it is light, medium or heavy, and what a wrong guess would cost, then wait for XO's yes. He sets the model's effort level from that. A "go" for a named job is the yes for that job; a new or wider change needs a new yes. Docs-only changes (and the DESIGN_NOTES direct pushes) still follow their own rules above; investigation, sims and probes that change no files need no permission.
 - Add an entry to `docs/CHANGES.md` for each PR, and list XO's own commits in it.
 - **Docs-only changes** (CLAUDE.md, README, CHANGES.md, comments, other markdown): do not run the smoke test. Run it for anything that touches code or data.
 - (XO) Don't forget to update __init__.py for version changes.
@@ -71,17 +72,23 @@ Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE
 
 ## Code map
 - Before touching `ETA_locked` / `speed_locked` on any waypoint (anywhere a route is built, not just `_spawn_flight`), read `docs/DESIGN_NOTES.md` section 8 first. The Mission Editor's two lock rules are easy to re-break by accident (v0.41.2's fix and the v0.41.32 "Viper 2: Waypoint 8" fix are mirror images of each other): `_free_locked_speeds` now enforces both generically at the end of the build, so a new route shape should lean on that rather than hand-setting a lock on a specific point.
+- `sqe/strike_tasks.py`: `StrikeTasks`, the strike / SEAD / DEAD / CAS tasking (HARM and JSOW tasks, DEAD gate, CAS tasks), inherited by `MissionBuilder`.
+- `sqe/fighter_stations.py`: `FighterStations`, the TARCAP / escort / sweep station rules (engage circles, SAM-clear stations, hold times), inherited by `MissionBuilder`.
+- `sqe/support_caps.py`: `SupportCaps`, the tanker / HAVCAP / base CAP / carrier CAP (which ones, where they sit, their route), inherited by `MissionBuilder`.
+- `sqe/red_air_picture.py`: `RedAirPicture`, red's known CAP stations and alert aircraft in a mission, inherited by `MissionBuilder`. `sqe/raid_spawns.py`: `RaidSpawns`, red raids and reactive spawns, inherited by `MissionBuilder`.
 - `sqe/mission_builder.py`: builds the mission; fight circles, tanker, carrier CAP, HARM/JSOW placement, recovery net.
 - `sqe/routes.py`: route planning and SAM avoidance (`AVOID_NM`).
 - `sqe/threatmap.py`: `tanker_spot` and threat geometry.
 - `sqe/war.py`, `sqe/packages.py`, `sqe/engine.py`: the war sim, package templates, daily planning (`AI_ONLY` job types).
 - `sqe/redair.py`, `sqe/raids.py`: red doctrine by level (`RED_DOCTRINE`, `RED_QUALITY`).
 - `sqe/sweep.py`: Fighter Sweep dispatch (only against red air out in the open) and its SAM-clear station.
+- `sqe/blue_barcap.py`: blue's planned patrols and the HAVCAP / TNKCAP guard chains, how packages pick them up (`attach`), the Overview status lines. `sqe/support_assets.py`: tankers and AWACS as assets (airframes, daily windows, losses). `sqe/barcap.py`: the BARCAP areas and chains both sides use.
+- `sqe/scramble.py`: where scrambled (alert) pairs station themselves, for both sides.
 - `sqe/debrief.py`: the Lua mission hook (landed/dead tables, recovery net).
 - `sqe/sams.py`, `sqe/threat.py`, `sqe/ecm.py`: SAM sites, threat model, jamming.
 - `sqe/state.py`, `sqe/settings.py`, `sqe/difficulty.py`, `sqe/gui/`: campaign state, settings, difficulty levels, the UI.
 - `sqe/data/theatres/`: theatre data (carrier position etc.).
-- `tools/smoke_test.py`: the checks. `tools/low_level_test.py`, `tools/capture_loadouts.py`: helpers.
+- `tools/smoke_test.py`: the checks, in named sections (`check_NN_...`; `--list`, `--only name,name`, `--timeout SECONDS`; a section lists at its top what it borrows from earlier ones). `tools/miz_identity.py`: builds about 80 missions (including BARCAP, intercept and sweep packages) and compares them with a saved baseline: run `save DIR` before a no-behaviour-change refactor (rename, function split) and `check DIR` after; exit 0 = identical missions. `SQE_IDENT_NO_STANDOFF=1` builds the same set with the stand-off setting off (a second baseline). `tools/red_sam_report.py [level] [seed]`: prints where red's SAM sites sit (bearing from the threat axis, distance). `tools/low_level_test.py`, `tools/capture_loadouts.py`: helpers.
 
 ## Levels
 1 insurgent, 2 regional power, 3 near-peer.

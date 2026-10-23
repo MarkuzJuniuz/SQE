@@ -164,9 +164,9 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     lane = 0.0 if human or not stack_idx else (1 if stack_idx % 2 else -1) * min(4.5, 1.5 * ((stack_idx + 1) // 2))
     lane_xy = lambda xy: offset(xy[0], xy[1], g.hdg + 90, lane * NM) if lane else xy
     wp.append(Wpt("PUSH", *lane_xy(g.push), alt, p.push_kts, "Push on time, check in with AWACS"))
-    st_ = (g.stand or {}).get(key) if role in (Role.ESCORT, Role.SWEEP) else None
+    st_ = (g.stand or {}).get(key) if role in (Role.TARCAP, Role.ESCORT, Role.SWEEP) else None
     if st_ is not None and len(st_) >= 5:
-        # TARCAP (ESCORT role) and ESCORT (SWEEP role, package escort): a station of their own, short of the target and outside live SAM cover,
+        # TARCAP and ESCORT (the package escort): a station of their own, short of the target and outside live SAM cover,
         # where they hold and shoot at what comes in range without chasing it. No IP. The TARCAP gets there first, holds its time and goes
         # home from the station; the escort holds until the last ground-attack flight is off target and leaves by the package egress when
         # that leg is clear of SAM cover (from the station otherwise). The same route for you and for the AI.
@@ -177,8 +177,8 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
             for w_ in wp:                                      # v0.41.12: its PUSH lies ahead of the base, toward the station: it climbs straight out
                 if w_.name == "PUSH":
                     w_.x, w_.y = offset(bx, by, g.hdg, SWEEP_PUSH_NM * NM)
-            wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"SWEEP: station {short_:.0f} nm short of the target{why_}; clear the air, do not chase", "SWEEPSTN", orbit=True))
-        elif role == Role.ESCORT:
+            wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"SWEEP: station {short_:.0f} nm short of the target{why_}; clear the air, do not chase", "SWEEP", orbit=True))
+        elif role == Role.TARCAP:
             wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"TARCAP: on station {short_:.0f} nm short of the target{why_}; hold and shoot, do not chase", "TARCAP", orbit=True))
         else:
             wp.append(Wpt("TGT", sx_, sy_, alt, p.cap_kts, f"ESCORT: hold {short_:.0f} nm short of the target{why_} until the strikers are off; do not chase", "ESCORT", orbit=True))
@@ -207,16 +207,18 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         wp.append(Wpt("TGT", g.tx, g.ty, 0, p.attack_kts, "SEAD site. You set standoff", "SEAD", agl=True))
     elif role == Role.SEAD:
         wp.append(Wpt("SEAD", *offset(g.tx, g.ty, harm_ax, harm_nm * NM), ialt, p.attack_kts, "HARM launch point", "SEAD", rad=irad))
-    elif role == Role.SWEEP and so:
-        wp.append(Wpt("TGT", so[0], so[1], alt, p.cap_kts, f"SWEEP: stop here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "SWEEP", orbit=True))
-    elif role == Role.SWEEP:
-        wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts + 30, "SWEEP: clear the airspace", "SWEEP"))
+    elif role in (Role.ESCORT, Role.SWEEP) and so:
+        nm_ = "ESCORT" if role == Role.ESCORT else "SWEEP"        # v0.41.60: one name per job (this branch is the old 4-tuple stop-short point; no station reaches it any more)
+        wp.append(Wpt("TGT", so[0], so[1], alt, p.cap_kts, f"{nm_}: stop here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", nm_, orbit=True))
+    elif role in (Role.ESCORT, Role.SWEEP):
+        nm_ = "ESCORT" if role == Role.ESCORT else "SWEEP"        # a flight with no station of its own (stand-off setting off, or fleet-defence fighters)
+        wp.append(Wpt("TGT", g.tx, g.ty, alt, p.attack_kts + 30, f"{nm_}: " + ("cover the strikers over target" if role == Role.ESCORT else "clear the airspace"), nm_))
     elif role == Role.CAS:
         wp.append(Wpt("TGT", g.tx, g.ty, 0 if human else ialt, p.attack_kts, "CAS: check in with JTAC (COMM1 CH3)", "CAS", agl=human, rad=irad and not human))
     elif so:
-        wp.append(Wpt("TGT", so[0], so[1], ialt, p.cap_kts, f"ESCORT: hold here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "ESCORT", rad=irad, orbit=True))
+        wp.append(Wpt("TGT", so[0], so[1], ialt, p.cap_kts, f"TARCAP: hold here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "TARCAP", rad=irad, orbit=True))
     else:
-        wp.append(Wpt("TGT", g.tx, g.ty, ialt, p.attack_kts, "ESCORT: cover the strikers over target", "ESCORT", rad=irad))
+        wp.append(Wpt("TGT", g.tx, g.ty, ialt, p.attack_kts, "TARCAP: cover the strikers over target", "TARCAP", rad=irad))
     standoff = not human and (role == Role.SEAD or (jsow and role == Role.STRIKE))
     if standoff:
         # a HARM or JSOW flight fires from stand-off range and goes home the way it came. The package egress lies beyond the target for the
@@ -224,7 +226,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         sax = harm_ax if role == Role.SEAD else jsow_hdg
         snm = (harm_nm if role == Role.SEAD else jsow_nm) + STANDOFF_EGRESS_NM
         wp.append(Wpt("EGR", *offset(g.tx, g.ty, sax, snm * NM), ialt, p.egress_kts, "Exit: back out along the approach", rad=irad))
-    elif not (so and role in (Role.SWEEP, Role.ESCORT)):         # a stand-off fighter never crosses the target area: it goes home from its hold
+    elif not (so and role in (Role.ESCORT, Role.SWEEP, Role.TARCAP)):         # a stand-off fighter never crosses the target area: it goes home from its hold
         wp.append(Wpt("EGR", *lane_xy(g.egr), ialt + (1000 * (stack_idx % 3) if lane else 0), p.egress_kts, "Exit threat area", rad=irad))
     if not human and g.sa10_avoid and role in (Role.STRIKE, Role.SEAD, Role.CAS):
         k0 = next((k for k, w in enumerate(wp) if w.name == "PUSH"), 1)
@@ -293,7 +295,7 @@ def hold_leave_s(wps: list[Wpt], push_s: float) -> float:
     return push_s
 
 
-OBJECTIVE_ACTIONS = ("BOMB", "JSOW", "SEAD", "SWEEP", "CAS", "ESCORT", "TARCAP", "SWEEPSTN", "CAPORBIT")
+OBJECTIVE_ACTIONS = ("BOMB", "JSOW", "SEAD", "SWEEP", "CAS", "ESCORT", "TARCAP", "CAPORBIT")
 
 
 def objective_wp(wps: list[Wpt]) -> Wpt | None:

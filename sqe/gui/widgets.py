@@ -99,12 +99,19 @@ class MapView(QWidget):
         pen = QPen(QColor(BORDER), 1); pen.setStyle(Qt.DashLine); p.setPen(pen); p.setBrush(Qt.NoBrush)
         for line in _GEO["borders"]:
             p.drawPolyline(QPolygonF([P(x, y) for x, y in line]))
-        # SAM threat rings
+        # SAM threat rings: red (live sites; a damaged site's ring is fainter) and blue (Patriot / HAWK sites); a destroyed site has none
         if self.rings:
             for a in st.assets.values():
                 if a.kind == AssetKind.SAM and not a.destroyed and a.variant in RANGE_NM and RANGE_NM[a.variant] >= 8:
-                    c = P(a.x, a.y); r = RANGE_NM[a.variant] * 1852 * sc
-                    p.setPen(QPen(QColor(255, 93, 108, 170), 1)); p.setBrush(QBrush(QColor(255, 93, 108, 26)))
+                    c = P(a.x, a.y); r = RANGE_NM[a.variant] * 1852 * sc; h = max(0.25, min(1.0, a.health))
+                    p.setPen(QPen(QColor(255, 93, 108, int(60 + 110 * h)), 1)); p.setBrush(QBrush(QColor(255, 93, 108, int(8 + 18 * h))))
+                    p.drawEllipse(c, r, r)
+            from ..raids import PATRIOT_NM, HAWK_NM
+            for k, a in (getattr(st, "blue_sams", None) or {}).items():
+                rng = PATRIOT_NM if k.endswith("_pat") else HAWK_NM if k.endswith("_hawk") else 0
+                if rng and not a.destroyed:
+                    c = P(a.x, a.y); r = rng * 1852 * sc; h = max(0.25, min(1.0, a.health))
+                    p.setPen(QPen(QColor(90, 160, 255, int(60 + 110 * h)), 1)); p.setBrush(QBrush(QColor(90, 160, 255, int(8 + 18 * h))))
                     p.drawEllipse(c, r, r)
         f = QFont(); f.setPointSize(8); p.setFont(f)
         for a in st.assets.values():

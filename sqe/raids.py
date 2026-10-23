@@ -37,7 +37,7 @@ def raider_wings(state, kind: str = "field", budget: bool = True) -> list:
         a = state.assets.get(w.base_asset_id)
         if w.available < 2 or a is None or a.destroyed or (budget and not redair.can(state, w.base_asset_id, 2)):
             continue
-        t = next((t for t in pref if t in w.types), None)
+        t = next((t for t in pref if t in w.types_up), None)        # v0.41.53: a squadron of that type with a pair serviceable
         if t:
             out.append((w, t))
     return out
@@ -57,7 +57,7 @@ def aim_xy(state, aim: str, base):
 
 
 def aim_kind(aim: str) -> str:
-    return "field" if not aim else "sector" if aim.startswith("sector:") else "garrison" if aim.startswith("bgar_") else "supply"
+    return "field" if not aim else "sector" if aim.startswith("sector:") else "garrison" if aim.startswith(("bgar_", "bfwd_")) else "supply"
 
 
 def describe(state, base, aim: str = "") -> str:
@@ -70,11 +70,13 @@ def describe(state, base, aim: str = "") -> str:
     return f"Intercept an air attack on the {a.name}" if k == "garrison" else f"Intercept a raid on the {a.name}"
 
 
-def _reach(state, kind: str, x: float, y: float, budget: bool = True):
-    """(distance nm, wing, type) of the nearest wing that can reach (x, y) with a raid of this kind, or None."""
+def _reach(state, kind: str, x: float, y: float, budget: bool = True, only: str | None = None):
+    """(distance nm, wing, type) of the nearest wing that can reach (x, y) with a raid of this kind, or None. v0.41.125: `only` restricts the aircraft type."""
     from .loadouts import ENEMY_RADIUS_NM
     best = None
     for w, t in raider_wings(state, kind, budget):
+        if only and t != only:
+            continue
         a = state.assets[w.base_asset_id]
         nm = math.hypot(a.x - x, a.y - y) / NM
         if nm <= ENEMY_RADIUS_NM[t] * 0.85 and (best is None or nm < best[0]):
@@ -105,15 +107,22 @@ def candidates(state, kind: str) -> list:
         for a in sorted(getattr(state, "blue_assets", {}).values(), key=lambda a: a.id):
             if a.destroyed:
                 continue
-            if (kind == "garrison") != (a.id.startswith("bgar_")):
+            if (kind == "garrison") != (a.id.startswith(("bgar_", "bfwd_"))):
                 continue
+            wt_ = 1.0
+            if a.id.startswith("bfwd_"):                                  # v0.41.102: a forward garrison is raided where friendly troops still hold the sector, more where the pressure is
+                from . import ground
+                i_ = ground.sector_of(state, a.id)
+                if i_ is None or ground.blue_strength(state, i_) < ground.MIN_FORCE:
+                    continue
+                wt_ = 0.5 + ground.info(state, i_)["pressure"]
             home = state.bases.get(a.id.split("_", 1)[1]) if a.id.split("_", 1)[1] in state.bases else _nearest_field(state, a.x, a.y)
             if home is None or home.id in fallen:
                 continue
             r = _reach(state, kind, a.x, a.y)
             if r is None:
                 continue
-            out.append((home, a.id, max(0.15, 1.0 - r[0] / 330.0) * (0.5 + 0.5 * a.health) * (a.value / 5.0)))
+            out.append((home, a.id, max(0.15, 1.0 - r[0] / 330.0) * (0.5 + 0.5 * a.health) * (a.value / 5.0) * wt_))
     elif kind == "sector":
         from . import ground
         if ground.active(state):
@@ -145,8 +154,10 @@ def _weighted(rng: random.Random, ws: list):
     return ws[-1]
 
 
-def pick_target(state, rng: random.Random):
+def pick_target(state, rng: random.Random, d=None):
     ws = target_weights(state)
+    if d is not None:                               # v0.41.125: only a field red can suppress (see `sead_plan`)
+        ws = [(b, w) for b, w in ws if (r_ := reach_for(state, "field", b.x, b.y)) is not None and sead_plan(state, d, b, "", r_[1], r_[2])[0]]
     return _weighted(rng, ws)[0] if ws else None
 
 
@@ -161,7 +172,15 @@ def pick_aim(state, d, rng: random.Random):
         if r < acc:
             kind = k
             break
-    ws = candidates(state, kind) or (candidates(state, "field") if kind != "field" else [])
+    def can_(ws_):                                  # v0.41.125: red does not start a raid on a covered target it cannot suppress
+        out_ = []
+        for b_, aim_, w_ in ws_:
+            x_, y_ = aim_xy(state, aim_, b_)
+            r_ = reach_for(state, aim_kind(aim_), x_, y_)
+            if r_ is not None and sead_plan(state, d, b_, aim_, r_[1], r_[2])[0]:
+                out_.append((b_, aim_, w_))
+        return out_
+    ws = can_(candidates(state, kind)) or (can_(candidates(state, "field")) if kind != "field" else [])
     if not ws:
         return None
     ws = shy(state, d, ws)
@@ -169,9 +188,99 @@ def pick_aim(state, d, rng: random.Random):
     return base, aim
 
 
+ARM_AD_FACTOR = 0.5     # v0.41.84: a field raid with a red SEAD pair meets half the battery cover in the unflown (background) raids (judgment call)
+ARM_AD_FACTOR_8 = 0.2     # v0.41.116: ...and two four-jet flights (8 Su-24M, 16 Kh-31P) take more again (judgment call)
+ARM_AD_FACTOR_4 = 0.3     # v0.41.94: ...and a four-jet SEAD group (both a Patriot and a HAWK live, or a full-strength Patriot) takes more of it (judgment call)
+
+
+def arm_jets(state, base, available: int, nb: int, cap: int = 8, cap_free: int = 8) -> int:
+    """v0.41.94: the size of red's Su-24M SEAD group against this field's batteries, like blue's salvo sizing: 2 jets (4 Kh-31P) for a Patriot or a HAWK
+    alone, 4 (8 missiles) when both are live or the Patriot is at full strength, 8 (two four-jet flights, v0.41.116) when a full Patriot and a HAWK are both live. At most the Su-24Ms the wing has left beyond its `nb` bom
+    (a short wing falls back to a pair), 0 when the field has neither battery. Thresholds are judgment calls (Kh-31P: 2 per Su-24M, Wikipedia).
+    v0.41.125: `cap` (the level's `arm_cap`; L2 a pair) lowers the size unless the wing has `cap_free` jets spare."""
+    from . import sams
+    bt = sams.blue_battery(base, state)
+    if not (bt["patriot_ln"] or bt["hawk"]):
+        return 0
+    full_ = bt["patriot_ln"] >= sams.BLUE_PATRIOT_LN
+    want = 8 if (bt["patriot_ln"] and bt["hawk"] and full_) else (4 if ((bt["patriot_ln"] and bt["hawk"]) or full_) else 2)     # v0.41.116: a full Patriot AND a HAWK: two four-jet flights (XO 2026-10-22: 4 + 4)
+    free = available - nb
+    if free < cap_free:
+        want = min(want, cap)
+    for n_ in (want, 4, 2):                                  # a short wing steps down: 8, 4, 2, none
+        if n_ <= want and free >= n_:
+            return n_
+    return 0
 PATRIOT_NM = 40          # v0.41.20: a full-strength field's Patriot covers its own field and what lies this close to it
 FLEET_NM = 70            # v0.41.31: ...and the carrier group's SM-2 reach (measured: CAP pairs killed 51-67 nm out; mission_builder.FLEET_RAID_AVOID_NM)
 HAWK_NM = 25             # ...and a field's HAWK battery (v0.41.30: every full-strength field has one, not only yours)
+
+
+def covering_fields(state, x: float, y: float) -> list:
+    """v0.41.129: every airfield whose live Patriot (PATRIOT_NM) or HAWK (HAWK_NM) covers (x, y), nearest first. In Georgia the fields are about 20 nm apart, so a
+    target is usually covered by its neighbours' batteries too."""
+    from .sams import blue_battery
+    out = []
+    for b in state.bases.values():
+        if b.kind != BaseKind.AIRFIELD:
+            continue
+        bt = blue_battery(b, state)
+        dn = math.hypot(b.x - x, b.y - y) / NM
+        if (bt["patriot_ln"] and dn <= PATRIOT_NM) or (bt["hawk"] and dn <= HAWK_NM):
+            out.append((dn, b.id, b))
+    return [b for _, _, b in sorted(out, key=lambda t: t[:2])]
+
+
+def cover_field(state, x: float, y: float):
+    """v0.41.125: the nearest airfield whose live Patriot (PATRIOT_NM) or HAWK (HAWK_NM) covers (x, y), or None."""
+    fs = covering_fields(state, x, y)
+    return fs[0] if fs else None
+
+
+def reach_for(state, kind: str, x: float, y: float, budget: bool = True):
+    """v0.41.125: like `_reach`, but a target under live Patriot / HAWK cover is raided only by a Su-24M wing (the type that carries the SEAD group)."""
+    return _reach(state, kind, x, y, budget, only="Su_24M" if cover_field(state, x, y) is not None else None)
+
+
+ARM_MAX_TOTAL = 12       # v0.41.129: the most SEAD jets one raid sends in all (three flights of four; judgment call)
+
+
+def sead_groups(state, d, x: float, y: float, available: int, nb: int):
+    """v0.41.129 (XO 2026-10-23: the neighbour's Patriot shot the bombers after the gate opened): -> [(field, jets)], one SEAD group for EVERY field whose
+    live battery covers (x, y), nearest first; [] when nothing covers it; None when red cannot suppress them all. Every covering field gets a pair (4 Kh-31P
+    to blind its radars; judgment call), and what is left of the wing's spare jets (`available` less the `nb` bombers) tops the nearest fields up to
+    their `arm_jets` size, nearest first (the level's `arm_cap` caps one group: L2 a pair unless `arm_cap_free` jets are spare). None when the pairs alone
+    need more jets than are spare, or the total tops ARM_MAX_TOTAL."""
+    fs = covering_fields(state, x, y)
+    if not fs:
+        return []
+    cap, cap_free = int(getattr(d, "arm_cap", 8)), int(getattr(d, "arm_cap_free", 8))
+    free0 = available - nb
+    if free0 < 2 * len(fs) or 2 * len(fs) > ARM_MAX_TOTAL:
+        return None
+    left = min(free0, ARM_MAX_TOTAL) - 2 * len(fs)
+    out = []
+    for f in fs:
+        want = arm_jets(state, f, free0 + nb, nb, cap, cap_free)
+        size = max([n for n in (8, 4, 2) if n <= max(2, want) and n - 2 <= left] or [2])
+        left -= size - 2
+        out.append((f, size))
+    return out if sum(n for _, n in out) <= ARM_MAX_TOTAL else None
+
+
+def sead_plan(state, d, base, aim: str, wing, ac: str):
+    """v0.41.125 (XO 2026-10-23: no dice, intelligent planning): -> (ok, n_arm). A target under live Patriot / HAWK cover is raided only by a Su-24M wing
+    that can field the SEAD groups (v0.41.129: one for every covering field, see `sead_groups`; L1 none); an uncovered target needs none. Raids on
+    covered supply sites, garrisons and sectors are not attempted (no SEAD is built for them)."""
+    x, y = aim_xy(state, aim, base)
+    if cover_field(state, x, y) is None:
+        return True, 0
+    if aim_kind(aim) != "field" or ac != "Su_24M" or getattr(d, "raid_arm", 0) <= 0:
+        return False, 0
+    avail = wing.available_of({"Su_24M"}) if hasattr(wing, "available_of") else wing.available
+    g = sead_groups(state, d, x, y, avail, int(d.raid_size[1]))
+    n = sum(j for _, j in g) if g else 0
+    return n > 0, n
 
 
 def shy(state, d, ws: list) -> list:
@@ -183,7 +292,7 @@ def shy(state, d, ws: list) -> list:
         return ws
     fields = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and getattr(b, "defense", 0.0) >= 0.6]
     from .sams import blue_battery
-    hawks = [b for b in fields if blue_battery(b)["hawk"]] if doc["hawk"] else []
+    hawks = [b for b in fields if blue_battery(b, state)["hawk"]] if doc["hawk"] else []
     fleets = [b for b in state.bases.values() if b.kind == BaseKind.CARRIER]     # v0.41.30: every field's HAWK, not only your home field's
     out = []
     for base, aim, w in ws:
@@ -204,13 +313,16 @@ def raid_objective(base, aim: str = "", desc: str | None = None) -> Objective:
 def _commit(state, d, base, aim: str) -> None:
     """Book the raid's aircraft against the nearest capable wing's daily sortie budget."""
     x, y = aim_xy(state, aim, base)
-    r = _reach(state, aim_kind(aim), x, y)
+    r = reach_for(state, aim_kind(aim), x, y)
     if r is not None:
         redair.spend(state, r[1].base_asset_id, int(d.raid_size[1]))
 
 
 def todays_raids(state, d, rng: random.Random) -> tuple:
     """-> (objectives of the announced raids, number of surprise raids). One draw per day; the same seed gives the same answer."""
+    from . import bombers
+    if bombers.is_quiet(state):                             # v0.41.109: the quiet day before the carrier raid
+        return [], 0
     rate = float(d.raid_rate)
     n = int(rate) + (1 if rng.random() < rate - int(rate) else 0)
     warned, surprise = [], 0
@@ -228,14 +340,14 @@ def todays_raids(state, d, rng: random.Random) -> tuple:
     return warned, surprise
 
 
-def hit(state, base_id: str, wing, rng: random.Random, through: int | None = None, aim: str = "") -> list:
+def hit(state, base_id: str, wing, rng: random.Random, through: int | None = None, aim: str = "", ac: str | None = None) -> list:
     """Bombs fall on one of our airfields, a supply site, a garrison or on friendly troops. The raiders lose a jet to the defences. Log lines."""
     b = state.bases[base_id]
     k = through if through is not None else rng.randint(1, 3)
     from .sams import covering_ad
     ad = covering_ad(state, *aim_xy(state, aim, b))
     if wing is not None:                                # v0.41.30: a full Patriot + HAWK takes a second jet (was always one)
-        wing.available = max(0, wing.available - 1 - (round(ad) if through is None else 0))    # (a flown raid's real kills are counted by the debrief)
+        wing.lose(ac, 1 + (round(ad) if through is None else 0))    # (a flown raid's real kills are counted by the debrief)
     kind = aim_kind(aim)
     if kind == "sector":
         g, i = state.ground, int(aim.split(":")[1])
@@ -247,10 +359,12 @@ def hit(state, base_id: str, wing, rng: random.Random, through: int | None = Non
         return [f"   {a.name} {'destroyed' if a.destroyed else f'damaged, {a.health:.0%} left'}"]
     gar = state.blue_assets.get(f"bgar_{base_id}") if getattr(state, "blue_assets", None) else None
     shield = 1.0 - GARRISON_SHIELD * (gar.health if gar is not None and not gar.destroyed else 0.0)
+    gone = []
     if b.kind != BaseKind.CARRIER:
-        b.defense = max(0.0, b.defense - BASE_LOSS * k * shield * (1.0 - 0.4 * ad))     # v0.41.30: batteries soak part of the damage (judgment call)
+        from .sams import hit_field
+        gone = hit_field(state, b, BASE_LOSS * k * shield * (1.0 - 0.4 * ad))     # v0.41.30: batteries soak part of the damage (judgment call)
     sqs = sorted((s for s in state.squadrons.values() if s.base_id == base_id and s.available > 0), key=lambda s: -s.available)
-    lines = [f"   bombs fell on {b.name}: its defences are down to {b.defense:.0%}" if b.kind != BaseKind.CARRIER else f"   missiles hit {b.name}"]
+    lines = [f"   bombs fell on {b.name}: its defences are down to {b.defense:.0%}{' (' + ', '.join(gone) + ' destroyed)' if gone else ''}" if b.kind != BaseKind.CARRIER else f"   missiles hit {b.name}"]
     if sqs:
         sq = sqs[0]
         lost = min(sq.available, rng.randint(1, 1 + k))
@@ -269,22 +383,36 @@ def overnight(state, d, rng: random.Random) -> list:
             continue
         b, aim = pa
         x, y = aim_xy(state, aim, b)
-        r = _reach(state, aim_kind(aim), x, y)
+        r = reach_for(state, aim_kind(aim), x, y)
         if r is None:
             continue
         wing = r[1]
         redair.spend(state, wing.base_asset_id, int(d.raid_size[1]))
         alert = sum(s.available for s in state.squadrons.values() if s.base_id == b.id) / max(1, sum(s.authorized for s in state.squadrons.values() if s.base_id == b.id))
         from .sams import covering_ad
-        p_stop = min(0.95, 0.2 + 0.45 * covering_ad(state, x, y) + 0.3 * alert)       # v0.41.30: the batteries that cover the target (was the field's defense number)
+        ad_ = covering_ad(state, x, y)
+        ok_, n_arm_ = sead_plan(state, d, b, aim, wing, r[2])      # v0.41.125: no dice: a covered target is raided only with its SEAD group
+        if not ok_:
+            continue
+        arm_ = n_arm_ > 0
+        if arm_:
+            ad_ *= ARM_AD_FACTOR_8 if n_arm_ >= 8 else (ARM_AD_FACTOR_4 if n_arm_ >= 4 else ARM_AD_FACTOR)
+        p_stop = min(0.95, 0.2 + 0.45 * ad_ + 0.3 * alert)       # v0.41.30: the batteries that cover the target (was the field's defense number)
         what = {"field": b.name, "supply": state.blue_assets[aim].name if aim in state.blue_assets else "", "garrison": state.blue_assets[aim].name if aim in state.blue_assets else "",
                 "sector": "friendly troops in " + state.ground["names"][int(aim.split(":")[1])] if aim.startswith("sector:") else ""}[aim_kind(aim)]
+        from . import blue_barcap
+        wa_ = state.assets.get(wing.base_asset_id)
+        up_, psq_ = blue_barcap.patrol_up(state, rng, b, (wa_.x, wa_.y)) if (wa_ is not None and b.kind != BaseKind.CARRIER) else (False, None)       # v0.41.86: a pair on station
+        if up_:
+            p_stop = min(0.95, p_stop + blue_barcap.PATROL_STOP)
         if rng.random() < p_stop:
-            k = min(wing.available, rng.randint(1, 3 + round(covering_ad(state, x, y)))); wing.available -= k
-            lines.append(f"Surprise raid on {what}: alert aircraft got up in time; {k} attack aircraft shot down")
+            k = wing.lose(r[2], rng.randint(1, 3 + round(covering_ad(state, x, y))))
+            lines.append(f"Surprise raid on {what}: " + ("the base patrol and " if up_ else "") + f"alert aircraft got up in time; {k} attack aircraft shot down")
+            if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
+                lines.append(ln_)
         else:
-            lines.append(f"Surprise raid on {what}: nobody was warned and the aircraft got through")
-            lines += [x_.strip() for x_ in hit(state, b.id, wing, rng, None, aim)]
+            lines.append(f"Surprise raid on {what}: nobody was warned and the aircraft got through" + (" (red anti-radiation missiles suppressed the batteries)" if arm_ else ""))
+            lines += [x_.strip() for x_ in hit(state, b.id, wing, rng, None, aim, r[2])]
     if state.raids is not None:
         state.raids["surprise"] = 0
     return lines
@@ -298,6 +426,9 @@ def emergency_seed(state, package_number: int, flight_id) -> random.Random:
 def emergency_happens(state, d, rng: random.Random) -> bool:
     """The per-sortie dice, with the cap: none right after a sortie that had one."""
     if (state.raids or {}).get("last_emerg", -9) == state.sortie_counter:
+        return False
+    from . import bombers
+    if bombers.is_quiet(state):
         return False
     return rng.random() < d.emerg_chance
 

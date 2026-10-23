@@ -20,7 +20,7 @@ def _browse(parent, line: QLineEdit, title: str):
 
 
 class NewCampaignDialog(QDialog):
-    def __init__(self, parent=None, weather_mode: str = "clear"):
+    def __init__(self, parent=None, weather_mode: str = "clear", skill_red: str = "level", skill_blue: str = "level"):
         super().__init__(parent); self.setWindowTitle("New Campaign"); self.setMinimumWidth(520)
         lay = QVBoxLayout(self); lay.setSpacing(12)
         t = QLabel("New Campaign"); t.setObjectName("title"); lay.addWidget(t)
@@ -59,6 +59,14 @@ class NewCampaignDialog(QDialog):
             self.wx.addItem(val, k)
         self.wx.setCurrentIndex(max(0, self.wx.findData(weather_mode)))
         form.addRow("Weather", self.wx)                # the same setting as Settings > Campaign > Weather: it can be changed there later
+        from ..difficulty import SKILL_CHOICES as _SK
+        self.skr, self.skb = QComboBox(), QComboBox()
+        for cb_, cur_ in ((self.skr, skill_red), (self.skb, skill_blue)):
+            for k, val in _SK.items():
+                cb_.addItem(val, k)
+            cb_.setCurrentIndex(max(0, cb_.findData(cur_)))
+        form.addRow("AI Skill, Red", self.skr)          # the same two settings as Settings > Campaign > AI Skill: they can be changed there later
+        form.addRow("AI Skill, Blue", self.skb)
         lay.addLayout(form)
         self.blurb = QLabel(); self.blurb.setWordWrap(True); self.blurb.setObjectName("dim"); lay.addWidget(self.blurb)
         self.lvl.currentIndexChanged.connect(self._b); self._b()
@@ -77,12 +85,13 @@ class NewCampaignDialog(QDialog):
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
                 "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(),
-                "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData())}
+                "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData()),
+                "ai_skill_red": str(self.skr.currentData() or "level"), "ai_skill_blue": str(self.skb.currentData() or "level")}
 
 
 class SettingsDialog(QDialog):
-    """Five tabs: General (flight timing), Campaign (what the world does), Mission build (merging, limits), DCS integration (paths, the
-    scripting patch) and Terrain scan (with a plain scanned / not scanned status). Every control keeps the name it always had."""
+    """Six tabs: General (flight timing), Campaign (what the world does), Mission build (merging, limits), DCS integration (paths, the
+    scripting patch), Terrain scan (with a plain scanned / not scanned status) and Experimental (features still being tested). Every control keeps the name it always had."""
     def __init__(self, settings: S.AppSettings, parent=None):
         super().__init__(parent); self.s = settings; self.setWindowTitle("Settings"); self.setMinimumWidth(720); self.setMinimumHeight(560); self.resize(780, 700)
         lay = QVBoxLayout(self); lay.setSpacing(10)
@@ -120,8 +129,40 @@ class SettingsDialog(QDialog):
                 "natural pace (afterburner time). AI flights adjust automatically.")
         self.fuel = QCheckBox("AI fuel management (unlimited until the push, real fuel in the fight, unlimited again from egress)")
         self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); v.addWidget(self.fuel)
+        self.hotramp = QCheckBox("Hot starts at the ramp (scramble pairs)")
+        self.hotramp.setChecked(bool(getattr(settings, "hot_ramp_scrambles", False))); v.addWidget(self.hotramp)
+        hint(v, "Land fields only. On: alert pairs at land fields wait hot on the ramp and taxi out when called. Off: they wait hidden and appear on the runway (the older, steadier way). "
+                "The carrier always keeps the hidden deck start, and so does your own field.")
         self.f14n = QCheckBox("F-14B(U): name waypoints with special-point codes (IP, ST, HB...) so DEST can select them")
         self.f14n.setChecked(bool(settings.f14_special_names)); v.addWidget(self.f14n)
+        v.addStretch(1)
+
+        # ---- Experimental: features still being tested; each one can be switched off --------------------------------------
+        v = page("Experimental")
+        hint(v, "Features still being tried out. Each one can be switched off if it misbehaves; the defaults are the safe ones.")
+        self.ecm = QCheckBox("ECM script (SQE's own jamming)")
+        self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
+        hint(v, "SQE's own jamming model; off by default. Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
+                "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
+        self.hotrwy = QCheckBox("Hot starts on the runway (AI flights)")
+        self.hotrwy.setChecked(bool(getattr(settings, "hot_runway_starts", False))); v.addWidget(self.hotrwy)
+        hint(v, "Land fields other than yours. On: AI package flights wait hidden and appear on the runway in time to make their push, one runway release a minute apart. "
+                "A flight that cannot be released in time (the package is already underway at the start) still appears airborne. The carrier keeps the airborne start. Off: all AI flights appear airborne.")
+        self.hotrwy_own = QCheckBox("    ...also at my own field")
+        self.hotrwy_own.setChecked(bool(getattr(settings, "hot_runway_own_field", False)) and self.hotrwy.isChecked()); v.addWidget(self.hotrwy_own)
+        hint(v, "Needs the setting above. AI flights at your own field appear on the runway only after you have taken off, never in the last ten minutes before your planned landing, "
+                "and wait while you are on your way in to land.")
+        self.hotrwy_own.setEnabled(self.hotrwy.isChecked())
+        def _own_gate(on):
+            self.hotrwy_own.setEnabled(bool(on))
+            if not on:
+                self.hotrwy_own.setChecked(False)
+        self.hotrwy.toggled.connect(_own_gate)
+        self.borrow_red = QCheckBox("Red SAM borrowing")
+        self.borrow_red.setChecked(bool(getattr(settings, "borrow_red", False))); v.addWidget(self.borrow_red)
+        self.borrow_blue = QCheckBox("Blue SAM borrowing")
+        self.borrow_blue.setChecked(bool(getattr(settings, "borrow_blue", False))); v.addWidget(self.borrow_blue)
+        hint(v, "On: that side moves SAM batteries from quiet sites to threatened ones. Off: that side only rebuilds destroyed sites the slow way (by supply). Orders already on their way wait until you switch it back on. Takes effect at the next overnight update.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
@@ -132,6 +173,17 @@ class SettingsDialog(QDialog):
             self.wxm.addItem(val, k)
         self.wxm.setCurrentIndex(max(0, self.wxm.findData(getattr(settings, "weather_mode", "clear"))))
         row(v, "Weather", self.wxm)
+        from ..difficulty import SKILL_CHOICES as _SK
+        self.skr, self.skb = QComboBox(), QComboBox()
+        for cb_, key_ in ((self.skr, "ai_skill_red"), (self.skb, "ai_skill_blue")):
+            for k, val in _SK.items():
+                cb_.addItem(val, k)
+            cb_.setCurrentIndex(max(0, cb_.findData(getattr(settings, key_, "level"))))
+        row(v, "AI Skill, Red", self.skr)
+        row(v, "AI Skill, Blue", self.skb)
+        hint(v, "How good the AI pilots are, one setting for each side (Red's ground units follow the Red setting; Blue's base defences follow the Blue setting once it is set). "
+                "Level default is what SQE always did: Red follows the difficulty level (Average, Good, High) and Blue's AI flights fly at High. DCS's top skill "
+                "levels can feel like cheating; lower one side if it does. It changes the AI's skill only, not how the campaign's numbers run. It applies from your next mission.")
         hint(v, "Procedural follows the theatre's climate for the month and changes slowly from day to day (never clear to storm in an afternoon); each sortie "
                 "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
                 "that cannot attack at all is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
@@ -158,10 +210,6 @@ class SettingsDialog(QDialog):
         _row = QFormLayout(); _row.addRow("AI landings, carrier", self.land_cv); _row.addRow("AI landings, airfields", self.land_af); v.addLayout(_row)
         hint(v, "Skip: AI flights going home are recovered short of the base (10 nm from the boat, 8 nm from a field), count as landed and leave the mission, "
                 "so DCS's landing queue never runs them dry or fills your pattern. Your own wingmen are recovered too once you are back. Land for real: DCS landings.")
-        self.ecm = QCheckBox("ECM script: SQE's own jamming model (experimental, off by default)")
-        self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
-        hint(v, "Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
-                "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
         self.ruins = QCheckBox("Ruins: show what earlier packages already hit (smoke and fire); struck flights fly home")
         self.ruins.setChecked(bool(getattr(settings, "ruins", True))); v.addWidget(self.ruins)
         hint(v, "Earlier packages in the same area that struck before your start leave smoking ruins (at most three sites, a few plumes each). The result is "
@@ -180,29 +228,29 @@ class SettingsDialog(QDialog):
         self.merge.setCurrentIndex(1 if settings.merge_mode == "area" else 0)
         self.mmax = QSpinBox(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.merge_max_units))
         row(v, "Package merging", self.merge, self.mmax)
-        hint(v, "Packages inside the radius that start within 30 minutes after yours fly in the same mission (AI-flown, one shared ground "
-                "world and support). The waiting window shows the unit count so you can compare performance. Trimmed to the unit limit.")
-        self.mrad = QSpinBox(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "merge_radius_nm", 25)))
+        hint(v, "Packages inside the radius that start within the time windows below fly in the same mission (AI-flown, one shared ground "
+                "world and support). The waiting window shows the unit count so you can compare performance. The unit limit counts the whole mission, merged packages included: over it, returning flights go first, then the package that starts latest (a Fighter Sweep last), then wrecks are trimmed.")
+        self.mrad = QSpinBox(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "merge_radius_nm", 15)))
         row(v, "Merge radius", self.mrad)
         hint(v, "Packages whose target is inside this circle fly in the same mission (within the time windows below). The circle is centred on your target, "
                 "slid inward so it never hangs over the edge of the target area; your own target stays inside it. If the unit limit is exceeded, the package "
-                "furthest from the centre drops first.")
-        self.mback = QSpinBox(); self.mback.setRange(0, 30); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_back_min", 15)))
+                "that starts latest drops first.")
+        self.mback = QSpinBox(); self.mback.setRange(0, 30); self.mback.setSingleStep(5); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_back_min", 15)))
         row(v, "Earlier packages", self.mback)
         hint(v, "Packages that started up to this long before yours also fly, already airborne and underway when the mission starts. "
                 "A package that has already struck is not flown to its target (see Ruins on the Campaign tab). 0 = only later packages.")
+        self.mfwd = QSpinBox(); self.mfwd.setRange(0, 60); self.mfwd.setSingleStep(5); self.mfwd.setSuffix(" min after"); self.mfwd.setValue(int(getattr(settings, "merge_fwd_min", 30)))
+        row(v, "Later packages", self.mfwd)
+        hint(v, "Packages that start up to this long after yours also fly in the same mission (late-activated, they push at their own time). "
+                "Over the unit limit, the package that starts latest is dropped first.")
         self.mpct = QSpinBox(); self.mpct.setRange(0, 100); self.mpct.setSuffix(" %"); self.mpct.setValue(int(settings.merge_enemy_pct))
         row(v, "Enemy air sum", self.mpct)
         hint(v, "When packages are folded in: enemy fighters = the biggest package's need + this share of every other folded package's need (100 = full sum).")
-        self.ecap = QSpinBox(); self.ecap.setRange(0, 300); self.ecap.setSuffix(" nm enemy"); self.ecap.setValue(int(settings.enemy_cap_engage_nm))
-        self.fcap = QSpinBox(); self.fcap.setRange(0, 300); self.fcap.setSuffix(" nm friendly"); self.fcap.setValue(int(settings.friendly_cap_engage_nm))
-        row(v, "CAP engage range", self.ecap, self.fcap)
-        hint(v, "How far patrol fighters (enemy CAP, your HAVCAP/BASECAP) chase before breaking off. 0 = unlimited. Scrambled alert fighters are not limited.")
         self.feng = QSpinBox(); self.feng.setRange(0, 300); self.feng.setSuffix(" nm"); self.feng.setValue(int(settings.fighter_engage_nm))
         self.fmin = QSpinBox(); self.fmin.setRange(0, 120); self.fmin.setSuffix(" min after TOT"); self.fmin.setValue(int(settings.fighter_engage_minutes))
-        row(v, "Escort / sweep engage range", self.feng, self.fmin)
-        hint(v, "How far AI escorts, sweeps and SEAD go after a fighter, and for how long: the engage task ends this many minutes after the strike's TOT and they fly on home (alert pairs get 5 minutes more). 0 = unlimited. Your own flight is never limited (unless SQE was started with --ai-test).")
-        self.fso = QCheckBox("AI escorts and sweeps stop short of live SAM cover"); self.fso.setChecked(bool(settings.fighter_standoff))
+        row(v, "TARCAP / escort / sweep engage range", self.feng, self.fmin)
+        hint(v, "How far AI TARCAPs, escorts, sweeps and SEAD go after a fighter, and for how long: the engage task ends this many minutes after the strike's TOT and they fly on home (alert pairs get 5 minutes more). 0 = unlimited. Your own flight is never limited (unless SQE was started with --ai-test).")
+        self.fso = QCheckBox("AI TARCAPs, escorts and sweeps stop short of live SAM cover"); self.fso.setChecked(bool(settings.fighter_standoff))
         v.addWidget(self.fso)
         hint(v, "Their route ends where the first live SAM ring (plus 3 nm) would begin, and they hold there. Off = they fly to the target as before.")
         v.addStretch(1)
@@ -242,6 +290,7 @@ class SettingsDialog(QDialog):
         v.addStretch(1)
         self._tm_refresh()
 
+        self.tabs.tabBar().moveTab(1, self.tabs.count() - 1)                  # Experimental last
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); bb.accepted.connect(self._save)
         bb.rejected.connect(self.reject); lay.addWidget(bb)
         if not settings.dcs_saves or not Path(settings.dcs_saves).exists():
@@ -277,9 +326,14 @@ class SettingsDialog(QDialog):
         self.s.hold_minutes = int(self.hold.value())
         self.s.takeoff_buffer_s = int(self.tob.value())
         self.s.ai_unlimited_fuel = self.fuel.isChecked()
+        self.s.hot_ramp_scrambles = self.hotramp.isChecked()
+        self.s.hot_runway_starts = self.hotrwy.isChecked()
+        self.s.hot_runway_own_field = self.hotrwy.isChecked() and self.hotrwy_own.isChecked()
+        self.s.borrow_red = self.borrow_red.isChecked()
+        self.s.borrow_blue = self.borrow_blue.isChecked()
         self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())
         self.s.merge_enemy_pct = int(self.mpct.value())
-        self.s.merge_back_min = int(self.mback.value())
+        self.s.merge_back_min = int(self.mback.value()); self.s.merge_fwd_min = int(self.mfwd.value())
         self.s.merge_radius_nm = int(self.mrad.value())
         self.s.ruins = bool(self.ruins.isChecked())
         self.s.ecm_script = bool(self.ecm.isChecked())
@@ -288,9 +342,9 @@ class SettingsDialog(QDialog):
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
         self.s.reactive = bool(self.react.isChecked()); self.s.emergencies = bool(self.emerg.isChecked()); self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
+        self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
         self.s.shore_margin_m = int(self.shore.value())
         self.s.river_margin_m = int(self.river.value())
-        self.s.enemy_cap_engage_nm = int(self.ecap.value()); self.s.friendly_cap_engage_nm = int(self.fcap.value())
         self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value()); self.s.fighter_standoff = self.fso.isChecked()
         self.s.f14_special_names = self.f14n.isChecked()
         self.s.auto_patch_scripting = self.autopatch.isChecked(); self.s.patch_asked = True

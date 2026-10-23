@@ -11,10 +11,10 @@ from .aircraft import AIRCRAFT
 from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
-from .models import Objective, ObjectiveType, Role
-from . import raids, redair
+from .models import BaseKind, Objective, ObjectiveType, Role
+from . import raids, redair, sams
 from .mission_builder import MissionBuilder, MissionOptions
-from .packages import AI_ONLY, Ledger, NoPlayerSlot, Package, PackageBuilder
+from .packages import AI_ONLY, ai_only, carrier_raid, Ledger, NoPlayerSlot, Package, PackageBuilder
 
 RAID_SCRAMBLES = True      # v0.41.27: emergency raid scrambles are off while intercepts are AI-only (troops in contact stay)
 from .scenario import new_campaign
@@ -113,13 +113,17 @@ class Session:
 
     def plan_day(self) -> list:
         st = self.state
+        from . import threatmap as _tm
+        _tm.set_ramp_lead(bool(getattr(self.settings, "hot_ramp_scrambles", False)))      # v0.41.92: planning keep-outs use the same scramble circles as the build
         from . import ground
         ground.ensure_blue_garrisons(st)                # older saves: a friendly garrison at every airfield
+        ground.ensure_forward_garrisons(st)             # v0.41.102: a forward garrison for each side in every sector (older saves too)
+        sams.ensure_blue_sams(st)                       # v0.41.62: blue's three air-defence sites at every airfield (older saves: from the field's `defense`)
         ground.snap_roads(st)                           # once, as soon as a road scan exists: columns and supply sites sit on a road
         redair.ensure(st, self.d)                       # the enemy's air tasking for the day
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=self.PACKAGES_PER_DAY)
         redair.assign_guards(st, self.d, objs)          # v0.41.10: red's patrols take stations over the SAM sites it expects to be attacked
-        keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry", "sead_fail")}
+        keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry", "sead_fail", "bomber_days", "bomber_stage", "deck_out_to")}
         if st.red_air.get("patrol_used") is not None:                 # replanning the same day never books the raids twice
             st.red_air["used"] = dict(st.red_air["patrol_used"])
         warned, n_surprise = raids.todays_raids(st, self.d, self._rng(71))
@@ -128,6 +132,10 @@ class Session:
         st.raids = {**keep, "day": st.day, "surprise": n_surprise, "carry": []}
         pb = PackageBuilder(st, self.d)
         psq = st.player.squadron_id if st.player else None
+        from . import blue_barcap, support_assets
+        support_assets.plan(st)                          # v0.41.87: when each AWACS / tanker type has an aircraft on orbit today (before the guards, v0.41.88)
+        bp = blue_barcap.plan(st, self.d)                # v0.41.85: blue's standing patrols and guards are planned (and paid for) before the packages
+        st.barcap["blue_flights"], st.barcap["blue_cover"] = bp["flights"], bp["cover"]
 
         sweeps = {}                                     # id(sweep package) -> the packages it goes in ahead of
 
@@ -135,14 +143,20 @@ class Session:
             sweeps.clear()
             # Packages launch at different times of day, so an aircraft can fly more than one sortie: each package sees every
             # serviceable airframe, but no squadron is asked for more than two sorties per airframe per day.
-            daily = {sid: 2 * q.available for sid, q in st.squadrons.items()}
+            daily = {sid: max(0, 2 * q.available - bp["used"].get(sid, 0)) for sid, q in st.squadrons.items()}
+            from . import carrier_hit
+            _df = carrier_hit.deck_factor(st)                       # v0.41.109: a carrier deck torn up by a raid launches less (0 the day after, half the day after that)
+            if _df < 1.0:
+                for sid, q in st.squadrons.items():
+                    if st.bases[q.base_id].kind == BaseKind.CARRIER:
+                        daily[sid] = int(daily[sid] * _df)
             out, names = [], {}          # callsign counter for the whole day: Enfield 1, Enfield 2 ... never two Enfield 1s
-            for i, o in enumerate(objs, 1):
+            for i, o in sorted(enumerate(objs, 1), key=lambda t: not carrier_raid(st, t[1])):      # v0.41.107: the setpiece is built FIRST (it is rare and needs the carrier squadrons), numbers unchanged
                 ledger = Ledger(st)
                 for sid in ledger.free:
                     ledger.free[sid] = min(ledger.free[sid], daily[sid])
                 pkg = None
-                for fp in ((True, False) if ((i - 1) in forced and o.type not in AI_ONLY) else (False,)):
+                for fp in ((True, False) if (((i - 1) in forced or carrier_raid(st, o)) and not ai_only(st, o)) else (False,)):
                     try:
                         pkg = pb.build(o, i, ledger, for_player=fp, names=names)
                         break
@@ -153,6 +167,7 @@ class Session:
                 for f in pkg.flights:
                     daily[f.squadron_id] -= f.count
                 out.append(pkg)
+            out.sort(key=lambda p: p.number)
             # Fighter Sweep (v0.40.2): where intel expects more enemy fighters than the packages' own TARCAP and escort can take, a sweep
             # package of 4-ships goes in ahead of them. One per area (targets within SWEEP_AREA_KM), sized to the worst package there.
             from .packages import is_sweep, sweep_4ships
@@ -245,6 +260,9 @@ class Session:
                         p.extra["sweep_vs"].update(sx=float(sst_[0]), sy=float(sst_[1]))
         if dropped:
             pkgs = [p for p in pkgs if id(p) not in dropped]
+        for p in pkgs:
+            p.support = pb._support(p)                                   # v0.41.87: with the start times known, only the AWACS / tankers that are on orbit while it flies
+        blue_barcap.attach(st, pkgs)                                 # v0.41.85: the planned base CAP / carrier CAP sortie that faces each package and is up while it flies
         pkgs.sort(key=lambda p: p.start)
         for n, p in enumerate(pkgs, 1):                              # numbers follow the clock
             p.number, p.id = n, f"pkg{n}"
@@ -359,7 +377,7 @@ class Session:
         from .war import WarSimulator, chance
         st = self.state
         st.raids.setdefault("sead", {})
-        sim = WarSimulator(self.d)
+        sim = self._sim()
         from .models import SEAD_AIMS
         for p in pkgs:
             if p.objective.type == ObjectiveType.DEAD and p.objective.aim in SEAD_AIMS:
@@ -435,14 +453,14 @@ class Session:
             squadron_only = self.settings.flight_filter != "all"
         if pkg.extra.get("scrub"):                                       # scrubbed for weather: nobody flies it, the war sim ignores it
             return []
-        if pkg.objective.type in AI_ONLY:                                 # v0.41.27: AI-only for now (BARCAP, bomber and raid intercepts)
+        if pkg.objective.type in AI_ONLY and not pkg.extra.get("setpiece"):    # v0.41.27: AI-only for now (BARCAP, land-raid intercepts); v0.41.107: the carrier raid is a flyable setpiece
             return []
         opts = pkg.player_options(self.state.player.aircraft)
         return [f for f in opts if f.squadron_id == self.state.player.squadron_id] if squadron_only else opts
 
     # ---- merge area: a circle around the package's target, kept inside the area where targets exist ---------------------
     def merge_radius_m(self) -> float:
-        return max(5.0, float(getattr(self.settings, "merge_radius_nm", 25))) * 1852.0
+        return max(5.0, float(getattr(self.settings, "merge_radius_nm", 15))) * 1852.0
 
     def _pkg_xy(self, p: Package):
         """The ground target of a package, or None for fleet packages (BARCAP, fleet defence), which are never folded by area."""
@@ -486,7 +504,7 @@ class Session:
         """Is `other`'s target inside the merge circle around `anchor`'s?"""
         if self.settings.merge_mode != "area":
             return False
-        c, t = self.merge_center(anchor), self._pkg_xy(other)
+        c, t = self.merge_center(anchor), self._pkg_xy(other) or self._raid_xy(other)
         return c is not None and t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= self.merge_radius_m()
 
     def _postpone_if_short(self, orig: Package, emerg: Package) -> None:
@@ -503,12 +521,13 @@ class Session:
 
     def merge_candidates(self, pkg: Package) -> list:
         """Packages folded into a mission built around `pkg`: every package whose target lies inside the merge circle (Settings: radius, default
-        50 nm, centred by merge_center), starting up to 30 minutes AFTER it or up to `merge_back_min` minutes BEFORE it (those are already underway
+        50 nm, centred by merge_center), starting up to `merge_fwd_min` minutes AFTER it or up to `merge_back_min` minutes BEFORE it (those are already underway
         when the mission starts). At most six, closest to the centre first, so the unit limit drops the furthest first. Empty when merging is off."""
         if self.settings.merge_mode != "area":
             return []
         hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
         back = max(0, int(getattr(self.settings, "merge_back_min", 15)))
+        fwd = max(0, int(getattr(self.settings, "merge_fwd_min", 30)))
         R = self.merge_radius_m()
         c = self.merge_center(pkg, R)
         if c is None:
@@ -516,13 +535,22 @@ class Session:
         out = []
         for p in self.packages():
             t = self._pkg_xy(p)
-            if p.number == pkg.number or t is None or not (-back <= hm(p) - hm(pkg) <= 30) or not any(not f.tag for f in p.flights) or p.extra.get("scrub"):
+            if p.number == pkg.number or t is None or not (-back <= hm(p) - hm(pkg) <= fwd) or not any(not f.tag for f in p.flights) or p.extra.get("scrub"):
                 continue
             d = math.hypot(t[0] - c[0], t[1] - c[1])
             if d <= R:
                 out.append((d, hm(p), p.number, p))
         out.sort(key=lambda r: (not (r[3].objective.type == ObjectiveType.COUNTER_AIR and r[3].objective.aim == "SWEEP"),) + r[:3])     # a Fighter Sweep first: the unit limit drops the strike packages before it
         return [r[3] for r in out[:6]]
+
+    @staticmethod
+    def _drop_one(extras: list) -> list:
+        """v0.41.131 (XO 2026-10-23): the package to give up first when the mission is over the unit limit: the one that starts LATEST; of two with the same start the
+        one later in the list (further from the centre). A Fighter Sweep (the escorts' reason to be there) and an emergency raid scramble (the in-universe \"help has been dispatched\") go last."""
+        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
+        sweep = lambda p: (p.objective.type == ObjectiveType.COUNTER_AIR and p.objective.aim == "SWEEP") or p.objective.type == ObjectiveType.FLEET_DEFENSE
+        k = max(range(len(extras)), key=lambda i: (not sweep(extras[i]), hm(extras[i]), i))
+        return extras[:k] + extras[k + 1:]
 
     def ruin_candidates(self, pkg: Package, extras: list) -> list:
         """Earlier packages of the same day, same area, that may already have struck when your mission starts: their targets are shown as ruins.
@@ -550,7 +578,7 @@ class Session:
         import copy
         out = {}
         for p in pkgs:
-            sim = WarSimulator(self.d, self._rng(55 + p.number))
+            sim = self._sim(self._rng(55 + p.number))
             try:
                 out[p.id] = sim.resolve_abstract(copy.deepcopy(self.state), Package.from_dict(p.to_dict()))["roll"]
             except Exception:
@@ -601,7 +629,7 @@ class Session:
         spec = AIRCRAFT[psq.aircraft]
         committed = sum(f.count for f in pkg.flights if f.squadron_id == psq.id)
         kinds = []
-        base = raids.pick_target(st, random.Random(rng.random()))       # (still drawn: the same seed gives the same day)
+        base = raids.pick_target(st, random.Random(rng.random()), d)       # (still drawn: the same seed gives the same day)
         # v0.41.27: no raid scrambles for you for now (an intercept is AI-only until its routes follow the SAM rules); troops in contact stay
         if base is not None and RAID_SCRAMBLES:
             kinds.append("RAID")
@@ -660,6 +688,8 @@ class Session:
         for f in epkg.flights:
             f.is_player = False
         if kind == "RAID":
+            from . import blue_barcap
+            blue_barcap.attach(st, [epkg])                    # v0.41.114: the planned base CAP of the raided field is up for a land-raid scramble too
             text = (f"Bombers are inbound on {where} and nobody was warned. Alert aircraft are not enough: the fighters nearest to it are being scrambled.")
             title = "EMERGENCY SCRAMBLE"
         else:
@@ -668,11 +698,24 @@ class Session:
         return {"kind": kind, "eligible": bool(ok), "reason": "" if ok else why, "title": title, "text": text, "pkg": epkg.to_dict(),
                 "where": where, "number": number}
 
+    def dispatch_line(self, epkg: Package) -> str:
+        """v0.41.101: the in-universe line for an emergency you are not flying ("Our A-10Cs from Kobuleti have been dispatched to help"): who is
+        answering it, never the out-of-universe reason (your jet cannot do the job, no free pair)."""
+        st = self.state
+        fl = [f for f in epkg.flights if not f.tag] or list(epkg.flights)
+        names = list(dict.fromkeys(AIRCRAFT[f.aircraft].display + "s" for f in fl if f.aircraft in AIRCRAFT))
+        bases = list(dict.fromkeys(st.bases[f.base_id].name for f in fl if f.base_id in st.bases))
+        who = " and ".join(names) if names else "Other crews"
+        frm = f" from {' and '.join(bases)}" if bases else ""
+        if epkg.objective.type == ObjectiveType.CAS:
+            return f"Our {who}{frm} have been dispatched to help."
+        return f"Our {who}{frm} are scrambling to intercept."
+
     # ---- fly ---------------------------------------------------------------------------------------
     def fly(self, package_number: int, flight_id: str | None, scramble: bool = False):
         """Build the sortie. If an emergency came up for this package (emergency_for) and `scramble` is True and your squadron can take it, you fly the
         emergency and the package you were tasked with goes to the war simulation (or is postponed a day if the squadron cannot cover both). Otherwise the
-        emergency is folded into your mission if it is a ground job inside the merge circle, and settled by odds if it is not."""
+        emergency is folded into your mission (CAS or raid; v0.41.124: wherever it is, the circle is only the anchor for your own package's finds)."""
         st = self.state
         problems = self.settings.problems()
         if problems:
@@ -680,6 +723,7 @@ class Session:
         pkg = next(p for p in self.packages() if p.number == package_number)
         ev = self.emergency_for(package_number, flight_id)
         lead_extras = []
+        hidden_in = None                                                                      # v0.41.121: the package you were tasked with, when you take the scramble instead
         if ev:
             epkg = ev["package"]
             st.plan.append(epkg.to_dict())
@@ -691,18 +735,22 @@ class Session:
                 scramble = False                                                              # weather scrubs it: nothing flies
             if scramble and ev["eligible"]:
                 orig, pkg, flight_id = pkg, epkg, None
+                hidden_in = orig
                 self._postpone_if_short(orig, epkg)
                 st.note(f"EMERGENCY: you were scrambled to {ev['where']} ({ev['kind'].lower()}); package #{orig.number} is left to the other squadrons.")
             else:
-                st.note(f"EMERGENCY at {ev['where']}: " + ("you stayed with your tasking." if ev["eligible"] else ev["reason"] + ".") + " The war handles it.")
-                if epkg.objective.type == ObjectiveType.CAS and self._inside_merge(pkg, epkg):
+                st.note(f"EMERGENCY at {ev['where']}: " + ("you stayed with your tasking." if ev["eligible"] else self.dispatch_line(epkg)) + " The war handles it.")
+                if epkg.objective.type in (ObjectiveType.CAS, ObjectiveType.FLEET_DEFENSE) and pkg.objective.type != ObjectiveType.FLEET_DEFENSE:      # v0.41.124 (XO 2026-10-23): no circle test, the emergency is yours to meet whenever it started in your package's window
                     lead_extras = [epkg]
         PackageBuilder(st, self.d).assign_player(pkg, flight_id)
         self.options.hold_minutes = int(self.settings.hold_minutes)
         self.options.launch_offset_s = int(self.settings.takeoff_buffer_s)
         self.options.ai_unlimited_fuel = bool(self.settings.ai_unlimited_fuel)
-        self.options.enemy_cap_engage_nm = int(self.settings.enemy_cap_engage_nm)
-        self.options.friendly_cap_engage_nm = int(self.settings.friendly_cap_engage_nm)
+        self.options.hot_ramp_scrambles = bool(getattr(self.settings, "hot_ramp_scrambles", False))
+        self.options.hot_runway_starts = bool(getattr(self.settings, "hot_runway_starts", False))
+        self.options.hot_runway_own_field = self.options.hot_runway_starts and bool(getattr(self.settings, "hot_runway_own_field", False))
+        self.options.ai_skill_red = str(getattr(self.settings, "ai_skill_red", "level"))
+        self.options.ai_skill_blue = str(getattr(self.settings, "ai_skill_blue", "level"))
         self.options.fighter_engage_nm = int(self.settings.fighter_engage_nm)
         self.options.fighter_engage_minutes = int(self.settings.fighter_engage_minutes)
         self.options.player_is_ai = bool(self.ai_test)
@@ -721,9 +769,18 @@ class Session:
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
         extras = lead_extras + [x for x in self.merge_candidates(pkg) if all(x.number != y.number for y in lead_extras)]
+        if hidden_in is not None:
+            # v0.41.121 (XO 2026-10-23): the packages that were listed inside the package you were tasked with come along into the scramble mission, as long as their
+            # start is inside the usual window round the scramble's (-merge_back_min / +merge_fwd_min). The mission's own circle and window found only what lay near the
+            # raided field. Your original package itself still goes to the war sim; at most six packages in all (the scramble's own finds first).
+            hm_ = lambda p_: int(p_.start[:2]) * 60 + int(p_.start[3:5])
+            back_ = max(0, int(getattr(self.settings, "merge_back_min", 15))); fwd_ = max(0, int(getattr(self.settings, "merge_fwd_min", 30)))
+            have_ = {x.number for x in extras} | {pkg.number, hidden_in.number}
+            extras = (extras + [x for x in self.merge_candidates(hidden_in) if x.number not in have_ and -back_ <= hm_(x) - hm_(pkg) <= fwd_])[:6]
         ruins = self.ruin_candidates(pkg, extras)
         pre = self._preroll(list(extras) + ruins) if (ruins or extras) and getattr(self.settings, "ruins", True) else {}
-        cap = 10 ** 6 if self.full_map else int(self.settings.merge_max_units)
+        from . import limits
+        cap = 10 ** 6 if self.full_map else min(int(self.settings.merge_max_units), limits.unit_ceiling())          # v0.41.131: the unit limit counts the whole mission, merged packages included
         while True:
             with contextlib.redirect_stdout(io.StringIO()):      # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
                 res = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz, extras, ruins, pre)
@@ -732,7 +789,7 @@ class Session:
             if ruins:
                 ruins = ruins[:-1]                               # returning flights first
             else:
-                extras = extras[:-1]                             # too heavy for VR: drop the last package and rebuild
+                extras = self._drop_one(extras)                  # too heavy: drop the latest-starting package (a Fighter Sweep last) and rebuild
             res.warnings.append(f"merged mission trimmed to fit the {cap}-unit limit")
         st.sortie_counter += 1
         st.pending = {"package": package_number, "flight": pkg.player_flight.id, "manifest": res.manifest.to_dict(),
@@ -750,12 +807,19 @@ class Session:
         return res
 
     # ---- skip the day ---------------------------------------------------------------------------------
+    def _sim(self, rng=None):
+        """The war simulator with the Experimental switches from the settings (borrow_red / borrow_blue)."""
+        from .war import WarSimulator
+        sim = WarSimulator(self.d, rng)
+        sim.borrow = {"red": bool(getattr(self.settings, "borrow_red", False)), "blue": bool(getattr(self.settings, "borrow_blue", False))}
+        return sim
+
     def skip_day(self) -> dict:
         """Skip Turn: any pending sortie is discarded and EVERY package of the day (even ones you could have flown) is resolved
         by the war simulation. The date advances, the war replans."""
         st = self.state
         st.pending = None
-        sim = WarSimulator(self.d, self._rng(44))
+        sim = self._sim(self._rng(44))
         results = [sim.resolve_abstract(st, Package.from_dict(pd)) for pd in st.plan]
         st.note(f"Day {st.day}: you stood down. The war went on without you ({sum(1 for r in results if r['success'])} of {sum(1 for r in results if not r.get('scrubbed'))} packages succeeded"
                 f"{'; ' + str(sum(1 for r in results if r.get('scrubbed'))) + ' scrubbed for weather' if any(r.get('scrubbed') for r in results) else ''}).")
@@ -812,7 +876,7 @@ class Session:
         out["objective"], out["objective_type"] = pend["objective"], pend["objective_type"]
         rng = self._rng(33)
         out["story"] = narrative.debrief_story(out, st, rng)
-        sim = WarSimulator(self.d, rng)
+        sim = self._sim(rng)
         meanwhile = []
         t_end = float(data.get("time", 0) or 0)
         real = {m["number"] for m in pend.get("merged", []) if t_end >= m["tot_s"] + 90}    # their strike was really flown; the rest are dice

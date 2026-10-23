@@ -51,7 +51,7 @@ _D: dict = {
         "CAS": {1: "=ALQ_184", 3: "={E6A6262A-CA08-4B3D-B030-E1A993B98452}", 4: "={5335D97A-35A5-4643-9D9B-026C75961E52}", 5: "={CBU-87}", 7: "={CBU-87}", 8: "={5335D97A-35A5-4643-9D9B-026C75961E52}", 9: "={E6A6262A-CA08-4B3D-B030-E1A993B98453}", 10: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 11: "={DB434044-F5D0-4F1F-9BA9-B73027E18DD3}"},
     },
 }
-_ALIAS = {Role.ESCORT: "CAP", Role.SWEEP: "CAP", Role.CAP: "CAP"}
+_ALIAS = {Role.TARCAP: "CAP", Role.ESCORT: "CAP", Role.SWEEP: "CAP", Role.CAP: "CAP"}
 
 
 def _find(P, want):
@@ -146,6 +146,32 @@ def enemy_bomber_loadout(cls_name: str) -> dict:
     for i in sorted(cls.pylons):
         P = getattr(cls, f"Pylon{i}", None)
         w = _find(P, "Kh_22") if P is not None else None
+        if w is not None:
+            out[i] = {"CLSID": w[1]["clsid"]}
+    return out
+
+
+def enemy_arm_loadout(cls_name: str) -> dict:
+    """v0.41.84: Kh-31P anti-radiation missiles on every pylon that takes one (Su-24M: pylons 2 and 7)."""
+    from dcs import planes
+    cls = getattr(planes, cls_name)
+    out = {}
+    for i in sorted(cls.pylons):
+        P = getattr(cls, f"Pylon{i}", None)
+        w = _find(P, "Kh_31P") if P is not None else None
+        if w is not None:
+            out[i] = {"CLSID": w[1]["clsid"]}
+    return out
+
+
+def enemy_dead_loadout(cls_name: str) -> dict:
+    """v0.41.117: KAB-500Kr (TV-guided 500 kg bomb) on every pylon that takes one (Su-24M: 2, 3, 6, 7): red's DEAD flights against a battery."""
+    from dcs import planes
+    cls = getattr(planes, cls_name)
+    out = {}
+    for i in sorted(cls.pylons):
+        P = getattr(cls, f"Pylon{i}", None)
+        w = _find(P, "KAB_500Kr") if P is not None else None
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
     return out

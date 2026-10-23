@@ -43,8 +43,7 @@ local gateLog = {}
 local kills = {}
 local shots = {}
 local jams = {}
-local TRACK = {}                  -- v0.41.43: group name -> {{t, x, z, alt_m}, ...} the lead's position every 30 s (flights and red patrols), for finding where a flight really went
-local pulls = {}                  -- v0.41.34: support CAP pull-backs: group, time, how far out (nm) it was
+local TRACK = {}                  -- v0.41.43: group name -> {{t, x, z, alt_m, fuel_pct, kts}, ...} the lead's position every 30 s (flights and red patrols), for finding where a flight really went
 local deaths = {}                 -- why each loss happened: last hit seen, last fuel and altitude sample (so an unexplained loss still tells something)
 local LASTHIT = {}                -- unit name -> {by, w, t} of the last hit on it
 local SAMPLE = {}                 -- unit name -> {fuel, alt, spd, t} sampled every 30 s for every aircraft
@@ -52,6 +51,8 @@ local JAMW = { __JAMW__ }          -- unit name -> {from, to} mission seconds th
 local JAMS = { __JAMS__ }
 local ALERTS = { __ALERTS__ }       -- alert / scramble groups: g = group, f = the flag their trigger sets when called, b = field, ty = type
 local ALOG = {}                     -- group -> {called = t, air = t}
+local COVER = { __COVER__ }          -- v0.41.79: CAP pairs with a standby: g = group, n = jets, bf = flag that sends the pair home (its orbit stops), rf = flag that calls the replacement, u = planned end (s)
+local COVERLOG = {}                 -- group -> {why, t, replaced}
 local CFG = '__CFG__'               -- the build's settings (splash damage, ECM script), raw JSON
 local splashN, splashK = 0, 0          -- unit name -> 1 internal set, 2 ECM pod (ecm.py)
 __JAMCFG__
@@ -75,6 +76,7 @@ local function shotsJson()
     local more = ""
     if k.km then more = string.format(',"km":%.1f,"alt":%d', k.km, math.floor(k.alt or 0)) end        -- shooter-to-target range (km) and shooter altitude (m) at launch
     if k.tx and k.tz then more = more .. string.format(',"tx":%d,"tz":%d', math.floor(k.tx), math.floor(k.tz)) end        -- the target's map position: its last known spot
+    if k.left then more = more .. string.format(',"left":%d', k.left) end        -- v0.41.122: air-to-air missiles still on the shooter
     o[#o + 1] = string.format('{"t":%d,"ev":"%s","by":"%s","bt":"%s","w":"%s","tg":"%s","tt":"%s"%s}', k.t, k.ev, esc(k.by), esc(k.bt), esc(k.w), esc(k.tg), esc(k.tt), more)
   end
   return "[" .. table.concat(o, ",") .. "]"
@@ -104,10 +106,11 @@ local function alertsJson()
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
-local function pullsJson()
+local function coverJson()
   local o = {}
-  for _, k in ipairs(pulls) do
-    o[#o + 1] = string.format('{"g":"%s","t":%d,"nm":%d,"limit_nm":%d}', esc(k.g), k.t, k.nm, k.lim)
+  for _, c in ipairs(COVER) do
+    local l = COVERLOG[c.g]
+    if l then o[#o + 1] = string.format('{"g":"%s","why":"%s","t":%d,"replaced":%s}', esc(c.g), esc(l.why), l.t, tostring(l.replaced and true or false)) end
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
@@ -115,7 +118,7 @@ local function tracksJson()
   local o = {}
   for gn, pts in pairs(TRACK) do
     local q = {}
-    for _, e in ipairs(pts) do q[#q + 1] = string.format("[%d,%d,%d,%d]", e[1], e[2], e[3], e[4]) end
+    for _, e in ipairs(pts) do q[#q + 1] = string.format("[%d,%d,%d,%d,%d,%d]", e[1], e[2], e[3], e[4], e[5] or -1, e[6] or -1) end
     o[#o + 1] = string.format('"%s":[%s]', esc(gn), table.concat(q, ","))
   end
   return "{" .. table.concat(o, ",") .. "}"
@@ -128,12 +131,21 @@ local function gatesJson()
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
+local function rgateJson()
+  local o = {}
+  if SQE_RGATE then
+    for n, e in pairs(SQE_RGATE) do
+      o[#o + 1] = string.format('"%s":{"open":%s,"abort":%s}', esc(n), num(e.open), num(e.abort))
+    end
+  end
+  return "{" .. table.concat(o, ",") .. "}"
+end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"pulls":%s,"tracks":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"tracks":%s,"rgate":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), pullsJson(), tracksJson(), CFG, splashN, splashK))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), tracksJson(), rgateJson(), CFG, splashN, splashK))
   f:close()
 end
 local function nameOf(obj)
@@ -216,6 +228,17 @@ local function logShot(ev, e, by)
       end
     end
   end
+  local left = nil                                            -- v0.41.122: air-to-air missiles the shooter still carries after this shot (to see when a pair goes winchester)
+  if ev == "shot" and e.initiator then
+    local oka, am = pcall(function() return e.initiator:getAmmo() end)
+    if oka and am then
+      left = 0
+      for _, a in ipairs(am) do
+        local d = a.desc
+        if d and d.category == 1 and d.missileCategory == 1 then left = left + (a.count or 0) end
+      end
+    end
+  end
   if ev == "hit" and e.target then
     local okc, cat = pcall(function() return e.target:getCategory() end)
     if okc and cat == Object.Category.SCENERY then return end        -- trees, houses, poles: pure noise in the log
@@ -225,7 +248,7 @@ local function logShot(ev, e, by)
   end
   if ev == "hit" and tg ~= "" then LASTHIT[tg] = { by = by or "?", w = w, t = timer.getTime() } end
   if #shots >= 2000 then return end   -- v0.41.6: was 600; busy runs reached 595
-  shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt, km = km, alt = salt, tx = tx, tz = tz }
+  shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt, km = km, alt = salt, tx = tx, tz = tz, left = left }
 end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
 local function jamOn(name)                  -- future: the player's cockpit switch (export script) feeds this
@@ -441,7 +464,12 @@ timer.scheduleFunction(function(_, t)
               local gn, p0 = g:getName(), u0:getPoint()
               local tr = TRACK[gn] or {}
               TRACK[gn] = tr
-              if #tr < 400 then tr[#tr + 1] = { math.floor(timer.getTime()), math.floor(p0.x), math.floor(p0.z), math.floor(p0.y) } end
+              if #tr < 400 then
+                local fu, kt = -1, -1                       -- v0.41.71: the lead's fuel (percent of internal) and speed (kts), to see why a flight does not go home
+                pcall(function() fu = math.floor(u0:getFuel() * 100) end)
+                pcall(function() local v0 = u0:getVelocity(); kt = math.floor(math.sqrt(v0.x ^ 2 + v0.y ^ 2 + v0.z ^ 2) * 1.944) end)
+                tr[#tr + 1] = { math.floor(timer.getTime()), math.floor(p0.x), math.floor(p0.z), math.floor(p0.y), fu, kt }
+              end
               break
             end
           end
@@ -500,12 +528,93 @@ if #ALERTS > 0 then
     return t + 10
   end, nil, timer.getTime() + 10)
 end
+-- v0.41.79: CAP replacement. A covered pair (a red patrol, a blue base / carrier / HAVCAP / tanker CAP) is watched: if a jet of it is down, or its air-to-air
+-- missiles are all gone (winchester), or a jet is at bingo fuel, the whole pair leaves (its orbit stops on the bf flag: a pair does not stay one jet short,
+-- XO: "if one is shot down they bug out") and COVER_DELAY_S later the replacement is called (the rf flag; the nearest field's pair, or a pair that appears
+-- behind the station). Nothing is called when the sortie is nearly over anyway (COVER_MIN_LEFT_S).
+local COVER_DELAY_S = 150           -- the short delay between the pair leaving and the replacement being called (judgment call)
+local COVER_MIN_LEFT_S = 600
+local BINGO_FUEL = 0.20             -- fraction of internal fuel left (judgment call; DCS's own bingo is type-dependent)
+local function aamCount(u)
+  local n = 0
+  pcall(function()
+    for _, a in ipairs(u:getAmmo() or {}) do
+      local d = a.desc or {}
+      if d.category == 1 and d.missileCategory == 1 then n = n + (a.count or 0) end
+    end
+  end)
+  return n
+end
+if #COVER > 0 then
+  timer.scheduleFunction(function(_, t)
+    local now, left = timer.getTime(), false
+    for _, c in ipairs(COVER) do
+      if not c.done then
+        left = true
+        local l = COVERLOG[c.g]
+        if not l and now > c.u - COVER_MIN_LEFT_S then
+          c.done = true                                  -- the sortie is nearly over: a pair that lands now is not a loss
+        elseif not l then
+          local g = Group.getByName(c.g)
+          if g then
+            local alive, why, aam = 0, nil, 0
+            for _, u in ipairs(g:getUnits() or {}) do
+              local ok, ex = pcall(function() return u:isExist() and u:getLife() > 0 end)
+              if ok and ex then
+                alive = alive + 1
+                aam = aam + aamCount(u)
+                local okf, fu = pcall(function() return u:getFuel() end)
+                if okf and fu and fu < BINGO_FUEL and not why then why = "bingo" end
+              end
+            end
+            if alive < c.n and not why then why = "lost" end
+            if c.armed and alive > 0 and aam == 0 and not why then why = "winchester" end
+            if aam > 0 then c.armed = true end
+            if why and now > 120 then
+              COVERLOG[c.g] = { why = why, t = math.floor(now), replaced = false }
+              pcall(function() trigger.action.setUserFlag(c.bf, true) end)
+              dump()
+            end
+          end
+        else
+          if not l.replaced and now - l.t >= COVER_DELAY_S then
+            if c.rf > 0 and now <= c.u - COVER_MIN_LEFT_S then
+              pcall(function() trigger.action.setUserFlag(c.rf, true) end)
+              l.replaced = true
+              dump()
+            else
+              c.done = true
+            end
+          end
+          if l.replaced then c.done = true end
+        end
+      end
+    end
+    if left then return t + 10 end
+    return nil
+  end, nil, timer.getTime() + 20)
+end
 -- the runway queue (v0.40.7): alert groups at a field with no parking for their type wait hidden; when one is called (its trigger sets its
 -- flag) it is put on the runway, at least RWY_STAGGER_S after the last group that went from there, and at your own field only once you
 -- have left the runway (or 15 minutes in)
 local RWYQ = { __RWYQ__ }
 local PRWY = "__PRWY__"
 local RWY_STAGGER_S = 60
+local PHOME = __PHOME__             -- v0.41.97: your own field (nil off a carrier): a hot release there waits while you are on your way in to land
+local HOME_NM = 10
+local function playerInbound()
+  if not PHOME or not pl.takeoff or pl.landed or dead[PLAYER] then return false end
+  local inb = false
+  pcall(function()
+    local u = Unit.getByName(PLAYER)
+    if not u or not u:isExist() then return end
+    local p = u:getPoint()
+    local d = math.sqrt((p.x - PHOME.x) ^ 2 + (p.z - PHOME.z) ^ 2)
+    local agl = p.y - land.getHeight({ x = p.x, y = p.z })
+    inb = d < HOME_NM * 1852 and agl < 1500 and (timer.getTime() - pl.takeoff) > 300
+  end)
+  return inb
+end
 local ALERT_TAXI_S = 120          -- v0.41.0: an alert pair appears on the runway this long after it is called (the taxi it no longer does)
 local rwyLast = {}
 if #RWYQ > 0 then
@@ -516,11 +625,16 @@ if #RWYQ > 0 then
       if not q.done then
         pend = pend + 1
         local want = false
-        pcall(function() want = trigger.misc.getUserFlag(q.f) > 0 end)
-        if want and not q.wt then q.wt = now end
-        want = want and q.wt and (now - q.wt >= ALERT_TAXI_S)
+        if q.t then
+          want = now >= q.t                      -- v0.41.96: a scheduled package flight, released at its time (no taxi delay)
+        else
+          pcall(function() want = trigger.misc.getUserFlag(q.f) > 0 end)
+          if want and not q.wt then q.wt = now end
+          want = want and q.wt and (now - q.wt >= ALERT_TAXI_S)
+        end
         local free = (not rwyLast[q.b]) or (now - rwyLast[q.b] >= RWY_STAGGER_S)
         if q.b == PRWY and not (pl.takeoff or dead[PLAYER] or now > 900) then free = false end
+        if q.t and q.b == PRWY and playerInbound() then free = false end
         if want and free then
           pcall(function() local g = Group.getByName(q.g); if g then g:activate() end end)
           rwyLast[q.b] = now; q.done = true
@@ -877,7 +991,12 @@ if #RECOV > 0 then
               local okp, up = pcall(function() return u:getPoint() end)
               if okp and up and math.sqrt((up.x - cp.x) ^ 2 + (up.z - cp.z) ^ 2) <= r.r then near = true end
             end
-            if near then
+            if near then                              -- v0.41.72: near the boat for r.dwell seconds (the pattern laps), then it counts as landed
+              r.since = r.since or t
+            else
+              r.since = nil
+            end
+            if (near and t - r.since >= (r.dwell or 0)) or (r.t2 and t >= r.t2) then      -- v0.41.71: or still out STALE_S after its work was done
               r.done = true
               SQE_RECOVER(r.g)
             end
@@ -888,56 +1007,6 @@ if #RECOV > 0 then
     if left then return t + 15 end
     return nil
   end, nil, timer.getTime() + 15)
-end
--- v0.41.34: the support CAP pull-back. DCS's engage-in-zone circle chooses targets but does not hold a flight once it is chasing one: in
--- XO's runs of 2026-10-16 a tanker CAP left its 25 nm and 37 nm circles, ran 50-78 nm out after red fighters and died to the Sukhumi S-300.
--- Every 10 s: a support CAP whose lead is further than p.r from the centre of its circle (the circle plus PULLBACK_MARGIN_NM), with air-to-air
--- missiles left, above bingo and before its time on station ends, gets its own route again from its first orbit point (with its engage circle),
--- which drops the chase. Then it is left alone for 2 min. Each pull is logged in the results file ("pulls").
-local PULL = { __PULL__ }
-local function hasAAM(u)
-  local ok, am = pcall(function() return u:getAmmo() end)
-  if not ok or not am then return false end
-  for _, w in ipairs(am) do
-    local d = w.desc
-    if d and d.category == 1 and d.missileCategory == 1 and (w.count or 0) > 0 then return true end
-  end
-  return false
-end
-if #PULL > 0 then
-  timer.scheduleFunction(function(_, t)
-    local left = false
-    for _, p in ipairs(PULL) do
-      if not p.done then
-        local g = Group.getByName(p.g)
-        if not g or t >= p.stop then p.done = true
-        else
-          left = true
-          local lead
-          for _, u in ipairs(g:getUnits() or {}) do
-            local oke, ex = pcall(function() return u:isExist() end)
-            if oke and ex then lead = u; break end
-          end
-          if lead and t >= (p.nxt or 0) then
-            local okp, up = pcall(function() return lead:getPoint() end)
-            local okf, fuel = pcall(function() return lead:getFuel() end)
-            local d = (okp and up) and math.sqrt((up.x - p.x) ^ 2 + (up.z - p.z) ^ 2) or 0
-            if d > p.r and hasAAM(lead) and (not okf or not fuel or fuel > p.bingo) then
-              local okc, c = pcall(function() return g:getController() end)
-              if okc and c then
-                pcall(function() c:setTask({ id = 'Mission', params = { route = { points = p.route } } }) end)
-                pulls[#pulls + 1] = { g = p.g, t = math.floor(t), nm = math.floor(d / 1852), lim = math.floor(p.r / 1852) }
-                dump()
-              end
-              p.nxt = t + 120
-            end
-          end
-        end
-      end
-    end
-    if left then return t + 10 end
-    return nil
-  end, nil, timer.getTime() + 10)
 end
 if (CVREC.cv or CVREC.x) and not AITEST then
   timer.scheduleFunction(function(_, t)
@@ -961,6 +1030,8 @@ if (CVREC.cv or CVREC.x) and not AITEST then
 end
 dump()
 '''
+BINGO_PCT = 20            # v0.41.92: the hook's bingo for pairs (BINGO_FUEL in the Lua below); the debrief fuel lines use it
+BINGO_REPORT_PCT = 35      # ...and report a flight that ended the mission at or under this much fuel
 
 
 def _jamcfg() -> str:
@@ -988,7 +1059,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
              calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
              watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
-             rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None) -> str:
+             rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
@@ -1006,25 +1077,19 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__JAMS__", ", ".join(f"[{_lq(k)}]={int(v)}" for k, v in (jams or {}).items()))
             .replace("__JAMW__", ", ".join(f"[{_lq(k)}]={{{float(a):.0f}, {float(b):.0f}}}" for k, (a, b) in (jamw or {}).items()))
             .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)).replace("__SPLASH__", "true" if splash else "false")
-            .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}}}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy))
+            .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}' + (f', t={int(q["t"])}' if q.get("t") is not None else '') + '}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy))
+            .replace("__COVER__", ", ".join(f'{{g={_lq(c["g"])}, n={int(c["n"])}, bf={int(c["bf"])}, rf={int(c["rf"])}, u={float(c["u"]):.0f}}}' for c in (cover or [])))
             .replace("__ALERTS__", ", ".join(f'{{g={_lq(a["g"])}, f={int(a["f"])}, b={_lq(a["b"])}, ty={_lq(a["ty"])}}}' for a in (alerts or [])))
+            .replace("__PHOME__", ("{ x = %.1f, z = %.1f }" % tuple((cfg or {})["phome"])) if (cfg or {}).get("phome") else "nil")
             .replace("__CVREC__", _cvrec_lua((cfg or {}).get("cvrec")))
             .replace("__RECOV__", _recov_lua((cfg or {}).get("recov")))
-            .replace("__PULL__", _pull_lua((cfg or {}).get("pull")))
-            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov", "pull")}).replace("'", "")))
+            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov")}).replace("'", "")))
 
 
 def _recov_lua(rs) -> str:
     """v0.41.25: the recovery net's entries as a Lua list: group, carrier unit ("" for a field), x / z, radius (m), earliest time (s)."""
     return ", ".join(f'{{ g={_lq(r["g"])}, cv={_lq(r.get("cv") or "")}, x={float(r["x"]):.1f}, z={float(r["z"]):.1f}, r={float(r["r"]):.0f}, '
-                     f't={float(r["t"]):.0f} }}' for r in (rs or []))
-
-
-def _pull_lua(ps) -> str:
-    """v0.41.34: the support CAP pull-back entries as a Lua list: group, circle centre x / z, pull-back radius (m), time on station ends (s),
-    bingo fuel fraction, and the route it gets again (already a Lua table, from MissionBuilder._pull_entries)."""
-    return ", ".join(f'{{ g={_lq(p["g"])}, x={float(p["x"]):.1f}, z={float(p["z"]):.1f}, r={float(p["r"]):.0f}, stop={float(p["stop"]):.0f}, '
-                     f'bingo={float(p["bingo"]):.2f}, route={p["route"]} }}' for p in (ps or []))
+                     f't={float(r["t"]):.0f}, t2={float(r.get("t2", r["t"] + 1e6)):.0f}, dwell={float(r.get("dwell", 0)):.0f} }}' for r in (rs or []))
 
 
 def _cvrec_lua(cv) -> str:
@@ -1040,14 +1105,14 @@ def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despaw
                  group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
                  enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
                  watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
-                 rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None) -> None:
+                 rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover))))
     mission.triggerrules.triggers.append(t)
 
 
@@ -1171,7 +1236,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
                     if fields:
                         nb = min(fields, key=lambda b: (b.x - a0.x) ** 2 + (b.y - a0.y) ** 2)
-                        nb.defense = max(0.0, nb.defense - 0.10)
+                        from . import sams as _sams
+                        _sams.hit_field(state, nb, 0.10)
                         out["lines"].append(f"The position was overrun; the column presses on toward {nb.name}")
         elif g["kind"] == "asset":
             a = state.assets[g["ref"]]
@@ -1189,10 +1255,16 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             if a.kind.value == "SAM" and rad and all(u in lost for u in rad) and not a.destroyed:
                 a.suppressed = True               # SEAD worked: the radars are gone, but the launchers are still there
                 out["lines"].append(f"{a.name}: radars destroyed, launchers intact. SUPPRESSED, not dead: it needs a DEAD strike to finish it.")
+        elif g["kind"] == "support":                              # v0.41.87: a tanker / AWACS shot down comes off its asset
+            if dead:
+                from . import support_assets as _sa
+                ln = _sa.lose(state, g.get("label", ""), len(dead))
+                if ln:
+                    out["lines"].append(ln)
         elif g["kind"] == "enemy_air":
             w = state.enemy_air_at(g["ref"])
             if w and dead:
-                w.available = max(0, w.available - len(dead))
+                w.lose(g.get("ac"), len(dead))                    # v0.41.53: the loss comes off the squadron that flew that type
                 out["red_air_lost"] += len(dead)
                 out["lines"].append(f"{len(dead)} enemy aircraft from {state.assets[g['ref']].name} destroyed")
     # a raid you were sent to stop: bombers still alive when they reached their base got through
@@ -1204,18 +1276,26 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             wing = state.enemy_air_at(g["ref"])
             if len(alive) < len(g["units"]):
                 out["lines"].append(f"Raid: {len(g['units']) - len(alive)} of {len(g['units'])} attack aircraft shot down")
-            if alive and t_now >= g.get("raid_arrive_s", 0.0):
+            rg_ = (data.get("rgate") or {}).get(g.get("raid_group", ""), {}) if g.get("raid_gate_s") is not None else {}
+            arrive_ = g.get("raid_arrive_s", 0.0)
+            if rg_.get("open") is not None:                       # v0.41.126: held at the gate until the radars went down: it can arrive no sooner than that plus the leg in
+                arrive_ = max(arrive_, float(rg_["open"]) + float(g["raid_gate_s"]))
+            if alive and g.get("raid_gate_s") is not None and rg_.get("abort") is not None and rg_.get("open") is None:
+                out["lines"].append(f"Raid on {where}: the radars were still up, so the attack aircraft turned back at the gate; no bombs fell")
+            elif alive and g.get("raid_gate_s") is not None and rg_.get("open") is None:
+                out["lines"].append(f"Raid on {where}: the attack aircraft were still held outside the defences; no bombs fell")
+            elif alive and t_now >= arrive_:
                 from . import raids as _rd
                 import random as _rnd
                 out["lines"].append(f"Raid on {where}: {len(alive)} attack aircraft got through")
-                out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, _rnd.Random(f"{state.campaign_id}:{state.day}:through"), len(alive), g.get("raid_aim", ""))]
+                out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, _rnd.Random(f"{state.campaign_id}:{state.day}:through"), len(alive), g.get("raid_aim", ""), g.get("ac"))]
             elif alive:
                 from . import raids as _rd
                 import random as _rnd
                 rr = _rnd.Random(f"{state.campaign_id}:{state.day}:early")
                 if rr.random() < 0.5:
                     out["lines"].append(f"Raid: you left before the raiders arrived; {len(alive)} got through to {where}")
-                    out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, rr, len(alive), g.get("raid_aim", ""))]
+                    out["lines"] += [x.strip() for x in _rd.hit(state, g["raid_base"], wing, rr, len(alive), g.get("raid_aim", ""), g.get("ac"))]
                 else:
                     out["lines"].append("Raid: you left before the raiders arrived; the defences stopped them")
             else:
@@ -1234,6 +1314,19 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         else:
             out["lines"].append(f"Alert {al['g']} ({al.get('ty', '?')}, {al.get('b', '?')}): called at {hm_(al['called'])}, " +
                                 ("NEVER GOT AIRBORNE (stuck on the ground)" if al.get("stuck") else "not airborne yet when the mission ended"))
+    # v0.41.92: fuel. The lead's fuel is tracked every 30 s (`tracks`: [t, x, z, alt_m, fuel_%, kts]); a flight that ended the mission low explains the
+    # pairs that went home early (bingo). Reported for every AI group that was airborne and ended at BINGO_REPORT_PCT or less.
+    ty_ = {a_["g"]: a_.get("ty", "") for a_ in (data.get("alerts") or [])}
+    for gn_, tr_ in sorted((data.get("tracks") or {}).items()):
+        fl_ = [p_ for p_ in tr_ if len(p_) >= 6 and p_[3] > 300 and p_[5] > 120 and 0 <= p_[4] <= 100]
+        if len(fl_) < 4:
+            continue
+        last_ = fl_[-1]
+        if last_[4] > BINGO_REPORT_PCT:
+            continue
+        cross_ = next((p_ for p_ in fl_ if p_[4] <= BINGO_PCT), None)
+        out["lines"].append(f"Fuel: {gn_}{' (' + ty_[gn_] + ')' if ty_.get(gn_) else ''} airborne {int(fl_[0][0]) // 60}-{int(last_[0]) // 60} min, fuel {fl_[0][4]}% to {last_[4]}%"
+                            + (f", at bingo ({BINGO_PCT}%) from {int(cross_[0]) // 60} min" if cross_ else ""))
     cf_ = data.get("cfg") or {}
     if cf_:
         sp_ = data.get("splash") or {}

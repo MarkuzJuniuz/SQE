@@ -12,7 +12,7 @@ from .models import SEAD_AIMS, Objective, ObjectiveType, AssetKind, Role
 from .packages import Package
 from .state import CampaignState
 
-ROLE_WEIGHT = {Role.STRIKE: 1.0, Role.SEAD: 0.9, Role.ESCORT: 0.6, Role.SWEEP: 0.7, Role.CAP: 0.6, Role.CAS: 1.0}
+ROLE_WEIGHT = {Role.STRIKE: 1.0, Role.SEAD: 0.9, Role.TARCAP: 0.6, Role.ESCORT: 0.7, Role.SWEEP: 0.7, Role.CAP: 0.6, Role.CAS: 1.0}
 
 
 def _suppressor(f, pkg=None) -> bool:
@@ -129,6 +129,13 @@ class ObjectivePlanner:
                         continue
                     pr *= 0.7 + 0.6 * zi["pressure"]                 # the harder Red is pressing, the more urgent
                     what = f"Close air support: {zi['name']} (enemy {zi['red']:.0f}, friendly {zi['blue']:.0f})"
+                sz = ground.sector_of(state, a.id)
+                if sz is not None:                                   # v0.41.102: a red forward garrison: the harder Red presses in its sector, the more it matters
+                    zi = ground.info(state, sz)
+                    if zi["blue"] < ground.MIN_FORCE or zi["red"] < ground.MIN_FORCE:      # nothing of ours near it, or red does not hold the sector: not a job for today
+                        continue
+                    pr *= 0.7 + 0.6 * zi["pressure"]
+                    what = f"Close air support: dislodge the enemy forward position, {zi['name']}"
                 bl = self._garrison_cover(state, a) if a.variant == "GARRISON" else []        # a dug-in garrison sits under its sites' umbrella: SEAD / DEAD goes first
                 # v0.41.20: no needless banzai. A CAS target under a live SA-2/3/6 goes out only with a SEAD escort (aim "SEAD": packages.py
                 # requires the HARM flight or postpones the job); under a live SA-11 / SA-10 it is blocked and that site gets a DEAD first.
@@ -154,12 +161,15 @@ class ObjectivePlanner:
                 pr *= 1.8                                              # clear the belt first
             pool.append((pr, o))
         fleet = next((b for b in state.bases.values() if b.kind.value == "CARRIER"), None)
-        bw = next((x for x in state.enemy_air if "Tu_22M3" in x.types and x.available >= 2 and not state.assets[x.base_asset_id].destroyed), None)
-        if fleet and bw and self.d is not None and self.d.bomber_policy != "none":
-            t = totals(state)
-            if self.d.bomber_policy == "normal" or t["enemy_air"] < 0.45 or t["c2"] < 0.5:     # regional powers use bombers only when losing badly
-                pr = 6.0 + 0.3 * bw.available
+        if fleet and self.d is not None and self.d.bomber_policy != "none":
+            from . import bombers                                    # v0.41.105: the bomber wing is a trump card: safe window or desperation, never fewer than 4, 2 escorts each
+            dec = bombers.decide(state, self.d)
+            if dec["mode"] != "hold":
+                pr = (12.0 if dec["mode"] == "desperate" else 7.0) + 0.3 * dec["n"]
+                bombers.note_launch(state)
                 pool.append((pr, Objective("", ObjectiveType.FLEET_DEFENSE, fleet.id, pr, f"Intercept a bomber raid on {fleet.name}")))
+            else:
+                bombers.note_stage(state, dec)                       # v0.41.109: the quiet day before the raid
         if fleet:
             tot = sum(x.available for x in state.enemy_air)
             auth = sum(x.authorized for x in state.enemy_air) or 1
@@ -266,6 +276,7 @@ def blinded_today(state, site: str) -> bool:
 class WarSimulator:
     def __init__(self, d: Difficulty, rng: random.Random | None = None):
         self.d, self.rng = d, rng or random.Random()
+        self.borrow = {"red": True, "blue": True}                  # v0.41.81: the Experimental switches (engine sets them from the settings)
 
     def odds(self, state: CampaignState, pkg: Package) -> tuple:
         obj = pkg.objective
@@ -326,18 +337,33 @@ class WarSimulator:
             from .sams import covering_ad, AD_RAID_WEIGHT
             from .raids import aim_xy
             strength += AD_RAID_WEIGHT * covering_ad(state, *aim_xy(state, pkg.objective.aim, state.bases[pkg.objective.target_id]))
+        up_, psq_ = False, None
+        from . import blue_barcap
+        if pkg.extra.get("land") and pkg.extra.get("bomber_wing"):        # v0.41.86: a base patrol on station on the side the raid comes from adds a pair
+            wa_ = state.assets.get(pkg.extra["bomber_wing"])
+            fb_ = state.bases.get(pkg.objective.target_id)
+            if wa_ is not None and fb_ is not None and fb_.kind.value != "CARRIER":
+                up_, psq_ = blue_barcap.patrol_up(state, rng, fb_, (wa_.x, wa_.y))
+                if up_:
+                    strength += blue_barcap.PATROL_RAID_WEIGHT * ROLE_WEIGHT[Role.CAP]
         p = strength / (strength + 2.5 + 2.0 * d.iads + 0.4 * esc)
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
         lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'} (odds {p:.0%})"]
         if bw is not None and ok:
-            k = min(bw.available, rng.randint(2, 4)); bw.available -= k
+            k = bw.lose(pkg.extra.get("raider"), rng.randint(2, 4) if pkg.extra.get("land") else max(1, round(pkg.extra.get("bombers", 4) * rng.uniform(0.4, 0.8))))
             lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
+            if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
+                lines.append(ln_)
         elif bw is not None and pkg.extra.get("land"):
-            lines += raids_hit(state, pkg.objective.target_id, bw, rng, None, pkg.objective.aim)
+            lines += raids_hit(state, pkg.objective.target_id, bw, rng, None, pkg.objective.aim, pkg.extra.get("raider"))
         elif bw is not None:
-            bw.available = max(0, bw.available - 1)
+            bw.lose(pkg.extra.get("raider"), 1)
+            from . import carrier_hit
             carriers = [s for s in state.squadrons.values() if state.bases[s.base_id].kind.value == "CARRIER"]
-            if carriers:
+            big_ = carrier_hit.big(state, d, rng)                        # v0.41.109: Level 3, the raid nobody flew: usually a very big deal
+            if big_:
+                lines += big_
+            elif carriers:
                 sq = rng.choice(carriers); lost = rng.randint(1, 3); sq.available = max(0, sq.available - lost)
                 lines.append(f"   missiles hit the fleet: {lost} aircraft lost on deck ({sq.name})")
         for ln in lines:
@@ -480,11 +506,13 @@ class WarSimulator:
                 sq.available = min(sq.authorized, sq.available + max(1, round(sq.authorized * d.friendly_replenish)))
         for w in state.enemy_air:
             if state.assets[w.base_asset_id].destroyed:             # a cratered field cannot operate or rearm: the survivors scatter or are lost
-                w.available = int(w.available * 0.75)
+                w.scatter(0.75)
                 continue
-            if w.available < w.authorized and not w.reserve:
-                w.available = min(w.authorized, w.available + max(1, round(w.authorized * d.enemy_replenish)))
+            w.replenish(max(1, round(w.authorized * d.enemy_replenish)))       # new jets for the squadrons that are not resting (v0.41.53)
         for ln in airwings.step(state, d, self.rng):
+            state.note("Overnight: " + ln)
+        from . import support_assets
+        for ln in support_assets.step(state, self.rng):                  # v0.41.87: missing AWACS / tanker airframes come back
             state.note("Overnight: " + ln)
         for a in state.assets.values():
             if 0 < a.health < 1.0:
@@ -493,7 +521,7 @@ class WarSimulator:
             a.suppressed = False                                    # blinded radars come back on overnight
         for ln in self.counterstrike(state):
             state.note("Overnight: " + ln)
-        for ln in sams.rebuild(state, d, self.rng) + sams.relocate(state, d, self.rng) + sams.retreat(state, d, self.rng):
+        for ln in (sams.red_orders(state, d, self.rng) if self.borrow["red"] else []) + sams.rebuild(state, d, self.rng) + sams.relocate(state, d, self.rng) + sams.retreat(state, d, self.rng):
             state.note("Overnight: " + ln)
         for ln in raids.overnight(state, d, self.rng):               # surprise raids nobody flew: alert aircraft against the bombers
             state.note("Overnight: " + ln)
@@ -505,15 +533,15 @@ class WarSimulator:
                 state.note("Overnight: " + ln)
             for bid in state.ground.get("fallen", []):
                 if bid in state.bases:
-                    state.bases[bid].defense = 0.0
+                    sams.set_field(state, state.bases[bid], 0.0)
         state.day += 1
         update_front(state)
         update_status(state)
 
     def counterstrike(self, state: CampaignState) -> list:
-        """Our airfield air defences repair (by supply; see sams.blue_defence) and a strong field lends a battery to the weakest. (The old random
+        """Our airfield air defences repair (by supply; see sams.blue_defence) destroyed sites are ordered or rebuilt (sams.blue_orders). (The old random
         overnight air strike is gone: Red raids are planned now, see raids.py.) Returns log lines."""
-        return sams.blue_defence(state, self.d)
+        return sams.blue_defence(state, self.d) + (sams.blue_orders(state, self.d, self.rng) if self.borrow["blue"] else []) + sams.rebuild_blue_sites(state, self.d, self.rng)
 
 
 def totals(state: CampaignState) -> dict:

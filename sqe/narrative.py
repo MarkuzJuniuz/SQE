@@ -129,6 +129,20 @@ def site_name(state, obj) -> str:
         return ""
 
 
+def setpiece_text(state, pkg, yours: bool, aircraft: str = "") -> list:
+    """v0.41.107: the carrier raid setpiece, in universe. -> paragraphs for the right-hand pane. `yours`: a flight in the list is one you can fly."""
+    ex = pkg.extra
+    bomb, esc = ex.get("bombers", 0), ex.get("escorts", 0)
+    cv = state.bases.get(pkg.objective.target_id)
+    site = cv.name if cv is not None else "the task force"
+    first = (f"Radar and the E-2 have a raid forming up out of Mozdok: {bomb} Backfires with {esc} Flankers on their wing, bearing {ex.get('brg', 0):.0f} degrees onto {site}. "
+             f"Every fighter that can reach the task force is being launched to meet it.")
+    if yours:
+        return [first, "Kill the bombers before they reach launch range, then the escorts. One of these flights is yours; the others fly with you."]
+    return [first, f"Several fighter groups from the carrier and the land bases are on high alert to defend {site}. There is no job on this order for {aircraft or 'your aircraft'}.",
+            "Press Skip Turn and the war simulation settles the raid and the day moves on."]
+
+
 def intent_for(state, pkg) -> str:
     """The intent line for a package, stable for the day and varied across the tasking order (see commander_intent)."""
     typ = pkg.objective.type

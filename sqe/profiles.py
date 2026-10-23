@@ -51,7 +51,7 @@ def candidates(p, role) -> list:
     base = p.alt_ft.get(role, 20000)
     med = p.med_alt_ft or max(10000, int(round(base * 0.6 / 1000.0)) * 1000)
     out = [("base", base, False)]
-    if role in (Role.STRIKE, Role.SEAD, Role.ESCORT) and med < base:
+    if role in (Role.STRIKE, Role.SEAD, Role.TARCAP) and med < base:
         out.append(("med", med, False))
     if role in (Role.STRIKE, Role.CAS) and not p.no_low:
         out.append(("low", p.low_agl_ft, True))

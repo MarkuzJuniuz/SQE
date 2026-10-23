@@ -151,11 +151,25 @@ FIELD_SAM_DETECT_NM = 50.0  # ...and the field then sees this far (the v0.41.6 G
                             # HARMed and bombed the SA-10 next to the field, and not one alert pair was called)
 
 
+RAMP_LEAD_NM = 30.0         # v0.41.92: extra scramble-circle radius when alert pairs wait hot on the ramp and taxi (see set_ramp_lead)
+_LEAD_NM = 0.0              # the lead in force for the mission being built (MissionBuilder.build sets it from the hot-ramp setting)
+
+
+def set_ramp_lead(on: bool) -> None:
+    """v0.41.92: hot-ramp pairs take 5 to 9 minutes from the call to the air (XO's 2026-10-21 runs: 324 to 566 s at Gudauta, 283 and 290 s at Nalchik;
+    the hidden runway start is about 2 minutes), so with the setting on the circles are larger by what blue covers in the 4 extra minutes
+    (about 500 kt = 8 nm a minute, 30 nm). Judgment call from those runs. Planning keep-outs (marshal, sweep, CVCAP) read the same radius."""
+    global _LEAD_NM
+    _LEAD_NM = RAMP_LEAD_NM if on else 0.0
+
+
 def field_detect_nm(field_xy, target_xy, state=None) -> float:
     """v0.41.1: the radius of an enemy field's scramble circle, round the field itself, sized by how far it is from the fight.
     v0.41.8: with state given, a field with a live long-range SAM (an SA-10) within FIELD_SAM_NM sees at least FIELD_SAM_DETECT_NM."""
     d = math.hypot(field_xy[0] - target_xy[0], field_xy[1] - target_xy[1]) / NM
     r = max(25.0, min(FIELD_DETECT_NM, 0.6 * d + 15.0))
+    if _LEAD_NM:
+        r = max(r, min(r + _LEAD_NM, 0.85 * d + 15.0))              # never past what the fight's own distance justifies
     if state is not None and any(a.variant in UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.25
                                  and math.hypot(a.x - field_xy[0], a.y - field_xy[1]) / NM <= FIELD_SAM_NM for a in state.assets.values()):
         r = max(r, FIELD_SAM_DETECT_NM)
