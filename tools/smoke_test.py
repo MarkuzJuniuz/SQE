@@ -1631,7 +1631,28 @@ def check_31l_red_arm(c):
                 continue
             rp.extra["dead"], rp.extra["dead_cover"] = 8, 4                    # v0.41.117: the gated DEAD package
             rp.extra["arm"], rp.extra["arm_cover"] = 8, 4                      # v0.41.116: two four-jet flights (Patriot, HAWK) with an escort pair and a TARCAP pair
-            s.fly(rp.number, None)
+            from sqe.mission_builder import MissionBuilder as _MBg
+            _gates, _gn0 = [], _MBg._raid_gate_new
+            def _gn(self_, *a_, **k_):
+                g_ = _gn0(self_, *a_, **k_); _gates.append((g_, self_.state)); return g_
+            _MBg._raid_gate_new = _gn
+            try:
+                s.fly(rp.number, None)
+            finally:
+                _MBg._raid_gate_new = _gn0
+            # v0.41.128: the gate is clear of EVERY live battery's reach (the neighbour field's too), unless it hit the cap
+            from sqe import raids as _rdg
+            from sqe.sams import blue_battery as _bb
+            from sqe.routes import NM as _NMg
+            from sqe.raid_spawns import DEAD_GATE_CLEAR_NM as _CL, DEAD_HOLD_MAX_NM as _HM
+            assert _gates and _gates[0][0] is not None, "the raid has a gate"
+            _g0, _st0 = _gates[0]
+            for _b in _st0.bases.values():
+                if _b.kind.value != "AIRFIELD":
+                    continue
+                _bt = _bb(_b, _st0); _r = max(_rdg.PATRIOT_NM if _bt["patriot_ln"] else 0, _rdg.HAWK_NM if _bt["hawk"] else 0)
+                _hx, _hy = _g0["hold"]
+                assert not _r or _g0["nm"] >= _HM - 4 or ((_hx - _b.x) ** 2 + (_hy - _b.y) ** 2) ** 0.5 >= (_r + _CL) * _NMg - 1, f"the gate is inside {_b.name}'s reach"
             mz = _zf.ZipFile(st.pending["miz"]).read("mission").decode()
             assert "RAID-S-1-1" in mz and "RAID-S-1-2" in mz and "Raid SEAD 1" in mz, "the SEAD flight is in the mission"
             assert "RAID-S-1-4" in mz and "RAID-S-2-4" in mz and "Raid SEAD 2" in mz, "8 SEAD jets: two flights of four"
