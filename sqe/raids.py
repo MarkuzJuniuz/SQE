@@ -216,19 +216,25 @@ FLEET_NM = 70            # v0.41.31: ...and the carrier group's SM-2 reach (meas
 HAWK_NM = 25             # ...and a field's HAWK battery (v0.41.30: every full-strength field has one, not only yours)
 
 
-def cover_field(state, x: float, y: float):
-    """v0.41.125: the nearest airfield whose live Patriot (PATRIOT_NM) or HAWK (HAWK_NM) covers (x, y), or None."""
+def covering_fields(state, x: float, y: float) -> list:
+    """v0.41.129: every airfield whose live Patriot (PATRIOT_NM) or HAWK (HAWK_NM) covers (x, y), nearest first. In Georgia the fields are about 20 nm apart, so a
+    target is usually covered by its neighbours' batteries too."""
     from .sams import blue_battery
-    best = None
+    out = []
     for b in state.bases.values():
         if b.kind != BaseKind.AIRFIELD:
             continue
         bt = blue_battery(b, state)
         dn = math.hypot(b.x - x, b.y - y) / NM
         if (bt["patriot_ln"] and dn <= PATRIOT_NM) or (bt["hawk"] and dn <= HAWK_NM):
-            if best is None or dn < best[0]:
-                best = (dn, b)
-    return best[1] if best else None
+            out.append((dn, b.id, b))
+    return [b for _, _, b in sorted(out, key=lambda t: t[:2])]
+
+
+def cover_field(state, x: float, y: float):
+    """v0.41.125: the nearest airfield whose live Patriot (PATRIOT_NM) or HAWK (HAWK_NM) covers (x, y), or None."""
+    fs = covering_fields(state, x, y)
+    return fs[0] if fs else None
 
 
 def reach_for(state, kind: str, x: float, y: float, budget: bool = True):
@@ -236,18 +242,44 @@ def reach_for(state, kind: str, x: float, y: float, budget: bool = True):
     return _reach(state, kind, x, y, budget, only="Su_24M" if cover_field(state, x, y) is not None else None)
 
 
+ARM_MAX_TOTAL = 12       # v0.41.129: the most SEAD jets one raid sends in all (three flights of four; judgment call)
+
+
+def sead_groups(state, d, x: float, y: float, available: int, nb: int):
+    """v0.41.129 (XO 2026-10-23: the neighbour's Patriot shot the bombers after the gate opened): -> [(field, jets)], one SEAD group for EVERY field whose
+    live battery covers (x, y), nearest first; [] when nothing covers it; None when red cannot suppress them all. Every covering field gets a pair (4 Kh-31P
+    to blind its radars; judgment call), and what is left of the wing's spare jets (`available` less the `nb` bombers) tops the nearest fields up to
+    their `arm_jets` size, nearest first (the level's `arm_cap` caps one group: L2 a pair unless `arm_cap_free` jets are spare). None when the pairs alone
+    need more jets than are spare, or the total tops ARM_MAX_TOTAL."""
+    fs = covering_fields(state, x, y)
+    if not fs:
+        return []
+    cap, cap_free = int(getattr(d, "arm_cap", 8)), int(getattr(d, "arm_cap_free", 8))
+    free0 = available - nb
+    if free0 < 2 * len(fs) or 2 * len(fs) > ARM_MAX_TOTAL:
+        return None
+    left = min(free0, ARM_MAX_TOTAL) - 2 * len(fs)
+    out = []
+    for f in fs:
+        want = arm_jets(state, f, free0 + nb, nb, cap, cap_free)
+        size = max([n for n in (8, 4, 2) if n <= max(2, want) and n - 2 <= left] or [2])
+        left -= size - 2
+        out.append((f, size))
+    return out if sum(n for _, n in out) <= ARM_MAX_TOTAL else None
+
+
 def sead_plan(state, d, base, aim: str, wing, ac: str):
     """v0.41.125 (XO 2026-10-23: no dice, intelligent planning): -> (ok, n_arm). A target under live Patriot / HAWK cover is raided only by a Su-24M wing
-    that can field the SEAD group (sized by `arm_jets`, capped by the level: L2 a pair unless the wing has plenty spare; L1 none); an uncovered target
-    needs none. Raids on covered supply sites, garrisons and sectors are not attempted (no SEAD is built for them)."""
+    that can field the SEAD groups (v0.41.129: one for every covering field, see `sead_groups`; L1 none); an uncovered target needs none. Raids on
+    covered supply sites, garrisons and sectors are not attempted (no SEAD is built for them)."""
     x, y = aim_xy(state, aim, base)
-    cf = cover_field(state, x, y)
-    if cf is None:
+    if cover_field(state, x, y) is None:
         return True, 0
     if aim_kind(aim) != "field" or ac != "Su_24M" or getattr(d, "raid_arm", 0) <= 0:
         return False, 0
     avail = wing.available_of({"Su_24M"}) if hasattr(wing, "available_of") else wing.available
-    n = arm_jets(state, cf, avail, int(d.raid_size[1]), int(getattr(d, "arm_cap", 8)), int(getattr(d, "arm_cap_free", 8)))
+    g = sead_groups(state, d, x, y, avail, int(d.raid_size[1]))
+    n = sum(j for _, j in g) if g else 0
     return n > 0, n
 
 

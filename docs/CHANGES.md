@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.129, red SEAD covers every battery that covers the target
+
+XO (2026-10-23): close the gap left by v0.41.128 (the neighbour's Patriot still shot the bombers after the gate opened). In Georgia the fields are about 20 nm apart: Kutaisi is covered by Senaki's and Kobuleti's batteries too.
+- `raids.covering_fields` (every field whose live Patriot, 40 nm, or HAWK, 25 nm, covers a point, nearest first) and `raids.sead_groups`: one SEAD group per covering field. Each gets a pair (4 Kh-31P to blind its radars; judgment call); the wing's spare jets (`available` less the bombers) top the nearest fields up to their `arm_jets` size, nearest first, at most `ARM_MAX_TOTAL` 12 jets in all (judgment call). A wing that cannot spare a pair for each field does not raid that target. `arm_cap` (L2: a pair) now caps one group; the L2 lift at `arm_cap_free` 8 spare jets is as before. `sead_plan`, `pick_aim`, `pick_target`, `overnight` and `packages._land_raid_plan` use it; the package carries `arm_fields` ([[field id, jets]]).
+- `raid_spawns._spawn_raid_arm`: a group (or two flights of four for an eight) per covering field, firing from `ARM_LAUNCH_NM` from that field, 600 m apart, names `Raid SEAD n`. The escort / TARCAP cover and the DEAD flights stay with the raided field. A package without `arm_fields` (an older save) sends all its jets at the raided field.
+- The gate (`_raid_gate_new`) now opens when the radars of every covering field are dead.
+- 40-day sims, 2 seeds, announced raid packages: L1 0, L2 11, L3 9 (the SEAD force is 12 jets at L3). Red raids a clustered field only when it has the jets for all of it; L2 needs 8 spare, L3 six beyond the bombers.
+- Smoke: `check_31wg_sead_every_covering_battery`; `check_31wd_red_sead_first` rewritten for the per-field sizing. Full smoke passed. Untested in DCS.
+
 ## v0.41.128, the raid gate sits clear of the neighbouring fields' SAMs too
 
 XO's run (v0.41.126): the gate worked (abort at 1294 s, DEAD flights and the escort turned home), but the bombers were shot at the gate. The raid was on Kutaisi; the gate, 48 nm from Kutaisi, lay 28 nm from Senaki's Patriot, which killed RAID-B-3 at 90 s and RAID-D-2-1 at 354 s. In this theatre the fields are 20 nm apart, so a gate measured from the raided field alone is inside a neighbour's reach.

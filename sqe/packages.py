@@ -365,16 +365,18 @@ class PackageBuilder:
             if types:
                 esc = (w.base_asset_id, rnd.choice(types)); break
         brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360          # they come from where they took off
-        arm = 0
+        arm, arm_fields = 0, []
         if self.d and getattr(self.d, "raid_arm", 0) > 0 and not aim and raider == "Su_24M" and bw.available >= nb + 2:    # v0.41.84: a SEAD group ahead of the bombers
-            arm = raids.arm_jets(st, tb, bw.available, nb, int(getattr(self.d, "arm_cap", 8)), int(getattr(self.d, "arm_cap_free", 8)))     # v0.41.94: sized like blue's salvo; v0.41.125: no dice, L2 capped at a pair
+            sg_ = raids.sead_groups(st, self.d, ax, ay, bw.available, nb)     # v0.41.94: sized like blue's salvo; v0.41.125: no dice, L2 capped at a pair; v0.41.129: a group for every covering field
+            arm_fields = [[f_.id, n_] for f_, n_ in (sg_ or [])]
+            arm = sum(n_ for _, n_ in arm_fields)
         free2_ = bw.available - nb - arm
         dead = (8 if (arm >= 8 and free2_ >= 8) else (4 if (arm >= 4 and free2_ >= 4) else (2 if (arm >= 2 and free2_ >= 2 and getattr(self.d, "arm_cap", 8) <= 2) else 0)))     # v0.41.125: L2 gets a DEAD pair behind its SEAD pair     # v0.41.117: the DEAD package (KAB-500Kr), gated; only behind a SEAD group of four or more
         dead_cover = 4 if (dead and esc) else 0
         arm_cover = 4 if (arm >= 4 and esc) else 0       # v0.41.116: a SEAD group of four or more brings its own fighters: a pair of escorts and a pair on a TARCAP station
         if raids.cover_field(st, ax, ay) is not None and not arm:       # v0.41.125: no SEAD to send under live cover: no raid
             return None
-        return {"arm": arm, "arm_cover": arm_cover, "dead": dead, "dead_cover": dead_cover, "land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
+        return {"arm": arm, "arm_fields": arm_fields, "arm_cover": arm_cover, "dead": dead, "dead_cover": dead_cover, "land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
                 "escort_wing": esc[0] if esc else "", "escort_type": esc[1] if esc else "",
                 "escorts": (4 if nb >= 4 else 2) if esc else 0, "aim": aim, "dest": [ax, ay]}
 

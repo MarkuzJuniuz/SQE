@@ -1008,6 +1008,14 @@ def check_21_raids_emergencies(c):
     c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_ev_orig', '_rd', '_st', '_zf',)})
 
 
+def boost_su24(st, n=24):
+    """v0.41.129: red raids a clustered field only with a pair of SEAD jets for every covering battery; tests that need a raid give red a strong Su-24M force."""
+    for w_ in st.enemy_air:
+        for q_ in w_.sqns:
+            if q_.aircraft == "Su_24M":
+                q_.authorized = max(q_.authorized, n); q_.available = q_.authorized
+
+
 def check_22_raid_intercepts_ai_only(c):
     _ev_orig = c._ev_orig
     s = fresh_session()
@@ -1027,10 +1035,11 @@ def check_22_raid_intercepts_ai_only(c):
         try:
             _rp0 = None
             for _day in range(8):
+                boost_su24(_st); s.plan_day() if _day == 0 else None
                 _rp0 = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "RAID" and s.emergency_for(p_.number, None)["eligible"]), None)
                 if _rp0:
                     break
-                _st.day += 1; s.plan_day()
+                _st.day += 1; boost_su24(_st); s.plan_day()
             assert _rp0 is not None
             s.fly(_rp0.number, None, scramble=True)
         finally:
@@ -1112,7 +1121,7 @@ def check_27_raid_s_route_bends(c):
     s.apply(_data); assert _base.defense < _def0 or any("bombs fell" in x_ for x_ in _st.log), "bombers that got through hit the base"
     # surprise raids nobody flew are settled overnight; the file round-trips and an old save loads
     s.new("Raid night", "F-16C", 2, seed=6); _st = s.state
-    _st.raids["surprise"] = 3; _lines = _rd.overnight(_st, _gd(2), _rnd.Random(1)); assert _lines and _st.raids["surprise"] == 0
+    boost_su24(_st); _st.raids["surprise"] = 3; _lines = _rd.overnight(_st, _gd(2), _rnd.Random(1)); assert _lines and _st.raids["surprise"] == 0
     _rt = _CS.from_dict(_st.to_dict()); assert _rt.raids == _st.raids
     _o = _st.to_dict(); _o.pop("raids"); assert _CS.from_dict(_o).raids == {}
     _eng27.AI_ONLY = _aio27
@@ -1630,6 +1639,7 @@ def check_31l_red_arm(c):
             if rp is None:
                 continue
             rp.extra["dead"], rp.extra["dead_cover"] = 8, 4                    # v0.41.117: the gated DEAD package
+            rp.extra["arm_fields"] = []                                        # v0.41.129: no per-field list: all the jets go at the raided field
             rp.extra["arm"], rp.extra["arm_cover"] = 8, 4                      # v0.41.116: two four-jet flights (Patriot, HAWK) with an escort pair and a TARCAP pair
             from sqe.mission_builder import MissionBuilder as _MBg
             _gates, _gn0 = [], _MBg._raid_gate_new
@@ -1981,6 +1991,7 @@ def check_31w_raid_scramble_merge(c):
                     assert "RAID-B-1" in txt, "the raiders are in the mission"
                     return
             st.day += 1
+            boost_su24(st)
             ses.plan_day()
         raise AssertionError("no raid scramble inside the merge circle in 40 days")
     finally:
@@ -2037,6 +2048,60 @@ def check_31wf_carrier_return_height(c):
     print(f"[carrier return] {len(seen)} flights cross {CV_RCV_NM} nm out at {CV_RCV_FT} ft before descending")
 
 
+def check_31wg_sead_every_covering_battery(c):
+    """v0.41.129: red's SEAD covers EVERY field whose live battery covers the target (Kutaisi: Senaki and Kobuleti too): a group per field, the gate opens on all their
+    radars, and the plan is None when the wing cannot spare a pair for each."""
+    import re, zipfile
+    from sqe import raids as rd
+    from sqe.difficulty import LEVELS
+    from sqe.sams import blue_battery
+    s = fresh_session(3, 12); st = s.state
+    d = LEVELS[3]
+    cand = next((b_, rd.aim_xy(st, a_, b_)) for b_, a_, w_ in rd.candidates(st, "field") if len(rd.covering_fields(st, *rd.aim_xy(st, a_, b_))) >= 2)
+    b, (x, y) = cand
+    fs = rd.covering_fields(st, x, y)
+    assert len(fs) >= 2 and fs[0].id == b.id or fs[0].id != b.id, "neighbours cover it"
+    g = rd.sead_groups(st, d, x, y, 2 * len(fs) + 4, 4)
+    assert g and [f_.id for f_, _ in g] == [f_.id for f_ in fs] and all(n_ >= 2 for _, n_ in g), "a group for every covering field"
+    assert rd.sead_groups(st, d, x, y, 2 * len(fs) + 4 - 1, 4) is None, "one jet short of a pair each: no raid"
+    assert rd.sead_groups(st, d, x, y, 2 * len(fs) + 4 + 6, 4)[0][1] >= 4, "spare jets top the nearest field up"
+    # the built mission: a SEAD group for each field and one gate waiting on all their radars
+    import sqe.engine as eng
+    aio, eng.AI_ONLY = eng.AI_ONLY, ()
+    old = (LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise)
+    LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise = 1.0, 3.0, 0.0
+    try:
+        for seed in (12, 16, 5, 20):
+            s = fresh_session(); s.new("Red SEAD all", "F-15C", 3, seed=seed); st = s.state
+            rp = None
+            for _day in range(10):
+                rp = next((p_ for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land") and not p_.extra.get("aim")
+                           and len(p_.extra.get("arm_fields") or []) >= 2 and s.flyable(p_)), None)
+                if rp:
+                    break
+                st.day += 1
+                for w_ in st.enemy_air:                                    # a strong Su-24M force: a pair per covering field is spare
+                    for q_ in w_.sqns:
+                        if q_.aircraft == "Su_24M":
+                            q_.authorized = max(q_.authorized, 24); q_.available = q_.authorized
+                s.plan_day()
+            if rp is None:
+                continue
+            nf = len(rp.extra["arm_fields"])
+            s.fly(rp.number, None)
+            mz = zipfile.ZipFile(st.pending["miz"]).read("mission").decode()
+            n_s = len(set(re.findall(r"Raid SEAD (\d+)", mz)))
+            assert n_s >= nf, (n_s, nf, "a SEAD group per covering field")
+            n_dead = len(re.findall(r'"c_unit_dead"', mz.replace("\\", "")))
+            assert n_dead >= 2 * nf, (n_dead, nf, "the gate waits on every covering field's radars")
+            print(f"[sead all] {nf} covering fields: {n_s} SEAD groups, gate on {n_dead} radars")
+            return
+        raise AssertionError("no raid with two covering fields in four seeds")
+    finally:
+        LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise = old
+        eng.AI_ONLY = aio
+
+
 def check_31wd_red_sead_first(c):
     """v0.41.125: no dice. Red raids a target under live Patriot / HAWK cover only when it can field the SEAD group (Su-24M wing, jets spare): L3 sizes it by the
     batteries, L2 caps it at a pair unless 8 jets are spare, L1 never; an uncovered target needs none; Su-25s and covered sites / garrisons / sectors are not tried."""
@@ -2049,11 +2114,14 @@ def check_31wd_red_sead_first(c):
     assert raids.cover_field(st, fld.x, fld.y) is not None, "a fresh blue field has a live Patriot / HAWK"
     wing = lambda n: NS(available_of=lambda ts, n=n: n, available=n)
     d1, d2, d3 = LEVELS[1], LEVELS[2], LEVELS[3]
-    ok, n = raids.sead_plan(st, d3, fld, "", wing(14), "Su_24M"); assert ok and n >= 2, ("L3 with spare jets", ok, n)
+    k = len(raids.covering_fields(st, fld.x, fld.y))                  # v0.41.129: a pair for every covering field (the neighbours' batteries too)
+    assert k >= 2, "fields here cover each other"
+    ok, n = raids.sead_plan(st, d3, fld, "", wing(14), "Su_24M"); assert ok and n >= 2 * k, ("L3 with spare jets", ok, n, k)
     ok, n = raids.sead_plan(st, d3, fld, "", wing(5), "Su_24M"); assert not ok, "L3: no spare jets, no raid on a covered field"
     ok, n = raids.sead_plan(st, d3, fld, "", wing(14), "Su_25"); assert not ok, "a Su-25 raid does not go in under cover"
-    ok, n = raids.sead_plan(st, d2, fld, "", wing(10), "Su_24M"); assert ok and n == 2, ("L2: a pair", ok, n)
-    ok, n = raids.sead_plan(st, d2, fld, "", wing(12), "Su_24M"); assert ok and n >= 4, ("L2 with 8 spare: the full sizing", ok, n)
+    ok, n = raids.sead_plan(st, d2, fld, "", wing(10), "Su_24M"); assert ok and n == 2 * k, ("L2: a pair per covering field", ok, n, k)
+    ok, n = raids.sead_plan(st, d2, fld, "", wing(12), "Su_24M"); assert ok and n > 2 * k, ("L2 with 8 spare: the full sizing", ok, n)
+    ok, n = raids.sead_plan(st, d2, fld, "", wing(8), "Su_24M"); assert not ok, "L2: not a pair for every covering field spare: no raid"
     ok, n = raids.sead_plan(st, d1, fld, "", wing(14), "Su_24M"); assert not ok, "L1 never raids a covered field"
     far = next((a for a in st.assets.values() if raids.cover_field(st, a.x, a.y) is None), None)
     assert raids.arm_jets(st, fld, 10, 4, cap=2, cap_free=8) == 2 and raids.arm_jets(st, fld, 12, 4, cap=2, cap_free=8) >= 4, "arm_jets cap and the spare-jet lift"
@@ -2069,7 +2137,7 @@ def check_31wc_scramble_folds_outside_circle(c):
         (TMP / "saves").mkdir(parents=True, exist_ok=True)
         ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=5))
         ses.new("Fold outside", "F-16C", 2, seed=4)
-        st = ses.state
+        st = ses.state; boost_su24(st)
         for _ in range(40):
             for p in ses.packages():
                 if not ses.flyable(p):
@@ -2081,6 +2149,7 @@ def check_31wc_scramble_folds_outside_circle(c):
                     print("[fold outside circle] a raid scramble outside the 5 nm merge circle is folded into the mission")
                     return
             st.day += 1
+            boost_su24(st)
             ses.plan_day()
         raise AssertionError("no raid scramble outside the merge circle in 40 days")
     finally:
@@ -2097,7 +2166,7 @@ def check_31wb_scramble_takes_hidden_packages(c):
         (TMP / "saves").mkdir(parents=True, exist_ok=True)
         ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=400))
         ses.new("Scramble members", "F-16C", 2, seed=4)
-        st = ses.state
+        st = ses.state; boost_su24(st)
         hm = lambda p_: int(p_.start[:2]) * 60 + int(p_.start[3:5])
         for _ in range(40):
             for p in ses.packages():
@@ -2118,6 +2187,7 @@ def check_31wb_scramble_takes_hidden_packages(c):
                 assert any(x.number in merged for x in inside) or not inside, "a package hidden in the original comes along"
                 return
             st.day += 1
+            boost_su24(st)
             ses.plan_day()
         raise AssertionError("no scramble with a package hidden in the original in 40 days")
     finally:
@@ -4013,6 +4083,7 @@ CHECKS = [
     check_31wc_scramble_folds_outside_circle,
     check_31wd_red_sead_first,
     check_31we_red_gate_debrief,
+    check_31wg_sead_every_covering_battery,
     check_31wf_carrier_return_height,
     check_31x_forward_garrisons,
     check_31y_unit_cap_merged,
