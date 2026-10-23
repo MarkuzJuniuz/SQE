@@ -31,6 +31,7 @@ A2A_ZONE_NM = {True: 25, False: 15}
 # SwitchWaypoint worked, immediately with from = 1, only after the leg with from = the current waypoint).
 CALLIN_REACH_NM = 110         # a patrol answers a hotspot at most this far from its station (judgment call)
 CALLIN_MIN_NM = 10            # ...and it is not worth a call when the hotspot is this close already
+CALLIN_LUA_DELAY_S = 5         # v0.41.114: the call triggers wait this long, so the Lua that defines SQE_CALLIN (TimeAfter 1) has run
 CALLIN_STAY_S = 480           # how long a called pair stays at the hotspot before it flies back (judgment call: 8 minutes)
 ALERT_STAY_AFTER_TOT_S = 1200   # a scrambled pair flies home this long after the time on target (was an hour, i.e. never in the sortie)
 CALLIN_LUA = (
@@ -223,6 +224,7 @@ class RedAirPicture:
             zx_, zy_, zr_ = self._field_zone(wa[1], tx, ty)
             zone = self.m.triggers.add_triggerzone(mapping.Point(zx_, zy_, self.t), zr_ * NM, True, f"callin {wa[1].id}")
             t1.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
+        t1.add_condition(condition.TimeAfter(CALLIN_LUA_DELAY_S))      # v0.41.114: never before SQE_CALLIN is defined (blue already inside the zone at time 0 gave a script error)
         for c in self._hot_calls:
             t1.add_action(action.DoScript(String(self._callin_call(c))))
         self.m.triggerrules.triggers.append(t1)
@@ -332,6 +334,7 @@ class RedAirPicture:
                     zc_ = self.m.triggers.add_triggerzone(pt(pf_["gx"], pf_["gy"]), RED_CALLIN_NM * NM, True, f"callin {g.name}")
                     tc_ = triggers.TriggerOnce(comment=f"call in {g.name} to {pf_.get('guard')}")
                     tc_.add_condition(condition.PartOfCoalitionInZone("blue", zc_.id))
+                    tc_.add_condition(condition.TimeAfter(CALLIN_LUA_DELAY_S))
                     tc_.add_action(action.DoScript(String(self._callin_call(self._hot_calls[-1]))))
                     self.m.triggerrules.triggers.append(tc_)
                     self._callins.append({"g": g.name, "site": pf_.get("guard")})

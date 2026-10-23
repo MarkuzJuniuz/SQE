@@ -1,6 +1,16 @@
 # CHANGES.md
 
 
+## v0.41.114, blue defensive missions: stations up the raid's way in, a base CAP for the intercept, and a fix to the call-in script error
+
+XO (Kobuleti run, 2026-10-22): the CAPs sat on top of the bases and nothing was there to call in. Also his mission-load error `attempt to call global 'SQE_CALLIN' (a nil value)`.
+- FIX: the call-in triggers (red, red SAM guard, blue) fired at mission time 0 when the target side was already inside the zone, before the trigger that defines `SQE_CALLIN` had run. All three now wait `CALLIN_LUA_DELAY_S` (5 s). Smoke checks 31zd / 31ze assert it.
+- STATIONS: the raid scramble's package CAP (CAP1/CAP2, for an airfield target) now sits on `scramble.blue_station` (forward on the raid's line, under our air defence) instead of on the line from the player's base. Alert pairs use the same point.
+- COVER: a point counts as covered also when a full-strength Patriot (0.65 air defence) is within `BLUE_COVER_PAT_NM` (30 nm); before, only the 25 nm HAWK-class reach counted.
+- CLEARANCE: blue stations use `scramble.clear_for_station` (SA-10 35 nm, other rings +3 nm) instead of the sweep's rule (45 nm, +20 nm), which rejected even the target field and sent the pair 10 nm BEHIND it.
+- ATTACH: an airfield raid-intercept package (FLEET_DEFENSE on a field) now gets the field's BASECAP, and a raid scramble made by the emergency path (`_make_emergency`) gets its guards too, if a patrol is planned in that window.
+- Judgment calls: 30 nm / 0.65, 35 nm, 3 nm (all mine, no source). Untested in DCS.
+
 ## v0.41.113, BARCAP stations pushed forward
 
 XO (2026-10-22 runs): the base CAPs sat too safe, so no air-to-air happened between the bases. The orbit centre moves out toward the threat so the two sides can snipe at long range while the defender is still inside its own SAM cover.

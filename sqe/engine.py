@@ -678,6 +678,8 @@ class Session:
         for f in epkg.flights:
             f.is_player = False
         if kind == "RAID":
+            from . import blue_barcap
+            blue_barcap.attach(st, [epkg])                    # v0.41.114: the planned base CAP of the raided field is up for a land-raid scramble too
             text = (f"Bombers are inbound on {where} and nobody was warned. Alert aircraft are not enough: the fighters nearest to it are being scrambled.")
             title = "EMERGENCY SCRAMBLE"
         else:

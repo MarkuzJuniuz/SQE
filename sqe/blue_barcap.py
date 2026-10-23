@@ -14,7 +14,7 @@ import math
 
 from . import barcap
 from .aircraft import AIRCRAFT
-from .models import BaseKind, Role
+from .models import BaseKind, ObjectiveType, Role
 
 NM = 1852.0
 DAILY_SORTIES = 2              # per serviceable airframe per day: the rule the packages follow (engine.plan_day)
@@ -182,17 +182,25 @@ def attach(state, pkgs: list) -> None:
     for p in pkgs:
         obj = p.objective
         setp = bool(p.extra.get("setpiece"))                              # v0.41.109: the carrier raid setpiece gets the carrier CAP and the guards too
-        if (obj.type in _FLEET and not setp) or is_sweep(obj) or (obj.target_id not in state.assets and not setp):
+        tb_ = state.bases.get(obj.target_id)
+        land_raid = (obj.type == ObjectiveType.FLEET_DEFENSE and tb_ is not None and tb_.kind == BaseKind.AIRFIELD and not setp)    # v0.41.114: a land-raid intercept
+        if land_raid:
+            pass
+        elif (obj.type in _FLEET and not setp) or is_sweep(obj) or (obj.target_id not in state.assets and not setp):
             continue
         s0 = _minute(p.start)
         lo, hi = s0 - LEAD_MIN, s0 + PACKAGE_WINDOW_MIN
-        if setp:
+        if land_raid:
+            txy = (tb_.x, tb_.y)                                           # the raided field is what the base CAP faces and guards
+        elif setp:
             ba_ = state.assets.get(p.extra.get("bomber_wing", ""))
             txy = (ba_.x, ba_.y) if ba_ is not None else (state.bases[obj.target_id].x, state.bases[obj.target_id].y)
         else:
             txy = target_point(state, obj)
         assets = []
-        if base_cap is not None and not setp:
+        if land_raid:
+            assets.append(tb_)
+        elif base_cap is not None and not setp:
             assets.append(base_cap)
         cv = next((state.bases[state.squadrons[f.squadron_id].base_id] for f in p.flights if not f.tag and f.squadron_id in state.squadrons
                    and state.bases[state.squadrons[f.squadron_id].base_id].kind == BaseKind.CARRIER), None)

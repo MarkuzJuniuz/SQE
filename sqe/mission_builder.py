@@ -1414,6 +1414,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          spawn=sp[0] if sp else None, spawn_alt_ft=sp[1] if sp else 0, spawn_kts=sp[2] if sp else 0,
                          jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), harm_deg=self._harm_deg(package, geom))
         if self._raid_cap(package, f):
+            self._raid_cap_station(package, geom, wps)                # v0.41.114: the station up the raid's way in, not on the player's line
             # v0.41.28: a raid scramble's way out to its station bends round red SAMs like a strike's (the orbit leg stays as it is)
             k1_ = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)
             if k1_:

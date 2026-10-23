@@ -20,7 +20,7 @@ from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
 from .loadouts import ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_strike_loadout
 from .models import AssetKind, BaseKind, ObjectiveType, Role
-from .red_air_picture import A2A_ZONE_NM, CALLIN_LUA, CALLIN_MIN_NM, CALLIN_REACH_NM, RED_LONG_RANGE
+from .red_air_picture import A2A_ZONE_NM, CALLIN_LUA, CALLIN_LUA_DELAY_S, CALLIN_MIN_NM, CALLIN_REACH_NM, RED_LONG_RANGE
 from .support_caps import SUPPORT_CAP_ZONE_NM
 from .routes import AVOID_NM, FT, NM, Wpt, avoid_circles, bearing, dist, offset
 from .strike_tasks import KPH
@@ -234,6 +234,21 @@ class RaidSpawns:
             srcs = reactive.blue_sources(st, AIRCRAFT, fight, committed, *dpt)
             self._intel.append(f"Alert fighters of {sq.name} ({self._short(base.name)}) are on cockpit alert and may launch to help.")
 
+    def _raid_cap_station(self, package, geom, wps) -> None:
+        """v0.41.114 (XO 2026-10-22, the Kobuleti run): a raid scramble's CAP racetrack sat on the line from the PLAYER's base to the target (37 nm west of the
+        field over the sea, 32 nm off the raid's way in). It now sits where an alert pair would: up the raid's way in, as far forward as our own air defence
+        still covers it and clear of red's SAM rings (scramble.blue_station). Land fields only: the carrier keeps its old geometry."""
+        st = self.state
+        tb = st.bases.get(package.objective.target_id)
+        k1 = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)
+        if tb is None or tb.kind != BaseKind.AIRFIELD or k1 is None or k1 + 1 >= len(wps):
+            return
+        tx, ty = geom.tx, geom.ty
+        (sx, sy), _why = scramble.blue_station(st, tx, ty, scramble.raid_origin(st, package, tx, ty))
+        leg = max(dist(wps[k1].x, wps[k1].y, wps[k1 + 1].x, wps[k1 + 1].y), 5 * NM)
+        wps[k1].x, wps[k1].y = sx, sy
+        wps[k1 + 1].x, wps[k1 + 1].y = offset(sx, sy, bearing(sx, sy, tx, ty) + 90, leg)
+
     def _blue_callins(self, package, raid_x, fleet_obj, tx, ty, tot_s) -> None:
         """v0.41.112 (XO 2026-10-22): the BASECAP call-in, blue side. In a defensive mission (a raid on blue, or the fleet under attack) the blue
         base and carrier CAPs that can reach the hotspot (where the alert pairs would station themselves) are called to it when red comes within
@@ -283,6 +298,7 @@ class RaidSpawns:
         t1 = triggers.TriggerOnce(comment="call in the blue patrols")
         zone = self.m.triggers.add_triggerzone(pt(*dpt), 120 * NM, True, "callin blue")
         t1.add_condition(condition.PartOfCoalitionInZone("red", zone.id))
+        t1.add_condition(condition.TimeAfter(CALLIN_LUA_DELAY_S))
         for c in calls:
             t1.add_action(action.DoScript(String(self._callin_call(c))))
         self.m.triggerrules.triggers.append(t1)
