@@ -25,6 +25,8 @@ STEP_NM = 5.0
 FIELD_HOLD_NM = 15.0     # red with no SAM cover at all holds this far out from its own field toward the target (the old patrols sit 20-25 nm out)
 BLUE_COVER_AD = 0.3      # a blue field's air defence (sams.air_defence, 0 to 1) that counts as cover over what lies within BLUE_COVER_NM of it
 BLUE_COVER_NM = 25.0     # raids.HAWK_NM: the field's HAWK reach, judgment call for the margin inside the Patriot's 40
+BLUE_COVER_PAT_AD = 0.65   # v0.41.114: a field at Patriot strength (sams.air_defence: a Patriot at full strength is 0.7)...
+BLUE_COVER_PAT_NM = 30.0   # ...covers this far, 10 nm inside the Patriot's 40 (raids.PATRIOT_NM): a station "well inside SAM support" (XO 2026-10-22; judgment call)
 
 
 def red_covered(state, x, y) -> bool:
@@ -41,7 +43,7 @@ def red_covered(state, x, y) -> bool:
 def blue_covered(state, x, y) -> bool:
     """Is (x, y) under blue's own air defence: a field with a Patriot / HAWK battery up within BLUE_COVER_NM of it?"""
     from .sams import covering_ad
-    return covering_ad(state, x, y, BLUE_COVER_NM) >= BLUE_COVER_AD
+    return covering_ad(state, x, y, BLUE_COVER_NM) >= BLUE_COVER_AD or covering_ad(state, x, y, BLUE_COVER_PAT_NM) >= BLUE_COVER_PAT_AD
 
 
 def _walk(frm, to, step_nm=STEP_NM):
@@ -76,11 +78,28 @@ def raid_origin(state, pkg, tx, ty):
     return (w.x, w.y)
 
 
+STATION_SA10_NM = 35.0      # judgment call (v0.41.114): a defender sits under its own cover, so it keeps less room from red's SA-10 than a sweep (45)
+STATION_RING_MARGIN_NM = 3.0  # judgment call: the sweep uses 20 nm outside the other rings; 3 keeps a CAP off a point-defence SAM's ring only
+
+
+def clear_for_station(state, x, y) -> bool:
+    """A blue defensive station: STATION_SA10_NM from every live red SA-10, STATION_RING_MARGIN_NM outside every other SAM ring of 3 nm+."""
+    from . import threatmap as tm
+    from .sweep import _sams
+    for a in _sams(state):
+        if a.variant in tm.UMBRELLA_VARIANTS:
+            if dist(x, y, a.x, a.y) < STATION_SA10_NM * NM:
+                return False
+        elif tm.RANGE_NM.get(a.variant, 0) >= 3 and dist(x, y, a.x, a.y) < (tm.RANGE_NM[a.variant] + STATION_RING_MARGIN_NM) * NM:
+            return False
+    return True
+
+
 def blue_station(state, tx, ty, origin_xy):
     """Blue's alert pair against a raid on (tx, ty): on the line from the target toward where the raid comes from, as far forward (STICK_NM at
     most) as it is still under blue's air defence and clear of red's SAM rings; else on the target (when that is clear of red's SAMs) or the
     nearest clear point back toward the field side. -> ((x, y), why) with why in 'target' / 'forward' / 'clear'."""
-    from .sweep import clear_for_sweep
+    clear_for_sweep = clear_for_station
     if origin_xy is None or dist(tx, ty, *origin_xy) < 2 * NM:
         return (tx, ty), "target"
     fwd = offset(tx, ty, bearing(tx, ty, *origin_xy), min(STICK_NM * NM, dist(tx, ty, *origin_xy)))

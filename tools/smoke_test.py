@@ -2086,6 +2086,17 @@ def check_31zc_raid_quiet_and_hit(c):
         bombers.desperation = real
 
 
+def _callin_triggers_wait(m, what):
+    """v0.41.114: every trigger that runs SQE_CALLIN also waits for a clock (c_time_after of 3 s or more), so the Lua that defines it has run
+    (a mission whose zone already held blue at time 0 gave 'attempt to call global SQE_CALLIN (a nil value)')."""
+    n = 0
+    for t in m["trigrules"].values():
+        if any("SQE_CALLIN('" in str(a) for a in t["actions"].values()):
+            n += 1
+            assert any(r.get("predicate") == "c_time_after" and r.get("seconds", 0) >= 3 for r in t["rules"].values()), (what, t.get("comment"), t["rules"])
+    assert n, what
+
+
 def check_31zd_red_callin(c):
     """v0.41.111: the BASECAP call-in. A red patrol that can answer the hotspot has its route extended AFTER the landing point (HOTSPOT, BACK, racetrack leg,
     a second landing), the mission defines SQE_CALLIN and calls it from a trigger, the call's waypoint numbers match the route, a pair outgunned or out of
@@ -2121,6 +2132,7 @@ def check_31zd_red_callin(c):
         for g in ((co.get("plane") or {}).get("group") or {}).values():
             grp[g["name"]] = g
     assert "define SQE_CALLIN" in raw and "SwitchWaypoint" in raw
+    _callin_triggers_wait(m, "red")
     for n, hot, back, stay, bf in calls:
         pts = grp[n]["route"]["points"]
         hot, back = int(hot), int(back)
@@ -2195,6 +2207,7 @@ def check_31ze_blue_callin(c):
         for g in ((co.get("plane") or {}).get("group") or {}).values():
             grp[g["name"]] = g
     assert "define SQE_CALLIN" in raw and "SwitchWaypoint" in raw
+    _callin_triggers_wait(m, "blue")
     n_ok = 0
     for n, hot, back, stay, bf in calls:
         if n not in grp:
