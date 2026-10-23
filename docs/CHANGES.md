@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.130, Overview: ground-war text moved left, blue SAM rings, damage-aware rings
+
+XO (2026-10-23): give the map its space back and let the rings show what is changing.
+- The ground-war sector lines, BARCAP cover lines and bomber lines moved from above the map to a "GROUND WAR AND PATROLS" card under the conflict text on the left.
+- Map: blue Patriot (40 nm) and HAWK (25 nm) rings from `state.blue_sams` in blue (same ranges as the red raid planning, `raids.PATRIOT_NM` / `HAWK_NM`); one checkbox, "SAM rings (red / blue)". A damaged site's ring is fainter (health, floor 25 %); a destroyed site has no ring. Ring sizes are still fixed per site type. A "moved" marker is not built: the state does not keep a site's earlier position.
+- GUI only. Smoke: UI sections only.
+
 ## v0.41.129, red SEAD covers every battery that covers the target
 
 XO (2026-10-23): close the gap left by v0.41.128 (the neighbour's Patriot still shot the bombers after the gate opened). In Georgia the fields are about 20 nm apart: Kutaisi is covered by Senaki's and Kobuleti's batteries too.

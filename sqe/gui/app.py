@@ -52,6 +52,9 @@ class OverviewPage(QWidget):
         c.layout().addWidget(self.phase)
         self.txt = QTextBrowser(); self.txt.setFrameShape(QFrame.NoFrame); self.txt.setStyleSheet("background:transparent;border:none;")
         c.layout().addWidget(self.txt, 1)
+        gc = card(); left.addWidget(gc)                                   # v0.41.130: the ground-war / patrol lines moved here from above the map
+        gh = QLabel("GROUND WAR AND PATROLS"); gh.setObjectName("small"); gc.layout().addWidget(gh)
+        self.gsum = QLabel(); self.gsum.setWordWrap(True); self.gsum.setObjectName("small"); gc.layout().addWidget(self.gsum)
         right = QVBoxLayout(); root.addLayout(right, 6)
         g = QGridLayout(); g.setSpacing(12); right.addLayout(g)
         self.cards = {"fa": StatCard("Coalition air", theme.BLUE), "ea": StatCard("Enemy air", theme.RED),
@@ -61,8 +64,7 @@ class OverviewPage(QWidget):
         mc = card(); right.addWidget(mc, 1)
         top = QHBoxLayout(); mc.layout().addLayout(top)
         t = QLabel("THEATRE"); t.setObjectName("small"); top.addWidget(t); top.addStretch(1)
-        self.rings = QCheckBox("SAM threat rings"); self.rings.setChecked(True); top.addWidget(self.rings)
-        self.gsum = QLabel(); self.gsum.setWordWrap(True); self.gsum.setObjectName("small"); mc.layout().addWidget(self.gsum)
+        self.rings = QCheckBox("SAM rings (red / blue)"); self.rings.setChecked(True); top.addWidget(self.rings)
         self.map = MapView(); mc.layout().addWidget(self.map, 1)
         self.rings.toggled.connect(self.map.set_rings)
 
