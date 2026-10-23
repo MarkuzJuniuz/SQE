@@ -705,7 +705,7 @@ class Session:
     def fly(self, package_number: int, flight_id: str | None, scramble: bool = False):
         """Build the sortie. If an emergency came up for this package (emergency_for) and `scramble` is True and your squadron can take it, you fly the
         emergency and the package you were tasked with goes to the war simulation (or is postponed a day if the squadron cannot cover both). Otherwise the
-        emergency is folded into your mission if it is a ground job inside the merge circle, and settled by odds if it is not."""
+        emergency is folded into your mission (CAS or raid; v0.41.124: wherever it is, the circle is only the anchor for your own package's finds)."""
         st = self.state
         problems = self.settings.problems()
         if problems:
@@ -730,7 +730,7 @@ class Session:
                 st.note(f"EMERGENCY: you were scrambled to {ev['where']} ({ev['kind'].lower()}); package #{orig.number} is left to the other squadrons.")
             else:
                 st.note(f"EMERGENCY at {ev['where']}: " + ("you stayed with your tasking." if ev["eligible"] else self.dispatch_line(epkg)) + " The war handles it.")
-                if epkg.objective.type in (ObjectiveType.CAS, ObjectiveType.FLEET_DEFENSE) and pkg.objective.type != ObjectiveType.FLEET_DEFENSE and self._inside_merge(pkg, epkg):
+                if epkg.objective.type in (ObjectiveType.CAS, ObjectiveType.FLEET_DEFENSE) and pkg.objective.type != ObjectiveType.FLEET_DEFENSE:      # v0.41.124 (XO 2026-10-23): no circle test, the emergency is yours to meet whenever it started in your package's window
                     lead_extras = [epkg]
         PackageBuilder(st, self.d).assign_player(pkg, flight_id)
         self.options.hold_minutes = int(self.settings.hold_minutes)

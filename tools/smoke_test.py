@@ -1956,6 +1956,33 @@ def check_31w_raid_scramble_merge(c):
         rd.emergency_happens = keep
 
 
+def check_31wc_scramble_folds_outside_circle(c):
+    """v0.41.124: a raid scramble you do not take is folded into your mission wherever the raided field is: the merge circle is not tested."""
+    from sqe import raids as rd
+    keep = rd.emergency_happens
+    rd.emergency_happens = lambda a, b, c_: True
+    try:
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=5))
+        ses.new("Fold outside", "F-16C", 2, seed=4)
+        st = ses.state
+        for _ in range(40):
+            for p in ses.packages():
+                if not ses.flyable(p):
+                    continue
+                ev = ses.emergency_for(p.number, None)
+                if ev and ev["kind"] == "RAID" and not ses._inside_merge(p, ev["package"]):
+                    ses.fly(p.number, None, scramble=False)
+                    assert any(m["type"] == "FLEET_DEFENSE" for m in st.pending["merged"]), "the raid scramble is folded in although its field is outside the circle"
+                    print("[fold outside circle] a raid scramble outside the 5 nm merge circle is folded into the mission")
+                    return
+            st.day += 1
+            ses.plan_day()
+        raise AssertionError("no raid scramble outside the merge circle in 40 days")
+    finally:
+        rd.emergency_happens = keep
+
+
 def check_31wb_scramble_takes_hidden_packages(c):
     """v0.41.121: when you take an emergency scramble, the packages that were listed inside the package you were tasked with come along (inside the
     -merge_back_min / +30 min window round the scramble's start), together with the scramble's own finds, at most six."""
@@ -2196,7 +2223,7 @@ def check_31zd_red_callin(c):
                 raw = _zf.ZipFile(s.settings.sortie_miz).read("mission").decode("utf-8", "ignore")
                 calls = set(_re.findall(r"SQE_CALLIN\('([^']+)',(\d+),(\d+),(\d+),(\d+)\)", raw))
                 s.state.pending = None
-                if calls:
+                if calls and "call in the patrols" in raw:        # v0.41.124: a folded raid scramble can carry blue call-ins only
                     found = (raw, calls)
                     break
             if found:
@@ -2229,7 +2256,7 @@ def check_31zd_red_callin(c):
             assert any(r_.get("predicate") == "c_flag_is_false" for r_ in t_["rules"].values()), "the clock call checks the done flag"
     # v0.41.115: the call waits for the strike (the pair reaches its hotspot shortly before the TOT), it is not made at once
     _calls_t = [min(r.get("seconds", 0) for r in t["rules"].values() if r.get("predicate") == "c_time_after")
-                for t in m["trigrules"].values() if str(t.get("comment", "")).startswith("call in")]     # v0.41.118: the site-guard triggers ("call in Bandit N to ...") too
+                for t in m["trigrules"].values() if str(t.get("comment", "")).startswith("call in") and "blue" not in str(t.get("comment", ""))]     # v0.41.124: red patrols only (a folded raid scramble also arms blue call-ins, which wait on red's arrival, not on the strike)     # v0.41.118: the site-guard triggers ("call in Bandit N to ...") too
     assert _calls_t and all(x > 30 for x in _calls_t), ("the red call-in must wait for the strike", _calls_t)
     for n, hot, back, stay, bf in calls:
         pts = grp[n]["route"]["points"]
@@ -2326,6 +2353,9 @@ def check_31y_unit_cap_merged(c):
     from sqe import limits
     assert limits.unit_ceiling() == 500, limits.unit_ceiling()
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    from sqe import raids as _rd
+    _keep_em = _rd.emergency_happens
+    _rd.emergency_happens = lambda a, b, c_: False       # v0.41.124: an emergency now folds in wherever it is; it is random per campaign id, so keep it out of this count
     def build(limit):
         ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=60, merge_max_units=limit))
         ses.new("Unit cap", "F-16C", 3, seed=4)
@@ -2340,6 +2370,7 @@ def check_31y_unit_cap_merged(c):
     r0, m0 = build(250)
     assert m0 >= 1, "a package merged in"
     r1, m1 = build(60)                                   # a tiny base limit: the base mission is trimmed hard, but the merged packages stay
+    _rd.emergency_happens = _keep_em
     assert m1 == m0, ("merged packages are not dropped for the base limit", m0, m1)
     assert r1.counts["units"] <= limits.unit_ceiling() + 1, r1.counts
 
@@ -3873,6 +3904,7 @@ CHECKS = [
     check_31v_hot_runway,
     check_31w_raid_scramble_merge,
     check_31wb_scramble_takes_hidden_packages,
+    check_31wc_scramble_folds_outside_circle,
     check_31x_forward_garrisons,
     check_31y_unit_cap_merged,
     check_31z_bomber_trump_card,

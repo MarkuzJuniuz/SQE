@@ -1,6 +1,12 @@
 # CHANGES.md
 
 
+## v0.41.124, a scramble you do not take is folded in wherever it is
+
+XO (2026-10-23): the mirror of v0.41.121. The mission is built around the package you picked (its circle and window); every unit of the scramble that started in its window comes along, rooted on that package's time.
+- `engine.fly`: the CAS / raid emergency is folded into your mission without the merge-circle test (`_inside_merge`). Not when your own tasking is a fleet defence / raid. Unit cap and six-package limit unchanged (the cap trims the furthest units first).
+- Smoke: `check_31wc_scramble_folds_outside_circle`; two older checks adjusted (the unit-cap count pins emergencies off, the red call-in check picks a mission with a red call-in: a folded scramble can carry blue call-ins only). Full smoke passed. Untested in DCS.
+
 ## v0.41.123, alert pairs: the clock call is no longer dropped, and they dash to the station
 
 XO (2026-10-23 runs, v0.41.122, Standoff DEAD): 0 air-to-air again. Tracks: red alert pairs came within 19 to 28 nm of the F-14 TARCAP and nobody fired (ROE is the DCS default on both sides; not the cause). The pairs were late: Sochi pairs called at 850 to 890 s (detection circle) and on station about 1530 s; Nalchik pairs (120 nm out) took off at 450 s and needed about 1,000 s at 400 kt, arriving after the JSOW release (1333 s).
