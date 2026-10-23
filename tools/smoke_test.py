@@ -1608,6 +1608,7 @@ def check_31l_red_arm(c):
                 st.day += 1; s.plan_day()
             if rp is None:
                 continue
+            rp.extra["dead"], rp.extra["dead_cover"] = 8, 4                    # v0.41.117: the gated DEAD package
             rp.extra["arm"], rp.extra["arm_cover"] = 8, 4                      # v0.41.116: two four-jet flights (Patriot, HAWK) with an escort pair and a TARCAP pair
             s.fly(rp.number, None)
             mz = _zf.ZipFile(st.pending["miz"]).read("mission").decode()
@@ -1615,6 +1616,13 @@ def check_31l_red_arm(c):
             assert "RAID-S-1-4" in mz and "RAID-S-2-4" in mz and "Raid SEAD 2" in mz, "8 SEAD jets: two flights of four"
             assert "Raid SEAD Escort" in mz and "Raid SEAD TARCAP" in mz and "RAID-SE-2" in mz and "RAID-ST-2" in mz, "the SEAD package brings an escort pair and a TARCAP pair"
             assert "D8F2C90B-887B-4B9E-9FE2-996BC9E9AF03" in mz, "it carries Kh-31P"
+            # v0.41.117: the DEAD package: 4 + 4 KAB-500Kr jets with an escort pair and a TARCAP pair, held at a gate until the battery's radars are dead
+            assert "RAID-D-1-4" in mz and "RAID-D-2-4" in mz and "Raid DEAD 2" in mz, "8 DEAD jets: two flights of four"
+            assert "E2C426E3-8B10-4E09-B733-9CDC26520F48" in mz, "the DEAD flights carry KAB-500Kr"
+            assert "Raid DEAD Escort" in mz and "Raid DEAD TARCAP" in mz and "RAID-DE-2" in mz and "RAID-DT-2" in mz, "the DEAD package brings its own escort and TARCAP"
+            _mzr = mz.replace("\\", "")
+            assert "red DEAD gate open" in _mzr and "red DEAD gate abort" in _mzr and "c_unit_dead" in _mzr and "c_flag_is_false" in _mzr, "the gate: radars dead opens it, else the abort trigger"
+            assert "SQE_GOTO('Raid DEAD 1'" in _mzr and "function SQE_GOTO" in _mzr and "SwitchWaypoint" in _mzr, "the abort sends the flights to their egress"
             assert "RAID-B-1" in mz, "the bombers still fly"
             return
         raise AssertionError("no raid with a SEAD pair in four seeds")

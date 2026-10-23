@@ -164,6 +164,19 @@ def enemy_arm_loadout(cls_name: str) -> dict:
     return out
 
 
+def enemy_dead_loadout(cls_name: str) -> dict:
+    """v0.41.117: KAB-500Kr (TV-guided 500 kg bomb) on every pylon that takes one (Su-24M: 2, 3, 6, 7): red's DEAD flights against a battery."""
+    from dcs import planes
+    cls = getattr(planes, cls_name)
+    out = {}
+    for i in sorted(cls.pylons):
+        P = getattr(cls, f"Pylon{i}", None)
+        w = _find(P, "KAB_500Kr") if P is not None else None
+        if w is not None:
+            out[i] = {"CLSID": w[1]["clsid"]}
+    return out
+
+
 def enemy_strike_loadout(cls_name: str) -> dict:
     """Free-fall bombs for a raid on an airfield (Su-24M): FAB-500 where a pylon takes one, else FAB-250."""
     from dcs import planes
