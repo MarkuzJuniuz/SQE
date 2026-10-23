@@ -1993,6 +1993,29 @@ def check_31we_red_gate_debrief(c):
     print("[red gate] aborted / held raids are stopped; an opened gate delays the arrival; the hook records it")
 
 
+def check_31wf_carrier_return_height(c):
+    """v0.41.127: a flight going home to the boat keeps its height to a point CV_RCV_NM out (CV_RCV_FT), then descends, instead of dropping to deck height
+    on the whole way home (XO's F-14s flew 65 nm at 2,000 ft)."""
+    import re, math, zipfile
+    from sqe.mission_builder import CV_RCV_NM, CV_RCV_FT
+    s = fresh_session(3, 3); st = s.state
+    fl = [p_ for p_ in s.packages() if s.flyable(p_)]
+    assert fl, "a flyable package"
+    s.fly(fl[0].number, None)
+    t = zipfile.ZipFile(st.pending["miz"]).read("mission").decode()
+    cv = next(b_ for b_ in st.bases.values() if b_.kind.value == "CARRIER")
+    seen = []
+    for m in re.finditer(r'"RCV"', t):
+        seg = t[m.start():m.start() + 1500]
+        x_, y_ = re.search(r'\["x"\]=([-\d.]+)', seg), re.search(r'\["y"\]=([-\d.]+)', seg)
+        if abs(math.hypot(float(x_.group(1)) - cv.x, float(y_.group(1)) - cv.y) / 1852 - CV_RCV_NM) < 1:
+            a_ = t.rfind('["alt"]=', 0, m.start())
+            seen.append(float(re.match(r'\["alt"\]=([\d.]+)', t[a_:a_ + 30]).group(1)))
+    assert seen, "carrier flights get a recovery point CV_RCV_NM from the boat"
+    assert all(abs(a_ - CV_RCV_FT * 0.3048) < 5 for a_ in seen), seen
+    print(f"[carrier return] {len(seen)} flights cross {CV_RCV_NM} nm out at {CV_RCV_FT} ft before descending")
+
+
 def check_31wd_red_sead_first(c):
     """v0.41.125: no dice. Red raids a target under live Patriot / HAWK cover only when it can field the SEAD group (Su-24M wing, jets spare): L3 sizes it by the
     batteries, L2 caps it at a pair unless 8 jets are spare, L1 never; an uncovered target needs none; Su-25s and covered sites / garrisons / sectors are not tried."""
@@ -3969,6 +3992,7 @@ CHECKS = [
     check_31wc_scramble_folds_outside_circle,
     check_31wd_red_sead_first,
     check_31we_red_gate_debrief,
+    check_31wf_carrier_return_height,
     check_31x_forward_garrisons,
     check_31y_unit_cap_merged,
     check_31z_bomber_trump_card,
