@@ -228,17 +228,21 @@ class SettingsDialog(QDialog):
         self.merge.setCurrentIndex(1 if settings.merge_mode == "area" else 0)
         self.mmax = QSpinBox(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.merge_max_units))
         row(v, "Package merging", self.merge, self.mmax)
-        hint(v, "Packages inside the radius that start within 30 minutes after yours fly in the same mission (AI-flown, one shared ground "
-                "world and support). The waiting window shows the unit count so you can compare performance. The unit limit counts only your own mission: the units merged packages bring do not count against it (a fixed ceiling in sqe/data/limits.json is the only upper bound).")
-        self.mrad = QSpinBox(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "merge_radius_nm", 25)))
+        hint(v, "Packages inside the radius that start within the time windows below fly in the same mission (AI-flown, one shared ground "
+                "world and support). The waiting window shows the unit count so you can compare performance. The unit limit counts the whole mission, merged packages included: over it, returning flights go first, then the package that starts latest (a Fighter Sweep last), then wrecks are trimmed.")
+        self.mrad = QSpinBox(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "merge_radius_nm", 15)))
         row(v, "Merge radius", self.mrad)
         hint(v, "Packages whose target is inside this circle fly in the same mission (within the time windows below). The circle is centred on your target, "
                 "slid inward so it never hangs over the edge of the target area; your own target stays inside it. If the unit limit is exceeded, the package "
-                "furthest from the centre drops first.")
-        self.mback = QSpinBox(); self.mback.setRange(0, 30); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_back_min", 15)))
+                "that starts latest drops first.")
+        self.mback = QSpinBox(); self.mback.setRange(0, 30); self.mback.setSingleStep(5); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_back_min", 15)))
         row(v, "Earlier packages", self.mback)
         hint(v, "Packages that started up to this long before yours also fly, already airborne and underway when the mission starts. "
                 "A package that has already struck is not flown to its target (see Ruins on the Campaign tab). 0 = only later packages.")
+        self.mfwd = QSpinBox(); self.mfwd.setRange(0, 60); self.mfwd.setSingleStep(5); self.mfwd.setSuffix(" min after"); self.mfwd.setValue(int(getattr(settings, "merge_fwd_min", 30)))
+        row(v, "Later packages", self.mfwd)
+        hint(v, "Packages that start up to this long after yours also fly in the same mission (late-activated, they push at their own time). "
+                "Over the unit limit, the package that starts latest is dropped first.")
         self.mpct = QSpinBox(); self.mpct.setRange(0, 100); self.mpct.setSuffix(" %"); self.mpct.setValue(int(settings.merge_enemy_pct))
         row(v, "Enemy air sum", self.mpct)
         hint(v, "When packages are folded in: enemy fighters = the biggest package's need + this share of every other folded package's need (100 = full sum).")
@@ -329,7 +333,7 @@ class SettingsDialog(QDialog):
         self.s.borrow_blue = self.borrow_blue.isChecked()
         self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())
         self.s.merge_enemy_pct = int(self.mpct.value())
-        self.s.merge_back_min = int(self.mback.value())
+        self.s.merge_back_min = int(self.mback.value()); self.s.merge_fwd_min = int(self.mfwd.value())
         self.s.merge_radius_nm = int(self.mrad.value())
         self.s.ruins = bool(self.ruins.isChecked())
         self.s.ecm_script = bool(self.ecm.isChecked())

@@ -889,7 +889,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         ceil_ = self.o.unit_ceiling or limits.unit_ceiling()
         if self.o.max_units >= 10 ** 5:                            # full-map stress test: no limit at all
             return float(10 ** 9)
-        return min(self.o.max_units - (u - getattr(self, "_merged_units", 0)), ceil_ - u)
+        return min(self.o.max_units - u, ceil_ - u)          # v0.41.131: the whole mission counts again
 
     def _counts(self) -> dict:
         """Units for the VR budget. A dead static (wreck) is cheap, so it counts `carcass_weight` of a unit; 'wrecks' is how many there are."""

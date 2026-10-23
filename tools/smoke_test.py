@@ -403,7 +403,7 @@ def check_07_merge_circle(c):
     import math as _m
     rs2 = Session(AppSettings(dcs_saves=str(TMP / "rad"), persist=False)); (TMP / "rad").mkdir(exist_ok=True)
     rs2.new("dev", "F-14BU", 3, seed=1)
-    _R = rs2.merge_radius_m(); assert abs(_R - 25 * 1852.0) < 1
+    _R = rs2.merge_radius_m(); assert abs(_R - 15 * 1852.0) < 1
     _A = list(rs2.state.assets.values())
     _bx = (min(a.x for a in _A), max(a.x for a in _A), min(a.y for a in _A), max(a.y for a in _A))
     _n = 0
@@ -2522,31 +2522,42 @@ def check_31ze_blue_callin(c):
 
 
 def check_31y_unit_cap_merged(c):
-    """v0.41.104: the Settings unit limit counts only the BASE mission; the units merged packages bring do not count against it, and the only upper bound for
-    the whole mission is the ceiling in sqe/data/limits.json (the base mission is still trimmed to the limit, merged packages are not dropped for it)."""
+    """v0.41.131 (supersedes v0.41.104): the Settings unit limit counts the WHOLE mission again, merged packages included. Over it, returning flights go first, then
+    the package that starts latest (a Fighter Sweep last); the 500 ceiling in sqe/data/limits.json is dormant below it. Also: the "later packages" window."""
+    from types import SimpleNamespace as NS
     from sqe import limits
+    from sqe.engine import Session
+    from sqe.models import ObjectiveType
     assert limits.unit_ceiling() == 500, limits.unit_ceiling()
+    mk = lambda start, aim=None, typ=ObjectiveType.STRIKE: NS(start=start, objective=NS(type=typ, aim=aim))
+    a, b, c_, sw = mk("18:10"), mk("18:30"), mk("18:30"), mk("18:50", "SWEEP", ObjectiveType.COUNTER_AIR)
+    ex = [sw, a, b, c_]
+    assert Session._drop_one(ex) == [sw, a, b], "latest start first; of a tie the later in the list (further out)"
+    assert Session._drop_one([sw, a]) == [sw], "the sweep stays while a strike is left"
+    assert Session._drop_one([sw]) == [], "a lone sweep can still go"
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
     from sqe import raids as _rd
     _keep_em = _rd.emergency_happens
-    _rd.emergency_happens = lambda a, b, c_: False       # v0.41.124: an emergency now folds in wherever it is; it is random per campaign id, so keep it out of this count
-    def build(limit):
-        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=60, merge_max_units=limit))
+    _rd.emergency_happens = lambda a_, b_, c__: False
+    def build(limit, fwd=30):
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=60, merge_max_units=limit, merge_fwd_min=fwd))
         ses.new("Unit cap", "F-16C", 3, seed=4)
         for _ in range(6):
             for p in ses.packages():
                 if ses.flyable(p) and ses.merge_candidates(p):
                     r = ses.fly(p.number, None)
-                    return r, len(ses.state.pending.get("merged") or [])
+                    return r, len(ses.state.pending.get("merged") or []), len(ses.merge_candidates(p))
             ses.state.day += 1
             ses.plan_day()
         raise AssertionError("no package with a merge candidate in 6 days")
-    r0, m0 = build(250)
+    r0, m0, n30 = build(250)
     assert m0 >= 1, "a package merged in"
-    r1, m1 = build(60)                                   # a tiny base limit: the base mission is trimmed hard, but the merged packages stay
+    r1, m1, _n = build(60)                               # a tiny limit: the packages go, the base mission stays
+    r2, m2, n0 = build(250, fwd=0)                       # later packages off: no more candidates than with 30 minutes
     _rd.emergency_happens = _keep_em
-    assert m1 == m0, ("merged packages are not dropped for the base limit", m0, m1)
-    assert r1.counts["units"] <= limits.unit_ceiling() + 1, r1.counts
+    assert m1 <= m0 and (m1 == 0 or r1.counts["units"] <= 60), ("merged packages are dropped for the limit", m0, m1, r1.counts)
+    assert n0 <= n30, ("the later-packages window narrows the candidates", n0, n30)
+    assert AppSettings().merge_radius_nm == 15 and AppSettings().merge_fwd_min == 30
 
 
 def check_31o_support_assets(c):

@@ -460,7 +460,7 @@ class Session:
 
     # ---- merge area: a circle around the package's target, kept inside the area where targets exist ---------------------
     def merge_radius_m(self) -> float:
-        return max(5.0, float(getattr(self.settings, "merge_radius_nm", 25))) * 1852.0
+        return max(5.0, float(getattr(self.settings, "merge_radius_nm", 15))) * 1852.0
 
     def _pkg_xy(self, p: Package):
         """The ground target of a package, or None for fleet packages (BARCAP, fleet defence), which are never folded by area."""
@@ -521,12 +521,13 @@ class Session:
 
     def merge_candidates(self, pkg: Package) -> list:
         """Packages folded into a mission built around `pkg`: every package whose target lies inside the merge circle (Settings: radius, default
-        50 nm, centred by merge_center), starting up to 30 minutes AFTER it or up to `merge_back_min` minutes BEFORE it (those are already underway
+        50 nm, centred by merge_center), starting up to `merge_fwd_min` minutes AFTER it or up to `merge_back_min` minutes BEFORE it (those are already underway
         when the mission starts). At most six, closest to the centre first, so the unit limit drops the furthest first. Empty when merging is off."""
         if self.settings.merge_mode != "area":
             return []
         hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
         back = max(0, int(getattr(self.settings, "merge_back_min", 15)))
+        fwd = max(0, int(getattr(self.settings, "merge_fwd_min", 30)))
         R = self.merge_radius_m()
         c = self.merge_center(pkg, R)
         if c is None:
@@ -534,13 +535,22 @@ class Session:
         out = []
         for p in self.packages():
             t = self._pkg_xy(p)
-            if p.number == pkg.number or t is None or not (-back <= hm(p) - hm(pkg) <= 30) or not any(not f.tag for f in p.flights) or p.extra.get("scrub"):
+            if p.number == pkg.number or t is None or not (-back <= hm(p) - hm(pkg) <= fwd) or not any(not f.tag for f in p.flights) or p.extra.get("scrub"):
                 continue
             d = math.hypot(t[0] - c[0], t[1] - c[1])
             if d <= R:
                 out.append((d, hm(p), p.number, p))
         out.sort(key=lambda r: (not (r[3].objective.type == ObjectiveType.COUNTER_AIR and r[3].objective.aim == "SWEEP"),) + r[:3])     # a Fighter Sweep first: the unit limit drops the strike packages before it
         return [r[3] for r in out[:6]]
+
+    @staticmethod
+    def _drop_one(extras: list) -> list:
+        """v0.41.131 (XO 2026-10-23): the package to give up first when the mission is over the unit limit: the one that starts LATEST; of two with the same start the
+        one later in the list (further from the centre). A Fighter Sweep (the escorts' reason to be there) and an emergency raid scramble (the in-universe \"help has been dispatched\") go last."""
+        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
+        sweep = lambda p: (p.objective.type == ObjectiveType.COUNTER_AIR and p.objective.aim == "SWEEP") or p.objective.type == ObjectiveType.FLEET_DEFENSE
+        k = max(range(len(extras)), key=lambda i: (not sweep(extras[i]), hm(extras[i]), i))
+        return extras[:k] + extras[k + 1:]
 
     def ruin_candidates(self, pkg: Package, extras: list) -> list:
         """Earlier packages of the same day, same area, that may already have struck when your mission starts: their targets are shown as ruins.
@@ -761,16 +771,16 @@ class Session:
         extras = lead_extras + [x for x in self.merge_candidates(pkg) if all(x.number != y.number for y in lead_extras)]
         if hidden_in is not None:
             # v0.41.121 (XO 2026-10-23): the packages that were listed inside the package you were tasked with come along into the scramble mission, as long as their
-            # start is inside the usual window round the scramble's (-merge_back_min / +30 min). The mission's own circle and window found only what lay near the
+            # start is inside the usual window round the scramble's (-merge_back_min / +merge_fwd_min). The mission's own circle and window found only what lay near the
             # raided field. Your original package itself still goes to the war sim; at most six packages in all (the scramble's own finds first).
             hm_ = lambda p_: int(p_.start[:2]) * 60 + int(p_.start[3:5])
-            back_ = max(0, int(getattr(self.settings, "merge_back_min", 15)))
+            back_ = max(0, int(getattr(self.settings, "merge_back_min", 15))); fwd_ = max(0, int(getattr(self.settings, "merge_fwd_min", 30)))
             have_ = {x.number for x in extras} | {pkg.number, hidden_in.number}
-            extras = (extras + [x for x in self.merge_candidates(hidden_in) if x.number not in have_ and -back_ <= hm_(x) - hm_(pkg) <= 30])[:6]
+            extras = (extras + [x for x in self.merge_candidates(hidden_in) if x.number not in have_ and -back_ <= hm_(x) - hm_(pkg) <= fwd_])[:6]
         ruins = self.ruin_candidates(pkg, extras)
         pre = self._preroll(list(extras) + ruins) if (ruins or extras) and getattr(self.settings, "ruins", True) else {}
         from . import limits
-        cap = 10 ** 6 if self.full_map else limits.unit_ceiling()          # v0.41.104: the ceiling bounds the whole mission; the Settings limit counts only the base mission (builder _room)
+        cap = 10 ** 6 if self.full_map else min(int(self.settings.merge_max_units), limits.unit_ceiling())          # v0.41.131: the unit limit counts the whole mission, merged packages included
         while True:
             with contextlib.redirect_stdout(io.StringIO()):      # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
                 res = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz, extras, ruins, pre)
@@ -779,8 +789,8 @@ class Session:
             if ruins:
                 ruins = ruins[:-1]                               # returning flights first
             else:
-                extras = extras[:-1]                             # too heavy for VR: drop the last package and rebuild
-            res.warnings.append(f"merged mission trimmed to fit the {cap}-unit ceiling")
+                extras = self._drop_one(extras)                  # too heavy: drop the latest-starting package (a Fighter Sweep last) and rebuild
+            res.warnings.append(f"merged mission trimmed to fit the {cap}-unit limit")
         st.sortie_counter += 1
         st.pending = {"package": package_number, "flight": pkg.player_flight.id, "manifest": res.manifest.to_dict(),
                       "built_at": time.time(), "miz": str(res.miz), "timeline": res.timeline,
