@@ -187,15 +187,6 @@ class SettingsDialog(QDialog):
         hint(v, "How good the AI pilots are, one setting for each side (Red's ground units follow the Red setting; Blue's base defences follow the Blue setting once it is set). "
                 "Level default is what SQE always did: Red follows the difficulty level (Average, Good, High) and Blue's AI flights fly at High. DCS's top skill "
                 "levels can feel like cheating; lower one side if it does. It changes the AI's skill only, not how the campaign's numbers run. It applies from your next mission.")
-        self.react = QCheckBox("Reactive dispatch: enemy reinforcements and friendly alert fighters can launch during a sortie")
-        self.react.setChecked(bool(getattr(settings, "reactive", True))); v.addWidget(self.react)
-        hint(v, "Random and difficulty-scaled: other enemy wings within range of the target may send extra pairs (never more aircraft than the wing has), "
-                "and our carrier or nearby bases may launch alert pairs when the fight is lopsided, for fleet defence, or when the fleet is raided. "
-                "Reinforcements are skipped before a flight is dropped when a mission is near the unit limit.")
-        self.emerg = QCheckBox("Emergencies: a raid or troops in contact can break out when you click Fly")
-        self.emerg.setChecked(bool(getattr(settings, "emergencies", True))); v.addWidget(self.emerg)
-        hint(v, "Chance per sortie by difficulty (about 3%, 9%, 21%), never two sorties in a row. If your squadron can take it you are offered the scramble; "
-                "otherwise you are told, and the war settles it. Raids on our airfields (announced or not) happen whether this is on or off.")
         self.splash = QCheckBox("Splash damage: blast damage around bomb and missile impacts (on by default)")
         self.splash.setChecked(bool(getattr(settings, "splash_damage", True))); v.addWidget(self.splash)
         hint(v, "DCS often leaves a vehicle a few metres from a bomb untouched. On: ground units near an air-to-ground weapon's impact take a blast "
@@ -337,7 +328,7 @@ class SettingsDialog(QDialog):
         self.s.splash_damage = bool(self.splash.isChecked())
         self.s.ai_land_carrier = str(self.land_cv.currentData() or "always")
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
-        self.s.reactive = bool(self.react.isChecked()); self.s.emergencies = bool(self.emerg.isChecked()); self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
+        self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
         self.s.shore_margin_m = int(self.shore.value())
