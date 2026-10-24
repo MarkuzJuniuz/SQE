@@ -145,6 +145,7 @@ class AppSettings:
                     if raw.get("merge_max_units") == 150:
                         s.merge_max_units = 250   # still on the old default: move to the new one (an explicit different value is kept)
                     s.unit_cap_v2 = True
+                s.fighter_standoff = True         # v0.41.133 (XO 2026-10-23): TARCAPs, escorts and sweeps always stop short of live SAM cover (the checkbox is gone; off made the AI go banzai)
                 if not raw.get("merge_v131"):
                     if raw.get("merge_radius_nm") == 25:
                         s.merge_radius_nm = 15    # still on the old default: move to the new one

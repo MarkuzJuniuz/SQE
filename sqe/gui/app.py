@@ -24,6 +24,11 @@ from .dialogs import DebriefDialog, NewCampaignDialog, SettingsDialog, WaitingDi
 from .widgets import MapView, StatCard, card
 
 
+def _game_note(text: str) -> str:
+    """v0.41.133 (XO 2026-10-24): game-mechanics text in an in-universe popup: a small grey "SQE NOTE" label, then the text in grey italics, in parentheses."""
+    return f'<span style="color:#8b97a8;"><small>SQE NOTE</small><br><i>({text})</i></span>'
+
+
 def _tbl(headers, stretch_last=True) -> QTableWidget:
     t = QTableWidget(0, len(headers)); t.setHorizontalHeaderLabels(headers); t.verticalHeader().setVisible(False)
     t.setEditTriggers(QTableWidget.NoEditTriggers); t.setSelectionBehavior(QTableWidget.SelectRows)
@@ -556,8 +561,6 @@ class MainWindow(QMainWindow):
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "Could not build the mission", traceback.format_exc()); return
         QApplication.restoreOverrideCursor()
-        if res.warnings:
-            QMessageBox.information(self, "Built with notes", "\n".join(res.warnings))
         self.refresh_all(); self.wait_for_results()
 
     def _emergency_popup(self, ev, number) -> bool:
@@ -566,18 +569,18 @@ class MainWindow(QMainWindow):
         box = QMessageBox(self); box.setIcon(QMessageBox.Warning); box.setWindowTitle(ev["title"])
         if ev["eligible"]:
             box.setText(f"<b>{ev['title']}</b><br>{ev['text']}")
-            box.setInformativeText(f"Your squadron can answer it: {epkg.objective.description}.\n\nIf you scramble, the package you were tasked with "
-                                   f"(#{number}) is left to the other squadrons and is settled by the war simulation (or postponed a day if there are not "
-                                   f"enough aircraft for both). If you stay with your tasking, the emergency is settled without you"
-                                   + (" or flown by AI inside your mission." if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else "."))
+            box.setTextFormat(Qt.RichText); box.setInformativeText(f"Your squadron can answer it: {epkg.objective.description}.<br><br>" + _game_note(
+                                   f"If you scramble, the package you were tasked with (#{number}) is left to the other squadrons and is settled by the war "
+                                   f"simulation (or postponed a day if there are not enough aircraft for both). If you stay with your tasking, the emergency "
+                                   f"is settled without you" + (" or flown by AI inside your mission." if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else ".")))
             go = box.addButton("Scramble", QMessageBox.AcceptRole); box.addButton("Stay with my tasking", QMessageBox.RejectRole)
             box.exec()
             return box.clickedButton() is go
         box.setText(f"<b>{ev['title']}</b><br>{ev['text']}")
-        box.setInformativeText(f"{self.session.dispatch_line(epkg)}\n\n"
-                               + ("If it lies inside your mission area it is joined to your mission as AI; otherwise the war simulation settles it."
-                                  if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else "The war simulation settles it.")
-                               + " Your own tasking goes ahead as planned.")
+        box.setTextFormat(Qt.RichText); box.setInformativeText(f"{self.session.dispatch_line(epkg)}<br><br>" + _game_note(
+                               ("If it lies inside your mission area it is joined to your mission as AI; otherwise the war simulation settles it."
+                                if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else "The war simulation settles it.")
+                               + " Your own tasking goes ahead as planned."))
         box.addButton("Understood", QMessageBox.AcceptRole); box.exec()
         return False
 

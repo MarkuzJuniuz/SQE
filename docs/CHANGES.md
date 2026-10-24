@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.133, Settings and notice clean-up
+
+XO (2026-10-24):
+- Settings > Campaign: the Weather description now sits under the Weather dropdown (it had drifted below the AI Skill text).
+- The "AI TARCAPs, escorts and sweeps stop short of live SAM cover" checkbox is gone: the behaviour is always on (switching it off made the AI go banzai). A settings file that had it off is set back to on at load; `fighter_standoff` stays an internal option (the identity tool still uses it).
+- The "Built with notes" popup after FLY is gone; the same notes appear on the waiting screen, now below the Launch / Marshal / PUSH / TOT line (last in the box).
+- The emergency scramble popups show their game-mechanics paragraph (what happens to your tasking, who settles it) as a small grey "SQE NOTE" label over grey italics in parentheses; the in-universe lines are unchanged. Other text is unchanged.
+- Smoke: GUI sections.
+
 ## v0.41.132, no RCV point on the player's own carrier flight
 
 XO (2026-10-23): the v0.41.127 RCV point (30 nm from the boat, 10,000 ft) was added to every flight going home to the carrier, the player's too. It is now added to AI flights only (and to the player's flight when the AI flies it, the all-AI test), as the land-field recovery point already was. `mission_builder._home_leg`. Smoke: carrier-return section.
