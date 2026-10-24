@@ -111,7 +111,7 @@ class MissionsPage(QWidget):
         self.body = QWidget(); self.bl = QVBoxLayout(self.body); self.bl.setContentsMargins(0, 0, 6, 0); self.bl.setSpacing(8)
         self.scroll.setWidget(self.body); L.addWidget(self.scroll, 1)
         self.note = QLabel("Press FLY on your flight. Push time, TOT and the briefing are built when you do."); self.note.setObjectName("small"); L.addWidget(self.note)
-        self.resume = QPushButton("Resume pending sortie..."); self.resume.setObjectName("danger"); self.resume.hide(); L.addWidget(self.resume)
+        self.resume = QPushButton("Resume sortie in progress"); self.resume.setObjectName("fly"); self.resume.hide(); L.addWidget(self.resume)
         self.resume.clicked.connect(win.wait_for_results)
         self.skip = QPushButton("Skip Turn"); self.skip.setToolTip("Stand down for today: the whole tasking order is resolved by the war simulation and the date advances.")
         self.skip.clicked.connect(win.skip_turn); L.addWidget(self.skip, 0, Qt.AlignRight)

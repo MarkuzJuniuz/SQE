@@ -8,6 +8,7 @@ XO (2026-10-24):
 - The "AI TARCAPs, escorts and sweeps stop short of live SAM cover" checkbox is gone: the behaviour is always on (switching it off made the AI go banzai). A settings file that had it off is set back to on at load; `fighter_standoff` stays an internal option (the identity tool still uses it).
 - The "Built with notes" popup after FLY is gone; the same notes appear on the waiting screen, now below the Launch / Marshal / PUSH / TOT line (last in the box).
 - The emergency scramble popups show their game-mechanics paragraph (what happens to your tasking, who settles it) as a small grey "SQE NOTE" label over grey italics in parentheses; the in-universe lines are unchanged. Other text is unchanged.
+- The Missions pane's resume button ("Resume pending sortie...", a red outline that did not look clickable) is now a solid Fly-blue button, "Resume sortie in progress".
 - Smoke: GUI sections.
 
 ## v0.41.132, no RCV point on the player's own carrier flight
