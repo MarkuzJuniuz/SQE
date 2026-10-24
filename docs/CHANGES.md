@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.134, the Resume button looks like a button
+
+XO (2026-10-24): the Missions pane's "Resume pending sortie..." button was a red outline that did not look clickable. It is now a solid Fly-blue button, "Resume sortie in progress" (same style as FLY; shown only while a sortie is waiting for results). GUI only.
+
 ## v0.41.133, Settings and notice clean-up
 
 XO (2026-10-24):
