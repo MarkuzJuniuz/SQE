@@ -1,13 +1,13 @@
 """AWACS tuning probe (XO 2026-10-22): can a mission tell that the player's radio is tuned to the AWACS?
 
-Builds one tiny Caucasus mission per jet (a single Player slot at Kutaisi, cold and dark; an E-3A orbiting on 251.0 MHz AM). The mission holds
+Builds one tiny Caucasus mission per jet (a single Player slot at Kutaisi, cold and dark; an E-3A orbiting on 262.5 MHz AM). The mission holds
 Mission Editor "cockpit parameter" triggers for a list of CANDIDATE parameter names (we do not know the real names per module):
   * "PROBE <name> EXISTS"        - the parameter has any value (so the name is real for this jet),
-  * "PROBE <name> TUNED MHz/kHz/Hz" - its value is within 0.1 of 251.0 MHz in that unit (so we learn the unit as well).
-Each fires once as an on-screen message AND a line in dcs.log (`SQEPROBE ...`). Also a looping radio transmission on 251.0 MHz AM with a subtitle, to
+  * "PROBE <name> TUNED MHz/kHz/Hz" - its value is within 0.1 of 262.5 MHz in that unit (so we learn the unit as well).
+Each fires once as an on-screen message AND a line in dcs.log (`SQEPROBE ...`). Also a looping radio transmission on 262.5 MHz AM with a subtitle, to
 see whether the subtitle shows only when tuned.
 
-How XO runs it: fly the jet for a minute, switch the radio to 251.0 (AM), then away and back; send dcs.log (grep SQEPROBE) or a screenshot of the messages.
+How XO runs it: fly the jet for a minute, switch the radio to 262.5 (AM), then away and back; send dcs.log (grep SQEPROBE) or a screenshot of the messages.
 Usage:  python tools/awacs_probe.py OUT_DIR            (all jets)     python tools/awacs_probe.py OUT_DIR f16 fa18
 Public source for the idea: the ME conditions "Cockpit Parameter is in range / equal to" (pydcs `CockpitParamInRange`). Nothing here is verified in DCS yet."""
 from __future__ import annotations
@@ -24,7 +24,7 @@ from dcs.terrain import caucasus
 from dcs.translation import String
 from dcs.unit import Skill
 
-FREQ_MHZ = 251.0
+FREQ_MHZ = 262.5          # v2 (XO 2026-10-24): not 251.0, the F-16C default COMM1 (a "tuned" line at mission start proved nothing in v1)
 JETS = {"f16": ("F-16C", planes.F_16C_50), "fa18": ("FA-18C", planes.FA_18C_hornet), "f14": ("F-14B", planes.F_14B),
         "a10": ("A-10C", planes.A_10C_2), "f15": ("F-15C", planes.F_15C)}
 CANDIDATES = [
@@ -49,7 +49,7 @@ def build(key: str, out_dir: Path) -> Path:
     m.start_time = datetime.datetime(2006, 6, 12, 9, 0)
     blue = m.country("USA")
     ap = m.terrain.airports["Kutaisi"]
-    g = m.flight_group_from_airport(blue, f"Probe {label}", cls, ap, maintask=task.CAP, start_type=StartType.Cold, group_size=1)
+    g = m.flight_group_from_airport(blue, f"Probe {label}", cls, ap, maintask=task.CAP, start_type=StartType.Warm, group_size=1)
     g.units[0].skill = Skill.Player
     g.units[0].name = f"Probe {label} 1-1"
     aw = m.flight_group(blue, "Probe AWACS", planes.E_3A, None, mapping.Point(ap.position.x + 40000, ap.position.y + 20000, m.terrain), altitude=9000, speed=220, maintask=task.AWACS)
@@ -62,25 +62,38 @@ def build(key: str, out_dir: Path) -> Path:
         t.add_action(action.MessageToAll(String(text), 20))
         t.add_action(action.DoScript(String(f'env.info("SQEPROBE {text}")')))
         m.triggerrules.triggers.append(t)
+    flag = [100]
+    def edge(text, conds, extra_cond, extra_action):
+        t = triggers.TriggerContinious(comment=text)           # v2: fires on every CHANGE, not once (flag-gated: one line per transition)
+        for c in conds + [extra_cond]:
+            t.add_condition(c)
+        t.add_action(action.MessageToAll(String(text), 8))
+        t.add_action(action.DoScript(String(f'env.info("SQEPROBE {text}")')))
+        t.add_action(extra_action)
+        m.triggerrules.triggers.append(t)
     for name in CANDIDATES:
         say(f"PROBE {name} EXISTS", condition.CockpitParamInRange(name, "0.000001", "1000000000000"))
         for unit, mul in SCALES.items():
-            say(f"PROBE {name} TUNED {unit}", condition.CockpitParamInRange(name, f"{(FREQ_MHZ - 0.1) * mul:.1f}", f"{(FREQ_MHZ + 0.1) * mul:.1f}"))
-    # a looping radio transmission with a subtitle: does the text show only to a pilot tuned to 251.0 AM?
+            f = flag[0]; flag[0] += 1
+            lo, hi = (FREQ_MHZ - 0.1) * mul, (FREQ_MHZ + 0.1) * mul
+            edge(f"PROBE {name} TUNED {unit}", [condition.CockpitParamInRange(name, f"{lo:.1f}", f"{hi:.1f}")], condition.FlagIsFalse(f), action.SetFlag(f))
+            edge(f"PROBE {name} UNTUNED {unit} (below)", [condition.CockpitParamInRange(name, "0.000001", f"{lo - 0.1:.1f}")], condition.FlagIsTrue(f), action.ClearFlag(f))
+            edge(f"PROBE {name} UNTUNED {unit} (above)", [condition.CockpitParamInRange(name, f"{hi + 0.1:.1f}", "1000000000000")], condition.FlagIsTrue(f), action.ClearFlag(f))
+    # a looping radio transmission with a subtitle: does the text show only to a pilot tuned to 262.5 AM?
     wav = out_dir / "sqe_probe.wav"
     _wav(wav)
     key_ = m.map_resource.add_resource_file(str(wav))
     rt = action.RadioTransmission(file=key_, frequency=int(FREQ_MHZ * 1000), modulation=False, loop=True, power=1000, name="sqeprobe")
     orig = rt.dict
     def with_subtitle():
-        d = orig(); d["subtitle"] = "SQEPROBE AWACS: you are tuned to 251.0 AM"; d["subtitleDuration"] = 10; return d
+        d = orig(); d["subtitle"] = "SQEPROBE AWACS: you are tuned to 262.5 AM"; d["subtitleDuration"] = 10; return d
     rt.dict = with_subtitle
     t = triggers.TriggerOnce(comment="PROBE radio transmission")
     t.add_condition(condition.TimeAfter(20))
     t.add_action(rt)
-    t.add_action(action.MessageToAll(String("PROBE: radio transmission started on 251.0 AM (subtitle test)"), 15))
+    t.add_action(action.MessageToAll(String("PROBE: radio transmission started on 262.5 AM (subtitle test)"), 15))
     m.triggerrules.triggers.append(t)
-    m.set_description_text(f"AWACS tuning probe, {label}. Start up, tune 251.0 (AM), then away and back. Messages named PROBE <param> EXISTS / TUNED <unit> tell which cockpit parameter reports your radio.")
+    m.set_description_text(f"AWACS tuning probe, {label}. Tune 262.5 (AM), then away and back, a few times. Hot start. The AWACS is on 262.5 AM. Messages PROBE <param> EXISTS / TUNED <unit> / UNTUNED <unit> tell which cockpit parameter reports your radio, live.")
     path = out_dir / f"AWACS_Probe_{label}.miz"
     m.save(str(path))
     return path
