@@ -385,9 +385,10 @@ def check_06_gui_dialogs_build_scan(c):
         QMessageBox.information = staticmethod(lambda *a, **k: None)
         assert [_dlg.tabs.tabText(i) for i in range(_dlg.tabs.count())] == ["General", "Campaign", "Mission Build", "DCS integration", "Terrain scan", "Experimental"]
         assert "Not scanned" in _dlg.tm_status.text()
-        _gs.carcass_weight_pct, _gs.reactive, _gs.weather_mode, _gs.merge_radius_nm = 40, False, "rain", 35       # every moved control still round-trips
+        _gs.carcass_weight_pct, _gs.weather_mode, _gs.merge_radius_nm = 40, "rain", 35       # every moved control still round-trips
         _d2 = SettingsDialog(_gs)
-        assert (_d2.cw.value(), _d2.react.isChecked(), _d2.wxm.currentData(), _d2.mrad.value()) == (40, False, "rain", 35)
+        assert (_d2.cw.value(), _d2.wxm.currentData(), _d2.mrad.value()) == (40, "rain", 35)
+        assert not hasattr(_d2, "react") and not hasattr(_d2, "emerg")      # v0.41.135: both checkboxes are gone
         _dlg._make_probe(); _dlg._save()
         assert (TMP / "gsv" / "Missions" / "SQE_TerrainScan.miz").exists()
         _nc = NewCampaignDialog(None, "rain")

@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.135, reactive dispatch and emergencies are always on
+
+XO (2026-10-24): the two Settings checkboxes "Reactive dispatch" and "Emergencies" are gone; both behaviours are always on (the defaults). A settings file that had either off is set back on at load. The settings fields stay internal (the smoke test still switches them). GUI and settings only.
+
 ## v0.41.134, the Resume button looks like a button
 
 XO (2026-10-24): the Missions pane's "Resume pending sortie..." button was a red outline that did not look clickable. It is now a solid Fly-blue button, "Resume sortie in progress" (same style as FLY; shown only while a sortie is waiting for results). GUI only.
