@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.136, Bug B: the war sim's red air cover counts fighters only
+
+XO (2026-10-27, Campaign Revamp prep). `war.py` added `0.05 * every serviceable red aircraft` to the defence of a strike or a DEAD (two places), bombers and strikers included. With the planned striker zerg that would have made every strike harder. It now counts red's serviceable FIGHTERS only (`ENEMY_FIGHTERS`), at 0.0765 each (fighters are about 65% of red's jets today, so the term stays about where it was; judgment call). New helper `war._air_cover`. No mission-building change. Smoke: war-sim sections.
+
 ## v0.41.135, reactive dispatch and emergencies are always on
 
 XO (2026-10-24): the two Settings checkboxes "Reactive dispatch" and "Emergencies" are gone; both behaviours are always on (the defaults). A settings file that had either off is set back on at load. The settings fields stay internal (the smoke test still switches them). GUI and settings only.
