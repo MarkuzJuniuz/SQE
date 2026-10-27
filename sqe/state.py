@@ -56,6 +56,7 @@ class CampaignState:
     front: int = 0                                 # how far the war has advanced: tiers up to front+2 are open for tasking
     front_days: int = 0                            # days spent at this stage (the anti-stall clock)
     ground: dict = field(default_factory=dict)     # the ground war (ground.py): sectors, strengths, the line, fallen fields
+    tempo: dict = field(default_factory=dict)      # v0.41.147: air tempo by job kind (tempo.py): the player's flown results nudge the AI flights' odds
     raids: dict = field(default_factory=dict)      # Red raids and emergencies (raids.py): today's surprise raids, the emergency in play, postponed packages
     red_air: dict = field(default_factory=dict)    # the enemy's air tasking for the day (redair.py): patrol and sweep pairs, windows, stations
     barcap: dict = field(default_factory=dict)     # v0.41.73: today's BARCAP areas for both sides (barcap.py): stations per defended asset and direction
@@ -92,6 +93,7 @@ class CampaignState:
             "assets": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.assets.items()},
             "enemy_air": [asdict(w) for w in self.enemy_air],
             "raids": self.raids,
+            "tempo": self.tempo,
             "sams": self.sams,
             "red_air": self.red_air,
             "barcap": self.barcap,
@@ -124,6 +126,7 @@ class CampaignState:
         if s.ground and int(s.ground.get("v", 1)) < 3:
             raise ValueError("This campaign was saved before the Campaign Revamp supply stage (v0.41.144): the ground war and its supply sites changed, so it cannot be loaded. Please start a new campaign.")
         s.raids = d.get("raids") or {}
+        s.tempo = d.get("tempo") or {}
         s.sams = d.get("sams") or {}
         s.red_air = d.get("red_air") or {}
         s.barcap = d.get("barcap") or {}

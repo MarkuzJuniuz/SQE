@@ -52,6 +52,7 @@ BLUE_ATTACK_CHANCE = 0.7      # daily chance that a ready force attacks
 RED_CLOCK_DAYS = 3            # after we take a base the enemy's own attacks wait this long (its force needs 3 days to arrive; XO 2026-10-24 item 5)
 AI_CAS = {1: 3, 2: 2, 3: 3}     # abstract daily blue air strikes on the sector facing us (judgment call: the toy model's AI CAS, 1-3 a day)
 AI_CAS_P = 0.55
+TEMPO_GROUND_GAIN = 2.0       # v0.41.147: the CAS tempo (up to +-0.20) counts this many times on the chance of one abstract AI strike (judgment call)
 AI_CAS_CUT = 0.15
 COUNTER_DELAY_DAYS = 3        # the enemy's last counter-force arrives this many days after the final base falls
 COUNTER_FORCED_DAYS = 6       # ...and attacks every day for this long
@@ -546,7 +547,8 @@ def resolve_day(state, d, rng) -> list:
             fw[key][i] = h
     for _ in range(AI_CAS.get(getattr(d, "level", 3), 2)):  # v0.41.143: blue's own air (the AI flights nobody flies) works the red sector that faces us
         facing = [i for i in range(n) if red[i] >= MIN_FORCE and (blue[i] >= MIN_FORCE or (i + 1 < n and blue[i + 1] >= MIN_FORCE))]
-        if facing and rng.random() < AI_CAS_P:
+        from . import tempo
+        if facing and rng.random() < min(0.95, max(0.05, AI_CAS_P + TEMPO_GROUND_GAIN * tempo.get(state, "CAS"))):         # v0.41.147: air tempo: the player's flown CAS results
             i = max(facing)
             red[i] = max(0.0, red[i] * (1.0 - AI_CAS_CUT))
     # who is in contact: a sector both sides hold, or (v0.41.143) two neighbouring sectors, red's on the enemy side, when neither is shared: an assault across the line

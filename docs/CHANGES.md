@@ -1,6 +1,18 @@
 # CHANGES.md
 
 
+## v0.41.147, Air tempo
+
+XO (2026-10-27, "the player flying would improve the odds of the background jobs ... incremental and capped ... indicated in the debrief"). New `sqe/tempo.py`.
+- Four job kinds: CAS, STRIKE, DEAD (SEAD / DEAD / Standoff) and AIR (sweeps, patrols, intercepts). Each has a tempo, an additive change to the chance that a background (AI) package of that kind gets the job done, and to the ground war's abstract AI close air support.
+- A flown sortie is graded the way the story already is (great / good / mixed / bad) and moves its kind's tempo by +5 / +3 / 0 / -4 points; capped at +-20 points; it fades 3% a night, so the edge goes if you stop flying that job. Saved with the campaign (older saves load with none).
+- The debrief gets a line, e.g. "Air tempo, close air support: +5% (now +9%)", or "unchanged ... (at the cap)".
+- Where it bites: `WarSimulator.odds` (strike, CAS and the other generic jobs, plus the SEAD-escorted supply strike), `sead_p` (SEAD / DEAD), the Fighter Sweep odds, and the ground war's abstract AI strikes (`TEMPO_GROUND_GAIN` 2: the CAS tempo counts twice there). The raid-intercept rolls are not touched.
+- All step sizes, the cap, the fade and the gain are judgment calls (no source).
+- Sims (8 seeds, L3): idle about day 78, every third day 73, daily CAS play 66. L1 and L2 stay inside their targets (about 22 to 23, and 29 to 30). The sims still show no defeats, so the "idle wins about 50%" goal needs red to be stronger; left for XO's flown tests.
+- Smoke: new `check_67_air_tempo`; the debrief path check asserts the tempo line.
+
+
 ## v0.41.146, Campaign Revamp Stage B4: Level 1 raids
 
 XO (2026-10-27, "go, medium"). Which rule blocked L1 raids: every airfield, depot and garrison of ours sits under a live Patriot / HAWK, and red raids a covered target only with a Su-24M wing that can field a SEAD group (v0.41.125). Level 1 has no SEAD (`raid_arm` 0), so the only raids it ever planned were on a contested sector outside the cover: about 5 of 31 drawn raids in a 40-day probe, none on a field, depot or garrison.
