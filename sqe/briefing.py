@@ -87,6 +87,13 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                         "that is where your JSOWs land."]
         sit += ["", f"Your job is only to suppress the radars. A Close DEAD package follows about {_gap} minutes behind you and goes in only if the radars are out. "
                     f"Intelligence puts the chance of suppressing this site at about {round(_p * 100 / 5) * 5:.0f}%" + (f", better than it was: this site has beaten us {_sf(state, obj.target_id)} time{'s' if _sf(state, obj.target_id) != 1 else ''} running and its crews and positions are known." if _sf(state, obj.target_id) else ".")]
+    if obj.after and obj.type.value in ("STRIKE", "CAS"):
+        from .war import after_sites as _as, follow_ready as _fr
+        _names = " and ".join(state.assets[i].name for i in _as(obj) if i in state.assets and not state.assets[i].destroyed) or "the covering SAM sites"
+        sit += ["", f"Behind the SEAD. This target sits under the long-range cover of {_names}. A SEAD package goes in first and your flight follows about 10 minutes behind "
+                    f"it. Before you commit, the mission checks the radars: if any is still up when you reach the gate, you hold outside the threat and re-check, and you "
+                    f"break off and RTB on a timeout, on low fuel, or when the SEAD flights are down. "
+                    + ("Intelligence expects the SEAD to have worked." if _fr(state, obj) else "Intelligence doubts the SEAD will work today; expect to be turned back.")]
     if x.get("intel"):
         sit += ["", "Intelligence: " + " ".join(x["intel"])]
     mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {_long_label(pf, obj)}.", f"Your task: {pf.task}."]

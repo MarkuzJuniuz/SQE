@@ -278,8 +278,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
         self._gates = []                                                # DEAD flights that turn back when the site's radars are still up
         self._sead_grps = {}                                            # site id -> the SEAD flights' group names (all merged packages); the gate aborts when they are all down
-        self._blind_site = None
+        self._blind_site = set()
         extras = [x for x in extras if any(not f.tag for f in x.flights)]
+        self._extras = list(extras)
         ruins = [x for x in ruins if any(not f.tag for f in x.flights)]
         self._preroll, self._ruin_sites = dict(preroll or {}), []
         from . import terrainmask
@@ -1193,7 +1194,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         st, obj = self.state, package.objective
         from .war import blinded_today
         # the DEAD stage of a SEAD-first pair: if the SEAD package blinded the site (the day's verdict), its radars are already gone when the mission starts
-        self._blind_site = obj.target_id if (obj.type == ObjectiveType.DEAD and obj.aim == "DEAD" and blinded_today(st, obj.target_id)) else None
+        self._blind_site = {obj.target_id} if (obj.type == ObjectiveType.DEAD and obj.aim == "DEAD" and blinded_today(st, obj.target_id)) else set()
+        fol_ = []
+        if obj.type in (ObjectiveType.STRIKE, ObjectiveType.CAS) and obj.after:      # v0.41.158: behind a SEAD: the sites it waits on are live in this mission, those the SEAD blinded without their radars
+            from .war import after_sites, site_blind_today
+            fol_ = [st.assets[x] for x in after_sites(obj) if x in st.assets and not st.assets[x].destroyed]
+            staged_ = {x.objective.target_id for x in getattr(self, "_extras", []) if x.objective.type == ObjectiveType.DEAD and x.objective.aim in SEAD_AIMS}
+            self._blind_site |= {a.id for a in fol_ if site_blind_today(st, a.id) and a.id not in staged_}      # a SEAD flown in this mission blinds it for real
         if obj.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
             tgt, relevant = None, []            # no ground target, but enemy SAMs whose rings touch the route / station stay live
         else:
@@ -1201,6 +1208,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             dfn = sorted((st.assets[i] for i in tgt.defended_by if not st.assets[i].destroyed), key=lambda x: dist(x.x, x.y, tgt.x, tgt.y))
             relevant = [tgt] + dfn[:2]                                                   # the two nearest defenders; more only costs VR frame rate
             relevant += [g for g in st.assets.values() if g.guards == tgt.id]            # a SAM site's dug-in garrison is part of its cluster
+            relevant += fol_
         if polyline:                         # every SAM site whose ring touches the route is live from the start
             relevant += tm.corridor_sam_sites(st, polyline, tgt)
         ewrs = sorted((a for a in st.assets.values() if a.kind == AssetKind.EWR and not a.destroyed),
@@ -1243,7 +1251,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return
         if column:
             base_count = max(1, round(len(g.units) / max(0.05, a.health)))                      # the count at full health, so losses read back as health
-        if a.kind == AssetKind.SAM and (a.suppressed or a.id == self._blind_site):
+        if a.kind == AssetKind.SAM and (a.suppressed or a.id in self._blind_site):
             gone = [u for u in g.units if str(getattr(u, "type", "")) in TRACK_RADARS | SEARCH_RADARS]
             for u in gone:
                 g.units.remove(u)

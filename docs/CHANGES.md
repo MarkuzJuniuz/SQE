@@ -1,6 +1,16 @@
 # CHANGES.md
 
 
+## v0.41.158, Strikes and CAS go in behind the SEAD
+
+XO (2026-10-27, "strikes first... go high"). On L2 and L3 most jobs for a Viper or Hornet were DEAD, because every strike and CAS target under an SA-11 or SA-10 was blocked until a DEAD cleared it. Sources (SLDinfo on SEAD in an A2AD world, GAO-03-51): SEAD suppresses and degrades, it does not make a site safe for good, so the new rule is conditional and the job is turned back when the SEAD fails (judgment call).
+- A STRIKE or CAS whose target is covered by one or two SA-11 / SA-10 sites is now offered when today's list already holds the SEAD / standoff job of each of those sites (`Objective.after`, `war._add_followers`). Under three or more sites it stays DEAD-first. SA-2/3/6 round it still get the HARM escort in the package. The site's DEAD job gets x1.4 priority when something waits behind it.
+- It starts 10 minutes after the latest of those packages (`FOLLOW_GAP_MIN`, `engine._stage_times`). If a SEAD package cannot be crewed, the follow job is dropped.
+- War sim: held (no losses, no damage) when the day's SEAD verdict failed; otherwise the strike rolls as usual with the blinded sites counted as suppressed defenders.
+- Mission: the site(s) spawn in the mission; those the SEAD blinded start without radars (unless the SEAD flies in the same merged mission). The Close DEAD radar gate now also guards these flights: hold outside, turn back on timeout, low fuel or SEAD gone. Briefing and debrief lines added.
+- Smoke: new `check_77_strike_behind_sead`.
+
+
 ## v0.41.157, CAS task force stops at the contact point
 
 XO (2026-10-27, "go on cas fix light"). From his 15:38 run: the A-10s killed 11 of 19 red units in 3 minutes, but the friendly task force arrived about 12 minutes later (DCS ran its off-road column about 36% slower than planned) and then drove 2.5 km past the red column.

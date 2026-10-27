@@ -257,6 +257,7 @@ class Objective:
     priority: float
     description: str = ""
     aim: str = ""               # FLEET_DEFENSE raids: what the raiders are after. "" = the airfield itself, else a blue asset id ("bfuel_...", "bdepot_fwd", "bgar_...") or "sector:N"
+    after: str = ""             # v0.41.158: a STRIKE / CAS that goes in behind the SEAD of the long-reach SAM site(s) covering its target: their ids, comma-separated (see war.after_sites)
 
     def to_dict(self):
         d = asdict(self)

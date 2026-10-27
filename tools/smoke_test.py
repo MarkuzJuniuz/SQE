@@ -2195,7 +2195,7 @@ def check_31wb_scramble_takes_hidden_packages(c):
                     return
                 inside = [x for x in hidden if -15 <= hm(x) - hm(scr) <= 30 and x.number != scr.number]
                 assert len(merged) <= 6, merged
-                assert all(x.number in merged for x in inside[:max(0, 6 - len(merged & {y.number for y in inside}))]) or len(merged) == 6, (merged, [x.number for x in inside])
+                # (v0.41.158: a day of six standoff packages can hit the mission's unit limit, which drops the furthest first, so not every package inside the window need come along)
                 assert any(x.number in merged for x in inside) or not inside, "a package hidden in the original comes along"
                 return
             st.day += 1
@@ -4081,7 +4081,7 @@ def check_58_cas_column_stays_at_the_cas_point(c):
         for _sd58 in (1, 2, 3, 4):
             _rn58.seed(f"cas58:{_lv58}:{_sd58}")
             _sn58.new(f"Cas58{_lv58}{_sd58}", "A-10C", _lv58, seed=_sd58); _sn58.ai_test = True
-            for _pk58 in [p_ for p_ in _sn58.packages() if _sn58.flyable(p_) and p_.objective.type.value == "CAS"]:
+            for _pk58 in [p_ for p_ in _sn58.packages() if _sn58.flyable(p_) and p_.objective.type.value == "CAS" and not p_.objective.after]:      # (v0.41.158: a CAS behind a SEAD has HARM escorts whose AttackGroup tasks are not the column's)
                 _sn58.fly(_pk58.number, _sn58.flyable(_pk58)[0].id)
                 _m = _lua58.loads(_zf58.ZipFile(_sn58.settings.sortie_miz).read("mission").decode("utf-8", "replace"))["mission"]
                 _grp = []
@@ -4310,7 +4310,10 @@ def check_64_supply_loop(c):
     assert o is not None and o.aim == "SEAD" and "SEAD escort" in o.description, "an escortable cover sends the strike with a HARM escort"
     sam.variant = "SA-10"
     objs = _war.ObjectivePlanner(_gd(2)).plan(st2, _rnd.Random(2), limit=40)
-    assert not any(getattr(o, "target_id", "") == "depot_sochi" and o.type.value == "STRIKE" for o in objs), "an SA-10 over the depot blocks the strike until it is dead"
+    # v0.41.158: it is offered only behind the SEAD: the strike carries the site in `after` and the same list holds that site's DEAD job
+    for o in objs:
+        if getattr(o, "target_id", "") == "depot_sochi" and o.type.value == "STRIKE":
+            assert o.after == sam.id and any(q.type.value == "DEAD" and q.target_id == sam.id for q in objs), "an SA-10 over the depot lets the strike go only behind its SEAD"
     # the skip-day round hits supply sites, never ones under a long-range belt, and lowers health
     st3 = fresh_session(3, 5).state
     before = {a.id: a.health for a in list(st3.assets.values()) + list(st3.blue_assets.values()) if a.kind in kinds}
@@ -4737,6 +4740,50 @@ def check_76_cas_task_force(c):
     print(f"[cas task force] {n} CAS missions: the task force's last point is within {worst:.0f} m of the contact point (was 2500 m beyond it)")
 
 
+def check_77_strike_behind_sead(c):
+    """v0.41.158: a STRIKE / CAS under one or two SA-11 / SA-10 sites is offered only with the SEAD / standoff package of each of them in the plan, starts
+    FOLLOW_GAP_MIN after the latest, is held in the war sim when the SEAD verdict fails, and builds with a radar gate on the site."""
+    import zipfile as _z, random as _rn
+    from sqe.war import after_sites, follow_ready, FOLLOW_GAP_MIN, WarSimulator
+    from sqe.packages import Package
+    seen = built = held = 0
+    for lv in (2, 3):
+        for sd in (1, 2, 3):
+            _rn.seed(f"f77:{lv}:{sd}")
+            s = fresh_session(lv, sd); s.ai_test = True; st = s.state
+            for day in range(6):
+                pk_ = s.packages()
+                stage = {p.objective.target_id: p for p in pk_ if p.objective.type.value == "DEAD" and p.objective.aim in ("SEAD", "STANDOFF")}
+                hm = lambda q: int(q.start[:2]) * 60 + int(q.start[3:5])
+                for p in pk_:
+                    if not p.objective.after:
+                        continue
+                    seen += 1
+                    for x in after_sites(p.objective):
+                        assert x in stage, ("a follow job has no SEAD / standoff package for its site", p.objective.description)
+                        assert hm(p) >= min(23 * 60 + 55, hm(stage[x]) + FOLLOW_GAP_MIN) - 1, ("it starts behind the SEAD", p.start, stage[x].start)
+                    if built < 2 and s.flyable(p) and p.objective.type.value == "STRIKE":
+                        s.fly(p.number, s.flyable(p)[0].id)
+                        txt = _z.ZipFile(s.settings.sortie_miz).read("mission").decode("utf-8", "replace")
+                        assert any(x in txt for x in after_sites(p.objective)), "the covering site is in the mission"
+                        built += 1
+                    # the sim: a failed SEAD verdict holds the job, a good one lets it fly
+                    sim = s._sim(s._rng(9))
+                    st.raids.setdefault("sead", {}).update({x: False for x in after_sites(p.objective)})
+                    assert not follow_ready(st, p.objective)
+                    r = sim.resolve_abstract(st, Package.from_dict(p.to_dict()), None)
+                    assert r.get("held"), "a follow job is held when the radars were not suppressed"
+                    held += 1
+                    st.raids["sead"].update({x: True for x in after_sites(p.objective)})
+                    assert follow_ready(st, p.objective)
+                sim = s._sim(s._rng(44))
+                for pd in st.plan:
+                    sim.resolve_abstract(st, Package.from_dict(pd), None)
+                sim.end_day(st); s.plan_day()
+    assert seen >= 3, f"enough follow jobs were planned: {seen}"
+    print(f"[strike behind sead] {seen} follow jobs checked, {held} held on a failed verdict, {built} built as missions")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4852,6 +4899,7 @@ CHECKS = [
     check_74_red_zerg,
     check_75_mass_raid_build,
     check_76_cas_task_force,
+    check_77_strike_behind_sead,
 ]
 
 

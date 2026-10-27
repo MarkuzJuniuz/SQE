@@ -215,6 +215,7 @@ class Session:
         pkgs = build_all(set(rng.sample(range(len(objs)), min(len(objs), 5))))     # your squadron is tasked on a handful of them
         if mine(pkgs) < 3:
             pkgs = build_all(set(range(len(objs))))
+        pkgs = self._drop_orphan_followers(pkgs)             # v0.41.158: a strike behind a SEAD whose package could not be crewed has nothing to go in behind
         # same-area packages are launched in the same wave (so they can be folded together), waves spread through the day
         from .packages import packages_linked
         from .timeofday import wave_times
@@ -349,14 +350,37 @@ class Session:
                     m = min(23 * 60 + 55, max(0, int(p.start[:2]) * 60 + int(p.start[3:5]) + shift))
                     p.start = f"{m // 60:02d}:{m % 60:02d}"
 
+    def _drop_orphan_followers(self, pkgs: list) -> list:
+        """A follow job (STRIKE / CAS with `after`) stays only if every site it waits on still stands and has its SEAD / standoff package built."""
+        from .models import SEAD_AIMS
+        from .war import after_sites
+        st = self.state
+        have = {p.objective.target_id for p in pkgs if p.objective.type == ObjectiveType.DEAD and p.objective.aim in SEAD_AIMS}
+        keep = [p for p in pkgs if all(x in have or st.assets.get(x) is None or st.assets[x].destroyed for x in after_sites(p.objective))]
+        if len(keep) == len(pkgs):
+            return pkgs
+        for p in pkgs:
+            if p not in keep:
+                st.note(f"{p.objective.description}: dropped, the SEAD it was to follow could not be crewed")
+        return keep
+
     def _stage_times(self, pkgs: list) -> None:
         """Keep each DEAD-stage package DEAD_STAGE_GAP_MIN after the SEAD-stage package of the same site (waves would otherwise spread them)."""
-        from .war import DEAD_STAGE_GAP_MIN
+        from .models import SEAD_AIMS
+        from .war import DEAD_STAGE_GAP_MIN, FOLLOW_GAP_MIN, after_sites
         sead = {p.objective.target_id: p for p in pkgs if p.objective.type == ObjectiveType.DEAD and p.objective.aim == "SEAD"}
         for p in pkgs:
             sp = sead.get(p.objective.target_id)
             if p.objective.type == ObjectiveType.DEAD and p.objective.aim == "DEAD" and sp is not None:
                 m = min(23 * 60 + 55, int(sp.start[:2]) * 60 + int(sp.start[3:5]) + DEAD_STAGE_GAP_MIN)
+                p.start = f"{m // 60:02d}:{m % 60:02d}"
+        # v0.41.158: a follow job (STRIKE / CAS behind the SEAD of the long-reach sites round its target) starts FOLLOW_GAP_MIN after the latest of those packages
+        stage = {p.objective.target_id: p for p in pkgs if p.objective.type == ObjectiveType.DEAD and p.objective.aim in SEAD_AIMS}
+        hm = lambda q: int(q.start[:2]) * 60 + int(q.start[3:5])
+        for p in pkgs:
+            sps = [stage[x] for x in after_sites(p.objective) if x in stage]
+            if sps:
+                m = min(23 * 60 + 55, max(hm(q) for q in sps) + FOLLOW_GAP_MIN)
                 p.start = f"{m // 60:02d}:{m % 60:02d}"
 
     def _late_sead(self, pkgs: list) -> None:
@@ -410,8 +434,8 @@ class Session:
         """Objectives postponed yesterday (no aircraft left for them after an emergency scramble), if they are still worth flying and not already in the list."""
         st, out = self.state, []
         for od in (st.raids or {}).get("carry", []):
-            if od["type"] == "DEAD" and od.get("aim"):
-                continue                                        # a SEAD / DEAD stage is planned fresh with its partner, never carried alone
+            if (od["type"] == "DEAD" and od.get("aim")) or od.get("after"):
+                continue                                        # a SEAD / DEAD stage, or a strike behind a SEAD, is planned fresh with its partner, never carried alone
             o = Objective(od["id"], ObjectiveType(od["type"]), od["target_id"], od["priority"] + 2.0, od.get("description", ""), od.get("aim", ""))
             tgt = st.assets.get(o.target_id) or st.bases.get(o.target_id)
             if tgt is None or getattr(tgt, "destroyed", False) or any(x.type == o.type and x.target_id == o.target_id for x in objs + out):

@@ -139,7 +139,7 @@ class Package:
     @classmethod
     def from_dict(cls, d: dict) -> "Package":
         o = d["objective"]
-        obj = Objective(o["id"], ObjectiveType(o["type"]), o["target_id"], o["priority"], o.get("description", ""), o.get("aim", ""))
+        obj = Objective(o["id"], ObjectiveType(o["type"]), o["target_id"], o["priority"], o.get("description", ""), o.get("aim", ""), o.get("after", ""))
         return cls(d["id"], d["number"], obj, [FlightPlan(**{**f, "role": Role(f["role"])}) for f in d["flights"]],
                    [SupportPlan(**s) for s in d["support"]], d.get("jtac", False), d.get("jtac_laser_code", 1688),
                    d.get("start", "09:00"), d.get("n_def", 0), d.get("extra", {}))
