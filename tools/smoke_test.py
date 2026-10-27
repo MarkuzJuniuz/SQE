@@ -4815,6 +4815,32 @@ def check_78_carrier_moves_with_the_front(c):
     print(f"[carrier] 30 days: {moves} moves, biggest {worst:.0f} km, always clear of the red fields and in open water")
 
 
+def check_79_pilot_influence(c):
+    """v0.41.160: Pilot Influence off = the red surge never starts (your flying makes no difference), and the campaign cannot be lost by standing down;
+    on = it ramps up after the grace days. The setting rides from the app settings into the campaign."""
+    from sqe import ground as _g
+    from sqe.war import update_status
+    from sqe.packages import Package
+    from sqe.gui.dialogs import PILOT_INFLUENCE_TEXT
+    assert "cannot be lost" in PILOT_INFLUENCE_TEXT
+    for on in (True, False):
+        s = fresh_session(3, 7); s.ai_test = True; s.settings.pilot_influence = on; st = s.state; s.plan_day()
+        top = 1.0
+        for day in range(40):
+            sim = s._sim(s._rng(44))
+            assert st.ground["pilot_influence"] == on, "the setting rides in the campaign"
+            top = max(top, _g.surge(st, s.d))
+            for pd in st.plan:
+                sim.resolve_abstract(st, Package.from_dict(pd), None)
+            sim.end_day(st); update_status(st)
+            assert st.status != "DEFEAT", "standing down does not lose the war in 40 days at L3 here"
+            if st.status != "ACTIVE":
+                break
+            s.plan_day()
+        assert (top > 1.0) == on, ("the surge follows the setting", on, top)
+        print(f"[pilot influence] {'on' if on else 'off'}: highest surge {top:.2f} over 40 idle days")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4932,6 +4958,7 @@ CHECKS = [
     check_76_cas_task_force,
     check_77_strike_behind_sead,
     check_78_carrier_moves_with_the_front,
+    check_79_pilot_influence,
 ]
 
 

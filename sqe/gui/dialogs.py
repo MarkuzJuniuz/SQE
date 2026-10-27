@@ -19,8 +19,12 @@ def _browse(parent, line: QLineEdit, title: str):
         line.setText(S.native(d))
 
 
+PILOT_INFLUENCE_TEXT = ("Your flying changes the war. On: the higher-ups learn from your sorties. Fly well and command commits more to the fight; stay on the "
+                        "ground and the front can slip, so you can lose the war. Off: the war plays out on its own, with no effect from your flying, and it cannot be lost.")
+
+
 class NewCampaignDialog(QDialog):
-    def __init__(self, parent=None, weather_mode: str = "clear", skill_red: str = "level", skill_blue: str = "level"):
+    def __init__(self, parent=None, weather_mode: str = "clear", skill_red: str = "level", skill_blue: str = "level", pilot_influence: bool = True):
         super().__init__(parent); self.setWindowTitle("New Campaign"); self.setMinimumWidth(520)
         lay = QVBoxLayout(self); lay.setSpacing(12)
         t = QLabel("New Campaign"); t.setObjectName("title"); lay.addWidget(t)
@@ -53,6 +57,9 @@ class NewCampaignDialog(QDialog):
         form.addRow("Campaign starts", row)
         self.night = QCheckBox("Allow night sorties (otherwise missions are spread through daylight)")
         form.addRow("", self.night)
+        self.pinf = QCheckBox("Pilot Influence: your sorties affect the war (you can lose it if you don't fly)")
+        self.pinf.setChecked(bool(pilot_influence)); self.pinf.setToolTip(PILOT_INFLUENCE_TEXT)
+        form.addRow("", self.pinf)                      # the same setting as Settings > Campaign > Pilot Influence: it can be changed there later
         from .. import weather as _wxn
         self.wx = QComboBox()
         for k, val in _wxn.MODES.items():
@@ -84,7 +91,7 @@ class NewCampaignDialog(QDialog):
 
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
-                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(),
+                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(), "pilot_influence": self.pinf.isChecked(),
                 "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData()),
                 "ai_skill_red": str(self.skr.currentData() or "level"), "ai_skill_blue": str(self.skb.currentData() or "level")}
 
@@ -168,6 +175,9 @@ class SettingsDialog(QDialog):
             self.wxm.addItem(val, k)
         self.wxm.setCurrentIndex(max(0, self.wxm.findData(getattr(settings, "weather_mode", "clear"))))
         row(v, "Weather", self.wxm)
+        self.pinf = QCheckBox("Pilot Influence (your sorties affect the war)"); self.pinf.setChecked(bool(getattr(settings, "pilot_influence", True)))
+        row(v, "Pilot Influence", self.pinf)
+        hint(v, PILOT_INFLUENCE_TEXT)
         hint(v, "Procedural follows the theatre's climate for the month and changes slowly from day to day (never clear to storm in an afternoon); each sortie "
                 "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
                 "that cannot attack at all is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
@@ -323,6 +333,7 @@ class SettingsDialog(QDialog):
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
         self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
+        self.s.pilot_influence = bool(self.pinf.isChecked())
         self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
         self.s.shore_margin_m = int(self.shore.value())
         self.s.river_margin_m = int(self.river.value())
