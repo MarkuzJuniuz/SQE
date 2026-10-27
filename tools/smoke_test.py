@@ -2411,8 +2411,11 @@ def check_31zd_red_callin(c):
                 calls = set(_re.findall(r"SQE_CALLIN\('([^']+)',(\d+),(\d+),(\d+),(\d+)\)", raw))
                 s.state.pending = None
                 if calls and "call in the patrols" in raw:        # v0.41.124: a folded raid scramble can carry blue call-ins only
-                    found = (raw, calls)
-                    break
+                    _rn = {g_["name"] for co_ in dlua.loads(raw)["mission"]["coalition"]["red"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()}
+                    calls = {c_ for c_ in calls if c_[0] in _rn}          # v0.41.156: more L3 scrambles find blue-only call-ins sooner; keep the red ones
+                    if calls:
+                        found = (raw, calls)
+                        break
             if found:
                 break
             s.skip_day()
@@ -4671,6 +4674,43 @@ def check_74_red_zerg(c):
     print("[red zerg] idle surge and cap, L1 none, wave days, damage curve, no-trickle field fall, rear feed")
 
 
+def check_75_mass_raid_build(c):
+    """v0.41.156: a mass raid (8 or more bombers) is built with one escort per two bombers plus a sweep ahead, and a 12-bomber wave raid stays under the unit limit."""
+    import re as _re, zipfile as _z
+    import sqe.engine as _eng
+    from sqe import raids as _r
+    _aio, _eng.AI_ONLY = _eng.AI_ONLY, ()
+    _rs, _eng.RAID_SCRAMBLES = _eng.RAID_SCRAMBLES, True
+    _em = _r.emergency_happens
+    s = fresh_session(3, 6); st = s.state; d = s.d
+    _w0 = d.raid_wave; d.raid_wave = 1.0
+    try:
+        _r.emergency_happens = lambda *a, **k: True
+        boost_su24(st, 40)
+        for w_ in st.enemy_air:
+            for q_ in w_.sqns:
+                q_.authorized = max(q_.authorized, 24); q_.available = q_.authorized
+        rp = None
+        for _ in range(10):
+            s.plan_day()
+            rp = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "RAID" and s.emergency_for(p_.number, None)["eligible"]), None)
+            if rp:
+                break
+            st.day += 1
+        assert rp is not None
+        s.fly(rp.number, None, scramble=True)
+        ex = st.pending["package_dict"].get("extra") or {}
+        assert ex.get("bombers", 0) >= 8 and ex.get("mass") and ex.get("escorts", 0) >= ex["bombers"] // 2, ex
+        mz = _z.ZipFile(st.pending["miz"]).read("mission").decode()
+        _nb, _nu = len(set(_re.findall(r"RAID-B-\d+", mz))), len(_re.findall(r'\["unitId"\]', mz))
+        assert _nb == ex["bombers"] and _nu <= 275, (_nb, _nu, ex)       # the regex counts statics too; the builder enforces its own 250
+        assert any("Raid Sweep" in x for x in _re.findall(r"Raid Sweep \d", mz)), "a mass raid opens with a sweep"
+    finally:
+        d.raid_wave = _w0; _r.emergency_happens = _em; _eng.AI_ONLY = _aio; _eng.RAID_SCRAMBLES = _rs
+    assert d.emerg_chance >= 0.3 and d.level == 3
+    print("[mass raid] 8+ bombers: escorts 1 per 2 plus a sweep, SEAD and DEAD groups, under the unit limit; L3 scramble chance 33%")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4784,6 +4824,7 @@ CHECKS = [
     check_72_window_size,
     check_73_tasking_line,
     check_74_red_zerg,
+    check_75_mass_raid_build,
 ]
 
 

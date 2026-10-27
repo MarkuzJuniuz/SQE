@@ -95,7 +95,7 @@ LEVELS: dict[int, Difficulty] = {
                   friendly_replenish=0.06, enemy_replenish=0.07, asset_repair=0.05, sam_repair=0.08,
                   friendly_scale=0.85, enemy_cap_per_air=0.20, counterstrike=0.55, bomber_wing=30, bomber_escort_wing=16, bomber_policy="normal", bomber_safe_p=0.12,
                   forward_sams=("SA-15", "SA-8", "SA-19"), garrison_chance=1.0, garrison_size=1.0, react_chance=0.55, react_ratio=(1.0, 1.6),
-                  ground_red=(90, 80, 35, 0, 0), ground_blue=(0, 10, 45, 55, 40), red_attack=0.8, red_reinf=7.0, blue_reinf=7.0, raid_rate=2.0, red_surge=0.08, raid_wave=0.25, raid_wave_mult=1.5, red_supply_strikes=4, red_rear_feed=0.05, raid_arm=1.0, raid_surprise=0.45, emerg_chance=0.21, raid_size=(6, 8), sam_rebuild=0.07, sam_scoot=0.50,
+                  ground_red=(90, 80, 35, 0, 0), ground_blue=(0, 10, 45, 55, 40), red_attack=0.8, red_reinf=7.0, blue_reinf=7.0, raid_rate=2.0, red_surge=0.08, raid_wave=0.25, raid_wave_mult=1.5, red_supply_strikes=4, red_rear_feed=0.05, raid_arm=1.0, raid_surprise=0.45, emerg_chance=0.33, raid_size=(6, 8), sam_rebuild=0.07, sam_scoot=0.50,
                   raid_mix=(0.25, 0.20, 0.25), blue_garrison_size=0.7, blue_rebuild=0.10, sam_retreat=1.0, sead_valve=2, air_retreat=1.0),
 }
 

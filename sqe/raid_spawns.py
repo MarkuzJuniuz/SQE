@@ -798,7 +798,7 @@ class RaidSpawns:
             # v0.41.108: the escorts of a big raid split in two jobs. Half (at least 3 groups) fly a sweep RAID_SWEEP_LEAD_S ahead of the bombers on the same
             # route and fight what they meet; the rest escort the bomber groups (spread over them). A small raid keeps its single escort group.
             esz = sizes(ex["escorts"])
-            n_sweep = len(esz) // 2 if len(esz) >= 3 else 0
+            n_sweep = len(esz) // 2 if len(esz) >= 3 else (1 if (ex.get("mass") and len(esz) >= 2) else 0)        # v0.41.156: a mass raid (8 or more bombers) always opens with a sweep
             eload = enemy_cap_loadout(ex["escort_type"])
             from .mission_builder import AAM_WEAPONS            # lazy: the builder's module imports this one
             esc_nm_ = A2A_ZONE_NM[ex["escort_type"] in RED_LONG_RANGE]

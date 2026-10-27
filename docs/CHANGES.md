@@ -1,6 +1,16 @@
 # CHANGES.md
 
 
+## v0.41.156, Red zerg, part 2: the mass raid in the mission
+
+XO (2026-10-27, "go on next item, high"; "I want to be annoyed by constant scrambles on L3"). The mission side already built big raids in several groups with SEAD and DEAD groups ahead of them (part 1 made L3 raids 6 to 8 bombers, 12 on a wave day); this makes them proper zergs.
+- Escorts: one fighter per two bombers (judgment call, XO's 1:2), and a raid of 8 or more bombers (`mass`) gets two more as a sweep that flies ahead of the bombers (`packages._land_raid_plan`, `raid_spawns._spawn_raid`). Never more than the escort wing has serviceable. Before, a raid always had 4.
+- L3 scramble chance per sortie 21% to 33% (`emerg_chance`; still never two sorties in a row). L1 and L2 unchanged.
+- Measured (L3, SEAD and DEAD groups included): a normal raid is about 210 units, a 12-bomber wave raid about 235 to 250 (the builder trims wrecks and the latest packages to stay at the 250 limit).
+- Smoke: new `check_75_mass_raid_build`.
+- XO's three runs on v0.41.154 (CAS, a big AI-only scramble, a SAM-heavy L3 sweep) are kept as reference. Watch item from them: on the CAS run the blue tanks killed one red ground unit and the two columns then drove past each other.
+
+
 ## v0.41.155, Red zerg, part 1: red can win (ground and war model)
 
 XO (2026-10-27, "red needs the zerg for a chance ... high effort, go in your order"). This is the war-model half; the mass raids you fly come next (part 2). A NEW CAMPAIGN is needed to see it (the ground state gains `flown_day`; older saves load but start the clock at day 1).
