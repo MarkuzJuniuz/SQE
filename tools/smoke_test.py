@@ -4043,6 +4043,57 @@ def check_57_pydcs_s_scattered_formation(c):
     print("[scatter] pydcs's scattered formation: the same layout where it finishes, and 300 groups of 12 in a 15 m ring all finish (they hung before)")
 
 
+def check_58_cas_column_stays_at_the_cas_point(c):
+    # v0.41.137: the CAS target column is built at the CAS waypoint (it used to start up to 10 km back and drive in, so DCS's real speed decided where it
+    # was at the TOT), the A-10s' AttackGroup names the CAS target's own group, and the friendly task force starts close
+    import zipfile as _zf58, math as _m58, random as _rn58
+    from dcs import lua as _lua58
+    _sn58 = fresh_session(2, 5)
+    def _walk58(o):
+        if isinstance(o, dict):
+            yield o
+            for v_ in o.values():
+                yield from _walk58(v_)
+    _n58, _worst58, _adv58 = 0, 0.0, 0.0
+    for _lv58 in (1, 2, 3):
+        for _sd58 in (1, 2, 3, 4):
+            _rn58.seed(f"cas58:{_lv58}:{_sd58}")
+            _sn58.new(f"Cas58{_lv58}{_sd58}", "A-10C", _lv58, seed=_sd58); _sn58.ai_test = True
+            for _pk58 in [p_ for p_ in _sn58.packages() if _sn58.flyable(p_) and p_.objective.type.value == "CAS"]:
+                _sn58.fly(_pk58.number, _sn58.flyable(_pk58)[0].id)
+                _m = _lua58.loads(_zf58.ZipFile(_sn58.settings.sortie_miz).read("mission").decode("utf-8", "replace"))["mission"]
+                _grp = []
+                for _sd_ in ("red", "blue"):
+                    for _cn in _m["coalition"][_sd_]["country"].values():
+                        for _kd in ("plane", "vehicle"):
+                            for _g in (_cn.get(_kd) or {}).get("group", {}).values():
+                                _grp.append((_kd, _g))
+                _veh = {g_["groupId"]: g_ for k_, g_ in _grp if k_ == "vehicle"}
+                _hit = None
+                for _k, _g in _grp:
+                    if _k != "plane" or _hit:
+                        continue
+                    for _pt in _g["route"]["points"].values():
+                        _at = [t_ for t_ in _walk58(_pt.get("task", {})) if t_.get("id") == "AttackGroup"]
+                        if _at:
+                            _hit = (_pt, _veh.get(_at[0]["params"]["groupId"])); break
+                if _hit is None or _hit[1] is None:
+                    continue
+                _pt, _tg = _hit
+                assert _tg["name"] == _pk58.objective.target_id, ("the A-10s attack the CAS target's own group", _tg["name"], _pk58.objective.target_id)
+                _us = list(_tg["units"].values()); _x0 = sum(u_["x"] for u_ in _us) / len(_us); _y0 = sum(u_["y"] for u_ in _us) / len(_us)
+                _d0 = _m58.hypot(_pt["x"] - _x0, _pt["y"] - _y0)
+                assert _d0 < 400, ("the CAS waypoint sits on the target column", _tg["name"], round(_d0))
+                _wps = list(_tg["route"]["points"].values())
+                if len(_wps) > 1:
+                    _adv = _m58.hypot(_wps[1]["x"] - _x0, _wps[1]["y"] - _y0)
+                    assert _adv < 2000, ("the column only creeps toward us", round(_adv))
+                    _adv58 = max(_adv58, _adv)
+                _worst58 = max(_worst58, _d0); _n58 += 1
+    assert _n58 >= 6, f"enough CAS missions were checked: {_n58}"
+    print(f"[cas point] {_n58} AI CAS missions: the A-10s' target group is the package's own and sits within {_worst58:.0f} m of the CAS waypoint; moving columns creep at most {_adv58:.0f} m")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4139,6 +4190,7 @@ CHECKS = [
     check_55_tanker_track_keeps_clear,
     check_56_barcap_intercepts_ai_only,
     check_57_pydcs_s_scattered_formation,
+    check_58_cas_column_stays_at_the_cas_point,
 ]
 
 

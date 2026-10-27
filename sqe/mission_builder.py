@@ -2089,26 +2089,32 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g.add_waypoint(mapping.Point(q[0], q[1], self.t), PointAction.OffRoad, speed_ms * 3.6)
         self._ground_orders(g)
 
+    CAS_APPROACH_M = 6000.0       # v0.41.137: the friendly task force starts at most this far from the contact point
+    CAS_ENEMY_ADVANCE_M = 1200.0  # v0.41.137: the enemy column creeps this far toward us; it never starts far from the CAS point
+
     def _spawn_cas_support(self, package, plan, geom, manifest):
         if not package.jtac:
             return
         r = self.vrng
-        cx, cy = self.armor_center or (geom.tx, geom.ty)
+        # v0.41.137: the CAS TARGET's own group and centre (not "the last armour group spawned": a CAS package also builds the target's defenders,
+        # and a garrison or a neighbouring column built after it used to take the place of the target here)
+        tid = package.objective.target_id
+        cx, cy = self.site_pos.get(tid) or (geom.tx, geom.ty)
         fb = self._nearest_airfield(cx, cy)
         brg = bearing(cx, cy, fb.x, fb.y)                         # towards our side
         tot = float(self.cas_tot or 1500.0)
         t_contact = max(300.0, tot - 15.0)                        # guns are firing as the CAS flight arrives
-        v = max(2.5, min(8.0, 9000.0 / t_contact))                # m/s, a believable advance
-        dist_run = v * t_contact + 1500.0                         # each side starts this far from the contact point
-        enemy = self.groups_by_asset.get(self.armor_id) if self.armor_id else None
-        static = bool(self.armor_id) and self.state.assets[self.armor_id].variant == "GARRISON"      # dug in: our troops come to it
+        dist_run = min(8.0 * t_contact + 1500.0, self.CAS_APPROACH_M)      # the friendly force starts this far from the contact point
+        v = max(2.5, min(8.0, (dist_run - 1500.0) / t_contact))   # m/s, a believable advance
+        enemy = self.groups_by_asset.get(tid) if tid else None
+        static = bool(tid) and self.state.assets[tid].variant == "GARRISON"      # dug in: our troops come to it
         if enemy is not None and not static:
-            ex, ey = offset(cx, cy, brg + 180, dist_run)
-            self._translate(enemy, ex - cx, ey - cy)
-            self._drive(enemy, [offset(cx, cy, brg, 2500)], v)
+            # v0.41.137: the column stays where the CAS flight is sent. It used to start up to 10 km back and drive 13 km to be at the CAS point
+            # at the TOT; any shortfall in DCS's real speed (slopes, a long mixed column, stopping to fight) left it kilometres from the point
+            self._drive(enemy, [offset(cx, cy, brg, self.CAS_ENEMY_ADVANCE_M)], min(v, 3.5))
         fx, fy = offset(cx, cy, brg + r.uniform(-6, 6), dist_run)
         comp = [("M_1_Abrams", r.randint(1, 2)), ("M_2_Bradley", r.randint(2, 3)), ("M1043_HMMWV_Armament", r.randint(1, 2))]
-        sc = ground.blue_scale(self.state, self.armor_id or "")          # the friendly force is as strong as Blue is in this sector
+        sc = ground.blue_scale(self.state, tid or "")          # the friendly force is as strong as Blue is in this sector
         comp = [(n_, max(1, int(round(c_ * sc)))) for n_, c_ in comp]
         g = self._platoon(self.usa, f"Friendly Task Force {package.number}", comp, fx, fy, (int(brg) + 180) % 360, F.Rectangle)
         if g is not None:
@@ -2116,7 +2122,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             for k, u in enumerate(g.units, 1):
                 u.name = f"TF{package.number}|{k}"; names.append(u.name)
             self._drive(g, [offset(cx, cy, brg + (0 if static else 180), 2000 if static else 2500)], v)
-            manifest.add("friendly_ground", self.armor_id or "", names)
+            manifest.add("friendly_ground", tid or "", names)
         jx, jy = offset(fx, fy, brg + 90, 120)
         jt = self.m.vehicle_group(self.usa, f"Axeman {package.number}-1", _UN.Hummer, mapping.Point(jx, jy, self.t), heading=(int(brg) + 180) % 360, group_size=1)
         jt.units[0].name = f"JTAC-{package.id}"
