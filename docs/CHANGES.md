@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.151, Window size and position, and a developer shortcut
+
+XO (2026-10-27, "fit on a 1080p screen with some margins, centered ... remember size and position, with reset"). Light change in `gui/app.py`.
+- The window first opens at 90% of the usable screen (the taskbar is left out), at most 1700 x 960 and never under the 1100 x 700 minimum, centered on the screen it opens on. On a 1080p screen that is about 1700 x 936. (It was 1280 x 820 wherever Windows put it.)
+- It remembers its size and position when you close it (new setting `window_geometry`, Qt's own saved geometry, so a monitor that has gone is handled by Qt). File > Reset window size and position goes back to the default and centers it.
+- Developer secret (XO): Ctrl+Space skips the day at once with no questions and no result box, so you can watch the Overview and its map move. It does nothing while a sortie is built or once the war is over. Not in any menu.
+- Smoke: new `check_72_window_size`.
+
+
 ## v0.41.150, Campaign Revamp Stage C3: the stories, and the ending
 
 XO (2026-10-27, "go C3, medium"). New `sqe/story.py`; the text lives in the theatre pack (`caucasus.json`, `stories`, one entry per level). A theatre without `stories` keeps the old texts.
