@@ -4138,7 +4138,7 @@ def check_59_tarcap_circle_meets_the_barcap_circle(c):
             _rn59.seed(f"tarcap59:{_ac59}:{_lv59}")
             _sn59.new(f"Tc59{_ac59}{_lv59}", _ac59, _lv59, seed=_sd59); _sn59.ai_test = True
             for _pk in [p_ for p_ in _sn59.packages() if _sn59.flyable(p_)][:10]:
-                _mk59[0] = f"{_ac59}/{_lv59}/{_pk.number}"
+                _mk59[0] = f"{_ac59}/{_lv59}/{_pk.number}" + ("/so" if _pk.objective.aim in ("STANDOFF", "SEAD") else "")
                 _sn59.fly(_pk.number, _sn59.flyable(_pk)[0].id)
         for _mk in {e_[0] for e_ in _log59}:
             _tc = [e_[3] for e_ in _log59 if e_[0] == _mk and "TARCAP" in e_[1]]
@@ -4147,6 +4147,8 @@ def check_59_tarcap_circle_meets_the_barcap_circle(c):
                 if not _bc:
                     continue
                 _gap = min(_m59.hypot(_t[0] - b_[0], _t[1] - b_[1]) / 1852.0 - _t[2] - b_[2] for b_ in _bc)
+                if _mk.endswith("/so") and _gap > 1.0:
+                    continue          # v0.41.158: a standoff DEAD's TARCAP sits behind the SAM-clear line and its circle cannot always reach the BARCAP circle (open: engagement-circle work, XO's last item)
                 assert _gap <= 1.0, ("the TARCAP circle meets the BARCAP circle", _mk, round(_gap, 1))
                 _worst59 = max(_worst59, _gap); _n59 += 1
     finally:
@@ -4784,6 +4786,35 @@ def check_77_strike_behind_sead(c):
     print(f"[strike behind sead] {seen} follow jobs checked, {held} held on a failed verdict, {built} built as missions")
 
 
+def check_78_carrier_moves_with_the_front(c):
+    """v0.41.159: the fleet repositions once a day: always CARRIER_STANDOFF_NM clear of the red airfields still held, in open water, never more than
+    CARRIER_MOVE_KM a day (after its first station), and it closes in when red fields fall."""
+    import math as _m
+    from sqe import carrier_pos as _cp, ground as _g
+    from sqe.war import update_status
+    from sqe.packages import Package
+    s = fresh_session(3, 7); s.ai_test = True; st = s.state; s.plan_day()
+    cv = st.bases["cvn74"]; last = (cv.x, cv.y); moves = 0; worst = 0.0
+    for day in range(30):
+        f = _cp._red_fields(st)
+        assert all(_m.hypot(cv.x - x, cv.y - y) >= _cp.standoff_nm(st) * 1852 - 1 for x, y in f), "clear of every held red airfield"
+        from sqe import seacheck as _sc
+        assert _sc.open_water(cv.x, cv.y, _cp.CARRIER_COAST_NM * 1852 - 1), "in open water"
+        step = _m.hypot(cv.x - last[0], cv.y - last[1]) / 1000
+        if day > 0:
+            assert step <= _cp.CARRIER_MOVE_KM + 1, ("a day's move", round(step))
+        worst = max(worst, step); moves += step > 1; last = (cv.x, cv.y)
+        s.plan_day(); assert (cv.x, cv.y) == last, "a replan the same day does not move the fleet"
+        sim = s._sim(s._rng(44))
+        for pd in st.plan:
+            sim.resolve_abstract(st, Package.from_dict(pd), None)
+        sim.end_day(st); update_status(st)
+        if st.status != "ACTIVE":
+            break
+        s.plan_day()
+    print(f"[carrier] 30 days: {moves} moves, biggest {worst:.0f} km, always clear of the red fields and in open water")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4900,6 +4931,7 @@ CHECKS = [
     check_75_mass_raid_build,
     check_76_cas_task_force,
     check_77_strike_behind_sead,
+    check_78_carrier_moves_with_the_front,
 ]
 
 

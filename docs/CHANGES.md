@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.159, The carrier moves along the campaign
+
+XO (2026-10-27, "100 sounds about right... fully dynamic"). The fleet no longer sits at a fixed point 160 km west of Batumi.
+- New `sqe/carrier_pos.py`: once a day (at planning; a replan changes nothing) the fleet takes the spot nearest the front line that is at least 100 nm (`carrier_standoff_nm` in the theatre pack) from every red airfield red still holds and 25 nm off the coast, moving at most 150 km a day. Under 30 km of gain it stays put. As red fields fall the circle shrinks and the fleet closes in. The first day on an older save puts it on its station at once. A log line says when it moves.
+- Fiction (XO): red's shore-based anti-ship missiles; the real reason is that nothing red launches near it survives. The numbers are judgment calls (100 nm from XO's run, 150 km/day, 30 km hysteresis).
+- Smoke: new `check_78_carrier_moves_with_the_front`.
+
+
 ## v0.41.158, Strikes and CAS go in behind the SEAD
 
 XO (2026-10-27, "strikes first... go high"). On L2 and L3 most jobs for a Viper or Hornet were DEAD, because every strike and CAS target under an SA-11 or SA-10 was blocked until a DEAD cleared it. Sources (SLDinfo on SEAD in an A2AD world, GAO-03-51): SEAD suppresses and degrades, it does not make a site safe for good, so the new rule is conditional and the job is turned back when the SEAD fails (judgment call).
