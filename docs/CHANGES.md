@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.154, L1 gets museum-piece SAMs; Ctrl+Space only in AI-Test
+
+XO (2026-10-27, "the more SAMs the merrier ... medium"). Story premise: a shadow sponsor keeps the insurgents properly funded and armed, so their old SAMs work at full health.
+- Level 1 air defence (`difficulty.py`): SA-2 and SA-3 join the AAA and MANPADS mix, and 4 sites per field instead of fewer. They are old sites, so the rebuild stays slow and there is no EWR (iads 0.15). Judgment call: SA-2/SA-3 are real 1960s-era exports and still fielded by irregulars' sponsors; the numbers are tuned to give SEAD / DEAD work for every airframe without stalling the planner.
+- Sims (8 seeds, none and good play): L1 still wins every run, median day 23 (was about 22).
+- Story: the L1 Background mentions old but working SAM batteries kept in repair across the border. Russia is not named on L1.
+- Ctrl+Space (XO) now works only in AI-Test, not in a normal campaign (`gui/app.py`).
+
+
 ## v0.41.153, Story wording and Ctrl+Space everywhere
 
 XO (2026-10-27). Merged #217 before this landed, so it is its own change.

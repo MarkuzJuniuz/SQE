@@ -728,10 +728,10 @@ class MainWindow(QMainWindow):
         return False
 
     def eventFilter(self, obj, ev):
-        """Developer secret (XO 2026-10-27): Ctrl+Space skips the day. Done here and not as a QShortcut because a list or text box that has the focus (the Missions
+        """Developer secret (XO 2026-10-27): Ctrl+Space skips the day, in AI-Test only (v0.41.154). Done here and not as a QShortcut because a list or text box that has the focus (the Missions
         list) uses Ctrl+Space itself and swallowed the shortcut; the filter sees the key first."""
         from PySide6.QtCore import QEvent
-        if ev.type() in (QEvent.ShortcutOverride, QEvent.KeyPress) and ev.key() == Qt.Key_Space and ev.modifiers() == Qt.ControlModifier and self.isActiveWindow():
+        if ev.type() in (QEvent.ShortcutOverride, QEvent.KeyPress) and ev.key() == Qt.Key_Space and ev.modifiers() == Qt.ControlModifier and self.isActiveWindow() and getattr(self.session, "ai_test", False):
             if ev.type() == QEvent.KeyPress:
                 self._dev_skip_day()
             ev.accept()

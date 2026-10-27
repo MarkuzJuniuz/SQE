@@ -63,10 +63,10 @@ class Difficulty:
     blue_rebuild: float = 0.15           # nightly chance (x friendly supply) that a destroyed friendly supply site or garrison is replaced
 
 LEVELS: dict[int, Difficulty] = {
-    1: Difficulty(1, "Level 1 - Insurgent", "Irregular forces. A few old aircraft, AAA and MANPADS, scattered older SAMs. "
+    1: Difficulty(1, "Level 1 - Insurgent", "Irregular forces. A few old aircraft, AAA and MANPADS, and a few old but working SAMs. "
                   "Expect to be shot at, not hunted.",
                   enemy_air_total=44, red_squadron_max=6, enemy_types=["MiG_21Bis", "MiG_23MLD", "MiG_29A", "Su_25", "Su_24M"],
-                  sam_variants=["AAA", "MANPAD", "SA-3"], sam_sites_per_cluster=1, iads=0.15,
+                  sam_variants=["SA-2", "SA-3", "AAA", "MANPAD"], sam_sites_per_cluster=4, iads=0.15,         # v0.41.154 (XO 2026-10-27): the insurgents are armed with working museum pieces by a sponsor: each field gets an SA-2, an SA-3, AAA and MANPADS (it was one site of AAA or MANPADS)
                   enemy_skill="Average", loss_rate=0.035, base_damage=0.45, variance=0.8,
                   friendly_replenish=0.14, enemy_replenish=0.03, asset_repair=0.03, sam_repair=0.03,
                   friendly_scale=1.2, enemy_cap_per_air=0.10, counterstrike=0.10, bomber_wing=0, bomber_policy="none", react_chance=0.08, react_ratio=(0.2, 0.5),
