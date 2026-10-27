@@ -30,6 +30,8 @@ NM = 1852.0
 MIN_FORCE = 3.0               # below this a side has no organised force in the zone
 MAX_FORCE = 100.0
 SUPPLY_KINDS = (AssetKind.FUEL, AssetKind.DEPOT)
+BREAK_RATIO = 0.30            # v0.41.145 (XO 2026-10-27, never hunt the last unit): a side whose force in a sector is under this share of the other's has lost the sector tonight (it withdraws); nobody has to be destroyed
+DOWN_HEALTH = 0.30            # v0.41.145: a depot, fuel farm, SAM site or garrison at or under this health counts as down (not offered as a target, no longer gates)
 AIR_EFFECT = 0.6              # share of a visible column's losses that its zone's strength takes (the column is only the lead element)
 BLUE_LOSS = 40.0              # blue strength lost when the whole friendly task force at the JTAC is destroyed
 SKIRMISH, ATTACK = 0.04, 0.14
@@ -340,8 +342,9 @@ def info(state, i: int) -> dict:
     r, b = red_strength(state, i), blue_strength(state, i)
     n = n_zones(state.ground)
     contested = r >= MIN_FORCE and b >= MIN_FORCE
-    facing = r >= MIN_FORCE and b < MIN_FORCE and i + 1 < n and blue_strength(state, i + 1) >= MIN_FORCE and red_strength(state, i + 1) < MIN_FORCE      # our force stands across the line from the enemy column
-    return {"i": i, "name": state.ground["names"][i], "red": r, "blue": b, "contested": contested, "engaged": contested or facing,
+    broken = contested and r < BREAK_RATIO * b                                  # v0.41.145: red is already beaten here: it withdraws tonight, so no job is generated for it
+    facing = r >= MIN_FORCE and b < MIN_FORCE and i + 1 < n and blue_strength(state, i + 1) >= MIN_FORCE and red_strength(state, i + 1) < MIN_FORCE and r >= BREAK_RATIO * blue_strength(state, i + 1)      # our force stands across the line from the enemy column
+    return {"i": i, "name": state.ground["names"][i], "red": r, "blue": b, "contested": contested, "broken": broken, "engaged": (contested and not broken) or facing,
             "pressure": r / (r + b) if r + b > 0 else 0.0}
 
 
@@ -590,11 +593,14 @@ def resolve_day(state, d, rng) -> list:
                 lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked and were thrown back")
             else:
                 lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked, heavy fighting (enemy {red[ri]:.0f}, friendly {blue[bi]:.0f})")
-    for i in range(n):                                  # a remnant too small to hold ground withdraws
-        if red[i] < MIN_FORCE and red[i] > 0 and blue[i] >= MIN_FORCE:
+    for i in range(n):                                  # a remnant too small to hold ground withdraws: under MIN_FORCE, or (v0.41.145) under BREAK_RATIO of what faces it
+        if red[i] > 0 and blue[i] >= MIN_FORCE and (red[i] < MIN_FORCE or red[i] < BREAK_RATIO * blue[i]):
             _fall_back(g, i, "red")
-        if blue[i] < MIN_FORCE and blue[i] > 0 and red[i] >= MIN_FORCE:
+        if blue[i] > 0 and red[i] >= MIN_FORCE and (blue[i] < MIN_FORCE or blue[i] < BREAK_RATIO * red[i]):
             _fall_back(g, i, "blue")
+    for i in range(n - 1):                              # across a quiet line: a red force under BREAK_RATIO of the Coalition force facing it gives up the sector
+        if red[i] >= MIN_FORCE and blue[i] < MIN_FORCE and blue[i + 1] >= MIN_FORCE and red[i + 1] < MIN_FORCE and red[i] < BREAK_RATIO * blue[i + 1]:
+            _fall_back(g, i, "red")
     for i in range(n):                                  # nobody holds this zone any more: whoever is next to it moves in (Red from the front side)
         if red[i] < MIN_FORCE and blue[i] < MIN_FORCE:
             if i > 0 and red[i - 1] >= MIN_FORCE and not (i + 1 < n and blue[i + 1] >= MIN_FORCE and rng.random() < 0.5):

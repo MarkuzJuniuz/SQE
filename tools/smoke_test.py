@@ -2231,7 +2231,8 @@ def check_31x_forward_garrisons(c):
     gr.resolve_day(st, d, Calm(1))
     assert st.ground["blue"][i] <= b0 * (1 - gr.FWD_SHARE) + 1e-6 + 6, (b0, st.ground["blue"][i])      # (+6: the day's reinforcements may land in the front sector)
     # red's forward position is a CAS job where red holds the sector and we are there; blue's is raidable
-    j = next(k for k in range(n) if st.ground["red"][k] >= gr.MIN_FORCE and st.ground["blue"][k] >= gr.MIN_FORCE)
+    j = next(k for k in range(n) if st.ground["blue"][k] >= gr.MIN_FORCE)
+    st.ground["red"][j], st.ground["blue"][j] = 50.0, 60.0; gr.push(st)        # v0.41.145: a real fight (the start values leave red under 30% of ours, which is already a beaten sector)
     st.assets[f"rfwd_{j + 1}"].health = 1.0
     ses.plan_day()
     descs = [p_["objective"]["description"] for p_ in st.plan]
@@ -4322,6 +4323,43 @@ def check_64_supply_loop(c):
     print("[supply loop] sites by level, stock-based supply with the 55% floor, 6-day repair timer (none on a struck day), captured sites change sides and back, SEAD-escorted supply strikes, skip-day round, v2 saves refused")
 
 
+def check_65_no_last_unit_hunt(c):
+    """v0.41.145, Campaign Revamp B3: a sector is lost on a threshold (under BREAK_RATIO of what faces it), a depot / SAM site at or under DOWN_HEALTH counts as down; nobody hunts the last unit."""
+    import random as _rnd
+    from sqe import ground as _gr, war as _war
+    from sqe.models import AssetKind as _AK
+    from sqe.difficulty import get as _gd
+    st = fresh_session(2, 5).state; g = st.ground
+    i = 5
+    for k in range(len(g["red"])):
+        g["red"][k] = g["blue"][k] = 0.0
+    g["red"][i], g["blue"][i] = 20.0, 80.0                                      # 20 is over MIN_FORCE (3) but under 30% of 80
+    _gr.push(st)
+    zi = _gr.info(st, i); assert zi["contested"] and zi["broken"] and not zi["engaged"], "a beaten sector is not a job any more"
+    g["red"][i], g["blue"][i] = 40.0, 80.0; _gr.push(st)
+    zi = _gr.info(st, i); assert zi["engaged"] and not zi["broken"], "40 against 80 is still a fight"
+    # tonight a broken red force gives the sector up even though it is far from destroyed
+    g["red"][i], g["blue"][i] = 20.0, 80.0; _gr.push(st)
+    st.day = 100; g["clock"] = 0; g["red_clock"] = 0
+    _gr.resolve_day(st, _gd(2), _rnd.Random(1))
+    assert g["red"][i] < 3.0, ("the broken force withdrew", g["red"][i])
+    # the same for ours: a Coalition force under 30% of what faces it withdraws
+    for k in range(len(g["red"])):
+        g["red"][k] = g["blue"][k] = 0.0
+    g["red"][i], g["blue"][i] = 90.0, 20.0; _gr.push(st); _gr.resolve_day(st, _gd(2), _rnd.Random(1))
+    assert g["blue"][i] < 3.0
+    # sites: a depot, fuel farm or SAM at or under DOWN_HEALTH is not offered and no longer gates
+    st2 = fresh_session(2, 5).state; st2.front = 2
+    d = st2.assets["depot_sochi"]; d.health = 0.2
+    sam = next(x for x in st2.assets.values() if x.kind == _AK.SAM and x.variant in ("SA-10", "SA-11", "SA-6", "SA-2"))
+    sam.health = 0.28
+    objs = _war.ObjectivePlanner(_gd(2)).plan(st2, _rnd.Random(2), limit=40)
+    assert not any(o.target_id == "depot_sochi" for o in objs), "a depot at 20% is down"
+    assert not any(o.target_id == sam.id and o.type.value == "DEAD" for o in objs), "a SAM at 28% is down: no hunting"
+    assert sam not in _war.covering_sams(st2, sam)
+    print("[no last-unit hunt] a sector under 30% of what faces it is lost tonight (both sides), no job for a beaten sector, sites at 30% or less are down for the planner and the gate")
+
+
 def check_62_red_roster(c):
     # v0.41.142 (Campaign Revamp Stage A3): red's starting air order of battle comes from the level's roster (redroster.py): the numbers, no MiG-25, the MiG-31
     # on Levels 2 and 3 only, the depth gradient of the long-range jets, nothing over what a field can park, a fighter pair at every field, the Mozdok wings
@@ -4471,6 +4509,7 @@ CHECKS = [
     check_62_red_roster,
     check_63_the_push,
     check_64_supply_loop,
+    check_65_no_last_unit_hunt,
 ]
 
 

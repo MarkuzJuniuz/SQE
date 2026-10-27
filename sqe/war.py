@@ -46,7 +46,7 @@ def covering_sams(state, a) -> list:
     from . import threatmap as tm
     out = []
     for x in state.assets.values():
-        if x.kind != AssetKind.SAM or x.destroyed or x.health <= 0.25 or getattr(x, "suppressed", False) or x.variant not in GATE_VARIANTS:
+        if x.kind != AssetKind.SAM or x.destroyed or x.health <= ground.DOWN_HEALTH or getattr(x, "suppressed", False) or x.variant not in GATE_VARIANTS:
             continue
         if ((x.x - a.x) ** 2 + (x.y - a.y) ** 2) ** 0.5 <= GATE_REACH_NM.get(x.variant, tm.RANGE_NM.get(x.variant, 0)) * 1852:
             out.append(x)
@@ -115,6 +115,8 @@ class ObjectivePlanner:
         for a in state.assets.values():
             if a.destroyed:
                 continue
+            if a.health <= ground.DOWN_HEALTH and a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.SAM) and ground.active(state):
+                continue                                   # v0.41.145: down for planning (a threshold, not the last vehicle): not hunted, it mends on its own
             locked = not self._open(state, a)
             defenders = [x for x in a.defended_by if alive(x)]
             if a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT):
