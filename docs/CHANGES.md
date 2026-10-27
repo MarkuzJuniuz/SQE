@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.137, the CAS target column stays at the CAS point
+
+XO (2026-10-27): last night's L1 CAS mission, the A-10s' target was off by some distance and they never touched it. `mission_builder._spawn_cas_support` moved the enemy column up to 10 km back and drove it 13 km at 7 to 8 m/s so it would be at the CAS waypoint at the TOT (the plan put it within 1.4 to 1.9 km on paper), but DCS's real speed (slopes, a long mixed column, stopping to fight on the v0.41.39 weapons-free orders) decides where it is. Now:
+- The column is built at the CAS point and only creeps 1.2 km toward your side (at most 3.5 m/s); the friendly task force starts at most 6 km from the contact point (was up to 10 km).
+- The support spawn uses the CAS target's OWN group and centre, not "the last armour group spawned" (a CAS package also builds the target's defenders, so a garrison or neighbouring column built after the target could take its place; the A-10s' own attack task already named the right group).
+- Dug-in forward garrisons were already on the point (2 to 22 m) and are unchanged.
+- Smoke: new section `check_58_cas_column_stays_at_the_cas_point` (12 campaigns, every AI CAS mission: target group is the package's own, within 400 m of the CAS waypoint, creep under 2 km). The identity tool will show CAS missions changed (expected).
+
 ## v0.41.136, Bug B: the war sim's red air cover counts fighters only
 
 XO (2026-10-27, Campaign Revamp prep). `war.py` added `0.05 * every serviceable red aircraft` to the defence of a strike or a DEAD (two places), bombers and strikers included. With the planned striker zerg that would have made every strike harder. It now counts red's serviceable FIGHTERS only (`ENEMY_FIGHTERS`), at 0.0765 each (fighters are about 65% of red's jets today, so the term stays about where it was; judgment call). New helper `war._air_cover`. No mission-building change. Smoke: war-sim sections.
