@@ -11,6 +11,7 @@ from .difficulty import Difficulty
 from .models import SEAD_AIMS, Objective, ObjectiveType, AssetKind, Role
 from .packages import Package
 from .state import CampaignState
+from .loadouts import ENEMY_FIGHTERS
 
 ROLE_WEIGHT = {Role.STRIKE: 1.0, Role.SEAD: 0.9, Role.TARCAP: 0.6, Role.ESCORT: 0.7, Role.SWEEP: 0.7, Role.CAP: 0.6, Role.CAS: 1.0}
 
@@ -65,6 +66,15 @@ def cas_cover(state, a) -> tuple:
 
 
 NM = 1852.0
+
+
+AIR_COVER_PER_FIGHTER = 0.0765      # v0.41.136: was 0.05 per aircraft of ANY kind; red's fighters are about 65% of its jets today, so this keeps today's defence term (judgment call)
+
+
+def _air_cover(state: CampaignState, iads: float) -> float:
+    """The red air cover that makes a strike or a DEAD harder: its serviceable FIGHTERS only (v0.41.136, Bug B). Bombers and strike jets on the ramp
+    defend nothing, so adding them to the red order of battle (the striker zerg) no longer makes the whole war harder."""
+    return AIR_COVER_PER_FIGHTER * sum(w.available_of(ENEMY_FIGHTERS) for w in state.enemy_air) * (0.6 + 0.6 * iads)
 
 
 class ObjectivePlanner:
@@ -293,7 +303,7 @@ class WarSimulator:
             sam *= 0.6 + 0.8 * self.d.iads
             if has_sead:
                 sam *= 0.5
-        air = 0.05 * sum(w.available for w in state.enemy_air) * (0.6 + 0.6 * self.d.iads)
+        air = _air_cover(state, self.d.iads)
         defense = sam + air
         return (strength / (strength + defense) if strength + defense else 0.0), strength, defense
 
@@ -410,7 +420,7 @@ class WarSimulator:
             t.suppressed = True
             t.health = max(0.05, t.health - 0.2)            # the radars and a launcher or two; the battery survives
         s_dead = sum(f.count * ROLE_WEIGHT[Role.STRIKE] for f in dead)
-        air = 0.05 * sum(w.available for w in state.enemy_air) * (0.6 + 0.6 * d.iads)
+        air = _air_cover(state, d.iads)
         defense = (site * (0.35 if blinded else 1.4)) + garrison * 0.3 + air
         p_dead = s_dead / (s_dead + defense) if s_dead else 0.0
         killed = force["killed"] if force and "killed" in force else chance(rng, p_dead, d.variance)
