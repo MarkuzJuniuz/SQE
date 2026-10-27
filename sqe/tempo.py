@@ -41,6 +41,8 @@ def record(state, objective_type, tone: str) -> list:
     """The flown sortie moves its kind's tempo. -> the debrief lines ([] when nothing moved)."""
     k = kind_of(objective_type)
     step = STEP.get(tone, 0.0)
+    if getattr(state, "ground", None):
+        state.ground["flown_day"] = state.day                       # v0.41.155: the squadron flew today: red's idle surge starts over (ground.surge)
     if not hasattr(state, "tempo") or state.tempo is None:
         state.tempo = {}
     old = get(state, k)

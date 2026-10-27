@@ -50,6 +50,9 @@ REAR_FRAC = 0.7               # red strength in the sectors behind its first lin
 BLUE_ATTACK_MIN = 30.0        # our force in a sector must be at least this before we attack (toy model "THR"; judgment call)
 BLUE_ATTACK_RATIO = 0.9       # ...and not weaker than this share of the enemy's strength there (supply-weighted)
 BLUE_ATTACK_CHANCE = 0.7      # daily chance that a ready force attacks
+SURGE_GRACE_DAYS = 2          # v0.41.155: days your squadron can stand down before red's surge starts (judgment call)
+SURGE_CAP = 2.0               # ...and the most it adds (x2 at the top)
+REAR_FLOOR = 15.0             # v0.41.155: a rear sector is not drained below this by the red feed (judgment call)
 RED_CLOCK_DAYS = 3            # after we take a base the enemy's own attacks wait this long (its force needs 3 days to arrive; XO 2026-10-24 item 5)
 AI_CAS = {1: 3, 2: 2, 3: 3}     # abstract daily blue air strikes on the sector facing us (judgment call: the toy model's AI CAS, 1-3 a day)
 AI_CAS_P = 0.55
@@ -451,7 +454,7 @@ def supply_round(state, d, rng) -> list:
                 a.health = max(0.0, a.health - SUPPLY_ROUND_HIT)
                 lines.append(f"{'Our' if who == 'red' else 'Enemy'} {a.name} was hit in the background supply strikes ({a.health:.0%} left)")
     pick(list(state.assets.values()), SUPPLY_ROUND_BLUE, "blue")
-    pick(list(getattr(state, "blue_assets", {}).values()), 1 + int(rng.random() < getattr(d, "raid_rate", 0.3)), "red")
+    pick(list(getattr(state, "blue_assets", {}).values()), int(getattr(d, "red_supply_strikes", 1)) + int(rng.random() < min(1.0, getattr(d, "raid_rate", 0.3))), "red")
     return lines
 
 
@@ -530,12 +533,24 @@ def _clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
 
+def surge(state, d) -> float:
+    """v0.41.155 (XO 2026-10-27, "red needs a chance to win if I do not fly"): 1.0 while your squadron flies; then it grows by the level's `red_surge` for every day beyond
+    SURGE_GRACE_DAYS since the last flown sortie, up to 1 + SURGE_CAP. It multiplies red's reinforcements, attack chance and raid rate."""
+    step = float(getattr(d, "red_surge", 0.0))
+    g = state.ground or {}
+    if step <= 0 or not g:
+        return 1.0
+    idle = state.day - int(g.get("flown_day", g.get("start_day", 1))) - SURGE_GRACE_DAYS
+    return 1.0 + min(SURGE_CAP, max(0, idle) * step)
+
+
 def resolve_day(state, d, rng) -> list:
     """One day of ground fighting. Returns the overnight lines for the log."""
     g = state.ground
     pull(state)
     red, blue, n = g["red"], g["blue"], n_zones(g)
     sr, sb = supply(state, "red"), supply(state, "blue")
+    sg = surge(state, d)
     lines = _counter_arrives(state)
     forced = _forced_zone(state)
     fw = g.setdefault("fwd", {"r": [1.0] * n, "b": [1.0] * n})
@@ -549,7 +564,7 @@ def resolve_day(state, d, rng) -> list:
     for _ in range(AI_CAS.get(getattr(d, "level", 3), 2)):  # v0.41.143: blue's own air (the AI flights nobody flies) works the red sector that faces us
         facing = [i for i in range(n) if red[i] >= MIN_FORCE and (blue[i] >= MIN_FORCE or (i + 1 < n and blue[i + 1] >= MIN_FORCE))]
         from . import tempo
-        if facing and rng.random() < min(0.95, max(0.05, AI_CAS_P + TEMPO_GROUND_GAIN * tempo.get(state, "CAS"))):         # v0.41.147: air tempo: the player's flown CAS results
+        if facing and rng.random() < min(0.95, max(0.05, AI_CAS_P + TEMPO_GROUND_GAIN * tempo.get(state, "CAS"))) * sb:         # v0.41.147: air tempo: the player's flown CAS results
             i = max(facing)
             red[i] = max(0.0, red[i] * (1.0 - AI_CAS_CUT))
     # who is in contact: a sector both sides hold, or (v0.41.143) two neighbouring sectors, red's on the enemy side, when neither is shared: an assault across the line
@@ -564,7 +579,7 @@ def resolve_day(state, d, rng) -> list:
         att = None
         if forced == ri and not quiet:                                                  # the enemy's last counter-force presses every day
             att = "red"
-        elif state.day >= g.get("red_clock", 0) and rng.random() < getattr(d, "red_attack", 0.3) * _clamp(pR / max(pB, 1.0), 0.4, 1.6):
+        elif state.day >= g.get("red_clock", 0) and rng.random() < getattr(d, "red_attack", 0.3) * sg * _clamp(pR / max(pB, 1.0), 0.4, 1.6):
             att = "red"
         elif state.day >= g.get("clock", 0) and B >= BLUE_ATTACK_MIN and pB >= BLUE_ATTACK_RATIO * pR and rng.random() < BLUE_ATTACK_CHANCE:
             att = "blue"                                                                # v0.41.143: our force is ready (takeover clock over, enough strength)
@@ -615,8 +630,16 @@ def resolve_day(state, d, rng) -> list:
     rz = max((i for i in range(n) if red[i] >= MIN_FORCE), default=None)
     bz = min((i for i in range(n) if blue[i] >= MIN_FORCE), default=n - 1)
     if rz is not None:                                   # red with no organised force anywhere gets none (its last counter-force is the only way back)
-        red[rz] = min(MAX_FORCE, red[rz] + getattr(d, "red_reinf", 5.0) * sr)
+        red[rz] = min(MAX_FORCE, red[rz] + getattr(d, "red_reinf", 5.0) * sr * sg)
     blue[bz] = min(MAX_FORCE, blue[bz] + getattr(d, "blue_reinf", 5.0) * sb)
+    feed = float(getattr(d, "red_rear_feed", 0.0))                       # v0.41.155 (red zerg): red's rear sectors move strength one sector toward the front each night
+    if feed > 0 and rz is not None:
+        for i in range(rz - 1, -1, -1):
+            if red[i] >= REAR_FLOOR + 1.0:
+                mv = min(red[i] - REAR_FLOOR, red[i] * feed * sr, MAX_FORCE - red[i + 1])
+                if mv > 0:
+                    red[i] -= mv
+                    red[i + 1] += mv
     for i in range(n):                                   # a lost red forward garrison is re-established where red still holds the sector (blue's come back through rebuild_blue)
         a = state.assets.get(fwd_id("red", i))
         if a is not None and a.health <= 0.05 and red[i] >= MIN_FORCE and rng.random() < FWD_REBUILD * sr:
@@ -667,7 +690,7 @@ def check_falls(state) -> list:
         i = int(k)
         if i >= n_zones(g) or bid not in state.bases:
             continue
-        held = g["red"][i] >= MIN_FORCE and g["blue"][i] < MIN_FORCE
+        held = g["red"][i] >= MIN_FORCE and (g["blue"][i] < MIN_FORCE or g["blue"][i] < BREAK_RATIO * g["red"][i])        # v0.41.155: a trickle of reinforcements under BREAK_RATIO of what faces it no longer saves a field
         if held and bid not in g["fallen"]:
             g["fallen"].append(bid)
             lines += apply_fall(state, bid)
@@ -717,8 +740,8 @@ def _check_red_bases(state) -> list:
     g, lines = state.ground, []
     for rb in g.get("rbases", []):
         i, rid = rb["zone"], rb["id"]
-        ours = g["blue"][i] >= MIN_FORCE and g["red"][i] < MIN_FORCE
-        theirs = g["red"][i] >= MIN_FORCE and g["blue"][i] < MIN_FORCE
+        ours = g["blue"][i] >= MIN_FORCE and (g["red"][i] < MIN_FORCE or g["red"][i] < BREAK_RATIO * g["blue"][i])         # v0.41.155: the same no-hunt ratio on both sides
+        theirs = g["red"][i] >= MIN_FORCE and (g["blue"][i] < MIN_FORCE or g["blue"][i] < BREAK_RATIO * g["red"][i])
         if rid not in g["taken"] and ours:
             g["taken"].append(rid)
             g["taken_day"][rid] = state.day

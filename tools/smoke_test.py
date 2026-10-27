@@ -4635,6 +4635,42 @@ def check_73_tasking_line(c):
     print("[tasking line] packages by kind, how many you can fly, no-jobs and war-over cases")
 
 
+def check_74_red_zerg(c):
+    """v0.41.155: red's zerg: the idle surge, massed-wave days, a mass raid settled aircraft by aircraft, the no-trickle field fall, the rear feed."""
+    import random
+    from sqe import ground as G, raids as R
+    from sqe.difficulty import LEVELS
+    s = fresh_session(3, 7); st = s.state; d = s.d; g = st.ground
+    g["flown_day"] = st.day
+    assert G.surge(st, d) == 1.0                                           # flown today: no surge
+    st.day += 2 + 5; sg = G.surge(st, d)
+    assert abs(sg - (1.0 + 5 * d.red_surge)) < 1e-9, sg                  # 5 idle days beyond the grace
+    st.day += 100; assert G.surge(st, d) == 1.0 + G.SURGE_CAP              # capped
+    assert G.surge(fresh_session(1, 3).state, LEVELS[1]) == 1.0            # L1 has no surge
+    st.day -= 107
+    # wave days: seeded, a fraction of days, bigger raids
+    ws = [R.wave_mult(st, d) for _ in range(1)]
+    days = []
+    for k in range(60):
+        st.day = k + 1; days.append(R.wave_mult(st, d))
+    assert any(m > 1.0 for m in days) and any(m == 1.0 for m in days), days
+    assert R.eff(2) == 2.0 and R.eff(8) == 6.0                            # damage counts four in full, then half
+    # a mass raid: more aircraft than four are settled one by one
+    st.day = 5; assert LEVELS[3].raid_size[1] >= 6 and LEVELS[3].red_supply_strikes >= 3 and LEVELS[3].red_rear_feed > 0
+    # field fall: a trickle under 30% of the force facing it no longer saves the field
+    g2 = fresh_session(3, 9).state; gg = g2.ground; n = G.n_zones(gg)
+    k, bid = next(iter(gg["fall"].items())); i = int(k)
+    gg["red"][i], gg["blue"][i] = 100.0, 4.0
+    G.check_falls(g2); assert bid in gg["fallen"], gg["fallen"]
+    # the rear feed moves strength one sector forward, never below the floor
+    g3 = fresh_session(3, 11); st3 = g3.state; gr = st3.ground
+    gr["red"] = [60.0] * 6 + [0.0] * (n - 6); gr["blue"] = [0.0] * (n - 1) + [40.0]
+    before = list(gr["red"])
+    G.resolve_day(st3, g3.d, random.Random(3))
+    assert gr["red"][0] <= before[0] and min(gr["red"][:6]) >= 0 and sum(gr["red"][:6]) > 0
+    print("[red zerg] idle surge and cap, L1 none, wave days, damage curve, no-trickle field fall, rear feed")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4747,6 +4783,7 @@ CHECKS = [
     check_71_story,
     check_72_window_size,
     check_73_tasking_line,
+    check_74_red_zerg,
 ]
 
 

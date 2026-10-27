@@ -355,7 +355,7 @@ class PackageBuilder:
         bw, raider = r[1], r[2]
         ba = st.assets[bw.base_asset_id]
         lo, hi = (self.d.raid_size if self.d else (2, 2))
-        nb = max(2, min(rnd.randint(lo, hi), bw.available))
+        nb = max(2, min(int(round(rnd.randint(lo, hi) * raids.wave_mult(st, self.d))) if self.d else rnd.randint(lo, hi), bw.available))     # v0.41.155: a massed-wave day
         nb -= nb % 2
         esc = None
         for w in sorted(st.enemy_air, key=lambda w: math.hypot(st.assets[w.base_asset_id].x - ax, st.assets[w.base_asset_id].y - ay)):

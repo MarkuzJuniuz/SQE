@@ -28,6 +28,19 @@ SECTOR_HIT = 4.0              # friendly sector strength lost per aircraft that 
 GARRISON_SHIELD = 0.25        # a field's garrison takes this share off the damage its defences would suffer
 
 
+def wave_mult(state, d) -> float:
+    """v0.41.155 (red zerg): 1.0 on an ordinary day, the level's `raid_wave_mult` on a massed-wave day (chance `raid_wave`; seeded from the campaign and the day)."""
+    p = float(getattr(d, "raid_wave", 0.0))
+    if p <= 0.0:
+        return 1.0
+    return float(getattr(d, "raid_wave_mult", 1.5)) if random.Random(f"{state.campaign_id}:{state.day}:wave").random() < p else 1.0
+
+
+def eff(k: int) -> float:
+    """v0.41.155: damage counts aircraft up to four in full, then half each (a big raid hurts more but the rest of the bombs fall on rubble; judgment call)."""
+    return float(k) if k <= 4 else 4.0 + 0.5 * (k - 4)
+
+
 def raider_wings(state, kind: str = "field", budget: bool = True) -> list:
     """[(wing, type)] of the enemy wings that can send a raid now: 2+ serviceable aircraft, field not cratered, sorties left in the day's budget.
     Bombers (Su-24M) are preferred against fields and supply sites, Su-25s against troops and garrisons."""
@@ -334,7 +347,8 @@ def todays_raids(state, d, rng: random.Random) -> tuple:
     from . import bombers
     if bombers.is_quiet(state):                             # v0.41.109: the quiet day before the carrier raid
         return [], 0
-    rate = float(d.raid_rate)
+    from . import ground as _gr
+    rate = float(d.raid_rate) * _gr.surge(state, d)                  # v0.41.155: red raids more while your squadron stands down
     n = int(rate) + (1 if rng.random() < rate - int(rate) else 0)
     warned, surprise = [], 0
     for _ in range(n):
@@ -355,6 +369,7 @@ def hit(state, base_id: str, wing, rng: random.Random, through: int | None = Non
     """Bombs fall on one of our airfields, a supply site, a garrison or on friendly troops. The raiders lose a jet to the defences. Log lines."""
     b = state.bases[base_id]
     k = through if through is not None else rng.randint(1, 3)
+    ke = eff(k)
     from .sams import covering_ad
     ad = covering_ad(state, *aim_xy(state, aim, b))
     if wing is not None:                                # v0.41.30: a full Patriot + HAWK takes a second jet (was always one)
@@ -362,23 +377,23 @@ def hit(state, base_id: str, wing, rng: random.Random, through: int | None = Non
     kind = aim_kind(aim)
     if kind == "sector":
         g, i = state.ground, int(aim.split(":")[1])
-        g["blue"][i] = max(0.0, g["blue"][i] - SECTOR_HIT * k)
+        g["blue"][i] = max(0.0, g["blue"][i] - SECTOR_HIT * ke)
         return [f"   {g['names'][i]}: friendly strength down to {g['blue'][i]:.0f} after the air attack"]
     if kind in ("supply", "garrison"):
         a = state.blue_assets[aim]
-        a.health = max(0.0, a.health - ASSET_HIT * k)
+        a.health = max(0.0, a.health - ASSET_HIT * ke)
         return [f"   {a.name} {'destroyed' if a.destroyed else f'damaged, {a.health:.0%} left'}"]
     gar = state.blue_assets.get(f"bgar_{base_id}") if getattr(state, "blue_assets", None) else None
     shield = 1.0 - GARRISON_SHIELD * (gar.health if gar is not None and not gar.destroyed else 0.0)
     gone = []
     if b.kind != BaseKind.CARRIER:
         from .sams import hit_field
-        gone = hit_field(state, b, BASE_LOSS * k * shield * (1.0 - 0.4 * ad))     # v0.41.30: batteries soak part of the damage (judgment call)
+        gone = hit_field(state, b, BASE_LOSS * ke * shield * (1.0 - 0.4 * ad))     # v0.41.30: batteries soak part of the damage (judgment call)
     sqs = sorted((s for s in state.squadrons.values() if s.base_id == base_id and s.available > 0), key=lambda s: -s.available)
     lines = [f"   bombs fell on {b.name}: its defences are down to {b.defense:.0%}{' (' + ', '.join(gone) + ' destroyed)' if gone else ''}" if b.kind != BaseKind.CARRIER else f"   missiles hit {b.name}"]
     if sqs:
         sq = sqs[0]
-        lost = min(sq.available, rng.randint(1, 1 + k))
+        lost = min(sq.available, rng.randint(1, 1 + int(ke)))
         sq.available -= lost
         lines.append(f"   {lost} parked aircraft lost ({sq.name}: {sq.available}/{sq.authorized} left)")
     return lines
@@ -416,14 +431,26 @@ def overnight(state, d, rng: random.Random) -> list:
         up_, psq_ = blue_barcap.patrol_up(state, rng, b, (wa_.x, wa_.y)) if (wa_ is not None and b.kind != BaseKind.CARRIER) else (False, None)       # v0.41.86: a pair on station
         if up_:
             p_stop = min(0.95, p_stop + blue_barcap.PATROL_STOP)
-        if rng.random() < p_stop:
-            k = wing.lose(r[2], rng.randint(1, 3 + round(covering_ad(state, x, y))))
-            lines.append(f"Surprise raid on {what}: " + ("the base patrol and " if up_ else "") + f"alert aircraft got up in time; {k} attack aircraft shot down")
+        lo_, hi_ = d.raid_size
+        n_ = max(2, int(round(rng.randint(int(lo_), int(hi_)) * wave_mult(state, d))))
+        if n_ <= 4:                                              # a small raid is settled as one lump (all stopped or all through), as before v0.41.155
+            if rng.random() < p_stop:
+                k = wing.lose(r[2], rng.randint(1, 3 + round(covering_ad(state, x, y))))
+                lines.append(f"Surprise raid on {what}: " + ("the base patrol and " if up_ else "") + f"alert aircraft got up in time; {k} attack aircraft shot down")
+                if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
+                    lines.append(ln_)
+            else:
+                lines.append(f"Surprise raid on {what}: nobody was warned and the aircraft got through" + (" (red anti-radiation missiles suppressed the batteries)" if arm_ else ""))
+                lines += [x_.strip() for x_ in hit(state, b.id, wing, rng, None, aim, r[2])]
+        else:                                                    # v0.41.155 (red zerg): a mass raid is settled aircraft by aircraft
+            stopped_ = sum(1 for _ in range(n_) if rng.random() < p_stop)
+            through_ = n_ - stopped_
+            k = wing.lose(r[2], stopped_ + (1 if through_ else 0))
+            lines.append(f"Surprise raid on {what}: {n_} attack aircraft; " + ("the base patrol and " if up_ else "") + f"alert aircraft stopped {stopped_}, {through_} got through" + (" (red anti-radiation missiles suppressed the batteries)" if arm_ else ""))
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
-        else:
-            lines.append(f"Surprise raid on {what}: nobody was warned and the aircraft got through" + (" (red anti-radiation missiles suppressed the batteries)" if arm_ else ""))
-            lines += [x_.strip() for x_ in hit(state, b.id, wing, rng, None, aim, r[2])]
+            if through_:
+                lines += [x_.strip() for x_ in hit(state, b.id, None, rng, through_, aim, r[2])]
     if state.raids is not None:
         state.raids["surprise"] = 0
     return lines
