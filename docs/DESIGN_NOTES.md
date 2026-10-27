@@ -208,6 +208,7 @@ _verified v0.41.144, 2026-10-27 (written from the code; smoke `check_64_supply_l
 - **Repair** (`ground.supply_repair`, nightly, skip days too): +supply/6 of a site a day; none on a night after the site lost health (compares with `g["sup_h"]`). The old flat `asset_repair` skips supply sites.
 - **Supply strikes under SAM cover** (`war.ObjectivePlanner.plan`): a FUEL / DEPOT STRIKE under only SA-2/3/6 is offered with aim "SEAD" and a required HARM flight (`packages._slots`); `WarSimulator.odds` uses the salvo-size odds of the escort for it. An SA-11 / SA-10 still blocks it until that site is dead.
 - **Skip days** (`engine.skip_day` -> `ground.supply_round`): blue tries `SUPPLY_ROUND_BLUE` (2) background strikes on red sites, red 1 or 2 on ours (by `raid_rate`); chance 50% open, 20% under escortable cover, none under a long-range belt; a hit costs `SUPPLY_ROUND_HIT` (0.35). Judgment calls.
+- **No-hunt thresholds (v0.41.145):** `ground.BREAK_RATIO` (0.30): in `resolve_day` a force under 30% of the one facing it falls back (both sides, shared sector or across a quiet line); `info()["broken"]` keeps such a sector out of the CAS list. `ground.DOWN_HEALTH` (0.30): the planner skips depots, fuel, command posts and SAMs at or under it, `covering_sams` and the threat map ignore a SAM at or under it. The sectors with their forward positions are the "detachments".
 
 ## 12. The carrier raid setpiece (v0.41.105 to v0.41.109)
 _verified v0.41.109, 2026-10-22 (read from the code; smoke `check_31z`, `31za`, `31zb`, `31zc`; not yet flown by XO)_

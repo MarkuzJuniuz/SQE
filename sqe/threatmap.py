@@ -33,7 +33,7 @@ SERIOUS_NM = 8          # shorter-ranged systems do not block routes (they only 
 def rings(state, min_range: float = SERIOUS_NM) -> list:
     out = []
     for a in state.assets.values():
-        if a.kind == AssetKind.SAM and not a.destroyed and a.health > 0.25:
+        if a.kind == AssetKind.SAM and not a.destroyed and a.health > 0.30:
             r = RANGE_NM.get(a.variant, 0)
             if r >= min_range:
                 out.append((a, r * NM))
@@ -170,7 +170,7 @@ def field_detect_nm(field_xy, target_xy, state=None) -> float:
     r = max(25.0, min(FIELD_DETECT_NM, 0.6 * d + 15.0))
     if _LEAD_NM:
         r = max(r, min(r + _LEAD_NM, 0.85 * d + 15.0))              # never past what the fight's own distance justifies
-    if state is not None and any(a.variant in UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.25
+    if state is not None and any(a.variant in UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.30
                                  and math.hypot(a.x - field_xy[0], a.y - field_xy[1]) / NM <= FIELD_SAM_NM for a in state.assets.values()):
         r = max(r, FIELD_SAM_DETECT_NM)
     return r
