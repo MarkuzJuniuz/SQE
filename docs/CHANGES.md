@@ -3,13 +3,13 @@
 
 ## v0.41.145, Campaign Revamp Stage B3: detachments and the no-hunt thresholds
 
-XO (2026-10-27, "your defaults. Please go B3 on high."). The detachments along the road already exist as the sectors of the push: each has a red and a blue force and a dug-in forward position (`rfwd_N` / `bfwd_N`, v0.41.102), so there are 9 red-side sectors on L3 (Sochi to Gelendzhik 4, Gelendzhik to Krymsk 1, Gudauta to Sochi 2, Sukhumi to Gudauta 2) and 4 on L1 and L2. That matches the plan (about 7 to 8 on L3, 2 to 3 on L1/L2) closely enough, and I added no new unit types. What B3 adds is the rule that nobody hunts the last unit:
+XO (2026-10-27, "your defaults. Please go B3 on high."). The detachments along the road already exist as the sectors of the push: each has a red and a blue force and a dug-in forward position (`rfwd_N` / `bfwd_N`, v0.41.102), so the red-side sectors are Sochi to Gelendzhik 4, Gelendzhik to Krymsk 1, Gudauta to Sochi 2, Sukhumi to Gudauta 1 (it was 2; XO asked for a second look and the plan said 1 for the 54 km leg): 8 on L3 and 3 on L1 and L2, the plan's 7 to 8 and 2 to 3. The push now has 8 / 8 / 13 sectors in all. No new unit types. What B3 adds is the rule that nobody hunts the last unit:
 - A sector is lost on a threshold: a force under `BREAK_RATIO` (30%) of the force facing it withdraws that night, for both sides, in a shared sector and across a quiet line. Nothing has to be destroyed.
 - A sector red has already lost on that rule is not offered as a CAS job (it is beaten; the fight ends tonight). The planner's `engaged` and the new `broken` flag in `ground.info`.
 - A depot, fuel farm, command post or SAM site at or under `DOWN_HEALTH` (30%) counts as down: the planner does not offer it, a down SAM no longer gates strikes, and the route map stops drawing its ring. It mends on its own timer.
-- Effect on pacing (AI-only sims, 6 seeds): L1 about day 24, L2 about 31, L3 about 74 (daily play inside the 57 to 77 target). Idle and daily still look alike, which is the air-tempo item.
+- Effect on pacing (AI-only sims, 6 seeds, with the 8 / 8 / 13 sectors): L1 about day 23, L2 about 30 to 32, L3 about 72 to 74 (daily play inside the 57 to 77 target). Idle and daily still look alike, which is the air-tempo item.
 - Numbers (30%) are a judgment call from the plan ("about 30%").
-- Smoke: new `check_65_no_last_unit_hunt`; `check_31x` sets up a real fight (the start values leave red under 30% of ours on L1/L2, which is now a beaten sector).
+- Smoke: new `check_65_no_last_unit_hunt`; `check_08` picks a DEAD package whose strike flight the player can fly; `check_31x` sets up a real fight (the start values leave red under 30% of ours on L1/L2, which is now a beaten sector).
 
 
 ## v0.41.144, Campaign Revamp Stage B2: depots and the supply loop
