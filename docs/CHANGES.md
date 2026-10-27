@@ -1,11 +1,16 @@
 # CHANGES.md
 
 
+## v0.41.161, Pilot Influence also switches air tempo
+
+XO (2026-10-27, "lump them together"; he wants to test progress with flying off). With Pilot Influence off, `tempo.get` returns 0 and `tempo.record` moves nothing, on top of the red surge: your flying changes nothing in the war sim. The tempo already earned is kept and comes back when the setting is turned on. The setting's text says so. Smoke: `check_79_pilot_influence` also checks tempo.
+
+
 ## v0.41.160, Pilot Influence
 
 XO (2026-10-27: "a setting for the dynamic player flight effects... it's just for giving red a chance to win on L3"). New setting `pilot_influence`, on by default, in New Campaign and Settings > Campaign (like Weather and AI Skill: an app setting, copied into the campaign when it is planned and simulated).
 - On: as before, red surges while your squadron stands down (v0.41.155).
-- Off: `ground.surge` stays at 1.0, so your flying makes no difference to the red surge. Measured first: with the surge off and no flying at all, L2 still wins and L3 does not lose (6 seeds, 60 days), so the war cannot be lost by standing down. The air tempo (what your flown sorties do to the odds of background jobs) is off too (XO: "lump them together"): `tempo.get` returns 0 and `tempo.record` moves nothing; the tempo already earned is kept and comes back when the setting is turned on.
+- Off: `ground.surge` stays at 1.0, so your flying makes no difference to the red surge. Measured first: with the surge off and no flying at all, L2 still wins and L3 does not lose (6 seeds, 60 days), so the war cannot be lost by standing down. The air tempo (what your flown sorties do to the odds of background jobs) is unchanged.
 - Smoke: new `check_79_pilot_influence`.
 
 
