@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import random
 from . import threatmap as tm
-from . import ground, theatres
+from . import ground, theatres, tempo
 from . import raids, sams, ecm, airwings
 from .raids import hit as raids_hit
 from .difficulty import Difficulty
@@ -321,8 +321,10 @@ class WarSimulator:
             s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in pkg.flights if f.role == Role.SEAD)
             site = sum((1.0 + 0.8 * self.d.iads) * x.health for x in cov)
             p_s = min(0.95, s_sead / (s_sead + site)) if (s_sead and site) else (0.95 if s_sead else 0.0)
-            return max(p_s, strength / (strength + defense) if strength + defense else 0.0) if cov else (strength / (strength + defense) if strength + defense else 0.0), strength, defense
-        return (strength / (strength + defense) if strength + defense else 0.0), strength, defense
+            p_e = max(p_s, strength / (strength + defense) if strength + defense else 0.0) if cov else (strength / (strength + defense) if strength + defense else 0.0)
+            return max(0.02, min(0.98, p_e + tempo.get(state, "STRIKE"))), strength, defense
+        p0 = strength / (strength + defense) if strength + defense else 0.0
+        return max(0.02, min(0.98, p0 + tempo.get(state, tempo.kind_of(obj.type)))), strength, defense
 
     def _resolve_sweep(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         """A Fighter Sweep fights the enemy fighters near its area; the target itself is not attacked. Kills come off the nearest wings, which
@@ -334,7 +336,7 @@ class WarSimulator:
                        key=lambda w: math.hypot(state.assets[w.base_asset_id].x - t.x, state.assets[w.base_asset_id].y - t.y))[:3]
         strength = sum(f.count * ROLE_WEIGHT[f.role] for f in pkg.flights)
         red = sum(w.available for w in wings) * (0.6 + 0.6 * d.iads) * 0.25
-        p = strength / (strength + red) if strength + red else 0.0
+        p = max(0.02, min(0.98, (strength / (strength + red) if strength + red else 0.0) + tempo.get(state, "AIR")))
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
         lines = [f"{pkg.objective.description}: {'AIR CLEARED' if ok else 'CONTESTED'} (odds {p:.0%})"]
         kills = (max(1, round(sum(f.count for f in pkg.flights) * 0.4 * p)) if ok else int(rng.random() < 0.5)) if wings else 0
@@ -405,7 +407,7 @@ class WarSimulator:
         s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in pkg.flights if _suppressor(f, pkg))        # JSOW slingers add to the overwhelm
         if not s_sead:
             return 0.0
-        return min(0.95, s_sead / (s_sead + site) + min(SEAD_LEARN_MAX, SEAD_LEARN * sead_fail(state, t.id)))
+        return min(0.95, s_sead / (s_sead + site) + min(SEAD_LEARN_MAX, SEAD_LEARN * sead_fail(state, t.id)) + tempo.get(state, "DEAD"))
 
     def _resolve_dead(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         """SEAD and DEAD are two different jobs. The SEAD flight blinds the radars (the site is 'suppressed', not dead). The DEAD flight
@@ -544,6 +546,7 @@ class WarSimulator:
         for a in state.assets.values():
             if 0 < a.health < 1.0 and ground.zone_of(state, a.id) is None and not (ground.active(state) and a.kind in ground.SUPPLY_KINDS):        # v0.41.143: a front column is a sector's strength: the ground war reinforces it, it does not repair itself
                 a.health = min(1.0, a.health + (d.sam_repair if a.kind == AssetKind.SAM else d.asset_repair))
+        tempo.decay(state)                                           # v0.41.147: the squadrons' edge fades a little each night
         for a in state.assets.values():
             a.suppressed = False                                    # blinded radars come back on overnight
         for ln in self.counterstrike(state):

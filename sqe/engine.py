@@ -12,7 +12,7 @@ from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
 from .models import BaseKind, Objective, ObjectiveType, Role
-from . import raids, redair, sams, ground
+from . import raids, redair, sams, ground, tempo
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import AI_ONLY, ai_only, carrier_raid, Ledger, NoPlayerSlot, Package, PackageBuilder
 
@@ -876,6 +876,8 @@ class Session:
         out["objective"], out["objective_type"] = pend["objective"], pend["objective_type"]
         rng = self._rng(33)
         out["story"] = narrative.debrief_story(out, st, rng)
+        out["tempo"] = tempo.record(st, pend["objective_type"], tempo.tone_of(out))      # v0.41.147: the flown result nudges the background jobs of its kind
+        out.setdefault("lines", []).extend(out["tempo"])
         sim = self._sim(rng)
         meanwhile = []
         t_end = float(data.get("time", 0) or 0)

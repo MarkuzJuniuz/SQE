@@ -126,6 +126,7 @@ def check_00_setup(c):
         out = s.apply(got)
         assert out.get("kill_log") and "killed by" in out["kill_log"][0], out.get("kill_log")
         assert s.state.day == 2 and s.state.plan, "campaign did not advance"
+        assert out["tempo"] and any(x_.startswith("Air tempo") for x_ in out["lines"]), "v0.41.147: the debrief shows the air tempo change"
         assert s.state.pilot["sorties"] == 1 and s.state.pilot["kills_ground"] == 2, s.state.pilot
         print(f"    debrief: {out['story'].splitlines()[0][:100]}...  pilot: {s.state.pilot['sorties']} sortie, {s.state.pilot['kills_air']}A/{s.state.pilot['kills_ground']}G kills")
         r = mk(); r.open(s.path)
@@ -4371,6 +4372,37 @@ def check_66_l1_raids(c):
     print("[L1 raids] the insurgents raid covered targets without SEAD; rate 0.25 a day")
 
 
+def check_67_air_tempo(c):
+    """v0.41.147: air tempo. A flown sortie nudges the chance of background jobs of its kind, capped, fading nightly, shown in the debrief lines."""
+    import random as _rnd
+    from sqe import tempo as _tp, ground as _gr, war as _war
+    from sqe.state import CampaignState as _CS
+    from sqe.models import ObjectiveType as _OT
+    s = fresh_session(3, 5); st = s.state
+    assert st.tempo == {} and _tp.get(st, "CAS") == 0.0
+    ln = _tp.record(st, "CAS", "great"); assert abs(_tp.get(st, "CAS") - 0.05) < 1e-9 and "close air support" in ln[0] and "+5%" in ln[0], ln
+    for _ in range(10):
+        ln = _tp.record(st, _OT.CAS, "great")
+    assert _tp.get(st, "CAS") == _tp.TEMPO_CAP and "cap" in ln[0], "capped"
+    _tp.record(st, "CAS", "bad"); assert abs(_tp.get(st, "CAS") - 0.16) < 1e-9
+    for _ in range(40):
+        _tp.record(st, "STRIKE", "bad")
+    assert _tp.get(st, "STRIKE") == -_tp.TEMPO_CAP, "the floor too"
+    assert _tp.kind_of("BARCAP") == "AIR" and _tp.kind_of("FLEET_DEFENSE") == "AIR" and _tp.kind_of(_OT.DEAD) == "DEAD"
+    assert _tp.tone_of({"objective_type": "CAS", "target_damage": 0.8, "blue_air_lost": 0}) == "great" and _tp.tone_of({"objective_type": "CAS", "target_damage": 0.1, "blue_air_lost": 3}) == "bad"
+    # it changes the odds of a background package of that kind, and the abstract AI strikes of the ground war
+    pk = next(p_ for p_ in s.packages() if p_.objective.type not in (_OT.BARCAP, _OT.FLEET_DEFENSE)); kd = _tp.kind_of(pk.objective.type)
+    sim = _war.WarSimulator(s.d, _rnd.Random(1))
+    st.tempo = {}; p0 = sim.odds(st, pk)[0]
+    st.tempo = {kd: 0.2}; p1 = sim.odds(st, pk)[0]
+    assert abs((p1 - p0) - 0.2) < 1e-6 or p1 >= 0.98, (p0, p1)
+    # fades at night, saves with the campaign
+    st.tempo = {"CAS": 0.2, "DEAD": 0.004}; _tp.decay(st)
+    assert abs(st.tempo["CAS"] - 0.194) < 1e-9 and st.tempo["DEAD"] == 0.0
+    assert _CS.from_dict(st.to_dict()).tempo == st.tempo
+    print("[air tempo] steps by debrief grade, cap and floor +-20%, kinds, effect on background odds, nightly fade, saved")
+
+
 def check_62_red_roster(c):
     # v0.41.142 (Campaign Revamp Stage A3): red's starting air order of battle comes from the level's roster (redroster.py): the numbers, no MiG-25, the MiG-31
     # on Levels 2 and 3 only, the depth gradient of the long-range jets, nothing over what a field can park, a fighter pair at every field, the Mozdok wings
@@ -4522,6 +4554,7 @@ CHECKS = [
     check_64_supply_loop,
     check_65_no_last_unit_hunt,
     check_66_l1_raids,
+    check_67_air_tempo,
 ]
 
 
