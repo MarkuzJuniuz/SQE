@@ -4081,7 +4081,7 @@ def check_58_cas_column_stays_at_the_cas_point(c):
         for _sd58 in (1, 2, 3, 4):
             _rn58.seed(f"cas58:{_lv58}:{_sd58}")
             _sn58.new(f"Cas58{_lv58}{_sd58}", "A-10C", _lv58, seed=_sd58); _sn58.ai_test = True
-            for _pk58 in [p_ for p_ in _sn58.packages() if _sn58.flyable(p_) and p_.objective.type.value == "CAS"]:
+            for _pk58 in [p_ for p_ in _sn58.packages() if _sn58.flyable(p_) and p_.objective.type.value == "CAS" and not p_.objective.after]:      # (v0.41.158: a CAS behind a SEAD has HARM escorts whose AttackGroup tasks are not the column's)
                 _sn58.fly(_pk58.number, _sn58.flyable(_pk58)[0].id)
                 _m = _lua58.loads(_zf58.ZipFile(_sn58.settings.sortie_miz).read("mission").decode("utf-8", "replace"))["mission"]
                 _grp = []
