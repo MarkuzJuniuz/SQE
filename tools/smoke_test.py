@@ -4622,6 +4622,19 @@ def check_72_window_size(c):
     print("[window] default size 90% of the usable screen, capped, centered; geometry saved as a setting")
 
 
+def check_73_tasking_line(c):
+    """v0.41.152: the Overview's tasking line: the day's packages by kind, how many you can fly, or why none."""
+    from sqe import overview_detail as _od
+    s = fresh_session(3, 7); st = s.state
+    head, det = _od.tasking(s); n = len(s.packages())
+    assert head == f"{n} package{'s' if n != 1 else ''}" and n > 0 and ("You can fly" in det or "Stand-down" in det), (head, det)
+    plan = st.plan; st.plan = []
+    head, det = _od.tasking(s); assert head == "No jobs today" and "No jobs are open" in det, (head, det)
+    st.plan = plan; st.status = "VICTORY"
+    assert _od.tasking(s)[0] == "War over"
+    print("[tasking line] packages by kind, how many you can fly, no-jobs and war-over cases")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4733,6 +4746,7 @@ CHECKS = [
     check_70_overview_detail,
     check_71_story,
     check_72_window_size,
+    check_73_tasking_line,
 ]
 
 

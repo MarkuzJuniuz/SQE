@@ -61,7 +61,7 @@ class OverviewPage(QWidget):
         self.txt = QTextBrowser(); self.txt.setFrameShape(QFrame.NoFrame); self.txt.setStyleSheet("background:transparent;border:none;")   # v0.41.149: Background and Intent, scrollable, collapsible
         c.layout().addWidget(self.txt, 1)
         self.now = QLabel(); self.now.setWordWrap(True); self.now.setStyleSheet("font-size:14px;"); c.layout().addWidget(self.now)              # the Now line stays pinned at the bottom, open or closed
-        self._sit_open = True; self._st = None; self.get_settings = lambda: None; self._left = left; self._sit_card = c
+        self._sit_open = True; self._st = None; self.get_settings = lambda: None; self.get_session = lambda: None; self._left = left; self._sit_card = c
         gc = card(); left.addWidget(gc, 1)                                 # v0.41.149: the detail tabs (they replaced the one long sector list)
         self.dtabs = QTabWidget(); gc.layout().addWidget(self.dtabs)
         self.dviews = {}
@@ -73,6 +73,7 @@ class OverviewPage(QWidget):
                       "su": StatCard("Supply: Coalition / Enemy", theme.GREEN), "ad": StatCard("Air defence: Coalition / Enemy", theme.RED)}
         for i, k in enumerate(("fr", "od", "su", "ad")):
             g.addWidget(self.cards[k], i // 2, i % 2)
+        self.today = StatCard("Today's tasking", theme.BLUE); right.addWidget(self.today)               # v0.41.152: what the day holds for you
         self.warn_card = card(); right.addWidget(self.warn_card)                # v0.41.148: warnings (a base about to fall, the counter-force), hidden when there are none
         wh = QLabel("WARNINGS"); wh.setObjectName("small"); self.warn_card.layout().addWidget(wh)
         self.warn = QLabel(); self.warn.setWordWrap(True); self.warn.setStyleSheet(f"color:{theme.AMBER};"); self.warn_card.layout().addWidget(self.warn)
@@ -155,6 +156,9 @@ class OverviewPage(QWidget):
         ab, ae = round(100 * posture.iads_pct(st, "blue")), round(100 * posture.iads_pct(st, "red"))
         self.cards["ad"].set(f"{ab}% / {ae}%", "\n".join(x for x in (("Coalition: " + posture.transit_text(st, "blue")) if posture.transit_text(st, "blue") else "",
                                                                       (en + ": " + posture.transit_text(st, "red")) if posture.transit_text(st, "red") else "") if x) or "sites operational")
+        sess = self.get_session()
+        if sess is not None and sess.state is st:
+            self.today.set(*overview_detail.tasking(sess))
         ws = posture.fall_warnings(st)
         self.warn.setText("\n".join(ws)); self.warn_card.setVisible(bool(ws))
         self._fill_details(st)
@@ -361,6 +365,7 @@ class MissionsPage(QWidget):
 class ForcesPage(QWidget):
     def __init__(self):
         super().__init__(); lay = QVBoxLayout(self)
+        self.air_line = QLabel(); self.air_line.setObjectName("small"); self.air_line.setWordWrap(True); lay.addWidget(self.air_line)         # v0.41.152: aircraft counts, a detail line (jets no longer decide the war)
         self.tabs = QTabWidget(); lay.addWidget(self.tabs)
         self.sq = _tbl(["Squadron", "Aircraft", "Service", "Based at", "Serviceable", "Readiness"])
         self.ea = _tbl(["Enemy air wing", "Types", "Serviceable", "Strength"])
@@ -377,6 +382,12 @@ class ForcesPage(QWidget):
         b.setStyleSheet(f"QProgressBar::chunk {{ background: {color}; border-radius:5px; }}"); return b
 
     def refresh(self, st):
+        from .. import war as _war
+        t = _war.totals(st); en = story.enemy(st)
+        self.air_line.setText(f"Aircraft serviceable (a detail, jets no longer decide the war): Coalition {t['fa']} of {t['fz']}, {en} {t['ea']} of {t['ez']}.")
+        self.tabs.setTabText(4, f"{en} air wings"); self.tabs.setTabText(5, f"{en} assets")
+        self.gw.setHorizontalHeaderLabels(["Sector", f"{en} force", "Coalition force", f"{en} forward garrison", "Coalition forward garrison"])
+        self.ea.setHorizontalHeaderLabels([f"{en} air wing", "Types", "Serviceable", "Strength"]); self.as_.setHorizontalHeaderLabels([f"{en} asset", "Type", "Depth", "Condition"])
         sqs = list(st.squadrons.values()); self.sq.setRowCount(len(sqs))
         for i, s in enumerate(sqs):
             sp = AIRCRAFT[s.aircraft]
@@ -519,6 +530,7 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.p_over, self.p_miss, self.p_forces, self.p_pilot, self.p_log = OverviewPage(), MissionsPage(self), ForcesPage(), PilotPage(), LogPage()
         self.p_over.get_settings = lambda: self.session.settings
+        self.p_over.get_session = lambda: self.session
         grp = QButtonGroup(self); grp.setExclusive(True)
         for i, (name, page) in enumerate((("Overview", self.p_over), ("Missions", self.p_miss), ("Forces", self.p_forces), ("Pilot", self.p_pilot), ("War log", self.p_log))):
             b = QPushButton(name); b.setObjectName("nav"); b.setCheckable(True); grp.addButton(b, i); sl.addWidget(b)

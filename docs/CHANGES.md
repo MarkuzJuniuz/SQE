@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.152, Campaign Revamp Stage C4: polish
+
+XO (2026-10-27, "go, medium C4"; nothing else to change from his skip-day runs yet). Display only; the war is untouched.
+- Overview: a "Today's tasking" card: the day's packages by kind (CAS, strike, SEAD / DEAD, counter-air, patrol, fleet defence), how many your squadron can fly, or why it has none (`overview_detail.tasking`). There is no "supply is low" stand-down: the planner has no such rule, so the card only reports what the planner gave. After the war it says so.
+- Forces page: the aircraft counts of both sides are one quiet detail line at the top ("jets no longer decide the war"); the ground-war, air-wing and asset tabs and columns use the opponent's label (Russia / CRA) and "Coalition" instead of Enemy / Friendly.
+- Smoke: new `check_73_tasking_line`.
+
+
 ## v0.41.151, Window size and position, and a developer shortcut
 
 XO (2026-10-27, "fit on a 1080p screen with some margins, centered ... remember size and position, with reset"). Light change in `gui/app.py`.
