@@ -439,7 +439,7 @@ def check_08_sead_dead_split_suppression(c):
     assert any(a.variant == "GARRISON" for a in st.assets.values()), "no SAM garrisons at level 3"
     assert all(a.tier <= st.front + 2 for p in ds.packages() if p.objective.type.value not in ("BARCAP", "FLEET_DEFENSE")
                for a in [st.assets[p.objective.target_id]]), "a locked-tier target was offered on day 1"
-    dp = next(p for p in ds.packages() if p.objective.type == ObjectiveType.DEAD and ds.flyable(p))
+    dp = next(p for p in ds.packages() if p.objective.type == ObjectiveType.DEAD and any(f.role == Role.STRIKE for f in ds.flyable(p)) and any(f.role == Role.SEAD for f in p.flights))      # v0.41.145: one the player can fly the DEAD flight of
     roles = {f.role for f in dp.flights if not f.tag}
     assert Role.SEAD in roles and Role.STRIKE in roles, f"a DEAD package needs a SEAD flight and a DEAD flight, got {roles}"
     dres = ds.fly(dp.number, next(f for f in ds.flyable(dp) if f.role == Role.STRIKE).id)
@@ -879,7 +879,7 @@ def check_19_ground_war(c):
     for _lv in (1, 2, 3):
         s.new(f"Ground {_lv}", "F-16C", _lv, seed=11)
         _st = s.state; _g = _st.ground
-        assert _gr.active(_st) and _gr.n_zones(_g) == (14 if _lv == 3 else 9) and len(_gr.summary(_st)) >= 5
+        assert _gr.active(_st) and _gr.n_zones(_g) == (13 if _lv == 3 else 8) and len(_gr.summary(_st)) >= 5
         assert all(f"armor_{i + 1}" in _st.assets for i in range(_gr.n_zones(_g))) and _st.blue_assets, "columns and Blue facilities exist"
         # same seed, same fighting
         _a, _b = _CS.from_dict(_st.to_dict()), _CS.from_dict(_st.to_dict())
@@ -931,7 +931,7 @@ def check_20_format_save_loads_with(c):
     # a full night of the war on a live campaign
     for _ in range(3):
         s.state.status = "ACTIVE"; _war.WarSimulator(_gd(2), _rnd.Random(9)).end_day(s.state)
-    print("[ground] 9 / 9 / 14 sectors per level, repeatable fighting, round trip, falls / retaking / defeat, damped column losses, Blue losses, format-4 migration, nightly resolution")
+    print("[ground] 8 / 8 / 13 sectors per level, repeatable fighting, round trip, falls / retaking / defeat, damped column losses, Blue losses, format-4 migration, nightly resolution")
     c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_st',)})
 
 
@@ -4224,7 +4224,7 @@ def check_63_the_push(c):
     s = fresh_session(2, 5); st = s.state; g = st.ground
     assert g["v"] == _gr.GROUND_V == 3 and [r["id"] for r in g["rbases"]] == ["ab_sukhumi", "ab_gudauta", "ab_sochi"] and g["victory_ids"] == ["ab_sochi"] and g["counter_id"] == "ab_sochi"
     s3 = fresh_session(3, 5); g3 = s3.state.ground
-    assert _gr.n_zones(g3) == 14 and g3["victory_ids"] == ["ab_sochi", "ab_krymsk"] and g3["counter_id"] == "ab_krymsk" and len(g3["rbases"]) == 5
+    assert _gr.n_zones(g3) == 13 and g3["victory_ids"] == ["ab_sochi", "ab_krymsk"] and g3["counter_id"] == "ab_krymsk" and len(g3["rbases"]) == 5
     s1 = fresh_session(1, 5); assert s1.state.ground["counter_id"] in ("", None) or not s1.state.ground["counter_id"]
     # a red base falls when we hold the sector on our side of it and red is gone from there; the clock holds our next attack; retaking it when red returns
     zi = g["rbases"][0]["zone"]
@@ -4248,7 +4248,7 @@ def check_63_the_push(c):
         for dd in range(12):
             _gr.resolve_day(sg, _gd(lv), _rnd.Random(dd)); sg.day += 1
         assert all(0 <= v <= _gr.MAX_FORCE for v in sg.ground["red"] + sg.ground["blue"])
-    print("[the push] 9 / 9 / 14 sectors, red bases fall and are retaken, takeover clocks, counter-force and victory ids by level, v1 saves refused, nightly fights in range")
+    print("[the push] 8 / 8 / 13 sectors, red bases fall and are retaken, takeover clocks, counter-force and victory ids by level, v1 saves refused, nightly fights in range")
 
 
 def check_64_supply_loop(c):
