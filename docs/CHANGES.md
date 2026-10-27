@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.160, Pilot Influence
+
+XO (2026-10-27: "a setting for the dynamic player flight effects... it's just for giving red a chance to win on L3"). New setting `pilot_influence`, on by default, in New Campaign and Settings > Campaign (like Weather and AI Skill: an app setting, copied into the campaign when it is planned and simulated).
+- On: as before, red surges while your squadron stands down (v0.41.155).
+- Off: `ground.surge` stays at 1.0, so your flying makes no difference to the red surge. Measured first: with the surge off and no flying at all, L2 still wins and L3 does not lose (6 seeds, 60 days), so the war cannot be lost by standing down. The air tempo (what your flown sorties do to the odds of background jobs) is unchanged.
+- Smoke: new `check_79_pilot_influence`.
+
+
 ## v0.41.159, The carrier moves along the campaign
 
 XO (2026-10-27, "100 sounds about right... fully dynamic"). The fleet no longer sits at a fixed point 160 km west of Batumi.

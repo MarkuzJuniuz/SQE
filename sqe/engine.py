@@ -121,6 +121,8 @@ class Session:
         ground.ensure_forward_garrisons(st)             # v0.41.102: a forward garrison for each side in every sector (older saves too)
         sams.ensure_blue_sams(st)                       # v0.41.62: blue's three air-defence sites at every airfield (older saves: from the field's `defense`)
         ground.snap_roads(st)                           # once, as soon as a road scan exists: columns and supply sites sit on a road
+        if st.ground is not None:
+            st.ground["pilot_influence"] = bool(getattr(self.settings, "pilot_influence", True))
         from . import carrier_pos
         _cv = carrier_pos.update(st)                    # v0.41.159: the fleet repositions once a day, along the front and clear of the red airfields
         if _cv:
@@ -843,6 +845,8 @@ class Session:
     def _sim(self, rng=None):
         """The war simulator."""
         from .war import WarSimulator
+        if self.state is not None and self.state.ground is not None:
+            self.state.ground["pilot_influence"] = bool(getattr(self.settings, "pilot_influence", True))      # v0.41.160: the app setting rides in the campaign for the sim
         return WarSimulator(self.d, rng)
 
     def skip_day(self) -> dict:
