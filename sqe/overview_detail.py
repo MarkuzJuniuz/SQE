@@ -2,19 +2,23 @@
 Like posture.py it only READS the state."""
 from __future__ import annotations
 import re
-from . import ground, posture, tempo, narrative, sams
+from . import ground, posture, tempo, narrative, sams, story
 from .models import AssetKind
 
 EVENT_RE = re.compile(r"HAS FALLEN|has been retaken|back in our hands|counter-force|VICTORY|DEFEAT|The last objective|takeover", re.I)
 
 
 def situation(state) -> dict:
-    """The Situation panel: the Background (full text), the Intent, and the Now line pinned under them. The theatre's text still has one text for
-    every level (Stage C3 writes the per-level stories): its last paragraph, when it is the commander's intent, is shown as the Intent."""
-    paras = [p.strip() for p in narrative.BACKGROUND.split("\n\n") if p.strip()]
-    intent = ""
-    if len(paras) > 1 and "intent" in paras[-1].lower():
-        intent = paras.pop()
+    """The Situation panel: the Background (full text), the Intent, and the Now line pinned under them. They come from the level's story (`story.py`);
+    a theatre without stories shows its one background, whose last paragraph (when it is the commander's intent) becomes the Intent."""
+    st_ = story.get(state)
+    if st_.get("background"):
+        paras, intent = list(st_["background"]), st_.get("intent", "")
+    else:
+        paras = [p.strip() for p in narrative.BACKGROUND.split("\n\n") if p.strip()]
+        intent = ""
+        if len(paras) > 1 and "intent" in paras[-1].lower():
+            intent = paras.pop()
     label, now = posture.posture(state)
     return {"background": paras, "intent": intent, "label": label, "now": now}
 
@@ -71,7 +75,7 @@ def supply_rows(state) -> list:
         return []
     g, out = state.ground, []
     prev = g.get("sup_h", {})
-    for side, label, pool in (("blue", "Coalition", getattr(state, "blue_assets", {})), ("red", "Enemy", state.assets)):
+    for side, label, pool in (("blue", "Coalition", getattr(state, "blue_assets", {})), ("red", story.enemy(state), state.assets)):
         rate = ground.supply(state, side) / ground.SUPPLY_REPAIR_DAYS
         for a in sorted(pool.values(), key=lambda x: x.name):
             if a.kind not in ground.SUPPLY_KINDS:
@@ -97,7 +101,7 @@ def air_defence_rows(state) -> list:
     for a in sorted(state.assets.values(), key=lambda x: x.name):
         if a.kind in (AssetKind.SAM, AssetKind.EWR):
             st_ = "destroyed" if a.destroyed else ("radars blinded today" if getattr(a, "suppressed", False) else "operational")
-            out.append(("Enemy", a.name, a.variant or a.kind.value, round(100 * a.health), st_))
+            out.append((story.enemy(state), a.name, a.variant or a.kind.value, round(100 * a.health), st_))
     for a in sorted((getattr(state, "blue_sams", None) or {}).values(), key=lambda x: x.name):
         out.append(("Coalition", a.name, a.variant or "SAM", round(100 * a.health), "destroyed" if a.destroyed else "operational"))
     return out
@@ -113,7 +117,7 @@ def orders_rows(state) -> list:
         out.append(("Coalition", f"{kind} battery from {o.get('from_name', '?')} to {b.name if b else o.get('to')}, due day {o['due']} ({_when(state, o)})"))
     for o in rec.get("red_orders", []):
         to, fr = state.assets.get(o.get("to")), state.assets.get(o.get("from"))
-        out.append(("Enemy", f"battery from {fr.name if fr else o.get('from')} to {to.name if to else o.get('to')}, due day {o['due']} ({_when(state, o)})"))
+        out.append((story.enemy(state), f"battery from {fr.name if fr else o.get('from')} to {to.name if to else o.get('to')}, due day {o['due']} ({_when(state, o)})"))
     return out
 
 

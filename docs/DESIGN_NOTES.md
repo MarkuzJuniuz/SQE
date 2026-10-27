@@ -219,6 +219,8 @@ _verified v0.41.144, 2026-10-27 (written from the code; smoke `check_64_supply_l
 - **Situation panel and detail tabs (v0.41.149):** `sqe/overview_detail.py` (`situation`, `ground_rows`, `ground_notes`, `history`, `supply_rows`, `air_defence_rows`, `orders_rows`, `tempo_lines`); `gui/app.py` `OverviewPage` draws them (`_fill_details`, `_set_situation`; the open / closed state is `AppSettings.situation_open`). Front history is read from `state.log` (no extra state).
 - **Scramble undo (v0.41.149):** `Session.fly` stores `pending["undo"]` (plan, raid record, log length, taken before the emergency is applied) when an emergency came with the sortie; `Session._restore_undo` runs in `abort()` and at the top of `fly()`, so a cancelled or replaced sortie offers the scramble again. The GUI's "Discard it and build a new one" calls `abort()` before asking `emergency_for`.
 
+- **Stories (v0.41.150):** `sqe/story.py` reads `theatres.active()["stories"][level]` (enemy label, background, intent, `now` per posture label, `beats`). `posture.posture()` takes its Now line from it (the LINES in posture.py are the fallback); `overview_detail.situation` takes Background and Intent from it. War-log beats are added by `story.beat(state, key, base=...)` in `ground._check_red_bases` (fall_<id>, retake), `check_falls` (fallen_blue, back_blue), `_counter_arrives`, `_update_win`, `war.update_status` (lose) and `scenario` (open). Once `state.status` is not ACTIVE: no warnings, and the Missions page shows the ending instead of the tasking order.
+
 ## 12. The carrier raid setpiece (v0.41.105 to v0.41.109)
 _verified v0.41.109, 2026-10-22 (read from the code; smoke `check_31z`, `31za`, `31zb`, `31zc`; not yet flown by XO)_
 

@@ -7,7 +7,7 @@ Every word threshold and unit below is a judgment call (no public figure exists 
 they can be tuned from XO's flown tests.
 """
 from __future__ import annotations
-from . import ground
+from . import ground, story
 from .models import AssetKind
 
 POINTS_PER_BATTALION = 10.0       # judgment call: a sector's strength runs 0..100, so a full sector is ten battalions (XO 2026-10-24 gave "scale 10 for L3")
@@ -132,18 +132,18 @@ def _warnings(state) -> list:
 
 
 def fall_warnings(state) -> list:
-    return [t for _, t in _warnings(state)] if _active(state) else []
+    return [t for _, t in _warnings(state)] if _active(state) and state.status == "ACTIVE" else []          # v0.41.150: none once the war is over
 
 
 def posture(state) -> tuple:
     """-> (label, text). The label is one of LABELS, or an ending (Ceasefire / Insurgency broken / Defeat)."""
     if state.status == "VICTORY":
         lab = ENDINGS.get(int(state.level), "Ceasefire")
-        return lab, LINES[lab]
+        return lab, story.now_line(state, lab, LINES[lab])
     if state.status == "DEFEAT":
-        return "Defeat", LINES["Defeat"]
+        return "Defeat", story.now_line(state, "Defeat", LINES["Defeat"])
     if not _active(state):
-        return "Holding", LINES["Holding"]
+        return "Holding", story.now_line(state, "Holding", LINES["Holding"])
     g = state.ground
     kinds = {k for k, _ in _warnings(state)}
     nxt = objective(state)
@@ -159,12 +159,12 @@ def posture(state) -> tuple:
         lab = "Offensive"
     else:
         lab = "Holding"
-    return lab, LINES[lab]
+    return lab, story.now_line(state, lab, LINES[lab])
 
 
 def supply_lines(state) -> list:
     e, f = ground.supply(state, "red"), ground.supply(state, "blue")
-    return [f"Coalition supply: {round(100 * f)}% ({supply_word(f)})", f"Enemy supply: {round(100 * e)}% ({supply_word(e)})"]
+    return [f"Coalition supply: {round(100 * f)}% ({supply_word(f)})", f"{story.enemy(state)} supply: {round(100 * e)}% ({supply_word(e)})"]
 
 
 def _orders(state, key: str) -> list:
@@ -190,7 +190,7 @@ def transit_text(state, side: str) -> str:
 
 def air_defence_lines(state) -> list:
     out = []
-    for side, label in (("blue", "Coalition"), ("red", "Enemy")):
+    for side, label in (("blue", "Coalition"), ("red", story.enemy(state))):
         s = f"{label} air defence: {round(100 * iads_pct(state, side))}% of sites operational"
         t = transit_text(state, side)
         out.append(s + (f"; {t}" if t else ""))
@@ -203,7 +203,8 @@ def odds_line(state) -> str:
         return "No Coalition ground force is in contact."
     def bn(n):
         return f"{n} battalion{'s' if n != 1 else ''}" if n >= 1 else "under a battalion"
-    return f"{o['sector']}: Coalition {bn(o['bn_blue'])} against the enemy's {bn(o['bn_red'])} ({o['word']})"
+    en = story.enemy(state)
+    return f"{o['sector']}: Coalition {bn(o['bn_blue'])} against {'the enemy' if en == 'Enemy' else en}'s {bn(o['bn_red'])} ({o['word']})"
 
 
 def front_lines(state) -> list:
