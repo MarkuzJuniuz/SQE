@@ -37,10 +37,12 @@ RETURN_MIN_DAYS = 2
 BLUE_REPAIR = 0.10
 # v0.41.67: SAM orders by need (XO 2026-10-21: "SAMs can be ordered by both sides should the need arise"; "move first, build if nothing to spare").
 # A destroyed blue site is in need. The least-threatened field that has a standing site of the same kind (health at or above BLUE_FULL_DEF) sends it;
-# it arrives ORDER_TRANSIT_DAYS later (faster than the REBUILD_MIN_DAYS of a new build), and the field it left is rebuilt by the usual rule. When no
+# it arrives transit_days(supply) later (faster than the REBUILD_MIN_DAYS of a new build), and the field it left is rebuilt by the usual rule. When no
 # field has one to spare, the usual rebuild (3 days, supply) is the only way. Doctrine: JP 3-01 defended asset list (the most threatened, most valuable
-# asset first); no public figures for transit time or odds, so every number here is a judgment call.
-ORDER_TRANSIT_DAYS = 2
+# asset first); no public figures for transit time, so every number here is a judgment call.
+# v0.41.140 (XO 2026-10-27, Campaign Revamp): the orders are a fixed feature (no settings), for both sides at every level. A battery moves by air, so
+# it arrives in 1 to 3 days by the sender's supply (1 at 100%, 3 at the 55% floor), and there is no chance roll any more: supply sets the time.
+ORDER_TRANSIT_DAYS = 2                    # the middle value; the real time comes from transit_days
 ORDER_MIN_GAP_NM = 20.0       # the sender must sit this much further from the nearest enemy fighter field than the receiver
 ORDERS_PER_NIGHT = 1
 
@@ -285,6 +287,13 @@ def rebuild(state, d, rng: random.Random) -> list:
     return lines
 
 
+def transit_days(sup: float) -> int:
+    """v0.41.140 (XO 2026-10-27): days a SAM battery takes to reach the site it was ordered to. Batteries move by air (fuel and lift decide), so 1 day at
+    full supply, 3 at the 55% floor (ground.SUPPLY_FLOOR), 2 between. Judgment call: no public figure; the shape follows XO's "1 to 3 days by supply"."""
+    f = max(0.0, min(1.0, (1.0 - sup) / 0.45))
+    return 1 + int(round(2 * f))
+
+
 def _red_ordered(state) -> set:
     return {o["to"] for o in _rec(state).get("red_orders", [])}
 
@@ -292,7 +301,7 @@ def _red_ordered(state) -> set:
 def red_orders(state, d, rng: random.Random) -> list:
     """v0.41.68: red's SAM orders, the same rule as blue's (blue_orders). First the batteries that arrive today; then, at most ORDERS_PER_NIGHT, a new
     order for the shallowest-tier destroyed site that is in play (tier up to front + 2, its field still standing, value first among equals): a standing
-    site of the same kind in a DEEPER tier (health BLUE_FULL_DEF or more) sends its battery; the chance is red's supply. The sender's site goes down
+    site of the same kind in a DEEPER tier (health BLUE_FULL_DEF or more) sends its battery; it arrives in transit_days(red's supply) days. The sender's site goes down
     (the usual rebuild takes it when its tier comes into play), the receiver is not rebuilt meanwhile. No spare, no order: sams.rebuild is the only
     way. Returns log lines."""
     from . import ground
@@ -315,10 +324,10 @@ def red_orders(state, d, rng: random.Random) -> list:
     for a in needy[:ORDERS_PER_NIGHT]:
         donors = sorted((x for x in sites if x.variant == a.variant and not x.destroyed and x.health >= BLUE_FULL_DEF and x.tier > a.tier
                          and x.id not in busy and not _parent_down(state, x)), key=lambda x: (-x.tier, x.id))
-        if not donors or rng.random() >= sup:
+        if not donors:
             continue
         src = donors[0]
-        orders.append({"to": a.id, "from": src.id, "due": state.day + ORDER_TRANSIT_DAYS, "health": round(src.health, 2)})
+        orders.append({"to": a.id, "from": src.id, "due": state.day + transit_days(sup), "health": round(src.health, 2)})
         src.health = 0.0
         vacated.append(src.id)
         lines.append(f"The enemy ordered a {a.variant} battery from {src.name} to replace the loss at {a.name}")
@@ -439,8 +448,7 @@ def _ordered(state) -> set:
 
 def blue_orders(state, d, rng: random.Random) -> list:
     """v0.41.67: blue's SAM orders. First the batteries that arrive today; then, at most ORDERS_PER_NIGHT, a new order for the most threatened
-    field with a destroyed site: the least-threatened field with a standing site of that kind sends it (needs the supply to move it: the chance is
-    blue's supply). The sender's site goes down and is rebuilt by the usual rule, and a site emptied by an order is not itself in need. Returns log lines."""
+    field with a destroyed site: the least-threatened field with a standing site of that kind sends it (it arrives in transit_days(blue's supply) days). The sender's site goes down and is rebuilt by the usual rule, and a site emptied by an order is not itself in need. Returns log lines."""
     from . import ground
     track(state)
     ensure_blue_sams(state)
@@ -468,11 +476,11 @@ def blue_orders(state, d, rng: random.Random) -> list:
         donors = sorted(((_threat_nm(state, f), f.id, f) for f in fields if f.id != b.id
                          and blue_sites(state, f)[k].health >= BLUE_FULL_DEF and blue_site_id(f.id, k) not in busy
                          and _threat_nm(state, f) >= thr + ORDER_MIN_GAP_NM), key=lambda t: (-t[0], t[1]))
-        if not donors or rng.random() >= sup:
+        if not donors:
             continue
         f = donors[0][2]
         src = blue_sites(state, f)[k]
-        orders.append({"key": k, "to": b.id, "from": f.id, "from_name": f.name, "due": state.day + ORDER_TRANSIT_DAYS, "health": round(src.health, 2)})
+        orders.append({"key": k, "to": b.id, "from": f.id, "from_name": f.name, "due": state.day + transit_days(sup), "health": round(src.health, 2)})
         src.health = 0.0
         vacated.append(src.id)
         _sync(state, f)
