@@ -1,6 +1,18 @@
 # CHANGES.md
 
 
+## v0.41.155, Red zerg, part 1: red can win (ground and war model)
+
+XO (2026-10-27, "red needs the zerg for a chance ... high effort, go in your order"). This is the war-model half; the mass raids you fly come next (part 2). A NEW CAMPAIGN is needed to see it (the ground state gains `flown_day`; older saves load but start the clock at day 1).
+- Idle surge (`ground.surge`): the longer your squadron has not flown, the harder red pushes. After 2 idle days it adds `red_surge` (L1 0, L2 0.03, L3 0.08) per day, up to x3 (`SURGE_CAP` 2.0). It multiplies red's reinforcements, attack chance and raid rate. Any flown sortie resets it (`tempo.record` stamps `flown_day`). Judgment call, tuned on sims.
+- Mass raids (L3 raid rate 2.0 a day, was 0.7; size 6 to 8, was 4; L2 rate and size unchanged): a raid of more than 4 is settled aircraft by aircraft (some stopped, the rest bomb), the odds of stopping it fall with its size, and damage counts the first four aircraft in full and the rest at half (`raids.eff`). Small raids are settled exactly as before. Massed-wave days (`raid_wave`: L2 10%, L3 25%) make that day's raids 1.5 times bigger (`raids.wave_mult`).
+- Red strikes on our depots and fuel in the background (`red_supply_strikes`: L1 1, L2 2, L3 4 a skip day). Our supply now really drops (sims: 0.57 to 0.85 on L3), which lowers our reinforcements and our blue AI strikes (the AI CAS chance is now multiplied by our supply).
+- Rear feed (`red_rear_feed`: L2 0.02, L3 0.05): each night red's rear sectors move that share of their strength one sector forward, scaled by supply, never below 15.
+- Fix: a trickle of reinforcements in our last sector kept a field from ever falling. A field now falls (and a red base is taken) when the holder faces a force under 30% of its own (the no-hunt ratio), for both sides.
+- Sims (4 seeds, 130 day cap): L3 idle = DEFEAT on days 78 to 103 (all four); flying every 3rd day wins at day 87; flying daily wins at day 72 (before: 66 to 73). L2 idle still wins at about day 31 (the war is too short for the surge to bite; gentle on purpose). L1 unchanged.
+- Smoke: new `check_74_red_zerg`.
+
+
 ## v0.41.154, L1 gets museum-piece SAMs; Ctrl+Space only in AI-Test
 
 XO (2026-10-27, "the more SAMs the merrier ... medium"). Story premise: a shadow sponsor keeps the insurgents properly funded and armed, so their old SAMs work at full health.

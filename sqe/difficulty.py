@@ -55,6 +55,11 @@ class Difficulty:
     sam_rebuild: float = 0.04            # nightly chance (x Red supply) that a destroyed SAM site is replaced (sams.py)
     sam_scoot: float = 0.30              # nightly chance that a hurt mobile SAM site moves
     raid_size: tuple = (2, 2)            # Su-24M in a raid: drawn between these (never more than the wing has)
+    raid_wave: float = 0.0               # v0.41.155 (red zerg): chance that a day is a massed-wave day: that day's raids are `raid_wave_mult` times bigger (judgment call)
+    raid_wave_mult: float = 1.5
+    red_supply_strikes: int = 1          # v0.41.155: background strikes red tries a skip day on our depots and fuel (ground.supply_round; judgment call)
+    red_surge: float = 0.0               # v0.41.155: red's push, attacks and raids grow by this much for each day beyond SURGE_GRACE_DAYS since your squadron last flew (ground.surge; judgment call)
+    red_rear_feed: float = 0.0           # v0.41.155: share of a rear sector's strength that moves one sector forward each night, scaled by red supply (ground.resolve_day; judgment call)
     raid_mix: tuple = (0.0, 0.0, 0.0)    # share of the raids that go for (a supply site, a field's garrison, friendly troops in a contested sector) instead of the airfield itself
     blue_garrison_size: float = 1.0      # scales the vehicle count of a friendly airfield garrison
     sead_valve: int = 3                  # failed SEAD days on one site before the combined SEAD + DEAD package is offered again (war.py)
@@ -80,7 +85,7 @@ LEVELS: dict[int, Difficulty] = {
                   friendly_replenish=0.08, enemy_replenish=0.05, asset_repair=0.04, sam_repair=0.06,
                   friendly_scale=1.0, enemy_cap_per_air=0.15, counterstrike=0.30, bomber_wing=11, bomber_escort_wing=8, bomber_policy="desperate", bomber_safe_p=0.06,
                   forward_sams=("SA-8", "SA-8"), garrison_chance=0.6, garrison_size=0.8, react_chance=0.35, react_ratio=(0.6, 1.1),
-                  ground_red=(70, 55, 15, 0, 0), ground_blue=(0, 15, 60, 70, 50), red_attack=0.45, red_reinf=5.6, blue_reinf=7.0, raid_rate=0.4, raid_arm=1.0, arm_cap=2, arm_cap_free=8, raid_surprise=0.35, emerg_chance=0.09, raid_size=(2, 4), sam_rebuild=0.04, sam_scoot=0.30,
+                  ground_red=(70, 55, 15, 0, 0), ground_blue=(0, 15, 60, 70, 50), red_attack=0.45, red_reinf=5.6, blue_reinf=7.0, raid_rate=0.4, red_surge=0.03, raid_wave=0.10, raid_wave_mult=1.5, red_supply_strikes=2, red_rear_feed=0.02, raid_arm=1.0, arm_cap=2, arm_cap_free=8, raid_surprise=0.35, emerg_chance=0.09, raid_size=(2, 4), sam_rebuild=0.04, sam_scoot=0.30,
                   raid_mix=(0.20, 0.15, 0.25), blue_garrison_size=0.8, blue_rebuild=0.15, sam_retreat=0.8, sead_valve=3, air_retreat=0.8),
     3: Difficulty(3, "Level 3 - Near-Peer", "Modern fighters, long-range SAMs and an integrated air-defence network. "
                   "Every sortie is contested and attrition bites.",
@@ -90,7 +95,7 @@ LEVELS: dict[int, Difficulty] = {
                   friendly_replenish=0.06, enemy_replenish=0.07, asset_repair=0.05, sam_repair=0.08,
                   friendly_scale=0.85, enemy_cap_per_air=0.20, counterstrike=0.55, bomber_wing=30, bomber_escort_wing=16, bomber_policy="normal", bomber_safe_p=0.12,
                   forward_sams=("SA-15", "SA-8", "SA-19"), garrison_chance=1.0, garrison_size=1.0, react_chance=0.55, react_ratio=(1.0, 1.6),
-                  ground_red=(90, 80, 35, 0, 0), ground_blue=(0, 10, 45, 55, 40), red_attack=0.8, red_reinf=7.0, blue_reinf=7.0, raid_rate=0.7, raid_arm=1.0, raid_surprise=0.45, emerg_chance=0.21, raid_size=(4, 4), sam_rebuild=0.07, sam_scoot=0.50,
+                  ground_red=(90, 80, 35, 0, 0), ground_blue=(0, 10, 45, 55, 40), red_attack=0.8, red_reinf=7.0, blue_reinf=7.0, raid_rate=2.0, red_surge=0.08, raid_wave=0.25, raid_wave_mult=1.5, red_supply_strikes=4, red_rear_feed=0.05, raid_arm=1.0, raid_surprise=0.45, emerg_chance=0.21, raid_size=(6, 8), sam_rebuild=0.07, sam_scoot=0.50,
                   raid_mix=(0.25, 0.20, 0.25), blue_garrison_size=0.7, blue_rebuild=0.10, sam_retreat=1.0, sead_valve=2, air_retreat=1.0),
 }
 

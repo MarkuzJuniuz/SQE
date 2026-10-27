@@ -375,16 +375,22 @@ class WarSimulator:
                 up_, psq_ = blue_barcap.patrol_up(state, rng, fb_, (wa_.x, wa_.y))
                 if up_:
                     strength += blue_barcap.PATROL_RAID_WEIGHT * ROLE_WEIGHT[Role.CAP]
-        p = strength / (strength + 2.5 + 2.0 * d.iads + 0.4 * esc)
+        nb_ = int(pkg.extra.get("bombers", 4)) if pkg.extra else 4
+        p = strength / (strength + 2.5 + 2.0 * d.iads + 0.4 * esc + 0.25 * max(0, nb_ - 4))     # v0.41.155 (red zerg): a mass raid is harder to stop (judgment call)
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
         lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'} (odds {p:.0%})"]
         if bw is not None and ok:
-            k = bw.lose(pkg.extra.get("raider"), rng.randint(2, 4) if pkg.extra.get("land") else max(1, round(pkg.extra.get("bombers", 4) * rng.uniform(0.4, 0.8))))
+            k = bw.lose(pkg.extra.get("raider"), (rng.randint(2, 4) if nb_ <= 4 else max(2, round(nb_ * rng.uniform(0.4, 0.7)))) if pkg.extra.get("land") else max(1, round(pkg.extra.get("bombers", 4) * rng.uniform(0.4, 0.8))))
             lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
         elif bw is not None and pkg.extra.get("land"):
-            lines += raids_hit(state, pkg.objective.target_id, bw, rng, None, pkg.objective.aim, pkg.extra.get("raider"))
+            if nb_ <= 4:
+                lines += raids_hit(state, pkg.objective.target_id, bw, rng, None, pkg.objective.aim, pkg.extra.get("raider"))
+            else:                                                                  # v0.41.155: a mass raid that got through puts most of its bombers on target
+                thr_ = max(2, round(nb_ * rng.uniform(0.4, 0.8)))
+                bw.lose(pkg.extra.get("raider"), max(1, thr_ // 3))
+                lines += raids_hit(state, pkg.objective.target_id, None, rng, thr_, pkg.objective.aim, pkg.extra.get("raider"))
         elif bw is not None:
             bw.lose(pkg.extra.get("raider"), 1)
             from . import carrier_hit
