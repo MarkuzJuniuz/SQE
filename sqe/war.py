@@ -65,6 +65,23 @@ def cas_cover(state, a) -> tuple:
     return cov, [x for x in cov if x.variant not in ESCORTABLE]
 
 
+FOLLOW_MAX_SITES = 2    # v0.41.158: a strike / CAS target under at most this many SA-11 / SA-10 sites goes in behind their SEAD; under more it stays DEAD-first (judgment call: two is what one gate sequence and one day's package limit can carry)
+FOLLOW_GAP_MIN = 10     # a follow job starts this long after the SEAD / standoff package of its site (same gap as the Close DEAD stage)
+
+
+def after_sites(obj) -> list:
+    """The long-reach SAM sites a follow job (a STRIKE / CAS with `after` set) waits on."""
+    return [x for x in (getattr(obj, "after", "") or "").split(",") if x]
+
+
+def follow_split(cov: list) -> tuple:
+    """(the follow sites, the escortable ones) for a target's covering SAMs: the sites a SEAD / standoff package must hit first, and the SA-2/3/6 a
+    HARM escort handles in the package itself. Follow sites are [] when there are none or more than FOLLOW_MAX_SITES (the target stays blocked)."""
+    hard = [x for x in cov if x.variant not in ESCORTABLE]
+    soft = [x for x in cov if x.variant in ESCORTABLE]
+    return (hard if len(hard) <= FOLLOW_MAX_SITES else []), soft
+
+
 NM = 1852.0
 
 
@@ -123,10 +140,19 @@ class ObjectivePlanner:
                 pr = a.value * a.health / (1 + 0.5 * len(defenders))
                 cov = covering_sams(state, a)
                 o_ = Objective("", ObjectiveType.STRIKE, a.id, pr, f"Strike {a.name}")
+                fol, soft = follow_split(cov)
                 if a.kind in (AssetKind.FUEL, AssetKind.DEPOT) and cov and all(x.variant in ESCORTABLE for x in cov):
-                    # v0.41.144: a supply site under live SA-2/3/6 goes out with a HARM escort (as CAS does, v0.41.20); an SA-11 / SA-10 still needs a DEAD first
+                    # v0.41.144: a supply site under live SA-2/3/6 goes out with a HARM escort (as CAS does, v0.41.20)
                     o_.aim = "SEAD"
                     o_.description += " (with a SEAD escort)"
+                    cov = []
+                elif fol and (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or not soft):
+                    # v0.41.158: under one or two SA-11 / SA-10 sites it goes in behind their SEAD (offered only when the day's plan has that SEAD / standoff job, see _add_followers)
+                    o_.after = ",".join(x.id for x in fol)
+                    o_.description += f", behind the SEAD on {' and '.join(x.name for x in fol)}"
+                    if soft:
+                        o_.aim = "SEAD"                                  # and the SA-2/3/6 round it get the HARM escort, as above
+                        o_.description += " (with a SEAD escort)"
                     cov = []
                 cand.append((pr, o_, self._blockers(state, a) + cov, locked))
             elif a.kind == AssetKind.SAM and a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10:      # short-range SAMs are CAS's problem, not a SEAD/DEAD package's
@@ -159,9 +185,14 @@ class ObjectivePlanner:
                 # v0.41.20: no needless banzai. A CAS target under a live SA-2/3/6 goes out only with a SEAD escort (aim "SEAD": packages.py
                 # requires the HARM flight or postpones the job); under a live SA-11 / SA-10 it is blocked and that site gets a DEAD first.
                 cov, hard = cas_cover(state, a)
-                bl = bl + [x for x in hard if x not in bl]
+                fol, soft = follow_split(cov)
+                if not fol:
+                    bl = bl + [x for x in hard if x not in bl]
                 o_ = Objective("", ObjectiveType.CAS, a.id, pr, what)
-                if cov and not hard:
+                if fol:                                              # v0.41.158: under one or two SA-11 / SA-10 sites: behind their SEAD (offered only when the day's plan has it)
+                    o_.after = ",".join(x.id for x in fol)
+                    o_.description += f", behind the SEAD on {' and '.join(x.name for x in fol)}"
+                if soft and (not hard or fol):
                     o_.aim = "SEAD"
                     o_.description += " (with a SEAD escort)"
                 cand.append((pr, o_, bl, locked))
@@ -171,14 +202,17 @@ class ObjectivePlanner:
                     pr = a.value * 1.2 * (w.available / max(1, w.authorized))
                     cand.append((pr, Objective("", ObjectiveType.COUNTER_AIR, a.id, pr, f"Counter-air at {a.name} ({w.available} aircraft)"),
                                  self._blockers(state, a) + covering_sams(state, a), locked))
-        blocking = {x.id for c in cand for x in c[2]}                  # sites that stand in front of something else
-        pool = []
+        blocking = {x.id for c in cand for x in c[2]} | {sid for c in cand for sid in after_sites(c[1])}      # sites that stand in front of something else
+        pool, follows = [], []
+        fsites = {sid for c in cand if not c[2] and not c[3] for sid in after_sites(c[1])}
         for pr, o, bl, locked in cand:
             if bl or locked:
                 continue
             if o.type == ObjectiveType.DEAD and o.target_id in blocking:
                 pr *= 1.8                                              # clear the belt first
-            pool.append((pr, o))
+                if o.target_id in fsites:
+                    pr *= 1.4                                          # v0.41.158: and a site with a strike or CAS job waiting behind its SEAD (judgment call)
+            (follows if o.after else pool).append((pr, o))
         fleet = next((b for b in state.bases.values() if b.kind.value == "CARRIER"), None)
         if fleet and self.d is not None and self.d.bomber_policy != "none":
             from . import bombers                                    # v0.41.105: the bomber wing is a trump card: safe window or desperation, never fewer than 4, 2 escorts each
@@ -209,12 +243,39 @@ class ObjectivePlanner:
             if (s, o) not in picked and per.get(o.type, 0) < cap:
                 picked.append((s, o)); per[o.type] = per.get(o.type, 0) + 1
         picked.sort(key=lambda t: t[0], reverse=True)
+        picked = self._add_followers(state, picked, sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in follows), key=lambda t: t[0], reverse=True), limit, cap)
         picked = self._stage_dead(state, picked, limit)
         out = []
         for i, (_, o) in enumerate(picked, 1):
             o.id = f"obj-d{state.day}-{i}"
             out.append(o)
         return out
+
+    def _add_followers(self, state, picked: list, follows: list, limit: int, cap: int) -> list:
+        """v0.41.158: a STRIKE / CAS under one or two SA-11 / SA-10 sites goes in behind their SEAD: it is offered only when today's list already has
+        the DEAD job of every one of those sites (which _stage_dead turns into a SEAD / standoff package), so those sites have their radars busy
+        (or blind) when it arrives. It takes a free slot, or the place of a lower-ranked job of a type that has another one. Judgment call: the
+        public SEAD sources describe suppression as temporary and partial, so the job is held (turned back) when the SEAD verdict fails."""
+        valve = int(getattr(self.d, 'sead_valve', SEAD_FAIL_VALVE))
+        dead_sites = {o.target_id for _, o in picked if o.type == ObjectiveType.DEAD and not o.aim}
+        for s, o in follows:
+            sites = after_sites(o)
+            if not sites or any(sid not in dead_sites or sid not in state.assets
+                                or not (long_range_site(state, state.assets[sid]) or sead_fail(state, sid) < valve) for sid in sites):
+                continue
+            if sum(1 for _, p in picked if p.type == o.type) >= cap:
+                continue
+            if len(picked) >= limit:
+                per = {}
+                for _, p in picked:
+                    per[p.type] = per.get(p.type, 0) + 1
+                weak = [(t, p) for t, p in picked if p.type != ObjectiveType.DEAD and not p.after and per[p.type] > 1 and t < s]
+                if not weak:
+                    continue
+                picked.remove(min(weak, key=lambda t: t[0]))
+            picked.append((s, o))
+        picked.sort(key=lambda t: t[0], reverse=True)
+        return picked
 
     def _stage_dead(self, state, picked: list, limit: int) -> list:
         """SEAD first. Each SEAD / DEAD job becomes two packages for the same site: a SEAD package that blinds the radars, and a DEAD package that
@@ -277,9 +338,9 @@ def note_sead(state, site: str, blinded: bool) -> None:
     ff[site] = 0 if blinded else int(ff.get(site, 0)) + 1
 
 
-def sead_stage_in_plan(state, site: str) -> bool:
-    """Is there a SEAD package (not scrubbed) for this site in today's plan?"""
-    return any(p["objective"].get("type") == "DEAD" and p["objective"].get("aim") == "SEAD" and p["objective"].get("target_id") == site
+def sead_stage_in_plan(state, site: str, aims: tuple = ("SEAD",)) -> bool:
+    """Is there a SEAD package (not scrubbed) for this site in today's plan? (`aims`: which kinds count; a follow job accepts a standoff package too.)"""
+    return any(p["objective"].get("type") == "DEAD" and p["objective"].get("aim") in aims and p["objective"].get("target_id") == site
                and not (p.get("extra") or {}).get("scrub") for p in (state.plan or []))
 
 
@@ -290,6 +351,20 @@ def blinded_today(state, site: str) -> bool:
     if a is None:
         return False
     return bool(a.suppressed or (((state.raids or {}).get("sead") or {}).get(site) and sead_stage_in_plan(state, site)))
+
+
+def follow_ready(state, obj) -> bool:
+    """v0.41.158: may a follow job (STRIKE / CAS with `after`) go in? Every site it waits on is gone, already blinded, or has a SEAD / standoff
+    package in today's plan whose cast verdict is success (the dice are cast at planning, so the sim, the briefing and the mission builder agree)."""
+    return all(site_blind_today(state, sid) for sid in after_sites(obj))
+
+
+def site_blind_today(state, sid: str) -> bool:
+    """For a follow job: is this long-reach site gone, already blinded, or hit today by a SEAD / standoff package with a verdict of success?"""
+    a = state.assets.get(sid)
+    if a is None or a.destroyed or a.suppressed:
+        return True
+    return bool(((state.raids or {}).get("sead") or {}).get(sid) and sead_stage_in_plan(state, sid, SEAD_AIMS))
 
 
 class WarSimulator:
@@ -308,6 +383,10 @@ class WarSimulator:
             if t.kind == AssetKind.SAM and not t.destroyed:
                 sam += 1.5 * t.health
                 sam += 0.8 * sum(g.health for g in state.assets.values() if g.guards == t.id)     # a dug-in garrison makes the site harder
+            for sid in after_sites(obj):                  # v0.41.158: a follow job: the SA-11 / SA-10 sites it waits on are blinded (follow_ready), but still there
+                x_ = state.assets.get(sid)
+                if x_ is not None and not x_.destroyed and sid not in t.defended_by:
+                    sam += 1.5 * x_.health * 0.4
             sam *= 0.6 + 0.8 * self.d.iads
             if has_sead:
                 sam *= 0.5
@@ -486,6 +565,10 @@ class WarSimulator:
             state.note(f"Package #{pkg.number} ({pkg.objective.description}) was scrubbed: {pkg.extra['scrub']}")
             return {"success": False, "scrubbed": True, "odds": 0.0, "lines": [f"{pkg.objective.description}: SCRUBBED - {pkg.extra['scrub']}"],
                     "objective": pkg.objective.description, "roll": {"success": False}}
+        if pkg.objective.after and not follow_ready(state, pkg.objective) and not (force and force.get("blinded")):
+            line = f"{pkg.objective.description}: HELD - the SAM radars were not suppressed, so the flight turned back"
+            state.note(line)
+            return {"success": False, "held": True, "odds": 0.0, "lines": [line], "objective": pkg.objective.description, "roll": {"success": False, "held": True}}
         if pkg.objective.type == ObjectiveType.FLEET_DEFENSE:
             return self._resolve_raid(state, pkg, force)
         if pkg.objective.type == ObjectiveType.COUNTER_AIR and pkg.objective.aim == "SWEEP":

@@ -91,9 +91,18 @@ class StrikeTasks:
         st, o = self.state, self.o
         pt = self._pt
         gate = None
-        if (not f.tag and package.objective.type == ObjectiveType.DEAD and package.objective.aim not in SEAD_AIMS and package.objective.target_id and tot_s is not None
-                and f.role in (Role.STRIKE, Role.TARCAP, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10
-                and (f.role == Role.STRIKE or stw is None)):               # a TARCAP / escort on its own station is already outside the threat
+        obj_ = package.objective
+        # v0.41.158: a STRIKE / CAS behind a SEAD (obj.after) gates on the long-reach site(s) it waits on, the way a Close DEAD gates on its target: the first of
+        # them whose radars are still up in this mission (the SEAD's verdict failed), else the first. The radars of the others are already out (_blind_sites).
+        fol_ = obj_.type in (ObjectiveType.STRIKE, ObjectiveType.CAS) and bool(obj_.after)
+        gsite_ = obj_.target_id
+        if fol_:
+            from .war import after_sites, site_blind_today
+            live_ = [x for x in after_sites(obj_) if x in self.state.assets and not self.state.assets[x].destroyed]
+            gsite_ = next((x for x in live_ if not site_blind_today(self.state, x)), live_[0] if live_ else "")
+        if (not f.tag and ((obj_.type == ObjectiveType.DEAD and obj_.aim not in SEAD_AIMS) or fol_) and gsite_ and tot_s is not None
+                and f.role in (Role.STRIKE, Role.CAS, Role.TARCAP, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10
+                and (f.role in (Role.STRIKE, Role.CAS) or stw is None)):               # a TARCAP / escort on its own station is already outside the threat
             # radar gate: the DEAD flight, and its escorts and sweeps, break off if the site's radars are still up when the DEAD flight commits
             added = [w.name for w in wps[first:]]
             n0_ = len(g.points) - len(added)                           # points before the first one added above (the start point)
@@ -110,12 +119,12 @@ class StrikeTasks:
                 to_ = len(g.points)
             leg_ = [(w.x, w.y) for w in wps if w.name in ("IP", "TGT")]
             also_ = [a_.id for a_, _ in self._cover_tors(package, leg_)]          # the route check: the Tors that cover the site or the run in
-            tga_ = st.assets.get(package.objective.target_id)
+            tga_ = st.assets.get(gsite_)
             um_ = tm.umbrella_site(st, tga_)
             gm_ = SA10_GATE_KM if (tga_ is not None and tga_.variant in tm.UMBRELLA_VARIANTS) else DEAD_GATE_KM
-            gate = {"t": tot_s - DEAD_GATE_BEFORE_TGT_S, "site": package.objective.target_id, "grp": g.name, "also": also_, "gm": gm_ * 1000,
+            gate = {"t": tot_s - DEAD_GATE_BEFORE_TGT_S, "site": gsite_, "grp": g.name, "also": also_, "gm": gm_ * 1000,
                     "ux": um_.x if um_ else None, "uz": um_.y if um_ else None, "um": SA10_GATE_KM * 1000 if um_ else None,
-                    "from": n0_ + max(0, ti_ - 1) + 1, "to": to_, "ai": ai_, "dead": f.role == Role.STRIKE, "you": bool(f.is_player), "pkg": package.id}
+                    "from": n0_ + max(0, ti_ - 1) + 1, "to": to_, "ai": ai_, "dead": f.role in (Role.STRIKE, Role.CAS), "you": bool(f.is_player), "pkg": package.id}
         return gate
 
     def _cas_tasks(self, wp, w, armor, tot_s):

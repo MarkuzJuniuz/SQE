@@ -1300,10 +1300,12 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                     out["lines"].append("Raid: you left before the raiders arrived; the defences stopped them")
             else:
                 out["lines"].append(f"Raid on {where}: stopped, no bombs fell")
+    follow_ = any((p_.get("objective") or {}).get("after") for p_ in (state.plan or []) if p_.get("id") == data.get("package"))      # v0.41.158: a strike / CAS behind a SEAD
     for ref in data.get("aborted", []) or []:
         a = state.assets.get(ref)
         if a is not None:
-            out["lines"].append(f"DEAD called off on {a.name}: its radars were still up when the strike flight reached the gate, so it turned back without attacking.")
+            out["lines"].append((f"Attack called off behind {a.name}" if follow_ else f"DEAD called off on {a.name}") +
+                                ": its radars were still up when the strike flight reached the gate, so it turned back without attacking.")
     # alert / scramble groups (v0.40.8): called, airborne, or stuck on the ground; and the build's settings, so test runs can be told apart
     hm_ = lambda t_: f"{int(t_) // 60:d} min" if t_ is not None else "-"
     for al in data.get("alerts", []) or []:
