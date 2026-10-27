@@ -4094,6 +4094,45 @@ def check_58_cas_column_stays_at_the_cas_point(c):
     print(f"[cas point] {_n58} AI CAS missions: the A-10s' target group is the package's own and sits within {_worst58:.0f} m of the CAS waypoint; moving columns creep at most {_adv58:.0f} m")
 
 
+def check_59_tarcap_circle_meets_the_barcap_circle(c):
+    # v0.41.138 (XO 2026-10-27, engagement circles): a TARCAP's engage circle meets the BARCAP circle of its mission (it used to leave a strip of up
+    # to 9 nm between them; where one circle cannot reach, SAM trim or the 35 nm cap, up to 4 nm is left in the full identity set, none in these cases), and the player-facing label of the base CAP is "BARCAP"
+    import inspect as _in59, math as _m59, random as _rn59
+    from sqe.fighter_stations import FighterStations as _FS59
+    from sqe import packages as _pk59
+    assert _pk59._TAG_TASK["BASECAP"] == "BARCAP", _pk59._TAG_TASK["BASECAP"]
+    _log59, _orig59 = [], _FS59.__dict__["_limit_engage"].__func__
+    def _wrap59(g, nm, until_s=None, zone=None):
+        _f = _in59.stack()[1].frame.f_locals.get("f")
+        if zone is not None and _f is not None:
+            _log59.append((_mk59[0], str(getattr(_f, "role", "")), getattr(_f, "tag", ""), zone))
+        return _orig59(g, nm, until_s, zone)
+    _mk59 = [""]
+    _FS59._limit_engage = staticmethod(_wrap59)
+    _n59, _worst59 = 0, -999.0
+    try:
+        _sn59 = fresh_session(2, 5)
+        for _ac59, _lv59, _sd59 in (("F-15C", 3, 3), ("F-14BU", 2, 9), ("FA-18C", 2, 11)):
+            _rn59.seed(f"tarcap59:{_ac59}:{_lv59}")
+            _sn59.new(f"Tc59{_ac59}{_lv59}", _ac59, _lv59, seed=_sd59); _sn59.ai_test = True
+            for _pk in [p_ for p_ in _sn59.packages() if _sn59.flyable(p_)][:10]:
+                _mk59[0] = f"{_ac59}/{_lv59}/{_pk.number}"
+                _sn59.fly(_pk.number, _sn59.flyable(_pk)[0].id)
+        for _mk in {e_[0] for e_ in _log59}:
+            _tc = [e_[3] for e_ in _log59 if e_[0] == _mk and "TARCAP" in e_[1]]
+            _bc = [e_[3] for e_ in _log59 if e_[0] == _mk and e_[2] in ("BASECAP", "CVCAP")]
+            for _t in _tc:
+                if not _bc:
+                    continue
+                _gap = min(_m59.hypot(_t[0] - b_[0], _t[1] - b_[1]) / 1852.0 - _t[2] - b_[2] for b_ in _bc)
+                assert _gap <= 1.0, ("the TARCAP circle meets the BARCAP circle", _mk, round(_gap, 1))
+                _worst59 = max(_worst59, _gap); _n59 += 1
+    finally:
+        _FS59._limit_engage = staticmethod(_orig59)
+    assert _n59 >= 6, f"enough TARCAP circles were checked: {_n59}"
+    print(f"[tarcap meets barcap] {_n59} TARCAP circles: the widest strip left to the nearest BARCAP circle is {_worst59:.1f} nm")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4191,6 +4230,7 @@ CHECKS = [
     check_56_barcap_intercepts_ai_only,
     check_57_pydcs_s_scattered_formation,
     check_58_cas_column_stays_at_the_cas_point,
+    check_59_tarcap_circle_meets_the_barcap_circle,
 ]
 
 
