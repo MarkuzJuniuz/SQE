@@ -1621,7 +1621,7 @@ def check_31l_red_arm(c):
     LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise = 1.0, 3.0, 0.0       # every day brings announced raids
     def _su24(st_, d_, rng_):                                         # always a field raid that Su-24Ms can reach
         for b_, a_, w_ in _rd.candidates(st_, "field"):
-            r_ = _rd._reach(st_, "field", *_rd.aim_xy(st_, a_, b_))
+            r_ = _rd.reach_for(st_, "field", *_rd.aim_xy(st_, a_, b_), d=d_)           # v0.41.142: the real pick (the nearest wing that can field the SEAD group)
             if r_ is not None and r_[2] == "Su_24M":
                 return b_, a_
         return None
