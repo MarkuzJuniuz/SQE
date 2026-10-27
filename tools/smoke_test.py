@@ -2970,8 +2970,13 @@ def check_37_with_you_on_sweep(c):
         _ds = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False)); _ds.new("Disperse", "F-16C", _lv, seed=1); _sd = _ds.state
         _tt = _thx.terrain()
         for w_ in _sd.enemy_air:
-            _c = _sl(_tt, _sd.assets[w_.base_asset_id].airport, w_.types) if _sd.assets[w_.base_asset_id].airport else None
-            assert _c is None or w_.authorized <= max(2, _c) or "Tu_22M3" in w_.types, (_sd.assets[w_.base_asset_id].name, w_.authorized, _c)
+            _ap = _sd.assets[w_.base_asset_id].airport
+            if not _ap or "Tu_22M3" in w_.types:
+                continue
+            # v0.41.142: the light jets and the heavy ones (Su-27, MiG-31, Su-24M, which need the bigger spots) each have their own count
+            _c = _sl(_tt, _ap, ["MiG_29A"]); _ch = _sl(_tt, _ap, ["Su_24M", "Su_27", "MiG_31"])
+            _nh = sum(q_.authorized for q_ in w_.sqns if q_.aircraft in ("Su_24M", "Su_27", "MiG_31"))
+            assert (_c is None or w_.authorized <= max(2, _c)) and (_ch is None or _nh <= max(2, _ch)), (_sd.assets[w_.base_asset_id].name, w_.authorized, _c, _nh, _ch)
         _use = {}
         for q_ in _sd.squadrons.values():
             b_ = _sd.bases[q_.base_id]
