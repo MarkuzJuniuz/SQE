@@ -4173,6 +4173,31 @@ def check_60_long_range_tarcap_stands_behind_the_short_range_escort(c):
     print(f"[stagger] {_moved} long-range stations moved behind and aside of a short-range station, {_same} left where they were")
 
 
+def check_61_l1_red_supply_floor(c):
+    # v0.41.141: red's supply never drops below 70% on Level 1 (cross-border resupply); L2 and L3 keep the 55% floor; blue is never floored this way
+    from sqe import ground as _g61
+    from sqe.models import AssetKind as _AK61
+    _sn61 = fresh_session(2, 5)
+    _out61 = {}
+    for _lv61 in (1, 2, 3):
+        _sn61.new(f"Sup61{_lv61}", "F-16C", _lv61, seed=4)
+        _st61 = _sn61.state
+        _full = _g61.supply(_st61, "red")
+        _any = next(iter(_st61.assets.values()))
+        _st61.assets["smoke_dep61"] = type(_any)("smoke_dep61", "Smoke depot", _AK61.DEPOT, _any.x, _any.y, 0.0, 6, [], None, "", 1)      # (L1 has no red depot yet: one destroyed one stands in)
+        for _a61 in _st61.assets.values():
+            if _a61.kind in (_AK61.FUEL, _AK61.DEPOT):
+                _a61.health = 0.0
+        _out61[_lv61] = (_full, _g61.supply(_st61, "red"))
+        for _a61 in getattr(_st61, "blue_assets", {}).values():
+            if _a61.kind in (_AK61.FUEL, _AK61.DEPOT):
+                _a61.health = 0.0
+        assert abs(_g61.supply(_st61, "blue") - _g61.SUPPLY_FLOOR) < 1e-9, ("blue keeps the 55% floor", _lv61, _g61.supply(_st61, "blue"))
+    assert abs(_out61[1][1] - 0.70) < 1e-9, _out61
+    assert abs(_out61[2][1] - 0.55) < 1e-9 and abs(_out61[3][1] - 0.55) < 1e-9, _out61
+    print(f"[l1 supply floor] red supply with every depot and fuel site gone: L1 {_out61[1][1]:.2f}, L2 {_out61[2][1]:.2f}, L3 {_out61[3][1]:.2f}")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4272,6 +4297,7 @@ CHECKS = [
     check_58_cas_column_stays_at_the_cas_point,
     check_59_tarcap_circle_meets_the_barcap_circle,
     check_60_long_range_tarcap_stands_behind_the_short_range_escort,
+    check_61_l1_red_supply_floor,
 ]
 
 

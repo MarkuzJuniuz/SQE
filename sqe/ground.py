@@ -30,6 +30,7 @@ DECISIVE, REPULSED = 1.8, 0.55
 RETREAT_SHARE = 0.6           # what a routed force saves by falling back
 FALL_LOSS = 0.3               # aircraft lost when a field falls and its squadrons leave
 SUPPLY_FLOOR, SUPPLY_NONE = 0.55, 0.85
+L1_RED_SUPPLY_FLOOR = 0.70    # v0.41.141 (XO 2026-10-27, Campaign Revamp): on Level 1 the insurgents are resupplied across the border by night, so their supply never drops below this however many depots die (judgment call; a toy-model run showed it does not change who wins). Levels 2 and 3 keep the 55% floor.
 
 
 def active(state) -> bool:
@@ -318,10 +319,12 @@ def facility_health(assets, kinds):
 
 
 def supply(state, side: str) -> float:
-    """0.55 (every depot and fuel site gone) .. 1.0 (all intact). A side with no such sites at all runs at 0.85."""
+    """0.55 (every depot and fuel site gone) .. 1.0 (all intact). A side with no such sites at all runs at 0.85. Red on Level 1 never falls below
+    L1_RED_SUPPLY_FLOOR (0.70): the insurgents are fed across the border."""
     pool = state.assets.values() if side == "red" else getattr(state, "blue_assets", {}).values()
     h = facility_health(pool, (AssetKind.FUEL, AssetKind.DEPOT))
-    return SUPPLY_NONE if h is None else SUPPLY_FLOOR + (1.0 - SUPPLY_FLOOR) * h
+    v = SUPPLY_NONE if h is None else SUPPLY_FLOOR + (1.0 - SUPPLY_FLOOR) * h
+    return max(v, L1_RED_SUPPLY_FLOOR) if (side == "red" and getattr(state, "level", 2) == 1) else v
 
 
 def _control(r: float, b: float) -> float:
