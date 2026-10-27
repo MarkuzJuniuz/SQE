@@ -1,4 +1,5 @@
 from __future__ import annotations
+import html
 import sys
 import traceback
 from pathlib import Path
@@ -8,9 +9,9 @@ from PySide6.QtGui import QAction, QColor, QFont
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
                                QHeaderView, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QProgressBar,
                                QPushButton, QCheckBox, QScrollArea, QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser,
-                               QVBoxLayout, QWidget)
+                               QSizePolicy, QVBoxLayout, QWidget)
 
-from .. import APP_NAME, CAMPAIGN_EXT, __version__, narrative
+from .. import APP_NAME, CAMPAIGN_EXT, __version__, narrative, overview_detail, posture
 from ..aircraft import AIRCRAFT
 from ..briefing import threat_lines
 from ..timeofday import is_night
@@ -49,16 +50,23 @@ class OverviewPage(QWidget):
         super().__init__()
         root = QHBoxLayout(self); root.setSpacing(16)
         left = QVBoxLayout(); root.addLayout(left, 5)
-        c = card(); left.addWidget(c)
-        h = QLabel("THE CONFLICT"); h.setObjectName("small"); c.layout().addWidget(h)
+        c = card(); left.addWidget(c, 1)
+        hr = QHBoxLayout(); c.layout().addLayout(hr)
+        h = QLabel("SITUATION"); h.setObjectName("small"); hr.addWidget(h); hr.addStretch(1)
+        self.sit_btn = QPushButton("Hide"); self.sit_btn.setFlat(True); self.sit_btn.setCursor(Qt.PointingHandCursor); hr.addWidget(self.sit_btn)
+        self.sit_btn.clicked.connect(self._toggle_situation)
         self.op = QLabel(narrative.TITLE); self.op.setObjectName("title"); c.layout().addWidget(self.op)
         self.phase = QLabel(); self.phase.setObjectName("h2"); self.phase.setStyleSheet(f"color:{theme.AMBER};"); self.phase.setWordWrap(True)
         c.layout().addWidget(self.phase)
-        self.txt = QTextBrowser(); self.txt.setFrameShape(QFrame.NoFrame); self.txt.setStyleSheet("background:transparent;border:none;")
+        self.txt = QTextBrowser(); self.txt.setFrameShape(QFrame.NoFrame); self.txt.setStyleSheet("background:transparent;border:none;")   # v0.41.149: Background and Intent, scrollable, collapsible
         c.layout().addWidget(self.txt, 1)
-        gc = card(); left.addWidget(gc)                                   # v0.41.130: the ground-war / patrol lines moved here from above the map
-        gh = QLabel("GROUND WAR AND PATROLS"); gh.setObjectName("small"); gc.layout().addWidget(gh)
-        self.gsum = QLabel(); self.gsum.setWordWrap(True); self.gsum.setObjectName("small"); gc.layout().addWidget(self.gsum)
+        self.now = QLabel(); self.now.setWordWrap(True); self.now.setStyleSheet("font-size:14px;"); c.layout().addWidget(self.now)              # the Now line stays pinned at the bottom, open or closed
+        self._sit_open = True; self._st = None; self.get_settings = lambda: None; self._left = left; self._sit_card = c
+        gc = card(); left.addWidget(gc, 1)                                 # v0.41.149: the detail tabs (they replaced the one long sector list)
+        self.dtabs = QTabWidget(); gc.layout().addWidget(self.dtabs)
+        self.dviews = {}
+        for key, title in (("ground", "Ground"), ("supply", "Supply"), ("ad", "Air defence"), ("air", "Air")):
+            v = QTextBrowser(); v.setFrameShape(QFrame.NoFrame); v.setStyleSheet("background:transparent;border:none;"); self.dviews[key] = v; self.dtabs.addTab(v, title)
         right = QVBoxLayout(); root.addLayout(right, 6)
         g = QGridLayout(); g.setSpacing(12); right.addLayout(g)
         self.cards = {"fr": StatCard("The front", theme.AMBER), "od": StatCard("Ground odds", theme.BLUE),
@@ -75,12 +83,61 @@ class OverviewPage(QWidget):
         self.map = MapView(); mc.layout().addWidget(self.map, 1)
         self.rings.toggled.connect(self.map.set_rings)
 
+    def _set_situation(self, on: bool):
+        self._sit_open = on
+        self.txt.setVisible(on); self.sit_btn.setText("Hide" if on else "Show")
+        self._sit_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred if on else QSizePolicy.Maximum)
+        self._left.setStretch(0, 3 if on else 0); self._left.setStretch(1, 2 if on else 1)          # a closed Situation panel gives the room to the detail tabs
+
+    def _toggle_situation(self):
+        self._set_situation(not self._sit_open)
+        stg = self.get_settings()
+        if stg is not None:
+            stg.situation_open = self._sit_open
+            try:
+                stg.save()
+            except OSError:
+                pass
+
+    @staticmethod
+    def _table(headers, rows, note: str = "") -> str:
+        th = "".join(f"<th align='left' style='color:#8fa3b8;padding-right:14px'>{html.escape(h)}</th>" for h in headers)
+        tr = "".join("<tr>" + "".join(f"<td style='padding-right:14px'>{html.escape(str(c))}</td>" for c in r) + "</tr>" for r in rows)
+        return (f"<p style='color:#b9c6d6'>{html.escape(note)}</p>" if note else "") + f"<table cellspacing='2'><tr>{th}</tr>{tr}</table>"
+
+    def _fill_details(self, st):
+        od, T = overview_detail, self._table
+        notes = od.ground_notes(st)
+        hist = od.history(st)
+        self.dviews["ground"].setHtml(
+            "<p>" + "<br>".join(html.escape(n) for n in notes) + "</p>"
+            + T(("Sector", "Enemy (bn)", "Coalition (bn)", ""), od.ground_rows(st))
+            + ("<p><b>Front history</b><br>" + "<br>".join(html.escape(x) for x in hist) + "</p>" if hist else "<p style='color:#8fa3b8'>The front has not moved yet.</p>"))
+        self.dviews["supply"].setHtml(
+            "<p style='color:#b9c6d6'>" + "<br>".join(html.escape(x) for x in posture.supply_lines(st)) + "<br>A site mends in about 6 days at full supply (longer when supply is low), "
+            "and not on a night after it was struck.</p>" + T(("Side", "Site", "Health", "State"), [(a, b, f"{c}%", d) for a, b, c, d in od.supply_rows(st)]))
+        orders = od.orders_rows(st)
+        self.dviews["ad"].setHtml(
+            "<p style='color:#b9c6d6'>" + "<br>".join(html.escape(x) for x in posture.air_defence_lines(st)) + "</p>"
+            + ("<p><b>SAM batteries in transit</b><br>" + "<br>".join(html.escape(f"{a}: {b}") for a, b in orders) + "</p>" if orders else "")
+            + T(("Side", "Site", "Type", "Health", "State"), [(a, b, c, f"{d}%", e) for a, b, c, d, e in od.air_defence_rows(st)]))
+        from .. import blue_barcap as _bb, bombers as _bomb
+        self.dviews["air"].setHtml(
+            "<p><b>Air tempo</b> (what your flown sorties do to the odds of the same kind of job done in the background; capped at +-20, fades 3% a night)<br>"
+            + "<br>".join(html.escape(x) for x in od.tempo_lines(st)) + "</p><p>"
+            + "<br>".join(html.escape(x) for x in (_bb.status_lines(st) + _bomb.status_lines(st))).replace("   ", "&nbsp;&nbsp;&nbsp;") + "</p>")
+
     def refresh(self, st):
         from .. import posture
         n, name, text = narrative.phase(st)
         self.phase.setText(f"{name.upper()}")                                   # v0.41.148: the posture label (it replaced the three phases)
-        self.txt.setHtml(f"<p style='font-size:14px;line-height:150%'>{text}</p><hr>" +
-                         "".join(f"<p style='color:#b9c6d6;line-height:150%'>{p}</p>" for p in narrative.BACKGROUND.split("\n\n")))
+        self._st = st
+        sit = overview_detail.situation(st)
+        self.now.setText(f"<b>Now:</b> {html.escape(sit['now'])}")
+        self.txt.setHtml("".join(f"<p style='color:#b9c6d6;line-height:150%'>{html.escape(p)}</p>" for p in sit["background"]) +
+                         (f"<hr><p style='line-height:150%'><b>Intent.</b> {html.escape(sit['intent'])}</p>" if sit["intent"] else ""))
+        stg = self.get_settings()
+        self._set_situation(True if stg is None else bool(getattr(stg, "situation_open", True)))
         if posture._active(st):
             k, tot = posture.stage(st)
             nxt = posture.objective(st)
@@ -98,9 +155,7 @@ class OverviewPage(QWidget):
                                                                       ("Enemy: " + posture.transit_text(st, "red")) if posture.transit_text(st, "red") else "") if x) or "sites operational")
         ws = posture.fall_warnings(st)
         self.warn.setText("\n".join(ws)); self.warn_card.setVisible(bool(ws))
-        from .. import ground as _g
-        from .. import blue_barcap as _bb, bombers as _bomb
-        self.gsum.setText("\n".join((_g.summary(st) if _g.active(st) else []) + _bb.status_lines(st) + _bomb.status_lines(st)))
+        self._fill_details(st)
         self.map.set_state(st)
 
 
@@ -436,6 +491,7 @@ class MainWindow(QMainWindow):
         sub = QLabel("Squadron Campaign Engine"); sub.setObjectName("small"); sl.addWidget(sub); sl.addSpacing(18)
         self.stack = QStackedWidget()
         self.p_over, self.p_miss, self.p_forces, self.p_pilot, self.p_log = OverviewPage(), MissionsPage(self), ForcesPage(), PilotPage(), LogPage()
+        self.p_over.get_settings = lambda: self.session.settings
         grp = QButtonGroup(self); grp.setExclusive(True)
         for i, (name, page) in enumerate((("Overview", self.p_over), ("Missions", self.p_miss), ("Forces", self.p_forces), ("Pilot", self.p_pilot), ("War log", self.p_log))):
             b = QPushButton(name); b.setObjectName("nav"); b.setCheckable(True); grp.addButton(b, i); sl.addWidget(b)
@@ -560,6 +616,8 @@ class MainWindow(QMainWindow):
         if sess.state.pending and QMessageBox.question(self, "Sortie pending",
                 "A sortie is already built and waiting for results. Discard it and build a new one?") != QMessageBox.Yes:
             return
+        if sess.state.pending:
+            sess.abort()                                    # v0.41.149: discarding gives back what the sortie used, a scramble included (so it is offered again)
         if sess.settings.problems():
             QMessageBox.warning(self, "Settings", "\n".join(sess.settings.problems())); self.settings(); return
         scramble = False

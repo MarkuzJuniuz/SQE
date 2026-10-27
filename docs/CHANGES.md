@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.149, Campaign Revamp Stage C2: Situation panel, detail tabs, scramble fix
+
+XO (2026-10-27, "go C2, high"). New `sqe/overview_detail.py` (data only; the GUI draws it).
+- SITUATION PANEL (Overview, top left): the full Background text, scrollable, and the Intent, in a panel with a Hide / Show button; the posture label and one "Now" line (the posture's line; at the end of the campaign the ending text) stay pinned at the bottom open or closed. It starts open and remembers the last state (new setting `situation_open`). The text is still the one per-theatre background (its last paragraph, the commander's intent, is shown as the Intent); the per-level stories are Stage C3.
+- DETAIL TABS (Overview, bottom left; they replaced the long sector list): Ground (takeover clock, each base, a row per sector with battalions each side, front history from the war log: falls, retakes, counter-force), Supply (every fuel farm and depot of both sides with health and state: intact / struck since last night, no repair tonight / repairing, days to full / destroyed, days to rebuild; captured sites say so), Air defence (IADS per side, SAM batteries in transit with the days, every SAM site and radar with health and state), Air (the four air-tempo values and the BARCAP cover lines).
+- SCRAMBLE NOTE FIX (XO's report): cancelling a sortie that came with a scramble and pressing Fly again no longer forgets the scramble. Building the sortie had used the emergency up (its package was added to the day's plan, the raid record marked, and your own package maybe postponed) and the cancel never gave that back. The pending sortie now keeps a copy of the plan, the raid record and the log length from before; Cancel (and Discard and rebuild) restores them, so the scramble popup comes up again.
+- Smoke: new `check_69_scramble_undo` (it fails without the fix) and `check_70_overview_detail`.
+
+
 ## v0.41.148, Campaign Revamp Stage C1: the Overview figures
 
 XO (2026-10-27, "please go C1, high"). New `sqe/posture.py` holds every Overview figure; the Overview and the briefing both read it. The war itself is unchanged.

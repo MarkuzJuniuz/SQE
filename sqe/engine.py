@@ -1,5 +1,6 @@
 """Session: the single API the GUI (and the smoke test) talk to. No Qt in here."""
 from __future__ import annotations
+import copy
 import json
 import math
 import random
@@ -721,7 +722,9 @@ class Session:
         if problems:
             raise RuntimeError("; ".join(problems))
         pkg = next(p for p in self.packages() if p.number == package_number)
+        self._restore_undo()                                                                  # v0.41.149: a sortie being replaced (cancelled) hands back what its emergency changed
         ev = self.emergency_for(package_number, flight_id)
+        undo = ({"plan": copy.deepcopy(st.plan), "raids": copy.deepcopy(st.raids or {}), "log_len": len(st.log)} if ev else None)
         lead_extras = []
         hidden_in = None                                                                      # v0.41.121: the package you were tasked with, when you take the scramble instead
         if ev:
@@ -797,6 +800,8 @@ class Session:
                       "objective": pkg.objective.description, "objective_type": pkg.objective.type.value, "counts": res.counts, "warnings": res.warnings, "seed": res.seed,
                       "package_dict": pkg.to_dict(), "merged": res.manifest.merged,
                       "ruins": {str(r["number"]): pre[r["id"]] for r in res.manifest.ruins if r["id"] in pre}}
+        if undo is not None:
+            st.pending["undo"] = undo
         self.last_build = res
         # a stale results file from a previous sortie must never be mistaken for this one
         try:
@@ -847,11 +852,24 @@ class Session:
         """Manually Submit: any file the user picks, checked against the pending sortie."""
         return self.poll(path)
 
+    def _restore_undo(self) -> None:
+        """v0.41.149 (XO 2026-10-27): you cancelled a sortie that came with an emergency (a scramble) and pressed Fly again: the scramble was gone. Building the sortie
+        had used the emergency up (it added its package to the day's plan, marked the cap, and may have postponed your own package); the pending sortie keeps a copy
+        of the plan, the raid record and the log length from before, and cancelling or rebuilding puts them back so the scramble is offered again."""
+        st = self.state
+        u = (st.pending or {}).pop("undo", None)
+        if not u:
+            return
+        st.plan = u["plan"]
+        st.raids = u["raids"]
+        del st.log[u["log_len"]:]
+
     def abort(self) -> None:
         """Throw the built sortie away. The sortie counter goes back too (v0.41.0): it feeds the mission seed, so flying the same package again
         rebuilds the same layout (sites, spawns, patrols), and two test runs of one package can be compared."""
         if self.state.pending is not None and self.state.sortie_counter > 0:
             self.state.sortie_counter -= 1
+        self._restore_undo()
         self.state.pending = None
         self.save()
 
