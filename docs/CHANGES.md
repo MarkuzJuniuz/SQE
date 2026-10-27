@@ -1,6 +1,19 @@
 # CHANGES.md
 
 
+## v0.41.142, Campaign Revamp Stage A3: red's air roster by type, not by dice
+
+XO (2026-10-24 to 10-27, the Revamp plan). Red now starts each level with a fixed ROSTER of jets per type, placed by rules, instead of a total split over fields with a random type per field. New module `sqe/redroster.py`.
+- Numbers (judgment calls, no public source; the plan's zerg sizes): Level 1 44 jets (14 fighters: MiG-21Bis 6, MiG-23MLD 5, MiG-29A 3; Su-25 20; Su-24M 10). Level 2 128 field jets (MiG-31 7, MiG-29S 12, MiG-29A 22, MiG-23MLD 11, Su-25 52, Su-24M 24) plus a Mozdok Tu-22M3 wing of 11 and an Su-27 escort squadron of 8. Level 3 256 field jets (MiG-31 14, Su-27 24, MiG-29S 28, MiG-29A 20, Su-25 110, Su-24M 60) plus 30 Tu-22M3 and 16 Su-27 escorts. The old totals were 20 / 90 / 150.
+- Where they go: in proportion to the theatre's `wing_weight`, capped by what each field can park (the DCS parking count) and, for the heavy types (MiG-31, Su-27, Su-24M), by its heavy spots. Su-24M leans to the deeper fields (weight x (tier - 1)). Every field keeps at least four fighters, and nobody gets a lone jet of a type (it joins the biggest block of that type).
+- Long-range depth gradient (XO 2026-10-24): of a field's MiG-31 + Su-27 jets, 75% are MiG-31 at fringe fields (tier 2), 50% in the middle (tier 3), about 15% deep (tier 4), so the Su-27 feels prized and a deep MiG-31 pair is the "spice". L3 check: MiG-31 share 0.71 at the fringe, 0.53 in the middle, and a pair at Maykop deep (a lone jet is topped up to a pair from the biggest block).
+- MiG-31 is now a proper red type: R-33 / R-40 loadout (the heavy-missile list gained them, it used to carry R-60 only), quality 0.67 and intercept reach 230 nm (judgment calls), and it counts as a long-range red jet in the red air picture.
+- Raids on blue airfields: with Su-24M spread thin, the nearest red wing could hold only 2 of them, too few for the SEAD group a covered target needs, and the planner then dropped the raid (the Level 2 raid-rate check saw none in 60 days). `raids.reach_for` now takes the level and passes over a wing that cannot field that group for the nearest one that can.
+- Mozdok bomber wing and escorts are bigger on paper; raids are still capped (`MAX_RAID` 12 on L3, 4 on L2), so bigger raids and the 1:2 escorts wait for the mass-raid step. The Tu-22M3 wing of 30 is more than the 14 Tu-22M3 parking slots at Mozdok; accepted (XO: nobody launches them all).
+- Level 1 has no MiG-31, Su-27 or MiG-25; MiG-21Bis is Level 1 only.
+- Smoke: new `check_62_red_roster` (per-level totals and fighter counts, bomber wing sizes, parking and heavy caps, two or more fighters per field, no lone jets, no MiG-25, MiG-31 only on L2/L3, the gradient falls with depth and is above zero deep, MiG-31 loadout). `check_01` now also counts the standby pair as HAVCAP / base CAP cover (the new roster changed the merged mix and the check had ignored it).
+- A 40-day no-player air sim: Level 1 and 2 still end in VICTORY on day 41, Level 3 stays ACTIVE with red's air not bleeding (the same as before: the sim has no player sorties).
+
 ## v0.41.141, Campaign Revamp Stage A2: the Level 1 insurgents never drop below 70% supply
 
 XO (2026-10-27): on L1 the opponent is resupplied across the border by night, so killing its depots cannot starve it completely. `ground.supply("red")` on Level 1 now has a floor of 70% (`L1_RED_SUPPLY_FLOOR`; Levels 2 and 3 keep 55%; blue is unchanged on every level). It reaches everything that reads red's supply: the daily ground fight and reinforcements, SAM rebuilds and SAM-order transit time (v0.41.140). Judgment call: a toy-model run (2026-10-27 notes) showed the floor does not change who wins on L1, it only slows the grind. Today L1 has no red depot or fuel site at all (red supply is a flat 85% there), so nothing changes in play until Stage B adds the depots; the rule is in place for them.

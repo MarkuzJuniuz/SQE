@@ -149,14 +149,14 @@ def check_01_package_merging_fold_same(c):
     _mz = lua.loads(z.read("mission").decode())
     _tags = {f.callsign for f in pk.flights if f.tag}
     import re as _re
-    _tags |= set(_re.findall(r'\["comment"\]="support relief ([^"]+)"', z.read("mission").decode()))     # v0.41.78: the chain of relief sorties covers the rest of the time
+    _tags |= set(_re.findall(r'\["comment"\]="support (?:relief|replacement) ([^"]+)"', z.read("mission").decode()))     # v0.41.78: the chain of relief sorties covers the rest of the time; v0.41.79: and the standby pair (v0.41.142: the new red roster changed the merged mix and exposed that the check ignored the standby)
     _stops = []
     for _c in _mz["mission"]["coalition"].values():
         for _cn in _c["country"].values():
             for _g in _cn.get("plane", {}).get("group", {}).values():
                 if _g["name"] in _tags:
                     _stops += [t_["params"]["stopCondition"]["time"] for t_ in _g["route"]["points"][2]["task"]["params"]["tasks"].values() if t_["params"].get("stopCondition")]
-    assert _tags and _stops and max(_stops) >= max(m["rtb_s"] for m in res.merged) + 300 - 1, ("HAVCAP / base CAP (with their reliefs) outlast the merged packages", _stops)
+    assert _tags and _stops and max(_stops) >= max(m["rtb_s"] for m in res.merged) + 300 - 1, ("HAVCAP / base CAP (with their reliefs) outlast the merged packages", _stops, [m["rtb_s"] for m in res.merged])
     print(f"[merge] #{pk.number} {pk.objective.type.value} + {[(m['number'], m['type']) for m in res.merged]}: {res.counts['groups']} groups / {res.counts['units']} units")
     # every AI ground-attack flight stays on its job: no air-to-air on the way in, home when the air-to-ground load is gone, self-defence after the attack
     from sqe.mission_builder import A2G_WEAPONS as _A2GW
@@ -4198,6 +4198,52 @@ def check_61_l1_red_supply_floor(c):
     print(f"[l1 supply floor] red supply with every depot and fuel site gone: L1 {_out61[1][1]:.2f}, L2 {_out61[2][1]:.2f}, L3 {_out61[3][1]:.2f}")
 
 
+def check_62_red_roster(c):
+    # v0.41.142 (Campaign Revamp Stage A3): red's starting air order of battle comes from the level's roster (redroster.py): the numbers, no MiG-25, the MiG-31
+    # on Levels 2 and 3 only, the depth gradient of the long-range jets, nothing over what a field can park, a fighter pair at every field, the Mozdok wings
+    from sqe import redroster as _rr62, theatres as _th62
+    from sqe.loadouts import ENEMY_FIGHTERS as _EF62, enemy_cap_loadout as _ecl62
+    from sqe.scenario import _slots as _sl62
+    _sn62 = fresh_session(2, 5)
+    _want62 = {1: (44, 14), 2: (128, 52), 3: (256, 86)}
+    _th = _th62.use("caucasus"); _terr = _th62.terrain()
+    for _lv62 in (1, 2, 3):
+        for _sd62 in (1, 2):
+            _sn62.new(f"Ros62{_lv62}{_sd62}", "F-16C", _lv62, seed=_sd62)
+            _st = _sn62.state
+            _cnt, _field = {}, {}
+            for _w in _st.enemy_air:
+                for _q in _w.sqns:
+                    _cnt[_q.aircraft] = _cnt.get(_q.aircraft, 0) + _q.authorized
+                    if _q.aircraft != "Tu_22M3" and _q.role != "escort":
+                        _field.setdefault(_w.base_asset_id, {}).setdefault(_q.aircraft, 0)
+                        _field[_w.base_asset_id][_q.aircraft] += _q.authorized
+            assert "MiG_25" not in _cnt and "MiG_25PD" not in _cnt, ("no MiG-25 on any level", _cnt)
+            assert ("MiG_31" in _cnt) == (_lv62 >= 2), ("MiG-31 on Levels 2 and 3 only", _lv62, _cnt)
+            assert ("MiG_21Bis" in _cnt) == (_lv62 == 1), ("MiG-21Bis on Level 1 only", _lv62, _cnt)
+            _fld_tot = sum(n_ for f_ in _field.values() for n_ in f_.values()); _fld_fig = sum(n_ for f_ in _field.values() for t_, n_ in f_.items() if t_ in _EF62)
+            assert (_fld_tot, _fld_fig) == _want62[_lv62], ("field jets and fighters", _lv62, _fld_tot, _fld_fig)
+            _bw = {1: 0, 2: 11, 3: 30}[_lv62]
+            assert _cnt.get("Tu_22M3", 0) == _bw, ("the bomber wing", _lv62, _cnt.get("Tu_22M3"))
+            for _aid, _types in _field.items():
+                _ap = next(f_["airport"] for f_ in _th["red_fields"] if f_["id"] == _aid)
+                _cap, _hv = _sl62(_terr, _ap, ["MiG_29A"]), _sl62(_terr, _ap, ["Su_24M", "Su_27", "MiG_31"])
+                assert sum(_types.values()) <= (_cap or 999), ("a field holds no more than it can park", _aid, _types, _cap)
+                assert sum(n_ for t_, n_ in _types.items() if t_ in _rr62.HEAVY) <= (_hv or 999), ("...nor more heavy jets than its big spots", _aid, _types, _hv)
+                assert sum(n_ for t_, n_ in _types.items() if t_ in _rr62.FIGHTERS) >= 2, ("every field keeps a fighter pair", _aid, _types)
+                assert all(n_ >= 2 for n_ in _types.values()), ("no lone jet of a type at a field", _aid, _types)
+            if _lv62 == 3:
+                _tier = _th["field_tier"]
+                _lr = {2: [0, 0], 3: [0, 0], 4: [0, 0]}
+                for _aid, _types in _field.items():
+                    _t = _tier.get(_aid, 3)
+                    _lr[_t][0] += _types.get("MiG_31", 0); _lr[_t][1] += _types.get("MiG_31", 0) + _types.get("Su_27", 0)
+                _sh = {t_: (a_ / b_ if b_ else 0.0) for t_, (a_, b_) in _lr.items()}
+                assert _sh[2] > _sh[3] > _sh[4] > 0, ("MiG-31 share of the long-range jets falls with field depth", _sh)
+    assert _ecl62("MiG_31").get(2, {}).get("CLSID") and _ecl62("MiG_31").get(1, {}).get("CLSID") != "{R-60 2L}", ("the MiG-31 flies with its R-33 / R-40", _ecl62("MiG_31"))
+    print(f"[red roster] L1 44 jets, L2 {_want62[2][0]} + 11 Tu-22M3 + 8 escorts, L3 {_want62[3][0]} + 30 Tu-22M3 + 16 escorts; MiG-31 share by depth at L3: {_sh[2]:.2f} > {_sh[3]:.2f} > {_sh[4]:.2f}")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4298,6 +4344,7 @@ CHECKS = [
     check_59_tarcap_circle_meets_the_barcap_circle,
     check_60_long_range_tarcap_stands_behind_the_short_range_escort,
     check_61_l1_red_supply_floor,
+    check_62_red_roster,
 ]
 
 
