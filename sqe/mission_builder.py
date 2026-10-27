@@ -50,6 +50,7 @@ TARCAP_FWD_NM = 20           # v0.41.120: the TARCAP's engage circle tries to re
 TARCAP_NEAR_NM = 16          # v0.41.118: ...then it moves in toward the middle of the shooters' launch points until it is this far from it (judgment call: AIM-54 / AIM-120 reach covers the HARM point from there; still outside the SAM rings and TARCAP_BEHIND_NM from the JSOW point)
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
+TARCAP_BARCAP_OVERLAP_NM = 4   # v0.41.138: the TARCAP circle reaches this far (less 2 nm of margin) inside the nearest BARCAP circle, so there is no unguarded strip between them (judgment call: a few miles so a bandit crossing from one to the other is always inside one)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
 LATE_ATTACK_S = 600           # v0.41.16: an AI strike flight drops only within this of its TOT
 CV_PATTERN_NM = 6             # v0.41.72: an AI carrier flight within this of the boat...
@@ -413,6 +414,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._hot_calls, self._hot_flag = [], 0                              # v0.41.111: the BASECAP call-in (red_air_picture.py)
         self._recov = []                                                     # v0.41.25: the recovery net (see _recov_net)                                                   # v0.41.10: red patrols called in to the SAM site they guard
         self._launch_pts[package.id] = self._launch_points(package, geom)    # v0.41.42: known before any flight is built (an escort / TARCAP may be built first)
+        self._barcap_zones = self._barcap_circles(package, geom)             # v0.41.138: the BARCAP circles a TARCAP's circle must meet (whatever order the flights are built in)
         striker_tots = []                                                    # v0.41.38: each ground-attack flight's own target time (strike / SEAD / CAS), for the TARCAP hold
         for idx, f in enumerate(package.flights):
             g, tot_f = self._spawn_flight(package, f, plan, geom, tanker_xy, hav_xy, push_of(f), tgt.eta_s, rtb_s, idx, manifest, despawn)
@@ -1628,7 +1630,17 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 thr_ = self._red_approach(stw.x, stw.y) if stw.action == "TARCAP" else None
                 if thr_ is not None and dist(stw.x, stw.y, *thr_) > TARCAP_FWD_NM * NM:
                     fpts_ = [offset(stw.x, stw.y, bearing(stw.x, stw.y, *thr_), TARCAP_FWD_NM * NM)]
-                zone_ = self._cover_circle(list(lp_) + [(stw.x, stw.y)] + fpts_, (cx_, cy_), package, COVER_ZONE_NM, bearing(cx_, cy_, stw.x, stw.y),
+                # v0.41.138 (XO 2026-10-27, engagement circles): the circle meets the nearest BARCAP circle (a point just inside its edge, listed after the
+                # station and before the forward point, so the shooters and the station come first and the reach toward red is what gives way). A TARCAP
+                # is wanted at the sweep size for its type (25 nm long-range shooters, 15 nm the rest); the launch points still make it bigger.
+                bpts_, want_ = [], COVER_ZONE_NM
+                if stw.action == "TARCAP":
+                    want_ = A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]
+                    bz_ = [z_ for z_ in getattr(self, "_barcap_zones", []) if dist(stw.x, stw.y, z_[0], z_[1]) / NM > z_[2] - TARCAP_BARCAP_OVERLAP_NM]
+                    if bz_:
+                        bx_, by_, br_ = min(bz_, key=lambda z_: dist(stw.x, stw.y, z_[0], z_[1]) / NM - z_[2])
+                        bpts_ = [offset(bx_, by_, bearing(bx_, by_, stw.x, stw.y), max(0.0, br_ - TARCAP_BARCAP_OVERLAP_NM) * NM)]
+                zone_ = self._cover_circle(list(lp_) + [(stw.x, stw.y)] + bpts_ + fpts_, (cx_, cy_), package, want_, bearing(cx_, cy_, stw.x, stw.y),
                                            long_only=True, max_nm=TARCAP_COVER_MAX_NM)
                 cover_lo_ = True            # v0.41.42 (XO): the circle takes in the shooters first; only an SA-10 keeps it out (an SA-11 / SA-6 no longer pushes it off the launch points)
             zct_ = self._limit_engage(g, 0, hold_end, self._clear_zone(zone_, package, long_only=cover_lo_))

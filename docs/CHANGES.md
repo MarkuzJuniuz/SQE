@@ -1,6 +1,16 @@
 # CHANGES.md
 
 
+## v0.41.138, engagement circles slice 1: the TARCAP circle meets the BARCAP circle
+
+XO (2026-10-27, engagement circle diagram). Measured on the identity set first (84 missions, 120 TARCAP circles): matched inside each mission, every TARCAP has a BARCAP circle, and 9 of them left a strip of 0 to 9 nm between the two circles (my first count, 33 gaps up to 37 nm, paired circles from different missions and was wrong).
+- A TARCAP's cover circle now takes in a point just inside the nearest BARCAP circle's edge (`TARCAP_BARCAP_OVERLAP_NM = 4`, so the circles overlap by about 2 nm; judgment call). It sits after the shooters' launch points and the station in the list and before the forward reach toward red, so if one circle cannot span everything it is the forward reach that gives way. Result on the same set: 9 gaps down to 4, the largest 4 nm (SAM trim or the 35 nm cap; left alone).
+- `SupportCaps._barcap_circles`: works out the BARCAP circles of the mission before any flight is built (same route plan and SAM trim the flights use), so build order does not matter. Nothing it does is kept.
+- A TARCAP is wanted at the sweep size for its type: 25 nm for the long-range shooters (F-15C, F-14B), 15 nm for the rest (was 20 nm for all). The launch points still make it bigger, so a short-range jet's circle is rarely 15.
+- The player-facing label of the base CAP is now "BARCAP" (briefings, kneeboards). The internal tag `BASECAP` stays.
+- Not done (design stays in the notes): short-range jets forward / long-range jets behind and to the side. Both types already share one station per package and the launch points decide the circle, so it needs a station per flight type; only 11 of 59 missions in the set have mixed types. Timings were left alone: the BARCAP is up for the whole package and the TARCAP holds to TOT + 5 min, no gap seen.
+- Smoke: new section `check_59_tarcap_circle_meets_the_barcap_circle` (38 TARCAP circles in F-15C, F-14B and Hornet missions: no strip over 1 nm; fails on the old code). The identity tool will show changed circles and the new label (expected).
+
 ## v0.41.137, the CAS target column stays at the CAS point
 
 XO (2026-10-27): last night's L1 CAS mission, the A-10s' target was off by some distance and they never touched it. `mission_builder._spawn_cas_support` moved the enemy column up to 10 km back and drove it 13 km at 7 to 8 m/s so it would be at the CAS waypoint at the TOT (the plan put it within 1.4 to 1.9 km on paper), but DCS's real speed (slopes, a long mixed column, stopping to fight on the v0.41.39 weapons-free orders) decides where it is. Now:

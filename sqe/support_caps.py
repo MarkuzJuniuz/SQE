@@ -136,6 +136,20 @@ class SupportCaps:
                     tanker_xy = offset(x, y, g.hdg + 90, race / 2)
         return tanker_xy, awacs_unit, hav_xy
 
+    def _barcap_circles(self, package, geom) -> list:
+        """v0.41.138: the engage circles (x, y, radius nm) of this mission's BARCAPs (base CAP and carrier CAP), worked out the same way the flights
+        get them (the route plan, then the SAM trim), so a TARCAP knows where the barrier circle is whatever order the flights are built in. Nothing is
+        built or changed."""
+        out = []
+        for f in package.flights:
+            if f.tag not in ("BASECAP", "CVCAP"):
+                continue
+            cz_, _, _ = self._support_cap_route(package, f, geom, None, 0, 0)
+            z_ = self._clear_zone(cz_, package)
+            if z_ is not None:
+                out.append(z_)
+        return out
+
     def _support_cap_route(self, package, f, geom, hav_xy, tot_s, rtb_s):
         """A support CAP's route: airborne on station for the whole package, one thing to guard. -> (cap_zone, wps, stop). Moved out of _spawn_flight in v0.41.54, unchanged."""
         st, o = self.state, self.o
