@@ -1,6 +1,11 @@
 # CHANGES.md
 
 
+## v0.41.161, Pilot Influence also switches air tempo
+
+XO (2026-10-27, "lump them together"; he wants to test progress with flying off). With Pilot Influence off, `tempo.get` returns 0 and `tempo.record` moves nothing, on top of the red surge: your flying changes nothing in the war sim. The tempo already earned is kept and comes back when the setting is turned on. The setting's text says so. Smoke: `check_79_pilot_influence` also checks tempo.
+
+
 ## v0.41.160, Pilot Influence
 
 XO (2026-10-27: "a setting for the dynamic player flight effects... it's just for giving red a chance to win on L3"). New setting `pilot_influence`, on by default, in New Campaign and Settings > Campaign (like Weather and AI Skill: an app setting, copied into the campaign when it is planned and simulated).

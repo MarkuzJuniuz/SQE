@@ -4838,6 +4838,9 @@ def check_79_pilot_influence(c):
                 break
             s.plan_day()
         assert (top > 1.0) == on, ("the surge follows the setting", on, top)
+        from sqe import tempo as _tp
+        st.tempo = {"CAS": 0.1}
+        assert (_tp.get(st, "CAS") == 0.1) == on, "air tempo follows the setting too"
         print(f"[pilot influence] {'on' if on else 'off'}: highest surge {top:.2f} over 40 idle days")
 
 
