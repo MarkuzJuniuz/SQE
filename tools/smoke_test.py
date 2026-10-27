@@ -3768,14 +3768,15 @@ def check_47_support_cap_pull_back(c):
     # air wings that fall back: a badly depleted wing or squadron stands down, recovers faster, returns; the player's squadron and carriers never
     from sqe import airwings as _aw
     s.new("Air rest", "F-16C", 3, seed=11); _st = s.state; _d9 = type(_gd(3))(**{**_gd(3).__dict__, "air_retreat": 1.0})
-    _w9 = next(w_ for w_ in _st.enemy_air if "Tu_22M3" not in w_.types and len(w_.sqns) >= 2 and all(q_.authorized >= _aw.MIN_AUTHORIZED for q_ in w_.sqns)); _q9 = _w9.sqns[0]; _q9.available = 2; _oth9 = [q_.available for q_ in _w9.sqns[1:]]
+    _w9 = next(w_ for w_ in _st.enemy_air if "Tu_22M3" not in w_.types and len(w_.sqns) >= 2 and all(q_.authorized >= _aw.MIN_AUTHORIZED for q_ in w_.sqns))
+    _w9.sqns.sort(key=lambda q_: -q_.authorized); _q9 = _w9.sqns[0]; _n9d = max(1, int(_aw.RETREAT_FRAC * _q9.authorized)); _q9.available = _n9d; _oth9 = [q_.available for q_ in _w9.sqns[1:]]      # v0.41.142: the biggest squadron, down to the retreat line
     _bs = [sq_ for sq_ in _st.squadrons.values() if sq_.id != _st.player.squadron_id and _st.bases[sq_.base_id].kind.value != "CARRIER"]
     _psq = _st.squadrons[_st.player.squadron_id]; _psq.available = 1
     for _b9 in _bs:
         _b9.available = 1
     _ea0 = _war.totals(_st)["ea"]; _rng9 = _rnd.Random(1)
     _l9 = _aw.step(_st, _d9, _rng9)
-    assert _q9.available == 0 and _q9.reserve == 2 and _w9.reserve == 2 and any("squadron at" in x_ for x_ in _l9), "a depleted squadron stands down"
+    assert _q9.available == 0 and _q9.reserve == _n9d and _w9.reserve == _n9d and any("squadron at" in x_ for x_ in _l9), "a depleted squadron stands down"
     assert [q_.available for q_ in _w9.sqns[1:]] == _oth9 and not any(q_.reserve for q_ in _w9.sqns[1:]), "the wing's other squadrons keep flying (v0.41.53)"
     assert _psq.available == 1 and _psq.reserve == 0, "your own squadron is never pulled"
     assert all(b_.reserve == 1 for b_ in _bs if b_.authorized >= _aw.MIN_AUTHORIZED), "the other friendly squadrons follow the same rule"
