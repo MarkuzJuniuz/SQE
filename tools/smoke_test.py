@@ -4607,6 +4607,21 @@ def check_71_story(c):
     print("[story] three level stories, opponent label, no Tomcat line, no foreshadowing, opening / fall / counter / defeat beats in the war log, ending without warnings")
 
 
+def check_72_window_size(c):
+    """v0.41.151: the window opens at 90% of the usable screen (at most 1700 x 960), centered; the geometry is a saved setting."""
+    from sqe.settings import AppSettings as _AS
+    assert _AS(persist=False).window_geometry == "", "no saved geometry: open at the default size"
+    try:
+        from sqe.gui.app import default_window_rect as _dw
+    except ImportError:
+        print("[window] PySide6 not installed here; window size not exercised"); return
+    x, y, w, h = _dw(0, 0, 1920, 1040)                       # 1080p minus a 40 px taskbar
+    assert (w, h) == (1700, 936) and 1920 - w - x == x and 1040 - h - y == y and w <= 0.95 * 1920 and h <= 0.95 * 1040, (x, y, w, h)
+    x, y, w, h = _dw(0, 0, 3840, 2080); assert (w, h) == (1700, 960), "capped on a big screen"
+    x, y, w, h = _dw(100, 50, 1366, 728); assert w == int(1366 * 0.9) and h == 700, "never under the minimum height"
+    print("[window] default size 90% of the usable screen, capped, centered; geometry saved as a setting")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4717,6 +4732,7 @@ CHECKS = [
     check_69_scramble_undo,
     check_70_overview_detail,
     check_71_story,
+    check_72_window_size,
 ]
 
 

@@ -494,10 +494,22 @@ class LogPage(QWidget):
         self.log.setHtml("<br>".join(reversed(st.log[-300:])))
 
 
+WIN_MAX = (1700, 960)         # v0.41.151 (XO 2026-10-27): the window opens at 90% of the usable screen, at most this big, centered (1080p: about 1700 x 936)
+WIN_MIN = (1100, 700)
+WIN_FRACTION = 0.90
+
+
+def default_window_rect(ax: int, ay: int, aw: int, ah: int) -> tuple:
+    """(x, y, w, h) for a usable screen area of aw x ah at (ax, ay): 90% of it, capped at WIN_MAX, never under WIN_MIN, centered."""
+    w = max(WIN_MIN[0], min(WIN_MAX[0], int(aw * WIN_FRACTION)))
+    h = max(WIN_MIN[1], min(WIN_MAX[1], int(ah * WIN_FRACTION)))
+    return ax + (aw - w) // 2, ay + (ah - h) // 2, w, h
+
+
 class MainWindow(QMainWindow):
     def __init__(self, session: Session):
         super().__init__(); self.session = session
-        self.setWindowTitle(f"{APP_NAME}"); self.resize(1280, 820); self.setMinimumSize(1100, 700)
+        self.setWindowTitle(f"{APP_NAME}"); self.setMinimumSize(*WIN_MIN); self._place_window()
         root = QWidget(); root.setObjectName("root"); self.setCentralWidget(root)
         lay = QHBoxLayout(root); lay.setContentsMargins(0, 0, 0, 0); lay.setSpacing(0)
         side = QFrame(); side.setObjectName("sidebar"); side.setFixedWidth(210); lay.addWidget(side)
@@ -526,6 +538,8 @@ class MainWindow(QMainWindow):
         self.banner = QLabel(); self.banner.setObjectName("pill"); hdr.addWidget(self.banner)
         main.addWidget(self.stack, 1)
         self._menus()
+        from PySide6.QtGui import QShortcut, QKeySequence
+        self._dev_skip = QShortcut(QKeySequence("Ctrl+Space"), self); self._dev_skip.activated.connect(self._dev_skip_day)      # v0.41.151: developer secret (XO)
 
     # ---- menus ---------------------------------------------------------------------------------------
     def _menus(self):
@@ -537,7 +551,7 @@ class MainWindow(QMainWindow):
         act("&New Campaign...", self.new_campaign, "Ctrl+N"); act("&Open Campaign...", self.open_campaign, "Ctrl+O")
         self.recent = f.addMenu("Open &Recent"); self.recent.aboutToShow.connect(self._recent)
         f.addSeparator(); act("&Save", self.save, "Ctrl+S"); act("Save &As...", self.save_as, "Ctrl+Shift+S")
-        f.addSeparator(); act("S&ettings...", self.settings, "Ctrl+,"); f.addSeparator(); act("E&xit", self.close, "Alt+F4")
+        f.addSeparator(); act("S&ettings...", self.settings, "Ctrl+,"); act("Reset &window size and position", self.reset_window); f.addSeparator(); act("E&xit", self.close, "Alt+F4")
 
 
     def _recent(self):
@@ -610,6 +624,31 @@ class MainWindow(QMainWindow):
         if f:
             self.session.save(f if f.endswith(CAMPAIGN_EXT) else f + CAMPAIGN_EXT); self.refresh_all()
 
+    def _place_window(self, reset: bool = False):
+        """Open where it was last closed (Qt keeps it on a screen that still exists), or at the default size, centered."""
+        from PySide6.QtCore import QByteArray
+        stg = self.session.settings
+        if not reset and getattr(stg, "window_geometry", ""):
+            try:
+                if self.restoreGeometry(QByteArray.fromBase64(stg.window_geometry.encode())):
+                    return
+            except Exception:
+                pass
+        scr = QApplication.screenAt(self.pos()) or QApplication.primaryScreen()
+        a = scr.availableGeometry()
+        x, y, w, h = default_window_rect(a.x(), a.y(), a.width(), a.height())
+        self.setGeometry(x, y, w, h)
+
+    def reset_window(self):
+        self.session.settings.window_geometry = ""
+        if self.isMaximized() or self.isFullScreen():
+            self.showNormal()
+        self._place_window(reset=True)
+        try:
+            self.session.settings.save()
+        except OSError:
+            pass
+
     def closeEvent(self, ev):
         st = self.session.state
         if st is not None and st.pending and self.session.settings.auto_patch_scripting and \
@@ -617,6 +656,11 @@ class MainWindow(QMainWindow):
                     "A sortie is still pending. Closing SQE restores DCS's MissionScripting.lua, so DCS can no longer write the results "
                     "for this mission.\n\nClose anyway?") != QMessageBox.Yes:
             ev.ignore(); return
+        try:
+            self.session.settings.window_geometry = bytes(self.saveGeometry().toBase64()).decode()
+            self.session.settings.save()
+        except Exception:
+            pass
         ev.accept()
 
     def settings(self):
@@ -671,6 +715,14 @@ class MainWindow(QMainWindow):
                                + " Your own tasking goes ahead as planned."))
         box.addButton("Understood", QMessageBox.AcceptRole); box.exec()
         return False
+
+    def _dev_skip_day(self):
+        """Developer secret (XO 2026-10-27): Ctrl+Space skips the day at once, no questions and no result box, to watch the Overview and its map move.
+        Not while a sortie is built (it would be thrown away) and not once the war is over."""
+        st = self.session.state
+        if st is None or st.status != "ACTIVE" or st.pending:
+            return
+        self.session.skip_day(); self.refresh_all()
 
     def skip_turn(self):
         sess = self.session
