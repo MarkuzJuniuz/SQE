@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.139, engagement circles slice 2: the long-range TARCAP stands behind and aside of the short-range escort
+
+XO (2026-10-27, engagement circle diagram): short-range jets forward, long-range jets behind and to one side. Measured first on the identity set: no package has a short- and a long-range TARCAP together (one TARCAP flight per package, and the planner gives it a long-range jet first), so there was nothing to stagger there. The pair that does exist is the TARCAP (long-range first) and the package ESCORT (short-range first): in 34 packages, 24 of them had both on one and the same point (the SAM-free runs), the other 10 (DEAD, JSOW) sat 30 nm apart already.
+- New `FighterStations._stagger_stations`, run once after the stations are planned: where a TARCAP and an escort of different range classes (`LONG_RANGE_A2A`: F-15C, F-14B) stand within `LRA_SPLIT_MIN_NM` (12) of each other, the long-range station moves `LRA_BACK_NM` (8) back from the target and `LRA_SIDE_NM` (6) to one side, the side with more room to the SAM rings; smaller moves if a ring is in the way, none if nothing is clear. About 10 nm apart, the long-range one about 8 nm farther from the target (judgment call: the sweep circles are 25 and 15 nm; the side gap is for friendly fire with active missiles in the air, DCS behaviour unverified). Same class, or already apart: nothing moves. The station tuple keeps its other fields. Applies to your own TARCAP or escort route too.
+- A first version put the long-range jets "away from red"; where red's nearest patrol sat on our side that landed one 3 nm from the target, so "behind" is measured from the target.
+- Left as they are: DEAD and JSOW packages, where the SAM rings already put the two stations 30 nm apart (there the TARCAP is the nearer one to the target by up to 8 nm; no change).
+- Smoke: new section `check_60_long_range_tarcap_stands_behind_the_short_range_escort` (24 stations moved, each farther from the target, at most 15 nm). The identity tool shows changed TARCAP stations, routes and circles in those packages (expected).
+
 ## v0.41.138, engagement circles slice 1: the TARCAP circle meets the BARCAP circle
 
 XO (2026-10-27, engagement circle diagram). Measured on the identity set first (84 missions, 120 TARCAP circles): matched inside each mission, every TARCAP has a BARCAP circle, and 9 of them left a strip of 0 to 9 nm between the two circles (my first count, 33 gaps up to 37 nm, paired circles from different missions and was wrong).
