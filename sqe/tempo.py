@@ -21,7 +21,14 @@ def kind_of(objective_type: str) -> str:
     return {"CAS": "CAS", "STRIKE": "STRIKE", "DEAD": "DEAD"}.get(t, "AIR")
 
 
+def influence_on(state) -> bool:
+    """v0.41.160: the Pilot Influence setting (copied into the campaign by the engine). Off: your flying changes nothing in the war."""
+    return bool((getattr(state, "ground", None) or {}).get("pilot_influence", True))
+
+
 def get(state, kind: str) -> float:
+    if not influence_on(state):
+        return 0.0
     return float((getattr(state, "tempo", None) or {}).get(kind, 0.0))
 
 
@@ -43,6 +50,8 @@ def record(state, objective_type, tone: str) -> list:
     step = STEP.get(tone, 0.0)
     if getattr(state, "ground", None):
         state.ground["flown_day"] = state.day                       # v0.41.155: the squadron flew today: red's idle surge starts over (ground.surge)
+    if not influence_on(state):
+        return []                                                    # Pilot Influence off: nothing moves
     if not hasattr(state, "tempo") or state.tempo is None:
         state.tempo = {}
     old = get(state, k)

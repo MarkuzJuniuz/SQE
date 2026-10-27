@@ -5,7 +5,7 @@
 
 XO (2026-10-27: "a setting for the dynamic player flight effects... it's just for giving red a chance to win on L3"). New setting `pilot_influence`, on by default, in New Campaign and Settings > Campaign (like Weather and AI Skill: an app setting, copied into the campaign when it is planned and simulated).
 - On: as before, red surges while your squadron stands down (v0.41.155).
-- Off: `ground.surge` stays at 1.0, so your flying makes no difference to the red surge. Measured first: with the surge off and no flying at all, L2 still wins and L3 does not lose (6 seeds, 60 days), so the war cannot be lost by standing down. The air tempo (what your flown sorties do to the odds of background jobs) is unchanged.
+- Off: `ground.surge` stays at 1.0, so your flying makes no difference to the red surge. Measured first: with the surge off and no flying at all, L2 still wins and L3 does not lose (6 seeds, 60 days), so the war cannot be lost by standing down. The air tempo (what your flown sorties do to the odds of background jobs) is off too (XO: "lump them together"): `tempo.get` returns 0 and `tempo.record` moves nothing; the tempo already earned is kept and comes back when the setting is turned on.
 - Smoke: new `check_79_pilot_influence`.
 
 
