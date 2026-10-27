@@ -216,6 +216,9 @@ _verified v0.41.144, 2026-10-27 (written from the code; smoke `check_64_supply_l
 - **Posture rules in order:** counter-force attacking, Under pressure, Consolidating, Last stand, Offensive / Holding by the odds word; endings from `state.status`. The text under each label is `posture.LINES` (placeholder until the C3 stories).
 - **Units and words** (all judgment calls, constants at the top of the file): 10 strength points = a battalion; odds word by the ratio of our force to the enemy's at our frontmost sector (`front_sector`); supply bands; the fall warning looks `WARN_ZONES` (2) sectors in front of a Coalition field.
 
+- **Situation panel and detail tabs (v0.41.149):** `sqe/overview_detail.py` (`situation`, `ground_rows`, `ground_notes`, `history`, `supply_rows`, `air_defence_rows`, `orders_rows`, `tempo_lines`); `gui/app.py` `OverviewPage` draws them (`_fill_details`, `_set_situation`; the open / closed state is `AppSettings.situation_open`). Front history is read from `state.log` (no extra state).
+- **Scramble undo (v0.41.149):** `Session.fly` stores `pending["undo"]` (plan, raid record, log length, taken before the emergency is applied) when an emergency came with the sortie; `Session._restore_undo` runs in `abort()` and at the top of `fly()`, so a cancelled or replaced sortie offers the scramble again. The GUI's "Discard it and build a new one" calls `abort()` before asking `emergency_for`.
+
 ## 12. The carrier raid setpiece (v0.41.105 to v0.41.109)
 _verified v0.41.109, 2026-10-22 (read from the code; smoke `check_31z`, `31za`, `31zb`, `31zc`; not yet flown by XO)_
 

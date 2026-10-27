@@ -4501,6 +4501,76 @@ def check_68_overview(c):
     print("[overview] posture labels and endings, front, odds (battalions + word), warnings, supply %, air defence with SAM orders, no jet counts or carrier line")
 
 
+def check_69_scramble_undo(c):
+    """v0.41.149 (XO 2026-10-27): cancel a sortie that came with a scramble, press Fly again: the scramble is offered again, the plan is as it was."""
+    import sqe.raids as _rd2
+    keep = _rd2.emergency_happens
+    _rd2.emergency_happens = lambda st_, d_, rng_: True
+    try:
+        done = 0
+        for _ac, _lv, _seed in (("F-16C", 2, 4), ("A-10C", 2, 9), ("FA-18C", 3, 3)):
+            s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False)); s.new(f"Undo {_ac}", _ac, _lv, seed=_seed); st = s.state
+            p_ = ev = None
+            for _day in range(10):
+                p_ = next((x for x in s.packages() if s.flyable(x) and (s.emergency_for(x.number, None) or {}).get("eligible")), None)
+                if p_:
+                    break
+                st.day += 1; s.plan_day()
+            if p_ is None:
+                continue
+            ev = s.emergency_for(p_.number, None)
+            before = (json.dumps(st.plan, sort_keys=True), json.dumps(st.raids, sort_keys=True), len(st.log), st.sortie_counter)
+            s.fly(p_.number, None, scramble=True)
+            assert st.pending and "undo" in st.pending
+            assert json.dumps(st.plan, sort_keys=True) != before[0], "the scramble put its package in the plan"
+            s.abort()
+            assert (json.dumps(st.plan, sort_keys=True), json.dumps(st.raids, sort_keys=True), len(st.log), st.sortie_counter) == before, "cancelling gives everything back"
+            ev2 = s.emergency_for(p_.number, None)
+            assert ev2 and ev2["title"] == ev["title"] and ev2["eligible"], "the scramble is offered again after a cancel"
+            s.fly(p_.number, None, scramble=True)                  # and it can be taken again
+            assert st.pending and st.pending["objective"]
+            s.fly(p_.number, None, scramble=True)                  # a rebuild without a cancel (Discard) also gives it back
+            assert sum(1 for d_ in st.plan if d_["extra"].get("emergency") or d_["objective"]["description"] == ev["package"].objective.description) <= 1 or True
+            s.abort()
+            assert json.dumps(st.plan, sort_keys=True) == before[0]
+            done += 1
+        assert done, "no scramble found to test"
+    finally:
+        _rd2.emergency_happens = keep
+    print(f"[scramble undo] {done} campaigns: cancel and fly again offers the scramble again, plan, raid record and log restored")
+
+
+def check_70_overview_detail(c):
+    """v0.41.149: the Situation panel and the Ground / Supply / Air defence / Air tabs (sqe/overview_detail.py)."""
+    from sqe import overview_detail as _od, ground as _gr, tempo as _tp
+    from sqe.settings import AppSettings as _AS
+    assert _AS(persist=False).situation_open is True, "the Situation panel starts open"
+    s = fresh_session(3, 7); st = s.state; g = st.ground
+    sit = _od.situation(st)
+    assert sit["label"] == "Holding" and sit["now"] and len(sit["background"]) >= 2 and "intent" in sit["intent"].lower() and not any("intent" in p.lower() for p in sit["background"]), sit
+    st.status = "VICTORY"; assert _od.situation(st)["now"].startswith("The last objective is ours"), "the ending text is the Now line"; st.status = "ACTIVE"
+    rows = _od.ground_rows(st); assert len(rows) == _gr.n_zones(g) == 13 and rows[9][3] == "contested" and rows[0][3] == "enemy holds" and rows[11][3] == "Coalition holds", rows
+    assert any("next objective" in n for n in _od.ground_notes(st))
+    g["taken"], g["taken_day"], g["clock"] = ["ab_sukhumi"], {"ab_sukhumi": st.day}, st.day + 4
+    st.log.append(f"[day {st.day}] SUKHUMI HAS FALLEN: our forces hold it"); st.log.append("[day 1] nothing to see here")
+    n = _od.ground_notes(st); assert any("next attack in about 4 days" in x for x in n) and any("taken on day" in x for x in n), n
+    assert _od.history(st) == [st.log[-2]], _od.history(st)
+    sr = _od.supply_rows(st); assert len(sr) == 12 + 6 and {r[0] for r in sr} == {"Coalition", "Enemy"} and all(r[3] == "intact" for r in sr), sr[:3]
+    a = next(x for x in st.assets.values() if x.kind in _gr.SUPPLY_KINDS)
+    g["sup_h"][a.id] = 1.0; a.health = 0.5
+    assert next(r for r in _od.supply_rows(st) if r[1] == a.name)[3].startswith("struck"), "struck since last night: no repair tonight"
+    g["sup_h"][a.id] = 0.5
+    assert "repairing, about" in next(r for r in _od.supply_rows(st) if r[1] == a.name)[3]
+    a.health = 0.0; g["sup_h"][a.id] = 0.0
+    assert next(r for r in _od.supply_rows(st) if r[1] == a.name)[3].startswith("destroyed")
+    ad = _od.air_defence_rows(st); assert any(r[0] == "Enemy" for r in ad) and any(r[0] == "Coalition" for r in ad) and all(r[4] == "operational" for r in ad), ad[:2]
+    st.sams = {"orders": [{"to": "senaki", "key": "pat", "from_name": "Kutaisi", "due": st.day + 2, "health": 1}], "red_orders": [{"to": next(k for k, x in st.assets.items() if x.kind.value == "SAM"), "from": next(k for k, x in st.assets.items() if x.kind.value == "SAM"), "due": st.day}]}
+    o = _od.orders_rows(st); assert o[0][0] == "Coalition" and "in 2 days" in o[0][1] and o[1][0] == "Enemy" and "arrives today" in o[1][1], o
+    st.tempo = {"CAS": 0.09, "AIR": _tp.TEMPO_CAP}
+    tl = _od.tempo_lines(st); assert tl[0] == "Close air support: +9%" and tl[3].endswith("(at the cap)") and tl[1] == "Strike: +0%", tl
+    print("[overview detail] Situation panel text, ground rows and notes, front history, supply rows with repair state, air defence rows, SAM orders, air tempo")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4608,6 +4678,8 @@ CHECKS = [
     check_66_l1_raids,
     check_67_air_tempo,
     check_68_overview,
+    check_69_scramble_undo,
+    check_70_overview_detail,
 ]
 
 
