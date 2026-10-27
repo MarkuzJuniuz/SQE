@@ -4711,6 +4711,32 @@ def check_75_mass_raid_build(c):
     print("[mass raid] 8+ bombers: escorts 1 per 2 plus a sweep, SEAD and DEAD groups, under the unit limit; L3 scramble chance 33%")
 
 
+def check_76_cas_task_force(c):
+    """v0.41.157: the friendly task force stops 400 m short of the CAS contact point (it used to drive 2.5 km past) and is not slower than the plan needs."""
+    import zipfile as _z, math as _m, random as _rn
+    from dcs import lua as _lua
+    s = fresh_session(2, 5); n = 0; worst = 0.0
+    for lv in (1, 2, 3):
+        for sd in (1, 2, 3, 4):
+            _rn.seed(f"cas76:{lv}:{sd}")
+            s.new(f"Cas76{lv}{sd}", "A-10C", lv, seed=sd); s.ai_test = True
+            for pk in [p_ for p_ in s.packages() if s.flyable(p_) and p_.objective.type.value == "CAS"]:
+                s.fly(pk.number, s.flyable(pk)[0].id)
+                m = _lua.loads(_z.ZipFile(s.settings.sortie_miz).read("mission").decode("utf-8", "replace"))["mission"]
+                veh = {g_["name"]: g_ for co_ in m["coalition"]["blue"]["country"].values() for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()}
+                red = {g_["name"]: g_ for co_ in m["coalition"]["red"]["country"].values() for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()}
+                tf, tg = veh.get(f"Friendly Task Force {pk.number}"), red.get(pk.objective.target_id)
+                if tf is None or tg is None or len(tg["route"]["points"]) < 2:
+                    continue                                           # a dug-in garrison target: the force comes to it
+                pts = tf["route"]["points"]; last = pts[max(pts)]
+                us = list(tg["units"].values()); x0 = sum(u_["x"] for u_ in us) / len(us); y0 = sum(u_["y"] for u_ in us) / len(us)
+                d_end = _m.hypot(last["x"] - x0, last["y"] - y0)
+                assert d_end < 1000, ("the task force stops near the contact point", round(d_end))
+                worst = max(worst, d_end); n += 1
+    assert n >= 3, f"enough moving-column CAS missions were checked: {n}"
+    print(f"[cas task force] {n} CAS missions: the task force's last point is within {worst:.0f} m of the contact point (was 2500 m beyond it)")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4825,6 +4851,7 @@ CHECKS = [
     check_73_tasking_line,
     check_74_red_zerg,
     check_75_mass_raid_build,
+    check_76_cas_task_force,
 ]
 
 
