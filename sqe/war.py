@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import random
 from . import threatmap as tm
-from . import ground, theatres, tempo
+from . import ground, theatres, tempo, story
 from . import raids, sams, ecm, airwings
 from .raids import hit as raids_hit
 from .difficulty import Difficulty
@@ -628,4 +628,6 @@ def update_status(state: CampaignState) -> str:
             state.status = "DEFEAT"; state.note("DEFEAT: the coalition air component can no longer sustain operations.")
         elif ground.fallen_count(state) >= 2:
             state.status = "DEFEAT"; state.note("DEFEAT: the front has collapsed; two of our airfields are lost.")
+            for ln in story.beat(state, "lose"):
+                state.note(ln)
     return state.status

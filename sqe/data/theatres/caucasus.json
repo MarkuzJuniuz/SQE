@@ -474,6 +474,104 @@
         "the coast and the north Caucasus",
         "the enemy deep rear"
     ],
+    "stories": {
+        "3": {
+            "enemy": "Russia",
+            "enemy_long": "Russia",
+            "background": [
+                "In this scenario a long dispute on the Black Sea coast has turned into open war. Russia has moved a combined-arms army group and its southern air regiments up the coast road, from Krymsk and Gelendzhik through Sochi into Abkhazia, and its columns are pushing on toward the Georgian airbase at Senaki. The army group is covered by one of the densest air-defence networks in the region and by modern fighters.",
+                "A US-led coalition has answered Georgia's request for help. The carrier USS Stennis and her air wing operate from the eastern Black Sea; U.S. Air Force squadrons fly from Senaki, Kutaisi and Kobuleti. You fly with the Navy's carrier air wing or with the Air Force, as part of a joint air campaign.",
+                "The mountains close the interior, so the coast road is the only way through. The war will be settled on that road, base by base. Each airfield taken pushes the front back, brings the next one into range and puts the enemy's air defences, fuel and depots in the way. Nobody on either side is trying to march on a capital."
+            ],
+            "intent": "Coalition command's intent: break the enemy's air defences and supply along the coast, support the ground force as it takes the airfields one by one, and hold what we take until the next push is ready. Sukhumi first, then Gudauta and Sochi, then Gelendzhik and Krymsk. Every day the war is planned and the packages go out. Yours is the one you fly yourself.",
+            "now": {
+                "Offensive": "The advance is moving. Our ground force at the front outweighs Russia's here, and the air campaign is keeping it that way.",
+                "Consolidating": "We hold what we took. The next push waits for the takeover to finish; use the time to hit supply and air defence.",
+                "Holding": "The front is not moving. Our ground force at the contested sector is not yet strong enough to attack; close air support and supply strikes decide the next move.",
+                "Under pressure": "Russia is gaining ground on our side of the line. Hold the sector in front of our airfields.",
+                "Last stand": "The final objective is next. Take it and the war is decided.",
+                "Defeat": "Two of our airfields are gone and the front has collapsed. The campaign is lost.",
+                "Counter-force": "A fresh Russian force has arrived and is counter-attacking the airfield we just took. Beat it and the war is won.",
+                "Ceasefire": "Russia has asked for talks and the guns have gone quiet along the coast. The campaign is won."
+            },
+            "beats": {
+                "open": "Operation IRON TIDE begins. Russian columns are on the coast road and the coalition air campaign opens today.",
+                "retake": "{base} is back in Russian hands.",
+                "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. One more airfield lost and the front collapses.",
+                "back_blue": "{base} is ours again, though its defences are gone.",
+                "win": "The counter-attack is broken. Russia asks for talks and the guns go quiet along the coast. The war is won.",
+                "lose": "The front has collapsed. With two of our airfields lost the coalition withdraws, and the campaign is lost.",
+                "fall_ab_sukhumi": "Sukhumi is ours. Georgian and coalition troops hold the airfield; the first step up the coast road is taken.",
+                "fall_ab_gudauta": "Gudauta falls. Abkhazia is behind us and the road to Sochi is open.",
+                "fall_ab_sochi": "Sochi is ours. Russia's main base on the Abkhaz border is lost, and its columns along the road to the north-west are cut from their rear.",
+                "fall_ab_gelen": "Gelendzhik is ours. The Black Sea coast opens up ahead of the column.",
+                "fall_ab_krymsk": "Krymsk falls. The last Russian air base on the coast is in coalition hands.",
+                "counter": "A fresh Russian force has come down from the north and is counter-attacking {base}."
+            }
+        },
+        "2": {
+            "enemy": "Russia",
+            "enemy_long": "Russia",
+            "background": [
+                "In this scenario a dispute on the Black Sea coast has turned into open war. Russia has committed a reinforced corps and older air regiments, and its columns are moving down the coast road from Sochi into Abkhazia, toward the Georgian airbase at Senaki. Its air defences are patchy but there are plenty of them, and its fighters are numerous rather than modern.",
+                "A US-led coalition has answered Georgia's request for help. The carrier USS Stennis and her air wing operate from the eastern Black Sea; U.S. Air Force squadrons fly from Senaki, Kutaisi and Kobuleti. You fly with the Navy's carrier air wing or with the Air Force, as part of a joint air campaign.",
+                "The mountains close the interior, so the coast road is the only way through. The war will be settled on that road, base by base. Each airfield taken pushes the front back, brings the next one into range and puts the enemy's air defences, fuel and depots in the way. Nobody on either side is trying to march on a capital."
+            ],
+            "intent": "Coalition command's intent: break the enemy's air defences and supply along the coast, support the ground force as it takes the airfields one by one, and hold what we take until the next push is ready. Sukhumi first, then Gudauta, then Sochi. Every day the war is planned and the packages go out. Yours is the one you fly yourself.",
+            "now": {
+                "Offensive": "The advance is moving. Our ground force at the front outweighs Russia's here, and the air campaign is keeping it that way.",
+                "Consolidating": "We hold what we took. The next push waits for the takeover to finish; use the time to hit supply and air defence.",
+                "Holding": "The front is not moving. Our ground force at the contested sector is not yet strong enough to attack; close air support and supply strikes decide the next move.",
+                "Under pressure": "Russia is gaining ground on our side of the line. Hold the sector in front of our airfields.",
+                "Last stand": "The final objective is next. Take it and the war is decided.",
+                "Defeat": "Two of our airfields are gone and the front has collapsed. The campaign is lost.",
+                "Counter-force": "A fresh Russian force has arrived and is counter-attacking Sochi. Beat it and the war is won.",
+                "Ceasefire": "Russia has asked for talks and the fighting has stopped. The coast road is ours. The campaign is won."
+            },
+            "beats": {
+                "open": "Operation IRON TIDE begins. Russian columns are on the coast road and the coalition air campaign opens today.",
+                "retake": "{base} is back in Russian hands.",
+                "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. One more airfield lost and the front collapses.",
+                "back_blue": "{base} is ours again, though its defences are gone.",
+                "win": "The counter-attack is broken. Russia asks for talks and the fighting stops. The war is won.",
+                "lose": "The front has collapsed. With two of our airfields lost the coalition withdraws, and the campaign is lost.",
+                "fall_ab_sukhumi": "Sukhumi is ours. Georgian and coalition troops hold the airfield; the first step up the coast road is taken.",
+                "fall_ab_gudauta": "Gudauta falls. Abkhazia is behind us and the road to Sochi is open.",
+                "fall_ab_sochi": "Sochi is ours. Russia's main base on the Abkhaz border is in coalition hands.",
+                "counter": "A fresh Russian force has arrived and is counter-attacking {base}, a smaller one than the first."
+            }
+        },
+        "1": {
+            "enemy": "CRA",
+            "enemy_long": "the Coastal Republic Army",
+            "background": [
+                "In this scenario a militia calling itself the Coastal Republic Army (CRA) has seized the coastal cities from Sukhumi to Sochi and is pushing toward the Georgian airbase at Senaki. It fights with old Soviet armor and a few obsolete jets under scattered air defences, and it is resupplied by night across the border, so it never quite runs dry.",
+                "A US-led coalition has answered Georgia's request for help. The carrier USS Stennis and her air wing operate from the eastern Black Sea; U.S. Air Force squadrons fly from Senaki, Kutaisi and Kobuleti. You fly with the Navy's carrier air wing or with the Air Force, as part of a joint air campaign.",
+                "The mountains close the interior, so the coast road is the only way through. The campaign is a push along that road, city by city, against an enemy that is outgunned but does not give up ground easily."
+            ],
+            "intent": "Coalition command's intent: keep the militia's supply and air defences under pressure, support the ground force as it retakes the coastal cities, and hold what we retake. Sukhumi first, then Gudauta, then Sochi. Every day the war is planned and the packages go out. Yours is the one you fly yourself.",
+            "now": {
+                "Offensive": "The advance is moving. Our ground force at the front outweighs the CRA's here, and the air campaign is keeping it that way.",
+                "Consolidating": "We hold what we took. The next push waits for the takeover to finish; use the time to hit supply and air defence.",
+                "Holding": "The front is not moving. Our ground force at the contested sector is not yet strong enough to attack; close air support and supply strikes decide the next move.",
+                "Under pressure": "The CRA is gaining ground on our side of the line. Hold the sector in front of our airfields.",
+                "Last stand": "The final objective is next. Take it and the war is decided.",
+                "Defeat": "Two of our airfields are gone and the front has collapsed. The campaign is lost.",
+                "Insurgency broken": "The coastal cities are back under government control and the Coastal Republic Army has lost the field. The campaign is won."
+            },
+            "beats": {
+                "open": "Operation IRON TIDE begins. The Coastal Republic Army holds the coast and the coalition air campaign opens today.",
+                "retake": "{base} has been retaken by the Coastal Republic Army.",
+                "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. One more airfield lost and the front collapses.",
+                "back_blue": "{base} is ours again, though its defences are gone.",
+                "win": "The Coastal Republic Army has lost the field. The insurgency is broken and the war is won.",
+                "lose": "The front has collapsed. With two of our airfields lost the coalition withdraws, and the campaign is lost.",
+                "fall_ab_sukhumi": "Sukhumi is back under government control. The first of the coastal cities is retaken.",
+                "fall_ab_gudauta": "Gudauta is retaken. Abkhazia is behind us and the road to Sochi is open.",
+                "fall_ab_sochi": "Sochi is retaken. The last of the coastal cities is back in government hands."
+            }
+        }
+    },
     "title": "Operation IRON TIDE",
     "background": "After months of border incidents and a collapsed ceasefire, the Northern Federation's Southern Military District crossed the frontier in force. Its armored columns are pushing south along the Black Sea coast toward the Georgian airbase at Senaki, supported by air regiments at Sukhumi, Gudauta, Sochi and across the Kuban, and covered by a layered air-defence network.\n\nA coalition task force has answered the request for assistance. The USS Stennis carrier air wing operates from the eastern Black Sea; U.S. Air Force squadrons operate from Senaki, Kutaisi and Kobuleti. You fly with the Navy's Tomcat community or with the Air Force, as part of a joint air campaign.\n\nCoalition command's intent is plain: stop the armored advance, win control of the air, take the enemy air-defence network apart, and then strike the headquarters and logistics that keep the offensive moving. Every day the war is planned; every day the packages go out. Yours is the one you fly yourself.",
     "climate": {

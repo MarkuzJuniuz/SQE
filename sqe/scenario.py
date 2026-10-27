@@ -10,7 +10,7 @@ from .difficulty import Difficulty, get as get_difficulty
 from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, RedSquadron, PlayerProfile)
 from .state import CampaignState
 from .aircraft import AIRCRAFT
-from . import ground, redroster, theatres
+from . import ground, redroster, theatres, story
 from . import sams as _sams_mod
 
 def THEATRES() -> dict:
@@ -283,4 +283,6 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     me = next((q for q in mine if q.id == player_squadron), mine[0])
     st.player = PlayerProfile(aircraft=player_aircraft, squadron_id=me.id, callsign=me.callsign)
     st.note(f"Campaign '{name}' begins. You fly the {AIRCRAFT[player_aircraft].display} with {me.name}. {d.name}.")
+    for _ln in story.beat(st, "open"):
+        st.note(_ln)
     return st

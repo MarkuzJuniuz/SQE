@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QDialog, Q
                                QPushButton, QCheckBox, QScrollArea, QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser,
                                QSizePolicy, QVBoxLayout, QWidget)
 
-from .. import APP_NAME, CAMPAIGN_EXT, __version__, narrative, overview_detail, posture
+from .. import APP_NAME, CAMPAIGN_EXT, __version__, narrative, overview_detail, posture, story
 from ..aircraft import AIRCRAFT
 from ..briefing import threat_lines
 from ..timeofday import is_night
@@ -111,7 +111,7 @@ class OverviewPage(QWidget):
         hist = od.history(st)
         self.dviews["ground"].setHtml(
             "<p>" + "<br>".join(html.escape(n) for n in notes) + "</p>"
-            + T(("Sector", "Enemy (bn)", "Coalition (bn)", ""), od.ground_rows(st))
+            + T(("Sector", story.enemy(st) + " (bn)", "Coalition (bn)", ""), od.ground_rows(st))
             + ("<p><b>Front history</b><br>" + "<br>".join(html.escape(x) for x in hist) + "</p>" if hist else "<p style='color:#8fa3b8'>The front has not moved yet.</p>"))
         self.dviews["supply"].setHtml(
             "<p style='color:#b9c6d6'>" + "<br>".join(html.escape(x) for x in posture.supply_lines(st)) + "<br>A site mends in about 6 days at full supply (longer when supply is low), "
@@ -145,14 +145,16 @@ class OverviewPage(QWidget):
             fe, fb = posture.supply_pct(st, "red"), posture.supply_pct(st, "blue")
             self.cards["fr"].set(f"Stage {k} of {tot}" if nxt is not None else "All taken", ("Next: " + nxt["name"] + "\n" if nxt is not None else "") +
                                  ", ".join(f"{nm} ({'taken' if s_ == 'ours' else 'next' if s_ == 'next' else 'enemy'})" for nm, s_ in posture.bases_status(st)))
-            self.cards["od"].set(o["word"].capitalize() if o else "No contact", posture.odds_line(st))
-            self.cards["su"].set(f"{fb}% / {fe}%", f"Coalition {posture.supply_word(fb / 100)}, enemy {posture.supply_word(fe / 100)}")
+            self.cards["od"].set(*((posture.posture(st)[0], "The war is over") if st.status != "ACTIVE" else (o["word"].capitalize() if o else "No contact", posture.odds_line(st))))
+            self.cards["su"].set(f"{fb}% / {fe}%", f"Coalition {posture.supply_word(fb / 100)}, {story.enemy(st)} {posture.supply_word(fe / 100)}")
         else:
             for kk in ("fr", "od", "su"):
                 self.cards[kk].set("-", "")
+        en = story.enemy(st)
+        self.cards["su"].l.setText(f"SUPPLY: COALITION / {en.upper()}"); self.cards["ad"].l.setText(f"AIR DEFENCE: COALITION / {en.upper()}")
         ab, ae = round(100 * posture.iads_pct(st, "blue")), round(100 * posture.iads_pct(st, "red"))
         self.cards["ad"].set(f"{ab}% / {ae}%", "\n".join(x for x in (("Coalition: " + posture.transit_text(st, "blue")) if posture.transit_text(st, "blue") else "",
-                                                                      ("Enemy: " + posture.transit_text(st, "red")) if posture.transit_text(st, "red") else "") if x) or "sites operational")
+                                                                      (en + ": " + posture.transit_text(st, "red")) if posture.transit_text(st, "red") else "") if x) or "sites operational")
         ws = posture.fall_warnings(st)
         self.warn.setText("\n".join(ws)); self.warn_card.setVisible(bool(ws))
         self._fill_details(st)
@@ -198,6 +200,19 @@ class MissionsPage(QWidget):
 
     def refresh(self, sess: Session):
         st = sess.state; self.sess = sess
+        if st.status != "ACTIVE":                           # v0.41.150: the war is over: no tasking order, the ending instead
+            self.lst.blockSignals(True); self.lst.clear(); self.lst.blockSignals(False)
+            self.pkgs = []; self.members = {}
+            self.day.setText(f"{st.campaign_date().strftime('%d %b %Y').upper()}  -  Day {st.day}  -  the war is over")
+            self.resume.setVisible(False); self.skip.setEnabled(False); self.note.hide()
+            self._clear_body()
+            lab, text = posture.posture(st)
+            self.bl.addWidget(self._label(lab, "title"))
+            self.bl.addWidget(self._label(text, "dim"))
+            self.bl.addWidget(self._label("There is nothing left to fly. Start a new campaign from the File menu.", "small"))
+            self.bl.addStretch(1)
+            return
+        self.note.show()
         self._loading = True
         self.flt.setCurrentIndex(0 if sess.settings.list_filter != "all" else 1)
         self._loading = False

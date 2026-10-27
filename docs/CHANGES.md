@@ -1,6 +1,16 @@
 # CHANGES.md
 
 
+## v0.41.150, Campaign Revamp Stage C3: the stories, and the ending
+
+XO (2026-10-27, "go C3, medium"). New `sqe/story.py`; the text lives in the theatre pack (`caucasus.json`, `stories`, one entry per level). A theatre without `stories` keeps the old texts.
+- THE STORIES: one per level. Levels 2 and 3 are Russia against Georgia and a US-led coalition; level 2 is level 3's story with a smaller Russian force, the victory at Sochi and a smaller counter-attack. Level 1 is the fictional Coastal Republic Army (CRA). Each has the Background, the Intent and a "Now" line for every posture label and ending (Ceasefire on L2 and L3, Insurgency broken on L1, Defeat). No named leaders or parties, no Tomcat line (the carrier air wing or the Air Force, joint campaign), and no foreshadowing: the counter-attack is not mentioned until the last objective falls.
+- The opponent's short label is used on the Overview and in the tabs: Russia, or CRA (it was "Enemy").
+- WAR LOG BEATS (so the log reads as the story so far): the opening, each base falling (Sukhumi, Gudauta, Sochi, Gelendzhik, Krymsk), a base retaken by the enemy, the counter-force arriving (L2, L3), one of our airfields falling and coming back, the win and the defeat. Hooks in `ground.py` (`_check_red_bases`, `check_falls`, `_counter_arrives`, `_update_win`), `war.update_status` and the campaign start.
+- THE ENDING (XO's report: after the victory the flights were listed and the buttons looked clickable): once a campaign is won or lost the Missions page shows the ending instead of the tasking order, the Warnings card and the takeover warnings are gone, and the Ground odds card shows the ending.
+- Smoke: new `check_71_story`; the C1 and C2 checks follow the opponent's label.
+
+
 ## v0.41.149, Campaign Revamp Stage C2: Situation panel, detail tabs, scramble fix
 
 XO (2026-10-27, "go C2, high"). New `sqe/overview_detail.py` (data only; the GUI draws it).

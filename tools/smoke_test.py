@@ -4462,7 +4462,7 @@ def check_68_overview(c):
         sr = "\n".join(_po.sitrep(st))
         for bad in ("aircraft serviceable", "Armored advance", "air arm", "Coalition air component", "carrier"):
             assert bad not in sr, bad
-        assert "stage 1 of" in sr and "next objective Sukhumi" in sr and "(losing)" in sr and "Coalition supply: 100% (good)" in sr and "Enemy air defence: 100%" in sr, sr
+        assert "stage 1 of" in sr and "next objective Sukhumi" in sr and "(losing)" in sr and "Coalition supply: 100% (good)" in sr and f"{'CRA' if lv == 1 else 'Russia'} air defence: 100%" in sr, sr
         assert not _po.fall_warnings(st), "no warning on day 1"
     # the odds word and the battalion unit
     o = _po.front_odds(st); assert o["bn_blue"] == round(o["blue"] / 10) and o["word"] == "losing"
@@ -4476,7 +4476,7 @@ def check_68_overview(c):
     assert [_po.supply_word(x) for x in (1.0, 0.8, 0.7, 0.55)] == ["good", "adequate", "strained", "critical"]
     for sid in [k for k, a in st.assets.items() if a.kind in _gr.SUPPLY_KINDS]:
         st.assets[sid].health = 0.0
-    assert _po.supply_pct(st, "red") == 55 and "Enemy supply: 55% (critical)" in _po.supply_lines(st)
+    assert _po.supply_pct(st, "red") == 55 and "Russia supply: 55% (critical)" in _po.supply_lines(st)
     # a fall warning, then Under pressure; the takeover; the last stand; the counter-force and the endings
     g["blue"][9] = g["blue"][10] = 0.0
     w = _po.fall_warnings(st); assert any("falls in about 1 day" in x for x in w) and _po.posture(st)[0] == "Under pressure", w
@@ -4494,7 +4494,7 @@ def check_68_overview(c):
     s1.state.status = "DEFEAT"; assert _po.posture(s1.state)[0] == "Defeat"
     # SAM orders in transit are shown with their days
     st.status = "ACTIVE"; st.sams = {"orders": [{"due": st.day + 2}], "red_orders": [{"due": st.day + 1}, {"due": st.day + 3}]}
-    ln = _po.air_defence_lines(st); assert "1 SAM battery in transit, the first in 2 days" in ln[0] and "2 SAM batteries in transit, the first in 1 day" in ln[1], ln
+    ln = _po.air_defence_lines(st); assert "1 SAM battery in transit, the first in 2 days" in ln[0] and "2 SAM batteries in transit, the first in 1 day" in ln[1] and ln[1].startswith("Russia"), ln
     # the carrier gets no line on the Overview
     st.raids = st.raids or {}
     assert not any("carrier" in x.lower() for x in _bo.status_lines(st))
@@ -4548,14 +4548,14 @@ def check_70_overview_detail(c):
     s = fresh_session(3, 7); st = s.state; g = st.ground
     sit = _od.situation(st)
     assert sit["label"] == "Holding" and sit["now"] and len(sit["background"]) >= 2 and "intent" in sit["intent"].lower() and not any("intent" in p.lower() for p in sit["background"]), sit
-    st.status = "VICTORY"; assert _od.situation(st)["now"].startswith("The last objective is ours"), "the ending text is the Now line"; st.status = "ACTIVE"
+    st.status = "VICTORY"; assert _od.situation(st)["now"].startswith("Russia has asked for talks"), "the ending text is the Now line"; st.status = "ACTIVE"
     rows = _od.ground_rows(st); assert len(rows) == _gr.n_zones(g) == 13 and rows[9][3] == "contested" and rows[0][3] == "enemy holds" and rows[11][3] == "Coalition holds", rows
     assert any("next objective" in n for n in _od.ground_notes(st))
     g["taken"], g["taken_day"], g["clock"] = ["ab_sukhumi"], {"ab_sukhumi": st.day}, st.day + 4
     st.log.append(f"[day {st.day}] SUKHUMI HAS FALLEN: our forces hold it"); st.log.append("[day 1] nothing to see here")
     n = _od.ground_notes(st); assert any("next attack in about 4 days" in x for x in n) and any("taken on day" in x for x in n), n
     assert _od.history(st) == [st.log[-2]], _od.history(st)
-    sr = _od.supply_rows(st); assert len(sr) == 12 + 6 and {r[0] for r in sr} == {"Coalition", "Enemy"} and all(r[3] == "intact" for r in sr), sr[:3]
+    sr = _od.supply_rows(st); assert len(sr) == 12 + 6 and {r[0] for r in sr} == {"Coalition", "Russia"} and all(r[3] == "intact" for r in sr), sr[:3]
     a = next(x for x in st.assets.values() if x.kind in _gr.SUPPLY_KINDS)
     g["sup_h"][a.id] = 1.0; a.health = 0.5
     assert next(r for r in _od.supply_rows(st) if r[1] == a.name)[3].startswith("struck"), "struck since last night: no repair tonight"
@@ -4563,12 +4563,48 @@ def check_70_overview_detail(c):
     assert "repairing, about" in next(r for r in _od.supply_rows(st) if r[1] == a.name)[3]
     a.health = 0.0; g["sup_h"][a.id] = 0.0
     assert next(r for r in _od.supply_rows(st) if r[1] == a.name)[3].startswith("destroyed")
-    ad = _od.air_defence_rows(st); assert any(r[0] == "Enemy" for r in ad) and any(r[0] == "Coalition" for r in ad) and all(r[4] == "operational" for r in ad), ad[:2]
+    ad = _od.air_defence_rows(st); assert any(r[0] == "Russia" for r in ad) and any(r[0] == "Coalition" for r in ad) and all(r[4] == "operational" for r in ad), ad[:2]
     st.sams = {"orders": [{"to": "senaki", "key": "pat", "from_name": "Kutaisi", "due": st.day + 2, "health": 1}], "red_orders": [{"to": next(k for k, x in st.assets.items() if x.kind.value == "SAM"), "from": next(k for k, x in st.assets.items() if x.kind.value == "SAM"), "due": st.day}]}
-    o = _od.orders_rows(st); assert o[0][0] == "Coalition" and "in 2 days" in o[0][1] and o[1][0] == "Enemy" and "arrives today" in o[1][1], o
+    o = _od.orders_rows(st); assert o[0][0] == "Coalition" and "in 2 days" in o[0][1] and o[1][0] == "Russia" and "arrives today" in o[1][1], o
     st.tempo = {"CAS": 0.09, "AIR": _tp.TEMPO_CAP}
     tl = _od.tempo_lines(st); assert tl[0] == "Close air support: +9%" and tl[3].endswith("(at the cap)") and tl[1] == "Strike: +0%", tl
     print("[overview detail] Situation panel text, ground rows and notes, front history, supply rows with repair state, air defence rows, SAM orders, air tempo")
+
+
+def check_71_story(c):
+    """v0.41.150: the per-level stories (sqe/story.py): texts, the opponent's label, war-log beats, the ending on the Overview."""
+    from sqe import story as _sy, posture as _po, ground as _gr, overview_detail as _od, war as _war
+    import json as _js
+    for lv, en in ((1, "CRA"), (2, "Russia"), (3, "Russia")):
+        s = fresh_session(lv, 7); st = s.state
+        assert _sy.enemy(st) == en and _sy.get(st)["background"] and _sy.get(st)["intent"], lv
+        txt = " ".join(_sy.get(st)["background"] + [_sy.get(st)["intent"]])
+        assert "Tomcat" not in txt and ("Coastal Republic Army" in txt) == (lv == 1) and ("Russia" in txt) == (lv != 1), lv
+        assert any("Operation IRON TIDE begins" in x for x in st.log), "the opening beat is in the war log"
+        for lab in _po.LABELS[:5] + ("Defeat",):
+            assert _sy.now_line(st, lab, "") , (lv, lab)
+        assert ("Counter-force" in _sy.get(st)["now"]) == (lv != 1) and ("counter" in _sy.get(st)["beats"]) == (lv != 1)
+        assert _sy.get(st)["beats"]["fall_ab_sochi"] and _sy.beat(st, "retake", base="Gudauta")[0].count("Gudauta") == 1
+        sit = _od.situation(st); assert sit["background"] == _sy.get(st)["background"] and sit["intent"] == _sy.get(st)["intent"]
+        # no foreshadowing: nothing before the last objective falls mentions a counter-attack
+        assert "counter" not in (txt + " ".join(_sy.get(st)["now"][k] for k in ("Offensive", "Consolidating", "Holding", "Under pressure", "Last stand"))).lower(), lv
+    # the beats arrive in the war log when the war moves (L3: Sukhumi falls, then the counter-force, the win)
+    s = fresh_session(3, 7); st = s.state; g = st.ground
+    g["red"][8] = 0.0; g["blue"][8] = 40.0
+    for a in st.assets.values():
+        if a.id == "armor_9":
+            a.health = 0.0
+    lines = _gr._check_red_bases(st); assert any("Sukhumi is ours" in x for x in lines), lines
+    g["counter"] = {"arrive": st.day, "frac": 0.6, "arrived": False}; g["counter_id"] = "ab_krymsk"; g["taken"].append("ab_krymsk")
+    ln = _gr._counter_arrives(st); assert any("A fresh Russian force has come down from the north and is counter-attacking Krymsk" in x for x in ln), ln
+    g["fallen"] = []; st.status = "ACTIVE"
+    g["fallen"] = ["senaki", "kutaisi"]; _war.update_status(st)
+    assert st.status == "DEFEAT" and any("The front has collapsed" in x for x in st.log[-3:]), st.log[-3:]
+    # the ending: no warnings, the odds card says so (data side), the posture is the ending
+    assert not _po.fall_warnings(st) and _po.posture(st)[0] == "Defeat"
+    s1 = fresh_session(1, 7); s1.state.status = "VICTORY"
+    assert _po.posture(s1.state)[1].startswith("The coastal cities are back under government control") and _po.fall_warnings(s1.state) == []
+    print("[story] three level stories, opponent label, no Tomcat line, no foreshadowing, opening / fall / counter / defeat beats in the war log, ending without warnings")
 
 
 CHECKS = [
@@ -4680,6 +4716,7 @@ CHECKS = [
     check_68_overview,
     check_69_scramble_undo,
     check_70_overview_detail,
+    check_71_story,
 ]
 
 

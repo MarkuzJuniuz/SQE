@@ -25,6 +25,7 @@ Pure planning and bookkeeping, no pydcs. Positions are DCS metres (x north, y ea
 from __future__ import annotations
 import math
 from .models import AssetKind, EnemyAsset
+from . import story
 
 NM = 1852.0
 MIN_FORCE = 3.0               # below this a side has no organised force in the zone
@@ -671,10 +672,12 @@ def check_falls(state) -> list:
             g["fallen"].append(bid)
             lines += apply_fall(state, bid)
             lines += capture_sites(state, bid, [f"bfuel_{bid}"])
+            lines += story.beat(state, "fallen_blue", base=state.bases[bid].name)
         elif not held and bid in g["fallen"] and g["blue"][i] >= MIN_FORCE:
             g["fallen"].remove(bid)
             release_sites(state, bid)
             lines.append(f"{state.bases[bid].name} is back in our hands, with its defences gone; the squadrons stay where they moved")
+            lines += story.beat(state, "back_blue", base=state.bases[bid].name)
     return lines
 
 
@@ -699,7 +702,7 @@ def _counter_arrives(state) -> list:
     g["red"][i] = min(MAX_FORCE, g["red"][i] + MAX_FORCE * c["frac"])
     c["until"] = state.day + COUNTER_FORCED_DAYS
     rb = next(r for r in g["rbases"] if r["id"] == cid)
-    return [f"{rb['name']}: the enemy counter-force has arrived and is attacking"]
+    return [f"{rb['name']}: the enemy counter-force has arrived and is attacking"] + story.beat(state, "counter", base=rb["name"])
 
 
 def _forced_zone(state):
@@ -723,6 +726,7 @@ def _check_red_bases(state) -> list:
             g["red_clock"] = state.day + RED_CLOCK_DAYS
             lines.append(f"{rb['name'].upper()} HAS FALLEN: our forces hold it. The next push waits for the takeover ({CLOCK_DAYS} days)")
             lines += apply_red_fall(state, rb)
+            lines += story.beat(state, "fall_" + rid)
             c = g.get("counter")
             if rid == g.get("counter_id") and c is None:
                 g["counter"] = {"arrive": state.day + COUNTER_DELAY_DAYS, "frac": COUNTER_FRAC.get(int(state.level), 0.0), "arrived": False}
@@ -739,6 +743,7 @@ def _check_red_bases(state) -> list:
             if c is not None and rid == g.get("counter_id"):
                 c["used"] = True
             lines.append(f"{rb['name']} has been retaken by the enemy")
+            lines += story.beat(state, "retake", base=rb["name"])
     return lines
 
 
@@ -760,7 +765,7 @@ def _update_win(state) -> list:
             elif not c.get("resolved"):
                 return []
     g["won"] = True
-    return ["The last objective is ours and nothing is left to stop us"]
+    return ["The last objective is ours and nothing is left to stop us"] + story.beat(state, "win")
 
 
 def victory(state) -> bool:
