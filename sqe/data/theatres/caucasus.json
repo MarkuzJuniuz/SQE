@@ -293,6 +293,86 @@
             "dx": -8000,
             "dy": 6000,
             "value": 4
+        },
+        {
+            "parent": "ab_sukhumi",
+            "id": "fuel_sukhumi",
+            "name": "Sukhumi fuel farm",
+            "kind": "FUEL",
+            "airport": "Sukhumi-Babushara",
+            "dx": -3000,
+            "dy": 8000,
+            "value": 5
+        },
+        {
+            "parent": "ab_sukhumi",
+            "id": "depot_sukhumi",
+            "name": "Sukhumi supply depot",
+            "kind": "DEPOT",
+            "airport": "Sukhumi-Babushara",
+            "dx": 3000,
+            "dy": 11000,
+            "value": 4
+        },
+        {
+            "parent": "ab_gudauta",
+            "id": "depot_gudauta",
+            "name": "Gudauta supply depot",
+            "kind": "DEPOT",
+            "airport": "Gudauta",
+            "dx": 3500,
+            "dy": 11000,
+            "value": 4
+        },
+        {
+            "parent": "ab_sochi",
+            "id": "fuel_sochi",
+            "name": "Sochi fuel farm",
+            "kind": "FUEL",
+            "airport": "Sochi-Adler",
+            "dx": -4000,
+            "dy": 8000,
+            "value": 6
+        },
+        {
+            "parent": "ab_sochi",
+            "id": "depot_sochi",
+            "name": "Sochi supply depot",
+            "kind": "DEPOT",
+            "airport": "Sochi-Adler",
+            "dx": 4000,
+            "dy": 10000,
+            "value": 5
+        },
+        {
+            "parent": "ab_gelen",
+            "id": "fuel_gelen",
+            "name": "Gelendzhik fuel farm",
+            "kind": "FUEL",
+            "airport": "Gelendzhik",
+            "dx": 5000,
+            "dy": 7000,
+            "value": 4
+        },
+        {
+            "parent": "ab_gelen",
+            "id": "depot_gelen",
+            "name": "Gelendzhik supply depot",
+            "kind": "DEPOT",
+            "airport": "Gelendzhik",
+            "dx": -3000,
+            "dy": 9000,
+            "value": 4
+        },
+        {
+            "parent": "ab_krymsk",
+            "id": "depot_krymsk",
+            "name": "Krymsk supply depot",
+            "kind": "DEPOT",
+            "airport": "Krymsk",
+            "dx": -5000,
+            "dy": 12000,
+            "value": 5
         }
     ],
     "front": {

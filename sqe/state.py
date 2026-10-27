@@ -121,8 +121,8 @@ class CampaignState:
         s.assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in d["assets"].items()}
         s.enemy_air = [wing_from_dict(w) for w in d["enemy_air"]]
         s.ground = d.get("ground") or {}
-        if s.ground and int(s.ground.get("v", 1)) < 2:
-            raise ValueError("This campaign was saved before the Campaign Revamp (v0.41.143): the ground war changed, so it cannot be loaded. Please start a new campaign.")
+        if s.ground and int(s.ground.get("v", 1)) < 3:
+            raise ValueError("This campaign was saved before the Campaign Revamp supply stage (v0.41.144): the ground war and its supply sites changed, so it cannot be loaded. Please start a new campaign.")
         s.raids = d.get("raids") or {}
         s.sams = d.get("sams") or {}
         s.red_air = d.get("red_air") or {}

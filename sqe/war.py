@@ -119,7 +119,14 @@ class ObjectivePlanner:
             defenders = [x for x in a.defended_by if alive(x)]
             if a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT):
                 pr = a.value * a.health / (1 + 0.5 * len(defenders))
-                cand.append((pr, Objective("", ObjectiveType.STRIKE, a.id, pr, f"Strike {a.name}"), self._blockers(state, a) + covering_sams(state, a), locked))
+                cov = covering_sams(state, a)
+                o_ = Objective("", ObjectiveType.STRIKE, a.id, pr, f"Strike {a.name}")
+                if a.kind in (AssetKind.FUEL, AssetKind.DEPOT) and cov and all(x.variant in ESCORTABLE for x in cov):
+                    # v0.41.144: a supply site under live SA-2/3/6 goes out with a HARM escort (as CAS does, v0.41.20); an SA-11 / SA-10 still needs a DEAD first
+                    o_.aim = "SEAD"
+                    o_.description += " (with a SEAD escort)"
+                    cov = []
+                cand.append((pr, o_, self._blockers(state, a) + cov, locked))
             elif a.kind == AssetKind.SAM and a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10:      # short-range SAMs are CAS's problem, not a SEAD/DEAD package's
                 covered = sum(x.value for x in state.assets.values() if a.id in x.defended_by and not x.destroyed) / 3.0
                 pr = a.value * a.health + covered
@@ -304,6 +311,15 @@ class WarSimulator:
                 sam *= 0.5
         air = _air_cover(state, self.d.iads)
         defense = sam + air
+        if obj.type == ObjectiveType.STRIKE and obj.aim == "SEAD":
+            # v0.41.144: a supply strike under escortable SAM cover goes in at the SEAD flight's own chance (the salvo-size rule of sead_p: the HARMs
+            # against the covering sites' weight), not worse than the plain strike odds (judgment call; the roll rates are unchanged)
+            t = state.assets[obj.target_id]
+            cov = covering_sams(state, t)
+            s_sead = sum(f.count * ROLE_WEIGHT[Role.SEAD] for f in pkg.flights if f.role == Role.SEAD)
+            site = sum((1.0 + 0.8 * self.d.iads) * x.health for x in cov)
+            p_s = min(0.95, s_sead / (s_sead + site)) if (s_sead and site) else (0.95 if s_sead else 0.0)
+            return max(p_s, strength / (strength + defense) if strength + defense else 0.0) if cov else (strength / (strength + defense) if strength + defense else 0.0), strength, defense
         return (strength / (strength + defense) if strength + defense else 0.0), strength, defense
 
     def _resolve_sweep(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
@@ -524,7 +540,7 @@ class WarSimulator:
         for ln in support_assets.step(state, self.rng):                  # v0.41.87: missing AWACS / tanker airframes come back
             state.note("Overnight: " + ln)
         for a in state.assets.values():
-            if 0 < a.health < 1.0 and ground.zone_of(state, a.id) is None:        # v0.41.143: a front column is a sector's strength: the ground war reinforces it, it does not repair itself
+            if 0 < a.health < 1.0 and ground.zone_of(state, a.id) is None and not (ground.active(state) and a.kind in ground.SUPPLY_KINDS):        # v0.41.143: a front column is a sector's strength: the ground war reinforces it, it does not repair itself
                 a.health = min(1.0, a.health + (d.sam_repair if a.kind == AssetKind.SAM else d.asset_repair))
         for a in state.assets.values():
             a.suppressed = False                                    # blinded radars come back on overnight
@@ -538,6 +554,8 @@ class WarSimulator:
             for ln in ground.resolve_day(state, d, self.rng):
                 state.note("Overnight: " + ln)
             ground.repair_blue(state, d)
+            for ln in ground.supply_repair(state):                 # v0.41.144: both sides' supply sites mend on their own timer
+                state.note("Overnight: " + ln)
             for ln in ground.rebuild_blue(state, d, self.rng):
                 state.note("Overnight: " + ln)
             for bid in state.ground.get("fallen", []):

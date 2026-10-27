@@ -246,6 +246,8 @@ class PackageBuilder:
                     Slot(Role.SEAD, 4 if nb >= SALVO_8_NEIGHBOURS else 2)]     # the JSOW flight is picked before the second HARM flight: without it nothing is destroyed
         elif obj.type == ObjectiveType.CAS and obj.aim == "SEAD":           # v0.41.20: CAS under a live SA-2/3/6: the HARM escort is not optional
             tmpl = [Slot(Role.CAS, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
+        elif obj.type == ObjectiveType.STRIKE and obj.aim == "SEAD":        # v0.41.144: a supply strike under a live SA-2/3/6: same, the HARM escort is required
+            tmpl = [Slot(Role.STRIKE, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
         if carrier_raid(self.state, obj):                                    # v0.41.107: the setpiece: every fighter flight in reach, about one blue fighter per raider
             k = max(2, math.ceil(SETPIECE_RATIO * n_fl))              # n_fl = bombers; raiders = bombers x 3 (2 escorts each) -> k flights of 4
             return [Slot(Role.CAP, 4), Slot(Role.CAP, 4)] + [Slot(Role.CAP, 4, False) for _ in range(k - 2)] + [Slot(Role.SWEEP, 2, False)]
@@ -317,11 +319,11 @@ class PackageBuilder:
             for sl_, sq_, n_, _ in chosen:
                 ledger.free[sq_.id] += n_
             raise NoPlayerSlot("no JSOW-capable squadron free for the Standoff DEAD today")
-        if obj.type == ObjectiveType.CAS and obj.aim == "SEAD" and not any(sl_.role == Role.SEAD for sl_, *_ in chosen):
+        if obj.type in (ObjectiveType.CAS, ObjectiveType.STRIKE) and obj.aim == "SEAD" and not any(sl_.role == Role.SEAD for sl_, *_ in chosen):
             # v0.41.20: no HARM jets free: the CAS under a live SAM waits for another day rather than going in unescorted (no needless banzai)
             for sl_, sq_, n_, _ in chosen:
                 ledger.free[sq_.id] += n_
-            raise NoPlayerSlot("no SEAD flight free to escort the CAS today")
+            raise NoPlayerSlot("no SEAD flight free to escort the " + ("CAS" if obj.type == ObjectiveType.CAS else "strike") + " today")
 
         # support CAP: all four kinds (TNKCAP, HAVCAP, BASECAP, CVCAP) are planned chains now (blue_barcap.py), attached after the start times are known
         # v0.41.88: TNKCAP and HAVCAP are planned too (blue_barcap.py): chains per tanker / AWACS asset, attached once the start times are known.

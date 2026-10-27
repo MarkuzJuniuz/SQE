@@ -2905,7 +2905,7 @@ def check_35_no_ground_group_sits(c):
             _sw = next(p_ for p_ in _swp if _ws.flyable(p_)); break
     assert _sw, "no Fighter Sweep planned in 19 days"
     _pk_ = _ws.packages()
-    assert all(f_.role == _Rl2.SWEEP and f_.count == 4 and not f_.tag for f_ in _sw.flights), "a sweep is 4-ships only, no support CAP"
+    assert all(f_.role == _Rl2.SWEEP and f_.count in (2, 4) and not f_.tag for f_ in _sw.flights), "a sweep is a 4-ship (a squadron with fewer jets free flies the pair it has; v0.41.144), no support CAP"
     assert all(f_.aircraft in ("F-15C", "F-14BU") for p_ in _ws.packages() if _isw(p_.objective) for f_ in p_.flights if not f_.tag), ("v0.41.15: sweeps fly F-15Cs and F-14s only", [(p_.objective.description, [(f_.aircraft, f_.tag, f_.role.value) for f_ in p_.flights]) for p_ in _ws.packages() if _isw(p_.objective)])
     _esc = [f_ for p_ in _pk_ if p_.objective.type.value in ("STRIKE", "DEAD", "CAS") for f_ in p_.flights if f_.role == _Rl2.ESCORT]
     assert _esc and all(f_.count == 2 for f_ in _esc), "a defended strike package carries a 2-ship escort (v0.41.1), the extra fighters are the sweep's"
@@ -4221,7 +4221,7 @@ def check_63_the_push(c):
     from sqe.state import CampaignState as _CS
     from sqe.difficulty import get as _gd
     s = fresh_session(2, 5); st = s.state; g = st.ground
-    assert g["v"] == _gr.GROUND_V == 2 and [r["id"] for r in g["rbases"]] == ["ab_sukhumi", "ab_gudauta", "ab_sochi"] and g["victory_ids"] == ["ab_sochi"] and g["counter_id"] == "ab_sochi"
+    assert g["v"] == _gr.GROUND_V == 3 and [r["id"] for r in g["rbases"]] == ["ab_sukhumi", "ab_gudauta", "ab_sochi"] and g["victory_ids"] == ["ab_sochi"] and g["counter_id"] == "ab_sochi"
     s3 = fresh_session(3, 5); g3 = s3.state.ground
     assert _gr.n_zones(g3) == 14 and g3["victory_ids"] == ["ab_sochi", "ab_krymsk"] and g3["counter_id"] == "ab_krymsk" and len(g3["rbases"]) == 5
     s1 = fresh_session(1, 5); assert s1.state.ground["counter_id"] in ("", None) or not s1.state.ground["counter_id"]
@@ -4248,6 +4248,78 @@ def check_63_the_push(c):
             _gr.resolve_day(sg, _gd(lv), _rnd.Random(dd)); sg.day += 1
         assert all(0 <= v <= _gr.MAX_FORCE for v in sg.ground["red"] + sg.ground["blue"])
     print("[the push] 9 / 9 / 14 sectors, red bases fall and are retaken, takeover clocks, counter-force and victory ids by level, v1 saves refused, nightly fights in range")
+
+
+def check_64_supply_loop(c):
+    """v0.41.144, Campaign Revamp B2: depots and fuel on both sides, stock-based supply, captured sites change sides, repair timers, SEAD-escorted supply strikes, skip-day round."""
+    import random as _rnd
+    from sqe import ground as _gr, war as _war
+    from sqe.models import AssetKind as _AK
+    from sqe.state import CampaignState as _CS
+    from sqe.difficulty import get as _gd
+    kinds = (_AK.FUEL, _AK.DEPOT)
+    for lv, n_red in ((1, 4), (2, 12), (3, 12)):
+        st = fresh_session(lv, 5).state
+        assert st.ground["sup_n"] == {"red": n_red, "blue": 6} and _gr.supply(st, "blue") == 1.0, (lv, st.ground["sup_n"])
+        assert "bdepot_rear" in st.blue_assets and "bdepot_fwd" in st.blue_assets
+    s = fresh_session(3, 5); st = s.state; g = st.ground
+    red_ids = [a.id for a in st.assets.values() if a.kind in kinds]
+    # supply is stock over the starting count: losing sites lowers it to the floor at worst
+    for i in red_ids:
+        st.assets[i].health = 0.0
+    assert abs(_gr.supply(st, "red") - _gr.SUPPLY_FLOOR) < 1e-9
+    for i in red_ids:
+        st.assets[i].health = 1.0
+    # repair: a destroyed site is back in 6 days at 100% supply, slower at low supply, and not on a day it is struck
+    a = st.assets["fuel_sochi"]; a.health = 0.0; g["sup_h"]["fuel_sochi"] = 0.0
+    for _ in range(5):
+        _gr.supply_repair(st)
+    assert 0.5 < a.health < 1.0, a.health
+    _gr.supply_repair(st); assert a.health >= 0.99 or abs(a.health - 1.0) < 0.2
+    a.health = 0.5; g["sup_h"]["fuel_sochi"] = 0.8                                  # struck since last night: no repair
+    _gr.supply_repair(st); assert a.health == 0.5
+    # a base falling hands its sites to the captor with their stock; retaking hands them back
+    for _id in ("fuel_sukhumi", "depot_sukhumi"):
+        st.assets[_id].health = 0.6
+    rb = next(r for r in g["rbases"] if r["id"] == "ab_sukhumi")
+    ln = _gr.apply_red_fall(st, rb)
+    assert "fuel_sukhumi" in st.blue_assets and "depot_sukhumi" in st.blue_assets and "fuel_sukhumi" not in st.assets and st.blue_assets["fuel_sukhumi"].health == 0.6, "captured with their stock"
+    assert _gr.supply(st, "blue") == 1.0 and _gr.supply(st, "red") < 1.0, "the captor stays capped at 100%, the old owner drops"
+    _gr.release_sites(st, "ab_sukhumi"); assert "fuel_sukhumi" in st.assets and "fuel_sukhumi" not in st.blue_assets
+    # the same for our own field (bfuel_x) when it falls and is retaken
+    _gr.apply_fall(st, "senaki"); _gr.capture_sites(st, "senaki", ["bfuel_senaki"]); assert "bfuel_senaki" in st.assets and "bfuel_senaki" not in st.blue_assets and _gr.supply(st, "blue") < 1.0
+    _gr.release_sites(st, "senaki"); assert "bfuel_senaki" in st.blue_assets
+    # a round trip keeps everything
+    assert _CS.from_dict(st.to_dict()).ground["sup_n"] == g["sup_n"]
+    # a supply strike under only an SA-2/3/6 goes out with a SEAD escort; under an SA-11 / SA-10 it waits for a DEAD
+    st2 = fresh_session(2, 5).state
+    site = st2.assets["depot_sochi"]
+    for x in st2.assets.values():
+        if x.kind == _AK.SAM:
+            x.health = 0.0
+    sam = next(x for x in st2.assets.values() if x.kind == _AK.SAM and x.id.startswith("sam_sochi"))
+    sam.x, sam.y, sam.health, sam.variant = site.x + 5000, site.y, 1.0, "SA-6"
+    st2.front = 2
+    objs = _war.ObjectivePlanner(_gd(2)).plan(st2, _rnd.Random(2), limit=40)
+    o = next((o for o in objs if getattr(o, "target_id", "") == "depot_sochi"), None)
+    assert o is not None and o.aim == "SEAD" and "SEAD escort" in o.description, "an escortable cover sends the strike with a HARM escort"
+    sam.variant = "SA-10"
+    objs = _war.ObjectivePlanner(_gd(2)).plan(st2, _rnd.Random(2), limit=40)
+    assert not any(getattr(o, "target_id", "") == "depot_sochi" and o.type.value == "STRIKE" for o in objs), "an SA-10 over the depot blocks the strike until it is dead"
+    # the skip-day round hits supply sites, never ones under a long-range belt, and lowers health
+    st3 = fresh_session(3, 5).state
+    before = {a.id: a.health for a in list(st3.assets.values()) + list(st3.blue_assets.values()) if a.kind in kinds}
+    lns = []
+    for k in range(40):
+        lns += _gr.supply_round(st3, _gd(3), _rnd.Random(k))
+    assert lns and any(a.health < before[a.id] for a in list(st3.assets.values()) + list(st3.blue_assets.values()) if a.id in before)
+    # old v2 saves are refused
+    d = st.to_dict(); d["ground"]["v"] = 2
+    try:
+        _CS.from_dict(d); raise AssertionError("v2 should be refused")
+    except ValueError as e_:
+        assert "new campaign" in str(e_)
+    print("[supply loop] sites by level, stock-based supply with the 55% floor, 6-day repair timer (none on a struck day), captured sites change sides and back, SEAD-escorted supply strikes, skip-day round, v2 saves refused")
 
 
 def check_62_red_roster(c):
@@ -4398,6 +4470,7 @@ CHECKS = [
     check_61_l1_red_supply_floor,
     check_62_red_roster,
     check_63_the_push,
+    check_64_supply_loop,
 ]
 
 

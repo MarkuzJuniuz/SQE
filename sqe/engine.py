@@ -12,7 +12,7 @@ from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
 from .models import BaseKind, Objective, ObjectiveType, Role
-from . import raids, redair, sams
+from . import raids, redair, sams, ground
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import AI_ONLY, ai_only, carrier_raid, Ledger, NoPlayerSlot, Package, PackageBuilder
 
@@ -821,6 +821,8 @@ class Session:
         results = [sim.resolve_abstract(st, Package.from_dict(pd)) for pd in st.plan]
         st.note(f"Day {st.day}: you stood down. The war went on without you ({sum(1 for r in results if r['success'])} of {sum(1 for r in results if not r.get('scrubbed'))} packages succeeded"
                 f"{'; ' + str(sum(1 for r in results if r.get('scrubbed'))) + ' scrubbed for weather' if any(r.get('scrubbed') for r in results) else ''}).")
+        for ln in ground.supply_round(st, self.d, sim.rng):                 # v0.41.144: both sides still bomb each other's depots and fuel in the background
+            st.note("Overnight: " + ln)
         sim.end_day(st)
         status = update_status(st)
         if st.status == "ACTIVE":

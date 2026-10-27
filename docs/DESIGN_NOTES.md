@@ -199,6 +199,16 @@ _verified v0.41.102, 2026-10-22 (read from the code; smoke `check_31x_forward_ga
 - **Red's tasking:** `raids.candidates("garrison")` also lists `bfwd_N` (and `aim_kind` calls it a garrison) where blue still holds the sector, weighted by pressure. A hit lowers its health, which the ground sim turns into a force loss.
 - **In missions:** `rfwd_N` is built when it is the CAS target (`_spawn_site`, like any garrison); `bfwd_N` only as a raid target (`_spawn_raid_target`) and in the full-map test. The friendly force at a CAS against `rfwd_N` is scaled by `blue_scale` through `ground.sector_of`.
 
+## 11b. Supply sites, captures and the skip-day round (v0.41.144)
+_verified v0.41.144, 2026-10-27 (written from the code; smoke `check_64_supply_loop`; not yet flown by XO)_
+
+- **Sites:** red's FUEL / DEPOT are in `state.assets` (theatre `support_targets`: a fuel farm and depot at each chain base, plus the far-north Beslan and Nalchik depots); blue's are in `state.blue_assets` (`bfuel_<field>` per airfield, `bdepot_fwd`, `bdepot_rear`). `ground.SUPPLY_KINDS`.
+- **Supply** (`ground.supply`): stock held over the count the side started with (`g["sup_n"]`), so a captured site lifts the captor (cap 100%) and lowers the old owner (floor 55%). L1 red keeps its 70% floor. Reinforcement in `resolve_day` is scaled by it.
+- **Capture:** `apply_red_fall` / `check_falls` call `capture_sites`, which moves the sites to the other dict with their health (stock, no fade) and remembers them in `g["capt"][base]`; a retake calls `release_sites`. A site moved into `blue_assets` can be raided by the existing supply raids, one moved into `state.assets` is a normal blue target.
+- **Repair** (`ground.supply_repair`, nightly, skip days too): +supply/6 of a site a day; none on a night after the site lost health (compares with `g["sup_h"]`). The old flat `asset_repair` skips supply sites.
+- **Supply strikes under SAM cover** (`war.ObjectivePlanner.plan`): a FUEL / DEPOT STRIKE under only SA-2/3/6 is offered with aim "SEAD" and a required HARM flight (`packages._slots`); `WarSimulator.odds` uses the salvo-size odds of the escort for it. An SA-11 / SA-10 still blocks it until that site is dead.
+- **Skip days** (`engine.skip_day` -> `ground.supply_round`): blue tries `SUPPLY_ROUND_BLUE` (2) background strikes on red sites, red 1 or 2 on ours (by `raid_rate`); chance 50% open, 20% under escortable cover, none under a long-range belt; a hit costs `SUPPLY_ROUND_HIT` (0.35). Judgment calls.
+
 ## 12. The carrier raid setpiece (v0.41.105 to v0.41.109)
 _verified v0.41.109, 2026-10-22 (read from the code; smoke `check_31z`, `31za`, `31zb`, `31zc`; not yet flown by XO)_
 
