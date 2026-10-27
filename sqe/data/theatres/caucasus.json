@@ -35,7 +35,8 @@
         "short": "USS Stennis",
         "from_airport": "Batumi",
         "heading": 270,
-        "distance_m": 160000
+        "distance_m": 160000,
+        "carrier_standoff_nm": 100
     },
     "blue_fields": [
         {
