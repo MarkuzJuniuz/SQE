@@ -133,3 +133,25 @@ def tempo_lines(state) -> list:
         v = tempo.get(state, k) * 100
         out.append(f"{tempo.LABEL[k].capitalize()}: {v:+.0f}%" + ("  (at the cap)" if abs(v) >= tempo.TEMPO_CAP * 100 - 0.5 else ""))
     return out
+
+
+TYPE_WORDS = (("CAS", "CAS"), ("STRIKE", "strike"), ("DEAD", "SEAD / DEAD"), ("COUNTER_AIR", "counter-air"), ("BARCAP", "patrol"), ("FLEET_DEFENSE", "fleet defence"))
+
+
+def tasking(sess) -> tuple:
+    """Today's tasking for the Overview: (headline, detail). The packages on the order by kind, how many your squadron can fly, or why it has none."""
+    st = sess.state
+    pk = sess.packages()
+    if st.status != "ACTIVE":
+        return "War over", "There is nothing left to fly."
+    n_you = sum(1 for p in pk if sess.flyable(p))
+    kinds = {}
+    for p in pk:
+        kinds[p.objective.type.value] = kinds.get(p.objective.type.value, 0) + 1
+    parts = [f"{kinds[k]} {w}" for k, w in TYPE_WORDS if kinds.get(k)]
+    head = f"{len(pk)} package{'s' if len(pk) != 1 else ''}"
+    if not pk:
+        return "No jobs today", " ".join(sess.idle_reasons()) or "Nothing is open on today's tasking order."
+    if n_you:
+        return head, ", ".join(parts) + f". You can fly {n_you}."
+    return head, ", ".join(parts) + ". Stand-down day for you: " + " ".join(sess.idle_reasons())
