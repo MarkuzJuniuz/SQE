@@ -5,7 +5,6 @@ from . import narrative, credit_line
 from .aircraft import AIRCRAFT
 from .models import AssetKind
 from .routes import dist, NM
-from .war import totals
 
 _SAM_NAME = {"SA-8": "SA-8 Gecko", "AAA": "AAA", "MANPAD": "MANPADS", "SA-2": "SA-2 Guideline", "SA-3": "SA-3 Goa", "SA-6": "SA-6 Gainful",
              "SA-11": "SA-11 Gadfly", "SA-10": "SA-10 Grumble", "SA-15": "SA-15 Gauntlet", "SA-19": "SA-19 Grison"}
@@ -33,7 +32,6 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     n, pname, ptext = narrative.phase(state)
     obj = pkg.objective
     threats = threat_lines(state, *tgt_xy)
-    t = totals(state)
     sit = [f"{x['date']}. {narrative.TITLE}, day {state.day}. {pname}.", "", ptext, "", *narrative.sitrep(state), "",
            f"Commander's intent: {narrative.intent_for(state, pkg)}"]
     if threats:

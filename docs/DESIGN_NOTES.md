@@ -211,6 +211,11 @@ _verified v0.41.144, 2026-10-27 (written from the code; smoke `check_64_supply_l
 - **No-hunt thresholds (v0.41.145):** `ground.BREAK_RATIO` (0.30): in `resolve_day` a force under 30% of the one facing it falls back (both sides, shared sector or across a quiet line); `info()["broken"]` keeps such a sector out of the CAS list. `ground.DOWN_HEALTH` (0.30): the planner skips depots, fuel, command posts and SAMs at or under it, `covering_sams` and the threat map ignore a SAM at or under it. The sectors with their forward positions are the "detachments" (`leg_zones` in the theatre file: 1, 4, 2, 1, 4, 1 from Krymsk to Kutaisi).
 - **Air tempo (v0.41.147):** `tempo.py`; `state.tempo` by kind; `tempo.record` is called in `engine.apply` after the debrief story and adds its line to `out["lines"]`; `tempo.get` is added in `WarSimulator.odds`, `sead_p`, `_resolve_sweep` and `ground.resolve_day` (AI CAS, `TEMPO_GROUND_GAIN`); `tempo.decay` runs in `war.end_day`.
 
+## 11c. The Overview figures and the posture (v0.41.148, verified 2026-10-27)
+- **One module:** `sqe/posture.py` (`posture()`, `front_lines`, `front_odds`, `fall_warnings`, `supply_lines`, `air_defence_lines`, `sitrep`). It only reads the state. `narrative.phase()` / `narrative.sitrep()` delegate to it; `briefing.build_text` and `gui/app.py` `OverviewPage.refresh` (cards "fr", "od", "su", "ad" and the warnings card) use it. Jet counts and the armor % are no longer shown anywhere on the Overview (`war.totals` still feeds the defeat rule "air component under 15%").
+- **Posture rules in order:** counter-force attacking, Under pressure, Consolidating, Last stand, Offensive / Holding by the odds word; endings from `state.status`. The text under each label is `posture.LINES` (placeholder until the C3 stories).
+- **Units and words** (all judgment calls, constants at the top of the file): 10 strength points = a battalion; odds word by the ratio of our force to the enemy's at our frontmost sector (`front_sector`); supply bands; the fall warning looks `WARN_ZONES` (2) sectors in front of a Coalition field.
+
 ## 12. The carrier raid setpiece (v0.41.105 to v0.41.109)
 _verified v0.41.109, 2026-10-22 (read from the code; smoke `check_31z`, `31za`, `31zb`, `31zc`; not yet flown by XO)_
 

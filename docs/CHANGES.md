@@ -1,6 +1,20 @@
 # CHANGES.md
 
 
+## v0.41.148, Campaign Revamp Stage C1: the Overview figures
+
+XO (2026-10-27, "please go C1, high"). New `sqe/posture.py` holds every Overview figure; the Overview and the briefing both read it. The war itself is unchanged.
+- POSTURE replaces the three phases (`narrative.PHASES` is gone; `narrative.phase()` now returns the posture). Labels as XO agreed: Offensive, Consolidating, Holding, Under pressure, Last stand, Counter-force, and the endings Ceasefire (L2, L3) / Insurgency broken (L1) / Defeat. Order of the rules: counter-force attacking, then Under pressure (a Coalition field fallen, a fall warning, or a taken base under attack), then Consolidating (takeover clock running or counter-force on its way), then Last stand (the next objective is the last one), then Offensive (our force at the front is at least 1.3 times the enemy's) or Holding. The one-line text under each label is a placeholder; Stage C3 writes the stories.
+- THE FRONT card: stage x of y (taken bases + 1), the next objective, each base taken / next / enemy, and any Coalition field lost.
+- GROUND ODDS card: our frontmost sector against the enemy's, in battalions (10 strength points = one battalion; a full sector is ten), with a word: holding (ratio 1.3 or more), even, losing (0.77 or less). Judgment calls (the defender factor `ground.DEFENDER` is 1.25).
+- WARNINGS card (hidden when empty): "X falls in about N days" (a Coalition field when the sector two in front of it or nearer is held by the enemy with none of ours there; a line moves about a sector a day), "X is under attack" for a base we took, "the enemy counter-force arrives in N days" / "is attacking", "one of our airfields has fallen: a second loses the campaign", "takeover under way: our next attack in about N days".
+- SUPPLY card: a percentage (55 to 100) per side plus a word (good 90+, adequate 75+, strained 62+, critical); the bands are judgment calls.
+- AIR DEFENCE card: IADS % per side and the SAM batteries in transit with the days to the first.
+- REMOVED: Coalition air %, Enemy air %, Armored advance %, "Enemy command posts", the old three-stage front text, the "Phase n" pill (it shows the posture), and the carrier's damaged-deck line on the Overview (the deck still cuts launches; XO wants no carrier line).
+- The briefing situation uses the same lines (front, odds, warnings, supply, air defence) instead of the aircraft counts.
+- Smoke: new `check_68_overview`.
+
+
 ## v0.41.147, Air tempo
 
 XO (2026-10-27, "the player flying would improve the odds of the background jobs ... incremental and capped ... indicated in the debrief"). New `sqe/tempo.py`.

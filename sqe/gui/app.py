@@ -18,7 +18,6 @@ from ..difficulty import LEVELS
 from ..engine import Session
 from ..packages import PackageBuilder, folded_n_def
 from ..settings import AppSettings
-from ..war import totals
 from . import theme
 from .dialogs import DebriefDialog, NewCampaignDialog, SettingsDialog, WaitingDialog
 from .widgets import MapView, StatCard, card
@@ -62,10 +61,13 @@ class OverviewPage(QWidget):
         self.gsum = QLabel(); self.gsum.setWordWrap(True); self.gsum.setObjectName("small"); gc.layout().addWidget(self.gsum)
         right = QVBoxLayout(); root.addLayout(right, 6)
         g = QGridLayout(); g.setSpacing(12); right.addLayout(g)
-        self.cards = {"fa": StatCard("Coalition air", theme.BLUE), "ea": StatCard("Enemy air", theme.RED),
-                      "ad": StatCard("Air defences", theme.AMBER), "ar": StatCard("Armored advance", theme.GREEN)}
-        for i, k in enumerate(("fa", "ea", "ad", "ar")):
+        self.cards = {"fr": StatCard("The front", theme.AMBER), "od": StatCard("Ground odds", theme.BLUE),
+                      "su": StatCard("Supply: Coalition / Enemy", theme.GREEN), "ad": StatCard("Air defence: Coalition / Enemy", theme.RED)}
+        for i, k in enumerate(("fr", "od", "su", "ad")):
             g.addWidget(self.cards[k], i // 2, i % 2)
+        self.warn_card = card(); right.addWidget(self.warn_card)                # v0.41.148: warnings (a base about to fall, the counter-force), hidden when there are none
+        wh = QLabel("WARNINGS"); wh.setObjectName("small"); self.warn_card.layout().addWidget(wh)
+        self.warn = QLabel(); self.warn.setWordWrap(True); self.warn.setStyleSheet(f"color:{theme.AMBER};"); self.warn_card.layout().addWidget(self.warn)
         mc = card(); right.addWidget(mc, 1)
         top = QHBoxLayout(); mc.layout().addLayout(top)
         t = QLabel("THEATRE"); t.setObjectName("small"); top.addWidget(t); top.addStretch(1)
@@ -74,15 +76,28 @@ class OverviewPage(QWidget):
         self.rings.toggled.connect(self.map.set_rings)
 
     def refresh(self, st):
+        from .. import posture
         n, name, text = narrative.phase(st)
-        self.phase.setText(f"{name}   |   front: stage {min(3, st.front + 1)} of 3")
+        self.phase.setText(f"{name.upper()}")                                   # v0.41.148: the posture label (it replaced the three phases)
         self.txt.setHtml(f"<p style='font-size:14px;line-height:150%'>{text}</p><hr>" +
                          "".join(f"<p style='color:#b9c6d6;line-height:150%'>{p}</p>" for p in narrative.BACKGROUND.split("\n\n")))
-        t = totals(st)
-        self.cards["fa"].set(f"{t['friendly_air']:.0%}", f"{t['fa']} of {t['fz']} aircraft")
-        self.cards["ea"].set(f"{t['enemy_air']:.0%}", f"{t['ea']} of {t['ez']} aircraft")
-        self.cards["ad"].set(f"{t['iads']:.0%}", "SAM / radar sites operational")
-        self.cards["ar"].set(f"{t['armor']:.0%}", "column strength")
+        if posture._active(st):
+            k, tot = posture.stage(st)
+            nxt = posture.objective(st)
+            o = posture.front_odds(st)
+            fe, fb = posture.supply_pct(st, "red"), posture.supply_pct(st, "blue")
+            self.cards["fr"].set(f"Stage {k} of {tot}" if nxt is not None else "All taken", ("Next: " + nxt["name"] + "\n" if nxt is not None else "") +
+                                 ", ".join(f"{nm} ({'taken' if s_ == 'ours' else 'next' if s_ == 'next' else 'enemy'})" for nm, s_ in posture.bases_status(st)))
+            self.cards["od"].set(o["word"].capitalize() if o else "No contact", posture.odds_line(st))
+            self.cards["su"].set(f"{fb}% / {fe}%", f"Coalition {posture.supply_word(fb / 100)}, enemy {posture.supply_word(fe / 100)}")
+        else:
+            for kk in ("fr", "od", "su"):
+                self.cards[kk].set("-", "")
+        ab, ae = round(100 * posture.iads_pct(st, "blue")), round(100 * posture.iads_pct(st, "red"))
+        self.cards["ad"].set(f"{ab}% / {ae}%", "\n".join(x for x in (("Coalition: " + posture.transit_text(st, "blue")) if posture.transit_text(st, "blue") else "",
+                                                                      ("Enemy: " + posture.transit_text(st, "red")) if posture.transit_text(st, "red") else "") if x) or "sites operational")
+        ws = posture.fall_warnings(st)
+        self.warn.setText("\n".join(ws)); self.warn_card.setVisible(bool(ws))
         from .. import ground as _g
         from .. import blue_barcap as _bb, bombers as _bomb
         self.gsum.setText("\n".join((_g.summary(st) if _g.active(st) else []) + _bb.status_lines(st) + _bomb.status_lines(st)))
@@ -618,7 +633,7 @@ class MainWindow(QMainWindow):
         self.p_miss.refresh(self.session)
         n, name, _ = narrative.phase(st)
         self.h_title.setText(st.name)
-        for pill, txt in zip(self.pills, (st.campaign_date().strftime("%d %b %Y").upper(), f"Day {st.day}", LEVELS[st.level].name, f"Phase {n}", st.player.aircraft)):
+        for pill, txt in zip(self.pills, (st.campaign_date().strftime("%d %b %Y").upper(), f"Day {st.day}", LEVELS[st.level].name, name, st.player.aircraft)):
             pill.setText(txt)
         self.banner.setText({"ACTIVE": "Sortie pending" if st.pending else "", "VICTORY": "VICTORY", "DEFEAT": "DEFEAT"}[st.status])
         self.banner.setVisible(bool(self.banner.text()))
