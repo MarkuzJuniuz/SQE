@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.157, CAS task force stops at the contact point
+
+XO (2026-10-27, "go on cas fix light"). From his 15:38 run: the A-10s killed 11 of 19 red units in 3 minutes, but the friendly task force arrived about 12 minutes later (DCS ran its off-road column about 36% slower than planned) and then drove 2.5 km past the red column.
+- The task force now stops 400 m short of the contact point on our side and holds, weapons free (a dug-in garrison target: 2 km short, as before), and drives 1.3 times the planned speed (`CAS_TF_SPEED_MARGIN`, judgment call, one run's measurement; the speed is capped at 8 m/s).
+- Smoke: new `check_76_cas_task_force`.
+
+
 ## v0.41.156, Red zerg, part 2: the mass raid in the mission
 
 XO (2026-10-27, "go on next item, high"; "I want to be annoyed by constant scrambles on L3"). The mission side already built big raids in several groups with SEAD and DEAD groups ahead of them (part 1 made L3 raids 6 to 8 bombers, 12 on a wave day); this makes them proper zergs.
