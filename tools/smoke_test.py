@@ -4449,6 +4449,58 @@ def check_62_red_roster(c):
     print(f"[red roster] L1 44 jets, L2 {_want62[2][0]} + 11 Tu-22M3 + 8 escorts, L3 {_want62[3][0]} + 30 Tu-22M3 + 16 escorts; MiG-31 share by depth at L3: {_sh[2]:.2f} > {_sh[3]:.2f} > {_sh[4]:.2f}")
 
 
+def check_68_overview(c):
+    """v0.41.148: the Overview figures (sqe/posture.py): posture label, the front, ground odds, warnings, supply, air defence; no jet counts, no armor %."""
+    from sqe import posture as _po, narrative as _nv, ground as _gr, bombers as _bo
+    from sqe.briefing import build_text as _bt
+    from sqe.state import CampaignState as _CS
+    assert not hasattr(_nv, "PHASES"), "the three phases are gone"
+    for lv in (1, 2, 3):
+        s = fresh_session(lv, 7); st = s.state; g = st.ground
+        lab, txt = _po.posture(st)
+        assert lab == "Holding" and txt, (lv, lab)                                    # day 1: the line is not moving yet
+        sr = "\n".join(_po.sitrep(st))
+        for bad in ("aircraft serviceable", "Armored advance", "air arm", "Coalition air component", "carrier"):
+            assert bad not in sr, bad
+        assert "stage 1 of" in sr and "next objective Sukhumi" in sr and "(losing)" in sr and "Coalition supply: 100% (good)" in sr and "Enemy air defence: 100%" in sr, sr
+        assert not _po.fall_warnings(st), "no warning on day 1"
+    # the odds word and the battalion unit
+    o = _po.front_odds(st); assert o["bn_blue"] == round(o["blue"] / 10) and o["word"] == "losing"
+    g["blue"][9], g["red"][9] = 60.0, 30.0
+    st.assets["armor_10"].health = 0.3
+    o = _po.front_odds(st); assert o["word"] == "holding" and o["bn_blue"] == 6 and o["bn_red"] == 3, o
+    assert _po.posture(st)[0] == "Offensive"
+    g["blue"][9], g["red"][9] = 40.0, 40.0; st.assets["armor_10"].health = 0.4
+    assert _po.front_odds(st)["word"] == "even" and _po.posture(st)[0] == "Holding"
+    # supply is a percentage with a word
+    assert [_po.supply_word(x) for x in (1.0, 0.8, 0.7, 0.55)] == ["good", "adequate", "strained", "critical"]
+    for sid in [k for k, a in st.assets.items() if a.kind in _gr.SUPPLY_KINDS]:
+        st.assets[sid].health = 0.0
+    assert _po.supply_pct(st, "red") == 55 and "Enemy supply: 55% (critical)" in _po.supply_lines(st)
+    # a fall warning, then Under pressure; the takeover; the last stand; the counter-force and the endings
+    g["blue"][9] = g["blue"][10] = 0.0
+    w = _po.fall_warnings(st); assert any("falls in about 1 day" in x for x in w) and _po.posture(st)[0] == "Under pressure", w
+    g["blue"][9], g["blue"][10] = 10.0, 45.0
+    g["taken"], g["clock"] = ["ab_sukhumi"], st.day + 5
+    assert _po.posture(st)[0] == "Consolidating" and any("next attack in about 5 days" in x for x in _po.fall_warnings(st))
+    g["clock"], g["taken"] = 0, ["ab_sukhumi", "ab_gudauta", "ab_sochi", "ab_gelen"]
+    assert _po.posture(st)[0] == "Last stand"
+    g["taken"] = list(g["stages"]); g["counter"] = {"arrive": st.day + 2, "frac": 0.6, "arrived": False}
+    assert any("counter-force arrives in 2 days" in x for x in _po.fall_warnings(st))
+    g["counter"].update(arrived=True, until=st.day + 4); assert _po.posture(st)[0] == "Counter-force"
+    g["fallen"] = ["senaki"]; assert any("second one is lost" in x for x in _po.fall_warnings(st))
+    st.status = "VICTORY"; assert _po.posture(st)[0] == "Ceasefire"
+    s1 = fresh_session(1, 7); s1.state.status = "VICTORY"; assert _po.posture(s1.state)[0] == "Insurgency broken"
+    s1.state.status = "DEFEAT"; assert _po.posture(s1.state)[0] == "Defeat"
+    # SAM orders in transit are shown with their days
+    st.status = "ACTIVE"; st.sams = {"orders": [{"due": st.day + 2}], "red_orders": [{"due": st.day + 1}, {"due": st.day + 3}]}
+    ln = _po.air_defence_lines(st); assert "1 SAM battery in transit, the first in 2 days" in ln[0] and "2 SAM batteries in transit, the first in 1 day" in ln[1], ln
+    # the carrier gets no line on the Overview
+    st.raids = st.raids or {}
+    assert not any("carrier" in x.lower() for x in _bo.status_lines(st))
+    print("[overview] posture labels and endings, front, odds (battalions + word), warnings, supply %, air defence with SAM orders, no jet counts or carrier line")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4555,6 +4607,7 @@ CHECKS = [
     check_65_no_last_unit_hunt,
     check_66_l1_raids,
     check_67_air_tempo,
+    check_68_overview,
 ]
 
 

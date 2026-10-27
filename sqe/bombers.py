@@ -156,15 +156,11 @@ def is_quiet(state) -> bool:
 
 
 def status_lines(state) -> list:
-    """Overview lines: the quiet day, and a carrier deck that is out of action."""
+    """Overview lines: the quiet day (v0.41.148: the damaged-deck line is gone, XO wants no carrier line on the Overview)."""
     out = []
     if is_quiet(state):
         out.append("Red air is unusually quiet today: no strikes or raids, only patrols. Something is being prepared.")
-    from . import carrier_hit
-    f = carrier_hit.deck_factor(state)
-    if f < 1.0:
-        out.append("The carrier's flight deck is damaged: " + ("no launches today." if f <= 0 else f"launches cut to {f:.0%} today."))
-    return out
+    return out                                                           # v0.41.148 (XO 2026-10-25): the carrier gets no line on the Overview
 
 
 def note_launch(state) -> None:

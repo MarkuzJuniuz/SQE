@@ -19,7 +19,7 @@ class StatCard(QFrame):
         lay = QVBoxLayout(self); lay.setContentsMargins(16, 12, 16, 12); lay.setSpacing(2)
         self.l = QLabel(label.upper()); self.l.setObjectName("small")
         self.v = QLabel("-"); self.v.setObjectName("big"); self.v.setStyleSheet(f"color:{color};")
-        self.s = QLabel(""); self.s.setObjectName("dim")
+        self.s = QLabel(""); self.s.setObjectName("dim"); self.s.setWordWrap(True)
         for w in (self.l, self.v, self.s):
             lay.addWidget(w)
 
