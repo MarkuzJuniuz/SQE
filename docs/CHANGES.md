@@ -1,6 +1,20 @@
 # CHANGES.md
 
 
+## v0.41.144, Campaign Revamp Stage B2: depots and the supply loop
+
+XO (2026-10-27, "go with B2 as planned. High."). Depots and fuel on both sides now matter: they feed the ground war, they can be struck, they mend on a timer, and they change hands with the bases.
+- Sites: red gets a fuel farm and a depot at each base of the push (Sukhumi, Gudauta, Sochi, and on L3 Gelendzhik and Krymsk; Level 1 has them at the fields it has) besides Beslan and Nalchik; blue gets a rear depot next to the forward one. Counts and places are judgment calls.
+- Supply is stock over the count a side started with, not an average of what is left: a captured site lifts the captor (capped at 100%) and lowers the old owner (floor 55%). L1 red keeps its 70% floor. L1 red now starts at 100% instead of 85%.
+- Captured sites change sides with their stock, no fade, when a base falls (red's to us, ours to red) and go back on a retake. Both sides can still raid or strike what the other holds.
+- Repair timer: a destroyed site is back in 6 days at 100% supply, about 11 at 55%, none on a night after it was struck, skip days count. (Judgment call: XO's baseline of 6 days.)
+- Supply strikes under SA-2/3/6 cover go out with a required HARM escort (as CAS does), at the escort's salvo-size odds; under an SA-11/SA-10 belt they still wait for a DEAD. Escort missing = the job waits.
+- Skip days run a background supply-strike round for both sides (blue 2 tries on red, red 1 or 2 on us), with a 50% chance in the open, 20% under escortable cover, none under a long-range belt.
+- Ground format v3: v2 saves are refused ("start a new campaign").
+- Sims: L1 about day 27, L2 about 32 to 35, L3 about 83 (idle and daily the same, as before: the sim does not model the player). A 120-day trace on L3: red supply falls from 100% to 59% as bases fall, blue stays at 100% from the captures, no spiral.
+- Smoke: new `check_64_supply_loop`; `check_35` accepts a 2-ship sweep when the squadron has only two jets free.
+
+
 ## v0.41.143, Campaign Revamp Stage B1: the push
 
 XO (2026-10-27, "go on B, high"). The ground war is now a march across red's airfields, and victory is by ground only.

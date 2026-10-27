@@ -29,6 +29,7 @@ from .models import AssetKind, EnemyAsset
 NM = 1852.0
 MIN_FORCE = 3.0               # below this a side has no organised force in the zone
 MAX_FORCE = 100.0
+SUPPLY_KINDS = (AssetKind.FUEL, AssetKind.DEPOT)
 AIR_EFFECT = 0.6              # share of a visible column's losses that its zone's strength takes (the column is only the lead element)
 BLUE_LOSS = 40.0              # blue strength lost when the whole friendly task force at the JTAC is destroyed
 SKIRMISH, ATTACK = 0.04, 0.14
@@ -36,10 +37,11 @@ DECISIVE, REPULSED = 1.8, 0.55
 RETREAT_SHARE = 0.6           # what a routed force saves by falling back
 FALL_LOSS = 0.3               # aircraft lost when a field falls and its squadrons leave
 SUPPLY_FLOOR, SUPPLY_NONE = 0.55, 0.85
+SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (55% = about 11 days); no repair on a day it is struck
 L1_RED_SUPPLY_FLOOR = 0.70    # v0.41.141 (XO 2026-10-27, Campaign Revamp): on Level 1 the insurgents are resupplied across the border by night, so their supply never drops below this however many depots die (judgment call; a toy-model run showed it does not change who wins). Levels 2 and 3 keep the 55% floor.
 
 
-GROUND_V = 2                  # state.ground["v"]: 2 = the Campaign Revamp ground war (red bases fall); a campaign with v 1 cannot be loaded
+GROUND_V = 3                  # state.ground["v"]: 2 = the Campaign Revamp ground war (red bases fall); a campaign with v 1 cannot be loaded
 CLOCK_DAYS = 9                # takeover clock: days after a base falls before our next attack (toy-model base case; judgment call)
 REAR_FRAC = 0.7               # red strength in the sectors behind its first line, as a share of its first sector's start strength (judgment call)
 BLUE_ATTACK_MIN = 30.0        # our force in a sector must be at least this before we attack (toy model "THR"; judgment call)
@@ -154,7 +156,12 @@ def build_blue_assets(state, rng, ap=None) -> None:
         far = g["axis"][kn]
         x, y = seacheck.snap_to_land(*_lerp(c, far, 0.6))
         ba["bdepot_fwd"] = EnemyAsset("bdepot_fwd", "Forward supply depot", AssetKind.DEPOT, x, y, 1.0, 6, [], None, "", 1)
+        x, y = seacheck.snap_to_land(*_lerp(g["centers"][-1], g["axis"][-1], 0.5))           # v0.41.144: a rear depot at the back of our line, well behind the forward one
+        ba["bdepot_rear"] = EnemyAsset("bdepot_rear", "Rear supply depot", AssetKind.DEPOT, x, y, 1.0, 5, [], None, "", 1)
     state.blue_assets = ba
+    if g is not None:
+        g["sup_n"] = {"red": sum(1 for a in state.assets.values() if a.kind in SUPPLY_KINDS), "blue": sum(1 for a in ba.values() if a.kind in SUPPLY_KINDS)}
+        g["sup_h"] = {a.id: 1.0 for a in list(state.assets.values()) + list(ba.values()) if a.kind in SUPPLY_KINDS}
 
 
 def _blue_garrison(b) -> EnemyAsset:
@@ -372,12 +379,107 @@ def facility_health(assets, kinds):
 
 
 def supply(state, side: str) -> float:
-    """0.55 (every depot and fuel site gone) .. 1.0 (all intact). A side with no such sites at all runs at 0.85. Red on Level 1 never falls below
-    L1_RED_SUPPLY_FLOOR (0.70): the insurgents are fed across the border."""
+    """0.55 (no stock left) .. 1.0 (all of the side's sites at hand and intact). v0.41.144: the stock held (sum of the health of the supply sites a side holds)
+    over the number it started with, so a captured site raises the captor's figure (up to 100%) and lowers the old owner's (to 55% at worst); a site's
+    health is its stock and does not fade. A side that started with no sites runs at 0.85. Red on Level 1 never falls below L1_RED_SUPPLY_FLOOR (0.70)."""
     pool = state.assets.values() if side == "red" else getattr(state, "blue_assets", {}).values()
-    h = facility_health(pool, (AssetKind.FUEL, AssetKind.DEPOT))
-    v = SUPPLY_NONE if h is None else SUPPLY_FLOOR + (1.0 - SUPPLY_FLOOR) * h
+    sites = [a for a in pool if a.kind in SUPPLY_KINDS]
+    n = int(((state.ground or {}).get("sup_n") or {}).get(side, len(sites)))
+    v = SUPPLY_NONE if n <= 0 else SUPPLY_FLOOR + (1.0 - SUPPLY_FLOOR) * min(1.0, sum(a.health for a in sites) / n)
     return max(v, L1_RED_SUPPLY_FLOOR) if (side == "red" and getattr(state, "level", 2) == 1) else v
+
+
+def supply_repair(state) -> list:
+    """Overnight: each side's supply sites mend at supply / SUPPLY_REPAIR_DAYS of a full site a day (a destroyed one is back in 6 days at 100% supply,
+    about 11 at 55%), except a site that was struck since last night. Skip days count. The owner at the moment pays: a captured site mends at the
+    captor's rate."""
+    g = state.ground
+    prev = g.setdefault("sup_h", {})
+    out = []
+    for side in ("red", "blue"):
+        pool = state.assets if side == "red" else getattr(state, "blue_assets", {})
+        rate = supply(state, side) / SUPPLY_REPAIR_DAYS
+        for a in pool.values():
+            if a.kind not in SUPPLY_KINDS:
+                continue
+            before = prev.get(a.id, a.health)
+            if a.health < before - 1e-6:                                    # struck today: no repair tonight
+                pass
+            elif a.health < 1.0:
+                was_down = a.destroyed
+                a.health = min(1.0, a.health + rate)
+                if was_down and not a.destroyed and side == "blue":
+                    out.append(f"{a.name} is working again")
+            prev[a.id] = a.health
+    return out
+
+
+SUPPLY_ROUND_BLUE = 2         # v0.41.144 (XO 2026-10-24, "skip days run a supply-strike round"): background strikes a side tries on a day nobody flew (judgment call)
+SUPPLY_ROUND_P = {"open": 0.50, "escorted": 0.20}      # chance one succeeds: site under no live SAM cover / only SA-2/3/6 (the escort has to deal with them); under an SA-11 / SA-10 belt none is tried
+SUPPLY_ROUND_HIT = 0.35       # health a struck site loses
+
+
+def supply_round(state, d, rng) -> list:
+    """The background supply-strike round of a skip day: both sides' air still tries to bomb the other's depots and fuel. Blue picks among red's sites
+    (not under a live SA-11 / SA-10), red among ours. A struck site is not repaired that night (supply_repair). Returns log lines."""
+    from .war import covering_sams, ESCORTABLE
+    lines = []
+    g = state.ground
+    if not g or not active(state):
+        return lines
+
+    def pick(pool, attempts, who, p_scale=1.0):
+        sites = [a for a in pool if a.kind in SUPPLY_KINDS and not a.destroyed]
+        for _ in range(attempts):
+            if not sites:
+                return
+            cands = []
+            for a in sites:
+                cov = covering_sams(state, a) if who == "blue" else []
+                if any(x.variant not in ESCORTABLE for x in cov):
+                    continue
+                cands.append((a, SUPPLY_ROUND_P["escorted" if cov else "open"], a.value))
+            if not cands:
+                return
+            a, p, _v = rng.choices(cands, weights=[c[2] for c in cands])[0]
+            if rng.random() < p * p_scale:
+                a.health = max(0.0, a.health - SUPPLY_ROUND_HIT)
+                lines.append(f"{'Our' if who == 'red' else 'Enemy'} {a.name} was hit in the background supply strikes ({a.health:.0%} left)")
+    pick(list(state.assets.values()), SUPPLY_ROUND_BLUE, "blue")
+    pick(list(getattr(state, "blue_assets", {}).values()), 1 + int(rng.random() < getattr(d, "raid_rate", 0.3)), "red")
+    return lines
+
+
+def _move_sites(state, ids, to_blue: bool) -> None:
+    src, dst = (state.assets, state.blue_assets) if to_blue else (state.blue_assets, state.assets)
+    for i in ids:
+        a = src.pop(i, None)
+        if a is not None:
+            dst[i] = a
+
+
+def capture_sites(state, base_id: str, ids) -> list:
+    """The supply sites of a fallen base change sides with their stock (no fade). `ids` are the sites to move; remembered under the base so a retake moves them back."""
+    g = state.ground
+    red_base = base_id.startswith("ab_")
+    ids = [i for i in ids if i in (state.assets if red_base else state.blue_assets)]
+    if not ids:
+        return []
+    g.setdefault("capt", {})[base_id] = ids
+    _move_sites(state, ids, to_blue=red_base)
+    names = ", ".join((state.blue_assets if red_base else state.assets)[i].name for i in ids)
+    return [f"   captured with their stock: {names}"]
+
+
+def release_sites(state, base_id: str) -> list:
+    g = state.ground
+    ids = (g.get("capt") or {}).pop(base_id, [])
+    red_base = base_id.startswith("ab_")
+    ids = [i for i in ids if i in (state.blue_assets if red_base else state.assets)]
+    if not ids:
+        return []
+    _move_sites(state, ids, to_blue=not red_base)
+    return [f"   its supply sites are back under {'enemy' if red_base else 'friendly'} control"]
 
 
 def _control(r: float, b: float) -> float:
@@ -560,8 +662,10 @@ def check_falls(state) -> list:
         if held and bid not in g["fallen"]:
             g["fallen"].append(bid)
             lines += apply_fall(state, bid)
+            lines += capture_sites(state, bid, [f"bfuel_{bid}"])
         elif not held and bid in g["fallen"] and g["blue"][i] >= MIN_FORCE:
             g["fallen"].remove(bid)
+            release_sites(state, bid)
             lines.append(f"{state.bases[bid].name} is back in our hands, with its defences gone; the squadrons stay where they moved")
     return lines
 
@@ -622,6 +726,7 @@ def _check_red_bases(state) -> list:
             a = state.assets.get(rid)
             if a is not None:
                 a.health = max(a.health, 0.5)
+            release_sites(state, rid)
             c = g.get("counter")
             if c is not None and rid == g.get("counter_id"):
                 c["used"] = True
@@ -656,8 +761,8 @@ def victory(state) -> bool:
 
 def apply_red_fall(state, rb) -> list:
     """A red base falls to us: the field and everything dug in round it go down for good, and its jets withdraw to the nearest standing red field
-    (FALL_LOSS of them lost on the way), the way our own squadrons do when one of our fields falls. Depots and command posts are left for the supply
-    stage (B2). Nothing happens to an asset the level does not have (Level 1 has no field at Gudauta)."""
+    (FALL_LOSS of them lost on the way), the way our own squadrons do when one of our fields falls. Its depots and fuel farms change sides with their
+    stock (v0.41.144); command posts are left alone. Nothing happens to an asset the level does not have (Level 1 has no field at Gudauta)."""
     rid = rb["id"]
     key = rid[3:] if rid.startswith("ab_") else rid
     lines = []
@@ -669,6 +774,7 @@ def apply_red_fall(state, rb) -> list:
             a.health = 0.0
         elif a.kind == AssetKind.ARMOR and a.variant == "GARRISON" and a.id.startswith(f"gar_{key}_"):
             a.health = 0.0
+    lines += capture_sites(state, rid, [a.id for a in state.assets.values() if a.kind in SUPPLY_KINDS and a.id.endswith("_" + key)])      # v0.41.144: depots and fuel change sides with their stock
     w = state.enemy_air_at(rid)
     if w is not None and w.sqns:
         dests = [x for x in state.enemy_air if x is not w and not state.assets[x.base_asset_id].destroyed]
@@ -714,6 +820,8 @@ def fallen_count(state) -> int:
 
 def repair_blue(state, d) -> None:
     for a in getattr(state, "blue_assets", {}).values():
+        if a.kind in SUPPLY_KINDS:                                      # v0.41.144: supply sites mend on their own timer (supply_repair)
+            continue
         if 0 < a.health < 1.0:
             a.health = min(1.0, a.health + d.asset_repair)
 
