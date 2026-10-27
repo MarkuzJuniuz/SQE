@@ -1,6 +1,11 @@
 # CHANGES.md
 
 
+## v0.41.141, Campaign Revamp Stage A2: the Level 1 insurgents never drop below 70% supply
+
+XO (2026-10-27): on L1 the opponent is resupplied across the border by night, so killing its depots cannot starve it completely. `ground.supply("red")` on Level 1 now has a floor of 70% (`L1_RED_SUPPLY_FLOOR`; Levels 2 and 3 keep 55%; blue is unchanged on every level). It reaches everything that reads red's supply: the daily ground fight and reinforcements, SAM rebuilds and SAM-order transit time (v0.41.140). Judgment call: a toy-model run (2026-10-27 notes) showed the floor does not change who wins on L1, it only slows the grind. Today L1 has no red depot or fuel site at all (red supply is a flat 85% there), so nothing changes in play until Stage B adds the depots; the rule is in place for them.
+- Smoke: new section `check_61_l1_red_supply_floor` (every red depot and fuel site gone: L1 0.70, L2 and L3 0.55; blue 0.55 on all levels).
+
 ## v0.41.140, Campaign Revamp Stage A1: SAM orders are a fixed feature
 
 XO (2026-10-27). Both sides' SAM orders (`sams.red_orders`, `sams.blue_orders`) now always run overnight, at every level. They used to sit behind two Experimental-tab checkboxes ("Red SAM borrowing", "Blue SAM borrowing"), both OFF by default, so in a normal campaign no battery ever moved.
