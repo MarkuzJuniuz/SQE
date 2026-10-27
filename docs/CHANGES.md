@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.153, Story wording and Ctrl+Space everywhere
+
+XO (2026-10-27). Merged #217 before this landed, so it is its own change.
+- Story text (XO): the "In this scenario" opening is gone from the three Backgrounds.
+- Ctrl+Space (v0.41.151's developer secret) now works from any page: a focused list or text box used the key itself and swallowed the shortcut, so it is caught by an application-wide key filter instead.
+
+
 ## v0.41.152, Campaign Revamp Stage C4: polish
 
 XO (2026-10-27, "go, medium C4"; nothing else to change from his skip-day runs yet). Display only; the war is untouched.

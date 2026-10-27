@@ -550,8 +550,7 @@ class MainWindow(QMainWindow):
         self.banner = QLabel(); self.banner.setObjectName("pill"); hdr.addWidget(self.banner)
         main.addWidget(self.stack, 1)
         self._menus()
-        from PySide6.QtGui import QShortcut, QKeySequence
-        self._dev_skip = QShortcut(QKeySequence("Ctrl+Space"), self); self._dev_skip.activated.connect(self._dev_skip_day)      # v0.41.151: developer secret (XO)
+        QApplication.instance().installEventFilter(self)                                    # v0.41.151: developer secret Ctrl+Space (see eventFilter)
 
     # ---- menus ---------------------------------------------------------------------------------------
     def _menus(self):
@@ -727,6 +726,17 @@ class MainWindow(QMainWindow):
                                + " Your own tasking goes ahead as planned."))
         box.addButton("Understood", QMessageBox.AcceptRole); box.exec()
         return False
+
+    def eventFilter(self, obj, ev):
+        """Developer secret (XO 2026-10-27): Ctrl+Space skips the day. Done here and not as a QShortcut because a list or text box that has the focus (the Missions
+        list) uses Ctrl+Space itself and swallowed the shortcut; the filter sees the key first."""
+        from PySide6.QtCore import QEvent
+        if ev.type() in (QEvent.ShortcutOverride, QEvent.KeyPress) and ev.key() == Qt.Key_Space and ev.modifiers() == Qt.ControlModifier and self.isActiveWindow():
+            if ev.type() == QEvent.KeyPress:
+                self._dev_skip_day()
+            ev.accept()
+            return True
+        return super().eventFilter(obj, ev)
 
     def _dev_skip_day(self):
         """Developer secret (XO 2026-10-27): Ctrl+Space skips the day at once, no questions and no result box, to watch the Overview and its map move.
