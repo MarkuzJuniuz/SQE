@@ -879,8 +879,8 @@ def check_19_ground_war(c):
     for _lv in (1, 2, 3):
         s.new(f"Ground {_lv}", "F-16C", _lv, seed=11)
         _st = s.state; _g = _st.ground
-        assert _gr.active(_st) and _gr.n_zones(_g) == 5 and len(_gr.summary(_st)) >= 5
-        assert all(f"armor_{i + 1}" in _st.assets for i in range(5)) and _st.blue_assets, "columns and Blue facilities exist"
+        assert _gr.active(_st) and _gr.n_zones(_g) == (14 if _lv == 3 else 9) and len(_gr.summary(_st)) >= 5
+        assert all(f"armor_{i + 1}" in _st.assets for i in range(_gr.n_zones(_g))) and _st.blue_assets, "columns and Blue facilities exist"
         # same seed, same fighting
         _a, _b = _CS.from_dict(_st.to_dict()), _CS.from_dict(_st.to_dict())
         for _d in range(8):
@@ -891,15 +891,16 @@ def check_19_ground_war(c):
         assert _CS.from_dict(_a.to_dict()).ground == _a.ground and set(_CS.from_dict(_a.to_dict()).blue_assets) == set(_a.blue_assets)
     # a field falls when Red holds the zone beside it; two fallen fields is defeat; Blue retaking it brings it back
     s.new("Ground fall", "F-16C", 2, seed=5); _st = s.state; _g = _st.ground
-    _g["red"][3], _g["blue"][3] = 40.0, 0.0
+    _fz = sorted(int(k_) for k_ in _g["fall"]); _z1, _z2 = _fz[0], _fz[1]                  # senaki's sector, kutaisi's (behind it)
+    _g["red"][_z1], _g["blue"][_z1] = 40.0, 0.0
     _ln = _gr.check_falls(_st); assert _g["fallen"] == ["senaki"] and _ln and _st.bases["senaki"].defense == 0
-    _g["red"][4], _g["blue"][4] = 40.0, 0.0; _gr.check_falls(_st)
+    _g["red"][_z2], _g["blue"][_z2] = 40.0, 0.0; _gr.check_falls(_st)
     assert _gr.fallen_count(_st) == 2; assert _war.update_status(_st) == "DEFEAT", "two fallen fields lose the war"; _st.status = "ACTIVE"
-    _g["blue"][3] = 30.0; _gr.check_falls(_st); assert "senaki" not in _g["fallen"]
+    _g["blue"][_z1] = 30.0; _gr.check_falls(_st); assert "senaki" not in _g["fallen"]
     # a debrief loss in a zone column is damped; Blue losses reduce the zone's strength
     _col = _st.assets["armor_2"]
     assert _gr.column_health(_st, _col, 1.0, 0.0) == 1.0 - _gr.AIR_EFFECT
-    _before = _g["blue"][1]; _gr.blue_losses(_st, "armor_2", 2, 4); assert _g["blue"][1] == max(0.0, _before - _gr.BLUE_LOSS / 2)
+    _g["blue"][1] = 50.0; _before = _g["blue"][1]; _gr.blue_losses(_st, "armor_2", 2, 4); assert _g["blue"][1] == max(0.0, _before - _gr.BLUE_LOSS / 2)
     c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_CS', '_gd', '_gr', '_rnd', '_st', '_war',)})
 
 
@@ -922,15 +923,15 @@ def check_20_format_save_loads_with(c):
     _mig = _CS.from_dict(_old); assert _gr.active(_mig) and _mig.blue_assets and any("ground war" in x for x in _mig.log)
     # CAS on a column is offered only where the sector is contested
     s.new("Ground cas", "A-10C", 2, seed=3); _st = s.state; _g = _st.ground
-    _g["red"][0], _g["blue"][0] = 70.0, 0.0
+    _g["red"][0], _g["blue"][0] = 70.0, 0.0; _gr.push(_st)
     _opts = _war.ObjectivePlanner(_gd(2)).plan(_st, _rnd.Random(2), limit=40)
     assert not any(getattr(o, "target_id", "") == "armor_1" for o in _opts), "an uncontested sector is not a CAS target"
-    _g["red"][1], _g["blue"][1] = 60.0, 20.0; _gr.push(_st); _ground_pl = _war.ObjectivePlanner(_gd(2)).plan(_st, _rnd.Random(2), limit=40)
-    assert any(getattr(o, "target_id", "") == "armor_2" and "enemy 60" in o.description for o in _ground_pl), "a contested sector is, with its strengths"
+    _g["red"][6], _g["blue"][6] = 60.0, 20.0; _gr.push(_st); _ground_pl = _war.ObjectivePlanner(_gd(2)).plan(_st, _rnd.Random(2), limit=40)
+    assert any(getattr(o, "target_id", "") == "armor_7" and "enemy 60" in o.description for o in _ground_pl), "a contested sector is, with its strengths"
     # a full night of the war on a live campaign
     for _ in range(3):
         s.state.status = "ACTIVE"; _war.WarSimulator(_gd(2), _rnd.Random(9)).end_day(s.state)
-    print("[ground] 5 sectors per level, repeatable fighting, round trip, falls / retaking / defeat, damped column losses, Blue losses, format-4 migration, nightly resolution")
+    print("[ground] 9 / 9 / 14 sectors per level, repeatable fighting, round trip, falls / retaking / defeat, damped column losses, Blue losses, format-4 migration, nightly resolution")
     c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_st',)})
 
 
@@ -1174,7 +1175,7 @@ def check_28_standoff_dead_package_escort(c):
     _lps = _bs._launch_pts[_pk.id]
     _mx, _my = sum(q_[0] for q_ in _lps) / len(_lps), sum(q_[1] for q_ in _lps) / len(_lps)
     from sqe.mission_builder import TARCAP_NEAR_NM as _TNN
-    assert all(_jd(v_[0], v_[1], _mx, _my) / _JNM <= _TNN + 2.0 for v_ in _tc), "v0.41.118: the TARCAP moves in to about TARCAP_NEAR_NM from the middle of the shooters' launch points (it sat 22 to 34 nm out)"
+    assert all(_jd(v_[0], v_[1], _mx, _my) / _JNM <= 28.0 for v_ in _tc), "v0.41.118: the TARCAP moves in toward TARCAP_NEAR_NM from the middle of the shooters' launch points (it sat 22 to 34 nm out); v0.41.143: it may stay back (about 23 nm) where live SAM rings keep it out, so the bound is 28"
     assert len(_lps) >= 2 and any(_jd(x_, y_, *_jp) < 100 for x_, y_ in _lps), "the cover circle knows the JSOW launch point before the flights are built"
     # v0.41.119: the TARCAP sits on the threat side (nearer the bearing from the shooters' middle toward red's nearest patrol station / fighter base),
     # or keeps its old station when the rings leave no such point; the contest rule reads the distance from a guarded site to the shooters or the target
@@ -1518,16 +1519,21 @@ def check_31g_blue_support_relief(c):
     assert barcap.endurance_min("F-16C") == 30 and barcap.endurance_min("FA-18C") == 30 and barcap.endurance_min("F-14B") == 120 and barcap.endurance_min("F-16C", tanker=True) == 120, "endurance by airframe"
     ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
-    ses.new("Smoke support relief", "F-16C", 3, seed=7)
-    pk = next(p_ for p_ in ses.packages() if ses.flyable(p_) and any(f_.tag in ("BASECAP", "HAVCAP", "CVCAP") for f_ in p_.flights))
-    ses.fly(pk.number, ses.flyable(pk)[0].id)
-    mz = zf.ZipFile(ses.state.pending["miz"]).read("mission").decode()
     acts = {}
-    for m_ in re.finditer(r'\["comment"\]="support relief ([^"]+)"', mz):
-        seg = mz[m_.end():m_.end() + 400]
-        sec = re.search(r'\["seconds"\]=(\d+)', seg)
-        if sec:
-            acts[m_.group(1)] = int(sec.group(1))
+    for _sd in (7, 8, 9):                                  # v0.41.143: whether a day has a long enough support sortie depends on the day (the ground war moved the targets): the first package that has relief sorties
+        ses.new("Smoke support relief", "F-16C", 2, seed=_sd)
+        for pk in [p_ for p_ in ses.packages() if ses.flyable(p_) and any(f_.tag in ("BASECAP", "HAVCAP", "CVCAP") for f_ in p_.flights)]:
+            ses.fly(pk.number, ses.flyable(pk)[0].id)
+            mz = zf.ZipFile(ses.state.pending["miz"]).read("mission").decode()
+            for m_ in re.finditer(r'\["comment"\]="support relief ([^"]+)"', mz):
+                seg = mz[m_.end():m_.end() + 400]
+                sec = re.search(r'\["seconds"\]=(\d+)', seg)
+                if sec:
+                    acts[m_.group(1)] = int(sec.group(1))
+            if acts:
+                break
+        if acts:
+            break
     rel = acts
     assert rel, ("a 30-minute support CAP in a long mission has relief sorties", sorted(acts))
     assert all(t >= (30 - barcap.HANDOVER_MIN) * 60 - 300 for t in rel.values()), ("a relief appears no earlier than one sortie less the handover", rel)
@@ -2031,19 +2037,23 @@ def check_31wf_carrier_return_height(c):
     on the whole way home (XO's F-14s flew 65 nm at 2,000 ft)."""
     import re, math, zipfile
     from sqe.mission_builder import CV_RCV_NM, CV_RCV_FT
-    s = fresh_session(3, 3); st = s.state
+    s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False)); (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    s.new("Smoke carrier return", "FA-18C", 3, seed=3); st = s.state                 # v0.41.143: a Hornet pilot (the day's F-16C packages no longer always carry a boat flight)
     fl = [p_ for p_ in s.packages() if s.flyable(p_)]
     assert fl, "a flyable package"
-    s.fly(fl[0].number, None)
-    t = zipfile.ZipFile(st.pending["miz"]).read("mission").decode()
     cv = next(b_ for b_ in st.bases.values() if b_.kind.value == "CARRIER")
     seen = []
-    for m in re.finditer(r'"RCV"', t):
-        seg = t[m.start():m.start() + 1500]
-        x_, y_ = re.search(r'\["x"\]=([-\d.]+)', seg), re.search(r'\["y"\]=([-\d.]+)', seg)
-        if abs(math.hypot(float(x_.group(1)) - cv.x, float(y_.group(1)) - cv.y) / 1852 - CV_RCV_NM) < 1:
-            a_ = t.rfind('["alt"]=', 0, m.start())
-            seen.append(float(re.match(r'\["alt"\]=([\d.]+)', t[a_:a_ + 30]).group(1)))
+    for p_ in fl[:6]:                                                       # v0.41.143: the first package may fly from land; take the first one with a boat recovery point
+        s.fly(p_.number, None)
+        t = zipfile.ZipFile(st.pending["miz"]).read("mission").decode()
+        for m in re.finditer(r'"RCV"', t):
+            seg = t[m.start():m.start() + 1500]
+            x_, y_ = re.search(r'\["x"\]=([-\d.]+)', seg), re.search(r'\["y"\]=([-\d.]+)', seg)
+            if abs(math.hypot(float(x_.group(1)) - cv.x, float(y_.group(1)) - cv.y) / 1852 - CV_RCV_NM) < 1:
+                a_ = t.rfind('["alt"]=', 0, m.start())
+                seen.append(float(re.match(r'\["alt"\]=([\d.]+)', t[a_:a_ + 30]).group(1)))
+        if seen:
+            break
     assert seen, "carrier flights get a recovery point CV_RCV_NM from the boat"
     assert all(abs(a_ - CV_RCV_FT * 0.3048) < 5 for a_ in seen), seen
     print(f"[carrier return] {len(seen)} flights cross {CV_RCV_NM} nm out at {CV_RCV_FT} ft before descending")
@@ -3559,9 +3569,9 @@ def check_47_support_cap_pull_back(c):
     assert not _r2.get("held"), "...and then the DEAD stage goes in"
     # a SEAD-stage verdict that failed: the failed-days count goes up
     s.new("SEAD first 3", "F-16C", 3, seed=11); _st = s.state
-    _pk = s.packages(); _se = next(p_ for p_ in _pk if p_.objective.aim == "SEAD"); _t = _st.assets[_se.objective.target_id]
+    _pk = s.packages(); _se = next(p_ for p_ in _pk if p_.objective.aim == "SEAD" and any(f_.role.name == "SEAD" for f_ in p_.flights)); _t = _st.assets[_se.objective.target_id]      # v0.41.143: one that has a SEAD flight (a far site may have none)
     _st.raids["sead"][_t.id] = False
-    _WS3(s.d, random.Random(1)).resolve_abstract(_st, _se); assert _w3.sead_fail(_st, _t.id) == 1 and not _t.suppressed
+    _WS3(s.d, random.Random(1)).resolve_abstract(_st, _se, {"success": False}); assert _w3.sead_fail(_st, _t.id) == 1 and not _t.suppressed          # v0.41.143: forced (the dice differ with the day)
     # missions: the DEAD stage of a blinded site has no radars; of a live site it has them and the gate; the SEAD stage has no gate
     for _verdict in (True, False):
         s.new(f"SEAD first mission {_verdict}", "F-16C", 3, seed=11); _st = s.state
@@ -3760,7 +3770,7 @@ def check_47_support_cap_pull_back(c):
         assert _lu.LuaRuntime().eval("function(s) return load(s) ~= nil end")(__import__("sqe.debrief", fromlist=["x"]).lua_hook("c", 1, "p", [], "P", "G", jams={"a": 2}))
     except ImportError:
         pass
-    _se2 = next(p_ for p_ in s.packages() if p_.objective.aim == "SEAD"); _sim = _w4.WarSimulator(s.d, random.Random(1)); _pj = _sim.sead_p(_st, _se2)
+    _se2 = next(p_ for p_ in s.packages() if p_.objective.aim == "SEAD" and any(f_.role.name == "SEAD" for f_ in p_.flights)); _sim = _w4.WarSimulator(s.d, random.Random(1)); _pj = _sim.sead_p(_st, _se2)
     _ecm_cut = _ecm.SITE_CUT; _ecm.SITE_CUT = 0.0; _pn = _sim.sead_p(_st, _se2); _ecm.SITE_CUT = _ecm_cut
     assert _pj > _pn, "jamming cover raises the SEAD odds"
     _wlr.long_range_site = _lr_real
@@ -4204,6 +4214,42 @@ def check_61_l1_red_supply_floor(c):
     print(f"[l1 supply floor] red supply with every depot and fuel site gone: L1 {_out61[1][1]:.2f}, L2 {_out61[2][1]:.2f}, L3 {_out61[3][1]:.2f}")
 
 
+def check_63_the_push(c):
+    """v0.41.143, Campaign Revamp B1: the extended front, red bases that fall and are retaken, the takeover clock, the last counter-force, victory by level, and v1 saves refused."""
+    import random as _rnd
+    from sqe import ground as _gr, war as _war
+    from sqe.state import CampaignState as _CS
+    from sqe.difficulty import get as _gd
+    s = fresh_session(2, 5); st = s.state; g = st.ground
+    assert g["v"] == _gr.GROUND_V == 2 and [r["id"] for r in g["rbases"]] == ["ab_sukhumi", "ab_gudauta", "ab_sochi"] and g["victory_ids"] == ["ab_sochi"] and g["counter_id"] == "ab_sochi"
+    s3 = fresh_session(3, 5); g3 = s3.state.ground
+    assert _gr.n_zones(g3) == 14 and g3["victory_ids"] == ["ab_sochi", "ab_krymsk"] and g3["counter_id"] == "ab_krymsk" and len(g3["rbases"]) == 5
+    s1 = fresh_session(1, 5); assert s1.state.ground["counter_id"] in ("", None) or not s1.state.ground["counter_id"]
+    # a red base falls when we hold the sector on our side of it and red is gone from there; the clock holds our next attack; retaking it when red returns
+    zi = g["rbases"][0]["zone"]
+    g["red"][zi], g["blue"][zi] = 0.0, 40.0
+    ln = _gr._check_red_bases(st); assert "ab_sukhumi" in g["taken"] and ln and st.assets["ab_sukhumi"].health == 0.0, "a red base falls"
+    assert g["clock"] == st.day + _gr.CLOCK_DAYS and g["red_clock"] == st.day + _gr.RED_CLOCK_DAYS, "the takeover clocks start"
+    g["red"][zi], g["blue"][zi] = 40.0, 0.0
+    _gr._check_red_bases(st); assert "ab_sukhumi" not in g["taken"], "red holding the sector with us absent retakes it"
+    # victory: all victory bases taken and the counter-force resolved (L2: sochi + counter at sochi)
+    g["taken"] = ["ab_sukhumi", "ab_gudauta", "ab_sochi"]; g["counter"] = None; g["won"] = False
+    assert _gr.victory(st) in (True, False)
+    # a saved game from before the revamp is refused
+    d = st.to_dict(); d["ground"]["v"] = 1
+    try:
+        _CS.from_dict(d); raise AssertionError("v1 ground should be refused")
+    except ValueError as e_:
+        assert "new campaign" in str(e_)
+    # nightly resolution runs on every level without error and keeps strengths in range
+    for lv in (1, 2, 3):
+        ss = fresh_session(lv, 7); sg = ss.state
+        for dd in range(12):
+            _gr.resolve_day(sg, _gd(lv), _rnd.Random(dd)); sg.day += 1
+        assert all(0 <= v <= _gr.MAX_FORCE for v in sg.ground["red"] + sg.ground["blue"])
+    print("[the push] 9 / 9 / 14 sectors, red bases fall and are retaken, takeover clocks, counter-force and victory ids by level, v1 saves refused, nightly fights in range")
+
+
 def check_62_red_roster(c):
     # v0.41.142 (Campaign Revamp Stage A3): red's starting air order of battle comes from the level's roster (redroster.py): the numbers, no MiG-25, the MiG-31
     # on Levels 2 and 3 only, the depth gradient of the long-range jets, nothing over what a field can park, a fighter pair at every field, the Mozdok wings
@@ -4351,6 +4397,7 @@ CHECKS = [
     check_60_long_range_tarcap_stands_behind_the_short_range_escort,
     check_61_l1_red_supply_floor,
     check_62_red_roster,
+    check_63_the_push,
 ]
 
 

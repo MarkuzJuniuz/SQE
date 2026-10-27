@@ -69,7 +69,7 @@ LEVELS: dict[int, Difficulty] = {
                   enemy_skill="Average", loss_rate=0.035, base_damage=0.45, variance=0.8,
                   friendly_replenish=0.14, enemy_replenish=0.03, asset_repair=0.03, sam_repair=0.03,
                   friendly_scale=1.2, enemy_cap_per_air=0.10, counterstrike=0.10, bomber_wing=0, bomber_policy="none", react_chance=0.08, react_ratio=(0.2, 0.5),
-                  ground_red=(55, 35, 8, 0, 0), ground_blue=(0, 20, 55, 70, 50), red_attack=0.15, red_reinf=3.5, blue_reinf=6.0, raid_rate=0.15, raid_surprise=0.25, emerg_chance=0.03, raid_size=(2, 2), sam_rebuild=0.02, sam_scoot=0.15,
+                  ground_red=(55, 35, 8, 0, 0), ground_blue=(0, 20, 55, 70, 50), red_attack=0.15, red_reinf=3.5, blue_reinf=7.0, raid_rate=0.15, raid_surprise=0.25, emerg_chance=0.03, raid_size=(2, 2), sam_rebuild=0.02, sam_scoot=0.15,
                   raid_mix=(0.10, 0.10, 0.20), blue_garrison_size=1.0, blue_rebuild=0.20, sam_retreat=0.6, air_retreat=0.6),
     2: Difficulty(2, "Level 2 - Regional Power", "A real air force and layered SAMs, but not a peer. "
                   "A competent campaign wins; a careless one bleeds.",
@@ -79,7 +79,7 @@ LEVELS: dict[int, Difficulty] = {
                   friendly_replenish=0.08, enemy_replenish=0.05, asset_repair=0.04, sam_repair=0.06,
                   friendly_scale=1.0, enemy_cap_per_air=0.15, counterstrike=0.30, bomber_wing=11, bomber_escort_wing=8, bomber_policy="desperate", bomber_safe_p=0.06,
                   forward_sams=("SA-8", "SA-8"), garrison_chance=0.6, garrison_size=0.8, react_chance=0.35, react_ratio=(0.6, 1.1),
-                  ground_red=(70, 55, 15, 0, 0), ground_blue=(0, 15, 60, 70, 50), red_attack=0.45, red_reinf=7.5, blue_reinf=4.0, raid_rate=0.4, raid_arm=1.0, arm_cap=2, arm_cap_free=8, raid_surprise=0.35, emerg_chance=0.09, raid_size=(2, 4), sam_rebuild=0.04, sam_scoot=0.30,
+                  ground_red=(70, 55, 15, 0, 0), ground_blue=(0, 15, 60, 70, 50), red_attack=0.45, red_reinf=5.6, blue_reinf=7.0, raid_rate=0.4, raid_arm=1.0, arm_cap=2, arm_cap_free=8, raid_surprise=0.35, emerg_chance=0.09, raid_size=(2, 4), sam_rebuild=0.04, sam_scoot=0.30,
                   raid_mix=(0.20, 0.15, 0.25), blue_garrison_size=0.8, blue_rebuild=0.15, sam_retreat=0.8, sead_valve=3, air_retreat=0.8),
     3: Difficulty(3, "Level 3 - Near-Peer", "Modern fighters, long-range SAMs and an integrated air-defence network. "
                   "Every sortie is contested and attrition bites.",
@@ -89,7 +89,7 @@ LEVELS: dict[int, Difficulty] = {
                   friendly_replenish=0.06, enemy_replenish=0.07, asset_repair=0.05, sam_repair=0.08,
                   friendly_scale=0.85, enemy_cap_per_air=0.20, counterstrike=0.55, bomber_wing=30, bomber_escort_wing=16, bomber_policy="normal", bomber_safe_p=0.12,
                   forward_sams=("SA-15", "SA-8", "SA-19"), garrison_chance=1.0, garrison_size=1.0, react_chance=0.55, react_ratio=(1.0, 1.6),
-                  ground_red=(90, 80, 35, 0, 0), ground_blue=(0, 10, 45, 55, 40), red_attack=0.55, red_reinf=7.0, blue_reinf=4.0, raid_rate=0.7, raid_arm=1.0, raid_surprise=0.45, emerg_chance=0.21, raid_size=(4, 4), sam_rebuild=0.07, sam_scoot=0.50,
+                  ground_red=(90, 80, 35, 0, 0), ground_blue=(0, 10, 45, 55, 40), red_attack=0.8, red_reinf=7.0, blue_reinf=7.0, raid_rate=0.7, raid_arm=1.0, raid_surprise=0.45, emerg_chance=0.21, raid_size=(4, 4), sam_rebuild=0.07, sam_scoot=0.50,
                   raid_mix=(0.25, 0.20, 0.25), blue_garrison_size=0.7, blue_rebuild=0.10, sam_retreat=1.0, sead_valve=2, air_retreat=1.0),
 }
 

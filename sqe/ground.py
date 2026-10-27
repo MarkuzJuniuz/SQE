@@ -14,6 +14,12 @@ One rule set for both sides (only the numbers differ with difficulty):
   * if Red holds the zone next to one of our fields, that field falls (its defences go, its squadrons move to the nearest field with losses). Two fields
     lost at once is a defeat.
 
+v0.41.143 (Campaign Revamp Stage B1, "the push"): the line of sectors now runs from the red end of the campaign (Sochi on Levels 1 and 2, Krymsk on
+Level 3) through every red base on the coast road to Senaki and Kutaisi. Each red base has a doorstep sector on our side of it; it FALLS when we hold
+that sector and the enemy has nothing there, and can be retaken the same way. The next attack waits for a takeover clock (CLOCK_DAYS) after a fall.
+Victory is by ground only: Sochi (Levels 1, 2) or Sochi AND Krymsk (Level 3), and on Levels 2 and 3 the enemy gets one last counter-force at the final
+base. See `docs/CHANGES.md` v0.41.143 and the plan docs in the Project.
+
 Pure planning and bookkeeping, no pydcs. Positions are DCS metres (x north, y east).
 """
 from __future__ import annotations
@@ -31,6 +37,21 @@ RETREAT_SHARE = 0.6           # what a routed force saves by falling back
 FALL_LOSS = 0.3               # aircraft lost when a field falls and its squadrons leave
 SUPPLY_FLOOR, SUPPLY_NONE = 0.55, 0.85
 L1_RED_SUPPLY_FLOOR = 0.70    # v0.41.141 (XO 2026-10-27, Campaign Revamp): on Level 1 the insurgents are resupplied across the border by night, so their supply never drops below this however many depots die (judgment call; a toy-model run showed it does not change who wins). Levels 2 and 3 keep the 55% floor.
+
+
+GROUND_V = 2                  # state.ground["v"]: 2 = the Campaign Revamp ground war (red bases fall); a campaign with v 1 cannot be loaded
+CLOCK_DAYS = 9                # takeover clock: days after a base falls before our next attack (toy-model base case; judgment call)
+REAR_FRAC = 0.7               # red strength in the sectors behind its first line, as a share of its first sector's start strength (judgment call)
+BLUE_ATTACK_MIN = 30.0        # our force in a sector must be at least this before we attack (toy model "THR"; judgment call)
+BLUE_ATTACK_RATIO = 0.9       # ...and not weaker than this share of the enemy's strength there (supply-weighted)
+BLUE_ATTACK_CHANCE = 0.7      # daily chance that a ready force attacks
+RED_CLOCK_DAYS = 3            # after we take a base the enemy's own attacks wait this long (its force needs 3 days to arrive; XO 2026-10-24 item 5)
+AI_CAS = {1: 3, 2: 2, 3: 3}     # abstract daily blue air strikes on the sector facing us (judgment call: the toy model's AI CAS, 1-3 a day)
+AI_CAS_P = 0.55
+AI_CAS_CUT = 0.15
+COUNTER_DELAY_DAYS = 3        # the enemy's last counter-force arrives this many days after the final base falls
+COUNTER_FORCED_DAYS = 6       # ...and attacks every day for this long
+COUNTER_FRAC = {1: 0.0, 2: 0.35, 3: 0.60}      # counter-force strength as a share of a full 100-point sector (toy model; judgment call)
 
 
 def active(state) -> bool:
@@ -52,38 +73,65 @@ def zone_centers(axis, leg_zones) -> list:
     return out
 
 
-def build(state, th, d, rng, ap) -> None:
-    """New campaign: the zones, the Red column in each, and Blue's facilities. `ap(name)` -> a pydcs airport position."""
-    from . import seacheck
+def _chain_for(th, level: int):
+    """(nodes, legs, stage ids) for a level: the chain of the theatre pack cut at the level's last red target. Nodes run from the red end to the blue end;
+    legs[k] is the number of sectors between node k and node k+1."""
     fr = th["front"]
-    pts = [ap(fr["from_airport"]), ap(fr["to_airport"])]
-    leg_zones = [int(fr.get("zones", 4))]
-    if fr.get("beyond"):
-        pts.append(ap(fr["beyond"]))
-        leg_zones.append(int(fr.get("deep_zones", 1)))
+    chain, legs = list(fr["chain"]), list(fr["leg_zones"])
+    stages = list((fr.get("stages") or {}).get(str(level)) or [])
+    k0 = 0
+    if stages:
+        k0 = next((k for k, n in enumerate(chain) if n.get("red") == stages[-1]), 0)
+    return chain[k0:], legs[k0:], stages
+
+
+def build(state, th, d, rng, ap) -> None:
+    """New campaign: the sectors of the front, the Red column in each, and Blue's facilities. `ap(name)` -> a pydcs airport position."""
+    from . import seacheck
+    nodes, legs, stages = _chain_for(th, int(getattr(d, "level", 2)))
+    pts = [ap(n["airport"]) for n in nodes]
     axis = [[p.x, p.y] for p in pts]
-    centers = zone_centers(axis, leg_zones)
+    centers = zone_centers(axis, legs)
     centers = [list(seacheck.snap_to_land(c[0], c[1])) for c in centers]
     n = len(centers)
-    names = list(fr.get("zone_names") or [])
-    names = [names[i] if i < len(names) else f"Sector {i + 1}" for i in range(n)]
+    names = []
+    for k, cnt in enumerate(legs):
+        a_, b_ = nodes[k]["name"], nodes[k + 1]["name"]
+        names += [f"{a_} - {b_}" if cnt == 1 else f"{a_} - {b_} {j + 1}/{cnt}" for j in range(cnt)]
     red0, blue0 = _initial(d, n)
-    state.ground = {"v": 1, "axis": axis, "legs": leg_zones, "centers": centers, "names": names, "red": red0, "blue": blue0,
-                    "fall": {str(k): v for k, v in (fr.get("fall") or {}).items()}, "fallen": [], "line_km": 0.0}
+    off = lambda k: sum(legs[:k])
+    rbases = [{"id": nd["red"], "name": nd["name"], "zone": off(k), "x": axis[k][0], "y": axis[k][1]} for k, nd in enumerate(nodes) if nd.get("red")]
+    order = {sid: i for i, sid in enumerate(stages)}
+    rbases.sort(key=lambda r: order.get(r["id"], 99))                      # in the order we take them
+    fall = {str(off(k) - 1): nd["blue"] for k, nd in enumerate(nodes) if nd.get("blue") and off(k) >= 1}
+    fr = th["front"]
+    state.ground = {"v": GROUND_V, "axis": axis, "legs": legs, "centers": centers, "names": names, "red": red0, "blue": blue0,
+                    "fall": fall, "fallen": [], "line_km": 0.0,
+                    "rbases": rbases, "stages": stages, "taken": [], "taken_day": {}, "clock": 0,
+                    "victory_ids": list((fr.get("victory") or {}).get(str(d.level), [])), "counter_id": (fr.get("counter") or {}).get(str(d.level), ""),
+                    "counter": None, "won": False}
     state.ground["line_km"] = line_km(state.ground)
-    # the Red column of each zone
+    # the Red column of each sector
     for i, (cx, cy) in enumerate(centers):
-        state.assets[f"armor_{i + 1}"] = EnemyAsset(f"armor_{i + 1}", f"Armor column {chr(65 + i)}", AssetKind.ARMOR, cx, cy, 1.0, 6 + min(i, 2), [], None, "ARMOR", 1)
+        state.assets[f"armor_{i + 1}"] = EnemyAsset(f"armor_{i + 1}", f"Armor column {_col_letter(i)}", AssetKind.ARMOR, cx, cy, 1.0, 6 + min(i, 2), [], None, "ARMOR", 1)
     push(state)
     build_blue_assets(state, rng, ap)
     ensure_forward_garrisons(state)
 
 
+def _col_letter(i: int) -> str:
+    return chr(65 + i) if i < 26 else chr(65 + i // 26 - 1) + chr(65 + i % 26)
+
+
 def _initial(d, n) -> tuple:
-    red = list(getattr(d, "ground_red", (70, 55, 15, 0, 0)))
-    blue = list(getattr(d, "ground_blue", (0, 15, 60, 70, 50)))
-    pad = lambda v: (v + [0.0] * n)[:n]
-    return [float(x) for x in pad(red)], [float(x) for x in pad(blue)]
+    """Strength per sector, red end first: the level's five start values sit at the blue end (the old front); the sectors behind them hold red's rear
+    strength, REAR_FRAC of the first start value, and none of ours."""
+    red_t = [float(x) for x in getattr(d, "ground_red", (70, 55, 15, 0, 0))]
+    blue_t = [float(x) for x in getattr(d, "ground_blue", (0, 15, 60, 70, 50))]
+    rear = max(0, n - len(red_t))
+    red = [REAR_FRAC * red_t[0]] * rear + red_t
+    blue = [0.0] * rear + blue_t
+    return red[-n:], blue[-n:]
 
 
 def build_blue_assets(state, rng, ap=None) -> None:
@@ -100,8 +148,10 @@ def build_blue_assets(state, rng, ap=None) -> None:
         ba[f"bgar_{b.id}"] = _blue_garrison(b)
     g = state.ground
     if g:
-        c = g["centers"][min(len(g["centers"]) - 1, max(0, g["legs"][0] - 1))]
-        far = g["axis"][min(1, len(g["axis"]) - 1)]
+        zi = min((int(k) for k in g.get("fall", {})), default=len(g["centers"]) - 1)         # the sector next to our first airfield (Senaki)
+        c = g["centers"][zi]
+        kn = next((k for k in range(len(g["legs"]) + 1) if sum(g["legs"][:k]) == zi + 1), min(1, len(g["axis"]) - 1))
+        far = g["axis"][kn]
         x, y = seacheck.snap_to_land(*_lerp(c, far, 0.6))
         ba["bdepot_fwd"] = EnemyAsset("bdepot_fwd", "Forward supply depot", AssetKind.DEPOT, x, y, 1.0, 6, [], None, "", 1)
     state.blue_assets = ba
@@ -281,7 +331,10 @@ def blue_strength(state, i: int) -> float:
 
 def info(state, i: int) -> dict:
     r, b = red_strength(state, i), blue_strength(state, i)
-    return {"i": i, "name": state.ground["names"][i], "red": r, "blue": b, "contested": r >= MIN_FORCE and b >= MIN_FORCE,
+    n = n_zones(state.ground)
+    contested = r >= MIN_FORCE and b >= MIN_FORCE
+    facing = r >= MIN_FORCE and b < MIN_FORCE and i + 1 < n and blue_strength(state, i + 1) >= MIN_FORCE and red_strength(state, i + 1) < MIN_FORCE      # our force stands across the line from the enemy column
+    return {"i": i, "name": state.ground["names"][i], "red": r, "blue": b, "contested": contested, "engaged": contested or facing,
             "pressure": r / (r + b) if r + b > 0 else 0.0}
 
 
@@ -376,7 +429,8 @@ def resolve_day(state, d, rng) -> list:
     pull(state)
     red, blue, n = g["red"], g["blue"], n_zones(g)
     sr, sb = supply(state, "red"), supply(state, "blue")
-    lines = []
+    lines = _counter_arrives(state)
+    forced = _forced_zone(state)
     fw = g.setdefault("fwd", {"r": [1.0] * n, "b": [1.0] * n})
     for key, side, force in (("r", "red", red), ("b", "blue", blue)):
         for i in range(n):
@@ -385,39 +439,55 @@ def resolve_day(state, d, rng) -> list:
             if drop > 0.01 and force[i] > 0:                    # a garrison lost since yesterday takes its share of the sector's force with it
                 force[i] = max(0.0, force[i] * (1.0 - FWD_SHARE * min(1.0, drop)))
             fw[key][i] = h
-    for i in range(n):
-        R, B = red[i], blue[i]
-        if R >= MIN_FORCE and B >= MIN_FORCE:
-            pR, pB = R * sr, B * sb
-            att = None
-            if rng.random() < getattr(d, "red_attack", 0.3) * _clamp(pR / max(pB, 1.0), 0.4, 1.6):
-                att = "red"
-            elif pB > 1.15 * pR and rng.random() < 0.5:
-                att = "blue"
-            inten = ATTACK if att else SKIRMISH
-            ur, ub = rng.uniform(0.8, 1.2), rng.uniform(0.8, 1.2)
-            kr = 1.1 if att == "red" else 0.9 if att == "blue" else 1.0         # the attacker pays a little more
-            kb = 1.1 if att == "blue" else 0.9 if att == "red" else 1.0
-            red[i] = max(0.0, R - min(R, inten * pB * kr * ur))
-            blue[i] = max(0.0, B - min(B, inten * pR * kb * ub))
-            name = g["names"][i]
-            if att:
-                a_is_red = att == "red"
-                pa = (red[i] * sr) if a_is_red else (blue[i] * sb)
-                dh = fwd_health(state, "blue" if a_is_red else "red", i)               # a standing forward garrison strengthens the defence (v0.41.102)
-                pd = (DEFENDER + FWD_EXTRA * dh) * ((blue[i] * sb) if a_is_red else (red[i] * sr))
-                if pa > DECISIVE * pd:
-                    _rout(g, i, "blue" if a_is_red else "red")
-                    _advance(g, i, "red" if a_is_red else "blue")
-                    lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked and broke the other side; the survivors fell back")
-                elif pa < REPULSED * pd:
-                    if a_is_red:
-                        red[i] *= 0.85
-                    else:
-                        blue[i] *= 0.85
-                    lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked and were thrown back")
+    for _ in range(AI_CAS.get(getattr(d, "level", 3), 2)):  # v0.41.143: blue's own air (the AI flights nobody flies) works the red sector that faces us
+        facing = [i for i in range(n) if red[i] >= MIN_FORCE and (blue[i] >= MIN_FORCE or (i + 1 < n and blue[i + 1] >= MIN_FORCE))]
+        if facing and rng.random() < AI_CAS_P:
+            i = max(facing)
+            red[i] = max(0.0, red[i] * (1.0 - AI_CAS_CUT))
+    # who is in contact: a sector both sides hold, or (v0.41.143) two neighbouring sectors, red's on the enemy side, when neither is shared: an assault across the line
+    pairs = [(i, i) for i in range(n) if red[i] >= MIN_FORCE and blue[i] >= MIN_FORCE]
+    pairs += [(i, i + 1) for i in range(n - 1) if red[i] >= MIN_FORCE and blue[i + 1] >= MIN_FORCE and blue[i] < MIN_FORCE and red[i + 1] < MIN_FORCE]
+    for ri, bi in pairs:
+        R, B = red[ri], blue[bi]
+        if R < MIN_FORCE or B < MIN_FORCE:                                              # an earlier fight today moved them
+            continue
+        quiet = ri != bi                                                                # across the line: nothing happens unless one side attacks
+        pR, pB = R * sr, B * sb
+        att = None
+        if forced == ri and not quiet:                                                  # the enemy's last counter-force presses every day
+            att = "red"
+        elif state.day >= g.get("red_clock", 0) and rng.random() < getattr(d, "red_attack", 0.3) * _clamp(pR / max(pB, 1.0), 0.4, 1.6):
+            att = "red"
+        elif state.day >= g.get("clock", 0) and B >= BLUE_ATTACK_MIN and pB >= BLUE_ATTACK_RATIO * pR and rng.random() < BLUE_ATTACK_CHANCE:
+            att = "blue"                                                                # v0.41.143: our force is ready (takeover clock over, enough strength)
+        if quiet and not att:
+            continue
+        inten = ATTACK if att else SKIRMISH
+        ur, ub = rng.uniform(0.8, 1.2), rng.uniform(0.8, 1.2)
+        kr = 1.1 if att == "red" else 0.9 if att == "blue" else 1.0         # the attacker pays a little more
+        kb = 1.1 if att == "blue" else 0.9 if att == "red" else 1.0
+        red[ri] = max(0.0, R - min(R, inten * pB * kr * ur))
+        blue[bi] = max(0.0, B - min(B, inten * pR * kb * ub))
+        name = g["names"][ri]
+        if att:
+            a_is_red = att == "red"
+            pa = (red[ri] * sr) if a_is_red else (blue[bi] * sb)
+            dh = fwd_health(state, "blue", bi) if a_is_red else fwd_health(state, "red", ri)       # a standing forward garrison strengthens the defence (v0.41.102)
+            pd = (DEFENDER + FWD_EXTRA * dh) * ((blue[bi] * sb) if a_is_red else (red[ri] * sr))
+            if pa > DECISIVE * pd:
+                if a_is_red:
+                    _rout(g, bi, "blue"); _advance(g, ri, "red")
                 else:
-                    lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked, heavy fighting (enemy {red[i]:.0f}, friendly {blue[i]:.0f})")
+                    _rout(g, ri, "red"); _advance(g, bi, "blue")
+                lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked and broke the other side; the survivors fell back")
+            elif pa < REPULSED * pd:
+                if a_is_red:
+                    red[ri] *= 0.85
+                else:
+                    blue[bi] *= 0.85
+                lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked and were thrown back")
+            else:
+                lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked, heavy fighting (enemy {red[ri]:.0f}, friendly {blue[bi]:.0f})")
     for i in range(n):                                  # a remnant too small to hold ground withdraws
         if red[i] < MIN_FORCE and red[i] > 0 and blue[i] >= MIN_FORCE:
             _fall_back(g, i, "red")
@@ -427,12 +497,14 @@ def resolve_day(state, d, rng) -> list:
         if red[i] < MIN_FORCE and blue[i] < MIN_FORCE:
             if i > 0 and red[i - 1] >= MIN_FORCE and not (i + 1 < n and blue[i + 1] >= MIN_FORCE and rng.random() < 0.5):
                 _advance(g, i - 1, "red")
-            elif i + 1 < n and blue[i + 1] >= MIN_FORCE:
+            elif i + 1 < n and blue[i + 1] >= MIN_FORCE and state.day >= g.get("clock", 0):      # v0.41.143: not during the takeover clock
                 _advance(g, i + 1, "blue")
+    lines += _check_red_bases(state)                     # v0.41.143: a base is taken (or retaken) on the state of the sectors before the day's reinforcements arrive
     # reinforcements arrive at the zone in contact: Red's front-most zone, Blue's front-most (lowest-numbered) zone
-    rz = max((i for i in range(n) if red[i] >= MIN_FORCE), default=0)
+    rz = max((i for i in range(n) if red[i] >= MIN_FORCE), default=None)
     bz = min((i for i in range(n) if blue[i] >= MIN_FORCE), default=n - 1)
-    red[rz] = min(MAX_FORCE, red[rz] + getattr(d, "red_reinf", 5.0) * sr)
+    if rz is not None:                                   # red with no organised force anywhere gets none (its last counter-force is the only way back)
+        red[rz] = min(MAX_FORCE, red[rz] + getattr(d, "red_reinf", 5.0) * sr)
     blue[bz] = min(MAX_FORCE, blue[bz] + getattr(d, "blue_reinf", 5.0) * sb)
     for i in range(n):                                   # a lost red forward garrison is re-established where red still holds the sector (blue's come back through rebuild_blue)
         a = state.assets.get(fwd_id("red", i))
@@ -445,6 +517,7 @@ def resolve_day(state, d, rng) -> list:
     if abs(g["line_km"] - km0) >= 1.0:
         lines.append(f"The front line moved {abs(g['line_km'] - km0):.0f} km {'toward our airfields' if g['line_km'] > km0 else 'back toward the enemy'}")
     lines += check_falls(state)
+    lines += _update_win(state)
     push(state)
     return lines
 
@@ -490,6 +563,129 @@ def check_falls(state) -> list:
         elif not held and bid in g["fallen"] and g["blue"][i] >= MIN_FORCE:
             g["fallen"].remove(bid)
             lines.append(f"{state.bases[bid].name} is back in our hands, with its defences gone; the squadrons stay where they moved")
+    return lines
+
+
+def _base_zone(g, rid: str):
+    return next((rb["zone"] for rb in g.get("rbases", []) if rb["id"] == rid), None)
+
+
+def _counter_arrives(state) -> list:
+    """The enemy's last counter-force: it arrives COUNTER_DELAY_DAYS after the final base fell, in the sector in front of that base, and presses every
+    day for COUNTER_FORCED_DAYS. If red has retaken the base by then, the try is spent."""
+    g, c = state.ground, state.ground.get("counter")
+    if not c or c.get("arrived"):
+        return []
+    if state.day < c["arrive"]:
+        return []
+    c["arrived"] = True
+    cid = g.get("counter_id", "")
+    i = _base_zone(g, cid)
+    if cid not in g["taken"] or i is None:
+        c["used"] = True
+        return []
+    g["red"][i] = min(MAX_FORCE, g["red"][i] + MAX_FORCE * c["frac"])
+    c["until"] = state.day + COUNTER_FORCED_DAYS
+    rb = next(r for r in g["rbases"] if r["id"] == cid)
+    return [f"{rb['name']}: the enemy counter-force has arrived and is attacking"]
+
+
+def _forced_zone(state):
+    g, c = state.ground, state.ground.get("counter")
+    if not c or not c.get("arrived") or c.get("resolved") or c.get("used") or state.day > c.get("until", -1):
+        return None
+    return _base_zone(g, g.get("counter_id", ""))
+
+
+def _check_red_bases(state) -> list:
+    """A red base falls while we hold the sector on our side of it and the enemy has nothing there; it is retaken when the enemy holds that sector again."""
+    g, lines = state.ground, []
+    for rb in g.get("rbases", []):
+        i, rid = rb["zone"], rb["id"]
+        ours = g["blue"][i] >= MIN_FORCE and g["red"][i] < MIN_FORCE
+        theirs = g["red"][i] >= MIN_FORCE and g["blue"][i] < MIN_FORCE
+        if rid not in g["taken"] and ours:
+            g["taken"].append(rid)
+            g["taken_day"][rid] = state.day
+            g["clock"] = state.day + CLOCK_DAYS
+            g["red_clock"] = state.day + RED_CLOCK_DAYS
+            lines.append(f"{rb['name'].upper()} HAS FALLEN: our forces hold it. The next push waits for the takeover ({CLOCK_DAYS} days)")
+            lines += apply_red_fall(state, rb)
+            c = g.get("counter")
+            if rid == g.get("counter_id") and c is None:
+                g["counter"] = {"arrive": state.day + COUNTER_DELAY_DAYS, "frac": COUNTER_FRAC.get(int(state.level), 0.0), "arrived": False}
+            elif c is not None and c.get("used"):
+                c["resolved"] = True                                        # the one try is spent: retaking the base ends it
+        elif rid in g["taken"] and theirs:
+            g["taken"].remove(rid)
+            g["taken_day"].pop(rid, None)
+            a = state.assets.get(rid)
+            if a is not None:
+                a.health = max(a.health, 0.5)
+            c = g.get("counter")
+            if c is not None and rid == g.get("counter_id"):
+                c["used"] = True
+            lines.append(f"{rb['name']} has been retaken by the enemy")
+    return lines
+
+
+def _update_win(state) -> list:
+    """Victory is by ground only. A level with no counter-force wins when its victory bases are ours; with one, when the counter-force has been beaten."""
+    g = state.ground
+    if g.get("won") or not g.get("victory_ids"):
+        return []
+    if not all(x in g["taken"] for x in g["victory_ids"]):
+        return []
+    c = g.get("counter")
+    if g.get("counter_id"):
+        if c is None:
+            return []
+        if not c.get("resolved"):
+            i = _base_zone(g, g["counter_id"])
+            if c.get("arrived") and not c.get("used") and i is not None and g["red"][i] < MIN_FORCE and g["blue"][i] >= MIN_FORCE:
+                c["resolved"] = True
+            elif not c.get("resolved"):
+                return []
+    g["won"] = True
+    return ["The last objective is ours and nothing is left to stop us"]
+
+
+def victory(state) -> bool:
+    return bool(active(state) and state.ground.get("won"))
+
+
+def apply_red_fall(state, rb) -> list:
+    """A red base falls to us: the field and everything dug in round it go down for good, and its jets withdraw to the nearest standing red field
+    (FALL_LOSS of them lost on the way), the way our own squadrons do when one of our fields falls. Depots and command posts are left for the supply
+    stage (B2). Nothing happens to an asset the level does not have (Level 1 has no field at Gudauta)."""
+    rid = rb["id"]
+    key = rid[3:] if rid.startswith("ab_") else rid
+    lines = []
+    fa = state.assets.get(rid)
+    if fa is not None:
+        fa.health = 0.0
+    for a in state.assets.values():
+        if a.kind in (AssetKind.SAM, AssetKind.EWR) and (a.id.startswith(f"sam_{key}_") or a.id.startswith(f"ewr_{key}") or a.id.startswith(f"fsam_{key}")):
+            a.health = 0.0
+        elif a.kind == AssetKind.ARMOR and a.variant == "GARRISON" and a.id.startswith(f"gar_{key}_"):
+            a.health = 0.0
+    w = state.enemy_air_at(rid)
+    if w is not None and w.sqns:
+        dests = [x for x in state.enemy_air if x is not w and not state.assets[x.base_asset_id].destroyed]
+        fx, fy = rb["x"], rb["y"]
+        dest = min(dests, key=lambda x: (state.assets[x.base_asset_id].x - fx) ** 2 + (state.assets[x.base_asset_id].y - fy) ** 2) if dests else None
+        total = sum(q.available + q.reserve for q in w.sqns)
+        if dest is None:
+            w.sqns.clear(); w.squadrons = 0
+            lines.append(f"   the {total} enemy aircraft there are lost")
+        else:
+            lost = 0
+            for q in list(w.sqns):
+                k = int(round(q.available * FALL_LOSS))
+                q.available = max(0, q.available - k); lost += k
+                w.sqns.remove(q); dest.sqns.append(q)
+            w.squadrons = len(w.sqns); dest.squadrons = len(dest.sqns)
+            lines.append(f"   its squadrons withdraw to {state.assets[dest.base_asset_id].name}, {lost} aircraft lost")
     return lines
 
 
@@ -550,4 +746,6 @@ def summary(state) -> list:
         out.append(f"{g['names'][i]}: enemy {r:.0f} | friendly {b:.0f}  ({tag})")
     if g.get("fallen"):
         out.append("FALLEN: " + ", ".join(state.bases[x].name for x in g["fallen"] if x in state.bases))
+    if g.get("rbases"):
+        out.append("TAKEN: " + (", ".join(rb["name"] for rb in g["rbases"] if rb["id"] in g["taken"]) or "none yet"))
     return out
