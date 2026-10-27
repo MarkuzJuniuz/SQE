@@ -59,8 +59,6 @@ class AppSettings:
     dcs_saves: str = ""
     last_campaign: str = ""
     ai_unlimited_fuel: bool = True        # AI flights: unlimited fuel until the push, real fuel for the combat leg, unlimited again from egress
-    borrow_red: bool = False              # v0.41.81 (Experimental tab): red moves SAM batteries to where they are needed (sams.red_orders); off = only the usual rebuild
-    borrow_blue: bool = False             # the same for blue (sams.blue_orders)
     hot_ramp_scrambles: bool = False      # v0.41.80: scramble pairs at LAND fields wait hot on the ramp and taxi out (experimental); off = hidden, put on the runway when called
     hot_runway_starts: bool = False       # v0.41.96: AI package flights from LAND fields other than yours start on the runway (queued by the hook) instead of airborne, when the schedule allows (v0.41.97: your own field too, after your takeoff)
     hot_runway_own_field: bool = False    # v0.41.99: sub-setting of hot_runway_starts: also AI flights at YOUR field (after your takeoff); only counts while hot_runway_starts is on

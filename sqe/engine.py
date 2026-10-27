@@ -808,11 +808,9 @@ class Session:
 
     # ---- skip the day ---------------------------------------------------------------------------------
     def _sim(self, rng=None):
-        """The war simulator with the Experimental switches from the settings (borrow_red / borrow_blue)."""
+        """The war simulator."""
         from .war import WarSimulator
-        sim = WarSimulator(self.d, rng)
-        sim.borrow = {"red": bool(getattr(self.settings, "borrow_red", False)), "blue": bool(getattr(self.settings, "borrow_blue", False))}
-        return sim
+        return WarSimulator(self.d, rng)
 
     def skip_day(self) -> dict:
         """Skip Turn: any pending sortie is discarded and EVERY package of the day (even ones you could have flown) is resolved

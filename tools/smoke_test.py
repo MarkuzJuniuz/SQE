@@ -1349,7 +1349,7 @@ def check_31a_sam_orders_by_need(c):
     dr = type(d)(**{**d.__dict__, "blue_rebuild": 1.0})
     sm.rebuild_blue_sites(st, dr, rnd.Random(3))
     assert st.blue_sams[nid].destroyed or not st.sams["orders"], "no new build at a site a battery is on its way to"
-    st.day += sm.ORDER_TRANSIT_DAYS
+    st.day = max(st.day, max(o_["due"] for o_ in st.sams["orders"]))
     r3 = sm.blue_orders(st, d, rnd.Random(4))
     assert any("arrived" in x for x in r3) and not st.blue_sams[nid].destroyed and st.blue_sams[nid].health >= 0.99, r3
     assert not st.sams["orders"], "the order is done"
@@ -1394,7 +1394,7 @@ def check_31b_red_sam_orders(c):
     dr = type(d)(**{**d.__dict__, "sam_rebuild": 1.0})
     sm.rebuild(st, dr, rnd.Random(3))
     assert st.assets[o["to"]].destroyed, "no new build at a site a battery is on its way to"
-    st.day = st.day - sm.REBUILD_MIN_DAYS - 1 + sm.ORDER_TRANSIT_DAYS
+    st.day = max(o["due"], st.day - sm.REBUILD_MIN_DAYS - 1)
     r3 = sm.red_orders(st, d, rnd.Random(4))
     assert any("arrived" in x for x in r3) and not st.assets[o["to"]].destroyed and st.assets[o["to"]].health >= 0.99, r3
     assert not st.sams["red_orders"], "the order is done"
@@ -2625,25 +2625,26 @@ def check_31p_guard_chains(c):
     print(f"[guards] {len(g)} guard sorties planned ({sum(1 for f in g if f['kind'] == 'TNKCAP')} tanker, {sum(1 for f in g if f['kind'] == 'HAVCAP')} AWACS), "
           f"{len(tags)} carried by packages; none from your squadron")
 
-def check_31j_borrow_switches(c):
-    """v0.41.81: the Experimental tab's per-side borrowing switches: off, that side's SAM orders do not run overnight; on (default), they do."""
+def check_31j_sam_orders_always_on(c):
+    """v0.41.140: SAM orders are a fixed feature (no settings): both sides' orders run overnight, with no chance roll, and a battery arrives in 1 to 3 days
+    by supply (1 at 100%, 2 in between, 3 at the 55% floor)."""
     from sqe import sams, war
-    from sqe.war import WarSimulator
+    from sqe.settings import AppSettings as _AS
+    assert not hasattr(_AS(), "borrow_red") and not hasattr(_AS(), "borrow_blue"), "the borrow settings are gone"
+    assert [sams.transit_days(x) for x in (1.0, 0.95, 0.85, 0.775, 0.7, 0.6, 0.55, 0.3)] == [1, 1, 2, 2, 2, 3, 3, 3], "transit days by supply"
     calls = []
     real_r, real_b = sams.red_orders, sams.blue_orders
     sams.red_orders = lambda *a, **k: (calls.append("red"), [])[1]
     sams.blue_orders = lambda *a, **k: (calls.append("blue"), [])[1]
     try:
-        for red, blue in ((True, True), (False, True), (True, False), (False, False)):
-            ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, borrow_red=red, borrow_blue=blue))
-            (TMP / "saves").mkdir(parents=True, exist_ok=True)
-            ses.new("Smoke borrow", "F-16C", 3, seed=7)
-            calls.clear()
-            ses.skip_day()
-            assert ("red" in calls) == red and ("blue" in calls) == blue, ((red, blue), calls)
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses.new("Smoke orders on", "F-16C", 3, seed=7)
+        calls.clear()
+        ses.skip_day()
+        assert "red" in calls and "blue" in calls, calls
     finally:
         sams.red_orders, sams.blue_orders = real_r, real_b
-    assert not AppSettings().borrow_red and not AppSettings().borrow_blue, "both default off (v0.41.83)"
 
 
 def check_31c_ai_skill_red_blue(c):
@@ -4213,7 +4214,7 @@ CHECKS = [
     check_31g_blue_support_relief,
     check_31h_cap_replacement,
     check_31i_hot_ramp_scrambles,
-    check_31j_borrow_switches,
+    check_31j_sam_orders_always_on,
     check_31k_salvo_size,
     check_31l_red_arm,
     check_31m_blue_barcap_plan,

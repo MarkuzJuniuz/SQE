@@ -158,11 +158,6 @@ class SettingsDialog(QDialog):
             if not on:
                 self.hotrwy_own.setChecked(False)
         self.hotrwy.toggled.connect(_own_gate)
-        self.borrow_red = QCheckBox("Red SAM borrowing")
-        self.borrow_red.setChecked(bool(getattr(settings, "borrow_red", False))); v.addWidget(self.borrow_red)
-        self.borrow_blue = QCheckBox("Blue SAM borrowing")
-        self.borrow_blue.setChecked(bool(getattr(settings, "borrow_blue", False))); v.addWidget(self.borrow_blue)
-        hint(v, "On: that side moves SAM batteries from quiet sites to threatened ones. Off: that side only rebuilds destroyed sites the slow way (by supply). Orders already on their way wait until you switch it back on. Takes effect at the next overnight update.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
@@ -317,8 +312,6 @@ class SettingsDialog(QDialog):
         self.s.hot_ramp_scrambles = self.hotramp.isChecked()
         self.s.hot_runway_starts = self.hotrwy.isChecked()
         self.s.hot_runway_own_field = self.hotrwy.isChecked() and self.hotrwy_own.isChecked()
-        self.s.borrow_red = self.borrow_red.isChecked()
-        self.s.borrow_blue = self.borrow_blue.isChecked()
         self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())
         self.s.merge_enemy_pct = int(self.mpct.value())
         self.s.merge_back_min = int(self.mback.value()); self.s.merge_fwd_min = int(self.mfwd.value())

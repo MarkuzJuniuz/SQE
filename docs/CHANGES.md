@@ -1,6 +1,16 @@
 # CHANGES.md
 
 
+## v0.41.140, Campaign Revamp Stage A1: SAM orders are a fixed feature
+
+XO (2026-10-27). Both sides' SAM orders (`sams.red_orders`, `sams.blue_orders`) now always run overnight, at every level. They used to sit behind two Experimental-tab checkboxes ("Red SAM borrowing", "Blue SAM borrowing"), both OFF by default, so in a normal campaign no battery ever moved.
+- The settings `borrow_red` / `borrow_blue`, the two checkboxes and the war simulator's `borrow` switch are gone (old settings files still load; the two keys are ignored).
+- A battery moves by air, so it arrives in `transit_days(supply)` days: 1 at 100% supply, 2 in between (about 66% to 89%), 3 at the 55% floor (was a flat 2). Judgment call: no public figure; the shape is XO's "1 to 3 days by supply". The sender's supply is red's or blue's own `ground.supply`.
+- The chance roll is gone for both sides (it was the side's supply as a probability): supply now sets the time, not whether it happens. This also stops the war sim drawing a random number per order.
+- Not yet: the planner weighing what the sending site leaves exposed (queued for later).
+- A 30-day check without a player: L1 no orders (no destroyed sites), L2 12 to 14 orders, L3 12 to 14, all arrived.
+- Smoke: `check_31j_borrow_switches` is now `check_31j_sam_orders_always_on` (settings gone, transit table, both sides run in a skipped day); the red and blue order checks wait for the order's own due day.
+
 ## v0.41.139, engagement circles slice 2: the long-range TARCAP stands behind and aside of the short-range escort
 
 XO (2026-10-27, engagement circle diagram): short-range jets forward, long-range jets behind and to one side. Measured first on the identity set: no package has a short- and a long-range TARCAP together (one TARCAP flight per package, and the planner gives it a long-range jet first), so there was nothing to stagger there. The pair that does exist is the TARCAP (long-range first) and the package ESCORT (short-range first): in 34 packages, 24 of them had both on one and the same point (the SAM-free runs), the other 10 (DEAD, JSOW) sat 30 nm apart already.
