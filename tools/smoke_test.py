@@ -2411,8 +2411,11 @@ def check_31zd_red_callin(c):
                 calls = set(_re.findall(r"SQE_CALLIN\('([^']+)',(\d+),(\d+),(\d+),(\d+)\)", raw))
                 s.state.pending = None
                 if calls and "call in the patrols" in raw:        # v0.41.124: a folded raid scramble can carry blue call-ins only
-                    found = (raw, calls)
-                    break
+                    _rn = {g_["name"] for co_ in dlua.loads(raw)["mission"]["coalition"]["red"]["country"].values() for g_ in ((co_.get("plane") or {}).get("group") or {}).values()}
+                    calls = {c_ for c_ in calls if c_[0] in _rn}          # v0.41.156: more L3 scrambles find blue-only call-ins sooner; keep the red ones
+                    if calls:
+                        found = (raw, calls)
+                        break
             if found:
                 break
             s.skip_day()
