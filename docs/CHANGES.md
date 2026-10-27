@@ -1,6 +1,16 @@
 # CHANGES.md
 
 
+## v0.41.146, Campaign Revamp Stage B4: Level 1 raids
+
+XO (2026-10-27, "go, medium"). Which rule blocked L1 raids: every airfield, depot and garrison of ours sits under a live Patriot / HAWK, and red raids a covered target only with a Su-24M wing that can field a SEAD group (v0.41.125). Level 1 has no SEAD (`raid_arm` 0), so the only raids it ever planned were on a contested sector outside the cover: about 5 of 31 drawn raids in a 40-day probe, none on a field, depot or garrison.
+- New difficulty setting `raid_banzai` (Level 1 only): the insurgents go in unsuppressed on covered targets. The batteries shoot at them (the existing raid resolution and mission), so most raids cost red jets; judgment call, no source.
+- L1 `raid_rate` 0.15 to 0.25 a day (one raid every four days; XO's open item, my default).
+- Probe after: 52 of 52 drawn raids find a target on L1 (was 5 of 31). L1 sims still win around day 22 to 23, no defeats.
+- Smoke: new `check_66_l1_raids`; `check_31wd` now expects an L1 raid on a covered field to be allowed with no SEAD.
+- No other tuning needed: all three levels sit inside the days-to-win targets after B1 to B3.
+
+
 ## v0.41.145, Campaign Revamp Stage B3: detachments and the no-hunt thresholds
 
 XO (2026-10-27, "your defaults. Please go B3 on high."). The detachments along the road already exist as the sectors of the push: each has a red and a blue force and a dug-in forward position (`rfwd_N` / `bfwd_N`, v0.41.102), so the red-side sectors are Sochi to Gelendzhik 4, Gelendzhik to Krymsk 1, Gudauta to Sochi 2, Sukhumi to Gudauta 1 (it was 2; XO asked for a second look and the plan said 1 for the 54 km leg): 8 on L3 and 3 on L1 and L2, the plan's 7 to 8 and 2 to 3. The push now has 8 / 8 / 13 sectors in all. No new unit types. What B3 adds is the rule that nobody hunts the last unit:
