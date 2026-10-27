@@ -135,7 +135,7 @@ class ObjectivePlanner:
                 z = ground.zone_of(state, a.id)
                 if z is not None:                                    # a front-line column: only where the sector is actually being fought over
                     zi = ground.info(state, z)
-                    if not zi["contested"]:
+                    if not zi["engaged"]:                            # v0.41.143: also a column our force stands facing across the line
                         continue
                     pr *= 0.7 + 0.6 * zi["pressure"]                 # the harder Red is pressing, the more urgent
                     what = f"Close air support: {zi['name']} (enemy {zi['red']:.0f}, friendly {zi['blue']:.0f})"
@@ -524,7 +524,7 @@ class WarSimulator:
         for ln in support_assets.step(state, self.rng):                  # v0.41.87: missing AWACS / tanker airframes come back
             state.note("Overnight: " + ln)
         for a in state.assets.values():
-            if 0 < a.health < 1.0:
+            if 0 < a.health < 1.0 and ground.zone_of(state, a.id) is None:        # v0.41.143: a front column is a sector's strength: the ground war reinforces it, it does not repair itself
                 a.health = min(1.0, a.health + (d.sam_repair if a.kind == AssetKind.SAM else d.asset_repair))
         for a in state.assets.values():
             a.suppressed = False                                    # blinded radars come back on overnight
@@ -596,7 +596,10 @@ def update_front(state: CampaignState) -> bool:
 def update_status(state: CampaignState) -> str:
     t = totals(state)
     if state.status == "ACTIVE":
-        if t["c2"] <= 0.05 and t["enemy_air"] < 0.15:
+        by_ground = ground.active(state) and bool(state.ground.get("victory_ids"))      # v0.41.143: victory is by ground only (jet counts no longer decide the war)
+        if by_ground and ground.victory(state):
+            state.status = "VICTORY"; state.note("VICTORY: the objectives are ours and the enemy has nothing left to throw at us.")
+        elif not by_ground and t["c2"] <= 0.05 and t["enemy_air"] < 0.15:
             state.status = "VICTORY"; state.note("VICTORY: the enemy command structure and air arm are broken.")
         elif t["friendly_air"] < 0.15:
             state.status = "DEFEAT"; state.note("DEFEAT: the coalition air component can no longer sustain operations.")

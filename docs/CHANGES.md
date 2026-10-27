@@ -1,6 +1,21 @@
 # CHANGES.md
 
 
+## v0.41.143, Campaign Revamp Stage B1: the push
+
+XO (2026-10-27, "go on B, high"). The ground war is now a march across red's airfields, and victory is by ground only.
+- The front line is a chain of airfields: Krymsk, Gelendzhik, Sochi-Adler, Gudauta, Sukhumi-Babushara, then our Senaki and Kutaisi. Levels 1 and 2 have 9 sectors (Sukhumi, Gudauta, Sochi), Level 3 has 14 (Gelendzhik and Krymsk too). Theatre data: `front.chain`, `leg_zones`, `stages`, `victory`, `counter` in `caucasus.json`.
+- A red base falls when we hold its sector and red is gone from it; red retakes it by the same rule. When one falls: its field, SAM, EWR and garrison are zeroed (depots, fuel and command posts wait for B2), its squadrons move to the nearest standing red wing with 30% lost.
+- Takeover clock: after a base falls our next attack waits 9 days and red's own attacks wait 3 (judgment calls).
+- Last counter-force: at Krymsk on L3 (60% strength) and Sochi on L2 (35%); L1 has none. It arrives 3 days after the base falls and presses for 6 days. Victory needs the victory bases (Sochi on L1/L2; Sochi AND Krymsk on L3) and the counter-force beaten. No hunting the last unit.
+- Blue's own abstract air strikes (the AI flights nobody flies) work the red sector facing us: `AI_CAS` 3 / 2 / 3 a day at 55% for a 15% cut (judgment call, from the toy model).
+- Red reinforcement per day: L1 3.5, L2 5.6, L3 7.0; blue 7.0 on all levels. L3 `red_attack` 0.8. Front columns no longer regenerate through the generic nightly repair (it made red a wall).
+- Planner: CAS targets a sector that is engaged (in contact, or facing our force across the line).
+- Old saves are refused: "start a new campaign" (ground format v2).
+- Sims (8 seeds, AI only): L1 about day 26, L2 about day 34, L3 about day 90. L3 is inside the idle target but over the daily-play one: the sim does not model the player enough. The "air tempo" idea (flown results nudging the AI flights' odds, capped) is next.
+- Smoke: new `check_63_the_push`; `check_19`, `check_20`, `check_28`, `check_31g`, `check_31wf`, `check_47` updated for the 9/14-sector war and for days whose first package differs.
+
+
 ## v0.41.142, Campaign Revamp Stage A3: red's air roster by type, not by dice
 
 XO (2026-10-24 to 10-27, the Revamp plan). Red now starts each level with a fixed ROSTER of jets per type, placed by rules, instead of a total split over fields with a random type per field. New module `sqe/redroster.py`.

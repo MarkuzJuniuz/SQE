@@ -275,7 +275,7 @@ def _airports(th: dict) -> list:
 
 def _front_chain(th: dict) -> list:
     fr = th.get("front", {}) or {}
-    return [a for a in (fr.get("from_airport"), fr.get("to_airport"), fr.get("beyond")) if a]
+    return [n["airport"] for n in (fr.get("chain") or []) if n.get("airport")]
 
 
 def make_probe(out_path, seat: bool = True) -> Path:

@@ -296,14 +296,85 @@
         }
     ],
     "front": {
-        "from_airport": "Sukhumi-Babushara",
-        "to_airport": "Senaki-Kolkhi",
-        "zones": 4,
-        "beyond": "Kutaisi",
-        "deep_zones": 1,
-        "fall": {
-            "3": "senaki",
-            "4": "kutaisi"
+        "chain": [
+            {
+                "airport": "Krymsk",
+                "red": "ab_krymsk",
+                "name": "Krymsk"
+            },
+            {
+                "airport": "Gelendzhik",
+                "red": "ab_gelen",
+                "name": "Gelendzhik"
+            },
+            {
+                "airport": "Sochi-Adler",
+                "red": "ab_sochi",
+                "name": "Sochi"
+            },
+            {
+                "airport": "Gudauta",
+                "red": "ab_gudauta",
+                "name": "Gudauta"
+            },
+            {
+                "airport": "Sukhumi-Babushara",
+                "red": "ab_sukhumi",
+                "name": "Sukhumi"
+            },
+            {
+                "airport": "Senaki-Kolkhi",
+                "blue": "senaki",
+                "name": "Senaki"
+            },
+            {
+                "airport": "Kutaisi",
+                "blue": "kutaisi",
+                "name": "Kutaisi"
+            }
+        ],
+        "leg_zones": [
+            1,
+            4,
+            2,
+            2,
+            4,
+            1
+        ],
+        "stages": {
+            "1": [
+                "ab_sukhumi",
+                "ab_gudauta",
+                "ab_sochi"
+            ],
+            "2": [
+                "ab_sukhumi",
+                "ab_gudauta",
+                "ab_sochi"
+            ],
+            "3": [
+                "ab_sukhumi",
+                "ab_gudauta",
+                "ab_sochi",
+                "ab_gelen",
+                "ab_krymsk"
+            ]
+        },
+        "victory": {
+            "1": [
+                "ab_sochi"
+            ],
+            "2": [
+                "ab_sochi"
+            ],
+            "3": [
+                "ab_sochi",
+                "ab_krymsk"
+            ]
+        },
+        "counter": {
+            "2": "ab_sochi",
+            "3": "ab_krymsk"
         }
     },
     "tier_labels": [
