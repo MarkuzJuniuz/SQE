@@ -4310,7 +4310,10 @@ def check_64_supply_loop(c):
     assert o is not None and o.aim == "SEAD" and "SEAD escort" in o.description, "an escortable cover sends the strike with a HARM escort"
     sam.variant = "SA-10"
     objs = _war.ObjectivePlanner(_gd(2)).plan(st2, _rnd.Random(2), limit=40)
-    assert not any(getattr(o, "target_id", "") == "depot_sochi" and o.type.value == "STRIKE" for o in objs), "an SA-10 over the depot blocks the strike until it is dead"
+    # v0.41.158: it is offered only behind the SEAD: the strike carries the site in `after` and the same list holds that site's DEAD job
+    for o in objs:
+        if getattr(o, "target_id", "") == "depot_sochi" and o.type.value == "STRIKE":
+            assert o.after == sam.id and any(q.type.value == "DEAD" and q.target_id == sam.id for q in objs), "an SA-10 over the depot lets the strike go only behind its SEAD"
     # the skip-day round hits supply sites, never ones under a long-range belt, and lowers health
     st3 = fresh_session(3, 5).state
     before = {a.id: a.health for a in list(st3.assets.values()) + list(st3.blue_assets.values()) if a.kind in kinds}
