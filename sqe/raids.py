@@ -70,12 +70,14 @@ def describe(state, base, aim: str = "") -> str:
     return f"Intercept an air attack on the {a.name}" if k == "garrison" else f"Intercept a raid on the {a.name}"
 
 
-def _reach(state, kind: str, x: float, y: float, budget: bool = True, only: str | None = None):
+def _reach(state, kind: str, x: float, y: float, budget: bool = True, only: str | None = None, fits=None):
     """(distance nm, wing, type) of the nearest wing that can reach (x, y) with a raid of this kind, or None. v0.41.125: `only` restricts the aircraft type."""
     from .loadouts import ENEMY_RADIUS_NM
     best = None
     for w, t in raider_wings(state, kind, budget):
         if only and t != only:
+            continue
+        if fits is not None and not fits(w, t):
             continue
         a = state.assets[w.base_asset_id]
         nm = math.hypot(a.x - x, a.y - y) / NM
@@ -157,7 +159,7 @@ def _weighted(rng: random.Random, ws: list):
 def pick_target(state, rng: random.Random, d=None):
     ws = target_weights(state)
     if d is not None:                               # v0.41.125: only a field red can suppress (see `sead_plan`)
-        ws = [(b, w) for b, w in ws if (r_ := reach_for(state, "field", b.x, b.y)) is not None and sead_plan(state, d, b, "", r_[1], r_[2])[0]]
+        ws = [(b, w) for b, w in ws if (r_ := reach_for(state, "field", b.x, b.y, d=d)) is not None and sead_plan(state, d, b, "", r_[1], r_[2])[0]]
     return _weighted(rng, ws)[0] if ws else None
 
 
@@ -176,7 +178,7 @@ def pick_aim(state, d, rng: random.Random):
         out_ = []
         for b_, aim_, w_ in ws_:
             x_, y_ = aim_xy(state, aim_, b_)
-            r_ = reach_for(state, aim_kind(aim_), x_, y_)
+            r_ = reach_for(state, aim_kind(aim_), x_, y_, d=d)
             if r_ is not None and sead_plan(state, d, b_, aim_, r_[1], r_[2])[0]:
                 out_.append((b_, aim_, w_))
         return out_
@@ -237,9 +239,16 @@ def cover_field(state, x: float, y: float):
     return fs[0] if fs else None
 
 
-def reach_for(state, kind: str, x: float, y: float, budget: bool = True):
-    """v0.41.125: like `_reach`, but a target under live Patriot / HAWK cover is raided only by a Su-24M wing (the type that carries the SEAD group)."""
-    return _reach(state, kind, x, y, budget, only="Su_24M" if cover_field(state, x, y) is not None else None)
+def reach_for(state, kind: str, x: float, y: float, budget: bool = True, d=None):
+    """v0.41.125: like `_reach`, but a target under live Patriot / HAWK cover is raided only by a Su-24M wing (the type that carries the SEAD group).
+    v0.41.142: with the level `d`, the wing must also be big enough to field that SEAD group (a nearer wing of two Su-24M is passed over for the nearest
+    one that can; the new red roster spreads the Su-24M over the fields, where the old random squadrons left whole wings of them)."""
+    if cover_field(state, x, y) is None:
+        return _reach(state, kind, x, y, budget)
+    fits = None
+    if d is not None and kind == "field":
+        fits = lambda w, t: bool(sead_groups(state, d, x, y, w.available_of({"Su_24M"}) if hasattr(w, "available_of") else w.available, int(d.raid_size[1])))
+    return _reach(state, kind, x, y, budget, only="Su_24M", fits=fits)
 
 
 ARM_MAX_TOTAL = 12       # v0.41.129: the most SEAD jets one raid sends in all (three flights of four; judgment call)
@@ -313,7 +322,7 @@ def raid_objective(base, aim: str = "", desc: str | None = None) -> Objective:
 def _commit(state, d, base, aim: str) -> None:
     """Book the raid's aircraft against the nearest capable wing's daily sortie budget."""
     x, y = aim_xy(state, aim, base)
-    r = reach_for(state, aim_kind(aim), x, y)
+    r = reach_for(state, aim_kind(aim), x, y, d=d)
     if r is not None:
         redair.spend(state, r[1].base_asset_id, int(d.raid_size[1]))
 
@@ -383,7 +392,7 @@ def overnight(state, d, rng: random.Random) -> list:
             continue
         b, aim = pa
         x, y = aim_xy(state, aim, b)
-        r = reach_for(state, aim_kind(aim), x, y)
+        r = reach_for(state, aim_kind(aim), x, y, d=d)
         if r is None:
             continue
         wing = r[1]

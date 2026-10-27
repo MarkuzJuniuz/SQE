@@ -10,7 +10,7 @@ from .difficulty import Difficulty, get as get_difficulty
 from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, RedSquadron, PlayerProfile)
 from .state import CampaignState
 from .aircraft import AIRCRAFT
-from . import ground, theatres
+from . import ground, redroster, theatres
 from . import sams as _sams_mod
 
 def THEATRES() -> dict:
@@ -209,16 +209,16 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         p = ap(apt)
         add(aid, nm, AssetKind.AIRFIELD, p.x, p.y, val, apt, tier=FIELD_TIER.get(aid, 3))
     ww = {k: v for k, v in th["wing_weight"].items() if k in live}
-    total_w = sum(ww.values())
-    plan_w = []
-    for aid, w in ww.items():
-        cnt = max(2, round(d.enemy_air_total * w / total_w))
-        squads = max(1, round(cnt / 14))                   # several squadrons per field at the bigger levels
-        types = rng.sample(d.enemy_types, k=min(len(d.enemy_types), 1 + min(2, squads)))
-        plan_w.append([aid, types, cnt, squads])
-    _disperse_red(st, t, plan_w)                          # no field holds more jets than DCS can park there
-    for aid, types, cnt, squads in plan_w:
-        sqns = red_squadrons(aid, st.assets[aid].name, types, cnt, d.red_squadron_max, d.enemy_types, random.Random(f"{st.campaign_id}:{aid}"))      # v0.41.52: typed squadrons; the wing's types are the ones they fly
+    # v0.41.142 (Campaign Revamp Stage A3): red's jets come from the level's roster (redroster.py), not a total and random types. The old random draw per
+    # field is made and dropped so the campaign's other random draws (SAM layouts and so on) stay as they were.
+    for aid in ww:
+        rng.sample(d.enemy_types, k=min(len(d.enemy_types), 1 + min(2, max(1, round(max(2, round(d.enemy_air_total * ww[aid] / sum(ww.values()))) / 14)))))
+    apt_of = {f[0]: f[2] for f in fields}
+    cap_all = {aid: _slots(t, apt_of[aid], ["MiG_29A"]) for aid in ww}
+    cap_hv = {aid: _slots(t, apt_of[aid], ["Su_24M", "Su_27", "MiG_31"]) for aid in ww}
+    plan_r = redroster.allocate(d.level, list(ww), ww, FIELD_TIER, cap_all, cap_hv)
+    for aid, types in plan_r.items():
+        sqns = [RedSquadron(i_, n_, t_, c_) for i_, n_, t_, c_ in redroster.cut(aid, st.assets[aid].name, types, d.red_squadron_max)]
         st.enemy_air.append(EnemyAirWing(aid, list(dict.fromkeys(q.aircraft for q in sqns)), len(sqns), sqns))
 
     if d.bomber_wing > 0 and th["bomber_base"] in live:       # strategic bombers live far from the front (Mozdok in the Caucasus)

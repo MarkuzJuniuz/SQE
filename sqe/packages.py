@@ -347,7 +347,7 @@ class PackageBuilder:
         aim = getattr(obj, "aim", "") or ""
         ax, ay = raids.aim_xy(st, aim, tb)
         rnd = random.Random(f"{st.campaign_id}:{st.day}:{number}:{obj.target_id}:{aim}:raid")
-        r = raids.reach_for(st, raids.aim_kind(aim), ax, ay, budget=False)
+        r = raids.reach_for(st, raids.aim_kind(aim), ax, ay, budget=False, d=self.d)
         if r is None:
             return None
         bw, raider = r[1], r[2]
