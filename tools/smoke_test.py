@@ -1114,7 +1114,7 @@ def check_27_raid_s_route_bends(c):
         from sqe import raids as _raids31
         assert _raids31.FLEET_NM == _FR31
     from sqe.red_air_picture import RED_LONG_RANGE as _RLR
-    assert _RLR == {"Su_27"}, "red's long-range class is the Su-27 only"
+    assert _RLR == {"Su_27", "MiG_31"}, "red's long-range class is the Su-27 and (v0.41.142) the MiG-31"
     _man = s.manifest(); _rg = next(g_ for g_ in _man.groups if g_.get("raid_base"))
     _base = _st.bases[_rg["raid_base"]]; _def0 = _base.defense
     _data = {"campaign": _st.campaign_id, "sortie": _st.sortie_counter, "package": _st.pending["package_dict"]["id"], "mission_ended": True,
