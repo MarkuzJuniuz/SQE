@@ -4133,6 +4133,45 @@ def check_59_tarcap_circle_meets_the_barcap_circle(c):
     print(f"[tarcap meets barcap] {_n59} TARCAP circles: the widest strip left to the nearest BARCAP circle is {_worst59:.1f} nm")
 
 
+def check_60_long_range_tarcap_stands_behind_the_short_range_escort(c):
+    # v0.41.139 (XO 2026-10-27, engagement circles slice 2): where a package has a long-range TARCAP (F-15C, F-14B) and a short-range escort (F-16, F/A-18)
+    # on (nearly) the same station, the TARCAP moves back from the target and to one side; same-class pairs and pairs already apart stay as they were
+    import math as _m60, random as _rn60
+    from sqe.fighter_stations import FighterStations as _FS60, LRA_SPLIT_MIN_NM as _MIN60
+    from sqe.models import Role as _R60
+    _log60, _orig60 = [], _FS60._stagger_stations
+    def _wrap60(self, geom, package, tx, ty):
+        _before = dict(geom.stand)
+        _orig60(self, geom, package, tx, ty)
+        _log60.append((_before, dict(geom.stand), (tx, ty)))
+    _FS60._stagger_stations = _wrap60
+    try:
+        _sn60 = fresh_session(2, 5)
+        for _ac60, _lv60, _sd60 in (("A-10C", 1, 5), ("F-14BU", 2, 9), ("FA-18C", 2, 11), ("F-15C", 3, 3)):
+            _rn60.seed(f"stagger60:{_ac60}:{_lv60}")
+            _sn60.new(f"St60{_ac60}{_lv60}", _ac60, _lv60, seed=_sd60); _sn60.ai_test = True
+            for _pk in [p_ for p_ in _sn60.packages() if _sn60.flyable(p_)][:8]:
+                _sn60.fly(_pk.number, _sn60.flyable(_pk)[0].id)
+    finally:
+        _FS60._stagger_stations = _orig60
+    _moved, _same = 0, 0
+    for _b, _a, (_tx, _ty) in _log60:
+        for _k, _v in _a.items():
+            _v0 = _b.get(_k)
+            if _v0 is None:
+                continue
+            if _v[0] == _v0[0] and _v[1] == _v0[1]:
+                _same += 1
+                continue
+            _moved += 1
+            _d_move = _m60.hypot(_v[0] - _v0[0], _v[1] - _v0[1]) / 1852.0
+            assert _k[0] == _R60.TARCAP or _k[0] == _R60.ESCORT, _k
+            assert _d_move <= 15.0, ("the move stays small", round(_d_move, 1))
+            assert _m60.hypot(_v[0] - _tx, _v[1] - _ty) > _m60.hypot(_v0[0] - _tx, _v0[1] - _ty), "the long-range station is farther from the target than before"
+    assert _moved >= 5, f"enough staggered stations were seen: {_moved}"
+    print(f"[stagger] {_moved} long-range stations moved behind and aside of a short-range station, {_same} left where they were")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4231,6 +4270,7 @@ CHECKS = [
     check_57_pydcs_s_scattered_formation,
     check_58_cas_column_stays_at_the_cas_point,
     check_59_tarcap_circle_meets_the_barcap_circle,
+    check_60_long_range_tarcap_stands_behind_the_short_range_escort,
 ]
 
 
