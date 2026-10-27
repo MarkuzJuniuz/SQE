@@ -948,7 +948,7 @@ def check_21_raids_emergencies(c):
     # rates over a long run follow the difficulty table, and the same day plans the same raids
     _nw = _ns = 0
     for _ in range(60):
-        s.plan_day(); _st.day += 1
+        _st.ground["flown_day"] = _st.day; s.plan_day(); _st.day += 1          # flown every day: the idle surge (v0.41.155) stays out of the rate check
         _nw += sum(1 for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land")); _ns += _st.raids["surprise"]
     assert 8 <= _nw <= 36 and _ns >= 1, (_nw, _ns)
     _st.day = 5; s.plan_day(); _a = [d_["objective"]["description"] for d_ in _st.plan]; s.plan_day(); assert _a == [d_["objective"]["description"] for d_ in _st.plan], "a day replans the same"
