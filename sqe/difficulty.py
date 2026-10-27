@@ -47,6 +47,7 @@ class Difficulty:
     blue_reinf: float = 5.0              # the same for Blue
     raid_rate: float = 0.40              # Red raids on our airfields per day (raids.py); some are announced, the rest are surprises
     raid_arm: float = 0.0                # v0.41.84: chance a Su-24M raid on a field with a live Patriot / HAWK brings a Kh-31P SEAD pair (judgment call: L1 none, L2 rare, L3 normal)
+    raid_banzai: bool = False            # v0.41.146 (Campaign Revamp B4): Level 1's insurgents raid targets under live Patriot / HAWK cover without any SEAD (judgment call: they have no SEAD doctrine, and with every one of our fields covered they could never raid at all); the cover shoots them
     arm_cap: int = 8                     # v0.41.125: most Su-24M in red's SEAD group (L2: a pair, judgment call) ...
     arm_cap_free: int = 8                # ... unless the wing has this many spare jets beyond the bombers (then the full sizing)
     raid_surprise: float = 0.35          # share of the raids that are surprises (nobody warned us)
@@ -69,7 +70,7 @@ LEVELS: dict[int, Difficulty] = {
                   enemy_skill="Average", loss_rate=0.035, base_damage=0.45, variance=0.8,
                   friendly_replenish=0.14, enemy_replenish=0.03, asset_repair=0.03, sam_repair=0.03,
                   friendly_scale=1.2, enemy_cap_per_air=0.10, counterstrike=0.10, bomber_wing=0, bomber_policy="none", react_chance=0.08, react_ratio=(0.2, 0.5),
-                  ground_red=(55, 35, 8, 0, 0), ground_blue=(0, 20, 55, 70, 50), red_attack=0.15, red_reinf=3.5, blue_reinf=7.0, raid_rate=0.15, raid_surprise=0.25, emerg_chance=0.03, raid_size=(2, 2), sam_rebuild=0.02, sam_scoot=0.15,
+                  ground_red=(55, 35, 8, 0, 0), ground_blue=(0, 20, 55, 70, 50), red_attack=0.15, red_reinf=3.5, blue_reinf=7.0, raid_rate=0.25, raid_banzai=True, raid_surprise=0.25, emerg_chance=0.03, raid_size=(2, 2), sam_rebuild=0.02, sam_scoot=0.15,
                   raid_mix=(0.10, 0.10, 0.20), blue_garrison_size=1.0, blue_rebuild=0.20, sam_retreat=0.6, air_retreat=0.6),
     2: Difficulty(2, "Level 2 - Regional Power", "A real air force and layered SAMs, but not a peer. "
                   "A competent campaign wins; a careless one bleeds.",

@@ -243,7 +243,7 @@ def reach_for(state, kind: str, x: float, y: float, budget: bool = True, d=None)
     """v0.41.125: like `_reach`, but a target under live Patriot / HAWK cover is raided only by a Su-24M wing (the type that carries the SEAD group).
     v0.41.142: with the level `d`, the wing must also be big enough to field that SEAD group (a nearer wing of two Su-24M is passed over for the nearest
     one that can; the new red roster spreads the Su-24M over the fields, where the old random squadrons left whole wings of them)."""
-    if cover_field(state, x, y) is None:
+    if cover_field(state, x, y) is None or getattr(d, "raid_banzai", False):
         return _reach(state, kind, x, y, budget)
     fits = None
     if d is not None and kind == "field":
@@ -283,6 +283,8 @@ def sead_plan(state, d, base, aim: str, wing, ac: str):
     covered supply sites, garrisons and sectors are not attempted (no SEAD is built for them)."""
     x, y = aim_xy(state, aim, base)
     if cover_field(state, x, y) is None:
+        return True, 0
+    if getattr(d, "raid_banzai", False):                  # v0.41.146: Level 1's insurgents go in without suppression; the batteries shoot at them
         return True, 0
     if aim_kind(aim) != "field" or ac != "Su_24M" or getattr(d, "raid_arm", 0) <= 0:
         return False, 0

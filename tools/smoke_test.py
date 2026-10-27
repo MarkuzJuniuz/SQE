@@ -2133,7 +2133,7 @@ def check_31wd_red_sead_first(c):
     ok, n = raids.sead_plan(st, d2, fld, "", wing(10), "Su_24M"); assert ok and n == 2 * k, ("L2: a pair per covering field", ok, n, k)
     ok, n = raids.sead_plan(st, d2, fld, "", wing(12), "Su_24M"); assert ok and n > 2 * k, ("L2 with 8 spare: the full sizing", ok, n)
     ok, n = raids.sead_plan(st, d2, fld, "", wing(8), "Su_24M"); assert not ok, "L2: not a pair for every covering field spare: no raid"
-    ok, n = raids.sead_plan(st, d1, fld, "", wing(14), "Su_24M"); assert not ok, "L1 never raids a covered field"
+    ok, n = raids.sead_plan(st, d1, fld, "", wing(14), "Su_24M"); assert ok and n == 0, "v0.41.146: L1 raids a covered field with no SEAD (the insurgents go in unsuppressed)"
     far = next((a for a in st.assets.values() if raids.cover_field(st, a.x, a.y) is None), None)
     assert raids.arm_jets(st, fld, 10, 4, cap=2, cap_free=8) == 2 and raids.arm_jets(st, fld, 12, 4, cap=2, cap_free=8) >= 4, "arm_jets cap and the spare-jet lift"
     print("[red SEAD first] covered target: L3 SEAD by batteries, L2 a pair (full with 8 spare), L1 and Su-25 none; no spare jets: no raid")
@@ -4360,6 +4360,17 @@ def check_65_no_last_unit_hunt(c):
     print("[no last-unit hunt] a sector under 30% of what faces it is lost tonight (both sides), no job for a beaten sector, sites at 30% or less are down for the planner and the gate")
 
 
+def check_66_l1_raids(c):
+    """v0.41.146, Campaign Revamp B4: Level 1's insurgents find a target (every one of our fields is under Patriot / HAWK cover and they have no SEAD)."""
+    import random as _rnd
+    from sqe import raids as _rd
+    s = fresh_session(1, 5); st = s.state; d = s.d
+    assert d.raid_banzai and d.raid_rate == 0.25 and not fresh_session(2, 5).d.raid_banzai
+    got = [_rd.pick_aim(st, d, _rnd.Random(k)) for k in range(40)]
+    assert all(g is not None for g in got), "L1 always finds a raid target"
+    print("[L1 raids] the insurgents raid covered targets without SEAD; rate 0.25 a day")
+
+
 def check_62_red_roster(c):
     # v0.41.142 (Campaign Revamp Stage A3): red's starting air order of battle comes from the level's roster (redroster.py): the numbers, no MiG-25, the MiG-31
     # on Levels 2 and 3 only, the depth gradient of the long-range jets, nothing over what a field can park, a fighter pair at every field, the Mozdok wings
@@ -4510,6 +4521,7 @@ CHECKS = [
     check_63_the_push,
     check_64_supply_loop,
     check_65_no_last_unit_hunt,
+    check_66_l1_raids,
 ]
 
 
