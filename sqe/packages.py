@@ -357,7 +357,7 @@ class PackageBuilder:
         lo, hi = (self.d.raid_size if self.d else (2, 2))
         nb = max(2, min(int(round(rnd.randint(lo, hi) * raids.wave_mult(st, self.d))) if self.d else rnd.randint(lo, hi), bw.available))     # v0.41.155: a massed-wave day
         nb -= nb % 2
-        esc = None
+        esc, esc_avail = None, 0
         for w in sorted(st.enemy_air, key=lambda w: math.hypot(st.assets[w.base_asset_id].x - ax, st.assets[w.base_asset_id].y - ay)):
             a = st.assets[w.base_asset_id]
             if w is bw or w.available < 2 or a.destroyed:
@@ -365,7 +365,7 @@ class PackageBuilder:
             d_nm = math.hypot(a.x - ax, a.y - ay) / NM
             types = [t for t in w.general_types_up() if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm]
             if types:
-                esc = (w.base_asset_id, rnd.choice(types)); break
+                esc = (w.base_asset_id, rnd.choice(types)); esc_avail = w.available; break
         brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360          # they come from where they took off
         arm, arm_fields = 0, []
         if self.d and getattr(self.d, "raid_arm", 0) > 0 and not aim and raider == "Su_24M" and bw.available >= nb + 2:    # v0.41.84: a SEAD group ahead of the bombers
@@ -380,7 +380,7 @@ class PackageBuilder:
             return None
         return {"arm": arm, "arm_fields": arm_fields, "arm_cover": arm_cover, "dead": dead, "dead_cover": dead_cover, "land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
                 "escort_wing": esc[0] if esc else "", "escort_type": esc[1] if esc else "",
-                "escorts": (4 if nb >= 4 else 2) if esc else 0, "aim": aim, "dest": [ax, ay]}
+                "escorts": (max(4 if nb >= 4 else 2, min(nb // 2 + (2 if nb >= 8 else 0), esc_avail - esc_avail % 2)) if esc else 0), "mass": nb >= 8, "aim": aim, "dest": [ax, ay]}
 
     def _raid_plan(self, number: int, obj=None):
         """Bomber raid on the fleet: bearing it arrives on, how many bombers, and escorts that can really reach (range-limited)."""
