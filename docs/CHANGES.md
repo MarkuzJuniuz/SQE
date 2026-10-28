@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.181, TARCAP holds back and chases less (CAS and strike)
+
+XO 2026-10-28 ("they're there to protect the package, not to kill the BARCAPs"). From the two CAS runs: the Eagles pushed out into red's scrambles and lost 9-10 to R-27ERs. (1) Engage reach past the station toward red (`TARCAP_FWD_NM`, 20): CAS 10 (`TARCAP_FWD_CAS_NM`), strike 12 (`TARCAP_FWD_STRIKE_NM`); SEAD / DEAD keep 20. (2) CAS station `CAS_STATION_NM` 20 -> 25 nm from the target. (3) Strike TARCAP holds 30 nm (`TARCAP_NEAR_STRIKE_NM`, was 26) from the shooters' middle; other packages keep 26. All judgment calls; the cost may be a few more A-10s lost to bandits that reach them before the Eagles shoot. The `check_` bound on the TARCAP distance from the shooters' middle (38) is now 42.
+
 ## v0.41.180, CAS columns drive on roads
 
 XO 2026-10-28 (added on top of #244). Both CAS columns were driven `OffRoad` in a straight line, so the blue task force cut cross-country through the forest and met red's column among trees (kissing distance, no fire). `_drive_road`: when the road scan exists and every point has a road within `CAS_ROAD_SNAP_M` (1.5 km), the column gets "On Road" waypoints (DCS routes it along the road, as a column), the task force starts on a road, and its stop point is a road point; otherwise the old straight off-road drive. Static garrisons are untouched; the JTAC jeep is unchanged. EXPERIMENT: DCS road routing can stall a column or send it on a longer way round, and the speed and timing logic still assumes the straight-line distance. If it stalls, revert is one line. New smoke check `check_87_cas_columns_on_roads`.

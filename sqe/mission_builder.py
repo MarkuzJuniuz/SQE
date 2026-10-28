@@ -48,6 +48,9 @@ RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor t
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
 TARCAP_BEHIND_NM = 8          # v0.41.43 (16; v0.41.115: 8, XO 2026-10-22: it sat 56 nm from red's patrols, too far to snipe): with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
 TARCAP_FWD_NM = 20           # v0.41.120: the TARCAP's engage circle tries to reach this far past its station toward red (judgment call: red's alert pairs held 24 nm from the station in XO's 2026-10-23 run)
+TARCAP_NEAR_STRIKE_NM = 30   # v0.41.181 (XO 2026-10-28): a STRIKE package's TARCAP holds this far from the shooters' middle (was 26 for all); judgment call: it protects the package, it does not hunt red's patrols
+TARCAP_FWD_CAS_NM = 10      # v0.41.181: engage reach past the station for a CAS / strike package's TARCAP (20 for SEAD / DEAD, unchanged); judgment call from two CAS runs where the Eagles pushed out into red's scrambles and lost 9-10 to R-27ERs
+TARCAP_FWD_STRIKE_NM = 12
 TARCAP_NEAR_NM = 26          # v0.41.168 (XO 2026-10-27: 16, the TARCAP dived into red's BARCAP swarm; 26 is a judgment call between the old 16 and the 56 nm that was too far to snipe). v0.41.118: ...then it moves in toward the middle of the shooters' launch points until it is this far from it (judgment call: AIM-54 / AIM-120 reach covers the HARM point from there; still outside the SAM rings and TARCAP_BEHIND_NM from the JSOW point)
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
@@ -1643,8 +1646,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 # come first, and the circle is never bigger than TARCAP_COVER_MAX_NM)
                 fpts_ = []
                 thr_ = self._red_approach(stw.x, stw.y) if stw.action == "TARCAP" else None
-                if thr_ is not None and dist(stw.x, stw.y, *thr_) > TARCAP_FWD_NM * NM:
-                    fpts_ = [offset(stw.x, stw.y, bearing(stw.x, stw.y, *thr_), TARCAP_FWD_NM * NM)]
+                fwd_nm_ = {ObjectiveType.CAS: TARCAP_FWD_CAS_NM, ObjectiveType.STRIKE: TARCAP_FWD_STRIKE_NM}.get(package.objective.type, TARCAP_FWD_NM)
+                if thr_ is not None and dist(stw.x, stw.y, *thr_) > fwd_nm_ * NM:
+                    fpts_ = [offset(stw.x, stw.y, bearing(stw.x, stw.y, *thr_), fwd_nm_ * NM)]
                 # v0.41.138 (XO 2026-10-27, engagement circles): the circle meets the nearest BARCAP circle (a point just inside its edge, listed after the
                 # station and before the forward point, so the shooters and the station come first and the reach toward red is what gives way). A TARCAP
                 # is wanted at the sweep size for its type (25 nm long-range shooters, 15 nm the rest); the launch points still make it bigger.
@@ -2293,20 +2297,21 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     # from there the TARCAP moves toward the middle of the shooters' launch points, 1 nm at a time, until it is TARCAP_NEAR_NM from it, never
                     # closer than TARCAP_BEHIND_NM to the JSOW point and never into a SAM ring (the step back's rings, but an SA-10 at SA10_AVOID_NM (35 nm, the reach measured in
                     # the runs) instead of its 48 nm table ring + 5, which held the TARCAP 53 nm from the SA-10 while the HARM point is 36 nm from it)
+                    near_nm_ = TARCAP_NEAR_STRIKE_NM if package.objective.type == ObjectiveType.STRIKE else TARCAP_NEAR_NM
                     lps_ = self._launch_pts.get(package.id) or self._launch_points(package, geom)       # the stations are planned before _launch_pts is filled in
                     if lps_:
                         mx_, my_ = sum(q_[0] for q_ in lps_) / len(lps_), sum(q_[1] for q_ in lps_) / len(lps_)
-                        while dist(ex_, ey_, mx_, my_) > TARCAP_NEAR_NM * NM:
+                        while dist(ex_, ey_, mx_, my_) > near_nm_ * NM:
                             nx_, ny_ = offset(ex_, ey_, bearing(ex_, ey_, mx_, my_), 1.0 * NM)
                             if dist(nx_, ny_, jx_, jy_) < TARCAP_BEHIND_NM * NM or not all(dist(nx_, ny_, a_.x, a_.y) > (SA10_AVOID_NM * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_):
                                 break
                             ex_, ey_ = nx_, ny_
                         # v0.41.119 (XO 2026-10-22: the TARCAP sat on the sea side, about 90 degrees off the way red comes, so it could not snipe): the station is then put
-                        # TARCAP_NEAR_NM from the shooters' middle on the bearing toward red's nearest patrol station or fighter base, swung off it (15 degrees at a time,
+                        # near_nm_ from the shooters' middle on the bearing toward red's nearest patrol station or fighter base, swung off it (15 degrees at a time,
                         # 180 at most, so the clear point nearest the axis) as far as the SAM rings and the JSOW distance force; the station above stays when that is no nearer the axis
                         thr_ = self._red_approach(mx_, my_)
                         if thr_ is not None:
-                            ax2_ = axis_station((mx_, my_), thr_, (jx_, jy_), TARCAP_NEAR_NM, TARCAP_BEHIND_NM,
+                            ax2_ = axis_station((mx_, my_), thr_, (jx_, jy_), near_nm_, TARCAP_BEHIND_NM,
                                                 lambda x_, y_: all(dist(x_, y_, a_.x, a_.y) > (SA10_AVOID_NM * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_), (ex_, ey_))
                             if ax2_ is not None:
                                 ex_, ey_ = ax2_
