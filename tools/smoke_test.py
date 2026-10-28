@@ -4452,9 +4452,9 @@ def check_62_red_roster(c):
                     _t = _tier.get(_aid, 3)
                     _lr[_t][0] += _types.get("MiG_31", 0); _lr[_t][1] += _types.get("MiG_31", 0) + _types.get("Su_27", 0)
                 _sh = {t_: (a_ / b_ if b_ else 0.0) for t_, (a_, b_) in _lr.items()}
-                assert _sh[2] > _sh[3] > _sh[4] > 0, ("MiG-31 share of the long-range jets falls with field depth", _sh)
+                assert _sh[2] < _sh[3] < _sh[4], ("MiG-31 share of the long-range jets rises with field depth (v0.41.163)", _sh)
     assert _ecl62("MiG_31").get(2, {}).get("CLSID") and _ecl62("MiG_31").get(1, {}).get("CLSID") != "{R-60 2L}", ("the MiG-31 flies with its R-33 / R-40", _ecl62("MiG_31"))
-    print(f"[red roster] L1 44 jets, L2 {_want62[2][0]} + 11 Tu-22M3 + 8 escorts, L3 {_want62[3][0]} + 30 Tu-22M3 + 16 escorts; MiG-31 share by depth at L3: {_sh[2]:.2f} > {_sh[3]:.2f} > {_sh[4]:.2f}")
+    print(f"[red roster] L1 44 jets, L2 {_want62[2][0]} + 11 Tu-22M3 + 8 escorts, L3 {_want62[3][0]} + 30 Tu-22M3 + 16 escorts; MiG-31 share by depth at L3: {_sh[2]:.2f} < {_sh[3]:.2f} < {_sh[4]:.2f}")
 
 
 def check_68_overview(c):

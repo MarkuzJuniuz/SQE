@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.163, Fewer MiG-31s, and they sit deep
+
+XO 2026-10-27: the fringe fields were full of MiG-31s that dogfighters would slaughter. A MiG-31 is a big interceptor that works from rear bases under ground control, so:
+
+- The depth gradient is flipped (`redroster.MIG31_SHARE`): of a field's MiG-31 + Su-27 jets, 15% are MiG-31 at fringe fields (tier 2), 50% in the middle, 75% deep (tier 4). The Su-27 now holds the fringe.
+- Smaller MiG-31 fleet (judgment call, no public source): L2 7 down to 4 (3 more MiG-29S, same fighter total of 52), L3 14 down to 8 (6 more Su-27, same total of 86).
+- Smoke: `check_62_red_roster` now asserts the share rises with depth.
+- Only new campaigns get the new split; running campaigns keep their jets.
+
 ## v0.41.162, Friendly errors for saves this version cannot open
 
 XO (2026-10-27, "when I loaded an old save it gave py errors... make that graceful"). Loading a save that this build cannot read no longer shows a traceback.
