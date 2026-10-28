@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.182, Kneeboard page 1: the RECOVERY block moves to the bottom
+
+XO 2026-10-28. At the top, with the task line under it in grey, the recovery data read as if the target belonged to it. The RECOVERY block (home / divert ILS, TACAN, ICLS) now closes page 1, after the waypoints and notes; the task line is back at the top. Layout only.
+
 ## v0.41.181, TARCAP holds back and chases less (CAS and strike)
 
 XO 2026-10-28 ("they're there to protect the package, not to kill the BARCAPs"). From the two CAS runs: the Eagles pushed out into red's scrambles and lost 9-10 to R-27ERs. (1) Engage reach past the station toward red (`TARCAP_FWD_NM`, 20): CAS 10 (`TARCAP_FWD_CAS_NM`), strike 12 (`TARCAP_FWD_STRIKE_NM`); SEAD / DEAD keep 20. (2) CAS station `CAS_STATION_NM` 20 -> 25 nm from the target. (3) Strike TARCAP holds 30 nm (`TARCAP_NEAR_STRIKE_NM`, was 26) from the shooters' middle; other packages keep 26. All judgment calls; the cost may be a few more A-10s lost to bandits that reach them before the Eagles shoot. The `check_` bound on the TARCAP distance from the shooters' middle (38) is now 42.
