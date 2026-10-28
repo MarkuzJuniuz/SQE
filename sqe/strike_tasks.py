@@ -49,7 +49,7 @@ class StrikeTasks:
             # v0.41.167: a STRIKE escort too (L2 run: the supply-depot strike's HARMs were aimed at the depot, the SA-2/SA-3 stayed up and killed 3 jets)
             # v0.41.20: a CAS escort: HARMs on the SA-2/3/6 sites that cover the CAS target, through the whole CAS window
             from .war import covering_sams
-            for cs_ in covering_sams(self.state, self.state.assets[package.objective.target_id]):
+            for cs_ in covering_sams(self.state, self.state.assets[package.objective.target_id], short=package.objective.type == ObjectiveType.CAS):
                 cg_ = self.groups_by_asset.get(cs_.id)
                 if cg_ is not None:
                     ctc = task.ControlledTask(task.AttackGroup(cg_.id, weapon_type=task.WeaponType.ARM, group_attack=True))

@@ -39,14 +39,17 @@ def long_range_site(state, site) -> bool:
     return live(site) or any(live(a) and a.id != site.id and math.hypot(a.x - site.x, a.y - site.y) <= tm.UMBRELLA_KM * 1000 for a in state.assets.values())
 
 
-def covering_sams(state, a) -> list:
+def covering_sams(state, a, short: bool = False) -> list:
     """v0.41.19: the strike gate. Live medium / long-range SAM sites (GATE_VARIANTS, its own cluster included) whose reach covers the target and
     that are not suppressed. While any is up, a strike on the target is not planned; the site gets a DEAD first (the SAM belt is rolled back,
-    then the targets behind it). The v0.41.14 fuel-farm strike went in under a live SA-6 and lost all four jets."""
+    then the targets behind it). The v0.41.14 fuel-farm strike went in under a live SA-6 and lost all four jets.
+    v0.41.175: `short=True` (a CAS target) also counts the fixed Tor sites (SHORT_GATE) whose 8 nm ring covers it; the Tors that travel with a column (fsam_) never count."""
     from . import threatmap as tm
     out = []
     for x in state.assets.values():
-        if x.kind != AssetKind.SAM or x.destroyed or x.health <= ground.DOWN_HEALTH or getattr(x, "suppressed", False) or x.variant not in GATE_VARIANTS:
+        if x.kind != AssetKind.SAM or x.destroyed or x.health <= ground.DOWN_HEALTH or getattr(x, "suppressed", False):
+            continue
+        if x.variant not in GATE_VARIANTS and not (short and x.variant in SHORT_GATE and not x.id.startswith("fsam_")):
             continue
         if ((x.x - a.x) ** 2 + (x.y - a.y) ** 2) ** 0.5 <= GATE_REACH_NM.get(x.variant, tm.RANGE_NM.get(x.variant, 0)) * 1852:
             out.append(x)
@@ -56,12 +59,13 @@ def covering_sams(state, a) -> list:
 GATE_REACH_NM = {"SA-10": 35}    # v0.41.20: the SA-10's measured reach (54-57 km in the runs), not the 48 nm ring table, as everywhere else since v0.41.14
 
 
-ESCORTABLE = ("SA-2", "SA-3", "SA-6")       # v0.41.20: a HARM escort can keep these quiet over a CAS target; an SA-11 / SA-10 needs a DEAD first
+SHORT_GATE = ("SA-15",)     # v0.41.175: a fixed Tor site covers a CAS target with its own 8 nm ring; CAS only (a strike has no business that low), see covering_sams(short=True)
+ESCORTABLE = ("SA-2", "SA-3", "SA-6") + SHORT_GATE   # v0.41.20: a HARM escort can keep these quiet over a CAS target; an SA-11 / SA-10 needs a DEAD first. v0.41.175: a Tor site too (judgment call: no SEAD / DEAD job exists for a site under 10 nm, so the escort is all the planner can send; the Tor can shoot HARMs down, so the flight is not safe, only better off)
 
 
 def cas_cover(state, a) -> tuple:
     """v0.41.20: (gate SAMs covering a CAS target, the ones among them a SEAD escort cannot handle). `a` needs only x and y."""
-    cov = covering_sams(state, a)
+    cov = covering_sams(state, a, short=True)
     return cov, [x for x in cov if x.variant not in ESCORTABLE]
 
 
@@ -149,10 +153,9 @@ class ObjectivePlanner:
                 elif fol and (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or not soft):
                     # v0.41.158: under one or two SA-11 / SA-10 sites it goes in behind their SEAD (offered only when the day's plan has that SEAD / standoff job, see _add_followers)
                     o_.after = ",".join(x.id for x in fol)
-                    o_.description += f", behind the SEAD on {' and '.join(x.name for x in fol)}"
                     if soft:
                         o_.aim = "SEAD"                                  # and the SA-2/3/6 round it get the HARM escort, as above
-                        o_.description += " (with a SEAD escort)"
+                    o_.description += f" (after the SEAD on {' and '.join(x.name for x in fol)}" + (", with a SEAD escort)" if soft else ")")
                     cov = []
                 cand.append((pr, o_, self._blockers(state, a) + cov, locked))
             elif a.kind == AssetKind.SAM and a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10:      # short-range SAMs are CAS's problem, not a SEAD/DEAD package's
@@ -191,8 +194,10 @@ class ObjectivePlanner:
                 o_ = Objective("", ObjectiveType.CAS, a.id, pr, what)
                 if fol:                                              # v0.41.158: under one or two SA-11 / SA-10 sites: behind their SEAD (offered only when the day's plan has it)
                     o_.after = ",".join(x.id for x in fol)
-                    o_.description += f", behind the SEAD on {' and '.join(x.name for x in fol)}"
-                if soft and (not hard or fol):
+                    o_.description += f" (after the SEAD on {' and '.join(x.name for x in fol)}" + (", with a SEAD escort)" if soft else ")")
+                    if soft:
+                        o_.aim = "SEAD"
+                elif soft and not hard:
                     o_.aim = "SEAD"
                     o_.description += " (with a SEAD escort)"
                 cand.append((pr, o_, bl, locked))
