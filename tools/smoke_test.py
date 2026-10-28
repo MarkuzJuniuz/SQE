@@ -4855,6 +4855,20 @@ def check_79_pilot_influence(c):
         print(f"[pilot influence] {'on' if on else 'off'}: highest surge {top:.2f} over 40 idle days")
 
 
+def check_82_red_cas(c):
+    """v0.41.172: red flies abstract close air support at the blue sector facing it: none on L1, some on L2 / L3, shown in the overnight log; with no
+    cover and no escort the chance drops; the strike spends the attack wing's day budget."""
+    from sqe import ground as _g
+    assert _g.RED_AI_CAS[1] == 0 and 0 < _g.RED_AI_CAS[2] <= _g.RED_AI_CAS[3]
+    for lvl, expect in ((1, False), (3, True)):
+        s = fresh_session(lvl, 5); s.ai_test = True; st = s.state; s.plan_day()
+        for _ in range(8):
+            s.skip_day()
+        hit = any("Red air strike on the friendly troops" in str(l) for l in (st.log or []))
+        assert hit == expect, (lvl, hit)
+    print("[red CAS] none on L1, strikes on L3 in the log")
+
+
 def check_81_stand_down_keeps_pilot_influence(c):
     """v0.41.164 (XO 2026-10-27): a day with nothing to fly is out of the pilot's hands: the red surge clock holds and the air tempo does not fade
     overnight. Skipping with flights available is the pilot's choice and fades / counts as before. Pilot Influence off: no effect either way."""
@@ -5035,6 +5049,7 @@ CHECKS = [
     check_79_pilot_influence,
     check_80_incompatible_saves,
     check_81_stand_down_keeps_pilot_influence,
+    check_82_red_cas,
 ]
 
 

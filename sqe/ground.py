@@ -59,6 +59,18 @@ AI_CAS = {1: 3, 2: 2, 3: 3}     # abstract daily blue air strikes on the sector 
 AI_CAS_P = 0.55
 TEMPO_GROUND_GAIN = 2.0       # v0.41.147: the CAS tempo (up to +-0.20) counts this many times on the chance of one abstract AI strike (judgment call)
 AI_CAS_CUT = 0.15
+# v0.41.172 (XO 2026-10-28, "red needs CAS too, they have zerg numbers"): red's own abstract air strikes on the blue sector facing it. All judgment calls (no public
+# source for Russian CAS-to-fighter ratios; mirrors blue's AI CAS above). Cover: a red wing with fighters within RED_CAS_COVER_KM counts as air cover; with none, the
+# strike takes a fighter pair from the nearest wing (1 pair for the CAS pair, i.e. 1:2) if it has one; with neither it is "bare" and much likelier to fail.
+RED_AI_CAS = {1: 0, 2: 1, 3: 1}          # strikes a day by level (L1: an old museum-piece air force, none)
+RED_CAS_P = 0.30                         # base chance one succeeds (x red's surge); blue's own is 0.55
+RED_CAS_CUT = 0.10                       # strength a sector loses to one successful red strike (blue's own AI_CAS_CUT is 0.15: red's air is the lesser arm; judgment call)
+RED_CAS_BARE = 0.15                      # ...less this when there is no cover and no escort
+RED_CAS_BLUE_SHARE = 0.5                 # half of blue's AIR tempo (up to +0.40) is taken off the chance (the player's air work protects the sector)
+RED_CAS_COVER_KM = 150.0
+RED_CAS_LOSS = 0.25                      # chance a strike costs red one attack jet
+RED_CAS_ESCORT_LOSS = 0.15               # ...and an escorted strike one fighter (a fight with blue's patrols)
+RED_ATTACK_TYPES = ("Su_25", "Su_24M")
 COUNTER_DELAY_DAYS = 3        # the enemy's last counter-force arrives this many days after the final base falls
 COUNTER_FORCED_DAYS = 6       # ...and attacks every day for this long
 COUNTER_FRAC = {1: 0.0, 2: 0.35, 3: 0.60}      # counter-force strength as a share of a full 100-point sector (toy model; judgment call)
@@ -546,6 +558,45 @@ def surge(state, d) -> float:
     return 1.0 + min(SURGE_CAP, max(0, idle) * step)
 
 
+def _red_cas(state, d, rng, red, blue, n, sg) -> list:
+    """v0.41.172: red's abstract close air support on the blue sector facing it (see RED_AI_CAS). Escort or cover as described there. -> log lines."""
+    from . import redair, tempo
+    from .loadouts import ENEMY_FIGHTERS
+    out = []
+    face = lambda: [i for i in range(n) if blue[i] >= MIN_FORCE and (red[i] >= MIN_FORCE or (i > 0 and red[i - 1] >= MIN_FORCE))]      # blue sectors facing red
+    if not face() or not getattr(state, "enemy_air", None):
+        return out
+    wings = [w for w in state.enemy_air if w.base_asset_id in state.assets]
+    for _ in range(RED_AI_CAS.get(getattr(d, "level", 3), 0)):
+        fc = face()
+        if not fc:
+            break
+        i = min(fc)                                                     # the front-most blue sector facing red
+        cx, cy = state.ground["centers"][i]
+        dist = lambda w, cx=cx, cy=cy: ((state.assets[w.base_asset_id].x - cx) ** 2 + (state.assets[w.base_asset_id].y - cy) ** 2) ** 0.5
+        at = [w for w in sorted(wings, key=dist) if w.available_of(RED_ATTACK_TYPES) >= 2 and redair.can(state, w.base_asset_id, 2)]
+        if not at:
+            continue
+        w = at[0]
+        redair.spend(state, w.base_asset_id, 2)
+        cover = [x for x in wings if dist(x) <= RED_CAS_COVER_KM * 1000.0 and x.available_of(ENEMY_FIGHTERS) >= 2]
+        esc = None
+        if not cover:
+            fw = [x for x in sorted(wings, key=dist) if x.available_of(ENEMY_FIGHTERS) >= 2 and redair.can(state, x.base_asset_id, 2)]
+            if fw:
+                esc = fw[0]
+                redair.spend(state, esc.base_asset_id, 2)
+        p = RED_CAS_P * sg - RED_CAS_BLUE_SHARE * tempo.get(state, "AIR") - (RED_CAS_BARE if (not cover and esc is None) else 0.0)
+        if rng.random() < min(0.95, max(0.05, p)):
+            blue[i] = max(0.0, blue[i] * (1.0 - RED_CAS_CUT))
+            out.append(f"   Red air strike on the friendly troops in {state.ground['names'][i]}" + (" (escorted)" if esc is not None else "") + f": friendly strength down to {blue[i]:.0f}")
+        if rng.random() < RED_CAS_LOSS:
+            w.lose(next((q.aircraft for q in w.sqns if q.aircraft in RED_ATTACK_TYPES and q.available > 0), None), 1)
+        if esc is not None and rng.random() < RED_CAS_ESCORT_LOSS:
+            esc.lose(next((q.aircraft for q in esc.sqns if q.aircraft in ENEMY_FIGHTERS and q.available > 0), None), 1)
+    return out
+
+
 def resolve_day(state, d, rng) -> list:
     """One day of ground fighting. Returns the overnight lines for the log."""
     g = state.ground
@@ -569,6 +620,7 @@ def resolve_day(state, d, rng) -> list:
         if facing and rng.random() < min(0.95, max(0.05, AI_CAS_P + TEMPO_GROUND_GAIN * tempo.get(state, "CAS"))) * sb:         # v0.41.147: air tempo: the player's flown CAS results
             i = max(facing)
             red[i] = max(0.0, red[i] * (1.0 - AI_CAS_CUT))
+    lines += _red_cas(state, d, rng, red, blue, n, sg)
     # who is in contact: a sector both sides hold, or (v0.41.143) two neighbouring sectors, red's on the enemy side, when neither is shared: an assault across the line
     pairs = [(i, i) for i in range(n) if red[i] >= MIN_FORCE and blue[i] >= MIN_FORCE]
     pairs += [(i, i + 1) for i in range(n - 1) if red[i] >= MIN_FORCE and blue[i + 1] >= MIN_FORCE and blue[i] < MIN_FORCE and red[i + 1] < MIN_FORCE]
