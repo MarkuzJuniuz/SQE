@@ -1176,7 +1176,7 @@ def check_28_standoff_dead_package_escort(c):
     _lps = _bs._launch_pts[_pk.id]
     _mx, _my = sum(q_[0] for q_ in _lps) / len(_lps), sum(q_[1] for q_ in _lps) / len(_lps)
     from sqe.mission_builder import TARCAP_NEAR_NM as _TNN
-    assert all(_jd(v_[0], v_[1], _mx, _my) / _JNM <= 28.0 for v_ in _tc), "v0.41.118: the TARCAP moves in toward TARCAP_NEAR_NM from the middle of the shooters' launch points (it sat 22 to 34 nm out); v0.41.143: it may stay back (about 23 nm) where live SAM rings keep it out, so the bound is 28"
+    assert all(_jd(v_[0], v_[1], _mx, _my) / _JNM <= 38.0 for v_ in _tc), "v0.41.118: the TARCAP moves in toward TARCAP_NEAR_NM from the middle of the shooters' launch points (it sat 22 to 34 nm out); v0.41.143: it may stay back (about 23 nm) where live SAM rings keep it out, so the bound is 28; v0.41.168: TARCAP_NEAR_NM 26, bound 38"
     assert len(_lps) >= 2 and any(_jd(x_, y_, *_jp) < 100 for x_, y_ in _lps), "the cover circle knows the JSOW launch point before the flights are built"
     # v0.41.119: the TARCAP sits on the threat side (nearer the bearing from the shooters' middle toward red's nearest patrol station / fighter base),
     # or keeps its old station when the rings leave no such point; the contest rule reads the distance from a guarded site to the shooters or the target

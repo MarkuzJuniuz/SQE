@@ -1,6 +1,11 @@
 # CHANGES.md
 
 
+## v0.41.168, The TARCAP stands further back
+
+XO 2026-10-27: the TARCAP dived into red's BARCAP swarm. `TARCAP_NEAR_NM` 16 -> 26 (judgment call); BARCAP circles unchanged. Smoke bound in check on the TARCAP distance 28 -> 38.
+
+
 ## v0.41.167, A strike's SEAD escort fires HARMs at the SAMs that cover the target
 
 XO 2026-10-27 (L2 F-14 supply-depot strike): the escort flight fired no HARMs, because its ARM task was aimed at the depot group; the SA-2 and SA-3 shot down three jets.
