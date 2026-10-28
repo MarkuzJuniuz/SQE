@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.171, Air tempo: credit for what the whole mission did; a bad sortie takes nothing back
+
+XO 2026-10-28: the tempo only looked at the package's own objective, so air kills and blinded SAM sites in a strike package taught the background AI nothing, and a bad sortie made it unlearn.
+- `tempo.credits(outcome)`: DEAD +2 per SAM site blinded or damaged by a quarter or more (+4 destroyed); AIR +2 for one red aircraft shot down, +4 for two or more; STRIKE +2 for another (non-SAM) asset hit by a quarter or more; at most +6 a kind per sortie (judgment calls). A kind takes the larger of its grade step and its credit, not the sum. The debrief lists each credit.
+- `STEP["bad"]` 0 (was -4): only the nightly decay lowers the tempo. Cap +40 and decay 3% unchanged.
+- `debrief` `red_assets` entries now carry `kind`, `primary`, `destroyed`, `suppressed`.
+- Smoke: `check_67_air_tempo` (bad takes nothing back; credits by kind).
+
+
 ## v0.41.170, The CAS task force starts closer
 
 XO 2026-10-28: in the flown CAS run the friendly task force stalled 0.7 km out (11 min in) and the red column barely moved, 5.6 km apart, so they never met. `CAS_APPROACH_M` 6000 -> 2500 m: the task force starts at most 2.5 km from the contact point. Cause of the stalls unknown (DCS ground pathing); this hides it for short trips.

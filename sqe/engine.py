@@ -955,7 +955,7 @@ class Session:
         out["objective"], out["objective_type"] = pend["objective"], pend["objective_type"]
         rng = self._rng(33)
         out["story"] = narrative.debrief_story(out, st, rng)
-        out["tempo"] = tempo.record(st, pend["objective_type"], tempo.tone_of(out))      # v0.41.147: the flown result nudges the background jobs of its kind
+        out["tempo"] = tempo.record(st, pend["objective_type"], tempo.tone_of(out), tempo.credits(out))      # v0.41.147: the flown result nudges the background jobs of its kind
         out.setdefault("lines", []).extend(out["tempo"])
         sim = self._sim(rng)
         meanwhile = []
