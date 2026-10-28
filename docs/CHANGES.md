@@ -1,6 +1,13 @@
 # CHANGES.md
 
 
+## v0.41.167, A strike's SEAD escort fires HARMs at the SAMs that cover the target
+
+XO 2026-10-27 (L2 F-14 supply-depot strike): the escort flight fired no HARMs, because its ARM task was aimed at the depot group; the SA-2 and SA-3 shot down three jets.
+
+- `strike_tasks._sead_attack_tasks`: the covering SA-2/3/6 (gate) sites get HARM tasks for a STRIKE package as well as a CAS one (same window as CAS).
+
+
 ## v0.41.166, The coalition's supply floor is 30%; air tempo runs 0 to +40%
 
 XO 2026-10-27: idle L3 could not lose, and AI-flown sorties made the air tempo worse.

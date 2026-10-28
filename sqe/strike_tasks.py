@@ -45,7 +45,8 @@ class StrikeTasks:
             if ng_ is not None:
                 cth = task.ControlledTask(task.AttackGroup(ng_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
                 cth.stop_after_time(int(w.eta_s) + 300); wp.tasks.append(cth)
-        if package.objective.type == ObjectiveType.CAS:
+        if package.objective.type in (ObjectiveType.CAS, ObjectiveType.STRIKE):
+            # v0.41.167: a STRIKE escort too (L2 run: the supply-depot strike's HARMs were aimed at the depot, the SA-2/SA-3 stayed up and killed 3 jets)
             # v0.41.20: a CAS escort: HARMs on the SA-2/3/6 sites that cover the CAS target, through the whole CAS window
             from .war import covering_sams
             for cs_ in covering_sams(self.state, self.state.assets[package.objective.target_id]):
