@@ -144,8 +144,8 @@ class SupportCaps:
         for f in package.flights:
             if f.tag not in ("BASECAP", "CVCAP"):
                 continue
-            cz_, _, _ = self._support_cap_route(package, f, geom, None, 0, 0)
-            z_ = self._clear_zone(cz_, package)
+            cz_, wps_, _ = self._support_cap_route(package, f, geom, None, 0, 0)
+            z_ = self._clear_zone(cz_, package, hold=(wps_[1].x, wps_[1].y))
             if z_ is not None:
                 out.append(z_)
         return out

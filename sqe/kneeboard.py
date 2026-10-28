@@ -111,6 +111,17 @@ def _tgt_note(r, has_target):
     return " ".join(parts)
 
 
+# v0.41.177 (XO 2026-10-28, from DCS's airfield panels): the land fields' approach aids. The ILS belongs to the runway named (the other end has none).
+NAV = {"Batumi": "BATUMI  ILS 110.30 RWY13  TACAN 16X BTM",
+       "Kobuleti": "KOBULETI  ILS 111.50 RWY07  TACAN 67X KBL  NDB 870/490",
+       "Kutaisi": "KUTAISI  ILS 109.75 RWY07  TACAN 44X KTS  VOR 113.60",
+       "Senaki-Kolkhi": "SENAKI  ILS 108.90 RWY09  TACAN 31X TSK  NDB 335/688"}
+
+
+def nav_line(airport):
+    return NAV.get(airport or "", "")
+
+
 def render_pages(outdir, ctx: dict) -> list:
     outdir = Path(outdir); outdir.mkdir(parents=True, exist_ok=True)
     head = f"{ctx['date']}  {ctx['callsign']}  {ctx['role']}"
@@ -118,6 +129,10 @@ def render_pages(outdir, ctx: dict) -> list:
 
     # ------------------------------------------------ page 1: comms + the times YOU must hit
     f = _Form(head)
+    if ctx.get("nav"):
+        f.band("RECOVERY: ILS / TACAN / ICLS")
+        for ln in ctx["nav"]:
+            f.line(ln, True, gap=2)
     f.line(ctx["objective"][:60], color=DIM, gap=8)
     if ctx.get("fc3"):                      # FC3 radios have no channels: just the frequencies
         f.band("FREQUENCIES")

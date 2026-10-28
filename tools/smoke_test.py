@@ -4878,6 +4878,24 @@ def check_84_cas_station(c):
     print(f"[CAS station] {d(new):.0f} nm from the target (old rule {d(old):.0f} nm)")
 
 
+def check_85_kneeboard_nav_and_cap_zone(c):
+    """v0.41.177: the kneeboard has a RECOVERY block (home / divert ILS with runway, TACAN, or the boat's TACAN / ICLS); a BASECAP circle that the SAM trim
+    would leave without its own orbit point is centred on the orbit instead."""
+    from sqe import kneeboard as _kb
+    assert "ILS 110.30 RWY13" in _kb.nav_line("Batumi") and "ILS 109.75 RWY07" in _kb.nav_line("Kutaisi") and not _kb.nav_line("Nowhere")
+    assert {_kb.nav_line(a) for a in ("Batumi", "Kobuleti", "Kutaisi", "Senaki-Kolkhi")} >= set() and all(_kb.nav_line(a) for a in ("Kobuleti", "Senaki-Kolkhi"))
+    from sqe.fighter_stations import FighterStations as _FS
+    from sqe.routes import NM as _NM
+    class _T(_FS):
+        def __init__(s): pass
+        def _zone_sams(s, package, fighters=False, long_only=False): return [(0.0, 0.0, 35.0)]
+    z = _T()._clear_zone((0.0, 52 * _NM, 40.0), None, hold=(23 * _NM, 52 * _NM + 5 * _NM))
+    assert abs(z[0] - 23 * _NM) < 1 and z[2] >= 8.0, ("re-centred on the orbit", z)
+    z2 = _T()._clear_zone((0.0, 52 * _NM, 40.0), None)
+    assert z2[0] == 0.0 and abs(z2[2] - 17.0) < 0.01, ("no hold: the old trim", z2)
+    print("[kneeboard nav] RECOVERY block data; BASECAP circle follows its orbit")
+
+
 def check_83_tor_cas_and_target_line(c):
     """v0.41.175: a fixed Tor (SA-15) site whose 8 nm ring covers a CAS target counts as escortable cover (HARM escort), a column Tor (fsam_) or a far one
     does not, and a strike / CAS briefing has a target line and the word 'after' in its description, not 'behind'."""
@@ -5114,6 +5132,7 @@ CHECKS = [
     check_82_red_cas,
     check_83_tor_cas_and_target_line,
     check_84_cas_station,
+    check_85_kneeboard_nav_and_cap_zone,
 ]
 
 

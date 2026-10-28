@@ -35,6 +35,7 @@ from .support_caps import SupportCaps
 from .red_air_picture import RedAirPicture, A2A_ZONE_NM
 from .raid_spawns import RaidSpawns
 from .strike_tasks import StrikeTasks, DEAD_GATE_KM, SEAD_WAVE_KM, TRACK_RADARS, SEARCH_RADARS, KPH
+from . import kneeboard
 from .kneeboard import latlon, render_pages
 from .loadouts import LoadoutLibrary, enemy_cap_loadout, ENEMY_FIGHTERS
 from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType, Role, task_label
@@ -555,7 +556,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                    "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "push": m_["push"], "tot": m_["tot"], "rtb": m_["rtb"], "flights": m_["flights"],
                                "status": ("already struck, heading home; its target is in ruins" if m_.get("struck") else "airborne when you start" if m_.get("underway") else "")} for m_ in merged],
                    "intel": [l_.replace(" are within reach of the target area and may be sent to reinforce.", " may reinforce.").replace(" are on cockpit alert and may launch to help.", " on alert, may launch.") for l_ in self._intel],
-                   "zulu_note": self._zulu_note(), "msa": relief.msa_ft(polyline)}
+                   "zulu_note": self._zulu_note(), "msa": relief.msa_ft(polyline),
+                   "nav": [ln_ for ln_ in (self._nav_row("HOME", pbase), self._nav_row("DIVERT", div)) if ln_]}
             for pg in render_pages(td, ctx):
                 m.add_aircraft_kneeboard(pspec.dcs_type, pg)
             warns += list(dict.fromkeys(self.lo.warnings))
@@ -1594,7 +1596,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """How the flight fights: the engage circles, hold and homeward fight, ROE and range options. One branch for support CAPs, one for stations, one for other AI fighters, one for raid scrambles."""
         st, o = self.state, self.o
         if f.tag:
-            czone_ = self._clear_zone(cap_zone, package)
+            czone_ = self._clear_zone(cap_zone, package, hold=(wps[1].x, wps[1].y) if len(wps) > 1 and f.tag in ("BASECAP", "CVCAP") else None)
             self._limit_engage(g, self.o.friendly_cap_engage_nm, None, czone_)
             # v0.41.14: support CAP snipes (maximum range: the bandits turn defensive before they reach what it guards) and goes home when its
             # air-to-air missiles are gone (the SAMs and the boat's SM-2s cover what it guards)
@@ -2297,6 +2299,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     COVER_SHIFTS = (0, 4, 8, 12, 16, 20, 24)                 # v0.41.23: nm the centre may move, toward our side first, then sideways
     COVER_TURNS = (0, 30, -30, 60, -60, 90, -90)
+
+    def _nav_row(self, label, b) -> str:
+        """v0.41.177: one kneeboard line of approach aids for a home / divert base: a land field's ILS (with its runway), TACAN, NDB / VOR; the boat's TACAN and ICLS."""
+        if b is None:
+            return ""
+        if b.kind == BaseKind.CARRIER:
+            return f"{label:<6} {b.name.upper()[:14]}  TACAN {self.o.carrier_tacan}  ICLS {self.o.carrier_icls}  Case I"
+        ln = kneeboard.nav_line(b.airport)
+        return f"{label:<6} {ln}" if ln else ""
 
     def _zulu_note(self) -> str:
         tz = float(theatres.active().get("tz", 0) or 0)

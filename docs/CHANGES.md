@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.178, Kneeboard RECOVERY block (ILS / TACAN / ICLS) and the BASECAP circle follows its orbit
+
+XO 2026-10-28. (1) Page 1 of the kneeboard opens with a RECOVERY block, same layout for land and Navy jets: HOME and DIVERT lines with a land field's ILS frequency and its runway, TACAN, NDB / VOR (Batumi, Kobuleti, Kutaisi, Senaki-Kolkhi, from DCS's airfield panels, XO's screenshots), or the boat's TACAN and ICLS, Case I. The ILS is for the runway named; the other end has none. (2) Run 3's Dodge 5 BASECAP orbit sat 22.7 nm from the centre of a circle the SA-10 trim had cut to 17 nm, so the pair fought outside its zone and chased into the SA-10 (two lost at 29 nm). `_clear_zone(..., hold=)`: when the trim leaves the CAP's own orbit point outside the circle, the circle is centred on the orbit point, as big as the SAMs allow (8 nm floor). Used by BASECAP / CVCAP only. New smoke check `check_85_kneeboard_nav_and_cap_zone`.
+
 ## v0.41.177, CAS fighter cover stands within reach of the A-10s
 
 XO 2026-10-28 ("do A, medium"), from the three CAS runs (3_CAS_Runs). A CAS TARCAP / escort under a covering SA-10 stood 35-40 nm from the A-10s (`profiles.station()` anchors to 0.85 x the SA-10's reach), out of engage range: Enfield 1 (4 F-15C) fired 3 AIM-9 and no AIM-120 in run 1 while red Su-27s killed the A-10s after TOT. New `profiles.cas_station()`: candidate points `CAS_STATION_NM` (20 nm) from the CAS target, starting on the push bearing and swung off it 15 degrees at a time either way; the first one outside every live SAM ring (plus margin) wins, else the one with most room (so it may sit inside a ring when no point is clear: the risk is taken for cover). Used only for CAS packages with a long-range SAM over the target; every other station rule is unchanged. JUDGMENT CALLS: 20 nm (AIM-120 / AIM-7 reach covers the A-10s from there), and taking SAM risk over standing too far to help. New smoke check `check_84_cas_station`. Not in this PR: BASECAP racetrack near the Sukhumi SA-10, CBU-only attacks, kissing-distance columns.
