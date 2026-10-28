@@ -7,7 +7,8 @@ XO 2026-10-28: the tempo only looked at the package's own objective, so air kill
 - `tempo.credits(outcome)`: DEAD +2 per SAM site blinded or damaged by a quarter or more (+4 destroyed); AIR +2 for one red aircraft shot down, +4 for two or more; STRIKE +2 for another (non-SAM) asset hit by a quarter or more; at most +6 a kind per sortie (judgment calls). A kind takes the larger of its grade step and its credit, not the sum. The debrief lists each credit.
 - `STEP["bad"]` 0 (was -4): only the nightly decay lowers the tempo. Cap +40 and decay 3% unchanged.
 - `debrief` `red_assets` entries now carry `kind`, `primary`, `destroyed`, `suppressed`.
-- Smoke: `check_67_air_tempo` (bad takes nothing back; credits by kind).
+- `raids.overnight`: half of the AIR tempo (`TEMPO_STOP_SHARE` 0.5, so +20 points at the cap) is added to the chance a surprise raider is stopped (cap 95% as before); the damage of raiders that get through is unchanged.
+- Smoke: `check_67_air_tempo` (bad takes nothing back; credits by kind; the raid share).
 
 
 ## v0.41.170, The CAS task force starts closer

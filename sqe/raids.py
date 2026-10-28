@@ -23,6 +23,7 @@ RAID_RESERVE = 0.6            # an emergency is offered only if the event is wit
 BASE_LOSS = 0.06              # airfield defence lost per bomber that gets through
 RAID_PRIORITY = 8.0
 RAIDERS = ("Su_24M", "Su_25")  # attack types a raid can fly (bombers for fields and supply sites; Su-25s lead against troops)
+TEMPO_STOP_SHARE = 0.5        # v0.41.171 (XO 2026-10-28): half of the AIR tempo is added to the chance a surprise raider is stopped (+20 points at the +40 cap; judgment call)
 ASSET_HIT = 0.20              # health a supply site or garrison loses per aircraft that gets through
 SECTOR_HIT = 4.0              # friendly sector strength lost per aircraft that gets through
 GARRISON_SHIELD = 0.25        # a field's garrison takes this share off the damage its defences would suffer
@@ -431,6 +432,8 @@ def overnight(state, d, rng: random.Random) -> list:
         up_, psq_ = blue_barcap.patrol_up(state, rng, b, (wa_.x, wa_.y)) if (wa_ is not None and b.kind != BaseKind.CARRIER) else (False, None)       # v0.41.86: a pair on station
         if up_:
             p_stop = min(0.95, p_stop + blue_barcap.PATROL_STOP)
+        from . import tempo as _tp
+        p_stop = min(0.95, p_stop + TEMPO_STOP_SHARE * _tp.get(state, "AIR"))      # v0.41.171: the player's air work taught the alert pairs (Pilot Influence off: 0)
         lo_, hi_ = d.raid_size
         n_ = max(2, int(round(rng.randint(int(lo_), int(hi_)) * wave_mult(state, d))))
         if n_ <= 4:                                              # a small raid is settled as one lump (all stopped or all through), as before v0.41.155

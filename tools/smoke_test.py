@@ -4417,6 +4417,8 @@ def check_67_air_tempo(c):
     ln = _tp.record(st, "STRIKE", "mixed", _tp.credits(_o))
     assert abs(_tp.get(st, "AIR") - 0.04) < 1e-9 and abs(_tp.get(st, "DEAD") - 0.04) < 1e-9 and abs(_tp.get(st, "STRIKE") - 0.02) < 1e-9 and _tp.get(st, "CAS") == 0.0 and len(ln) == 3, (st.tempo, ln)
     ln = _tp.record(st, "STRIKE", "great", _tp.credits(_o)); assert abs(_tp.get(st, "STRIKE") - 0.07) < 1e-9, "the grade (5) beats the credit (2): not summed"
+    from sqe import raids as _rdx
+    assert _rdx.TEMPO_STOP_SHARE == 0.5 and abs(_rdx.TEMPO_STOP_SHARE * _tp.TEMPO_CAP - 0.20) < 1e-9, "v0.41.171: half the AIR tempo helps stop surprise raiders"
     print("[air tempo] steps by debrief grade, cap +40% and floor 0, kinds, effect on background odds, nightly fade, saved")
 
 
