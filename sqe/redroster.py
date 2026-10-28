@@ -4,9 +4,10 @@ Until v0.41.141 a level had a total (`enemy_air_total`) and a pool of types, and
 how many jets of each type red starts with, and where they go follows rules, not dice:
 
 - Jets go to the fields in proportion to the theatre's `wing_weight`, within what each field can park (the DCS parking count, as before).
-- The long-range fighters ("snipers": MiG-31 and Su-27) follow a depth gradient (XO 2026-10-24): at the fringe fields (field tier 2) 75% of a field's
-  long-range jets are MiG-31, in the middle (tier 3) 50%, deep (tier 4) 15%, so the Su-27 feels prized and the deep MiG-31 is "spice". The numbers are
-  judgment calls (no public source); the MiG-31 itself is a small, specialised fleet in reality and made numerous here as a game liberty.
+- The long-range fighters ("snipers": MiG-31 and Su-27) follow a depth gradient (flipped 2026-10-27, XO): at the fringe fields (field tier 2) 15% of a
+  field's long-range jets are MiG-31, in the middle (tier 3) 50%, deep (tier 4) 75%. The MiG-31 is a big interceptor that works from rear bases under
+  ground control and is poor in a turning fight, so it sits deep and the Su-27 holds the fringe. The numbers are judgment calls (no public source); the
+  MiG-31 is a small, specialised fleet in reality, so L2 has 4 and L3 has 8.
 - The heavy types (MiG-31, Su-27, Su-24M) need the bigger parking spots, so a field takes only as many as its heavy count allows.
 - Nobody gets a lone jet: a type with a single jet at a field moves to the field that has most of that type.
 
@@ -17,7 +18,7 @@ import math
 
 HEAVY = {"MiG_31", "Su_27", "Su_24M"}
 LONG_RANGE = ("MiG_31", "Su_27")
-MIG31_SHARE = {2: 0.75, 3: 0.50, 4: 0.15}             # share of a field's long-range jets that are MiG-31, by the field's tier (XO 2026-10-24)
+MIG31_SHARE = {2: 0.15, 3: 0.50, 4: 0.75}             # share of a field's long-range jets that are MiG-31, by the field's tier (v0.41.163, XO 2026-10-27: flipped, the interceptor sits deep under ground control, the Su-27 holds the fringe)
 ORDER = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis", "Su_24M", "Su_25")      # allocation order: the fighters first (every field gets some), then the strikers fill what parking is left
 FIGHTERS = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis")
 FIGHTER_FLOOR = 4                                       # every field keeps at least this many fighters (a pair of pairs): the old rule "every wing keeps a fighter squadron"
@@ -26,8 +27,8 @@ FIGHTER_FLOOR = 4                                       # every field keeps at l
 # the extra jets are cheap strikers). L1: an old museum-piece air force that is quietly supplied (XO 2026-10-25): about 14 fighters, 20 Su-25, 10 Su-24M.
 ROSTERS = {
     1: {"MiG_21Bis": 6, "MiG_23MLD": 5, "MiG_29A": 3, "Su_25": 20, "Su_24M": 10},
-    2: {"MiG_31": 7, "MiG_29S": 12, "MiG_29A": 22, "MiG_23MLD": 11, "Su_25": 52, "Su_24M": 24},
-    3: {"MiG_31": 14, "Su_27": 24, "MiG_29S": 28, "MiG_29A": 20, "Su_25": 110, "Su_24M": 60},
+    2: {"MiG_31": 4, "MiG_29S": 15, "MiG_29A": 22, "MiG_23MLD": 11, "Su_25": 52, "Su_24M": 24},
+    3: {"MiG_31": 8, "Su_27": 30, "MiG_29S": 28, "MiG_29A": 20, "Su_25": 110, "Su_24M": 60},
 }
 
 
