@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.183, ECM switch probe tools (tools only, no gameplay change)
+
+XO 2026-10-28 ("produce the probes", with button presses to be correlated). Can the player's ECM state be read? NOT verified in DCS: these are the tools to find out. (1) `tools/ecm_probe.py OUT_DIR [f15 f16 fa18 f14 a10]`: one small Caucasus mission per jet (player slot at Kutaisi, red SA-6 site 30 km NE), with Mission Editor "Cockpit Parameter" triggers for about 60 CANDIDATE parameter names in five value bands, each logging a `SQEPROBE PARAM <name> band <band>` line on every change (a name that never fires is not real for that jet), plus a side-test script sampling the player's jet every 2 s: external draw arguments 0 to 999, `getRadar()`, `getSensors()`, `getAmmo()`, logging changes. The briefing holds the press protocol. (2) `tools/ecm_export_logger.lua`: the discovery tool. A chained Export.lua script (one `dofile` line in XO's own `Scripts\Export.lua`; it writes nothing else, changes nothing in DCS) that logs every cockpit parameter change from `list_cockpit_params()` and every cockpit argument change (`GetDevice(0):get_argument_value`) with the model time to `Saved Games\DCS\Logs\SQE_cockpit_changes.log`: pressing the ECM binding shows which values it moves, with no name guessing. `list_cockpit_params()` is from memory and unverified; the log's first lines show whether it worked and its raw format. The logger was exercised against a stubbed DCS API (lupa), not in DCS. New smoke check `check_88_ecm_probe`. Nothing in `sqe/` changed; `jamOn` is unchanged until a parameter name is confirmed.
+
 ## v0.41.182, Kneeboard page 1: the RECOVERY block moves to the bottom
 
 XO 2026-10-28. At the top, with the task line under it in grey, the recovery data read as if the target belonged to it. The RECOVERY block (home / divert ILS, TACAN, ICLS) now closes page 1, after the waypoints and notes; the task line is back at the top. Layout only.

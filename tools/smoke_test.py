@@ -4932,6 +4932,24 @@ def check_87_cas_columns_on_roads(c):
     print("[CAS roads] On Road with a road close by, off-road otherwise")
 
 
+def check_88_ecm_probe(c):
+    """v0.41.183: the ECM probe builds a mission per jet (candidate cockpit-parameter triggers, side-test script, SA-6 site) and the Export logger file is there."""
+    import sys as _s, tempfile, zipfile
+    from pathlib import Path as _P
+    _s.path.insert(0, str(_P(__file__).resolve().parent))
+    import ecm_probe as _ep
+    with tempfile.TemporaryDirectory() as td:
+        for k in ("f15", "a10"):
+            p_ = _ep.build(k, _P(td))
+            txt = zipfile.ZipFile(p_).read("mission").decode()
+            assert txt.count("c_cockpit_param_in_range") >= len(_ep.CANDIDATES) * len(_ep.BANDS) * 3, "candidate triggers"
+            assert "SQEPROBE DRAWARG" in txt and "getRadar" in txt and "SQEPROBE PARAM" in txt, "side test and log lines"
+            assert "Probe SA-6" in txt
+    lua = (_P(__file__).resolve().parent / "ecm_export_logger.lua").read_text()
+    assert "list_cockpit_params" in lua and "SQE_cockpit_changes.log" in lua and "prev_next" in lua
+    print("[ECM probe] missions build for two jets; the Export logger file is in tools/")
+
+
 def check_83_tor_cas_and_target_line(c):
     """v0.41.175: a fixed Tor (SA-15) site whose 8 nm ring covers a CAS target counts as escortable cover (HARM escort), a column Tor (fsam_) or a far one
     does not, and a strike / CAS briefing has a target line and the word 'after' in its description, not 'behind'."""
@@ -5171,6 +5189,7 @@ CHECKS = [
     check_85_kneeboard_nav_and_cap_zone,
     check_86_tf_stop_distance,
     check_87_cas_columns_on_roads,
+    check_88_ecm_probe,
 ]
 
 
