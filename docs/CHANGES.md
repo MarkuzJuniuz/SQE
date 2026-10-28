@@ -1,6 +1,11 @@
 # CHANGES.md
 
 
+## v0.41.172, Red close air support in the ground war
+
+XO 2026-10-28 ("red needs CAS too, they have zerg numbers"): `ground._red_cas` mirrors blue's abstract AI CAS. Each day red flies `RED_AI_CAS` strikes (L1 0, L2 1, L3 3) at the front-most blue sector facing it; one succeeds with chance `RED_CAS_P` 0.50 x red's surge, less half of blue's AIR tempo, less `RED_CAS_BARE` 0.15 when it has neither cover nor an escort; a success takes `AI_CAS_CUT` (15%) off that sector. Cover = a red wing with a fighter pair within 150 km; with none the strike takes a fighter pair (1:2) from the nearest wing that has one (the pair counts against the wing's day budget). A strike costs one attack jet (Su-25 / Su-24M) 25% of the time, an escorted one a fighter 15%. Numbers are judgment calls (no public source for Russian CAS-to-fighter ratios; the sources read were silent on escorts). The strikes show in the overnight log as "Red air strike on the friendly troops in ...".
+
+
 ## v0.41.171, Air tempo: credit for what the whole mission did; a bad sortie takes nothing back
 
 XO 2026-10-28: the tempo only looked at the package's own objective, so air kills and blinded SAM sites in a strike package taught the background AI nothing, and a bad sortie made it unlearn.
