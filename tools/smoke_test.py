@@ -4855,6 +4855,45 @@ def check_79_pilot_influence(c):
         print(f"[pilot influence] {'on' if on else 'off'}: highest surge {top:.2f} over 40 idle days")
 
 
+def check_83_tor_cas_and_target_line(c):
+    """v0.41.175: a fixed Tor (SA-15) site whose 8 nm ring covers a CAS target counts as escortable cover (HARM escort), a column Tor (fsam_) or a far one
+    does not, and a strike / CAS briefing has a target line and the word 'after' in its description, not 'behind'."""
+    from sqe import war as _w
+    from sqe.models import AssetKind as _AK
+    st = fresh_session(3, 5).state
+    for x in st.assets.values():
+        if x.kind == _AK.SAM:
+            x.health = 0.0
+    tgt = next(a for a in st.assets.values() if a.kind == _AK.ARMOR)
+    site = next(x for x in st.assets.values() if x.kind == _AK.SAM and x.id.startswith("sam_"))
+    site.x, site.y, site.health, site.variant = tgt.x + 5000, tgt.y, 1.0, "SA-15"
+    cov, hard = _w.cas_cover(st, tgt)
+    assert [x.id for x in cov] == [site.id] and not hard, ("a Tor site over a CAS target is escortable cover", cov, hard)
+    assert not _w.covering_sams(st, tgt), "the strike gate does not count a Tor"
+    fol, soft = _w.follow_split(cov)
+    assert not fol and soft == [site], "no SEAD to wait for, a HARM escort instead"
+    site.x = tgt.x + 20000
+    assert not _w.cas_cover(st, tgt)[0], "outside its 8 nm ring"
+    site.x = tgt.x + 5000
+    site2 = next(x for x in st.assets.values() if x.kind == _AK.SAM and x is not site)
+    site2.x, site2.y, site2.health, site2.variant = tgt.x + 3000, tgt.y, 1.0, "SA-15"
+    site.health = 0.0
+    site2.id = "fsam_" + site2.id
+    assert not _w.cas_cover(st, tgt)[0], "a Tor that travels with a column is the A-10s' job"
+    # the briefing: target line and wording
+    s = fresh_session(2, 5); s.plan_day(); seen = 0
+    for p_ in s.packages():
+        if p_.objective.type.value in ("STRIKE", "CAS") and "behind the SEAD" in p_.objective.description:
+            raise AssertionError(("old wording", p_.objective.description))
+        if p_.objective.type.value in ("STRIKE", "DEAD") and s.flyable(p_):
+            res = s.fly(p_.number, s.flyable(p_)[0].id)
+            assert "Target position" in res.text["mission"] and "nm from" in res.text["mission"], res.text["mission"]
+            seen += 1
+            break
+    assert seen, "a strike or DEAD package to read"
+    print("[tor CAS] a fixed Tor over a CAS target sends the HARM escort; the briefing has a target line")
+
+
 def check_82_red_cas(c):
     """v0.41.172: red flies abstract close air support at the blue sector facing it: none on L1, some on L2 / L3, shown in the overnight log; with no
     cover and no escort the chance drops; the strike spends the attack wing's day budget."""
@@ -5050,6 +5089,7 @@ CHECKS = [
     check_80_incompatible_saves,
     check_81_stand_down_keeps_pilot_influence,
     check_82_red_cas,
+    check_83_tor_cas_and_target_line,
 ]
 
 

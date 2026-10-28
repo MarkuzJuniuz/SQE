@@ -90,13 +90,13 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     if obj.after and obj.type.value in ("STRIKE", "CAS"):
         from .war import after_sites as _as, follow_ready as _fr
         _names = " and ".join(state.assets[i].name for i in _as(obj) if i in state.assets and not state.assets[i].destroyed) or "the covering SAM sites"
-        sit += ["", f"Behind the SEAD. This target sits under the long-range cover of {_names}. A SEAD package goes in first and your flight follows about 10 minutes behind "
+        sit += ["", f"Behind the SEAD. The target itself is not a SAM site: it sits under the long-range cover of {_names}. A SEAD package goes in first and your flight follows about 10 minutes behind "
                     f"it. Before you commit, the mission checks the radars: if any is still up when you reach the gate, you hold outside the threat and re-check, and you "
                     f"break off and RTB on a timeout, on low fuel, or when the SEAD flights are down. "
                     + ("Intelligence expects the SEAD to have worked." if _fr(state, obj) else "Intelligence doubts the SEAD will work today; expect to be turned back.")]
     if x.get("intel"):
         sit += ["", "Intelligence: " + " ".join(x["intel"])]
-    mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {_long_label(pf, obj)}.", f"Your task: {pf.task}."]
+    mis = [f"{obj.description}.", *([x["target_line"]] if x.get("target_line") else []), f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {_long_label(pf, obj)}.", f"Your task: {pf.task}."]
     exe = ["Package (push / TOT are staggered: TARCAP first, then SEAD and escorts, then strikers):"]
     for r in x["pkg_table"]:
         f = next(ff for ff in pkg.flights if ff.callsign == r["callsign"])
