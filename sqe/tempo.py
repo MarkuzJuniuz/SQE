@@ -2,7 +2,7 @@
 
 Four job kinds (CAS, STRIKE, DEAD = SEAD / DEAD / Standoff, AIR = sweeps, patrols, intercepts). Each has a tempo, an additive change to the chance that a
 background (AI) package of that kind gets the job done, and to the abstract AI close air support of the ground war. After a flown sortie the debrief rates it
-the way the story does (great / good / mixed / bad) and the tempo of that kind moves a small step; it is capped at +-TEMPO_CAP and drifts back toward zero a
+the way the story does (great / good / mixed / bad) and the tempo of that kind moves a small step; it is kept between TEMPO_MIN and TEMPO_CAP (0 to +40 points) and drifts back toward zero a
 little every night (a squadron's edge fades if you stop flying that job). Judgment calls (no source): step sizes, the cap, the decay.
 """
 from __future__ import annotations
@@ -10,7 +10,8 @@ from __future__ import annotations
 from .models import ObjectiveType
 
 KINDS = ("CAS", "STRIKE", "DEAD", "AIR")
-TEMPO_CAP = 0.20                  # most the chance of a background job moves (+-20 percentage points)
+TEMPO_CAP = 0.40                  # v0.41.166 (XO 2026-10-27): the most the chance of a background job moves up (+40 percentage points; was +-20)
+TEMPO_MIN = 0.0                   # ...and it never goes below zero: a bad sortie only takes back what flying built (an AI-flown sortie often grades bad, which made the numbers worse)
 STEP = {"great": 0.05, "good": 0.03, "mixed": 0.0, "bad": -0.04}
 DECAY = 0.97                      # per night, toward zero
 LABEL = {"CAS": "close air support", "STRIKE": "strike", "DEAD": "SEAD / DEAD", "AIR": "air cover and counter-air"}
@@ -29,7 +30,7 @@ def influence_on(state) -> bool:
 def get(state, kind: str) -> float:
     if not influence_on(state):
         return 0.0
-    return float((getattr(state, "tempo", None) or {}).get(kind, 0.0))
+    return max(TEMPO_MIN, min(TEMPO_CAP, float((getattr(state, "tempo", None) or {}).get(kind, 0.0))))      # older saves may hold a negative value: read as zero
 
 
 def tone_of(outcome: dict) -> str:
@@ -55,7 +56,7 @@ def record(state, objective_type, tone: str) -> list:
     if not hasattr(state, "tempo") or state.tempo is None:
         state.tempo = {}
     old = get(state, k)
-    new = max(-TEMPO_CAP, min(TEMPO_CAP, old + step))
+    new = max(TEMPO_MIN, min(TEMPO_CAP, old + step))
     state.tempo[k] = round(new, 4)
     if abs(new - old) < 1e-9:
         return [f"Air tempo, {LABEL[k]}: unchanged at {new * 100:+.0f}%" + (" (at the cap)" if abs(new) >= TEMPO_CAP - 1e-9 and step else "")]
