@@ -2109,7 +2109,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g.add_waypoint(mapping.Point(q[0], q[1], self.t), PointAction.OffRoad, speed_ms * 3.6)
         self._ground_orders(g)
 
-    CAS_APPROACH_M = 6000.0       # v0.41.137: the friendly task force starts at most this far from the contact point
+    CAS_APPROACH_M = 2500.0       # v0.41.137: the friendly task force starts at most this far from the contact point (v0.41.170: 6000; XO 2026-10-28 run: it stalled 0.7 km out, 11 min in, and never met the column; judgment call, closer hides the stall)
     CAS_TF_SPEED_MARGIN = 1.3     # v0.41.157: the friendly task force drives this much faster than the plan (judgment call, from one DCS run: it took about 36% longer than planned)
     CAS_ENEMY_ADVANCE_M = 1200.0  # v0.41.137: the enemy column creeps this far toward us; it never starts far from the CAS point
 
