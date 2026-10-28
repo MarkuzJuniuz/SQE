@@ -62,8 +62,9 @@ AI_CAS_CUT = 0.15
 # v0.41.172 (XO 2026-10-28, "red needs CAS too, they have zerg numbers"): red's own abstract air strikes on the blue sector facing it. All judgment calls (no public
 # source for Russian CAS-to-fighter ratios; mirrors blue's AI CAS above). Cover: a red wing with fighters within RED_CAS_COVER_KM counts as air cover; with none, the
 # strike takes a fighter pair from the nearest wing (1 pair for the CAS pair, i.e. 1:2) if it has one; with neither it is "bare" and much likelier to fail.
-RED_AI_CAS = {1: 0, 2: 1, 3: 3}          # strikes a day by level (L1: an old museum-piece air force, none)
-RED_CAS_P = 0.50                         # base chance one succeeds (x red's surge); blue's own is 0.55
+RED_AI_CAS = {1: 0, 2: 1, 3: 1}          # strikes a day by level (L1: an old museum-piece air force, none)
+RED_CAS_P = 0.30                         # base chance one succeeds (x red's surge); blue's own is 0.55
+RED_CAS_CUT = 0.10                       # strength a sector loses to one successful red strike (blue's own AI_CAS_CUT is 0.15: red's air is the lesser arm; judgment call)
 RED_CAS_BARE = 0.15                      # ...less this when there is no cover and no escort
 RED_CAS_BLUE_SHARE = 0.5                 # half of blue's AIR tempo (up to +0.40) is taken off the chance (the player's air work protects the sector)
 RED_CAS_COVER_KM = 150.0
@@ -587,7 +588,7 @@ def _red_cas(state, d, rng, red, blue, n, sg) -> list:
                 redair.spend(state, esc.base_asset_id, 2)
         p = RED_CAS_P * sg - RED_CAS_BLUE_SHARE * tempo.get(state, "AIR") - (RED_CAS_BARE if (not cover and esc is None) else 0.0)
         if rng.random() < min(0.95, max(0.05, p)):
-            blue[i] = max(0.0, blue[i] * (1.0 - AI_CAS_CUT))
+            blue[i] = max(0.0, blue[i] * (1.0 - RED_CAS_CUT))
             out.append(f"   Red air strike on the friendly troops in {state.ground['names'][i]}" + (" (escorted)" if esc is not None else "") + f": friendly strength down to {blue[i]:.0f}")
         if rng.random() < RED_CAS_LOSS:
             w.lose(next((q.aircraft for q in w.sqns if q.aircraft in RED_ATTACK_TYPES and q.available > 0), None), 1)
