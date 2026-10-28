@@ -4857,6 +4857,27 @@ def check_79_pilot_influence(c):
         print(f"[pilot influence] {'on' if on else 'off'}: highest surge {top:.2f} over 40 idle days")
 
 
+def check_84_cas_station(c):
+    """v0.41.177: a CAS TARCAP / escort under a long-range SAM sits CAS_STATION_NM from the target (not 35-40 nm), outside the SAM rings when a point exists."""
+    from sqe import profiles as _pr
+    from sqe.models import AssetKind as _AK
+    from sqe.mission_builder import NM as _NM
+    st = fresh_session(3, 5).state
+    for x in st.assets.values():
+        if x.kind == _AK.SAM:
+            x.health = 0.0
+    tgt = next(a for a in st.assets.values() if a.kind == _AK.ARMOR)
+    site = next(x for x in st.assets.values() if x.kind == _AK.SAM and x.id.startswith("sam_"))
+    site.x, site.y, site.health, site.variant = tgt.x - 12 * _NM, tgt.y, 1.0, "SA-10"
+    pts = [(tgt.x + 60 * _NM, tgt.y), (tgt.x + 25 * _NM, tgt.y), (tgt.x, tgt.y)]
+    old = _pr.station(st, pts, 25000)
+    new = _pr.cas_station(st, pts, 25000)
+    d = lambda r: ((r[0] - tgt.x) ** 2 + (r[1] - tgt.y) ** 2) ** 0.5 / _NM
+    assert abs(d(new) - _pr.CAS_STATION_NM) < 0.5, ("CAS station distance", d(new))
+    assert d(new) < d(old) or d(old) <= _pr.CAS_STATION_NM + 1, (d(new), d(old))
+    print(f"[CAS station] {d(new):.0f} nm from the target (old rule {d(old):.0f} nm)")
+
+
 def check_83_tor_cas_and_target_line(c):
     """v0.41.175: a fixed Tor (SA-15) site whose 8 nm ring covers a CAS target counts as escortable cover (HARM escort), a column Tor (fsam_) or a far one
     does not, and a strike / CAS briefing has a target line and the word 'after' in its description, not 'behind'."""
@@ -5092,6 +5113,7 @@ CHECKS = [
     check_81_stand_down_keeps_pilot_influence,
     check_82_red_cas,
     check_83_tor_cas_and_target_line,
+    check_84_cas_station,
 ]
 
 

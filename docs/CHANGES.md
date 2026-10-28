@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.177, CAS fighter cover stands within reach of the A-10s
+
+XO 2026-10-28 ("do A, medium"), from the three CAS runs (3_CAS_Runs). A CAS TARCAP / escort under a covering SA-10 stood 35-40 nm from the A-10s (`profiles.station()` anchors to 0.85 x the SA-10's reach), out of engage range: Enfield 1 (4 F-15C) fired 3 AIM-9 and no AIM-120 in run 1 while red Su-27s killed the A-10s after TOT. New `profiles.cas_station()`: candidate points `CAS_STATION_NM` (20 nm) from the CAS target, starting on the push bearing and swung off it 15 degrees at a time either way; the first one outside every live SAM ring (plus margin) wins, else the one with most room (so it may sit inside a ring when no point is clear: the risk is taken for cover). Used only for CAS packages with a long-range SAM over the target; every other station rule is unchanged. JUDGMENT CALLS: 20 nm (AIM-120 / AIM-7 reach covers the A-10s from there), and taking SAM risk over standing too far to help. New smoke check `check_84_cas_station`. Not in this PR: BASECAP racetrack near the Sukhumi SA-10, CBU-only attacks, kissing-distance columns.
+
 ## v0.41.176, New Campaign: the Pilot Influence checkbox says only what it does
 
 XO 2026-10-28 (screenshot of the New Campaign dialog). The checkbox still read "Pilot Influence: your sorties affect the war (you can lose it if you don't fly)": #238 fixed the Settings text and the tooltip but missed this label. The parenthetical was also wrong in both directions: idle skipping loses only on L3 (L2 is won in about 30 days either way), and with influence off L3 can still be lost. The label is now "Pilot Influence: your sorties affect the war". `check_79_pilot_influence` asserts the label. Text only, no behaviour change.
