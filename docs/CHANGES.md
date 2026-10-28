@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.164, Nothing to fly keeps your Pilot Influence; a box when the war ends
+
+XO 2026-10-27: a day with no flyable package is out of the pilot's hands.
+
+- `Session.skip_day`: on a stand-down day (no package you can fly) with Pilot Influence on, the idle surge clock is held (`flown_day` = today) and tonight's air-tempo fade is skipped (`war.end_day` checks the `stand_down` flag, cleared after the day). Skipping while you could have flown is unchanged.
+- The GUI shows one box, titled VICTORY or DEFEAT with the ending's name, with the same story line as the Overview, the moment the war ends (a flown sortie, a skipped day or the dev skip). A finished campaign that is merely loaded shows none. The old VICTORY / DEFEAT line in the "Day resolved" box is gone.
+- Smoke: new `check_81_stand_down_keeps_pilot_influence`.
+
 ## v0.41.163, Fewer MiG-31s, and they sit deep
 
 XO 2026-10-27: the fringe fields were full of MiG-31s that dogfighters would slaughter. A MiG-31 is a big interceptor that works from rear bases under ground control, so:

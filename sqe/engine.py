@@ -876,7 +876,11 @@ class Session:
         """Skip Turn: any pending sortie is discarded and EVERY package of the day (even ones you could have flown) is resolved
         by the war simulation. The date advances, the war replans."""
         st = self.state
+        stand_down = not any(self.flyable(p) for p in self.packages())      # v0.41.164 (XO 2026-10-27): nothing to fly is out of the pilot's hands
         st.pending = None
+        if stand_down and st.ground and tempo.influence_on(st):
+            st.ground["flown_day"] = st.day                                 # the idle surge clock holds, as if the squadron flew
+            st.ground["stand_down"] = True                                  # ...and tonight's decay of the air tempo is skipped (war.end_day)
         sim = self._sim(self._rng(44))
         results = [sim.resolve_abstract(st, Package.from_dict(pd)) for pd in st.plan]
         st.note(f"Day {st.day}: you stood down. The war went on without you ({sum(1 for r in results if r['success'])} of {sum(1 for r in results if not r.get('scrubbed'))} packages succeeded"
@@ -884,6 +888,8 @@ class Session:
         for ln in ground.supply_round(st, self.d, sim.rng):                 # v0.41.144: both sides still bomb each other's depots and fuel in the background
             st.note("Overnight: " + ln)
         sim.end_day(st)
+        if st.ground:
+            st.ground.pop("stand_down", None)
         status = update_status(st)
         if st.status == "ACTIVE":
             self.plan_day()
