@@ -487,6 +487,29 @@ timer.scheduleFunction(function(_, t)
       end
     end
   end
+  -- v0.41.169 (XO 2026-10-28): the CAS columns' tracks too: the friendly task forces and the red armor columns (lead unit, every 30 s, at most 120 points a group), to see where they stop and pass
+  for _, side in ipairs({ coalition.side.BLUE, coalition.side.RED }) do
+    pcall(function()
+      for _, g in ipairs(coalition.getGroups(side, Group.Category.GROUND) or {}) do
+        local gn = g:getName()
+        if gn and (string.sub(gn, 1, 18) == "Friendly Task Forc" or string.sub(gn, 1, 6) == "armor_") then
+          for _, u0 in ipairs(g:getUnits() or {}) do
+            if u0:isExist() then
+              local p0 = u0:getPoint()
+              local tr = TRACK[gn] or {}
+              TRACK[gn] = tr
+              if #tr < 120 then
+                local kt = -1
+                pcall(function() local v0 = u0:getVelocity(); kt = math.floor(math.sqrt(v0.x ^ 2 + v0.y ^ 2 + v0.z ^ 2) * 1.944) end)
+                tr[#tr + 1] = { math.floor(timer.getTime()), math.floor(p0.x), math.floor(p0.z), math.floor(p0.y), -1, kt }
+              end
+              break
+            end
+          end
+        end
+      end
+    end)
+  end
   dump(); return t + 30
 end, nil, timer.getTime() + 30)
 -- call-outs for the player's flight: scheduled radio calls from the other flights and the support aircraft, plus weapon and result calls
