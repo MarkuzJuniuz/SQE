@@ -64,7 +64,7 @@ class NewCampaignDialog(QDialog):
         form.addRow("Campaign starts", row)
         self.night = QCheckBox("Allow night sorties (otherwise missions are spread through daylight)")
         form.addRow("", self.night)
-        self.pinf = QCheckBox("Pilot Influence: your sorties affect the war (you can lose it if you don't fly)")
+        self.pinf = QCheckBox("Pilot Influence: your sorties affect the war")
         self.pinf.setChecked(bool(pilot_influence)); self.pinf.setToolTip(PILOT_INFLUENCE_TEXT)
         form.addRow("", self.pinf)                      # the same setting as Settings > Campaign > Pilot Influence: it can be changed there later
         from .. import weather as _wxn

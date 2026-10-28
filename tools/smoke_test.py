@@ -4834,6 +4834,8 @@ def check_79_pilot_influence(c):
     from sqe.packages import Package
     from sqe.gui.dialogs import PILOT_INFLUENCE_TEXT
     assert "no effect from your flying" in PILOT_INFLUENCE_TEXT and "lost" not in PILOT_INFLUENCE_TEXT.split("Off:")[1], "v0.41.173: the Off text says what it does and nothing about winning or losing"
+    import inspect as _insp, sqe.gui.dialogs as _dl
+    assert "affect the war\")" in _insp.getsource(_dl) and "you can lose it" not in _insp.getsource(_dl), "v0.41.176: the New Campaign checkbox says only what Pilot Influence does"
     for on in (True, False):
         s = fresh_session(3, 7); s.ai_test = True; s.settings.pilot_influence = on; st = s.state; s.plan_day()
         top = 1.0
