@@ -1,6 +1,11 @@
 # CHANGES.md
 
 
+## v0.41.169, State file: tracks of the CAS columns
+
+XO 2026-10-28 (CAS columns stop "at kissing distance" then move apart): `tracks` in SQE_state.json now also holds the lead unit of each Friendly Task Force and each red `armor_` group, every 30 s, at most 120 points (same `[t, x, z, alt, -1, kts]` format as the flights). Diagnosis only; no behaviour change.
+
+
 ## v0.41.168, The TARCAP stands further back
 
 XO 2026-10-27: the TARCAP dived into red's BARCAP swarm. `TARCAP_NEAR_NM` 16 -> 26 (judgment call); BARCAP circles unchanged. Smoke bound in check on the TARCAP distance 28 -> 38.
