@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.165, Settings: Pilot Influence moved below the whole Weather block
+
+XO 2026-10-27 (screenshot): in Settings > Campaign the Pilot Influence row sat between the Weather combo and the Weather description, so the weather text read as if it described Pilot Influence. The row and its description now come after the Weather block. The New Campaign dialog was already fine (no description paragraphs there). Layout only; smoke not needed beyond the import check.
+
 ## v0.41.164, Nothing to fly keeps your Pilot Influence; a box when the war ends
 
 XO 2026-10-27: a day with no flyable package is out of the pilot's hands.
