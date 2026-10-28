@@ -1,6 +1,15 @@
 # CHANGES.md
 
 
+## v0.41.162, Friendly errors for saves this version cannot open
+
+XO (2026-10-27, "when I loaded an old save it gave py errors... make that graceful"). Loading a save that this build cannot read no longer shows a traceback.
+- Saves now carry `app_version` and `compat` (an era number, `COMPAT_ERA` in `sqe/__init__.py`, bumped when a change breaks older saves). Saves without the stamp are simply tried.
+- `CampaignState.load` raises `SaveIncompatible` (kind older / newer / damaged) for a bad file, a newer format or era, an older era, or any error while reading; `Session.open` also catches errors in the steps after loading and leaves the campaign that was open open.
+- The GUI dialog says which SQE saved the file (when it is stamped) and offers "Back up and start a new campaign" (a copy goes to the backups folder, the original is not touched, and New Campaign opens with the name, aircraft and level filled in) or "Leave it alone". A save from a newer SQE gets an OK button only. A save that loads fine shows nothing.
+- Smoke: new `check_80_incompatible_saves`.
+
+
 ## v0.41.161, Pilot Influence also switches air tempo
 
 XO (2026-10-27, "lump them together"; he wants to test progress with flying off). With Pilot Influence off, `tempo.get` returns 0 and `tempo.record` moves nothing, on top of the red surge: your flying changes nothing in the war sim. The tempo already earned is kept and comes back when the setting is turned on. The setting's text says so. Smoke: `check_79_pilot_influence` also checks tempo.

@@ -24,7 +24,7 @@ PILOT_INFLUENCE_TEXT = ("Your flying changes the war. On: the higher-ups learn f
 
 
 class NewCampaignDialog(QDialog):
-    def __init__(self, parent=None, weather_mode: str = "clear", skill_red: str = "level", skill_blue: str = "level", pilot_influence: bool = True):
+    def __init__(self, parent=None, weather_mode: str = "clear", skill_red: str = "level", skill_blue: str = "level", pilot_influence: bool = True, prefill: dict | None = None):
         super().__init__(parent); self.setWindowTitle("New Campaign"); self.setMinimumWidth(520)
         lay = QVBoxLayout(self); lay.setSpacing(12)
         t = QLabel("New Campaign"); t.setObjectName("title"); lay.addWidget(t)
@@ -48,6 +48,13 @@ class NewCampaignDialog(QDialog):
             self.lvl.addItem(d.name, n)
         self.lvl.setCurrentIndex(1)
         form.addRow("Difficulty", self.lvl)
+        pf = prefill or {}                               # v0.41.162: from a save this build could not open: its name, aircraft and level
+        if pf.get("name"):
+            self.name.setText(str(pf["name"]))
+        if pf.get("aircraft") and self.ac.findData(pf["aircraft"]) >= 0:
+            self.ac.setCurrentIndex(self.ac.findData(pf["aircraft"]))
+        if pf.get("level") and self.lvl.findData(int(pf["level"])) >= 0:
+            self.lvl.setCurrentIndex(self.lvl.findData(int(pf["level"])))
         self.month = QComboBox()
         for i, mname in enumerate(("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"), 1):
             self.month.addItem(mname, i)

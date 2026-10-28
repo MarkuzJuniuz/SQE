@@ -573,14 +573,14 @@ class MainWindow(QMainWindow):
             self.recent.addAction(QAction("(none found)", self)).setEnabled(False)
 
     # ---- campaign ops -------------------------------------------------------------------------------------
-    def new_campaign(self):
+    def new_campaign(self, prefill: dict | None = None):
         if self.session.settings.problems():
             self.settings()
             if self.session.settings.problems():
                 return
         if self._offer_terrain_scan():
             return
-        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"), getattr(self.session.settings, "ai_skill_red", "level"), getattr(self.session.settings, "ai_skill_blue", "level"), bool(getattr(self.session.settings, "pilot_influence", True)))
+        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"), getattr(self.session.settings, "ai_skill_red", "level"), getattr(self.session.settings, "ai_skill_blue", "level"), bool(getattr(self.session.settings, "pilot_influence", True)), prefill=prefill)
         if dlg.exec() == QDialog.Accepted:
             try:
                 v = dlg.values()
@@ -619,10 +619,41 @@ class MainWindow(QMainWindow):
             self._open(f)
 
     def _open(self, path):
+        from ..state import SaveIncompatible
         try:
             self.session.open(path); self.refresh_all()
+        except SaveIncompatible as e:
+            self._incompatible(path, e)
         except Exception:
             QMessageBox.critical(self, "Could not open campaign", traceback.format_exc())
+
+    def _incompatible(self, path, e):
+        """v0.41.162: a save this build cannot open: say why, say which version could, and offer a backup + a new campaign (never a traceback)."""
+        from .. import __version__
+        i = e.info(); nm = i["name"] or Path(path).stem
+        who = f"SQE v{i['saved_by']}" if i.get("saved_by") else "an earlier SQE"
+        day = f" (day {i['day']})" if i.get("day") else ""
+        box = QMessageBox(self); box.setWindowTitle("Can't open this campaign"); box.setIcon(QMessageBox.Information)
+        if e.kind == "newer":
+            box.setText(f"{nm} was saved by {i['saved_by'] and 'SQE v' + i['saved_by'] or 'a newer SQE'}, which is newer than this version (v{__version__}). Update SQE to open it. "
+                        "This file has not been changed.")
+            box.addButton("OK", QMessageBox.AcceptRole); box.exec(); return
+        if e.kind == "damaged":
+            box.setText(f"{nm} couldn't be opened (the file may be damaged or from a different version).")
+        else:
+            box.setText(f"{nm}{day} was saved by {who}. This version, v{__version__}, can't open it because the campaign format has changed.\n\n"
+                        f"To keep playing that campaign, run {who}. This file has not been changed.")
+        go = box.addButton("Back up and start a new campaign", QMessageBox.AcceptRole)
+        box.addButton("Leave it alone", QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is not go:
+            return
+        try:
+            dst = self.session.backup_incompatible(path)
+        except OSError as ex:
+            QMessageBox.warning(self, "Backup failed", f"The backup could not be made ({ex}). Nothing was changed."); return
+        QMessageBox.information(self, "Backed up", f"A copy was saved as {dst}.")
+        self.new_campaign(prefill={"name": i["name"], "aircraft": i.get("aircraft"), "level": i.get("level")})
 
     def save(self):
         if self.session.state:
