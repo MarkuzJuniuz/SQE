@@ -1,6 +1,11 @@
 # CHANGES.md
 
 
+## v0.41.170, The CAS task force starts closer
+
+XO 2026-10-28: in the flown CAS run the friendly task force stalled 0.7 km out (11 min in) and the red column barely moved, 5.6 km apart, so they never met. `CAS_APPROACH_M` 6000 -> 2500 m: the task force starts at most 2.5 km from the contact point. Cause of the stalls unknown (DCS ground pathing); this hides it for short trips.
+
+
 ## v0.41.169, State file: tracks of the CAS columns
 
 XO 2026-10-28 (CAS columns stop "at kissing distance" then move apart): `tracks` in SQE_state.json now also holds the lead unit of each Friendly Task Force and each red `armor_` group, every 30 s, at most 120 points (same `[t, x, z, alt, -1, kts]` format as the flights). Diagnosis only; no behaviour change.
