@@ -127,7 +127,7 @@ def _when(state, o) -> str:
 
 
 def tempo_lines(state) -> list:
-    """The air tempo of each job kind: the nudge to the background jobs' odds (cap +-20 points, fades 3% a night)."""
+    """The air tempo of each job kind: the nudge to the background jobs' odds (0 to +40 points, fades 3% a night)."""
     out = []
     for k in tempo.KINDS:
         v = tempo.get(state, k) * 100

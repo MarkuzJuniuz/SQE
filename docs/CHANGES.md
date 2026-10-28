@@ -1,6 +1,14 @@
 # CHANGES.md
 
 
+## v0.41.166, The coalition's supply floor is 30%; air tempo runs 0 to +40%
+
+XO 2026-10-27: idle L3 could not lose, and AI-flown sorties made the air tempo worse.
+
+- `ground.BLUE_SUPPLY_FLOOR` 0.30 on every level (red keeps 0.55, L1 red 0.70): the coalition's stock comes by sea, so once its depots and fuel are hit it recovers slowly (repair is supply / 6 days). Sims (L3 F-16C, 5 seeds, 120 days, red 0.55): idle 3 red wins of 5, flying stand-in 0 red wins (2 coalition wins, 3 still open); L2 unchanged (coalition wins in about a month either way). Judgment call, no public source. Flying L3 now takes longer to finish (about 100+ days).
+- `tempo`: the air tempo runs 0 to +40 points (`TEMPO_MIN` 0, `TEMPO_CAP` 0.40; was +-20): a bad sortie only takes back what flying built, so an AI-flown sortie cannot make the background jobs worse. A negative value in an older save reads as zero. Overview and tempo text updated.
+- Smoke: `check_61` (coalition floor 0.30) and `check_67_air_tempo` (cap, zero floor, old negative saves) adjusted.
+
 ## v0.41.165, Settings: Pilot Influence moved below the whole Weather block
 
 XO 2026-10-27 (screenshot): in Settings > Campaign the Pilot Influence row sat between the Weather combo and the Weather description, so the weather text read as if it described Pilot Influence. The row and its description now come after the Weather block. The New Campaign dialog was already fine (no description paragraphs there). Layout only; smoke not needed beyond the import check.

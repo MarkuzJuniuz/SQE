@@ -4215,7 +4215,7 @@ def check_61_l1_red_supply_floor(c):
         for _a61 in getattr(_st61, "blue_assets", {}).values():
             if _a61.kind in (_AK61.FUEL, _AK61.DEPOT):
                 _a61.health = 0.0
-        assert abs(_g61.supply(_st61, "blue") - _g61.SUPPLY_FLOOR) < 1e-9, ("blue keeps the 55% floor", _lv61, _g61.supply(_st61, "blue"))
+        assert abs(_g61.supply(_st61, "blue") - _g61.BLUE_SUPPLY_FLOOR) < 1e-9, ("blue keeps the 30% floor (v0.41.166)", _lv61, _g61.supply(_st61, "blue"))
     assert abs(_out61[1][1] - 0.70) < 1e-9, _out61
     assert abs(_out61[2][1] - 0.55) < 1e-9 and abs(_out61[3][1] - 0.55) < 1e-9, _out61
     print(f"[l1 supply floor] red supply with every depot and fuel site gone: L1 {_out61[1][1]:.2f}, L2 {_out61[2][1]:.2f}, L3 {_out61[3][1]:.2f}")
@@ -4392,10 +4392,11 @@ def check_67_air_tempo(c):
     for _ in range(10):
         ln = _tp.record(st, _OT.CAS, "great")
     assert _tp.get(st, "CAS") == _tp.TEMPO_CAP and "cap" in ln[0], "capped"
-    _tp.record(st, "CAS", "bad"); assert abs(_tp.get(st, "CAS") - 0.16) < 1e-9
+    _tp.record(st, "CAS", "bad"); assert abs(_tp.get(st, "CAS") - 0.36) < 1e-9
     for _ in range(40):
         _tp.record(st, "STRIKE", "bad")
-    assert _tp.get(st, "STRIKE") == -_tp.TEMPO_CAP, "the floor too"
+    assert _tp.get(st, "STRIKE") == 0.0 and _tp.TEMPO_CAP == 0.40, "the floor is zero (v0.41.166): bad sorties never push it negative"
+    st.tempo = {"DEAD": -0.1}; assert _tp.get(st, "DEAD") == 0.0, "an older save with a negative tempo reads as zero"; st.tempo = {"CAS": _tp.TEMPO_CAP}
     assert _tp.kind_of("BARCAP") == "AIR" and _tp.kind_of("FLEET_DEFENSE") == "AIR" and _tp.kind_of(_OT.DEAD) == "DEAD"
     assert _tp.tone_of({"objective_type": "CAS", "target_damage": 0.8, "blue_air_lost": 0}) == "great" and _tp.tone_of({"objective_type": "CAS", "target_damage": 0.1, "blue_air_lost": 3}) == "bad"
     # it changes the odds of a background package of that kind, and the abstract AI strikes of the ground war
@@ -4408,7 +4409,7 @@ def check_67_air_tempo(c):
     st.tempo = {"CAS": 0.2, "DEAD": 0.004}; _tp.decay(st)
     assert abs(st.tempo["CAS"] - 0.194) < 1e-9 and st.tempo["DEAD"] == 0.0
     assert _CS.from_dict(st.to_dict()).tempo == st.tempo
-    print("[air tempo] steps by debrief grade, cap and floor +-20%, kinds, effect on background odds, nightly fade, saved")
+    print("[air tempo] steps by debrief grade, cap +40% and floor 0, kinds, effect on background odds, nightly fade, saved")
 
 
 def check_62_red_roster(c):
