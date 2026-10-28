@@ -635,7 +635,8 @@ class WarSimulator:
         for a in state.assets.values():
             if 0 < a.health < 1.0 and ground.zone_of(state, a.id) is None and not (ground.active(state) and a.kind in ground.SUPPLY_KINDS):        # v0.41.143: a front column is a sector's strength: the ground war reinforces it, it does not repair itself
                 a.health = min(1.0, a.health + (d.sam_repair if a.kind == AssetKind.SAM else d.asset_repair))
-        tempo.decay(state)                                           # v0.41.147: the squadrons' edge fades a little each night
+        if not (state.ground or {}).get("stand_down"):                 # v0.41.164: not on a stand-down day (nothing to fly: the edge is kept)
+            tempo.decay(state)                                       # v0.41.147: the squadrons' edge fades a little each night
         for a in state.assets.values():
             a.suppressed = False                                    # blinded radars come back on overnight
         for ln in self.counterstrike(state):

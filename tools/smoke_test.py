@@ -4844,6 +4844,32 @@ def check_79_pilot_influence(c):
         print(f"[pilot influence] {'on' if on else 'off'}: highest surge {top:.2f} over 40 idle days")
 
 
+def check_81_stand_down_keeps_pilot_influence(c):
+    """v0.41.164 (XO 2026-10-27): a day with nothing to fly is out of the pilot's hands: the red surge clock holds and the air tempo does not fade
+    overnight. Skipping with flights available is the pilot's choice and fades / counts as before. Pilot Influence off: no effect either way."""
+    from sqe import ground as _g, posture as _po
+    for choice in (False, True):
+        s = fresh_session(3, 7); s.ai_test = True; st = s.state; s.plan_day()
+        st.day += 6; st.tempo = {"CAS": 0.1}; day0 = st.day
+        if not choice:
+            s.flyable = lambda p: []                                    # a stand-down day: no package can be flown
+        assert (not any(s.flyable(p) for p in s.packages())) == (not choice)
+        s.skip_day()
+        if choice:
+            assert st.tempo.get("CAS", 0) < 0.1, "a chosen skip still fades the tempo"
+            assert int(st.ground.get("flown_day", 1)) < day0, "...and the idle clock keeps running"
+        else:
+            assert st.tempo.get("CAS") == 0.1, ("the tempo is kept on a stand-down day", st.tempo)
+            assert int(st.ground["flown_day"]) == day0, "the idle surge clock held"
+            assert "stand_down" not in st.ground, "the flag is cleared again"
+    s = fresh_session(3, 7); s.ai_test = True; s.settings.pilot_influence = False; s.plan_day(); st = s.state; st.tempo = {"CAS": 0.1}; fd0 = st.ground.get("flown_day")
+    s.flyable = lambda p: []; s.skip_day()
+    assert st.ground.get("flown_day") == fd0, "Pilot Influence off: nothing is held"
+    st.status = "VICTORY"; lab, txt = _po.posture(st)
+    assert lab and txt, "the ending popup has its text"
+    print(f"[stand-down] tempo kept, idle clock held; ending text: {lab}")
+
+
 def check_80_incompatible_saves(c):
     """v0.41.162: a save this build cannot open raises SaveIncompatible (older / newer / damaged), never a raw traceback; the open campaign stays open;
     the backup copies the file and leaves the original alone; a good save loads with no fuss and is stamped with the version and era."""
@@ -4997,6 +5023,7 @@ CHECKS = [
     check_78_carrier_moves_with_the_front,
     check_79_pilot_influence,
     check_80_incompatible_saves,
+    check_81_stand_down_keeps_pilot_influence,
 ]
 
 

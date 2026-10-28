@@ -777,6 +777,16 @@ class MainWindow(QMainWindow):
         if st is None or st.status != "ACTIVE" or st.pending:
             return
         self.session.skip_day(); self.refresh_all()
+        self._ending_popup("ACTIVE")
+
+    def _ending_popup(self, before: str):
+        """v0.41.164 (XO 2026-10-27): once, the moment the war ends (the status went from ACTIVE to won / lost), a box with the ending's story line - the same
+        text as the Overview. Not when a finished campaign is merely loaded."""
+        st = self.session.state
+        if st is None or before != "ACTIVE" or st.status == "ACTIVE":
+            return
+        lab, text = posture.posture(st)
+        QMessageBox.information(self, ("VICTORY: " if st.status == "VICTORY" else "DEFEAT: ") + lab, text)
 
     def skip_turn(self):
         sess = self.session
@@ -787,15 +797,18 @@ class MainWindow(QMainWindow):
                 msg += "\n\nThe sortie you built and have not finished will be discarded."
             if QMessageBox.question(self, "Skip Turn", msg) != QMessageBox.Yes:
                 return
+        before = sess.state.status
         out = sess.skip_day(); self.refresh_all()
         lines = [f"{'+' if r['success'] else '-'} {r['objective']}" for r in out["results"]]
-        end = {"VICTORY": "\n\nVICTORY. The enemy has been broken.", "DEFEAT": "\n\nDEFEAT. The coalition position has collapsed."}.get(out["status"], "")
-        QMessageBox.information(self, "Day resolved", "\n".join(lines) + end)
+        QMessageBox.information(self, "Day resolved", "\n".join(lines))
+        self._ending_popup(before)                                # (the war's ending, if this day ended it, has its own box with the story)
 
     def wait_for_results(self):
         dlg = WaitingDialog(self.session, self); r = dlg.exec()
         if r == QDialog.Accepted and dlg.data is not None:
+            before = self.session.state.status
             out = self.session.apply(dlg.data); self.refresh_all(); DebriefDialog(out, self.session.state, self).exec(); self.refresh_all()
+            self._ending_popup(before)
             self.stack.setCurrentIndex(1); self.nav_missions.setChecked(True)
         elif r == 2:
             self.session.abort(); self.refresh_all()
