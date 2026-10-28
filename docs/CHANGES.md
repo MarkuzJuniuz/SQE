@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.179, The CAS task force stops 1.5 km short of the contact point
+
+XO 2026-10-28 ("see if increasing the distance lets them fight"). The 15:30 and 15:44 runs again ended with the blue task force and red's lead vehicles a few hundred metres apart in dense forest, neither side firing (the earlier run closed to 187 m). New `CAS_TF_STOP_M` = 1500 (was a hard-coded 400 m; the static-garrison 2 km is unchanged). A TEST, not a fix: if the columns still do not fight, the next suspect is forest blocking ground line of sight (no tree-cover data in the code yet), and XO is fine with it ("they called the cavalry"). New smoke check `check_86_tf_stop_distance`.
+
 ## v0.41.178, Kneeboard RECOVERY block (ILS / TACAN / ICLS) and the BASECAP circle follows its orbit
 
 XO 2026-10-28. (1) Page 1 of the kneeboard opens with a RECOVERY block, same layout for land and Navy jets: HOME and DIVERT lines with a land field's ILS frequency and its runway, TACAN, NDB / VOR (Batumi, Kobuleti, Kutaisi, Senaki-Kolkhi, from DCS's airfield panels, XO's screenshots), or the boat's TACAN and ICLS, Case I. The ILS is for the runway named; the other end has none. (2) Run 3's Dodge 5 BASECAP orbit sat 22.7 nm from the centre of a circle the SA-10 trim had cut to 17 nm, so the pair fought outside its zone and chased into the SA-10 (two lost at 29 nm). `_clear_zone(..., hold=)`: when the trim leaves the CAP's own orbit point outside the circle, the circle is centred on the orbit point, as big as the SAMs allow (8 nm floor). Used by BASECAP / CVCAP only. New smoke check `check_85_kneeboard_nav_and_cap_zone`.

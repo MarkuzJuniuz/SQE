@@ -4747,7 +4747,7 @@ def check_76_cas_task_force(c):
                 pts = tf["route"]["points"]; last = pts[max(pts)]
                 us = list(tg["units"].values()); x0 = sum(u_["x"] for u_ in us) / len(us); y0 = sum(u_["y"] for u_ in us) / len(us)
                 d_end = _m.hypot(last["x"] - x0, last["y"] - y0)
-                assert d_end < 1000, ("the task force stops near the contact point", round(d_end))
+                assert d_end < 2200, ("the task force stops near the contact point", round(d_end))
                 worst = max(worst, d_end); n += 1
     assert n >= 3, f"enough moving-column CAS missions were checked: {n}"
     print(f"[cas task force] {n} CAS missions: the task force's last point is within {worst:.0f} m of the contact point (was 2500 m beyond it)")
@@ -4894,6 +4894,15 @@ def check_85_kneeboard_nav_and_cap_zone(c):
     z2 = _T()._clear_zone((0.0, 52 * _NM, 40.0), None)
     assert z2[0] == 0.0 and abs(z2[2] - 17.0) < 0.01, ("no hold: the old trim", z2)
     print("[kneeboard nav] RECOVERY block data; BASECAP circle follows its orbit")
+
+
+def check_86_tf_stop_distance(c):
+    """v0.41.179: the CAS task force stops CAS_TF_STOP_M (1.5 km) short of the contact point, not the old 400 m."""
+    import inspect
+    from sqe.mission_builder import MissionBuilder as _MB
+    assert _MB.CAS_TF_STOP_M == 1500
+    assert "self.CAS_TF_STOP_M" in inspect.getsource(_MB), "the stop distance comes from the constant"
+    print("[TF stop] 1500 m")
 
 
 def check_83_tor_cas_and_target_line(c):
@@ -5133,6 +5142,7 @@ CHECKS = [
     check_83_tor_cas_and_target_line,
     check_84_cas_station,
     check_85_kneeboard_nav_and_cap_zone,
+    check_86_tf_stop_distance,
 ]
 
 
