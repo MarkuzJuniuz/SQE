@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.180, CAS columns drive on roads
+
+XO 2026-10-28 (added on top of #244). Both CAS columns were driven `OffRoad` in a straight line, so the blue task force cut cross-country through the forest and met red's column among trees (kissing distance, no fire). `_drive_road`: when the road scan exists and every point has a road within `CAS_ROAD_SNAP_M` (1.5 km), the column gets "On Road" waypoints (DCS routes it along the road, as a column), the task force starts on a road, and its stop point is a road point; otherwise the old straight off-road drive. Static garrisons are untouched; the JTAC jeep is unchanged. EXPERIMENT: DCS road routing can stall a column or send it on a longer way round, and the speed and timing logic still assumes the straight-line distance. If it stalls, revert is one line. New smoke check `check_87_cas_columns_on_roads`.
+
 ## v0.41.179, The CAS task force stops 1.5 km short of the contact point
 
 XO 2026-10-28 ("see if increasing the distance lets them fight"). The 15:30 and 15:44 runs again ended with the blue task force and red's lead vehicles a few hundred metres apart in dense forest, neither side firing (the earlier run closed to 187 m). New `CAS_TF_STOP_M` = 1500 (was a hard-coded 400 m; the static-garrison 2 km is unchanged). A TEST, not a fix: if the columns still do not fight, the next suspect is forest blocking ground line of sight (no tree-cover data in the code yet), and XO is fine with it ("they called the cavalry"). New smoke check `check_86_tf_stop_distance`.

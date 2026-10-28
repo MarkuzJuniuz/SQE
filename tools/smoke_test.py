@@ -4905,6 +4905,33 @@ def check_86_tf_stop_distance(c):
     print("[TF stop] 1500 m")
 
 
+def check_87_cas_columns_on_roads(c):
+    """v0.41.180: with a road close by, a CAS column drives "On Road" to a road point; with no road scan it drives off-road as before."""
+    from sqe import roads as _r
+    from sqe.mission_builder import MissionBuilder as _MB
+    from dcs.point import PointAction as _PA
+    calls = []
+    class G:
+        def add_waypoint(s, pt, act, spd): calls.append((round(pt.x), round(pt.y), act))
+    b = _MB.__new__(_MB); b.t = None
+    b._ground_orders = lambda g: None
+    class Pt:
+        def __init__(s, x, y, t): s.x, s.y = x, y
+    import sqe.mission_builder as _m
+    _m.mapping = type("M", (), {"Point": Pt})
+    old_av, old_sn = _r.available, _r.snap
+    try:
+        _r.available = lambda: True; _r.snap = lambda x, y, m=3000.0: (x + 100.0, y)
+        assert b._drive_road(G(), [(0.0, 0.0)], 5.0) is True and calls[-1] == (100, 0, _PA.OnRoad), calls
+        _r.snap = lambda x, y, m=3000.0: None
+        assert b._drive_road(G(), [(0.0, 0.0)], 5.0) is False and calls[-1] == (0, 0, _PA.OffRoad), calls
+        _r.available = lambda: False
+        assert b._road_pt(0.0, 0.0) is None
+    finally:
+        _r.available, _r.snap = old_av, old_sn
+    print("[CAS roads] On Road with a road close by, off-road otherwise")
+
+
 def check_83_tor_cas_and_target_line(c):
     """v0.41.175: a fixed Tor (SA-15) site whose 8 nm ring covers a CAS target counts as escortable cover (HARM escort), a column Tor (fsam_) or a far one
     does not, and a strike / CAS briefing has a target line and the word 'after' in its description, not 'behind'."""
@@ -5143,6 +5170,7 @@ CHECKS = [
     check_84_cas_station,
     check_85_kneeboard_nav_and_cap_zone,
     check_86_tf_stop_distance,
+    check_87_cas_columns_on_roads,
 ]
 
 
