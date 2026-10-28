@@ -40,7 +40,7 @@ DECISIVE, REPULSED = 1.8, 0.55
 RETREAT_SHARE = 0.6           # what a routed force saves by falling back
 FALL_LOSS = 0.3               # aircraft lost when a field falls and its squadrons leave
 SUPPLY_FLOOR, SUPPLY_NONE = 0.55, 0.85
-BLUE_SUPPLY_FLOOR = 0.30     # v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly (red 0.55, resupplied overland). Sim: a flying L3 did not lose at 0.30, an idle one lost 3 of 5; L2 unchanged (5 of 5 coalition wins in about a month). Judgment call, no public source
+BLUE_SUPPLY_FLOOR = 0.35     # v0.41.174 (XO 2026-10-28): 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle). v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly (red 0.55, resupplied overland). Sim: a flying L3 did not lose at 0.30, an idle one lost 3 of 5; L2 unchanged (5 of 5 coalition wins in about a month). Judgment call, no public source
 SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (55% = about 11 days); no repair on a day it is struck
 L1_RED_SUPPLY_FLOOR = 0.70    # v0.41.141 (XO 2026-10-27, Campaign Revamp): on Level 1 the insurgents are resupplied across the border by night, so their supply never drops below this however many depots die (judgment call; a toy-model run showed it does not change who wins). Levels 2 and 3 keep the 55% floor.
 
@@ -400,7 +400,7 @@ def facility_health(assets, kinds):
 
 
 def supply(state, side: str) -> float:
-    """0.55 (no stock left; the coalition's floor is BLUE_SUPPLY_FLOOR, 0.30) .. 1.0 (all of the side's sites at hand and intact). v0.41.144: the stock held (sum of the health of the supply sites a side holds)
+    """0.55 (no stock left; the coalition's floor is BLUE_SUPPLY_FLOOR, 0.35) .. 1.0 (all of the side's sites at hand and intact). v0.41.144: the stock held (sum of the health of the supply sites a side holds)
     over the number it started with, so a captured site raises the captor's figure (up to 100%) and lowers the old owner's (to 55% at worst); a site's
     health is its stock and does not fade. A side that started with no sites runs at 0.85. Red on Level 1 never falls below L1_RED_SUPPLY_FLOOR (0.70)."""
     pool = state.assets.values() if side == "red" else getattr(state, "blue_assets", {}).values()

@@ -4215,7 +4215,7 @@ def check_61_l1_red_supply_floor(c):
         for _a61 in getattr(_st61, "blue_assets", {}).values():
             if _a61.kind in (_AK61.FUEL, _AK61.DEPOT):
                 _a61.health = 0.0
-        assert abs(_g61.supply(_st61, "blue") - _g61.BLUE_SUPPLY_FLOOR) < 1e-9, ("blue keeps the 30% floor (v0.41.166)", _lv61, _g61.supply(_st61, "blue"))
+        assert abs(_g61.supply(_st61, "blue") - _g61.BLUE_SUPPLY_FLOOR) < 1e-9, ("blue keeps the 35% floor (v0.41.174)", _lv61, _g61.supply(_st61, "blue"))
     assert abs(_out61[1][1] - 0.70) < 1e-9, _out61
     assert abs(_out61[2][1] - 0.55) < 1e-9 and abs(_out61[3][1] - 0.55) < 1e-9, _out61
     print(f"[l1 supply floor] red supply with every depot and fuel site gone: L1 {_out61[1][1]:.2f}, L2 {_out61[2][1]:.2f}, L3 {_out61[3][1]:.2f}")
