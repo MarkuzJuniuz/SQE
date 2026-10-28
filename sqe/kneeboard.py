@@ -129,10 +129,6 @@ def render_pages(outdir, ctx: dict) -> list:
 
     # ------------------------------------------------ page 1: comms + the times YOU must hit
     f = _Form(head)
-    if ctx.get("nav"):
-        f.band("RECOVERY: ILS / TACAN / ICLS")
-        for ln in ctx["nav"]:
-            f.line(ln, True, gap=2)
     f.line(ctx["objective"][:60], color=DIM, gap=8)
     if ctx.get("fc3"):                      # FC3 radios have no channels: just the frequencies
         f.band("FREQUENCIES")
@@ -162,6 +158,10 @@ def render_pages(outdir, ctx: dict) -> list:
         notes.append(f"MSA {int(ctx['msa']):,} ft along the route.")
     for note in notes:
         f.line(note, color=DIM, gap=4)
+    if ctx.get("nav"):                      # v0.41.182 (XO 2026-10-28): the recovery block closes the page; at the top it read as part of the task line
+        f.band("RECOVERY: ILS / TACAN / ICLS")
+        for ln in ctx["nav"]:
+            f.line(ln, True, gap=2)
     pages.append(f.save(outdir / "1_comms_times.png"))
 
     # ------------------------------------------------ page 2: fuel, codes, weather, target, package

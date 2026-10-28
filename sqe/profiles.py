@@ -242,7 +242,7 @@ def leg_clear(state, p0, p1, alt_ft) -> bool:
     return True
 
 
-CAS_STATION_NM = 20.0           # v0.41.177 (XO 2026-10-28, 3 CAS runs): a CAS TARCAP / escort under a long-range SAM sits this far from the CAS target, on the push side (judgment call: AIM-120 / AIM-7 reach covers the A-10s from there; the old rule left it 35-40 nm away and it never fired)
+CAS_STATION_NM = 25.0           # v0.41.177 (XO 2026-10-28, 3 CAS runs): a CAS TARCAP / escort under a long-range SAM sits this far from the CAS target, on the push side (v0.41.181: 25, was 20, XO: it protects the package, it does not hunt) (judgment call: AIM-120 / AIM-7 reach covers the A-10s from there; the old rule left it 35-40 nm away and it never fired)
 CAS_STATION_SWINGS = tuple(range(0, 181, 15))
 
 

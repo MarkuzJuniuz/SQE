@@ -48,6 +48,9 @@ RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor t
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
 TARCAP_BEHIND_NM = 8          # v0.41.43 (16; v0.41.115: 8, XO 2026-10-22: it sat 56 nm from red's patrols, too far to snipe): with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
 TARCAP_FWD_NM = 20           # v0.41.120: the TARCAP's engage circle tries to reach this far past its station toward red (judgment call: red's alert pairs held 24 nm from the station in XO's 2026-10-23 run)
+TARCAP_NEAR_STRIKE_NM = 30   # v0.41.181 (XO 2026-10-28): a STRIKE package's TARCAP holds this far from the shooters' middle (was 26 for all); judgment call: it protects the package, it does not hunt red's patrols
+TARCAP_FWD_CAS_NM = 10      # v0.41.181: engage reach past the station for a CAS / strike package's TARCAP (20 for SEAD / DEAD, unchanged); judgment call from two CAS runs where the Eagles pushed out into red's scrambles and lost 9-10 to R-27ERs
+TARCAP_FWD_STRIKE_NM = 12
 TARCAP_NEAR_NM = 26          # v0.41.168 (XO 2026-10-27: 16, the TARCAP dived into red's BARCAP swarm; 26 is a judgment call between the old 16 and the 56 nm that was too far to snipe). v0.41.118: ...then it moves in toward the middle of the shooters' launch points until it is this far from it (judgment call: AIM-54 / AIM-120 reach covers the HARM point from there; still outside the SAM rings and TARCAP_BEHIND_NM from the JSOW point)
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
@@ -1643,8 +1646,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 # come first, and the circle is never bigger than TARCAP_COVER_MAX_NM)
                 fpts_ = []
                 thr_ = self._red_approach(stw.x, stw.y) if stw.action == "TARCAP" else None
-                if thr_ is not None and dist(stw.x, stw.y, *thr_) > TARCAP_FWD_NM * NM:
-                    fpts_ = [offset(stw.x, stw.y, bearing(stw.x, stw.y, *thr_), TARCAP_FWD_NM * NM)]
+                fwd_nm_ = {ObjectiveType.CAS: TARCAP_FWD_CAS_NM, ObjectiveType.STRIKE: TARCAP_FWD_STRIKE_NM}.get(package.objective.type, TARCAP_FWD_NM)
+                if thr_ is not None and dist(stw.x, stw.y, *thr_) > fwd_nm_ * NM:
+                    fpts_ = [offset(stw.x, stw.y, bearing(stw.x, stw.y, *thr_), fwd_nm_ * NM)]
                 # v0.41.138 (XO 2026-10-27, engagement circles): the circle meets the nearest BARCAP circle (a point just inside its edge, listed after the
                 # station and before the forward point, so the shooters and the station come first and the reach toward red is what gives way). A TARCAP
                 # is wanted at the sweep size for its type (25 nm long-range shooters, 15 nm the rest); the launch points still make it bigger.
@@ -2111,12 +2115,32 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         g.points[0].tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
         g.points[0].tasks.append(task.OptAlarmState(2))
 
-    def _drive(self, g, via, speed_ms):
+    def _drive(self, g, via, speed_ms, road: bool = False):
         for q in via:
             g.add_waypoint(mapping.Point(q[0], q[1], self.t), PointAction.OffRoad, speed_ms * 3.6)
         self._ground_orders(g)
 
+    CAS_ROAD_SNAP_M = 1500.0      # v0.41.180 (XO 2026-10-28): a CAS column's start and stop points move onto a road this close (judgment call)
+
+    def _road_pt(self, x, y):
+        """v0.41.180: the nearest road point within CAS_ROAD_SNAP_M, else None (no road scan, or no road that close)."""
+        from . import roads
+        return roads.snap(x, y, self.CAS_ROAD_SNAP_M) if roads.available() else None
+
+    def _drive_road(self, g, via, speed_ms) -> bool:
+        """v0.41.180: drive the group to `via` on roads ("On Road": DCS routes it along them, as a column) when each point has a road close by;
+        else the old straight off-road drive. -> True when it went by road."""
+        pts = [self._road_pt(*q) for q in via]
+        if not pts or any(p_ is None for p_ in pts):
+            self._drive(g, via, speed_ms)
+            return False
+        for q in pts:
+            g.add_waypoint(mapping.Point(q[0], q[1], self.t), PointAction.OnRoad, speed_ms * 3.6)
+        self._ground_orders(g)
+        return True
+
     CAS_APPROACH_M = 2500.0       # v0.41.137: the friendly task force starts at most this far from the contact point (v0.41.170: 6000; XO 2026-10-28 run: it stalled 0.7 km out, 11 min in, and never met the column; judgment call, closer hides the stall)
+    CAS_TF_STOP_M = 1500          # v0.41.179 (XO 2026-10-28; was 400 m): the task force stops this far short of the contact point. Three runs ended with the columns at 190-400 m, in forest, and no fire from either side (DCS trees block ground line of sight, unproven); a test of whether more room lets them fight. Judgment call.
     CAS_TF_SPEED_MARGIN = 1.3     # v0.41.157: the friendly task force drives this much faster than the plan (judgment call, from one DCS run: it took about 36% longer than planned)
     CAS_ENEMY_ADVANCE_M = 1200.0  # v0.41.137: the enemy column creeps this far toward us; it never starts far from the CAS point
 
@@ -2139,8 +2163,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if enemy is not None and not static:
             # v0.41.137: the column stays where the CAS flight is sent. It used to start up to 10 km back and drive 13 km to be at the CAS point
             # at the TOT; any shortfall in DCS's real speed (slopes, a long mixed column, stopping to fight) left it kilometres from the point
-            self._drive(enemy, [offset(cx, cy, brg, self.CAS_ENEMY_ADVANCE_M)], min(v, 3.5))
+            self._drive_road(enemy, [offset(cx, cy, brg, self.CAS_ENEMY_ADVANCE_M)], min(v, 3.5))
         fx, fy = offset(cx, cy, brg + r.uniform(-6, 6), dist_run)
+        if not static:
+            rp_ = self._road_pt(fx, fy)                           # v0.41.180: the task force starts on a road too, and meets the column along it
+            if rp_ is not None:
+                fx, fy = rp_
         comp = [("M_1_Abrams", r.randint(1, 2)), ("M_2_Bradley", r.randint(2, 3)), ("M1043_HMMWV_Armament", r.randint(1, 2))]
         sc = ground.blue_scale(self.state, tid or "")          # the friendly force is as strong as Blue is in this sector
         comp = [(n_, max(1, int(round(c_ * sc)))) for n_, c_ in comp]
@@ -2149,10 +2177,14 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             names = []
             for k, u in enumerate(g.units, 1):
                 u.name = f"TF{package.number}|{k}"; names.append(u.name)
-            # v0.41.157 (XO's 15:38 run: the task force reached the column 12 minutes after the A-10s, then drove 2.5 km past it): it stops 400 m short of the
+            # v0.41.157 (XO's 15:38 run: the task force reached the column 12 minutes after the A-10s, then drove 2.5 km past it): it stops CAS_TF_STOP_M (v0.41.179: 1.5 km, was 400 m) short of the
             # contact point (static garrison: 2 km short) and holds, weapons free, so the survivors come to it; and it drives CAS_TF_SPEED_MARGIN faster than the
             # plan, because DCS runs a mixed off-road column about 30% slower (measured in that run)
-            self._drive(g, [offset(cx, cy, brg, 2000 if static else 400)], min(8.0, v * self.CAS_TF_SPEED_MARGIN))
+            stop_ = [offset(cx, cy, brg, 2000 if static else self.CAS_TF_STOP_M)]
+            if static:
+                self._drive(g, stop_, min(8.0, v * self.CAS_TF_SPEED_MARGIN))
+            else:
+                self._drive_road(g, stop_, min(8.0, v * self.CAS_TF_SPEED_MARGIN))
             manifest.add("friendly_ground", tid or "", names)
         jx, jy = offset(fx, fy, brg + 90, 120)
         jt = self.m.vehicle_group(self.usa, f"Axeman {package.number}-1", _UN.Hummer, mapping.Point(jx, jy, self.t), heading=(int(brg) + 180) % 360, group_size=1)
@@ -2265,20 +2297,21 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     # from there the TARCAP moves toward the middle of the shooters' launch points, 1 nm at a time, until it is TARCAP_NEAR_NM from it, never
                     # closer than TARCAP_BEHIND_NM to the JSOW point and never into a SAM ring (the step back's rings, but an SA-10 at SA10_AVOID_NM (35 nm, the reach measured in
                     # the runs) instead of its 48 nm table ring + 5, which held the TARCAP 53 nm from the SA-10 while the HARM point is 36 nm from it)
+                    near_nm_ = TARCAP_NEAR_STRIKE_NM if package.objective.type == ObjectiveType.STRIKE else TARCAP_NEAR_NM
                     lps_ = self._launch_pts.get(package.id) or self._launch_points(package, geom)       # the stations are planned before _launch_pts is filled in
                     if lps_:
                         mx_, my_ = sum(q_[0] for q_ in lps_) / len(lps_), sum(q_[1] for q_ in lps_) / len(lps_)
-                        while dist(ex_, ey_, mx_, my_) > TARCAP_NEAR_NM * NM:
+                        while dist(ex_, ey_, mx_, my_) > near_nm_ * NM:
                             nx_, ny_ = offset(ex_, ey_, bearing(ex_, ey_, mx_, my_), 1.0 * NM)
                             if dist(nx_, ny_, jx_, jy_) < TARCAP_BEHIND_NM * NM or not all(dist(nx_, ny_, a_.x, a_.y) > (SA10_AVOID_NM * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_):
                                 break
                             ex_, ey_ = nx_, ny_
                         # v0.41.119 (XO 2026-10-22: the TARCAP sat on the sea side, about 90 degrees off the way red comes, so it could not snipe): the station is then put
-                        # TARCAP_NEAR_NM from the shooters' middle on the bearing toward red's nearest patrol station or fighter base, swung off it (15 degrees at a time,
+                        # near_nm_ from the shooters' middle on the bearing toward red's nearest patrol station or fighter base, swung off it (15 degrees at a time,
                         # 180 at most, so the clear point nearest the axis) as far as the SAM rings and the JSOW distance force; the station above stays when that is no nearer the axis
                         thr_ = self._red_approach(mx_, my_)
                         if thr_ is not None:
-                            ax2_ = axis_station((mx_, my_), thr_, (jx_, jy_), TARCAP_NEAR_NM, TARCAP_BEHIND_NM,
+                            ax2_ = axis_station((mx_, my_), thr_, (jx_, jy_), near_nm_, TARCAP_BEHIND_NM,
                                                 lambda x_, y_: all(dist(x_, y_, a_.x, a_.y) > (SA10_AVOID_NM * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_), (ex_, ey_))
                             if ax2_ is not None:
                                 ex_, ey_ = ax2_
