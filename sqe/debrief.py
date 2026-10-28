@@ -1269,14 +1269,16 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             from . import ground as _gr2
             a.health = _gr2.column_health(state, a, before, frac)
             dmg = before - a.health
-            out["red_assets"].append({"name": a.name, "before": before, "after": a.health})
+            ra_ = {"name": a.name, "before": before, "after": a.health, "kind": a.kind.value, "primary": bool(g.get("primary")),
+                   "destroyed": bool(a.destroyed or a.health <= _gr2.DOWN_HEALTH)}          # v0.41.171: tempo credits (tempo.credits)
+            out["red_assets"].append(ra_)
             if g.get("primary"):
                 out["target_damage"] = 1 - (a.health / before) if before > 0 else 0.0
             if dmg > 0:
                 out["lines"].append(f"{a.name}: {before:.0%} -> {a.health:.0%}")
             rad = list(g.get("trk") or []) + list(g.get("srch") or [])
             if a.kind.value == "SAM" and rad and all(u in lost for u in rad) and not a.destroyed:
-                a.suppressed = True               # SEAD worked: the radars are gone, but the launchers are still there
+                a.suppressed = True; ra_["suppressed"] = True               # SEAD worked: the radars are gone, but the launchers are still there
                 out["lines"].append(f"{a.name}: radars destroyed, launchers intact. SUPPRESSED, not dead: it needs a DEAD strike to finish it.")
         elif g["kind"] == "support":                              # v0.41.87: a tanker / AWACS shot down comes off its asset
             if dead:

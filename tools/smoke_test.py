@@ -4392,7 +4392,7 @@ def check_67_air_tempo(c):
     for _ in range(10):
         ln = _tp.record(st, _OT.CAS, "great")
     assert _tp.get(st, "CAS") == _tp.TEMPO_CAP and "cap" in ln[0], "capped"
-    _tp.record(st, "CAS", "bad"); assert abs(_tp.get(st, "CAS") - 0.36) < 1e-9
+    _tp.record(st, "CAS", "bad"); assert abs(_tp.get(st, "CAS") - 0.40) < 1e-9, "v0.41.171: a bad sortie takes nothing back"
     for _ in range(40):
         _tp.record(st, "STRIKE", "bad")
     assert _tp.get(st, "STRIKE") == 0.0 and _tp.TEMPO_CAP == 0.40, "the floor is zero (v0.41.166): bad sorties never push it negative"
@@ -4409,6 +4409,16 @@ def check_67_air_tempo(c):
     st.tempo = {"CAS": 0.2, "DEAD": 0.004}; _tp.decay(st)
     assert abs(st.tempo["CAS"] - 0.194) < 1e-9 and st.tempo["DEAD"] == 0.0
     assert _CS.from_dict(st.to_dict()).tempo == st.tempo
+    # v0.41.171: credit for what the whole mission did, by kind (larger of grade and credit, never the sum)
+    st.tempo = {}
+    _o = {"red_air_lost": 2, "red_assets": [{"name": "s", "kind": "SAM", "before": 1.0, "after": 0.7, "primary": False}, {"name": "d", "kind": "DEPOT", "before": 1.0, "after": 0.5, "primary": False}]}
+    _cr = _tp.credits(_o); assert _cr["AIR"] == 0.04 and _cr["DEAD"] == 0.02 and _cr["STRIKE"] == 0.02 and _cr["CAS"] == 0.0, _cr
+    _o["red_assets"][0]["suppressed"] = True; _o["red_assets"][0]["destroyed"] = True; assert _tp.credits(_o)["DEAD"] == 0.04
+    ln = _tp.record(st, "STRIKE", "mixed", _tp.credits(_o))
+    assert abs(_tp.get(st, "AIR") - 0.04) < 1e-9 and abs(_tp.get(st, "DEAD") - 0.04) < 1e-9 and abs(_tp.get(st, "STRIKE") - 0.02) < 1e-9 and _tp.get(st, "CAS") == 0.0 and len(ln) == 3, (st.tempo, ln)
+    ln = _tp.record(st, "STRIKE", "great", _tp.credits(_o)); assert abs(_tp.get(st, "STRIKE") - 0.07) < 1e-9, "the grade (5) beats the credit (2): not summed"
+    from sqe import raids as _rdx
+    assert _rdx.TEMPO_STOP_SHARE == 0.5 and abs(_rdx.TEMPO_STOP_SHARE * _tp.TEMPO_CAP - 0.20) < 1e-9, "v0.41.171: half the AIR tempo helps stop surprise raiders"
     print("[air tempo] steps by debrief grade, cap +40% and floor 0, kinds, effect on background odds, nightly fade, saved")
 
 
