@@ -1,6 +1,11 @@
 # CHANGES.md
 
 
+## v0.41.174, The coalition's supply floor is 35%
+
+XO 2026-10-28. `ground.BLUE_SUPPLY_FLOOR` 0.30 -> 0.35 on every level (red unchanged). With red CAS in (v0.41.172), L3 sims (6 seeds, 120 days, optimistic pilot, influence on): 0.30 made flying every 3rd day a coin flip (3 wins, 1 defeat, 2 open); 0.35 wins it 6 of 6 (78-110 days), flying daily wins in 58-85, idle skipping still loses 4 of 6; 0.40 barely punishes idle (1 loss in 6). Influence off at 0.35: 2 of 6 lost, the rest open. A judgment call.
+
+
 ## v0.41.173, Pilot Influence text: off does not mean the war cannot be lost
 
 XO 2026-10-28. With Pilot Influence off the war plays on its own and, since red CAS (v0.41.172), L3 is lost in about two runs in three (6 seeds, 120 days; the corrected sims never won). The setting text no longer says "it cannot be lost"; XO: it should just say what it does and nothing about winning or losing, so the Off sentence now ends after "(no red surge, no air tempo)". `settings.py` comment and `check_79_pilot_influence` follow. Text only, no behaviour change.
