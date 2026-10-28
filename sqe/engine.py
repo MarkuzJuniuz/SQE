@@ -21,7 +21,7 @@ RAID_SCRAMBLES = True      # v0.41.27: emergency raid scrambles are off while in
 from .scenario import new_campaign
 from . import theatres
 from .settings import AppSettings
-from .state import CampaignState
+from .state import CampaignState, SaveIncompatible
 from .war import ObjectivePlanner, WarSimulator, update_status
 
 
@@ -79,7 +79,30 @@ class Session:
         self.save()
 
     def open(self, path) -> None:
-        self.state = CampaignState.load(path)
+        """Open a campaign. Raises SaveIncompatible (never a raw traceback) when it cannot be read; the campaign that was open stays open."""
+        prev = (self.state, getattr(self, "path", None))
+        loaded = CampaignState.load(path)
+        try:
+            self._open_loaded(loaded, path)
+        except SaveIncompatible:
+            self.state, self.path = prev
+            raise
+        except Exception as e:
+            self.state, self.path = prev
+            raise SaveIncompatible(loaded.to_dict() if loaded is not None else {}, "older", f"{type(e).__name__}: {e}") from e
+
+    def backup_incompatible(self, path) -> Path:
+        """Copy a save this build cannot open into the backups folder (the original is not touched). -> the copy's path."""
+        import re as _re, shutil as _sh, time as _t
+        src = Path(path)
+        b = self.settings.backups_dir
+        b.mkdir(parents=True, exist_ok=True)
+        dst = b / f"{_re.sub(r'[^A-Za-z0-9_-]+', '_', src.stem)}_old_{_t.strftime('%Y%m%d_%H%M')}{CAMPAIGN_EXT}"
+        _sh.copy2(src, dst)
+        return dst
+
+    def _open_loaded(self, loaded, path) -> None:
+        self.state = loaded
         theatres.use(self.state.theatre)
         self.sync_terrain()
         self.path = Path(path)

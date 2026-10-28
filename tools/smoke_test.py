@@ -4844,6 +4844,40 @@ def check_79_pilot_influence(c):
         print(f"[pilot influence] {'on' if on else 'off'}: highest surge {top:.2f} over 40 idle days")
 
 
+def check_80_incompatible_saves(c):
+    """v0.41.162: a save this build cannot open raises SaveIncompatible (older / newer / damaged), never a raw traceback; the open campaign stays open;
+    the backup copies the file and leaves the original alone; a good save loads with no fuss and is stamped with the version and era."""
+    import json as _j, tempfile as _tf
+    from pathlib import Path as _P
+    from sqe import __version__, COMPAT_ERA
+    from sqe.state import SaveIncompatible
+    s = fresh_session(2, 3); s.save()
+    d = _j.loads(_P(s.path).read_text(encoding="utf-8"))
+    assert d["app_version"] == __version__ and d["compat"] == COMPAT_ERA, "saves carry the version and the era"
+    tmp = _P(_tf.mkdtemp())
+    def put(name, dd):
+        p = tmp / name; p.write_text(dd if isinstance(dd, str) else _j.dumps(dd), encoding="utf-8"); return p
+    cur = s.state
+    cases = {"old_ground": ({**d, "ground": {**d["ground"], "v": 1}, "app_version": "0.41.150"}, "older"),
+             "format3": ({**d, "format": 3}, "older"), "newer_era": ({**d, "compat": COMPAT_ERA + 1, "app_version": "0.99.0"}, "newer"),
+             "newer_fmt": ({**d, "format": 99}, "newer"), "broken": ({k: v for k, v in d.items() if k != "assets"}, "older"), "junk": ("not json {{", "damaged")}
+    for nm, (dd, kind) in cases.items():
+        p = put(nm + ".sqe", dd)
+        try:
+            s.open(p)
+        except SaveIncompatible as e:
+            assert e.kind == kind, (nm, e.kind, kind)
+            e.info()
+        else:
+            raise AssertionError(f"{nm}: should not open")
+        assert s.state is cur, "a refused save leaves the open campaign open"
+    bad = put("bak.sqe", cases["old_ground"][0]); before = bad.read_text(encoding="utf-8")
+    dst = s.backup_incompatible(bad)
+    assert dst.exists() and dst.read_text(encoding="utf-8") == before and bad.read_text(encoding="utf-8") == before, "the backup is a copy; the original is untouched"
+    s.open(s.path)                                                       # a good save opens with no dialog
+    print(f"[incompatible saves] {len(cases)} bad saves refused with a friendly error, the open campaign stayed open; backup copied to {dst.name}")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -4962,6 +4996,7 @@ CHECKS = [
     check_77_strike_behind_sead,
     check_78_carrier_moves_with_the_front,
     check_79_pilot_influence,
+    check_80_incompatible_saves,
 ]
 
 
