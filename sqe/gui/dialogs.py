@@ -20,7 +20,7 @@ def _browse(parent, line: QLineEdit, title: str):
 
 
 PILOT_INFLUENCE_TEXT = ("Your flying changes the war. On: the higher-ups learn from your sorties. Fly well and command commits more to the fight; stay on the "
-                        "ground and the front can slip, so you can lose the war. Off: the war plays out on its own, with no effect from your flying (no red surge, no air tempo). It can still be lost, and on its own it is rarely won.")
+                        "ground and the front can slip, so you can lose the war. Off: the war plays out on its own, with no effect from your flying (no red surge, no air tempo).")
 
 
 class NewCampaignDialog(QDialog):

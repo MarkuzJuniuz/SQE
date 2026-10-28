@@ -4833,7 +4833,7 @@ def check_79_pilot_influence(c):
     from sqe.war import update_status
     from sqe.packages import Package
     from sqe.gui.dialogs import PILOT_INFLUENCE_TEXT
-    assert "can still be lost" in PILOT_INFLUENCE_TEXT and "cannot be lost" not in PILOT_INFLUENCE_TEXT, "v0.41.173: with influence off the war can still be lost (L3 sims: it is lost about two times in three)"
+    assert "no effect from your flying" in PILOT_INFLUENCE_TEXT and "lost" not in PILOT_INFLUENCE_TEXT.split("Off:")[1], "v0.41.173: the Off text says what it does and nothing about winning or losing"
     for on in (True, False):
         s = fresh_session(3, 7); s.ai_test = True; s.settings.pilot_influence = on; st = s.state; s.plan_day()
         top = 1.0

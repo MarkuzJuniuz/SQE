@@ -3,7 +3,7 @@
 
 ## v0.41.173, Pilot Influence text: off does not mean the war cannot be lost
 
-XO 2026-10-28. With Pilot Influence off the war plays on its own and, since red CAS (v0.41.172), L3 is lost in about two runs in three (6 seeds, 120 days; the corrected sims never won). The setting text no longer says "it cannot be lost"; it says it can still be lost and on its own is rarely won. `settings.py` comment and `check_79_pilot_influence` follow. Text only, no behaviour change.
+XO 2026-10-28. With Pilot Influence off the war plays on its own and, since red CAS (v0.41.172), L3 is lost in about two runs in three (6 seeds, 120 days; the corrected sims never won). The setting text no longer says "it cannot be lost"; XO: it should just say what it does and nothing about winning or losing, so the Off sentence now ends after "(no red surge, no air tempo)". `settings.py` comment and `check_79_pilot_influence` follow. Text only, no behaviour change.
 
 
 ## v0.41.172, Red close air support in the ground war

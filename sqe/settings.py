@@ -73,7 +73,7 @@ class AppSettings:
     river_margin_m: int = 100             # ...and this far from rivers and shallow water (terrain scan only)
     ai_skill_red: str = "level"            # v0.41.70: "level" (the difficulty level decides) or Average / Good / High / Excellent: Red's pilots and ground units
     ai_skill_blue: str = "level"           # ...and Blue's AI flights ("level" = High); see difficulty.ai_skill
-    pilot_influence: bool = True           # v0.41.160: your flying (or neglect) feeds back into the war: red surges while you stand down. Off: no surge and no tempo, so standing down changes nothing (the war can still be lost on its own)
+    pilot_influence: bool = True           # v0.41.160: your flying (or neglect) feeds back into the war: red surges while you stand down. Off: no surge and no tempo, so your flying or standing down changes nothing
     weather_mode: str = "clear"            # "clear" | "procedural" | a fixed weather: scattered, broken, overcast, rain, storm
     ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
     merge_radius_nm: int = 15             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in (v0.41.131: 15, was 25)
