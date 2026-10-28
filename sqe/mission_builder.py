@@ -2234,7 +2234,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 continue
             # TARCAP and ESCORT roles: a station of their own, for you and for the AI alike (v0.40.1)
             t = geom.tiers[key]
-            geom.stand[key] = profiles.station(self.state, pts, t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000), geom.egr)
+            alt_ = t.alt_ft if t.changed else prof.alt_ft.get(f.role, 20000)
+            geom.stand[key] = profiles.station(self.state, pts, alt_, geom.egr)
+            if package.objective.type == ObjectiveType.CAS and not geom.sweep and profiles._long_range_threat(self.state, pts[-1], alt_) is not None:
+                geom.stand[key] = profiles.cas_station(self.state, pts, alt_, geom.egr)       # v0.41.177: close enough to cover the A-10s
             if geom.sweep:
                 geom.stand[key] = self._sweep_station(geom.stand[key], tx, ty, pts[0], package)
             elif f.role in (Role.ESCORT, Role.SWEEP, Role.TARCAP) and any(getattr(x_, "kit", "") == "JSOW" for x_ in package.flights):
