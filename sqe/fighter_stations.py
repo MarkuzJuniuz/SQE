@@ -185,15 +185,23 @@ class FighterStations:
         self._zsams_c = c_
         return out
 
-    def _clear_zone(self, zone, package, floor_nm: float = 8.0, fighters: bool = True, long_only: bool = False):
+    def _clear_zone(self, zone, package, floor_nm: float = 8.0, fighters: bool = True, long_only: bool = False, hold=None):
         """v0.41.22: a blue air-to-air engage circle (x, y, radius nm) trimmed so it ends outside every SAM's reach it is not sent against
         (the v0.41.21 scan: about 300 of 700 fight circles reached into an SA-2 / SA-6 / SA-11, so a fight that started on a clean station was
         chased over a SAM). Never below floor_nm."""
         if zone is None:
             return None
         x, y, r = zone
-        for sx, sy, snm in self._zone_sams(package, fighters, long_only):
+        r0 = r
+        sams = self._zone_sams(package, fighters, long_only)
+        for sx, sy, snm in sams:
             r = min(r, dist(x, y, sx, sy) / NM - snm)
+        if hold is not None and dist(x, y, hold[0], hold[1]) / NM > max(floor_nm, r):
+            # v0.41.177 (XO 2026-10-28, run 3: Dodge 5's orbit sat 22.7 nm from the centre of a circle the SA-10 trim had cut to 17 nm, so the pair was
+            # fighting outside its zone and chased into the SA-10): when the trim leaves the CAP's own orbit point outside the circle, the circle is
+            # centred on the orbit point instead, as big as the SAMs allow (floor_nm at least)
+            x, y = hold
+            r = min([r0] + [dist(x, y, sx, sy) / NM - snm for sx, sy, snm in sams])
         return (x, y, max(floor_nm, r))
 
     @staticmethod

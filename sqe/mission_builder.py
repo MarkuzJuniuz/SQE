@@ -35,6 +35,7 @@ from .support_caps import SupportCaps
 from .red_air_picture import RedAirPicture, A2A_ZONE_NM
 from .raid_spawns import RaidSpawns
 from .strike_tasks import StrikeTasks, DEAD_GATE_KM, SEAD_WAVE_KM, TRACK_RADARS, SEARCH_RADARS, KPH
+from . import kneeboard
 from .kneeboard import latlon, render_pages
 from .loadouts import LoadoutLibrary, enemy_cap_loadout, ENEMY_FIGHTERS
 from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType, Role, task_label
@@ -555,7 +556,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                    "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "push": m_["push"], "tot": m_["tot"], "rtb": m_["rtb"], "flights": m_["flights"],
                                "status": ("already struck, heading home; its target is in ruins" if m_.get("struck") else "airborne when you start" if m_.get("underway") else "")} for m_ in merged],
                    "intel": [l_.replace(" are within reach of the target area and may be sent to reinforce.", " may reinforce.").replace(" are on cockpit alert and may launch to help.", " on alert, may launch.") for l_ in self._intel],
-                   "zulu_note": self._zulu_note(), "msa": relief.msa_ft(polyline)}
+                   "zulu_note": self._zulu_note(), "msa": relief.msa_ft(polyline),
+                   "nav": [kneeboard.nav_line(a_) for a_ in (pbase.airport if pbase.kind == BaseKind.AIRFIELD else None, div.airport) if kneeboard.nav_line(a_)]}
             for pg in render_pages(td, ctx):
                 m.add_aircraft_kneeboard(pspec.dcs_type, pg)
             warns += list(dict.fromkeys(self.lo.warnings))
@@ -1594,7 +1596,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """How the flight fights: the engage circles, hold and homeward fight, ROE and range options. One branch for support CAPs, one for stations, one for other AI fighters, one for raid scrambles."""
         st, o = self.state, self.o
         if f.tag:
-            czone_ = self._clear_zone(cap_zone, package)
+            czone_ = self._clear_zone(cap_zone, package, hold=(wps[1].x, wps[1].y) if len(wps) > 1 and f.tag in ("BASECAP", "CVCAP") else None)
             self._limit_engage(g, self.o.friendly_cap_engage_nm, None, czone_)
             # v0.41.14: support CAP snipes (maximum range: the bandits turn defensive before they reach what it guards) and goes home when its
             # air-to-air missiles are gone (the SAMs and the boat's SM-2s cover what it guards)
