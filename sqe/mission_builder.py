@@ -557,7 +557,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                                "status": ("already struck, heading home; its target is in ruins" if m_.get("struck") else "airborne when you start" if m_.get("underway") else "")} for m_ in merged],
                    "intel": [l_.replace(" are within reach of the target area and may be sent to reinforce.", " may reinforce.").replace(" are on cockpit alert and may launch to help.", " on alert, may launch.") for l_ in self._intel],
                    "zulu_note": self._zulu_note(), "msa": relief.msa_ft(polyline),
-                   "nav": [kneeboard.nav_line(a_) for a_ in (pbase.airport if pbase.kind == BaseKind.AIRFIELD else None, div.airport) if kneeboard.nav_line(a_)]}
+                   "nav": [ln_ for ln_ in (self._nav_row("HOME", pbase), self._nav_row("DIVERT", div)) if ln_]}
             for pg in render_pages(td, ctx):
                 m.add_aircraft_kneeboard(pspec.dcs_type, pg)
             warns += list(dict.fromkeys(self.lo.warnings))
@@ -2299,6 +2299,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     COVER_SHIFTS = (0, 4, 8, 12, 16, 20, 24)                 # v0.41.23: nm the centre may move, toward our side first, then sideways
     COVER_TURNS = (0, 30, -30, 60, -60, 90, -90)
+
+    def _nav_row(self, label, b) -> str:
+        """v0.41.177: one kneeboard line of approach aids for a home / divert base: a land field's ILS (with its runway), TACAN, NDB / VOR; the boat's TACAN and ICLS."""
+        if b is None:
+            return ""
+        if b.kind == BaseKind.CARRIER:
+            return f"{label:<6} {b.name.upper()[:14]}  TACAN {self.o.carrier_tacan}  ICLS {self.o.carrier_icls}  Case I"
+        ln = kneeboard.nav_line(b.airport)
+        return f"{label:<6} {ln}" if ln else ""
 
     def _zulu_note(self) -> str:
         tz = float(theatres.active().get("tz", 0) or 0)

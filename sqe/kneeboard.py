@@ -130,7 +130,7 @@ def render_pages(outdir, ctx: dict) -> list:
     # ------------------------------------------------ page 1: comms + the times YOU must hit
     f = _Form(head)
     if ctx.get("nav"):
-        f.band("AIRFIELDS (HOME, DIVERT)")
+        f.band("RECOVERY: ILS / TACAN / ICLS")
         for ln in ctx["nav"]:
             f.line(ln, True, gap=2)
     f.line(ctx["objective"][:60], color=DIM, gap=8)
