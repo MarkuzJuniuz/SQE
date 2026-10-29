@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.193, CAS columns start out of gun range
+
+XO 2026-10-29 (L3 CAS run): the friendly task force started 1.7 km from the red column and killed it all by 589 s, the CAS flight (TOT about 14 min) found nothing. `CAS_APPROACH_M` 2500 to 4200 and `CAS_TF_STOP_M` 1500 to 2700: they start 4.2 km apart and finish 1.5 km apart (red creeps 1200 m toward us), the patrol legs time the arrival to the TOT. The advance speed now uses the stop constant. Judgment calls; the only measured engagement range is 1.7 km (fire from second 34). Risk: a stall short of the meeting (6 km stalled on 10-28). Not seen in DCS.
+
 ## v0.41.192, fuel farms and depots are buildings (both sides)
 
 XO 2026-10-29 ("I was surprised why I was hitting trucks"; "the same for blue"). `raid_spawns.SUPPLY_BUILDINGS` + `_place_buildings`: one builder for both sides. Fuel farm = three tanks and a store; depot = two warehouses and two ammo bunkers (pydcs `Warehouse` statics, the models blue's raid targets already used). Red's `SOFT` table for FUEL / DEPOT is now only the Shilka guard (a vehicle group, always full strength); the buildings are named `<asset id>|b<n>` on the unit itself (the debrief reports a static by its unit name; the old blue raid-target statics were named on the group only) and listed in the manifest with `base_count` counting them, so health still reads back from survivors; a damaged site builds fewer (at least one). Unit count per site drops from 8 to 10 trucks to 4 buildings and 1 to 2 guards. Debrief hook: a STATIC killed in a KILL event counts dead even if DCS sends no DEAD event for it. NOT seen in DCS yet: whether a destroyed static fires DEAD under its unit name (the KILL fallback covers it), how the Shilka and buildings look together. Command sites, ammo dumps as a kind of their own and factories are a later pass. Smoke `check_93_supply_buildings`.
