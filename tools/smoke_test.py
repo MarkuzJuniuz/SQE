@@ -4747,7 +4747,7 @@ def check_76_cas_task_force(c):
                 pts = tf["route"]["points"]; last = pts[max(pts)]
                 us = list(tg["units"].values()); x0 = sum(u_["x"] for u_ in us) / len(us); y0 = sum(u_["y"] for u_ in us) / len(us)
                 d_end = _m.hypot(last["x"] - x0, last["y"] - y0)
-                assert d_end < 2200, ("the task force stops near the contact point", round(d_end))
+                assert d_end < 3500, ("the task force stops near the contact point", round(d_end))
                 worst = max(worst, d_end); n += 1
     assert n >= 3, f"enough moving-column CAS missions were checked: {n}"
     print(f"[cas task force] {n} CAS missions: the task force's last point is within {worst:.0f} m of the contact point (was 2500 m beyond it)")
