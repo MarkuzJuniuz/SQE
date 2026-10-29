@@ -4900,7 +4900,7 @@ def check_86_tf_stop_distance(c):
     """v0.41.179: the CAS task force stops CAS_TF_STOP_M (1.5 km) short of the contact point, not the old 400 m."""
     import inspect
     from sqe.mission_builder import MissionBuilder as _MB
-    assert _MB.CAS_TF_STOP_M == 1500
+    assert _MB.CAS_TF_STOP_M == 2700 and _MB.CAS_APPROACH_M - _MB.CAS_TF_STOP_M >= 1500
     assert "self.CAS_TF_STOP_M" in inspect.getsource(_MB), "the stop distance comes from the constant"
     print("[TF stop] 1500 m")
 

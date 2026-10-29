@@ -2150,8 +2150,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._ground_orders(g)
         return True
 
-    CAS_APPROACH_M = 2500.0       # v0.41.137: the friendly task force starts at most this far from the contact point (v0.41.170: 6000; XO 2026-10-28 run: it stalled 0.7 km out, 11 min in, and never met the column; judgment call, closer hides the stall)
-    CAS_TF_STOP_M = 1500          # v0.41.179 (XO 2026-10-28; was 400 m): the task force stops this far short of the contact point. Three runs ended with the columns at 190-400 m, in forest, and no fire from either side (DCS trees block ground line of sight, unproven); a test of whether more room lets them fight. Judgment call.
+    CAS_APPROACH_M = 4200.0       # v0.41.193 (XO 2026-10-29 run: the columns started 1.7 km apart and fought from second 34, 14 minutes before the CAS TOT; was 2500): v0.41.137: the friendly task force starts at most this far from the contact point (v0.41.170: 6000; XO 2026-10-28 run: it stalled 0.7 km out, 11 min in, and never met the column; judgment call, closer hides the stall)
+    CAS_TF_STOP_M = 2700          # v0.41.193: was 1500, so with the red column's 1200 m creep the two finish 1.5 km apart (before: 300 m) and start 4.2 km apart, outside gun range until they arrive. v0.41.179 (XO 2026-10-28; was 400 m): the task force stops this far short of the contact point. Three runs ended with the columns at 190-400 m, in forest, and no fire from either side (DCS trees block ground line of sight, unproven); a test of whether more room lets them fight. Judgment call.
     CAS_TF_SPEED_MARGIN = 1.3     # v0.41.157: the friendly task force drives this much faster than the plan (judgment call, from one DCS run: it took about 36% longer than planned)
     CAS_PATROL_MAX_M = 900.0      # v0.41.190 (XO 2026-10-29 run: the red column and the task force were in gun range at 6 min, the Mavericks came at 14): each column first drives an out-and-back "patrol" leg of at most this length away from the other, so it reaches the meeting at about the CAS TOT (judgment call)
     CAS_PATROL_MIN_M = 150.0      # a shorter leg is skipped
@@ -2181,7 +2181,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         tot = float(self.cas_tot or 1500.0)
         t_contact = max(300.0, tot - 15.0)                        # guns are firing as the CAS flight arrives
         dist_run = min(8.0 * t_contact + 1500.0, self.CAS_APPROACH_M)      # the friendly force starts this far from the contact point
-        v = max(2.5, min(8.0, (dist_run - 1500.0) / t_contact))   # m/s, a believable advance
+        v = max(2.5, min(8.0, (dist_run - self.CAS_TF_STOP_M) / t_contact))   # m/s, a believable advance
         enemy = self.groups_by_asset.get(tid) if tid else None
         static = bool(tid) and self.state.assets[tid].variant == "GARRISON"      # dug in: our troops come to it
         if enemy is not None and not static:
