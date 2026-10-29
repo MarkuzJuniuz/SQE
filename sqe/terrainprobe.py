@@ -133,6 +133,7 @@ local function relief_pass()
         for q = 1, n - 1 do anch[#anch + 1] = {a[1] + (b[1] - a[1]) * q / n, a[2] + (b[2] - a[2]) * q / n} end
       end
     end
+    for _, e in ipairs(__EXTRA__) do anch[#anch + 1] = {e[1], e[2]} end        -- v0.41.187: the ground-war sector centres (columns, forward garrisons, depots sit there)
     if #anch == 0 then finish_all("no airfields found") return end
     local lists, have = {{}, {}, {}}, {}
     local ni, nj = math.floor((X1 - X0) / RSTEP), math.floor((Y1 - Y0) / RSTEP)
@@ -258,8 +259,33 @@ def probe_lua() -> str:
     rfile = sc.get("relief_file") or sc["file"].replace("terrain", "relief")
     dfile = sc.get("roads_file") or sc["file"].replace("terrain", "roads")
     return (PROBE_LUA.replace("__DFILE__", dfile).replace("__RSTEP__", str(int(sc.get("road_step", 2000)))).replace("__X1__", str(X1)).replace("__Y1__", str(Y1)).replace("__HSTEP__", str(HS)).replace("__HNX__", str(hnx)).replace("__HNY__", str(hny)).replace("__RFILE__", rfile).replace("__X0__", str(X0)).replace("__Y0__", str(Y0)).replace("__STEP__", str(STEP))
-            .replace("__ANCHORS__", _lua_list(_airports(th))).replace("__FRONT__", _lua_list(_front_chain(th))).replace("__RRAD__", str(int(sc.get("road_radius_m", 25000))))
+            .replace("__ANCHORS__", _lua_list(_airports(th))).replace("__FRONT__", _lua_list(_front_chain(th))).replace("__EXTRA__", _lua_xy(_sector_anchors(th))).replace("__RRAD__", str(int(sc.get("road_radius_m", 25000))))
             .replace("__NX__", str(nx)).replace("__NY__", str(ny)).replace("__FILE__", sc["file"]).replace("__NAME__", th["name"]))
+
+
+def _lua_xy(pts) -> str:
+    return "{" + ",".join("{%d,%d}" % (round(x), round(y)) for x, y in pts) + "}"
+
+
+def _sector_anchors(th: dict) -> list:
+    """v0.41.187 (XO 2026-10-28): the centres of the ground-war sectors, on the longest chain (the one that holds every sector), as the campaign builder
+    places them (even steps along the axis between the chain's airfields, moved onto land when a terrain scan exists). XO's 2026-10-28 roads file had no
+    point at all in the Gelendzhik - Sochi sectors: the sector centres lie up to 40 km from the straight line between two airfields (the coast bends),
+    so the discs round the airfields and the line did not reach them. [] when the theatre has no chain or pydcs cannot give the airfield positions."""
+    try:
+        from . import theatres, ground, seacheck
+        fr = th.get("front") or {}
+        chain, legs = list(fr.get("chain") or []), list(fr.get("leg_zones") or [])
+        if len(chain) < 2 or len(legs) != len(chain) - 1:
+            return []
+        t = theatres.terrain()
+        axis = []
+        for n in chain:
+            a = t.airports[n["airport"]].position
+            axis.append([a.x, a.y])
+        return [tuple(seacheck.snap_to_land(c[0], c[1])) for c in ground.zone_centers(axis, legs)]
+    except Exception:
+        return []
 
 
 def _lua_list(names) -> str:

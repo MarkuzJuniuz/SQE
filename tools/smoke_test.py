@@ -4953,6 +4953,28 @@ def check_89_column_road_pull(c):
     print("[column road pull] a column up to 6 km from a road moves onto it, once, in older saves too")
 
 
+def check_90_road_scan_sector_anchors(c):
+    """v0.41.187: the road scan also covers the ground-war sector centres (they sit up to 40 km from the airfield discs and the straight front line), and a depot or fuel farm
+    reaches a road as far as a column (6 km)."""
+    from sqe import theatres, terrainprobe as _tp, roads as _rdm, ground as _grd
+    th = theatres.active()
+    anc = _tp._sector_anchors(th)
+    n_sect = sum(th["front"]["leg_zones"])
+    assert len(anc) == n_sect, ("one anchor per sector", len(anc), n_sect)
+    lua = _tp.probe_lua()
+    assert "__EXTRA__" not in lua and all("{%d,%d}" % (round(x), round(y)) in lua for x, y in anc), "the anchors are in the probe script"
+    _rdm.clear()
+    s = mk(); s.new("RoadAnch", "F-16C", 2, seed=5); st = s.state
+    dep = next(a_ for a_ in st.assets.values() if a_.kind.name in ("FUEL", "DEPOT"))
+    road = (dep.x + 5000.0, dep.y)
+    _rdm.from_points([road])
+    st.ground.pop("roads", None); st.ground.pop("roads_wide", None)
+    _grd.snap_roads(st)
+    assert (dep.x, dep.y) == road, ("a supply site 5 km from a road moved onto it", (dep.x, dep.y), road)
+    _rdm.clear()
+    print("[road scan anchors] %d sector centres are scan anchors; supply sites snap up to 6 km" % len(anc))
+
+
 def check_88_ecm_probe(c):
     """v0.41.183: the ECM probe builds a mission per jet (candidate cockpit-parameter triggers, side-test script, SA-6 site) and the Export logger file is there."""
     import sys as _s, tempfile, zipfile
@@ -5212,6 +5234,7 @@ CHECKS = [
     check_87_cas_columns_on_roads,
     check_88_ecm_probe,
     check_89_column_road_pull,
+    check_90_road_scan_sector_anchors,
 ]
 
 
