@@ -136,7 +136,7 @@ def stagger(package, role) -> int:
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import jsow_launch_xy, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, AVOID_NM, avoid_circles, HARM_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
+from .routes import jsow_launch_xy, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, SA10_STATION_NM, AVOID_NM, avoid_circles, HARM_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
 from .state import CampaignState
 
 F = VehicleGroup.Formation
@@ -2330,7 +2330,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         mx_, my_ = sum(q_[0] for q_ in lps_) / len(lps_), sum(q_[1] for q_ in lps_) / len(lps_)
                         while dist(ex_, ey_, mx_, my_) > near_nm_ * NM:
                             nx_, ny_ = offset(ex_, ey_, bearing(ex_, ey_, mx_, my_), 1.0 * NM)
-                            if dist(nx_, ny_, jx_, jy_) < TARCAP_BEHIND_NM * NM or not all(dist(nx_, ny_, a_.x, a_.y) > (SA10_AVOID_NM * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_):
+                            if dist(nx_, ny_, jx_, jy_) < TARCAP_BEHIND_NM * NM or not all(dist(nx_, ny_, a_.x, a_.y) > (SA10_STATION_NM * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_):
                                 break
                             ex_, ey_ = nx_, ny_
                         # v0.41.119 (XO 2026-10-22: the TARCAP sat on the sea side, about 90 degrees off the way red comes, so it could not snipe): the station is then put
@@ -2339,7 +2339,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         thr_ = self._red_approach(mx_, my_)
                         if thr_ is not None:
                             ax2_ = axis_station((mx_, my_), thr_, (jx_, jy_), near_nm_, TARCAP_BEHIND_NM,
-                                                lambda x_, y_: all(dist(x_, y_, a_.x, a_.y) > (SA10_AVOID_NM * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_), (ex_, ey_))
+                                                lambda x_, y_: all(dist(x_, y_, a_.x, a_.y) > (SA10_STATION_NM * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_), (ex_, ey_))
                             if ax2_ is not None:
                                 ex_, ey_ = ax2_
                 geom.stand[key] = (ex_, ey_, [], dist(ex_, ey_, tx, ty) / NM, False)

@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.194, fighter stations keep 45 nm from a live SA-10
+
+XO 2026-10-29 (merged run, second package): Dodge 4's TARCAP orbit drifted from 39 to 30 nm of the Sukhumi SA-10 and both F-15Cs died at 335 / 348 s. The station point was kept 35 nm out, but the racetrack's near end swings 5-9 nm closer. New `routes.SA10_STATION_NM` 45 for fighter stations (TARCAP / escort / sweep station search, `_sam_clear` used by the support CAPs and scramble stations); routes still avoid at `SA10_AVOID_NM` 35. Judgment call. Carrier / base CAPs also keep 45 nm now.
+
 ## v0.41.193, CAS columns start out of gun range
 
 XO 2026-10-29 (L3 CAS run): the friendly task force started 1.7 km from the red column and killed it all by 589 s, the CAS flight (TOT about 14 min) found nothing. `CAS_APPROACH_M` 2500 to 4200 and `CAS_TF_STOP_M` 1500 to 2700: they start 4.2 km apart and finish 1.5 km apart (red creeps 1200 m toward us), the patrol legs time the arrival to the TOT. The advance speed now uses the stop constant. Judgment calls; the only measured engagement range is 1.7 km (fire from second 34). Risk: a stall short of the meeting (6 km stalled on 10-28). Not seen in DCS.
