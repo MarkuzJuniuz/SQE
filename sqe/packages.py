@@ -159,6 +159,7 @@ def _next_callsign(st, sq, used: dict) -> str:
 
 
 LONG_RANGE_A2A = {"F-15C", "F-14BU"}
+CAS_JET_MIN_DEF_FLIGHTS = 3      # v0.41.189: jets take CAS first only when this many red defender flights can reach the target (judgment call; 2026-10-29 sim: with 1 nearly every L1 / L2 job counted as hot and the A-10Cs flew none)
 CAS_JET_SWAY_NM = 400            # v0.41.188: the CAS squadron of the other kind is picked only when none of the preferred kind is free within this much of it (judgment call)
 A2A_SECONDARY_NM = 400          # an F-16 / F/A-18 squadron is picked for TARCAP or escort only when no long-range shooter is within this much of it
 
@@ -281,7 +282,7 @@ class PackageBuilder:
             n_fl = 1 if any(w.available > 0 for w in st.enemy_air) else 0
         else:
             n_fl = threat.defender_flights(threat.expected_defenders(st, tx, ty, iads))
-        self._hot = n_fl > 0                                  # v0.41.188: red fighters can reach the target: CAS jets first
+        self._hot = n_fl >= CAS_JET_MIN_DEF_FLIGHTS                                  # v0.41.188: red fighters can reach the target: CAS jets first
         pkg = Package(id=f"pkg{number}", number=number, objective=obj, n_def=2 * n_fl, extra=extra)
         slots = self._slots(obj, self._defended(obj), n_fl)
         pp = st.player
@@ -293,6 +294,11 @@ class PackageBuilder:
             ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles and (s.kit != "JSOW" or psq.aircraft in JSOW_PER_JET)
                   and (not is_sweep(obj) or psq.aircraft in LONG_RANGE_A2A)                    # v0.41.15: no BVR sweep in an F-16 / F/A-18
                   and self._in_range(psq.id, tx, ty) and ledger.free[psq.id] >= 2]
+            if obj.type == ObjectiveType.CAS and psq.aircraft != "A-10C" and not self._hot:
+                # v0.41.189 (XO): a quiet CAS job is the A-10Cs' job; a Viper / Hornet pilot is offered the CAS slot only when no A-10C squadron can fly it today
+                hog_ = any(sq_.aircraft == "A-10C" and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty) for sq_ in st.squadrons.values())
+                if hog_:
+                    ok = [i for i in ok if slots[i].role != Role.CAS]
             if not ok:
                 raise NoPlayerSlot(f"{psq.name} cannot fly any role in: {obj.description}")
             player_idx = max(ok, key=lambda i: PLAYER_ROLE_PREFERENCE[slots[i].role])

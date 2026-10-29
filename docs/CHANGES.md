@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.189, A-10Cs keep the quieter CAS jobs
+
+XO 2026-10-29. Sim of #250 (30 days, 3 seeds a level): A-10Cs flew no CAS on L1 or L2 and only the overflow on L3, because "red fighters reach the target" (`n_fl` above 0) was true for almost every job. `packages.CAS_JET_MIN_DEF_FLIGHTS` 3: jets (F-16C, F/A-18C) take a CAS job first only when 3 or more red defender flights can reach the target, else the A-10Cs do (judgment call; the choice stays soft, the other kind flies when none is free). A Viper / Hornet pilot is also not offered the CAS slot of a quiet job while an A-10C squadron can fly it (XO: a quiet job is the A-10s' job); he gets it when no A-10C squadron is free or in range, and on every hot job. Smoke `check_91_jets_on_cas` also checks that.
+
 ## v0.41.188, Vipers and Hornets fly CAS (Mavericks), player-flyable
 
 XO 2026-10-29 ("I want to fly them; in order to tune it I need to fly it"; the A-10C is a sitting duck on L3 while red fighters are around). `aircraft.py`: F-16C and F/A-18C get the CAS role (their existing Maverick-only presets: 4x AGM-65D / 4x AGM-65F). Planner (`packages._pick_squadron`): CAS goes to A-10C squadrons when no red fighter can reach the target (`n_fl` 0) and to jets when red fighters can (`CAS_JET_SWAY_NM` 400 is a soft preference, the other kind is still used when none is free). A Viper / Hornet pilot on a CAS job gets the CAS slot, not the escort or SEAD slot. War sim: an AI-flown jet CAS flight counts `JET_CAS_FACTOR` 0.7 of an A-10C one (judgment call, no public source: Mavericks only, one pass; the player's own sortie is scored from the debrief). Not changed: route and altitude profile (the jets use the existing CAS route; a fast-jet egress is a possible PR 2 after XO's flights), the weapon choice (Maverick-only presets). Smoke `check_91_jets_on_cas`. XO's own commits: none in this stretch.
