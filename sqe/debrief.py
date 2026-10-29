@@ -428,6 +428,7 @@ function H:onEvent(e)
     end
     do
       local tn0 = nameOf(e.target)
+      if tn0 and ocat == Object.Category.STATIC and not dead[tn0] then dead[tn0] = true; dump() end      -- v0.41.192: a building (supply site) counts dead on the kill even if DCS sends no DEAD event for a static
       if tn0 and #kills < 300 then
         local function tname(o) local ok, t = pcall(function() return o:getTypeName() end); if ok and t then return t end return "?" end
         local wn = "?"

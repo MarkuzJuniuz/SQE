@@ -33,7 +33,7 @@ from .difficulty import Difficulty, ai_skill
 from .fighter_stations import FighterStations, ESCORT_AFTER_TOT_S, TARCAP_AFTER_TOT_S, axis_station
 from .support_caps import SupportCaps
 from .red_air_picture import RedAirPicture, A2A_ZONE_NM
-from .raid_spawns import RaidSpawns
+from .raid_spawns import SUPPLY_BUILDINGS, RaidSpawns
 from .strike_tasks import StrikeTasks, DEAD_GATE_KM, SEAD_WAVE_KM, TRACK_RADARS, SEARCH_RADARS, KPH
 from . import kneeboard
 from .kneeboard import latlon, render_pages
@@ -230,8 +230,8 @@ SITES = {
 }
 SOFT = {
     AssetKind.C2:    [("ZIL_131_KUNG", 2), ("Ural_375", 3), ("ZSU_23_4_Shilka", 2)],
-    AssetKind.FUEL:  [("ATZ_10", 4), ("Ural_375", 2), ("ZSU_23_4_Shilka", 1)],
-    AssetKind.DEPOT: [("Ural_375", 6), ("KAMAZ_Truck", 2), ("ZSU_23_4_Shilka", 2)],
+    AssetKind.FUEL:  [("ZSU_23_4_Shilka", 1)],      # v0.41.192: the buildings are statics (raid_spawns.SUPPLY_BUILDINGS); only the guard is a vehicle group
+    AssetKind.DEPOT: [("ZSU_23_4_Shilka", 2)],
     AssetKind.AIRFIELD: [("ZSU_23_4_Shilka", 2), ("Ural_375", 3)],
     AssetKind.ARMOR: [("T_72B", 4), ("BMP_2", 3), ("BTR_80", 2), ("ZSU_23_4_Shilka", 1)],
 }
@@ -1138,7 +1138,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             out.append((name, n))
         if a.kind == AssetKind.SAM and r.random() < 0.45:
             out.append((r.choice(["ZSU_23_4_Shilka", "SA_18_Igla_manpad", "Ural_375_ZU_23"]), r.randint(1, 2)))
-        if a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT) and r.random() < 0.5:
+        if a.kind == AssetKind.C2 and r.random() < 0.5:
             out.append(("Ural_375", r.randint(1, 3)))
         return out
 
@@ -1247,6 +1247,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         comp = (self._garrison_comp() if garrison else self._armor_comp()) if a.kind == AssetKind.ARMOR else self._vary_comp(a, comp)
         cx, cy = self._site_center(a)
         base_count = sum(n for vname, n in comp if _vt(vname) is not None)
+        bld = []
+        if a.kind in SUPPLY_BUILDINGS:                  # v0.41.192: fuel farm / depot = real buildings, guarded by the Shilka group
+            bld = self._place_buildings(self.red, a.id, a.kind, cx, cy, r.randint(0, 359), scale=a.health)
+            base_count += len(SUPPLY_BUILDINGS[a.kind])
         if garrison:
             fb = self._nearest_airfield(cx, cy)
             heading, form = int(bearing(cx, cy, fb.x, fb.y)), r.choice([F.Rectangle, F.Scattered, F.Star])
@@ -1257,6 +1261,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             heading, form = r.randint(0, 359), r.choice([F.Star, F.Scattered, F.Rectangle])
         column = a.kind == AssetKind.ARMOR and not garrison and ground.zone_of(self.state, a.id) is not None
         scale = (ARMOR_DENSITY[0] + ARMOR_DENSITY[1] * a.health) if column else a.health         # a front-line column is as dense as its sector is strong
+        if bld:
+            scale = 1.0                                 # the guard is always there; the damage shows in the buildings
         g = self._platoon(self.red, a.id, comp, cx, cy, heading, form, scale=scale)
         if g is None:
             return
@@ -1277,6 +1283,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             except Exception:
                 pass
             names.append(u.name)
+        names += bld
         self.groups_by_asset[a.id] = g
         if a.kind == AssetKind.ARMOR:
             self.armor_id, self.armor_center = a.id, (cx, cy)
