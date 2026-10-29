@@ -1521,8 +1521,8 @@ def check_31g_blue_support_relief(c):
     ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
     acts = {}
-    for _sd in (7, 8, 9):                                  # v0.41.143: whether a day has a long enough support sortie depends on the day (the ground war moved the targets): the first package that has relief sorties
-        ses.new("Smoke support relief", "F-16C", 2, seed=_sd)
+    for _ac, _sd in [(a_, d_) for d_ in (7, 8, 9) for a_ in ("F-16C", "FA-18C", "F-14BU")]:   # v0.41.188: jets fly CAS now, so the day's 30-minute support CAPs are not always a flyable F-16C package; try the other jets too                                  # v0.41.143: whether a day has a long enough support sortie depends on the day (the ground war moved the targets): the first package that has relief sorties
+        ses.new("Smoke support relief", _ac, 2, seed=_sd)
         for pk in [p_ for p_ in ses.packages() if ses.flyable(p_) and any(f_.tag in ("BASECAP", "HAVCAP", "CVCAP") for f_ in p_.flights)]:
             ses.fly(pk.number, ses.flyable(pk)[0].id)
             mz = zf.ZipFile(ses.state.pending["miz"]).read("mission").decode()
@@ -4918,6 +4918,7 @@ def check_87_cas_columns_on_roads(c):
     class Pt:
         def __init__(s, x, y, t): s.x, s.y = x, y
     import sqe.mission_builder as _m
+    old_map = _m.mapping
     _m.mapping = type("M", (), {"Point": Pt})
     old_av, old_sn = _r.available, _r.snap
     try:
@@ -4929,6 +4930,7 @@ def check_87_cas_columns_on_roads(c):
         assert b._road_pt(0.0, 0.0) is None
     finally:
         _r.available, _r.snap = old_av, old_sn
+        _m.mapping = old_map                 # v0.41.188: the stub leaked into every later check that builds a mission
     print("[CAS roads] On Road with a road close by, off-road otherwise")
 
 
@@ -4951,6 +4953,35 @@ def check_89_column_road_pull(c):
     assert _grd.snap_roads(st) == 0, "done once"
     _rdm.clear()
     print("[column road pull] a column up to 6 km from a road moves onto it, once, in older saves too")
+
+
+def check_91_jets_on_cas(c):
+    """v0.41.188: the F-16C and F/A-18C can fly CAS (Mavericks): the planner gives the job to A-10Cs when the air is clear and to jets when red fighters reach the target,
+    a jet pilot who picks a CAS job flies the CAS slot, and an AI-flown jet CAS flight counts JET_CAS_FACTOR of an A-10C one in the war sim."""
+    from sqe import war as _w, aircraft as _ac
+    from sqe.models import Role as _Ro
+    for k in ("F-16C", "FA-18C"):
+        assert _Ro.CAS in _ac.AIRCRAFT[k].roles, ("CAS role", k)
+    class F:
+        def __init__(s, a, pl=False): s.role, s.aircraft, s.is_player = _Ro.CAS, a, pl
+    assert _w.flight_weight(F("A-10C")) == 1.0 and abs(_w.flight_weight(F("F-16C")) - _w.JET_CAS_FACTOR) < 1e-9 and _w.flight_weight(F("F-16C", True)) == 1.0, "0.7 for AI jets only"
+    seen_jet = seen_hog = seen_pl = 0
+    for seed in range(1, 9):
+        s = mk(); s.new("JetCAS", "F-16C", 3, seed=seed); s.plan_day()
+        for p_ in s.packages():
+            if p_.objective.type.value != "CAS":
+                continue
+            for f_ in p_.flights:
+                if f_.role == _Ro.CAS:
+                    seen_jet += f_.aircraft != "A-10C"; seen_hog += f_.aircraft == "A-10C"
+            fl_ = s.flyable(p_, squadron_only=False)
+            if fl_ and not seen_pl:
+                f0_ = next((f for f in p_.flights if f.id == fl_[0].id), None)
+                if f0_ is not None and f0_.aircraft == "F-16C":
+                    assert f0_.role == _Ro.CAS, ("a Viper pilot on a CAS job flies the CAS slot", f0_.role)
+                    s.fly(p_.number, fl_[0].id); seen_pl = 1
+    assert seen_jet + seen_hog, "a CAS package to read"
+    print("[jets on CAS] CAS jets %d, A-10C flights %d, player Viper CAS flown %d" % (seen_jet, seen_hog, seen_pl))
 
 
 def check_90_road_scan_sector_anchors(c):
@@ -5235,6 +5266,7 @@ CHECKS = [
     check_88_ecm_probe,
     check_89_column_road_pull,
     check_90_road_scan_sector_anchors,
+    check_91_jets_on_cas,
 ]
 
 

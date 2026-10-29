@@ -159,6 +159,7 @@ def _next_callsign(st, sq, used: dict) -> str:
 
 
 LONG_RANGE_A2A = {"F-15C", "F-14BU"}
+CAS_JET_SWAY_NM = 400            # v0.41.188: the CAS squadron of the other kind is picked only when none of the preferred kind is free within this much of it (judgment call)
 A2A_SECONDARY_NM = 400          # an F-16 / F/A-18 squadron is picked for TARCAP or escort only when no long-range shooter is within this much of it
 
 
@@ -280,6 +281,7 @@ class PackageBuilder:
             n_fl = 1 if any(w.available > 0 for w in st.enemy_air) else 0
         else:
             n_fl = threat.defender_flights(threat.expected_defenders(st, tx, ty, iads))
+        self._hot = n_fl > 0                                  # v0.41.188: red fighters can reach the target: CAS jets first
         pkg = Package(id=f"pkg{number}", number=number, objective=obj, n_def=2 * n_fl, extra=extra)
         slots = self._slots(obj, self._defended(obj), n_fl)
         pp = st.player
@@ -294,6 +296,9 @@ class PackageBuilder:
             if not ok:
                 raise NoPlayerSlot(f"{psq.name} cannot fly any role in: {obj.description}")
             player_idx = max(ok, key=lambda i: PLAYER_ROLE_PREFERENCE[slots[i].role])
+            if obj.type == ObjectiveType.CAS and psq.aircraft != "A-10C":      # v0.41.188: a Hornet / Viper pilot picking a CAS job flies the Maverick slot, not the escort
+                cas_ = [i for i in ok if slots[i].role == Role.CAS]
+                player_idx = cas_[0] if cas_ else player_idx
             lead_service = spec.service
 
         chosen = []                      # (slot, squadron, count, is_player)
@@ -416,6 +421,8 @@ class PackageBuilder:
                 k += A2A_SECONDARY_NM
             if escort and sq.aircraft in LONG_RANGE_A2A:
                 k += A2A_SECONDARY_NM
+            if slot.role == Role.CAS and (sq.aircraft != "A-10C") == (not getattr(self, "_hot", False)):
+                k += CAS_JET_SWAY_NM         # v0.41.188: A-10Cs where the air is clear, F-16C / F/A-18C when red fighters reach the target
             return k
         if lead_service is None:
             return min(cands, key=key)
