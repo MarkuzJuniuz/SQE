@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.190, the CAS columns patrol first so they meet at the CAS TOT
+
+XO 2026-10-29 (his four L3 runs; "do some rounds before they move closer, pretend they're looking for something"). In the F-16C CAS run (13:21) the T-80Bs fired at 362 s, the six Abrams were dead by 741 s and the Mavericks started at 841 s: both columns reached gun range about 8 minutes before the CAS flight (the red column crept from 30 s, the task force arrived at its stop point at about 5 minutes). `mission_builder._patrol_via`: each column first drives an out-and-back leg away from the other (at most `CAS_PATROL_MAX_M` 900, none under `CAS_PATROL_MIN_M` 150), sized so the whole drive takes `t_contact - CAS_ARRIVE_LEAD_S` (60 s): the red column goes back along its own side and returns to its forward point, the task force goes back toward our side and returns to its stop point. No timers, so nothing to desync. All numbers are judgment calls. Not seen in DCS: how a long mixed column handles the turn-around on a road (the fallback is starting a column further back, or removing the leg); the red column is the CAS target and its position is where the flight is sent, so it patrols and ends where it always did. Smoke `check_92_cas_patrol_leg`.
+
 ## v0.41.189, A-10Cs keep the quieter CAS jobs
 
 XO 2026-10-29. Sim of #250 (30 days, 3 seeds a level): A-10Cs flew no CAS on L1 or L2 and only the overflow on L3, because "red fighters reach the target" (`n_fl` above 0) was true for almost every job. `packages.CAS_JET_MIN_DEF_FLIGHTS` 3: jets (F-16C, F/A-18C) take a CAS job first only when 3 or more red defender flights can reach the target, else the A-10Cs do (judgment call; the choice stays soft, the other kind flies when none is free). A Viper / Hornet pilot is also not offered the CAS slot of a quiet job while an A-10C squadron can fly it (XO: a quiet job is the A-10s' job); he gets it when no A-10C squadron is free or in range, and on every hot job. Smoke `check_91_jets_on_cas` also checks that.

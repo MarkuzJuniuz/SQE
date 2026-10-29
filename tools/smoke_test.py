@@ -4955,6 +4955,23 @@ def check_89_column_road_pull(c):
     print("[column road pull] a column up to 6 km from a road moves onto it, once, in older saves too")
 
 
+def check_92_cas_patrol_leg(c):
+    """v0.41.190: a CAS column that would reach the meeting too early drives an out-and-back leg first (away from the other column), sized so the whole drive takes about the time to the CAS TOT."""
+    import math as _m
+    from sqe.mission_builder import MissionBuilder as _MB
+    b = _MB.__new__(_MB)
+    st_, fin = (0.0, 0.0), (1000.0, 0.0)
+    v = b._patrol_via(st_, 180, fin, 3.0, 600.0)                    # 1800 m of driving for 1000 m of road: a 400 m leg each way
+    assert len(v) == 3 and v[1] == st_ and v[2] == fin, v
+    assert abs(_m.hypot(*v[0]) - 400.0) < 1.0 and v[0][0] < 0, ("out the other way, 400 m", v)
+    tot = _m.hypot(*v[0]) * 2 + 1000.0
+    assert abs(tot / 3.0 - 600.0) < 1.0, ("the drive takes the time asked", tot / 3.0)
+    assert b._patrol_via(st_, 180, fin, 3.0, 340.0) == [fin], "no leg when the direct drive already takes that long"
+    far = b._patrol_via(st_, 180, fin, 8.0, 900.0)
+    assert abs(_m.hypot(*far[0]) - _MB.CAS_PATROL_MAX_M) < 1.0, "the leg is capped"
+    print("[CAS patrol] out-and-back leg sized to the time, capped, skipped when not needed")
+
+
 def check_91_jets_on_cas(c):
     """v0.41.188: the F-16C and F/A-18C can fly CAS (Mavericks): the planner gives the job to A-10Cs when the air is clear and to jets when red fighters reach the target,
     a jet pilot who picks a CAS job flies the CAS slot, and an AI-flown jet CAS flight counts JET_CAS_FACTOR of an A-10C one in the war sim."""
@@ -5274,6 +5291,7 @@ CHECKS = [
     check_89_column_road_pull,
     check_90_road_scan_sector_anchors,
     check_91_jets_on_cas,
+    check_92_cas_patrol_leg,
 ]
 
 
