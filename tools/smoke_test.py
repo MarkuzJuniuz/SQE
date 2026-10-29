@@ -4981,6 +4981,13 @@ def check_91_jets_on_cas(c):
                     assert f0_.role == _Ro.CAS, ("a Viper pilot on a CAS job flies the CAS slot", f0_.role)
                     s.fly(p_.number, fl_[0].id); seen_pl = 1
     assert seen_jet + seen_hog, "a CAS package to read"
+    # v0.41.189: on a quiet job a jet pilot is not given the CAS slot while an A-10C squadron can fly it
+    from sqe.packages import PackageBuilder as _PB, CAS_JET_MIN_DEF_FLIGHTS as _MIN
+    assert _MIN >= 2, "threshold sane"
+    s = mk(); s.new("JetCASq", "F-16C", 1, seed=3); s.plan_day()
+    for p_ in s.packages():
+        if p_.objective.type.value == "CAS":
+            assert all(f_.aircraft == "A-10C" for f_ in p_.flights if f_.role == _Ro.CAS), ("quiet L1 CAS stays with the A-10Cs", [(f_.aircraft, f_.is_player) for f_ in p_.flights if f_.role == _Ro.CAS])
     print("[jets on CAS] CAS jets %d, A-10C flights %d, player Viper CAS flown %d" % (seen_jet, seen_hog, seen_pl))
 
 

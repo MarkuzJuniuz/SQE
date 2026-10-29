@@ -3,7 +3,7 @@
 
 ## v0.41.189, A-10Cs keep the quieter CAS jobs
 
-XO 2026-10-29. Sim of #250 (30 days, 3 seeds a level): A-10Cs flew no CAS on L1 or L2 and only the overflow on L3, because "red fighters reach the target" (`n_fl` above 0) was true for almost every job. `packages.CAS_JET_MIN_DEF_FLIGHTS` 3: jets (F-16C, F/A-18C) take a CAS job first only when 3 or more red defender flights can reach the target, else the A-10Cs do (judgment call; the choice stays soft, the other kind flies when none is free). Smoke unchanged apart from the existing `check_91_jets_on_cas`.
+XO 2026-10-29. Sim of #250 (30 days, 3 seeds a level): A-10Cs flew no CAS on L1 or L2 and only the overflow on L3, because "red fighters reach the target" (`n_fl` above 0) was true for almost every job. `packages.CAS_JET_MIN_DEF_FLIGHTS` 3: jets (F-16C, F/A-18C) take a CAS job first only when 3 or more red defender flights can reach the target, else the A-10Cs do (judgment call; the choice stays soft, the other kind flies when none is free). A Viper / Hornet pilot is also not offered the CAS slot of a quiet job while an A-10C squadron can fly it (XO: a quiet job is the A-10s' job); he gets it when no A-10C squadron is free or in range, and on every hot job. Smoke `check_91_jets_on_cas` also checks that.
 
 ## v0.41.188, Vipers and Hornets fly CAS (Mavericks), player-flyable
 
