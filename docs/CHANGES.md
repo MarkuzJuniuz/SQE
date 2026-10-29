@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.186, front-line columns move onto roads up to 6 km away (older saves too)
+
+XO 2026-10-28 ("units still on the forest"). Measured with XO's road scan (4101 points, 2 km grid) against the five CAS runs of that day: three had every column within 1.2 km of a scanned road, two (the kissing-distance runs) had them 3.4 to 5.2 km away, beyond the campaign's 3 km snap and the mission's 1.5 km snap, so the columns stayed in the forest. `ground.snap_roads`: columns (not fuel farms or depots) now snap within `ROAD_SNAP_COLUMN_M` 6000 (judgment call: the scan's largest gap is 5.8 km); a save snapped before at 3 km gets ONE more pass for the columns (`roads_wide` flag; their air defence moves with them; garrisons stay). The CAS contact point is the column's position, so the CAS fight moves with it. The mission-level snap (CAS_ROAD_SNAP_M 1.5 km) is unchanged. Risk: a column can move up to 6 km along the front on an old save; real DCS On Road routing is still untested. Smoke `check_89_column_road_pull`.
+
 ## v0.41.185, TARCAP pull-back: it protects the package, it does not hunt
 
 XO 2026-10-28 ("they go super maverick every single time on CAS and Strike"). Judgment calls, no source. (1) CAS under a long-range SAM: `CAS_STATION_NM` 25 to 30 nm from the target (further back). (2) CAS and strike TARCAP circles: `TARCAP_PKG_ZONE_NM` 15 nm at most (was 25 for the F-15C / F-14), and no point on the nearest BARCAP circle, so the circle no longer stretches toward red's patrols; BARCAP circles unchanged. SEAD / DEAD keep their circle. (3) Stations of JSOW / stand-off packages: `TARCAP_NEAR_NM` 26 to 18 (SEAD / DEAD), `TARCAP_NEAR_STRIKE_NM` 30 to 22 (strike), measured from the shooters' middle toward red. Risk: more bandits reach the package through the gap between the two circles.
