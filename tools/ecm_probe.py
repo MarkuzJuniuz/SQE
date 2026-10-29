@@ -82,7 +82,7 @@ timer.scheduleFunction(scan, nil, timer.getTime() + 5)
 env.info("SQEPROBE side-test script started for " .. pname)
 '''
 
-PROTOCOL = ("ECM probe, {label}. WARM START at Kutaisi (cold ramp, systems powered up by you). Fly or sit on the ramp, it does not matter. PROTOCOL: (1) 60 s with nothing touched. (2) ECM ON, wait 10 s, "
+PROTOCOL = ("ECM probe, {label}. AIR START at 20,000 ft and 350 kt near Kutaisi, a race-track toward the red SA-6 site (about 30 km NE of Kutaisi); stay level and in the air for the whole test (some jets may not run a jammer on the ground). PROTOCOL: (1) 60 s with nothing touched. (2) ECM ON, wait 10 s, "
             "ECM OFF, wait 10 s; three times. (3) Then press each other button on the ECM / EW panel ONE at a time with 10 s between, and write down the order "
             "you pressed them. (4) Optional: climb, head for the red SA-6 site 30 km NE of Kutaisi with ECM on, then repeat with ECM off, and note if it fired. "
             "Send dcs.log (lines with SQEPROBE) and Saved Games\\DCS\\Logs\\SQE_cockpit_changes.log if the Export logger is installed.")
@@ -95,7 +95,10 @@ def build(key: str, out_dir: Path) -> Path:
     m.start_time = datetime.datetime(2006, 6, 12, 9, 0)
     blue, red = m.country("USA"), m.country("Russia")
     ap = m.terrain.airports["Kutaisi"]
-    g = m.flight_group_from_airport(blue, f"Probe {label}", cls, ap, maintask=task.CAP, start_type=StartType.Warm, group_size=1)
+    # v2 (XO 2026-10-28: some jets may not run the jammer on the ground): an AIR start, 20,000 ft, 350 kt, heading for the SA-6 site, level orbit
+    g = m.flight_group(blue, f"Probe {label}", cls, None, mapping.Point(ap.position.x - 15000, ap.position.y - 15000, m.terrain), altitude=6096, speed=650, maintask=task.CAP, group_size=1)
+    g.add_waypoint(mapping.Point(ap.position.x + 40000, ap.position.y + 40000, m.terrain), 6096, 650)
+    g.add_waypoint(mapping.Point(ap.position.x - 15000, ap.position.y - 15000, m.terrain), 6096, 650)
     g.units[0].skill = Skill.Player
     g.units[0].name = f"Probe {label} 1-1"
     sx, sy = ap.position.x + 21000, ap.position.y + 21000
