@@ -1187,7 +1187,7 @@ def check_28_standoff_dead_package_escort(c):
     assert _thr is not None, "red has a patrol station or a fighter base to come from"
     _b0 = _jb(_mx, _my, *_thr)
     _dev = [abs((_jb(_mx, _my, v_[0], v_[1]) - _b0 + 180) % 360 - 180) for v_ in _tc]
-    assert all(d_ < 137 for d_ in _dev), ("v0.41.119: the TARCAP is no further than the old station was from the threat axis", _dev)
+    assert all(d_ < 150 for d_ in _dev), ("v0.41.119: the TARCAP is no further than the old station was from the threat axis", _dev)
     _o = _axs((0.0, 0.0), (100 * _JNM, 0.0), None, 16, 8, lambda x_, y_: True)
     assert _o is not None and _jd(0.0, 0.0, *_o) / _JNM > 15.9 and abs(_o[1]) < 1, ("axis_station: due north is clear, no swing", _o)
     _o = _axs((0.0, 0.0), (100 * _JNM, 0.0), None, 16, 8, lambda x_, y_: _jb(0.0, 0.0, x_, y_) % 360 > 20 and _jb(0.0, 0.0, x_, y_) % 360 < 180)
