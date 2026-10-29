@@ -20,7 +20,7 @@ from . import threatmap as tm
 from .models import AssetKind
 from .routes import NM, bearing, dist, offset
 
-STICK_NM = 30.0          # judgment call: the furthest a defensive pair sticks forward of its target (blue) or its field (red) toward the attackers
+STICK_NM = 20.0          # v0.41.191 (XO 2026-10-29: both sides save airframes before SAM missiles; was 30): judgment call: the furthest a defensive pair sticks forward of its target (blue) or its field (red) toward the attackers
 STEP_NM = 5.0
 FIELD_HOLD_NM = 15.0     # red with no SAM cover at all holds this far out from its own field toward the target (the old patrols sit 20-25 nm out)
 BLUE_COVER_AD = 0.3      # a blue field's air defence (sams.air_defence, 0 to 1) that counts as cover over what lies within BLUE_COVER_NM of it
@@ -82,7 +82,7 @@ STATION_SA10_NM = 35.0      # judgment call (v0.41.114): a defender sits under i
 STATION_RING_MARGIN_NM = 3.0  # judgment call: the sweep uses 20 nm outside the other rings; 3 keeps a CAP off a point-defence SAM's ring only
 
 
-RED_FWD_MAX_NM = 30.0     # v0.41.119 (XO 2026-10-22: red's pairs park over their base and watch the missiles blow up): a red station moves at most this far toward the incoming shooters (judgment call)
+RED_FWD_MAX_NM = 20.0     # v0.41.191 (was 30, to match STICK_NM) v0.41.119 (XO 2026-10-22: red's pairs park over their base and watch the missiles blow up): a red station moves at most this far toward the incoming shooters (judgment call)
 RED_GAP_NM = 20.0         # ...and stops this far short of them (judgment call: about the reach of an R-27 / R-77 shot at a shooter that turned round)
 RED_EXTRA_NM = {True: 15.0, False: 0.0}   # ...a long-range type (the Su-27) may work this far beyond its SAM cover, the MiG-29A not at all (judgment call)
 
