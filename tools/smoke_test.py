@@ -4932,6 +4932,27 @@ def check_87_cas_columns_on_roads(c):
     print("[CAS roads] On Road with a road close by, off-road otherwise")
 
 
+def check_89_column_road_pull(c):
+    """v0.41.186: an older save (columns snapped at 3 km before) gets ONE more pass that moves a column up to ROAD_SNAP_COLUMN_M onto a road; fuel farms and depots stay."""
+    from sqe import roads as _rdm, ground as _grd
+    _rdm.clear()
+    s = mk(); s.new("RoadPull", "F-16C", 2, seed=5); st = s.state
+    col = st.assets["armor_1"]
+    dep = next((a_ for a_ in st.assets.values() if a_.kind.name in ("FUEL", "DEPOT")), None)
+    d0 = (dep.x, dep.y) if dep else None
+    road = (col.x + 4000.0, col.y)
+    _rdm.from_points([road])                                   # one road, 4 km from the column: out of reach of the old 3 km snap
+    st.ground["roads"] = True
+    st.ground.pop("roads_wide", None)                          # an older save: snapped before, no extra pass yet
+    n = _grd.snap_roads(st)
+    assert n >= 1 and (col.x, col.y) == road and st.ground.get("roads_wide"), ("the extra pass moved the column onto the road point", n, (col.x, col.y), road)
+    if dep:
+        assert (dep.x, dep.y) == d0, "depots and fuel farms are not part of the extra pass"
+    assert _grd.snap_roads(st) == 0, "done once"
+    _rdm.clear()
+    print("[column road pull] a column up to 6 km from a road moves onto it, once, in older saves too")
+
+
 def check_88_ecm_probe(c):
     """v0.41.183: the ECM probe builds a mission per jet (candidate cockpit-parameter triggers, side-test script, SA-6 site) and the Export logger file is there."""
     import sys as _s, tempfile, zipfile
@@ -5190,6 +5211,7 @@ CHECKS = [
     check_86_tf_stop_distance,
     check_87_cas_columns_on_roads,
     check_88_ecm_probe,
+    check_89_column_road_pull,
 ]
 
 

@@ -270,20 +270,35 @@ def ensure_blue_garrisons(state) -> bool:
 ROAD_SNAP_M = 3000.0                     # a column or supply site moves onto a road if one is this close
 
 
+ROAD_SNAP_COLUMN_M = 6000.0           # v0.41.186 (XO 2026-10-28): a front-line COLUMN moves onto a road this close (judgment call: XO's 2026-10-28 CAS runs: two of five contact points had the nearest scanned road 3.4 to 5.2 km away, and the scan's biggest gap is 5.8 km)
+
+
+def _is_column(a) -> bool:
+    return a.kind == AssetKind.ARMOR and a.variant != "GARRISON"
+
+
 def snap_roads(state) -> int:
-    """Once, as soon as a road scan exists: front-line columns, fuel farms and depots (both sides) move onto the nearest road point (<= ROAD_SNAP_M,
-    and still on land); a column's air defence and anything guarding a moved site moves with it. Garrisons stay off the road, dug in. Returns how many moved."""
+    """Once, as soon as a road scan exists: front-line columns, fuel farms and depots (both sides) move onto the nearest road point (columns <= ROAD_SNAP_COLUMN_M,
+    the rest <= ROAD_SNAP_M, and still on land); a column's air defence and anything guarding a moved site moves with it. Garrisons stay off the road, dug in.
+    v0.41.186: older saves (snapped before, at 3 km) get ONE more pass for the columns that were out of reach, at ROAD_SNAP_COLUMN_M. Returns how many moved."""
     from . import roads, seacheck
     g = getattr(state, "ground", None)
-    if not g or g.get("roads") or not roads.available():
+    if not g or not roads.available():
+        return 0
+    first = not g.get("roads")
+    if not first and g.get("roads_wide"):
         return 0
     g["roads"] = True
+    g["roads_wide"] = True
     moved = 0
     pool = list(state.assets.values()) + list((getattr(state, "blue_assets", None) or {}).values())
     for a in pool:
-        if not (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or (a.kind == AssetKind.ARMOR and a.variant != "GARRISON")):
+        col = _is_column(a)
+        if not (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or col):
             continue
-        p = roads.snap(a.x, a.y, ROAD_SNAP_M)
+        if not first and not col:
+            continue                                                       # the extra pass is for columns only
+        p = roads.snap(a.x, a.y, ROAD_SNAP_COLUMN_M if col else ROAD_SNAP_M)
         if p is None or p == (a.x, a.y) or not seacheck.site_ok(*p):
             continue
         dx, dy = p[0] - a.x, p[1] - a.y
