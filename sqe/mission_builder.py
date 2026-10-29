@@ -74,7 +74,7 @@ STAGGER = {Role.SWEEP: -90, Role.ESCORT: -90, Role.SEAD: -60, Role.TARCAP: -TARC
 
 SEAD_ENGAGE_NM = 30            # a SEAD flight, or a fighter held at its stand-off point, engages only what is within this of that point
 DEAD_SEAD_LEAD_S = 300         # in a DEAD package the SEAD flight is on the site this long before the DEAD flight
-JSOW_TRAIL_S = 120             # v0.41.11: a Standoff DEAD's JSOW flight pushes this long after its HARM shooters, so it reaches SA-10 range once the
+JSOW_TRAIL_S = -30             # v0.41.195 (XO 2026-10-29: SEAD and DEAD should fire as one salvo, JSOWs a few seconds after the HARMs; the HARMs, being faster, draw the SAMs' attention first): was 120. In his run the JSOWs began launching 150-200 s after the HARMs (HARMs 545-682 s, JSOWs 752-904 s), so the push moves 150 s earlier (negative = ahead of the SEAD push). A judgment call from one run; retune after the next. v0.41.11 (below) is why it was 120: a Standoff DEAD's JSOW flight pushes this long after its HARM shooters, so it reaches SA-10 range once the
                                # HARMs have landed (about 2 min of flight). Was 0 (together): the v0.41.10 run, the SA-10 fired at the JSOW jets while the HARMs were in the air
                                # (on two axes), the HARMs go first, the JSOWs land a few minutes later on a radar that is dead or has shut down.
                                # v0.39.19 had the JSOW flight 160 s ahead so the WEAPONS would land together: it went in alone and died (v0.39.19 run, Viper 2).
