@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.195, JSOWs launch with the HARMs
+
+XO 2026-10-29: the SEAD HARMs and the Standoff DEAD JSOWs should go out as one salvo; the faster HARMs draw the SAMs first, and the SAMs fire a salvo quickly and then need time to reload. His run: HARMs launched 545-682 s, JSOWs 752-904 s. `JSOW_TRAIL_S` 120 to -30: the JSOW flight pushes 150 s earlier. Target gap: JSOWs 3-5 s after the HARMs; a constant cannot hit that, it is a first cut from one run. v0.41.11 set 120 because the SA-10 fired on JSOW jets while HARMs were in the air; that risk returns (the JSOW launch point is 30 nm out, the HARM point 35). Retune after the next Standoff DEAD run.
+
 ## v0.41.194, fighter stations keep 45 nm from a live SA-10
 
 XO 2026-10-29 (merged run, second package): Dodge 4's TARCAP orbit drifted from 39 to 30 nm of the Sukhumi SA-10 and both F-15Cs died at 335 / 348 s. The station point was kept 35 nm out, but the racetrack's near end swings 5-9 nm closer. New `routes.SA10_STATION_NM` 45 for fighter stations (TARCAP / escort / sweep station search, `_sam_clear` used by the support CAPs and scramble stations); routes still avoid at `SA10_AVOID_NM` 35. Judgment call. Carrier / base CAPs also keep 45 nm now.
