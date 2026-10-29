@@ -13,6 +13,7 @@ from .packages import Package
 from .state import CampaignState
 from .loadouts import ENEMY_FIGHTERS
 
+JET_CAS_FACTOR = 0.7       # v0.41.188: an AI-flown F-16C / F/A-18C CAS sortie counts 0.7 of an A-10C one (judgment call: Mavericks only, no gun or CBU, one pass; no public source). A player's own sortie is scored from the debrief.
 ROLE_WEIGHT = {Role.STRIKE: 1.0, Role.SEAD: 0.9, Role.TARCAP: 0.6, Role.ESCORT: 0.7, Role.SWEEP: 0.7, Role.CAP: 0.6, Role.CAS: 1.0}
 
 
@@ -372,13 +373,20 @@ def site_blind_today(state, sid: str) -> bool:
     return bool(((state.raids or {}).get("sead") or {}).get(sid) and sead_stage_in_plan(state, sid, SEAD_AIMS))
 
 
+def flight_weight(f) -> float:
+    w = ROLE_WEIGHT[f.role]
+    if f.role == Role.CAS and f.aircraft != "A-10C" and not f.is_player:
+        w *= JET_CAS_FACTOR
+    return w
+
+
 class WarSimulator:
     def __init__(self, d: Difficulty, rng: random.Random | None = None):
         self.d, self.rng = d, rng or random.Random()
 
     def odds(self, state: CampaignState, pkg: Package) -> tuple:
         obj = pkg.objective
-        strength = sum(f.count * ROLE_WEIGHT[f.role] for f in pkg.flights)
+        strength = sum(f.count * flight_weight(f) for f in pkg.flights)
         has_sead = any(f.role == Role.SEAD for f in pkg.flights)
         sam = 0.0
         if obj.type not in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
@@ -418,7 +426,7 @@ class WarSimulator:
         t = state.assets[pkg.objective.target_id]
         wings = sorted([w for w in state.enemy_air if w.available > 0 and w.base_asset_id in state.assets],
                        key=lambda w: math.hypot(state.assets[w.base_asset_id].x - t.x, state.assets[w.base_asset_id].y - t.y))[:3]
-        strength = sum(f.count * ROLE_WEIGHT[f.role] for f in pkg.flights)
+        strength = sum(f.count * flight_weight(f) for f in pkg.flights)
         red = sum(w.available for w in wings) * (0.6 + 0.6 * d.iads) * 0.25
         p = max(0.02, min(0.98, (strength / (strength + red) if strength + red else 0.0) + tempo.get(state, "AIR")))
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
@@ -444,7 +452,7 @@ class WarSimulator:
     def _resolve_raid(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         d, rng = self.d, self.rng
         bw = state.enemy_air_at(pkg.extra.get("bomber_wing", "")) if pkg.extra else None
-        strength = sum(f.count * ROLE_WEIGHT[f.role] for f in pkg.flights)
+        strength = sum(f.count * flight_weight(f) for f in pkg.flights)
         esc = pkg.extra.get("escorts", 0)
         if pkg.extra.get("land"):           # v0.41.30: the batteries round the raid's target fight it too (sams.covering_ad, AD_RAID_WEIGHT)
             from .sams import covering_ad, AD_RAID_WEIGHT

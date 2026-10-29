@@ -4953,6 +4953,35 @@ def check_89_column_road_pull(c):
     print("[column road pull] a column up to 6 km from a road moves onto it, once, in older saves too")
 
 
+def check_91_jets_on_cas(c):
+    """v0.41.188: the F-16C and F/A-18C can fly CAS (Mavericks): the planner gives the job to A-10Cs when the air is clear and to jets when red fighters reach the target,
+    a jet pilot who picks a CAS job flies the CAS slot, and an AI-flown jet CAS flight counts JET_CAS_FACTOR of an A-10C one in the war sim."""
+    from sqe import war as _w, aircraft as _ac
+    from sqe.models import Role as _Ro
+    for k in ("F-16C", "FA-18C"):
+        assert _Ro.CAS in _ac.AIRCRAFT[k].roles, ("CAS role", k)
+    class F:
+        def __init__(s, a, pl=False): s.role, s.aircraft, s.is_player = _Ro.CAS, a, pl
+    assert _w.flight_weight(F("A-10C")) == 1.0 and abs(_w.flight_weight(F("F-16C")) - _w.JET_CAS_FACTOR) < 1e-9 and _w.flight_weight(F("F-16C", True)) == 1.0, "0.7 for AI jets only"
+    seen_jet = seen_hog = seen_pl = 0
+    for seed in range(1, 9):
+        s = mk(); s.new("JetCAS", "F-16C", 3, seed=seed); s.plan_day()
+        for p_ in s.packages():
+            if p_.objective.type.value != "CAS":
+                continue
+            for f_ in p_.flights:
+                if f_.role == _Ro.CAS:
+                    seen_jet += f_.aircraft != "A-10C"; seen_hog += f_.aircraft == "A-10C"
+            fl_ = s.flyable(p_, squadron_only=False)
+            if fl_ and not seen_pl:
+                f0_ = next((f for f in p_.flights if f.id == fl_[0].id), None)
+                if f0_ is not None and f0_.aircraft == "F-16C":
+                    assert f0_.role == _Ro.CAS, ("a Viper pilot on a CAS job flies the CAS slot", f0_.role)
+                    s.fly(p_.number, fl_[0].id); seen_pl = 1
+    assert seen_jet + seen_hog, "a CAS package to read"
+    print("[jets on CAS] CAS jets %d, A-10C flights %d, player Viper CAS flown %d" % (seen_jet, seen_hog, seen_pl))
+
+
 def check_90_road_scan_sector_anchors(c):
     """v0.41.187: the road scan also covers the ground-war sector centres (they sit up to 40 km from the airfield discs and the straight front line), and a depot or fuel farm
     reaches a road as far as a column (6 km)."""
@@ -5235,6 +5264,7 @@ CHECKS = [
     check_88_ecm_probe,
     check_89_column_road_pull,
     check_90_road_scan_sector_anchors,
+    check_91_jets_on_cas,
 ]
 
 
