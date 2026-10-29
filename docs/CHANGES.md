@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.185, TARCAP pull-back: it protects the package, it does not hunt
+
+XO 2026-10-28 ("they go super maverick every single time on CAS and Strike"). Judgment calls, no source. (1) CAS under a long-range SAM: `CAS_STATION_NM` 25 to 30 nm from the target (further back). (2) CAS and strike TARCAP circles: `TARCAP_PKG_ZONE_NM` 15 nm at most (was 25 for the F-15C / F-14), and no point on the nearest BARCAP circle, so the circle no longer stretches toward red's patrols; BARCAP circles unchanged. SEAD / DEAD keep their circle. (3) Stations of JSOW / stand-off packages: `TARCAP_NEAR_NM` 26 to 18 (SEAD / DEAD), `TARCAP_NEAR_STRIKE_NM` 30 to 22 (strike), measured from the shooters' middle toward red. Risk: more bandits reach the package through the gap between the two circles.
+
 ## v0.41.184, ECM probe v2: air start, RWR / warning-panel / display logging, parser fix
 
 XO 2026-10-28, after the first F-15C log (FC3: `list_cockpit_params()` worked but held only `BASE_SENSOR_*` and flight-model values, no switch, zero cockpit-argument changes, none of the 60 candidate names fired, draw arguments showed no toggle) and two hints: the F-15C's RWR shows a flashing X-shaped symbol while jamming, and some jets may not run the jammer on the ground. (1) `tools/ecm_probe.py`: the player now starts IN THE AIR (20,000 ft, 350 kt, a race-track toward the red SA-6 site); the briefing protocol says so. (2) `tools/ecm_export_logger.lua`: also logs `LoGetTWSInfo()` (RWR mode and emitter count on change, full dump when either changes), `LoGetMCPState()` and `list_indication(0..20)` changes; prints a `NOTE GetDevice(0): n of 1000 cockpit arguments readable` line (the first log had zero `ARG` lines, unexplained); the parameter parser splits at the LAST colon, so `ExternalFM:HumanInfo:nz:0.0` is one name (the first log was flooded with false `PARAM ExternalFM` lines). Exercised against a stubbed DCS API (lupa); not in DCS. Tools only.
