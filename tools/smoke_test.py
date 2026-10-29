@@ -1811,12 +1811,12 @@ def check_31r_scramble_stations(c):
     assert _m.hypot(f1_ - thr_[0], g1_ - thr_[1]) <= _m.hypot(f0_ - thr_[0], g0_ - thr_[1]) + 1, "the long-range type reaches at least as far forward"
     assert sc.red_station_vs(st, (a0.x + 200 * _NM, a0.y), a0.x, a0.y, None) == sc.red_station(st, (a0.x + 200 * _NM, a0.y), a0.x, a0.y), "no threat = the old station"
     assert sc.red_station_vs(st, (far[0] + 100 * _NM, far[1]), far[0], far[1], (far[0] - 80 * _NM, far[1]))[1] == "field", "no cover: it stays over its field"
-    # blue: never further than STICK_NM from the target, and clear of red's SAM rings when it moves
+    # blue: never further than DEFENDER_FWD_MAX_NM from the target, and clear of red's SAM rings when it moves
     from sqe.sweep import clear_for_sweep
     for b in [b_ for b_ in st.bases.values() if b_.kind.value == "AIRFIELD"][:3]:
         org = (b.x + 120 * _NM, b.y + 40 * _NM)
         (x, y), why = sc.blue_station(st, b.x, b.y, org)
-        assert _m.hypot(x - b.x, y - b.y) <= sc.STICK_NM * _NM + 1, ("blue sticks forward by no more than STICK_NM", why)
+        assert _m.hypot(x - b.x, y - b.y) <= sc.DEFENDER_FWD_MAX_NM * _NM + 1, ("blue sticks forward by no more than DEFENDER_FWD_MAX_NM", why)
         assert why in ("target", "forward", "clear")
     # missions: every red fighter group built for the sortie ends its route with a landing
     n_red = n_land = 0
@@ -1833,7 +1833,7 @@ def check_31r_scramble_stations(c):
                     n_land += 1
         s.state.pending = None
     assert n_red == n_land, ("every red CAP / alert route ends in a landing", n_red, n_land)
-    print(f"[scramble] red covered target = station, no cover = over the field, blue forward <= {sc.STICK_NM:.0f} nm under cover; {n_red} red CAP / alert routes, all end in a landing")
+    print(f"[scramble] red covered target = station, no cover = over the field, blue forward <= {sc.DEFENDER_FWD_MAX_NM:.0f} nm under cover; {n_red} red CAP / alert routes, all end in a landing")
 
 
 def check_31s_scramble_timing_fuel(c):

@@ -5,13 +5,13 @@ Until now both sides' alert pairs flew a straight line to the target and orbited
 on the raid's target). Now the pair takes a STATION:
 
 * the pair stations as far forward of the target toward the attackers (or, for red, from its own field toward the target) as it can while it is
-  still under its own side's SAM cover (STICK_NM at most), in steps of STEP_NM;
+  still under its own side's SAM cover (DEFENDER_FWD_MAX_NM at most), in steps of STEP_NM;
 * blue's station is also clear of red's SAM rings (the sweep's rule, `sweep.clear_for_sweep`): the 2026-10-16 CAP-on-the-target gap;
 * with no cover at all red holds over its own field, and blue holds on the target as before.
 
 Doctrine: air-defence doctrine splits the air into a fighter engagement zone, a missile engagement zone and a joint zone where both work at once
 (JP 3-01 terms; the definitions here are from a summary card, not the manual's text), so a defensive pair working at the edge of its own SAM cover is a
-recognised shape. How far forward it sticks (STICK_NM), the step and the cover margin are judgment calls. Pure planning, no pydcs.
+recognised shape. How far forward it sticks (DEFENDER_FWD_MAX_NM), the step and the cover margin are judgment calls. Pure planning, no pydcs.
 """
 from __future__ import annotations
 import math
@@ -20,7 +20,7 @@ from . import threatmap as tm
 from .models import AssetKind
 from .routes import NM, bearing, dist, offset
 
-STICK_NM = 20.0          # v0.41.191 (XO 2026-10-29: both sides save airframes before SAM missiles; was 30): judgment call: the furthest a defensive pair sticks forward of its target (blue) or its field (red) toward the attackers
+DEFENDER_FWD_MAX_NM = 20.0   # v0.41.191 (XO 2026-10-29: both sides save airframes before SAM missiles; was STICK_NM 30 and red's RED_FWD_MAX_NM 30, now one number): judgment call: the furthest a defensive pair sticks forward of its target (blue) or its field (red) toward the attackers
 STEP_NM = 5.0
 FIELD_HOLD_NM = 15.0     # red with no SAM cover at all holds this far out from its own field toward the target (the old patrols sit 20-25 nm out)
 BLUE_COVER_AD = 0.3      # a blue field's air defence (sams.air_defence, 0 to 1) that counts as cover over what lies within BLUE_COVER_NM of it
@@ -56,7 +56,7 @@ def _walk(frm, to, step_nm=STEP_NM):
 
 def red_station(state, field_xy, tx, ty):
     """Red's alert pair against blue at (tx, ty): the covered point nearest the target on the line from its field (the target itself when it is
-    covered), at most STICK_NM beyond the cover; else over its own field. -> ((x, y), why) with why in 'target' / 'edge' / 'field'."""
+    covered), at most DEFENDER_FWD_MAX_NM beyond the cover; else over its own field. -> ((x, y), why) with why in 'target' / 'edge' / 'field'."""
     if red_covered(state, tx, ty):
         return (tx, ty), "target"
     for p in _walk((tx, ty), field_xy):
@@ -82,7 +82,7 @@ STATION_SA10_NM = 35.0      # judgment call (v0.41.114): a defender sits under i
 STATION_RING_MARGIN_NM = 3.0  # judgment call: the sweep uses 20 nm outside the other rings; 3 keeps a CAP off a point-defence SAM's ring only
 
 
-RED_FWD_MAX_NM = 20.0     # v0.41.191 (was 30, to match STICK_NM) v0.41.119 (XO 2026-10-22: red's pairs park over their base and watch the missiles blow up): a red station moves at most this far toward the incoming shooters (judgment call)
+RED_FWD_MAX_NM = DEFENDER_FWD_MAX_NM    # v0.41.191: the same cap as blue's alert pairs (a red station moves at most this far toward the incoming shooters)
 RED_GAP_NM = 20.0         # ...and stops this far short of them (judgment call: about the reach of an R-27 / R-77 shot at a shooter that turned round)
 RED_EXTRA_NM = {True: 15.0, False: 0.0}   # ...a long-range type (the Su-27) may work this far beyond its SAM cover, the MiG-29A not at all (judgment call)
 
@@ -120,19 +120,19 @@ def clear_for_station(state, x, y) -> bool:
 
 
 def blue_station(state, tx, ty, origin_xy):
-    """Blue's alert pair against a raid on (tx, ty): on the line from the target toward where the raid comes from, as far forward (STICK_NM at
+    """Blue's alert pair against a raid on (tx, ty): on the line from the target toward where the raid comes from, as far forward (DEFENDER_FWD_MAX_NM at
     most) as it is still under blue's air defence and clear of red's SAM rings; else on the target (when that is clear of red's SAMs) or the
     nearest clear point back toward the field side. -> ((x, y), why) with why in 'target' / 'forward' / 'clear'."""
     clear_for_sweep = clear_for_station
     if origin_xy is None or dist(tx, ty, *origin_xy) < 2 * NM:
         return (tx, ty), "target"
-    fwd = offset(tx, ty, bearing(tx, ty, *origin_xy), min(STICK_NM * NM, dist(tx, ty, *origin_xy)))
+    fwd = offset(tx, ty, bearing(tx, ty, *origin_xy), min(DEFENDER_FWD_MAX_NM * NM, dist(tx, ty, *origin_xy)))
     for p in reversed(_walk((tx, ty), fwd)):                       # furthest forward first
         if blue_covered(state, *p) and clear_for_sweep(state, *p):
             return p, ("target" if dist(*p, tx, ty) < 1 * NM else "forward")
     if clear_for_sweep(state, tx, ty):
         return (tx, ty), "target"
-    back = offset(tx, ty, bearing(tx, ty, *origin_xy) + 180, STICK_NM * NM)
+    back = offset(tx, ty, bearing(tx, ty, *origin_xy) + 180, DEFENDER_FWD_MAX_NM * NM)
     for p in _walk((tx, ty), back):
         if clear_for_sweep(state, *p):
             return p, "clear"
