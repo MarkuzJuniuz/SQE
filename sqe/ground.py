@@ -278,8 +278,7 @@ def _is_column(a) -> bool:
 
 
 def snap_roads(state) -> int:
-    """Once, as soon as a road scan exists: front-line columns, fuel farms and depots (both sides) move onto the nearest road point (columns <= ROAD_SNAP_COLUMN_M,
-    the rest <= ROAD_SNAP_M, and still on land); a column's air defence and anything guarding a moved site moves with it. Garrisons stay off the road, dug in.
+    """Once, as soon as a road scan exists: front-line columns, fuel farms and depots (both sides) move onto the nearest road point (<= ROAD_SNAP_COLUMN_M, and still on land); a column's air defence and anything guarding a moved site moves with it. Garrisons stay off the road, dug in.
     v0.41.186: older saves (snapped before, at 3 km) get ONE more pass for the columns that were out of reach, at ROAD_SNAP_COLUMN_M. Returns how many moved."""
     from . import roads, seacheck
     g = getattr(state, "ground", None)
@@ -296,9 +295,9 @@ def snap_roads(state) -> int:
         col = _is_column(a)
         if not (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or col):
             continue
-        if not first and not col:
-            continue                                                       # the extra pass is for columns only
-        p = roads.snap(a.x, a.y, ROAD_SNAP_COLUMN_M if col else ROAD_SNAP_M)
+        if not first and a.kind in (AssetKind.FUEL, AssetKind.DEPOT) and roads.snap(a.x, a.y, ROAD_SNAP_M) is not None:
+            continue                                                       # the extra pass: columns and supply sites the 3 km pass could not reach
+        p = roads.snap(a.x, a.y, ROAD_SNAP_COLUMN_M)                                  # v0.41.187: depots and fuel farms reach as far as columns (a supply site must be reachable by road)
         if p is None or p == (a.x, a.y) or not seacheck.site_ok(*p):
             continue
         dx, dy = p[0] - a.x, p[1] - a.y
