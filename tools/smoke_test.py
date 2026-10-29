@@ -4918,6 +4918,7 @@ def check_87_cas_columns_on_roads(c):
     class Pt:
         def __init__(s, x, y, t): s.x, s.y = x, y
     import sqe.mission_builder as _m
+    old_map = _m.mapping
     _m.mapping = type("M", (), {"Point": Pt})
     old_av, old_sn = _r.available, _r.snap
     try:
@@ -4929,6 +4930,7 @@ def check_87_cas_columns_on_roads(c):
         assert b._road_pt(0.0, 0.0) is None
     finally:
         _r.available, _r.snap = old_av, old_sn
+        _m.mapping = old_map                 # v0.41.188: the stub leaked into every later check that builds a mission
     print("[CAS roads] On Road with a road close by, off-road otherwise")
 
 
