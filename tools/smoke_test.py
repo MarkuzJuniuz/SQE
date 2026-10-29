@@ -1521,8 +1521,8 @@ def check_31g_blue_support_relief(c):
     ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
     acts = {}
-    for _sd in (7, 8, 9):                                  # v0.41.143: whether a day has a long enough support sortie depends on the day (the ground war moved the targets): the first package that has relief sorties
-        ses.new("Smoke support relief", "F-16C", 2, seed=_sd)
+    for _ac, _sd in [(a_, d_) for d_ in (7, 8, 9) for a_ in ("F-16C", "FA-18C", "F-14BU")]:   # v0.41.188: jets fly CAS now, so the day's 30-minute support CAPs are not always a flyable F-16C package; try the other jets too                                  # v0.41.143: whether a day has a long enough support sortie depends on the day (the ground war moved the targets): the first package that has relief sorties
+        ses.new("Smoke support relief", _ac, 2, seed=_sd)
         for pk in [p_ for p_ in ses.packages() if ses.flyable(p_) and any(f_.tag in ("BASECAP", "HAVCAP", "CVCAP") for f_ in p_.flights)]:
             ses.fly(pk.number, ses.flyable(pk)[0].id)
             mz = zf.ZipFile(ses.state.pending["miz"]).read("mission").decode()
