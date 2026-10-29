@@ -4972,6 +4972,31 @@ def check_92_cas_patrol_leg(c):
     print("[CAS patrol] out-and-back leg sized to the time, capped, skipped when not needed")
 
 
+def check_93_supply_buildings(c):
+    """v0.41.192: a red fuel farm / depot is built as static buildings (named `<asset>|b<n>`, unit name too) guarded by a Shilka group, no supply trucks; the manifest lists the
+    buildings so health reads back from survivors; blue's raid-target depot / fuel farm uses the same builder."""
+    import re as _re, zipfile
+    from sqe.models import AssetKind as _AK
+    from sqe.raid_spawns import SUPPLY_BUILDINGS as _SB
+    ses = fresh_session(3, 5)
+    ses.plan_day()
+    a_ = next(x for x in ses.state.assets.values() if x.kind in _SB and not x.destroyed)
+    p_ = next(x for x in ses.packages() if ses.flyable(x))
+    ses.full_map = True                                  # the stress option builds every live site: a supply site is among them
+    try:
+        rr = ses.fly(p_.number, ses.flyable(p_)[0].id)
+    finally:
+        ses.full_map = False
+    g_ = next(g for g in rr.manifest.groups if g["kind"] == "asset" and g["ref"] == a_.id)
+    blds = [n for n in g_["units"] if "|b" in n]
+    assert blds and g_["base_count"] >= len(blds), (g_["units"], g_["base_count"])
+    mis = zipfile.ZipFile(rr.miz).read("mission").decode("utf8", "ignore")
+    for n in blds:
+        assert '["name"]="%s"' % n in mis, ("the unit itself carries the name the debrief reports", n)
+    assert "ATZ_10" not in mis and "KAMAZ" not in mis, "no supply trucks any more"
+    print("[supply buildings] %s: %d buildings + guard, named and in the manifest" % (a_.kind.value, len(blds)))
+
+
 def check_91_jets_on_cas(c):
     """v0.41.188: the F-16C and F/A-18C can fly CAS (Mavericks): the planner gives the job to A-10Cs when the air is clear and to jets when red fighters reach the target,
     a jet pilot who picks a CAS job flies the CAS slot, and an AI-flown jet CAS flight counts JET_CAS_FACTOR of an A-10C one in the war sim."""
@@ -5292,6 +5317,7 @@ CHECKS = [
     check_90_road_scan_sector_anchors,
     check_91_jets_on_cas,
     check_92_cas_patrol_leg,
+    check_93_supply_buildings,
 ]
 
 

@@ -71,6 +71,12 @@ ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's fl
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
 
 
+SUPPLY_BUILDINGS = {      # v0.41.192: what a supply site looks like on the map, for both sides (fuel: tanks and a store; depot: warehouses and ammo bunkers)
+    AssetKind.DEPOT: [statics.Warehouse.Warehouse, statics.Warehouse._Ammunition_depot, statics.Warehouse.Warehouse, statics.Warehouse._Ammunition_depot],
+    AssetKind.FUEL: [statics.Warehouse.Tank, statics.Warehouse.Tank_2, statics.Warehouse.Tank_3, statics.Warehouse.Warehouse],
+}
+
+
 class RaidSpawns:
     def _raid_marshal(self, ba, w1, station, dx, dy):
         """v0.41.29: where a red raid marshals: on its way in (field -> w1 -> station), inside the cover of a live red SAM site and at least
@@ -350,6 +356,21 @@ class RaidSpawns:
             rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
 
     # ---- what the raiders are going for: the friendly garrison, supply site or troops they will bomb ---------------------------
+    def _place_buildings(self, country, aim, kind, cx, cy, hdg, scale=1.0):
+        """v0.41.192 (XO 2026-10-29: a fuel farm or depot is buildings, not trucks): the static buildings of a supply site, for either side. Returns their
+        unit names `<aim>|b<n>` (the debrief reports a static's death by its UNIT name, so the unit is named, not only the group). `scale` < 1 leaves out
+        some of them (a site already damaged); at least one stays."""
+        parts = SUPPLY_BUILDINGS.get(kind) or []
+        n = max(1, round(len(parts) * scale)) if parts else 0
+        names = []
+        for k, vt in enumerate(parts[:n]):
+            x, y = offset(cx, cy, k * (360 / len(parts)) + hdg, 40 + 12 * k)
+            nm = f"{aim}|b{k + 1}"          # b: never clashes with a guard vehicle `<aim>|<n>` in the same site
+            sg = self.m.static_group(country, nm, vt, mapping.Point(x, y, self.t), heading=hdg)
+            sg.units[0].name = nm
+            names.append(nm)
+        return names
+
     def _spawn_raid_target(self, package, base, aim, dx, dy, manifest):
         """Put the thing under attack on the map: a field's garrison, a fuel farm / depot, or a column of friendly troops. They are what the
         raiders bomb, so the intercepting player sees what is at stake. Small groups (a handful of vehicles or statics)."""
@@ -359,17 +380,7 @@ class RaidSpawns:
         pt = lambda x, y: mapping.Point(x, y, self.t)
         if kind == "supply":
             a = st.blue_assets[aim]
-            hdg = r.randint(0, 359)
-            if a.kind == AssetKind.DEPOT:
-                parts = [statics.Warehouse.Warehouse, statics.Warehouse._Ammunition_depot, statics.Warehouse.Warehouse]
-            else:
-                parts = [statics.Warehouse.Tank, statics.Warehouse.Tank_2, statics.Warehouse.Tank_3, statics.Warehouse.Warehouse]
-            names = []
-            for k, vt in enumerate(parts):
-                x, y = offset(a.x, a.y, k * (360 / len(parts)) + hdg, 40 + 12 * k)
-                nm = f"{aim}|{k + 1}"
-                self.m.static_group(self.usa, nm, vt, pt(x, y), heading=hdg)
-                names.append(nm)
+            names = self._place_buildings(self.usa, aim, a.kind, a.x, a.y, r.randint(0, 359))
             manifest.add("blue_site", aim, names, label=a.name)
             return
         if kind == "sector":
