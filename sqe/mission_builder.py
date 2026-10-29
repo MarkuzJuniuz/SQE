@@ -2146,6 +2146,19 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     CAS_APPROACH_M = 2500.0       # v0.41.137: the friendly task force starts at most this far from the contact point (v0.41.170: 6000; XO 2026-10-28 run: it stalled 0.7 km out, 11 min in, and never met the column; judgment call, closer hides the stall)
     CAS_TF_STOP_M = 1500          # v0.41.179 (XO 2026-10-28; was 400 m): the task force stops this far short of the contact point. Three runs ended with the columns at 190-400 m, in forest, and no fire from either side (DCS trees block ground line of sight, unproven); a test of whether more room lets them fight. Judgment call.
     CAS_TF_SPEED_MARGIN = 1.3     # v0.41.157: the friendly task force drives this much faster than the plan (judgment call, from one DCS run: it took about 36% longer than planned)
+    CAS_PATROL_MAX_M = 900.0      # v0.41.190 (XO 2026-10-29 run: the red column and the task force were in gun range at 6 min, the Mavericks came at 14): each column first drives an out-and-back "patrol" leg of at most this length away from the other, so it reaches the meeting at about the CAS TOT (judgment call)
+    CAS_PATROL_MIN_M = 150.0      # a shorter leg is skipped
+    CAS_ARRIVE_LEAD_S = 60.0      # the columns meet this long before the CAS flight arrives
+
+    def _patrol_via(self, start, away_brg, final, speed_ms, t_arrive):
+        """v0.41.190: the route points for a column that must take about t_arrive seconds to get from `start` to `final` at speed_ms: out `away_brg` and back
+        (half the extra distance each way, at most CAS_PATROL_MAX_M), then on to `final`. Just [final] when no leg is needed."""
+        direct = math.hypot(final[0] - start[0], final[1] - start[1])
+        leg = (speed_ms * t_arrive - direct) / 2.0
+        if leg < self.CAS_PATROL_MIN_M:
+            return [final]
+        return [offset(start[0], start[1], away_brg, min(leg, self.CAS_PATROL_MAX_M)), start, final]
+
     CAS_ENEMY_ADVANCE_M = 1200.0  # v0.41.137: the enemy column creeps this far toward us; it never starts far from the CAS point
 
     def _spawn_cas_support(self, package, plan, geom, manifest):
@@ -2167,7 +2180,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if enemy is not None and not static:
             # v0.41.137: the column stays where the CAS flight is sent. It used to start up to 10 km back and drive 13 km to be at the CAS point
             # at the TOT; any shortfall in DCS's real speed (slopes, a long mixed column, stopping to fight) left it kilometres from the point
-            self._drive_road(enemy, [offset(cx, cy, brg, self.CAS_ENEMY_ADVANCE_M)], min(v, 3.5))
+            t_arr_ = max(0.0, t_contact - self.CAS_ARRIVE_LEAD_S)
+            self._drive_road(enemy, self._patrol_via((cx, cy), brg + 180, offset(cx, cy, brg, self.CAS_ENEMY_ADVANCE_M), min(v, 3.5), t_arr_), min(v, 3.5))   # v0.41.190: a patrol leg away from us first
         fx, fy = offset(cx, cy, brg + r.uniform(-6, 6), dist_run)
         if not static:
             rp_ = self._road_pt(fx, fy)                           # v0.41.180: the task force starts on a road too, and meets the column along it
@@ -2185,10 +2199,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             # contact point (static garrison: 2 km short) and holds, weapons free, so the survivors come to it; and it drives CAS_TF_SPEED_MARGIN faster than the
             # plan, because DCS runs a mixed off-road column about 30% slower (measured in that run)
             stop_ = [offset(cx, cy, brg, 2000 if static else self.CAS_TF_STOP_M)]
+            v_tf_ = min(8.0, v * self.CAS_TF_SPEED_MARGIN)
+            via_ = self._patrol_via((fx, fy), brg, stop_[0], v_tf_, max(0.0, t_contact - self.CAS_ARRIVE_LEAD_S))   # v0.41.190: our column also drives a patrol leg (away from the enemy) first
             if static:
-                self._drive(g, stop_, min(8.0, v * self.CAS_TF_SPEED_MARGIN))
+                self._drive(g, via_, v_tf_)
             else:
-                self._drive_road(g, stop_, min(8.0, v * self.CAS_TF_SPEED_MARGIN))
+                self._drive_road(g, via_, v_tf_)
             manifest.add("friendly_ground", tid or "", names)
         jx, jy = offset(fx, fy, brg + 90, 120)
         jt = self.m.vehicle_group(self.usa, f"Axeman {package.number}-1", _UN.Hummer, mapping.Point(jx, jy, self.t), heading=(int(brg) + 180) % 360, group_size=1)
