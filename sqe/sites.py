@@ -14,7 +14,7 @@ from pathlib import Path
 
 SAM_REACH_M = 12000.0         # a SAM site moves to a spot at most this far from where the doctrinal placement put it (judgment call)
 SUPPLY_REACH_M = 12000.0      # same for a fuel farm / depot
-FOLLOWER_REACH_M = 5000.0     # a garrison / a column's air defence moves to a spot at most this far from where it stood next to its parent
+FOLLOWER_REACH_M = 3000.0     # a garrison / a column's air defence moves to a spot at most this far from where it stood next to its parent
 COLUMN_REACH_M = 12000.0      # a front-line column moves onto a scanned road point at most this far away (sectors are 20 to 60 km apart)
 _CACHE: dict = {}
 

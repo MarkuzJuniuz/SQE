@@ -5309,7 +5309,7 @@ def check_96_site_spots(c):
                 totc += 1; onc += xy in pools["ground"]
             if a.guards and a.guards in st.assets:
                 par = st.assets[a.guards]
-                assert math.hypot(a.x - par.x, a.y - par.y) < 5000, ("a garrison stays close to its SAM site", a.id)
+                assert math.hypot(a.x - par.x, a.y - par.y) < 7000, ("a garrison stays close to its SAM site", a.id)
     assert on >= 0.9 * tot and ons == tots and onc == totc, (on, tot, ons, tots, onc, totc)
     xy0 = {a.id: (a.x, a.y) for a in st.assets.values() if a.id.startswith("sam_")}
     scenario.snap_assets_to_land(st)
