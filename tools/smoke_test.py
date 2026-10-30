@@ -5407,6 +5407,39 @@ def check_98_srtm_relief(c):
     print("[srtm relief] made-up tile: spike 1,240 m (rounded up), sea floor clipped, flat ground exact, packed file reads back")
 
 
+def check_99_fighters_clear_gate(c):
+    """v0.41.203: a strike or CAS flight is gated on the air as well as on radars: the AI flight holds outside while red fighters are up near it or its target (at most
+    AIR_HOLD_STRIKE_S / AIR_HOLD_CAS_S), then goes in anyway; its bombing task drops the whole load (expend All, not Auto, which let one jet drop two bombs and the rest go home).
+    Checked on a built plain CAS mission (no SEAD ahead of it), on the strike cap in the gate builder, and on the hook text."""
+    import inspect, re as _re, zipfile as _zf
+    from sqe import debrief as _db
+    from sqe.engine import Session as _S
+    from sqe.mission_builder import MissionBuilder as _MB
+    from sqe.strike_tasks import AIR_HOLD_STRIKE_S, AIR_HOLD_CAS_S, StrikeTasks as _ST
+    assert "AIR_HOLD_STRIKE_S if" not in inspect.getsource(_ST._dead_gate) and "AIR_HOLD_CAS_S if f.role == Role.CAS else AIR_HOLD_STRIKE_S" in inspect.getsource(_ST._dead_gate), "strikers get the long cap, CAS the short one"
+    cs = _S(__import__("sqe.settings", fromlist=["AppSettings"]).AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    got = None
+    for sd in range(1, 9):
+        cs.new(f"Gate99{sd}", "A-10C", 2, seed=sd); cs.ai_test = True
+        for pd in cs.state.plan:
+            if pd["objective"]["type"] == "CAS":
+                pd["objective"]["after"] = ""                  # a plain job: no SEAD ahead of it, so the air gate is all it has
+        pc = next((p for p in cs.packages() if p.objective.type.value == "CAS" and cs.flyable(p)), None)
+        if pc is not None:
+            got = cs.fly(pc.number, cs.flyable(pc)[0].id); break
+    assert got is not None, "a flyable plain CAS package"
+    mis2 = _zf.ZipFile(got.miz).read("mission").decode("utf8", "ignore")
+    caps2 = _re.findall(r"\{t=\d+, site=[^\n]*?acap=(\d+)", mis2)
+    assert str(AIR_HOLD_CAS_S) in caps2, ("a plain CAS flight carries the gate with the shorter cap", caps2[:4])
+    assert inspect.getsource(_MB._attach_waypoints).count("expend=task.Expend.All") == 2, "both bombing tasks drop the whole load"
+    hk = _db.lua_hook("c", 1, "p", [], "Hornet 1-1", "Hornet 1", [], None, "a.wav", "b.wav", {}, [],
+                      [{"id": "t", "label": "Target", "who": "W", "prim": True, "units": [], "trk": [], "srch": []}], [],
+                      [{"t": 100, "site": "t", "grp": "Hornet 2", "from": 3, "to": 5, "ai": True, "dead": True, "you": False, "gm": 70000, "acap": 240, "tx": 1.0, "tz": 2.0}], True)
+    assert "redFighterNear" in hk and "AIR_LEAD_M" in hk and "air-timeout" in hk and "acap=240" in hk and "tx=1.0" in hk, "the hook has the air check, the cap and a target point"
+    assert 'hasAttribute("Fighters")' in hk and "Interceptors" in hk, "fighters are told by their DCS attributes"
+    print("[fighters-clear gate] strikers carry the gate (cap %d s), a plain CAS too (%d s), bombing expends All, hook has the air check" % (AIR_HOLD_STRIKE_S, AIR_HOLD_CAS_S))
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5544,6 +5577,7 @@ CHECKS = [
     check_96_site_spots,
     check_97_builtin_relief,
     check_98_srtm_relief,
+    check_99_fighters_clear_gate,
 ]
 
 

@@ -18,6 +18,9 @@ from .routes import AVOID_NM, FT, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM,
 JSOW_ATTACK_S = 120           # v0.41.46: a JSOW slinger's release tasks end this long after the launch point's ETA, and it turns for home (judgment call; XO's run: releases came 25-60 s before the point)
 JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
 DEAD_GATE_BEFORE_TGT_S = 75    # fallback: if the DEAD flight never gets close, the radars are checked this long before its planned target time
+AIR_GATE_KM = 70               # v0.41.203: a strike / CAS flight with no radar site to wait on checks the air this far from its target (km); the hold, if any, is out here, short of the fight
+AIR_HOLD_STRIKE_S = 240        # ...and holds at most this long (judgment call: about what the Day-2 fight of XO's 2026-10-30 run lasted), then goes in all the same
+AIR_HOLD_CAS_S = 150           # CAS holds less: the troops on the ground are waiting (judgment call)
 DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
 SA10_GATE_KM = 60              # ...but never inside an SA-10's reach (55 km): against an SA-10 target, or under an SA-10 umbrella, the gate (and so the hold
                                # orbit) is this far from the SA-10. v0.39.21 run: Hornet 1 held 40 km from the Sukhumi SA-6, 26 km from the SA-10, and was shot down there
@@ -101,7 +104,8 @@ class StrikeTasks:
             from .war import after_sites, site_blind_today
             live_ = [x for x in after_sites(obj_) if x in self.state.assets and not self.state.assets[x].destroyed]
             gsite_ = next((x for x in live_ if not site_blind_today(self.state, x)), live_[0] if live_ else "")
-        if (not f.tag and ((obj_.type == ObjectiveType.DEAD and obj_.aim not in SEAD_AIMS) or fol_) and gsite_ and tot_s is not None
+        air_only_ = (not fol_) and obj_.type in (ObjectiveType.STRIKE, ObjectiveType.CAS) and f.role in (Role.STRIKE, Role.CAS)      # v0.41.203: the fighters-clear gate on its own
+        if (not f.tag and ((obj_.type == ObjectiveType.DEAD and obj_.aim not in SEAD_AIMS) or fol_ or air_only_) and gsite_ and tot_s is not None
                 and f.role in (Role.STRIKE, Role.CAS, Role.TARCAP, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10
                 and (f.role in (Role.STRIKE, Role.CAS) or stw is None)):               # a TARCAP / escort on its own station is already outside the threat
             # radar gate: the DEAD flight, and its escorts and sweeps, break off if the site's radars are still up when the DEAD flight commits
@@ -122,10 +126,11 @@ class StrikeTasks:
             also_ = [a_.id for a_, _ in self._cover_tors(package, leg_)]          # the route check: the Tors that cover the site or the run in
             tga_ = st.assets.get(gsite_)
             um_ = tm.umbrella_site(st, tga_)
-            gm_ = SA10_GATE_KM if (tga_ is not None and tga_.variant in tm.UMBRELLA_VARIANTS) else DEAD_GATE_KM
+            gm_ = SA10_GATE_KM if (tga_ is not None and tga_.variant in tm.UMBRELLA_VARIANTS) else (AIR_GATE_KM if air_only_ else DEAD_GATE_KM)
             gate = {"t": tot_s - DEAD_GATE_BEFORE_TGT_S, "site": gsite_, "grp": g.name, "also": also_, "gm": gm_ * 1000,
                     "ux": um_.x if um_ else None, "uz": um_.y if um_ else None, "um": SA10_GATE_KM * 1000 if um_ else None,
-                    "from": n0_ + max(0, ti_ - 1) + 1, "to": to_, "ai": ai_, "dead": f.role in (Role.STRIKE, Role.CAS), "you": bool(f.is_player), "pkg": package.id}
+                    "from": n0_ + max(0, ti_ - 1) + 1, "to": to_, "ai": ai_, "dead": f.role in (Role.STRIKE, Role.CAS), "you": bool(f.is_player), "pkg": package.id,
+                    "acap": AIR_HOLD_CAS_S if f.role == Role.CAS else AIR_HOLD_STRIKE_S, "tx": tga_.x if tga_ is not None else None, "tz": tga_.y if tga_ is not None else None}
         return gate
 
     def _cas_tasks(self, wp, w, armor, tot_s):

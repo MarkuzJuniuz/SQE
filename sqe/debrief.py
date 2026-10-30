@@ -748,14 +748,52 @@ for _, gt in ipairs(GATES) do
   if gt.t + 300 > gs.fall then gs.fall = gt.t + 300 end
 end
 local function sitePoint(s)
+  if not s then return nil end
   for _, un in ipairs(s.units) do
     local u = Unit.getByName(un)
     if u then local ok, p = pcall(function() return u:getPoint() end); if ok and p then return p end end
   end
 end
 local HOLD_S = 720           -- an AI DEAD flight whose radars are still up holds this long (12 min) before it breaks off
-local HOLD_CHECK_S = 60      -- and re-checks the radars this often while it holds
+local HOLD_CHECK_S = 30      -- and re-checks the radars (and, v0.41.203, the air) this often while it holds
 local HOLD_FUEL = 0.30       -- below this fuel fraction the holding flight breaks off at once: it must have fuel for the strike and the way home
+-- v0.41.203: the fighters-clear gate. The same gate that waits for a site's radars also waits for red fighters: a striker (or CAS flight) does not push
+-- into a live air fight (XO's 2026-10-30 runs: the strike flights dropped their loads or bugged out under P-27 / P-33 shots). Red fighters in the air
+-- within AIR_LEAD_M of the flight's lead or AIR_TGT_M of the target hold it outside the fight, for at most the gate's acap seconds, then it goes in.
+local AIR_LEAD_M = 100000     -- judgment calls (the MiG-31's P-33 reaches about 120 km, the Su-27 / MiG-29's P-27 about 50 km at altitude)
+local AIR_TGT_M = 60000
+local function redFighterNear(p, r)
+  if not p then return false end
+  local found = false
+  pcall(function()
+    for _, g in ipairs(coalition.getGroups(coalition.side.RED, Group.Category.AIRPLANE) or {}) do
+      for _, u in ipairs(g:getUnits() or {}) do
+        if u:isExist() and u:inAir() and (u:hasAttribute("Fighters") or u:hasAttribute("Interceptors") or u:hasAttribute("Multirole fighters")) then
+          local a = u:getPoint()
+          if math.sqrt((a.x - p.x) ^ 2 + (a.z - p.z) ^ 2) <= r then found = true; return end
+        end
+      end
+    end
+  end)
+  return found
+end
+local function leadPoint(grpName)
+  local ok, p = pcall(function() local g = Group.getByName(grpName); local u = g and g:getUnit(1); return u and u:getPoint() end)
+  if ok then return p end
+end
+local function airUp(gs)
+  if redFighterNear(gs.tp, AIR_TGT_M) then return true end
+  for _, gt in ipairs(gs.gates) do
+    if gt.dead and redFighterNear(leadPoint(gt.grp), AIR_LEAD_M) then return true end
+  end
+  return false
+end
+local function whoOf(s) return (s and s.who) or "Strike" end
+local function labelOf(s, gs) return (s and s.label) or gs.site end
+local function airCap(gs)
+  for _, gt in ipairs(gs.gates) do if gt.dead and (gt.acap or 0) > 0 then return gt.acap end end
+  return 240
+end
 -- every SEAD flight of this site is down or gone (no airborne unit left): the blinding has failed and there is no reason to go in.
 -- Only counts when the mission has SEAD flights on the site at all; an error reading a group counts it as still flying.
 local function seadsGone(gs)
@@ -802,12 +840,12 @@ local function breakOff(gs, why)
   local s = siteOf(gs)
   if not aborted[gs.site] then
     aborted[gs.site] = true
-    say(s.who .. ": abort, abort. " .. s.label .. " radars still up, DEAD flight break off.", gs.gates[1].you)
+    say(whoOf(s) .. ": abort, abort. " .. labelOf(s, gs) .. " radars still up, DEAD flight break off.", gs.gates[1].you)
   end
   for _, gt in ipairs(gs.gates) do
     if gt.dead then
       local why_txt = ({ ["hold-timeout"] = "hold time is up", ["hold-fuel"] = "fuel is low", ["seads-gone"] = "the SEAD flights are down or gone" })[why] or ("not blind in time (" .. why .. ")")
-      say(s.who .. ": abort, RTB. " .. s.label .. " " .. why_txt .. ".", gt.you)
+      say(whoOf(s) .. ": abort, RTB. " .. labelOf(s, gs) .. " " .. why_txt .. ".", gt.you)
     end
   end
   for _, gt in ipairs(gs.gates) do
@@ -829,12 +867,13 @@ local function breakOff(gs, why)
   end
   dump()
 end
-local function resume(gs)
+local function resume(gs, how)
   gs.done = true
   gs.holding = false
   local s = siteOf(gs)
+  how = how or "hold-resumed"
   for _, gt in ipairs(gs.gates) do
-    local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = false, cmd = false, by = "hold-resumed", held = math.floor(timer.getTime() - gs.holdAt) }
+    local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = false, cmd = false, by = how, held = math.floor(timer.getTime() - gs.holdAt) }
     gateLog[#gateLog + 1] = e
     if gt.ai then
       local g = Group.getByName(gt.grp)
@@ -848,7 +887,11 @@ local function resume(gs)
     end
   end
   for _, gt in ipairs(gs.gates) do
-    if gt.dead then say(s.who .. ": " .. s.label .. " radars are down. Go, go, go." .. (torsUp(gs) and " A Tor is still up on the run-in, watch it." or ""), gt.you) end
+    if gt.dead then
+      if how == "air-timeout" then say(whoOf(s) .. ": " .. labelOf(s, gs) .. ", hold time is up, red fighters still around. Pushing anyway.", gt.you)
+      elseif gs.holdWhy == "air" then say(whoOf(s) .. ": " .. labelOf(s, gs) .. ", the air is clear. Go, go, go.", gt.you)
+      else say(whoOf(s) .. ": " .. labelOf(s, gs) .. " radars are down. Go, go, go." .. (torsUp(gs) and " A Tor is still up on the run-in, watch it." or ""), gt.you) end
+    end
   end
   dump()
 end
@@ -856,8 +899,12 @@ local function holdGroups(gs)
   gs.holding = true
   gs.holdAt = timer.getTime()
   local s = siteOf(gs)
+  gs.holdWhy = gateBlind(gs) and "air" or "radars"
   for _, gt in ipairs(gs.gates) do
-    if gt.dead then say(s.who .. ": " .. s.label .. " radars still up. Hold outside, rechecking.", gt.you) end
+    if gt.dead then
+      if gs.holdWhy == "air" then say(whoOf(s) .. ": " .. labelOf(s, gs) .. ", red fighters still up ahead. Hold outside, rechecking.", gt.you)
+      else say(whoOf(s) .. ": " .. labelOf(s, gs) .. " radars still up. Hold outside, rechecking.", gt.you) end
+    end
   end
   for _, gt in ipairs(gs.gates) do
     if gt.ai and gt.dead then
@@ -887,7 +934,12 @@ local function holdCheck(gs, t)
   if not gs.holding then return nil end
   local s = siteOf(gs)
   local blind = gateBlind(gs)
-  if blind then resume(gs); return nil end
+  if blind then
+    if not airUp(gs) then resume(gs); return nil end
+    -- the radars are down but red fighters are still about: wait for the air to clear, for at most the gate's cap, then go in (never an abort over fighters)
+    if timer.getTime() - gs.holdAt >= airCap(gs) or holdFuelLow(gs) then resume(gs, "air-timeout"); return nil end
+    return t + HOLD_CHECK_S
+  end
   if timer.getTime() - gs.holdAt >= HOLD_S then breakOff(gs, "hold-timeout"); return nil end
   if seadsGone(gs) then breakOff(gs, "seads-gone"); return nil end
   if holdFuelLow(gs) then breakOff(gs, "hold-fuel"); return nil end
@@ -907,6 +959,14 @@ local function decide(gs, why)
       return
     end
     breakOff(gs, why)
+    return
+  end
+  local canHold2 = false
+  for _, gt in ipairs(gs.gates) do if gt.dead then canHold2 = true end end
+  if canHold2 and why ~= "hold-timeout" and why ~= "hold-fuel" and why ~= "clock" and airUp(gs) and not holdFuelLow(gs) then
+    if not gs.tp then gs.tp = sitePoint(s) end
+    holdGroups(gs)
+    timer.scheduleFunction(holdCheck, gs, timer.getTime() + HOLD_CHECK_S)
     return
   end
   gs.done = true
@@ -959,6 +1019,7 @@ timer.scheduleFunction(function(_, t)
       local s
       for _, x in ipairs(SITES) do if x.id == gs.site then s = x end end
       if s and not gs.tp then gs.tp = sitePoint(s) end
+      if not gs.tp and gs.gates[1].tx then gs.tp = { x = gs.gates[1].tx, z = gs.gates[1].tz } end          -- v0.41.203: a target with no live unit to read a position from
       if now >= gs.fall then
         decide(gs, "clock")
       else
@@ -1093,7 +1154,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
                    f'units={lst(x["units"])}, trk={lst(x["trk"])}, srch={lst(x["srch"])}}}' for x in (sites or []))
     ru = ", ".join(f'{{x={r["x"]:.1f}, z={r["z"]:.1f}, n={int(r["n"])}, r={float(r["r"]):.0f}, p={int(r["p"])}, dn={float(r["dn"]):.2f}, pw={int(r["pw"])}, s={float(r["s"]):.2f}}}'
                    for r in (ruins or []))
-    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}{_umbrella_lua(x)}}}'
+    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}, acap={int(x.get("acap") or 0)}{_umbrella_lua(x)}{(", tx=%.1f, tz=%.1f" % (float(x["tx"]), float(x["tz"]))) if x.get("tx") is not None else ""}}}'
                    for x in (gates or []))
     return (LUA_HOOK.replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)

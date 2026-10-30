@@ -1830,7 +1830,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         wp.name = nm
                 if not o.player_is_ai:                                       # all-AI test: the player's flight now gets the AI tasks below, like any AI flight
                     if w.action == "BOMB":
-                        wp.tasks.append(task.Bombing(pt(w.x, w.y), group_attack=True))
+                        wp.tasks.append(task.Bombing(pt(w.x, w.y), expend=task.Expend.All, group_attack=True))
                     continue
             if ai_a2g and w.name == "EGR":
                 wp.tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))                      # and no chasing on the way home either
@@ -1876,7 +1876,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             elif w.action == "BOMB":
                 # v0.41.16: the attack is only good until LATE_ATTACK_S after its TOT; later, the flight flies on to its egress and home (the
                 # v0.41.14 run: the lead, alone after its wingmen flamed out, bombed 30 min late and met a live SA-6)
-                bct_ = task.ControlledTask(task.Bombing(pt(w.x, w.y), group_attack=True))
+                bct_ = task.ControlledTask(task.Bombing(pt(w.x, w.y), expend=task.Expend.All, group_attack=True))
                 bct_.stop_after_time(int(w.eta_s + LATE_ATTACK_S)); wp.tasks.append(bct_)
             elif w.action == "JSOW":
                 self._jsow_tasks(wp, f, armor, package, w.eta_s)
