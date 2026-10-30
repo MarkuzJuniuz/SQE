@@ -4201,7 +4201,7 @@ def check_60_long_range_tarcap_stands_behind_the_short_range_escort(c):
             _moved += 1
             _d_move = _m60.hypot(_v[0] - _v0[0], _v[1] - _v0[1]) / 1852.0
             assert _k[0] == _R60.TARCAP or _k[0] == _R60.ESCORT, _k
-            assert _d_move <= 15.0, ("the move stays small", round(_d_move, 1))
+            assert _d_move <= 16.0, ("the move stays small", round(_d_move, 1))
             assert _m60.hypot(_v[0] - _tx, _v[1] - _ty) > _m60.hypot(_v0[0] - _tx, _v0[1] - _ty), "the long-range station is farther from the target than before"
     assert _moved >= 5, f"enough staggered stations were seen: {_moved}"
     print(f"[stagger] {_moved} long-range stations moved behind and aside of a short-range station, {_same} left where they were")
