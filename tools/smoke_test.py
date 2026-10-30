@@ -3931,9 +3931,11 @@ def check_51_no_needless_banzai_cas(c):
             if p_.objective.type.value != "CAS":
                 continue
             _cov, _hard = _cc20(_st, _st.assets[p_.objective.target_id])
-            assert not _hard, ("no CAS under a live SA-11 / SA-10", p_.objective.description, [x.variant for x in _hard])
-            assert bool(_cov) == (p_.objective.aim == "SEAD"), ("CAS under a live SA-2/3/6 is marked for a SEAD escort", p_.objective.description)
-            if _cov:
+            _fol = bool(p_.objective.after)              # v0.41.158 / v0.41.204: under one or two SA-11 / SA-10 only as a follow job, behind their SEAD
+            assert not _hard or (_fol and all(x.id in p_.objective.after.split(",") for x in _hard)), ("no CAS under a live SA-11 / SA-10 unless it follows their SEAD", p_.objective.description, [x.variant for x in _hard])
+            if not _fol:
+                assert bool(_cov) == (p_.objective.aim == "SEAD"), ("CAS under a live SA-2/3/6 is marked for a SEAD escort", p_.objective.description)
+            if _cov and not _fol:
                 assert any(f_.role.value == "SEAD" and not f_.tag for f_ in p_.flights), ("an escorted CAS flies with its HARM flight", p_.objective.description)
                 _nesc += 1
             _ncas += 1
@@ -3947,7 +3949,7 @@ def check_51_no_needless_banzai_cas(c):
         assert _rd20.shy(_st, _L(1), _ws) == _ws, "Easy raids do not shy from defences"
         assert all(w1 <= w0 for (_, _, w0), (_, _, w1) in zip(_ws, _rd20.shy(_st, _L(3), _ws))), "Hard raids shy from defended targets"
     assert set(_av20) == {"SA-2", "SA-3", "SA-6", "SA-11", "SA-10"}, "AI routes bend round every medium / long-range SAM"
-    print(f"[banzai] {_ncas} CAS jobs on Normal, {_nesc} under an SA-2/3/6 with their SEAD escort, none under an SA-11/10; red commits at any / 1:1 / 2:1 odds")
+    print(f"[banzai] {_ncas} CAS jobs on Normal, {_nesc} under an SA-2/3/6 with their SEAD escort, none under an SA-11/10 except behind its SEAD (follow jobs); red commits at any / 1:1 / 2:1 odds")
 
 
 def check_52_carrier_cap_s_orbit(c):
