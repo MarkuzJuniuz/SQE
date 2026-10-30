@@ -2776,11 +2776,11 @@ def check_32_red_s_known_cap(c):
     s.new("Garrison", "FA-18C", 2, seed=9); _st = s.state; _pl = _war.ObjectivePlanner(_gd(2))
     _gc = lambda: [o_ for o_ in _pl.plan(_st, _rnd.Random(1), limit=12) if o_.type.value == "CAS" and _st.assets[o_.target_id].variant == "GARRISON" and not o_.target_id.startswith("rfwd_")]      # (a forward position has no SAM site to wait for)
     _gs = [a_ for a_ in _st.assets.values() if a_.variant == "GARRISON" and not a_.id.startswith("rfwd_") and not a_.destroyed and _pl._open(_st, a_)]
-    assert _gs and not _gc(), "no garrison CAS while the long-range sites around it live"
+    assert _gs and not [o_ for o_ in _gc() if not (o_.after or o_.aim == "SEAD")], "v0.41.204: while the long-range sites around a garrison live, its CAS is only ever a follow job (after) or has a HARM escort, never plain"
     for a_ in _gs:
         for x_ in _pl._garrison_cover(_st, a_): x_.health = 0.0
-    assert _gc(), "garrison CAS is offered once the cover is cleared"
-    print("[garrison cas] held back while the long-range SAM sites that cover a garrison live, offered once they are down; front-line CAS unchanged")
+    assert [o_ for o_ in _gc() if not o_.after], "garrison CAS is offered (plain) once the cover is cleared"
+    print("[garrison cas] only behind a SEAD or with a HARM escort while the long-range SAM sites that cover a garrison live, plain once they are down; front-line CAS unchanged")
     import sqe.war as _wlr; _lr_real = _wlr.long_range_site; _wlr.long_range_site = lambda *a_: False     # this check is about the SEAD / Close DEAD pair: no Standoff DEAD
     # --late-sead (hold test): the SEAD stage goes in LATE_SEAD_MIN later, so the DEAD stage (DEAD_STAGE_GAP_MIN behind it) arrives first and holds
     import sqe.engine as _eng2
