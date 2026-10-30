@@ -22,9 +22,9 @@ def _browse(parent, line: QLineEdit, title: str):
 
 EDGE_DECAY_TEXT = ("Your edge fades by 3% each night, back toward zero, when you do not keep flying that kind of job (nights with nothing for you to fly do not count). "
                    "Off: the edge you build is kept. Needs Tactical Edge on.")
-PILOT_INFLUENCE_TEXT = ("Your flying changes the war. On: the higher-ups learn from your actual flights, and what they learn benefits the whole campaign: the background "
-                        "AI jobs of the same kind do better (your Tactical Edge). If you stay on the ground, red pushes harder and the front can slip, so you can lose the war. "
-                        "Off: the war plays out on its own, with no effect from your flying (no red surge, no Tactical Edge).")
+PILOT_INFLUENCE_TEXT = ("Your flying shapes the war. On: the higher-ups study your actual sorties, and what they learn is carried to every unit in the theatre: the "
+                        "background strikes, SEAD and air cover of the same kind succeed more often (your Tactical Edge). Stay on the ground and red seizes the initiative: it "
+                        "surges, the front can crack, and you can lose the war. Off: the war runs on its own, with no effect from your flying (no red surge, no Tactical Edge).")
 
 
 class NewCampaignDialog(QDialog):
