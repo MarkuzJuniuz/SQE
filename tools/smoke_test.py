@@ -5440,6 +5440,29 @@ def check_99_fighters_clear_gate(c):
     print("[fighters-clear gate] strikers carry the gate (cap %d s), a plain CAS too (%d s), bombing expends All, hook has the air check" % (AIR_HOLD_STRIKE_S, AIR_HOLD_CAS_S))
 
 
+def check_100_garrison_follow(c):
+    """v0.41.204: a garrison under one or two SA-11 / SA-10 sites is offered as a follow job (after = their ids) when the SEAD / standoff job is in the day's list, and the mission builds with the gate."""
+    import re as _re, zipfile as _zf
+    from sqe.engine import Session as _S
+    cs = _S(__import__("sqe.settings", fromlist=["AppSettings"]).AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    found = built = 0
+    for sd in range(1, 9):
+        cs.new(f"Garr100{sd}", "A-10C", 2, seed=sd); cs.ai_test = True
+        pk = cs.packages()
+        have = {p.objective.target_id for p in pk if p.objective.type.value == "DEAD" and p.objective.aim in ("STANDOFF", "SEAD")}
+        for p in pk:
+            o = p.objective
+            if o.type.value == "CAS" and "garrison (after the SEAD" in o.description:
+                found += 1
+                assert o.after and all(x in have for x in o.after.split(",")), ("a follow garrison has its SEAD / standoff in the plan", o.description, o.after, have)
+                if not built and cs.flyable(p):
+                    got = cs.fly(p.number, cs.flyable(p)[0].id); built = 1
+                    mis = _zf.ZipFile(got.miz).read("mission").decode("utf8", "ignore")
+                    assert _re.search(r"\{t=\d+, site=[^\n]*?acap=\d+", mis), "the follow garrison CAS carries the gate"
+    assert found >= 3, ("garrison CAS behind a SEAD across seeds 1-8", found)
+    print("[garrison follow] %d follow garrison jobs across 8 seeds, one built with the gate" % found)
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5578,6 +5601,7 @@ CHECKS = [
     check_97_builtin_relief,
     check_98_srtm_relief,
     check_99_fighters_clear_gate,
+    check_100_garrison_follow,
 ]
 
 

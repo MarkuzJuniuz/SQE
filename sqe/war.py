@@ -190,6 +190,13 @@ class ObjectivePlanner:
                 # requires the HARM flight or postpones the job); under a live SA-11 / SA-10 it is blocked and that site gets a DEAD first.
                 cov, hard = cas_cover(state, a)
                 fol, soft = follow_split(cov)
+                if bl and (fol or (soft and not hard and len(soft) <= FOLLOW_MAX_SITES)):
+                    # v0.41.204 (XO 2026-10-30): a garrison under one or two SA-11 / SA-10 sites (or under SA-2/3/6 only) is no longer blocked
+                    # until they are dead: it goes in behind their SEAD / standoff like any CAS (the follow job, gated on the radars), or with a
+                    # HARM escort (at most FOLLOW_MAX_SITES SA-2/3/6: the three-SAM Sukhumi cluster stays DEAD-first, a judgment call). Sites that are not in `cov`
+                    # (outside the gate reach) keep blocking it, as before.
+                    done_ = {x.id for x in cov}
+                    bl = [x for x in bl if x.id not in done_]
                 if not fol:
                     bl = bl + [x for x in hard if x not in bl]
                 o_ = Objective("", ObjectiveType.CAS, a.id, pr, what)
