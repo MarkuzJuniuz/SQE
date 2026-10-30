@@ -181,7 +181,7 @@ def iads_pct(state, side: str) -> float:
 
 def transit_text(state, side: str) -> str:
     """'2 SAM batteries in transit, the first in 1 day' or ''."""
-    o = _orders(state, "orders" if side == "blue" else "red_orders")
+    o = _orders(state, "blue_asks" if side == "blue" else "red_asks")
     if not o:
         return ""
     d = max(0, min(int(x["due"]) for x in o) - state.day)

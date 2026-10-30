@@ -107,15 +107,15 @@ def air_defence_rows(state) -> list:
     return out
 
 
-def orders_rows(state) -> list:
+def asks_rows(state) -> list:
     """SAM batteries in transit: (side, text)."""
     rec = getattr(state, "sams", None) or {}
     out = []
-    for o in rec.get("orders", []):
+    for o in rec.get("blue_asks", []):
         b = state.bases.get(o.get("to"))
         kind = sams.BLUE_SITES.get(o.get("key"), ("", "battery"))[0]
         out.append(("Coalition", f"{kind} battery from {o.get('from_name', '?')} to {b.name if b else o.get('to')}, due day {o['due']} ({_when(state, o)})"))
-    for o in rec.get("red_orders", []):
+    for o in rec.get("red_asks", []):
         to, fr = state.assets.get(o.get("to")), state.assets.get(o.get("from"))
         out.append((story.enemy(state), f"battery from {fr.name if fr else o.get('from')} to {to.name if to else o.get('to')}, due day {o['due']} ({_when(state, o)})"))
     return out

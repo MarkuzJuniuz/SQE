@@ -117,7 +117,7 @@ class OverviewPage(QWidget):
         self.dviews["supply"].setHtml(
             "<p style='color:#b9c6d6'>" + "<br>".join(html.escape(x) for x in posture.supply_lines(st)) + "<br>A site mends in about 6 days at full supply (longer when supply is low), "
             "and not on a night after it was struck.</p>" + T(("Side", "Site", "Health", "State"), [(a, b, f"{c}%", d) for a, b, c, d in od.supply_rows(st)]))
-        orders = od.orders_rows(st)
+        orders = od.asks_rows(st)
         self.dviews["ad"].setHtml(
             "<p style='color:#b9c6d6'>" + "<br>".join(html.escape(x) for x in posture.air_defence_lines(st)) + "</p>"
             + ("<p><b>SAM batteries in transit</b><br>" + "<br>".join(html.escape(f"{a}: {b}") for a, b in orders) + "</p>" if orders else "")

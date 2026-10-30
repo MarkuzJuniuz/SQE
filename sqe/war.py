@@ -654,7 +654,7 @@ class WarSimulator:
             a.suppressed = False                                    # blinded radars come back on overnight
         for ln in self.counterstrike(state):
             state.note("Overnight: " + ln)
-        for ln in sams.red_orders(state, d, self.rng) + sams.rebuild(state, d, self.rng) + sams.relocate(state, d, self.rng) + sams.retreat(state, d, self.rng):
+        for ln in sams.red_asks(state, d, self.rng) + sams.rebuild(state, d, self.rng) + sams.relocate(state, d, self.rng) + sams.retreat(state, d, self.rng):
             state.note("Overnight: " + ln)
         for ln in raids.overnight(state, d, self.rng):               # surprise raids nobody flew: alert aircraft against the bombers
             state.note("Overnight: " + ln)
@@ -674,9 +674,9 @@ class WarSimulator:
         update_status(state)
 
     def counterstrike(self, state: CampaignState) -> list:
-        """Our airfield air defences repair (by supply; see sams.blue_defence) destroyed sites are ordered or rebuilt (sams.blue_orders). (The old random
+        """Our airfield air defences repair (by supply; see sams.blue_defence) destroyed sites are ordered or rebuilt (sams.blue_asks). (The old random
         overnight air strike is gone: Red raids are planned now, see raids.py.) Returns log lines."""
-        return sams.blue_defence(state, self.d) + sams.blue_orders(state, self.d, self.rng) + sams.rebuild_blue_sites(state, self.d, self.rng)
+        return sams.blue_defence(state, self.d) + sams.blue_asks(state, self.d, self.rng) + sams.rebuild_blue_sites(state, self.d, self.rng)
 
 
 def totals(state: CampaignState) -> dict:
