@@ -5522,13 +5522,20 @@ def check_102_persistent_objects(c):
     for pk in s.packages():
         fl = s.flyable(pk)
         ta = st.assets.get(pk.objective.target_id) if pk.objective.target_id else None
-        if fl and ta is not None and not any(b.kind.value == "CARRIER" for b in [st.bases[f.base_id] for f in pk.flights]):
+        if fl and ta is not None and not any(b.kind.value == "CARRIER" for b in [st.bases[f.base_id] for f in pk.flights if not f.tag]):
             near = [a for a in list(st.assets.values()) + list(st.blue_assets.values()) if a.kind in (_AK.FUEL, _AK.DEPOT) and not a.destroyed and math.hypot(a.x - ta.x, a.y - ta.y) <= 15 * 1852]
             if near:
                 pick = (pk, fl[0], ta); break
     assert pick is not None, "a land-based package with supply sites inside 15 nm is needed"
     pk, fl, ta = pick
     sup = lambda R: {a.id for a in list(st.assets.values()) + list(st.blue_assets.values()) if a.kind in (_AK.FUEL, _AK.DEPOT) and not a.destroyed and math.hypot(a.x - ta.x, a.y - ta.y) <= R * 1852}
+    from sqe import blue_barcap as _bb, barcap as _bc
+    planned_ = (getattr(st, "barcap", None) or {}).get("blue_flights") or []
+    lo_, hi_ = _bb._minute(pk.start) - _bb.LEAD_MIN, _bb._minute(pk.start) + _bb.PACKAGE_WINDOW_MIN
+    cvb_ = next((b for b in st.bases.values() if b.kind.value == "CARRIER"), None)
+    ar_ = _bc.facing_area(st, "blue", cvb_.id, __import__("sqe.packages", fromlist=["target_point"]).target_point(st, pk.objective)) if cvb_ else None
+    due_ = bool(ar_ and any(f_["area"] == ar_["id"] and f_["start"] <= hi_ and f_["end"] >= lo_ for f_ in planned_))
+    assert any(f_.tag == "CVCAP" for f_ in pk.flights) == due_, ("the carrier's scheduled CVCAP rides along exactly when its window overlaps", due_, [f_.tag for f_ in pk.flights])
     s.settings.merge_radius_nm = 15
     res = s.fly(pk.number, fl.id); ships, stat = _scan(s)
     assert ships == 4, ("the carrier group (carrier + 3 escorts) is in a land-based mission", ships)
