@@ -96,6 +96,8 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                     + ("Intelligence expects the SEAD to have worked." if _fr(state, obj) else "Intelligence doubts the SEAD will work today; expect to be turned back.")]
     if x.get("intel"):
         sit += ["", "Intelligence: " + " ".join(x["intel"])]
+    if x.get("qra"):
+        sit += ["", "QRA (quick reaction alert): " + "; ".join(x["qra"]) + ". Each is ordered up by the mission's triggers when a raid or a threat comes inside its reach; the debrief reports when each was ordered and how long it took to get airborne."]
     mis = [f"{obj.description}.", *([x["target_line"]] if x.get("target_line") else []), f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {_long_label(pf, obj)}.", f"Your task: {pf.task}."]
     exe = ["Package (push / TOT are staggered: TARCAP first, then SEAD and escorts, then strikers):"]
     for r in x["pkg_table"]:

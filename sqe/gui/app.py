@@ -20,7 +20,7 @@ from ..engine import Session
 from ..packages import PackageBuilder, folded_n_def
 from ..settings import AppSettings
 from . import theme
-from .dialogs import DebriefDialog, NewCampaignDialog, SettingsDialog, WaitingDialog
+from .dialogs import DayResolvedDialog, DebriefDialog, NewCampaignDialog, SettingsDialog, WaitingDialog
 from .widgets import MapView, SideCard, StatCard, card
 from . import overview_view as V
 
@@ -425,7 +425,7 @@ class ForcesPage(QWidget):
         self.air_line = QLabel(); self.air_line.setObjectName("small"); self.air_line.setWordWrap(True); lay.addWidget(self.air_line)         # v0.41.152: aircraft counts, a detail line (jets no longer decide the war)
         self.tabs = QTabWidget(); lay.addWidget(self.tabs)
         self.sq = _tbl(["Squadron", "Aircraft", "Service", "Based at", "Serviceable", "Readiness"])
-        self.ea = _tbl(["Enemy air wing", "Types", "Serviceable", "Strength"])
+        self.ea = _tbl(["Aircraft", "Based at", "Serviceable", "Strength"])
         self.as_ = _tbl(["Enemy asset", "Type", "Depth", "Condition"])
         self.bs = _tbl(["Coalition base", "Type", "Patriot", "HAWK", "AAA"])
         self.gw = _tbl(["Sector", "Enemy force", "Friendly force", "Enemy forward garrison", "Friendly forward garrison"])
@@ -444,18 +444,20 @@ class ForcesPage(QWidget):
         self.air_line.setText(f"Aircraft serviceable: Coalition {t['fa']} of {t['fz']}, {en} {t['ea']} of {t['ez']}.")
         self.tabs.setTabText(4, f"{en} air wings"); self.tabs.setTabText(5, f"{en} assets")
         self.gw.setHorizontalHeaderLabels(["Sector", f"{en} force", "Coalition force", f"{en} forward garrison", "Coalition forward garrison"])
-        self.ea.setHorizontalHeaderLabels([f"{en} air wing", "Types", "Serviceable", "Strength"]); self.as_.setHorizontalHeaderLabels([f"{en} asset", "Type", "Depth", "Condition"])
+        self.ea.setHorizontalHeaderLabels(["Aircraft", "Based at", "Serviceable", "Strength"]); self.as_.setHorizontalHeaderLabels([f"{en} asset", "Type", "Depth", "Condition"])
         sqs = list(st.squadrons.values()); self.sq.setRowCount(len(sqs))
         for i, s in enumerate(sqs):
             sp = AIRCRAFT[s.aircraft]
             for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.available} / {s.authorized}")):
                 self.sq.setItem(i, j, _item(v))
             self.sq.setCellWidget(i, 5, self._bar(s.readiness, theme.BLUE))
-        self.ea.setRowCount(len(st.enemy_air))
-        for i, w in enumerate(st.enemy_air):
-            for j, v in enumerate((st.assets[w.base_asset_id].name + (f"  ({w.squadrons} squadrons)" if w.squadrons > 1 else ""), ", ".join(f"{q.aircraft.replace('_', '-')} {q.available}/{q.authorized}" + (f" (resting, {q.reserve})" if q.reserve else "") for q in w.sqns), f"{w.available} / {w.authorized}")):
+        rows_ = [(w, q) for w in st.enemy_air for q in w.sqns]                     # v0.41.208 (XO): laid out like the Coalition squadrons (no squadron names): one row per airframe, its base, serviceable and strength
+        self.ea.setRowCount(len(rows_))
+        for i, (w, q) in enumerate(rows_):
+            for j, v in enumerate((q.aircraft.replace("_", "-"), st.assets[w.base_asset_id].name,
+                                   f"{q.available} / {q.authorized}" + (f" (resting, {q.reserve})" if q.reserve else ""))):
                 self.ea.setItem(i, j, _item(v))
-            self.ea.setCellWidget(i, 3, self._bar(w.available / max(1, w.authorized), theme.RED))
+            self.ea.setCellWidget(i, 3, self._bar(q.available / max(1, q.authorized), theme.RED))
         from .. import sams as _sams, support_assets as _sa
         bl = list(st.bases.values()); self.bs.setRowCount(len(bl))
         col = lambda h: theme.GREEN if h > 0.6 else theme.AMBER if h > 0.25 else theme.RED
@@ -650,12 +652,12 @@ class MainWindow(QMainWindow):
             self.settings()
             if self.session.settings.problems():
                 return
-        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"), getattr(self.session.settings, "ai_skill_red", "level"), getattr(self.session.settings, "ai_skill_blue", "level"), bool(getattr(self.session.settings, "pilot_influence", True)), prefill=prefill)
+        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"), getattr(self.session.settings, "ai_skill_red", "level"), getattr(self.session.settings, "ai_skill_blue", "level"), bool(getattr(self.session.settings, "pilot_influence", True)), prefill=prefill, edge_decay=bool(getattr(self.session.settings, "tempo_decay", False)))
         if dlg.exec() == QDialog.Accepted:
             try:
                 v = dlg.values()
                 self.session.settings.weather_mode = v.get("weather_mode", self.session.settings.weather_mode)
-                self.session.settings.pilot_influence = bool(v.get("pilot_influence", True))
+                self.session.settings.pilot_influence = bool(v.get("pilot_influence", True)); self.session.settings.tempo_decay = bool(v.get("tempo_decay", False))
                 self.session.settings.ai_skill_red = v.get("ai_skill_red", self.session.settings.ai_skill_red); self.session.settings.ai_skill_blue = v.get("ai_skill_blue", self.session.settings.ai_skill_blue)
                 try:
                     self.session.settings.save()
@@ -849,10 +851,9 @@ class MainWindow(QMainWindow):
                 msg += "\n\nThe sortie you built and have not finished will be discarded."
             if QMessageBox.question(self, "Skip Turn", msg) != QMessageBox.Yes:
                 return
-        before = sess.state.status
+        before, day0 = sess.state.status, sess.state.day
         out = sess.skip_day(); self.refresh_all()
-        lines = [f"{'+' if r['success'] else '-'} {r['objective']}" for r in out["results"]]
-        QMessageBox.information(self, "Day resolved", "\n".join(lines))
+        DayResolvedDialog(out["results"], day0, self).exec()
         self._ending_popup(before)                                # (the war's ending, if this day ended it, has its own box with the story)
 
     def wait_for_results(self):

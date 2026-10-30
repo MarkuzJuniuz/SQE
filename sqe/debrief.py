@@ -1417,15 +1417,15 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             out["lines"].append((f"Attack called off behind {a.name}" if follow_ else f"DEAD called off on {a.name}") +
                                 ": its radars were still up when the strike flight reached the gate, so it turned back without attacking.")
     # alert / scramble groups (v0.40.8): called, airborne, or stuck on the ground; and the build's settings, so test runs can be told apart
-    hm_ = lambda t_: f"{int(t_) // 60:d} min" if t_ is not None else "-"
-    for al in data.get("alerts", []) or []:
+    ms_ = lambda t_: f"{int(t_) // 60:d}:{int(t_) % 60:02d}"                  # v0.41.208 (XO): scrambles are numbered in the order the build lists them (the briefing's QRA list uses the same numbers)
+    for n_, al in enumerate(data.get("alerts", []) or [], 1):
         if al.get("called") is None:
             continue
+        who_ = f"Scramble {n_} ({al.get('ty', '?')}, {al.get('b', '?')})"
         if al.get("air") is not None:
-            out["lines"].append(f"Alert {al['g']} ({al.get('ty', '?')}, {al.get('b', '?')}): called at {hm_(al['called'])}, airborne {int(al['air'] - al['called'])} s later")
+            out["lines"].append(f"{who_}: ordered {ms_(al['called'])}, airborne +{ms_(al['air'] - al['called'])}")
         else:
-            out["lines"].append(f"Alert {al['g']} ({al.get('ty', '?')}, {al.get('b', '?')}): called at {hm_(al['called'])}, " +
-                                ("NEVER GOT AIRBORNE (stuck on the ground)" if al.get("stuck") else "not airborne yet when the mission ended"))
+            out["lines"].append(f"{who_}: ordered {ms_(al['called'])}, " + ("NEVER GOT AIRBORNE (stuck on the ground)" if al.get("stuck") else "not airborne yet when the mission ended"))
     # v0.41.92: fuel. The lead's fuel is tracked every 30 s (`tracks`: [t, x, z, alt_m, fuel_%, kts]); a flight that ended the mission low explains the
     # pairs that went home early (bingo). Reported for every AI group that was airborne and ended at BINGO_REPORT_PCT or less.
     ty_ = {a_["g"]: a_.get("ty", "") for a_ in (data.get("alerts") or [])}

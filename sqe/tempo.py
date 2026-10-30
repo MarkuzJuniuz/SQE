@@ -28,6 +28,11 @@ def influence_on(state) -> bool:
     return bool((getattr(state, "ground", None) or {}).get("pilot_influence", True))
 
 
+def decay_on(state) -> bool:
+    """v0.41.208 (XO): the nightly fade of the edge is a per-campaign switch (Enable Tactical Edge Decay), default OFF."""
+    return bool((getattr(state, "ground", None) or {}).get("tempo_decay", False))
+
+
 def get(state, kind: str) -> float:
     if not influence_on(state):
         return 0.0

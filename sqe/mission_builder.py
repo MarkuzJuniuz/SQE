@@ -512,7 +512,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         x = {"date": date_str, "mode3": mode3, "laser": laser, "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}",
              "bullseye": latlon(bx, by, self.t), "divert": div.name, "weather": weather.describe(self.wx), "weather_short": weather.metar(self.wx), "wx_notes": self.wx_notes,
              "link16": any(r["stn"] != "-" for r in whois), "pkg_table": pkg_table,
-             "n_def": air_pkg.n_def, "intel": self._intel, "merged_nums": [m_["number"] for m_ in merged if not m_.get("struck")]}
+             "n_def": air_pkg.n_def, "intel": self._intel, "qra": [f"Scramble {n_} ({a_['ty']}, {a_['b']})" for n_, a_ in enumerate(self._alerts, 1)], "merged_nums": [m_["number"] for m_ in merged if not m_.get("struck")]}
         _ta = st.assets.get(package.objective.target_id)       # v0.41.175: a target line for the briefing: where it is, from your home field, what is there
         if package.objective.type in (ObjectiveType.STRIKE, ObjectiveType.CAS, ObjectiveType.DEAD, ObjectiveType.COUNTER_AIR):
             x["target_line"] = (f"Target position {latlon(tx, ty, self.t)}, bearing {int(bearing(pbase.x, pbase.y, tx, ty)):03d} degrees, "
