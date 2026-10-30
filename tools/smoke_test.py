@@ -2646,7 +2646,7 @@ def check_31j_sam_orders_always_on(c):
     from sqe import sams, war
     from sqe.settings import AppSettings as _AS
     assert not hasattr(_AS(), "borrow_red") and not hasattr(_AS(), "borrow_blue"), "the borrow settings are gone"
-    assert [sams.transit_days(x) for x in (1.0, 0.95, 0.85, 0.775, 0.7, 0.6, 0.55, 0.3)] == [1, 1, 2, 2, 2, 3, 3, 3], "transit days by supply"
+    assert [sams.transit_days(x) for x in (1.0, 0.7, 0.55, 0.3)] == [7, 7, 7, 7], "v0.41.196: an order takes a week whatever the supply"
     calls = []
     real_r, real_b = sams.red_orders, sams.blue_orders
     sams.red_orders = lambda *a, **k: (calls.append("red"), [])[1]

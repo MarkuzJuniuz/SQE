@@ -422,7 +422,9 @@ def supply(state, side: str) -> float:
     n = int(((state.ground or {}).get("sup_n") or {}).get(side, len(sites)))
     fl = BLUE_SUPPLY_FLOOR if side == "blue" else SUPPLY_FLOOR
     v = SUPPLY_NONE if n <= 0 else fl + (1.0 - fl) * min(1.0, sum(a.health for a in sites) / n)
-    return max(v, L1_RED_SUPPLY_FLOOR) if (side == "red" and getattr(state, "level", 2) == 1) else v
+    v = max(v, L1_RED_SUPPLY_FLOOR) if (side == "red" and getattr(state, "level", 2) == 1) else v
+    from . import sams
+    return v - sams.debt(state, side)               # v0.41.196: the cost of replacement SAM batteries lowers supply even below the floor
 
 
 def supply_repair(state) -> list:
