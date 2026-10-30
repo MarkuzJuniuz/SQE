@@ -263,6 +263,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self.rng = rng or random.Random()
         self._runway_busy = set()                                      # bases whose runway / catapult already holds a group at mission start
         self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []
+        self._ecm_player = ""                           # v0.41.210: how the hook learns the player's jammer: "live" (F-16C lamp via Export.lua), "f10" (FC3 jet), "" (old attack-leg window)
         self._supply_built = set()                      # v0.41.209: blue supply sites already put on the map this mission (a raid target is one)
         self._rwy_rel, self._hot = {}, None                            # v0.41.96: release times already given per runway; the hot-runway slot of the flight being built
         self._launch_pts = {}                                          # package id -> [(x, y)] where its HARM / JSOW / strike flights launch (the cover zone)             # alert groups waiting for a runway (the hook lines them up), trigger flags, your runway
@@ -518,7 +519,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         x = {"date": date_str, "mode3": mode3, "laser": laser, "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}",
              "bullseye": latlon(bx, by, self.t), "divert": div.name, "weather": weather.describe(self.wx), "weather_short": weather.metar(self.wx), "wx_notes": self.wx_notes,
              "link16": any(r["stn"] != "-" for r in whois), "pkg_table": pkg_table,
-             "n_def": air_pkg.n_def, "intel": self._intel, "qra": [f"Scramble {n_} ({a_['ty']}, {a_['b']})" for n_, a_ in enumerate(self._alerts, 1)], "merged_nums": [m_["number"] for m_ in merged if not m_.get("struck")]}
+             "n_def": air_pkg.n_def, "intel": self._intel, "ecm_player": self._ecm_player, "qra": [f"Scramble {n_} ({a_['ty']}, {a_['b']})" for n_, a_ in enumerate(self._alerts, 1)], "merged_nums": [m_["number"] for m_ in merged if not m_.get("struck")]}
         _ta = st.assets.get(package.objective.target_id)       # v0.41.175: a target line for the briefing: where it is, from your home field, what is there
         if package.objective.type in (ObjectiveType.STRIKE, ObjectiveType.CAS, ObjectiveType.DEAD, ObjectiveType.COUNTER_AIR):
             x["target_line"] = (f"Target position {latlon(tx, ty, self.t)}, bearing {int(bearing(pbase.x, pbase.y, tx, ty)):03d} degrees, "
@@ -547,7 +548,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM, jams=(self._jams if o.ecm_script else {}), jamw=(self._jamw if o.ecm_script else {}),
                          watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and not f_.is_player],
                          done_after=max([float(tgt.eta_s)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
-                         rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts, cover=self._cover,
+                         rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts, cover=self._cover, ecm_player=self._ecm_player,
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
                               "cvrec": self._wing_recovery(pbase, tgt.eta_s), "recov": list(self._recov),
@@ -1620,6 +1621,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             p1_ = float(next((w.eta_s for w in wps if w.name == "EGR"), (tot_s if tot_s is not None else push_s) + 900))
             for un_ in names:
                 self._jamw[un_] = (p0_, p1_)
+            if not o.player_is_ai:                                            # v0.41.210 (XO): read the player's own jammer: the F-16C's lamp (Export.lua flag file), or F10 ECM ON / OFF for an FC3 jet
+                self._ecm_player = "live" if f.aircraft == "F-16C" else ("f10" if AIRCRAFT[f.aircraft].fc3 else "")
         if not f.tag and not f.is_player and (self._jams.get(names[0]) or f.aircraft in NATIVE_ECM):
             run_t0 = float(push_s)                                            # the jammers run for the attack leg only: PUSH to EGR
             run_t1 = float(next((w.eta_s for w in wps if w.name == "EGR"), (tot_s if tot_s is not None else push_s) + 900))
