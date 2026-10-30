@@ -42,7 +42,11 @@ BLUE_REPAIR = 0.10
 # asset first); no public figures for transit time, so every number here is a judgment call.
 # v0.41.140 (XO 2026-10-27, Campaign Revamp): the orders are a fixed feature (no settings), for both sides at every level. A battery moves by air, so
 # it arrives in 1 to 3 days by the sender's supply (1 at 100%, 3 at the 55% floor), and there is no chance roll any more: supply sets the time.
-ORDER_TRANSIT_DAYS = 2                    # the middle value; the real time comes from transit_days
+ORDER_TRANSIT_DAYS = 14                   # v0.41.196 (XO 2026-10-29): an order takes TWO WEEKS (was 1 to 3 days by supply); moving a battery stays as it is. Judgment call. 12-seed L3 sim, flying every 3rd day: red had a SAM at Sukhumi on 53% of days with the 1-week order, 37% with 2 weeks
+SAM_DEBT = {"long": 0.0, "medium": 0.0, "short": 0.0}       # v0.41.196: supply a side pays for a replacement battery (order or rebuild in place). The mechanism is built but the price is ZERO: the 12-seed L3 sim showed no benefit (1x = 0.06 / 0.03 / 0.02: red SAM days at Sukhumi 49% against 37% with no debt, blue won 6 of 12 against 10 of 12). Raise these to switch it on.
+SAM_DEBT_PAYBACK = 1.5                  # the debt of one purchase pays back in a straight line over this many times the order time (XO's choice)
+SAM_DEBT_CAP = 0.15                     # all open debt of a side together, so a side that keeps losing SA-10s cannot spiral (judgment call)
+_DEBT_LONG, _DEBT_MEDIUM = ("SA-10", "Patriot"), ("SA-11", "SA-6", "HAWK", "Hawk")
 ORDER_MIN_GAP_NM = 20.0       # the sender must sit this much further from the nearest enemy fighter field than the receiver
 ORDERS_PER_NIGHT = 1
 
@@ -283,15 +287,41 @@ def rebuild(state, d, rng: random.Random) -> list:
         if rng.random() < p:
             a.health = REBUILT_HEALTH
             r["down"].pop(a.id, None)
+            add_debt(state, "red", a.variant)
             lines.append(f"The enemy put up a replacement {a.variant} site: {a.name} (half strength)")
     return lines
 
 
+def debt_for(variant: str) -> float:
+    """Supply a replacement battery of this kind costs (SAM_DEBT): SA-10 / Patriot long, SA-11 / SA-6 / HAWK medium, the rest short."""
+    v = str(variant)
+    return SAM_DEBT["long"] if v in _DEBT_LONG else SAM_DEBT["medium"] if v in _DEBT_MEDIUM else SAM_DEBT["short"]
+
+
+def add_debt(state, side: str, variant: str) -> None:
+    """A side pays for a replacement SAM battery: the debt lowers its supply (ground.supply) even below the floor and fades in a straight line over
+    SAM_DEBT_PAYBACK x ORDER_TRANSIT_DAYS days. Skip days count (it runs on the date). Old entries are dropped here."""
+    r = _rec(state)
+    book = r.setdefault("debt", {"red": [], "blue": []})
+    span = SAM_DEBT_PAYBACK * ORDER_TRANSIT_DAYS
+    live = [e for e in book.setdefault(side, []) if state.day - e[1] < span]
+    live.append([debt_for(variant), state.day])
+    book[side] = live
+
+
+def debt(state, side: str) -> float:
+    """Supply a side still owes (0 .. SAM_DEBT_CAP), from the open purchases."""
+    book = (getattr(state, "sams", None) or {}).get("debt") or {}
+    span = SAM_DEBT_PAYBACK * ORDER_TRANSIT_DAYS
+    tot = sum(amt * max(0.0, 1.0 - (state.day - day0) / span) for amt, day0 in book.get(side, []))
+    return min(SAM_DEBT_CAP, tot)
+
+
 def transit_days(sup: float) -> int:
-    """v0.41.140 (XO 2026-10-27): days a SAM battery takes to reach the site it was ordered to. Batteries move by air (fuel and lift decide), so 1 day at
+    """v0.41.196: ORDER_TRANSIT_DAYS (a week) whatever the supply (the argument stays for the callers). Before: 1 to 3 days by supply.
+    v0.41.140 (XO 2026-10-27): days a SAM battery takes to reach the site it was ordered to. Batteries move by air (fuel and lift decide), so 1 day at
     full supply, 3 at the 55% floor (ground.SUPPLY_FLOOR), 2 between. Judgment call: no public figure; the shape follows XO's "1 to 3 days by supply"."""
-    f = max(0.0, min(1.0, (1.0 - sup) / 0.45))
-    return 1 + int(round(2 * f))
+    return ORDER_TRANSIT_DAYS
 
 
 def _red_ordered(state) -> set:
@@ -321,13 +351,14 @@ def red_orders(state, d, rng: random.Random) -> list:
     sites = [x for x in state.assets.values() if x.kind == AssetKind.SAM and not x.id.startswith("fsam_")]
     needy = sorted((a for a in sites if a.destroyed and a.tier <= state.front + 2 and not _parent_down(state, a)
                     and a.id not in busy and a.id not in vacated), key=lambda a: (a.tier, -a.value, a.id))
-    for a in needy[:ORDERS_PER_NIGHT]:
+    for a in needy[:ORDERS_PER_NIGHT if not orders else 0]:           # v0.41.196: one order in flight per side
         donors = sorted((x for x in sites if x.variant == a.variant and not x.destroyed and x.health >= BLUE_FULL_DEF and x.tier > a.tier
                          and x.id not in busy and not _parent_down(state, x)), key=lambda x: (-x.tier, x.id))
         if not donors:
             continue
         src = donors[0]
         orders.append({"to": a.id, "from": src.id, "due": state.day + transit_days(sup), "health": round(src.health, 2)})
+        add_debt(state, "red", a.variant)
         src.health = 0.0
         vacated.append(src.id)
         lines.append(f"The enemy ordered a {a.variant} battery from {src.name} to replace the loss at {a.name}")
@@ -472,7 +503,7 @@ def blue_orders(state, d, rng: random.Random) -> list:
     needy = sorted(((_threat_nm(state, b), b.id, k, b) for b in fields for k in BLUE_SITES
                     if blue_sites(state, b)[k].destroyed and blue_site_id(b.id, k) not in busy and blue_site_id(b.id, k) not in vacated),
                    key=lambda t: t[:3])
-    for thr, _bid, k, b in needy[:ORDERS_PER_NIGHT]:
+    for thr, _bid, k, b in needy[:ORDERS_PER_NIGHT if not orders else 0]:          # v0.41.196: one order in flight per side
         donors = sorted(((_threat_nm(state, f), f.id, f) for f in fields if f.id != b.id
                          and blue_sites(state, f)[k].health >= BLUE_FULL_DEF and blue_site_id(f.id, k) not in busy
                          and _threat_nm(state, f) >= thr + ORDER_MIN_GAP_NM), key=lambda t: (-t[0], t[1]))
@@ -481,6 +512,7 @@ def blue_orders(state, d, rng: random.Random) -> list:
         f = donors[0][2]
         src = blue_sites(state, f)[k]
         orders.append({"key": k, "to": b.id, "from": f.id, "from_name": f.name, "due": state.day + transit_days(sup), "health": round(src.health, 2)})
+        add_debt(state, "blue", BLUE_SITES[k][0])
         src.health = 0.0
         vacated.append(src.id)
         _sync(state, f)
@@ -508,6 +540,7 @@ def rebuild_blue_sites(state, d, rng: random.Random) -> list:
         if rng.random() < p:
             a.health = REBUILT_HEALTH
             r["down"].pop(a.id, None)
+            add_debt(state, "blue", getattr(a, "variant", "") or a.name)
             b = state.bases.get(a.guards)
             if b is not None:
                 _sync(state, b)

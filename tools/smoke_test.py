@@ -126,7 +126,7 @@ def check_00_setup(c):
         out = s.apply(got)
         assert out.get("kill_log") and "killed by" in out["kill_log"][0], out.get("kill_log")
         assert s.state.day == 2 and s.state.plan, "campaign did not advance"
-        assert out["tempo"] and any(x_.startswith("Air tempo") for x_ in out["lines"]), "v0.41.147: the debrief shows the air tempo change"
+        assert out["tempo"] and any(x_.startswith("Tactical Edge") for x_ in out["lines"]), "v0.41.147: the debrief shows the air tempo change"
         assert s.state.pilot["sorties"] == 1 and s.state.pilot["kills_ground"] == 2, s.state.pilot
         print(f"    debrief: {out['story'].splitlines()[0][:100]}...  pilot: {s.state.pilot['sorties']} sortie, {s.state.pilot['kills_air']}A/{s.state.pilot['kills_ground']}G kills")
         r = mk(); r.open(s.path)
@@ -2646,7 +2646,7 @@ def check_31j_sam_orders_always_on(c):
     from sqe import sams, war
     from sqe.settings import AppSettings as _AS
     assert not hasattr(_AS(), "borrow_red") and not hasattr(_AS(), "borrow_blue"), "the borrow settings are gone"
-    assert [sams.transit_days(x) for x in (1.0, 0.95, 0.85, 0.775, 0.7, 0.6, 0.55, 0.3)] == [1, 1, 2, 2, 2, 3, 3, 3], "transit days by supply"
+    assert [sams.transit_days(x) for x in (1.0, 0.7, 0.55, 0.3)] == [14, 14, 14, 14], "v0.41.196: an order takes two weeks whatever the supply"
     calls = []
     real_r, real_b = sams.red_orders, sams.blue_orders
     sams.red_orders = lambda *a, **k: (calls.append("red"), [])[1]
@@ -4997,6 +4997,45 @@ def check_93_supply_buildings(c):
     print("[supply buildings] %s: %d buildings + guard, named and in the manifest" % (a_.kind.value, len(blds)))
 
 
+def check_94_sam_cost(c):
+    """v0.41.196: a replacement SAM battery costs its side supply (SA-10 / Patriot 6, SA-11 / SA-6 / HAWK 3, the rest 2 points), the debt fades in a straight line over 1.5 x the order
+    time (two weeks), is capped, lowers supply below the floor, and a side has one order in flight. v0.41.196 final: orders take two weeks and the price is zero (mechanics tested at the 1x prices)."""
+    from sqe import sams, ground
+    st = fresh_session(3, 5).state
+    assert sams.SAM_DEBT == {"long": 0.0, "medium": 0.0, "short": 0.0}, "the price is zero until XO switches it on"
+    assert sams.debt(st, "red") == 0.0 and sams.debt(st, "blue") == 0.0
+    _old = dict(sams.SAM_DEBT)
+    sams.SAM_DEBT.update({"long": 0.06, "medium": 0.03, "short": 0.02})          # the mechanics are tested at the 1x prices, then restored
+    try:
+        _check_94_body(st, sams, ground)
+    finally:
+        sams.SAM_DEBT.update(_old)
+    print("[SAM cost] two-week orders, price zero by default; debt mechanics (by class, straight-line payback, cap, below-the-floor supply) work when priced")
+
+
+def _check_94_body(st, sams, ground):
+    assert sams.ORDER_TRANSIT_DAYS == 14 and sams.transit_days(1.0) == 14
+    assert (sams.debt_for("SA-10"), sams.debt_for("Patriot"), sams.debt_for("SA-11"), sams.debt_for("HAWK"), sams.debt_for("SA-3"), sams.debt_for("AAA")) == (0.06, 0.06, 0.03, 0.03, 0.02, 0.02)
+    sams._rec(st).pop("debt", None)
+    base = ground.supply(st, "red") + sams.debt(st, "red")             # supply with no debt
+    assert sams.debt(st, "red") == 0.0
+    sams.add_debt(st, "red", "SA-10")
+    assert abs(sams.debt(st, "red") - 0.06) < 1e-9 and abs(ground.supply(st, "red") - (base - 0.06)) < 1e-9, "the debt lowers supply"
+    d0 = st.day
+    st.day = d0 + 5
+    assert abs(sams.debt(st, "red") - 0.06 * (1 - 5 / (sams.SAM_DEBT_PAYBACK * sams.ORDER_TRANSIT_DAYS))) < 1e-9, "straight-line payback over 1.5 x the order time"
+    st.day = d0 + int(sams.SAM_DEBT_PAYBACK * sams.ORDER_TRANSIT_DAYS) + 1
+    assert sams.debt(st, "red") == 0.0, "paid back"
+    st.day = d0
+    for _ in range(10):
+        sams.add_debt(st, "red", "SA-10")
+    assert abs(sams.debt(st, "red") - sams.SAM_DEBT_CAP) < 1e-9, "capped"
+    assert sams.debt(st, "blue") == 0.0, "the other side owes nothing"
+    st.day = d0 + 100
+    sams.add_debt(st, "red", "SA-3")
+    assert len(sams._rec(st)["debt"]["red"]) == 1, "old entries are dropped"
+
+
 def check_91_jets_on_cas(c):
     """v0.41.188: the F-16C and F/A-18C can fly CAS (Mavericks): the planner gives the job to A-10Cs when the air is clear and to jets when red fighters reach the target,
     a jet pilot who picks a CAS job flies the CAS slot, and an AI-flown jet CAS flight counts JET_CAS_FACTOR of an A-10C one in the war sim."""
@@ -5318,6 +5357,7 @@ CHECKS = [
     check_91_jets_on_cas,
     check_92_cas_patrol_leg,
     check_93_supply_buildings,
+    check_94_sam_cost,
 ]
 
 

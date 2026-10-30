@@ -124,7 +124,7 @@ class OverviewPage(QWidget):
             + T(("Side", "Site", "Type", "Health", "State"), [(a, b, c, f"{d}%", e) for a, b, c, d, e in od.air_defence_rows(st)]))
         from .. import blue_barcap as _bb, bombers as _bomb
         self.dviews["air"].setHtml(
-            "<p><b>Air tempo</b> (what your flown sorties do to the odds of the same kind of job done in the background; 0 to +40, fades 3% a night)<br>"
+            "<p><b>Tactical Edge</b> (what your flown sorties do to the odds of the same kind of job done in the background; 0 to +40, fades 3% a night)<br>"
             + "<br>".join(html.escape(x) for x in od.tempo_lines(st)) + "</p><p>"
             + "<br>".join(html.escape(x) for x in (_bb.status_lines(st) + _bomb.status_lines(st))).replace("   ", "&nbsp;&nbsp;&nbsp;") + "</p>")
 

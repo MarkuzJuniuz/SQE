@@ -20,7 +20,7 @@ def _browse(parent, line: QLineEdit, title: str):
 
 
 PILOT_INFLUENCE_TEXT = ("Your flying changes the war. On: the higher-ups learn from your sorties. Fly well and command commits more to the fight; stay on the "
-                        "ground and the front can slip, so you can lose the war. Off: the war plays out on its own, with no effect from your flying (no red surge, no air tempo).")
+                        "ground and the front can slip, so you can lose the war. Off: the war plays out on its own, with no effect from your flying (no red surge, no Tactical Edge).")
 
 
 class NewCampaignDialog(QDialog):
@@ -64,9 +64,9 @@ class NewCampaignDialog(QDialog):
         form.addRow("Campaign starts", row)
         self.night = QCheckBox("Allow night sorties (otherwise missions are spread through daylight)")
         form.addRow("", self.night)
-        self.pinf = QCheckBox("Pilot Influence: your sorties affect the war")
+        self.pinf = QCheckBox("Tactical Edge: your sorties affect the war")
         self.pinf.setChecked(bool(pilot_influence)); self.pinf.setToolTip(PILOT_INFLUENCE_TEXT)
-        form.addRow("", self.pinf)                      # the same setting as Settings > Campaign > Pilot Influence: it can be changed there later
+        form.addRow("", self.pinf)                      # the same setting as Settings > Campaign > Tactical Edge: it can be changed there later
         from .. import weather as _wxn
         self.wx = QComboBox()
         for k, val in _wxn.MODES.items():
@@ -186,8 +186,8 @@ class SettingsDialog(QDialog):
                 "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
                 "that cannot attack at all is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
         # v0.41.165: Pilot Influence goes AFTER the whole Weather block (combo + its description), never between them
-        self.pinf = QCheckBox("Pilot Influence (your sorties affect the war)"); self.pinf.setChecked(bool(getattr(settings, "pilot_influence", True)))
-        row(v, "Pilot Influence", self.pinf)
+        self.pinf = QCheckBox("Tactical Edge (your sorties affect the war)"); self.pinf.setChecked(bool(getattr(settings, "pilot_influence", True)))
+        row(v, "Tactical Edge", self.pinf)
         hint(v, PILOT_INFLUENCE_TEXT)
         from ..difficulty import SKILL_CHOICES as _SK
         self.skr, self.skb = QComboBox(), QComboBox()
