@@ -5324,6 +5324,50 @@ def check_96_site_spots(c):
     print(f"[site spots] SAM sites on a spot {on}/{tot}, supply {ons}/{tots}, columns {onc}/{totc} (3 seeds, L3); no file: built as before")
 
 
+def check_97_builtin_relief(c):
+    """v0.41.200: SQE ships a 2 km ground-height grid (sqe/data/theatres/<theatre>_relief.json, made by `sqe_scan.py condense`). The app asks for it (builtin=True) and
+    uses it only when the player has no scan of their own; a scan always wins; plain configure() keeps the old 'no relief' behaviour. The packer keeps the highest
+    ground of each 2 x 2 block (a ridge is never lost)."""
+    import importlib.util, json as _json, tempfile as _tf
+    from pathlib import Path as _P
+    from sqe import relief, theatres
+    spec = importlib.util.spec_from_file_location("sqe_scan_tool", str(_P(__file__).resolve().parent / "sqe_scan.py"))
+    tool = importlib.util.module_from_spec(spec); spec.loader.exec_module(tool)
+    theatres.use("caucasus")
+    prev = (relief._DIR, relief._BUILTIN, relief._FIXED)
+    try:
+        with _tf.TemporaryDirectory() as d:
+            d = _P(d)
+            relief.configure(d)
+            assert not relief.available(), "no scan and no builtin flag: no relief (tests that want the old behaviour keep it)"
+            relief.configure(d, builtin=True)
+            assert relief.available() and relief.info().startswith("built-in grid"), relief.info()
+            R = relief._R
+            assert R["step"] == 2000 and R["nx"] == 250 and R["ny"] == 390, (R["step"], R["nx"], R["ny"])
+            hi = max(max(r) for r in R["max"]) * relief.UNIT_M
+            assert 5000 < hi < 5700, hi
+            assert all(R["max"][i][j] >= R["mean"][i][j] for i in range(0, R["nx"], 7) for j in range(0, R["ny"], 5)), "highest ground is never below average ground"
+            # a scan of the player's own wins over the built-in grid
+            (d / relief._file()).write_text(_json.dumps({"terrain": "Caucasus", "x0": -430000, "y0": 190000, "step": 1000, "nx": 4, "ny": 4, "unit": 10,
+                                                         "max": [" ".join(["50"] * 4)] * 4, "mean": [" ".join(["40"] * 4)] * 4}))
+            relief.configure(d, builtin=True)
+            assert relief.available() and relief.info().startswith("loaded") and relief._R["nx"] == 4, relief.info()
+            # the packer: a made-up 4 x 4 scan comes out as 2 x 2 cells holding the highest / rounded average ground of each block
+            (d / relief._file()).write_text(_json.dumps({"terrain": "Caucasus", "x0": -430000, "y0": 190000, "step": 1000, "nx": 4, "ny": 4, "unit": 10,
+                                                         "max": ["0 10 20 30", "40 50 60 70", "80 90 100 110", "120 130 140 150"],
+                                                         "mean": ["0 9 20 31", "40 51 60 71", "80 91 100 111", "120 131 140 151"]}))
+            out = tool.condense_relief(d, "caucasus")
+            assert (out["nx"], out["ny"], out["step"], out["unit"]) == (2, 2, 2000, 10), out
+            relief._parse_packed(out)
+            g = relief._parse_packed(out)
+            assert [list(r) for r in g["max"]] == [[50, 70], [130, 150]], [list(r) for r in g["max"]]
+            assert [list(r) for r in g["mean"]] == [[25, 46], [106, 126]], [list(r) for r in g["mean"]]
+    finally:
+        relief._DIR, relief._BUILTIN, relief._FIXED = prev
+        relief.configure(prev[0], builtin=prev[1])
+    print("[built-in relief] the shipped 2 km grid loads only when asked for, a player's scan overrides it, highest ground >= average ground, summit in range")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5459,6 +5503,7 @@ CHECKS = [
     check_94_sam_cost,
     check_95_site_condenser,
     check_96_site_spots,
+    check_97_builtin_relief,
 ]
 
 

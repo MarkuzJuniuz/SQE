@@ -1,5 +1,7 @@
 """Ground height measured by DCS itself (see terrainprobe.py). Read from <Saved Games>\\SQE\\SQE_relief_<theatre>.json.
 
+A coarse grid (1 km cells in a scan). v0.41.200: without a scan of their own the app uses a built-in 2 km grid made from XO's scan (sqe/data/theatres/<id>_relief.json,
+written by tools/sqe_scan.py condense); a scan, when there is one, wins.
 A coarse grid (1 km cells by default). Each cell holds the HIGHEST ground in it (for safe altitudes, so a narrow ridge is never missed) and the
 AVERAGE ground (for line of sight). Heights are stored in units of 10 m. Coordinates are DCS's: x north, y east, metres.
 
@@ -7,9 +9,12 @@ Everything here returns None when there is no relief file (or the point is off t
 The line-of-sight test is an approximation (1 km cells, 4/3-earth radar horizon): good enough to choose a profile, not a guarantee.
 """
 from __future__ import annotations
+import base64
 import json
 import math
+import sys
 import time
+import zlib
 from array import array
 from pathlib import Path
 
@@ -24,6 +29,9 @@ _DIR = None
 _MTIME = None
 _CHECKED = 0.0
 _FIXED = False                             # a grid installed by from_grid (tests): never reloaded from disk
+_BUILTIN = False                           # engine.py asks for the built-in grid when the player has no scan of their own
+_SRC = ""                                  # "scan" | "built-in": where the loaded grid came from
+_SHIPPED: dict = {}                        # theatre id -> parsed built-in grid (or None)
 
 
 def _file() -> str:
@@ -39,9 +47,11 @@ def theatre_changed() -> None:
         _refresh(force=True)
 
 
-def configure(folder) -> None:
-    global _DIR, _R, _MTIME, _CHECKED, _FIXED
+def configure(folder, builtin: bool = False) -> None:
+    """Look for the player's own scan in `folder`. builtin=True (the app): without one, use the grid that ships with SQE (v0.41.200)."""
+    global _DIR, _R, _MTIME, _CHECKED, _FIXED, _BUILTIN
     _DIR = Path(folder) if folder else None
+    _BUILTIN = bool(builtin)
     _R, _MTIME, _CHECKED, _FIXED = None, None, 0.0, False
     _refresh(force=True)
 
@@ -53,30 +63,72 @@ def _parse(d: dict) -> dict:
             "max": rows("max"), "mean": rows("mean")}
 
 
+def _parse_packed(d: dict) -> dict:
+    """The built-in grid (written by tools/sqe_scan.py condense): `max` / `mean` are base64 of zlib of little-endian int16 differences between neighbouring
+    cells along a row, rows one after the other, in 10 m units."""
+    nx, ny = int(d["nx"]), int(d["ny"])
+
+    def grid(key):
+        a = array("h")
+        a.frombytes(zlib.decompress(base64.b64decode(d[key])))
+        if sys.byteorder == "big":
+            a.byteswap()
+        rows = []
+        for i in range(nx):
+            row, v = array("H"), 0
+            for dv in a[i * ny:(i + 1) * ny]:
+                v += dv
+                row.append(v)
+            rows.append(row)
+        return rows
+    return {"x0": float(d["x0"]), "y0": float(d["y0"]), "step": float(d["step"]), "nx": nx, "ny": ny, "max": grid("max"), "mean": grid("mean")}
+
+
+def _shipped():
+    """The built-in ground-height grid of the active theatre (sqe/data/theatres/<id>_relief.json), or None."""
+    from . import theatres
+    th = theatres.active()
+    tid = th.get("id", "")
+    if tid not in _SHIPPED:
+        g = None
+        try:
+            p = Path(th.get("_dir", "")) / f"{tid}_relief.json"
+            if p.is_file():
+                g = _parse_packed(json.loads(p.read_text(encoding="utf-8")))
+        except Exception:
+            g = None
+        _SHIPPED[tid] = g
+    return _SHIPPED[tid]
+
+
 def _refresh(force: bool = False) -> None:
-    global _R, _MTIME, _CHECKED
+    global _R, _MTIME, _CHECKED, _SRC
     if _FIXED:
         return
     now = time.time()
     if not force and now - _CHECKED < 3.0:
         return
     _CHECKED = now
-    if _DIR is None:
-        _R = None
-        return
-    p = _DIR / _file()
-    try:
-        mt = p.stat().st_mtime
-    except OSError:
-        _R, _MTIME = None, None
-        return
-    if mt == _MTIME and _R is not None:
-        return
-    try:
-        _R = _parse(json.loads(p.read_text(encoding="utf-8")))
-        _MTIME = mt
-    except Exception:
-        _R, _MTIME = None, None
+    if _DIR is not None:
+        p = _DIR / _file()
+        try:
+            mt = p.stat().st_mtime
+        except OSError:
+            mt = None
+        if mt is not None:
+            if mt == _MTIME and _R is not None and _SRC == "scan":
+                return
+            try:
+                _R = _parse(json.loads(p.read_text(encoding="utf-8")))
+                _MTIME, _SRC = mt, "scan"
+                return
+            except Exception:
+                pass
+    _R, _MTIME, _SRC = None, None, ""
+    if _BUILTIN:
+        g = _shipped()
+        if g is not None:
+            _R, _SRC = g, "built-in"
 
 
 def from_grid(x0: float, y0: float, step: float, hi: list, mean: list | None = None) -> None:
@@ -102,6 +154,8 @@ def info() -> str:
     _refresh()
     if _R is None:
         return "not scanned yet"
+    if _SRC == "built-in":
+        return f"built-in grid ({_R['nx']} x {_R['ny']} cells of {int(_R['step'])} m; run the terrain scan for a finer one)"
     top = max(max(r) for r in _R["max"] if len(r)) * UNIT_M
     return f"loaded ({_R['nx']} x {_R['ny']} cells of {int(_R['step'])} m, highest ground {int(top):,} m / {int(top / FT):,} ft)"
 

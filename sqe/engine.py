@@ -53,7 +53,7 @@ class Session:
         seacheck.SITE_MARGIN = float(getattr(self.settings, "shore_margin_m", 1500))
         terrainmask.RIVER_MARGIN = float(getattr(self.settings, "river_margin_m", 100))
         terrainmask.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
-        relief.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
+        relief.configure(self.settings.sqe_dir if self.settings.dcs_saves else None, builtin=True)
         roads.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
 
     # ---- persistence ---------------------------------------------------------------------------
