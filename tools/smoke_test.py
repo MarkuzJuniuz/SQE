@@ -2776,11 +2776,11 @@ def check_32_red_s_known_cap(c):
     s.new("Garrison", "FA-18C", 2, seed=9); _st = s.state; _pl = _war.ObjectivePlanner(_gd(2))
     _gc = lambda: [o_ for o_ in _pl.plan(_st, _rnd.Random(1), limit=12) if o_.type.value == "CAS" and _st.assets[o_.target_id].variant == "GARRISON" and not o_.target_id.startswith("rfwd_")]      # (a forward position has no SAM site to wait for)
     _gs = [a_ for a_ in _st.assets.values() if a_.variant == "GARRISON" and not a_.id.startswith("rfwd_") and not a_.destroyed and _pl._open(_st, a_)]
-    assert _gs and not _gc(), "no garrison CAS while the long-range sites around it live"
+    assert _gs and not [o_ for o_ in _gc() if not (o_.after or o_.aim == "SEAD")], "v0.41.204: while the long-range sites around a garrison live, its CAS is only ever a follow job (after) or has a HARM escort, never plain"
     for a_ in _gs:
         for x_ in _pl._garrison_cover(_st, a_): x_.health = 0.0
-    assert _gc(), "garrison CAS is offered once the cover is cleared"
-    print("[garrison cas] held back while the long-range SAM sites that cover a garrison live, offered once they are down; front-line CAS unchanged")
+    assert [o_ for o_ in _gc() if not o_.after], "garrison CAS is offered (plain) once the cover is cleared"
+    print("[garrison cas] only behind a SEAD or with a HARM escort while the long-range SAM sites that cover a garrison live, plain once they are down; front-line CAS unchanged")
     import sqe.war as _wlr; _lr_real = _wlr.long_range_site; _wlr.long_range_site = lambda *a_: False     # this check is about the SEAD / Close DEAD pair: no Standoff DEAD
     # --late-sead (hold test): the SEAD stage goes in LATE_SEAD_MIN later, so the DEAD stage (DEAD_STAGE_GAP_MIN behind it) arrives first and holds
     import sqe.engine as _eng2
@@ -3931,9 +3931,11 @@ def check_51_no_needless_banzai_cas(c):
             if p_.objective.type.value != "CAS":
                 continue
             _cov, _hard = _cc20(_st, _st.assets[p_.objective.target_id])
-            assert not _hard, ("no CAS under a live SA-11 / SA-10", p_.objective.description, [x.variant for x in _hard])
-            assert bool(_cov) == (p_.objective.aim == "SEAD"), ("CAS under a live SA-2/3/6 is marked for a SEAD escort", p_.objective.description)
-            if _cov:
+            _fol = bool(p_.objective.after)              # v0.41.158 / v0.41.204: under one or two SA-11 / SA-10 only as a follow job, behind their SEAD
+            assert not _hard or (_fol and all(x.id in p_.objective.after.split(",") for x in _hard)), ("no CAS under a live SA-11 / SA-10 unless it follows their SEAD", p_.objective.description, [x.variant for x in _hard])
+            if not _fol:
+                assert bool(_cov) == (p_.objective.aim == "SEAD"), ("CAS under a live SA-2/3/6 is marked for a SEAD escort", p_.objective.description)
+            if _cov and not _fol:
                 assert any(f_.role.value == "SEAD" and not f_.tag for f_ in p_.flights), ("an escorted CAS flies with its HARM flight", p_.objective.description)
                 _nesc += 1
             _ncas += 1
@@ -3947,7 +3949,7 @@ def check_51_no_needless_banzai_cas(c):
         assert _rd20.shy(_st, _L(1), _ws) == _ws, "Easy raids do not shy from defences"
         assert all(w1 <= w0 for (_, _, w0), (_, _, w1) in zip(_ws, _rd20.shy(_st, _L(3), _ws))), "Hard raids shy from defended targets"
     assert set(_av20) == {"SA-2", "SA-3", "SA-6", "SA-11", "SA-10"}, "AI routes bend round every medium / long-range SAM"
-    print(f"[banzai] {_ncas} CAS jobs on Normal, {_nesc} under an SA-2/3/6 with their SEAD escort, none under an SA-11/10; red commits at any / 1:1 / 2:1 odds")
+    print(f"[banzai] {_ncas} CAS jobs on Normal, {_nesc} under an SA-2/3/6 with their SEAD escort, none under an SA-11/10 except behind its SEAD (follow jobs); red commits at any / 1:1 / 2:1 odds")
 
 
 def check_52_carrier_cap_s_orbit(c):
@@ -5440,6 +5442,29 @@ def check_99_fighters_clear_gate(c):
     print("[fighters-clear gate] strikers carry the gate (cap %d s), a plain CAS too (%d s), bombing expends All, hook has the air check" % (AIR_HOLD_STRIKE_S, AIR_HOLD_CAS_S))
 
 
+def check_100_garrison_follow(c):
+    """v0.41.204: a garrison under one or two SA-11 / SA-10 sites is offered as a follow job (after = their ids) when the SEAD / standoff job is in the day's list, and the mission builds with the gate."""
+    import re as _re, zipfile as _zf
+    from sqe.engine import Session as _S
+    cs = _S(__import__("sqe.settings", fromlist=["AppSettings"]).AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    found = built = 0
+    for sd in range(1, 9):
+        cs.new(f"Garr100{sd}", "A-10C", 2, seed=sd); cs.ai_test = True
+        pk = cs.packages()
+        have = {p.objective.target_id for p in pk if p.objective.type.value == "DEAD" and p.objective.aim in ("STANDOFF", "SEAD")}
+        for p in pk:
+            o = p.objective
+            if o.type.value == "CAS" and "garrison (after the SEAD" in o.description:
+                found += 1
+                assert o.after and all(x in have for x in o.after.split(",")), ("a follow garrison has its SEAD / standoff in the plan", o.description, o.after, have)
+                if not built and cs.flyable(p):
+                    got = cs.fly(p.number, cs.flyable(p)[0].id); built = 1
+                    mis = _zf.ZipFile(got.miz).read("mission").decode("utf8", "ignore")
+                    assert _re.search(r"\{t=\d+, site=[^\n]*?acap=\d+", mis), "the follow garrison CAS carries the gate"
+    assert found >= 3, ("garrison CAS behind a SEAD across seeds 1-8", found)
+    print("[garrison follow] %d follow garrison jobs across 8 seeds, one built with the gate" % found)
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5578,6 +5603,7 @@ CHECKS = [
     check_97_builtin_relief,
     check_98_srtm_relief,
     check_99_fighters_clear_gate,
+    check_100_garrison_follow,
 ]
 
 

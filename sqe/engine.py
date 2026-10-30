@@ -774,8 +774,8 @@ class Session:
         problems = self.settings.problems()
         if problems:
             raise RuntimeError("; ".join(problems))
-        pkg = next(p for p in self.packages() if p.number == package_number)
         self._restore_undo()                                                                  # v0.41.149: a sortie being replaced (cancelled) hands back what its emergency changed
+        pkg = next(p for p in self.packages() if p.number == package_number)                  # v0.41.204: after the restore, or a package the scramble had taken could not be found again
         ev = self.emergency_for(package_number, flight_id)
         undo = ({"plan": copy.deepcopy(st.plan), "raids": copy.deepcopy(st.raids or {}), "log_len": len(st.log)} if ev else None)
         lead_extras = []
