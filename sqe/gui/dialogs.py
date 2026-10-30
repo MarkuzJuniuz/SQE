@@ -105,7 +105,7 @@ class NewCampaignDialog(QDialog):
 
 class SettingsDialog(QDialog):
     """Six tabs: General (flight timing), Campaign (what the world does), Mission build (merging, limits), DCS integration (paths, the
-    scripting patch), Terrain scan (with a plain scanned / not scanned status) and Experimental (features still being tested). Every control keeps the name it always had."""
+    scripting patch) and Experimental (features still being tested). Every control keeps the name it always had."""
     def __init__(self, settings: S.AppSettings, parent=None):
         super().__init__(parent); self.s = settings; self.setWindowTitle("Settings"); self.setMinimumWidth(720); self.setMinimumHeight(560); self.resize(780, 700)
         lay = QVBoxLayout(self); lay.setSpacing(10)
@@ -274,50 +274,11 @@ class SettingsDialog(QDialog):
         v.addStretch(1)
         self.inst.textChanged.connect(self._refresh); self._refresh()
 
-        # ---- Terrain scan ---------------------------------------------------------------------------------------------------------------
-        v = page("Terrain scan")
-        self.tm_status = QLabel(); self.tm_status.setWordWrap(True); v.addWidget(self.tm_status)
-        self.tm_relief = QLabel(); self.tm_relief.setWordWrap(True); v.addWidget(self.tm_relief)
-        self.tm_roads = QLabel(); self.tm_roads.setWordWrap(True); v.addWidget(self.tm_roads)
-        self.shore = QSpinBox(); self.shore.setRange(300, 5000); self.shore.setSingleStep(100); self.shore.setSuffix(" m"); self.shore.setValue(int(getattr(settings, "shore_margin_m", 1500)))
-        self.river = QSpinBox(); self.river.setRange(0, 1000); self.river.setSingleStep(50); self.river.setSuffix(" m rivers"); self.river.setValue(int(getattr(settings, "river_margin_m", 100)))
-        row(v, "Shore margin", self.shore, self.river)
-        self.tm = QLabel(); self.tm.setObjectName("small"); self.tm.setWordWrap(True); v.addWidget(self.tm)
-        self.probe_btn = QPushButton("Create terrain scan mission"); self.probe_btn.clicked.connect(self._make_probe)
-        self.recheck_btn = QPushButton("Re-check"); self.recheck_btn.clicked.connect(self._tm_refresh)
-        r = QHBoxLayout(); r.addWidget(self.probe_btn); r.addWidget(self.recheck_btn); r.addStretch(1); v.addLayout(r)
-        hint(v, "To measure the real map once: create the scan mission, start it in DCS (Fly), wait for COMPLETE, then Re-check. "
-                "Without a scan SQE uses a rough built-in coastline (it can be 1-3 km off and has no rivers).")
-        v.addStretch(1)
-        self._tm_refresh()
-
         self.tabs.tabBar().moveTab(1, self.tabs.count() - 1)                  # Experimental last
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); bb.accepted.connect(self._save)
         bb.rejected.connect(self.reject); lay.addWidget(bb)
         if not settings.dcs_saves or not Path(settings.dcs_saves).exists():
             self.tabs.setCurrentIndex(3)                                  # first run: the paths are what is missing
-
-    def _tm_refresh(self):
-        from .. import terrainmask as _tmk, relief as _rl, roads as _rd
-        _tmk.configure(self.s.sqe_dir if self.s.dcs_saves else None)
-        _rl.configure(self.s.sqe_dir if self.s.dcs_saves else None, builtin=True)
-        _rd.configure(self.s.sqe_dir if self.s.dcs_saves else None)
-        sc = _tmk.scanned(self.s.sqe_dir if self.s.dcs_saves else None)
-        have = ", ".join(f"{t} (scanned {dte})" for t, dte in sc) if sc else "none yet"
-        ok = bool(_tmk.available())
-        self.tm_status.setText(("Scanned: " + _tmk.info()) if ok else "Not scanned: ground sites use the coarse built-in coastline (up to 1-3 km off, no rivers).")
-        self.tm_status.setStyleSheet(f"color: {theme.GREEN if ok else theme.AMBER}; font-weight: 700; font-size: 15px;")
-        rok = bool(_rl.available())
-        self.tm_relief.setText(("Ground height: " + _rl.info()) if rok else "Ground height: not scanned. Low flights use a flat estimate and the kneeboard has no minimum safe altitude (run the scan mission again).")
-        self.tm_relief.setStyleSheet(f"color: {theme.GREEN if rok else theme.AMBER}; font-weight: 700; font-size: 15px;")
-        dok = bool(_rd.available())
-        self.tm_roads.setText(("Roads: " + _rd.info()) if dok else "Roads: not scanned. Columns and supply sites are not placed on roads (run the scan mission again).")
-        self.tm_roads.setStyleSheet(f"color: {theme.GREEN if dok else theme.AMBER}; font-weight: 700; font-size: 15px;")
-        self.tm.setText("Ground sites stay this far from the sea and lakes, and the second value from rivers and shallow water (rivers need the scan). "
-                        f"Terrain scans on disk: {have}.")
-
-    def _make_probe(self):
-        create_scan_mission(self, self.s, self.saves.text())
 
     def _refresh(self):
         self.ms.setText("MissionScripting.lua: " + S.mission_scripting_status(self.inst.text()))
@@ -343,8 +304,6 @@ class SettingsDialog(QDialog):
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.pilot_influence = bool(self.pinf.isChecked())
         self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
-        self.s.shore_margin_m = int(self.shore.value())
-        self.s.river_margin_m = int(self.river.value())
         self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value())
         self.s.f14_special_names = self.f14n.isChecked()
         self.s.auto_patch_scripting = self.autopatch.isChecked(); self.s.patch_asked = True
@@ -472,23 +431,3 @@ class DebriefDialog(QDialog):
         bb = QDialogButtonBox(QDialogButtonBox.Close); bb.rejected.connect(self.reject); bb.accepted.connect(self.accept)
         btn = bb.button(QDialogButtonBox.Close); btn.setText("Continue"); btn.setObjectName("primary")
         btn.clicked.connect(self.accept); lay.addWidget(bb)
-
-
-def create_scan_mission(parent, settings, saves_text: str = "") -> bool:
-    """Write SQE_TerrainScan.miz into the DCS Missions folder and tell the user how to run it. Returns True when it was created."""
-    from .. import terrainprobe
-    saves = saves_text or settings.dcs_saves
-    if not saves:
-        QMessageBox.warning(parent, "Terrain scan", "Set the DCS Saved Games folder first."); return False
-    try:
-        from .. import theatres as _th
-        tid = _th.active()["id"]
-        p = terrainprobe.make_probe(Path(S.native(saves)) / "Missions" / ("SQE_TerrainScan.miz" if tid == "caucasus" else f"SQE_TerrainScan_{tid}.miz"))
-    except Exception as ex:
-        QMessageBox.warning(parent, "Terrain scan", f"Could not create the mission: {ex}"); return False
-    QMessageBox.information(parent, "Terrain scan",
-                            f"Created {p.name} in your DCS Missions folder (you start in a free Su-25T).\n\n1. Keep SQE open (it enables DCS scripting while open).\n"
-                            "2. In DCS: Mission > Fly > Missions > My Missions > SQE_TerrainScan, then Fly.\n"
-                            "3. Wait for the message 'SQE terrain scan COMPLETE' (about a minute; DCS may stutter), then leave the mission.\n"
-                            "SQE uses the result the next time you open or start a campaign.")
-    return True

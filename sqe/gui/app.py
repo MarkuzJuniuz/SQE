@@ -4,8 +4,8 @@ import sys
 import traceback
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QSize
-from PySide6.QtGui import QAction, QColor, QFont
+from PySide6.QtCore import Qt, QTimer, QSize, QUrl
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
                                QHeaderView, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QProgressBar,
                                QPushButton, QCheckBox, QScrollArea, QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser,
@@ -22,6 +22,8 @@ from ..settings import AppSettings
 from . import theme
 from .dialogs import DebriefDialog, NewCampaignDialog, SettingsDialog, WaitingDialog
 from .widgets import MapView, StatCard, card
+
+RELEASES_URL = "https://github.com/MarkuzJuniuz/SQE/releases/latest"
 
 
 def _game_note(text: str) -> str:
@@ -65,7 +67,7 @@ class OverviewPage(QWidget):
         gc = card(); left.addWidget(gc, 1)                                 # v0.41.149: the detail tabs (they replaced the one long sector list)
         self.dtabs = QTabWidget(); gc.layout().addWidget(self.dtabs)
         self.dviews = {}
-        for key, title in (("ground", "Ground"), ("supply", "Supply"), ("ad", "Air defence"), ("air", "Air")):
+        for key, title in (("ground", "Ground"), ("supply", "Supply"), ("ad", "Air defence"), ("air", "Air Operations"), ("edge", "Tactical Edge")):
             v = QTextBrowser(); v.setFrameShape(QFrame.NoFrame); v.setStyleSheet("background:transparent;border:none;"); self.dviews[key] = v; self.dtabs.addTab(v, title)
         right = QVBoxLayout(); root.addLayout(right, 6)
         g = QGridLayout(); g.setSpacing(12); right.addLayout(g)
@@ -123,10 +125,11 @@ class OverviewPage(QWidget):
             + ("<p><b>SAM batteries in transit</b><br>" + "<br>".join(html.escape(f"{a}: {b}") for a, b in orders) + "</p>" if orders else "")
             + T(("Side", "Site", "Type", "Health", "State"), [(a, b, c, f"{d}%", e) for a, b, c, d, e in od.air_defence_rows(st)]))
         from .. import blue_barcap as _bb, bombers as _bomb
-        self.dviews["air"].setHtml(
+        self.dviews["edge"].setHtml(
             "<p><b>Tactical Edge</b> (what your flown sorties do to the odds of the same kind of job done in the background; 0 to +40, fades 3% a night)<br>"
-            + "<br>".join(html.escape(x) for x in od.tempo_lines(st)) + "</p><p>"
-            + "<br>".join(html.escape(x) for x in (_bb.status_lines(st) + _bomb.status_lines(st))).replace("   ", "&nbsp;&nbsp;&nbsp;") + "</p>")
+            + "<br>".join(html.escape(x) for x in od.tempo_lines(st)) + "</p>")
+        self.dviews["air"].setHtml(
+            "<p>" + "<br>".join(html.escape(x) for x in (_bb.status_lines(st) + _bomb.status_lines(st))).replace("   ", "&nbsp;&nbsp;&nbsp;") + "</p>")
 
     def refresh(self, st):
         from .. import posture
@@ -384,7 +387,7 @@ class ForcesPage(QWidget):
     def refresh(self, st):
         from .. import war as _war
         t = _war.totals(st); en = story.enemy(st)
-        self.air_line.setText(f"Aircraft serviceable (a detail, jets no longer decide the war): Coalition {t['fa']} of {t['fz']}, {en} {t['ea']} of {t['ez']}.")
+        self.air_line.setText(f"Aircraft serviceable: Coalition {t['fa']} of {t['fz']}, {en} {t['ea']} of {t['ez']}.")
         self.tabs.setTabText(4, f"{en} air wings"); self.tabs.setTabText(5, f"{en} assets")
         self.gw.setHorizontalHeaderLabels(["Sector", f"{en} force", "Coalition force", f"{en} forward garrison", "Coalition forward garrison"])
         self.ea.setHorizontalHeaderLabels([f"{en} air wing", "Types", "Serviceable", "Strength"]); self.as_.setHorizontalHeaderLabels([f"{en} asset", "Type", "Depth", "Condition"])
@@ -563,6 +566,21 @@ class MainWindow(QMainWindow):
         self.recent = f.addMenu("Open &Recent"); self.recent.aboutToShow.connect(self._recent)
         f.addSeparator(); act("&Save", self.save, "Ctrl+S"); act("Save &As...", self.save_as, "Ctrl+Shift+S")
         f.addSeparator(); act("S&ettings...", self.settings, "Ctrl+,"); act("Reset &window size and position", self.reset_window); f.addSeparator(); act("E&xit", self.close, "Alt+F4")
+        h = mb.addMenu("&Help")
+        a = QAction("&About SQE...", self); a.triggered.connect(self.about); h.addAction(a)
+        a = QAction("&Latest release (GitHub)", self); a.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(RELEASES_URL))); h.addAction(a)
+
+    def about(self):
+        from .. import EULA_LINE
+        QMessageBox.about(self, f"About {APP_NAME}", (
+            f"<h3>{APP_NAME} (SQE) v{__version__}</h3>"
+            "<p>A dynamic campaign and sortie generator for DCS World. It builds light missions with few units.</p>"
+            f"<p><a href='{RELEASES_URL}'>Latest release on GitHub</a></p>"
+            f"<p>{html.escape(EULA_LINE)}</p>"
+            "<p><b>Credits</b><br>"
+            "pydcs (the Retribution fork) builds the mission files.<br>"
+            "PySide6 / Qt for the interface; Pillow for the kneeboard images.<br>"
+            "Ground height data: SRTM (NASA / USGS Shuttle Radar Topography Mission) via the AWS open terrain tiles, public domain.</p>"))
 
 
     def _recent(self):
@@ -578,8 +596,6 @@ class MainWindow(QMainWindow):
             self.settings()
             if self.session.settings.problems():
                 return
-        if self._offer_terrain_scan():
-            return
         dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"), getattr(self.session.settings, "ai_skill_red", "level"), getattr(self.session.settings, "ai_skill_blue", "level"), bool(getattr(self.session.settings, "pilot_influence", True)), prefill=prefill)
         if dlg.exec() == QDialog.Accepted:
             try:
@@ -594,24 +610,6 @@ class MainWindow(QMainWindow):
                 self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], night_ops=v['night_ops'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus')); self.refresh_all()
             except Exception:
                 QMessageBox.critical(self, "Could not create campaign", traceback.format_exc())
-
-    def _offer_terrain_scan(self) -> bool:
-        """Once, before the first campaign: offer the one-time terrain scan. True when the user chose to scan first (no campaign is created now)."""
-        from .. import terrainmask
-        from .dialogs import create_scan_mission
-        s = self.session.settings
-        self.session.sync_terrain()
-        if terrainmask.available() or getattr(s, "terrain_asked", False):
-            return False
-        s.terrain_asked = True; s.save()
-        box = QMessageBox(self); box.setWindowTitle("Scan the map once?"); box.setIcon(QMessageBox.Question)
-        box.setText("Enemy sites are placed with a rough coastline. For exact placement (on dry land, off riverbanks) SQE can read the real map from DCS.")
-        box.setInformativeText("It takes one short mission in DCS (about two minutes, free Su-25T, once ever). You can also do it later in Settings.")
-        go = box.addButton("Create the scan mission", QMessageBox.AcceptRole); box.addButton("Skip for now", QMessageBox.RejectRole)
-        box.exec()
-        if box.clickedButton() is go:
-            return create_scan_mission(self, s)
-        return False
 
     def open_campaign(self):
         f, _ = QFileDialog.getOpenFileName(self, "Open campaign", str(self.session.campaigns_dir()), f"SQE campaign (*{CAMPAIGN_EXT})")

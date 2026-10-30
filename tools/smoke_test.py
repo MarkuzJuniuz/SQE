@@ -384,18 +384,17 @@ def check_06_gui_dialogs_build_scan(c):
         _gs = AppSettings(dcs_saves=str(TMP / "gsv"), persist=False)
         _dlg = SettingsDialog(_gs)
         QMessageBox.information = staticmethod(lambda *a, **k: None)
-        assert [_dlg.tabs.tabText(i) for i in range(_dlg.tabs.count())] == ["General", "Campaign", "Mission Build", "DCS integration", "Terrain scan", "Experimental"]
-        assert "Not scanned" in _dlg.tm_status.text()
+        assert [_dlg.tabs.tabText(i) for i in range(_dlg.tabs.count())] == ["General", "Campaign", "Mission Build", "DCS integration", "Experimental"]
+        assert not hasattr(_dlg, "probe_btn") and not hasattr(_dlg, "tm_status"), "v0.41.206: the terrain scan page is gone"
         _gs.carcass_weight_pct, _gs.weather_mode, _gs.merge_radius_nm = 40, "rain", 35       # every moved control still round-trips
         _d2 = SettingsDialog(_gs)
         assert (_d2.cw.value(), _d2.wxm.currentData(), _d2.mrad.value()) == (40, "rain", 35)
         assert not hasattr(_d2, "react") and not hasattr(_d2, "emerg")      # v0.41.135: both checkboxes are gone
-        _dlg._make_probe(); _dlg._save()
-        assert (TMP / "gsv" / "Missions" / "SQE_TerrainScan.miz").exists()
+        _dlg._save()
         _nc = NewCampaignDialog(None, "rain")
         assert _nc.values()["weather_mode"] == "rain", "the new-campaign dialog offers the weather, starting from the current setting"
         assert _d2.ecm.isChecked() is False and _d2.splash.isChecked() is True, "ECM script off and splash damage on by default (v0.41.13)"
-        print("[gui] settings (5 tabs, scan status) and new-campaign dialogs build; every control round-trips; scan mission button works")
+        print("[gui] settings (5 tabs, no terrain scan page) and new-campaign dialogs build; every control round-trips")
     except ImportError:
         print("[gui] PySide6 not installed here; dialogs not exercised")
 
