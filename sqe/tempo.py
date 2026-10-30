@@ -83,9 +83,9 @@ def record(state, objective_type, tone: str, extra: dict | None = None) -> list:
         new = max(TEMPO_MIN, min(TEMPO_CAP, old + step))
         state.tempo[k] = round(new, 4)
         if abs(new - old) < 1e-9:
-            out.append(f"Air tempo, {LABEL[k]}: unchanged at {new * 100:+.0f}%" + (" (at the cap)" if abs(new) >= TEMPO_CAP - 1e-9 and step else ""))
+            out.append(f"Tactical Edge, {LABEL[k]}: unchanged at {new * 100:+.0f}%" + (" (at the cap)" if abs(new) >= TEMPO_CAP - 1e-9 and step else ""))
         else:
-            out.append(f"Air tempo, {LABEL[k]}: {(new - old) * 100:+.0f}% (now {new * 100:+.0f}%): the squadrons' background jobs of this kind go better"
+            out.append(f"Tactical Edge, {LABEL[k]}: {(new - old) * 100:+.0f}% (now {new * 100:+.0f}%): the squadrons' background jobs of this kind go better"
                        + ("" if k == pk else " (credit for what the mission did)"))
     return out
 
