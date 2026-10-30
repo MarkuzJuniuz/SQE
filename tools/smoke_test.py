@@ -1267,8 +1267,8 @@ def check_29_phase_air_defence_that(c):
     _ds = _NS(sam_rebuild=1.0, sam_scoot=1.0)
     _lr = next(a_ for a_ in _st.assets.values() if a_.kind == _AK.SAM and a_.id.startswith("sam_") and a_.variant in ("SA-2", "SA-3", "SA-6", "SA-11", "SA-10") and a_.tier <= _st.front + 2)
     _lr.health = 0.0; _st.day = 10; _sm.track(_st); assert _st.sams["down"][_lr.id] == 10
-    _st.day = 12; assert not _sm.rebuild(_st, _ds, _rnd.Random(1)) and _lr.destroyed, "not rebuilt before the third day"
-    _st.day = 13; _got = []
+    _st.day = 10 + _sm.ORDER_DAYS - 1; assert not _sm.rebuild(_st, _ds, _rnd.Random(1)) and _lr.destroyed, "not rebuilt before the order time"
+    _st.day = 10 + _sm.ORDER_DAYS; _got = []
     for _k in range(30):
         _got = _sm.rebuild(_st, _ds, _rnd.Random(_k))
         if _got: break
