@@ -840,11 +840,12 @@ local function breakOff(gs, why)
   local s = siteOf(gs)
   if not aborted[gs.site] then
     aborted[gs.site] = true
-    say(whoOf(s) .. ": abort, abort. " .. labelOf(s, gs) .. " radars still up, DEAD flight break off.", gs.gates[1].you)
+    if why == "air-abort" then say(whoOf(s) .. ": abort, abort. " .. labelOf(s, gs) .. ", red fighters still up, flight break off.", gs.gates[1].you)
+    else say(whoOf(s) .. ": abort, abort. " .. labelOf(s, gs) .. " radars still up, DEAD flight break off.", gs.gates[1].you) end
   end
   for _, gt in ipairs(gs.gates) do
     if gt.dead then
-      local why_txt = ({ ["hold-timeout"] = "hold time is up", ["hold-fuel"] = "fuel is low", ["seads-gone"] = "the SEAD flights are down or gone" })[why] or ("not blind in time (" .. why .. ")")
+      local why_txt = ({ ["hold-timeout"] = "hold time is up", ["hold-fuel"] = "fuel is low", ["seads-gone"] = "the SEAD flights are down or gone", ["air-abort"] = "red fighters still in the air" })[why] or ("not blind in time (" .. why .. ")")
       say(whoOf(s) .. ": abort, RTB. " .. labelOf(s, gs) .. " " .. why_txt .. ".", gt.you)
     end
   end
@@ -888,8 +889,7 @@ local function resume(gs, how)
   end
   for _, gt in ipairs(gs.gates) do
     if gt.dead then
-      if how == "air-timeout" then say(whoOf(s) .. ": " .. labelOf(s, gs) .. ", hold time is up, red fighters still around. Pushing anyway.", gt.you)
-      elseif gs.holdWhy == "air" then say(whoOf(s) .. ": " .. labelOf(s, gs) .. ", the air is clear. Go, go, go.", gt.you)
+      if gs.holdWhy == "air" then say(whoOf(s) .. ": " .. labelOf(s, gs) .. ", the air is clear. Go, go, go.", gt.you)
       else say(whoOf(s) .. ": " .. labelOf(s, gs) .. " radars are down. Go, go, go." .. (torsUp(gs) and " A Tor is still up on the run-in, watch it." or ""), gt.you) end
     end
   end
@@ -936,8 +936,9 @@ local function holdCheck(gs, t)
   local blind = gateBlind(gs)
   if blind then
     if not airUp(gs) then resume(gs); return nil end
-    -- the radars are down but red fighters are still about: wait for the air to clear, for at most the gate's cap, then go in (never an abort over fighters)
-    if timer.getTime() - gs.holdAt >= airCap(gs) or holdFuelLow(gs) then resume(gs, "air-timeout"); return nil end
+    -- the radars are down but red fighters are still about: wait for the air to clear, for at most the gate's cap; v0.41.205: then the flight goes home
+    -- (no banzai: XO's 2026-10-30 runs lost the CAS flights pushing in under a full red air picture after the old "go in anyway")
+    if timer.getTime() - gs.holdAt >= airCap(gs) or holdFuelLow(gs) then breakOff(gs, "air-abort"); return nil end
     return t + HOLD_CHECK_S
   end
   if timer.getTime() - gs.holdAt >= HOLD_S then breakOff(gs, "hold-timeout"); return nil end
@@ -976,6 +977,7 @@ local function decide(gs, why)
     e.tp = gs.tp
     e.d0 = gdist(gt.grp, e.tp)
   end
+  if why == "dist" and not gs.rewatched then gs.watch = true end        -- v0.41.205: it keeps looking at the air until the flight commits (WATCH_COMMIT_M from the target)
   dump()
 end
 timer.scheduleFunction(function(_, t)
@@ -1010,10 +1012,30 @@ end
 -- when the DEAD flight's lead is within GATE_M of the site (so a late flight is judged where it really is), or at the clock time as a
 -- fallback (flight gone). Every gate is logged in the state file: when it ran, why, radars left, whether the command went through, and
 -- the flight's distance to the target then and 60 s later.
+local ARM_S = 240            -- v0.41.205: the distance trigger waits until the lead is in the air and this close to the gate's clock time (a target near the base put
+                             -- the lead inside the gate radius on the ramp, and the one-shot air check ran at 5 s with no red fighter up yet: XO's 2026-10-30 15:38 run)
+local WATCH_COMMIT_M = 25000 -- after a clean check the flight is watched until it is this close to the target; red fighters that come up meanwhile hold it once
+local function leadAirborne(grpName)
+  local ok, r = pcall(function() local g = Group.getByName(grpName); local u = g and g:getUnit(1); return u and u:inAir() end)
+  return ok and r or false
+end
 timer.scheduleFunction(function(_, t)
   local now = timer.getTime()
   local left = false
   for _, gs in ipairs(gorder) do
+    if gs.done and gs.watch and not gs.holding then
+      left = true
+      local close = false
+      for _, gt in ipairs(gs.gates) do
+        if gt.dead then local d = gdist(gt.grp, gs.tp); if (not d) or d <= WATCH_COMMIT_M then close = true end end
+      end
+      if close or now >= gs.fall + 600 then gs.watch = false
+      elseif airUp(gs) and not holdFuelLow(gs) then
+        gs.watch = false; gs.rewatched = true; gs.done = false
+        holdGroups(gs)
+        timer.scheduleFunction(holdCheck, gs, now + HOLD_CHECK_S)
+      end
+    end
     if not gs.done and not gs.holding then
       left = true
       local s
@@ -1029,7 +1051,8 @@ timer.scheduleFunction(function(_, t)
             -- umbrella covering it (gt.ux/uz/um): v0.39.21 run, Hornet 1 held 26 km from the Sukhumi SA-10 and was shot down in its orbit
             local d = gdist(gt.grp, gs.tp)
             local du = gt.ux and gdist(gt.grp, { x = gt.ux, z = gt.uz }) or nil
-            if (d and d <= ((gt.gm and gt.gm > 0) and gt.gm or GATE_M)) or (du and du <= gt.um) then decide(gs, "dist"); break end
+            local armed = leadAirborne(gt.grp) and now >= gt.t - ARM_S
+            if (armed and d and d <= ((gt.gm and gt.gm > 0) and gt.gm or GATE_M)) or (du and du <= gt.um) then decide(gs, "dist"); break end
           end
         end
       end
