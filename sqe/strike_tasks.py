@@ -19,8 +19,8 @@ JSOW_ATTACK_S = 120           # v0.41.46: a JSOW slinger's release tasks end thi
 JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
 DEAD_GATE_BEFORE_TGT_S = 75    # fallback: if the DEAD flight never gets close, the radars are checked this long before its planned target time
 AIR_GATE_KM = 70               # v0.41.203: a strike / CAS flight with no radar site to wait on checks the air this far from its target (km); the hold, if any, is out here, short of the fight
-AIR_HOLD_STRIKE_S = 240        # ...and holds at most this long (judgment call: about what the Day-2 fight of XO's 2026-10-30 run lasted), then goes in all the same
-AIR_HOLD_CAS_S = 150           # CAS holds less: the troops on the ground are waiting (judgment call)
+AIR_HOLD_STRIKE_S = 360        # ...and holds at most this long (judgment call: the Day-2 fight of XO's 2026-10-30 run lasted about that), then goes home (v0.41.205: it used to go in all the same and was shot down)
+AIR_HOLD_CAS_S = 240           # CAS holds less: the troops on the ground are waiting (judgment call)
 DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
 SA10_GATE_KM = 60              # ...but never inside an SA-10's reach (55 km): against an SA-10 target, or under an SA-10 umbrella, the gate (and so the hold
                                # orbit) is this far from the SA-10. v0.39.21 run: Hornet 1 held 40 km from the Sukhumi SA-6, 26 km from the SA-10, and was shot down there

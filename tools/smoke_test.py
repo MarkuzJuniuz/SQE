@@ -5437,7 +5437,8 @@ def check_99_fighters_clear_gate(c):
     hk = _db.lua_hook("c", 1, "p", [], "Hornet 1-1", "Hornet 1", [], None, "a.wav", "b.wav", {}, [],
                       [{"id": "t", "label": "Target", "who": "W", "prim": True, "units": [], "trk": [], "srch": []}], [],
                       [{"t": 100, "site": "t", "grp": "Hornet 2", "from": 3, "to": 5, "ai": True, "dead": True, "you": False, "gm": 70000, "acap": 240, "tx": 1.0, "tz": 2.0}], True)
-    assert "redFighterNear" in hk and "AIR_LEAD_M" in hk and "air-timeout" in hk and "acap=240" in hk and "tx=1.0" in hk, "the hook has the air check, the cap and a target point"
+    assert "redFighterNear" in hk and "AIR_LEAD_M" in hk and "air-abort" in hk and "air-timeout" not in hk and "acap=240" in hk and "tx=1.0" in hk, "the hook has the air check, the cap (then home) and a target point"
+    assert "leadAirborne" in hk and "ARM_S" in hk and "gt.t - ARM_S" in hk and "WATCH_COMMIT_M" in hk and "gs.watch" in hk, "v0.41.205: the distance trigger waits for the air and the clock, and the air is watched until the flight commits"
     assert 'hasAttribute("Fighters")' in hk and "Interceptors" in hk, "fighters are told by their DCS attributes"
     print("[fighters-clear gate] strikers carry the gate (cap %d s), a plain CAS too (%d s), bombing expends All, hook has the air check" % (AIR_HOLD_STRIKE_S, AIR_HOLD_CAS_S))
 
