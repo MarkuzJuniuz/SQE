@@ -9,6 +9,7 @@
 v0.41.198 (XO 2026-10-30): players must not have to run scans, and the first flights had SAMs floating in the sea. The raw scan is 2.5 MB and
 needs DCS; the condensed file is a few tens of KB and is picked ahead of any live placement by the campaign (a later change).
 
+The sites file also holds, for each airfield (red and blue), SAM and supply spots within 20 km of it (v0.41.199).
 The sites file holds, for each ground-war sector (the 13 zone centres of the front chain, `ground.zone_centers`), spots for three kinds:
   ground  front-line columns, garrisons, ground units: on a scanned road point
   sam     SAM sites: off the road, flat ground
@@ -28,6 +29,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 QUOTA = {"ground": 20, "sam": 12, "supply": 8}
+FIELD_QUOTA = {"sam": 30, "supply": 12}  # per airfield (v0.41.199, judgment call). Dense on purpose: the campaign moves each SAM site to the nearest spot, and the doctrinal layout (a Tor within 12 km of an SA-10, a short-range site 3.5 to 4.5 km out) only survives if that move is small
+FIELD_SPACINGS_M = (1500.0, 1200.0, 1000.0)   # spots of one kind round a field may sit this close (the sector spots keep SPACINGS_M)
+FIELD_RADIUS_M = 20000.0          # a field's spots lie within this of it (red's long-range SAM sites sit 7 to 19 km out, supply sites up to 15 km)
 SEA_MARGIN_M = 500.0              # a spot keeps this far from the sea or a big lake (XO 2026-10-29; the live default is 1,500 m)
 SECTOR_RADIUS_M = 30000.0         # candidates lie within this of a sector centre (and nearer to it than to any other centre)
 GRID_M = 500.0                    # candidate grid for SAM and supply spots
@@ -105,8 +109,57 @@ def _pick(cands: list, quota: int, taken: list, cross: float, spacings=SPACINGS_
     return chosen, spacings[-1]
 
 
+def field_centres() -> list:
+    """[(id, x, y)] of every airfield of the pack, red and blue (red_fields, blue_fields; the pydcs airport positions the campaign builder uses). Blue's fuel farms and depots hang off its fields the same way."""
+    from sqe import theatres
+    th = theatres.active()
+    t = theatres.terrain()
+    out = []
+    for f in list(th.get("red_fields", [])) + list(th.get("blue_fields", [])):
+        p = t.airports[f["airport"]].position
+        out.append((f["id"], p.x, p.y))
+    return out
+
+
+def _grid(tmask, relief, roads, cx: float, cy: float, radius: float, keep) -> tuple:
+    """Candidate SAM / supply cells on a GRID_M grid round (cx, cy): dry land, near a road, and keep(x, y) true.
+    -> ({"sam": [(roughness, road distance, x, y)], "supply": [...]}, {"water": n, "road": n})."""
+    rej = {"water": 0, "road": 0}
+    grid = {"sam": [], "supply": []}
+    n = int(radius // GRID_M)
+    for i in range(-n, n + 1):
+        for j in range(-n, n + 1):
+            x, y = cx + i * GRID_M, cy + j * GRID_M
+            if math.hypot(x - cx, y - cy) > radius or not keep(x, y):
+                continue
+            if not tmask.land_ok(x, y, SEA_MARGIN_M):
+                rej["water"] += 1
+                continue
+            dr = _nearest_road(roads, x, y, 2500.0)
+            rg = _rough(relief, x, y)
+            for k in ("sam", "supply"):
+                lo, hi = ROAD_NEAR_M[k]
+                if dr is None or not lo <= dr <= hi:
+                    rej["road"] += 1
+                    continue
+                grid[k].append((rg, dr, x, y))
+    return grid, rej
+
+
+def _fill(kind: str, grid: dict, quota: int, taken: list, spacings=SPACINGS_M) -> tuple:
+    """Fill one kind's quota from the grid, relaxing the flatness limit step by step. -> (spots, (limit used, spacing used))."""
+    ch, sp, limit = [], spacings[0], ROUGH_STEPS[kind][0]
+    for limit in ROUGH_STEPS[kind]:
+        cands = [(rg + dr / 100.0, x, y) for rg, dr, x, y in grid[kind] if rg <= limit]
+        ch, sp = _pick(cands, quota, taken, CROSS_M, spacings)
+        if len(ch) >= quota:
+            break
+    return ch, (limit, sp)
+
+
 def condense(scan_dir, theatre: str = "caucasus") -> tuple:
-    """-> (the sites dict, a report [str])."""
+    """-> (the sites dict, a report [str]). Sectors: ground / SAM / supply spots round the 13 zone centres. Fields: SAM / supply spots round each red airfield
+    (v0.41.199: red's SAM clusters, fuel farms and depots sit within 20 km of their field, which the sector spots do not cover; blue's fields get the same for their fuel farms)."""
     from sqe import theatres
     theatres.use(theatre)
     tmask, relief, roads = _load(Path(scan_dir), theatre)
@@ -114,7 +167,6 @@ def condense(scan_dir, theatre: str = "caucasus") -> tuple:
     report, sectors = [], []
     short = 0
     for si, (cx, cy) in enumerate(centres):
-        rej = {"water": 0, "road": 0, "rough": 0}
         spots = {k: [] for k in QUOTA}
         used = {k: None for k in QUOTA}
         taken = []
@@ -123,38 +175,12 @@ def condense(scan_dir, theatre: str = "caucasus") -> tuple:
         for (px, py) in _road_points(roads, cx, cy, SECTOR_RADIUS_M):
             if _owner(centres, px, py) != si:
                 continue
-            if not tmask.land_ok(px, py, SEA_MARGIN_M):
-                rej["water"] += 1
-                continue
-            gnd.append((math.hypot(px - cx, py - cy), px, py))
-        # sam / supply: a grid, scored by roughness then by distance to a road
-        grid = {"sam": [], "supply": []}
-        n = int(SECTOR_RADIUS_M // GRID_M)
-        for i in range(-n, n + 1):
-            for j in range(-n, n + 1):
-                x, y = cx + i * GRID_M, cy + j * GRID_M
-                if math.hypot(x - cx, y - cy) > SECTOR_RADIUS_M or _owner(centres, x, y) != si:
-                    continue
-                if not tmask.land_ok(x, y, SEA_MARGIN_M):
-                    rej["water"] += 1
-                    continue
-                dr = _nearest_road(roads, x, y, 2500.0)
-                rg = _rough(relief, x, y)
-                for k in ("sam", "supply"):
-                    lo, hi = ROAD_NEAR_M[k]
-                    if dr is None or not lo <= dr <= hi:
-                        rej["road"] += 1
-                        continue
-                    grid[k].append((rg, dr, x, y))
+            if tmask.land_ok(px, py, SEA_MARGIN_M):
+                gnd.append((math.hypot(px - cx, py - cy), px, py))
+        grid, _rej = _grid(tmask, relief, roads, cx, cy, SECTOR_RADIUS_M, lambda x, y, si=si: _owner(centres, x, y) == si)
         for k in ("sam", "supply"):
-            for limit in ROUGH_STEPS[k]:
-                cands = [(rg + dr / 100.0, x, y) for rg, dr, x, y in grid[k] if rg <= limit]
-                ch, sp = _pick(cands, QUOTA[k], taken, CROSS_M)
-                if len(ch) >= QUOTA[k]:
-                    break
-            used[k] = (limit, sp)
-            spots[k] = ch
-            taken += ch
+            spots[k], used[k] = _fill(k, grid, QUOTA[k], taken)
+            taken += spots[k]
         ch, sp = _pick(gnd, QUOTA["ground"], taken, CROSS_M)
         spots["ground"], used["ground"] = ch, (None, sp)
         sectors.append({"i": si, "x": round(cx), "y": round(cy), **{k: [[round(x), round(y)] for x, y in v] for k, v in spots.items()}})
@@ -165,8 +191,27 @@ def condense(scan_dir, theatre: str = "caucasus") -> tuple:
             flag = "  <-- SHORT"
             short += 1
         report.append(f"sector {si:2d} ({cx / 1000:7.0f}, {cy / 1000:6.0f} km)  {row}{flag}" + (f"   [relaxed: {'; '.join(relax)}]" if relax else ""))
-    report.append(f"{len(sectors)} sectors, {short} short of quota")
-    out = {"terrain": theatre, "version": 1, "quota": QUOTA, "sea_margin_m": SEA_MARGIN_M, "sector_radius_m": SECTOR_RADIUS_M, "sectors": sectors}
+    fields = []
+    flds = field_centres()
+    for fid, fx, fy in flds:
+        taken_sam = [(x, y) for s in sectors for x, y in s["sam"] if math.hypot(x - fx, y - fy) <= FIELD_RADIUS_M]
+        taken_sup = [(x, y) for s in sectors for x, y in s["supply"] if math.hypot(x - fx, y - fy) <= FIELD_RADIUS_M]
+        grid, _rej = _grid(tmask, relief, roads, fx, fy, FIELD_RADIUS_M,
+                           lambda x, y, fid=fid: min(flds, key=lambda f: math.hypot(f[1] - x, f[2] - y))[0] == fid)
+        spots, used = {}, {}
+        for k, tk in (("sam", taken_sam), ("supply", taken_sup)):
+            spots[k], used[k] = _fill(k, grid, FIELD_QUOTA[k], list(tk), FIELD_SPACINGS_M)
+        fields.append({"id": fid, "x": round(fx), "y": round(fy), **{k: [[round(x), round(y)] for x, y in v] for k, v in spots.items()}})
+        row = " ".join(f"{k} {len(spots[k])}/{FIELD_QUOTA[k]}" for k in FIELD_QUOTA)
+        relax = [f"{k}: relief <= {used[k][0]:.0f} m, spacing {used[k][1] / 1000:.1f} km" for k in ("sam", "supply") if used[k][0] != ROUGH_STEPS[k][0] or used[k][1] != FIELD_SPACINGS_M[0]]
+        flag = ""
+        if any(len(spots[k]) < FIELD_QUOTA[k] for k in FIELD_QUOTA):
+            flag = "  <-- SHORT"
+            short += 1
+        report.append(f"field  {fid:11s}              {row}{flag}" + (f"   [relaxed: {'; '.join(relax)}]" if relax else ""))
+    report.append(f"{len(sectors)} sectors and {len(fields)} fields, {short} short of quota")
+    out = {"terrain": theatre, "version": 2, "quota": QUOTA, "field_quota": FIELD_QUOTA, "sea_margin_m": SEA_MARGIN_M, "sector_radius_m": SECTOR_RADIUS_M,
+           "field_radius_m": FIELD_RADIUS_M, "sectors": sectors, "fields": fields}
     return out, report
 
 

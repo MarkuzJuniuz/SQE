@@ -42,6 +42,7 @@ BLUE_REPAIR = 0.10
 # asset first); no public figures for transit time, so every number here is a judgment call.
 # v0.41.140 (XO 2026-10-27, Campaign Revamp): the orders are a fixed feature (no settings), for both sides at every level. A battery moves by air, so
 # it arrives in 1 to 3 days by the sender's supply (1 at 100%, 3 at the 55% floor), and there is no chance roll any more: supply sets the time.
+TRANSFER_SETUP_DAYS = 1                  # v0.41.199 (XO 2026-10-30): a transferred battery needs this many days to be set up on top of the flight (both sides)
 TRANSFER_DAYS = 2                   # v0.41.197 (XO 2026-10-30): a TRANSFER between sites in theatre goes by air, 1 to 3 days by supply (the middle value; transfer_days() has the real time). Judgment call.
 SAM_DEBT = {"long": 0.0, "medium": 0.0, "short": 0.0}       # v0.41.196: supply a side pays for a replacement battery (order or rebuild in place). The mechanism is built but the price is ZERO: the 12-seed L3 sim showed no benefit (1x = 0.06 / 0.03 / 0.02: red SAM days at Sukhumi 49% against 37% with no debt, blue won 6 of 12 against 10 of 12). Raise these to switch it on.
 SAM_DEBT_PAYBACK = 1.5                  # the debt of one purchase pays back in a straight line over this many times the order time (XO's choice)
@@ -320,9 +321,10 @@ def debt(state, side: str) -> float:
 def transfer_days(sup: float) -> int:
     """v0.41.140 (XO 2026-10-27): days a SAM battery takes to go from one site to another in theatre. Batteries move by air (fuel and lift decide), so
     1 day at full supply, 3 at the 55% floor (ground.SUPPLY_FLOOR), 2 between. v0.41.197 puts this back (v0.41.196 had made it two weeks, which is
-    the ORDER_DAYS of a new battery from home). Judgment call: no public figure."""
+    the ORDER_DAYS of a new battery from home). v0.41.199 (XO 2026-10-30): plus TRANSFER_SETUP_DAYS, a day to set the battery up, so nothing is working
+    by the next morning: 2 days at full supply, 4 at the floor. Judgment call: no public figure."""
     f = max(0.0, min(1.0, (1.0 - sup) / 0.45))
-    return 1 + int(round(2 * f))
+    return 1 + TRANSFER_SETUP_DAYS + int(round(2 * f))
 
 
 def _red_asked(state) -> set:
