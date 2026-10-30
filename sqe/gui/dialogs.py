@@ -1,4 +1,5 @@
 from __future__ import annotations
+import html
 import json
 import time
 from pathlib import Path
@@ -19,12 +20,15 @@ def _browse(parent, line: QLineEdit, title: str):
         line.setText(S.native(d))
 
 
-PILOT_INFLUENCE_TEXT = ("Your flying changes the war. On: the higher-ups learn from your sorties. Fly well and command commits more to the fight; stay on the "
-                        "ground and the front can slip, so you can lose the war. Off: the war plays out on its own, with no effect from your flying (no red surge, no Tactical Edge).")
+EDGE_DECAY_TEXT = ("Your edge fades by 3% each night, back toward zero, when you do not keep flying that kind of job (nights with nothing for you to fly do not count). "
+                   "Off: the edge you build is kept. Needs Tactical Edge on.")
+PILOT_INFLUENCE_TEXT = ("Your flying shapes the war. On: the higher-ups study your actual sorties, and what they learn is carried to every unit in the theatre: the "
+                        "background strikes, SEAD and air cover of the same kind succeed more often (your Tactical Edge). Stay on the ground and red seizes the initiative: it "
+                        "surges, the front can crack, and you can lose the war. Off: the war runs on its own, with no effect from your flying (no red surge, no Tactical Edge).")
 
 
 class NewCampaignDialog(QDialog):
-    def __init__(self, parent=None, weather_mode: str = "clear", skill_red: str = "level", skill_blue: str = "level", pilot_influence: bool = True, prefill: dict | None = None):
+    def __init__(self, parent=None, weather_mode: str = "clear", skill_red: str = "level", skill_blue: str = "level", pilot_influence: bool = True, prefill: dict | None = None, edge_decay: bool = False):
         super().__init__(parent); self.setWindowTitle("New Campaign"); self.setMinimumWidth(520)
         lay = QVBoxLayout(self); lay.setSpacing(12)
         t = QLabel("New Campaign"); t.setObjectName("title"); lay.addWidget(t)
@@ -67,6 +71,10 @@ class NewCampaignDialog(QDialog):
         self.pinf = QCheckBox("Tactical Edge: your sorties affect the war")
         self.pinf.setChecked(bool(pilot_influence)); self.pinf.setToolTip(PILOT_INFLUENCE_TEXT)
         form.addRow("", self.pinf)                      # the same setting as Settings > Campaign > Tactical Edge: it can be changed there later
+        self.pdec = QCheckBox("Enable Tactical Edge Decay")
+        self.pdec.setChecked(bool(edge_decay)); self.pdec.setToolTip(EDGE_DECAY_TEXT); self.pdec.setEnabled(bool(pilot_influence))
+        self.pinf.toggled.connect(self.pdec.setEnabled); self.pdec.setStyleSheet("margin-left:22px;")      # a sub-option of Tactical Edge
+        form.addRow("", self.pdec)
         from .. import weather as _wxn
         self.wx = QComboBox()
         for k, val in _wxn.MODES.items():
@@ -98,7 +106,7 @@ class NewCampaignDialog(QDialog):
 
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
-                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(), "pilot_influence": self.pinf.isChecked(),
+                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(), "pilot_influence": self.pinf.isChecked(), "tempo_decay": self.pinf.isChecked() and self.pdec.isChecked(),
                 "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData()),
                 "ai_skill_red": str(self.skr.currentData() or "level"), "ai_skill_blue": str(self.skb.currentData() or "level")}
 
@@ -189,6 +197,10 @@ class SettingsDialog(QDialog):
         self.pinf = QCheckBox("Tactical Edge (your sorties affect the war)"); self.pinf.setChecked(bool(getattr(settings, "pilot_influence", True)))
         row(v, "Tactical Edge", self.pinf)
         hint(v, PILOT_INFLUENCE_TEXT)
+        self.pdec = QCheckBox("Enable Tactical Edge Decay"); self.pdec.setChecked(bool(getattr(settings, "tempo_decay", False)))
+        row(v, "", self.pdec)
+        hint(v, EDGE_DECAY_TEXT)
+        self.pinf.toggled.connect(self.pdec.setEnabled); self.pdec.setEnabled(self.pinf.isChecked()); self.pdec.setStyleSheet("margin-left:22px;")
         from ..difficulty import SKILL_CHOICES as _SK
         self.skr, self.skb = QComboBox(), QComboBox()
         for cb_, key_ in ((self.skr, "ai_skill_red"), (self.skb, "ai_skill_blue")):
@@ -302,7 +314,7 @@ class SettingsDialog(QDialog):
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
         self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
-        self.s.pilot_influence = bool(self.pinf.isChecked())
+        self.s.pilot_influence = bool(self.pinf.isChecked()); self.s.tempo_decay = bool(self.pinf.isChecked() and self.pdec.isChecked())
         self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
         self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value())
         self.s.f14_special_names = self.f14n.isChecked()
@@ -398,6 +410,26 @@ class WaitingDialog(QDialog):
 
     def reject(self):          # closing the window keeps the sortie pending; Debrief via the Missions page
         self.timer.stop(); super().reject()
+
+
+class DayResolvedDialog(QDialog):
+    """v0.41.208 (XO): what Skip Turn did, fully described: one block per package (the war simulation's own result lines), scrollable."""
+    def __init__(self, results: list, day: int, parent=None):
+        super().__init__(parent); self.setWindowTitle("Day resolved"); self.setMinimumSize(700, 480)
+        lay = QVBoxLayout(self); lay.setSpacing(12)
+        t = QLabel(f"Day {day} resolved"); t.setObjectName("title"); lay.addWidget(t)
+        ok = sum(1 for r in results if r.get("success")); scr = sum(1 for r in results if r.get("scrubbed")); held = sum(1 for r in results if r.get("held"))
+        bits = [f"{ok} succeeded", f"{len(results) - ok - scr - held} failed"] + ([f"{held} turned back at the SAM gate"] if held else []) + ([f"{scr} scrubbed for weather"] if scr else [])
+        sub = QLabel(f"The war simulation resolved {len(results)} package{'s' if len(results) != 1 else ''}: " + ", ".join(bits) + "."); sub.setWordWrap(True); sub.setObjectName("dim"); lay.addWidget(sub)
+        body = QTextBrowser(); lay.addWidget(body, 1)
+        h = []
+        for r in results:
+            ln = r.get("lines") or [r.get("objective", "?")]
+            col = theme.GREEN if r.get("success") else theme.AMBER if (r.get("scrubbed") or r.get("held")) else theme.RED
+            h.append(f"<p style='margin-bottom:2px'><b style='color:{col}'>{html.escape(ln[0])}</b><br>" + "<br>".join("&nbsp;&nbsp;&nbsp;" + html.escape(x.strip()) for x in ln[1:]) + "</p>")
+        body.setHtml("".join(h) or "<p>Nothing was tasked today.</p>")
+        bb = QDialogButtonBox(QDialogButtonBox.Close); bb.rejected.connect(self.reject)
+        btn = bb.button(QDialogButtonBox.Close); btn.setText("Continue"); btn.setObjectName("primary"); btn.clicked.connect(self.accept); lay.addWidget(bb)
 
 
 class DebriefDialog(QDialog):

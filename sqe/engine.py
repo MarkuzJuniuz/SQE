@@ -146,6 +146,7 @@ class Session:
         ground.snap_roads(st)                           # once, as soon as a road scan exists: columns and supply sites sit on a road
         if st.ground is not None:
             st.ground["pilot_influence"] = bool(getattr(self.settings, "pilot_influence", True))
+            st.ground["tempo_decay"] = bool(getattr(self.settings, "tempo_decay", False))      # v0.41.208
         from . import carrier_pos
         _cv = carrier_pos.update(st)                    # v0.41.159: the fleet repositions once a day, along the front and clear of the red airfields
         if _cv:
@@ -870,6 +871,7 @@ class Session:
         from .war import WarSimulator
         if self.state is not None and self.state.ground is not None:
             self.state.ground["pilot_influence"] = bool(getattr(self.settings, "pilot_influence", True))      # v0.41.160: the app setting rides in the campaign for the sim
+            self.state.ground["tempo_decay"] = bool(getattr(self.settings, "tempo_decay", False))             # v0.41.208
         return WarSimulator(self.d, rng)
 
     def skip_day(self) -> dict:

@@ -263,7 +263,7 @@ def check_02_alert_fields_scramble_on(c):
         "cfg": {"splash_damage": True, "ecm_script": False, "version": "x"}, "splash": {"blasts": 7, "kills": 2}}))
     st_, got, _ = ms.poll(); assert st_ == "ok"
     out = ms.apply(got)
-    assert any("NEVER GOT AIRBORNE" in ln_ and "Alert 1" in ln_ for ln_ in out["lines"]) and any("airborne 110 s later" in ln_ for ln_ in out["lines"]), "the debrief reports alert launches"
+    assert any("NEVER GOT AIRBORNE" in ln_ and "Scramble 1 (Su-27, Gelendzhik)" in ln_ for ln_ in out["lines"]) and any("Scramble 2 (MiG-29A, Sochi-Adler): ordered 15:00, airborne +1:50" in ln_ for ln_ in out["lines"]), "the debrief reports alert launches"
     assert any(ln_.startswith("Settings: splash damage ON (7 blasts, 2 kills), ECM script off") for ln_ in out["lines"]), "the debrief names the run's settings"
     assert out["packages"] and out["packages"][0]["resolved"], out["packages"]
     print("    merged debrief:", [ln for ln in out["lines"] if ln.startswith("Package #")][:2])
@@ -5182,7 +5182,7 @@ def check_81_stand_down_keeps_pilot_influence(c):
     overnight. Skipping with flights available is the pilot's choice and fades / counts as before. Pilot Influence off: no effect either way."""
     from sqe import ground as _g, posture as _po
     for choice in (False, True):
-        s = fresh_session(3, 7); s.ai_test = True; st = s.state; s.plan_day()
+        s = fresh_session(3, 7); s.ai_test = True; s.settings.tempo_decay = True; st = s.state; s.plan_day()      # v0.41.208: the nightly fade is a switch, off by default
         st.day += 6; st.tempo = {"CAS": 0.1}; day0 = st.day
         if not choice:
             s.flyable = lambda p: []                                    # a stand-down day: no package can be flown
@@ -5465,6 +5465,36 @@ def check_100_garrison_follow(c):
     print("[garrison follow] %d follow garrison jobs across 8 seeds, one built with the gate" % found)
 
 
+def check_101_ui_pass_3(c):
+    """v0.41.208 (XO): Tactical Edge decay is a switch (off by default: the edge is kept; on: it fades 3% a night), the Tactical Edge text is plain,
+    SEAD / DEAD keeps its capitals on the Overview, Russia's air wings list one airframe per row, the skipped day is described in full."""
+    import os as _os; _os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from sqe import overview_detail as _od
+    from sqe.gui.dialogs import PILOT_INFLUENCE_TEXT, EDGE_DECAY_TEXT
+    assert "command commits" not in PILOT_INFLUENCE_TEXT and "Tactical Edge" in PILOT_INFLUENCE_TEXT and "no effect from your flying" in PILOT_INFLUENCE_TEXT
+    assert "Off:" in EDGE_DECAY_TEXT
+    for on in (False, True):
+        s = fresh_session(3, 7); s.ai_test = True; s.settings.tempo_decay = on; s.plan_day(); st = s.state
+        st.tempo = {"CAS": 0.1, "STRIKE": 0.1}; st.day += 6
+        s.skip_day()
+        assert (st.tempo["CAS"] < 0.1) == on, ("decay follows the switch", on, st.tempo)
+    assert any(l_.startswith("SEAD / DEAD:") for l_ in _od.tempo_lines(st)), _od.tempo_lines(st)
+    try:
+        from PySide6.QtWidgets import QApplication as _QA, QTextBrowser as _TB, QLabel as _QL
+        from sqe.gui.app import ForcesPage as _FP
+        from sqe.gui.dialogs import DayResolvedDialog as _DR
+        _qa = _QA.instance() or _QA([])
+        pg = _FP(); pg.refresh(st)
+        assert [pg.ea.horizontalHeaderItem(i_).text() for i_ in range(4)] == ["Aircraft", "Based at", "Serviceable", "Strength"]
+        assert pg.ea.rowCount() == sum(len(w.sqns) for w in st.enemy_air) and pg.ea.rowCount() > 0, "one row per airframe"
+        d_ = _DR([{"success": True, "lines": ["Strike on X: SUCCESS (odds 60%)", "   X now at 20%"]}, {"success": False, "scrubbed": True, "lines": ["Y: SCRUBBED - rain"]}], 4)
+        t_ = d_.findChild(_TB).toPlainText()
+        assert "Day 4 resolved" in d_.findChildren(_QL)[0].text() and "X now at 20%" in t_ and "SCRUBBED" in t_, t_
+    except ImportError:
+        pass
+    print("[ui pass 3] decay switch off/on, plain Tactical Edge text, SEAD / DEAD caps, one wing row per airframe, full skip dialog")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5604,6 +5634,7 @@ CHECKS = [
     check_98_srtm_relief,
     check_99_fighters_clear_gate,
     check_100_garrison_follow,
+    check_101_ui_pass_3,
 ]
 
 

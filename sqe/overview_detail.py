@@ -131,7 +131,7 @@ def tempo_lines(state) -> list:
     out = []
     for k in tempo.KINDS:
         v = tempo.get(state, k) * 100
-        out.append(f"{tempo.LABEL[k].capitalize()}: {v:+.0f}%" + ("  (at the cap)" if abs(v) >= tempo.TEMPO_CAP * 100 - 0.5 else ""))
+        out.append(f"{tempo.LABEL[k][:1].upper() + tempo.LABEL[k][1:]}: {v:+.0f}%" + ("  (at the cap)" if abs(v) >= tempo.TEMPO_CAP * 100 - 0.5 else ""))
     return out
 
 
