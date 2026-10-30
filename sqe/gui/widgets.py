@@ -2,7 +2,7 @@ from __future__ import annotations
 import math
 from PySide6.QtCore import Qt, QPointF, QRectF
 from PySide6.QtGui import QColor, QPainter, QPen, QBrush, QPolygonF, QFont
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget, QSizePolicy
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget, QSizePolicy
 from ..models import AssetKind, BaseKind
 from . import theme
 
@@ -23,8 +23,34 @@ class StatCard(QFrame):
         for w in (self.l, self.v, self.s):
             lay.addWidget(w)
 
-    def set(self, value: str, sub: str = ""):
+    def set(self, value: str, sub: str = "", color: str | None = None):
         self.v.setText(value); self.s.setText(sub)
+        if color:
+            self.v.setStyleSheet(f"color:{color};")
+
+
+class SideCard(QFrame):
+    """v0.41.207 (XO's UI_Remarks.docx): one box per side, a small table SUPPLY | AIR DEFENSE with the figures colour-coded; the transit line only
+    when a SAM battery is on its way."""
+    def __init__(self, side: str):
+        super().__init__(); self.setObjectName("card")
+        lay = QVBoxLayout(self); lay.setContentsMargins(16, 12, 16, 12); lay.setSpacing(2)
+        self.h = QLabel(side.upper()); self.h.setObjectName("small"); lay.addWidget(self.h)
+        row = QHBoxLayout(); row.setSpacing(28); lay.addLayout(row)
+        self.cols = []
+        for name in ("SUPPLY", "AIR DEFENSE"):
+            c = QVBoxLayout(); c.setSpacing(0)
+            l = QLabel(name); l.setObjectName("small")
+            v = QLabel("-"); v.setObjectName("big")
+            c.addWidget(l); c.addWidget(v); row.addLayout(c); self.cols.append(v)
+        row.addStretch(1)
+        self.t = QLabel(""); self.t.setObjectName("dim"); self.t.setWordWrap(True); lay.addWidget(self.t)
+        self.t.setVisible(False)
+
+    def set(self, supply: str, sc: str, ad: str, ac: str, transit: str = ""):
+        for v, txt, col in ((self.cols[0], supply, sc), (self.cols[1], ad, ac)):
+            v.setText(txt); v.setStyleSheet(f"color:{col};")
+        self.t.setText(transit); self.t.setVisible(bool(transit))
 
 
 def _load_geo():
