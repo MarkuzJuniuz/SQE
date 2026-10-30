@@ -300,7 +300,7 @@ class SettingsDialog(QDialog):
     def _tm_refresh(self):
         from .. import terrainmask as _tmk, relief as _rl, roads as _rd
         _tmk.configure(self.s.sqe_dir if self.s.dcs_saves else None)
-        _rl.configure(self.s.sqe_dir if self.s.dcs_saves else None)
+        _rl.configure(self.s.sqe_dir if self.s.dcs_saves else None, builtin=True)
         _rd.configure(self.s.sqe_dir if self.s.dcs_saves else None)
         sc = _tmk.scanned(self.s.sqe_dir if self.s.dcs_saves else None)
         have = ", ".join(f"{t} (scanned {dte})" for t, dte in sc) if sc else "none yet"
