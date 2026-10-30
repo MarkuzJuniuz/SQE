@@ -66,7 +66,7 @@ def section(heading: str, body: str) -> str:
 
 
 def bar_image(text: str, frac: float, color: str, w: int = 120, h: int = 20) -> QImage:
-    """A bar that fills `frac` of its width in `color`, the number centred over it."""
+    """A bar that fills `frac` of its width in `color`, the number at its left edge, white with a dark outline."""
     img = QImage(w, h, QImage.Format_ARGB32); img.fill(QColor(theme.PANEL))
     p = QPainter(img); p.setRenderHint(QPainter.Antialiasing)
     frac = max(0.0, min(1.0, frac))
@@ -74,7 +74,9 @@ def bar_image(text: str, frac: float, color: str, w: int = 120, h: int = 20) -> 
     if frac > 0:
         p.setPen(QColor(0, 0, 0, 0)); p.setBrush(QColor(color)); p.drawRoundedRect(1, 1, max(4, int((w - 2) * frac)), h - 2, 3, 3)
     f = QFont(); f.setPointSize(9); f.setBold(True); p.setFont(f)
-    p.setPen(QColor("#ffffff" if frac < 0.12 else DARK)); p.drawText(0, 0, w, h, 0x84, text)      # AlignCenter
+    for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):                                              # v0.41.211 (XO): white number at the left edge with a thin dark outline, readable on the fill and on the empty track
+        p.setPen(QColor(0, 0, 0, 200)); p.drawText(7 + dx, dy, w - 7, h, 0x81, text)               # AlignLeft | AlignVCenter
+    p.setPen(QColor("#ffffff")); p.drawText(7, 0, w - 7, h, 0x81, text)
     p.end()
     return img
 

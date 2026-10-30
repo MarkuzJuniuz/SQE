@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.211, Overview readability: bar numbers outlined at the left edge, side cards top-aligned
+
+XO 2026-10-30 (low, "go"). (1) The number on the Ground and Tactical Edge bars was dark text centred over the bar, so it vanished on the empty (dark) part; it is now white with a thin dark outline at the bar's left edge. (2) The Coalition and Russia cards are top-aligned, so the headings and figures line up even when only Russia shows the SAM-in-transit line. Files: `sqe/gui/overview_view.py`, `sqe/gui/widgets.py`, `sqe/__init__.py`.
+
 ## v0.41.210, ECM hookup: your own jammer is read from the F-16C lamp, FC3 jets get F10 ECM ON / OFF
 
 XO 2026-10-30 (low, "go"), from `claude/ecm-indicators.md`. (1) New `tools/sqe_ecm_export.lua`, a chained Export.lua script (one `dofile` line in XO's Export.lua; it keeps the earlier export functions): once a second it reads the jet's ECM lamp and writes `Saved Games\DCS\Logs\SQE_ecm.flag` as `<0|1> <model time>`, and removes the file at start and stop. The F-16C (argument 102) is live. The F/A-18C (24), F-14B (2203) and A-10C (361) arguments are in the script but OFF until XO has flown them. (2) The results hook uses that file for the player's jammer when a radar missile is fired; a missing or stale (over 5 s) file falls back to the old rule (attack-leg window), so nothing is lost without the script. (3) FC3 jets (F-15C) have no readable lamp: with ECM script on they get F10 > Other > ECM ON and ECM OFF (two commands, flag starts off, on-screen message), for VAICOM/VoiceAttack to press with the key. (4) The briefing's comms section says which of the two applies. Not seen in DCS: the flag file needs XO flying the F-16C with the script installed. Files: `tools/sqe_ecm_export.lua` (new), `sqe/debrief.py`, `sqe/mission_builder.py`, `sqe/briefing.py`, `tools/smoke_test.py`, `sqe/__init__.py`.

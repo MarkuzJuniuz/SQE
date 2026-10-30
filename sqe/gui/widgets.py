@@ -46,6 +46,7 @@ class SideCard(QFrame):
         row.addStretch(1)
         self.t = QLabel(""); self.t.setObjectName("dim"); self.t.setWordWrap(True); lay.addWidget(self.t)
         self.t.setVisible(False)
+        lay.addStretch(1)                                # v0.41.211 (XO): contents top-aligned, so both side cards line up whether or not the transit line shows
 
     def set(self, supply: str, sc: str, ad: str, ac: str, transit: str = ""):
         for v, txt, col in ((self.cols[0], supply, sc), (self.cols[1], ad, ac)):
