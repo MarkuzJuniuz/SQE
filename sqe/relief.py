@@ -155,7 +155,7 @@ def info() -> str:
     if _R is None:
         return "not scanned yet"
     if _SRC == "built-in":
-        return f"built-in grid ({_R['nx']} x {_R['ny']} cells of {int(_R['step'])} m; run the terrain scan for a finer one)" + (f". Source: {_R['source']}" if _R.get("source") else "")
+        return f"built-in grid ({_R['nx']} x {_R['ny']} cells of {int(_R['step'])} m)" + (f". Source: {_R['source']}" if _R.get("source") else "")
     top = max(max(r) for r in _R["max"] if len(r)) * UNIT_M
     return f"loaded ({_R['nx']} x {_R['ny']} cells of {int(_R['step'])} m, highest ground {int(top):,} m / {int(top / FT):,} ft)"
 

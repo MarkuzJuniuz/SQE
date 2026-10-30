@@ -288,9 +288,6 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._extras = list(extras)
         ruins = [x for x in ruins if any(not f.tag for f in x.flights)]
         self._preroll, self._ruin_sites = dict(preroll or {}), []
-        from . import terrainmask
-        if not terrainmask.available():
-            warns.append("ground sites were placed with the rough built-in coastline (it can be 1-3 km off, and it has no rivers): run the terrain scan once (Settings) for exact placement")
         package = self._gather_support(package, extras)
         air_pkg = copy.copy(package)
         air_pkg.n_def = folded_n_def(package, extras, o.merge_enemy_pct)       # enemy air: the biggest package's need plus a share of the others'
