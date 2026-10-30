@@ -5226,6 +5226,52 @@ def check_80_incompatible_saves(c):
     print(f"[incompatible saves] {len(cases)} bad saves refused with a friendly error, the open campaign stayed open; backup copied to {dst.name}")
 
 
+def check_95_site_condenser(c):
+    """v0.41.198: tools/sqe_scan.py condense turns the raw scan files into the small site list (sqe/data/theatres/<theatre>_sites.json). Tested on a made-up flat
+    world (all land, roads on a 2 km grid, flat relief): every one of the 13 sectors fills its quotas (20 ground, 12 SAM, 8 supply), spots of one kind keep their
+    distance, nothing sits on another kind's spot. The shipped caucasus_sites.json (built from XO's 2026-10-30 scan) has the same shape."""
+    import importlib.util, json as _json, tempfile as _tf, math as _m
+    from pathlib import Path as _P
+    from sqe import terrainmask, relief, roads
+    spec = importlib.util.spec_from_file_location("sqe_scan_tool", str(_P(__file__).resolve().parent / "sqe_scan.py"))
+    tool = importlib.util.module_from_spec(spec); spec.loader.exec_module(tool)
+    prev = (terrainmask._DIR, relief._DIR, roads._DIR)
+    with _tf.TemporaryDirectory() as d:
+        d = _P(d)
+        nx, ny, st = 2000, 3120, 250
+        (d / "SQE_terrain_caucasus.json").write_text(_json.dumps({"terrain": "Caucasus", "x0": -430000, "y0": 190000, "step": st, "nx": nx, "ny": ny, "rows": [f"l{ny}"] * nx}))
+        rx, ry = 500, 780
+        (d / "SQE_relief_caucasus.json").write_text(_json.dumps({"terrain": "Caucasus", "x0": -430000, "y0": 190000, "step": 1000, "nx": rx, "ny": ry, "unit": 10,
+                                                                    "max": [" ".join(["2"] * ry)] * rx, "mean": [" ".join(["1"] * ry)] * rx}))
+        pts = [[x, y] for x in range(-420000, 60000, 2000) for y in range(200000, 960000, 2000)]
+        (d / "SQE_roads_caucasus.json").write_text(_json.dumps({"terrain": "Caucasus", "step": 2000, "pts": pts}))
+        try:
+            out, rep = tool.condense(d, "caucasus")
+        finally:
+            for mod, old in zip((terrainmask, relief, roads), prev):
+                mod.configure(old)
+    assert len(out["sectors"]) == 13 and rep[-1].startswith("13 sectors, 0 short"), rep[-3:]
+    _spots_ok(out, "made-up flat world")
+    shipped = _P(__file__).resolve().parent.parent / "sqe" / "data" / "theatres" / "caucasus_sites.json"
+    sh = _json.loads(shipped.read_text(encoding="utf-8"))
+    assert len(sh["sectors"]) == 13 and sh["quota"] == tool.QUOTA, "the shipped file has the 13 sectors and the agreed quotas"
+    _spots_ok(sh, "shipped caucasus_sites.json")
+    print("[site condenser] 13 sectors fill 20 / 12 / 8 on a made-up world; the shipped file keeps the quotas, spacing and the gap between kinds")
+
+
+def _spots_ok(data, label):
+    import math as _m
+    for s in data["sectors"]:
+        allp = []
+        for k, q in (("ground", 20), ("sam", 12), ("supply", 8)):
+            assert len(s[k]) == q, (label, s["i"], k, len(s[k]))
+            allp += [(k, x, y) for x, y in s[k]]
+        for i, (k1, x1, y1) in enumerate(allp):
+            for k2, x2, y2 in allp[i + 1:]:
+                dd = _m.hypot(x1 - x2, y1 - y2)
+                assert dd >= (1500 if k1 == k2 else 1000) - 1, (label, s["i"], k1, k2, round(dd))
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5359,6 +5405,7 @@ CHECKS = [
     check_92_cas_patrol_leg,
     check_93_supply_buildings,
     check_94_sam_cost,
+    check_95_site_condenser,
 ]
 
 
