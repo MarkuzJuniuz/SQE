@@ -181,6 +181,7 @@ class MissionOptions:
     full_map: bool = False              # stress test: build everything that exists (see _spawn_everything); the unit limit is off
     max_units: int = 250                # the unit limit of the BASE mission (wrecks are trimmed, furthest first, to fit under it); merged packages' units do not count (v0.41.104)
     unit_ceiling: int = 0               # most units in total, merged packages included (0 = sqe/data/limits.json, 500); a runaway guard
+    merge_radius_nm: int = 15           # v0.41.209 (XO): also the radius inside which every supply site (fuel farm, depot, both sides) is built round the target: the performance knob
     merge_enemy_pct: int = 100          # folded packages: biggest enemy-air need + this % of the others'
     carrier_min_enemy_nm: int = 150     # the carrier group is moved back along the line of retreat until it is at least this far from the fight
     player_is_client: bool = False
@@ -263,6 +264,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._runway_busy = set()                                      # bases whose runway / catapult already holds a group at mission start
         self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []
         self._ecm_player = ""                           # v0.41.210: how the hook learns the player's jammer: "live" (F-16C lamp via Export.lua), "f10" (FC3 jet), "" (old attack-leg window)
+        self._supply_built = set()                      # v0.41.209: blue supply sites already put on the map this mission (a raid target is one)
         self._rwy_rel, self._hot = {}, None                            # v0.41.96: release times already given per runway; the hot-runway slot of the flight being built
         self._launch_pts = {}                                          # package id -> [(x, y)] where its HARM / JSOW / strike flights launch (the cover zone)             # alert groups waiting for a runway (the hook lines them up), trigger flags, your runway
         self._air_spawns = []                                          # [(x, y, alt_m, t)]: where and when each airborne flight appears, so no two appear on top of each other
@@ -356,6 +358,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         raided_ = [package.objective.target_id] if (package.objective.type == ObjectiveType.FLEET_DEFENSE and package.objective.target_id in st.bases) else []
         for bid in dict.fromkeys([f.base_id for f in package.flights] + raided_ + [f.base_id for x in list(extras) + list(ruins) for f in x.flights if not f.tag]):
             self._place_base(st.bases[bid], tx, ty)
+        for cvb_ in st.bases.values():                  # v0.41.209 (XO 2026-10-30): the carrier group is always in the mission (4 ships, about 100 nm out); it was built only when a flight used the boat
+            if cvb_.kind == BaseKind.CARRIER and cvb_.id not in self.ship:
+                self._place_base(cvb_, tx, ty)
         atc = (o.carrier_atc_mhz if pbase.kind == BaseKind.CARRIER else self.t.airports[pbase.airport].atc_radio.uhf_hz / 1e6)
 
         # ---- enemy ground: everything the route touches is live from the first second ----------------------------------
@@ -469,6 +474,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + list(self._red_intel)
         self._spawn_reactive(package, extras, tx, ty, tgt.eta_s, geom, manifest, despawn)
         self._dry_pass()
+        self._spawn_supply_in_radius(package, tx, ty, manifest)
         self._place_carcasses()
         manifest.merged = [{k: v for k, v in m_.items() if k in ("id", "number", "objective", "type", "tot_s", "rtb_s")} for m_ in merged if not m_.get("struck")]
         bx, by = geom.push
@@ -915,6 +921,38 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                             continue
                         g += 1; u += len(grp.units)
         return {"groups": g, "units": u + int(math.ceil(w * self.o.carcass_weight)), "wrecks": w}
+
+    def _spawn_supply_in_radius(self, package, tx, ty, manifest) -> None:
+        """v0.41.209 (XO 2026-10-30): every live supply site (fuel farm, depot) of BOTH sides inside the merge radius round the target is in the mission, so a
+        pilot who flies past a depot sees it. The radius is the Settings > Mission Build merge radius (the performance knob). Built last (after every flight and
+        patrol), nearest first, while the unit limit has room: the rest are left out with a warning, and nothing else is pushed out for them (wrecks fit after)."""
+        st, o = self.state, self.o
+        if o.full_map:
+            return
+        R = max(5.0, float(o.merge_radius_nm)) * NM
+        cands = []
+        for a in st.assets.values():
+            if a.kind in SUPPLY_BUILDINGS and not a.destroyed and a.id not in self.groups_by_asset:
+                cands.append((dist(a.x, a.y, tx, ty), a.id, "red", a))
+        for aid, a in st.blue_assets.items():
+            if a.kind in SUPPLY_BUILDINGS and not a.destroyed and aid not in self._supply_built:
+                cands.append((dist(a.x, a.y, tx, ty), aid, "blue", a))
+        cands = sorted(c for c in cands if c[0] <= R)
+        if not cands:
+            return
+        home = min((b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD), key=lambda b: dist(b.x, b.y, tx, ty), default=None)
+        built = 0
+        for d_, aid, side, a in cands:
+            need = len(SUPPLY_BUILDINGS[a.kind]) + (1 if side == "red" else 0)         # the buildings and red's Shilka guard
+            if self._units_room() < need:
+                break
+            if side == "red":
+                self._spawn_site(a, SOFT.get(a.kind), manifest, primary=False)
+            elif home is not None:
+                self._spawn_raid_target(package, home, aid, a.x, a.y, manifest)
+            built += 1
+        if built < len(cands):
+            self.warns.append(f"{len(cands) - built} supply sites inside the {o.merge_radius_nm} nm merge radius left out to stay under the {o.max_units}-unit limit (furthest first)")
 
     def _place_carcasses(self) -> None:
         """Wrecks for every damaged or destroyed ground site near the route. Trimmed to what fits under the unit limit: the furthest
