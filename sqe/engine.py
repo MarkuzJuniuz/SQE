@@ -819,6 +819,7 @@ class Session:
         self.options.ai_land_carrier = str(getattr(self.settings, 'ai_land_carrier', "always"))
         self.options.ai_land_field = str(getattr(self.settings, 'ai_land_field', "never"))
         self.options.max_units = int(self.settings.merge_max_units)
+        self.options.merge_radius_nm = int(getattr(self.settings, 'merge_radius_nm', 15))
         self.options.full_map = bool(self.full_map)
         if self.full_map:
             self.options.max_units = 10 ** 6

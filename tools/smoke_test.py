@@ -5495,6 +5495,57 @@ def check_101_ui_pass_3(c):
     print("[ui pass 3] decay switch off/on, plain Tactical Edge text, SEAD / DEAD caps, one wing row per airframe, full skip dialog")
 
 
+def check_102_persistent_objects(c):
+    """v0.41.209 (XO 2026-10-30): the carrier group (carrier + 3 escorts) is in every mission, even a land-based one; every live supply site of both sides
+    inside the merge radius is built (the radius is the performance knob: a bigger one builds more); when the unit limit has no room the farthest are
+    left out with a warning and no flight is pushed out. The limit is the Settings value."""
+    import math
+    import zipfile as _zf
+    from dcs import lua as _lua
+    from sqe.models import AssetKind as _AK
+
+    def _scan(s_):
+        m_ = _lua.loads(_zf.ZipFile(s_.settings.sortie_miz).read("mission").decode())["mission"]
+        ships_, stat_ = 0, set()
+        for coal in m_["coalition"].values():
+            for ctry in coal["country"].values():
+                ships_ += sum(len(g["units"]) for g in (ctry.get("ship", {}) or {}).get("group", {}).values())
+                for g in (ctry.get("static", {}) or {}).get("group", {}).values():
+                    for u in g["units"].values():
+                        if "|b" in str(u.get("name", "")):
+                            stat_.add(str(u["name"]).split("|b")[0])
+        return ships_, stat_
+
+    s = fresh_session(3, 7); s.ai_test = True
+    st = s.state
+    pick = None
+    for pk in s.packages():
+        fl = s.flyable(pk)
+        ta = st.assets.get(pk.objective.target_id) if pk.objective.target_id else None
+        if fl and ta is not None and not any(b.kind.value == "CARRIER" for b in [st.bases[f.base_id] for f in pk.flights]):
+            near = [a for a in list(st.assets.values()) + list(st.blue_assets.values()) if a.kind in (_AK.FUEL, _AK.DEPOT) and not a.destroyed and math.hypot(a.x - ta.x, a.y - ta.y) <= 15 * 1852]
+            if near:
+                pick = (pk, fl[0], ta); break
+    assert pick is not None, "a land-based package with supply sites inside 15 nm is needed"
+    pk, fl, ta = pick
+    sup = lambda R: {a.id for a in list(st.assets.values()) + list(st.blue_assets.values()) if a.kind in (_AK.FUEL, _AK.DEPOT) and not a.destroyed and math.hypot(a.x - ta.x, a.y - ta.y) <= R * 1852}
+    s.settings.merge_radius_nm = 15
+    res = s.fly(pk.number, fl.id); ships, stat = _scan(s)
+    assert ships == 4, ("the carrier group (carrier + 3 escorts) is in a land-based mission", ships)
+    assert sup(15) <= stat, ("every live supply site inside the radius is built", sup(15) - stat)
+    n15 = len(stat); s.abort()
+    s.settings.merge_radius_nm = 50
+    res = s.fly(pk.number, fl.id); ships, stat = _scan(s)
+    assert sup(50) <= stat and len(stat) >= n15, ("a bigger radius builds more", n15, len(stat), sup(50) - stat)
+    u50 = res.counts["units"]; s.abort()
+    s.settings.merge_max_units = max(60, u50 - 12)               # the Settings value is the limit: no room left for some of the sites
+    res = s.fly(pk.number, fl.id); ships, stat = _scan(s)
+    assert res.counts["units"] <= s.settings.merge_max_units + 12 and any("supply sites inside the 50 nm merge radius left out" in w_ for w_ in res.warnings), (res.counts, res.warnings)
+    assert len(stat) < len(sup(50)) or n15 == len(sup(50)), "the farthest sites are the ones left out"
+    s.abort()
+    print(f"[persistent objects] carrier group 4 ships in a land mission; supply sites in radius 15 nm: {n15}, 50 nm: {len(sup(50))}; cap trims the farthest with a warning")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5635,6 +5686,7 @@ CHECKS = [
     check_99_fighters_clear_gate,
     check_100_garrison_follow,
     check_101_ui_pass_3,
+    check_102_persistent_objects,
 ]
 
 

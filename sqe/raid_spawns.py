@@ -382,6 +382,7 @@ class RaidSpawns:
             a = st.blue_assets[aim]
             names = self._place_buildings(self.usa, aim, a.kind, a.x, a.y, r.randint(0, 359))
             manifest.add("blue_site", aim, names, label=a.name)
+            self._supply_built.add(aim)
             return
         if kind == "sector":
             i = int(aim.split(":")[1])
