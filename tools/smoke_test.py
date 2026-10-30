@@ -1313,7 +1313,7 @@ def check_30_blue_s_air_defence(c):
     _bh, _bp, _ba = (_st.blue_sams[_sm.blue_site_id(_fl[0].id, k_)] for k_ in ("hawk", "pat", "aaa"))
     assert _gn == ["HAWK battery"] and _bh.destroyed and abs(_bp.health - 0.8) < 1e-9 and _ba.health == 1.0 and abs(_fl[0].defense - 0.6) < 1e-9, ("outer layer first", _gn, _bh.health, _bp.health, _ba.health)
     _sm.shift_field(_st, _fl[0], 0.3); assert _bh.destroyed, "repair does not revive a destroyed site"
-    _bh.health = 0.0; _st.day += 3; _sm.track(_st); _st.day += 3
+    _bh.health = 0.0; _st.day += 3; _sm.track(_st); _st.day += _sm.ORDER_DAYS
     _dr = type(_gd(3))(**{**_gd(3).__dict__, "blue_rebuild": 1.0}); _rl = _sm.rebuild_blue_sites(_st, _dr, _rnd.Random(5))
     assert _rl and abs(_bh.health - _sm.REBUILT_HEALTH) < 1e-9 and "HAWK" in _rl[0], "a destroyed blue site is rebuilt after the minimum days, at half strength"
     _bh.health = 0.0; _st.ground["fallen"] = [_fl[0].id]; _sm.track(_st); _st.day += 5
