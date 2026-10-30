@@ -5495,6 +5495,31 @@ def check_101_ui_pass_3(c):
     print("[ui pass 3] decay switch off/on, plain Tactical Edge text, SEAD / DEAD caps, one wing row per airframe, full skip dialog")
 
 
+def check_103_ecm_hookup(c):
+    """v0.41.210: the player's jammer from the F-16C lamp (Export.lua flag file) or F10 ECM ON / OFF for FC3 jets."""
+    from sqe import debrief as db
+    from pathlib import Path as _P
+    for mode in ("live", "f10", ""):
+        h = db.lua_hook("c", 1, "p", [], "P1", "G", ecm_player=mode)
+        assert f'local ECMP = "{mode}"' in h, mode
+        assert "__ECMP__" not in h
+    h_live = db.lua_hook("c", 1, "p", [], "P1", "G", ecm_player="live")
+    assert "SQE_ecm.flag" in h_live and "liveEcm" in h_live
+    h_f10 = db.lua_hook("c", 1, "p", [], "P1", "G", ecm_player="f10")
+    assert "ECM ON" in h_f10 and "ECM OFF" in h_f10 and "addCommandForGroup" in h_f10 and "local FC3ECM = false" in h_f10
+    lua = (_P(__file__).resolve().parent / "sqe_ecm_export.lua").read_text()
+    assert '["F-16C_50"] = { arg = 102,  enabled = true }' in lua
+    for n in ("FA-18C_hornet", "F-14B", "A-10C_2"):
+        assert f'["{n}"]' in lua
+    assert lua.count("enabled = false }") == 3 and "LuaExportActivityNextEvent" in lua and "prev_next" in lua
+    try:
+        import lupa  # noqa
+        rt = lupa.LuaRuntime(); rt.eval("function() end"); rt.execute(h_f10.split("\n", 0)[0] and "return 1")
+    except ImportError:
+        pass
+    print("[ecm hookup] hook text for live / f10 / off, F10 commands, export script jets (F-16C on, three off)")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5635,6 +5660,7 @@ CHECKS = [
     check_99_fighters_clear_gate,
     check_100_garrison_follow,
     check_101_ui_pass_3,
+    check_103_ecm_hookup,
 ]
 
 

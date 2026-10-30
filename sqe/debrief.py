@@ -251,11 +251,49 @@ local function logShot(ev, e, by)
   shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt, km = km, alt = salt, tx = tx, tz = tz, left = left }
 end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
-local function jamOn(name)                  -- future: the player's cockpit switch (export script) feeds this
+-- v0.41.210 (XO 2026-10-30): the player's own jammer. ECMP "live": the F-16C's ECM lamp, written once a second by tools/sqe_ecm_export.lua (Export.lua) to
+-- Logs\SQE_ecm.flag as "<0|1> <model time>"; a missing or stale file falls back to the attack-leg window below. ECMP "f10": an FC3 jet (nothing readable in its
+-- cockpit): the F10 > Other commands ECM ON / ECM OFF set the flag (starts off).
+local ECMP = "__ECMP__"
+local FC3ECM = false
+local function liveEcm()
+  local ok, v = pcall(function()
+    local f = io.open(lfs.writedir() .. [[Logs\SQE_ecm.flag]], "r")
+    if not f then return nil end
+    local s = f:read("*l"); f:close()
+    local on, t = string.match(s or "", "^(%d)%s+([%d%.]+)")
+    if not on or math.abs(timer.getTime() - tonumber(t)) > 5 then return nil end
+    return on == "1"
+  end)
+  if ok then return v end
+  return nil
+end
+local function jamOn(name)
+  if name == PLAYER and ECMP ~= "" then
+    if ECMP == "f10" then return FC3ECM end
+    local v = liveEcm()
+    if v ~= nil then return v end
+  end
   local w = JAMW[name]
   if not w then return true end
   local t = timer.getTime()
   return t >= w[1] and t <= w[2]
+end
+if ECMP == "f10" then
+  local tries = 0
+  local function addF10()
+    tries = tries + 1
+    local g = Group.getByName(PGROUP)
+    if not g then
+      if tries < 60 then return timer.getTime() + 2 end
+      return nil
+    end
+    local id = g:getID()
+    missionCommands.addCommandForGroup(id, "ECM ON", nil, function() FC3ECM = true; trigger.action.outTextForGroup(id, "ECM on (F10)", 6) end)
+    missionCommands.addCommandForGroup(id, "ECM OFF", nil, function() FC3ECM = false; trigger.action.outTextForGroup(id, "ECM off (F10)", 6) end)
+    return nil
+  end
+  timer.scheduleFunction(addF10, nil, timer.getTime() + 1)
 end
 local function jamCheck(e, shooter)
   if not next(JAMS) or not e.weapon then return end
@@ -1167,7 +1205,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
              calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
              watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
-             rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None) -> str:
+             rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "") -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
@@ -1182,7 +1220,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
     return (LUA_HOOK.replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
             .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
-            .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__JAMS__", ", ".join(f"[{_lq(k)}]={int(v)}" for k, v in (jams or {}).items()))
+            .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__ECMP__", ecm_player if ecm_player in ("live", "f10") else "").replace("__JAMS__", ", ".join(f"[{_lq(k)}]={int(v)}" for k, v in (jams or {}).items()))
             .replace("__JAMW__", ", ".join(f"[{_lq(k)}]={{{float(a):.0f}, {float(b):.0f}}}" for k, (a, b) in (jamw or {}).items()))
             .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)).replace("__SPLASH__", "true" if splash else "false")
             .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}' + (f', t={int(q["t"])}' if q.get("t") is not None else '') + '}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy))
@@ -1213,14 +1251,14 @@ def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despaw
                  group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
                  enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
                  watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
-                 rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None) -> None:
+                 rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "") -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover, ecm_player))))
     mission.triggerrules.triggers.append(t)
 
 
