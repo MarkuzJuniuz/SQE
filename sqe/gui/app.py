@@ -177,7 +177,7 @@ class OverviewPage(QWidget):
             v = tempo.get(st, k) * 100
             trs.append([names[k], im2.bar(f"{v:+.0f}%", v / (tempo.TEMPO_CAP * 100), "edge"), "At the cap" if abs(v) >= tempo.TEMPO_CAP * 100 - 0.5 else ""])
         im2.apply(self.dviews["edge"], "<p style='color:#b9c6d6'>What your flown sorties do to the odds of the same kind of job done in the background: 0 to +40 points, fading 3% a night. "
-                  "A full bar is the +40% cap.</p>" + V.table(("Job", "Edge (full bar = +40% cap)", ""), trs))
+                  "A full bar is the +40% cap.</p><p style='margin:0'>&nbsp;</p>" + V.table(("Job", "Edge", ""), trs))
 
     def refresh(self, st):
         from .. import posture
