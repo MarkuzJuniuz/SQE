@@ -2646,7 +2646,7 @@ def check_31j_sam_orders_always_on(c):
     from sqe import sams, war
     from sqe.settings import AppSettings as _AS
     assert not hasattr(_AS(), "borrow_red") and not hasattr(_AS(), "borrow_blue"), "the borrow settings are gone"
-    assert [sams.transfer_days(x) for x in (1.0, 0.7, 0.55, 0.3)] == [1, 2, 3, 3], "v0.41.197: a transfer takes 1 to 3 days by supply"
+    assert [sams.transfer_days(x) for x in (1.0, 0.7, 0.55, 0.3)] == [2, 3, 4, 4], "v0.41.199: a transfer takes 1 to 3 days by supply plus a setup day"
     assert sams.ORDER_DAYS == 14, "v0.41.197: an order from home takes two weeks"
     calls = []
     real_r, real_b = sams.red_asks, sams.blue_asks
@@ -5015,7 +5015,7 @@ def check_94_sam_cost(c):
 
 
 def _check_94_body(st, sams, ground):
-    assert sams.ORDER_DAYS == 14 and sams.transfer_days(1.0) == 1
+    assert sams.ORDER_DAYS == 14 and sams.transfer_days(1.0) == 2
     assert (sams.debt_for("SA-10"), sams.debt_for("Patriot"), sams.debt_for("SA-11"), sams.debt_for("HAWK"), sams.debt_for("SA-3"), sams.debt_for("AAA")) == (0.06, 0.06, 0.03, 0.03, 0.02, 0.02)
     sams._rec(st).pop("debt", None)
     base = ground.supply(st, "red") + sams.debt(st, "red")             # supply with no debt
@@ -5250,16 +5250,17 @@ def check_95_site_condenser(c):
         finally:
             for mod, old in zip((terrainmask, relief, roads), prev):
                 mod.configure(old)
-    assert len(out["sectors"]) == 13 and rep[-1].startswith("13 sectors, 0 short"), rep[-3:]
+    assert len(out["sectors"]) == 13 and len(out["fields"]) == 13 and rep[-1].startswith("13 sectors and 13 fields, 0 short"), rep[-3:]
     _spots_ok(out, "made-up flat world")
     shipped = _P(__file__).resolve().parent.parent / "sqe" / "data" / "theatres" / "caucasus_sites.json"
     sh = _json.loads(shipped.read_text(encoding="utf-8"))
-    assert len(sh["sectors"]) == 13 and sh["quota"] == tool.QUOTA, "the shipped file has the 13 sectors and the agreed quotas"
+    assert len(sh["sectors"]) == 13 and len(sh["fields"]) == 13 and sh["quota"] == tool.QUOTA, "the shipped file has the 13 sectors, the 13 fields (9 red, 4 blue) and the agreed quotas"
     _spots_ok(sh, "shipped caucasus_sites.json")
-    print("[site condenser] 13 sectors fill 20 / 12 / 8 on a made-up world; the shipped file keeps the quotas, spacing and the gap between kinds")
+    print("[site condenser] 13 sectors fill 20 / 12 / 8 and 13 fields 12 / 8 on a made-up world; the shipped file keeps the quotas, spacing and the gap between kinds")
 
 
 def _spots_ok(data, label):
+    import math
     import math as _m
     for s in data["sectors"]:
         allp = []
@@ -5270,6 +5271,47 @@ def _spots_ok(data, label):
             for k2, x2, y2 in allp[i + 1:]:
                 dd = _m.hypot(x1 - x2, y1 - y2)
                 assert dd >= (1500 if k1 == k2 else 1000) - 1, (label, s["i"], k1, k2, round(dd))
+    for f in data["fields"]:
+        assert len(f["sam"]) == 12 and len(f["supply"]) == 8, (label, f["id"], len(f["sam"]), len(f["supply"]))
+        assert all(math.hypot(x - f["x"], y - f["y"]) <= data["field_radius_m"] + 1 for k in ("sam", "supply") for x, y in f[k]), (label, f["id"], "within the field radius")
+
+
+def check_96_site_spots(c):
+    """v0.41.199: a new campaign puts red's SAM sites, fuel farms / depots and front-line columns on spots from sqe/data/theatres/<theatre>_sites.json (sites.apply);
+    almost all SAM sites find one within reach, a garrison keeps its offset from its SAM site, a site with no spot in reach stays where the old placement put it,
+    and a theatre without a sites file is built as before (no spot used). The sea snap and the on-load re-check leave a site on a spot alone."""
+    import math
+    from sqe import sites, theatres, scenario
+    th = theatres.active()
+    S = sites.load(th)
+    assert S and len(S["sectors"]) == 13, "the shipped sites file loads"
+    pools = {k: {(round(a), round(b)) for a, b in sites._pool(S, k)} for k in ("sam", "supply", "ground")}
+    on = tot = ons = tots = onc = totc = 0
+    for seed in (1, 2, 3):
+        s = mk(); s.new("Spots", "F-16C", 3, seed=seed); st = s.state
+        for a in st.assets.values():
+            xy = (round(a.x), round(a.y))
+            if a.kind.value == "SAM" and a.id.startswith("sam_"):
+                tot += 1; on += xy in pools["sam"]
+            elif a.kind.value in ("FUEL", "DEPOT"):
+                tots += 1; ons += xy in pools["supply"]
+            elif a.id.startswith("armor_"):
+                totc += 1; onc += xy in pools["ground"]
+            if a.guards and a.guards in st.assets:
+                par = st.assets[a.guards]
+                assert math.hypot(a.x - par.x, a.y - par.y) < 5000, ("a garrison stays close to its SAM site", a.id)
+    assert on >= 0.9 * tot and ons == tots and onc == totc, (on, tot, ons, tots, onc, totc)
+    xy0 = {a.id: (a.x, a.y) for a in st.assets.values() if a.id.startswith("sam_")}
+    scenario.snap_assets_to_land(st)
+    assert all((a.x, a.y) == xy0[a.id] for a in st.assets.values() if a.id in xy0 and (round(a.x), round(a.y)) in pools["sam"]), "a site on a spot is not moved by the sea snap"
+    sites._CACHE[th["id"]] = None                                         # no sites file: built as before
+    try:
+        s = mk(); s.new("NoSpots", "F-16C", 3, seed=1)
+        assert sites.apply(s.state, th) == set(), "no sites file: nothing is moved"
+        assert not sites.on_spot(0.0, 0.0)
+    finally:
+        sites.clear_cache()
+    print(f"[site spots] SAM sites on a spot {on}/{tot}, supply {ons}/{tots}, columns {onc}/{totc} (3 seeds, L3); no file: built as before")
 
 
 CHECKS = [
@@ -5406,6 +5448,7 @@ CHECKS = [
     check_93_supply_buildings,
     check_94_sam_cost,
     check_95_site_condenser,
+    check_96_site_spots,
 ]
 
 

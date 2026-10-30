@@ -12,6 +12,7 @@ from .state import CampaignState
 from .aircraft import AIRCRAFT
 from . import ground, redroster, theatres, story
 from . import sams as _sams_mod
+from . import sites as _sites_mod
 
 def THEATRES() -> dict:
     """{id: name} of the installed theatre packs."""
@@ -55,6 +56,8 @@ def snap_assets_to_land(st) -> int:
             pair[a.id] = "armor_" + a.id[5:]
     n = 0
     for a in sorted(st.assets.values(), key=lambda a: a.id in pair):          # parents first
+        if _sites_mod.on_spot(a.x, a.y):
+            continue                                                      # sits on a condensed site spot (sites.py): dry, flat ground, kept 500 m off the sea
         if a.kind == AssetKind.AIRFIELD:
             continue
         x, y = a.x, a.y
@@ -269,6 +272,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         sx, sy = _offset(col.x, col.y, rng.randint(0, 359), rng.randint(2200, 3600))
         add(f"fsam_{i+1}", f"Column {chr(65 + i)} {SAM_LABEL[v]}", AssetKind.SAM, sx, sy, SAM_VALUE[v], variant=v, tier=1)
 
+    _sites_mod.apply(st, th)                                         # v0.41.199: red's SAM sites, supply sites and columns move onto the condensed site spots
     snap_assets_to_land(st)                                          # nothing is generated in the sea
     sams = [x for x in st.assets.values() if x.kind == AssetKind.SAM]
     for x in st.assets.values():

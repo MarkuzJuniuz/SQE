@@ -198,6 +198,7 @@ def _blue_garrison(b) -> EnemyAsset:
 # range open sources give (Dupuy Institute: a prepared defence is worth about x1.3 to over x3 depending on preparation and terrain; US planning ratios about
 # 3:1 against a prepared defender, 2.5:1 against a hasty one; positional defence keeps at least two-thirds of the force forward in platoon / company
 # strongpoints). Tune on XO's runs.
+FWD_SPOT_REACH_M = 6000.0     # a forward garrison settles on a condensed ground spot at most this far from its planned position (judgment call)
 FWD_OFFSET_M = 3000.0         # each garrison sits this far either side of the sector centre
 FWD_EXTRA = 0.25              # defender factor added by a full-health garrison in the sector: DEFENDER 1.25 -> 1.5 (a standing garrison, still inside the sourced range)
 FWD_SHARE = 0.15              # share of its side's sector strength lost when the garrison is destroyed (scaled by the health it lost)
@@ -208,15 +209,17 @@ def fwd_id(side: str, i: int) -> str:
     return f"{'r' if side == 'red' else 'b'}fwd_{i + 1}"
 
 
-def fwd_pos(g, i: int, side: str) -> tuple:
-    from . import seacheck
+def fwd_pos(g, i: int, side: str, state=None) -> tuple:
+    from . import seacheck, sites
     c, n = g["centers"], len(g["centers"])
     cx, cy = c[i]
     a, b = c[max(i - 1, 0)], c[min(i + 1, n - 1)]
     vx, vy = a[0] - b[0], a[1] - b[1]                  # from the higher-numbered neighbour toward the lower one: toward the enemy
     L = math.hypot(vx, vy) or 1.0
     k = (1.0 if side == "red" else -1.0) * FWD_OFFSET_M / L
-    return seacheck.snap_to_land(cx + vx * k, cy + vy * k)
+    x, y = seacheck.snap_to_land(cx + vx * k, cy + vy * k)
+    sp = sites.free_spot(state, "ground", x, y, FWD_SPOT_REACH_M) if state is not None else None     # v0.41.199: a condensed site spot when there is one
+    return sp if sp is not None else (x, y)
 
 
 def ensure_forward_garrisons(state) -> bool:
@@ -230,7 +233,7 @@ def ensure_forward_garrisons(state) -> bool:
             aid = fwd_id(side, i)
             if aid in pool:
                 continue
-            x, y = fwd_pos(g, i, side)
+            x, y = fwd_pos(g, i, side, state)
             nm = f"{'Enemy' if side == 'red' else 'Friendly'} forward position, {g['names'][i]}"
             pool[aid] = EnemyAsset(aid, nm, AssetKind.ARMOR, x, y, 1.0, 5, [], None, "GARRISON", 1)
             added = True
