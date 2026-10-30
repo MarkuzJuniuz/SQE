@@ -2646,7 +2646,7 @@ def check_31j_sam_orders_always_on(c):
     from sqe import sams, war
     from sqe.settings import AppSettings as _AS
     assert not hasattr(_AS(), "borrow_red") and not hasattr(_AS(), "borrow_blue"), "the borrow settings are gone"
-    assert [sams.transit_days(x) for x in (1.0, 0.7, 0.55, 0.3)] == [7, 7, 7, 7], "v0.41.196: an order takes a week whatever the supply"
+    assert [sams.transit_days(x) for x in (1.0, 0.7, 0.55, 0.3)] == [14, 14, 14, 14], "v0.41.196: an order takes two weeks whatever the supply"
     calls = []
     real_r, real_b = sams.red_orders, sams.blue_orders
     sams.red_orders = lambda *a, **k: (calls.append("red"), [])[1]
@@ -4999,10 +4999,22 @@ def check_93_supply_buildings(c):
 
 def check_94_sam_cost(c):
     """v0.41.196: a replacement SAM battery costs its side supply (SA-10 / Patriot 6, SA-11 / SA-6 / HAWK 3, the rest 2 points), the debt fades in a straight line over 1.5 x the order
-    time (a week), is capped, lowers supply below the floor, and a side has one order in flight."""
+    time (two weeks), is capped, lowers supply below the floor, and a side has one order in flight. v0.41.196 final: orders take two weeks and the price is zero (mechanics tested at the 1x prices)."""
     from sqe import sams, ground
     st = fresh_session(3, 5).state
-    assert sams.ORDER_TRANSIT_DAYS == 7 and sams.transit_days(1.0) == 7
+    assert sams.SAM_DEBT == {"long": 0.0, "medium": 0.0, "short": 0.0}, "the price is zero until XO switches it on"
+    assert sams.debt(st, "red") == 0.0 and sams.debt(st, "blue") == 0.0
+    _old = dict(sams.SAM_DEBT)
+    sams.SAM_DEBT.update({"long": 0.06, "medium": 0.03, "short": 0.02})          # the mechanics are tested at the 1x prices, then restored
+    try:
+        _check_94_body(st, sams, ground)
+    finally:
+        sams.SAM_DEBT.update(_old)
+    print("[SAM cost] two-week orders, price zero by default; debt mechanics (by class, straight-line payback, cap, below-the-floor supply) work when priced")
+
+
+def _check_94_body(st, sams, ground):
+    assert sams.ORDER_TRANSIT_DAYS == 14 and sams.transit_days(1.0) == 14
     assert (sams.debt_for("SA-10"), sams.debt_for("Patriot"), sams.debt_for("SA-11"), sams.debt_for("HAWK"), sams.debt_for("SA-3"), sams.debt_for("AAA")) == (0.06, 0.06, 0.03, 0.03, 0.02, 0.02)
     sams._rec(st).pop("debt", None)
     base = ground.supply(st, "red") + sams.debt(st, "red")             # supply with no debt
@@ -5011,18 +5023,17 @@ def check_94_sam_cost(c):
     assert abs(sams.debt(st, "red") - 0.06) < 1e-9 and abs(ground.supply(st, "red") - (base - 0.06)) < 1e-9, "the debt lowers supply"
     d0 = st.day
     st.day = d0 + 5
-    assert abs(sams.debt(st, "red") - 0.06 * (1 - 5 / 10.5)) < 1e-9, "straight-line payback over 10.5 days"
-    st.day = d0 + 11
+    assert abs(sams.debt(st, "red") - 0.06 * (1 - 5 / (sams.SAM_DEBT_PAYBACK * sams.ORDER_TRANSIT_DAYS))) < 1e-9, "straight-line payback over 1.5 x the order time"
+    st.day = d0 + int(sams.SAM_DEBT_PAYBACK * sams.ORDER_TRANSIT_DAYS) + 1
     assert sams.debt(st, "red") == 0.0, "paid back"
     st.day = d0
     for _ in range(10):
         sams.add_debt(st, "red", "SA-10")
     assert abs(sams.debt(st, "red") - sams.SAM_DEBT_CAP) < 1e-9, "capped"
     assert sams.debt(st, "blue") == 0.0, "the other side owes nothing"
-    st.day = d0 + 50
+    st.day = d0 + 100
     sams.add_debt(st, "red", "SA-3")
     assert len(sams._rec(st)["debt"]["red"]) == 1, "old entries are dropped"
-    print("[SAM cost] week-long orders, debt by class, straight-line payback, cap, below-the-floor supply")
 
 
 def check_91_jets_on_cas(c):

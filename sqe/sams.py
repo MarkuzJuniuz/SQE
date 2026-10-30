@@ -42,8 +42,8 @@ BLUE_REPAIR = 0.10
 # asset first); no public figures for transit time, so every number here is a judgment call.
 # v0.41.140 (XO 2026-10-27, Campaign Revamp): the orders are a fixed feature (no settings), for both sides at every level. A battery moves by air, so
 # it arrives in 1 to 3 days by the sender's supply (1 at 100%, 3 at the 55% floor), and there is no chance roll any more: supply sets the time.
-ORDER_TRANSIT_DAYS = 7                    # v0.41.196 (XO 2026-10-29): an order takes a week (was 1 to 3 days by supply); moving a battery stays as it is. Judgment call.
-SAM_DEBT = {"long": 0.06, "medium": 0.03, "short": 0.02}      # v0.41.196 (XO 2026-10-29): supply points a side pays for a replacement battery (order or rebuild in place); judgment calls, no public figure
+ORDER_TRANSIT_DAYS = 14                   # v0.41.196 (XO 2026-10-29): an order takes TWO WEEKS (was 1 to 3 days by supply); moving a battery stays as it is. Judgment call. 12-seed L3 sim, flying every 3rd day: red had a SAM at Sukhumi on 53% of days with the 1-week order, 37% with 2 weeks
+SAM_DEBT = {"long": 0.0, "medium": 0.0, "short": 0.0}       # v0.41.196: supply a side pays for a replacement battery (order or rebuild in place). The mechanism is built but the price is ZERO: the 12-seed L3 sim showed no benefit (1x = 0.06 / 0.03 / 0.02: red SAM days at Sukhumi 49% against 37% with no debt, blue won 6 of 12 against 10 of 12). Raise these to switch it on.
 SAM_DEBT_PAYBACK = 1.5                  # the debt of one purchase pays back in a straight line over this many times the order time (XO's choice)
 SAM_DEBT_CAP = 0.15                     # all open debt of a side together, so a side that keeps losing SA-10s cannot spiral (judgment call)
 _DEBT_LONG, _DEBT_MEDIUM = ("SA-10", "Patriot"), ("SA-11", "SA-6", "HAWK", "Hawk")
