@@ -21,7 +21,8 @@ from ..packages import PackageBuilder, folded_n_def
 from ..settings import AppSettings
 from . import theme
 from .dialogs import DebriefDialog, NewCampaignDialog, SettingsDialog, WaitingDialog
-from .widgets import MapView, StatCard, card
+from .widgets import MapView, SideCard, StatCard, card
+from . import overview_view as V
 
 RELEASES_URL = "https://github.com/MarkuzJuniuz/SQE/releases/latest"
 
@@ -68,14 +69,24 @@ class OverviewPage(QWidget):
         self.dtabs = QTabWidget(); gc.layout().addWidget(self.dtabs)
         self.dviews = {}
         for key, title in (("ground", "Ground"), ("supply", "Supply"), ("ad", "Air defence"), ("air", "Air Operations"), ("edge", "Tactical Edge")):
-            v = QTextBrowser(); v.setFrameShape(QFrame.NoFrame); v.setStyleSheet("background:transparent;border:none;"); self.dviews[key] = v; self.dtabs.addTab(v, title)
+            v = QTextBrowser(); v.setFrameShape(QFrame.NoFrame); v.setStyleSheet("background:transparent;border:none;"); self.dviews[key] = v
+            if key == "ground":                                              # v0.41.207: the base notes sit in an expandable section above the sector table
+                w = QWidget(); wl = QVBoxLayout(w); wl.setContentsMargins(0, 0, 0, 0); wl.setSpacing(4)
+                self.notes_btn = QPushButton("Notes  \u25b8"); self.notes_btn.setFlat(True); self.notes_btn.setCursor(Qt.PointingHandCursor)
+                self.notes_btn.setStyleSheet("text-align:left;padding:4px 6px;")
+                self.notes_view = QTextBrowser(); self.notes_view.setFrameShape(QFrame.NoFrame); self.notes_view.setStyleSheet("background:transparent;border:none;")
+                self.notes_view.setMaximumHeight(230); self.notes_view.setVisible(False)
+                self.notes_btn.clicked.connect(self._toggle_notes)
+                wl.addWidget(self.notes_btn); wl.addWidget(self.notes_view); wl.addWidget(v, 1)
+                self.dtabs.addTab(w, title)
+            else:
+                self.dtabs.addTab(v, title)
         right = QVBoxLayout(); root.addLayout(right, 6)
         g = QGridLayout(); g.setSpacing(12); right.addLayout(g)
-        self.cards = {"fr": StatCard("The front", theme.AMBER), "od": StatCard("Ground odds", theme.BLUE),
-                      "su": StatCard("Supply: Coalition / Enemy", theme.GREEN), "ad": StatCard("Air defence: Coalition / Enemy", theme.RED)}
-        for i, k in enumerate(("fr", "od", "su", "ad")):
-            g.addWidget(self.cards[k], i // 2, i % 2)
-        self.today = StatCard("Today's tasking", theme.BLUE); right.addWidget(self.today)               # v0.41.152: what the day holds for you
+        self.cards = {"fr": StatCard("The front", theme.AMBER), "od": StatCard("Ground odds", theme.BLUE)}
+        self.side = {"blue": SideCard("Coalition"), "red": SideCard("Russia")}
+        g.addWidget(self.cards["fr"], 0, 0); g.addWidget(self.cards["od"], 0, 1); g.addWidget(self.side["blue"], 1, 0); g.addWidget(self.side["red"], 1, 1)
+        self.today = StatCard("Today's tasking", theme.AMBER); right.addWidget(self.today)               # v0.41.152: what the day holds for you
         self.warn_card = card(); right.addWidget(self.warn_card)                # v0.41.148: warnings (a base about to fall, the counter-force), hidden when there are none
         wh = QLabel("WARNINGS"); wh.setObjectName("small"); self.warn_card.layout().addWidget(wh)
         self.warn = QLabel(); self.warn.setWordWrap(True); self.warn.setStyleSheet(f"color:{theme.AMBER};"); self.warn_card.layout().addWidget(self.warn)
@@ -108,28 +119,65 @@ class OverviewPage(QWidget):
         tr = "".join("<tr>" + "".join(f"<td style='padding-right:14px'>{html.escape(str(c))}</td>" for c in r) + "</tr>" for r in rows)
         return (f"<p style='color:#b9c6d6'>{html.escape(note)}</p>" if note else "") + f"<table cellspacing='2'><tr>{th}</tr>{tr}</table>"
 
+    def _toggle_notes(self):
+        on = not self.notes_view.isVisible()
+        if on:
+            d = self.notes_view.document(); d.setTextWidth(max(300, self.notes_view.width() - 20))
+            self.notes_view.setFixedHeight(min(230, int(d.size().height()) + 14))
+        self.notes_view.setVisible(on); self.notes_btn.setText("Notes  \u25be" if on else "Notes  \u25b8")
+
     def _fill_details(self, st):
-        od, T = overview_detail, self._table
-        notes = od.ground_notes(st)
-        hist = od.history(st)
-        self.dviews["ground"].setHtml(
-            "<p>" + "<br>".join(html.escape(n) for n in notes) + "</p>"
-            + T(("Sector", story.enemy(st) + " (bn)", "Coalition (bn)", ""), od.ground_rows(st))
-            + ("<p><b>Front history</b><br>" + "<br>".join(html.escape(x) for x in hist) + "</p>" if hist else "<p style='color:#8fa3b8'>The front has not moved yet.</p>"))
-        self.dviews["supply"].setHtml(
-            "<p style='color:#b9c6d6'>" + "<br>".join(html.escape(x) for x in posture.supply_lines(st)) + "<br>A site mends in about 6 days at full supply (longer when supply is low), "
-            "and not on a night after it was struck.</p>" + T(("Side", "Site", "Health", "State"), [(a, b, f"{c}%", d) for a, b, c, d in od.supply_rows(st)]))
+        import re
+        from .. import ground, tempo, blue_barcap as _bb, bombers as _bomb
+        od, en, e = overview_detail, story.enemy(st), V.e
+        fe, fb = posture.supply_pct(st, "red"), posture.supply_pct(st, "blue")
+        ae, ab = round(100 * posture.iads_pct(st, "red")), round(100 * posture.iads_pct(st, "blue"))
+        # ---- Ground: the base notes (expandable), then the sector table with strength bars
+        notes, rows, hist = od.ground_notes(st), od.ground_rows(st), od.history(st)
+        base_rows, plain = [], []
+        for n in notes:
+            m = re.match(r"^(.+?): (next objective|held by the enemy|taken|LOST)$", n)
+            (base_rows.append((m.group(1), V.title(m.group(2)))) if m else plain.append(n))
+        self.notes_view.setHtml(("<p>" + "<br>".join(e(x) for x in plain) + "</p>" if plain else "") + (V.table(("Base", "Status"), base_rows) if base_rows else "<p>No ground war.</p>"))
+        im = V.Images()
+        raw = [(ground.red_strength(st, i) / posture.POINTS_PER_BATTALION, ground.blue_strength(st, i) / posture.POINTS_PER_BATTALION) for i in range(len(rows))] if rows else []
+        trs = []
+        for (name, r, b, tag), (rf, bf) in zip(rows, raw):
+            trs.append([name, im.bar(r, rf / 10.0, V.pct_band(rf * 10)), im.bar(b, bf / 10.0, V.pct_band(bf * 10)), V.title(tag)])
+        body = V.table(("Sector", en, "Coalition", "Status"), trs) if trs else ""
+        body += V.section("Front History", "<br>".join(e(x) for x in hist)) if hist else "<p style='margin-top:14px;color:#8fa3b8'>The front has not moved yet.</p>"
+        im.apply(self.dviews["ground"], body)
+        # ---- Supply
+        top = V.table(("Side", "Supply"), [("Coalition", ("bg", f"{fb}%", V.supply_band(fb))), (en, ("bg", f"{fe}%", V.supply_band(fe)))])
+        sites = V.table(("Side", "Site", "Health", "State"), [(a, b, ("bg", f"{c}%", V.pct_band(c)), V.first_cap(d)) for a, b, c, d in od.supply_rows(st)])
+        self.dviews["supply"].setHtml(top + V.section("Sites", sites)
+                                      + "<p style='margin-top:14px;color:#8fa3b8'>A site mends in about 6 days at full supply (longer when supply is low), and not on a night after it was struck.</p>")
+        # ---- Air defence: the transit section only when a battery is on its way
         orders = od.asks_rows(st)
-        self.dviews["ad"].setHtml(
-            "<p style='color:#b9c6d6'>" + "<br>".join(html.escape(x) for x in posture.air_defence_lines(st)) + "</p>"
-            + ("<p><b>SAM batteries in transit</b><br>" + "<br>".join(html.escape(f"{a}: {b}") for a, b in orders) + "</p>" if orders else "")
-            + T(("Side", "Site", "Type", "Health", "State"), [(a, b, c, f"{d}%", e) for a, b, c, d, e in od.air_defence_rows(st)]))
-        from .. import blue_barcap as _bb, bombers as _bomb
-        self.dviews["edge"].setHtml(
-            "<p><b>Tactical Edge</b> (what your flown sorties do to the odds of the same kind of job done in the background; 0 to +40, fades 3% a night)<br>"
-            + "<br>".join(html.escape(x) for x in od.tempo_lines(st)) + "</p>")
-        self.dviews["air"].setHtml(
-            "<p>" + "<br>".join(html.escape(x) for x in (_bb.status_lines(st) + _bomb.status_lines(st))).replace("   ", "&nbsp;&nbsp;&nbsp;") + "</p>")
+        top = V.table(("Side", "Air Defense"), [("Coalition", ("bg", f"{ab}%", V.pct_band(ab))), (en, ("bg", f"{ae}%", V.pct_band(ae)))])
+        transit = V.section("SAM Batteries in Transit", V.table(("Side", "Battery"), [(a, V.first_cap(b)) for a, b in orders])) if orders else ""
+        sites = V.table(("Side", "Site", "Type", "Health", "State"), [(a, b, c, ("bg", f"{d}%", V.pct_band(d)), V.first_cap(x)) for a, b, c, d, x in od.air_defence_rows(st)])
+        self.dviews["ad"].setHtml(top + transit + V.section("Sites", sites))
+        # ---- Air Operations: BARCAP cover and the tanker / AWACS guards, under their own headings
+        lines = _bb.status_lines(st)
+        cover = [tuple((ln.strip().split(": ", 1) + [""])[:2]) for ln in lines if ln.startswith("   ")]
+        head = next((ln for ln in lines if ln.startswith("BARCAP")), "")
+        guard = next((ln.split(": ", 1)[1] for ln in lines if ln.startswith("Tanker / AWACS")), "")
+        guard = guard.replace(" sorties planned", " guard sorties planned")
+        extra = _bomb.status_lines(st)
+        air = V.section("BARCAP Cover", "<p style='color:#8fa3b8'>Share of today's 24 hours with a pair up.</p>" + (V.table(("Area", "Cover"), cover) if cover else "")) if head else ""
+        air += V.section("Tanker/AWACS", f"<p>{e(V.first_cap(guard))}</p>") if guard else ""
+        air += V.section("Red Air", "<p>" + "<br>".join(e(x) for x in extra) + "</p>") if extra else ""
+        self.dviews["air"].setHtml(air or "<p style='color:#8fa3b8'>Nothing is planned yet.</p>")
+        # ---- Tactical Edge: a bar per job kind, full at the +40% cap
+        im2 = V.Images()
+        names = {"CAS": "Close Air Support", "STRIKE": "Strike", "DEAD": "SEAD/DEAD", "AIR": "Air Cover and Counter-Air"}
+        trs = []
+        for k in tempo.KINDS:
+            v = tempo.get(st, k) * 100
+            trs.append([names[k], im2.bar(f"{v:+.0f}%", v / (tempo.TEMPO_CAP * 100), "edge"), "At the cap" if abs(v) >= tempo.TEMPO_CAP * 100 - 0.5 else ""])
+        im2.apply(self.dviews["edge"], "<p style='color:#b9c6d6'>What your flown sorties do to the odds of the same kind of job done in the background: 0 to +40 points, fading 3% a night. "
+                  "A full bar is the +40% cap.</p><p style='margin:0'>&nbsp;</p>" + V.table(("Job", "Edge", ""), trs))
 
     def refresh(self, st):
         from .. import posture
@@ -149,16 +197,22 @@ class OverviewPage(QWidget):
             fe, fb = posture.supply_pct(st, "red"), posture.supply_pct(st, "blue")
             self.cards["fr"].set(f"Stage {k} of {tot}" if nxt is not None else "All taken", ("Next: " + nxt["name"] + "\n" if nxt is not None else "") +
                                  ", ".join(f"{nm} ({'taken' if s_ == 'ours' else 'next' if s_ == 'next' else 'enemy'})" for nm, s_ in posture.bases_status(st)))
-            self.cards["od"].set(*((posture.posture(st)[0], "The war is over") if st.status != "ACTIVE" else (o["word"].capitalize() if o else "No contact", posture.odds_line(st))))
-            self.cards["su"].set(f"{fb}% / {fe}%", f"Coalition {posture.supply_word(fb / 100)}, {story.enemy(st)} {posture.supply_word(fe / 100)}")
+            if st.status != "ACTIVE":
+                self.cards["od"].set(posture.posture(st)[0], "The war is over", theme.DIM)
+            else:
+                self.cards["od"].set(o["word"].capitalize() if o else "No contact", posture.odds_line(st), V.odds_color(o["word"]) if o else theme.DIM)
+            fb_, fe_ = fb, fe
+            ab, ae = round(100 * posture.iads_pct(st, "blue")), round(100 * posture.iads_pct(st, "red"))
+            en = story.enemy(st)
+            self.side["red"].h.setText(en.upper())
+            tb, te = posture.transit_text(st, "blue"), posture.transit_text(st, "red")
+            self.side["blue"].set(f"{fb_}%", V.COLORS[V.supply_band(fb_)], f"{ab}%", V.COLORS[V.pct_band(ab)], ("Coalition: " + tb) if tb else "")
+            self.side["red"].set(f"{fe_}%", V.COLORS[V.supply_band(fe_)], f"{ae}%", V.COLORS[V.pct_band(ae)], (en + ": " + te) if te else "")
         else:
-            for kk in ("fr", "od", "su"):
+            for kk in ("fr", "od"):
                 self.cards[kk].set("-", "")
-        en = story.enemy(st)
-        self.cards["su"].l.setText(f"SUPPLY: COALITION / {en.upper()}"); self.cards["ad"].l.setText(f"AIR DEFENCE: COALITION / {en.upper()}")
-        ab, ae = round(100 * posture.iads_pct(st, "blue")), round(100 * posture.iads_pct(st, "red"))
-        self.cards["ad"].set(f"{ab}% / {ae}%", "\n".join(x for x in (("Coalition: " + posture.transit_text(st, "blue")) if posture.transit_text(st, "blue") else "",
-                                                                      (en + ": " + posture.transit_text(st, "red")) if posture.transit_text(st, "red") else "") if x) or "sites operational")
+            for sd in self.side.values():
+                sd.set("-", theme.DIM, "-", theme.DIM)
         sess = self.get_session()
         if sess is not None and sess.state is st:
             self.today.set(*overview_detail.tasking(sess))
