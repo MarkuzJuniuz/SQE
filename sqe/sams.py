@@ -1,7 +1,7 @@
 """Air defence that rebuilds and moves (ground war, phase 3).
 
 Red:
-* A SAM site you destroyed is not gone for good. After REBUILD_MIN_DAYS a replacement can go up (SAM_REBUILD chance a day by level, scaled by Red's
+* A SAM site you destroyed is not gone for good. After ORDER_DAYS a replacement can go up (SAM_REBUILD chance a day by level, scaled by Red's
   supply, at most REBUILD_PER_DAY a night), at REBUILT_HEALTH. It is never rebuilt at a field that is itself cratered, never behind the front,
   and the column air defence (fsam_) travels with its sector and is not rebuilt.
 * A mobile site that has been hurt (SA-6, SA-11, SA-8, SA-15, SA-19) can pack up and move (SAM_SCOOT chance a night by level): a few nm, never
@@ -22,7 +22,7 @@ import random
 from .models import AssetKind
 
 NM = 1852.0
-REBUILD_MIN_DAYS = 3
+ORDER_DAYS = 14                          # v0.41.197 (XO 2026-10-30): an ORDER from home (the US for blue, the motherland for red) takes two weeks; was 3 days (REBUILD_MIN_DAYS). Judgment call.
 REBUILT_HEALTH = 0.5
 REBUILD_PER_DAY = 1
 MOBILE = {"SA-6", "SA-11", "SA-8", "SA-15", "SA-19"}
@@ -37,18 +37,18 @@ RETURN_MIN_DAYS = 2
 BLUE_REPAIR = 0.10
 # v0.41.67: SAM orders by need (XO 2026-10-21: "SAMs can be ordered by both sides should the need arise"; "move first, build if nothing to spare").
 # A destroyed blue site is in need. The least-threatened field that has a standing site of the same kind (health at or above BLUE_FULL_DEF) sends it;
-# it arrives transit_days(supply) later (faster than the REBUILD_MIN_DAYS of a new build), and the field it left is rebuilt by the usual rule. When no
+# it arrives transfer_days(supply) later (faster than the ORDER_DAYS of a new build), and the field it left is rebuilt by the usual rule. When no
 # field has one to spare, the usual rebuild (3 days, supply) is the only way. Doctrine: JP 3-01 defended asset list (the most threatened, most valuable
 # asset first); no public figures for transit time, so every number here is a judgment call.
 # v0.41.140 (XO 2026-10-27, Campaign Revamp): the orders are a fixed feature (no settings), for both sides at every level. A battery moves by air, so
 # it arrives in 1 to 3 days by the sender's supply (1 at 100%, 3 at the 55% floor), and there is no chance roll any more: supply sets the time.
-ORDER_TRANSIT_DAYS = 14                   # v0.41.196 (XO 2026-10-29): an order takes TWO WEEKS (was 1 to 3 days by supply); moving a battery stays as it is. Judgment call. 12-seed L3 sim, flying every 3rd day: red had a SAM at Sukhumi on 53% of days with the 1-week order, 37% with 2 weeks
+TRANSFER_DAYS = 2                   # v0.41.197 (XO 2026-10-30): a TRANSFER between sites in theatre goes by air, 1 to 3 days by supply (the middle value; transfer_days() has the real time). Judgment call.
 SAM_DEBT = {"long": 0.0, "medium": 0.0, "short": 0.0}       # v0.41.196: supply a side pays for a replacement battery (order or rebuild in place). The mechanism is built but the price is ZERO: the 12-seed L3 sim showed no benefit (1x = 0.06 / 0.03 / 0.02: red SAM days at Sukhumi 49% against 37% with no debt, blue won 6 of 12 against 10 of 12). Raise these to switch it on.
 SAM_DEBT_PAYBACK = 1.5                  # the debt of one purchase pays back in a straight line over this many times the order time (XO's choice)
 SAM_DEBT_CAP = 0.15                     # all open debt of a side together, so a side that keeps losing SA-10s cannot spiral (judgment call)
 _DEBT_LONG, _DEBT_MEDIUM = ("SA-10", "Patriot"), ("SA-11", "SA-6", "HAWK", "Hawk")
 ORDER_MIN_GAP_NM = 20.0       # the sender must sit this much further from the nearest enemy fighter field than the receiver
-ORDERS_PER_NIGHT = 1
+ASKS_PER_NIGHT = 1
 
 # v0.41.30: every blue airfield's air defence at doctrinal strength (XO 2026-10-16: "all bases are important", red-like firepower).
 # Sources: FM 44-85 App. B, a Patriot fire unit = 1 radar, 1 ECS, 1 power plant, 1 antenna mast group and 8 launching stations;
@@ -274,7 +274,7 @@ def rebuild(state, d, rng: random.Random) -> list:
     cands = []
     for aid, day0 in r["down"].items():
         a = state.assets.get(aid)
-        if a is None or not a.destroyed or aid.startswith("fsam_") or state.day - day0 < REBUILD_MIN_DAYS or aid in _red_ordered(state):
+        if a is None or not a.destroyed or aid.startswith("fsam_") or state.day - day0 < ORDER_DAYS or aid in _red_asked(state):
             continue
         if a.tier > state.front + 2 or _parent_down(state, a):
             continue
@@ -300,10 +300,10 @@ def debt_for(variant: str) -> float:
 
 def add_debt(state, side: str, variant: str) -> None:
     """A side pays for a replacement SAM battery: the debt lowers its supply (ground.supply) even below the floor and fades in a straight line over
-    SAM_DEBT_PAYBACK x ORDER_TRANSIT_DAYS days. Skip days count (it runs on the date). Old entries are dropped here."""
+    SAM_DEBT_PAYBACK x ORDER_DAYS days. Skip days count (it runs on the date). Old entries are dropped here."""
     r = _rec(state)
     book = r.setdefault("debt", {"red": [], "blue": []})
-    span = SAM_DEBT_PAYBACK * ORDER_TRANSIT_DAYS
+    span = SAM_DEBT_PAYBACK * ORDER_DAYS
     live = [e for e in book.setdefault(side, []) if state.day - e[1] < span]
     live.append([debt_for(variant), state.day])
     book[side] = live
@@ -312,32 +312,33 @@ def add_debt(state, side: str, variant: str) -> None:
 def debt(state, side: str) -> float:
     """Supply a side still owes (0 .. SAM_DEBT_CAP), from the open purchases."""
     book = (getattr(state, "sams", None) or {}).get("debt") or {}
-    span = SAM_DEBT_PAYBACK * ORDER_TRANSIT_DAYS
+    span = SAM_DEBT_PAYBACK * ORDER_DAYS
     tot = sum(amt * max(0.0, 1.0 - (state.day - day0) / span) for amt, day0 in book.get(side, []))
     return min(SAM_DEBT_CAP, tot)
 
 
-def transit_days(sup: float) -> int:
-    """v0.41.196: ORDER_TRANSIT_DAYS (a week) whatever the supply (the argument stays for the callers). Before: 1 to 3 days by supply.
-    v0.41.140 (XO 2026-10-27): days a SAM battery takes to reach the site it was ordered to. Batteries move by air (fuel and lift decide), so 1 day at
-    full supply, 3 at the 55% floor (ground.SUPPLY_FLOOR), 2 between. Judgment call: no public figure; the shape follows XO's "1 to 3 days by supply"."""
-    return ORDER_TRANSIT_DAYS
+def transfer_days(sup: float) -> int:
+    """v0.41.140 (XO 2026-10-27): days a SAM battery takes to go from one site to another in theatre. Batteries move by air (fuel and lift decide), so
+    1 day at full supply, 3 at the 55% floor (ground.SUPPLY_FLOOR), 2 between. v0.41.197 puts this back (v0.41.196 had made it two weeks, which is
+    the ORDER_DAYS of a new battery from home). Judgment call: no public figure."""
+    f = max(0.0, min(1.0, (1.0 - sup) / 0.45))
+    return 1 + int(round(2 * f))
 
 
-def _red_ordered(state) -> set:
-    return {o["to"] for o in _rec(state).get("red_orders", [])}
+def _red_asked(state) -> set:
+    return {o["to"] for o in _rec(state).get("red_asks", [])}
 
 
-def red_orders(state, d, rng: random.Random) -> list:
-    """v0.41.68: red's SAM orders, the same rule as blue's (blue_orders). First the batteries that arrive today; then, at most ORDERS_PER_NIGHT, a new
+def red_asks(state, d, rng: random.Random) -> list:
+    """v0.41.68: red's SAM orders, the same rule as blue's (blue_asks). First the batteries that arrive today; then, at most ASKS_PER_NIGHT, a new
     order for the shallowest-tier destroyed site that is in play (tier up to front + 2, its field still standing, value first among equals): a standing
-    site of the same kind in a DEEPER tier (health BLUE_FULL_DEF or more) sends its battery; it arrives in transit_days(red's supply) days. The sender's site goes down
+    site of the same kind in a DEEPER tier (health BLUE_FULL_DEF or more) sends its battery; it arrives in transfer_days(red's supply) days. The sender's site goes down
     (the usual rebuild takes it when its tier comes into play), the receiver is not rebuilt meanwhile. No spare, no order: sams.rebuild is the only
     way. Returns log lines."""
     from . import ground
     track(state)
     r = _rec(state)
-    orders, vacated = r.setdefault("red_orders", []), r.setdefault("red_vacated", [])
+    orders, vacated = r.setdefault("red_asks", []), r.setdefault("red_vacated", [])
     lines = []
     for o in [o for o in orders if o["due"] <= state.day]:
         orders.remove(o)
@@ -346,18 +347,18 @@ def red_orders(state, d, rng: random.Random) -> list:
             a.health = max(a.health, o["health"])
             r["down"].pop(a.id, None)
             lines.append(f"A {a.variant} battery arrived to replace the loss at {a.name}")
-    busy = _red_ordered(state)
+    busy = _red_asked(state)
     sup = ground.supply(state, "red") if ground.active(state) else 0.85
     sites = [x for x in state.assets.values() if x.kind == AssetKind.SAM and not x.id.startswith("fsam_")]
     needy = sorted((a for a in sites if a.destroyed and a.tier <= state.front + 2 and not _parent_down(state, a)
                     and a.id not in busy and a.id not in vacated), key=lambda a: (a.tier, -a.value, a.id))
-    for a in needy[:ORDERS_PER_NIGHT if not orders else 0]:           # v0.41.196: one order in flight per side
+    for a in needy[:ASKS_PER_NIGHT if not orders else 0]:           # v0.41.196: one order in flight per side
         donors = sorted((x for x in sites if x.variant == a.variant and not x.destroyed and x.health >= BLUE_FULL_DEF and x.tier > a.tier
                          and x.id not in busy and not _parent_down(state, x)), key=lambda x: (-x.tier, x.id))
         if not donors:
             continue
         src = donors[0]
-        orders.append({"to": a.id, "from": src.id, "due": state.day + transit_days(sup), "health": round(src.health, 2)})
+        orders.append({"to": a.id, "from": src.id, "due": state.day + transfer_days(sup), "health": round(src.health, 2)})
         add_debt(state, "red", a.variant)
         src.health = 0.0
         vacated.append(src.id)
@@ -451,7 +452,7 @@ def retreat(state, d, rng: random.Random) -> list:
 
 
 def blue_defence(state, d) -> list:
-    """Airfield defences repair by supply; a fallen field does not. (v0.41.67: the old "lend a battery" is gone: see blue_orders.)"""
+    """Airfield defences repair by supply; a fallen field does not. (v0.41.67: the old "lend a battery" is gone: see blue_asks.)"""
     from . import ground
     sup = ground.supply(state, "blue") if ground.active(state) else 1.0
     fallen = set((state.ground or {}).get("fallen", []))
@@ -472,19 +473,19 @@ def _threat_nm(state, b) -> float:
     return min(math.hypot(ex - b.x, ey - b.y) for ex, ey in fb) / NM if fb else 9999.0
 
 
-def _ordered(state) -> set:
+def _blue_asked(state) -> set:
     """Ids of the sites a battery is on its way to: the rebuild rule leaves them alone."""
-    return {blue_site_id(o["to"], o["key"]) for o in _rec(state).get("orders", [])}
+    return {blue_site_id(o["to"], o["key"]) for o in _rec(state).get("blue_asks", [])}
 
 
-def blue_orders(state, d, rng: random.Random) -> list:
-    """v0.41.67: blue's SAM orders. First the batteries that arrive today; then, at most ORDERS_PER_NIGHT, a new order for the most threatened
-    field with a destroyed site: the least-threatened field with a standing site of that kind sends it (it arrives in transit_days(blue's supply) days). The sender's site goes down and is rebuilt by the usual rule, and a site emptied by an order is not itself in need. Returns log lines."""
+def blue_asks(state, d, rng: random.Random) -> list:
+    """v0.41.67: blue's SAM orders. First the batteries that arrive today; then, at most ASKS_PER_NIGHT, a new order for the most threatened
+    field with a destroyed site: the least-threatened field with a standing site of that kind sends it (it arrives in transfer_days(blue's supply) days). The sender's site goes down and is rebuilt by the usual rule, and a site emptied by an order is not itself in need. Returns log lines."""
     from . import ground
     track(state)
     ensure_blue_sams(state)
     r = _rec(state)
-    orders, vacated = r.setdefault("orders", []), r.setdefault("vacated", [])
+    orders, vacated = r.setdefault("blue_asks", []), r.setdefault("blue_vacated", [])
     lines = []
     for o in [o for o in orders if o["due"] <= state.day]:
         orders.remove(o)
@@ -498,12 +499,12 @@ def blue_orders(state, d, rng: random.Random) -> list:
             lines.append(f"A {BLUE_SITES[o['key']][0]} battery from {o['from_name']} arrived at {b.name}")
     fallen = set((state.ground or {}).get("fallen", []))
     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD" and b.id not in fallen and blue_sites(state, b)]
-    busy = _ordered(state)
+    busy = _blue_asked(state)
     sup = ground.supply(state, "blue") if ground.active(state) else 1.0
     needy = sorted(((_threat_nm(state, b), b.id, k, b) for b in fields for k in BLUE_SITES
                     if blue_sites(state, b)[k].destroyed and blue_site_id(b.id, k) not in busy and blue_site_id(b.id, k) not in vacated),
                    key=lambda t: t[:3])
-    for thr, _bid, k, b in needy[:ORDERS_PER_NIGHT if not orders else 0]:          # v0.41.196: one order in flight per side
+    for thr, _bid, k, b in needy[:ASKS_PER_NIGHT if not orders else 0]:          # v0.41.196: one order in flight per side
         donors = sorted(((_threat_nm(state, f), f.id, f) for f in fields if f.id != b.id
                          and blue_sites(state, f)[k].health >= BLUE_FULL_DEF and blue_site_id(f.id, k) not in busy
                          and _threat_nm(state, f) >= thr + ORDER_MIN_GAP_NM), key=lambda t: (-t[0], t[1]))
@@ -511,27 +512,27 @@ def blue_orders(state, d, rng: random.Random) -> list:
             continue
         f = donors[0][2]
         src = blue_sites(state, f)[k]
-        orders.append({"key": k, "to": b.id, "from": f.id, "from_name": f.name, "due": state.day + transit_days(sup), "health": round(src.health, 2)})
+        orders.append({"key": k, "to": b.id, "from": f.id, "from_name": f.name, "due": state.day + transfer_days(sup), "health": round(src.health, 2)})
         add_debt(state, "blue", BLUE_SITES[k][0])
         src.health = 0.0
         vacated.append(src.id)
         _sync(state, f)
         lines.append(f"A {BLUE_SITES[k][0]} battery was ordered from {f.name} to {b.name}")
-    r["vacated"] = [v for v in vacated if state.blue_sams.get(v) is not None and state.blue_sams[v].destroyed]
+    r["blue_vacated"] = [v for v in vacated if state.blue_sams.get(v) is not None and state.blue_sams[v].destroyed]
     return lines
 
 
 def rebuild_blue_sites(state, d, rng: random.Random) -> list:
-    """v0.41.63: red's rebuild rule for blue's destroyed air-defence sites: after REBUILD_MIN_DAYS a replacement can go up (the level's `blue_rebuild`
+    """v0.41.63: red's rebuild rule for blue's destroyed air-defence sites: after ORDER_DAYS a replacement can go up (the level's `blue_rebuild`
     chance a night, scaled by blue's supply, at most REBUILD_PER_DAY a night) at REBUILT_HEALTH, never at a field that has fallen. Returns log lines."""
     from . import ground
     track(state)
     r = _rec(state)
     fallen = set((state.ground or {}).get("fallen", []))
     p = float(getattr(d, "blue_rebuild", 0.0)) * (ground.supply(state, "blue") if ground.active(state) else 1.0)
-    busy = _ordered(state)                                                     # a battery is on its way there: no new build
+    busy = _blue_asked(state)                                                     # a battery is on its way there: no new build
     cands = sorted((a for aid, day0 in r["down"].items() for a in [state.blue_sams.get(aid)]
-                    if a is not None and a.destroyed and state.day - day0 >= REBUILD_MIN_DAYS and a.guards not in fallen and aid not in busy), key=lambda a: a.id)
+                    if a is not None and a.destroyed and state.day - day0 >= ORDER_DAYS and a.guards not in fallen and aid not in busy), key=lambda a: a.id)
     rng.shuffle(cands)
     lines = []
     for a in cands:

@@ -1267,8 +1267,8 @@ def check_29_phase_air_defence_that(c):
     _ds = _NS(sam_rebuild=1.0, sam_scoot=1.0)
     _lr = next(a_ for a_ in _st.assets.values() if a_.kind == _AK.SAM and a_.id.startswith("sam_") and a_.variant in ("SA-2", "SA-3", "SA-6", "SA-11", "SA-10") and a_.tier <= _st.front + 2)
     _lr.health = 0.0; _st.day = 10; _sm.track(_st); assert _st.sams["down"][_lr.id] == 10
-    _st.day = 12; assert not _sm.rebuild(_st, _ds, _rnd.Random(1)) and _lr.destroyed, "not rebuilt before the third day"
-    _st.day = 13; _got = []
+    _st.day = 10 + _sm.ORDER_DAYS - 1; assert not _sm.rebuild(_st, _ds, _rnd.Random(1)) and _lr.destroyed, "not rebuilt before the order time"
+    _st.day = 10 + _sm.ORDER_DAYS; _got = []
     for _k in range(30):
         _got = _sm.rebuild(_st, _ds, _rnd.Random(_k))
         if _got: break
@@ -1313,7 +1313,7 @@ def check_30_blue_s_air_defence(c):
     _bh, _bp, _ba = (_st.blue_sams[_sm.blue_site_id(_fl[0].id, k_)] for k_ in ("hawk", "pat", "aaa"))
     assert _gn == ["HAWK battery"] and _bh.destroyed and abs(_bp.health - 0.8) < 1e-9 and _ba.health == 1.0 and abs(_fl[0].defense - 0.6) < 1e-9, ("outer layer first", _gn, _bh.health, _bp.health, _ba.health)
     _sm.shift_field(_st, _fl[0], 0.3); assert _bh.destroyed, "repair does not revive a destroyed site"
-    _bh.health = 0.0; _st.day += 3; _sm.track(_st); _st.day += 3
+    _bh.health = 0.0; _st.day += 3; _sm.track(_st); _st.day += _sm.ORDER_DAYS
     _dr = type(_gd(3))(**{**_gd(3).__dict__, "blue_rebuild": 1.0}); _rl = _sm.rebuild_blue_sites(_st, _dr, _rnd.Random(5))
     assert _rl and abs(_bh.health - _sm.REBUILT_HEALTH) < 1e-9 and "HAWK" in _rl[0], "a destroyed blue site is rebuilt after the minimum days, at half strength"
     _bh.health = 0.0; _st.ground["fallen"] = [_fl[0].id]; _sm.track(_st); _st.day += 5
@@ -1342,28 +1342,28 @@ def check_31a_sam_orders_by_need(c):
         if b is not near:
             sm.set_field(st, b, 1.0)
     st.blue_sams[nid].health = 0.0
-    r1 = sm.blue_orders(st, d, rnd.Random(1))
+    r1 = sm.blue_asks(st, d, rnd.Random(1))
     assert any("ordered" in x for x in r1), r1
     donor = max((b for b in fl if b is not near), key=lambda b: (sm._threat_nm(st, b), b.id))
-    assert st.blue_sams[sm.blue_site_id(donor.id, "pat")].destroyed and sm.blue_site_id(donor.id, "pat") in st.sams["vacated"], "the sender's site goes down"
-    st.day += sm.REBUILD_MIN_DAYS + 1; sm.track(st)
-    assert sm.blue_site_id(near.id, "pat") in sm._ordered(st), "a battery is on its way"
+    assert st.blue_sams[sm.blue_site_id(donor.id, "pat")].destroyed and sm.blue_site_id(donor.id, "pat") in st.sams["blue_vacated"], "the sender's site goes down"
+    st.day += sm.ORDER_DAYS + 1; sm.track(st)
+    assert sm.blue_site_id(near.id, "pat") in sm._blue_asked(st), "a battery is on its way"
     dr = type(d)(**{**d.__dict__, "blue_rebuild": 1.0})
     sm.rebuild_blue_sites(st, dr, rnd.Random(3))
-    assert st.blue_sams[nid].destroyed or not st.sams["orders"], "no new build at a site a battery is on its way to"
-    st.day = max(st.day, max(o_["due"] for o_ in st.sams["orders"]))
-    r3 = sm.blue_orders(st, d, rnd.Random(4))
+    assert st.blue_sams[nid].destroyed or not st.sams["blue_asks"], "no new build at a site a battery is on its way to"
+    st.day = max(st.day, max(o_["due"] for o_ in st.sams["blue_asks"]))
+    r3 = sm.blue_asks(st, d, rnd.Random(4))
     assert any("arrived" in x for x in r3) and not st.blue_sams[nid].destroyed and st.blue_sams[nid].health >= 0.99, r3
-    assert not st.sams["orders"], "the order is done"
+    assert not st.sams["blue_asks"], "the order is done"
     # nothing to spare: no field has a standing Patriot site further back, so nothing is ordered and the usual rebuild is left
     for b in fl:
         sm.set_field(st, b, 1.0)
-    st.sams["vacated"] = []
+    st.sams["blue_vacated"] = []
     st.blue_sams[nid].health = 0.0
     for b in fl:
         if b is not near:
             st.blue_sams[sm.blue_site_id(b.id, "pat")].health = 0.3
-    assert not sm.blue_orders(st, d, rnd.Random(5)) and not st.sams["orders"], "no spare battery: no order"
+    assert not sm.blue_asks(st, d, rnd.Random(5)) and not st.sams["blue_asks"], "no spare battery: no order"
     rt = type(st).from_dict(st.to_dict())
     assert rt.sams == st.sams, "orders save and load with the SAM record"
 
@@ -1386,20 +1386,20 @@ def check_31b_red_sam_orders(c):
     for x in sites:
         x.health = 1.0
     rcv.health = 0.0
-    r1 = sm.red_orders(st, d, rnd.Random(1))
+    r1 = sm.red_asks(st, d, rnd.Random(1))
     assert any("ordered" in x for x in r1), r1
-    assert snd.id in st.sams["red_vacated"] or any(o["from"] != snd.id for o in st.sams["red_orders"]), "a deeper site sends it"
-    o = st.sams["red_orders"][0]
+    assert snd.id in st.sams["red_vacated"] or any(o["from"] != snd.id for o in st.sams["red_asks"]), "a deeper site sends it"
+    o = st.sams["red_asks"][0]
     sender = st.assets[o["from"]]
     assert sender.destroyed and st.assets[o["to"]].variant == sender.variant and sender.tier > st.assets[o["to"]].tier, "the sender is a deeper site of the same kind"
-    sm.track(st); st.day += sm.REBUILD_MIN_DAYS + 1
+    sm.track(st); st.day += sm.ORDER_DAYS + 1
     dr = type(d)(**{**d.__dict__, "sam_rebuild": 1.0})
     sm.rebuild(st, dr, rnd.Random(3))
     assert st.assets[o["to"]].destroyed, "no new build at a site a battery is on its way to"
-    st.day = max(o["due"], st.day - sm.REBUILD_MIN_DAYS - 1)
-    r3 = sm.red_orders(st, d, rnd.Random(4))
+    st.day = max(o["due"], st.day - sm.ORDER_DAYS - 1)
+    r3 = sm.red_asks(st, d, rnd.Random(4))
     assert any("arrived" in x for x in r3) and not st.assets[o["to"]].destroyed and st.assets[o["to"]].health >= 0.99, r3
-    assert not st.sams["red_orders"], "the order is done"
+    assert not st.sams["red_asks"], "the order is done"
     rt = type(st).from_dict(st.to_dict())
     assert rt.sams == st.sams, "red orders save and load with the SAM record"
 
@@ -2646,11 +2646,12 @@ def check_31j_sam_orders_always_on(c):
     from sqe import sams, war
     from sqe.settings import AppSettings as _AS
     assert not hasattr(_AS(), "borrow_red") and not hasattr(_AS(), "borrow_blue"), "the borrow settings are gone"
-    assert [sams.transit_days(x) for x in (1.0, 0.7, 0.55, 0.3)] == [14, 14, 14, 14], "v0.41.196: an order takes two weeks whatever the supply"
+    assert [sams.transfer_days(x) for x in (1.0, 0.7, 0.55, 0.3)] == [1, 2, 3, 3], "v0.41.197: a transfer takes 1 to 3 days by supply"
+    assert sams.ORDER_DAYS == 14, "v0.41.197: an order from home takes two weeks"
     calls = []
-    real_r, real_b = sams.red_orders, sams.blue_orders
-    sams.red_orders = lambda *a, **k: (calls.append("red"), [])[1]
-    sams.blue_orders = lambda *a, **k: (calls.append("blue"), [])[1]
+    real_r, real_b = sams.red_asks, sams.blue_asks
+    sams.red_asks = lambda *a, **k: (calls.append("red"), [])[1]
+    sams.blue_asks = lambda *a, **k: (calls.append("blue"), [])[1]
     try:
         ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
         (TMP / "saves").mkdir(parents=True, exist_ok=True)
@@ -2659,7 +2660,7 @@ def check_31j_sam_orders_always_on(c):
         ses.skip_day()
         assert "red" in calls and "blue" in calls, calls
     finally:
-        sams.red_orders, sams.blue_orders = real_r, real_b
+        sams.red_asks, sams.blue_asks = real_r, real_b
 
 
 def check_31c_ai_skill_red_blue(c):
@@ -4512,7 +4513,7 @@ def check_68_overview(c):
     s1 = fresh_session(1, 7); s1.state.status = "VICTORY"; assert _po.posture(s1.state)[0] == "Insurgency broken"
     s1.state.status = "DEFEAT"; assert _po.posture(s1.state)[0] == "Defeat"
     # SAM orders in transit are shown with their days
-    st.status = "ACTIVE"; st.sams = {"orders": [{"due": st.day + 2}], "red_orders": [{"due": st.day + 1}, {"due": st.day + 3}]}
+    st.status = "ACTIVE"; st.sams = {"blue_asks": [{"due": st.day + 2}], "red_asks": [{"due": st.day + 1}, {"due": st.day + 3}]}
     ln = _po.air_defence_lines(st); assert "1 SAM battery in transit, the first in 2 days" in ln[0] and "2 SAM batteries in transit, the first in 1 day" in ln[1] and ln[1].startswith("Russia"), ln
     # the carrier gets no line on the Overview
     st.raids = st.raids or {}
@@ -4583,8 +4584,8 @@ def check_70_overview_detail(c):
     a.health = 0.0; g["sup_h"][a.id] = 0.0
     assert next(r for r in _od.supply_rows(st) if r[1] == a.name)[3].startswith("destroyed")
     ad = _od.air_defence_rows(st); assert any(r[0] == "Russia" for r in ad) and any(r[0] == "Coalition" for r in ad) and all(r[4] == "operational" for r in ad), ad[:2]
-    st.sams = {"orders": [{"to": "senaki", "key": "pat", "from_name": "Kutaisi", "due": st.day + 2, "health": 1}], "red_orders": [{"to": next(k for k, x in st.assets.items() if x.kind.value == "SAM"), "from": next(k for k, x in st.assets.items() if x.kind.value == "SAM"), "due": st.day}]}
-    o = _od.orders_rows(st); assert o[0][0] == "Coalition" and "in 2 days" in o[0][1] and o[1][0] == "Russia" and "arrives today" in o[1][1], o
+    st.sams = {"blue_asks": [{"to": "senaki", "key": "pat", "from_name": "Kutaisi", "due": st.day + 2, "health": 1}], "red_asks": [{"to": next(k for k, x in st.assets.items() if x.kind.value == "SAM"), "from": next(k for k, x in st.assets.items() if x.kind.value == "SAM"), "due": st.day}]}
+    o = _od.asks_rows(st); assert o[0][0] == "Coalition" and "in 2 days" in o[0][1] and o[1][0] == "Russia" and "arrives today" in o[1][1], o
     st.tempo = {"CAS": 0.09, "AIR": _tp.TEMPO_CAP}
     tl = _od.tempo_lines(st); assert tl[0] == "Close air support: +9%" and tl[3].endswith("(at the cap)") and tl[1] == "Strike: +0%", tl
     print("[overview detail] Situation panel text, ground rows and notes, front history, supply rows with repair state, air defence rows, SAM orders, air tempo")
@@ -5010,11 +5011,11 @@ def check_94_sam_cost(c):
         _check_94_body(st, sams, ground)
     finally:
         sams.SAM_DEBT.update(_old)
-    print("[SAM cost] two-week orders, price zero by default; debt mechanics (by class, straight-line payback, cap, below-the-floor supply) work when priced")
+    print("[SAM cost] two-week orders from home, 1 to 3 day transfers, price zero by default; debt mechanics (by class, straight-line payback, cap, below-the-floor supply) work when priced")
 
 
 def _check_94_body(st, sams, ground):
-    assert sams.ORDER_TRANSIT_DAYS == 14 and sams.transit_days(1.0) == 14
+    assert sams.ORDER_DAYS == 14 and sams.transfer_days(1.0) == 1
     assert (sams.debt_for("SA-10"), sams.debt_for("Patriot"), sams.debt_for("SA-11"), sams.debt_for("HAWK"), sams.debt_for("SA-3"), sams.debt_for("AAA")) == (0.06, 0.06, 0.03, 0.03, 0.02, 0.02)
     sams._rec(st).pop("debt", None)
     base = ground.supply(st, "red") + sams.debt(st, "red")             # supply with no debt
@@ -5023,8 +5024,8 @@ def _check_94_body(st, sams, ground):
     assert abs(sams.debt(st, "red") - 0.06) < 1e-9 and abs(ground.supply(st, "red") - (base - 0.06)) < 1e-9, "the debt lowers supply"
     d0 = st.day
     st.day = d0 + 5
-    assert abs(sams.debt(st, "red") - 0.06 * (1 - 5 / (sams.SAM_DEBT_PAYBACK * sams.ORDER_TRANSIT_DAYS))) < 1e-9, "straight-line payback over 1.5 x the order time"
-    st.day = d0 + int(sams.SAM_DEBT_PAYBACK * sams.ORDER_TRANSIT_DAYS) + 1
+    assert abs(sams.debt(st, "red") - 0.06 * (1 - 5 / (sams.SAM_DEBT_PAYBACK * sams.ORDER_DAYS))) < 1e-9, "straight-line payback over 1.5 x the order time"
+    st.day = d0 + int(sams.SAM_DEBT_PAYBACK * sams.ORDER_DAYS) + 1
     assert sams.debt(st, "red") == 0.0, "paid back"
     st.day = d0
     for _ in range(10):
