@@ -1,10 +1,14 @@
 """SQE terrain scan tool (command line; lives in tools/, never ships in the exe).
 
   python tools/sqe_scan.py make OUT.miz              write the DCS scan mission (same one as Settings > Terrain scan)
-  python tools/sqe_scan.py condense SCAN_DIR [--out FILE] [--theatre caucasus]
+  python tools/sqe_scan.py condense SCAN_DIR [--out FILE] [--theatre caucasus] [--scan-relief]
                                                      read the raw scan files (SQE_terrain_*, SQE_relief_*, SQE_roads_*.json
-                                                     from <Saved Games>\\SQE) and write the small site list
-                                                     sqe/data/theatres/<theatre>_sites.json and the built-in ground-height grid <theatre>_relief.json (2 km cells) that ship with SQE.
+                                                     from <Saved Games>\\SQE) and write the small site list sqe/data/theatres/<theatre>_sites.json
+                                                     (--scan-relief: also the ground-height grid from the scan)
+  python tools/sqe_scan.py srtm TILE_DIR [--compare SCAN_DIR] [--no-download] [--keep]
+                                                     build the built-in ground-height grid <theatre>_relief.json (2 km cells) from open SRTM tiles
+                                                     (downloads the ones TILE_DIR lacks from the AWS open terrain tiles; needs numpy: pip install numpy);
+                                                     --compare prints how it differs from a DCS scan. v0.41.201.
 
 v0.41.198 (XO 2026-10-30): players must not have to run scans, and the first flights had SAMs floating in the sea. The raw scan is 2.5 MB and
 needs DCS; the condensed file is a few tens of KB and is picked ahead of any live placement by the campaign (a later change).
@@ -235,17 +239,37 @@ def cmd_make(a) -> None:
     print(f"wrote {p}: start it in DCS (Fly), wait for COMPLETE, then copy the three SQE_*_{a.theatre}.json files from <Saved Games>\\SQE")
 
 
-RELIEF_FACTOR = 2                 # the built-in relief grid has cells this many times wider than the scan's (2 km): never lower than the scan, so safe altitudes stay safe
+RELIEF_FACTOR = 2                 # the scan-built relief grid has cells this many times wider than the scan's (2 km)
+SRTM_URL = "https://s3.amazonaws.com/elevation-tiles-prod/skadi/{ns}{lat:02d}/{ns}{lat:02d}{ew}{lng:03d}.hgt.gz"      # AWS open terrain tiles (SRTM, 1 arc-second, 3601 x 3601 per degree)
+SRTM_BLOCK = 8                    # each tile is cut down 8 x 8 (about 250 m) before use: block maximum + block average, then the 2 km cells are read from that
+GRIDS = {"caucasus": (-430000.0, 190000.0, 2000.0, 250, 390)}      # theatre -> (x0, y0, cell size m, nx, ny): the shipped relief grid; same frame as the scan files
+SRTM_CREDIT = "SRTM (NASA / USGS Shuttle Radar Topography Mission) via the AWS open terrain tiles, registry.opendata.aws/terrain-tiles"
+
+
+def _pack_rows(rows) -> str:
+    """int16 differences along each row, zlib 9, base64 (relief._parse_packed reads it)."""
+    import base64
+    import zlib
+    from array import array
+    a = array("h")
+    for row in rows:
+        prev = 0
+        for v in row:
+            a.append(int(v) - prev)
+            prev = int(v)
+    if sys.byteorder == "big":
+        a.byteswap()
+    return base64.b64encode(zlib.compress(a.tobytes(), 9)).decode("ascii")
+
+
+def _relief_json(theatre, x0, y0, step, nx, ny, mx, mean, source) -> dict:
+    return {"terrain": theatre, "version": 1, "x0": int(x0), "y0": int(y0), "step": int(step), "nx": nx, "ny": ny, "unit": 10, "source": source,
+            "packing": "base64 of zlib of int16 differences along each row, rows in order", "max": _pack_rows(mx), "mean": _pack_rows(mean)}
 
 
 def condense_relief(scan_dir, theatre: str = "caucasus") -> dict:
-    """The built-in ground-height grid: the scan's 1 km cells merged RELIEF_FACTOR x RELIEF_FACTOR (highest ground = the highest of the block, so a ridge is never
-    lost; average ground = the rounded average), packed as base64 of zlib of int16 differences along each row. Measured on XO's 2026-10-30 scan against the 1 km
-    grid over 300 random legs of 30 to 150 km: highest ground never lower, +38 ft on average, +361 ft at the 95th percentile; radar visibility share 0.02 different on average."""
-    import base64
-    import sys
-    import zlib
-    from array import array
+    """The built-in ground-height grid from a DCS scan: the scan's 1 km cells merged RELIEF_FACTOR x RELIEF_FACTOR (highest ground = the highest of the block, average
+    ground = the rounded average). (v0.41.200; since v0.41.201 the shipped grid comes from SRTM, see condense_srtm; this stays as the fallback and for other theatres.)"""
     from sqe import relief
     from sqe import theatres
     theatres.use(theatre)
@@ -255,31 +279,137 @@ def condense_relief(scan_dir, theatre: str = "caucasus") -> dict:
     R = relief._R
     f = RELIEF_FACTOR
     nx, ny = R["nx"] // f, R["ny"] // f
+    mx = [[max(R["max"][i * f + a][j * f + b] for a in range(f) for b in range(f)) for j in range(ny)] for i in range(nx)]
+    mean = [[int(round(sum(R["mean"][i * f + a][j * f + b] for a in range(f) for b in range(f)) / (f * f))) for j in range(ny)] for i in range(nx)]
+    return _relief_json(theatre, R["x0"], R["y0"], R["step"] * f, nx, ny, mx, mean, "DCS scan")
 
-    def merge(src, how):
-        rows = []
-        for i in range(nx):
-            blk = [src[i * f + a] for a in range(f)]
-            row = []
-            for j in range(ny):
-                v = [r[j * f + b] for r in blk for b in range(f)]
-                row.append(max(v) if how == "max" else int(round(sum(v) / len(v))))
-            rows.append(row)
-        return rows
 
-    def pack(rows):
-        a = array("h")
-        for row in rows:
-            prev = 0
-            for v in row:
-                a.append(v - prev)
-                prev = v
-        if sys.byteorder == "big":
-            a.byteswap()
-        return base64.b64encode(zlib.compress(a.tobytes(), 9)).decode("ascii")
-    return {"terrain": theatre, "version": 1, "x0": int(R["x0"]), "y0": int(R["y0"]), "step": int(R["step"] * f), "nx": nx, "ny": ny, "unit": 10,
-            "packing": "base64 of zlib of int16 differences along each row, rows in order",
-            "max": pack(merge(R["max"], "max")), "mean": pack(merge(R["mean"], "mean"))}
+def srtm_tile_name(lat: int, lng: int) -> str:
+    return f"{'N' if lat >= 0 else 'S'}{abs(lat):02d}{'E' if lng >= 0 else 'W'}{abs(lng):03d}"
+
+
+def _srtm_reduced(tile_dir: Path, lat: int, lng: int, fetch: bool, keep: bool, log: list):
+    """(max, mean) of one tile cut down SRTM_BLOCK x SRTM_BLOCK, in metres, row 0 = north; None when the tile does not exist (open sea). Cached as reduced/<tile>.npz."""
+    import gzip
+    import numpy as np
+    name = srtm_tile_name(lat, lng)
+    cache = tile_dir / "reduced" / f"{name}.npz"
+    if cache.exists():
+        z = np.load(cache)
+        return z["max"], z["mean"]
+    src = tile_dir / f"{name}.hgt.gz"
+    downloaded = False
+    if not src.exists() and fetch:
+        import urllib.error
+        import urllib.request
+        url = SRTM_URL.format(ns="N" if lat >= 0 else "S", lat=abs(lat), ew="E" if lng >= 0 else "W", lng=abs(lng))
+        try:
+            with urllib.request.urlopen(url, timeout=120) as r:
+                src.write_bytes(r.read())
+            downloaded = True
+            log.append(f"downloaded {name}")
+        except urllib.error.HTTPError as e:
+            log.append(f"{name}: not available ({e.code}), treated as sea level")
+            return None
+    if not src.exists():
+        log.append(f"{name}: missing, treated as sea level")
+        return None
+    raw = gzip.open(src).read()
+    n = int((len(raw) / 2) ** 0.5)
+    a = np.frombuffer(raw, ">i2").reshape(n, n).astype(np.float32)
+    void = int((a <= -32000).sum())
+    if void:
+        log.append(f"{name}: {void} void samples set to sea level")
+    a = np.clip(a, 0, None)[: n - 1, : n - 1]                  # sea-floor depths and voids to 0; the last row / column is the next tile's first
+    k = (n - 1) // SRTM_BLOCK
+    b = a[: k * SRTM_BLOCK, : k * SRTM_BLOCK].reshape(k, SRTM_BLOCK, k, SRTM_BLOCK)
+    mx, mean = b.max(axis=(1, 3)).astype(np.float32), b.mean(axis=(1, 3)).astype(np.float32)
+    cache.parent.mkdir(exist_ok=True)
+    np.savez_compressed(cache, max=mx, mean=mean)
+    if downloaded and not keep:
+        src.unlink()
+    return mx, mean
+
+
+def condense_srtm(tile_dir, theatre: str = "caucasus", grid=None, fetch: bool = True, keep: bool = False) -> tuple:
+    """The built-in ground-height grid from open SRTM tiles (v0.41.201). Each cell of the shipped grid (GRIDS) is read from the SRTM samples inside its box: the highest
+    ground is the highest sample, rounded UP to 10 m; the average ground is the average. The box is the corners' lat/long bounding box, which is a little bigger than the
+    cell (DCS's grid is turned up to about 7 degrees against north / east on the Caucasus map), so the highest ground can only come out a touch high, never low.
+    Returns (json dict, report lines, mask) with mask[i][j] False for cells that needed a missing tile."""
+    import numpy as np
+    import dcs.terrain
+    from dcs import mapping
+    tile_dir = Path(tile_dir)
+    tile_dir.mkdir(parents=True, exist_ok=True)
+    x0, y0, step, nx, ny = grid or GRIDS[theatre]
+    T = getattr(dcs.terrain, theatre.capitalize())()
+    lat = np.zeros((nx + 1, ny + 1)); lng = np.zeros((nx + 1, ny + 1))
+    for i in range(nx + 1):
+        for j in range(ny + 1):
+            p = mapping.Point(x0 + i * step, y0 + j * step, T).latlng()
+            lat[i, j], lng[i, j] = p.lat, p.lng
+    la0, la1, lo0, lo1 = int(math.floor(lat.min())), int(math.floor(lat.max())), int(math.floor(lng.min())), int(math.floor(lng.max()))
+    log: list = []
+    k = 3600 // SRTM_BLOCK
+    nla, nlo = la1 - la0 + 1, lo1 - lo0 + 1
+    Mx = np.zeros((nla * k, nlo * k), np.float32); Mn = np.zeros_like(Mx); have = np.zeros((nla, nlo), bool)
+    for la in range(la0, la1 + 1):
+        for lo in range(lo0, lo1 + 1):
+            t = _srtm_reduced(tile_dir, la, lo, fetch, keep, log)
+            if t is not None:
+                r = (la1 - la) * k                              # mosaic row 0 = the north edge of the northernmost tile
+                Mx[r:r + k, (lo - lo0) * k:(lo - lo0 + 1) * k], Mn[r:r + k, (lo - lo0) * k:(lo - lo0 + 1) * k] = t
+                have[la - la0, lo - lo0] = True
+    d = 1.0 / (k)                                                # degrees per reduced sample
+    mx_rows, mean_rows, mask = [], [], []
+    for i in range(nx):
+        rm, rn, rk = [], [], []
+        for j in range(ny):
+            cl = (lat[i, j], lat[i + 1, j], lat[i, j + 1], lat[i + 1, j + 1]); cg = (lng[i, j], lng[i + 1, j], lng[i, j + 1], lng[i + 1, j + 1])
+            r0 = int(math.floor((la1 + 1 - max(cl)) / d)); r1 = max(r0 + 1, int(math.ceil((la1 + 1 - min(cl)) / d)))
+            c0 = int(math.floor((min(cg) - lo0) / d)); c1 = max(c0 + 1, int(math.ceil((max(cg) - lo0) / d)))
+            r0, c0 = max(r0, 0), max(c0, 0)
+            ok = all(have[la - la0, lo - lo0] for la in range(int(math.floor(min(cl))), int(math.floor(max(cl))) + 1) for lo in range(int(math.floor(min(cg))), int(math.floor(max(cg))) + 1))
+            rk.append(ok)
+            rm.append(int(math.ceil(float(Mx[r0:r1, c0:c1].max()) / 10.0)))
+            rn.append(int(round(float(Mn[r0:r1, c0:c1].mean()) / 10.0)))
+        mx_rows.append(rm); mean_rows.append(rn); mask.append(rk)
+    miss = sum(1 for row in mask for v in row if not v)
+    rep = log + [f"tiles N{la0}..{la1} x E{lo0}..{lo1}: {int(have.sum())} found of {nla * nlo}; {miss} of {nx * ny} cells need a missing tile (they read as sea level)",
+                 f"highest ground {max(max(r) for r in mx_rows) * 10} m"]
+    return _relief_json(theatre, x0, y0, step, nx, ny, mx_rows, mean_rows, SRTM_CREDIT), rep, mask
+
+
+def compare_relief(new: dict, mask, scan_dir, theatre: str) -> list:
+    """New grid against the DCS scan (the 1 km cells inside each new cell): how far apart the average ground is, and the highest ground."""
+    import numpy as np
+    from sqe import relief, theatres
+    theatres.use(theatre)
+    relief.configure(scan_dir)
+    if not relief.available():
+        return ["(no scan to compare with)"]
+    g = relief._parse_packed(new)
+    R = relief._R
+    f = int(round(new["step"] / R["step"]))
+    dm, dx, where = [], [], []
+    for i in range(new["nx"]):
+        for j in range(new["ny"]):
+            if not mask[i][j] or i * f + f > R["nx"] or j * f + f > R["ny"]:
+                continue
+            sm = sum(R["mean"][i * f + a][j * f + b] for a in range(f) for b in range(f)) / (f * f) * 10
+            sx = max(R["max"][i * f + a][j * f + b] for a in range(f) for b in range(f)) * 10
+            dm.append(g["mean"][i][j] * 10 - sm); dx.append(g["max"][i][j] * 10 - sx); where.append((i, j))
+    dm, dx = np.array(dm), np.array(dx)
+    if not len(dm):
+        return ["(no cells to compare)"]
+    worst = np.argsort(-abs(dm))[:5]
+    out = [f"compared {len(dm)} cells with the DCS scan",
+           f"average ground, SRTM minus scan (m): mean {dm.mean():+.1f}, median {np.median(dm):+.1f}, mean absolute {abs(dm).mean():.1f}, 95th percentile of the absolute {np.percentile(abs(dm), 95):.0f}; {100 * (abs(dm) > 100).mean():.1f}% of cells differ by more than 100 m",
+           f"highest ground, SRTM minus scan (m): mean {dx.mean():+.1f}, median {np.median(dx):+.1f}, 5th percentile {np.percentile(dx, 5):+.0f}, 95th {np.percentile(dx, 95):+.0f}"]
+    for w in worst:
+        i, j = where[w]
+        out.append(f"  worst average-ground cell ({i},{j}) at x {new['x0'] + i * new['step']:.0f} y {new['y0'] + j * new['step']:.0f}: SRTM {g['mean'][i][j] * 10} m, scan {g['mean'][i][j] * 10 - dm[w]:.0f} m")
+    return out
 
 
 def cmd_condense(a) -> None:
@@ -288,18 +418,31 @@ def cmd_condense(a) -> None:
     dest = Path(a.out) if a.out else ROOT / "sqe" / "data" / "theatres" / f"{a.theatre}_sites.json"
     dest.write_text(json.dumps(out, separators=(",", ":")), encoding="utf-8")
     print(f"wrote {dest} ({dest.stat().st_size / 1024:.0f} KB)")
-    rel = condense_relief(a.scan_dir, a.theatre)
-    rdest = dest.with_name(f"{a.theatre}_relief.json")
-    rdest.write_text(json.dumps(rel, separators=(",", ":")), encoding="utf-8")
-    print(f"wrote {rdest} ({rdest.stat().st_size / 1024:.0f} KB, {rel['nx']} x {rel['ny']} cells of {rel['step']} m)")
+    if a.scan_relief:
+        rel = condense_relief(a.scan_dir, a.theatre)
+        rdest = dest.with_name(f"{a.theatre}_relief.json")
+        rdest.write_text(json.dumps(rel, separators=(",", ":")), encoding="utf-8")
+        print(f"wrote {rdest} ({rdest.stat().st_size / 1024:.0f} KB, {rel['nx']} x {rel['ny']} cells of {rel['step']} m, from the DCS scan)")
     print(JUDGMENT)
+
+
+def cmd_srtm(a) -> None:
+    out, rep, mask = condense_srtm(a.tile_dir, a.theatre, fetch=not a.no_download, keep=a.keep)
+    print("\n".join(rep))
+    if a.compare:
+        print("\n".join(compare_relief(out, mask, a.compare, a.theatre)))
+    dest = Path(a.out) if a.out else ROOT / "sqe" / "data" / "theatres" / f"{a.theatre}_relief.json"
+    dest.write_text(json.dumps(out, separators=(",", ":")), encoding="utf-8")
+    print(f"wrote {dest} ({dest.stat().st_size / 1024:.0f} KB, {out['nx']} x {out['ny']} cells of {out['step']} m, from SRTM)")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     m = sub.add_parser("make"); m.add_argument("out"); m.add_argument("--theatre", default="caucasus"); m.set_defaults(fn=cmd_make)
-    c = sub.add_parser("condense"); c.add_argument("scan_dir"); c.add_argument("--out"); c.add_argument("--theatre", default="caucasus"); c.set_defaults(fn=cmd_condense)
+    c = sub.add_parser("condense"); c.add_argument("scan_dir"); c.add_argument("--out"); c.add_argument("--theatre", default="caucasus"); c.add_argument("--scan-relief", action="store_true", help="also write the relief grid from the DCS scan (the shipped one comes from SRTM, see `srtm`)"); c.set_defaults(fn=cmd_condense)
+    r = sub.add_parser("srtm"); r.add_argument("tile_dir"); r.add_argument("--out"); r.add_argument("--theatre", default="caucasus"); r.add_argument("--compare", metavar="SCAN_DIR")
+    r.add_argument("--no-download", action="store_true"); r.add_argument("--keep", action="store_true", help="keep downloaded .hgt.gz files (they are 15 MB each; the reduced copy in tile_dir/reduced is enough)"); r.set_defaults(fn=cmd_srtm)
     a = ap.parse_args()
     a.fn(a)
 
