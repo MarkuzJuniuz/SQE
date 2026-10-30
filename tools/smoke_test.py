@@ -5368,6 +5368,45 @@ def check_97_builtin_relief(c):
     print("[built-in relief] the shipped 2 km grid loads only when asked for, a player's scan overrides it, highest ground >= average ground, summit in range")
 
 
+def check_98_srtm_relief(c):
+    """v0.41.201: tools/sqe_scan.py srtm builds the shipped ground-height grid from open SRTM tiles. On a made-up tile (500 m everywhere, one 1,234 m spike, one patch of
+    sea floor at -800 m) inside a 3 x 3 grid of 2 km cells: the spike's cell reads 1,240 m as highest ground (rounded up to 10 m), the sea-floor cell reads 0, the rest 500 m
+    both ways; nothing needs a missing tile; and the packed file reads back through relief._parse_packed."""
+    import importlib.util, gzip, tempfile as _tf
+    from pathlib import Path as _P
+    try:
+        import numpy as np
+    except ImportError:
+        print("[srtm relief] skipped: numpy is not installed (only the tools/ SRTM command needs it)")
+        return
+    from dcs import mapping
+    from dcs.mapping import LatLng
+    from dcs.terrain import Caucasus
+    from sqe import relief
+    spec = importlib.util.spec_from_file_location("sqe_scan_tool", str(_P(__file__).resolve().parent / "sqe_scan.py"))
+    tool = importlib.util.module_from_spec(spec); spec.loader.exec_module(tool)
+    T = Caucasus()
+    p0 = mapping.Point.from_latlng(LatLng(43.5, 40.5), T)
+    x0, y0 = p0.x - 3000, p0.y - 3000
+    a = np.full((3601, 3601), 500, ">i2")
+    def at(x, y):
+        ll = mapping.Point(x, y, T).latlng()
+        return int(round((44 - ll.lat) * 3600)), int(round((ll.lng - 40) * 3600))
+    r, k = at(x0 + 3000, y0 + 3000); a[r, k] = 1234                          # the spike: middle cell (1, 1)
+    r, k = at(x0 + 1000, y0 + 5000); a[r - 3:r + 4, k - 3:k + 4] = -800        # sea floor: cell (0, 2)
+    with _tf.TemporaryDirectory() as d:
+        (_P(d) / "N43E040.hgt.gz").write_bytes(gzip.compress(a.tobytes(), 1))
+        out, rep, mask = tool.condense_srtm(d, "caucasus", grid=(x0, y0, 2000.0, 3, 3), fetch=False)
+    assert all(all(row) for row in mask), rep
+    g = relief._parse_packed(out)
+    mx = [[g["max"][i][j] * 10 for j in range(3)] for i in range(3)]
+    mn = [[g["mean"][i][j] * 10 for j in range(3)] for i in range(3)]
+    assert mx[1][1] == 1240 and mn[1][1] in (500, 510), (mx[1][1], mn[1][1])
+    assert mx[0][2] == 500 and 480 <= mn[0][2] <= 510, "sea floor must not pull the cell below sea level or change the 500 m around it: " + str((mx[0][2], mn[0][2]))
+    assert all(mx[i][j] == 500 and mn[i][j] == 500 for i in range(3) for j in range(3) if (i, j) not in ((1, 1), (0, 2))), (mx, mn)
+    print("[srtm relief] made-up tile: spike 1,240 m (rounded up), sea floor clipped, flat ground exact, packed file reads back")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5504,6 +5543,7 @@ CHECKS = [
     check_95_site_condenser,
     check_96_site_spots,
     check_97_builtin_relief,
+    check_98_srtm_relief,
 ]
 
 

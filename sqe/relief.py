@@ -64,7 +64,7 @@ def _parse(d: dict) -> dict:
 
 
 def _parse_packed(d: dict) -> dict:
-    """The built-in grid (written by tools/sqe_scan.py condense): `max` / `mean` are base64 of zlib of little-endian int16 differences between neighbouring
+    """The built-in grid (written by tools/sqe_scan.py srtm or condense --scan-relief): `max` / `mean` are base64 of zlib of little-endian int16 differences between neighbouring
     cells along a row, rows one after the other, in 10 m units."""
     nx, ny = int(d["nx"]), int(d["ny"])
 
@@ -81,7 +81,7 @@ def _parse_packed(d: dict) -> dict:
                 row.append(v)
             rows.append(row)
         return rows
-    return {"x0": float(d["x0"]), "y0": float(d["y0"]), "step": float(d["step"]), "nx": nx, "ny": ny, "max": grid("max"), "mean": grid("mean")}
+    return {"x0": float(d["x0"]), "y0": float(d["y0"]), "step": float(d["step"]), "nx": nx, "ny": ny, "max": grid("max"), "mean": grid("mean"), "source": str(d.get("source", ""))}
 
 
 def _shipped():
@@ -155,7 +155,7 @@ def info() -> str:
     if _R is None:
         return "not scanned yet"
     if _SRC == "built-in":
-        return f"built-in grid ({_R['nx']} x {_R['ny']} cells of {int(_R['step'])} m; run the terrain scan for a finer one)"
+        return f"built-in grid ({_R['nx']} x {_R['ny']} cells of {int(_R['step'])} m; run the terrain scan for a finer one)" + (f". Source: {_R['source']}" if _R.get("source") else "")
     top = max(max(r) for r in _R["max"] if len(r)) * UNIT_M
     return f"loaded ({_R['nx']} x {_R['ny']} cells of {int(_R['step'])} m, highest ground {int(top):,} m / {int(top / FT):,} ft)"
 
