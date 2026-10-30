@@ -29,7 +29,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 QUOTA = {"ground": 20, "sam": 12, "supply": 8}
-FIELD_QUOTA = {"sam": 12, "supply": 8}   # per red airfield (v0.41.199, judgment call: red's SAM cluster is 4 to 6 sites, supply sites and depots hang off the field within 15 km)
+FIELD_QUOTA = {"sam": 30, "supply": 12}  # per airfield (v0.41.199, judgment call). Dense on purpose: the campaign moves each SAM site to the nearest spot, and the doctrinal layout (a Tor within 12 km of an SA-10, a short-range site 3.5 to 4.5 km out) only survives if that move is small
+FIELD_SPACINGS_M = (1500.0, 1200.0, 1000.0)   # spots of one kind round a field may sit this close (the sector spots keep SPACINGS_M)
 FIELD_RADIUS_M = 20000.0          # a field's spots lie within this of it (red's long-range SAM sites sit 7 to 19 km out, supply sites up to 15 km)
 SEA_MARGIN_M = 500.0              # a spot keeps this far from the sea or a big lake (XO 2026-10-29; the live default is 1,500 m)
 SECTOR_RADIUS_M = 30000.0         # candidates lie within this of a sector centre (and nearer to it than to any other centre)
@@ -145,12 +146,12 @@ def _grid(tmask, relief, roads, cx: float, cy: float, radius: float, keep) -> tu
     return grid, rej
 
 
-def _fill(kind: str, grid: dict, quota: int, taken: list) -> tuple:
+def _fill(kind: str, grid: dict, quota: int, taken: list, spacings=SPACINGS_M) -> tuple:
     """Fill one kind's quota from the grid, relaxing the flatness limit step by step. -> (spots, (limit used, spacing used))."""
-    ch, sp, limit = [], SPACINGS_M[0], ROUGH_STEPS[kind][0]
+    ch, sp, limit = [], spacings[0], ROUGH_STEPS[kind][0]
     for limit in ROUGH_STEPS[kind]:
         cands = [(rg + dr / 100.0, x, y) for rg, dr, x, y in grid[kind] if rg <= limit]
-        ch, sp = _pick(cands, quota, taken, CROSS_M)
+        ch, sp = _pick(cands, quota, taken, CROSS_M, spacings)
         if len(ch) >= quota:
             break
     return ch, (limit, sp)
@@ -199,10 +200,10 @@ def condense(scan_dir, theatre: str = "caucasus") -> tuple:
                            lambda x, y, fid=fid: min(flds, key=lambda f: math.hypot(f[1] - x, f[2] - y))[0] == fid)
         spots, used = {}, {}
         for k, tk in (("sam", taken_sam), ("supply", taken_sup)):
-            spots[k], used[k] = _fill(k, grid, FIELD_QUOTA[k], list(tk))
+            spots[k], used[k] = _fill(k, grid, FIELD_QUOTA[k], list(tk), FIELD_SPACINGS_M)
         fields.append({"id": fid, "x": round(fx), "y": round(fy), **{k: [[round(x), round(y)] for x, y in v] for k, v in spots.items()}})
         row = " ".join(f"{k} {len(spots[k])}/{FIELD_QUOTA[k]}" for k in FIELD_QUOTA)
-        relax = [f"{k}: relief <= {used[k][0]:.0f} m, spacing {used[k][1] / 1000:.1f} km" for k in ("sam", "supply") if used[k][0] != ROUGH_STEPS[k][0] or used[k][1] != SPACINGS_M[0]]
+        relax = [f"{k}: relief <= {used[k][0]:.0f} m, spacing {used[k][1] / 1000:.1f} km" for k in ("sam", "supply") if used[k][0] != ROUGH_STEPS[k][0] or used[k][1] != FIELD_SPACINGS_M[0]]
         flag = ""
         if any(len(spots[k]) < FIELD_QUOTA[k] for k in FIELD_QUOTA):
             flag = "  <-- SHORT"

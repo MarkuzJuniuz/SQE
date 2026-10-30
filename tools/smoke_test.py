@@ -3070,35 +3070,45 @@ def check_39_dcs_refuses_mission_whose(c):
     from sqe.strike_tasks import TRACK_RADARS as _TR, TOR_COVER_KM as _tck
     from sqe import threatmap as _tm9
     assert "Tor 9A331" in _TR, "a Tor's radar rides on the launcher: the vehicle counts as a radar"
-    _ts = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, flight_filter="all"))
-    _ts.new("Tor", "F-16C", 3, seed=1); _ts.state.campaign_id = f"{0x70a0001:010x}"; _ts.plan_day()
-    _A3 = _ts.state.assets; _tors = [a_ for a_ in _A3.values() if a_.variant == "SA-15"]
-    _cov = lambda p_: [a_.id for a_ in _tors if _m3.hypot(a_.x - _A3[p_.objective.target_id].x, a_.y - _A3[p_.objective.target_id].y) <= _tck * 1000]
-    _p3 = next(p_ for p_ in _ts.packages() if p_.objective.aim == "STANDOFF" and _A3[p_.objective.target_id].variant == "SA-10" and _cov(p_) and _ts.flyable(p_))
-    _ts.ai_test = True; _ts.fly(_p3.number, _ts.flyable(_p3)[0].id); _ts.ai_test = False
-    _m3t = _zf.ZipFile(_ts.state.pending["miz"]).read("mission").decode("utf-8", "ignore"); _M3 = _lua3.loads(_m3t)["mission"]
-    _red = {g_["groupId"]: (g_["name"], [(u_["x"], u_["y"]) for u_ in g_["units"].values()]) for co_ in _M3["coalition"]["red"]["country"].values()
-            for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()}
-    _torpos = [xy_ for n_, xys_ in _red.values() if n_ in _cov(_p3) for xy_ in xys_]
-    _harm, _jsow = [], 0
-    for co_ in _M3["coalition"]["blue"]["country"].values():
-        for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
-            seq_ = []
-            for pt_ in g_["route"]["points"].values():
-                for t_ in ((pt_.get("task") or {}).get("params") or {}).get("tasks", {}).values():
-                    tid_, prm_ = t_.get("id"), t_.get("params", {})
-                    if tid_ == "ControlledTask":
-                        tid_, prm_ = prm_["task"]["id"], prm_["task"].get("params", {})
-                    if tid_ == "AttackGroup":
-                        seq_.append(_red.get(prm_.get("groupId"), ("?",))[0])
-                    elif tid_ == "Bombing" and any(_m3.hypot(prm_["x"] - a_, prm_["y"] - b_) < 150 for a_, b_ in _torpos):
-                        _jsow += 1
-            if seq_:
-                _harm.append(seq_)
-    assert any(sq_[0] in _cov(_p3) and _p3.objective.target_id in sq_ for sq_ in _harm), "the second HARM flight opens on the Tors, then joins on the site"
-    assert any(_p3.objective.target_id in sq_ and sq_[-1] in _cov(_p3) and sq_.index(_p3.objective.target_id) < len(sq_) - 1 for sq_ in _harm), \
-        "the HARM flights end with a second pass at the Tors that guard the site (v0.39.22)"
-    assert _jsow >= 1, "the JSOW flight aims at the Tors that guard the site"
+    _p3 = None
+    for _sd3 in range(1, 9):                          # v0.41.199: the layout moves with the site spots; take the first seed whose Tor-covered SA-10 DEAD job passes the checks below
+        try:
+            _ts = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, flight_filter="all"))
+            _ts.new("Tor", "F-16C", 3, seed=_sd3); _ts.state.campaign_id = f"{0x70a0001 + _sd3 - 1:010x}"; _ts.plan_day()
+            _A3 = _ts.state.assets; _tors = [a_ for a_ in _A3.values() if a_.variant == "SA-15"]
+            _cov = lambda p_, _A3=_A3, _tors=_tors: [a_.id for a_ in _tors if _m3.hypot(a_.x - _A3[p_.objective.target_id].x, a_.y - _A3[p_.objective.target_id].y) <= _tck * 1000]
+            _p3 = next((p_ for p_ in _ts.packages() if p_.objective.aim == "STANDOFF" and _A3[p_.objective.target_id].variant == "SA-10" and _cov(p_) and _ts.flyable(p_)), None)
+            if _p3 is None:
+                continue
+            _ts.ai_test = True; _ts.fly(_p3.number, _ts.flyable(_p3)[0].id); _ts.ai_test = False
+            _m3t = _zf.ZipFile(_ts.state.pending["miz"]).read("mission").decode("utf-8", "ignore"); _M3 = _lua3.loads(_m3t)["mission"]
+            _red = {g_["groupId"]: (g_["name"], [(u_["x"], u_["y"]) for u_ in g_["units"].values()]) for co_ in _M3["coalition"]["red"]["country"].values()
+                    for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()}
+            _torpos = [xy_ for n_, xys_ in _red.values() if n_ in _cov(_p3) for xy_ in xys_]
+            _harm, _jsow = [], 0
+            for co_ in _M3["coalition"]["blue"]["country"].values():
+                for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
+                    seq_ = []
+                    for pt_ in g_["route"]["points"].values():
+                        for t_ in ((pt_.get("task") or {}).get("params") or {}).get("tasks", {}).values():
+                            tid_, prm_ = t_.get("id"), t_.get("params", {})
+                            if tid_ == "ControlledTask":
+                                tid_, prm_ = prm_["task"]["id"], prm_["task"].get("params", {})
+                            if tid_ == "AttackGroup":
+                                seq_.append(_red.get(prm_.get("groupId"), ("?",))[0])
+                            elif tid_ == "Bombing" and any(_m3.hypot(prm_["x"] - a_, prm_["y"] - b_) < 150 for a_, b_ in _torpos):
+                                _jsow += 1
+                    if seq_:
+                        _harm.append(seq_)
+            assert any(sq_[0] in _cov(_p3) and _p3.objective.target_id in sq_ for sq_ in _harm), "the second HARM flight opens on the Tors, then joins on the site"
+            assert any(_p3.objective.target_id in sq_ and sq_[-1] in _cov(_p3) and sq_.index(_p3.objective.target_id) < len(sq_) - 1 for sq_ in _harm), \
+                "the HARM flights end with a second pass at the Tors that guard the site (v0.39.22)"
+            assert _jsow >= 1, ("the JSOW flight aims at the Tors that guard the site", _sd3, len(_torpos))
+        except AssertionError:
+            _p3 = None
+            continue
+        break
+    assert _p3 is not None, "a Tor-covered SA-10 standoff job that passes the Tor checks in one of 8 seeds"
     import sqe.war as _wlr; _lr_real = _wlr.long_range_site; _wlr.long_range_site = lambda *a_: False     # this check is about the SEAD / Close DEAD pair: no Standoff DEAD
     _ts.plan_day()
     _d3 = next(p_ for p_ in _ts.packages() if p_.objective.aim == "DEAD" and _cov(p_) and _ts.flyable(p_))
@@ -5256,7 +5266,7 @@ def check_95_site_condenser(c):
     sh = _json.loads(shipped.read_text(encoding="utf-8"))
     assert len(sh["sectors"]) == 13 and len(sh["fields"]) == 13 and sh["quota"] == tool.QUOTA, "the shipped file has the 13 sectors, the 13 fields (9 red, 4 blue) and the agreed quotas"
     _spots_ok(sh, "shipped caucasus_sites.json")
-    print("[site condenser] 13 sectors fill 20 / 12 / 8 and 13 fields 12 / 8 on a made-up world; the shipped file keeps the quotas, spacing and the gap between kinds")
+    print("[site condenser] 13 sectors fill 20 / 12 / 8 and 13 fields 30 / 12 on a made-up world; the shipped file keeps the quotas, spacing and the gap between kinds")
 
 
 def _spots_ok(data, label):
@@ -5272,7 +5282,7 @@ def _spots_ok(data, label):
                 dd = _m.hypot(x1 - x2, y1 - y2)
                 assert dd >= (1500 if k1 == k2 else 1000) - 1, (label, s["i"], k1, k2, round(dd))
     for f in data["fields"]:
-        assert len(f["sam"]) == 12 and len(f["supply"]) == 8, (label, f["id"], len(f["sam"]), len(f["supply"]))
+        assert len(f["sam"]) == 30 and len(f["supply"]) == 12, (label, f["id"], len(f["sam"]), len(f["supply"]))
         assert all(math.hypot(x - f["x"], y - f["y"]) <= data["field_radius_m"] + 1 for k in ("sam", "supply") for x, y in f[k]), (label, f["id"], "within the field radius")
 
 

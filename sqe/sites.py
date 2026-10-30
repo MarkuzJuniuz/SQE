@@ -114,6 +114,9 @@ def apply(st, th: dict) -> set:
         sp = _nearest(pools[kind], used, a.x, a.y, reach)
         if sp is None:
             return
+        move(a, sp)
+
+    def move(a, sp):
         used.add(sp)
         dx, dy = sp[0] - a.x, sp[1] - a.y
         a.x, a.y = sp
@@ -121,16 +124,20 @@ def apply(st, th: dict) -> set:
         for c in followers.get(a.id, ()):
             c.x, c.y = c.x + dx, c.y + dy
 
-    for a in sorted(st.assets.values(), key=lambda a: a.id):
-        if a.kind == AssetKind.SAM and a.id.startswith("sam_"):
-            put(a, "sam", SAM_REACH_M)
-        elif a.kind in (AssetKind.FUEL, AssetKind.DEPOT):
-            put(a, "supply", SUPPLY_REACH_M)
-        elif a.kind == AssetKind.ARMOR and a.id.startswith("armor_"):
-            put(a, "ground", COLUMN_REACH_M)
-    for a in sorted((getattr(st, "blue_assets", None) or {}).values(), key=lambda a: a.id):          # blue's fuel farms and depots too
-        if a.kind in (AssetKind.FUEL, AssetKind.DEPOT):
-            put(a, "supply", SUPPLY_REACH_M)
+    def put_all(items, kind, reach):
+        """Smallest move first, over every (site, spot) pair, so no site is pushed far because an earlier one took its spot: the doctrinal layout
+        (a short-range site next to its SA-10) only survives when every move is small."""
+        pairs = sorted((math.hypot(sp[0] - a.x, sp[1] - a.y), a.id, sp, a) for a in items for sp in pools[kind] if math.hypot(sp[0] - a.x, sp[1] - a.y) <= reach)
+        done = set()
+        for d, aid, sp, a in pairs:
+            if aid in done or sp in used:
+                continue
+            done.add(aid)
+            move(a, sp)
+
+    put_all([a for a in st.assets.values() if a.kind == AssetKind.SAM and a.id.startswith("sam_")], "sam", SAM_REACH_M)
+    put_all([a for a in list(st.assets.values()) + list((getattr(st, "blue_assets", None) or {}).values()) if a.kind in (AssetKind.FUEL, AssetKind.DEPOT)], "supply", SUPPLY_REACH_M)
+    put_all([a for a in st.assets.values() if a.kind == AssetKind.ARMOR and a.id.startswith("armor_")], "ground", COLUMN_REACH_M)
     # the dug-in garrisons of the SAM sites (off the road: a SAM spot) and the columns' air defence (a road spot) settle on a spot near where they ended up
     for a in sorted(st.assets.values(), key=lambda a: a.id):
         if a.id.startswith("gar_") and a.guards in placed:
