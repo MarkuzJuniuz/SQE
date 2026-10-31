@@ -295,6 +295,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
         self._support_lbl = {}                                          # v0.41.215: tanker / AWACS unit name -> its label, for the damage calls
         self._gates = []                                                # DEAD flights that turn back when the site's radars are still up
+        self._route_end = {}                                            # v0.41.223: group name -> where its route ended before the SCRUB point was added (the home leg is built from there)
         self._scrub = []                                                # v0.41.223: every package flight for the hook's package scrub (group, unit names, kind, SCRUB point)
         self._sead_grps = {}                                            # site id -> the SEAD flights' group names (all merged packages); the gate aborts when they are all down
         self._blind_site = set()
@@ -2002,6 +2003,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         ai = bool(not f.is_player or self.o.player_is_ai)
         to = 0
         if ai:
+            from types import SimpleNamespace
+            self._route_end[g.name] = SimpleNamespace(x=g.points[-1].position.x, y=g.points[-1].position.y)      # _home_leg builds the recovery point from the route's real end
             if getattr(g.points[-1], "name", "") == "ABORT":
                 to = len(g.points)
             else:
@@ -2021,7 +2024,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if not f.is_player or o.player_is_ai:
                 # v0.41.10: staggered recovery. Each AI flight comes home through its own entry point, 8 nm out on its own bearing and height, so the
                 # flights do not all arrive over the field at once (two F-15 wingmen collided low and slow on the way home in two runs)
-                lp_ = g.points[-1].position
+                lp_ = self._route_end.get(g.name) or g.points[-1].position
                 rb_ = bearing(base.x, base.y, lp_.x, lp_.y) + RCV_SPREAD[idx % len(RCV_SPREAD)]
                 rx_, ry_ = offset(base.x, base.y, rb_, RCV_NM * NM)
                 rcv_alt_ = home_leg_ft((lp_.x, lp_.y), (rx_, ry_), 3000 + 1000 * (idx % 4))      # v0.41.49: the home leg clears the ridges (was a fixed 3,000-6,000 ft)
@@ -2034,7 +2037,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if special:
                 g.points[-1].name = "RTBXHB"
         if base.kind != BaseKind.AIRFIELD and base.id in self.ship and (not f.is_player or o.player_is_ai):          # v0.41.132: the player's own flight keeps its route
-            lp_ = g.points[-1].position
+            lp_ = self._route_end.get(g.name) or g.points[-1].position
             if dist(base.x, base.y, lp_.x, lp_.y) > (CV_RCV_NM + 10) * NM:          # else it is already close: no extra point
                 cx_, cy_ = offset(base.x, base.y, bearing(base.x, base.y, lp_.x, lp_.y), CV_RCV_NM * NM)
                 g.add_waypoint(pt(cx_, cy_), CV_RCV_FT * FT, 300 * KPH, "RCV")
