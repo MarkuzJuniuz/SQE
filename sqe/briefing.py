@@ -5,7 +5,6 @@ from . import narrative, credit_line
 from .aircraft import AIRCRAFT
 from .models import AssetKind
 from .routes import dist, NM
-from .war import totals
 
 _SAM_NAME = {"SA-8": "SA-8 Gecko", "AAA": "AAA", "MANPAD": "MANPADS", "SA-2": "SA-2 Guideline", "SA-3": "SA-3 Goa", "SA-6": "SA-6 Gainful",
              "SA-11": "SA-11 Gadfly", "SA-10": "SA-10 Grumble", "SA-15": "SA-15 Gauntlet", "SA-19": "SA-19 Grison"}
@@ -33,7 +32,6 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     n, pname, ptext = narrative.phase(state)
     obj = pkg.objective
     threats = threat_lines(state, *tgt_xy)
-    t = totals(state)
     sit = [f"{x['date']}. {narrative.TITLE}, day {state.day}. {pname}.", "", ptext, "", *narrative.sitrep(state), "",
            f"Commander's intent: {narrative.intent_for(state, pkg)}"]
     if threats:
@@ -89,9 +87,18 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                         "that is where your JSOWs land."]
         sit += ["", f"Your job is only to suppress the radars. A Close DEAD package follows about {_gap} minutes behind you and goes in only if the radars are out. "
                     f"Intelligence puts the chance of suppressing this site at about {round(_p * 100 / 5) * 5:.0f}%" + (f", better than it was: this site has beaten us {_sf(state, obj.target_id)} time{'s' if _sf(state, obj.target_id) != 1 else ''} running and its crews and positions are known." if _sf(state, obj.target_id) else ".")]
+    if obj.after and obj.type.value in ("STRIKE", "CAS"):
+        from .war import after_sites as _as, follow_ready as _fr
+        _names = " and ".join(state.assets[i].name for i in _as(obj) if i in state.assets and not state.assets[i].destroyed) or "the covering SAM sites"
+        sit += ["", f"Behind the SEAD. The target itself is not a SAM site: it sits under the long-range cover of {_names}. A SEAD package goes in first and your flight follows about 10 minutes behind "
+                    f"it. Before you commit, the mission checks the radars: if any is still up when you reach the gate, you hold outside the threat and re-check, and you "
+                    f"break off and RTB on a timeout, on low fuel, or when the SEAD flights are down. "
+                    + ("Intelligence expects the SEAD to have worked." if _fr(state, obj) else "Intelligence doubts the SEAD will work today; expect to be turned back.")]
     if x.get("intel"):
         sit += ["", "Intelligence: " + " ".join(x["intel"])]
-    mis = [f"{obj.description}.", f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {_long_label(pf, obj)}.", f"Your task: {pf.task}."]
+    if x.get("qra"):
+        sit += ["", "QRA (quick reaction alert): " + "; ".join(x["qra"]) + ". Each is ordered up by the mission's triggers when a raid or a threat comes inside its reach; the debrief reports when each was ordered and how long it took to get airborne."]
+    mis = [f"{obj.description}.", *([x["target_line"]] if x.get("target_line") else []), f"You are {pf.callsign}-1, lead of {pf.count}x {spec.display}, tasked as {_long_label(pf, obj)}.", f"Your task: {pf.task}."]
     exe = ["Package (push / TOT are staggered: TARCAP first, then SEAD and escorts, then strikers):"]
     for r in x["pkg_table"]:
         f = next(ff for ff in pkg.flights if ff.callsign == r["callsign"])
@@ -114,6 +121,12 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         com = ["COMM1 (UHF): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm1.items()),
                "COMM2 (VHF" + ("/UHF" if spec.service == "Navy" else "") + "): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm2.items())]
     com += [f"IFF Mode 3: {x['mode3']}    Laser code: {x['laser']}", f"Bullseye: {x['bullseye']}"]
+    if x.get("tune_mhz"):
+        com.append(f"AWACS: its calls reach you only while a radio is tuned to {x['tune_mhz']:.3f} MHz.")
+    if x.get("ecm_player") == "f10":
+        com.append("ECM: your jet's jammer cannot be read by the mission. Press F10 > Other > ECM ON when you switch it on and ECM OFF when you switch it off; SQE trusts that call (it starts off).")
+    elif x.get("ecm_player") == "live":
+        com.append("ECM: your jammer is read from the ECM lamp when the ECM script is installed (Settings > DCS integration); without it SQE counts it on over the attack leg.")
     if x.get("link16"):
         com.append("Link 16: your wing are members, the other Link 16 flights of your package are donors (the AWACS is not on the net). Station numbers (STN) are on your kneeboard.")
     if pkg.jtac:

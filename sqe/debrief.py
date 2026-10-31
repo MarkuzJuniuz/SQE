@@ -33,6 +33,12 @@ local AITEST = __AITEST__            -- all-AI test: nobody sits in a flight, so
 local CALLS = { __CALLS__ }
 local UFLT = { __UFLT__ }
 local ENEMYAIR = { __ENEMYAIR__ }
+-- v0.41.217: declared up here, before the event handler that reads them (a local further down the file is invisible to it: "attempt to index global DMGL")
+local AWUNIT = "__AWUNIT__"
+local DMGL = { __DMGL__ }                  -- unit name -> spoken label of every blue aircraft that may call (the player's own jet is not in it)
+local DMG_ON = __DMGON__
+local awdown = false                       -- the AWACS is down: its calls stop
+local dmgCall                              -- defined with the radio calls below
 local SITES = { __SITES__ }
 local RUINS = { __RUINS__ }
 local GATES = { __GATES__ }
@@ -251,11 +257,64 @@ local function logShot(ev, e, by)
   shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt, km = km, alt = salt, tx = tx, tz = tz, left = left }
 end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
-local function jamOn(name)                  -- future: the player's cockpit switch (export script) feeds this
+-- v0.41.210 (XO 2026-10-30): the player's own jammer. ECMP "live": the F-16C's ECM lamp, written four times a second by sqe/data/sqe_ecm_export.lua (Export.lua) to
+-- Logs\SQE_ecm.flag as "<0|1> <model time>"; a missing or stale file falls back to the attack-leg window below. ECMP "f10": an FC3 jet (nothing readable in its
+-- cockpit): the F10 > Other commands ECM ON / ECM OFF set the flag (starts off).
+local ECMP = "__ECMP__"
+local FC3ECM = false
+local ECMMSG = "__ECMMSG__" == "1"                      -- v0.41.213: Settings > Experimental > Show ECM status: the on-screen ECM messages
+local function liveEcm()
+  local ok, v = pcall(function()
+    local f = io.open(lfs.writedir() .. [[Logs\SQE_ecm.flag]], "r")
+    if not f then return nil end
+    local s = f:read("*l"); f:close()
+    local on, t = string.match(s or "", "^(%d)%s+([%d%.]+)")
+    if not on or math.abs(timer.getTime() - tonumber(t)) > 5 then return nil end
+    return on == "1"
+  end)
+  if ok then return v end
+  return nil
+end
+local function jamOn(name)
+  if name == PLAYER and ECMP ~= "" then
+    if ECMP == "f10" then return FC3ECM end
+    local v = liveEcm()
+    if v ~= nil then return v end
+  end
   local w = JAMW[name]
   if not w then return true end
   local t = timer.getTime()
   return t >= w[1] and t <= w[2]
+end
+if ECMP == "f10" then
+  local tries = 0
+  local function addF10()
+    tries = tries + 1
+    local g = Group.getByName(PGROUP)
+    if not g then
+      if tries < 60 then return timer.getTime() + 2 end
+      return nil
+    end
+    local id = g:getID()
+    missionCommands.addCommandForGroup(id, "ECM ON", nil, function() FC3ECM = true; if ECMMSG then trigger.action.outTextForGroup(id, "ECM on (F10)", 6) end end)
+    missionCommands.addCommandForGroup(id, "ECM OFF", nil, function() FC3ECM = false; if ECMMSG then trigger.action.outTextForGroup(id, "ECM off (F10)", 6) end end)
+    return nil
+  end
+  timer.scheduleFunction(addF10, nil, timer.getTime() + 1)
+end
+if ECMP == "live" and ECMMSG then                              -- v0.41.212 (XO): tell the pilot what SQE sees: once when the lamp file is first read, then on every on / off change
+  local last = nil
+  timer.scheduleFunction(function(_, t)
+    local v = liveEcm()
+    if v ~= nil and v ~= last then
+      local g = Group.getByName(PGROUP)
+      if g then
+        trigger.action.outTextForGroup(g:getID(), (last == nil and "SQE sees your ECM lamp: " or "ECM ") .. (v and "on" or "off"), 6)
+      end
+      last = v
+    end
+    return t + 2
+  end, nil, timer.getTime() + 5)
 end
 local function jamCheck(e, shooter)
   if not next(JAMS) or not e.weapon then return end
@@ -389,6 +448,9 @@ function H:onEvent(e)
                                 fuel = sm and sm.fuel, alt = sm and sm.alt, kts = sm and sm.spd, sage = sm and (now - sm.t) or nil, x = sm and sm.x, z = sm and sm.z, gh = sm and sm.gh }
       end
       dead[n] = true; dump(); siteDead(n)
+      if n == AWUNIT then awdown = true end                      -- the AWACS is gone: its calls stop (v0.41.215)
+      local lh_ = LASTHIT[n]
+      if DMGL[n] and lh_ and timer.getTime() - lh_.t < 90 then pcall(dmgCall, n, "down") end
     end
   elseif id == world.event.S_EVENT_TAKEOFF then
     if n == PLAYER and not pl.takeoff then pl.takeoff = timer.getTime(); dump() end
@@ -412,6 +474,7 @@ function H:onEvent(e)
       s.last = lab
       if throttle("hit:" .. lab, 15) then say(lab .. ": direct hit.") end
     end
+    if tn and DMGL[tn] then pcall(dmgCall, tn, "hit") end
   elseif id == world.event.S_EVENT_KILL then
     -- v0.41.10+: only real targets count: units and static objects (fuel tanks, bunkers), never scenery (trees, houses the bombs also flatten)
     local okc, ocat = pcall(function() return e.target:getCategory() end)
@@ -428,6 +491,7 @@ function H:onEvent(e)
     end
     do
       local tn0 = nameOf(e.target)
+      if tn0 and ocat == Object.Category.STATIC and not dead[tn0] then dead[tn0] = true; dump() end      -- v0.41.192: a building (supply site) counts dead on the kill even if DCS sends no DEAD event for a static
       if tn0 and #kills < 300 then
         local function tname(o) local ok, t = pcall(function() return o:getTypeName() end); if ok and t then return t end return "?" end
         local wn = "?"
@@ -447,6 +511,7 @@ function H:onEvent(e)
     if UFLT[n] and tn and ENEMYAIR[tn] and throttle("splash:" .. n, 4) then say(UFLT[n] .. ": splash one.") end
   elseif id == world.event.S_EVENT_EJECTION then
     if n then ejected[n] = true; dump() end
+    if n and DMGL[n] then pcall(dmgCall, n, "down") end
   elseif id == world.event.S_EVENT_MISSION_END then
     ended = true; dump()
   end
@@ -487,6 +552,29 @@ timer.scheduleFunction(function(_, t)
       end
     end
   end
+  -- v0.41.169 (XO 2026-10-28): the CAS columns' tracks too: the friendly task forces and the red armor columns (lead unit, every 30 s, at most 120 points a group), to see where they stop and pass
+  for _, side in ipairs({ coalition.side.BLUE, coalition.side.RED }) do
+    pcall(function()
+      for _, g in ipairs(coalition.getGroups(side, Group.Category.GROUND) or {}) do
+        local gn = g:getName()
+        if gn and (string.sub(gn, 1, 18) == "Friendly Task Forc" or string.sub(gn, 1, 6) == "armor_") then
+          for _, u0 in ipairs(g:getUnits() or {}) do
+            if u0:isExist() then
+              local p0 = u0:getPoint()
+              local tr = TRACK[gn] or {}
+              TRACK[gn] = tr
+              if #tr < 120 then
+                local kt = -1
+                pcall(function() local v0 = u0:getVelocity(); kt = math.floor(math.sqrt(v0.x ^ 2 + v0.y ^ 2 + v0.z ^ 2) * 1.944) end)
+                tr[#tr + 1] = { math.floor(timer.getTime()), math.floor(p0.x), math.floor(p0.z), math.floor(p0.y), -1, kt }
+              end
+              break
+            end
+          end
+        end
+      end
+    end)
+  end
   dump(); return t + 30
 end, nil, timer.getTime() + 30)
 -- call-outs for the player's flight: scheduled radio calls from the other flights and the support aircraft, plus weapon and result calls
@@ -505,11 +593,68 @@ function say(text, you)
   local snd = (you and SOUND_YOU ~= "") and SOUND_YOU or SOUND
   if snd ~= "" then trigger.action.outSoundForGroup(id, snd) end
 end
+-- v0.41.215 (XO 2026-10-30): AWACS calls need a tuned radio, and the other aircraft call their own damage.
+-- TUNEF: user flags that the mission's cockpit-parameter triggers hold at 1 while one of the player's radios is on the AWACS frequency (empty: this jet cannot be read,
+-- or the setting is off: always tuned). A call to the player from the AWACS that comes due while he is not tuned is held up to 60 s, with one on-screen note, then dropped.
+local TUNEF = { __TUNEF__ }
+local TUNEMHZ = "__TUNEMHZ__"
+local AWL_UP = string.upper("__AWACS__")
+local awnote = false
+local function tuned()
+  if #TUNEF == 0 then return true end
+  for _, f in ipairs(TUNEF) do
+    local ok, v = pcall(trigger.misc.getUserFlag, f)
+    if ok and tonumber(v) == 1 then return true end
+  end
+  return false
+end
+local function isAw(text) return string.upper(string.sub(text or "", 1, #AWL_UP + 3)) == AWL_UP .. " TO" end
+local function awHeld()
+  if awnote then return end
+  awnote = true
+  local g = Group.getByName(PGROUP)
+  if g then trigger.action.outTextForGroup(g:getID(), "AWACS calls are not reaching you: tune a radio to " .. TUNEMHZ .. " MHz.", 10, false) end
+end
+function sayAw(text, you)                  -- an AWACS call to the player: gone when the AWACS is down, held while he is not tuned
+  if awdown then return true end
+  if not tuned() then awHeld(); return false end
+  say(text, you); return true
+end
+function tryCall(i, c, now)
+  if said[i] or now < c.t then return end
+  if isAw(c.text) then
+    if awdown then said[i] = true; return end
+    if not tuned() then
+      awHeld()
+      if now > c.t + 60 then said[i] = true end
+      return
+    end
+  end
+  said[i] = true; say(c.text, c.you)
+end
+local HITL = { "I'm hit.", "I've taken a hit.", "Taking damage.", "I'm hit, checking my systems.", "Hit, I'm hit." }
+local DOWNL = { "Mayday, mayday, ejecting.", "Mayday, I'm going down.", "Punching out, punching out.", "I'm hit bad, ejecting.", "Mayday, mayday, mayday, going down." }
+local SUPL = { "I'm hit, breaking off.", "Taking damage, leaving the track.", "I'm hit." }
+local function pick(t) return t[math.random(#t)] end
+local downSaid = {}
+dmgCall = function(n, kind)               -- kind "hit" | "down": a blue aircraft calls its own damage, from a short random list ("*" before a label: tanker / AWACS)
+  local lab = DMGL[n]
+  if not DMG_ON or not lab or n == PLAYER then return end
+  local sup = string.sub(lab, 1, 1) == "*"
+  if sup then lab = string.sub(lab, 2) end
+  if kind == "down" then
+    if downSaid[n] then return end
+    downSaid[n] = true
+    say(lab .. ": " .. pick(DOWNL))
+  elseif throttle("dmg:" .. n, 60) then
+    say(lab .. ": " .. pick(sup and SUPL or HITL))
+  end
+end
+
+pcall(function() math.randomseed(math.floor(timer.getAbsTime())) end)
 timer.scheduleFunction(function(_, t)
   local now = timer.getTime()
-  for i, c in ipairs(CALLS) do
-    if not said[i] and now >= c.t then said[i] = true; say(c.text, c.you) end
-  end
+  for i, c in ipairs(CALLS) do tryCall(i, c, now) end
   return t + 2
 end, nil, timer.getTime() + 5)
 -- alert log (v0.40.8): when each alert / scramble group was called (its trigger's flag) and when it got airborne; one called and still on
@@ -672,9 +817,9 @@ timer.scheduleFunction(function(_, t)
   end
   local you = string.upper(PGROUP)
   if pl.landed then
-    say(AWACS_LBL .. " to " .. you .. ": all flights accounted for. Good work today. " .. AWACS_LBL .. " out.", true)
+    sayAw(AWACS_LBL .. " to " .. you .. ": all flights accounted for. Good work today. " .. AWACS_LBL .. " out.", true)
   else
-    say(AWACS_LBL .. " to " .. you .. ": all packages complete, no further tasking today. Return to base.", true)
+    sayAw(AWACS_LBL .. " to " .. you .. ": all packages complete, no further tasking today. Return to base.", true)
   end
   return t + 300
 end, nil, timer.getTime() + 60)
@@ -724,14 +869,52 @@ for _, gt in ipairs(GATES) do
   if gt.t + 300 > gs.fall then gs.fall = gt.t + 300 end
 end
 local function sitePoint(s)
+  if not s then return nil end
   for _, un in ipairs(s.units) do
     local u = Unit.getByName(un)
     if u then local ok, p = pcall(function() return u:getPoint() end); if ok and p then return p end end
   end
 end
 local HOLD_S = 720           -- an AI DEAD flight whose radars are still up holds this long (12 min) before it breaks off
-local HOLD_CHECK_S = 60      -- and re-checks the radars this often while it holds
+local HOLD_CHECK_S = 30      -- and re-checks the radars (and, v0.41.203, the air) this often while it holds
 local HOLD_FUEL = 0.30       -- below this fuel fraction the holding flight breaks off at once: it must have fuel for the strike and the way home
+-- v0.41.203: the fighters-clear gate. The same gate that waits for a site's radars also waits for red fighters: a striker (or CAS flight) does not push
+-- into a live air fight (XO's 2026-10-30 runs: the strike flights dropped their loads or bugged out under P-27 / P-33 shots). Red fighters in the air
+-- within AIR_LEAD_M of the flight's lead or AIR_TGT_M of the target hold it outside the fight, for at most the gate's acap seconds, then it goes in.
+local AIR_LEAD_M = 100000     -- judgment calls (the MiG-31's P-33 reaches about 120 km, the Su-27 / MiG-29's P-27 about 50 km at altitude)
+local AIR_TGT_M = 60000
+local function redFighterNear(p, r)
+  if not p then return false end
+  local found = false
+  pcall(function()
+    for _, g in ipairs(coalition.getGroups(coalition.side.RED, Group.Category.AIRPLANE) or {}) do
+      for _, u in ipairs(g:getUnits() or {}) do
+        if u:isExist() and u:inAir() and (u:hasAttribute("Fighters") or u:hasAttribute("Interceptors") or u:hasAttribute("Multirole fighters")) then
+          local a = u:getPoint()
+          if math.sqrt((a.x - p.x) ^ 2 + (a.z - p.z) ^ 2) <= r then found = true; return end
+        end
+      end
+    end
+  end)
+  return found
+end
+local function leadPoint(grpName)
+  local ok, p = pcall(function() local g = Group.getByName(grpName); local u = g and g:getUnit(1); return u and u:getPoint() end)
+  if ok then return p end
+end
+local function airUp(gs)
+  if redFighterNear(gs.tp, AIR_TGT_M) then return true end
+  for _, gt in ipairs(gs.gates) do
+    if gt.dead and redFighterNear(leadPoint(gt.grp), AIR_LEAD_M) then return true end
+  end
+  return false
+end
+local function whoOf(s) return (s and s.who) or "Strike" end
+local function labelOf(s, gs) return (s and s.label) or gs.site end
+local function airCap(gs)
+  for _, gt in ipairs(gs.gates) do if gt.dead and (gt.acap or 0) > 0 then return gt.acap end end
+  return 240
+end
 -- every SEAD flight of this site is down or gone (no airborne unit left): the blinding has failed and there is no reason to go in.
 -- Only counts when the mission has SEAD flights on the site at all; an error reading a group counts it as still flying.
 local function seadsGone(gs)
@@ -778,12 +961,13 @@ local function breakOff(gs, why)
   local s = siteOf(gs)
   if not aborted[gs.site] then
     aborted[gs.site] = true
-    say(s.who .. ": abort, abort. " .. s.label .. " radars still up, DEAD flight break off.", gs.gates[1].you)
+    if why == "air-abort" then say(whoOf(s) .. ": abort, abort. " .. labelOf(s, gs) .. ", red fighters still up, flight break off.", gs.gates[1].you)
+    else say(whoOf(s) .. ": abort, abort. " .. labelOf(s, gs) .. " radars still up, DEAD flight break off.", gs.gates[1].you) end
   end
   for _, gt in ipairs(gs.gates) do
     if gt.dead then
-      local why_txt = ({ ["hold-timeout"] = "hold time is up", ["hold-fuel"] = "fuel is low", ["seads-gone"] = "the SEAD flights are down or gone" })[why] or ("not blind in time (" .. why .. ")")
-      say(s.who .. ": abort, RTB. " .. s.label .. " " .. why_txt .. ".", gt.you)
+      local why_txt = ({ ["hold-timeout"] = "hold time is up", ["hold-fuel"] = "fuel is low", ["seads-gone"] = "the SEAD flights are down or gone", ["air-abort"] = "red fighters still in the air" })[why] or ("not blind in time (" .. why .. ")")
+      say(whoOf(s) .. ": abort, RTB. " .. labelOf(s, gs) .. " " .. why_txt .. ".", gt.you)
     end
   end
   for _, gt in ipairs(gs.gates) do
@@ -805,12 +989,13 @@ local function breakOff(gs, why)
   end
   dump()
 end
-local function resume(gs)
+local function resume(gs, how)
   gs.done = true
   gs.holding = false
   local s = siteOf(gs)
+  how = how or "hold-resumed"
   for _, gt in ipairs(gs.gates) do
-    local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = false, cmd = false, by = "hold-resumed", held = math.floor(timer.getTime() - gs.holdAt) }
+    local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = false, cmd = false, by = how, held = math.floor(timer.getTime() - gs.holdAt) }
     gateLog[#gateLog + 1] = e
     if gt.ai then
       local g = Group.getByName(gt.grp)
@@ -824,7 +1009,10 @@ local function resume(gs)
     end
   end
   for _, gt in ipairs(gs.gates) do
-    if gt.dead then say(s.who .. ": " .. s.label .. " radars are down. Go, go, go." .. (torsUp(gs) and " A Tor is still up on the run-in, watch it." or ""), gt.you) end
+    if gt.dead then
+      if gs.holdWhy == "air" then say(whoOf(s) .. ": " .. labelOf(s, gs) .. ", the air is clear. Go, go, go.", gt.you)
+      else say(whoOf(s) .. ": " .. labelOf(s, gs) .. " radars are down. Go, go, go." .. (torsUp(gs) and " A Tor is still up on the run-in, watch it." or ""), gt.you) end
+    end
   end
   dump()
 end
@@ -832,8 +1020,12 @@ local function holdGroups(gs)
   gs.holding = true
   gs.holdAt = timer.getTime()
   local s = siteOf(gs)
+  gs.holdWhy = gateBlind(gs) and "air" or "radars"
   for _, gt in ipairs(gs.gates) do
-    if gt.dead then say(s.who .. ": " .. s.label .. " radars still up. Hold outside, rechecking.", gt.you) end
+    if gt.dead then
+      if gs.holdWhy == "air" then say(whoOf(s) .. ": " .. labelOf(s, gs) .. ", red fighters still up ahead. Hold outside, rechecking.", gt.you)
+      else say(whoOf(s) .. ": " .. labelOf(s, gs) .. " radars still up. Hold outside, rechecking.", gt.you) end
+    end
   end
   for _, gt in ipairs(gs.gates) do
     if gt.ai and gt.dead then
@@ -863,7 +1055,13 @@ local function holdCheck(gs, t)
   if not gs.holding then return nil end
   local s = siteOf(gs)
   local blind = gateBlind(gs)
-  if blind then resume(gs); return nil end
+  if blind then
+    if not airUp(gs) then resume(gs); return nil end
+    -- the radars are down but red fighters are still about: wait for the air to clear, for at most the gate's cap; v0.41.205: then the flight goes home
+    -- (no banzai: XO's 2026-10-30 runs lost the CAS flights pushing in under a full red air picture after the old "go in anyway")
+    if timer.getTime() - gs.holdAt >= airCap(gs) or holdFuelLow(gs) then breakOff(gs, "air-abort"); return nil end
+    return t + HOLD_CHECK_S
+  end
   if timer.getTime() - gs.holdAt >= HOLD_S then breakOff(gs, "hold-timeout"); return nil end
   if seadsGone(gs) then breakOff(gs, "seads-gone"); return nil end
   if holdFuelLow(gs) then breakOff(gs, "hold-fuel"); return nil end
@@ -885,6 +1083,14 @@ local function decide(gs, why)
     breakOff(gs, why)
     return
   end
+  local canHold2 = false
+  for _, gt in ipairs(gs.gates) do if gt.dead then canHold2 = true end end
+  if canHold2 and why ~= "hold-timeout" and why ~= "hold-fuel" and why ~= "clock" and airUp(gs) and not holdFuelLow(gs) then
+    if not gs.tp then gs.tp = sitePoint(s) end
+    holdGroups(gs)
+    timer.scheduleFunction(holdCheck, gs, timer.getTime() + HOLD_CHECK_S)
+    return
+  end
   gs.done = true
   for _, gt in ipairs(gs.gates) do
     local e = { site = gt.site, grp = gt.grp, t = math.floor(gt.t), ran = math.floor(timer.getTime()), radars = s and s.nrad or -1, abort = false, cmd = false, by = why }
@@ -892,13 +1098,12 @@ local function decide(gs, why)
     e.tp = gs.tp
     e.d0 = gdist(gt.grp, e.tp)
   end
+  if why == "dist" and not gs.rewatched then gs.watch = true end        -- v0.41.205: it keeps looking at the air until the flight commits (WATCH_COMMIT_M from the target)
   dump()
 end
 timer.scheduleFunction(function(_, t)
   local now = timer.getTime()
-  for i, c in ipairs(CALLS) do
-    if not said[i] and now >= c.t then said[i] = true; say(c.text, c.you) end
-  end
+  for i, c in ipairs(CALLS) do tryCall(i, c, now) end
   return t + 2
 end, nil, timer.getTime() + 5)
 -- ruins of what earlier packages already hit: a few fires and smoke plumes (kept few for VR performance)
@@ -926,15 +1131,36 @@ end
 -- when the DEAD flight's lead is within GATE_M of the site (so a late flight is judged where it really is), or at the clock time as a
 -- fallback (flight gone). Every gate is logged in the state file: when it ran, why, radars left, whether the command went through, and
 -- the flight's distance to the target then and 60 s later.
+local ARM_S = 240            -- v0.41.205: the distance trigger waits until the lead is in the air and this close to the gate's clock time (a target near the base put
+                             -- the lead inside the gate radius on the ramp, and the one-shot air check ran at 5 s with no red fighter up yet: XO's 2026-10-30 15:38 run)
+local WATCH_COMMIT_M = 25000 -- after a clean check the flight is watched until it is this close to the target; red fighters that come up meanwhile hold it once
+local function leadAirborne(grpName)
+  local ok, r = pcall(function() local g = Group.getByName(grpName); local u = g and g:getUnit(1); return u and u:inAir() end)
+  return ok and r or false
+end
 timer.scheduleFunction(function(_, t)
   local now = timer.getTime()
   local left = false
   for _, gs in ipairs(gorder) do
+    if gs.done and gs.watch and not gs.holding then
+      left = true
+      local close = false
+      for _, gt in ipairs(gs.gates) do
+        if gt.dead then local d = gdist(gt.grp, gs.tp); if (not d) or d <= WATCH_COMMIT_M then close = true end end
+      end
+      if close or now >= gs.fall + 600 then gs.watch = false
+      elseif airUp(gs) and not holdFuelLow(gs) then
+        gs.watch = false; gs.rewatched = true; gs.done = false
+        holdGroups(gs)
+        timer.scheduleFunction(holdCheck, gs, now + HOLD_CHECK_S)
+      end
+    end
     if not gs.done and not gs.holding then
       left = true
       local s
       for _, x in ipairs(SITES) do if x.id == gs.site then s = x end end
       if s and not gs.tp then gs.tp = sitePoint(s) end
+      if not gs.tp and gs.gates[1].tx then gs.tp = { x = gs.gates[1].tx, z = gs.gates[1].tz } end          -- v0.41.203: a target with no live unit to read a position from
       if now >= gs.fall then
         decide(gs, "clock")
       else
@@ -944,7 +1170,8 @@ timer.scheduleFunction(function(_, t)
             -- umbrella covering it (gt.ux/uz/um): v0.39.21 run, Hornet 1 held 26 km from the Sukhumi SA-10 and was shot down in its orbit
             local d = gdist(gt.grp, gs.tp)
             local du = gt.ux and gdist(gt.grp, { x = gt.ux, z = gt.uz }) or nil
-            if (d and d <= ((gt.gm and gt.gm > 0) and gt.gm or GATE_M)) or (du and du <= gt.um) then decide(gs, "dist"); break end
+            local armed = leadAirborne(gt.grp) and now >= gt.t - ARM_S
+            if (armed and d and d <= ((gt.gm and gt.gm > 0) and gt.gm or GATE_M)) or (du and du <= gt.um) then decide(gs, "dist"); break end
           end
         end
       end
@@ -1059,7 +1286,8 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
              calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
              watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
-             rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None) -> str:
+             rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True,
+             tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
@@ -1069,12 +1297,14 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
                    f'units={lst(x["units"])}, trk={lst(x["trk"])}, srch={lst(x["srch"])}}}' for x in (sites or []))
     ru = ", ".join(f'{{x={r["x"]:.1f}, z={r["z"]:.1f}, n={int(r["n"])}, r={float(r["r"]):.0f}, p={int(r["p"])}, dn={float(r["dn"]):.2f}, pw={int(r["pw"])}, s={float(r["s"]):.2f}}}'
                    for r in (ruins or []))
-    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}{_umbrella_lua(x)}}}'
+    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}, acap={int(x.get("acap") or 0)}{_umbrella_lua(x)}{(", tx=%.1f, tz=%.1f" % (float(x["tx"]), float(x["tz"]))) if x.get("tx") is not None else ""}}}'
                    for x in (gates or []))
     return (LUA_HOOK.replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
             .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
-            .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__JAMS__", ", ".join(f"[{_lq(k)}]={int(v)}" for k, v in (jams or {}).items()))
+            .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__ECMP__", ecm_player if ecm_player in ("live", "f10") else "").replace("__ECMMSG__", "1" if ecm_msg else "0")
+            .replace("__TUNEF__", ", ".join(str(int(f)) for f in (tune_flags or []))).replace("__TUNEMHZ__", f"{float(tune_mhz):.3f}").replace("__AWUNIT__", _lua_str(awacs_unit))
+            .replace("__DMGL__", ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (dmg or {}).items())).replace("__DMGON__", "true" if dmg_on else "false").replace("__JAMS__", ", ".join(f"[{_lq(k)}]={int(v)}" for k, v in (jams or {}).items()))
             .replace("__JAMW__", ", ".join(f"[{_lq(k)}]={{{float(a):.0f}, {float(b):.0f}}}" for k, (a, b) in (jamw or {}).items()))
             .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)).replace("__SPLASH__", "true" if splash else "false")
             .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}' + (f', t={int(q["t"])}' if q.get("t") is not None else '') + '}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy))
@@ -1105,14 +1335,15 @@ def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despaw
                  group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
                  enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
                  watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
-                 rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None) -> None:
+                 rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True,
+                 tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover, ecm_player, ecm_msg, tune_flags, tune_mhz, awacs_unit, dmg, dmg_on))))
     mission.triggerrules.triggers.append(t)
 
 
@@ -1246,14 +1477,16 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             from . import ground as _gr2
             a.health = _gr2.column_health(state, a, before, frac)
             dmg = before - a.health
-            out["red_assets"].append({"name": a.name, "before": before, "after": a.health})
+            ra_ = {"name": a.name, "before": before, "after": a.health, "kind": a.kind.value, "primary": bool(g.get("primary")),
+                   "destroyed": bool(a.destroyed or a.health <= _gr2.DOWN_HEALTH)}          # v0.41.171: tempo credits (tempo.credits)
+            out["red_assets"].append(ra_)
             if g.get("primary"):
                 out["target_damage"] = 1 - (a.health / before) if before > 0 else 0.0
             if dmg > 0:
                 out["lines"].append(f"{a.name}: {before:.0%} -> {a.health:.0%}")
             rad = list(g.get("trk") or []) + list(g.get("srch") or [])
             if a.kind.value == "SAM" and rad and all(u in lost for u in rad) and not a.destroyed:
-                a.suppressed = True               # SEAD worked: the radars are gone, but the launchers are still there
+                a.suppressed = True; ra_["suppressed"] = True               # SEAD worked: the radars are gone, but the launchers are still there
                 out["lines"].append(f"{a.name}: radars destroyed, launchers intact. SUPPRESSED, not dead: it needs a DEAD strike to finish it.")
         elif g["kind"] == "support":                              # v0.41.87: a tanker / AWACS shot down comes off its asset
             if dead:
@@ -1300,20 +1533,22 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                     out["lines"].append("Raid: you left before the raiders arrived; the defences stopped them")
             else:
                 out["lines"].append(f"Raid on {where}: stopped, no bombs fell")
+    follow_ = any((p_.get("objective") or {}).get("after") for p_ in (state.plan or []) if p_.get("id") == data.get("package"))      # v0.41.158: a strike / CAS behind a SEAD
     for ref in data.get("aborted", []) or []:
         a = state.assets.get(ref)
         if a is not None:
-            out["lines"].append(f"DEAD called off on {a.name}: its radars were still up when the strike flight reached the gate, so it turned back without attacking.")
+            out["lines"].append((f"Attack called off behind {a.name}" if follow_ else f"DEAD called off on {a.name}") +
+                                ": its radars were still up when the strike flight reached the gate, so it turned back without attacking.")
     # alert / scramble groups (v0.40.8): called, airborne, or stuck on the ground; and the build's settings, so test runs can be told apart
-    hm_ = lambda t_: f"{int(t_) // 60:d} min" if t_ is not None else "-"
-    for al in data.get("alerts", []) or []:
+    ms_ = lambda t_: f"{int(t_) // 60:d}:{int(t_) % 60:02d}"                  # v0.41.208 (XO): scrambles are numbered in the order the build lists them (the briefing's QRA list uses the same numbers)
+    for n_, al in enumerate(data.get("alerts", []) or [], 1):
         if al.get("called") is None:
             continue
+        who_ = f"Scramble {n_} ({al.get('ty', '?')}, {al.get('b', '?')})"
         if al.get("air") is not None:
-            out["lines"].append(f"Alert {al['g']} ({al.get('ty', '?')}, {al.get('b', '?')}): called at {hm_(al['called'])}, airborne {int(al['air'] - al['called'])} s later")
+            out["lines"].append(f"{who_}: ordered {ms_(al['called'])}, airborne +{ms_(al['air'] - al['called'])}")
         else:
-            out["lines"].append(f"Alert {al['g']} ({al.get('ty', '?')}, {al.get('b', '?')}): called at {hm_(al['called'])}, " +
-                                ("NEVER GOT AIRBORNE (stuck on the ground)" if al.get("stuck") else "not airborne yet when the mission ended"))
+            out["lines"].append(f"{who_}: ordered {ms_(al['called'])}, " + ("NEVER GOT AIRBORNE (stuck on the ground)" if al.get("stuck") else "not airborne yet when the mission ended"))
     # v0.41.92: fuel. The lead's fuel is tracked every 30 s (`tracks`: [t, x, z, alt_m, fuel_%, kts]); a flight that ended the mission low explains the
     # pairs that went home early (bingo). Reported for every AI group that was airborne and ended at BINGO_REPORT_PCT or less.
     ty_ = {a_["g"]: a_.get("ty", "") for a_ in (data.get("alerts") or [])}

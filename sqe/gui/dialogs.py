@@ -1,4 +1,5 @@
 from __future__ import annotations
+import html
 import json
 import time
 from pathlib import Path
@@ -19,8 +20,15 @@ def _browse(parent, line: QLineEdit, title: str):
         line.setText(S.native(d))
 
 
+EDGE_DECAY_TEXT = ("Your edge fades by 3% each night, back toward zero, when you do not keep flying that kind of job (nights with nothing for you to fly do not count). "
+                   "Off: the edge you build is kept. Needs Tactical Edge on.")
+PILOT_INFLUENCE_TEXT = ("Your flying shapes the war. On: the higher-ups study your actual sorties, and what they learn is carried to every unit in the theatre: the "
+                        "background strikes, SEAD and air cover of the same kind succeed more often (your Tactical Edge). Stay on the ground and red seizes the initiative: it "
+                        "surges, the front can crack, and you can lose the war. Off: the war runs on its own, with no effect from your flying (no red surge, no Tactical Edge).")
+
+
 class NewCampaignDialog(QDialog):
-    def __init__(self, parent=None, weather_mode: str = "clear", skill_red: str = "level", skill_blue: str = "level"):
+    def __init__(self, parent=None, weather_mode: str = "clear", skill_red: str = "level", skill_blue: str = "level", pilot_influence: bool = True, prefill: dict | None = None, edge_decay: bool = False):
         super().__init__(parent); self.setWindowTitle("New Campaign"); self.setMinimumWidth(520)
         lay = QVBoxLayout(self); lay.setSpacing(12)
         t = QLabel("New Campaign"); t.setObjectName("title"); lay.addWidget(t)
@@ -44,6 +52,13 @@ class NewCampaignDialog(QDialog):
             self.lvl.addItem(d.name, n)
         self.lvl.setCurrentIndex(1)
         form.addRow("Difficulty", self.lvl)
+        pf = prefill or {}                               # v0.41.162: from a save this build could not open: its name, aircraft and level
+        if pf.get("name"):
+            self.name.setText(str(pf["name"]))
+        if pf.get("aircraft") and self.ac.findData(pf["aircraft"]) >= 0:
+            self.ac.setCurrentIndex(self.ac.findData(pf["aircraft"]))
+        if pf.get("level") and self.lvl.findData(int(pf["level"])) >= 0:
+            self.lvl.setCurrentIndex(self.lvl.findData(int(pf["level"])))
         self.month = QComboBox()
         for i, mname in enumerate(("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"), 1):
             self.month.addItem(mname, i)
@@ -53,6 +68,13 @@ class NewCampaignDialog(QDialog):
         form.addRow("Campaign starts", row)
         self.night = QCheckBox("Allow night sorties (otherwise missions are spread through daylight)")
         form.addRow("", self.night)
+        self.pinf = QCheckBox("Tactical Edge: your sorties affect the war")
+        self.pinf.setChecked(bool(pilot_influence)); self.pinf.setToolTip(PILOT_INFLUENCE_TEXT)
+        form.addRow("", self.pinf)                      # the same setting as Settings > Campaign > Tactical Edge: it can be changed there later
+        self.pdec = QCheckBox("Enable Tactical Edge Decay")
+        self.pdec.setChecked(bool(edge_decay)); self.pdec.setToolTip(EDGE_DECAY_TEXT); self.pdec.setEnabled(bool(pilot_influence))
+        self.pinf.toggled.connect(self.pdec.setEnabled); self.pdec.setStyleSheet("margin-left:22px;")      # a sub-option of Tactical Edge
+        form.addRow("", self.pdec)
         from .. import weather as _wxn
         self.wx = QComboBox()
         for k, val in _wxn.MODES.items():
@@ -84,14 +106,14 @@ class NewCampaignDialog(QDialog):
 
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
-                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(),
+                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(), "pilot_influence": self.pinf.isChecked(), "tempo_decay": self.pinf.isChecked() and self.pdec.isChecked(),
                 "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData()),
                 "ai_skill_red": str(self.skr.currentData() or "level"), "ai_skill_blue": str(self.skb.currentData() or "level")}
 
 
 class SettingsDialog(QDialog):
     """Six tabs: General (flight timing), Campaign (what the world does), Mission build (merging, limits), DCS integration (paths, the
-    scripting patch), Terrain scan (with a plain scanned / not scanned status) and Experimental (features still being tested). Every control keeps the name it always had."""
+    scripting patch) and Experimental (features still being tested). Every control keeps the name it always had."""
     def __init__(self, settings: S.AppSettings, parent=None):
         super().__init__(parent); self.s = settings; self.setWindowTitle("Settings"); self.setMinimumWidth(720); self.setMinimumHeight(560); self.resize(780, 700)
         lay = QVBoxLayout(self); lay.setSpacing(10)
@@ -140,10 +162,15 @@ class SettingsDialog(QDialog):
         # ---- Experimental: features still being tested; each one can be switched off --------------------------------------
         v = page("Experimental")
         hint(v, "Features still being tried out. Each one can be switched off if it misbehaves; the defaults are the safe ones.")
-        self.ecm = QCheckBox("ECM script (SQE's own jamming)")
-        self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
-        hint(v, "SQE's own jamming model; off by default. Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
-                "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
+        self.awt = QCheckBox("AWACS calls need a tuned radio")           # v0.41.215 (XO)
+        self.awt.setChecked(bool(getattr(settings, "awacs_tuned", True))); v.addWidget(self.awt)
+        hint(v, "On: you hear the AWACS only while one of your radios is on its frequency (it is in your comms plan); a call that comes due while you are not tuned is held up to a minute, "
+                "then dropped, with one on-screen note. Read from the F-16C and A-10C first radio (UHF), and both radios of the F/A-18C and F-14B; the F-15C (FC3) is always counted tuned. "
+                "Off: you hear every AWACS call whatever your radio is set to.")
+        self.dmgc = QCheckBox("Show damage calls")                       # v0.41.215 (XO)
+        self.dmgc.setChecked(bool(getattr(settings, "damage_calls", True))); v.addWidget(self.dmgc)
+        hint(v, "On: the other blue aircraft (your wingmen, other flights, the tanker and the AWACS) call when they are hit and when they eject or go down (\"Mayday, mayday, ejecting\"), "
+                "each picked at random from a short list. Off: no such calls.")
         self.hotrwy = QCheckBox("Hot starts on the runway (AI flights)")
         self.hotrwy.setChecked(bool(getattr(settings, "hot_runway_starts", False))); v.addWidget(self.hotrwy)
         hint(v, "Land fields other than yours. On: AI package flights wait hidden and appear on the runway in time to make their push, one runway release a minute apart. "
@@ -158,11 +185,6 @@ class SettingsDialog(QDialog):
             if not on:
                 self.hotrwy_own.setChecked(False)
         self.hotrwy.toggled.connect(_own_gate)
-        self.borrow_red = QCheckBox("Red SAM borrowing")
-        self.borrow_red.setChecked(bool(getattr(settings, "borrow_red", False))); v.addWidget(self.borrow_red)
-        self.borrow_blue = QCheckBox("Blue SAM borrowing")
-        self.borrow_blue.setChecked(bool(getattr(settings, "borrow_blue", False))); v.addWidget(self.borrow_blue)
-        hint(v, "On: that side moves SAM batteries from quiet sites to threatened ones. Off: that side only rebuilds destroyed sites the slow way (by supply). Orders already on their way wait until you switch it back on. Takes effect at the next overnight update.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
@@ -176,6 +198,14 @@ class SettingsDialog(QDialog):
         hint(v, "Procedural follows the theatre's climate for the month and changes slowly from day to day (never clear to storm in an afternoon); each sortie "
                 "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
                 "that cannot attack at all is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
+        # v0.41.165: Pilot Influence goes AFTER the whole Weather block (combo + its description), never between them
+        self.pinf = QCheckBox("Tactical Edge (your sorties affect the war)"); self.pinf.setChecked(bool(getattr(settings, "pilot_influence", True)))
+        row(v, "Tactical Edge", self.pinf)
+        hint(v, PILOT_INFLUENCE_TEXT)
+        self.pdec = QCheckBox("Enable Tactical Edge Decay"); self.pdec.setChecked(bool(getattr(settings, "tempo_decay", False)))
+        row(v, "", self.pdec)
+        hint(v, EDGE_DECAY_TEXT)
+        self.pinf.toggled.connect(self.pdec.setEnabled); self.pdec.setEnabled(self.pinf.isChecked()); self.pdec.setStyleSheet("margin-left:22px;")
         from ..difficulty import SKILL_CHOICES as _SK
         self.skr, self.skb = QComboBox(), QComboBox()
         for cb_, key_ in ((self.skr, "ai_skill_red"), (self.skb, "ai_skill_blue")):
@@ -258,25 +288,26 @@ class SettingsDialog(QDialog):
         self.autopatch.setChecked(bool(settings.auto_patch_scripting)); v.addWidget(self.autopatch)
         hint(v, "Results need io/lfs enabled in MissionScripting.lua. A backup is saved next to the file. "
                 "If SQE is closed before the mission ends, DCS can no longer write the results file.")
+        v.addSpacing(10)
+        self.ecm = QCheckBox("ECM script (SQE's own jamming)")
+        self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
+        hint(v, "SQE's own jamming model; off by default. Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
+                "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
+        self.ecm_msg = QCheckBox("Show ECM status")                      # v0.41.213 (XO): a sub-option of the ECM script
+        self.ecm_msg.setChecked(bool(getattr(settings, "ecm_status", True))); self.ecm_msg.setEnabled(self.ecm.isChecked())
+        self.ecm.toggled.connect(self.ecm_msg.setEnabled); self.ecm_msg.setStyleSheet("margin-left:22px;")
+        self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's ECM lamp (\"ECM on\" / \"ECM off\") and the F10 ECM ON / OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
+        v.addWidget(self.ecm_msg)
+        v.addSpacing(10)
+        self.ecm_state = QLabel(); v.addWidget(self.ecm_state)
+        self.ecm_inst = QPushButton("Install ECM script"); self.ecm_rem = QPushButton("Remove")
+        self.ecm_inst.clicked.connect(lambda: self._ecm_do(S.install_ecm_script)); self.ecm_rem.clicked.connect(lambda: self._ecm_do(S.remove_ecm_script))
+        r = QHBoxLayout(); r.addWidget(self.ecm_inst); r.addWidget(self.ecm_rem); r.addStretch(1); v.addLayout(r)
+        hint(v, "Lets SQE read your F-16C's ECM lamp (about four times a second) so its jamming model knows when your jammer is on. It copies sqe_ecm_export.lua into "
+                "Saved Games\\DCS\\Scripts and adds one line to the end of Export.lua there (a backup, Export.lua.sqe.bak, is saved first). Remove takes the line and the file out again. "
+                "Without it SQE counts your jammer as on over the attack leg. Takes effect when DCS starts.")
         v.addStretch(1)
-        self.inst.textChanged.connect(self._refresh); self._refresh()
-
-        # ---- Terrain scan ---------------------------------------------------------------------------------------------------------------
-        v = page("Terrain scan")
-        self.tm_status = QLabel(); self.tm_status.setWordWrap(True); v.addWidget(self.tm_status)
-        self.tm_relief = QLabel(); self.tm_relief.setWordWrap(True); v.addWidget(self.tm_relief)
-        self.tm_roads = QLabel(); self.tm_roads.setWordWrap(True); v.addWidget(self.tm_roads)
-        self.shore = QSpinBox(); self.shore.setRange(300, 5000); self.shore.setSingleStep(100); self.shore.setSuffix(" m"); self.shore.setValue(int(getattr(settings, "shore_margin_m", 1500)))
-        self.river = QSpinBox(); self.river.setRange(0, 1000); self.river.setSingleStep(50); self.river.setSuffix(" m rivers"); self.river.setValue(int(getattr(settings, "river_margin_m", 100)))
-        row(v, "Shore margin", self.shore, self.river)
-        self.tm = QLabel(); self.tm.setObjectName("small"); self.tm.setWordWrap(True); v.addWidget(self.tm)
-        self.probe_btn = QPushButton("Create terrain scan mission"); self.probe_btn.clicked.connect(self._make_probe)
-        self.recheck_btn = QPushButton("Re-check"); self.recheck_btn.clicked.connect(self._tm_refresh)
-        r = QHBoxLayout(); r.addWidget(self.probe_btn); r.addWidget(self.recheck_btn); r.addStretch(1); v.addLayout(r)
-        hint(v, "To measure the real map once: create the scan mission, start it in DCS (Fly), wait for COMPLETE, then Re-check. "
-                "Without a scan SQE uses a rough built-in coastline (it can be 1-3 km off and has no rivers).")
-        v.addStretch(1)
-        self._tm_refresh()
+        self.inst.textChanged.connect(self._refresh); self.saves.textChanged.connect(self._refresh); self._refresh()
 
         self.tabs.tabBar().moveTab(1, self.tabs.count() - 1)                  # Experimental last
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); bb.accepted.connect(self._save)
@@ -284,30 +315,17 @@ class SettingsDialog(QDialog):
         if not settings.dcs_saves or not Path(settings.dcs_saves).exists():
             self.tabs.setCurrentIndex(3)                                  # first run: the paths are what is missing
 
-    def _tm_refresh(self):
-        from .. import terrainmask as _tmk, relief as _rl, roads as _rd
-        _tmk.configure(self.s.sqe_dir if self.s.dcs_saves else None)
-        _rl.configure(self.s.sqe_dir if self.s.dcs_saves else None)
-        _rd.configure(self.s.sqe_dir if self.s.dcs_saves else None)
-        sc = _tmk.scanned(self.s.sqe_dir if self.s.dcs_saves else None)
-        have = ", ".join(f"{t} (scanned {dte})" for t, dte in sc) if sc else "none yet"
-        ok = bool(_tmk.available())
-        self.tm_status.setText(("Scanned: " + _tmk.info()) if ok else "Not scanned: ground sites use the coarse built-in coastline (up to 1-3 km off, no rivers).")
-        self.tm_status.setStyleSheet(f"color: {theme.GREEN if ok else theme.AMBER}; font-weight: 700; font-size: 15px;")
-        rok = bool(_rl.available())
-        self.tm_relief.setText(("Ground height: " + _rl.info()) if rok else "Ground height: not scanned. Low flights use a flat estimate and the kneeboard has no minimum safe altitude (run the scan mission again).")
-        self.tm_relief.setStyleSheet(f"color: {theme.GREEN if rok else theme.AMBER}; font-weight: 700; font-size: 15px;")
-        dok = bool(_rd.available())
-        self.tm_roads.setText(("Roads: " + _rd.info()) if dok else "Roads: not scanned. Columns and supply sites are not placed on roads (run the scan mission again).")
-        self.tm_roads.setStyleSheet(f"color: {theme.GREEN if dok else theme.AMBER}; font-weight: 700; font-size: 15px;")
-        self.tm.setText("Ground sites stay this far from the sea and lakes, and the second value from rivers and shallow water (rivers need the scan). "
-                        f"Terrain scans on disk: {have}.")
-
-    def _make_probe(self):
-        create_scan_mission(self, self.s, self.saves.text())
-
     def _refresh(self):
         self.ms.setText("MissionScripting.lua: " + S.mission_scripting_status(self.inst.text()))
+        st = S.ecm_script_state(self.saves.text())
+        self.ecm_state.setText("ECM script: " + S.ecm_script_status(self.saves.text()))
+        self.ecm_inst.setEnabled(st not in ("nofolder", "ok")); self.ecm_rem.setEnabled(st not in ("nofolder", "none"))
+        self.ecm_inst.setText("Update ECM script" if st == "old" else "Install ECM script")
+
+    def _ecm_do(self, fn):
+        ok, msg = fn(S.native(self.saves.text()))
+        (QMessageBox.information if ok else QMessageBox.warning)(self, "ECM script", msg)
+        self._refresh()
 
     def _save(self):
         self.s.dcs_install, self.s.dcs_saves = S.native(self.inst.text()), S.native(self.saves.text())
@@ -317,22 +335,22 @@ class SettingsDialog(QDialog):
         self.s.hot_ramp_scrambles = self.hotramp.isChecked()
         self.s.hot_runway_starts = self.hotrwy.isChecked()
         self.s.hot_runway_own_field = self.hotrwy.isChecked() and self.hotrwy_own.isChecked()
-        self.s.borrow_red = self.borrow_red.isChecked()
-        self.s.borrow_blue = self.borrow_blue.isChecked()
         self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())
         self.s.merge_enemy_pct = int(self.mpct.value())
         self.s.merge_back_min = int(self.mback.value()); self.s.merge_fwd_min = int(self.mfwd.value())
         self.s.merge_radius_nm = int(self.mrad.value())
         self.s.ruins = bool(self.ruins.isChecked())
         self.s.ecm_script = bool(self.ecm.isChecked())
+        self.s.ecm_status = bool(self.ecm_msg.isChecked())
+        self.s.awacs_tuned = bool(self.awt.isChecked())
+        self.s.damage_calls = bool(self.dmgc.isChecked())
         self.s.splash_damage = bool(self.splash.isChecked())
         self.s.ai_land_carrier = str(self.land_cv.currentData() or "always")
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
         self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
+        self.s.pilot_influence = bool(self.pinf.isChecked()); self.s.tempo_decay = bool(self.pinf.isChecked() and self.pdec.isChecked())
         self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
-        self.s.shore_margin_m = int(self.shore.value())
-        self.s.river_margin_m = int(self.river.value())
         self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value())
         self.s.f14_special_names = self.f14n.isChecked()
         self.s.auto_patch_scripting = self.autopatch.isChecked(); self.s.patch_asked = True
@@ -429,6 +447,26 @@ class WaitingDialog(QDialog):
         self.timer.stop(); super().reject()
 
 
+class DayResolvedDialog(QDialog):
+    """v0.41.208 (XO): what Skip Turn did, fully described: one block per package (the war simulation's own result lines), scrollable."""
+    def __init__(self, results: list, day: int, parent=None):
+        super().__init__(parent); self.setWindowTitle("Day resolved"); self.setMinimumSize(700, 480)
+        lay = QVBoxLayout(self); lay.setSpacing(12)
+        t = QLabel(f"Day {day} resolved"); t.setObjectName("title"); lay.addWidget(t)
+        ok = sum(1 for r in results if r.get("success")); scr = sum(1 for r in results if r.get("scrubbed")); held = sum(1 for r in results if r.get("held"))
+        bits = [f"{ok} succeeded", f"{len(results) - ok - scr - held} failed"] + ([f"{held} turned back at the SAM gate"] if held else []) + ([f"{scr} scrubbed for weather"] if scr else [])
+        sub = QLabel(f"The war simulation resolved {len(results)} package{'s' if len(results) != 1 else ''}: " + ", ".join(bits) + "."); sub.setWordWrap(True); sub.setObjectName("dim"); lay.addWidget(sub)
+        body = QTextBrowser(); lay.addWidget(body, 1)
+        h = []
+        for r in results:
+            ln = r.get("lines") or [r.get("objective", "?")]
+            col = theme.GREEN if r.get("success") else theme.AMBER if (r.get("scrubbed") or r.get("held")) else theme.RED
+            h.append(f"<p style='margin-bottom:2px'><b style='color:{col}'>{html.escape(ln[0])}</b><br>" + "<br>".join("&nbsp;&nbsp;&nbsp;" + html.escape(x.strip()) for x in ln[1:]) + "</p>")
+        body.setHtml("".join(h) or "<p>Nothing was tasked today.</p>")
+        bb = QDialogButtonBox(QDialogButtonBox.Close); bb.rejected.connect(self.reject)
+        btn = bb.button(QDialogButtonBox.Close); btn.setText("Continue"); btn.setObjectName("primary"); btn.clicked.connect(self.accept); lay.addWidget(bb)
+
+
 class DebriefDialog(QDialog):
     def __init__(self, out: dict, state, parent=None):
         super().__init__(parent); self.setWindowTitle("Debrief"); self.setMinimumSize(820, 680)
@@ -460,23 +498,3 @@ class DebriefDialog(QDialog):
         bb = QDialogButtonBox(QDialogButtonBox.Close); bb.rejected.connect(self.reject); bb.accepted.connect(self.accept)
         btn = bb.button(QDialogButtonBox.Close); btn.setText("Continue"); btn.setObjectName("primary")
         btn.clicked.connect(self.accept); lay.addWidget(bb)
-
-
-def create_scan_mission(parent, settings, saves_text: str = "") -> bool:
-    """Write SQE_TerrainScan.miz into the DCS Missions folder and tell the user how to run it. Returns True when it was created."""
-    from .. import terrainprobe
-    saves = saves_text or settings.dcs_saves
-    if not saves:
-        QMessageBox.warning(parent, "Terrain scan", "Set the DCS Saved Games folder first."); return False
-    try:
-        from .. import theatres as _th
-        tid = _th.active()["id"]
-        p = terrainprobe.make_probe(Path(S.native(saves)) / "Missions" / ("SQE_TerrainScan.miz" if tid == "caucasus" else f"SQE_TerrainScan_{tid}.miz"))
-    except Exception as ex:
-        QMessageBox.warning(parent, "Terrain scan", f"Could not create the mission: {ex}"); return False
-    QMessageBox.information(parent, "Terrain scan",
-                            f"Created {p.name} in your DCS Missions folder (you start in a free Su-25T).\n\n1. Keep SQE open (it enables DCS scripting while open).\n"
-                            "2. In DCS: Mission > Fly > Missions > My Missions > SQE_TerrainScan, then Fly.\n"
-                            "3. Wait for the message 'SQE terrain scan COMPLETE' (about a minute; DCS may stutter), then leave the mission.\n"
-                            "SQE uses the result the next time you open or start a campaign.")
-    return True

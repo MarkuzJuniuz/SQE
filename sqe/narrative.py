@@ -4,7 +4,6 @@ from __future__ import annotations
 import random
 from .models import ObjectiveType
 from . import theatres
-from .war import totals
 
 def __getattr__(name):
     """TITLE and BACKGROUND come from the active theatre pack (so `narrative.TITLE` keeps working)."""
@@ -14,39 +13,18 @@ def __getattr__(name):
     raise AttributeError(name)
 
 
-PHASES = [
-    ("Phase 1 - Stop the Advance and Contest the Air",
-     "The first priority is to halt the armored columns and keep the Federation's fighters off our airfields and "
-     "the fleet. Close air support, counter-air strikes and a standing combat air patrol over the carrier.",
-     lambda t: t["enemy_air"] < 0.6 or t["armor"] < 0.45),
-    ("Phase 2 - Roll Back the Air Defences",
-     "With the advance checked, the task force turns on the SAM and early-warning network. Every site destroyed "
-     "makes the next package cheaper. Suppress, destroy, and keep the pressure on.",
-     lambda t: t["iads"] < 0.45),
-    ("Phase 3 - Break the Machine",
-     "The air defences are in tatters. Now hit what the offensive runs on: command posts, fuel and ammunition. "
-     "Finish the enemy air arm on the ground and in the air.",
-     lambda t: False),
-]
-
-
 def phase(state) -> tuple:
-    t = totals(state)
-    for i, (name, text, done) in enumerate(PHASES, 1):
-        if not done(t):
-            return i, name, text
-    return len(PHASES), PHASES[-1][0], PHASES[-1][1]
+    """v0.41.148: the campaign posture (it replaced the three phases, which were driven by jet counts and the old tiers). -> (number, label, text)."""
+    from . import posture
+    lab, text = posture.posture(state)
+    order = list(posture.LABELS) + [posture.ENDINGS[1], posture.ENDINGS[2], "Defeat"]
+    return (order.index(lab) + 1 if lab in order else 0), lab, text
 
 
 def sitrep(state) -> list:
-    t = totals(state)
-    lines = [f"Enemy air arm: {t['ea']} of {t['ez']} aircraft serviceable ({t['enemy_air']:.0%}).",
-             f"Air-defence network: {t['iads']:.0%} of sites operational.",
-             f"Armored advance: columns at {t['armor']:.0%} strength.",
-             f"The front: {theatres.active()['front_desc'][min(2, state.front)]} (stage {min(3, state.front + 1)} of 3).",
-             f"Enemy command posts: {t['c2']:.0%} intact.",
-             f"Coalition air component: {t['fa']} of {t['fz']} aircraft serviceable ({t['friendly_air']:.0%})."]
-    return lines
+    """The situation lines of the briefing: the front, warnings, supply and air defence (no aircraft counts since v0.41.148)."""
+    from . import posture
+    return posture.sitrep(state)
 
 
 _INTENT = {

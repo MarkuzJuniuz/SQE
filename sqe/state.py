@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
-from . import FORMAT_VERSION
+from . import FORMAT_VERSION, COMPAT_ERA, MIN_COMPAT_ERA, __version__
 from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, wing_from_dict, PlayerProfile)
 
 
@@ -30,6 +30,21 @@ def _migrate_roles_v6(d: dict) -> None:
         fix(p)
     if d.get("pending"):
         fix(d["pending"].get("package_dict"))
+
+
+class SaveIncompatible(Exception):
+    """A campaign file this build cannot open. `kind`: "older" (saved by an earlier SQE), "newer" (a later one), "damaged" (not a readable save).
+    The GUI turns it into the friendly dialog; `info()` is what the file says about itself."""
+    def __init__(self, d: dict, kind: str, why: str = ""):
+        super().__init__(f"{kind}: {why}")
+        self.kind, self.why, self.d = kind, why, d or {}
+
+    def info(self) -> dict:
+        d = self.d
+        pl = d.get("player") or {}
+        sq = (d.get("squadrons") or {}).get(pl.get("squadron_id", ""), {})
+        return {"name": d.get("name", ""), "day": d.get("day"), "saved_by": d.get("app_version"), "level": d.get("level"), "aircraft": sq.get("aircraft"),
+                "squadron_id": pl.get("squadron_id")}
 
 
 @dataclass
@@ -56,6 +71,7 @@ class CampaignState:
     front: int = 0                                 # how far the war has advanced: tiers up to front+2 are open for tasking
     front_days: int = 0                            # days spent at this stage (the anti-stall clock)
     ground: dict = field(default_factory=dict)     # the ground war (ground.py): sectors, strengths, the line, fallen fields
+    tempo: dict = field(default_factory=dict)      # v0.41.147: air tempo by job kind (tempo.py): the player's flown results nudge the AI flights' odds
     raids: dict = field(default_factory=dict)      # Red raids and emergencies (raids.py): today's surprise raids, the emergency in play, postponed packages
     red_air: dict = field(default_factory=dict)    # the enemy's air tasking for the day (redair.py): patrol and sweep pairs, windows, stations
     barcap: dict = field(default_factory=dict)     # v0.41.73: today's BARCAP areas for both sides (barcap.py): stations per defended asset and direction
@@ -81,7 +97,7 @@ class CampaignState:
     # ---- serialisation ------------------------------------------------------------------
     def to_dict(self) -> dict:
         return {
-            "format": FORMAT_VERSION, "saved": datetime.now().isoformat(timespec="seconds"),
+            "format": FORMAT_VERSION, "compat": COMPAT_ERA, "app_version": __version__, "saved": datetime.now().isoformat(timespec="seconds"),
             "name": self.name, "theatre": self.theatre, "level": self.level, "campaign_id": self.campaign_id,
             "day": self.day, "sortie_counter": self.sortie_counter, "status": self.status,
             "start_date": self.start_date, "night_ops": self.night_ops, "pilot": self.pilot,
@@ -92,6 +108,7 @@ class CampaignState:
             "assets": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.assets.items()},
             "enemy_air": [asdict(w) for w in self.enemy_air],
             "raids": self.raids,
+            "tempo": self.tempo,
             "sams": self.sams,
             "red_air": self.red_air,
             "barcap": self.barcap,
@@ -121,7 +138,10 @@ class CampaignState:
         s.assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in d["assets"].items()}
         s.enemy_air = [wing_from_dict(w) for w in d["enemy_air"]]
         s.ground = d.get("ground") or {}
+        if s.ground and int(s.ground.get("v", 1)) < 3:
+            raise ValueError("This campaign was saved before the Campaign Revamp supply stage (v0.41.144): the ground war and its supply sites changed, so it cannot be loaded. Please start a new campaign.")
         s.raids = d.get("raids") or {}
+        s.tempo = d.get("tempo") or {}
         s.sams = d.get("sams") or {}
         s.red_air = d.get("red_air") or {}
         s.barcap = d.get("barcap") or {}
@@ -153,4 +173,20 @@ class CampaignState:
 
     @classmethod
     def load(cls, path: str | Path) -> "CampaignState":
-        return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
+        """Load a save, or raise SaveIncompatible (never a bare traceback) when this build cannot read it."""
+        try:
+            d = json.loads(Path(path).read_text(encoding="utf-8"))
+            if not isinstance(d, dict):
+                raise ValueError("not a campaign")
+        except Exception as e:
+            raise SaveIncompatible({}, "damaged", str(e)) from e
+        if int(d.get("format", 1)) > FORMAT_VERSION or int(d.get("compat", COMPAT_ERA)) > COMPAT_ERA:
+            raise SaveIncompatible(d, "newer", "saved by a newer SQE")
+        if int(d.get("compat", COMPAT_ERA)) < MIN_COMPAT_ERA:
+            raise SaveIncompatible(d, "older", "saved before a format change this build cannot read")
+        try:
+            return cls.from_dict(d)
+        except SaveIncompatible:
+            raise
+        except Exception as e:
+            raise SaveIncompatible(d, "older", f"{type(e).__name__}: {e}") from e

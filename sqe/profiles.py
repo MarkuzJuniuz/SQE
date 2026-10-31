@@ -242,6 +242,38 @@ def leg_clear(state, p0, p1, alt_ft) -> bool:
     return True
 
 
+CAS_STATION_NM = 30.0           # v0.41.177 (XO 2026-10-28, 3 CAS runs): a CAS TARCAP / escort under a long-range SAM sits this far from the CAS target, on the push side (v0.41.181: 25, was 20, XO: it protects the package, it does not hunt) (judgment call: AIM-120 / AIM-7 reach covers the A-10s from there; the old rule left it 35-40 nm away and it never fired)
+CAS_STATION_SWINGS = tuple(range(0, 181, 15))
+
+
+def cas_station(state, pts, alt_ft: int, egr=None):
+    """v0.41.177: a CAS fighter station within reach of the A-10s. Candidate points CAS_STATION_NM from the target, swung off the push bearing
+    (15 degrees at a time, either side, up to 180); the first one outside every live SAM ring wins, else the one with the most room. Same tuple as station()."""
+    import math
+    tx, ty = pts[-1]
+    px, py = pts[0]
+    b0 = math.atan2(py - ty, px - tx)
+    sites = _cover_sites(state, alt_ft)
+    best = None
+    for sw in CAS_STATION_SWINGS:
+        for sgn in ((1,) if sw in (0, 180) else (1, -1)):
+            b = b0 + math.radians(sw * sgn)
+            x, y = tx + math.cos(b) * CAS_STATION_NM * NM, ty + math.sin(b) * CAS_STATION_NM * NM
+            room = min((((a.x - x) ** 2 + (a.y - y) ** 2) ** 0.5 - r for a, r in sites), default=1e9)
+            if room > 0:
+                best = (x, y, room)
+                break
+            if best is None or room > best[2]:
+                best = (x, y, room)
+        if best is not None and best[2] > 0:
+            break
+    x, y = best[0], best[1]
+    lr = _long_range_threat(state, pts[-1], alt_ft)
+    names = [lr[0].variant] if lr else []
+    ok = egr is not None and leg_clear(state, (x, y), egr, alt_ft)
+    return x, y, names, CAS_STATION_NM, ok
+
+
 def station(state, pts, alt_ft: int, egr=None):
     """A TARCAP's or an escort's own station: the stand-off point when live SAM cover is in the way, else STATION_SHORT_NM short of the
     target on the run-in (never behind the first point). -> (x, y, [variants], nm short of the target, package egress clear from there)."""

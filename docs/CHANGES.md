@@ -1,6 +1,517 @@
 # CHANGES.md
 
 
+## v0.41.219, the ECM script installs itself; quarter-second lamp reads; support-CAP names; About tidy-up
+
+XO 2026-10-31 (medium, "go"). XO flew the F-16C ECM lamp and it worked. (1) `sqe_ecm_export.lua` polls four times a second (was once a second) and writes the flag file only when the lamp changes, plus a heartbeat once a second so the hook's 5 s freshness check holds (about one small write a second, so no performance cost; simulated with lupa: lamp change written the same tick). The script moved from `tools/` to `sqe/data/` so the exe ships it. (2) Settings > DCS integration now holds the ECM script checkbox, its "Show ECM status" sub-option, an ECM status line and an Install / Update ECM script and Remove button (moved from Experimental). Install copies the script to Saved Games\\DCS\\Scripts and adds `--[[SQE ECM EXPORT]]dofile(lfs.writedir() .. [[Scripts\\sqe_ecm_export.lua]])` to the END of Export.lua (created if missing; saved once to Export.lua.sqe.bak; line endings kept; never added twice, a hand-made line counts); Remove takes only our line, the copied script and a leftover flag file out. It runs on the click, not on Save. (3) Support-flight task names: "Tanker CAP (guards the tanker)" is now "HAVCAP (guards the tanker)" and "Carrier CAP" is "BARCAP (guards the carrier group)" (source: Wikipedia, Combat air patrol: HAVCAP protects AWACS / tankers; BARCAP is the fleet-defence patrol; the carrier wording is my own combination); the Air tab says "AI Support". (4) About box: the "Latest release on GitHub" link is gone (the Help menu still has it). Smoke check_106 (install / twice / remove / CRLF / backup / old copy / hand-made line, polling constants, labels). Not seen in DCS: the install button on XO's real Export.lua.
+
+## v0.41.218, no CAS against a garrison north of the mountains
+
+XO 2026-10-30 (light, "go"). A CAS mission at the Nalchik SA-6 site garrison put a friendly task force and its JTAC deep behind red's lines ("Tom Cruise at Nalchik"). XO's rule for this campaign: no JTACs and no friendly ground units on the other side of the mountains; the ground war runs on the coast road toward Krymsk. New `ground.near_front` and `ground.GARRISON_CAS_MAX_KM` (40): a dug-in site garrison is offered as a CAS job only within 40 km of a sector centre. Measured on a fresh L3 campaign: the coast garrisons (Sukhumi, Gudauta, Sochi, Gelendzhik, Krymsk) sit 1 to 21 km from a centre (12 of them), those beyond the mountains (Maykop 91 to 101, Nalchik 170 to 181, Beslan 214 to 220, Mozdok 256 to 259) 91 to 259 km (10): 40 is a judgment call in that gap. Those sites keep their SEAD / DEAD and strike jobs and the garrison still counts in the site's defence. Sector forward positions and columns are unchanged. Files: `sqe/ground.py`, `sqe/war.py`, `tools/smoke_test.py`, `sqe/__init__.py`.
+
+## v0.41.217, fix: the hook's event handler could not see DMGL ("attempt to index global 'DMGL'")
+
+XO 2026-10-30, a DCS script error on every hit / eject / death event in v0.41.215. My bug: the damage-call tables (`DMGL`, `DMG_ON`, `AWUNIT`, `awdown`, `dmgCall`) were declared as locals far below the event handler that reads them, so the handler saw them as nil globals. They are now declared at the top, next to `ENEMYAIR`. Why the smoke test missed it: it only checked that the hook text contained the right strings and compiled; it never ran an event. New `tools/hook_lua_sim.py` runs the hook under lupa with a stubbed DCS API and fires hit / eject / dead / crash events at it, and reports any undefined global the hook reads; `check_104` runs it (skipped when lupa is not installed; `pip install lupa`). It reproduced XO's error on the v0.41.215 code (line 455) and passes on this one. Files: `sqe/debrief.py`, `tools/hook_lua_sim.py` (new), `tools/smoke_test.py`, `sqe/__init__.py`.
+
+## v0.41.216, bold box headings on the Overview
+
+XO 2026-10-30 (low, "go"). SITUATION, THE FRONT, GROUND ODDS, COALITION, RUSSIA, TODAY'S TASKING, WARNINGS and THEATRE are bold (new `QLabel#head` style, same grey). The SUPPLY / AIR DEFENSE labels inside the side cards and the other small grey notes are unchanged (XO). Files: `sqe/gui/theme.py`, `sqe/gui/widgets.py`, `sqe/gui/app.py`, `sqe/__init__.py`.
+
+## v0.41.215, AWACS calls need a tuned radio; damage and mayday calls from the other aircraft
+
+XO 2026-10-30 (medium, "go"). Two new top-level checkboxes in Settings > Experimental, both default ON, SQE-wide for now (refactor-day list). (1) "AWACS calls need a tuned radio": Mission Editor "cockpit parameter in range" triggers set a flag per readable radio of your jet while it is within 0.05 MHz of the AWACS frequency (judgment call): F-16C `COMM1_FREQ`; A-10C `UHF_FREQ` only (its second radio is VHF, XO); F/A-18C and F-14B `COMM1_FREQ` and `COMM2_FREQ`. All probed in XO's dcs.log runs 2026-10-28 / 30; the F-14B's COMM2 was read from the RIO seat, the A-10C UHF tuned reading is not yet seen, AM versus FM is not told apart. The FC3 F-15C has nothing readable and always counts as tuned. An AWACS call to you that comes due while you are untuned is held up to 60 s with one on-screen note, then dropped; the closing "all flights accounted for" / "all packages complete" calls follow the same rule; the briefing's Command and Signal section says the frequency. Off: every AWACS call is heard. Not at all dependent on the new settings: when the AWACS is shot down its calls to you stop. (2) "Show damage calls": every blue aircraft but yours (wingmen, other flights, tanker, AWACS) says it is hit (once a minute at most) and, when it ejects or goes down within 90 s of a hit, a mayday; each line picked at random from a list of five (three for the tanker and AWACS hits). Not for red aircraft. Also: in Settings > Experimental the ECM script description now sits directly under its own checkbox, with "Show ECM status" below it (it had ended up between the two). Files: `sqe/debrief.py`, `sqe/mission_builder.py`, `sqe/support_caps.py`, `sqe/briefing.py`, `sqe/settings.py`, `sqe/engine.py`, `sqe/gui/dialogs.py`, `tools/smoke_test.py`, `sqe/__init__.py`. Not seen in DCS.
+
+## v0.41.214, the A-10C is CAS master again; strike / CAS flights hold 100 km out for the fighters-clear gate
+
+XO 2026-10-30 (light, "go"). XO saw F-16Cs engaged at their wait point (most survived): giving the CAS job to the jets did not make it safer, the exposure is the hold. (1) `packages.CAS_JET_MIN_DEF_FLIGHTS` 3 to 99: no CAS job counts as "hot", so the A-10C squadrons are first pick on every job and an F-16C / F/A-18C pilot is offered the CAS slot only when no A-10C squadron is free and in range (the v0.41.189 quiet-job rule, now on every job). AI-only sim (30 days x 3 seeds, player in an F-15C, AI's choice): L1 A-10C 28; L2 A-10C 162 / F/A-18C 23; L3 A-10C 175 (before, v0.41.189: L1 29/0/0, L2 60/67/19, L3 38/63/0 for A-10C / F-16C / F/A-18C). The war sim still counts an AI jet CAS flight at 0.7 (`JET_CAS_FACTOR`). (2) `strike_tasks.AIR_GATE_KM` 70 to 100: a plain strike or CAS flight holds 100 km from its target while red fighters are up, outside the P-33's reach of about 120 km from the fight (judgment call). The hold still lasts at most `AIR_HOLD_STRIKE_S` / `AIR_HOLD_CAS_S`, then the flight goes home (v0.41.205), it does not push in. Not seen in DCS. Files: `sqe/packages.py`, `sqe/strike_tasks.py`, `sqe/__init__.py`.
+
+## v0.41.213, "Show ECM status" setting
+
+XO 2026-10-30 (low, "go"). New checkbox Settings > Experimental > "Show ECM status", indented under the ECM script switch (greyed out while ECM script is off), default ON. It controls the on-screen ECM messages: the F-16C lamp messages from v0.41.212 and the FC3 jets' F10 "ECM on / off (F10)" text. Off: no messages; the F10 commands and the jammer logic are unchanged. SQE-wide for now (per-campaign question for refactor day). Builds on #274. Files: `sqe/settings.py`, `sqe/engine.py`, `sqe/mission_builder.py`, `sqe/debrief.py`, `sqe/gui/dialogs.py`, `tools/smoke_test.py`, `sqe/__init__.py`.
+
+## v0.41.212, ECM: an on-screen message from the F-16C lamp
+
+XO 2026-10-30 (light, "go"). With the ECM script on and an F-16C player, the hook now shows "SQE sees your ECM lamp: on / off" the first time it reads the Export.lua flag file, then "ECM on" / "ECM off" whenever the lamp changes (checked every 2 s, message 6 s). No message at all means the flag file is not being read (script not installed, or a stale file) and SQE is using the old attack-leg rule. FC3 jets already had their F10 messages. Files: `sqe/debrief.py`, `tools/smoke_test.py`, `sqe/__init__.py`.
+
+## v0.41.211, Overview readability: bar numbers outlined at the left edge, side cards top-aligned
+
+XO 2026-10-30 (low, "go"). (1) The number on the Ground and Tactical Edge bars was dark text centred over the bar, so it vanished on the empty (dark) part; it is now white with a thin dark outline at the bar's left edge. (2) The Coalition and Russia cards are top-aligned, so the headings and figures line up even when only Russia shows the SAM-in-transit line. Files: `sqe/gui/overview_view.py`, `sqe/gui/widgets.py`, `sqe/__init__.py`.
+
+## v0.41.210, ECM hookup: your own jammer is read from the F-16C lamp, FC3 jets get F10 ECM ON / OFF
+
+XO 2026-10-30 (low, "go"), from `claude/ecm-indicators.md`. (1) New `tools/sqe_ecm_export.lua`, a chained Export.lua script (one `dofile` line in XO's Export.lua; it keeps the earlier export functions): once a second it reads the jet's ECM lamp and writes `Saved Games\DCS\Logs\SQE_ecm.flag` as `<0|1> <model time>`, and removes the file at start and stop. The F-16C (argument 102) is live. The F/A-18C (24), F-14B (2203) and A-10C (361) arguments are in the script but OFF until XO has flown them. (2) The results hook uses that file for the player's jammer when a radar missile is fired; a missing or stale (over 5 s) file falls back to the old rule (attack-leg window), so nothing is lost without the script. (3) FC3 jets (F-15C) have no readable lamp: with ECM script on they get F10 > Other > ECM ON and ECM OFF (two commands, flag starts off, on-screen message), for VAICOM/VoiceAttack to press with the key. (4) The briefing's comms section says which of the two applies. Not seen in DCS: the flag file needs XO flying the F-16C with the script installed. Files: `tools/sqe_ecm_export.lua` (new), `sqe/debrief.py`, `sqe/mission_builder.py`, `sqe/briefing.py`, `tools/smoke_test.py`, `sqe/__init__.py`.
+
+## v0.41.209, persistent objects: the carrier group is always in the mission, supply sites inside the merge radius are built
+
+XO 2026-10-30 (medium, "go"). (1) The carrier group (the carrier and its three escorts, 4 ships, about 100 nm from every target in the probe) is placed in EVERY mission; before, only a sortie that launched from the boat, or a fleet-defence package, got it. It adds 4 units and nothing near the fight. The carrier's scheduled CVCAP comes along whenever its window overlaps the sortie (`blue_barcap.attach` used to add it only when the package used the boat); a package that already brought its own carrier CAP gets no second one, and a day with no scheduled CVCAP in that window gets none (XO: the carrier group is the strongest air defence in the game and does not need a CAP to be worth having). (2) Every live supply site (fuel farm, depot) of BOTH sides inside the merge radius round the target is built, so a pilot who attacks a SAM site 3 nm from a depot sees the depot (the probe found the fuel farm built about half the time and the depot only occasionally). The radius is the Settings > Mission Build merge radius (default 15 nm) and is the performance knob: at 50 nm the same mission built 5 sites instead of 2. Built last, after every flight and patrol, nearest first, while the unit limit has room (about 5 units a site, Settings value `merge_max_units`, never the old fixed 250); the farthest are left out with a mission warning ("N supply sites inside the R nm merge radius left out to stay under the limit") and nothing else is pushed out; wrecks fit in whatever room is left. Destroyed sites are not built; damaged ones keep the v0.41.192 rule (fewer buildings). The radius is read even when merging is off. Smoke `check_102_persistent_objects`. Probe (6 campaigns, about 50 missions): missions run 130 to 250 units, the carrier group is 4 and a fuel + depot pair about 10. Files: `sqe/mission_builder.py`, `sqe/raid_spawns.py`, `sqe/engine.py`, `sqe/blue_barcap.py`, `tools/smoke_test.py`, `sqe/__init__.py`.
+
+## v0.41.208, UI pass 3: Tactical Edge Decay switch, plainer Tactical Edge text, scramble names, Russia's wings per airframe, a full skip result
+
+XO 2026-10-30 (medium, "go"). (1) New switch "Enable Tactical Edge Decay" under Tactical Edge, in the New Campaign dialog and Settings > Campaign. Default OFF: the edge you build is kept; ON: it fades 3% a night as before (nothing fades on a stand-down night either way). It needs Tactical Edge on. Note this changes the default for every campaign: the nightly fade used to be always on. Both Tactical Edge switches stay SQE-wide settings copied into the campaign; XO moves them per campaign on refactor day. (2) The Tactical Edge description no longer says "fly well and command commits more": the higher-ups study your actual sorties and the lessons are carried to every unit in the theatre (background jobs of the same kind succeed more often); stay on the ground and red seizes the initiative (XO asked for a more military voice). (3) Scramble names: the debrief lists each alert as "Scramble N (type, base): ordered m:ss, airborne +m:ss" (N is the order the build lists them), and the mission briefing gets a "QRA" paragraph listing the same Scramble N entries. (4) SEAD / DEAD keeps its capitals in the tempo lines ("SEAD / DEAD: +8%", was "Sead / dead"). (5) The enemy air wings tab (Russia air wings) is laid out like the Coalition squadrons, with no squadron names: one row per airframe with Aircraft, Based at, Serviceable (with the resting count) and a Strength bar. (6) Skip Turn's result is a "Day N resolved" window (scrollable) with a summary line and, for each package, the war simulation's own result lines (success / failed / turned back at the SAM gate / scrubbed, odds, damage, losses), replacing the one-line "+ / -" alert. Files: `sqe/gui/app.py`, `sqe/gui/dialogs.py`, `sqe/settings.py`, `sqe/engine.py`, `sqe/tempo.py`, `sqe/war.py`, `sqe/debrief.py`, `sqe/briefing.py`, `sqe/mission_builder.py`, `sqe/overview_detail.py`, `tools/smoke_test.py`, `sqe/__init__.py`.
+
+## v0.41.207, UI pass 2: the Overview restyle (coloured figures, bars, title case, notes fold away)
+
+XO 2026-10-30 (high, "go on what you recommend"), from UI_Remarks.docx items 1 to 12. Overview only; the data layer (`overview_detail.py`, `posture.py`) is unchanged and keeps its lowercase strings, which the smoke test reads, so title case and colour happen in the GUI. New `sqe/gui/overview_view.py` (tables, section headings, bar images drawn as QImage resources). (1) The supply and air-defence cards are replaced by one card per side (Coalition, Russia) with Supply and Air Defense, each coloured; a "SAM battery in transit" line appears only when one is on its way. (2) Ground Odds takes its colour from the odds word (holding green, even amber, losing red). (3) Ground tab: the base notes fold under a "Notes" button (closed by default) as a Base / Status table; the sector table has strength bars for both sides, coloured by strength. (4) Supply and Air Defense tabs: a Side / % table up top, then the sites, with health cells coloured; "SAM Batteries in Transit" is its own section and only shows when there are orders. (5) Air Operations: BARCAP Cover as a table, Tanker/AWACS under its own heading. (6) Tactical Edge: a bar per job kind, full at the +40% cap. (7) Short labels are Title Case (acronyms kept; of/and/the stay lower), long state phrases get a first capital only. Colour cut-offs: supply red at 65% or less, amber 66 to 90, green above 90; every other 0 to 100 figure red under 40, amber 40 to 70, green above 70 (judgment call; the middle band is amber #E0A800). Per the docx the colour tables carry no good/bad words (the queue note says "always a word next to the colour"; flagged to XO). Checked by rendering the Overview offscreen and looking at every tab (the bar images survive `setHtml`). Files: `sqe/gui/overview_view.py` (new), `sqe/gui/app.py`, `sqe/gui/widgets.py`, `sqe/__init__.py`.
+
+## v0.41.206, UI pass 1: Help menu with About, Tactical Edge in its own tab, the terrain-scan UI is gone
+
+XO 2026-10-30 (medium, "go"). (1) New Help menu next to File: "About SQE..." (name, version, one-line description, the not-made-or-supported-by-Eagle-Dynamics line, credits: pydcs Retribution fork, PySide6/Qt, Pillow, SRTM NASA/USGS via the AWS open terrain tiles) and "Latest release (GitHub)" (github.com/MarkuzJuniuz/SQE/releases/latest). XO writes the marketing text and README himself, so the About screen is facts only. (2) The Forces tab's air line drops the bracketed "(a detail, jets no longer decide the war)"; the counts stay. (3) Overview detail tabs: "Air" is now "Air Operations" (BARCAP cover, tanker / AWACS, bomber status) and Tactical Edge has its own tab. (4) The Settings "Terrain scan" page, the "Create terrain scan mission" button and `create_scan_mission`, and the first-run "Scan the map once?" offer are removed, with every text that asked for a scan (the relief info text). The scan code (`terrainprobe.py`, `terrainmask.py`, `roads.py`, the relief scan readers) stays until a refactor week, when it moves to `tools/`; the scan mission is made with `tools/sqe_scan.py make`. The shore and river margins keep their saved values (no control). (5) The sortie warning "ground sites were placed with the rough built-in coastline..." is dropped. Files: `sqe/gui/app.py`, `sqe/gui/dialogs.py`, `sqe/mission_builder.py`, `sqe/relief.py`, `tools/smoke_test.py`, `sqe/__init__.py`.
+
+## v0.41.205, the fighters-clear gate: no spend at spawn, watched on the way in, goes home instead of pushing
+
+XO 2026-10-30 (medium, "do both"). XO's two CAS runs of v0.41.204 (15:38 day 4, 16:02 day 7) lost the CAS flight (Viper 2) to red alert fighters before the target. (1) 15:38: the target is 31 nm from Senaki, inside the gate's 70 km radius, so the gate's one air check ran at 5 s into the mission (state `gates`: `by: dist`, `ran: 5`) with no red fighter up yet, and was spent; red's four alert pairs got airborne later and killed Viper 2 at 790 and 861 s. The distance trigger now waits until the lead is in the air and within `ARM_S` (240 s) of the gate's clock time, and after a clean check the flight is WATCHED until it is `WATCH_COMMIT_M` (25 km) from the target: red fighters that come up meanwhile hold it, once (`gs.watch`, `gs.rewatched`). (2) 16:02: the hold worked (`air-timeout` at 960 s) but the old rule pushed in "all the same" into a sky with eight or more red alert pairs and RAID flights, and Viper 2 was shot down at 1084 / 1090 s. After the cap, with red fighters still up, the flight now goes home (`air-abort`, the call "red fighters still up, flight break off", logged in `gates`; it counts as aborted, no banzai). Caps: strike 240 -> 360 s, CAS 150 -> 240 s (judgment calls: the second run's fight lasted about that). Files: `sqe/debrief.py` (hook), `sqe/strike_tasks.py`, `tools/smoke_test.py`, `sqe/__init__.py`.
+
+## v0.41.204, a dug-in garrison under one or two SA-11 / SA-10 sites goes in behind their SEAD (A-10s back earlier)
+
+XO 2026-10-30 (high, "go"). A garrison (a red SAM site's or field's ground guard) was never offered as CAS while any long-range site covered it (`ObjectivePlanner._garrison_cover`), so the A-10s waited for the site to be dead. Now, when the sites that really cover it (`cas_cover`, the gate reach) are one or two SA-11 / SA-10 (`follow_split`), it is offered as a follow job like any other CAS: `after` set, planned only when today's list has the standoff / SEAD job of those sites, starting `FOLLOW_GAP_MIN` behind it, with the radar gate and the fighters-clear gate. A garrison under SA-2/3/6 only goes out with a HARM escort (aim SEAD) when at most `FOLLOW_MAX_SITES` such sites cover it; the three-SAM Sukhumi cluster stays DEAD-first (judgment call). A site outside the gate reach still blocks it, as before. Emergency CAS under hard cover is unchanged. A planned sweep behind SEAD is not part of this: the sweep station and fight circle are built around staying out of SAM reach, and the hold in the hook works for strikers and CAS only; XO to decide. Check: `check_100_garrison_follow`. Also `Session.fly` now hands back an undone scramble BEFORE it looks the package up (a package the scramble had taken, because your squadron could not cover both, could not be found again on a rebuild without a cancel; the more garrison CAS exposed it in the A-10C case of `check_69`). Two older checks (`check_51`, the garrison check in `check_40`s section) now expect the follow rule. Files: `sqe/war.py`, `sqe/engine.py`, `tools/smoke_test.py`, `sqe/__init__.py`.
+
+## v0.41.203, strikers wait for the air to clear (the fighters-clear gate); the bombing task drops the whole load
+
+XO 2026-10-30 (medium, "go"). XO's Day-2 runs: the strike flights (Viper 2, Cowboy 1) released 2 GBU-31 from one jet each, 27 to 35 km out, and went home; a CAS flight (Viper 2) fired one Maverick and left, because red alert fighters (Su-27s, a MiG-31) reached them in the air fight the escorts had not won yet. (1) The gate that holds a DEAD / behind-SEAD striker until a site's radars are down now also waits for red fighters: the check (`redFighterNear` in the Lua hook) looks for red airplanes in the air with the Fighters / Interceptors / Multirole fighters attribute within `AIR_LEAD_M` 100 km of the flight's lead or `AIR_TGT_M` 60 km of the target (judgment calls: the MiG-31's P-33 reaches about 120 km, the P-27 about 50 km at altitude). Radars down but fighters about: the AI flight holds outside (the same orbit hold as for radars), rechecks every 30 s (was 60), and goes in all the same after `acap` seconds, `AIR_HOLD_STRIKE_S` 240 for a strike, `AIR_HOLD_CAS_S` 150 for CAS (judgment calls: 240 is about what the Day-2 fight lasted, CAS holds less because the troops wait); never an abort over fighters. (2) A plain STRIKE or CAS flight that had no gate (no SEAD ahead of it) now gets one on its target (`air_only_` in `_dead_gate`, checked 70 km out, `AIR_GATE_KM`), so every striker and CAS flight is gated. (3) The bombing tasks (`BOMB` waypoints) use `expend: All`, not Auto: with Auto the AI dropped what it thought enough from one jet and the others kept theirs. The state's `gates` log shows `air-clear` runs as `hold-resumed` and `air-timeout` as such. Nothing in the war sim changed. New smoke check `check_99_fighters_clear_gate`. Not yet seen in DCS.
+
+## v0.41.202, the shipped ground-height grid now comes from SRTM
+
+XO 2026-10-30. `caucasus_relief.json` rebuilt by XO on his PC with `tools/sqe_scan.py srtm` (all tiles) and committed here; Settings now reads "Source: SRTM (NASA / USGS Shuttle Radar Topography Mission) via the AWS open terrain tiles". Checked against XO's DCS scan, 97,500 cells: from E36 to E45.4 the average ground agrees to about 15 m on average (under 1% of cells in E36 to E44 are more than 150 m off); east of about E45.5 the DCS scan is empty (a flat 10 m, the edge of the DCS map) while SRTM has the real mountains, which is where the big differences come from. Highest ground 5,640 m (scan 5,570 m). Highest ground per cell runs +89 m above the scan's on average (median +10 m), 2.7% of cells below it. File 141 KB, no code change.
+
+## v0.41.201, the ground-height grid can be built from open SRTM data (tool); the Settings line names its source
+
+XO 2026-10-30 (medium, "we'll just attribute"). Instead of shipping a grid made from DCS's own scan, the shipped grid can now be built from NASA / USGS SRTM (public domain) via the AWS open terrain tiles. New command `python tools/sqe_scan.py srtm TILE_DIR [--compare SCAN_DIR] [--no-download] [--keep]` (tools/ only, needs numpy): works out which 1 degree tiles the map needs (66, 1 to 2 GB of downloads once, only the small reduced copies are kept), cuts each to about 250 m (block maximum + block average), reads every 2 km cell of the shipped grid from the samples inside its box (highest ground = highest sample rounded UP to 10 m; average ground = average; sea-floor depths in these tiles and voids are set to 0) and writes `caucasus_relief.json`. `--compare` prints how it differs from a DCS scan. Tried on XO's one tile (N43 E040, 2,162 comparable cells): average ground differs from the scan by 21.7 m on average (95th percentile 68 m), 0.9% of cells by more than 100 m; highest ground comes out +123 m above the scan's on average (the scan's "highest" is probably a few probe points, and the box is a little bigger than the cell, so it can only err high). `condense` now writes only the sites file; `--scan-relief` still writes the scan-built grid. The grid file carries a `source` field and Settings shows it ("Source: SRTM ... via the AWS open terrain tiles"). The shipped `caucasus_relief.json` is still the scan-built one until XO runs the command with all tiles and commits the result (the download is blocked in Crew Chief's workspace). New smoke check `check_98_srtm_relief` (made-up tile).
+
+## v0.41.200, SQE ships its own ground-height grid
+
+XO 2026-10-30 (high effort, "ship the relief"). Players no longer have to run the relief scan. The ground-height grid (`relief.py`: terrain clearance of AI legs, the kneeboard minimum safe altitude, the spawn floor, radar line of sight for low flights) now falls back to a built-in grid, `sqe/data/theatres/caucasus_relief.json`: XO's 1 km scan merged to 2 km cells (highest ground of each block and the rounded average), 130 KB, packed as base64 of zlib of int16 differences along each row. Measured against the 1 km grid on 300 random legs of 30 to 150 km (5 nm corridor): highest ground never lower, +38 ft on average, +361 ft at the 95th percentile (a leg over a narrow ridge gets flown a little higher, never lower), +1,083 ft worst; radar visibility share 0.02 different on average (earlier run). A scan in the player's SQE folder still wins (it is finer); `configure(folder)` alone still means "no relief" (the tests use that), the app passes `builtin=True` (`engine.py` and the Settings dialog). The Settings line reads "built-in grid (250 x 390 cells of 2000 m; run the terrain scan for a finer one)". `tools/sqe_scan.py condense` now writes both files. New smoke check `check_97_builtin_relief`. Copyright: the grid is a coarse measurement of the DCS Caucasus map; XO accepted the risk of shipping it (EULA terms read, not legal advice).
+
+## v0.41.199, the campaign draws its sites from the condensed site list; a transferred SAM needs a setup day
+
+XO 2026-10-30 (heavy, "go high"). Step 2 of the terrain data condenser (step 1 is v0.41.198). (1) New `sqe/sites.py` loads `sqe/data/theatres/<theatre>_sites.json`. A new campaign is built as before (doctrinal SAM bearings, the pack's supply offsets, the sector centres) and `sites.apply` then moves each red SAM site, each fuel farm and depot (blue's too) and each front-line column to the nearest unused spot of its kind within reach (SAM and supply 12 km, columns 12 km; judgment calls); a SAM site's dug-in garrison and a column's air defence settle on a spot within 3 km of where they ended up, and the forward garrisons (`ground.fwd_pos`) take a free ground spot within 6 km. No random draw is made, so the campaign's other draws are unchanged. Anything with no spot in reach keeps the old placement and the old coastline snap; a theatre without a sites file is built exactly as before. The sea snap and the re-check on load leave a site that sits on a spot alone. (2) `tools/sqe_scan.py condense` now also writes spots round each airfield (red and blue, 30 SAM and 12 supply within 20 km, 1 to 1.5 km apart: dense on purpose, because the move to the nearest spot has to stay small or the doctrinal layout breaks; with 12 spots a field the share of SA-10 sites with a Tor inside the 12 km cover fell from 66% to 38%, with 30 and the smallest-move-first assignment it is 52% against 64% for the old placement, L3 seeds 1 to 8), because red's SAM clusters and supply sites hang off their field and the sector spots did not reach them; the file is 19 KB. (3) Measured on 24 campaigns (L1 to L3, 8 seeds) built WITHOUT a terrain scan and checked against XO's real scan mask: assets not on dry land (300 m) fell from 266 of 2,056 to 12 (SAM sites 82 to 2, supply sites 56 to 0, columns and forward garrisons 104 to 0; the rest are garrisons and column air defence with no spot in reach). With a scan the old placement was already clean, so the gain is for players who never run the scan. (4) A transferred SAM battery needs a setup day on top of the flight (`TRANSFER_SETUP_DAYS` 1): a transfer takes 2 to 4 days by supply (was 1 to 3), so nothing is working by the next morning; both sides (XO 2026-10-30, judgment call). Only new campaigns change; saves keep their positions. New smoke check `check_96_site_spots`; `check_95` and the transfer-time check updated; the Tor check (`check_39`) now tries seeds 1 to 8 for a Tor-covered SA-10 job because the seed-1 layout moved.
+
+## v0.41.198, the terrain data condenser (step 1: the tool and the site list)
+
+XO 2026-10-30 (heavy, "go high"): players must not have to run DCS scans, and early flights had SAMs floating in the sea. New command-line tool `tools/sqe_scan.py` (lives in `tools/`, never ships in the exe): `make OUT.miz` writes the same scan mission as Settings > Terrain scan; `condense SCAN_DIR` reads the three raw scan files (terrain mask at 250 m, ground height at 1 km, road points at 2 km) and writes `sqe/data/theatres/<theatre>_sites.json`. For each of the 13 sectors of the front chain it holds spots for ground units (on a scanned road point), SAM sites (off the road, flat ground) and supply (near a road, flat): 20 / 12 / 8 per sector (XO 2026-10-29, judgment call). Every spot is on dry land (the DCS-measured mask: 500 m from the sea or a big lake, 100 m from rivers and ponds), spots of one kind are at least 1.5 km apart (3 km when the sector allows), and a spot of one kind is at least 1 km from the others. Flatness is the highest minus the average ground in the 3 x 3 km round the spot (SAM 40 m, supply 60 m; relaxed in steps when a sector cannot fill its quota; the report names each relaxed sector). Built from XO's 2026-10-30 files: all 13 sectors fill their quotas, 520 spots, 9 KB. `caucasus_sites.json` is committed. NOTHING in the campaign reads it yet (step 2, own PR: the campaign draws from the file; the live placement stays as the fallback). The surface-type check in the plan was settled by reading the scan: it records land / water (the mask treats small inland water as rivers). New smoke check `check_95_site_condenser`.
+
+## v0.41.197, SAM transfers take 1 to 3 days again; an order from home takes two weeks; the SAM code names say what they do
+
+XO 2026-10-30. v0.41.196 put the two weeks on the wrong path: it slowed the in-theatre BORROW from a donor site, which XO pictures as an air lift of 1 to 3 days. The two weeks belong to the other path, the plain rebuild of a dead site, which is the order from home (the US for blue, the motherland for red). (1) A TRANSFER between sites is back to 1 to 3 days by supply (`transfer_days`). (2) An ORDER from home takes 14 days (`ORDER_DAYS`, was 3). (3) The debt payback runs over 1.5 x `ORDER_DAYS`; the price stays zero. (4) Renames, code and saved-campaign keys alike (start a new campaign): `REBUILD_MIN_DAYS` to `ORDER_DAYS`; `ORDER_TRANSIT_DAYS` to `TRANSFER_DAYS`; `transit_days` to `transfer_days`; `red_orders` / `blue_orders` to `red_asks` / `blue_asks` (the "ask a donor" functions, and the saved keys `red_asks`, `blue_asks`, `blue_vacated`); `ORDERS_PER_NIGHT` to `ASKS_PER_NIGHT`. Old saves lose their open transfers. Smoke checks updated.
+
+## v0.41.196, SAM orders take two weeks; the replacement cost is built but priced at zero; "Pilot Influence" and "Air Tempo" become "Tactical Edge"
+
+XO 2026-10-29 (day 22 of an L3 campaign: about 85% of the F-16 offers were SEAD/DEAD; destroyed SAMs came back faster than damaged ones healed; "red always has SAMs over Sukhumi"). (1) A SAM order takes TWO WEEKS (`sams.ORDER_TRANSIT_DAYS` 14, was 1 to 3 days by supply; moving a battery itself is unchanged) and each side has ONE order in flight. (2) A supply-debt mechanism for replacement batteries is built (`SAM_DEBT`, `add_debt`, `debt`; subtracted in `ground.supply` after the floor so it can dip below it; linear payback over 1.5 x the order time; cap `SAM_DEBT_CAP` 15 points) but the prices are ZERO, because the sim showed no benefit: 12 L3 runs flying every 3rd day, red had a SAM at Sukhumi on 37% of days with 2-week orders and no debt against 49% with a 1x debt (6 / 3 / 2 points for SA-10 and Patriot / SA-11, SA-6, HAWK / the rest), and blue won 10 of 12 against 6 of 12. With a 1-week order and 1x debt red had a SAM on 53% of days. 2x and 3x debt were no better and pulled red's supply to 0.34-0.48. Idle L3 is lost in every setup. Same-seed runs differ (the campaign id is random), so 4 seeds is noise. Raise the `SAM_DEBT` values to switch the cost on. (3) The names "Pilot Influence" (New Campaign checkbox, Settings row, description) and "Air tempo" (Overview text, debrief lines) are now "Tactical Edge"; code names (`tempo.py`, `pilot_influence`) stay for the refactor week. NOT built: the "Disable Tactical Edge Decay" switch and showing the debt in the supply figure (UI jobs). Smoke `check_94_sam_cost`.
+
+## v0.41.195, JSOWs launch with the HARMs
+
+XO 2026-10-29: the SEAD HARMs and the Standoff DEAD JSOWs should go out as one salvo; the faster HARMs draw the SAMs first, and the SAMs fire a salvo quickly and then need time to reload. His run: HARMs launched 545-682 s, JSOWs 752-904 s. `JSOW_TRAIL_S` 120 to -30: the JSOW flight pushes 150 s earlier. Target gap: JSOWs 3-5 s after the HARMs; a constant cannot hit that, it is a first cut from one run. v0.41.11 set 120 because the SA-10 fired on JSOW jets while HARMs were in the air; that risk returns (the JSOW launch point is 30 nm out, the HARM point 35). Retune after the next Standoff DEAD run.
+
+## v0.41.194, fighter stations keep 45 nm from a live SA-10
+
+XO 2026-10-29 (merged run, second package): Dodge 4's TARCAP orbit drifted from 39 to 30 nm of the Sukhumi SA-10 and both F-15Cs died at 335 / 348 s. The station point was kept 35 nm out, but the racetrack's near end swings 5-9 nm closer. New `routes.SA10_STATION_NM` 45 for fighter stations (TARCAP / escort / sweep station search, `_sam_clear` used by the support CAPs and scramble stations); routes still avoid at `SA10_AVOID_NM` 35. Judgment call. Carrier / base CAPs also keep 45 nm now.
+
+## v0.41.193, CAS columns start out of gun range
+
+XO 2026-10-29 (L3 CAS run): the friendly task force started 1.7 km from the red column and killed it all by 589 s, the CAS flight (TOT about 14 min) found nothing. `CAS_APPROACH_M` 2500 to 4200 and `CAS_TF_STOP_M` 1500 to 2700: they start 4.2 km apart and finish 1.5 km apart (red creeps 1200 m toward us), the patrol legs time the arrival to the TOT. The advance speed now uses the stop constant. Judgment calls; the only measured engagement range is 1.7 km (fire from second 34). Risk: a stall short of the meeting (6 km stalled on 10-28). Not seen in DCS.
+
+## v0.41.192, fuel farms and depots are buildings (both sides)
+
+XO 2026-10-29 ("I was surprised why I was hitting trucks"; "the same for blue"). `raid_spawns.SUPPLY_BUILDINGS` + `_place_buildings`: one builder for both sides. Fuel farm = three tanks and a store; depot = two warehouses and two ammo bunkers (pydcs `Warehouse` statics, the models blue's raid targets already used). Red's `SOFT` table for FUEL / DEPOT is now only the Shilka guard (a vehicle group, always full strength); the buildings are named `<asset id>|b<n>` on the unit itself (the debrief reports a static by its unit name; the old blue raid-target statics were named on the group only) and listed in the manifest with `base_count` counting them, so health still reads back from survivors; a damaged site builds fewer (at least one). Unit count per site drops from 8 to 10 trucks to 4 buildings and 1 to 2 guards. Debrief hook: a STATIC killed in a KILL event counts dead even if DCS sends no DEAD event for it. NOT seen in DCS yet: whether a destroyed static fires DEAD under its unit name (the KILL fallback covers it), how the Shilka and buildings look together. Command sites, ammo dumps as a kind of their own and factories are a later pass. Smoke `check_93_supply_buildings`.
+
+## v0.41.191, defensive pairs stay closer to their cover (both sides)
+
+XO 2026-10-29 (his Standoff DEAD run: blue lost 35 aircraft against 23, about 15 of them CAP flights, mostly to long R-27PE shots at 7 to 10 km altitude; "whichever side it is, command prefers to save airplanes over SAM missiles; only strays who go overboard should suffer"). one number, `scramble.DEFENDER_FWD_MAX_NM` 20 (was `STICK_NM` 30 for blue and red pairs, and red's own `RED_FWD_MAX_NM` 30, now an alias of it): the furthest a scrambled pair sticks forward of its field or target toward the attackers, under cover. `RED_GAP_NM` 20 and the BARCAP stations are unchanged. Numbers are judgment calls. This shortens the chase, it does not end the long-range duel: the BARCAP circle (the leash) is still the cause of chases beyond cover, which is a bigger change not made here. Raid interception on blue fields may weaken (red pairs sit nearer their fields). Smoke bounds follow the constants.
+
+## v0.41.190, the CAS columns patrol first so they meet at the CAS TOT
+
+XO 2026-10-29 (his four L3 runs; "do some rounds before they move closer, pretend they're looking for something"). In the F-16C CAS run (13:21) the T-80Bs fired at 362 s, the six Abrams were dead by 741 s and the Mavericks started at 841 s: both columns reached gun range about 8 minutes before the CAS flight (the red column crept from 30 s, the task force arrived at its stop point at about 5 minutes). `mission_builder._patrol_via`: each column first drives an out-and-back leg away from the other (at most `CAS_PATROL_MAX_M` 900, none under `CAS_PATROL_MIN_M` 150), sized so the whole drive takes `t_contact - CAS_ARRIVE_LEAD_S` (60 s): the red column goes back along its own side and returns to its forward point, the task force goes back toward our side and returns to its stop point. No timers, so nothing to desync. All numbers are judgment calls. Not seen in DCS: how a long mixed column handles the turn-around on a road (the fallback is starting a column further back, or removing the leg); the red column is the CAS target and its position is where the flight is sent, so it patrols and ends where it always did. Smoke `check_92_cas_patrol_leg`.
+
+## v0.41.189, A-10Cs keep the quieter CAS jobs
+
+XO 2026-10-29. Sim of #250 (30 days, 3 seeds a level): A-10Cs flew no CAS on L1 or L2 and only the overflow on L3, because "red fighters reach the target" (`n_fl` above 0) was true for almost every job. `packages.CAS_JET_MIN_DEF_FLIGHTS` 3: jets (F-16C, F/A-18C) take a CAS job first only when 3 or more red defender flights can reach the target, else the A-10Cs do (judgment call; the choice stays soft, the other kind flies when none is free). A Viper / Hornet pilot is also not offered the CAS slot of a quiet job while an A-10C squadron can fly it (XO: a quiet job is the A-10s' job); he gets it when no A-10C squadron is free or in range, and on every hot job. Smoke `check_91_jets_on_cas` also checks that.
+
+## v0.41.188, Vipers and Hornets fly CAS (Mavericks), player-flyable
+
+XO 2026-10-29 ("I want to fly them; in order to tune it I need to fly it"; the A-10C is a sitting duck on L3 while red fighters are around). `aircraft.py`: F-16C and F/A-18C get the CAS role (their existing Maverick-only presets: 4x AGM-65D / 4x AGM-65F). Planner (`packages._pick_squadron`): CAS goes to A-10C squadrons when no red fighter can reach the target (`n_fl` 0) and to jets when red fighters can (`CAS_JET_SWAY_NM` 400 is a soft preference, the other kind is still used when none is free). A Viper / Hornet pilot on a CAS job gets the CAS slot, not the escort or SEAD slot. War sim: an AI-flown jet CAS flight counts `JET_CAS_FACTOR` 0.7 of an A-10C one (judgment call, no public source: Mavericks only, one pass; the player's own sortie is scored from the debrief). Not changed: route and altitude profile (the jets use the existing CAS route; a fast-jet egress is a possible PR 2 after XO's flights), the weapon choice (Maverick-only presets). Smoke `check_91_jets_on_cas`. XO's own commits: none in this stretch.
+
+## v0.41.187, road scan covers the ground-war sectors; supply sites reach roads as far as columns
+
+XO 2026-10-28 ("we need ground units close to roads; if it needs a new road scan with bigger bounds say so"). Measured on nine new campaigns (L1 to L3, three seeds) against XO's road scan: after the snap 93% of columns and 100% of fuel farms were within 1.5 km of a road, but depots 91% (the 3 km limit left 9% out), and the columns and garrisons of the Gelendzhik - Sochi sectors were 45 to 54 km from the nearest scanned road: the scan had no point at all in a 100 x 100 km box there. Cause: the scan discs (25 km) sit round airfields and points on the straight line between them, while the sector centres, moved onto land, lie up to 40 km from that line. Now `terrainprobe._sector_anchors` adds the 13 sector centres of the theatre's longest chain as extra scan anchors (`__EXTRA__` in the probe Lua), so XO must RUN THE SCAN MISSION AGAIN to get them (the file is written after every pass). `ground.snap_roads`: depots and fuel farms now reach `ROAD_SNAP_COLUMN_M` (6 km) like columns, and the one-time extra pass for older saves covers supply sites the 3 km pass missed. Not built: skipping CAS jobs on columns far from any road (the scan is sparse, so "no road in reach" can mean "not scanned"). Smoke `check_90_road_scan_sector_anchors`.
+
+## v0.41.186, front-line columns move onto roads up to 6 km away (older saves too)
+
+XO 2026-10-28 ("units still on the forest"). Measured with XO's road scan (4101 points, 2 km grid) against the five CAS runs of that day: three had every column within 1.2 km of a scanned road, two (the kissing-distance runs) had them 3.4 to 5.2 km away, beyond the campaign's 3 km snap and the mission's 1.5 km snap, so the columns stayed in the forest. `ground.snap_roads`: columns (not fuel farms or depots) now snap within `ROAD_SNAP_COLUMN_M` 6000 (judgment call: the scan's largest gap is 5.8 km); a save snapped before at 3 km gets ONE more pass for the columns (`roads_wide` flag; their air defence moves with them; garrisons stay). The CAS contact point is the column's position, so the CAS fight moves with it. The mission-level snap (CAS_ROAD_SNAP_M 1.5 km) is unchanged. Risk: a column can move up to 6 km along the front on an old save; real DCS On Road routing is still untested. Smoke `check_89_column_road_pull`.
+
+## v0.41.185, TARCAP pull-back: it protects the package, it does not hunt
+
+XO 2026-10-28 ("they go super maverick every single time on CAS and Strike"). Judgment calls, no source. (1) CAS under a long-range SAM: `CAS_STATION_NM` 25 to 30 nm from the target (further back). (2) CAS and strike TARCAP circles: `TARCAP_PKG_ZONE_NM` 15 nm at most (was 25 for the F-15C / F-14), and no point on the nearest BARCAP circle, so the circle no longer stretches toward red's patrols; BARCAP circles unchanged. SEAD / DEAD keep their circle. (3) Stations of JSOW / stand-off packages: `TARCAP_NEAR_NM` 26 to 18 (SEAD / DEAD), `TARCAP_NEAR_STRIKE_NM` 30 to 22 (strike), measured from the shooters' middle toward red. Risk: more bandits reach the package through the gap between the two circles.
+
+## v0.41.184, ECM probe v2: air start, RWR / warning-panel / display logging, parser fix
+
+XO 2026-10-28, after the first F-15C log (FC3: `list_cockpit_params()` worked but held only `BASE_SENSOR_*` and flight-model values, no switch, zero cockpit-argument changes, none of the 60 candidate names fired, draw arguments showed no toggle) and two hints: the F-15C's RWR shows a flashing X-shaped symbol while jamming, and some jets may not run the jammer on the ground. (1) `tools/ecm_probe.py`: the player now starts IN THE AIR (20,000 ft, 350 kt, a race-track toward the red SA-6 site); the briefing protocol says so. (2) `tools/ecm_export_logger.lua`: also logs `LoGetTWSInfo()` (RWR mode and emitter count on change, full dump when either changes), `LoGetMCPState()` and `list_indication(0..20)` changes; prints a `NOTE GetDevice(0): n of 1000 cockpit arguments readable` line (the first log had zero `ARG` lines, unexplained); the parameter parser splits at the LAST colon, so `ExternalFM:HumanInfo:nz:0.0` is one name (the first log was flooded with false `PARAM ExternalFM` lines). Exercised against a stubbed DCS API (lupa); not in DCS. Tools only.
+
+## v0.41.183, ECM switch probe tools (tools only, no gameplay change)
+
+XO 2026-10-28 ("produce the probes", with button presses to be correlated). Can the player's ECM state be read? NOT verified in DCS: these are the tools to find out. (1) `tools/ecm_probe.py OUT_DIR [f15 f16 fa18 f14 a10]`: one small Caucasus mission per jet (player slot at Kutaisi, red SA-6 site 30 km NE), with Mission Editor "Cockpit Parameter" triggers for about 60 CANDIDATE parameter names in five value bands, each logging a `SQEPROBE PARAM <name> band <band>` line on every change (a name that never fires is not real for that jet), plus a side-test script sampling the player's jet every 2 s: external draw arguments 0 to 999, `getRadar()`, `getSensors()`, `getAmmo()`, logging changes. The briefing holds the press protocol. (2) `tools/ecm_export_logger.lua`: the discovery tool. A chained Export.lua script (one `dofile` line in XO's own `Scripts\Export.lua`; it writes nothing else, changes nothing in DCS) that logs every cockpit parameter change from `list_cockpit_params()` and every cockpit argument change (`GetDevice(0):get_argument_value`) with the model time to `Saved Games\DCS\Logs\SQE_cockpit_changes.log`: pressing the ECM binding shows which values it moves, with no name guessing. `list_cockpit_params()` is from memory and unverified; the log's first lines show whether it worked and its raw format. The logger was exercised against a stubbed DCS API (lupa), not in DCS. New smoke check `check_88_ecm_probe`. Nothing in `sqe/` changed; `jamOn` is unchanged until a parameter name is confirmed.
+
+## v0.41.182, Kneeboard page 1: the RECOVERY block moves to the bottom
+
+XO 2026-10-28. At the top, with the task line under it in grey, the recovery data read as if the target belonged to it. The RECOVERY block (home / divert ILS, TACAN, ICLS) now closes page 1, after the waypoints and notes; the task line is back at the top. Layout only.
+
+## v0.41.181, TARCAP holds back and chases less (CAS and strike)
+
+XO 2026-10-28 ("they're there to protect the package, not to kill the BARCAPs"). From the two CAS runs: the Eagles pushed out into red's scrambles and lost 9-10 to R-27ERs. (1) Engage reach past the station toward red (`TARCAP_FWD_NM`, 20): CAS 10 (`TARCAP_FWD_CAS_NM`), strike 12 (`TARCAP_FWD_STRIKE_NM`); SEAD / DEAD keep 20. (2) CAS station `CAS_STATION_NM` 20 -> 25 nm from the target. (3) Strike TARCAP holds 30 nm (`TARCAP_NEAR_STRIKE_NM`, was 26) from the shooters' middle; other packages keep 26. All judgment calls; the cost may be a few more A-10s lost to bandits that reach them before the Eagles shoot. The `check_` bound on the TARCAP distance from the shooters' middle (38) is now 42.
+
+## v0.41.180, CAS columns drive on roads
+
+XO 2026-10-28 (added on top of #244). Both CAS columns were driven `OffRoad` in a straight line, so the blue task force cut cross-country through the forest and met red's column among trees (kissing distance, no fire). `_drive_road`: when the road scan exists and every point has a road within `CAS_ROAD_SNAP_M` (1.5 km), the column gets "On Road" waypoints (DCS routes it along the road, as a column), the task force starts on a road, and its stop point is a road point; otherwise the old straight off-road drive. Static garrisons are untouched; the JTAC jeep is unchanged. EXPERIMENT: DCS road routing can stall a column or send it on a longer way round, and the speed and timing logic still assumes the straight-line distance. If it stalls, revert is one line. New smoke check `check_87_cas_columns_on_roads`.
+
+## v0.41.179, The CAS task force stops 1.5 km short of the contact point
+
+XO 2026-10-28 ("see if increasing the distance lets them fight"). The 15:30 and 15:44 runs again ended with the blue task force and red's lead vehicles a few hundred metres apart in dense forest, neither side firing (the earlier run closed to 187 m). New `CAS_TF_STOP_M` = 1500 (was a hard-coded 400 m; the static-garrison 2 km is unchanged). A TEST, not a fix: if the columns still do not fight, the next suspect is forest blocking ground line of sight (no tree-cover data in the code yet), and XO is fine with it ("they called the cavalry"). New smoke check `check_86_tf_stop_distance`.
+
+## v0.41.178, Kneeboard RECOVERY block (ILS / TACAN / ICLS) and the BASECAP circle follows its orbit
+
+XO 2026-10-28. (1) Page 1 of the kneeboard opens with a RECOVERY block, same layout for land and Navy jets: HOME and DIVERT lines with a land field's ILS frequency and its runway, TACAN, NDB / VOR (Batumi, Kobuleti, Kutaisi, Senaki-Kolkhi, from DCS's airfield panels, XO's screenshots), or the boat's TACAN and ICLS, Case I. The ILS is for the runway named; the other end has none. (2) Run 3's Dodge 5 BASECAP orbit sat 22.7 nm from the centre of a circle the SA-10 trim had cut to 17 nm, so the pair fought outside its zone and chased into the SA-10 (two lost at 29 nm). `_clear_zone(..., hold=)`: when the trim leaves the CAP's own orbit point outside the circle, the circle is centred on the orbit point, as big as the SAMs allow (8 nm floor). Used by BASECAP / CVCAP only. New smoke check `check_85_kneeboard_nav_and_cap_zone`.
+
+## v0.41.177, CAS fighter cover stands within reach of the A-10s
+
+XO 2026-10-28 ("do A, medium"), from the three CAS runs (3_CAS_Runs). A CAS TARCAP / escort under a covering SA-10 stood 35-40 nm from the A-10s (`profiles.station()` anchors to 0.85 x the SA-10's reach), out of engage range: Enfield 1 (4 F-15C) fired 3 AIM-9 and no AIM-120 in run 1 while red Su-27s killed the A-10s after TOT. New `profiles.cas_station()`: candidate points `CAS_STATION_NM` (20 nm) from the CAS target, starting on the push bearing and swung off it 15 degrees at a time either way; the first one outside every live SAM ring (plus margin) wins, else the one with most room (so it may sit inside a ring when no point is clear: the risk is taken for cover). Used only for CAS packages with a long-range SAM over the target; every other station rule is unchanged. JUDGMENT CALLS: 20 nm (AIM-120 / AIM-7 reach covers the A-10s from there), and taking SAM risk over standing too far to help. New smoke check `check_84_cas_station`. Not in this PR: BASECAP racetrack near the Sukhumi SA-10, CBU-only attacks, kissing-distance columns.
+
+## v0.41.176, New Campaign: the Pilot Influence checkbox says only what it does
+
+XO 2026-10-28 (screenshot of the New Campaign dialog). The checkbox still read "Pilot Influence: your sorties affect the war (you can lose it if you don't fly)": #238 fixed the Settings text and the tooltip but missed this label. The parenthetical was also wrong in both directions: idle skipping loses only on L3 (L2 is won in about 30 days either way), and with influence off L3 can still be lost. The label is now "Pilot Influence: your sorties affect the war". `check_79_pilot_influence` asserts the label. Text only, no behaviour change.
+
+## v0.41.175, A fixed Tor site over a CAS target gets the HARM escort; the "behind the SEAD" wording and a briefing target line
+
+XO 2026-10-28 ("both 1 and 2 on high"). (1) CAS and Tor: in the 2026-10-27 run (Sukhumi) the A-10s lost 3 of 4 to a stand-alone Tor site (`sam_sukhumi_3`, two Tors and a Shilka, 8 nm ring) that no part of the planner counted as cover. `war.SHORT_GATE` ("SA-15") is now in `ESCORTABLE`, and `covering_sams(state, a, short=True)` (used by `cas_cover` and by the CAS HARM tasking in `strike_tasks._sead_attack_tasks`) counts a live fixed Tor site whose 8 nm ring covers the target. A CAS job under one is marked aim "SEAD", so `packages.py` requires the HARM flight (or postpones the job) and the escort gets HARM tasks on the site. Not counted: a Tor that travels with a column (`fsam_`, the A-10s' own job), strikes and the strike gate (`covering_sams` without `short` is unchanged). JUDGMENT CALLS: the escort, not a "behind the SEAD" wait, because the planner offers no SEAD / DEAD job for a site under 10 nm (Bug A family), and making one is a bigger change; the Tor can shoot HARMs down (the code already says so for Standoff DEAD), so the flight is better off, not safe. (2) Wording: a follow job's description now reads "Strike Sukhumi fuel farm (after the SEAD on Gudauta SA-10 site)" instead of "..., behind the SEAD on Gudauta SA-10 site", which read as if Gudauta were the target; the SEAD escort note folds into the same bracket. The Behind-the-SEAD paragraph says the target itself is not a SAM site. (3) Briefing target line: strike, CAS, DEAD and counter-air briefings now have "Target position N.. E.., bearing 309 degrees, 34 nm from <home field>. <asset> stands at 55% strength." in the MISSION block (`mission_builder` builds it, `briefing.build_text` prints it). New smoke check `check_83_tor_cas_and_target_line`.
+
+## v0.41.174, The coalition's supply floor is 35%
+
+XO 2026-10-28. `ground.BLUE_SUPPLY_FLOOR` 0.30 -> 0.35 on every level (red unchanged). With red CAS in (v0.41.172), L3 sims (6 seeds, 120 days, optimistic pilot, influence on): 0.30 made flying every 3rd day a coin flip (3 wins, 1 defeat, 2 open); 0.35 wins it 6 of 6 (78-110 days), flying daily wins in 58-85, idle skipping still loses 4 of 6; 0.40 barely punishes idle (1 loss in 6). Influence off at 0.35: 2 of 6 lost, the rest open. A judgment call.
+
+
+## v0.41.173, Pilot Influence text: off does not mean the war cannot be lost
+
+XO 2026-10-28. With Pilot Influence off the war plays on its own and, since red CAS (v0.41.172), L3 is lost in about two runs in three (6 seeds, 120 days; the corrected sims never won). The setting text no longer says "it cannot be lost"; XO: it should just say what it does and nothing about winning or losing, so the Off sentence now ends after "(no red surge, no air tempo)". `settings.py` comment and `check_79_pilot_influence` follow. Text only, no behaviour change.
+
+
+## v0.41.172, Red close air support in the ground war
+
+XO 2026-10-28 ("red needs CAS too, they have zerg numbers"): `ground._red_cas` mirrors blue's abstract AI CAS. Each day red flies `RED_AI_CAS` strikes (L1 0, L2 1, L3 1) at the front-most blue sector facing it; one succeeds with chance `RED_CAS_P` 0.30 x red's surge, less half of blue's AIR tempo, less `RED_CAS_BARE` 0.15 when it has neither cover nor an escort; a success takes `RED_CAS_CUT` (10%) off that sector. Tuned with the L2/L3 matrix (4 seeds, 120 days): at 3 strikes / 0.50 / 15% blue lost on L3 in about 30 days almost everywhere; at 1 / 0.45 / 15% idle lost in 32-46 days and every-3rd-day mostly lost; at 1 / 0.30 / 10% L3 idle loses (3 of 4 with influence on), every 3rd day loses 2 of 4, every day wins 2 of 4; L2 is unchanged at about 30 days. Cover = a red wing with a fighter pair within 150 km; with none the strike takes a fighter pair (1:2) from the nearest wing that has one (the pair counts against the wing's day budget). A strike costs one attack jet (Su-25 / Su-24M) 25% of the time, an escorted one a fighter 15%. Numbers are judgment calls (no public source for Russian CAS-to-fighter ratios; the sources read were silent on escorts). The strikes show in the overnight log as "Red air strike on the friendly troops in ...".
+
+
+## v0.41.171, Air tempo: credit for what the whole mission did; a bad sortie takes nothing back
+
+XO 2026-10-28: the tempo only looked at the package's own objective, so air kills and blinded SAM sites in a strike package taught the background AI nothing, and a bad sortie made it unlearn.
+- `tempo.credits(outcome)`: DEAD +2 per SAM site blinded or damaged by a quarter or more (+4 destroyed); AIR +2 for one red aircraft shot down, +4 for two or more; STRIKE +2 for another (non-SAM) asset hit by a quarter or more; at most +6 a kind per sortie (judgment calls). A kind takes the larger of its grade step and its credit, not the sum. The debrief lists each credit.
+- `STEP["bad"]` 0 (was -4): only the nightly decay lowers the tempo. Cap +40 and decay 3% unchanged.
+- `debrief` `red_assets` entries now carry `kind`, `primary`, `destroyed`, `suppressed`.
+- `raids.overnight`: half of the AIR tempo (`TEMPO_STOP_SHARE` 0.5, so +20 points at the cap) is added to the chance a surprise raider is stopped (cap 95% as before); the damage of raiders that get through is unchanged.
+- Smoke: `check_67_air_tempo` (bad takes nothing back; credits by kind; the raid share).
+
+
+## v0.41.170, The CAS task force starts closer
+
+XO 2026-10-28: in the flown CAS run the friendly task force stalled 0.7 km out (11 min in) and the red column barely moved, 5.6 km apart, so they never met. `CAS_APPROACH_M` 6000 -> 2500 m: the task force starts at most 2.5 km from the contact point. Cause of the stalls unknown (DCS ground pathing); this hides it for short trips.
+
+
+## v0.41.169, State file: tracks of the CAS columns
+
+XO 2026-10-28 (CAS columns stop "at kissing distance" then move apart): `tracks` in SQE_state.json now also holds the lead unit of each Friendly Task Force and each red `armor_` group, every 30 s, at most 120 points (same `[t, x, z, alt, -1, kts]` format as the flights). Diagnosis only; no behaviour change.
+
+
+## v0.41.168, The TARCAP stands further back
+
+XO 2026-10-27: the TARCAP dived into red's BARCAP swarm. `TARCAP_NEAR_NM` 16 -> 26 (judgment call); BARCAP circles unchanged. Smoke bound in check on the TARCAP distance 28 -> 38.
+
+
+## v0.41.167, A strike's SEAD escort fires HARMs at the SAMs that cover the target
+
+XO 2026-10-27 (L2 F-14 supply-depot strike): the escort flight fired no HARMs, because its ARM task was aimed at the depot group; the SA-2 and SA-3 shot down three jets.
+
+- `strike_tasks._sead_attack_tasks`: the covering SA-2/3/6 (gate) sites get HARM tasks for a STRIKE package as well as a CAS one (same window as CAS).
+
+
+## v0.41.166, The coalition's supply floor is 30%; air tempo runs 0 to +40%
+
+XO 2026-10-27: idle L3 could not lose, and AI-flown sorties made the air tempo worse.
+
+- `ground.BLUE_SUPPLY_FLOOR` 0.30 on every level (red keeps 0.55, L1 red 0.70): the coalition's stock comes by sea, so once its depots and fuel are hit it recovers slowly (repair is supply / 6 days). Sims (L3 F-16C, 5 seeds, 120 days, red 0.55): idle 3 red wins of 5, flying stand-in 0 red wins (2 coalition wins, 3 still open); L2 unchanged (coalition wins in about a month either way). Judgment call, no public source. Flying L3 now takes longer to finish (about 100+ days).
+- `tempo`: the air tempo runs 0 to +40 points (`TEMPO_MIN` 0, `TEMPO_CAP` 0.40; was +-20): a bad sortie only takes back what flying built, so an AI-flown sortie cannot make the background jobs worse. A negative value in an older save reads as zero. Overview and tempo text updated.
+- Smoke: `check_61` (coalition floor 0.30) and `check_67_air_tempo` (cap, zero floor, old negative saves) adjusted.
+
+## v0.41.165, Settings: Pilot Influence moved below the whole Weather block
+
+XO 2026-10-27 (screenshot): in Settings > Campaign the Pilot Influence row sat between the Weather combo and the Weather description, so the weather text read as if it described Pilot Influence. The row and its description now come after the Weather block. The New Campaign dialog was already fine (no description paragraphs there). Layout only; smoke not needed beyond the import check.
+
+## v0.41.164, Nothing to fly keeps your Pilot Influence; a box when the war ends
+
+XO 2026-10-27: a day with no flyable package is out of the pilot's hands.
+
+- `Session.skip_day`: on a stand-down day (no package you can fly) with Pilot Influence on, the idle surge clock is held (`flown_day` = today) and tonight's air-tempo fade is skipped (`war.end_day` checks the `stand_down` flag, cleared after the day). Skipping while you could have flown is unchanged.
+- The GUI shows one box, titled VICTORY or DEFEAT with the ending's name, with the same story line as the Overview, the moment the war ends (a flown sortie, a skipped day or the dev skip). A finished campaign that is merely loaded shows none. The old VICTORY / DEFEAT line in the "Day resolved" box is gone.
+- Smoke: new `check_81_stand_down_keeps_pilot_influence`.
+
+## v0.41.163, Fewer MiG-31s, and they sit deep
+
+XO 2026-10-27: the fringe fields were full of MiG-31s that dogfighters would slaughter. A MiG-31 is a big interceptor that works from rear bases under ground control, so:
+
+- The depth gradient is flipped (`redroster.MIG31_SHARE`): of a field's MiG-31 + Su-27 jets, 15% are MiG-31 at fringe fields (tier 2), 50% in the middle, 75% deep (tier 4). The Su-27 now holds the fringe.
+- Smaller MiG-31 fleet (judgment call, no public source): L2 7 down to 4 (3 more MiG-29S, same fighter total of 52), L3 14 down to 8 (6 more Su-27, same total of 86).
+- Smoke: `check_62_red_roster` now asserts the share rises with depth.
+- Only new campaigns get the new split; running campaigns keep their jets.
+
+## v0.41.162, Friendly errors for saves this version cannot open
+
+XO (2026-10-27, "when I loaded an old save it gave py errors... make that graceful"). Loading a save that this build cannot read no longer shows a traceback.
+- Saves now carry `app_version` and `compat` (an era number, `COMPAT_ERA` in `sqe/__init__.py`, bumped when a change breaks older saves). Saves without the stamp are simply tried.
+- `CampaignState.load` raises `SaveIncompatible` (kind older / newer / damaged) for a bad file, a newer format or era, an older era, or any error while reading; `Session.open` also catches errors in the steps after loading and leaves the campaign that was open open.
+- The GUI dialog says which SQE saved the file (when it is stamped) and offers "Back up and start a new campaign" (a copy goes to the backups folder, the original is not touched, and New Campaign opens with the name, aircraft and level filled in) or "Leave it alone". A save from a newer SQE gets an OK button only. A save that loads fine shows nothing.
+- Smoke: new `check_80_incompatible_saves`.
+
+
+## v0.41.161, Pilot Influence also switches air tempo
+
+XO (2026-10-27, "lump them together"; he wants to test progress with flying off). With Pilot Influence off, `tempo.get` returns 0 and `tempo.record` moves nothing, on top of the red surge: your flying changes nothing in the war sim. The tempo already earned is kept and comes back when the setting is turned on. The setting's text says so. Smoke: `check_79_pilot_influence` also checks tempo.
+
+
+## v0.41.160, Pilot Influence
+
+XO (2026-10-27: "a setting for the dynamic player flight effects... it's just for giving red a chance to win on L3"). New setting `pilot_influence`, on by default, in New Campaign and Settings > Campaign (like Weather and AI Skill: an app setting, copied into the campaign when it is planned and simulated).
+- On: as before, red surges while your squadron stands down (v0.41.155).
+- Off: `ground.surge` stays at 1.0, so your flying makes no difference to the red surge. Measured first: with the surge off and no flying at all, L2 still wins and L3 does not lose (6 seeds, 60 days), so the war cannot be lost by standing down. The air tempo (what your flown sorties do to the odds of background jobs) is unchanged.
+- Smoke: new `check_79_pilot_influence`.
+
+
+## v0.41.159, The carrier moves along the campaign
+
+XO (2026-10-27, "100 sounds about right... fully dynamic"). The fleet no longer sits at a fixed point 160 km west of Batumi.
+- New `sqe/carrier_pos.py`: once a day (at planning; a replan changes nothing) the fleet takes the spot nearest the front line that is at least 100 nm (`carrier_standoff_nm` in the theatre pack) from every red airfield red still holds and 25 nm off the coast, moving at most 150 km a day. Under 30 km of gain it stays put. As red fields fall the circle shrinks and the fleet closes in. The first day on an older save puts it on its station at once. A log line says when it moves.
+- Fiction (XO): red's shore-based anti-ship missiles; the real reason is that nothing red launches near it survives. The numbers are judgment calls (100 nm from XO's run, 150 km/day, 30 km hysteresis).
+- Smoke: new `check_78_carrier_moves_with_the_front`.
+
+
+## v0.41.158, Strikes and CAS go in behind the SEAD
+
+XO (2026-10-27, "strikes first... go high"). On L2 and L3 most jobs for a Viper or Hornet were DEAD, because every strike and CAS target under an SA-11 or SA-10 was blocked until a DEAD cleared it. Sources (SLDinfo on SEAD in an A2AD world, GAO-03-51): SEAD suppresses and degrades, it does not make a site safe for good, so the new rule is conditional and the job is turned back when the SEAD fails (judgment call).
+- A STRIKE or CAS whose target is covered by one or two SA-11 / SA-10 sites is now offered when today's list already holds the SEAD / standoff job of each of those sites (`Objective.after`, `war._add_followers`). Under three or more sites it stays DEAD-first. SA-2/3/6 round it still get the HARM escort in the package. The site's DEAD job gets x1.4 priority when something waits behind it.
+- It starts 10 minutes after the latest of those packages (`FOLLOW_GAP_MIN`, `engine._stage_times`). If a SEAD package cannot be crewed, the follow job is dropped.
+- War sim: held (no losses, no damage) when the day's SEAD verdict failed; otherwise the strike rolls as usual with the blinded sites counted as suppressed defenders.
+- Mission: the site(s) spawn in the mission; those the SEAD blinded start without radars (unless the SEAD flies in the same merged mission). The Close DEAD radar gate now also guards these flights: hold outside, turn back on timeout, low fuel or SEAD gone. Briefing and debrief lines added.
+- Smoke: new `check_77_strike_behind_sead`.
+
+
+## v0.41.157, CAS task force stops at the contact point
+
+XO (2026-10-27, "go on cas fix light"). From his 15:38 run: the A-10s killed 11 of 19 red units in 3 minutes, but the friendly task force arrived about 12 minutes later (DCS ran its off-road column about 36% slower than planned) and then drove 2.5 km past the red column.
+- The task force now stops 400 m short of the contact point on our side and holds, weapons free (a dug-in garrison target: 2 km short, as before), and drives 1.3 times the planned speed (`CAS_TF_SPEED_MARGIN`, judgment call, one run's measurement; the speed is capped at 8 m/s).
+- Smoke: new `check_76_cas_task_force`.
+
+
+## v0.41.156, Red zerg, part 2: the mass raid in the mission
+
+XO (2026-10-27, "go on next item, high"; "I want to be annoyed by constant scrambles on L3"). The mission side already built big raids in several groups with SEAD and DEAD groups ahead of them (part 1 made L3 raids 6 to 8 bombers, 12 on a wave day); this makes them proper zergs.
+- Escorts: one fighter per two bombers (judgment call, XO's 1:2), and a raid of 8 or more bombers (`mass`) gets two more as a sweep that flies ahead of the bombers (`packages._land_raid_plan`, `raid_spawns._spawn_raid`). Never more than the escort wing has serviceable. Before, a raid always had 4.
+- L3 scramble chance per sortie 21% to 33% (`emerg_chance`; still never two sorties in a row). L1 and L2 unchanged.
+- Measured (L3, SEAD and DEAD groups included): a normal raid is about 210 units, a 12-bomber wave raid about 235 to 250 (the builder trims wrecks and the latest packages to stay at the 250 limit).
+- Smoke: new `check_75_mass_raid_build`.
+- XO's three runs on v0.41.154 (CAS, a big AI-only scramble, a SAM-heavy L3 sweep) are kept as reference. Watch item from them: on the CAS run the blue tanks killed one red ground unit and the two columns then drove past each other.
+
+
+## v0.41.155, Red zerg, part 1: red can win (ground and war model)
+
+XO (2026-10-27, "red needs the zerg for a chance ... high effort, go in your order"). This is the war-model half; the mass raids you fly come next (part 2). A NEW CAMPAIGN is needed to see it (the ground state gains `flown_day`; older saves load but start the clock at day 1).
+- Idle surge (`ground.surge`): the longer your squadron has not flown, the harder red pushes. After 2 idle days it adds `red_surge` (L1 0, L2 0.03, L3 0.08) per day, up to x3 (`SURGE_CAP` 2.0). It multiplies red's reinforcements, attack chance and raid rate. Any flown sortie resets it (`tempo.record` stamps `flown_day`). Judgment call, tuned on sims.
+- Mass raids (L3 raid rate 2.0 a day, was 0.7; size 6 to 8, was 4; L2 rate and size unchanged): a raid of more than 4 is settled aircraft by aircraft (some stopped, the rest bomb), the odds of stopping it fall with its size, and damage counts the first four aircraft in full and the rest at half (`raids.eff`). Small raids are settled exactly as before. Massed-wave days (`raid_wave`: L2 10%, L3 25%) make that day's raids 1.5 times bigger (`raids.wave_mult`).
+- Red strikes on our depots and fuel in the background (`red_supply_strikes`: L1 1, L2 2, L3 4 a skip day). Our supply now really drops (sims: 0.57 to 0.85 on L3), which lowers our reinforcements and our blue AI strikes (the AI CAS chance is now multiplied by our supply).
+- Rear feed (`red_rear_feed`: L2 0.02, L3 0.05): each night red's rear sectors move that share of their strength one sector forward, scaled by supply, never below 15.
+- Fix: a trickle of reinforcements in our last sector kept a field from ever falling. A field now falls (and a red base is taken) when the holder faces a force under 30% of its own (the no-hunt ratio), for both sides.
+- Sims (4 seeds, 130 day cap): L3 idle = DEFEAT on days 78 to 103 (all four); flying every 3rd day wins at day 87; flying daily wins at day 72 (before: 66 to 73). L2 idle still wins at about day 31 (the war is too short for the surge to bite; gentle on purpose). L1 unchanged.
+- Smoke: new `check_74_red_zerg`.
+
+
+## v0.41.154, L1 gets museum-piece SAMs; Ctrl+Space only in AI-Test
+
+XO (2026-10-27, "the more SAMs the merrier ... medium"). Story premise: a shadow sponsor keeps the insurgents properly funded and armed, so their old SAMs work at full health.
+- Level 1 air defence (`difficulty.py`): SA-2 and SA-3 join the AAA and MANPADS mix, and 4 sites per field instead of fewer. They are old sites, so the rebuild stays slow and there is no EWR (iads 0.15). Judgment call: SA-2/SA-3 are real 1960s-era exports and still fielded by irregulars' sponsors; the numbers are tuned to give SEAD / DEAD work for every airframe without stalling the planner.
+- Sims (8 seeds, none and good play): L1 still wins every run, median day 23 (was about 22).
+- Story: the L1 Background mentions old but working SAM batteries kept in repair across the border. Russia is not named on L1.
+- Ctrl+Space (XO) now works only in AI-Test, not in a normal campaign (`gui/app.py`).
+
+
+## v0.41.153, Story wording and Ctrl+Space everywhere
+
+XO (2026-10-27). Merged #217 before this landed, so it is its own change.
+- Story text (XO): the "In this scenario" opening is gone from the three Backgrounds.
+- Ctrl+Space (v0.41.151's developer secret) now works from any page: a focused list or text box used the key itself and swallowed the shortcut, so it is caught by an application-wide key filter instead.
+
+
+## v0.41.152, Campaign Revamp Stage C4: polish
+
+XO (2026-10-27, "go, medium C4"; nothing else to change from his skip-day runs yet). Display only; the war is untouched.
+- Overview: a "Today's tasking" card: the day's packages by kind (CAS, strike, SEAD / DEAD, counter-air, patrol, fleet defence), how many your squadron can fly, or why it has none (`overview_detail.tasking`). There is no "supply is low" stand-down: the planner has no such rule, so the card only reports what the planner gave. After the war it says so.
+- Forces page: the aircraft counts of both sides are one quiet detail line at the top ("jets no longer decide the war"); the ground-war, air-wing and asset tabs and columns use the opponent's label (Russia / CRA) and "Coalition" instead of Enemy / Friendly.
+- Smoke: new `check_73_tasking_line`.
+
+
+## v0.41.151, Window size and position, and a developer shortcut
+
+XO (2026-10-27, "fit on a 1080p screen with some margins, centered ... remember size and position, with reset"). Light change in `gui/app.py`.
+- The window first opens at 90% of the usable screen (the taskbar is left out), at most 1700 x 960 and never under the 1100 x 700 minimum, centered on the screen it opens on. On a 1080p screen that is about 1700 x 936. (It was 1280 x 820 wherever Windows put it.)
+- It remembers its size and position when you close it (new setting `window_geometry`, Qt's own saved geometry, so a monitor that has gone is handled by Qt). File > Reset window size and position goes back to the default and centers it.
+- Developer secret (XO): Ctrl+Space skips the day at once with no questions and no result box, so you can watch the Overview and its map move. It does nothing while a sortie is built or once the war is over. Not in any menu.
+- Smoke: new `check_72_window_size`.
+
+
+## v0.41.150, Campaign Revamp Stage C3: the stories, and the ending
+
+XO (2026-10-27, "go C3, medium"). New `sqe/story.py`; the text lives in the theatre pack (`caucasus.json`, `stories`, one entry per level). A theatre without `stories` keeps the old texts.
+- THE STORIES: one per level. Levels 2 and 3 are Russia against Georgia and a US-led coalition; level 2 is level 3's story with a smaller Russian force, the victory at Sochi and a smaller counter-attack. Level 1 is the fictional Coastal Republic Army (CRA). Each has the Background, the Intent and a "Now" line for every posture label and ending (Ceasefire on L2 and L3, Insurgency broken on L1, Defeat). No named leaders or parties, no Tomcat line (the carrier air wing or the Air Force, joint campaign), and no foreshadowing: the counter-attack is not mentioned until the last objective falls.
+- The opponent's short label is used on the Overview and in the tabs: Russia, or CRA (it was "Enemy").
+- WAR LOG BEATS (so the log reads as the story so far): the opening, each base falling (Sukhumi, Gudauta, Sochi, Gelendzhik, Krymsk), a base retaken by the enemy, the counter-force arriving (L2, L3), one of our airfields falling and coming back, the win and the defeat. Hooks in `ground.py` (`_check_red_bases`, `check_falls`, `_counter_arrives`, `_update_win`), `war.update_status` and the campaign start.
+- THE ENDING (XO's report: after the victory the flights were listed and the buttons looked clickable): once a campaign is won or lost the Missions page shows the ending instead of the tasking order, the Warnings card and the takeover warnings are gone, and the Ground odds card shows the ending.
+- Smoke: new `check_71_story`; the C1 and C2 checks follow the opponent's label.
+
+
+## v0.41.149, Campaign Revamp Stage C2: Situation panel, detail tabs, scramble fix
+
+XO (2026-10-27, "go C2, high"). New `sqe/overview_detail.py` (data only; the GUI draws it).
+- SITUATION PANEL (Overview, top left): the full Background text, scrollable, and the Intent, in a panel with a Hide / Show button; the posture label and one "Now" line (the posture's line; at the end of the campaign the ending text) stay pinned at the bottom open or closed. It starts open and remembers the last state (new setting `situation_open`). The text is still the one per-theatre background (its last paragraph, the commander's intent, is shown as the Intent); the per-level stories are Stage C3.
+- DETAIL TABS (Overview, bottom left; they replaced the long sector list): Ground (takeover clock, each base, a row per sector with battalions each side, front history from the war log: falls, retakes, counter-force), Supply (every fuel farm and depot of both sides with health and state: intact / struck since last night, no repair tonight / repairing, days to full / destroyed, days to rebuild; captured sites say so), Air defence (IADS per side, SAM batteries in transit with the days, every SAM site and radar with health and state), Air (the four air-tempo values and the BARCAP cover lines).
+- SCRAMBLE NOTE FIX (XO's report): cancelling a sortie that came with a scramble and pressing Fly again no longer forgets the scramble. Building the sortie had used the emergency up (its package was added to the day's plan, the raid record marked, and your own package maybe postponed) and the cancel never gave that back. The pending sortie now keeps a copy of the plan, the raid record and the log length from before; Cancel (and Discard and rebuild) restores them, so the scramble popup comes up again.
+- Smoke: new `check_69_scramble_undo` (it fails without the fix) and `check_70_overview_detail`.
+
+
+## v0.41.148, Campaign Revamp Stage C1: the Overview figures
+
+XO (2026-10-27, "please go C1, high"). New `sqe/posture.py` holds every Overview figure; the Overview and the briefing both read it. The war itself is unchanged.
+- POSTURE replaces the three phases (`narrative.PHASES` is gone; `narrative.phase()` now returns the posture). Labels as XO agreed: Offensive, Consolidating, Holding, Under pressure, Last stand, Counter-force, and the endings Ceasefire (L2, L3) / Insurgency broken (L1) / Defeat. Order of the rules: counter-force attacking, then Under pressure (a Coalition field fallen, a fall warning, or a taken base under attack), then Consolidating (takeover clock running or counter-force on its way), then Last stand (the next objective is the last one), then Offensive (our force at the front is at least 1.3 times the enemy's) or Holding. The one-line text under each label is a placeholder; Stage C3 writes the stories.
+- THE FRONT card: stage x of y (taken bases + 1), the next objective, each base taken / next / enemy, and any Coalition field lost.
+- GROUND ODDS card: our frontmost sector against the enemy's, in battalions (10 strength points = one battalion; a full sector is ten), with a word: holding (ratio 1.3 or more), even, losing (0.77 or less). Judgment calls (the defender factor `ground.DEFENDER` is 1.25).
+- WARNINGS card (hidden when empty): "X falls in about N days" (a Coalition field when the sector two in front of it or nearer is held by the enemy with none of ours there; a line moves about a sector a day), "X is under attack" for a base we took, "the enemy counter-force arrives in N days" / "is attacking", "one of our airfields has fallen: a second loses the campaign", "takeover under way: our next attack in about N days".
+- SUPPLY card: a percentage (55 to 100) per side plus a word (good 90+, adequate 75+, strained 62+, critical); the bands are judgment calls.
+- AIR DEFENCE card: IADS % per side and the SAM batteries in transit with the days to the first.
+- REMOVED: Coalition air %, Enemy air %, Armored advance %, "Enemy command posts", the old three-stage front text, the "Phase n" pill (it shows the posture), and the carrier's damaged-deck line on the Overview (the deck still cuts launches; XO wants no carrier line).
+- The briefing situation uses the same lines (front, odds, warnings, supply, air defence) instead of the aircraft counts.
+- Smoke: new `check_68_overview`.
+
+
+## v0.41.147, Air tempo
+
+XO (2026-10-27, "the player flying would improve the odds of the background jobs ... incremental and capped ... indicated in the debrief"). New `sqe/tempo.py`.
+- Four job kinds: CAS, STRIKE, DEAD (SEAD / DEAD / Standoff) and AIR (sweeps, patrols, intercepts). Each has a tempo, an additive change to the chance that a background (AI) package of that kind gets the job done, and to the ground war's abstract AI close air support.
+- A flown sortie is graded the way the story already is (great / good / mixed / bad) and moves its kind's tempo by +5 / +3 / 0 / -4 points; capped at +-20 points; it fades 3% a night, so the edge goes if you stop flying that job. Saved with the campaign (older saves load with none).
+- The debrief gets a line, e.g. "Air tempo, close air support: +5% (now +9%)", or "unchanged ... (at the cap)".
+- Where it bites: `WarSimulator.odds` (strike, CAS and the other generic jobs, plus the SEAD-escorted supply strike), `sead_p` (SEAD / DEAD), the Fighter Sweep odds, and the ground war's abstract AI strikes (`TEMPO_GROUND_GAIN` 2: the CAS tempo counts twice there). The raid-intercept rolls are not touched.
+- All step sizes, the cap, the fade and the gain are judgment calls (no source).
+- Sims (8 seeds, L3): idle about day 78, every third day 73, daily CAS play 66. L1 and L2 stay inside their targets (about 22 to 23, and 29 to 30). The sims still show no defeats, so the "idle wins about 50%" goal needs red to be stronger; left for XO's flown tests.
+- Smoke: new `check_67_air_tempo`; the debrief path check asserts the tempo line.
+
+
+## v0.41.146, Campaign Revamp Stage B4: Level 1 raids
+
+XO (2026-10-27, "go, medium"). Which rule blocked L1 raids: every airfield, depot and garrison of ours sits under a live Patriot / HAWK, and red raids a covered target only with a Su-24M wing that can field a SEAD group (v0.41.125). Level 1 has no SEAD (`raid_arm` 0), so the only raids it ever planned were on a contested sector outside the cover: about 5 of 31 drawn raids in a 40-day probe, none on a field, depot or garrison.
+- New difficulty setting `raid_banzai` (Level 1 only): the insurgents go in unsuppressed on covered targets. The batteries shoot at them (the existing raid resolution and mission), so most raids cost red jets; judgment call, no source.
+- L1 `raid_rate` 0.15 to 0.25 a day (one raid every four days; XO's open item, my default).
+- Probe after: 52 of 52 drawn raids find a target on L1 (was 5 of 31). L1 sims still win around day 22 to 23, no defeats.
+- Smoke: new `check_66_l1_raids`; `check_31wd` now expects an L1 raid on a covered field to be allowed with no SEAD.
+- No other tuning needed: all three levels sit inside the days-to-win targets after B1 to B3.
+
+
+## v0.41.145, Campaign Revamp Stage B3: detachments and the no-hunt thresholds
+
+XO (2026-10-27, "your defaults. Please go B3 on high."). The detachments along the road already exist as the sectors of the push: each has a red and a blue force and a dug-in forward position (`rfwd_N` / `bfwd_N`, v0.41.102), so the red-side sectors are Sochi to Gelendzhik 4, Gelendzhik to Krymsk 1, Gudauta to Sochi 2, Sukhumi to Gudauta 1 (it was 2; XO asked for a second look and the plan said 1 for the 54 km leg): 8 on L3 and 3 on L1 and L2, the plan's 7 to 8 and 2 to 3. The push now has 8 / 8 / 13 sectors in all. No new unit types. What B3 adds is the rule that nobody hunts the last unit:
+- A sector is lost on a threshold: a force under `BREAK_RATIO` (30%) of the force facing it withdraws that night, for both sides, in a shared sector and across a quiet line. Nothing has to be destroyed.
+- A sector red has already lost on that rule is not offered as a CAS job (it is beaten; the fight ends tonight). The planner's `engaged` and the new `broken` flag in `ground.info`.
+- A depot, fuel farm, command post or SAM site at or under `DOWN_HEALTH` (30%) counts as down: the planner does not offer it, a down SAM no longer gates strikes, and the route map stops drawing its ring. It mends on its own timer.
+- Effect on pacing (AI-only sims, 6 seeds, with the 8 / 8 / 13 sectors): L1 about day 23, L2 about 30 to 32, L3 about 72 to 74 (daily play inside the 57 to 77 target). Idle and daily still look alike, which is the air-tempo item.
+- Numbers (30%) are a judgment call from the plan ("about 30%").
+- Smoke: new `check_65_no_last_unit_hunt`; `check_08` picks a DEAD package whose strike flight the player can fly; `check_31x` sets up a real fight (the start values leave red under 30% of ours on L1/L2, which is now a beaten sector).
+
+
+## v0.41.144, Campaign Revamp Stage B2: depots and the supply loop
+
+XO (2026-10-27, "go with B2 as planned. High."). Depots and fuel on both sides now matter: they feed the ground war, they can be struck, they mend on a timer, and they change hands with the bases.
+- Sites: red gets a fuel farm and a depot at each base of the push (Sukhumi, Gudauta, Sochi, and on L3 Gelendzhik and Krymsk; Level 1 has them at the fields it has) besides Beslan and Nalchik; blue gets a rear depot next to the forward one. Counts and places are judgment calls.
+- Supply is stock over the count a side started with, not an average of what is left: a captured site lifts the captor (capped at 100%) and lowers the old owner (floor 55%). L1 red keeps its 70% floor. L1 red now starts at 100% instead of 85%.
+- Captured sites change sides with their stock, no fade, when a base falls (red's to us, ours to red) and go back on a retake. Both sides can still raid or strike what the other holds.
+- Repair timer: a destroyed site is back in 6 days at 100% supply, about 11 at 55%, none on a night after it was struck, skip days count. (Judgment call: XO's baseline of 6 days.)
+- Supply strikes under SA-2/3/6 cover go out with a required HARM escort (as CAS does), at the escort's salvo-size odds; under an SA-11/SA-10 belt they still wait for a DEAD. Escort missing = the job waits.
+- Skip days run a background supply-strike round for both sides (blue 2 tries on red, red 1 or 2 on us), with a 50% chance in the open, 20% under escortable cover, none under a long-range belt.
+- Ground format v3: v2 saves are refused ("start a new campaign").
+- Sims: L1 about day 27, L2 about 32 to 35, L3 about 83 (idle and daily the same, as before: the sim does not model the player). A 120-day trace on L3: red supply falls from 100% to 59% as bases fall, blue stays at 100% from the captures, no spiral.
+- Smoke: new `check_64_supply_loop`; `check_35` accepts a 2-ship sweep when the squadron has only two jets free.
+
+
+## v0.41.143, Campaign Revamp Stage B1: the push
+
+XO (2026-10-27, "go on B, high"). The ground war is now a march across red's airfields, and victory is by ground only.
+- The front line is a chain of airfields: Krymsk, Gelendzhik, Sochi-Adler, Gudauta, Sukhumi-Babushara, then our Senaki and Kutaisi. Levels 1 and 2 have 9 sectors (Sukhumi, Gudauta, Sochi), Level 3 has 14 (Gelendzhik and Krymsk too). Theatre data: `front.chain`, `leg_zones`, `stages`, `victory`, `counter` in `caucasus.json`.
+- A red base falls when we hold its sector and red is gone from it; red retakes it by the same rule. When one falls: its field, SAM, EWR and garrison are zeroed (depots, fuel and command posts wait for B2), its squadrons move to the nearest standing red wing with 30% lost.
+- Takeover clock: after a base falls our next attack waits 9 days and red's own attacks wait 3 (judgment calls).
+- Last counter-force: at Krymsk on L3 (60% strength) and Sochi on L2 (35%); L1 has none. It arrives 3 days after the base falls and presses for 6 days. Victory needs the victory bases (Sochi on L1/L2; Sochi AND Krymsk on L3) and the counter-force beaten. No hunting the last unit.
+- Blue's own abstract air strikes (the AI flights nobody flies) work the red sector facing us: `AI_CAS` 3 / 2 / 3 a day at 55% for a 15% cut (judgment call, from the toy model).
+- Red reinforcement per day: L1 3.5, L2 5.6, L3 7.0; blue 7.0 on all levels. L3 `red_attack` 0.8. Front columns no longer regenerate through the generic nightly repair (it made red a wall).
+- Planner: CAS targets a sector that is engaged (in contact, or facing our force across the line).
+- Old saves are refused: "start a new campaign" (ground format v2).
+- Sims (8 seeds, AI only): L1 about day 26, L2 about day 34, L3 about day 90. L3 is inside the idle target but over the daily-play one: the sim does not model the player enough. The "air tempo" idea (flown results nudging the AI flights' odds, capped) is next.
+- Smoke: new `check_63_the_push`; `check_19`, `check_20`, `check_28`, `check_31g`, `check_31wf`, `check_47` updated for the 9/14-sector war and for days whose first package differs.
+
+
+## v0.41.142, Campaign Revamp Stage A3: red's air roster by type, not by dice
+
+XO (2026-10-24 to 10-27, the Revamp plan). Red now starts each level with a fixed ROSTER of jets per type, placed by rules, instead of a total split over fields with a random type per field. New module `sqe/redroster.py`.
+- Numbers (judgment calls, no public source; the plan's zerg sizes): Level 1 44 jets (14 fighters: MiG-21Bis 6, MiG-23MLD 5, MiG-29A 3; Su-25 20; Su-24M 10). Level 2 128 field jets (MiG-31 7, MiG-29S 12, MiG-29A 22, MiG-23MLD 11, Su-25 52, Su-24M 24) plus a Mozdok Tu-22M3 wing of 11 and an Su-27 escort squadron of 8. Level 3 256 field jets (MiG-31 14, Su-27 24, MiG-29S 28, MiG-29A 20, Su-25 110, Su-24M 60) plus 30 Tu-22M3 and 16 Su-27 escorts. The old totals were 20 / 90 / 150.
+- Where they go: in proportion to the theatre's `wing_weight`, capped by what each field can park (the DCS parking count) and, for the heavy types (MiG-31, Su-27, Su-24M), by its heavy spots. Su-24M leans to the deeper fields (weight x (tier - 1)). Every field keeps at least four fighters, and nobody gets a lone jet of a type (it joins the biggest block of that type).
+- Long-range depth gradient (XO 2026-10-24): of a field's MiG-31 + Su-27 jets, 75% are MiG-31 at fringe fields (tier 2), 50% in the middle (tier 3), about 15% deep (tier 4), so the Su-27 feels prized and a deep MiG-31 pair is the "spice". L3 check: MiG-31 share 0.71 at the fringe, 0.53 in the middle, and a pair at Maykop deep (a lone jet is topped up to a pair from the biggest block).
+- MiG-31 is now a proper red type: R-33 / R-40 loadout (the heavy-missile list gained them, it used to carry R-60 only), quality 0.67 and intercept reach 230 nm (judgment calls), and it counts as a long-range red jet in the red air picture.
+- Raids on blue airfields: with Su-24M spread thin, the nearest red wing could hold only 2 of them, too few for the SEAD group a covered target needs, and the planner then dropped the raid (the Level 2 raid-rate check saw none in 60 days). `raids.reach_for` now takes the level and passes over a wing that cannot field that group for the nearest one that can.
+- Mozdok bomber wing and escorts are bigger on paper; raids are still capped (`MAX_RAID` 12 on L3, 4 on L2), so bigger raids and the 1:2 escorts wait for the mass-raid step. The Tu-22M3 wing of 30 is more than the 14 Tu-22M3 parking slots at Mozdok; accepted (XO: nobody launches them all).
+- Level 1 has no MiG-31, Su-27 or MiG-25; MiG-21Bis is Level 1 only.
+- Smoke: new `check_62_red_roster` (per-level totals and fighter counts, bomber wing sizes, parking and heavy caps, two or more fighters per field, no lone jets, no MiG-25, MiG-31 only on L2/L3, the gradient falls with depth and is above zero deep, MiG-31 loadout). `check_01` now also counts the standby pair as HAVCAP / base CAP cover (the new roster changed the merged mix and the check had ignored it).
+- A 40-day no-player air sim: Level 1 and 2 still end in VICTORY on day 41, Level 3 stays ACTIVE with red's air not bleeding (the same as before: the sim has no player sorties).
+
+## v0.41.141, Campaign Revamp Stage A2: the Level 1 insurgents never drop below 70% supply
+
+XO (2026-10-27): on L1 the opponent is resupplied across the border by night, so killing its depots cannot starve it completely. `ground.supply("red")` on Level 1 now has a floor of 70% (`L1_RED_SUPPLY_FLOOR`; Levels 2 and 3 keep 55%; blue is unchanged on every level). It reaches everything that reads red's supply: the daily ground fight and reinforcements, SAM rebuilds and SAM-order transit time (v0.41.140). Judgment call: a toy-model run (2026-10-27 notes) showed the floor does not change who wins on L1, it only slows the grind. Today L1 has no red depot or fuel site at all (red supply is a flat 85% there), so nothing changes in play until Stage B adds the depots; the rule is in place for them.
+- Smoke: new section `check_61_l1_red_supply_floor` (every red depot and fuel site gone: L1 0.70, L2 and L3 0.55; blue 0.55 on all levels).
+
+## v0.41.140, Campaign Revamp Stage A1: SAM orders are a fixed feature
+
+XO (2026-10-27). Both sides' SAM orders (`sams.red_orders`, `sams.blue_orders`) now always run overnight, at every level. They used to sit behind two Experimental-tab checkboxes ("Red SAM borrowing", "Blue SAM borrowing"), both OFF by default, so in a normal campaign no battery ever moved.
+- The settings `borrow_red` / `borrow_blue`, the two checkboxes and the war simulator's `borrow` switch are gone (old settings files still load; the two keys are ignored).
+- A battery moves by air, so it arrives in `transit_days(supply)` days: 1 at 100% supply, 2 in between (about 66% to 89%), 3 at the 55% floor (was a flat 2). Judgment call: no public figure; the shape is XO's "1 to 3 days by supply". The sender's supply is red's or blue's own `ground.supply`.
+- The chance roll is gone for both sides (it was the side's supply as a probability): supply now sets the time, not whether it happens. This also stops the war sim drawing a random number per order.
+- Not yet: the planner weighing what the sending site leaves exposed (queued for later).
+- A 30-day check without a player: L1 no orders (no destroyed sites), L2 12 to 14 orders, L3 12 to 14, all arrived.
+- Smoke: `check_31j_borrow_switches` is now `check_31j_sam_orders_always_on` (settings gone, transit table, both sides run in a skipped day); the red and blue order checks wait for the order's own due day.
+
+## v0.41.139, engagement circles slice 2: the long-range TARCAP stands behind and aside of the short-range escort
+
+XO (2026-10-27, engagement circle diagram): short-range jets forward, long-range jets behind and to one side. Measured first on the identity set: no package has a short- and a long-range TARCAP together (one TARCAP flight per package, and the planner gives it a long-range jet first), so there was nothing to stagger there. The pair that does exist is the TARCAP (long-range first) and the package ESCORT (short-range first): in 34 packages, 24 of them had both on one and the same point (the SAM-free runs), the other 10 (DEAD, JSOW) sat 30 nm apart already.
+- New `FighterStations._stagger_stations`, run once after the stations are planned: where a TARCAP and an escort of different range classes (`LONG_RANGE_A2A`: F-15C, F-14B) stand within `LRA_SPLIT_MIN_NM` (12) of each other, the long-range station moves `LRA_BACK_NM` (8) back from the target and `LRA_SIDE_NM` (6) to one side, the side with more room to the SAM rings; smaller moves if a ring is in the way, none if nothing is clear. About 10 nm apart, the long-range one about 8 nm farther from the target (judgment call: the sweep circles are 25 and 15 nm; the side gap is for friendly fire with active missiles in the air, DCS behaviour unverified). Same class, or already apart: nothing moves. The station tuple keeps its other fields. Applies to your own TARCAP or escort route too.
+- A first version put the long-range jets "away from red"; where red's nearest patrol sat on our side that landed one 3 nm from the target, so "behind" is measured from the target.
+- Left as they are: DEAD and JSOW packages, where the SAM rings already put the two stations 30 nm apart (there the TARCAP is the nearer one to the target by up to 8 nm; no change).
+- Smoke: new section `check_60_long_range_tarcap_stands_behind_the_short_range_escort` (24 stations moved, each farther from the target, at most 15 nm). The identity tool shows changed TARCAP stations, routes and circles in those packages (expected).
+
+## v0.41.138, engagement circles slice 1: the TARCAP circle meets the BARCAP circle
+
+XO (2026-10-27, engagement circle diagram). Measured on the identity set first (84 missions, 120 TARCAP circles): matched inside each mission, every TARCAP has a BARCAP circle, and 9 of them left a strip of 0 to 9 nm between the two circles (my first count, 33 gaps up to 37 nm, paired circles from different missions and was wrong).
+- A TARCAP's cover circle now takes in a point just inside the nearest BARCAP circle's edge (`TARCAP_BARCAP_OVERLAP_NM = 4`, so the circles overlap by about 2 nm; judgment call). It sits after the shooters' launch points and the station in the list and before the forward reach toward red, so if one circle cannot span everything it is the forward reach that gives way. Result on the same set: 9 gaps down to 4, the largest 4 nm (SAM trim or the 35 nm cap; left alone).
+- `SupportCaps._barcap_circles`: works out the BARCAP circles of the mission before any flight is built (same route plan and SAM trim the flights use), so build order does not matter. Nothing it does is kept.
+- A TARCAP is wanted at the sweep size for its type: 25 nm for the long-range shooters (F-15C, F-14B), 15 nm for the rest (was 20 nm for all). The launch points still make it bigger, so a short-range jet's circle is rarely 15.
+- The player-facing label of the base CAP is now "BARCAP" (briefings, kneeboards). The internal tag `BASECAP` stays.
+- Not done (design stays in the notes): short-range jets forward / long-range jets behind and to the side. Both types already share one station per package and the launch points decide the circle, so it needs a station per flight type; only 11 of 59 missions in the set have mixed types. Timings were left alone: the BARCAP is up for the whole package and the TARCAP holds to TOT + 5 min, no gap seen.
+- Smoke: new section `check_59_tarcap_circle_meets_the_barcap_circle` (38 TARCAP circles in F-15C, F-14B and Hornet missions: no strip over 1 nm; fails on the old code). The identity tool will show changed circles and the new label (expected).
+
+## v0.41.137, the CAS target column stays at the CAS point
+
+XO (2026-10-27): last night's L1 CAS mission, the A-10s' target was off by some distance and they never touched it. `mission_builder._spawn_cas_support` moved the enemy column up to 10 km back and drove it 13 km at 7 to 8 m/s so it would be at the CAS waypoint at the TOT (the plan put it within 1.4 to 1.9 km on paper), but DCS's real speed (slopes, a long mixed column, stopping to fight on the v0.41.39 weapons-free orders) decides where it is. Now:
+- The column is built at the CAS point and only creeps 1.2 km toward your side (at most 3.5 m/s); the friendly task force starts at most 6 km from the contact point (was up to 10 km).
+- The support spawn uses the CAS target's OWN group and centre, not "the last armour group spawned" (a CAS package also builds the target's defenders, so a garrison or neighbouring column built after the target could take its place; the A-10s' own attack task already named the right group).
+- Dug-in forward garrisons were already on the point (2 to 22 m) and are unchanged.
+- Smoke: new section `check_58_cas_column_stays_at_the_cas_point` (12 campaigns, every AI CAS mission: target group is the package's own, within 400 m of the CAS waypoint, creep under 2 km). The identity tool will show CAS missions changed (expected).
+
+## v0.41.136, Bug B: the war sim's red air cover counts fighters only
+
+XO (2026-10-27, Campaign Revamp prep). `war.py` added `0.05 * every serviceable red aircraft` to the defence of a strike or a DEAD (two places), bombers and strikers included. With the planned striker zerg that would have made every strike harder. It now counts red's serviceable FIGHTERS only (`ENEMY_FIGHTERS`), at 0.0765 each (fighters are about 65% of red's jets today, so the term stays about where it was; judgment call). New helper `war._air_cover`. No mission-building change. Smoke: war-sim sections.
+
 ## v0.41.135, reactive dispatch and emergencies are always on
 
 XO (2026-10-24): the two Settings checkboxes "Reactive dispatch" and "Emergencies" are gone; both behaviours are always on (the defaults). A settings file that had either off is set back on at load. The settings fields stay internal (the smoke test still switches them). GUI and settings only.

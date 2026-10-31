@@ -88,9 +88,9 @@ class LoadoutLibrary:
 
 
 # ---- enemy fighter air-to-air loads, built generically from pydcs's own tables -----------------------
-_HEAVY = ["R_27ER", "R_24R", "R_77", "AIM_7"]
+_HEAVY = ["R_27ER", "R_24R", "R_77", "AIM_7", "R_33", "R_40RD"]      # v0.41.142: + the MiG-31's R-33 and R-40RD
 _SHORT = ["R_73", "R_60", "R_3S", "AIM_9"]
-ENEMY_FIGHTERS = {"MiG_29A", "MiG_29S", "Su_27", "MiG_21Bis", "MiG_23MLD", "F_4E", "F_5E_3"}
+ENEMY_FIGHTERS = {"MiG_29A", "MiG_29S", "Su_27", "MiG_31", "MiG_21Bis", "MiG_23MLD", "F_4E", "F_5E_3"}
 
 
 def enemy_cap_loadout(cls_name: str) -> dict:

@@ -1,5 +1,6 @@
 """Session: the single API the GUI (and the smoke test) talk to. No Qt in here."""
 from __future__ import annotations
+import copy
 import json
 import math
 import random
@@ -12,7 +13,7 @@ from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
 from .models import BaseKind, Objective, ObjectiveType, Role
-from . import raids, redair, sams
+from . import raids, redair, sams, ground, tempo
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import AI_ONLY, ai_only, carrier_raid, Ledger, NoPlayerSlot, Package, PackageBuilder
 
@@ -20,7 +21,7 @@ RAID_SCRAMBLES = True      # v0.41.27: emergency raid scrambles are off while in
 from .scenario import new_campaign
 from . import theatres
 from .settings import AppSettings
-from .state import CampaignState
+from .state import CampaignState, SaveIncompatible
 from .war import ObjectivePlanner, WarSimulator, update_status
 
 
@@ -52,7 +53,7 @@ class Session:
         seacheck.SITE_MARGIN = float(getattr(self.settings, "shore_margin_m", 1500))
         terrainmask.RIVER_MARGIN = float(getattr(self.settings, "river_margin_m", 100))
         terrainmask.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
-        relief.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
+        relief.configure(self.settings.sqe_dir if self.settings.dcs_saves else None, builtin=True)
         roads.configure(self.settings.sqe_dir if self.settings.dcs_saves else None)
 
     # ---- persistence ---------------------------------------------------------------------------
@@ -78,7 +79,30 @@ class Session:
         self.save()
 
     def open(self, path) -> None:
-        self.state = CampaignState.load(path)
+        """Open a campaign. Raises SaveIncompatible (never a raw traceback) when it cannot be read; the campaign that was open stays open."""
+        prev = (self.state, getattr(self, "path", None))
+        loaded = CampaignState.load(path)
+        try:
+            self._open_loaded(loaded, path)
+        except SaveIncompatible:
+            self.state, self.path = prev
+            raise
+        except Exception as e:
+            self.state, self.path = prev
+            raise SaveIncompatible(loaded.to_dict() if loaded is not None else {}, "older", f"{type(e).__name__}: {e}") from e
+
+    def backup_incompatible(self, path) -> Path:
+        """Copy a save this build cannot open into the backups folder (the original is not touched). -> the copy's path."""
+        import re as _re, shutil as _sh, time as _t
+        src = Path(path)
+        b = self.settings.backups_dir
+        b.mkdir(parents=True, exist_ok=True)
+        dst = b / f"{_re.sub(r'[^A-Za-z0-9_-]+', '_', src.stem)}_old_{_t.strftime('%Y%m%d_%H%M')}{CAMPAIGN_EXT}"
+        _sh.copy2(src, dst)
+        return dst
+
+    def _open_loaded(self, loaded, path) -> None:
+        self.state = loaded
         theatres.use(self.state.theatre)
         self.sync_terrain()
         self.path = Path(path)
@@ -120,6 +144,13 @@ class Session:
         ground.ensure_forward_garrisons(st)             # v0.41.102: a forward garrison for each side in every sector (older saves too)
         sams.ensure_blue_sams(st)                       # v0.41.62: blue's three air-defence sites at every airfield (older saves: from the field's `defense`)
         ground.snap_roads(st)                           # once, as soon as a road scan exists: columns and supply sites sit on a road
+        if st.ground is not None:
+            st.ground["pilot_influence"] = bool(getattr(self.settings, "pilot_influence", True))
+            st.ground["tempo_decay"] = bool(getattr(self.settings, "tempo_decay", False))      # v0.41.208
+        from . import carrier_pos
+        _cv = carrier_pos.update(st)                    # v0.41.159: the fleet repositions once a day, along the front and clear of the red airfields
+        if _cv:
+            st.note(_cv)
         redair.ensure(st, self.d)                       # the enemy's air tasking for the day
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=self.PACKAGES_PER_DAY)
         redair.assign_guards(st, self.d, objs)          # v0.41.10: red's patrols take stations over the SAM sites it expects to be attacked
@@ -214,6 +245,7 @@ class Session:
         pkgs = build_all(set(rng.sample(range(len(objs)), min(len(objs), 5))))     # your squadron is tasked on a handful of them
         if mine(pkgs) < 3:
             pkgs = build_all(set(range(len(objs))))
+        pkgs = self._drop_orphan_followers(pkgs)             # v0.41.158: a strike behind a SEAD whose package could not be crewed has nothing to go in behind
         # same-area packages are launched in the same wave (so they can be folded together), waves spread through the day
         from .packages import packages_linked
         from .timeofday import wave_times
@@ -348,14 +380,37 @@ class Session:
                     m = min(23 * 60 + 55, max(0, int(p.start[:2]) * 60 + int(p.start[3:5]) + shift))
                     p.start = f"{m // 60:02d}:{m % 60:02d}"
 
+    def _drop_orphan_followers(self, pkgs: list) -> list:
+        """A follow job (STRIKE / CAS with `after`) stays only if every site it waits on still stands and has its SEAD / standoff package built."""
+        from .models import SEAD_AIMS
+        from .war import after_sites
+        st = self.state
+        have = {p.objective.target_id for p in pkgs if p.objective.type == ObjectiveType.DEAD and p.objective.aim in SEAD_AIMS}
+        keep = [p for p in pkgs if all(x in have or st.assets.get(x) is None or st.assets[x].destroyed for x in after_sites(p.objective))]
+        if len(keep) == len(pkgs):
+            return pkgs
+        for p in pkgs:
+            if p not in keep:
+                st.note(f"{p.objective.description}: dropped, the SEAD it was to follow could not be crewed")
+        return keep
+
     def _stage_times(self, pkgs: list) -> None:
         """Keep each DEAD-stage package DEAD_STAGE_GAP_MIN after the SEAD-stage package of the same site (waves would otherwise spread them)."""
-        from .war import DEAD_STAGE_GAP_MIN
+        from .models import SEAD_AIMS
+        from .war import DEAD_STAGE_GAP_MIN, FOLLOW_GAP_MIN, after_sites
         sead = {p.objective.target_id: p for p in pkgs if p.objective.type == ObjectiveType.DEAD and p.objective.aim == "SEAD"}
         for p in pkgs:
             sp = sead.get(p.objective.target_id)
             if p.objective.type == ObjectiveType.DEAD and p.objective.aim == "DEAD" and sp is not None:
                 m = min(23 * 60 + 55, int(sp.start[:2]) * 60 + int(sp.start[3:5]) + DEAD_STAGE_GAP_MIN)
+                p.start = f"{m // 60:02d}:{m % 60:02d}"
+        # v0.41.158: a follow job (STRIKE / CAS behind the SEAD of the long-reach sites round its target) starts FOLLOW_GAP_MIN after the latest of those packages
+        stage = {p.objective.target_id: p for p in pkgs if p.objective.type == ObjectiveType.DEAD and p.objective.aim in SEAD_AIMS}
+        hm = lambda q: int(q.start[:2]) * 60 + int(q.start[3:5])
+        for p in pkgs:
+            sps = [stage[x] for x in after_sites(p.objective) if x in stage]
+            if sps:
+                m = min(23 * 60 + 55, max(hm(q) for q in sps) + FOLLOW_GAP_MIN)
                 p.start = f"{m // 60:02d}:{m % 60:02d}"
 
     def _late_sead(self, pkgs: list) -> None:
@@ -409,8 +464,8 @@ class Session:
         """Objectives postponed yesterday (no aircraft left for them after an emergency scramble), if they are still worth flying and not already in the list."""
         st, out = self.state, []
         for od in (st.raids or {}).get("carry", []):
-            if od["type"] == "DEAD" and od.get("aim"):
-                continue                                        # a SEAD / DEAD stage is planned fresh with its partner, never carried alone
+            if (od["type"] == "DEAD" and od.get("aim")) or od.get("after"):
+                continue                                        # a SEAD / DEAD stage, or a strike behind a SEAD, is planned fresh with its partner, never carried alone
             o = Objective(od["id"], ObjectiveType(od["type"]), od["target_id"], od["priority"] + 2.0, od.get("description", ""), od.get("aim", ""))
             tgt = st.assets.get(o.target_id) or st.bases.get(o.target_id)
             if tgt is None or getattr(tgt, "destroyed", False) or any(x.type == o.type and x.target_id == o.target_id for x in objs + out):
@@ -720,8 +775,10 @@ class Session:
         problems = self.settings.problems()
         if problems:
             raise RuntimeError("; ".join(problems))
-        pkg = next(p for p in self.packages() if p.number == package_number)
+        self._restore_undo()                                                                  # v0.41.149: a sortie being replaced (cancelled) hands back what its emergency changed
+        pkg = next(p for p in self.packages() if p.number == package_number)                  # v0.41.204: after the restore, or a package the scramble had taken could not be found again
         ev = self.emergency_for(package_number, flight_id)
+        undo = ({"plan": copy.deepcopy(st.plan), "raids": copy.deepcopy(st.raids or {}), "log_len": len(st.log)} if ev else None)
         lead_extras = []
         hidden_in = None                                                                      # v0.41.121: the package you were tasked with, when you take the scramble instead
         if ev:
@@ -758,10 +815,14 @@ class Session:
         self.options.carcasses = bool(getattr(self.settings, 'carcasses', True)); self.options.carcass_weight = max(5, int(getattr(self.settings, 'carcass_weight_pct', 25))) / 100.0
         self.options.reactive = bool(getattr(self.settings, 'reactive', True))
         self.options.ecm_script = bool(getattr(self.settings, 'ecm_script', False))
+        self.options.ecm_status = bool(getattr(self.settings, 'ecm_status', True))
+        self.options.awacs_tuned = bool(getattr(self.settings, 'awacs_tuned', True))
+        self.options.damage_calls = bool(getattr(self.settings, 'damage_calls', True))
         self.options.splash_damage = bool(getattr(self.settings, 'splash_damage', True))
         self.options.ai_land_carrier = str(getattr(self.settings, 'ai_land_carrier', "always"))
         self.options.ai_land_field = str(getattr(self.settings, 'ai_land_field', "never"))
         self.options.max_units = int(self.settings.merge_max_units)
+        self.options.merge_radius_nm = int(getattr(self.settings, 'merge_radius_nm', 15))
         self.options.full_map = bool(self.full_map)
         if self.full_map:
             self.options.max_units = 10 ** 6
@@ -797,6 +858,8 @@ class Session:
                       "objective": pkg.objective.description, "objective_type": pkg.objective.type.value, "counts": res.counts, "warnings": res.warnings, "seed": res.seed,
                       "package_dict": pkg.to_dict(), "merged": res.manifest.merged,
                       "ruins": {str(r["number"]): pre[r["id"]] for r in res.manifest.ruins if r["id"] in pre}}
+        if undo is not None:
+            st.pending["undo"] = undo
         self.last_build = res
         # a stale results file from a previous sortie must never be mistaken for this one
         try:
@@ -808,22 +871,31 @@ class Session:
 
     # ---- skip the day ---------------------------------------------------------------------------------
     def _sim(self, rng=None):
-        """The war simulator with the Experimental switches from the settings (borrow_red / borrow_blue)."""
+        """The war simulator."""
         from .war import WarSimulator
-        sim = WarSimulator(self.d, rng)
-        sim.borrow = {"red": bool(getattr(self.settings, "borrow_red", False)), "blue": bool(getattr(self.settings, "borrow_blue", False))}
-        return sim
+        if self.state is not None and self.state.ground is not None:
+            self.state.ground["pilot_influence"] = bool(getattr(self.settings, "pilot_influence", True))      # v0.41.160: the app setting rides in the campaign for the sim
+            self.state.ground["tempo_decay"] = bool(getattr(self.settings, "tempo_decay", False))             # v0.41.208
+        return WarSimulator(self.d, rng)
 
     def skip_day(self) -> dict:
         """Skip Turn: any pending sortie is discarded and EVERY package of the day (even ones you could have flown) is resolved
         by the war simulation. The date advances, the war replans."""
         st = self.state
+        stand_down = not any(self.flyable(p) for p in self.packages())      # v0.41.164 (XO 2026-10-27): nothing to fly is out of the pilot's hands
         st.pending = None
+        if stand_down and st.ground and tempo.influence_on(st):
+            st.ground["flown_day"] = st.day                                 # the idle surge clock holds, as if the squadron flew
+            st.ground["stand_down"] = True                                  # ...and tonight's decay of the air tempo is skipped (war.end_day)
         sim = self._sim(self._rng(44))
         results = [sim.resolve_abstract(st, Package.from_dict(pd)) for pd in st.plan]
         st.note(f"Day {st.day}: you stood down. The war went on without you ({sum(1 for r in results if r['success'])} of {sum(1 for r in results if not r.get('scrubbed'))} packages succeeded"
                 f"{'; ' + str(sum(1 for r in results if r.get('scrubbed'))) + ' scrubbed for weather' if any(r.get('scrubbed') for r in results) else ''}).")
+        for ln in ground.supply_round(st, self.d, sim.rng):                 # v0.41.144: both sides still bomb each other's depots and fuel in the background
+            st.note("Overnight: " + ln)
         sim.end_day(st)
+        if st.ground:
+            st.ground.pop("stand_down", None)
         status = update_status(st)
         if st.status == "ACTIVE":
             self.plan_day()
@@ -847,11 +919,24 @@ class Session:
         """Manually Submit: any file the user picks, checked against the pending sortie."""
         return self.poll(path)
 
+    def _restore_undo(self) -> None:
+        """v0.41.149 (XO 2026-10-27): you cancelled a sortie that came with an emergency (a scramble) and pressed Fly again: the scramble was gone. Building the sortie
+        had used the emergency up (it added its package to the day's plan, marked the cap, and may have postponed your own package); the pending sortie keeps a copy
+        of the plan, the raid record and the log length from before, and cancelling or rebuilding puts them back so the scramble is offered again."""
+        st = self.state
+        u = (st.pending or {}).pop("undo", None)
+        if not u:
+            return
+        st.plan = u["plan"]
+        st.raids = u["raids"]
+        del st.log[u["log_len"]:]
+
     def abort(self) -> None:
         """Throw the built sortie away. The sortie counter goes back too (v0.41.0): it feeds the mission seed, so flying the same package again
         rebuilds the same layout (sites, spawns, patrols), and two test runs of one package can be compared."""
         if self.state.pending is not None and self.state.sortie_counter > 0:
             self.state.sortie_counter -= 1
+        self._restore_undo()
         self.state.pending = None
         self.save()
 
@@ -876,6 +961,8 @@ class Session:
         out["objective"], out["objective_type"] = pend["objective"], pend["objective_type"]
         rng = self._rng(33)
         out["story"] = narrative.debrief_story(out, st, rng)
+        out["tempo"] = tempo.record(st, pend["objective_type"], tempo.tone_of(out), tempo.credits(out))      # v0.41.147: the flown result nudges the background jobs of its kind
+        out.setdefault("lines", []).extend(out["tempo"])
         sim = self._sim(rng)
         meanwhile = []
         t_end = float(data.get("time", 0) or 0)

@@ -14,15 +14,25 @@ One rule set for both sides (only the numbers differ with difficulty):
   * if Red holds the zone next to one of our fields, that field falls (its defences go, its squadrons move to the nearest field with losses). Two fields
     lost at once is a defeat.
 
+v0.41.143 (Campaign Revamp Stage B1, "the push"): the line of sectors now runs from the red end of the campaign (Sochi on Levels 1 and 2, Krymsk on
+Level 3) through every red base on the coast road to Senaki and Kutaisi. Each red base has a doorstep sector on our side of it; it FALLS when we hold
+that sector and the enemy has nothing there, and can be retaken the same way. The next attack waits for a takeover clock (CLOCK_DAYS) after a fall.
+Victory is by ground only: Sochi (Levels 1, 2) or Sochi AND Krymsk (Level 3), and on Levels 2 and 3 the enemy gets one last counter-force at the final
+base. See `docs/CHANGES.md` v0.41.143 and the plan docs in the Project.
+
 Pure planning and bookkeeping, no pydcs. Positions are DCS metres (x north, y east).
 """
 from __future__ import annotations
 import math
 from .models import AssetKind, EnemyAsset
+from . import story
 
 NM = 1852.0
 MIN_FORCE = 3.0               # below this a side has no organised force in the zone
 MAX_FORCE = 100.0
+SUPPLY_KINDS = (AssetKind.FUEL, AssetKind.DEPOT)
+BREAK_RATIO = 0.30            # v0.41.145 (XO 2026-10-27, never hunt the last unit): a side whose force in a sector is under this share of the other's has lost the sector tonight (it withdraws); nobody has to be destroyed
+DOWN_HEALTH = 0.30            # v0.41.145: a depot, fuel farm, SAM site or garrison at or under this health counts as down (not offered as a target, no longer gates)
 AIR_EFFECT = 0.6              # share of a visible column's losses that its zone's strength takes (the column is only the lead element)
 BLUE_LOSS = 40.0              # blue strength lost when the whole friendly task force at the JTAC is destroyed
 SKIRMISH, ATTACK = 0.04, 0.14
@@ -30,6 +40,40 @@ DECISIVE, REPULSED = 1.8, 0.55
 RETREAT_SHARE = 0.6           # what a routed force saves by falling back
 FALL_LOSS = 0.3               # aircraft lost when a field falls and its squadrons leave
 SUPPLY_FLOOR, SUPPLY_NONE = 0.55, 0.85
+BLUE_SUPPLY_FLOOR = 0.35     # v0.41.174 (XO 2026-10-28): 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle). v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly (red 0.55, resupplied overland). Sim: a flying L3 did not lose at 0.30, an idle one lost 3 of 5; L2 unchanged (5 of 5 coalition wins in about a month). Judgment call, no public source
+SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (55% = about 11 days); no repair on a day it is struck
+L1_RED_SUPPLY_FLOOR = 0.70    # v0.41.141 (XO 2026-10-27, Campaign Revamp): on Level 1 the insurgents are resupplied across the border by night, so their supply never drops below this however many depots die (judgment call; a toy-model run showed it does not change who wins). Levels 2 and 3 keep the 55% floor.
+
+
+GROUND_V = 3                  # state.ground["v"]: 2 = the Campaign Revamp ground war (red bases fall); a campaign with v 1 cannot be loaded
+CLOCK_DAYS = 9                # takeover clock: days after a base falls before our next attack (toy-model base case; judgment call)
+REAR_FRAC = 0.7               # red strength in the sectors behind its first line, as a share of its first sector's start strength (judgment call)
+BLUE_ATTACK_MIN = 30.0        # our force in a sector must be at least this before we attack (toy model "THR"; judgment call)
+BLUE_ATTACK_RATIO = 0.9       # ...and not weaker than this share of the enemy's strength there (supply-weighted)
+BLUE_ATTACK_CHANCE = 0.7      # daily chance that a ready force attacks
+SURGE_GRACE_DAYS = 2          # v0.41.155: days your squadron can stand down before red's surge starts (judgment call)
+SURGE_CAP = 2.0               # ...and the most it adds (x2 at the top)
+REAR_FLOOR = 15.0             # v0.41.155: a rear sector is not drained below this by the red feed (judgment call)
+RED_CLOCK_DAYS = 3            # after we take a base the enemy's own attacks wait this long (its force needs 3 days to arrive; XO 2026-10-24 item 5)
+AI_CAS = {1: 3, 2: 2, 3: 3}     # abstract daily blue air strikes on the sector facing us (judgment call: the toy model's AI CAS, 1-3 a day)
+AI_CAS_P = 0.55
+TEMPO_GROUND_GAIN = 2.0       # v0.41.147: the CAS tempo (up to +-0.20) counts this many times on the chance of one abstract AI strike (judgment call)
+AI_CAS_CUT = 0.15
+# v0.41.172 (XO 2026-10-28, "red needs CAS too, they have zerg numbers"): red's own abstract air strikes on the blue sector facing it. All judgment calls (no public
+# source for Russian CAS-to-fighter ratios; mirrors blue's AI CAS above). Cover: a red wing with fighters within RED_CAS_COVER_KM counts as air cover; with none, the
+# strike takes a fighter pair from the nearest wing (1 pair for the CAS pair, i.e. 1:2) if it has one; with neither it is "bare" and much likelier to fail.
+RED_AI_CAS = {1: 0, 2: 1, 3: 1}          # strikes a day by level (L1: an old museum-piece air force, none)
+RED_CAS_P = 0.30                         # base chance one succeeds (x red's surge); blue's own is 0.55
+RED_CAS_CUT = 0.10                       # strength a sector loses to one successful red strike (blue's own AI_CAS_CUT is 0.15: red's air is the lesser arm; judgment call)
+RED_CAS_BARE = 0.15                      # ...less this when there is no cover and no escort
+RED_CAS_BLUE_SHARE = 0.5                 # half of blue's AIR tempo (up to +0.40) is taken off the chance (the player's air work protects the sector)
+RED_CAS_COVER_KM = 150.0
+RED_CAS_LOSS = 0.25                      # chance a strike costs red one attack jet
+RED_CAS_ESCORT_LOSS = 0.15               # ...and an escorted strike one fighter (a fight with blue's patrols)
+RED_ATTACK_TYPES = ("Su_25", "Su_24M")
+COUNTER_DELAY_DAYS = 3        # the enemy's last counter-force arrives this many days after the final base falls
+COUNTER_FORCED_DAYS = 6       # ...and attacks every day for this long
+COUNTER_FRAC = {1: 0.0, 2: 0.35, 3: 0.60}      # counter-force strength as a share of a full 100-point sector (toy model; judgment call)
 
 
 def active(state) -> bool:
@@ -51,38 +95,65 @@ def zone_centers(axis, leg_zones) -> list:
     return out
 
 
-def build(state, th, d, rng, ap) -> None:
-    """New campaign: the zones, the Red column in each, and Blue's facilities. `ap(name)` -> a pydcs airport position."""
-    from . import seacheck
+def _chain_for(th, level: int):
+    """(nodes, legs, stage ids) for a level: the chain of the theatre pack cut at the level's last red target. Nodes run from the red end to the blue end;
+    legs[k] is the number of sectors between node k and node k+1."""
     fr = th["front"]
-    pts = [ap(fr["from_airport"]), ap(fr["to_airport"])]
-    leg_zones = [int(fr.get("zones", 4))]
-    if fr.get("beyond"):
-        pts.append(ap(fr["beyond"]))
-        leg_zones.append(int(fr.get("deep_zones", 1)))
+    chain, legs = list(fr["chain"]), list(fr["leg_zones"])
+    stages = list((fr.get("stages") or {}).get(str(level)) or [])
+    k0 = 0
+    if stages:
+        k0 = next((k for k, n in enumerate(chain) if n.get("red") == stages[-1]), 0)
+    return chain[k0:], legs[k0:], stages
+
+
+def build(state, th, d, rng, ap) -> None:
+    """New campaign: the sectors of the front, the Red column in each, and Blue's facilities. `ap(name)` -> a pydcs airport position."""
+    from . import seacheck
+    nodes, legs, stages = _chain_for(th, int(getattr(d, "level", 2)))
+    pts = [ap(n["airport"]) for n in nodes]
     axis = [[p.x, p.y] for p in pts]
-    centers = zone_centers(axis, leg_zones)
+    centers = zone_centers(axis, legs)
     centers = [list(seacheck.snap_to_land(c[0], c[1])) for c in centers]
     n = len(centers)
-    names = list(fr.get("zone_names") or [])
-    names = [names[i] if i < len(names) else f"Sector {i + 1}" for i in range(n)]
+    names = []
+    for k, cnt in enumerate(legs):
+        a_, b_ = nodes[k]["name"], nodes[k + 1]["name"]
+        names += [f"{a_} - {b_}" if cnt == 1 else f"{a_} - {b_} {j + 1}/{cnt}" for j in range(cnt)]
     red0, blue0 = _initial(d, n)
-    state.ground = {"v": 1, "axis": axis, "legs": leg_zones, "centers": centers, "names": names, "red": red0, "blue": blue0,
-                    "fall": {str(k): v for k, v in (fr.get("fall") or {}).items()}, "fallen": [], "line_km": 0.0}
+    off = lambda k: sum(legs[:k])
+    rbases = [{"id": nd["red"], "name": nd["name"], "zone": off(k), "x": axis[k][0], "y": axis[k][1]} for k, nd in enumerate(nodes) if nd.get("red")]
+    order = {sid: i for i, sid in enumerate(stages)}
+    rbases.sort(key=lambda r: order.get(r["id"], 99))                      # in the order we take them
+    fall = {str(off(k) - 1): nd["blue"] for k, nd in enumerate(nodes) if nd.get("blue") and off(k) >= 1}
+    fr = th["front"]
+    state.ground = {"v": GROUND_V, "axis": axis, "legs": legs, "centers": centers, "names": names, "red": red0, "blue": blue0,
+                    "fall": fall, "fallen": [], "line_km": 0.0,
+                    "rbases": rbases, "stages": stages, "taken": [], "taken_day": {}, "clock": 0,
+                    "victory_ids": list((fr.get("victory") or {}).get(str(d.level), [])), "counter_id": (fr.get("counter") or {}).get(str(d.level), ""),
+                    "counter": None, "won": False}
     state.ground["line_km"] = line_km(state.ground)
-    # the Red column of each zone
+    # the Red column of each sector
     for i, (cx, cy) in enumerate(centers):
-        state.assets[f"armor_{i + 1}"] = EnemyAsset(f"armor_{i + 1}", f"Armor column {chr(65 + i)}", AssetKind.ARMOR, cx, cy, 1.0, 6 + min(i, 2), [], None, "ARMOR", 1)
+        state.assets[f"armor_{i + 1}"] = EnemyAsset(f"armor_{i + 1}", f"Armor column {_col_letter(i)}", AssetKind.ARMOR, cx, cy, 1.0, 6 + min(i, 2), [], None, "ARMOR", 1)
     push(state)
     build_blue_assets(state, rng, ap)
     ensure_forward_garrisons(state)
 
 
+def _col_letter(i: int) -> str:
+    return chr(65 + i) if i < 26 else chr(65 + i // 26 - 1) + chr(65 + i % 26)
+
+
 def _initial(d, n) -> tuple:
-    red = list(getattr(d, "ground_red", (70, 55, 15, 0, 0)))
-    blue = list(getattr(d, "ground_blue", (0, 15, 60, 70, 50)))
-    pad = lambda v: (v + [0.0] * n)[:n]
-    return [float(x) for x in pad(red)], [float(x) for x in pad(blue)]
+    """Strength per sector, red end first: the level's five start values sit at the blue end (the old front); the sectors behind them hold red's rear
+    strength, REAR_FRAC of the first start value, and none of ours."""
+    red_t = [float(x) for x in getattr(d, "ground_red", (70, 55, 15, 0, 0))]
+    blue_t = [float(x) for x in getattr(d, "ground_blue", (0, 15, 60, 70, 50))]
+    rear = max(0, n - len(red_t))
+    red = [REAR_FRAC * red_t[0]] * rear + red_t
+    blue = [0.0] * rear + blue_t
+    return red[-n:], blue[-n:]
 
 
 def build_blue_assets(state, rng, ap=None) -> None:
@@ -99,11 +170,18 @@ def build_blue_assets(state, rng, ap=None) -> None:
         ba[f"bgar_{b.id}"] = _blue_garrison(b)
     g = state.ground
     if g:
-        c = g["centers"][min(len(g["centers"]) - 1, max(0, g["legs"][0] - 1))]
-        far = g["axis"][min(1, len(g["axis"]) - 1)]
+        zi = min((int(k) for k in g.get("fall", {})), default=len(g["centers"]) - 1)         # the sector next to our first airfield (Senaki)
+        c = g["centers"][zi]
+        kn = next((k for k in range(len(g["legs"]) + 1) if sum(g["legs"][:k]) == zi + 1), min(1, len(g["axis"]) - 1))
+        far = g["axis"][kn]
         x, y = seacheck.snap_to_land(*_lerp(c, far, 0.6))
         ba["bdepot_fwd"] = EnemyAsset("bdepot_fwd", "Forward supply depot", AssetKind.DEPOT, x, y, 1.0, 6, [], None, "", 1)
+        x, y = seacheck.snap_to_land(*_lerp(g["centers"][-1], g["axis"][-1], 0.5))           # v0.41.144: a rear depot at the back of our line, well behind the forward one
+        ba["bdepot_rear"] = EnemyAsset("bdepot_rear", "Rear supply depot", AssetKind.DEPOT, x, y, 1.0, 5, [], None, "", 1)
     state.blue_assets = ba
+    if g is not None:
+        g["sup_n"] = {"red": sum(1 for a in state.assets.values() if a.kind in SUPPLY_KINDS), "blue": sum(1 for a in ba.values() if a.kind in SUPPLY_KINDS)}
+        g["sup_h"] = {a.id: 1.0 for a in list(state.assets.values()) + list(ba.values()) if a.kind in SUPPLY_KINDS}
 
 
 def _blue_garrison(b) -> EnemyAsset:
@@ -120,6 +198,7 @@ def _blue_garrison(b) -> EnemyAsset:
 # range open sources give (Dupuy Institute: a prepared defence is worth about x1.3 to over x3 depending on preparation and terrain; US planning ratios about
 # 3:1 against a prepared defender, 2.5:1 against a hasty one; positional defence keeps at least two-thirds of the force forward in platoon / company
 # strongpoints). Tune on XO's runs.
+FWD_SPOT_REACH_M = 6000.0     # a forward garrison settles on a condensed ground spot at most this far from its planned position (judgment call)
 FWD_OFFSET_M = 3000.0         # each garrison sits this far either side of the sector centre
 FWD_EXTRA = 0.25              # defender factor added by a full-health garrison in the sector: DEFENDER 1.25 -> 1.5 (a standing garrison, still inside the sourced range)
 FWD_SHARE = 0.15              # share of its side's sector strength lost when the garrison is destroyed (scaled by the health it lost)
@@ -130,15 +209,17 @@ def fwd_id(side: str, i: int) -> str:
     return f"{'r' if side == 'red' else 'b'}fwd_{i + 1}"
 
 
-def fwd_pos(g, i: int, side: str) -> tuple:
-    from . import seacheck
+def fwd_pos(g, i: int, side: str, state=None) -> tuple:
+    from . import seacheck, sites
     c, n = g["centers"], len(g["centers"])
     cx, cy = c[i]
     a, b = c[max(i - 1, 0)], c[min(i + 1, n - 1)]
     vx, vy = a[0] - b[0], a[1] - b[1]                  # from the higher-numbered neighbour toward the lower one: toward the enemy
     L = math.hypot(vx, vy) or 1.0
     k = (1.0 if side == "red" else -1.0) * FWD_OFFSET_M / L
-    return seacheck.snap_to_land(cx + vx * k, cy + vy * k)
+    x, y = seacheck.snap_to_land(cx + vx * k, cy + vy * k)
+    sp = sites.free_spot(state, "ground", x, y, FWD_SPOT_REACH_M) if state is not None else None     # v0.41.199: a condensed site spot when there is one
+    return sp if sp is not None else (x, y)
 
 
 def ensure_forward_garrisons(state) -> bool:
@@ -152,13 +233,24 @@ def ensure_forward_garrisons(state) -> bool:
             aid = fwd_id(side, i)
             if aid in pool:
                 continue
-            x, y = fwd_pos(g, i, side)
+            x, y = fwd_pos(g, i, side, state)
             nm = f"{'Enemy' if side == 'red' else 'Friendly'} forward position, {g['names'][i]}"
             pool[aid] = EnemyAsset(aid, nm, AssetKind.ARMOR, x, y, 1.0, 5, [], None, "GARRISON", 1)
             added = True
     if added:
         g.setdefault("fwd", {"r": [1.0] * n_zones(g), "b": [1.0] * n_zones(g)})
     return added
+
+
+GARRISON_CAS_MAX_KM = 40     # v0.41.218 (XO 2026-10-30): a dug-in site garrison is a CAS job only this close to a sector centre (the coast road). Judgment call from a fresh L3 campaign: the coast garrisons sit 1 to 21 km from a centre, the ones north of the mountains (Maykop, Nalchik, Beslan, Mozdok) 91 to 259 km.
+
+
+def near_front(state, x: float, y: float, km: float = GARRISON_CAS_MAX_KM) -> bool:
+    """v0.41.218: is the point within `km` of one of the ground war's sector centres? True when the campaign has no sector chain (older saves)."""
+    cs = (getattr(state, "ground", None) or {}).get("centers")
+    if not cs:
+        return True
+    return min(math.hypot(x - c[0], y - c[1]) for c in cs) <= km * 1000
 
 
 def sector_of(state, asset_id: str):
@@ -192,20 +284,34 @@ def ensure_blue_garrisons(state) -> bool:
 ROAD_SNAP_M = 3000.0                     # a column or supply site moves onto a road if one is this close
 
 
+ROAD_SNAP_COLUMN_M = 6000.0           # v0.41.186 (XO 2026-10-28): a front-line COLUMN moves onto a road this close (judgment call: XO's 2026-10-28 CAS runs: two of five contact points had the nearest scanned road 3.4 to 5.2 km away, and the scan's biggest gap is 5.8 km)
+
+
+def _is_column(a) -> bool:
+    return a.kind == AssetKind.ARMOR and a.variant != "GARRISON"
+
+
 def snap_roads(state) -> int:
-    """Once, as soon as a road scan exists: front-line columns, fuel farms and depots (both sides) move onto the nearest road point (<= ROAD_SNAP_M,
-    and still on land); a column's air defence and anything guarding a moved site moves with it. Garrisons stay off the road, dug in. Returns how many moved."""
+    """Once, as soon as a road scan exists: front-line columns, fuel farms and depots (both sides) move onto the nearest road point (<= ROAD_SNAP_COLUMN_M, and still on land); a column's air defence and anything guarding a moved site moves with it. Garrisons stay off the road, dug in.
+    v0.41.186: older saves (snapped before, at 3 km) get ONE more pass for the columns that were out of reach, at ROAD_SNAP_COLUMN_M. Returns how many moved."""
     from . import roads, seacheck
     g = getattr(state, "ground", None)
-    if not g or g.get("roads") or not roads.available():
+    if not g or not roads.available():
+        return 0
+    first = not g.get("roads")
+    if not first and g.get("roads_wide"):
         return 0
     g["roads"] = True
+    g["roads_wide"] = True
     moved = 0
     pool = list(state.assets.values()) + list((getattr(state, "blue_assets", None) or {}).values())
     for a in pool:
-        if not (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or (a.kind == AssetKind.ARMOR and a.variant != "GARRISON")):
+        col = _is_column(a)
+        if not (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or col):
             continue
-        p = roads.snap(a.x, a.y, ROAD_SNAP_M)
+        if not first and a.kind in (AssetKind.FUEL, AssetKind.DEPOT) and roads.snap(a.x, a.y, ROAD_SNAP_M) is not None:
+            continue                                                       # the extra pass: columns and supply sites the 3 km pass could not reach
+        p = roads.snap(a.x, a.y, ROAD_SNAP_COLUMN_M)                                  # v0.41.187: depots and fuel farms reach as far as columns (a supply site must be reachable by road)
         if p is None or p == (a.x, a.y) or not seacheck.site_ok(*p):
             continue
         dx, dy = p[0] - a.x, p[1] - a.y
@@ -280,7 +386,11 @@ def blue_strength(state, i: int) -> float:
 
 def info(state, i: int) -> dict:
     r, b = red_strength(state, i), blue_strength(state, i)
-    return {"i": i, "name": state.ground["names"][i], "red": r, "blue": b, "contested": r >= MIN_FORCE and b >= MIN_FORCE,
+    n = n_zones(state.ground)
+    contested = r >= MIN_FORCE and b >= MIN_FORCE
+    broken = contested and r < BREAK_RATIO * b                                  # v0.41.145: red is already beaten here: it withdraws tonight, so no job is generated for it
+    facing = r >= MIN_FORCE and b < MIN_FORCE and i + 1 < n and blue_strength(state, i + 1) >= MIN_FORCE and red_strength(state, i + 1) < MIN_FORCE and r >= BREAK_RATIO * blue_strength(state, i + 1)      # our force stands across the line from the enemy column
+    return {"i": i, "name": state.ground["names"][i], "red": r, "blue": b, "contested": contested, "broken": broken, "engaged": (contested and not broken) or facing,
             "pressure": r / (r + b) if r + b > 0 else 0.0}
 
 
@@ -318,10 +428,110 @@ def facility_health(assets, kinds):
 
 
 def supply(state, side: str) -> float:
-    """0.55 (every depot and fuel site gone) .. 1.0 (all intact). A side with no such sites at all runs at 0.85."""
+    """0.55 (no stock left; the coalition's floor is BLUE_SUPPLY_FLOOR, 0.35) .. 1.0 (all of the side's sites at hand and intact). v0.41.144: the stock held (sum of the health of the supply sites a side holds)
+    over the number it started with, so a captured site raises the captor's figure (up to 100%) and lowers the old owner's (to 55% at worst); a site's
+    health is its stock and does not fade. A side that started with no sites runs at 0.85. Red on Level 1 never falls below L1_RED_SUPPLY_FLOOR (0.70)."""
     pool = state.assets.values() if side == "red" else getattr(state, "blue_assets", {}).values()
-    h = facility_health(pool, (AssetKind.FUEL, AssetKind.DEPOT))
-    return SUPPLY_NONE if h is None else SUPPLY_FLOOR + (1.0 - SUPPLY_FLOOR) * h
+    sites = [a for a in pool if a.kind in SUPPLY_KINDS]
+    n = int(((state.ground or {}).get("sup_n") or {}).get(side, len(sites)))
+    fl = BLUE_SUPPLY_FLOOR if side == "blue" else SUPPLY_FLOOR
+    v = SUPPLY_NONE if n <= 0 else fl + (1.0 - fl) * min(1.0, sum(a.health for a in sites) / n)
+    v = max(v, L1_RED_SUPPLY_FLOOR) if (side == "red" and getattr(state, "level", 2) == 1) else v
+    from . import sams
+    return v - sams.debt(state, side)               # v0.41.196: the cost of replacement SAM batteries lowers supply even below the floor
+
+
+def supply_repair(state) -> list:
+    """Overnight: each side's supply sites mend at supply / SUPPLY_REPAIR_DAYS of a full site a day (a destroyed one is back in 6 days at 100% supply,
+    about 11 at 55%), except a site that was struck since last night. Skip days count. The owner at the moment pays: a captured site mends at the
+    captor's rate."""
+    g = state.ground
+    prev = g.setdefault("sup_h", {})
+    out = []
+    for side in ("red", "blue"):
+        pool = state.assets if side == "red" else getattr(state, "blue_assets", {})
+        rate = supply(state, side) / SUPPLY_REPAIR_DAYS
+        for a in pool.values():
+            if a.kind not in SUPPLY_KINDS:
+                continue
+            before = prev.get(a.id, a.health)
+            if a.health < before - 1e-6:                                    # struck today: no repair tonight
+                pass
+            elif a.health < 1.0:
+                was_down = a.destroyed
+                a.health = min(1.0, a.health + rate)
+                if was_down and not a.destroyed and side == "blue":
+                    out.append(f"{a.name} is working again")
+            prev[a.id] = a.health
+    return out
+
+
+SUPPLY_ROUND_BLUE = 2         # v0.41.144 (XO 2026-10-24, "skip days run a supply-strike round"): background strikes a side tries on a day nobody flew (judgment call)
+SUPPLY_ROUND_P = {"open": 0.50, "escorted": 0.20}      # chance one succeeds: site under no live SAM cover / only SA-2/3/6 (the escort has to deal with them); under an SA-11 / SA-10 belt none is tried
+SUPPLY_ROUND_HIT = 0.35       # health a struck site loses
+
+
+def supply_round(state, d, rng) -> list:
+    """The background supply-strike round of a skip day: both sides' air still tries to bomb the other's depots and fuel. Blue picks among red's sites
+    (not under a live SA-11 / SA-10), red among ours. A struck site is not repaired that night (supply_repair). Returns log lines."""
+    from .war import covering_sams, ESCORTABLE
+    lines = []
+    g = state.ground
+    if not g or not active(state):
+        return lines
+
+    def pick(pool, attempts, who, p_scale=1.0):
+        sites = [a for a in pool if a.kind in SUPPLY_KINDS and not a.destroyed]
+        for _ in range(attempts):
+            if not sites:
+                return
+            cands = []
+            for a in sites:
+                cov = covering_sams(state, a) if who == "blue" else []
+                if any(x.variant not in ESCORTABLE for x in cov):
+                    continue
+                cands.append((a, SUPPLY_ROUND_P["escorted" if cov else "open"], a.value))
+            if not cands:
+                return
+            a, p, _v = rng.choices(cands, weights=[c[2] for c in cands])[0]
+            if rng.random() < p * p_scale:
+                a.health = max(0.0, a.health - SUPPLY_ROUND_HIT)
+                lines.append(f"{'Our' if who == 'red' else 'Enemy'} {a.name} was hit in the background supply strikes ({a.health:.0%} left)")
+    pick(list(state.assets.values()), SUPPLY_ROUND_BLUE, "blue")
+    pick(list(getattr(state, "blue_assets", {}).values()), int(getattr(d, "red_supply_strikes", 1)) + int(rng.random() < min(1.0, getattr(d, "raid_rate", 0.3))), "red")
+    return lines
+
+
+def _move_sites(state, ids, to_blue: bool) -> None:
+    src, dst = (state.assets, state.blue_assets) if to_blue else (state.blue_assets, state.assets)
+    for i in ids:
+        a = src.pop(i, None)
+        if a is not None:
+            dst[i] = a
+
+
+def capture_sites(state, base_id: str, ids) -> list:
+    """The supply sites of a fallen base change sides with their stock (no fade). `ids` are the sites to move; remembered under the base so a retake moves them back."""
+    g = state.ground
+    red_base = base_id.startswith("ab_")
+    ids = [i for i in ids if i in (state.assets if red_base else state.blue_assets)]
+    if not ids:
+        return []
+    g.setdefault("capt", {})[base_id] = ids
+    _move_sites(state, ids, to_blue=red_base)
+    names = ", ".join((state.blue_assets if red_base else state.assets)[i].name for i in ids)
+    return [f"   captured with their stock: {names}"]
+
+
+def release_sites(state, base_id: str) -> list:
+    g = state.ground
+    ids = (g.get("capt") or {}).pop(base_id, [])
+    red_base = base_id.startswith("ab_")
+    ids = [i for i in ids if i in (state.blue_assets if red_base else state.assets)]
+    if not ids:
+        return []
+    _move_sites(state, ids, to_blue=not red_base)
+    return [f"   its supply sites are back under {'enemy' if red_base else 'friendly'} control"]
 
 
 def _control(r: float, b: float) -> float:
@@ -367,13 +577,65 @@ def _clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
 
+def surge(state, d) -> float:
+    """v0.41.155 (XO 2026-10-27, "red needs a chance to win if I do not fly"): 1.0 while your squadron flies; then it grows by the level's `red_surge` for every day beyond
+    SURGE_GRACE_DAYS since the last flown sortie, up to 1 + SURGE_CAP. It multiplies red's reinforcements, attack chance and raid rate."""
+    step = float(getattr(d, "red_surge", 0.0))
+    g = state.ground or {}
+    if step <= 0 or not g or not g.get("pilot_influence", True):      # v0.41.160: Pilot Influence off: no surge, your flying makes no difference here
+        return 1.0
+    idle = state.day - int(g.get("flown_day", g.get("start_day", 1))) - SURGE_GRACE_DAYS
+    return 1.0 + min(SURGE_CAP, max(0, idle) * step)
+
+
+def _red_cas(state, d, rng, red, blue, n, sg) -> list:
+    """v0.41.172: red's abstract close air support on the blue sector facing it (see RED_AI_CAS). Escort or cover as described there. -> log lines."""
+    from . import redair, tempo
+    from .loadouts import ENEMY_FIGHTERS
+    out = []
+    face = lambda: [i for i in range(n) if blue[i] >= MIN_FORCE and (red[i] >= MIN_FORCE or (i > 0 and red[i - 1] >= MIN_FORCE))]      # blue sectors facing red
+    if not face() or not getattr(state, "enemy_air", None):
+        return out
+    wings = [w for w in state.enemy_air if w.base_asset_id in state.assets]
+    for _ in range(RED_AI_CAS.get(getattr(d, "level", 3), 0)):
+        fc = face()
+        if not fc:
+            break
+        i = min(fc)                                                     # the front-most blue sector facing red
+        cx, cy = state.ground["centers"][i]
+        dist = lambda w, cx=cx, cy=cy: ((state.assets[w.base_asset_id].x - cx) ** 2 + (state.assets[w.base_asset_id].y - cy) ** 2) ** 0.5
+        at = [w for w in sorted(wings, key=dist) if w.available_of(RED_ATTACK_TYPES) >= 2 and redair.can(state, w.base_asset_id, 2)]
+        if not at:
+            continue
+        w = at[0]
+        redair.spend(state, w.base_asset_id, 2)
+        cover = [x for x in wings if dist(x) <= RED_CAS_COVER_KM * 1000.0 and x.available_of(ENEMY_FIGHTERS) >= 2]
+        esc = None
+        if not cover:
+            fw = [x for x in sorted(wings, key=dist) if x.available_of(ENEMY_FIGHTERS) >= 2 and redair.can(state, x.base_asset_id, 2)]
+            if fw:
+                esc = fw[0]
+                redair.spend(state, esc.base_asset_id, 2)
+        p = RED_CAS_P * sg - RED_CAS_BLUE_SHARE * tempo.get(state, "AIR") - (RED_CAS_BARE if (not cover and esc is None) else 0.0)
+        if rng.random() < min(0.95, max(0.05, p)):
+            blue[i] = max(0.0, blue[i] * (1.0 - RED_CAS_CUT))
+            out.append(f"   Red air strike on the friendly troops in {state.ground['names'][i]}" + (" (escorted)" if esc is not None else "") + f": friendly strength down to {blue[i]:.0f}")
+        if rng.random() < RED_CAS_LOSS:
+            w.lose(next((q.aircraft for q in w.sqns if q.aircraft in RED_ATTACK_TYPES and q.available > 0), None), 1)
+        if esc is not None and rng.random() < RED_CAS_ESCORT_LOSS:
+            esc.lose(next((q.aircraft for q in esc.sqns if q.aircraft in ENEMY_FIGHTERS and q.available > 0), None), 1)
+    return out
+
+
 def resolve_day(state, d, rng) -> list:
     """One day of ground fighting. Returns the overnight lines for the log."""
     g = state.ground
     pull(state)
     red, blue, n = g["red"], g["blue"], n_zones(g)
     sr, sb = supply(state, "red"), supply(state, "blue")
-    lines = []
+    sg = surge(state, d)
+    lines = _counter_arrives(state)
+    forced = _forced_zone(state)
     fw = g.setdefault("fwd", {"r": [1.0] * n, "b": [1.0] * n})
     for key, side, force in (("r", "red", red), ("b", "blue", blue)):
         for i in range(n):
@@ -382,55 +644,86 @@ def resolve_day(state, d, rng) -> list:
             if drop > 0.01 and force[i] > 0:                    # a garrison lost since yesterday takes its share of the sector's force with it
                 force[i] = max(0.0, force[i] * (1.0 - FWD_SHARE * min(1.0, drop)))
             fw[key][i] = h
-    for i in range(n):
-        R, B = red[i], blue[i]
-        if R >= MIN_FORCE and B >= MIN_FORCE:
-            pR, pB = R * sr, B * sb
-            att = None
-            if rng.random() < getattr(d, "red_attack", 0.3) * _clamp(pR / max(pB, 1.0), 0.4, 1.6):
-                att = "red"
-            elif pB > 1.15 * pR and rng.random() < 0.5:
-                att = "blue"
-            inten = ATTACK if att else SKIRMISH
-            ur, ub = rng.uniform(0.8, 1.2), rng.uniform(0.8, 1.2)
-            kr = 1.1 if att == "red" else 0.9 if att == "blue" else 1.0         # the attacker pays a little more
-            kb = 1.1 if att == "blue" else 0.9 if att == "red" else 1.0
-            red[i] = max(0.0, R - min(R, inten * pB * kr * ur))
-            blue[i] = max(0.0, B - min(B, inten * pR * kb * ub))
-            name = g["names"][i]
-            if att:
-                a_is_red = att == "red"
-                pa = (red[i] * sr) if a_is_red else (blue[i] * sb)
-                dh = fwd_health(state, "blue" if a_is_red else "red", i)               # a standing forward garrison strengthens the defence (v0.41.102)
-                pd = (DEFENDER + FWD_EXTRA * dh) * ((blue[i] * sb) if a_is_red else (red[i] * sr))
-                if pa > DECISIVE * pd:
-                    _rout(g, i, "blue" if a_is_red else "red")
-                    _advance(g, i, "red" if a_is_red else "blue")
-                    lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked and broke the other side; the survivors fell back")
-                elif pa < REPULSED * pd:
-                    if a_is_red:
-                        red[i] *= 0.85
-                    else:
-                        blue[i] *= 0.85
-                    lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked and were thrown back")
+    for _ in range(AI_CAS.get(getattr(d, "level", 3), 2)):  # v0.41.143: blue's own air (the AI flights nobody flies) works the red sector that faces us
+        facing = [i for i in range(n) if red[i] >= MIN_FORCE and (blue[i] >= MIN_FORCE or (i + 1 < n and blue[i + 1] >= MIN_FORCE))]
+        from . import tempo
+        if facing and rng.random() < min(0.95, max(0.05, AI_CAS_P + TEMPO_GROUND_GAIN * tempo.get(state, "CAS"))) * sb:         # v0.41.147: air tempo: the player's flown CAS results
+            i = max(facing)
+            red[i] = max(0.0, red[i] * (1.0 - AI_CAS_CUT))
+    lines += _red_cas(state, d, rng, red, blue, n, sg)
+    # who is in contact: a sector both sides hold, or (v0.41.143) two neighbouring sectors, red's on the enemy side, when neither is shared: an assault across the line
+    pairs = [(i, i) for i in range(n) if red[i] >= MIN_FORCE and blue[i] >= MIN_FORCE]
+    pairs += [(i, i + 1) for i in range(n - 1) if red[i] >= MIN_FORCE and blue[i + 1] >= MIN_FORCE and blue[i] < MIN_FORCE and red[i + 1] < MIN_FORCE]
+    for ri, bi in pairs:
+        R, B = red[ri], blue[bi]
+        if R < MIN_FORCE or B < MIN_FORCE:                                              # an earlier fight today moved them
+            continue
+        quiet = ri != bi                                                                # across the line: nothing happens unless one side attacks
+        pR, pB = R * sr, B * sb
+        att = None
+        if forced == ri and not quiet:                                                  # the enemy's last counter-force presses every day
+            att = "red"
+        elif state.day >= g.get("red_clock", 0) and rng.random() < getattr(d, "red_attack", 0.3) * sg * _clamp(pR / max(pB, 1.0), 0.4, 1.6):
+            att = "red"
+        elif state.day >= g.get("clock", 0) and B >= BLUE_ATTACK_MIN and pB >= BLUE_ATTACK_RATIO * pR and rng.random() < BLUE_ATTACK_CHANCE:
+            att = "blue"                                                                # v0.41.143: our force is ready (takeover clock over, enough strength)
+        if quiet and not att:
+            continue
+        inten = ATTACK if att else SKIRMISH
+        ur, ub = rng.uniform(0.8, 1.2), rng.uniform(0.8, 1.2)
+        kr = 1.1 if att == "red" else 0.9 if att == "blue" else 1.0         # the attacker pays a little more
+        kb = 1.1 if att == "blue" else 0.9 if att == "red" else 1.0
+        red[ri] = max(0.0, R - min(R, inten * pB * kr * ur))
+        blue[bi] = max(0.0, B - min(B, inten * pR * kb * ub))
+        name = g["names"][ri]
+        if att:
+            a_is_red = att == "red"
+            pa = (red[ri] * sr) if a_is_red else (blue[bi] * sb)
+            dh = fwd_health(state, "blue", bi) if a_is_red else fwd_health(state, "red", ri)       # a standing forward garrison strengthens the defence (v0.41.102)
+            pd = (DEFENDER + FWD_EXTRA * dh) * ((blue[bi] * sb) if a_is_red else (red[ri] * sr))
+            if pa > DECISIVE * pd:
+                if a_is_red:
+                    _rout(g, bi, "blue"); _advance(g, ri, "red")
                 else:
-                    lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked, heavy fighting (enemy {red[i]:.0f}, friendly {blue[i]:.0f})")
-    for i in range(n):                                  # a remnant too small to hold ground withdraws
-        if red[i] < MIN_FORCE and red[i] > 0 and blue[i] >= MIN_FORCE:
+                    _rout(g, ri, "red"); _advance(g, bi, "blue")
+                lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked and broke the other side; the survivors fell back")
+            elif pa < REPULSED * pd:
+                if a_is_red:
+                    red[ri] *= 0.85
+                else:
+                    blue[bi] *= 0.85
+                lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked and were thrown back")
+            else:
+                lines.append(f"{name}: {'Enemy' if a_is_red else 'Friendly'} forces attacked, heavy fighting (enemy {red[ri]:.0f}, friendly {blue[bi]:.0f})")
+    for i in range(n):                                  # a remnant too small to hold ground withdraws: under MIN_FORCE, or (v0.41.145) under BREAK_RATIO of what faces it
+        if red[i] > 0 and blue[i] >= MIN_FORCE and (red[i] < MIN_FORCE or red[i] < BREAK_RATIO * blue[i]):
             _fall_back(g, i, "red")
-        if blue[i] < MIN_FORCE and blue[i] > 0 and red[i] >= MIN_FORCE:
+        if blue[i] > 0 and red[i] >= MIN_FORCE and (blue[i] < MIN_FORCE or blue[i] < BREAK_RATIO * red[i]):
             _fall_back(g, i, "blue")
+    for i in range(n - 1):                              # across a quiet line: a red force under BREAK_RATIO of the Coalition force facing it gives up the sector
+        if red[i] >= MIN_FORCE and blue[i] < MIN_FORCE and blue[i + 1] >= MIN_FORCE and red[i + 1] < MIN_FORCE and red[i] < BREAK_RATIO * blue[i + 1]:
+            _fall_back(g, i, "red")
     for i in range(n):                                  # nobody holds this zone any more: whoever is next to it moves in (Red from the front side)
         if red[i] < MIN_FORCE and blue[i] < MIN_FORCE:
             if i > 0 and red[i - 1] >= MIN_FORCE and not (i + 1 < n and blue[i + 1] >= MIN_FORCE and rng.random() < 0.5):
                 _advance(g, i - 1, "red")
-            elif i + 1 < n and blue[i + 1] >= MIN_FORCE:
+            elif i + 1 < n and blue[i + 1] >= MIN_FORCE and state.day >= g.get("clock", 0):      # v0.41.143: not during the takeover clock
                 _advance(g, i + 1, "blue")
+    lines += _check_red_bases(state)                     # v0.41.143: a base is taken (or retaken) on the state of the sectors before the day's reinforcements arrive
     # reinforcements arrive at the zone in contact: Red's front-most zone, Blue's front-most (lowest-numbered) zone
-    rz = max((i for i in range(n) if red[i] >= MIN_FORCE), default=0)
+    rz = max((i for i in range(n) if red[i] >= MIN_FORCE), default=None)
     bz = min((i for i in range(n) if blue[i] >= MIN_FORCE), default=n - 1)
-    red[rz] = min(MAX_FORCE, red[rz] + getattr(d, "red_reinf", 5.0) * sr)
+    if rz is not None:                                   # red with no organised force anywhere gets none (its last counter-force is the only way back)
+        red[rz] = min(MAX_FORCE, red[rz] + getattr(d, "red_reinf", 5.0) * sr * sg)
     blue[bz] = min(MAX_FORCE, blue[bz] + getattr(d, "blue_reinf", 5.0) * sb)
+    feed = float(getattr(d, "red_rear_feed", 0.0))                       # v0.41.155 (red zerg): red's rear sectors move strength one sector toward the front each night
+    if feed > 0 and rz is not None:
+        for i in range(rz - 1, -1, -1):
+            if red[i] >= REAR_FLOOR + 1.0:
+                mv = min(red[i] - REAR_FLOOR, red[i] * feed * sr, MAX_FORCE - red[i + 1])
+                if mv > 0:
+                    red[i] -= mv
+                    red[i + 1] += mv
     for i in range(n):                                   # a lost red forward garrison is re-established where red still holds the sector (blue's come back through rebuild_blue)
         a = state.assets.get(fwd_id("red", i))
         if a is not None and a.health <= 0.05 and red[i] >= MIN_FORCE and rng.random() < FWD_REBUILD * sr:
@@ -442,6 +735,7 @@ def resolve_day(state, d, rng) -> list:
     if abs(g["line_km"] - km0) >= 1.0:
         lines.append(f"The front line moved {abs(g['line_km'] - km0):.0f} km {'toward our airfields' if g['line_km'] > km0 else 'back toward the enemy'}")
     lines += check_falls(state)
+    lines += _update_win(state)
     push(state)
     return lines
 
@@ -480,13 +774,144 @@ def check_falls(state) -> list:
         i = int(k)
         if i >= n_zones(g) or bid not in state.bases:
             continue
-        held = g["red"][i] >= MIN_FORCE and g["blue"][i] < MIN_FORCE
+        held = g["red"][i] >= MIN_FORCE and (g["blue"][i] < MIN_FORCE or g["blue"][i] < BREAK_RATIO * g["red"][i])        # v0.41.155: a trickle of reinforcements under BREAK_RATIO of what faces it no longer saves a field
         if held and bid not in g["fallen"]:
             g["fallen"].append(bid)
             lines += apply_fall(state, bid)
+            lines += capture_sites(state, bid, [f"bfuel_{bid}"])
+            lines += story.beat(state, "fallen_blue", base=state.bases[bid].name)
         elif not held and bid in g["fallen"] and g["blue"][i] >= MIN_FORCE:
             g["fallen"].remove(bid)
+            release_sites(state, bid)
             lines.append(f"{state.bases[bid].name} is back in our hands, with its defences gone; the squadrons stay where they moved")
+            lines += story.beat(state, "back_blue", base=state.bases[bid].name)
+    return lines
+
+
+def _base_zone(g, rid: str):
+    return next((rb["zone"] for rb in g.get("rbases", []) if rb["id"] == rid), None)
+
+
+def _counter_arrives(state) -> list:
+    """The enemy's last counter-force: it arrives COUNTER_DELAY_DAYS after the final base fell, in the sector in front of that base, and presses every
+    day for COUNTER_FORCED_DAYS. If red has retaken the base by then, the try is spent."""
+    g, c = state.ground, state.ground.get("counter")
+    if not c or c.get("arrived"):
+        return []
+    if state.day < c["arrive"]:
+        return []
+    c["arrived"] = True
+    cid = g.get("counter_id", "")
+    i = _base_zone(g, cid)
+    if cid not in g["taken"] or i is None:
+        c["used"] = True
+        return []
+    g["red"][i] = min(MAX_FORCE, g["red"][i] + MAX_FORCE * c["frac"])
+    c["until"] = state.day + COUNTER_FORCED_DAYS
+    rb = next(r for r in g["rbases"] if r["id"] == cid)
+    return [f"{rb['name']}: the enemy counter-force has arrived and is attacking"] + story.beat(state, "counter", base=rb["name"])
+
+
+def _forced_zone(state):
+    g, c = state.ground, state.ground.get("counter")
+    if not c or not c.get("arrived") or c.get("resolved") or c.get("used") or state.day > c.get("until", -1):
+        return None
+    return _base_zone(g, g.get("counter_id", ""))
+
+
+def _check_red_bases(state) -> list:
+    """A red base falls while we hold the sector on our side of it and the enemy has nothing there; it is retaken when the enemy holds that sector again."""
+    g, lines = state.ground, []
+    for rb in g.get("rbases", []):
+        i, rid = rb["zone"], rb["id"]
+        ours = g["blue"][i] >= MIN_FORCE and (g["red"][i] < MIN_FORCE or g["red"][i] < BREAK_RATIO * g["blue"][i])         # v0.41.155: the same no-hunt ratio on both sides
+        theirs = g["red"][i] >= MIN_FORCE and (g["blue"][i] < MIN_FORCE or g["blue"][i] < BREAK_RATIO * g["red"][i])
+        if rid not in g["taken"] and ours:
+            g["taken"].append(rid)
+            g["taken_day"][rid] = state.day
+            g["clock"] = state.day + CLOCK_DAYS
+            g["red_clock"] = state.day + RED_CLOCK_DAYS
+            lines.append(f"{rb['name'].upper()} HAS FALLEN: our forces hold it. The next push waits for the takeover ({CLOCK_DAYS} days)")
+            lines += apply_red_fall(state, rb)
+            lines += story.beat(state, "fall_" + rid)
+            c = g.get("counter")
+            if rid == g.get("counter_id") and c is None:
+                g["counter"] = {"arrive": state.day + COUNTER_DELAY_DAYS, "frac": COUNTER_FRAC.get(int(state.level), 0.0), "arrived": False}
+            elif c is not None and c.get("used"):
+                c["resolved"] = True                                        # the one try is spent: retaking the base ends it
+        elif rid in g["taken"] and theirs:
+            g["taken"].remove(rid)
+            g["taken_day"].pop(rid, None)
+            a = state.assets.get(rid)
+            if a is not None:
+                a.health = max(a.health, 0.5)
+            release_sites(state, rid)
+            c = g.get("counter")
+            if c is not None and rid == g.get("counter_id"):
+                c["used"] = True
+            lines.append(f"{rb['name']} has been retaken by the enemy")
+            lines += story.beat(state, "retake", base=rb["name"])
+    return lines
+
+
+def _update_win(state) -> list:
+    """Victory is by ground only. A level with no counter-force wins when its victory bases are ours; with one, when the counter-force has been beaten."""
+    g = state.ground
+    if g.get("won") or not g.get("victory_ids"):
+        return []
+    if not all(x in g["taken"] for x in g["victory_ids"]):
+        return []
+    c = g.get("counter")
+    if g.get("counter_id"):
+        if c is None:
+            return []
+        if not c.get("resolved"):
+            i = _base_zone(g, g["counter_id"])
+            if c.get("arrived") and not c.get("used") and i is not None and g["red"][i] < MIN_FORCE and g["blue"][i] >= MIN_FORCE:
+                c["resolved"] = True
+            elif not c.get("resolved"):
+                return []
+    g["won"] = True
+    return ["The last objective is ours and nothing is left to stop us"] + story.beat(state, "win")
+
+
+def victory(state) -> bool:
+    return bool(active(state) and state.ground.get("won"))
+
+
+def apply_red_fall(state, rb) -> list:
+    """A red base falls to us: the field and everything dug in round it go down for good, and its jets withdraw to the nearest standing red field
+    (FALL_LOSS of them lost on the way), the way our own squadrons do when one of our fields falls. Its depots and fuel farms change sides with their
+    stock (v0.41.144); command posts are left alone. Nothing happens to an asset the level does not have (Level 1 has no field at Gudauta)."""
+    rid = rb["id"]
+    key = rid[3:] if rid.startswith("ab_") else rid
+    lines = []
+    fa = state.assets.get(rid)
+    if fa is not None:
+        fa.health = 0.0
+    for a in state.assets.values():
+        if a.kind in (AssetKind.SAM, AssetKind.EWR) and (a.id.startswith(f"sam_{key}_") or a.id.startswith(f"ewr_{key}") or a.id.startswith(f"fsam_{key}")):
+            a.health = 0.0
+        elif a.kind == AssetKind.ARMOR and a.variant == "GARRISON" and a.id.startswith(f"gar_{key}_"):
+            a.health = 0.0
+    lines += capture_sites(state, rid, [a.id for a in state.assets.values() if a.kind in SUPPLY_KINDS and a.id.endswith("_" + key)])      # v0.41.144: depots and fuel change sides with their stock
+    w = state.enemy_air_at(rid)
+    if w is not None and w.sqns:
+        dests = [x for x in state.enemy_air if x is not w and not state.assets[x.base_asset_id].destroyed]
+        fx, fy = rb["x"], rb["y"]
+        dest = min(dests, key=lambda x: (state.assets[x.base_asset_id].x - fx) ** 2 + (state.assets[x.base_asset_id].y - fy) ** 2) if dests else None
+        total = sum(q.available + q.reserve for q in w.sqns)
+        if dest is None:
+            w.sqns.clear(); w.squadrons = 0
+            lines.append(f"   the {total} enemy aircraft there are lost")
+        else:
+            lost = 0
+            for q in list(w.sqns):
+                k = int(round(q.available * FALL_LOSS))
+                q.available = max(0, q.available - k); lost += k
+                w.sqns.remove(q); dest.sqns.append(q)
+            w.squadrons = len(w.sqns); dest.squadrons = len(dest.sqns)
+            lines.append(f"   its squadrons withdraw to {state.assets[dest.base_asset_id].name}, {lost} aircraft lost")
     return lines
 
 
@@ -515,6 +940,8 @@ def fallen_count(state) -> int:
 
 def repair_blue(state, d) -> None:
     for a in getattr(state, "blue_assets", {}).values():
+        if a.kind in SUPPLY_KINDS:                                      # v0.41.144: supply sites mend on their own timer (supply_repair)
+            continue
         if 0 < a.health < 1.0:
             a.health = min(1.0, a.health + d.asset_repair)
 
@@ -547,4 +974,6 @@ def summary(state) -> list:
         out.append(f"{g['names'][i]}: enemy {r:.0f} | friendly {b:.0f}  ({tag})")
     if g.get("fallen"):
         out.append("FALLEN: " + ", ".join(state.bases[x].name for x in g["fallen"] if x in state.bases))
+    if g.get("rbases"):
+        out.append("TAKEN: " + (", ".join(rb["name"] for rb in g["rbases"] if rb["id"] in g["taken"]) or "none yet"))
     return out

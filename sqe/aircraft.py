@@ -88,12 +88,12 @@ AIRCRAFT: dict[str, AircraftSpec] = {
         first_wp_label="0", bingo_lbs=3000, joker_lbs=4500),
     "FA-18C": AircraftSpec(
         "FA-18C", "F/A-18C Hornet", "FA_18C_hornet", BaseKind.CARRIER,
-        frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.TARCAP, _R.STRIKE, _R.SEAD}), RefuelMethod.BASKET, 1, 300, 450, True,
+        frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.TARCAP, _R.STRIKE, _R.SEAD, _R.CAS}), RefuelMethod.BASKET, 1, 300, 450, True,
         RouteProfile(aar_alt_ft=20000, aar_kts=350, marshal_alt_ft=23000, push_kts=500, ip_kts=500,
                      attack_kts=500, egress_kts=540, push_nm=65), first_wp_label="0", bingo_lbs=2500, joker_lbs=3500),
     "F-16C": AircraftSpec(
         "F-16C", "F-16C Viper", "F_16C_50", BaseKind.AIRFIELD,
-        frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.TARCAP, _R.STRIKE, _R.SEAD}), RefuelMethod.BOOM, 1, 280, 450, True,
+        frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.TARCAP, _R.STRIKE, _R.SEAD, _R.CAS}), RefuelMethod.BOOM, 1, 280, 450, True,
         RouteProfile(aar_alt_ft=22000, aar_kts=350, marshal_alt_ft=21000), first_wp_label="0", bingo_lbs=2000, joker_lbs=3000),
     "F-15C": AircraftSpec(
         "F-15C", "F-15C Eagle", "F_15C", BaseKind.AIRFIELD,

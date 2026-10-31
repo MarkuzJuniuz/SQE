@@ -1,10 +1,12 @@
 """Squadron Campaign Engine (SQE): abstracted war + one fully generated DCS package per sortie."""
 APP_NAME = "Squadron Campaign Engine"
 SHORT = "SQE"
-__version__ = "0.41.135"
+__version__ = "0.41.219"
 
 CAMPAIGN_EXT = ".sqe"
 FORMAT_VERSION = 6
+COMPAT_ERA = 1         # v0.41.162: bump when a change makes older saves unloadable (the Campaign Revamp's ground format did); a save stamped with a higher era than this build knows is refused
+MIN_COMPAT_ERA = 1     # the oldest stamped era this build can still read (saves with no stamp are simply tried)
 AUTHOR = "MarkuzJuniuz"        # named on generated missions (DCS EULA 4.1)
 EULA_LINE = "THIS MATERIAL IS NOT MADE OR SUPPORTED BY EAGLE DYNAMICS SA."
 

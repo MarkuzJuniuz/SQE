@@ -238,6 +238,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
 
 SA10_AVOID_NM = 35.0       # v0.41.11: an AI flight's route keeps this far from a live SA-10 that is not its target (the v0.41.10 run: two JSOW
                            # flights bound for Gudauta passed 31 nm from the Sukhumi SA-10 and were shot at from 57 km)
+SA10_STATION_NM = 45.0     # v0.41.194 (XO 2026-10-29: Dodge 4's TARCAP orbit swung from 39 to 30 nm of the Sukhumi SA-10 and both Eagles died): a fighter STATION keeps this far from a live SA-10 so the orbit's near end (about 5-9 nm closer than its centre) stays outside SA10_AVOID_NM. Judgment call.
 AVOID_NM = {"SA-10": SA10_AVOID_NM, "SA-11": 20.0, "SA-2": 26.0, "SA-6": 16.0, "SA-3": 15.0}    # v0.41.20: every gate SAM, by its reach plus a margin
 
 

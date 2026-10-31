@@ -59,20 +59,22 @@ class AppSettings:
     dcs_saves: str = ""
     last_campaign: str = ""
     ai_unlimited_fuel: bool = True        # AI flights: unlimited fuel until the push, real fuel for the combat leg, unlimited again from egress
-    borrow_red: bool = False              # v0.41.81 (Experimental tab): red moves SAM batteries to where they are needed (sams.red_orders); off = only the usual rebuild
-    borrow_blue: bool = False             # the same for blue (sams.blue_orders)
     hot_ramp_scrambles: bool = False      # v0.41.80: scramble pairs at LAND fields wait hot on the ramp and taxi out (experimental); off = hidden, put on the runway when called
     hot_runway_starts: bool = False       # v0.41.96: AI package flights from LAND fields other than yours start on the runway (queued by the hook) instead of airborne, when the schedule allows (v0.41.97: your own field too, after your takeoff)
     hot_runway_own_field: bool = False    # v0.41.99: sub-setting of hot_runway_starts: also AI flights at YOUR field (after your takeoff); only counts while hot_runway_starts is on
     takeoff_buffer_s: int = 60            # seconds between mission start and the briefed takeoff (negative = you must be quicker than the plan)
     hold_minutes: int = 2                 # slack at the marshal point before PUSH (minutes; negative = hurry)
     flight_filter: str = "squadron"      # who you may fly: "squadron" (only flights of YOUR squadron). "all" is for tests and tools only: a saved file never turns it on (v0.41.93)
+    window_geometry: str = ""            # v0.41.151: the main window's size and position (Qt saveGeometry, base64); empty = open at the default size, centered (File > Reset window)
+    situation_open: bool = True          # v0.41.149: the Overview's Situation panel is open (day 1 starts open; it remembers the last state)
     list_filter: str = "squadron"        # v0.41.93: the Missions page list: "squadron" (packages with a flight of yours) or "all" (every package, for looking only)
     merge_mode: str = "area"              # "off" | "area" (default): fold packages in the same area, starting within 30 min, into one mission
     shore_margin_m: int = 1500            # ground sites keep this far from the sea and lakes
     river_margin_m: int = 100             # ...and this far from rivers and shallow water (terrain scan only)
     ai_skill_red: str = "level"            # v0.41.70: "level" (the difficulty level decides) or Average / Good / High / Excellent: Red's pilots and ground units
     ai_skill_blue: str = "level"           # ...and Blue's AI flights ("level" = High); see difficulty.ai_skill
+    tempo_decay: bool = False              # v0.41.208 (XO): Enable Tactical Edge Decay: the edge fades 3% a night. Off by default. (Both Tactical Edge switches become per-campaign on refactor day, XO 2026-10-30)
+    pilot_influence: bool = True           # v0.41.160: your flying (or neglect) feeds back into the war: red surges while you stand down. Off: no surge and no tempo, so your flying or standing down changes nothing
     weather_mode: str = "clear"            # "clear" | "procedural" | a fixed weather: scattered, broken, overcast, rain, storm
     ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
     merge_radius_nm: int = 15             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in (v0.41.131: 15, was 25)
@@ -85,6 +87,9 @@ class AppSettings:
     ai_land_carrier: str = "always"       # v0.41.18: AI flights going home to a carrier: "always" recovered short of it | "home" only at your deck | "never" land
     ai_land_field: str = "never"          # v0.41.18: the same for airfields
     splash_damage: bool = True            # extra blast damage near bomb / missile impacts (mission hook); v0.41.13: on by default
+    awacs_tuned: bool = True              # v0.41.215: AWACS calls reach you only while a radio is on the AWACS frequency (jets that can be read)
+    damage_calls: bool = True             # v0.41.215: other blue aircraft, the tanker and the AWACS call their own hits and mayday
+    ecm_status: bool = True               # v0.41.213: show the on-screen ECM messages (needs ecm_script)
     ecm_script: bool = False              # SQE's own jamming model in the mission hook; off = DCS's own ECM, used by the AI when locked
     carcasses: bool = True                # burnt-out wrecks at damaged and destroyed ground sites near your route
     carcass_weight_pct: int = 25          # one wreck counts this % of a live unit toward the unit limit
@@ -171,6 +176,88 @@ class AppSettings:
         self.dcs_install, self.dcs_saves, self.last_campaign = native(self.dcs_install), native(self.dcs_saves), native(self.last_campaign)
         d = asdict(self); d.pop("persist", None)
         (config_dir() / "settings.json").write_text(json.dumps(d, indent=2))
+
+
+# ---- ECM export script: copied to Saved Games\DCS\Scripts and hooked into Export.lua (v0.41.219, XO 2026-10-31) -------------
+ECM_MARK = "--[[SQE ECM EXPORT]]"
+ECM_LINE = ECM_MARK + "dofile(lfs.writedir() .. [[Scripts\\sqe_ecm_export.lua]])"
+_ECM_ACTIVE = re.compile(r"^[ \t]*(?:--\[\[SQE ECM EXPORT\]\])?[ \t]*dofile\(.*sqe_ecm_export\.lua", re.M)
+_ECM_BUNDLED = Path(__file__).resolve().parent / "data" / "sqe_ecm_export.lua"
+
+
+def _ecm_paths(saves: str):
+    d = Path(saves) / "Scripts"
+    return d, d / "sqe_ecm_export.lua", d / "Export.lua"
+
+
+def _read_export(p: Path) -> str:
+    return p.read_bytes().decode("utf-8", errors="surrogateescape") if p.exists() else ""
+
+
+def ecm_script_state(saves: str) -> str:
+    """'nofolder' | 'none' | 'partial' (line or file missing) | 'old' (script differs from the bundled one) | 'ok'."""
+    if not saves or not Path(saves).is_dir():
+        return "nofolder"
+    _, sc, ex = _ecm_paths(saves)
+    has_line = bool(_ECM_ACTIVE.search(_read_export(ex)))
+    has_file = sc.exists()
+    if not has_line and not has_file:
+        return "none"
+    if not (has_line and has_file):
+        return "partial"
+    try:
+        return "ok" if sc.read_bytes() == _ECM_BUNDLED.read_bytes() else "old"
+    except OSError:
+        return "old"
+
+
+def ecm_script_status(saves: str) -> str:
+    return {"nofolder": "Set the DCS Saves folder first.", "none": "Not installed",
+            "partial": "Half installed (click Install to finish)", "old": "Installed, an older copy (click Install to update)",
+            "ok": "Installed"}[ecm_script_state(saves)]
+
+
+def install_ecm_script(saves: str) -> tuple[bool, str]:
+    """Copy the script to Saved Games\\DCS\\Scripts and add ONE marked line to the END of Export.lua (created if missing). Export.lua is saved once to
+    Export.lua.sqe.bak first. Safe to call again: a line already there (ours or a hand-made one) is not added twice."""
+    if not saves or not Path(saves).is_dir():
+        return False, "Set the DCS Saves folder first."
+    d, sc, ex = _ecm_paths(saves)
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        sc.write_bytes(_ECM_BUNDLED.read_bytes())
+        raw = ex.read_bytes() if ex.exists() else b""
+        if _ECM_ACTIVE.search(raw.decode("utf-8", errors="surrogateescape")):
+            return True, "Installed (the Export.lua line was already there)."
+        bak = ex.with_name("Export.lua.sqe.bak")
+        if ex.exists() and not bak.exists():
+            shutil.copy2(ex, bak)
+        nl = b"\r\n" if b"\r\n" in raw else b"\n"
+        if raw and not raw.endswith((b"\n", b"\r")):
+            raw += nl
+        ex.write_bytes(raw + ECM_LINE.encode("utf-8") + nl)
+    except OSError as e:
+        return False, f"Could not write to {d}: {e}"
+    return True, "Installed. Restart DCS (or start a new flight) to load it." + (" Export.lua backup: Export.lua.sqe.bak." if (ex.with_name("Export.lua.sqe.bak")).exists() else "")
+
+
+def remove_ecm_script(saves: str) -> tuple[bool, str]:
+    """Take our line out of Export.lua, delete the copied script and a leftover flag file. Other lines in Export.lua stay as they are."""
+    if not saves or not Path(saves).is_dir():
+        return False, "Set the DCS Saves folder first."
+    d, sc, ex = _ecm_paths(saves)
+    try:
+        if ex.exists():
+            raw = ex.read_bytes().decode("utf-8", errors="surrogateescape")
+            keep = [ln for ln in raw.splitlines(True) if not _ECM_ACTIVE.match(ln)]
+            if len(keep) != len(raw.splitlines(True)):
+                ex.write_bytes("".join(keep).encode("utf-8", errors="surrogateescape"))
+        for f in (sc, Path(saves) / "Logs" / "SQE_ecm.flag"):
+            if f.exists():
+                f.unlink()
+    except OSError as e:
+        return False, f"Could not remove it: {e}"
+    return True, "Removed."
 
 
 # ---- MissionScripting.lua: patched while SQE is open, restored on exit -------------------------------------------------

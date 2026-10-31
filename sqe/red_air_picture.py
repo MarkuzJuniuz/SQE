@@ -18,7 +18,7 @@ from .models import BaseKind, ObjectiveType, Role
 from .routes import FT, NM, bearing, dist, offset
 from .strike_tasks import KPH
 
-RED_LONG_RANGE = {"Su_27"}    # v0.41.29: red's long-range class (XO 2026-10-16: the Su-27 only; the MiG-31 is not in rotation)
+RED_LONG_RANGE = {"Su_27", "MiG_31"}    # v0.41.29: red's long-range class (the Su-27); v0.41.142: the MiG-31 joins it on Levels 2 and 3 (XO 2026-10-24)
 RED_CALLIN_ZONE_NM = 25       # ...where it engages inside this circle round the site
 RED_CALLIN_NM = 50            # ...and a patrol is called to the SAM site it guards when blue comes this close to that site
 CAP_FLEET_KEEPOUT_NM = 78      # Red's known CAP stations stay at least this far from any carrier: the ships' SM-2 reach 70 nm (measured: CAP pairs killed 51 to 67 nm out) + 8 nm margin (v0.41.76: was 90, hand-set)

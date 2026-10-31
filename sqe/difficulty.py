@@ -47,6 +47,7 @@ class Difficulty:
     blue_reinf: float = 5.0              # the same for Blue
     raid_rate: float = 0.40              # Red raids on our airfields per day (raids.py); some are announced, the rest are surprises
     raid_arm: float = 0.0                # v0.41.84: chance a Su-24M raid on a field with a live Patriot / HAWK brings a Kh-31P SEAD pair (judgment call: L1 none, L2 rare, L3 normal)
+    raid_banzai: bool = False            # v0.41.146 (Campaign Revamp B4): Level 1's insurgents raid targets under live Patriot / HAWK cover without any SEAD (judgment call: they have no SEAD doctrine, and with every one of our fields covered they could never raid at all); the cover shoots them
     arm_cap: int = 8                     # v0.41.125: most Su-24M in red's SEAD group (L2: a pair, judgment call) ...
     arm_cap_free: int = 8                # ... unless the wing has this many spare jets beyond the bombers (then the full sizing)
     raid_surprise: float = 0.35          # share of the raids that are surprises (nobody warned us)
@@ -54,6 +55,11 @@ class Difficulty:
     sam_rebuild: float = 0.04            # nightly chance (x Red supply) that a destroyed SAM site is replaced (sams.py)
     sam_scoot: float = 0.30              # nightly chance that a hurt mobile SAM site moves
     raid_size: tuple = (2, 2)            # Su-24M in a raid: drawn between these (never more than the wing has)
+    raid_wave: float = 0.0               # v0.41.155 (red zerg): chance that a day is a massed-wave day: that day's raids are `raid_wave_mult` times bigger (judgment call)
+    raid_wave_mult: float = 1.5
+    red_supply_strikes: int = 1          # v0.41.155: background strikes red tries a skip day on our depots and fuel (ground.supply_round; judgment call)
+    red_surge: float = 0.0               # v0.41.155: red's push, attacks and raids grow by this much for each day beyond SURGE_GRACE_DAYS since your squadron last flew (ground.surge; judgment call)
+    red_rear_feed: float = 0.0           # v0.41.155: share of a rear sector's strength that moves one sector forward each night, scaled by red supply (ground.resolve_day; judgment call)
     raid_mix: tuple = (0.0, 0.0, 0.0)    # share of the raids that go for (a supply site, a field's garrison, friendly troops in a contested sector) instead of the airfield itself
     blue_garrison_size: float = 1.0      # scales the vehicle count of a friendly airfield garrison
     sead_valve: int = 3                  # failed SEAD days on one site before the combined SEAD + DEAD package is offered again (war.py)
@@ -62,34 +68,34 @@ class Difficulty:
     blue_rebuild: float = 0.15           # nightly chance (x friendly supply) that a destroyed friendly supply site or garrison is replaced
 
 LEVELS: dict[int, Difficulty] = {
-    1: Difficulty(1, "Level 1 - Insurgent", "Irregular forces. A few old aircraft, AAA and MANPADS, scattered older SAMs. "
+    1: Difficulty(1, "Level 1 - Insurgent", "Irregular forces. A few old aircraft, AAA and MANPADS, and a few old but working SAMs. "
                   "Expect to be shot at, not hunted.",
-                  enemy_air_total=20, red_squadron_max=6, enemy_types=["MiG_21Bis", "Su_25", "MiG_23MLD"],
-                  sam_variants=["AAA", "MANPAD", "SA-3"], sam_sites_per_cluster=1, iads=0.15,
+                  enemy_air_total=44, red_squadron_max=6, enemy_types=["MiG_21Bis", "MiG_23MLD", "MiG_29A", "Su_25", "Su_24M"],
+                  sam_variants=["SA-2", "SA-3", "AAA", "MANPAD"], sam_sites_per_cluster=4, iads=0.15,         # v0.41.154 (XO 2026-10-27): the insurgents are armed with working museum pieces by a sponsor: each field gets an SA-2, an SA-3, AAA and MANPADS (it was one site of AAA or MANPADS)
                   enemy_skill="Average", loss_rate=0.035, base_damage=0.45, variance=0.8,
                   friendly_replenish=0.14, enemy_replenish=0.03, asset_repair=0.03, sam_repair=0.03,
                   friendly_scale=1.2, enemy_cap_per_air=0.10, counterstrike=0.10, bomber_wing=0, bomber_policy="none", react_chance=0.08, react_ratio=(0.2, 0.5),
-                  ground_red=(55, 35, 8, 0, 0), ground_blue=(0, 20, 55, 70, 50), red_attack=0.15, red_reinf=3.5, blue_reinf=6.0, raid_rate=0.15, raid_surprise=0.25, emerg_chance=0.03, raid_size=(2, 2), sam_rebuild=0.02, sam_scoot=0.15,
+                  ground_red=(55, 35, 8, 0, 0), ground_blue=(0, 20, 55, 70, 50), red_attack=0.15, red_reinf=3.5, blue_reinf=7.0, raid_rate=0.25, raid_banzai=True, raid_surprise=0.25, emerg_chance=0.03, raid_size=(2, 2), sam_rebuild=0.02, sam_scoot=0.15,
                   raid_mix=(0.10, 0.10, 0.20), blue_garrison_size=1.0, blue_rebuild=0.20, sam_retreat=0.6, air_retreat=0.6),
     2: Difficulty(2, "Level 2 - Regional Power", "A real air force and layered SAMs, but not a peer. "
                   "A competent campaign wins; a careless one bleeds.",
-                  enemy_air_total=90, enemy_types=["MiG_29A", "MiG_29S", "MiG_23MLD", "Su_24M", "Su_25"],
+                  enemy_air_total=128, enemy_types=["MiG_31", "MiG_29A", "MiG_29S", "MiG_23MLD", "Su_24M", "Su_25"],
                   sam_variants=["SA-2", "SA-3", "SA-6", "SA-11", "AAA"], sam_sites_per_cluster=3, iads=0.55,
                   enemy_skill="Good", loss_rate=0.06, base_damage=0.35, variance=0.8,
                   friendly_replenish=0.08, enemy_replenish=0.05, asset_repair=0.04, sam_repair=0.06,
-                  friendly_scale=1.0, enemy_cap_per_air=0.15, counterstrike=0.30, bomber_wing=4, bomber_escort_wing=8, bomber_policy="desperate", bomber_safe_p=0.06,
+                  friendly_scale=1.0, enemy_cap_per_air=0.15, counterstrike=0.30, bomber_wing=11, bomber_escort_wing=8, bomber_policy="desperate", bomber_safe_p=0.06,
                   forward_sams=("SA-8", "SA-8"), garrison_chance=0.6, garrison_size=0.8, react_chance=0.35, react_ratio=(0.6, 1.1),
-                  ground_red=(70, 55, 15, 0, 0), ground_blue=(0, 15, 60, 70, 50), red_attack=0.45, red_reinf=7.5, blue_reinf=4.0, raid_rate=0.4, raid_arm=1.0, arm_cap=2, arm_cap_free=8, raid_surprise=0.35, emerg_chance=0.09, raid_size=(2, 4), sam_rebuild=0.04, sam_scoot=0.30,
+                  ground_red=(70, 55, 15, 0, 0), ground_blue=(0, 15, 60, 70, 50), red_attack=0.45, red_reinf=5.6, blue_reinf=7.0, raid_rate=0.4, red_surge=0.03, raid_wave=0.10, raid_wave_mult=1.5, red_supply_strikes=2, red_rear_feed=0.02, raid_arm=1.0, arm_cap=2, arm_cap_free=8, raid_surprise=0.35, emerg_chance=0.09, raid_size=(2, 4), sam_rebuild=0.04, sam_scoot=0.30,
                   raid_mix=(0.20, 0.15, 0.25), blue_garrison_size=0.8, blue_rebuild=0.15, sam_retreat=0.8, sead_valve=3, air_retreat=0.8),
     3: Difficulty(3, "Level 3 - Near-Peer", "Modern fighters, long-range SAMs and an integrated air-defence network. "
                   "Every sortie is contested and attrition bites.",
-                  enemy_air_total=150, red_squadron_max=14, enemy_types=["MiG_29S", "Su_27", "Su_24M", "Su_25", "MiG_29A"],
+                  enemy_air_total=256, red_squadron_max=14, enemy_types=["MiG_31", "MiG_29S", "Su_27", "Su_24M", "Su_25", "MiG_29A"],
                   sam_variants=["SA-10", "SA-11", "SA-6", "SA-15", "SA-19"], sam_sites_per_cluster=4, iads=0.9,
                   enemy_skill="High", loss_rate=0.085, base_damage=0.28, variance=0.7,
                   friendly_replenish=0.06, enemy_replenish=0.07, asset_repair=0.05, sam_repair=0.08,
-                  friendly_scale=0.85, enemy_cap_per_air=0.20, counterstrike=0.55, bomber_wing=10, bomber_escort_wing=16, bomber_policy="normal", bomber_safe_p=0.12,
+                  friendly_scale=0.85, enemy_cap_per_air=0.20, counterstrike=0.55, bomber_wing=30, bomber_escort_wing=16, bomber_policy="normal", bomber_safe_p=0.12,
                   forward_sams=("SA-15", "SA-8", "SA-19"), garrison_chance=1.0, garrison_size=1.0, react_chance=0.55, react_ratio=(1.0, 1.6),
-                  ground_red=(90, 80, 35, 0, 0), ground_blue=(0, 10, 45, 55, 40), red_attack=0.55, red_reinf=7.0, blue_reinf=4.0, raid_rate=0.7, raid_arm=1.0, raid_surprise=0.45, emerg_chance=0.21, raid_size=(4, 4), sam_rebuild=0.07, sam_scoot=0.50,
+                  ground_red=(90, 80, 35, 0, 0), ground_blue=(0, 10, 45, 55, 40), red_attack=0.8, red_reinf=7.0, blue_reinf=7.0, raid_rate=2.0, red_surge=0.08, raid_wave=0.25, raid_wave_mult=1.5, red_supply_strikes=4, red_rear_feed=0.05, raid_arm=1.0, raid_surprise=0.45, emerg_chance=0.33, raid_size=(6, 8), sam_rebuild=0.07, sam_scoot=0.50,
                   raid_mix=(0.25, 0.20, 0.25), blue_garrison_size=0.7, blue_rebuild=0.10, sam_retreat=1.0, sead_valve=2, air_retreat=1.0),
 }
 

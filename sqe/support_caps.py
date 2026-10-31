@@ -111,6 +111,7 @@ class SupportCaps:
                 grp = self.m.awacs_flight(self.usa, f"{s.label} 1", cls, None, pt(x, y), race_distance=40 * NM, heading=int(g.hdg + 90) % 360,
                                           altitude=alt, speed=spd, frequency=freq)
                 callsigns.apply(grp, s.label, 1, callsigns.AWACS); grp.units[0].name = f"{s.label} 1-1"
+                self._support_lbl[grp.units[0].name] = s.label.upper()
                 self._support_units[BY_CLASS_.get(s.dcs_class, s.slot)] = grp.units[0].name
                 awacs_unit = grp.units[0]
             else:
@@ -131,10 +132,25 @@ class SupportCaps:
                 grp = self.m.refuel_flight(self.usa, f"{s.label} 1", cls, None, pt(x, y), race_distance=race, heading=int(g.hdg + 90) % 360,
                                            altitude=alt, speed=spd, frequency=freq, tacanchannel=plan.tacan[s.slot])
                 callsigns.apply(grp, s.label, 1, callsigns.TANKER); grp.units[0].name = f"{s.label} 1-1"
+                self._support_lbl[grp.units[0].name] = s.label.upper()
                 self._support_units[BY_CLASS_.get(s.dcs_class, s.slot)] = grp.units[0].name
                 if s.slot == "TANKER1":
                     tanker_xy = offset(x, y, g.hdg + 90, race / 2)
         return tanker_xy, awacs_unit, hav_xy
+
+    def _barcap_circles(self, package, geom) -> list:
+        """v0.41.138: the engage circles (x, y, radius nm) of this mission's BARCAPs (base CAP and carrier CAP), worked out the same way the flights
+        get them (the route plan, then the SAM trim), so a TARCAP knows where the barrier circle is whatever order the flights are built in. Nothing is
+        built or changed."""
+        out = []
+        for f in package.flights:
+            if f.tag not in ("BASECAP", "CVCAP"):
+                continue
+            cz_, wps_, _ = self._support_cap_route(package, f, geom, None, 0, 0)
+            z_ = self._clear_zone(cz_, package, hold=(wps_[1].x, wps_[1].y))
+            if z_ is not None:
+                out.append(z_)
+        return out
 
     def _support_cap_route(self, package, f, geom, hav_xy, tot_s, rtb_s):
         """A support CAP's route: airborne on station for the whole package, one thing to guard. -> (cap_zone, wps, stop). Moved out of _spawn_flight in v0.41.54, unchanged."""

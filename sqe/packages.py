@@ -71,7 +71,7 @@ _KIT_TASK = {"JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers an
 _SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
 _ESC_TASK = "Escort: hold your station with the package, shoot what comes in range, do not chase; leave when the strikers are off target"
 _TASK[Role.ESCORT] = _ESC_TASK
-_TAG_TASK = {"HAVCAP": "HAVCAP (guards the AWACS)", "TNKCAP": "Tanker CAP (guards the tanker)", "BASECAP": "Base CAP", "CVCAP": "Carrier CAP"}
+_TAG_TASK = {"HAVCAP": "HAVCAP (guards the AWACS)", "TNKCAP": "HAVCAP (guards the tanker)", "BASECAP": "BARCAP", "CVCAP": "BARCAP (guards the carrier group)"}
 BASECAP_ENEMY_NM = 130     # v0.41.7: a land base gets a base CAP when an enemy fighter field is within this (an alert pair reaches it)
 
 
@@ -139,7 +139,7 @@ class Package:
     @classmethod
     def from_dict(cls, d: dict) -> "Package":
         o = d["objective"]
-        obj = Objective(o["id"], ObjectiveType(o["type"]), o["target_id"], o["priority"], o.get("description", ""), o.get("aim", ""))
+        obj = Objective(o["id"], ObjectiveType(o["type"]), o["target_id"], o["priority"], o.get("description", ""), o.get("aim", ""), o.get("after", ""))
         return cls(d["id"], d["number"], obj, [FlightPlan(**{**f, "role": Role(f["role"])}) for f in d["flights"]],
                    [SupportPlan(**s) for s in d["support"]], d.get("jtac", False), d.get("jtac_laser_code", 1688),
                    d.get("start", "09:00"), d.get("n_def", 0), d.get("extra", {}))
@@ -159,6 +159,8 @@ def _next_callsign(st, sq, used: dict) -> str:
 
 
 LONG_RANGE_A2A = {"F-15C", "F-14BU"}
+CAS_JET_MIN_DEF_FLIGHTS = 99     # v0.41.214 (XO 2026-10-30): was 3. 99 = never "hot": the A-10C is the CAS master on every job and the jets only fly it when no A-10C squadron is free and in range (the Vipers were engaged at their wait point; the cure is the gate hold, below, not the airframe). v0.41.189 (was 3): jets take CAS first only when this many red defender flights can reach the target (judgment call; 2026-10-29 sim: with 1 nearly every L1 / L2 job counted as hot and the A-10Cs flew none)
+CAS_JET_SWAY_NM = 400            # v0.41.188: the CAS squadron of the other kind is picked only when none of the preferred kind is free within this much of it (judgment call)
 A2A_SECONDARY_NM = 400          # an F-16 / F/A-18 squadron is picked for TARCAP or escort only when no long-range shooter is within this much of it
 
 
@@ -246,6 +248,8 @@ class PackageBuilder:
                     Slot(Role.SEAD, 4 if nb >= SALVO_8_NEIGHBOURS else 2)]     # the JSOW flight is picked before the second HARM flight: without it nothing is destroyed
         elif obj.type == ObjectiveType.CAS and obj.aim == "SEAD":           # v0.41.20: CAS under a live SA-2/3/6: the HARM escort is not optional
             tmpl = [Slot(Role.CAS, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
+        elif obj.type == ObjectiveType.STRIKE and obj.aim == "SEAD":        # v0.41.144: a supply strike under a live SA-2/3/6: same, the HARM escort is required
+            tmpl = [Slot(Role.STRIKE, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
         if carrier_raid(self.state, obj):                                    # v0.41.107: the setpiece: every fighter flight in reach, about one blue fighter per raider
             k = max(2, math.ceil(SETPIECE_RATIO * n_fl))              # n_fl = bombers; raiders = bombers x 3 (2 escorts each) -> k flights of 4
             return [Slot(Role.CAP, 4), Slot(Role.CAP, 4)] + [Slot(Role.CAP, 4, False) for _ in range(k - 2)] + [Slot(Role.SWEEP, 2, False)]
@@ -278,6 +282,7 @@ class PackageBuilder:
             n_fl = 1 if any(w.available > 0 for w in st.enemy_air) else 0
         else:
             n_fl = threat.defender_flights(threat.expected_defenders(st, tx, ty, iads))
+        self._hot = n_fl >= CAS_JET_MIN_DEF_FLIGHTS                                  # v0.41.188: red fighters can reach the target: CAS jets first
         pkg = Package(id=f"pkg{number}", number=number, objective=obj, n_def=2 * n_fl, extra=extra)
         slots = self._slots(obj, self._defended(obj), n_fl)
         pp = st.player
@@ -289,9 +294,17 @@ class PackageBuilder:
             ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles and (s.kit != "JSOW" or psq.aircraft in JSOW_PER_JET)
                   and (not is_sweep(obj) or psq.aircraft in LONG_RANGE_A2A)                    # v0.41.15: no BVR sweep in an F-16 / F/A-18
                   and self._in_range(psq.id, tx, ty) and ledger.free[psq.id] >= 2]
+            if obj.type == ObjectiveType.CAS and psq.aircraft != "A-10C" and not self._hot:
+                # v0.41.189 (XO): a quiet CAS job is the A-10Cs' job; a Viper / Hornet pilot is offered the CAS slot only when no A-10C squadron can fly it today
+                hog_ = any(sq_.aircraft == "A-10C" and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty) for sq_ in st.squadrons.values())
+                if hog_:
+                    ok = [i for i in ok if slots[i].role != Role.CAS]
             if not ok:
                 raise NoPlayerSlot(f"{psq.name} cannot fly any role in: {obj.description}")
             player_idx = max(ok, key=lambda i: PLAYER_ROLE_PREFERENCE[slots[i].role])
+            if obj.type == ObjectiveType.CAS and psq.aircraft != "A-10C":      # v0.41.188: a Hornet / Viper pilot picking a CAS job flies the Maverick slot, not the escort
+                cas_ = [i for i in ok if slots[i].role == Role.CAS]
+                player_idx = cas_[0] if cas_ else player_idx
             lead_service = spec.service
 
         chosen = []                      # (slot, squadron, count, is_player)
@@ -317,11 +330,11 @@ class PackageBuilder:
             for sl_, sq_, n_, _ in chosen:
                 ledger.free[sq_.id] += n_
             raise NoPlayerSlot("no JSOW-capable squadron free for the Standoff DEAD today")
-        if obj.type == ObjectiveType.CAS and obj.aim == "SEAD" and not any(sl_.role == Role.SEAD for sl_, *_ in chosen):
+        if obj.type in (ObjectiveType.CAS, ObjectiveType.STRIKE) and obj.aim == "SEAD" and not any(sl_.role == Role.SEAD for sl_, *_ in chosen):
             # v0.41.20: no HARM jets free: the CAS under a live SAM waits for another day rather than going in unescorted (no needless banzai)
             for sl_, sq_, n_, _ in chosen:
                 ledger.free[sq_.id] += n_
-            raise NoPlayerSlot("no SEAD flight free to escort the CAS today")
+            raise NoPlayerSlot("no SEAD flight free to escort the " + ("CAS" if obj.type == ObjectiveType.CAS else "strike") + " today")
 
         # support CAP: all four kinds (TNKCAP, HAVCAP, BASECAP, CVCAP) are planned chains now (blue_barcap.py), attached after the start times are known
         # v0.41.88: TNKCAP and HAVCAP are planned too (blue_barcap.py): chains per tanker / AWACS asset, attached once the start times are known.
@@ -347,15 +360,15 @@ class PackageBuilder:
         aim = getattr(obj, "aim", "") or ""
         ax, ay = raids.aim_xy(st, aim, tb)
         rnd = random.Random(f"{st.campaign_id}:{st.day}:{number}:{obj.target_id}:{aim}:raid")
-        r = raids.reach_for(st, raids.aim_kind(aim), ax, ay, budget=False)
+        r = raids.reach_for(st, raids.aim_kind(aim), ax, ay, budget=False, d=self.d)
         if r is None:
             return None
         bw, raider = r[1], r[2]
         ba = st.assets[bw.base_asset_id]
         lo, hi = (self.d.raid_size if self.d else (2, 2))
-        nb = max(2, min(rnd.randint(lo, hi), bw.available))
+        nb = max(2, min(int(round(rnd.randint(lo, hi) * raids.wave_mult(st, self.d))) if self.d else rnd.randint(lo, hi), bw.available))     # v0.41.155: a massed-wave day
         nb -= nb % 2
-        esc = None
+        esc, esc_avail = None, 0
         for w in sorted(st.enemy_air, key=lambda w: math.hypot(st.assets[w.base_asset_id].x - ax, st.assets[w.base_asset_id].y - ay)):
             a = st.assets[w.base_asset_id]
             if w is bw or w.available < 2 or a.destroyed:
@@ -363,7 +376,7 @@ class PackageBuilder:
             d_nm = math.hypot(a.x - ax, a.y - ay) / NM
             types = [t for t in w.general_types_up() if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm]
             if types:
-                esc = (w.base_asset_id, rnd.choice(types)); break
+                esc = (w.base_asset_id, rnd.choice(types)); esc_avail = w.available; break
         brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360          # they come from where they took off
         arm, arm_fields = 0, []
         if self.d and getattr(self.d, "raid_arm", 0) > 0 and not aim and raider == "Su_24M" and bw.available >= nb + 2:    # v0.41.84: a SEAD group ahead of the bombers
@@ -378,7 +391,7 @@ class PackageBuilder:
             return None
         return {"arm": arm, "arm_fields": arm_fields, "arm_cover": arm_cover, "dead": dead, "dead_cover": dead_cover, "land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
                 "escort_wing": esc[0] if esc else "", "escort_type": esc[1] if esc else "",
-                "escorts": (4 if nb >= 4 else 2) if esc else 0, "aim": aim, "dest": [ax, ay]}
+                "escorts": (max(4 if nb >= 4 else 2, min(nb // 2 + (2 if nb >= 8 else 0), esc_avail - esc_avail % 2)) if esc else 0), "mass": nb >= 8, "aim": aim, "dest": [ax, ay]}
 
     def _raid_plan(self, number: int, obj=None):
         """Bomber raid on the fleet: bearing it arrives on, how many bombers, and escorts that can really reach (range-limited)."""
@@ -414,6 +427,8 @@ class PackageBuilder:
                 k += A2A_SECONDARY_NM
             if escort and sq.aircraft in LONG_RANGE_A2A:
                 k += A2A_SECONDARY_NM
+            if slot.role == Role.CAS and (sq.aircraft != "A-10C") == (not getattr(self, "_hot", False)):
+                k += CAS_JET_SWAY_NM         # v0.41.188: A-10Cs where the air is clear, F-16C / F/A-18C when red fighters reach the target
             return k
         if lead_service is None:
             return min(cands, key=key)
