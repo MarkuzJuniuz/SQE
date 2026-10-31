@@ -5700,6 +5700,56 @@ def check_106_ecm_install(c):
     print("[ecm install] install / twice / remove / CRLF / backup / old copy / hand line; 0.25 s polling; support-CAP labels")
 
 
+
+def check_107_raid_cover_fields(c):
+    """v0.41.220 (XO 2026-10-31): a raid scramble builds every field whose Patriot / HAWK cover the raid's target (nearest four), a covering neighbour with no flights
+    in the package gets only what reaches the target (no AAA beyond COVER_AAA_NM), and the supply circle also runs round the raid's target."""
+    import math, re as _re, zipfile as _z
+    import sqe.engine as _eng
+    from sqe import raids as _r
+    from sqe import sams as _sams
+    from sqe.raid_spawns import COVER_AAA_NM, COVER_FIELDS_MAX
+    from sqe.routes import NM as _NM
+    _aio, _eng.AI_ONLY = _eng.AI_ONLY, ()
+    _rs, _eng.RAID_SCRAMBLES = _eng.RAID_SCRAMBLES, True
+    _em = _r.emergency_happens
+    seen_extra = 0
+    try:
+        _r.emergency_happens = lambda *a, **k: True
+        for seed in (3, 6):
+            s = fresh_session(seed, 6); st = s.state
+            boost_su24(st, 40)
+            rp = None
+            for _ in range(12):
+                s.plan_day()
+                rp = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "RAID" and s.emergency_for(p_.number, None)["eligible"]), None)
+                if rp:
+                    break
+                st.day += 1
+            assert rp is not None, ("no raid scramble", seed)
+            s.fly(rp.number, None, scramble=True)
+            pk = st.pending["package_dict"]; ex = pk.get("extra") or {}
+            tb = st.bases[pk["objective"]["target_id"]]
+            dest = ex.get("dest") or (tb.x, tb.y)
+            mz = _z.ZipFile(st.pending["miz"]).read("mission").decode()
+            cov = _r.covering_fields(st, dest[0], dest[1])[:COVER_FIELDS_MAX]
+            assert cov, ("a raid on this field has no covering field", seed)
+            flown = {f["base_id"] for f in pk.get("flights", []) if isinstance(f, dict) and f.get("base_id")}
+            for b in cov:
+                bt = _sams.blue_battery(b, st)
+                dn = math.hypot(b.x - dest[0], b.y - dest[1]) / _NM
+                assert ("BASEDEF %s Patriot" % b.name in mz) or ("BASEDEF %s HAWK" % b.name in mz), ("a covering field was not built", seed, b.name, dn)
+                if b.id not in flown and b.id != tb.id and dn > COVER_AAA_NM:
+                    assert ("BASEDEF %s AAA" % b.name) not in mz, ("a covering neighbour got AAA the target is too far for", seed, b.name, round(dn, 1))
+                    seen_extra += 1
+            R_ = max(5.0, float(s.settings.merge_radius_nm)) * _NM
+            near = [aid for aid, a in st.blue_assets.items() if a.kind.value in ("FUEL", "DEPOT") and not a.destroyed and math.hypot(a.x - dest[0], a.y - dest[1]) <= R_]
+            for aid in near:
+                assert ("%s|b" % aid) in mz or any("supply sites inside" in w_ for w_ in (st.pending.get("warns") or [])), ("a supply site near the raid target is missing", seed, aid)
+    finally:
+        _r.emergency_happens = _em; _eng.AI_ONLY = _aio; _eng.RAID_SCRAMBLES = _rs
+    print("[raid cover fields] covering fields built (nearest %d), neighbours without flights get no far AAA (%d checked), supply circle also round the raid target" % (COVER_FIELDS_MAX, seen_extra))
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5845,8 +5895,8 @@ CHECKS = [
     check_104_tuned_and_damage_calls,
     check_105_no_garrison_cas_beyond_mountains,
     check_106_ecm_install,
+    check_107_raid_cover_fields,
 ]
-
 
 def _borrows(fn) -> set:
     """The Ctx attributes a section reads (`c._M4` ...): the names it borrows from earlier sections."""

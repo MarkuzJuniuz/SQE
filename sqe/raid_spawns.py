@@ -47,7 +47,10 @@ DEAD_HOLD_MAX_NM = 110        # ...but no farther out than this from the field (
 DEAD_HOLD_LAG_S = 60          # ...they reach the hold this long after the Kh-31P launch...
 DEAD_GATE_WAIT_S = 1200       # ...and if the radars are not all dead this long after the launch (20 min, judgment call; blue's DEAD hold is 12 min, debrief.HOLD_S), they abort and go home
 DEAD_ATTACK_WINDOW_S = 600    # ...the attack task runs this long once they go in
-GATE_ALT_STEP_M = 250           # v0.41.126: each group holding at the raid gate orbits this much higher than the one before (no two share a level)
+COVER_FIELDS_MAX = 4          # v0.41.220 (XO 2026-10-31): a raid scramble also builds the defences of the fields whose Patriot / HAWK cover the raid's target, nearest first, at most this many (units: a full field is about 30; judgment call)
+RAID_SUPPLY_UNITS = 16        # ...and the supply sites round a raid's target are built before the raiders and the alert pairs, at most this many units (about four sites; judgment call: the raid's own load had used the whole 250 before the late supply call)
+COVER_AAA_NM = 5              # ...and a covering neighbour's AAA only when the target is this close to it (AAA reaches a few km, not 25 to 40 nm; judgment call)
+GATE_ALT_STEP_M = 250          # v0.41.126: each group holding at the raid gate orbits this much higher than the one before (no two share a level)
 GOTO_LUA_DELAY_S = 5          # the abort trigger waits for the Lua that defines SQE_GOTO (TimeAfter 1), like the call-in
 GOTO_LUA = (
     "SQE_RGATE = SQE_RGATE or {}\n"
@@ -120,6 +123,30 @@ class RaidSpawns:
             if len(wps) == n0:
                 break
         return [(w.x, w.y) for w in wps]
+
+    def _raid_dests(self, packages) -> list:
+        """v0.41.220: where each raid scramble's raiders are going (the field, supply site, garrison or sector: `extra["dest"]`, else the field itself), for the
+        packages that are raid scrambles (FLEET_DEFENSE with a raid in `extra`)."""
+        out = []
+        for p in packages:
+            if p.objective.type != ObjectiveType.FLEET_DEFENSE or not p.extra or p.objective.target_id not in self.state.bases:
+                continue
+            c = self.state.bases[p.objective.target_id]
+            d_ = p.extra.get("dest") or (c.x, c.y)
+            if all(dist(d_[0], d_[1], q[0], q[1]) > 1.0 for q in out):
+                out.append((float(d_[0]), float(d_[1])))
+        return out
+
+    def _raid_cover_bases(self, packages) -> dict:
+        """v0.41.220 (XO 2026-10-31: a raid target was built but the base's SAMs and nearby sites were not): {base id: (x, y)} of every field whose live Patriot
+        (PATRIOT_NM) or HAWK (HAWK_NM) covers a raid scramble's target, the point being what `_place_base` measures the reach from. The war sim and the raid gate
+        already count these fields (`raids.covering_fields`); the mission now builds them, nearest first, at most COVER_FIELDS_MAX per raid."""
+        from .raids import covering_fields
+        out = {}
+        for x, y in self._raid_dests(packages):
+            for b in covering_fields(self.state, x, y)[:COVER_FIELDS_MAX]:
+                out.setdefault(b.id, (x, y))
+        return out
 
     def _raid_cap(self, package, f) -> bool:
         """v0.41.28: an AI fighter of a raid intercept (FLEET_DEFENSE, not a support CAP): TARCAP rules for its route and engage circle."""
