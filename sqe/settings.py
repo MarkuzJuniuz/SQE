@@ -92,7 +92,7 @@ class AppSettings:
     ecm_status: bool = True               # v0.41.213: show the on-screen ECM messages (needs ecm_script)
     ecm_script: bool = False              # SQE's own jamming model in the mission hook; off = DCS's own ECM, used by the AI when locked
     carcasses: bool = True                # burnt-out wrecks at damaged and destroyed ground sites near your route
-    carcass_weight_pct: int = 25          # one wreck counts this % of a live unit toward the unit limit
+    carcass_weight_pct: int = 25          # one wreck or one live static building (a fuel farm's tank, a depot's warehouse) counts this % of a live unit toward the unit limit (v0.41.221; renamed in refactor week)
     unit_cap_v2: bool = False             # the old default (150) has been moved to the new one (250) once
     merge_enemy_pct: int = 100            # folded packages: enemy fighters = the biggest package's + this % of every other folded package's (100 = full sum)
     fighter_engage_nm: int = 40           # AI escorts and sweeps chase no further than this (0 = unlimited)

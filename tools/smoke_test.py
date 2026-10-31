@@ -5700,6 +5700,179 @@ def check_106_ecm_install(c):
     print("[ecm install] install / twice / remove / CRLF / backup / old copy / hand line; 0.25 s polling; support-CAP labels")
 
 
+
+def check_107_raid_cover_fields(c):
+    """v0.41.220 (XO 2026-10-31): a raid scramble builds every field whose Patriot / HAWK cover the raid's target (nearest four), a covering neighbour with no flights
+    in the package gets only what reaches the target (no AAA beyond COVER_AAA_NM), and the supply circle also runs round the raid's target."""
+    import math, re as _re, zipfile as _z
+    import sqe.engine as _eng
+    from sqe import raids as _r
+    from sqe import sams as _sams
+    from sqe.raid_spawns import COVER_AAA_NM, COVER_FIELDS_MAX
+    from sqe.routes import NM as _NM
+    _aio, _eng.AI_ONLY = _eng.AI_ONLY, ()
+    _rs, _eng.RAID_SCRAMBLES = _eng.RAID_SCRAMBLES, True
+    _em = _r.emergency_happens
+    seen_extra = 0
+    try:
+        _r.emergency_happens = lambda *a, **k: True
+        for seed in (3, 6):
+            s = fresh_session(seed, 6); st = s.state
+            boost_su24(st, 40)
+            rp = None
+            for _ in range(12):
+                s.plan_day()
+                rp = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "RAID" and s.emergency_for(p_.number, None)["eligible"]), None)
+                if rp:
+                    break
+                st.day += 1
+            assert rp is not None, ("no raid scramble", seed)
+            s.fly(rp.number, None, scramble=True)
+            pk = st.pending["package_dict"]; ex = pk.get("extra") or {}
+            tb = st.bases[pk["objective"]["target_id"]]
+            dest = ex.get("dest") or (tb.x, tb.y)
+            mz = _z.ZipFile(st.pending["miz"]).read("mission").decode()
+            cov = _r.covering_fields(st, dest[0], dest[1])[:COVER_FIELDS_MAX]
+            assert cov, ("a raid on this field has no covering field", seed)
+            flown = {f["base_id"] for f in pk.get("flights", []) if isinstance(f, dict) and f.get("base_id")}
+            for b in cov:
+                bt = _sams.blue_battery(b, st)
+                dn = math.hypot(b.x - dest[0], b.y - dest[1]) / _NM
+                assert ("BASEDEF %s Patriot" % b.name in mz) or ("BASEDEF %s HAWK" % b.name in mz), ("a covering field was not built", seed, b.name, dn)
+                if b.id not in flown and b.id != tb.id and dn > COVER_AAA_NM:
+                    assert ("BASEDEF %s AAA" % b.name) not in mz, ("a covering neighbour got AAA the target is too far for", seed, b.name, round(dn, 1))
+                    seen_extra += 1
+            R_ = max(5.0, float(s.settings.merge_radius_nm)) * _NM
+            near = [aid for aid, a in st.blue_assets.items() if a.kind.value in ("FUEL", "DEPOT") and not a.destroyed and math.hypot(a.x - dest[0], a.y - dest[1]) <= R_]
+            for aid in near:
+                assert ("%s|b" % aid) in mz or any("supply sites inside" in w_ for w_ in (st.pending.get("warns") or [])), ("a supply site near the raid target is missing", seed, aid)
+    finally:
+        _r.emergency_happens = _em; _eng.AI_ONLY = _aio; _eng.RAID_SCRAMBLES = _rs
+    print("[raid cover fields] covering fields built (nearest %d), neighbours without flights get no far AAA (%d checked), supply circle also round the raid target" % (COVER_FIELDS_MAX, seen_extra))
+
+def check_108_static_weight(c):
+    """v0.41.221 (XO 2026-10-31): a live static (a supply site's building) counts `carcass_weight` of a unit like a wreck, no AI and it never moves; the settings row says so."""
+    import math as _mh
+    from types import SimpleNamespace as NS
+    from sqe import mission_builder as _mb
+    g = lambda n, dead=False: NS(units=list(range(n)), dead=dead)
+    fake = NS(m=NS(coalition={"blue": NS(countries={"usa": NS(plane_group=[g(2)], helicopter_group=[], vehicle_group=[g(3)], ship_group=[],
+                                                              static_group=[g(4), g(4), g(8, dead=True)])})}),
+              o=NS(carcass_weight=0.25))
+    cn = _mb.MissionBuilder._counts(fake)
+    assert cn["statics"] == 8 and cn["wrecks"] == 8, cn
+    assert cn["units"] == 5 + _mh.ceil((8 + 8) * 0.25), cn          # 5 live units, 16 statics and wrecks at a quarter each
+    fake.o.carcass_weight = 1.0
+    assert _mb.MissionBuilder._counts(fake)["units"] == 5 + 16, "at 100% a static counts a whole unit again"
+    import inspect
+    from sqe.gui import dialogs as _dl
+    src = inspect.getsource(_dl)
+    assert "Wreck and static weight" in src and 'row(v, "Wreck weight"' not in src, "the settings row is renamed"
+    print("[static weight] live statics and wrecks count carcass_weight each (8 + 8 at 25% = 4 units); setting row 'Wreck and static weight'")
+
+
+def check_109_blue_base_def_skill(c):
+    """v0.41.222 (XO 2026-10-31): blue's base Patriot / HAWK / AAA are always Excellent, even with the Blue AI skill setting on a lower named value."""
+    import zipfile as _z
+    from lupa import LuaRuntime
+    s = fresh_session(3, 4); st = s.state
+    s.settings.ai_skill_blue = "Average"           # a named lower value must NOT win for base defences
+    s.plan_day()
+    pk = next(p_ for p_ in s.packages() if s.flyable(p_))
+    s.fly(pk.number, None)
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.execute(_z.ZipFile(st.pending["miz"]).read("mission").decode("utf-8"))
+    seen = 0
+    def walk(tb):
+        nonlocal seen
+        nm = tb["name"]
+        if isinstance(nm, str) and nm.startswith("BASEDEF") and tb["units"] is not None:
+            seen += 1
+            for _, u_ in tb["units"].items():
+                assert u_["skill"] == "Excellent", ("a blue base defence is not Excellent", nm, u_["skill"])
+        for k_, v_ in tb.items():
+            if lua.eval("function(x) return type(x) == 'table' end")(v_):
+                walk(v_)
+    walk(lua.globals().mission)
+    assert seen >= 2, ("no blue base defence groups found", seen)
+    print("[blue base def skill] %d base-defence groups, every unit Excellent with Blue skill set to Average" % seen)
+
+
+def check_110_package_scrub(c):
+    """v0.41.223 (XO 2026-10-31): the package scrub. The hook sends a package's AI flights to their SCRUB points (never the player's own flight) once its strikers, or its
+    cover, have lost half their jets, inside the time window, and the AWACS calls ABORT to the player; a built mission carries the table and a SCRUB point per AI flight."""
+    import sys as _sys, zipfile as _z, re as _re
+    from sqe import debrief as db
+    from sqe.debrief import SCRUB_LOSS_FRAC
+    assert SCRUB_LOSS_FRAC == 0.5
+    _sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
+    try:
+        import lupa  # noqa
+        import hook_lua_sim as hs
+    except ImportError:
+        hs = None
+    if hs is not None:
+        def mk(tot):
+            sc = [{"pkg": "pkg1", "grp": "Viper 2", "k": "M", "units": ["Viper 2-1", "Viper 2-2"], "to": 9, "ai": True, "you": False, "tot": tot},
+                  {"pkg": "pkg1", "grp": "Venom 1", "k": "C", "units": ["Venom 1-1", "Venom 1-2", "Venom 1-3", "Venom 1-4"], "to": 7, "ai": True, "you": False, "tot": tot},
+                  {"pkg": "pkg1", "grp": "Dodge 1", "k": "O", "units": ["Dodge 1-1", "Dodge 1-2"], "to": 5, "ai": True, "you": False, "tot": tot},
+                  {"pkg": "pkg1", "grp": "You 1", "k": "C", "units": ["You 1-1", "You 1-2"], "to": 0, "ai": False, "you": True, "tot": tot}]
+            return db.lua_hook("c", 1, "p", [], "You 1-1", "You 1", scrub=sc, awacs="Overlord")
+        home = "Dodge 1:SwitchWaypoint:5|Dodge 1:reset|Venom 1:SwitchWaypoint:7|Venom 1:reset|Viper 2:SwitchWaypoint:9|Viper 2:reset"
+        r = hs.run_scrub(mk(1000), [])
+        assert r.strip() == "##", ("nothing lost, nothing scrubbed", r)
+        r = hs.run_scrub(mk(1000), ["Viper 2-1"])                           # one of the 2-ship strikers: half
+        assert r.startswith(home) and "ABORT, ABORT. Strike flight is down" in r and "OVERLORD to YOU 1" in r and "You 1:" not in r.split("##")[0], r
+        r = hs.run_scrub(mk(1000), ["Venom 1-1", "Venom 1-2", "You 1-1"])  # 3 of the 6 cover jets (the player's own wingmen count, he is never commanded)
+        assert r.startswith(home) and "Escort is down" in r and "You 1:" not in r.split("##")[0], r
+        r = hs.run_scrub(mk(1000), ["Venom 1-1"])                           # a quarter of the cover: no scrub
+        assert r.strip() == "##", r
+        r = hs.run_scrub(mk(-200), ["Viper 2-1"])                           # TOT long past: the strike is done or moot
+        assert r.strip() == "##", r
+        r = hs.run_scrub(mk(150), ["Venom 1-1", "Venom 1-2", "Venom 1-3"])  # cover lost but the strikers are about to commit (TOT - 90 s is past)
+        assert r.strip() == "##", r
+    s = fresh_session(3, 4); st = s.state
+    s.plan_day()
+    pk = next(p_ for p_ in s.packages() if s.flyable(p_))
+    s.fly(pk.number, None)
+    z = _z.ZipFile(st.pending["miz"])
+    ms = z.read("mission").decode("utf-8", "replace")
+    assert "PACKAGE SCRUB" in ms and "__SCRUB" not in ms, "the hook carries the scrub block with its placeholders filled"
+    n_tbl = len(_re.findall(r"\{pkg=", ms))
+    n_wp = len(_re.findall(r'name"\]\s*=\s*"SCRUB"', ms))
+    assert n_tbl >= 2, ("no package flights in the scrub table", n_tbl)
+    assert n_wp >= 1, ("no SCRUB waypoint in the mission", n_wp)
+    print("[package scrub] hook replay: strike half lost / cover half lost scrub the AI package (not the player), late and quarter losses do not; built mission: %d flights in the table, %d SCRUB points" % (n_tbl, n_wp))
+
+
+def check_111_step_spin(c):
+    """v0.41.224 (XO 2026-10-31): the number boxes have their minus / plus buttons OUTSIDE the field (Qt's own arrows turned into a text cursor at a display scale above 100%).
+    The box steps and clamps, keeps its suffix, and its text field is wide enough to show the number (a QSpinBox with NoButtons under the stylesheet's border left it 1 px)."""
+    import os as _os; _os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication, QLineEdit
+    from sqe.gui import theme, dialogs
+    from sqe.gui.widgets import StepSpin
+    from sqe.settings import AppSettings
+    app = QApplication.instance() or QApplication([])
+    app.setStyleSheet(theme.QSS)
+    w = StepSpin(); w.setRange(-600, 900); w.setSuffix(" s"); w.setSingleStep(5); w.setValue(60); w.resize(200, 40); w.show(); app.processEvents()
+    got = []; w.valueChanged.connect(got.append)
+    QTest.mouseClick(w._plus, Qt.LeftButton); QTest.mouseClick(w._plus, Qt.LeftButton); QTest.mouseClick(w._minus, Qt.LeftButton)
+    assert w.value() == 65 and got == [65, 70, 65], (w.value(), got)
+    w.setValue(900); QTest.mouseClick(w._plus, Qt.LeftButton)
+    assert w.value() == 900, "clamped at the top"
+    le = w._spin.findChild(QLineEdit)
+    assert le.geometry().width() > 40 and le.text().endswith(" s"), ("the number is not shown", le.geometry(), le.text())
+    d = dialogs.SettingsDialog(AppSettings()); d.show(); app.processEvents()
+    for nm in ("tob", "hold", "cw", "mmax", "mrad", "mback", "mfwd", "mpct", "feng", "fmin"):
+        sp = getattr(d, nm)
+        assert isinstance(sp, StepSpin), nm
+        assert sp._spin.findChild(QLineEdit).geometry().width() > 20, ("text field squeezed", nm)
+    print("[step spin] minus / plus outside the field step and clamp, suffix kept, text field wide; the 10 Settings number boxes use it")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5845,8 +6018,12 @@ CHECKS = [
     check_104_tuned_and_damage_calls,
     check_105_no_garrison_cas_beyond_mountains,
     check_106_ecm_install,
+    check_107_raid_cover_fields,
+    check_108_static_weight,
+    check_109_blue_base_def_skill,
+    check_110_package_scrub,
+    check_111_step_spin,
 ]
-
 
 def _borrows(fn) -> set:
     """The Ctx attributes a section reads (`c._M4` ...): the names it borrows from earlier sections."""

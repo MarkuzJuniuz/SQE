@@ -30,6 +30,11 @@ QPushButton#good {{ background: {GREEN}; color: #04140c; border: none; font-weig
 QPushButton#good:disabled {{ background: #1f4a39; color: #5f8a79; }}
 QListWidget, QTableWidget, QTextEdit, QTextBrowser, QLineEdit, QComboBox, QSpinBox {{
     background: {PANEL}; border: 1px solid {BORDER}; border-radius: 8px; padding: 6px; selection-background-color: #22476b; }}
+QSpinBox QLineEdit {{ background: transparent; border: none; padding: 0; margin: 0; }}
+QSpinBox#flatspin::up-button, QSpinBox#flatspin::down-button {{ width: 0px; border: none; margin: 0; padding: 0; }}
+QToolButton#step {{ background: {PANEL}; border: 1px solid {BORDER}; border-radius: 8px; min-width: 34px; min-height: 30px; font-size: 16px; font-weight: 700; color: {TEXT}; }}
+QToolButton#step:hover {{ background: {CARD}; border-color: {BLUE}; }}
+QToolButton#step:pressed {{ background: #22476b; }}
 QListWidget::item {{ padding: 10px; border-radius: 8px; }}
 QListWidget::item:selected {{ background: #1f3a55; border: 1px solid {BLUE}; }}
 QListWidget::item:hover {{ background: {CARD}; }}

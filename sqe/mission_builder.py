@@ -36,7 +36,7 @@ from .difficulty import Difficulty, ai_skill
 from .fighter_stations import FighterStations, ESCORT_AFTER_TOT_S, TARCAP_AFTER_TOT_S, axis_station
 from .support_caps import SupportCaps
 from .red_air_picture import RedAirPicture, A2A_ZONE_NM
-from .raid_spawns import SUPPLY_BUILDINGS, RaidSpawns
+from .raid_spawns import RAID_SUPPLY_UNITS, SUPPLY_BUILDINGS, RaidSpawns
 from .strike_tasks import StrikeTasks, DEAD_GATE_KM, SEAD_WAVE_KM, TRACK_RADARS, SEARCH_RADARS, KPH
 from . import kneeboard
 from .kneeboard import latlon, render_pages
@@ -49,6 +49,8 @@ TARCAP_LEAD_S = 120           # v0.41.115 (was 0; XO 2026-10-22: fighters in fir
 FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
+SCRUB_POINT_NM = 20           # v0.41.223: a package flight's SCRUB point (where a scrubbed flight goes first) sits this far from its home field, on the bearing of its route's last point (the same shape as the stand-off ABORT point)
+BLUE_BASE_DEF_SKILL = "Excellent"   # v0.41.222 (XO 2026-10-31): blue's base Patriot / HAWK / AAA are always the top DCS skill, whatever the Blue skill setting or the level says. Why: under "level" they were left at pydcs's Average while red's sites run at the level's skill (High on L3), and XO saw them barely fire. Judgment call (no public figure for operator quality).
 TARCAP_BEHIND_NM = 8          # v0.41.43 (16; v0.41.115: 8, XO 2026-10-22: it sat 56 nm from red's patrols, too far to snipe): with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
 TARCAP_FWD_NM = 20           # v0.41.120: the TARCAP's engage circle tries to reach this far past its station toward red (judgment call: red's alert pairs held 24 nm from the station in XO's 2026-10-23 run)
 TARCAP_NEAR_STRIKE_NM = 22   # v0.41.181 (XO 2026-10-28): a STRIKE package's TARCAP holds this far from the shooters' middle (was 26 for all); judgment call: it protects the package, it does not hunt red's patrols
@@ -182,7 +184,7 @@ class MissionOptions:
     ecm_status: bool = True             # v0.41.213: the on-screen ECM messages (F-16C lamp, FC3 F10 calls); only with ecm_script
     ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
-    carcass_weight: float = 0.25        # how much of a live unit one wreck counts toward the unit limit
+    carcass_weight: float = 0.25        # how much of a live unit one wreck or one live static building counts toward the unit limit (v0.41.221: the buildings too; the name stays until refactor week)
     carcass_range_nm: int = 40          # only sites this close to the route get wrecks
     full_map: bool = False              # stress test: build everything that exists (see _spawn_everything); the unit limit is off
     max_units: int = 250                # the unit limit of the BASE mission (wrecks are trimmed, furthest first, to fit under it); merged packages' units do not count (v0.41.104)
@@ -270,6 +272,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._runway_busy = set()                                      # bases whose runway / catapult already holds a group at mission start
         self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []
         self._ecm_player = ""                           # v0.41.210: how the hook learns the player's jammer: "live" (F-16C lamp via Export.lua), "f10" (FC3 jet), "" (old attack-leg window)
+        self._raid_xy = []                              # v0.41.220: where each raid scramble's raiders are going (the supply circle runs round these too)
         self._supply_built = set()                      # v0.41.209: blue supply sites already put on the map this mission (a raid target is one)
         self._rwy_rel, self._hot = {}, None                            # v0.41.96: release times already given per runway; the hot-runway slot of the flight being built
         self._launch_pts = {}                                          # package id -> [(x, y)] where its HARM / JSOW / strike flights launch (the cover zone)             # alert groups waiting for a runway (the hook lines them up), trigger flags, your runway
@@ -292,6 +295,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
         self._support_lbl = {}                                          # v0.41.215: tanker / AWACS unit name -> its label, for the damage calls
         self._gates = []                                                # DEAD flights that turn back when the site's radars are still up
+        self._route_end = {}                                            # v0.41.223: group name -> where its route ended before the SCRUB point was added (the home leg is built from there)
+        self._scrub = []                                                # v0.41.223: every package flight for the hook's package scrub (group, unit names, kind, SCRUB point)
         self._sead_grps = {}                                            # site id -> the SEAD flights' group names (all merged packages); the gate aborts when they are all down
         self._blind_site = set()
         extras = [x for x in extras if any(not f.tag for f in x.flights)]
@@ -365,6 +370,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         raided_ = [package.objective.target_id] if (package.objective.type == ObjectiveType.FLEET_DEFENSE and package.objective.target_id in st.bases) else []
         for bid in dict.fromkeys([f.base_id for f in package.flights] + raided_ + [f.base_id for x in list(extras) + list(ruins) for f in x.flights if not f.tag]):
             self._place_base(st.bases[bid], tx, ty)
+        # v0.41.220 (XO 2026-10-31): a raid scramble also builds the neighbouring fields whose Patriot / HAWK cover the raid's target (the war sim and the raid gate already
+        # count them; before, only the raided field and the fields with flights were built, so the target stood alone)
+        self._raid_xy = self._raid_dests([package] + list(extras))
+        for bid, near_ in self._raid_cover_bases([package] + list(extras)).items():
+            if bid not in self.apt and bid in st.bases:
+                self._place_base(st.bases[bid], tx, ty, near=near_)
         for cvb_ in st.bases.values():                  # v0.41.209 (XO 2026-10-30): the carrier group is always in the mission (4 ships, about 100 nm out); it was built only when a flight used the boat
             if cvb_.kind == BaseKind.CARRIER and cvb_.id not in self.ship:
                 self._place_base(cvb_, tx, ty)
@@ -479,6 +490,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                            egr_events=self._striker_egr)
         manifest.cur_pkg = ""
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + list(self._red_intel)
+        self._spawn_supply_in_radius(package, tx, ty, manifest, only_raid=True, max_units=RAID_SUPPLY_UNITS)       # v0.41.220: what a raid scramble is about is built before the raiders and the alert pairs use the unit limit
         self._spawn_reactive(package, extras, tx, ty, tgt.eta_s, geom, manifest, despawn)
         self._dry_pass()
         self._spawn_supply_in_radius(package, tx, ty, manifest)
@@ -562,7 +574,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and not f_.is_player],
                          done_after=max([float(tgt.eta_s)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
                          rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts, cover=self._cover, ecm_player=self._ecm_player, ecm_msg=bool(o.ecm_status),
-                         tune_flags=tune_flags, tune_mhz=tune_mhz, awacs_unit=f"{awl} 1-1" if any(s.slot == "AWACS" for s in package.support) else "",
+                         scrub=self._scrub, tune_flags=tune_flags, tune_mhz=tune_mhz, awacs_unit=f"{awl} 1-1" if any(s.slot == "AWACS" for s in package.support) else "",
                          dmg=({**self._ulabels, **{k: "*" + v for k, v in self._support_lbl.items()}} if o.damage_calls else {}), dmg_on=bool(o.damage_calls),
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
@@ -925,48 +937,59 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         return min(self.o.max_units - u, ceil_ - u)          # v0.41.131: the whole mission counts again
 
     def _counts(self) -> dict:
-        """Units for the VR budget. A dead static (wreck) is cheap, so it counts `carcass_weight` of a unit; 'wrecks' is how many there are."""
-        g = u = w = 0
+        """Units for the VR budget. A dead static (wreck) and a live static (a supply site's building) are cheap, no AI and they never move, so both count
+        `carcass_weight` of a unit (v0.41.221, XO 2026-10-31: the buildings used to count whole units); 'wrecks' and 'statics' are how many there are."""
+        g = u = w = n_s = 0
         for coal in self.m.coalition.values():
             for c in coal.countries.values():
                 for attr in ("plane_group", "helicopter_group", "vehicle_group", "ship_group", "static_group"):
                     for grp in getattr(c, attr, []):
-                        if attr == "static_group" and getattr(grp, "dead", False):
-                            w += len(grp.units)
+                        if attr == "static_group":
+                            if getattr(grp, "dead", False):
+                                w += len(grp.units)
+                            else:
+                                n_s += len(grp.units); g += 1
                             continue
                         g += 1; u += len(grp.units)
-        return {"groups": g, "units": u + int(math.ceil(w * self.o.carcass_weight)), "wrecks": w}
+        return {"groups": g, "units": u + int(math.ceil((w + n_s) * self.o.carcass_weight)), "wrecks": w, "statics": n_s}
 
-    def _spawn_supply_in_radius(self, package, tx, ty, manifest) -> None:
+    def _spawn_supply_in_radius(self, package, tx, ty, manifest, only_raid: bool = False, max_units: int | None = None) -> None:
         """v0.41.209 (XO 2026-10-30): every live supply site (fuel farm, depot) of BOTH sides inside the merge radius round the target is in the mission, so a
         pilot who flies past a depot sees it. The radius is the Settings > Mission Build merge radius (the performance knob). Built last (after every flight and
-        patrol), nearest first, while the unit limit has room: the rest are left out with a warning, and nothing else is pushed out for them (wrecks fit after)."""
+        patrol), nearest first, while the unit limit has room: the rest are left out with a warning, and nothing else is pushed out for them (wrecks fit after).
+        v0.41.220 (XO 2026-10-31): a raid scramble's target gets the same circle (`self._raid_xy`; the CAP station that centres the mission is up to 40 nm out from
+        it). `only_raid` measures from the raid targets only and `max_units` caps what that call builds: the first call runs BEFORE the raiders and the alert pairs,
+        because the raid's own load had already used the whole unit limit and the sites round its target were the first thing left out."""
         st, o = self.state, self.o
         if o.full_map:
             return
         R = max(5.0, float(o.merge_radius_nm)) * NM
+        centres = list(getattr(self, "_raid_xy", [])) + ([] if only_raid else [(tx, ty)])
+        if not centres:
+            return
         cands = []
         for a in st.assets.values():
             if a.kind in SUPPLY_BUILDINGS and not a.destroyed and a.id not in self.groups_by_asset:
-                cands.append((dist(a.x, a.y, tx, ty), a.id, "red", a))
+                cands.append((min(dist(a.x, a.y, cx, cy) for cx, cy in centres), a.id, "red", a))
         for aid, a in st.blue_assets.items():
             if a.kind in SUPPLY_BUILDINGS and not a.destroyed and aid not in self._supply_built:
-                cands.append((dist(a.x, a.y, tx, ty), aid, "blue", a))
-        cands = sorted(c for c in cands if c[0] <= R)
+                cands.append((min(dist(a.x, a.y, cx, cy) for cx, cy in centres), aid, "blue", a))
+        cands = sorted((c for c in cands if c[0] <= R), key=lambda c: (c[0], c[1]))
         if not cands:
             return
         home = min((b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD), key=lambda b: dist(b.x, b.y, tx, ty), default=None)
-        built = 0
+        built = used = 0
         for d_, aid, side, a in cands:
-            need = len(SUPPLY_BUILDINGS[a.kind]) + (1 if side == "red" else 0)         # the buildings and red's Shilka guard
-            if self._units_room() < need:
+            need = math.ceil(len(SUPPLY_BUILDINGS[a.kind]) * o.carcass_weight) + (1 if side == "red" else 0)         # v0.41.221: the buildings count like wrecks (carcass_weight), and red's Shilka guard is a whole unit
+            if self._units_room() < need or (max_units is not None and used + need > max_units):
                 break
             if side == "red":
                 self._spawn_site(a, SOFT.get(a.kind), manifest, primary=False)
             elif home is not None:
                 self._spawn_raid_target(package, home, aid, a.x, a.y, manifest)
             built += 1
-        if built < len(cands):
+            used += need
+        if built < len(cands) and max_units is None:
             self.warns.append(f"{len(cands) - built} supply sites inside the {o.merge_radius_nm} nm merge radius left out to stay under the {o.max_units}-unit limit (furthest first)")
 
     def _place_carcasses(self) -> None:
@@ -1050,7 +1073,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _carrier_heading(self, x, y, prefer):
         return carrier_heading(x, y, prefer)
 
-    def _platoon(self, country, name, comp, x, y, heading, formation, scale=1.0, spacing=None):
+    def _platoon(self, country, name, comp, x, y, heading, formation, scale=1.0, spacing=None, base_def=False):
         types = []
         for vname, n in comp:
             vt = _vt(vname)
@@ -1064,15 +1087,29 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if spacing and formation == F.Star:                  # pydcs lays a star out 20 m apart; a wider one for SAM batteries
             g.formation_star(int(heading) % 360, spacing)
         bs = ai_skill(self.o, "blue", self.d, ground=True) if country is self.usa else None      # v0.41.70: blue base defences follow the Blue skill when it is set
+        if base_def:                                         # v0.41.222 (XO 2026-10-31): blue's base SAMs and AAA are always Excellent, whatever the Blue skill setting says
+            bs = BLUE_BASE_DEF_SKILL
         if bs:
             g.set_skill(getattr(Skill, bs, Skill.High))
         return g
 
-    def _place_base(self, base, tx, ty):
+    def _place_base(self, base, tx, ty, near=None):
+        """v0.41.220: `near` = (x, y) of a raid target this field is built to cover (a neighbour of the raided field): it then gets only what reaches that point, the
+        Patriot inside PATRIOT_NM, the HAWK inside HAWK_NM, the AAA inside COVER_AAA_NM (a full field is about 30 units)."""
         o = self.o
         if base.kind == BaseKind.AIRFIELD:
             self.apt[base.id] = self.t.airports[base.airport]
-            bt = sams.blue_battery(base, self.state)            # v0.41.30: doctrinal batteries, every field alike; v0.41.62: read from the field's three sites (sams.py)
+            bt = dict(sams.blue_battery(base, self.state))      # v0.41.30: doctrinal batteries, every field alike; v0.41.62: read from the field's three sites (sams.py)
+            if near is not None:                                 # v0.41.220: a covering neighbour builds only what reaches the raid's target
+                from .raids import HAWK_NM, PATRIOT_NM
+                from .raid_spawns import COVER_AAA_NM
+                dn_ = dist(base.x, base.y, near[0], near[1]) / NM
+                if dn_ > PATRIOT_NM:
+                    bt["patriot_ln"] = 0
+                if dn_ > HAWK_NM:
+                    bt["hawk"] = False
+                if dn_ > COVER_AAA_NM:
+                    bt["aaa"] = 0
             if o.base_defenses and (bt["patriot_ln"] or bt["aaa"] or bt["hawk"]):
                 p = self.apt[base.id].position
                 # v0.41.7: the Patriot faces the threat (the nearest enemy fighter field; was a direction picked from the base's name: a Patriot
@@ -1089,17 +1126,17 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 x, y = site_at("pat", ang, 4500)
                 if bt["patriot_ln"]:
                     self.base_ad.setdefault(base.id, {})["pat"] = self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
-                                  ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M)
+                                  ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M, base_def=True)
                 x, y = site_at("aaa", ang + 120, 3500)
                 if bt["aaa"]:
-                    self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line)
+                    self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line, base_def=True)
                 if bt["aaa"] >= 2:
                     x, y = site_at("aaa2", ang - 120, 3500)
-                    self._platoon(self.usa, f"BASEDEF {base.name} AAA 2", [("Vulcan", 1), ("M1097_Avenger", 2)], x, y, ang, F.Line)
+                    self._platoon(self.usa, f"BASEDEF {base.name} AAA 2", [("Vulcan", 1), ("M1097_Avenger", 2)], x, y, ang, F.Line, base_def=True)
                 if bt["hawk"]:
                     x, y = site_at("hawk", ang + 50, 6000)
                     self.base_ad.setdefault(base.id, {})["hawk"] = self._platoon(self.usa, f"BASEDEF {base.name} HAWK", [("Hawk_sr", 1), ("Hawk_tr", sams.BLUE_HAWK_TR), ("Hawk_pcp", 1), ("Hawk_cwar", 1),
-                                  ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M)
+                                  ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M, base_def=True)
             return
         hdg = getattr(self, '_cv_hdg', {}).get(base.id)
         if hdg is None:
@@ -1400,6 +1437,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if f.role == Role.SEAD and package.objective.target_id:
             self._sead_grps.setdefault(package.objective.target_id, []).append(g.name)
         gate = self._dead_gate(package, f, g, wps, first, stw, tot_s, base)
+        self._scrub_point(package, f, g, base, wps, tot_s)
         self._home_leg(f, g, base, wps, idx, hold_end, stop, special)
         if gate is not None:
             if gate["to"] is None:
@@ -1956,6 +1994,28 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
                 self._sead_attack_tasks(package, f, wp, w, armor)
 
+    def _scrub_point(self, package, f, g, base, wps, tot_s):
+        """v0.41.223 (XO 2026-10-31): the package scrub's part of the route. Every non-support package flight is recorded for the hook (`self._scrub`); an AI flight also gets a
+        SCRUB point before its home leg, the point a scrubbed flight is sent to (the stand-off ABORT point when it already has one). The hook does the rest (debrief.py)."""
+        if f.tag or f.role not in (Role.STRIKE, Role.CAS, Role.SEAD, Role.TARCAP, Role.ESCORT, Role.SWEEP) or not wps:
+            return
+        kind = "M" if f.role in (Role.STRIKE, Role.CAS) else "C" if f.role in (Role.TARCAP, Role.ESCORT, Role.SWEEP) else "O"
+        ai = bool(not f.is_player or self.o.player_is_ai)
+        to = 0
+        if ai:
+            from types import SimpleNamespace
+            self._route_end[g.name] = SimpleNamespace(x=g.points[-1].position.x, y=g.points[-1].position.y)      # _home_leg builds the recovery point from the route's real end
+            if getattr(g.points[-1], "name", "") == "ABORT":
+                to = len(g.points)
+            else:
+                lw = wps[-1]
+                bx, by = offset(base.x, base.y, bearing(base.x, base.y, lw.x, lw.y), SCRUB_POINT_NM * NM)
+                alt_ = home_leg_ft((lw.x, lw.y), (bx, by), min(lw.alt_ft, 9000))      # clears the ground between the route's last point and here
+                g.add_waypoint(self._pt(bx, by), alt_ * FT, 320 * KPH, "SCRUB")
+                to = len(g.points)
+        self._scrub.append({"pkg": package.id, "grp": g.name, "k": kind, "units": [u.name for u in g.units], "to": to, "ai": ai, "you": bool(f.is_player),
+                            "tot": float(tot_s if tot_s is not None else 86400)})
+
     def _home_leg(self, f, g, base, wps, idx, hold_end, stop, special):
         """The way home: the recovery entry point, landing or deck recovery."""
         o = self.o
@@ -1964,7 +2024,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if not f.is_player or o.player_is_ai:
                 # v0.41.10: staggered recovery. Each AI flight comes home through its own entry point, 8 nm out on its own bearing and height, so the
                 # flights do not all arrive over the field at once (two F-15 wingmen collided low and slow on the way home in two runs)
-                lp_ = g.points[-1].position
+                lp_ = self._route_end.get(g.name) or g.points[-1].position
                 rb_ = bearing(base.x, base.y, lp_.x, lp_.y) + RCV_SPREAD[idx % len(RCV_SPREAD)]
                 rx_, ry_ = offset(base.x, base.y, rb_, RCV_NM * NM)
                 rcv_alt_ = home_leg_ft((lp_.x, lp_.y), (rx_, ry_), 3000 + 1000 * (idx % 4))      # v0.41.49: the home leg clears the ridges (was a fixed 3,000-6,000 ft)
@@ -1977,7 +2037,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if special:
                 g.points[-1].name = "RTBXHB"
         if base.kind != BaseKind.AIRFIELD and base.id in self.ship and (not f.is_player or o.player_is_ai):          # v0.41.132: the player's own flight keeps its route
-            lp_ = g.points[-1].position
+            lp_ = self._route_end.get(g.name) or g.points[-1].position
             if dist(base.x, base.y, lp_.x, lp_.y) > (CV_RCV_NM + 10) * NM:          # else it is already close: no extra point
                 cx_, cy_ = offset(base.x, base.y, bearing(base.x, base.y, lp_.x, lp_.y), CV_RCV_NM * NM)
                 g.add_waypoint(pt(cx_, cy_), CV_RCV_FT * FT, 300 * KPH, "RCV")
