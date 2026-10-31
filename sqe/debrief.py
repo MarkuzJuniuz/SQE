@@ -33,6 +33,12 @@ local AITEST = __AITEST__            -- all-AI test: nobody sits in a flight, so
 local CALLS = { __CALLS__ }
 local UFLT = { __UFLT__ }
 local ENEMYAIR = { __ENEMYAIR__ }
+-- v0.41.217: declared up here, before the event handler that reads them (a local further down the file is invisible to it: "attempt to index global DMGL")
+local AWUNIT = "__AWUNIT__"
+local DMGL = { __DMGL__ }                  -- unit name -> spoken label of every blue aircraft that may call (the player's own jet is not in it)
+local DMG_ON = __DMGON__
+local awdown = false                       -- the AWACS is down: its calls stop
+local dmgCall                              -- defined with the radio calls below
 local SITES = { __SITES__ }
 local RUINS = { __RUINS__ }
 local GATES = { __GATES__ }
@@ -592,11 +598,8 @@ end
 -- or the setting is off: always tuned). A call to the player from the AWACS that comes due while he is not tuned is held up to 60 s, with one on-screen note, then dropped.
 local TUNEF = { __TUNEF__ }
 local TUNEMHZ = "__TUNEMHZ__"
-local AWUNIT = "__AWUNIT__"
 local AWL_UP = string.upper("__AWACS__")
-local DMGL = { __DMGL__ }                  -- unit name -> spoken label of every blue aircraft that may call (the player's own jet is not in it)
-local DMG_ON = __DMGON__
-local awdown, awnote = false, false
+local awnote = false
 local function tuned()
   if #TUNEF == 0 then return true end
   for _, f in ipairs(TUNEF) do
@@ -634,7 +637,7 @@ local DOWNL = { "Mayday, mayday, ejecting.", "Mayday, I'm going down.", "Punchin
 local SUPL = { "I'm hit, breaking off.", "Taking damage, leaving the track.", "I'm hit." }
 local function pick(t) return t[math.random(#t)] end
 local downSaid = {}
-local function dmgCall(n, kind)               -- kind "hit" | "down": a blue aircraft calls its own damage, from a short random list ("*" before a label: tanker / AWACS)
+dmgCall = function(n, kind)               -- kind "hit" | "down": a blue aircraft calls its own damage, from a short random list ("*" before a label: tanker / AWACS)
   local lab = DMGL[n]
   if not DMG_ON or not lab or n == PLAYER then return end
   local sup = string.sub(lab, 1, 1) == "*"
