@@ -242,6 +242,17 @@ def ensure_forward_garrisons(state) -> bool:
     return added
 
 
+GARRISON_CAS_MAX_KM = 40     # v0.41.218 (XO 2026-10-30): a dug-in site garrison is a CAS job only this close to a sector centre (the coast road). Judgment call from a fresh L3 campaign: the coast garrisons sit 1 to 21 km from a centre, the ones north of the mountains (Maykop, Nalchik, Beslan, Mozdok) 91 to 259 km.
+
+
+def near_front(state, x: float, y: float, km: float = GARRISON_CAS_MAX_KM) -> bool:
+    """v0.41.218: is the point within `km` of one of the ground war's sector centres? True when the campaign has no sector chain (older saves)."""
+    cs = (getattr(state, "ground", None) or {}).get("centers")
+    if not cs:
+        return True
+    return min(math.hypot(x - c[0], y - c[1]) for c in cs) <= km * 1000
+
+
 def sector_of(state, asset_id: str):
     """Sector index of a forward garrison ('rfwd_N' / 'bfwd_N'), or None."""
     if not active(state) or not (asset_id.startswith("rfwd_") or asset_id.startswith("bfwd_")):

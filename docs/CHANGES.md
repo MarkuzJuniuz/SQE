@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.218, no CAS against a garrison north of the mountains
+
+XO 2026-10-30 (light, "go"). A CAS mission at the Nalchik SA-6 site garrison put a friendly task force and its JTAC deep behind red's lines ("Tom Cruise at Nalchik"). XO's rule for this campaign: no JTACs and no friendly ground units on the other side of the mountains; the ground war runs on the coast road toward Krymsk. New `ground.near_front` and `ground.GARRISON_CAS_MAX_KM` (40): a dug-in site garrison is offered as a CAS job only within 40 km of a sector centre. Measured on a fresh L3 campaign: the coast garrisons (Sukhumi, Gudauta, Sochi, Gelendzhik, Krymsk) sit 1 to 21 km from a centre (12 of them), those beyond the mountains (Maykop 91 to 101, Nalchik 170 to 181, Beslan 214 to 220, Mozdok 256 to 259) 91 to 259 km (10): 40 is a judgment call in that gap. Those sites keep their SEAD / DEAD and strike jobs and the garrison still counts in the site's defence. Sector forward positions and columns are unchanged. Files: `sqe/ground.py`, `sqe/war.py`, `tools/smoke_test.py`, `sqe/__init__.py`.
+
 ## v0.41.217, fix: the hook's event handler could not see DMGL ("attempt to index global 'DMGL'")
 
 XO 2026-10-30, a DCS script error on every hit / eject / death event in v0.41.215. My bug: the damage-call tables (`DMGL`, `DMG_ON`, `AWUNIT`, `awdown`, `dmgCall`) were declared as locals far below the event handler that reads them, so the handler saw them as nil globals. They are now declared at the top, next to `ENEMYAIR`. Why the smoke test missed it: it only checked that the hook text contained the right strings and compiled; it never ran an event. New `tools/hook_lua_sim.py` runs the hook under lupa with a stubbed DCS API and fires hit / eject / dead / crash events at it, and reports any undefined global the hook reads; `check_104` runs it (skipped when lupa is not installed; `pip install lupa`). It reproduced XO's error on the v0.41.215 code (line 455) and passes on this one. Files: `sqe/debrief.py`, `tools/hook_lua_sim.py` (new), `tools/smoke_test.py`, `sqe/__init__.py`.
