@@ -169,6 +169,8 @@ class ObjectivePlanner:
                     desc = f"SEAD and DEAD: {a.name}"
                 cand.append((pr, Objective("", ObjectiveType.DEAD, a.id, pr, desc), self._blockers(state, a), locked))
             elif a.kind == AssetKind.ARMOR:
+                if a.variant == "GARRISON" and not a.id.startswith(("rfwd_", "bfwd_")) and not ground.near_front(state, a.x, a.y):
+                    continue                                         # v0.41.218 (XO): no friendly ground troops, no JTAC beyond the mountains: a rear site's garrison is no CAS job
                 pr = a.value * a.health * 1.4
                 what = f"Close air support: dislodge the {a.name}" if a.variant == "GARRISON" else f"Close air support against {a.name}"
                 z = ground.zone_of(state, a.id)

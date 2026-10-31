@@ -5642,6 +5642,32 @@ def check_104_tuned_and_damage_calls(c):
     print("[tuned + damage calls] F-16C COMM1 triggers, A-10C UHF only, F-15C none, both switches off, AWACS in the damage table")
 
 
+def check_105_no_garrison_cas_beyond_mountains(c):
+    """v0.41.218: a dug-in site garrison is a CAS job only near the ground war (40 km of a sector centre): none at Maykop, Nalchik, Beslan or Mozdok."""
+    from sqe import ground as _g
+    from sqe.models import AssetKind as _AK
+    s = mk(); s.new("Coast garrisons", "F-16C", 3, seed=11); st = s.state
+    gar = [a for a in st.assets.values() if a.kind == _AK.ARMOR and a.variant == "GARRISON" and not a.id.startswith(("rfwd_", "bfwd_"))]
+    near = [a for a in gar if _g.near_front(st, a.x, a.y)]; far = [a for a in gar if not _g.near_front(st, a.x, a.y)]
+    assert near and far and all(any(k in a.name for k in ("Sukhumi", "Gudauta", "Sochi", "Gelendzhik", "Krymsk")) for a in near), [a.name for a in near]
+    assert all(any(k in a.name for k in ("Maykop", "Nalchik", "Beslan", "Mozdok")) for a in far), [a.name for a in far]
+    for a_ in st.assets.values():                           # every SAM dead: nothing blocks a garrison job, so only the distance rule can keep the far ones out
+        if a_.kind == _AK.SAM:
+            a_.health = 0.0
+    s.plan_day()
+    seen = set()
+    for _ in range(25):
+        for p_ in s.packages():
+            if p_.objective.type.value == "CAS":
+                seen.add(p_.objective.target_id)
+        s.skip_day()
+        if s.state.status != "ACTIVE":
+            break
+    assert not (seen & {a.id for a in far}), ("CAS offered against a garrison beyond the mountains", seen & {a.id for a in far})
+    assert seen & {a.id for a in near}, ("the coast garrisons are still offered", seen)
+    print("[garrison CAS] %d coast garrisons, %d beyond the mountains never offered CAS over 25 days with every SAM dead (%d CAS targets seen)" % (len(near), len(far), len(seen)))
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5785,6 +5811,7 @@ CHECKS = [
     check_102_persistent_objects,
     check_103_ecm_hookup,
     check_104_tuned_and_damage_calls,
+    check_105_no_garrison_cas_beyond_mountains,
 ]
 
 
