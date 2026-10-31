@@ -11,7 +11,7 @@ from .. import settings as S
 from ..aircraft import AIRCRAFT
 from ..difficulty import LEVELS
 from . import theme
-from .widgets import card
+from .widgets import StepSpin, card
 
 
 def _browse(parent, line: QLineEdit, title: str):
@@ -63,7 +63,7 @@ class NewCampaignDialog(QDialog):
         for i, mname in enumerate(("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"), 1):
             self.month.addItem(mname, i)
         self.month.setCurrentIndex(5)
-        self.day = QSpinBox(); self.day.setRange(1, 28); self.day.setValue(12)
+        self.day = StepSpin(); self.day.setRange(1, 28); self.day.setValue(12)
         row = QHBoxLayout(); row.addWidget(self.month, 1); row.addWidget(self.day); row.addWidget(QLabel("2006"))
         form.addRow("Campaign starts", row)
         self.night = QCheckBox("Allow night sorties (otherwise missions are spread through daylight)")
@@ -141,11 +141,11 @@ class SettingsDialog(QDialog):
 
         # ---- General: how a sortie runs for you ------------------------------------------------------------------------------
         v = page("General")
-        self.tob = QSpinBox(); self.tob.setRange(-600, 900); self.tob.setSuffix(" s"); self.tob.setValue(int(settings.takeoff_buffer_s))
+        self.tob = StepSpin(); self.tob.setRange(-600, 900); self.tob.setSuffix(" s"); self.tob.setValue(int(settings.takeoff_buffer_s))
         row(v, "Takeoff buffer", self.tob)
         hint(v, "Time between mission start and the takeoff time on your kneeboard (you start on the runway or cat, engines running). "
                 "Default 60 s. Negative means the plan expects you to be rolling before the clock starts, so you must make the time up in the air.")
-        self.hold = QSpinBox(); self.hold.setRange(-10, 30); self.hold.setSuffix(" min"); self.hold.setValue(int(settings.hold_minutes))
+        self.hold = StepSpin(); self.hold.setRange(-10, 30); self.hold.setSuffix(" min"); self.hold.setValue(int(settings.hold_minutes))
         row(v, "Marshal slack", self.hold)
         hint(v, "Time between reaching the marshal point and the PUSH. Smaller = less waiting. Negative means you must beat the "
                 "natural pace (afterburner time). AI flights adjust automatically.")
@@ -237,7 +237,7 @@ class SettingsDialog(QDialog):
                 "decided when you build the mission and applied at the debrief.")
         self.carc = QCheckBox("Carcasses: wrecks at damaged and destroyed ground sites near your route")
         self.carc.setChecked(bool(getattr(settings, "carcasses", True))); v.addWidget(self.carc)
-        self.cw = QSpinBox(); self.cw.setRange(5, 100); self.cw.setSuffix(" % of a unit"); self.cw.setValue(int(getattr(settings, "carcass_weight_pct", 25)))
+        self.cw = StepSpin(); self.cw.setRange(5, 100); self.cw.setSuffix(" % of a unit"); self.cw.setValue(int(getattr(settings, "carcass_weight_pct", 25)))
         row(v, "Wreck and static weight", self.cw)
         hint(v, "Wrecks and supply buildings (fuel tanks, depots) are static objects: no AI, no weapons, they never move. Each counts this share of a unit toward "
                 "the unit limit. When a mission is over the limit the furthest wrecks from your route are dropped first, before any flight is touched; buildings are "
@@ -248,28 +248,28 @@ class SettingsDialog(QDialog):
         v = page("Mission Build")
         self.merge = QComboBox(); self.merge.addItem("Off (one package per mission)", "off"); self.merge.addItem("Same area (targets inside the radius)", "area")
         self.merge.setCurrentIndex(1 if settings.merge_mode == "area" else 0)
-        self.mmax = QSpinBox(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.merge_max_units))
+        self.mmax = StepSpin(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.merge_max_units))
         row(v, "Package merging", self.merge, self.mmax)
         hint(v, "Packages inside the radius that start within the time windows below fly in the same mission (AI-flown, one shared ground "
                 "world and support). The waiting window shows the unit count so you can compare performance. The unit limit counts the whole mission, merged packages included: over it, returning flights go first, then the package that starts latest (a Fighter Sweep last), then wrecks are trimmed.")
-        self.mrad = QSpinBox(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "merge_radius_nm", 15)))
+        self.mrad = StepSpin(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "merge_radius_nm", 15)))
         row(v, "Merge radius", self.mrad)
         hint(v, "Packages whose target is inside this circle fly in the same mission (within the time windows below). The circle is centred on your target, "
                 "slid inward so it never hangs over the edge of the target area; your own target stays inside it. If the unit limit is exceeded, the package "
                 "that starts latest drops first.")
-        self.mback = QSpinBox(); self.mback.setRange(0, 30); self.mback.setSingleStep(5); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_back_min", 15)))
+        self.mback = StepSpin(); self.mback.setRange(0, 30); self.mback.setSingleStep(5); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_back_min", 15)))
         row(v, "Earlier packages", self.mback)
         hint(v, "Packages that started up to this long before yours also fly, already airborne and underway when the mission starts. "
                 "A package that has already struck is not flown to its target (see Ruins on the Campaign tab). 0 = only later packages.")
-        self.mfwd = QSpinBox(); self.mfwd.setRange(0, 60); self.mfwd.setSingleStep(5); self.mfwd.setSuffix(" min after"); self.mfwd.setValue(int(getattr(settings, "merge_fwd_min", 30)))
+        self.mfwd = StepSpin(); self.mfwd.setRange(0, 60); self.mfwd.setSingleStep(5); self.mfwd.setSuffix(" min after"); self.mfwd.setValue(int(getattr(settings, "merge_fwd_min", 30)))
         row(v, "Later packages", self.mfwd)
         hint(v, "Packages that start up to this long after yours also fly in the same mission (late-activated, they push at their own time). "
                 "Over the unit limit, the package that starts latest is dropped first.")
-        self.mpct = QSpinBox(); self.mpct.setRange(0, 100); self.mpct.setSuffix(" %"); self.mpct.setValue(int(settings.merge_enemy_pct))
+        self.mpct = StepSpin(); self.mpct.setRange(0, 100); self.mpct.setSuffix(" %"); self.mpct.setValue(int(settings.merge_enemy_pct))
         row(v, "Enemy air sum", self.mpct)
         hint(v, "When packages are folded in: enemy fighters = the biggest package's need + this share of every other folded package's need (100 = full sum).")
-        self.feng = QSpinBox(); self.feng.setRange(0, 300); self.feng.setSuffix(" nm"); self.feng.setValue(int(settings.fighter_engage_nm))
-        self.fmin = QSpinBox(); self.fmin.setRange(0, 120); self.fmin.setSuffix(" min after TOT"); self.fmin.setValue(int(settings.fighter_engage_minutes))
+        self.feng = StepSpin(); self.feng.setRange(0, 300); self.feng.setSuffix(" nm"); self.feng.setValue(int(settings.fighter_engage_nm))
+        self.fmin = StepSpin(); self.fmin.setRange(0, 120); self.fmin.setSuffix(" min after TOT"); self.fmin.setValue(int(settings.fighter_engage_minutes))
         row(v, "TARCAP / escort / sweep engage range", self.feng, self.fmin)
         hint(v, "How far AI TARCAPs, escorts, sweeps and SEAD go after a fighter, and for how long: the engage task ends this many minutes after the strike's TOT and they fly on home (alert pairs get 5 minutes more). 0 = unlimited. Your own flight is never limited (unless SQE was started with --ai-test).")
         v.addStretch(1)

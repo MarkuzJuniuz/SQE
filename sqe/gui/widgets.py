@@ -1,8 +1,8 @@
 from __future__ import annotations
 import math
-from PySide6.QtCore import Qt, QPointF, QRectF
+from PySide6.QtCore import Qt, QPointF, QRectF, Signal
 from PySide6.QtGui import QColor, QPainter, QPen, QBrush, QPolygonF, QFont
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget, QSizePolicy
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QSpinBox, QToolButton, QVBoxLayout, QWidget
 from ..models import AssetKind, BaseKind
 from . import theme
 
@@ -11,6 +11,31 @@ def card(layout_cls=QVBoxLayout, margins=(16, 14, 16, 14), spacing=8) -> QFrame:
     f = QFrame(); f.setObjectName("card")
     lay = layout_cls(f); lay.setContentsMargins(*margins); lay.setSpacing(spacing)
     return f
+
+
+class StepSpin(QWidget):
+    """v0.41.224 (XO 2026-10-31): a number box with its own minus and plus buttons OUTSIDE the field. Qt's built-in spin arrows sit inside the field and their click area
+    drifts at a display scale above 100% (the arrow turned into a text cursor). Same calls as QSpinBox for what the dialogs use: value, setValue, setRange, setSuffix,
+    setToolTip, valueChanged. The mouse wheel and typing still work."""
+    valueChanged = Signal(int)
+
+    def __init__(self):
+        super().__init__()
+        lay = QHBoxLayout(self); lay.setContentsMargins(0, 0, 0, 0); lay.setSpacing(4)
+        self._spin = QSpinBox(); self._spin.setObjectName("flatspin"); self._spin.setAlignment(Qt.AlignCenter)      # its own arrows are squeezed to zero width in theme.py (NoButtons + the stylesheet's border leaves the text field 1 px wide)
+        self._minus, self._plus = QToolButton(), QToolButton()
+        for b, txt, step in ((self._minus, "\u2212", self._spin.stepDown), (self._plus, "+", self._spin.stepUp)):
+            b.setText(txt); b.setObjectName("step"); b.setAutoRepeat(True); b.setFocusPolicy(Qt.NoFocus); b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(lambda _=False, f=step: f())
+        lay.addWidget(self._minus); lay.addWidget(self._spin, 1); lay.addWidget(self._plus)
+        self._spin.valueChanged.connect(self.valueChanged)
+
+    def value(self) -> int: return self._spin.value()
+    def setValue(self, v) -> None: self._spin.setValue(int(v))
+    def setRange(self, a, b) -> None: self._spin.setRange(int(a), int(b))
+    def setSuffix(self, s: str) -> None: self._spin.setSuffix(s)
+    def setSingleStep(self, n) -> None: self._spin.setSingleStep(int(n))
+    def setToolTip(self, s: str) -> None: self._spin.setToolTip(s); super().setToolTip(s)
 
 
 class StatCard(QFrame):
