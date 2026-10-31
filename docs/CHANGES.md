@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.214, the A-10C is CAS master again; strike / CAS flights hold 100 km out for the fighters-clear gate
+
+XO 2026-10-30 (light, "go"). XO saw F-16Cs engaged at their wait point (most survived): giving the CAS job to the jets did not make it safer, the exposure is the hold. (1) `packages.CAS_JET_MIN_DEF_FLIGHTS` 3 to 99: no CAS job counts as "hot", so the A-10C squadrons are first pick on every job and an F-16C / F/A-18C pilot is offered the CAS slot only when no A-10C squadron is free and in range (the v0.41.189 quiet-job rule, now on every job). AI-only sim (30 days x 3 seeds, player in an F-15C, AI's choice): L1 A-10C 28; L2 A-10C 162 / F/A-18C 23; L3 A-10C 175 (before, v0.41.189: L1 29/0/0, L2 60/67/19, L3 38/63/0 for A-10C / F-16C / F/A-18C). The war sim still counts an AI jet CAS flight at 0.7 (`JET_CAS_FACTOR`). (2) `strike_tasks.AIR_GATE_KM` 70 to 100: a plain strike or CAS flight holds 100 km from its target while red fighters are up, outside the P-33's reach of about 120 km from the fight (judgment call). The hold still lasts at most `AIR_HOLD_STRIKE_S` / `AIR_HOLD_CAS_S`, then the flight goes home (v0.41.205), it does not push in. Not seen in DCS. Files: `sqe/packages.py`, `sqe/strike_tasks.py`, `sqe/__init__.py`.
+
 ## v0.41.213, "Show ECM status" setting
 
 XO 2026-10-30 (low, "go"). New checkbox Settings > Experimental > "Show ECM status", indented under the ECM script switch (greyed out while ECM script is off), default ON. It controls the on-screen ECM messages: the F-16C lamp messages from v0.41.212 and the FC3 jets' F10 "ECM on / off (F10)" text. Off: no messages; the F10 commands and the jammer logic are unchanged. SQE-wide for now (per-campaign question for refactor day). Builds on #274. Files: `sqe/settings.py`, `sqe/engine.py`, `sqe/mission_builder.py`, `sqe/debrief.py`, `sqe/gui/dialogs.py`, `tools/smoke_test.py`, `sqe/__init__.py`.
