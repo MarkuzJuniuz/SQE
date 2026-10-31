@@ -55,7 +55,7 @@ class OverviewPage(QWidget):
         left = QVBoxLayout(); root.addLayout(left, 5)
         c = card(); left.addWidget(c, 1)
         hr = QHBoxLayout(); c.layout().addLayout(hr)
-        h = QLabel("SITUATION"); h.setObjectName("small"); hr.addWidget(h); hr.addStretch(1)
+        h = QLabel("SITUATION"); h.setObjectName("head"); hr.addWidget(h); hr.addStretch(1)
         self.sit_btn = QPushButton("Hide"); self.sit_btn.setFlat(True); self.sit_btn.setCursor(Qt.PointingHandCursor); hr.addWidget(self.sit_btn)
         self.sit_btn.clicked.connect(self._toggle_situation)
         self.op = QLabel(narrative.TITLE); self.op.setObjectName("title"); c.layout().addWidget(self.op)
@@ -88,11 +88,11 @@ class OverviewPage(QWidget):
         g.addWidget(self.cards["fr"], 0, 0); g.addWidget(self.cards["od"], 0, 1); g.addWidget(self.side["blue"], 1, 0); g.addWidget(self.side["red"], 1, 1)
         self.today = StatCard("Today's tasking", theme.AMBER); right.addWidget(self.today)               # v0.41.152: what the day holds for you
         self.warn_card = card(); right.addWidget(self.warn_card)                # v0.41.148: warnings (a base about to fall, the counter-force), hidden when there are none
-        wh = QLabel("WARNINGS"); wh.setObjectName("small"); self.warn_card.layout().addWidget(wh)
+        wh = QLabel("WARNINGS"); wh.setObjectName("head"); self.warn_card.layout().addWidget(wh)
         self.warn = QLabel(); self.warn.setWordWrap(True); self.warn.setStyleSheet(f"color:{theme.AMBER};"); self.warn_card.layout().addWidget(self.warn)
         mc = card(); right.addWidget(mc, 1)
         top = QHBoxLayout(); mc.layout().addLayout(top)
-        t = QLabel("THEATRE"); t.setObjectName("small"); top.addWidget(t); top.addStretch(1)
+        t = QLabel("THEATRE"); t.setObjectName("head"); top.addWidget(t); top.addStretch(1)
         self.rings = QCheckBox("SAM rings (red / blue)"); self.rings.setChecked(True); top.addWidget(self.rings)
         self.map = MapView(); mc.layout().addWidget(self.map, 1)
         self.rings.toggled.connect(self.map.set_rings)
