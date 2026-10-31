@@ -1300,9 +1300,9 @@ local function scrubGo(pkg, why, text)
     if f.pkg == pkg then
       if f.you then you = true end
       if f.ai and f.to > 0 then
-        scrubbedGrp[f.grp] = true
+        scrubbedGrp[f.g] = true
         local ok = pcall(function()
-          local g = Group.getByName(f.grp)
+          local g = Group.getByName(f.g)
           local c = g and g:getController()
           if not c then error("no group") end
           c:resetTask()
@@ -1379,7 +1379,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
     ea = ", ".join(f"[{_lq(n)}]=true" for n in (enemy_air or []))
     lst = lambda xs: "{" + ", ".join(_lq(x) for x in xs) + "}"
-    sc = ", ".join(f'{{pkg={_lq(x["pkg"])}, grp={_lq(x["grp"])}, k={_lq(x["k"])}, units={lst(x["units"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, '
+    sc = ", ".join(f'{{pkg={_lq(x["pkg"])}, g={_lq(x["grp"])}, k={_lq(x["k"])}, units={lst(x["units"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, '
                     f'you={"true" if x["you"] else "false"}, tot={float(x["tot"]):.0f}}}' for x in (scrub or []))
     st = ", ".join(f'{{id={_lq(x["id"])}, label={_lq(x["label"])}, who={_lq(x["who"])}, prim={"true" if x["prim"] else "false"}, '
                    f'units={lst(x["units"])}, trk={lst(x["trk"])}, srch={lst(x["srch"])}}}' for x in (sites or []))
