@@ -366,7 +366,7 @@ class MissionsPage(QWidget):
                 cont = QWidget(); cl = QHBoxLayout(cont); cl.setContentsMargins(4, 4, 4, 4); cl.addWidget(b, 0, Qt.AlignCenter)
                 t.setCellWidget(i, 5, cont)
             else:
-                t.setItem(i, 5, _item("AI support" if f.tag else ("On alert (AI)" if sp else f"AI {spec.service}"), theme.DIM))
+                t.setItem(i, 5, _item("AI Support" if f.tag else ("On alert (AI)" if sp else f"AI {spec.service}"), theme.DIM))
         return t, bool(opts)
 
     def _show(self, row):
@@ -631,7 +631,6 @@ class MainWindow(QMainWindow):
         QMessageBox.about(self, f"About {APP_NAME}", (
             f"<h3>{APP_NAME} (SQE) v{__version__}</h3>"
             "<p>A dynamic campaign and sortie generator for DCS World. It builds light missions with few units.</p>"
-            f"<p><a href='{RELEASES_URL}'>Latest release on GitHub</a></p>"
             f"<p>{html.escape(EULA_LINE)}</p>"
             "<p><b>Credits</b><br>"
             "pydcs (the Retribution fork) builds the mission files.<br>"

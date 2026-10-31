@@ -71,7 +71,7 @@ _KIT_TASK = {"JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers an
 _SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
 _ESC_TASK = "Escort: hold your station with the package, shoot what comes in range, do not chase; leave when the strikers are off target"
 _TASK[Role.ESCORT] = _ESC_TASK
-_TAG_TASK = {"HAVCAP": "HAVCAP (guards the AWACS)", "TNKCAP": "Tanker CAP (guards the tanker)", "BASECAP": "BARCAP", "CVCAP": "Carrier CAP"}
+_TAG_TASK = {"HAVCAP": "HAVCAP (guards the AWACS)", "TNKCAP": "HAVCAP (guards the tanker)", "BASECAP": "BARCAP", "CVCAP": "BARCAP (guards the carrier group)"}
 BASECAP_ENEMY_NM = 130     # v0.41.7: a land base gets a base CAP when an enemy fighter field is within this (an alert pair reaches it)
 
 

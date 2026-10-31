@@ -126,7 +126,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     if x.get("ecm_player") == "f10":
         com.append("ECM: your jet's jammer cannot be read by the mission. Press F10 > Other > ECM ON when you switch it on and ECM OFF when you switch it off; SQE trusts that call (it starts off).")
     elif x.get("ecm_player") == "live":
-        com.append("ECM: your jammer is read from the ECM lamp when tools/sqe_ecm_export.lua is installed in your Export.lua; without it SQE counts it on over the attack leg.")
+        com.append("ECM: your jammer is read from the ECM lamp when the ECM script is installed (Settings > DCS integration); without it SQE counts it on over the attack leg.")
     if x.get("link16"):
         com.append("Link 16: your wing are members, the other Link 16 flights of your package are donors (the AWACS is not on the net). Station numbers (STN) are on your kneeboard.")
     if pkg.jtac:

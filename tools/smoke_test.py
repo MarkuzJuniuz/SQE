@@ -5512,7 +5512,7 @@ def check_103_ecm_hookup(c):
     assert _AS().ecm_status is True
     h_f10 = db.lua_hook("c", 1, "p", [], "P1", "G", ecm_player="f10")
     assert "ECM ON" in h_f10 and "ECM OFF" in h_f10 and "addCommandForGroup" in h_f10 and "local FC3ECM = false" in h_f10
-    lua = (_P(__file__).resolve().parent / "sqe_ecm_export.lua").read_text()
+    lua = (_P(__file__).resolve().parent.parent / "sqe" / "data" / "sqe_ecm_export.lua").read_text()
     assert '["F-16C_50"] = { arg = 102,  enabled = true }' in lua
     for n in ("FA-18C_hornet", "F-14B", "A-10C_2"):
         assert f'["{n}"]' in lua
@@ -5668,6 +5668,38 @@ def check_105_no_garrison_cas_beyond_mountains(c):
     print("[garrison CAS] %d coast garrisons, %d beyond the mountains never offered CAS over 25 days with every SAM dead (%d CAS targets seen)" % (len(near), len(far), len(seen)))
 
 
+def check_106_ecm_install(c):
+    """v0.41.219 (XO 2026-10-31): the ECM export script installs itself (copy + one marked line at the end of Export.lua), removes cleanly, never touches
+    other lines or line endings, backs Export.lua up once, and polls four times a second; plus the renamed support-CAP labels."""
+    import tempfile
+    from pathlib import Path as _Pa
+    from sqe import settings as S
+    from sqe import packages as _pk
+    with tempfile.TemporaryDirectory() as td:
+        sv = str(_Pa(td) / "DCS"); _Pa(sv).mkdir()
+        assert S.ecm_script_state(sv) == "none" and S.ecm_script_state("") == "nofolder"
+        ok, _m = S.install_ecm_script(sv); assert ok
+        ex = _Pa(sv, "Scripts", "Export.lua"); sc = _Pa(sv, "Scripts", "sqe_ecm_export.lua")
+        assert ex.read_text() == S.ECM_LINE + "\n" and sc.exists() and S.ecm_script_state(sv) == "ok", ex.read_text()
+        S.install_ecm_script(sv); assert ex.read_text().count("sqe_ecm_export") == 1          # twice = still one line
+        assert S.remove_ecm_script(sv)[0] and not sc.exists() and S.ecm_script_state(sv) == "none"
+        assert ex.read_text().strip() == "", repr(ex.read_text())
+        orig = b"-- tacview\r\ndofile(lfs.writedir()..[[Scripts\\TacviewGameExport.lua]])"      # CRLF, no trailing newline
+        ex.write_bytes(orig); S.install_ecm_script(sv)
+        got = ex.read_bytes()
+        assert got == orig + b"\r\n" + S.ECM_LINE.encode() + b"\r\n", got
+        assert _Pa(sv, "Scripts", "Export.lua.sqe.bak").read_bytes() == orig
+        sc.write_text("-- old copy"); assert S.ecm_script_state(sv) == "old"
+        S.install_ecm_script(sv); assert S.ecm_script_state(sv) == "ok"
+        S.remove_ecm_script(sv); assert ex.read_bytes() == orig + b"\r\n", ex.read_bytes()    # our line gone, theirs untouched
+        ex.write_bytes(orig + b"\r\ndofile(lfs.writedir() .. [[Scripts\\sqe_ecm_export.lua]])\r\n")     # a hand-made line counts as installed
+        S.install_ecm_script(sv); assert ex.read_bytes().count(b"sqe_ecm_export") == 1
+    lua = (_Pa(__file__).resolve().parent.parent / "sqe" / "data" / "sqe_ecm_export.lua").read_text()
+    assert "POLL_S, BEAT_S = 0.25, 1.0" in lua and "--[[SQE ECM EXPORT]]dofile" in lua
+    assert _pk._TAG_TASK["TNKCAP"] == "HAVCAP (guards the tanker)" and _pk._TAG_TASK["CVCAP"] == "BARCAP (guards the carrier group)"
+    print("[ecm install] install / twice / remove / CRLF / backup / old copy / hand line; 0.25 s polling; support-CAP labels")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5812,6 +5844,7 @@ CHECKS = [
     check_103_ecm_hookup,
     check_104_tuned_and_damage_calls,
     check_105_no_garrison_cas_beyond_mountains,
+    check_106_ecm_install,
 ]
 
 

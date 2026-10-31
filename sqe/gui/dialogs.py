@@ -162,15 +162,6 @@ class SettingsDialog(QDialog):
         # ---- Experimental: features still being tested; each one can be switched off --------------------------------------
         v = page("Experimental")
         hint(v, "Features still being tried out. Each one can be switched off if it misbehaves; the defaults are the safe ones.")
-        self.ecm = QCheckBox("ECM script (SQE's own jamming)")
-        self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
-        hint(v, "SQE's own jamming model; off by default. Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
-                "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
-        self.ecm_msg = QCheckBox("Show ECM status")                      # v0.41.213 (XO): a sub-option of the ECM script
-        self.ecm_msg.setChecked(bool(getattr(settings, "ecm_status", True))); self.ecm_msg.setEnabled(self.ecm.isChecked())
-        self.ecm.toggled.connect(self.ecm_msg.setEnabled); self.ecm_msg.setStyleSheet("margin-left:22px;")
-        self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's ECM lamp (\"ECM on\" / \"ECM off\") and the F10 ECM ON / OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
-        v.addWidget(self.ecm_msg)
         self.awt = QCheckBox("AWACS calls need a tuned radio")           # v0.41.215 (XO)
         self.awt.setChecked(bool(getattr(settings, "awacs_tuned", True))); v.addWidget(self.awt)
         hint(v, "On: you hear the AWACS only while one of your radios is on its frequency (it is in your comms plan); a call that comes due while you are not tuned is held up to a minute, "
@@ -297,8 +288,26 @@ class SettingsDialog(QDialog):
         self.autopatch.setChecked(bool(settings.auto_patch_scripting)); v.addWidget(self.autopatch)
         hint(v, "Results need io/lfs enabled in MissionScripting.lua. A backup is saved next to the file. "
                 "If SQE is closed before the mission ends, DCS can no longer write the results file.")
+        v.addSpacing(10)
+        self.ecm = QCheckBox("ECM script (SQE's own jamming)")
+        self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
+        hint(v, "SQE's own jamming model; off by default. Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
+                "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
+        self.ecm_msg = QCheckBox("Show ECM status")                      # v0.41.213 (XO): a sub-option of the ECM script
+        self.ecm_msg.setChecked(bool(getattr(settings, "ecm_status", True))); self.ecm_msg.setEnabled(self.ecm.isChecked())
+        self.ecm.toggled.connect(self.ecm_msg.setEnabled); self.ecm_msg.setStyleSheet("margin-left:22px;")
+        self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's ECM lamp (\"ECM on\" / \"ECM off\") and the F10 ECM ON / OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
+        v.addWidget(self.ecm_msg)
+        v.addSpacing(10)
+        self.ecm_state = QLabel(); v.addWidget(self.ecm_state)
+        self.ecm_inst = QPushButton("Install ECM script"); self.ecm_rem = QPushButton("Remove")
+        self.ecm_inst.clicked.connect(lambda: self._ecm_do(S.install_ecm_script)); self.ecm_rem.clicked.connect(lambda: self._ecm_do(S.remove_ecm_script))
+        r = QHBoxLayout(); r.addWidget(self.ecm_inst); r.addWidget(self.ecm_rem); r.addStretch(1); v.addLayout(r)
+        hint(v, "Lets SQE read your F-16C's ECM lamp (about four times a second) so its jamming model knows when your jammer is on. It copies sqe_ecm_export.lua into "
+                "Saved Games\\DCS\\Scripts and adds one line to the end of Export.lua there (a backup, Export.lua.sqe.bak, is saved first). Remove takes the line and the file out again. "
+                "Without it SQE counts your jammer as on over the attack leg. Takes effect when DCS starts.")
         v.addStretch(1)
-        self.inst.textChanged.connect(self._refresh); self._refresh()
+        self.inst.textChanged.connect(self._refresh); self.saves.textChanged.connect(self._refresh); self._refresh()
 
         self.tabs.tabBar().moveTab(1, self.tabs.count() - 1)                  # Experimental last
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); bb.accepted.connect(self._save)
@@ -308,6 +317,15 @@ class SettingsDialog(QDialog):
 
     def _refresh(self):
         self.ms.setText("MissionScripting.lua: " + S.mission_scripting_status(self.inst.text()))
+        st = S.ecm_script_state(self.saves.text())
+        self.ecm_state.setText("ECM script: " + S.ecm_script_status(self.saves.text()))
+        self.ecm_inst.setEnabled(st not in ("nofolder", "ok")); self.ecm_rem.setEnabled(st not in ("nofolder", "none"))
+        self.ecm_inst.setText("Update ECM script" if st == "old" else "Install ECM script")
+
+    def _ecm_do(self, fn):
+        ok, msg = fn(S.native(self.saves.text()))
+        (QMessageBox.information if ok else QMessageBox.warning)(self, "ECM script", msg)
+        self._refresh()
 
     def _save(self):
         self.s.dcs_install, self.s.dcs_saves = S.native(self.inst.text()), S.native(self.saves.text())
