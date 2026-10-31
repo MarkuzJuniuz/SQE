@@ -5845,6 +5845,34 @@ def check_110_package_scrub(c):
     print("[package scrub] hook replay: strike half lost / cover half lost scrub the AI package (not the player), late and quarter losses do not; built mission: %d flights in the table, %d SCRUB points" % (n_tbl, n_wp))
 
 
+def check_111_step_spin(c):
+    """v0.41.224 (XO 2026-10-31): the number boxes have their minus / plus buttons OUTSIDE the field (Qt's own arrows turned into a text cursor at a display scale above 100%).
+    The box steps and clamps, keeps its suffix, and its text field is wide enough to show the number (a QSpinBox with NoButtons under the stylesheet's border left it 1 px)."""
+    import os as _os; _os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication, QLineEdit
+    from sqe.gui import theme, dialogs
+    from sqe.gui.widgets import StepSpin
+    from sqe.settings import AppSettings
+    app = QApplication.instance() or QApplication([])
+    app.setStyleSheet(theme.QSS)
+    w = StepSpin(); w.setRange(-600, 900); w.setSuffix(" s"); w.setSingleStep(5); w.setValue(60); w.resize(200, 40); w.show(); app.processEvents()
+    got = []; w.valueChanged.connect(got.append)
+    QTest.mouseClick(w._plus, Qt.LeftButton); QTest.mouseClick(w._plus, Qt.LeftButton); QTest.mouseClick(w._minus, Qt.LeftButton)
+    assert w.value() == 65 and got == [65, 70, 65], (w.value(), got)
+    w.setValue(900); QTest.mouseClick(w._plus, Qt.LeftButton)
+    assert w.value() == 900, "clamped at the top"
+    le = w._spin.findChild(QLineEdit)
+    assert le.geometry().width() > 40 and le.text().endswith(" s"), ("the number is not shown", le.geometry(), le.text())
+    d = dialogs.SettingsDialog(AppSettings()); d.show(); app.processEvents()
+    for nm in ("tob", "hold", "cw", "mmax", "mrad", "mback", "mfwd", "mpct", "feng", "fmin"):
+        sp = getattr(d, nm)
+        assert isinstance(sp, StepSpin), nm
+        assert sp._spin.findChild(QLineEdit).geometry().width() > 20, ("text field squeezed", nm)
+    print("[step spin] minus / plus outside the field step and clamp, suffix kept, text field wide; the 10 Settings number boxes use it")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5994,6 +6022,7 @@ CHECKS = [
     check_108_static_weight,
     check_109_blue_base_def_skill,
     check_110_package_scrub,
+    check_111_step_spin,
 ]
 
 def _borrows(fn) -> set:
