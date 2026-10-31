@@ -5750,6 +5750,27 @@ def check_107_raid_cover_fields(c):
         _r.emergency_happens = _em; _eng.AI_ONLY = _aio; _eng.RAID_SCRAMBLES = _rs
     print("[raid cover fields] covering fields built (nearest %d), neighbours without flights get no far AAA (%d checked), supply circle also round the raid target" % (COVER_FIELDS_MAX, seen_extra))
 
+def check_108_static_weight(c):
+    """v0.41.221 (XO 2026-10-31): a live static (a supply site's building) counts `carcass_weight` of a unit like a wreck, no AI and it never moves; the settings row says so."""
+    import math as _mh
+    from types import SimpleNamespace as NS
+    from sqe import mission_builder as _mb
+    g = lambda n, dead=False: NS(units=list(range(n)), dead=dead)
+    fake = NS(m=NS(coalition={"blue": NS(countries={"usa": NS(plane_group=[g(2)], helicopter_group=[], vehicle_group=[g(3)], ship_group=[],
+                                                              static_group=[g(4), g(4), g(8, dead=True)])})}),
+              o=NS(carcass_weight=0.25))
+    cn = _mb.MissionBuilder._counts(fake)
+    assert cn["statics"] == 8 and cn["wrecks"] == 8, cn
+    assert cn["units"] == 5 + _mh.ceil((8 + 8) * 0.25), cn          # 5 live units, 16 statics and wrecks at a quarter each
+    fake.o.carcass_weight = 1.0
+    assert _mb.MissionBuilder._counts(fake)["units"] == 5 + 16, "at 100% a static counts a whole unit again"
+    import inspect
+    from sqe.gui import dialogs as _dl
+    src = inspect.getsource(_dl)
+    assert "Wreck and static weight" in src and 'row(v, "Wreck weight"' not in src, "the settings row is renamed"
+    print("[static weight] live statics and wrecks count carcass_weight each (8 + 8 at 25% = 4 units); setting row 'Wreck and static weight'")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5896,6 +5917,7 @@ CHECKS = [
     check_105_no_garrison_cas_beyond_mountains,
     check_106_ecm_install,
     check_107_raid_cover_fields,
+    check_108_static_weight,
 ]
 
 def _borrows(fn) -> set:

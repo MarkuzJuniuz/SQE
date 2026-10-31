@@ -238,9 +238,10 @@ class SettingsDialog(QDialog):
         self.carc = QCheckBox("Carcasses: wrecks at damaged and destroyed ground sites near your route")
         self.carc.setChecked(bool(getattr(settings, "carcasses", True))); v.addWidget(self.carc)
         self.cw = QSpinBox(); self.cw.setRange(5, 100); self.cw.setSuffix(" % of a unit"); self.cw.setValue(int(getattr(settings, "carcass_weight_pct", 25)))
-        row(v, "Wreck weight", self.cw)
-        hint(v, "Wrecks are dead static objects: no AI, no weapons. Each counts this share of a unit toward the unit limit. When a mission is over the limit the "
-                "furthest wrecks from your route are dropped first, before any flight is touched. Wrecks stay where they are from day to day.")
+        row(v, "Wreck and static weight", self.cw)
+        hint(v, "Wrecks and supply buildings (fuel tanks, depots) are static objects: no AI, no weapons, they never move. Each counts this share of a unit toward "
+                "the unit limit. When a mission is over the limit the furthest wrecks from your route are dropped first, before any flight is touched; buildings are "
+                "placed before wrecks and are never dropped for them. Wrecks stay where they are from day to day.")
         v.addStretch(1)
 
         # ---- Mission build: merging and limits -----------------------------------------------------------------------------------
