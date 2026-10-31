@@ -49,6 +49,7 @@ TARCAP_LEAD_S = 120           # v0.41.115 (was 0; XO 2026-10-22: fighters in fir
 FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
+SCRUB_POINT_NM = 20           # v0.41.223: a package flight's SCRUB point (where a scrubbed flight goes first) sits this far from its home field, on the bearing of its route's last point (the same shape as the stand-off ABORT point)
 BLUE_BASE_DEF_SKILL = "Excellent"   # v0.41.222 (XO 2026-10-31): blue's base Patriot / HAWK / AAA are always the top DCS skill, whatever the Blue skill setting or the level says. Why: under "level" they were left at pydcs's Average while red's sites run at the level's skill (High on L3), and XO saw them barely fire. Judgment call (no public figure for operator quality).
 TARCAP_BEHIND_NM = 8          # v0.41.43 (16; v0.41.115: 8, XO 2026-10-22: it sat 56 nm from red's patrols, too far to snipe): with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
 TARCAP_FWD_NM = 20           # v0.41.120: the TARCAP's engage circle tries to reach this far past its station toward red (judgment call: red's alert pairs held 24 nm from the station in XO's 2026-10-23 run)
@@ -294,6 +295,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
         self._support_lbl = {}                                          # v0.41.215: tanker / AWACS unit name -> its label, for the damage calls
         self._gates = []                                                # DEAD flights that turn back when the site's radars are still up
+        self._scrub = []                                                # v0.41.223: every package flight for the hook's package scrub (group, unit names, kind, SCRUB point)
         self._sead_grps = {}                                            # site id -> the SEAD flights' group names (all merged packages); the gate aborts when they are all down
         self._blind_site = set()
         extras = [x for x in extras if any(not f.tag for f in x.flights)]
@@ -571,7 +573,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and not f_.is_player],
                          done_after=max([float(tgt.eta_s)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
                          rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts, cover=self._cover, ecm_player=self._ecm_player, ecm_msg=bool(o.ecm_status),
-                         tune_flags=tune_flags, tune_mhz=tune_mhz, awacs_unit=f"{awl} 1-1" if any(s.slot == "AWACS" for s in package.support) else "",
+                         scrub=self._scrub, tune_flags=tune_flags, tune_mhz=tune_mhz, awacs_unit=f"{awl} 1-1" if any(s.slot == "AWACS" for s in package.support) else "",
                          dmg=({**self._ulabels, **{k: "*" + v for k, v in self._support_lbl.items()}} if o.damage_calls else {}), dmg_on=bool(o.damage_calls),
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
@@ -1434,6 +1436,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if f.role == Role.SEAD and package.objective.target_id:
             self._sead_grps.setdefault(package.objective.target_id, []).append(g.name)
         gate = self._dead_gate(package, f, g, wps, first, stw, tot_s, base)
+        self._scrub_point(package, f, g, base, wps, tot_s)
         self._home_leg(f, g, base, wps, idx, hold_end, stop, special)
         if gate is not None:
             if gate["to"] is None:
@@ -1989,6 +1992,26 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 self._cas_tasks(wp, w, armor, tot_s)
             elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
                 self._sead_attack_tasks(package, f, wp, w, armor)
+
+    def _scrub_point(self, package, f, g, base, wps, tot_s):
+        """v0.41.223 (XO 2026-10-31): the package scrub's part of the route. Every non-support package flight is recorded for the hook (`self._scrub`); an AI flight also gets a
+        SCRUB point before its home leg, the point a scrubbed flight is sent to (the stand-off ABORT point when it already has one). The hook does the rest (debrief.py)."""
+        if f.tag or f.role not in (Role.STRIKE, Role.CAS, Role.SEAD, Role.TARCAP, Role.ESCORT, Role.SWEEP) or not wps:
+            return
+        kind = "M" if f.role in (Role.STRIKE, Role.CAS) else "C" if f.role in (Role.TARCAP, Role.ESCORT, Role.SWEEP) else "O"
+        ai = bool(not f.is_player or self.o.player_is_ai)
+        to = 0
+        if ai:
+            if getattr(g.points[-1], "name", "") == "ABORT":
+                to = len(g.points)
+            else:
+                lw = wps[-1]
+                bx, by = offset(base.x, base.y, bearing(base.x, base.y, lw.x, lw.y), SCRUB_POINT_NM * NM)
+                alt_ = home_leg_ft((lw.x, lw.y), (bx, by), min(lw.alt_ft, 9000))      # clears the ground between the route's last point and here
+                g.add_waypoint(self._pt(bx, by), alt_ * FT, 320 * KPH, "SCRUB")
+                to = len(g.points)
+        self._scrub.append({"pkg": package.id, "grp": g.name, "k": kind, "units": [u.name for u in g.units], "to": to, "ai": ai, "you": bool(f.is_player),
+                            "tot": float(tot_s if tot_s is not None else 86400)})
 
     def _home_leg(self, f, g, base, wps, idx, hold_end, stop, special):
         """The way home: the recovery entry point, landing or deck recovery."""

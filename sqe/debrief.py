@@ -146,12 +146,20 @@ local function rgateJson()
   end
   return "{" .. table.concat(o, ",") .. "}"
 end
+local scrubLog = {}                         -- v0.41.223: the package scrubs (see the PACKAGE SCRUB block at the end)
+local function scrubJson()
+  local o = {}
+  for _, e in ipairs(scrubLog) do
+    o[#o + 1] = string.format('{"pkg":"%s","t":%d,"why":"%s","n":%d}', esc(e.pkg), e.t, esc(e.why), e.n)
+  end
+  return "[" .. table.concat(o, ",") .. "]"
+end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"tracks":%s,"rgate":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"scrub":%s,"tracks":%s,"rgate":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), tracksJson(), rgateJson(), CFG, splashN, splashK))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), scrubJson(), tracksJson(), rgateJson(), CFG, splashN, splashK))
   f:close()
 end
 local function nameOf(obj)
@@ -1255,8 +1263,86 @@ if (CVREC.cv or CVREC.x) and not AITEST then
     return nil
   end, nil, timer.getTime() + 10)
 end
+-- v0.41.223 (XO 2026-10-31): PACKAGE SCRUB. The package's AI flights go home together once the package can no longer do its job. Two triggers, one rule: a side of the
+-- package (the strikers / CAS, or the covering fighters) that has lost SCRUB_FRAC of its jets. The strikers lost, before TOT + SCRUB_GRACE: nobody is left to protect or
+-- suppress for, so the escorts, TARCAPs and SEAD go home (XO's 2026-10-31 run: the 2-ship striker lost its leader and DCS sent it home, the escorts went on to their
+-- stations). The cover lost, before TOT - SCRUB_LEAD: the strikers have no one to hold the air for them, so they go home (the Gudauta CAS run of 2026-10-30).
+-- The AWACS calls ABORT to the player when his own package is scrubbed. The player's own flight is never commanded. Each scrubbed AI flight is sent to its SCRUB
+-- point (20 nm out from home, high enough to clear the ground) with SwitchWaypoint, after resetTask (a flight on a station or in a hold keeps circling otherwise).
+local SCRUB = { __SCRUB__ }
+local SCRUB_FRAC, SCRUB_GRACE, SCRUB_LEAD = __SCRUBFRAC__, __SCRUBGRACE__, __SCRUBLEAD__
+local scrubbedPkg, scrubbedGrp = {}, {}
+local function scrubCount(pkg, kind)
+  local init, alive = 0, 0
+  for _, f in ipairs(SCRUB) do
+    if f.pkg == pkg and f.k == kind then
+      for _, n in ipairs(f.units) do
+        init = init + 1
+        if not dead[n] and not ejected[n] then alive = alive + 1 end
+      end
+    end
+  end
+  return init, alive
+end
+local function scrubSay(text)                 -- the AWACS call to the player: retried for a minute if he is not tuned (sayAw drops it otherwise)
+  if sayAw(text, true) then return end
+  local tries = 0
+  timer.scheduleFunction(function(_, t)
+    tries = tries + 1
+    if sayAw(text, true) or tries >= 12 then return nil end
+    return t + 5
+  end, nil, timer.getTime() + 5)
+end
+local function scrubGo(pkg, why, text)
+  scrubbedPkg[pkg] = true
+  local n, you = 0, false
+  for _, f in ipairs(SCRUB) do
+    if f.pkg == pkg then
+      if f.you then you = true end
+      if f.ai and f.to > 0 then
+        scrubbedGrp[f.grp] = true
+        local ok = pcall(function()
+          local g = Group.getByName(f.grp)
+          local c = g and g:getController()
+          if not c then error("no group") end
+          c:resetTask()
+          c:setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = 1, goToWaypointIndex = f.to } })
+        end)
+        if ok then n = n + 1 end
+      end
+    end
+  end
+  for _, gs in ipairs(gorder) do             -- a gate that watches only scrubbed flights is retired: its hold must not resume them toward the target
+    local all = #gs.gates > 0
+    for _, gt in ipairs(gs.gates) do if not scrubbedGrp[gt.grp] then all = false end end
+    if all then gs.done = true; gs.holding = false; gs.watch = false end
+  end
+  scrubLog[#scrubLog + 1] = { pkg = pkg, t = math.floor(timer.getTime()), why = why, n = n }
+  if you then scrubSay(string.upper(AWACS_LBL) .. " to " .. string.upper(PGROUP) .. ": ABORT, ABORT. " .. text .. ". Package, return to base.") end
+  dump()
+end
+timer.scheduleFunction(function(_, t)
+  local now = timer.getTime()
+  local tots = {}
+  for _, f in ipairs(SCRUB) do tots[f.pkg] = f.tot end
+  for pkg, tot in pairs(tots) do
+    if not scrubbedPkg[pkg] then
+      local mi, ma = scrubCount(pkg, "M")
+      local ci, ca = scrubCount(pkg, "C")
+      if mi > 0 and ma <= mi * SCRUB_FRAC and now < tot + SCRUB_GRACE then
+        scrubGo(pkg, "strike", "Strike flight is down, mission cannot be completed")
+      elseif ci > 0 and ca <= ci * SCRUB_FRAC and now < tot - SCRUB_LEAD then
+        scrubGo(pkg, "cover", "Escort is down, package cannot go in")
+      end
+    end
+  end
+  return t + 5
+end, nil, timer.getTime() + 30)
 dump()
 '''
+SCRUB_LOSS_FRAC = 0.5          # v0.41.223: a side of a package (strikers, or the covering fighters) that has lost this share of its jets scrubs the package (judgment call: XO's run, a 2-ship that lost one went home; the Gudauta CAS escort was down to two of four)
+SCRUB_STRIKE_GRACE_S = 180     # ...the strikers lost: scrub until this long after TOT (after that the strike is done or moot)
+SCRUB_COVER_LEAD_S = 90        # ...the cover lost: scrub only until this long before TOT (strikers that have committed finish the job)
 BINGO_PCT = 20            # v0.41.92: the hook's bingo for pairs (BINGO_FUEL in the Lua below); the debrief fuel lines use it
 BINGO_REPORT_PCT = 35      # ...and report a flight that ended the mission at or under this much fuel
 
@@ -1287,19 +1373,22 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
              watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
              rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True,
-             tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False) -> str:
+             tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
     ea = ", ".join(f"[{_lq(n)}]=true" for n in (enemy_air or []))
     lst = lambda xs: "{" + ", ".join(_lq(x) for x in xs) + "}"
+    sc = ", ".join(f'{{pkg={_lq(x["pkg"])}, grp={_lq(x["grp"])}, k={_lq(x["k"])}, units={lst(x["units"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, '
+                    f'you={"true" if x["you"] else "false"}, tot={float(x["tot"]):.0f}}}' for x in (scrub or []))
     st = ", ".join(f'{{id={_lq(x["id"])}, label={_lq(x["label"])}, who={_lq(x["who"])}, prim={"true" if x["prim"] else "false"}, '
                    f'units={lst(x["units"])}, trk={lst(x["trk"])}, srch={lst(x["srch"])}}}' for x in (sites or []))
     ru = ", ".join(f'{{x={r["x"]:.1f}, z={r["z"]:.1f}, n={int(r["n"])}, r={float(r["r"]):.0f}, p={int(r["p"])}, dn={float(r["dn"]):.2f}, pw={int(r["pw"])}, s={float(r["s"]):.2f}}}'
                    for r in (ruins or []))
     gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}, acap={int(x.get("acap") or 0)}{_umbrella_lua(x)}{(", tx=%.1f, tz=%.1f" % (float(x["tx"]), float(x["tz"]))) if x.get("tx") is not None else ""}}}'
                    for x in (gates or []))
-    return (LUA_HOOK.replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
+    return (LUA_HOOK.replace("__SCRUB__", sc).replace("__SCRUBFRAC__", repr(float(SCRUB_LOSS_FRAC))).replace("__SCRUBGRACE__", f"{float(SCRUB_STRIKE_GRACE_S):.0f}").replace("__SCRUBLEAD__", f"{float(SCRUB_COVER_LEAD_S):.0f}")
+            .replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
             .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
             .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__ECMP__", ecm_player if ecm_player in ("live", "f10") else "").replace("__ECMMSG__", "1" if ecm_msg else "0")
@@ -1336,14 +1425,14 @@ def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despaw
                  enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
                  watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
                  rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True,
-                 tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False) -> None:
+                 tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover, ecm_player, ecm_msg, tune_flags, tune_mhz, awacs_unit, dmg, dmg_on))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover, ecm_player, ecm_msg, tune_flags, tune_mhz, awacs_unit, dmg, dmg_on, scrub))))
     mission.triggerrules.triggers.append(t)
 
 

@@ -63,6 +63,38 @@ def run(src: str) -> str:
     return rt.eval("function(d) return load(d) end")(DRIVER)(src, None)
 
 
+# v0.41.223: replay for the package scrub. Same stub DCS, but timer.getTime() is `now`, scheduleFunction records the function, Group.getByName gives a controller that
+# records resetTask / SwitchWaypoint, and `eject` units get an ejection event. Then the LAST function the hook scheduled while loading (the scrub trigger) is run once.
+SCRUB_TAIL = r"""
+local sched, cmds = {}, {}
+env.timer = {getTime = function() return NOW end, getAbsTime = function() return NOW end, scheduleFunction = function(f, a, t) sched[#sched+1] = {f = f, a = a, t = t}; return #sched end}
+env.Group.getByName = function(name)
+  return {getID = function() return 1 end, getUnits = function() return {} end, getUnit = function() return unit(name .. "-1") end,
+          getController = function() return {resetTask = function() cmds[#cmds+1] = name .. ":reset" end,
+                                             setCommand = function(_, c) cmds[#cmds+1] = name .. ":" .. c.id .. ":" .. tostring(c.params.goToWaypointIndex) end} end}
+end
+local fn, err = load(src, "hook", "t", env)
+if not fn then return "COMPILE: " .. tostring(err) end
+local ok, e1 = pcall(fn)
+if not ok then return "RUN: " .. tostring(e1) end
+for _, who in ipairs(EJECT) do handler:onEvent({id = ev.S_EVENT_EJECTION, initiator = unit(who)}) end
+local last = sched[#sched]
+local okf, ef = pcall(last.f, last.a, last.t)
+if not okf then return "TRIGGER ERROR: " .. tostring(ef) end
+table.sort(cmds)
+return table.concat(cmds, "|") .. " ## " .. table.concat(said_, " ## ")
+"""
+
+
+def run_scrub(src: str, eject: list, now: float = 100.0) -> str:
+    """-> "<sorted commands the hook issued> ## <radio lines>": group:reset, group:SwitchWaypoint:<index>."""
+    import lupa
+    rt = lupa.LuaRuntime(unpack_returned_tuples=True)
+    head = DRIVER[:DRIVER.index("local fn, err = load(src")]
+    driver = head.replace("local src, ALLOWED = ...", "local src, ALLOWED, EJECT, NOW = ...") + SCRUB_TAIL
+    return rt.eval("function(d) return load(d) end")(driver)(src, None, rt.table_from(eject), now)
+
+
 if __name__ == "__main__":
     import sys
     sys.path.insert(0, ".")
