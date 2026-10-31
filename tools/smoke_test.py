@@ -5599,6 +5599,17 @@ def check_104_tuned_and_damage_calls(c):
         assert _chk(h) is None and _chk(h0) is None, "the hook is valid Lua"
     except ImportError:
         pass
+    try:                                                    # v0.41.217: run the hook with a stubbed DCS API and fire hit / eject / dead events at it (tools/hook_lua_sim.py)
+        import lupa  # noqa
+        sys_path = str(__import__("pathlib").Path(__file__).resolve().parent)
+        if sys_path not in __import__("sys").path:
+            __import__("sys").path.insert(0, sys_path)
+        import hook_lua_sim as _hs
+        _r = _hs.run(_db.lua_hook("c", 1, "p", [], "Viper 1-1", "Viper 1", flights={"Viper 1-2": "VIPER 1-2"}, tune_flags=[9101], tune_mhz=262.5, awacs_unit="Magic 1-1",
+                                  dmg={"Viper 1-2": "VIPER 1-2", "Magic 1-1": "*MAGIC"}, dmg_on=True, awacs="Magic"))
+        assert _r.startswith("ok | undefined globals read:  |") and "MAGIC: Mayday" in _r and "VIPER 1-2: " in _r, ("the hook survives hit / eject / dead events", _r)
+    except ImportError:
+        pass
     def hook_of(ac, **opt):
         s = mk(); s.new("Tune " + ac, ac, 3, seed=11)
         for k, v in opt.items():

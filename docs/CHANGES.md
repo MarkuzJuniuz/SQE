@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.217, fix: the hook's event handler could not see DMGL ("attempt to index global 'DMGL'")
+
+XO 2026-10-30, a DCS script error on every hit / eject / death event in v0.41.215. My bug: the damage-call tables (`DMGL`, `DMG_ON`, `AWUNIT`, `awdown`, `dmgCall`) were declared as locals far below the event handler that reads them, so the handler saw them as nil globals. They are now declared at the top, next to `ENEMYAIR`. Why the smoke test missed it: it only checked that the hook text contained the right strings and compiled; it never ran an event. New `tools/hook_lua_sim.py` runs the hook under lupa with a stubbed DCS API and fires hit / eject / dead / crash events at it, and reports any undefined global the hook reads; `check_104` runs it (skipped when lupa is not installed; `pip install lupa`). It reproduced XO's error on the v0.41.215 code (line 455) and passes on this one. Files: `sqe/debrief.py`, `tools/hook_lua_sim.py` (new), `tools/smoke_test.py`, `sqe/__init__.py`.
+
 ## v0.41.216, bold box headings on the Overview
 
 XO 2026-10-30 (low, "go"). SITUATION, THE FRONT, GROUND ODDS, COALITION, RUSSIA, TODAY'S TASKING, WARNINGS and THEATRE are bold (new `QLabel#head` style, same grey). The SUPPLY / AIR DEFENSE labels inside the side cards and the other small grey notes are unchanged (XO). Files: `sqe/gui/theme.py`, `sqe/gui/widgets.py`, `sqe/gui/app.py`, `sqe/__init__.py`.
