@@ -36,7 +36,7 @@ from .difficulty import Difficulty, ai_skill
 from .fighter_stations import FighterStations, ESCORT_AFTER_TOT_S, TARCAP_AFTER_TOT_S, axis_station
 from .support_caps import SupportCaps
 from .red_air_picture import RedAirPicture, A2A_ZONE_NM
-from .raid_spawns import SUPPLY_BUILDINGS, RaidSpawns
+from .raid_spawns import RAID_SUPPLY_UNITS, SUPPLY_BUILDINGS, RaidSpawns
 from .strike_tasks import StrikeTasks, DEAD_GATE_KM, SEAD_WAVE_KM, TRACK_RADARS, SEARCH_RADARS, KPH
 from . import kneeboard
 from .kneeboard import latlon, render_pages
@@ -270,6 +270,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._runway_busy = set()                                      # bases whose runway / catapult already holds a group at mission start
         self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []
         self._ecm_player = ""                           # v0.41.210: how the hook learns the player's jammer: "live" (F-16C lamp via Export.lua), "f10" (FC3 jet), "" (old attack-leg window)
+        self._raid_xy = []                              # v0.41.220: where each raid scramble's raiders are going (the supply circle runs round these too)
         self._supply_built = set()                      # v0.41.209: blue supply sites already put on the map this mission (a raid target is one)
         self._rwy_rel, self._hot = {}, None                            # v0.41.96: release times already given per runway; the hot-runway slot of the flight being built
         self._launch_pts = {}                                          # package id -> [(x, y)] where its HARM / JSOW / strike flights launch (the cover zone)             # alert groups waiting for a runway (the hook lines them up), trigger flags, your runway
@@ -365,6 +366,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         raided_ = [package.objective.target_id] if (package.objective.type == ObjectiveType.FLEET_DEFENSE and package.objective.target_id in st.bases) else []
         for bid in dict.fromkeys([f.base_id for f in package.flights] + raided_ + [f.base_id for x in list(extras) + list(ruins) for f in x.flights if not f.tag]):
             self._place_base(st.bases[bid], tx, ty)
+        # v0.41.220 (XO 2026-10-31): a raid scramble also builds the neighbouring fields whose Patriot / HAWK cover the raid's target (the war sim and the raid gate already
+        # count them; before, only the raided field and the fields with flights were built, so the target stood alone)
+        self._raid_xy = self._raid_dests([package] + list(extras))
+        for bid, near_ in self._raid_cover_bases([package] + list(extras)).items():
+            if bid not in self.apt and bid in st.bases:
+                self._place_base(st.bases[bid], tx, ty, near=near_)
         for cvb_ in st.bases.values():                  # v0.41.209 (XO 2026-10-30): the carrier group is always in the mission (4 ships, about 100 nm out); it was built only when a flight used the boat
             if cvb_.kind == BaseKind.CARRIER and cvb_.id not in self.ship:
                 self._place_base(cvb_, tx, ty)
@@ -479,6 +486,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                            egr_events=self._striker_egr)
         manifest.cur_pkg = ""
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + list(self._red_intel)
+        self._spawn_supply_in_radius(package, tx, ty, manifest, only_raid=True, max_units=RAID_SUPPLY_UNITS)       # v0.41.220: what a raid scramble is about is built before the raiders and the alert pairs use the unit limit
         self._spawn_reactive(package, extras, tx, ty, tgt.eta_s, geom, manifest, despawn)
         self._dry_pass()
         self._spawn_supply_in_radius(package, tx, ty, manifest)
@@ -937,36 +945,43 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         g += 1; u += len(grp.units)
         return {"groups": g, "units": u + int(math.ceil(w * self.o.carcass_weight)), "wrecks": w}
 
-    def _spawn_supply_in_radius(self, package, tx, ty, manifest) -> None:
+    def _spawn_supply_in_radius(self, package, tx, ty, manifest, only_raid: bool = False, max_units: int | None = None) -> None:
         """v0.41.209 (XO 2026-10-30): every live supply site (fuel farm, depot) of BOTH sides inside the merge radius round the target is in the mission, so a
         pilot who flies past a depot sees it. The radius is the Settings > Mission Build merge radius (the performance knob). Built last (after every flight and
-        patrol), nearest first, while the unit limit has room: the rest are left out with a warning, and nothing else is pushed out for them (wrecks fit after)."""
+        patrol), nearest first, while the unit limit has room: the rest are left out with a warning, and nothing else is pushed out for them (wrecks fit after).
+        v0.41.220 (XO 2026-10-31): a raid scramble's target gets the same circle (`self._raid_xy`; the CAP station that centres the mission is up to 40 nm out from
+        it). `only_raid` measures from the raid targets only and `max_units` caps what that call builds: the first call runs BEFORE the raiders and the alert pairs,
+        because the raid's own load had already used the whole unit limit and the sites round its target were the first thing left out."""
         st, o = self.state, self.o
         if o.full_map:
             return
         R = max(5.0, float(o.merge_radius_nm)) * NM
+        centres = list(getattr(self, "_raid_xy", [])) + ([] if only_raid else [(tx, ty)])
+        if not centres:
+            return
         cands = []
         for a in st.assets.values():
             if a.kind in SUPPLY_BUILDINGS and not a.destroyed and a.id not in self.groups_by_asset:
-                cands.append((dist(a.x, a.y, tx, ty), a.id, "red", a))
+                cands.append((min(dist(a.x, a.y, cx, cy) for cx, cy in centres), a.id, "red", a))
         for aid, a in st.blue_assets.items():
             if a.kind in SUPPLY_BUILDINGS and not a.destroyed and aid not in self._supply_built:
-                cands.append((dist(a.x, a.y, tx, ty), aid, "blue", a))
-        cands = sorted(c for c in cands if c[0] <= R)
+                cands.append((min(dist(a.x, a.y, cx, cy) for cx, cy in centres), aid, "blue", a))
+        cands = sorted((c for c in cands if c[0] <= R), key=lambda c: (c[0], c[1]))
         if not cands:
             return
         home = min((b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD), key=lambda b: dist(b.x, b.y, tx, ty), default=None)
-        built = 0
+        built = used = 0
         for d_, aid, side, a in cands:
             need = len(SUPPLY_BUILDINGS[a.kind]) + (1 if side == "red" else 0)         # the buildings and red's Shilka guard
-            if self._units_room() < need:
+            if self._units_room() < need or (max_units is not None and used + need > max_units):
                 break
             if side == "red":
                 self._spawn_site(a, SOFT.get(a.kind), manifest, primary=False)
             elif home is not None:
                 self._spawn_raid_target(package, home, aid, a.x, a.y, manifest)
             built += 1
-        if built < len(cands):
+            used += need
+        if built < len(cands) and max_units is None:
             self.warns.append(f"{len(cands) - built} supply sites inside the {o.merge_radius_nm} nm merge radius left out to stay under the {o.max_units}-unit limit (furthest first)")
 
     def _place_carcasses(self) -> None:
@@ -1068,11 +1083,23 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g.set_skill(getattr(Skill, bs, Skill.High))
         return g
 
-    def _place_base(self, base, tx, ty):
+    def _place_base(self, base, tx, ty, near=None):
+        """v0.41.220: `near` = (x, y) of a raid target this field is built to cover (a neighbour of the raided field): it then gets only what reaches that point, the
+        Patriot inside PATRIOT_NM, the HAWK inside HAWK_NM, the AAA inside COVER_AAA_NM (a full field is about 30 units)."""
         o = self.o
         if base.kind == BaseKind.AIRFIELD:
             self.apt[base.id] = self.t.airports[base.airport]
-            bt = sams.blue_battery(base, self.state)            # v0.41.30: doctrinal batteries, every field alike; v0.41.62: read from the field's three sites (sams.py)
+            bt = dict(sams.blue_battery(base, self.state))      # v0.41.30: doctrinal batteries, every field alike; v0.41.62: read from the field's three sites (sams.py)
+            if near is not None:                                 # v0.41.220: a covering neighbour builds only what reaches the raid's target
+                from .raids import HAWK_NM, PATRIOT_NM
+                from .raid_spawns import COVER_AAA_NM
+                dn_ = dist(base.x, base.y, near[0], near[1]) / NM
+                if dn_ > PATRIOT_NM:
+                    bt["patriot_ln"] = 0
+                if dn_ > HAWK_NM:
+                    bt["hawk"] = False
+                if dn_ > COVER_AAA_NM:
+                    bt["aaa"] = 0
             if o.base_defenses and (bt["patriot_ln"] or bt["aaa"] or bt["hawk"]):
                 p = self.apt[base.id].position
                 # v0.41.7: the Patriot faces the threat (the nearest enemy fighter field; was a direction picked from the base's name: a Patriot
