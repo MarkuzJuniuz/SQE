@@ -182,7 +182,7 @@ class MissionOptions:
     ecm_status: bool = True             # v0.41.213: the on-screen ECM messages (F-16C lamp, FC3 F10 calls); only with ecm_script
     ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
-    carcass_weight: float = 0.25        # how much of a live unit one wreck counts toward the unit limit
+    carcass_weight: float = 0.25        # how much of a live unit one wreck or one live static building counts toward the unit limit (v0.41.221: the buildings too; the name stays until refactor week)
     carcass_range_nm: int = 40          # only sites this close to the route get wrecks
     full_map: bool = False              # stress test: build everything that exists (see _spawn_everything); the unit limit is off
     max_units: int = 250                # the unit limit of the BASE mission (wrecks are trimmed, furthest first, to fit under it); merged packages' units do not count (v0.41.104)
@@ -933,17 +933,21 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         return min(self.o.max_units - u, ceil_ - u)          # v0.41.131: the whole mission counts again
 
     def _counts(self) -> dict:
-        """Units for the VR budget. A dead static (wreck) is cheap, so it counts `carcass_weight` of a unit; 'wrecks' is how many there are."""
-        g = u = w = 0
+        """Units for the VR budget. A dead static (wreck) and a live static (a supply site's building) are cheap, no AI and they never move, so both count
+        `carcass_weight` of a unit (v0.41.221, XO 2026-10-31: the buildings used to count whole units); 'wrecks' and 'statics' are how many there are."""
+        g = u = w = n_s = 0
         for coal in self.m.coalition.values():
             for c in coal.countries.values():
                 for attr in ("plane_group", "helicopter_group", "vehicle_group", "ship_group", "static_group"):
                     for grp in getattr(c, attr, []):
-                        if attr == "static_group" and getattr(grp, "dead", False):
-                            w += len(grp.units)
+                        if attr == "static_group":
+                            if getattr(grp, "dead", False):
+                                w += len(grp.units)
+                            else:
+                                n_s += len(grp.units); g += 1
                             continue
                         g += 1; u += len(grp.units)
-        return {"groups": g, "units": u + int(math.ceil(w * self.o.carcass_weight)), "wrecks": w}
+        return {"groups": g, "units": u + int(math.ceil((w + n_s) * self.o.carcass_weight)), "wrecks": w, "statics": n_s}
 
     def _spawn_supply_in_radius(self, package, tx, ty, manifest, only_raid: bool = False, max_units: int | None = None) -> None:
         """v0.41.209 (XO 2026-10-30): every live supply site (fuel farm, depot) of BOTH sides inside the merge radius round the target is in the mission, so a
@@ -972,7 +976,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         home = min((b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD), key=lambda b: dist(b.x, b.y, tx, ty), default=None)
         built = used = 0
         for d_, aid, side, a in cands:
-            need = len(SUPPLY_BUILDINGS[a.kind]) + (1 if side == "red" else 0)         # the buildings and red's Shilka guard
+            need = math.ceil(len(SUPPLY_BUILDINGS[a.kind]) * o.carcass_weight) + (1 if side == "red" else 0)         # v0.41.221: the buildings count like wrecks (carcass_weight), and red's Shilka guard is a whole unit
             if self._units_room() < need or (max_units is not None and used + need > max_units):
                 break
             if side == "red":
