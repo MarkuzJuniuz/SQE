@@ -257,7 +257,7 @@ local function logShot(ev, e, by)
   shots[#shots + 1] = { t = math.floor(timer.getTime()), ev = ev, by = by or "?", bt = e.initiator and tname(e.initiator) or "?", w = w, tg = tg, tt = tt, km = km, alt = salt, tx = tx, tz = tz, left = left }
 end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
--- v0.41.210 (XO 2026-10-30): the player's own jammer. ECMP "live": the F-16C's ECM lamp, written once a second by tools/sqe_ecm_export.lua (Export.lua) to
+-- v0.41.210 (XO 2026-10-30): the player's own jammer. ECMP "live": the F-16C's ECM lamp, written four times a second by sqe/data/sqe_ecm_export.lua (Export.lua) to
 -- Logs\SQE_ecm.flag as "<0|1> <model time>"; a missing or stale file falls back to the attack-leg window below. ECMP "f10": an FC3 jet (nothing readable in its
 -- cockpit): the F10 > Other commands ECM ON / ECM OFF set the flag (starts off).
 local ECMP = "__ECMP__"
