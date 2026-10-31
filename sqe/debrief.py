@@ -295,6 +295,20 @@ if ECMP == "f10" then
   end
   timer.scheduleFunction(addF10, nil, timer.getTime() + 1)
 end
+if ECMP == "live" then                                      -- v0.41.212 (XO): tell the pilot what SQE sees: once when the lamp file is first read, then on every on / off change
+  local last = nil
+  timer.scheduleFunction(function(_, t)
+    local v = liveEcm()
+    if v ~= nil and v ~= last then
+      local g = Group.getByName(PGROUP)
+      if g then
+        trigger.action.outTextForGroup(g:getID(), (last == nil and "SQE sees your ECM lamp: " or "ECM ") .. (v and "on" or "off"), 6)
+      end
+      last = v
+    end
+    return t + 2
+  end, nil, timer.getTime() + 5)
+end
 local function jamCheck(e, shooter)
   if not next(JAMS) or not e.weapon then return end
   local ok, d = pcall(function() return e.weapon:getDesc() end)

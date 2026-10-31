@@ -5504,7 +5504,7 @@ def check_103_ecm_hookup(c):
         assert f'local ECMP = "{mode}"' in h, mode
         assert "__ECMP__" not in h
     h_live = db.lua_hook("c", 1, "p", [], "P1", "G", ecm_player="live")
-    assert "SQE_ecm.flag" in h_live and "liveEcm" in h_live
+    assert "SQE_ecm.flag" in h_live and "liveEcm" in h_live and "SQE sees your ECM lamp" in h_live
     h_f10 = db.lua_hook("c", 1, "p", [], "P1", "G", ecm_player="f10")
     assert "ECM ON" in h_f10 and "ECM OFF" in h_f10 and "addCommandForGroup" in h_f10 and "local FC3ECM = false" in h_f10
     lua = (_P(__file__).resolve().parent / "sqe_ecm_export.lua").read_text()

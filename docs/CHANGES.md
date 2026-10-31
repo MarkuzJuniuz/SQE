@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.212, ECM: an on-screen message from the F-16C lamp
+
+XO 2026-10-30 (light, "go"). With the ECM script on and an F-16C player, the hook now shows "SQE sees your ECM lamp: on / off" the first time it reads the Export.lua flag file, then "ECM on" / "ECM off" whenever the lamp changes (checked every 2 s, message 6 s). No message at all means the flag file is not being read (script not installed, or a stale file) and SQE is using the old attack-leg rule. FC3 jets already had their F10 messages. Files: `sqe/debrief.py`, `tools/smoke_test.py`, `sqe/__init__.py`.
+
 ## v0.41.211, Overview readability: bar numbers outlined at the left edge, side cards top-aligned
 
 XO 2026-10-30 (low, "go"). (1) The number on the Ground and Tactical Edge bars was dark text centred over the bar, so it vanished on the empty (dark) part; it is now white with a thin dark outline at the bar's left edge. (2) The Coalition and Russia cards are top-aligned, so the headings and figures line up even when only Russia shows the SAM-in-transit line. Files: `sqe/gui/overview_view.py`, `sqe/gui/widgets.py`, `sqe/__init__.py`.
