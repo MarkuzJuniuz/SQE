@@ -5071,7 +5071,8 @@ def check_91_jets_on_cas(c):
             if fl_ and not seen_pl:
                 f0_ = next((f for f in p_.flights if f.id == fl_[0].id), None)
                 if f0_ is not None and f0_.aircraft == "F-16C":
-                    assert f0_.role == _Ro.CAS, ("a Viper pilot on a CAS job flies the CAS slot", f0_.role)
+                    hog_cas_ = any(f.role == _Ro.CAS and f.aircraft == "A-10C" for f in p_.flights)      # v0.41.214: with the A-10C the CAS master on every job, a Viper pilot flies the CAS slot only when no A-10C flight is in the package
+                    assert f0_.role == _Ro.CAS or hog_cas_, ("a Viper pilot on a CAS job flies the CAS slot unless an A-10C holds it", f0_.role)
                     s.fly(p_.number, fl_[0].id); seen_pl = 1
     assert seen_jet + seen_hog, "a CAS package to read"
     # v0.41.189: on a quiet job a jet pilot is not given the CAS slot while an A-10C squadron can fly it
