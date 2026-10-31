@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## Docs, 2026-10-31: CLAUDE.md branch rule
+
+XO deletes branches after merging, so `crew-chief-working` can disappear (it did after release #282). CLAUDE.md now says to recreate it from `main` without asking. Docs only, no version change. Also `docs/DESIGN_NOTES.md` section 13 (pushed direct).
+
 ## v0.41.219, the ECM script installs itself; quarter-second lamp reads; support-CAP names; About tidy-up
 
 XO 2026-10-31 (medium, "go"). XO flew the F-16C ECM lamp and it worked. (1) `sqe_ecm_export.lua` polls four times a second (was once a second) and writes the flag file only when the lamp changes, plus a heartbeat once a second so the hook's 5 s freshness check holds (about one small write a second, so no performance cost; simulated with lupa: lamp change written the same tick). The script moved from `tools/` to `sqe/data/` so the exe ships it. (2) Settings > DCS integration now holds the ECM script checkbox, its "Show ECM status" sub-option, an ECM status line and an Install / Update ECM script and Remove button (moved from Experimental). Install copies the script to Saved Games\\DCS\\Scripts and adds `--[[SQE ECM EXPORT]]dofile(lfs.writedir() .. [[Scripts\\sqe_ecm_export.lua]])` to the END of Export.lua (created if missing; saved once to Export.lua.sqe.bak; line endings kept; never added twice, a hand-made line counts); Remove takes only our line, the copied script and a leftover flag file out. It runs on the click, not on Save. (3) Support-flight task names: "Tanker CAP (guards the tanker)" is now "HAVCAP (guards the tanker)" and "Carrier CAP" is "BARCAP (guards the carrier group)" (source: Wikipedia, Combat air patrol: HAVCAP protects AWACS / tankers; BARCAP is the fleet-defence patrol; the carrier wording is my own combination); the Air tab says "AI Support". (4) About box: the "Latest release on GitHub" link is gone (the Help menu still has it). Smoke check_106 (install / twice / remove / CRLF / backup / old copy / hand-made line, polling constants, labels). Not seen in DCS: the install button on XO's real Export.lua.

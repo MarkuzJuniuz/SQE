@@ -34,6 +34,7 @@ Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE
 - Build only on **Sonnet 5.5 or higher**. Talking and planning on any model is fine.
 - XO merges PRs himself. You never merge. `main` needs a PR.
 - Work on `crew-chief-working` (XO commits small changes straight to it). Pull before each build. PRs go into it.
+- **XO deletes branches after merging (habit, 2026-10-31), so `crew-chief-working` may be gone.** Check `git ls-remote --heads origin crew-chief-working` at session start and before every build. If it is missing, recreate it from `main` (`git fetch origin; git checkout -B crew-chief-working origin/main; git push -u origin crew-chief-working`) and carry on; no need to ask XO. Never recreate it from an old local copy.
 - PR label: `crew-chief`.
 - Commits end with the Co-Authored-By line for the current model and the Claude-Session URL. PR bodies end with the "Generated with Claude Code" line plus the session URL. Use the attribution given in each session's system reminder.
 - XO's rule: **no out-of-universe experience**. Only tuned job types are player-flyable. Untuned ones are AI-only.
