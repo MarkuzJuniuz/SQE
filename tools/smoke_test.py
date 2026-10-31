@@ -5505,6 +5505,10 @@ def check_103_ecm_hookup(c):
         assert "__ECMP__" not in h
     h_live = db.lua_hook("c", 1, "p", [], "P1", "G", ecm_player="live")
     assert "SQE_ecm.flag" in h_live and "liveEcm" in h_live and "SQE sees your ECM lamp" in h_live
+    h_off = db.lua_hook("c", 1, "p", [], "P1", "G", ecm_player="live", ecm_msg=False)
+    assert 'local ECMMSG = "0" == "1"' in h_off and 'local ECMMSG = "1" == "1"' in h_live       # v0.41.213: Show ECM status
+    from sqe.settings import AppSettings as _AS
+    assert _AS().ecm_status is True
     h_f10 = db.lua_hook("c", 1, "p", [], "P1", "G", ecm_player="f10")
     assert "ECM ON" in h_f10 and "ECM OFF" in h_f10 and "addCommandForGroup" in h_f10 and "local FC3ECM = false" in h_f10
     lua = (_P(__file__).resolve().parent / "sqe_ecm_export.lua").read_text()

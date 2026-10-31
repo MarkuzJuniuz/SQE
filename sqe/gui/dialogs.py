@@ -164,6 +164,11 @@ class SettingsDialog(QDialog):
         hint(v, "Features still being tried out. Each one can be switched off if it misbehaves; the defaults are the safe ones.")
         self.ecm = QCheckBox("ECM script (SQE's own jamming)")
         self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
+        self.ecm_msg = QCheckBox("Show ECM status")                      # v0.41.213 (XO): a sub-option of the ECM script
+        self.ecm_msg.setChecked(bool(getattr(settings, "ecm_status", True))); self.ecm_msg.setEnabled(self.ecm.isChecked())
+        self.ecm.toggled.connect(self.ecm_msg.setEnabled); self.ecm_msg.setStyleSheet("margin-left:22px;")
+        self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's ECM lamp (\"ECM on\" / \"ECM off\") and the F10 ECM ON / OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
+        v.addWidget(self.ecm_msg)
         hint(v, "SQE's own jamming model; off by default. Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
                 "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
         self.hotrwy = QCheckBox("Hot starts on the runway (AI flights)")
@@ -309,6 +314,7 @@ class SettingsDialog(QDialog):
         self.s.merge_radius_nm = int(self.mrad.value())
         self.s.ruins = bool(self.ruins.isChecked())
         self.s.ecm_script = bool(self.ecm.isChecked())
+        self.s.ecm_status = bool(self.ecm_msg.isChecked())
         self.s.splash_damage = bool(self.splash.isChecked())
         self.s.ai_land_carrier = str(self.land_cv.currentData() or "always")
         self.s.ai_land_field = str(self.land_af.currentData() or "never")

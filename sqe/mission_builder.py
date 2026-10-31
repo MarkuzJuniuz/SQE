@@ -174,6 +174,7 @@ class MissionOptions:
     ai_land_carrier: str = "always"     # v0.41.18: AI recovery short of a carrier: always | home (your deck only) | never
     ai_land_field: str = "never"        # v0.41.18: the same for airfields
     splash_damage: bool = True          # blasts on ground units near an air-to-ground weapon's impact (the hook)
+    ecm_status: bool = True             # v0.41.213: the on-screen ECM messages (F-16C lamp, FC3 F10 calls); only with ecm_script
     ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
     carcass_weight: float = 0.25        # how much of a live unit one wreck counts toward the unit limit
@@ -548,7 +549,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM, jams=(self._jams if o.ecm_script else {}), jamw=(self._jamw if o.ecm_script else {}),
                          watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and not f_.is_player],
                          done_after=max([float(tgt.eta_s)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
-                         rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts, cover=self._cover, ecm_player=self._ecm_player,
+                         rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts, cover=self._cover, ecm_player=self._ecm_player, ecm_msg=bool(o.ecm_status),
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
                               "cvrec": self._wing_recovery(pbase, tgt.eta_s), "recov": list(self._recov),
