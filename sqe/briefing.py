@@ -121,6 +121,8 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         com = ["COMM1 (UHF): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm1.items()),
                "COMM2 (VHF" + ("/UHF" if spec.service == "Navy" else "") + "): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm2.items())]
     com += [f"IFF Mode 3: {x['mode3']}    Laser code: {x['laser']}", f"Bullseye: {x['bullseye']}"]
+    if x.get("tune_mhz"):
+        com.append(f"AWACS: its calls reach you only while a radio is tuned to {x['tune_mhz']:.3f} MHz.")
     if x.get("ecm_player") == "f10":
         com.append("ECM: your jet's jammer cannot be read by the mission. Press F10 > Other > ECM ON when you switch it on and ECM OFF when you switch it off; SQE trusts that call (it starts off).")
     elif x.get("ecm_player") == "live":

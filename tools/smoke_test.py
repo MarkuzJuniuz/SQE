@@ -5583,6 +5583,54 @@ def check_102_persistent_objects(c):
     print(f"[persistent objects] carrier group 4 ships in a land mission; supply sites in radius 15 nm: {n15}, 50 nm: {len(sup(50))}; cap trims the farthest with a warning")
 
 
+def check_104_tuned_and_damage_calls(c):
+    """v0.41.215: AWACS calls need a tuned radio (cockpit-parameter triggers for the jets whose radios can be read), and the other aircraft call their own damage."""
+    import re as _re, zipfile as _zf
+    from dcs import lua as _lua
+    from sqe import debrief as _db
+    h = _db.lua_hook("c", 1, "p", [], "P1", "G", tune_flags=[9101, 9102], tune_mhz=262.5, awacs_unit="Magic 1-1", dmg={"Viper 2-2": "VIPER 2-2", "Texaco 1-1": "*TEXACO"}, dmg_on=True)
+    assert "local TUNEF = { 9101, 9102 }" in h and 'local TUNEMHZ = "262.500"' in h and 'local AWUNIT = "Magic 1-1"' in h and "local DMG_ON = true" in h, "the hook carries the tuning flags and the damage table"
+    assert '["Texaco 1-1"]="*TEXACO"' in h and "function tryCall" in h and "function sayAw" in h and "awdown = true" in h and "Mayday, mayday, ejecting." in h
+    h0 = _db.lua_hook("c", 1, "p", [], "P1", "G")
+    assert "local TUNEF = {  }" in h0 and "local DMG_ON = false" in h0, "nothing set: always tuned, no damage calls"
+    try:                                                    # the hook still compiles as Lua (lupa is optional)
+        import lupa as _lupa
+        _chk = _lupa.LuaRuntime().eval("function(src) local fn, err = load(src); return err end")
+        assert _chk(h) is None and _chk(h0) is None, "the hook is valid Lua"
+    except ImportError:
+        pass
+    def hook_of(ac, **opt):
+        s = mk(); s.new("Tune " + ac, ac, 3, seed=11)
+        for k, v in opt.items():
+            setattr(s.settings, k, v)
+        s.plan_day()
+        for p_ in s.packages():
+            fl = s.flyable(p_)
+            if fl:
+                s.fly(p_.number, fl[0].id); break
+        z = _zf.ZipFile(s.state.pending["miz"]); m = z.read("mission").decode()
+        def fh(o):
+            if isinstance(o, str):
+                return o if "SQE debrief hook" in o else None
+            for v in (o.values() if isinstance(o, dict) else o if isinstance(o, (list, tuple)) else ()):
+                r = fh(v)
+                if r:
+                    return r
+        hk = (fh(_lua.loads(m)) or fh(_lua.loads(z.read("l10n/DEFAULT/dictionary").decode())) or "").replace('\\"', '"')
+        return m, hk, s
+    m, hk, s = hook_of("F-16C")
+    n_ = m.count("COMM1_FREQ")
+    assert n_ >= 3 and "COMM2_FREQ" not in m and _re.search(r"local TUNEF = \{ \d+ \}", hk), ("F-16C: one radio, three triggers", n_)
+    assert "local DMG_ON = true" in hk and '="*' in hk, "damage calls on by default, the AWACS (and any tanker) is in the table with a * marker"
+    m2, hk2, _ = hook_of("A-10C")
+    assert "UHF_FREQ" in m2 and "COMM1_FREQ" not in m2 and "VHF_AM_FREQ" not in m2, "A-10C: UHF only"
+    m3, hk3, _ = hook_of("F-15C")
+    assert "COMM1_FREQ" not in m3 and "local TUNEF = {  }" in hk3, "F-15C (FC3): nothing readable, always tuned"
+    m4, hk4, _ = hook_of("F-16C", awacs_tuned=False, damage_calls=False)
+    assert "COMM1_FREQ" not in m4 and "local TUNEF = {  }" in hk4 and "local DMG_ON = false" in hk4, "both switches off"
+    print("[tuned + damage calls] F-16C COMM1 triggers, A-10C UHF only, F-15C none, both switches off, AWACS in the damage table")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5725,6 +5773,7 @@ CHECKS = [
     check_101_ui_pass_3,
     check_102_persistent_objects,
     check_103_ecm_hookup,
+    check_104_tuned_and_damage_calls,
 ]
 
 

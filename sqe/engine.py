@@ -816,6 +816,8 @@ class Session:
         self.options.reactive = bool(getattr(self.settings, 'reactive', True))
         self.options.ecm_script = bool(getattr(self.settings, 'ecm_script', False))
         self.options.ecm_status = bool(getattr(self.settings, 'ecm_status', True))
+        self.options.awacs_tuned = bool(getattr(self.settings, 'awacs_tuned', True))
+        self.options.damage_calls = bool(getattr(self.settings, 'damage_calls', True))
         self.options.splash_damage = bool(getattr(self.settings, 'splash_damage', True))
         self.options.ai_land_carrier = str(getattr(self.settings, 'ai_land_carrier', "always"))
         self.options.ai_land_field = str(getattr(self.settings, 'ai_land_field', "never"))
