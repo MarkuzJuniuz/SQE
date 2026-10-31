@@ -49,6 +49,7 @@ TARCAP_LEAD_S = 120           # v0.41.115 (was 0; XO 2026-10-22: fighters in fir
 FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
+BLUE_BASE_DEF_SKILL = "Excellent"   # v0.41.222 (XO 2026-10-31): blue's base Patriot / HAWK / AAA are always the top DCS skill, whatever the Blue skill setting or the level says. Why: under "level" they were left at pydcs's Average while red's sites run at the level's skill (High on L3), and XO saw them barely fire. Judgment call (no public figure for operator quality).
 TARCAP_BEHIND_NM = 8          # v0.41.43 (16; v0.41.115: 8, XO 2026-10-22: it sat 56 nm from red's patrols, too far to snipe): with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
 TARCAP_FWD_NM = 20           # v0.41.120: the TARCAP's engage circle tries to reach this far past its station toward red (judgment call: red's alert pairs held 24 nm from the station in XO's 2026-10-23 run)
 TARCAP_NEAR_STRIKE_NM = 22   # v0.41.181 (XO 2026-10-28): a STRIKE package's TARCAP holds this far from the shooters' middle (was 26 for all); judgment call: it protects the package, it does not hunt red's patrols
@@ -1069,7 +1070,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _carrier_heading(self, x, y, prefer):
         return carrier_heading(x, y, prefer)
 
-    def _platoon(self, country, name, comp, x, y, heading, formation, scale=1.0, spacing=None):
+    def _platoon(self, country, name, comp, x, y, heading, formation, scale=1.0, spacing=None, base_def=False):
         types = []
         for vname, n in comp:
             vt = _vt(vname)
@@ -1083,6 +1084,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if spacing and formation == F.Star:                  # pydcs lays a star out 20 m apart; a wider one for SAM batteries
             g.formation_star(int(heading) % 360, spacing)
         bs = ai_skill(self.o, "blue", self.d, ground=True) if country is self.usa else None      # v0.41.70: blue base defences follow the Blue skill when it is set
+        if base_def:                                         # v0.41.222 (XO 2026-10-31): blue's base SAMs and AAA are always Excellent, whatever the Blue skill setting says
+            bs = BLUE_BASE_DEF_SKILL
         if bs:
             g.set_skill(getattr(Skill, bs, Skill.High))
         return g
@@ -1120,17 +1123,17 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 x, y = site_at("pat", ang, 4500)
                 if bt["patriot_ln"]:
                     self.base_ad.setdefault(base.id, {})["pat"] = self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
-                                  ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M)
+                                  ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M, base_def=True)
                 x, y = site_at("aaa", ang + 120, 3500)
                 if bt["aaa"]:
-                    self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line)
+                    self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line, base_def=True)
                 if bt["aaa"] >= 2:
                     x, y = site_at("aaa2", ang - 120, 3500)
-                    self._platoon(self.usa, f"BASEDEF {base.name} AAA 2", [("Vulcan", 1), ("M1097_Avenger", 2)], x, y, ang, F.Line)
+                    self._platoon(self.usa, f"BASEDEF {base.name} AAA 2", [("Vulcan", 1), ("M1097_Avenger", 2)], x, y, ang, F.Line, base_def=True)
                 if bt["hawk"]:
                     x, y = site_at("hawk", ang + 50, 6000)
                     self.base_ad.setdefault(base.id, {})["hawk"] = self._platoon(self.usa, f"BASEDEF {base.name} HAWK", [("Hawk_sr", 1), ("Hawk_tr", sams.BLUE_HAWK_TR), ("Hawk_pcp", 1), ("Hawk_cwar", 1),
-                                  ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M)
+                                  ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M, base_def=True)
             return
         hdg = getattr(self, '_cv_hdg', {}).get(base.id)
         if hdg is None:

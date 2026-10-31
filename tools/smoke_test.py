@@ -5771,6 +5771,33 @@ def check_108_static_weight(c):
     print("[static weight] live statics and wrecks count carcass_weight each (8 + 8 at 25% = 4 units); setting row 'Wreck and static weight'")
 
 
+def check_109_blue_base_def_skill(c):
+    """v0.41.222 (XO 2026-10-31): blue's base Patriot / HAWK / AAA are always Excellent, even with the Blue AI skill setting on a lower named value."""
+    import zipfile as _z
+    from lupa import LuaRuntime
+    s = fresh_session(3, 4); st = s.state
+    s.settings.ai_skill_blue = "Average"           # a named lower value must NOT win for base defences
+    s.plan_day()
+    pk = next(p_ for p_ in s.packages() if s.flyable(p_))
+    s.fly(pk.number, None)
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.execute(_z.ZipFile(st.pending["miz"]).read("mission").decode("utf-8"))
+    seen = 0
+    def walk(tb):
+        nonlocal seen
+        nm = tb["name"]
+        if isinstance(nm, str) and nm.startswith("BASEDEF") and tb["units"] is not None:
+            seen += 1
+            for _, u_ in tb["units"].items():
+                assert u_["skill"] == "Excellent", ("a blue base defence is not Excellent", nm, u_["skill"])
+        for k_, v_ in tb.items():
+            if lua.eval("function(x) return type(x) == 'table' end")(v_):
+                walk(v_)
+    walk(lua.globals().mission)
+    assert seen >= 2, ("no blue base defence groups found", seen)
+    print("[blue base def skill] %d base-defence groups, every unit Excellent with Blue skill set to Average" % seen)
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5918,6 +5945,7 @@ CHECKS = [
     check_106_ecm_install,
     check_107_raid_cover_fields,
     check_108_static_weight,
+    check_109_blue_base_def_skill,
 ]
 
 def _borrows(fn) -> set:

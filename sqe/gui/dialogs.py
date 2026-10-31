@@ -214,7 +214,7 @@ class SettingsDialog(QDialog):
             cb_.setCurrentIndex(max(0, cb_.findData(getattr(settings, key_, "level"))))
         row(v, "AI Skill, Red", self.skr)
         row(v, "AI Skill, Blue", self.skb)
-        hint(v, "How good the AI pilots are, one setting for each side (Red's ground units follow the Red setting; Blue's base defences follow the Blue setting once it is set). "
+        hint(v, "How good the AI pilots are, one setting for each side (Red's ground units follow the Red setting; Blue's base defences are always Excellent, whatever this says). "
                 "Level default is what SQE always did: Red follows the difficulty level (Average, Good, High) and Blue's AI flights fly at High. DCS's top skill "
                 "levels can feel like cheating; lower one side if it does. It changes the AI's skill only, not how the campaign's numbers run. It applies from your next mission.")
         self.splash = QCheckBox("Splash damage: blast damage around bomb and missile impacts (on by default)")
