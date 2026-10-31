@@ -815,6 +815,7 @@ class Session:
         self.options.carcasses = bool(getattr(self.settings, 'carcasses', True)); self.options.carcass_weight = max(5, int(getattr(self.settings, 'carcass_weight_pct', 25))) / 100.0
         self.options.reactive = bool(getattr(self.settings, 'reactive', True))
         self.options.ecm_script = bool(getattr(self.settings, 'ecm_script', False))
+        self.options.ecm_status = bool(getattr(self.settings, 'ecm_status', True))
         self.options.splash_damage = bool(getattr(self.settings, 'splash_damage', True))
         self.options.ai_land_carrier = str(getattr(self.settings, 'ai_land_carrier', "always"))
         self.options.ai_land_field = str(getattr(self.settings, 'ai_land_field', "never"))
