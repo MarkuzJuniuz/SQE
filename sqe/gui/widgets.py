@@ -17,7 +17,7 @@ class StatCard(QFrame):
     def __init__(self, label: str, color: str):
         super().__init__(); self.setObjectName("card"); self.color = color
         lay = QVBoxLayout(self); lay.setContentsMargins(16, 12, 16, 12); lay.setSpacing(2)
-        self.l = QLabel(label.upper()); self.l.setObjectName("small")
+        self.l = QLabel(label.upper()); self.l.setObjectName("head")
         self.v = QLabel("-"); self.v.setObjectName("big"); self.v.setStyleSheet(f"color:{color};")
         self.s = QLabel(""); self.s.setObjectName("dim"); self.s.setWordWrap(True)
         for w in (self.l, self.v, self.s):
@@ -35,7 +35,7 @@ class SideCard(QFrame):
     def __init__(self, side: str):
         super().__init__(); self.setObjectName("card")
         lay = QVBoxLayout(self); lay.setContentsMargins(16, 12, 16, 12); lay.setSpacing(2)
-        self.h = QLabel(side.upper()); self.h.setObjectName("small"); lay.addWidget(self.h)
+        self.h = QLabel(side.upper()); self.h.setObjectName("head"); lay.addWidget(self.h)
         row = QHBoxLayout(); row.setSpacing(28); lay.addLayout(row)
         self.cols = []
         for name in ("SUPPLY", "AIR DEFENSE"):

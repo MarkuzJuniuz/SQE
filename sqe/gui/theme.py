@@ -11,6 +11,7 @@ QFrame#card {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 12
 QLabel#title {{ font-size: 22px; font-weight: 700; }}
 QLabel#h2 {{ font-size: 15px; font-weight: 600; }}
 QLabel#dim, QLabel#small {{ color: {DIM}; }}
+QLabel#head {{ color: {DIM}; font-weight: 700; }}      /* v0.41.216 (XO): the box headings on the Overview */
 QLabel#big {{ font-size: 26px; font-weight: 700; }}
 QLabel#pill {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 10px; padding: 3px 10px; color: {DIM}; }}
 QPushButton {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 8px; padding: 8px 14px; }}
