@@ -5798,6 +5798,53 @@ def check_109_blue_base_def_skill(c):
     print("[blue base def skill] %d base-defence groups, every unit Excellent with Blue skill set to Average" % seen)
 
 
+def check_110_package_scrub(c):
+    """v0.41.223 (XO 2026-10-31): the package scrub. The hook sends a package's AI flights to their SCRUB points (never the player's own flight) once its strikers, or its
+    cover, have lost half their jets, inside the time window, and the AWACS calls ABORT to the player; a built mission carries the table and a SCRUB point per AI flight."""
+    import sys as _sys, zipfile as _z, re as _re
+    from sqe import debrief as db
+    from sqe.debrief import SCRUB_LOSS_FRAC
+    assert SCRUB_LOSS_FRAC == 0.5
+    _sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
+    try:
+        import lupa  # noqa
+        import hook_lua_sim as hs
+    except ImportError:
+        hs = None
+    if hs is not None:
+        def mk(tot):
+            sc = [{"pkg": "pkg1", "grp": "Viper 2", "k": "M", "units": ["Viper 2-1", "Viper 2-2"], "to": 9, "ai": True, "you": False, "tot": tot},
+                  {"pkg": "pkg1", "grp": "Venom 1", "k": "C", "units": ["Venom 1-1", "Venom 1-2", "Venom 1-3", "Venom 1-4"], "to": 7, "ai": True, "you": False, "tot": tot},
+                  {"pkg": "pkg1", "grp": "Dodge 1", "k": "O", "units": ["Dodge 1-1", "Dodge 1-2"], "to": 5, "ai": True, "you": False, "tot": tot},
+                  {"pkg": "pkg1", "grp": "You 1", "k": "C", "units": ["You 1-1", "You 1-2"], "to": 0, "ai": False, "you": True, "tot": tot}]
+            return db.lua_hook("c", 1, "p", [], "You 1-1", "You 1", scrub=sc, awacs="Overlord")
+        home = "Dodge 1:SwitchWaypoint:5|Dodge 1:reset|Venom 1:SwitchWaypoint:7|Venom 1:reset|Viper 2:SwitchWaypoint:9|Viper 2:reset"
+        r = hs.run_scrub(mk(1000), [])
+        assert r.strip() == "##", ("nothing lost, nothing scrubbed", r)
+        r = hs.run_scrub(mk(1000), ["Viper 2-1"])                           # one of the 2-ship strikers: half
+        assert r.startswith(home) and "ABORT, ABORT. Strike flight is down" in r and "OVERLORD to YOU 1" in r and "You 1:" not in r.split("##")[0], r
+        r = hs.run_scrub(mk(1000), ["Venom 1-1", "Venom 1-2", "You 1-1"])  # 3 of the 6 cover jets (the player's own wingmen count, he is never commanded)
+        assert r.startswith(home) and "Escort is down" in r and "You 1:" not in r.split("##")[0], r
+        r = hs.run_scrub(mk(1000), ["Venom 1-1"])                           # a quarter of the cover: no scrub
+        assert r.strip() == "##", r
+        r = hs.run_scrub(mk(-200), ["Viper 2-1"])                           # TOT long past: the strike is done or moot
+        assert r.strip() == "##", r
+        r = hs.run_scrub(mk(150), ["Venom 1-1", "Venom 1-2", "Venom 1-3"])  # cover lost but the strikers are about to commit (TOT - 90 s is past)
+        assert r.strip() == "##", r
+    s = fresh_session(3, 4); st = s.state
+    s.plan_day()
+    pk = next(p_ for p_ in s.packages() if s.flyable(p_))
+    s.fly(pk.number, None)
+    z = _z.ZipFile(st.pending["miz"])
+    ms = z.read("mission").decode("utf-8", "replace")
+    assert "PACKAGE SCRUB" in ms and "__SCRUB" not in ms, "the hook carries the scrub block with its placeholders filled"
+    n_tbl = len(_re.findall(r"\{pkg=", ms))
+    n_wp = len(_re.findall(r'name"\]\s*=\s*"SCRUB"', ms))
+    assert n_tbl >= 2, ("no package flights in the scrub table", n_tbl)
+    assert n_wp >= 1, ("no SCRUB waypoint in the mission", n_wp)
+    print("[package scrub] hook replay: strike half lost / cover half lost scrub the AI package (not the player), late and quarter losses do not; built mission: %d flights in the table, %d SCRUB points" % (n_tbl, n_wp))
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5946,6 +5993,7 @@ CHECKS = [
     check_107_raid_cover_fields,
     check_108_static_weight,
     check_109_blue_base_def_skill,
+    check_110_package_scrub,
 ]
 
 def _borrows(fn) -> set:
