@@ -87,6 +87,8 @@ class AppSettings:
     ai_land_carrier: str = "always"       # v0.41.18: AI flights going home to a carrier: "always" recovered short of it | "home" only at your deck | "never" land
     ai_land_field: str = "never"          # v0.41.18: the same for airfields
     splash_damage: bool = True            # extra blast damage near bomb / missile impacts (mission hook); v0.41.13: on by default
+    awacs_tuned: bool = True              # v0.41.215: AWACS calls reach you only while a radio is on the AWACS frequency (jets that can be read)
+    damage_calls: bool = True             # v0.41.215: other blue aircraft, the tanker and the AWACS call their own hits and mayday
     ecm_status: bool = True               # v0.41.213: show the on-screen ECM messages (needs ecm_script)
     ecm_script: bool = False              # SQE's own jamming model in the mission hook; off = DCS's own ECM, used by the AI when locked
     carcasses: bool = True                # burnt-out wrecks at damaged and destroyed ground sites near your route

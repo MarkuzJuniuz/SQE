@@ -442,6 +442,9 @@ function H:onEvent(e)
                                 fuel = sm and sm.fuel, alt = sm and sm.alt, kts = sm and sm.spd, sage = sm and (now - sm.t) or nil, x = sm and sm.x, z = sm and sm.z, gh = sm and sm.gh }
       end
       dead[n] = true; dump(); siteDead(n)
+      if n == AWUNIT then awdown = true end                      -- the AWACS is gone: its calls stop (v0.41.215)
+      local lh_ = LASTHIT[n]
+      if DMGL[n] and lh_ and timer.getTime() - lh_.t < 90 then pcall(dmgCall, n, "down") end
     end
   elseif id == world.event.S_EVENT_TAKEOFF then
     if n == PLAYER and not pl.takeoff then pl.takeoff = timer.getTime(); dump() end
@@ -465,6 +468,7 @@ function H:onEvent(e)
       s.last = lab
       if throttle("hit:" .. lab, 15) then say(lab .. ": direct hit.") end
     end
+    if tn and DMGL[tn] then pcall(dmgCall, tn, "hit") end
   elseif id == world.event.S_EVENT_KILL then
     -- v0.41.10+: only real targets count: units and static objects (fuel tanks, bunkers), never scenery (trees, houses the bombs also flatten)
     local okc, ocat = pcall(function() return e.target:getCategory() end)
@@ -501,6 +505,7 @@ function H:onEvent(e)
     if UFLT[n] and tn and ENEMYAIR[tn] and throttle("splash:" .. n, 4) then say(UFLT[n] .. ": splash one.") end
   elseif id == world.event.S_EVENT_EJECTION then
     if n then ejected[n] = true; dump() end
+    if n and DMGL[n] then pcall(dmgCall, n, "down") end
   elseif id == world.event.S_EVENT_MISSION_END then
     ended = true; dump()
   end
@@ -582,11 +587,71 @@ function say(text, you)
   local snd = (you and SOUND_YOU ~= "") and SOUND_YOU or SOUND
   if snd ~= "" then trigger.action.outSoundForGroup(id, snd) end
 end
+-- v0.41.215 (XO 2026-10-30): AWACS calls need a tuned radio, and the other aircraft call their own damage.
+-- TUNEF: user flags that the mission's cockpit-parameter triggers hold at 1 while one of the player's radios is on the AWACS frequency (empty: this jet cannot be read,
+-- or the setting is off: always tuned). A call to the player from the AWACS that comes due while he is not tuned is held up to 60 s, with one on-screen note, then dropped.
+local TUNEF = { __TUNEF__ }
+local TUNEMHZ = "__TUNEMHZ__"
+local AWUNIT = "__AWUNIT__"
+local AWL_UP = string.upper("__AWACS__")
+local DMGL = { __DMGL__ }                  -- unit name -> spoken label of every blue aircraft that may call (the player's own jet is not in it)
+local DMG_ON = __DMGON__
+local awdown, awnote = false, false
+local function tuned()
+  if #TUNEF == 0 then return true end
+  for _, f in ipairs(TUNEF) do
+    local ok, v = pcall(trigger.misc.getUserFlag, f)
+    if ok and tonumber(v) == 1 then return true end
+  end
+  return false
+end
+local function isAw(text) return string.upper(string.sub(text or "", 1, #AWL_UP + 3)) == AWL_UP .. " TO" end
+local function awHeld()
+  if awnote then return end
+  awnote = true
+  local g = Group.getByName(PGROUP)
+  if g then trigger.action.outTextForGroup(g:getID(), "AWACS calls are not reaching you: tune a radio to " .. TUNEMHZ .. " MHz.", 10, false) end
+end
+function sayAw(text, you)                  -- an AWACS call to the player: gone when the AWACS is down, held while he is not tuned
+  if awdown then return true end
+  if not tuned() then awHeld(); return false end
+  say(text, you); return true
+end
+function tryCall(i, c, now)
+  if said[i] or now < c.t then return end
+  if isAw(c.text) then
+    if awdown then said[i] = true; return end
+    if not tuned() then
+      awHeld()
+      if now > c.t + 60 then said[i] = true end
+      return
+    end
+  end
+  said[i] = true; say(c.text, c.you)
+end
+local HITL = { "I'm hit.", "I've taken a hit.", "Taking damage.", "I'm hit, checking my systems.", "Hit, I'm hit." }
+local DOWNL = { "Mayday, mayday, ejecting.", "Mayday, I'm going down.", "Punching out, punching out.", "I'm hit bad, ejecting.", "Mayday, mayday, mayday, going down." }
+local SUPL = { "I'm hit, breaking off.", "Taking damage, leaving the track.", "I'm hit." }
+local function pick(t) return t[math.random(#t)] end
+local downSaid = {}
+local function dmgCall(n, kind)               -- kind "hit" | "down": a blue aircraft calls its own damage, from a short random list ("*" before a label: tanker / AWACS)
+  local lab = DMGL[n]
+  if not DMG_ON or not lab or n == PLAYER then return end
+  local sup = string.sub(lab, 1, 1) == "*"
+  if sup then lab = string.sub(lab, 2) end
+  if kind == "down" then
+    if downSaid[n] then return end
+    downSaid[n] = true
+    say(lab .. ": " .. pick(DOWNL))
+  elseif throttle("dmg:" .. n, 60) then
+    say(lab .. ": " .. pick(sup and SUPL or HITL))
+  end
+end
+
+pcall(function() math.randomseed(math.floor(timer.getAbsTime())) end)
 timer.scheduleFunction(function(_, t)
   local now = timer.getTime()
-  for i, c in ipairs(CALLS) do
-    if not said[i] and now >= c.t then said[i] = true; say(c.text, c.you) end
-  end
+  for i, c in ipairs(CALLS) do tryCall(i, c, now) end
   return t + 2
 end, nil, timer.getTime() + 5)
 -- alert log (v0.40.8): when each alert / scramble group was called (its trigger's flag) and when it got airborne; one called and still on
@@ -749,9 +814,9 @@ timer.scheduleFunction(function(_, t)
   end
   local you = string.upper(PGROUP)
   if pl.landed then
-    say(AWACS_LBL .. " to " .. you .. ": all flights accounted for. Good work today. " .. AWACS_LBL .. " out.", true)
+    sayAw(AWACS_LBL .. " to " .. you .. ": all flights accounted for. Good work today. " .. AWACS_LBL .. " out.", true)
   else
-    say(AWACS_LBL .. " to " .. you .. ": all packages complete, no further tasking today. Return to base.", true)
+    sayAw(AWACS_LBL .. " to " .. you .. ": all packages complete, no further tasking today. Return to base.", true)
   end
   return t + 300
 end, nil, timer.getTime() + 60)
@@ -1035,9 +1100,7 @@ local function decide(gs, why)
 end
 timer.scheduleFunction(function(_, t)
   local now = timer.getTime()
-  for i, c in ipairs(CALLS) do
-    if not said[i] and now >= c.t then said[i] = true; say(c.text, c.you) end
-  end
+  for i, c in ipairs(CALLS) do tryCall(i, c, now) end
   return t + 2
 end, nil, timer.getTime() + 5)
 -- ruins of what earlier packages already hit: a few fires and smoke plumes (kept few for VR performance)
@@ -1220,7 +1283,8 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
              calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
              watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
-             rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True) -> str:
+             rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True,
+             tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
@@ -1235,7 +1299,9 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
     return (LUA_HOOK.replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
             .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
-            .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__ECMP__", ecm_player if ecm_player in ("live", "f10") else "").replace("__ECMMSG__", "1" if ecm_msg else "0").replace("__JAMS__", ", ".join(f"[{_lq(k)}]={int(v)}" for k, v in (jams or {}).items()))
+            .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__ECMP__", ecm_player if ecm_player in ("live", "f10") else "").replace("__ECMMSG__", "1" if ecm_msg else "0")
+            .replace("__TUNEF__", ", ".join(str(int(f)) for f in (tune_flags or []))).replace("__TUNEMHZ__", f"{float(tune_mhz):.3f}").replace("__AWUNIT__", _lua_str(awacs_unit))
+            .replace("__DMGL__", ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (dmg or {}).items())).replace("__DMGON__", "true" if dmg_on else "false").replace("__JAMS__", ", ".join(f"[{_lq(k)}]={int(v)}" for k, v in (jams or {}).items()))
             .replace("__JAMW__", ", ".join(f"[{_lq(k)}]={{{float(a):.0f}, {float(b):.0f}}}" for k, (a, b) in (jamw or {}).items()))
             .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)).replace("__SPLASH__", "true" if splash else "false")
             .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}' + (f', t={int(q["t"])}' if q.get("t") is not None else '') + '}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy))
@@ -1266,14 +1332,15 @@ def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despaw
                  group: str = "", calls: list | None = None, wps: list | None = None, sound: str = "", sound_you: str = "", flights: dict | None = None,
                  enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
                  watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
-                 rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True) -> None:
+                 rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True,
+                 tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover, ecm_player, ecm_msg))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover, ecm_player, ecm_msg, tune_flags, tune_mhz, awacs_unit, dmg, dmg_on))))
     mission.triggerrules.triggers.append(t)
 
 

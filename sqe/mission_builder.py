@@ -28,6 +28,9 @@ from . import seacheck as seac
 from . import pydcs_patch
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
+
+TUNE_PARAMS = {"F-16C": ("COMM1_FREQ",), "A-10C": ("UHF_FREQ",), "FA-18C": ("COMM1_FREQ", "COMM2_FREQ"), "F-14BU": ("COMM1_FREQ", "COMM2_FREQ")}   # v0.41.215: the player's radios SQE can read (XO's probes 2026-10-28 / 30); the F-15C (FC3) has none
+TUNE_BAND_MHZ = 0.05            # v0.41.215: tuned = within this much of the AWACS frequency (judgment call; the probe used 0.1)
 from .debrief import Manifest, install_hook
 from .difficulty import Difficulty, ai_skill
 from .fighter_stations import FighterStations, ESCORT_AFTER_TOT_S, TARCAP_AFTER_TOT_S, axis_station
@@ -174,6 +177,8 @@ class MissionOptions:
     ai_land_carrier: str = "always"     # v0.41.18: AI recovery short of a carrier: always | home (your deck only) | never
     ai_land_field: str = "never"        # v0.41.18: the same for airfields
     splash_damage: bool = True          # blasts on ground units near an air-to-ground weapon's impact (the hook)
+    awacs_tuned: bool = True            # v0.41.215: the AWACS calls need a tuned radio (the cockpit-parameter triggers, tune_triggers)
+    damage_calls: bool = True           # v0.41.215: damage / mayday calls from the other aircraft
     ecm_status: bool = True             # v0.41.213: the on-screen ECM messages (F-16C lamp, FC3 F10 calls); only with ecm_script
     ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
@@ -285,6 +290,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self.warns = warns
         self._anchor_id = package.id
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
+        self._support_lbl = {}                                          # v0.41.215: tanker / AWACS unit name -> its label, for the damage calls
         self._gates = []                                                # DEAD flights that turn back when the site's radars are still up
         self._sead_grps = {}                                            # site id -> the SEAD flights' group names (all merged packages); the gate aborts when they are all down
         self._blind_site = set()
@@ -526,6 +532,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             x["target_line"] = (f"Target position {latlon(tx, ty, self.t)}, bearing {int(bearing(pbase.x, pbase.y, tx, ty)):03d} degrees, "
                                 f"{dist(pbase.x, pbase.y, tx, ty) / NM:.0f} nm from {pbase.name}."
                                 + (f" {_ta.name} stands at {_ta.health:.0%} strength." if _ta is not None else ""))
+        tune_flags, tune_mhz = [], 0.0
+        if o.awacs_tuned and not o.player_is_ai and any(s.slot == "AWACS" for s in package.support):
+            tune_mhz = float(plan.freq("AWACS"))
+            tune_flags = self._tune_triggers(pf.aircraft, tune_mhz)           # v0.41.215: [] for a jet whose radio cannot be read: always counts as tuned
+        if tune_flags:
+            x["tune_mhz"] = tune_mhz
         text = brief.build_text(st, package, tl, plan, self.rng, (tx, ty), x)
         m.set_description_text(text["full"])
         m.set_description_bluetask_text(text["blue_task"])
@@ -550,6 +562,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and not f_.is_player],
                          done_after=max([float(tgt.eta_s)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
                          rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts, cover=self._cover, ecm_player=self._ecm_player, ecm_msg=bool(o.ecm_status),
+                         tune_flags=tune_flags, tune_mhz=tune_mhz, awacs_unit=f"{awl} 1-1" if any(s.slot == "AWACS" for s in package.support) else "",
+                         dmg=({**self._ulabels, **{k: "*" + v for k, v in self._support_lbl.items()}} if o.damage_calls else {}), dmg_on=bool(o.damage_calls),
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
                               "cvrec": self._wing_recovery(pbase, tgt.eta_s), "recov": list(self._recov),
@@ -1523,6 +1537,24 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     HOT_CLIMB_KTS = 300      # average speed from the runway to the pretend-DEP point (climbing), judgment call
     HOT_HOME_S = 600         # v0.41.97: no runway release at your own field this close to your planned landing (judgment call)
     RWY_GAP_S = 60           # the hook's RWY_STAGGER_S: releases from one runway are at least this far apart
+
+    def _tune_triggers(self, aircraft: str, mhz: float) -> list:
+        """v0.41.215 (XO 2026-10-30): one flag per readable radio of the player's jet, set while that radio is within TUNE_BAND_MHZ of the AWACS frequency
+        (Mission Editor "Cockpit Parameter is in range" triggers; probed in DCS 2026-10-28 / 30: F-16C COMM1, F/A-18C and F-14B COMM1 + COMM2, A-10C UHF).
+        A jet not in TUNE_PARAMS (the FC3 F-15C) gets no flags and counts as always tuned. A radio tuned to another band reads far outside the window."""
+        flags = []
+        for name in TUNE_PARAMS.get(aircraft, ()):
+            self._flag_n += 1
+            fl = self._flag_n
+            flags.append(fl)
+            lo, hi = mhz - TUNE_BAND_MHZ, mhz + TUNE_BAND_MHZ
+            for rng_, want_set in (((lo, hi), True), (("0.000001", lo - 0.1), False), ((hi + 0.1, "1000000000000"), False)):
+                t = triggers.TriggerContinious(comment=f"SQE tuned {name} {'on' if want_set else 'off'}")
+                t.add_condition(condition.CockpitParamInRange(name, f"{float(rng_[0]):.6f}" if not isinstance(rng_[0], str) else rng_[0], f"{float(rng_[1]):.6f}" if not isinstance(rng_[1], str) else rng_[1]))
+                t.add_condition(condition.FlagIsFalse(fl) if want_set else condition.FlagIsTrue(fl))
+                t.add_action(action.SetFlag(fl) if want_set else action.ClearFlag(fl))
+                self.m.triggerrules.triggers.append(t)
+        return flags
 
     def _hot_slot(self, package, f, base, wps, act_raw, held):
         """v0.41.96: may this AI flight start on the runway instead of airborne, and when is it released? Only package flights from LAND fields

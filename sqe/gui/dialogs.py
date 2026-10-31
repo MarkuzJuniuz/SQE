@@ -164,13 +164,22 @@ class SettingsDialog(QDialog):
         hint(v, "Features still being tried out. Each one can be switched off if it misbehaves; the defaults are the safe ones.")
         self.ecm = QCheckBox("ECM script (SQE's own jamming)")
         self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
+        hint(v, "SQE's own jamming model; off by default. Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
+                "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
         self.ecm_msg = QCheckBox("Show ECM status")                      # v0.41.213 (XO): a sub-option of the ECM script
         self.ecm_msg.setChecked(bool(getattr(settings, "ecm_status", True))); self.ecm_msg.setEnabled(self.ecm.isChecked())
         self.ecm.toggled.connect(self.ecm_msg.setEnabled); self.ecm_msg.setStyleSheet("margin-left:22px;")
         self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's ECM lamp (\"ECM on\" / \"ECM off\") and the F10 ECM ON / OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
         v.addWidget(self.ecm_msg)
-        hint(v, "SQE's own jamming model; off by default. Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
-                "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
+        self.awt = QCheckBox("AWACS calls need a tuned radio")           # v0.41.215 (XO)
+        self.awt.setChecked(bool(getattr(settings, "awacs_tuned", True))); v.addWidget(self.awt)
+        hint(v, "On: you hear the AWACS only while one of your radios is on its frequency (it is in your comms plan); a call that comes due while you are not tuned is held up to a minute, "
+                "then dropped, with one on-screen note. Read from the F-16C and A-10C first radio (UHF), and both radios of the F/A-18C and F-14B; the F-15C (FC3) is always counted tuned. "
+                "Off: you hear every AWACS call whatever your radio is set to.")
+        self.dmgc = QCheckBox("Show damage calls")                       # v0.41.215 (XO)
+        self.dmgc.setChecked(bool(getattr(settings, "damage_calls", True))); v.addWidget(self.dmgc)
+        hint(v, "On: the other blue aircraft (your wingmen, other flights, the tanker and the AWACS) call when they are hit and when they eject or go down (\"Mayday, mayday, ejecting\"), "
+                "each picked at random from a short list. Off: no such calls.")
         self.hotrwy = QCheckBox("Hot starts on the runway (AI flights)")
         self.hotrwy.setChecked(bool(getattr(settings, "hot_runway_starts", False))); v.addWidget(self.hotrwy)
         hint(v, "Land fields other than yours. On: AI package flights wait hidden and appear on the runway in time to make their push, one runway release a minute apart. "
@@ -315,6 +324,8 @@ class SettingsDialog(QDialog):
         self.s.ruins = bool(self.ruins.isChecked())
         self.s.ecm_script = bool(self.ecm.isChecked())
         self.s.ecm_status = bool(self.ecm_msg.isChecked())
+        self.s.awacs_tuned = bool(self.awt.isChecked())
+        self.s.damage_calls = bool(self.dmgc.isChecked())
         self.s.splash_damage = bool(self.splash.isChecked())
         self.s.ai_land_carrier = str(self.land_cv.currentData() or "always")
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
