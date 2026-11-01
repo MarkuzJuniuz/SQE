@@ -267,7 +267,7 @@ end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
 -- v0.41.210 (XO 2026-10-30): the player's own jammer. ECMP "live": the F-16C's ECM lamp, written four times a second by sqe/data/sqe_ecm_export.lua (Export.lua) to
 -- Logs\SQE_ecm.flag as "<0|1> <model time>"; a missing or stale file falls back to the attack-leg window below. ECMP "f10": an FC3 jet (nothing readable in its
--- cockpit): one F10 > Other > ECM Switch toggles the flag (starts off); engine shutdown / death drops the item and clears the flag, engine startup brings it back.
+-- cockpit): one F10 > Other > ECM Switch toggles the flag (starts off); engine shutdown / death clears the flag (v0.41.226: the item stays).
 local ECMP = "__ECMP__"
 local FC3ECM = false
 local ECMMSG = "__ECMMSG__" == "1"                      -- v0.41.213: Settings > Experimental > Show ECM status: the on-screen ECM messages
@@ -312,11 +312,9 @@ if ECMP == "f10" then                                          -- v0.41.225 (XO 
     ecmLog("menu added (" .. tostring(why) .. ")")
     return true
   end
-  local function ecmDrop(why)
+  local function ecmDrop(why)                                  -- v0.41.226: the flag goes off but the menu item STAYS (a startup event may never come for an FC3 jet)
     FC3ECM = false
-    if ECMF.shown and ECMF.id then pcall(missionCommands.removeItemForGroup, ECMF.id, { "ECM Switch" }) end
-    ECMF.shown = false
-    ecmLog("menu removed, jammer off (" .. tostring(why) .. ")")
+    ecmLog("jammer off (" .. tostring(why) .. "), menu item kept")
   end
   local tries = 0
   local function addF10()
@@ -326,11 +324,14 @@ if ECMP == "f10" then                                          -- v0.41.225 (XO 
     return nil
   end
   timer.scheduleFunction(addF10, nil, timer.getTime() + 1)
-  -- the probe: log the player's lifecycle events to dcs.log, and act on the on / off ones
-  local EVN = {}
+  -- the probe (v0.41.226): EVERY event the player's unit sends goes to dcs.log (id, name when known), the known names are listed at start, and the unit's external
+  -- model arguments are sampled every 3 s with each change over 0.05 logged ("arg N a -> b"), to find anything that follows battery / generator power
+  local EVN, EVALL, nlog = {}, {}, 0
+  for k, v in pairs(world.event) do if type(v) == "number" then EVALL[v] = k end end
   for _, k in ipairs({ "S_EVENT_BIRTH", "S_EVENT_ENGINE_STARTUP", "S_EVENT_ENGINE_SHUTDOWN", "S_EVENT_TAKEOFF", "S_EVENT_LAND", "S_EVENT_DEAD", "S_EVENT_CRASH",
                        "S_EVENT_PILOT_DEAD", "S_EVENT_EJECTION", "S_EVENT_PLAYER_ENTER_UNIT", "S_EVENT_PLAYER_LEAVE_UNIT" }) do
     local v = world.event[k]
+    ecmLog("event name " .. k .. " = " .. tostring(v))
     if v then EVN[v] = k end
   end
   local H2 = {}
@@ -338,12 +339,33 @@ if ECMP == "f10" then                                          -- v0.41.225 (XO 
     local ok, nm = pcall(function() return e.initiator:getName() end)
     if not ok or nm ~= PLAYER then return end
     local k = EVN[e.id]
+    if nlog < 400 then
+      nlog = nlog + 1
+      ecmLog("event id " .. tostring(e.id) .. " " .. tostring(EVALL[e.id] or "?") .. " (" .. tostring(nm) .. ") t=" .. string.format("%.0f", timer.getTime()))
+    end
     if not k then return end
-    ecmLog("event " .. k .. " (" .. tostring(nm) .. ") t=" .. string.format("%.0f", timer.getTime()))
     if k == "S_EVENT_ENGINE_STARTUP" then ecmAdd("engine startup")
     elseif k == "S_EVENT_ENGINE_SHUTDOWN" or k == "S_EVENT_DEAD" or k == "S_EVENT_CRASH" or k == "S_EVENT_PILOT_DEAD" or k == "S_EVENT_EJECTION" then ecmDrop(k) end
   end
   world.addEventHandler(H2)
+  local ARGS, nargs = {}, 0
+  timer.scheduleFunction(function(_, now)
+    local u = Unit.getByName(PLAYER)
+    if u and nargs < 600 then
+      for n = 0, 999 do
+        local ok, v = pcall(u.getDrawArgumentValue, u, n)
+        if ok and type(v) == "number" then
+          local o = ARGS[n]
+          if o ~= nil and math.abs(v - o) >= 0.05 and nargs < 600 then
+            nargs = nargs + 1
+            ecmLog(string.format("arg %d %.2f -> %.2f t=%.0f", n, o, v, now))
+          end
+          ARGS[n] = v
+        end
+      end
+    end
+    return now + 3
+  end, nil, timer.getTime() + 5)
 end
 if ECMP == "live" and ECMMSG then                              -- v0.41.212 (XO): tell the pilot what SQE sees: once when the lamp file is first read, then on every on / off change
   local last = nil
