@@ -5516,7 +5516,7 @@ def check_103_ecm_hookup(c):
     assert '["F-16C_50"] = { arg = 102,  enabled = true }' in lua
     for n in ("FA-18C_hornet", "F-14B", "A-10C_2"):
         assert f'["{n}"]' in lua
-    assert "LoGetTWSInfo" in lua and "SQE EXPORT probe" in lua and "probe_n >= 1500" in lua and "list_cockpit_params" not in "\n".join(x for x in lua.split("\n") if not x.lstrip().startswith("--")) and "LoGetSightingSystemInfo" not in "\n".join(x for x in lua.split("\n") if not x.lstrip().startswith("--"))      # v0.41.230: only the RWR table is probed (comments aside)
+    assert "SQE EXPORT probe" not in lua and "probe(" not in lua and "LoGetTWSInfo" not in "\n".join(x for x in lua.split("\n") if not x.lstrip().startswith("--"))      # v0.41.231: the probe is gone
     assert lua.count("enabled = false }") == 3 and "LuaExportActivityNextEvent" in lua and "prev_next" in lua
     try:
         import lupa  # noqa
