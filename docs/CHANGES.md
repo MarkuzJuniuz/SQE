@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.228, ECM probe: does LoGetActivityLevel / list_indication / GetDevice(0) exist for the F-15C?
+
+XO 2026-11-01 (low, "go"). A web search gave XO a snippet that reads the F-15C's ECM from `LoGetActivityLevel()[104]` or from the text of `list_indication(0)`. Crew Chief doubts both (no such Export function is known; an FC3 jet has no modelled displays), so the Export probe in `sqe/data/sqe_ecm_export.lua` now answers it from XO's next F-15C flight. Each second, with the existing `SQE EXPORT probe:` line, it adds: `LoGetActivityLevel` (every field, or `=missing`), `list_indication(0)` (length, whether the text holds "ECM", the first 120 characters), `list_cockpit_params` (exists, length), and `GetDevice0` (nil / present). If `GetDevice(0)` is present, changes of its arguments 0 to 999 are logged as `SQE EXPORT dev0 arg N a -> b` (first 400). Read-only; XO has to press Settings > DCS integration > Install ECM script again to get the new file. The probe logging is still queued for removal. Smoke check_103 asserts the new text. Files: `sqe/data/sqe_ecm_export.lua`, `tools/smoke_test.py`.
+
 ## v0.41.227, FC3 jets: "SQE ECM Switch" plus a "SQE ECM OFF" re-sync command
 
 XO 2026-11-01 (low, "go"). His F-15C probe log (v0.41.226) found no readable ECM or power state: LoGetSightingSystemInfo.ECM_on never moved, the failure flags never changed, no draw argument followed power. The engine events do fire (shutdown and startup, plus takeoff). So the manual switch stays, renamed **SQE ECM Switch** (F10 > Other; it toggles SQE's flag), with a second command **SQE ECM OFF** that forces the flag off: when SQE and the jet disagree, XO turns the Eagle's ECM off and presses SQE ECM OFF. Both names start with "SQE" so voice bindings (VAICOM / VoiceAttack) keep them apart from the jet's own commands; the old "ECM Switch" name is gone, so a binding to it must be updated. A shutdown, death, crash or ejection still clears the flag. Briefing line and Settings tooltip updated. Smoke check_103 covers both commands. Files: `sqe/debrief.py`, `sqe/briefing.py`, `sqe/gui/dialogs.py`, `sqe/data/sqe_ecm_export.lua` (comment), `tools/smoke_test.py`.
