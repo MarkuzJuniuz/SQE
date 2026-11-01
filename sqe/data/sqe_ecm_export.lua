@@ -9,7 +9,7 @@
 --
 -- JETS: the F-16C is live (argument 102, "ECM Light (green)", confirmed in XO's 2026-10-28 log with a pod hung). The F/A-18C, F-14B and A-10C arguments below are
 -- from DCS-BIOS and NOT flown: they stay OFF (enabled = false) until XO has flown them with and without a pod. FC3 jets (F-15C) have no readable lamp: use
--- the mission's F10 > Other > ECM Switch toggle instead.
+-- the mission's F10 > Other > SQE ECM Switch toggle (and SQE ECM OFF) instead.
 --
 -- PROBE (v0.41.226, XO 2026-11-01): for a jet that has no enabled lamp above (the FC3 jets), once a second it also writes the jet's own export tables to dcs.log
 -- as "SQE EXPORT probe: ..." whenever they change: LoGetSightingSystemInfo (documented to hold ECM_on / radar_on), LoGetMCPState, and LoGetEngineInfo

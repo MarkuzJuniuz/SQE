@@ -267,7 +267,7 @@ end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
 -- v0.41.210 (XO 2026-10-30): the player's own jammer. ECMP "live": the F-16C's ECM lamp, written four times a second by sqe/data/sqe_ecm_export.lua (Export.lua) to
 -- Logs\SQE_ecm.flag as "<0|1> <model time>"; a missing or stale file falls back to the attack-leg window below. ECMP "f10": an FC3 jet (nothing readable in its
--- cockpit): one F10 > Other > ECM Switch toggles the flag (starts off); engine shutdown / death clears the flag (v0.41.226: the item stays).
+-- cockpit): F10 > Other > SQE ECM Switch toggles the flag and SQE ECM OFF forces it off (re-sync) (starts off); engine shutdown / death clears the flag (v0.41.226: the item stays).
 local ECMP = "__ECMP__"
 local FC3ECM = false
 local ECMMSG = "__ECMMSG__" == "1"                      -- v0.41.213: Settings > Experimental > Show ECM status: the on-screen ECM messages
@@ -294,7 +294,7 @@ local function jamOn(name)
   local t = timer.getTime()
   return t >= w[1] and t <= w[2]
 end
-if ECMP == "f10" then                                          -- v0.41.225 (XO 2026-10-31): ONE "ECM Switch" toggle; no menu item = off
+if ECMP == "f10" then                                          -- v0.41.225 (XO 2026-10-31): "SQE ECM Switch" toggle + "SQE ECM OFF" sync
   local ECMF = { shown = false, id = nil }
   local function ecmLog(m) pcall(env.info, "SQE ECM: " .. m) end
   local function ecmAdd(why)
@@ -303,10 +303,15 @@ if ECMP == "f10" then                                          -- v0.41.225 (XO 
     if not g then return false end
     local id = g:getID()
     ECMF.id = id
-    missionCommands.addCommandForGroup(id, "ECM Switch", nil, function()
+    missionCommands.addCommandForGroup(id, "SQE ECM Switch", nil, function()
       FC3ECM = not FC3ECM
       ecmLog("switch -> " .. (FC3ECM and "on" or "off"))
       if ECMMSG then trigger.action.outTextForGroup(id, "ECM " .. (FC3ECM and "on" or "off") .. " (F10)", 6) end
+    end)
+    missionCommands.addCommandForGroup(id, "SQE ECM OFF", nil, function()      -- v0.41.227 (XO): the re-sync: set SQE off whatever it thought
+      FC3ECM = false
+      ecmLog("sync -> off")
+      if ECMMSG then trigger.action.outTextForGroup(id, "ECM off (F10)", 6) end
     end)
     ECMF.shown = true
     ecmLog("menu added (" .. tostring(why) .. ")")
