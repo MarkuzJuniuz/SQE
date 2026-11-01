@@ -11,10 +11,9 @@
 -- from DCS-BIOS and NOT flown: they stay OFF (enabled = false) until XO has flown them with and without a pod. FC3 jets (F-15C) have no readable lamp: use
 -- the mission's F10 > Other > SQE ECM Switch toggle (and SQE ECM OFF) instead.
 --
--- PROBE (v0.41.230, XO 2026-11-01): for a jet that has no enabled lamp above (the FC3 jets), once a second it writes the RWR table (LoGetTWSInfo, every field, or
--- "=empty" / "=missing") to dcs.log as "SQE EXPORT probe: ..." whenever it changes, to see whether the F-15C's flashing jammer X is in it. Read-only; at most 1500 lines
--- per flight. Everything else tried before (the sighting-system, MCP and engine tables, LoGetActivityLevel, list_indication, GetDevice(0), list_cockpit_params and the
--- external model arguments) came back with no ECM or power state and was removed.
+-- FC3 JETS, WHAT WAS TRIED (2026-11, XO's F-15C flights): nothing the Export side can read follows the jet's ECM or electrical power: LoGetSightingSystemInfo.ECM_on, the
+-- LoGetMCPState flags, LoGetActivityLevel (missing), list_indication(0), GetDevice(0) (nil), list_cockpit_params (flight sensors only), the external model arguments and
+-- LoGetTWSInfo (the RWR table: Mode stayed 0, Emitters are other radars). Hence the manual F10 commands above.
 --
 -- HOW TO INSTALL: SQE does it for you (Settings > DCS integration > Install ECM script). By hand: copy THIS file to Saved Games\DCS\Scripts\sqe_ecm_export.lua and add
 -- at the END of Saved Games\DCS\Scripts\Export.lua (create it if it does not exist; this file chains the previous export functions instead of replacing them):
@@ -28,7 +27,7 @@ local JETS = {
   ["A-10C_2"] = { arg = 361, enabled = false },        -- CMSP_JMR switch, 3 positions (not flown)
 }
 
-local SQE_ECM = { file = nil, name = nil, next_t = 0, last = nil, last_w = -10, probe_t = 0, probe_last = nil, probe_n = 0 }
+local SQE_ECM = { file = nil, name = nil, next_t = 0, last = nil, last_w = -10 }
 local POLL_S, BEAT_S = 0.25, 1.0
 local prev_start, prev_stop, prev_next = LuaExportStart, LuaExportStop, LuaExportActivityNextEvent
 
@@ -39,51 +38,12 @@ local function write_flag(on, t)
   if ok and f then f:write(string.format("%d %.2f\n", on and 1 or 0, t)); f:close() end
 end
 
-local function flat(v, prefix, out, depth)
-  if type(v) == "table" then
-    if depth < 3 then
-      local keys = {}
-      for k in pairs(v) do keys[#keys + 1] = tostring(k) end
-      table.sort(keys)
-      for _, ks in ipairs(keys) do
-        local x = v[ks]
-        if x == nil then x = v[tonumber(ks)] end
-        flat(x, prefix .. "." .. ks, out, depth + 1)
-      end
-    end
-  elseif type(v) == "number" then out[#out + 1] = prefix .. "=" .. string.format("%.0f", v)
-  elseif type(v) == "boolean" or type(v) == "string" then out[#out + 1] = prefix .. "=" .. tostring(v) end
-end
-
-local function probe(t)                                  -- v0.41.226: look for a power / ECM signal in the export tables of a jet with no lamp
-  if t < SQE_ECM.probe_t or SQE_ECM.probe_n >= 1500 then return end
-  SQE_ECM.probe_t = t + 1.0
-  local out = {}
-  for _, f in ipairs({ "LoGetTWSInfo" }) do             -- v0.41.230 (XO 2026-11-01): the RWR table; the F-15C's RWR shows a flashing X while it jams
-    local fn = _G[f]
-    if fn then
-      local ok, v = pcall(fn)
-      if ok then
-        flat(v, f, out, 0)
-        if type(v) == "table" and next(v) == nil then out[#out + 1] = f .. "=empty" end
-      else out[#out + 1] = f .. "=error" end
-    else
-      out[#out + 1] = f .. "=missing"
-    end
-  end
-  local s = table.concat(out, " ")
-  if s ~= SQE_ECM.probe_last then
-    SQE_ECM.probe_last = s
-    SQE_ECM.probe_n = SQE_ECM.probe_n + 1
-    pcall(log.write, "SQE", log.INFO, "SQE EXPORT probe: " .. tostring(SQE_ECM.name) .. " t=" .. string.format("%.0f", t) .. " " .. s)
-  end
-end
-
 function LuaExportStart()
   if prev_start then pcall(prev_start) end
   local ok, n = pcall(function() return LoGetSelfData().Name end)
   SQE_ECM.name = ok and n or nil
-  SQE_ECM.next_t = 0; SQE_ECM.last = nil; SQE_ECM.last_w = -10; SQE_ECM.probe_t = 0; SQE_ECM.probe_last = nil; SQE_ECM.probe_n = 0;   pcall(os.remove, path())                              -- a flag left from an earlier flight must never be read as this one's
+  SQE_ECM.next_t = 0; SQE_ECM.last = nil; SQE_ECM.last_w = -10
+  pcall(os.remove, path())                              -- a flag left from an earlier flight must never be read as this one's
 end
 
 function LuaExportStop()
@@ -96,7 +56,6 @@ function LuaExportActivityNextEvent(t)
   if t >= SQE_ECM.next_t then
     SQE_ECM.next_t = t + POLL_S
     local j = SQE_ECM.name and JETS[SQE_ECM.name]
-    if not (j and j.enabled) then pcall(probe, t) end
     if j and j.enabled then
       local ok, v = pcall(function() return GetDevice(0):get_argument_value(j.arg) end)
       if ok and v ~= nil then
