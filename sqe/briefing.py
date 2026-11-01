@@ -124,7 +124,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     if x.get("tune_mhz"):
         com.append(f"AWACS: its calls reach you only while a radio is tuned to {x['tune_mhz']:.3f} MHz.")
     if x.get("ecm_player") == "f10":
-        com.append("ECM: your jet's jammer cannot be read by the mission. Press F10 > Other > ECM ON when you switch it on and ECM OFF when you switch it off; SQE trusts that call (it starts off).")
+        com.append("ECM: your jet's jammer cannot be read by the mission. Press F10 > Other > ECM Switch each time you flip it; SQE trusts that call (it starts off). Shutting the engines down clears it and the menu item returns when you start up again.")
     elif x.get("ecm_player") == "live":
         com.append("ECM: your jammer is read from the ECM lamp when the ECM script is installed (Settings > DCS integration); without it SQE counts it on over the attack leg.")
     if x.get("link16"):
