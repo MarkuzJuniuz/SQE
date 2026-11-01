@@ -5516,6 +5516,7 @@ def check_103_ecm_hookup(c):
     assert '["F-16C_50"] = { arg = 102,  enabled = true }' in lua
     for n in ("FA-18C_hornet", "F-14B", "A-10C_2"):
         assert f'["{n}"]' in lua
+    assert "LoGetSightingSystemInfo" in lua and "SQE EXPORT probe" in lua and "probe_n >= 1500" in lua       # v0.41.226: the FC3 export-table probe
     assert lua.count("enabled = false }") == 3 and "LuaExportActivityNextEvent" in lua and "prev_next" in lua
     try:
         import lupa  # noqa
