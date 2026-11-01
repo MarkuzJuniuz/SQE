@@ -267,7 +267,7 @@ end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
 -- v0.41.210 (XO 2026-10-30): the player's own jammer. ECMP "live": the F-16C's ECM lamp, written four times a second by sqe/data/sqe_ecm_export.lua (Export.lua) to
 -- Logs\SQE_ecm.flag as "<0|1> <model time>"; a missing or stale file falls back to the attack-leg window below. ECMP "f10": an FC3 jet (nothing readable in its
--- cockpit): the F10 > Other commands ECM ON / ECM OFF set the flag (starts off).
+-- cockpit): one F10 > Other > ECM Switch toggles the flag (starts off); engine shutdown / death drops the item and clears the flag, engine startup brings it back.
 local ECMP = "__ECMP__"
 local FC3ECM = false
 local ECMMSG = "__ECMMSG__" == "1"                      -- v0.41.213: Settings > Experimental > Show ECM status: the on-screen ECM messages
@@ -294,21 +294,56 @@ local function jamOn(name)
   local t = timer.getTime()
   return t >= w[1] and t <= w[2]
 end
-if ECMP == "f10" then
+if ECMP == "f10" then                                          -- v0.41.225 (XO 2026-10-31): ONE "ECM Switch" toggle; no menu item = off
+  local ECMF = { shown = false, id = nil }
+  local function ecmLog(m) pcall(env.info, "SQE ECM: " .. m) end
+  local function ecmAdd(why)
+    if ECMF.shown then return true end
+    local g = Group.getByName(PGROUP)
+    if not g then return false end
+    local id = g:getID()
+    ECMF.id = id
+    missionCommands.addCommandForGroup(id, "ECM Switch", nil, function()
+      FC3ECM = not FC3ECM
+      ecmLog("switch -> " .. (FC3ECM and "on" or "off"))
+      if ECMMSG then trigger.action.outTextForGroup(id, "ECM " .. (FC3ECM and "on" or "off") .. " (F10)", 6) end
+    end)
+    ECMF.shown = true
+    ecmLog("menu added (" .. tostring(why) .. ")")
+    return true
+  end
+  local function ecmDrop(why)
+    FC3ECM = false
+    if ECMF.shown and ECMF.id then pcall(missionCommands.removeItemForGroup, ECMF.id, { "ECM Switch" }) end
+    ECMF.shown = false
+    ecmLog("menu removed, jammer off (" .. tostring(why) .. ")")
+  end
   local tries = 0
   local function addF10()
     tries = tries + 1
-    local g = Group.getByName(PGROUP)
-    if not g then
-      if tries < 60 then return timer.getTime() + 2 end
-      return nil
-    end
-    local id = g:getID()
-    missionCommands.addCommandForGroup(id, "ECM ON", nil, function() FC3ECM = true; if ECMMSG then trigger.action.outTextForGroup(id, "ECM on (F10)", 6) end end)
-    missionCommands.addCommandForGroup(id, "ECM OFF", nil, function() FC3ECM = false; if ECMMSG then trigger.action.outTextForGroup(id, "ECM off (F10)", 6) end end)
+    if ecmAdd("mission start") then return nil end
+    if tries < 60 then return timer.getTime() + 2 end
     return nil
   end
   timer.scheduleFunction(addF10, nil, timer.getTime() + 1)
+  -- the probe: log the player's lifecycle events to dcs.log, and act on the on / off ones
+  local EVN = {}
+  for _, k in ipairs({ "S_EVENT_BIRTH", "S_EVENT_ENGINE_STARTUP", "S_EVENT_ENGINE_SHUTDOWN", "S_EVENT_TAKEOFF", "S_EVENT_LAND", "S_EVENT_DEAD", "S_EVENT_CRASH",
+                       "S_EVENT_PILOT_DEAD", "S_EVENT_EJECTION", "S_EVENT_PLAYER_ENTER_UNIT", "S_EVENT_PLAYER_LEAVE_UNIT" }) do
+    local v = world.event[k]
+    if v then EVN[v] = k end
+  end
+  local H2 = {}
+  function H2:onEvent(e)
+    local ok, nm = pcall(function() return e.initiator:getName() end)
+    if not ok or nm ~= PLAYER then return end
+    local k = EVN[e.id]
+    if not k then return end
+    ecmLog("event " .. k .. " (" .. tostring(nm) .. ") t=" .. string.format("%.0f", timer.getTime()))
+    if k == "S_EVENT_ENGINE_STARTUP" then ecmAdd("engine startup")
+    elseif k == "S_EVENT_ENGINE_SHUTDOWN" or k == "S_EVENT_DEAD" or k == "S_EVENT_CRASH" or k == "S_EVENT_PILOT_DEAD" or k == "S_EVENT_EJECTION" then ecmDrop(k) end
+  end
+  world.addEventHandler(H2)
 end
 if ECMP == "live" and ECMMSG then                              -- v0.41.212 (XO): tell the pilot what SQE sees: once when the lamp file is first read, then on every on / off change
   local last = nil
