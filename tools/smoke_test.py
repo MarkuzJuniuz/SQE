@@ -5511,12 +5511,12 @@ def check_103_ecm_hookup(c):
     from sqe.settings import AppSettings as _AS
     assert _AS().ecm_status is True
     h_f10 = db.lua_hook("c", 1, "p", [], "P1", "G", ecm_player="f10")
-    assert "SQE ECM Switch" in h_f10 and "SQE ECM OFF" in h_f10 and "ECM ON" not in h_f10 and "addCommandForGroup" in h_f10 and "S_EVENT_ENGINE_SHUTDOWN" in h_f10 and "getDrawArgumentValue" in h_f10 and "event id" in h_f10 and "local FC3ECM = false" in h_f10
+    assert "SQE ECM Switch" in h_f10 and "SQE ECM OFF" in h_f10 and "ECM ON" not in h_f10 and "addCommandForGroup" in h_f10 and "S_EVENT_ENGINE_SHUTDOWN" in h_f10 and "getDrawArgumentValue" not in h_f10 and "event id" not in h_f10 and "local FC3ECM = false" in h_f10
     lua = (_P(__file__).resolve().parent.parent / "sqe" / "data" / "sqe_ecm_export.lua").read_text()
     assert '["F-16C_50"] = { arg = 102,  enabled = true }' in lua
     for n in ("FA-18C_hornet", "F-14B", "A-10C_2"):
         assert f'["{n}"]' in lua
-    assert "LoGetSightingSystemInfo" in lua and "SQE EXPORT probe" in lua and "probe_n >= 1500" in lua and "list_cockpit_params" in lua and "SQE EXPORT param " in lua and "LoGetActivityLevel" not in lua.split("v0.41.229")[1]      # v0.41.229       # v0.41.226: the FC3 export-table probe
+    assert "LoGetTWSInfo" in lua and "SQE EXPORT probe" in lua and "probe_n >= 1500" in lua and "list_cockpit_params" not in "\n".join(x for x in lua.split("\n") if not x.lstrip().startswith("--")) and "LoGetSightingSystemInfo" not in "\n".join(x for x in lua.split("\n") if not x.lstrip().startswith("--"))      # v0.41.230: only the RWR table is probed (comments aside)
     assert lua.count("enabled = false }") == 3 and "LuaExportActivityNextEvent" in lua and "prev_next" in lua
     try:
         import lupa  # noqa
@@ -5546,8 +5546,8 @@ def check_103_ecm_hookup(c):
         rt.execute("menu['SQE ECM OFF']()"); assert rt.eval("FC3ECM == false"), "SQE ECM OFF forces the flag off (the sync)"
         rt.execute("menu['SQE ECM Switch']()"); rt.execute("menu['SQE ECM OFF']()"); assert rt.eval("FC3ECM == false")
         rt.execute("menu['SQE ECM Switch']()"); rt.execute("ev(8)"); assert rt.eval("FC3ECM == false"), "death counts as off"
-        rt.execute("ev(99)"); assert rt.eval("table.concat(logs,'|'):find('event id 99') ~= nil"), "an unknown event id is still logged"
-        assert rt.eval("table.concat(logs,'|'):find('S_EVENT_ENGINE_SHUTDOWN') ~= nil"), "events are logged for the dcs.log probe"
+        rt.execute("ev(99)"); assert rt.eval("FC3ECM == false"), "an unknown event id is ignored"
+        assert rt.eval("table.concat(logs,'|'):find('jammer off') ~= nil"), "a shutdown logs the jammer-off line"
     print("[ecm hookup] hook text for live / f10 / off, F10 commands, export script jets (F-16C on, three off)")
 
 
