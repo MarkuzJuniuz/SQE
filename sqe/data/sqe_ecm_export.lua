@@ -13,7 +13,7 @@
 --
 -- PROBE (v0.41.226, XO 2026-11-01): for a jet that has no enabled lamp above (the FC3 jets), once a second it also writes the jet's own export tables to dcs.log
 -- as "SQE EXPORT probe: ..." whenever they change: LoGetSightingSystemInfo (documented to hold ECM_on / radar_on), LoGetMCPState, and LoGetEngineInfo
--- (numbers rounded to whole units); v0.41.228 also whether LoGetActivityLevel, list_indication(0), list_cockpit_params and GetDevice(0) exist for the jet, and what they hold. It is read-only; it is how XO and Crew Chief look for a power / ECM signal on the F-15C. At most 1500 lines per flight.
+-- (numbers rounded to whole units); v0.41.229 also dumps list_cockpit_params() once and logs each entry that changes ("SQE EXPORT param NAME a -> b"). It is read-only; it is how XO and Crew Chief look for a power / ECM signal on the F-15C. At most 1500 lines per flight.
 --
 -- HOW TO INSTALL: SQE does it for you (Settings > DCS integration > Install ECM script). By hand: copy THIS file to Saved Games\DCS\Scripts\sqe_ecm_export.lua and add
 -- at the END of Saved Games\DCS\Scripts\Export.lua (create it if it does not exist; this file chains the previous export functions instead of replacing them):
@@ -67,50 +67,41 @@ local function probe(t)                                  -- v0.41.226: look for 
       out[#out + 1] = f .. "=missing"
     end
   end
-  -- v0.41.228 (XO 2026-11-01, a tip from a web search, doubted): do these exist for this jet, and what do they hold?
-  local fa = _G["LoGetActivityLevel"]
-  if fa then
-    local ok, v = pcall(fa)
-    if ok then flat(v, "LoGetActivityLevel", out, 0) else out[#out + 1] = "LoGetActivityLevel=error" end
-  else
-    out[#out + 1] = "LoGetActivityLevel=missing"
-  end
-  local fi = _G["list_indication"]
-  if fi then
-    local ok, v = pcall(fi, 0)
-    if ok and type(v) == "string" then
-      out[#out + 1] = "list_indication0.len=" .. #v
-      out[#out + 1] = "list_indication0.hasECM=" .. tostring(v:find("ECM", 1, true) ~= nil)
-      out[#out + 1] = "list_indication0.head=" .. v:sub(1, 120):gsub("%s+", "_")
-    else
-      out[#out + 1] = "list_indication0=" .. (ok and type(v) or "error")
-    end
-  else
-    out[#out + 1] = "list_indication=missing"
-  end
+  -- v0.41.229 (XO 2026-11-01): LoGetActivityLevel (missing), list_indication(0) (no ECM text) and GetDevice(0) (nil) are ruled out for the F-15C. list_cockpit_params()
+  -- exists (about 7.7 KB of "name:value" text): dump every name once, then log each entry whose value changes, so XO's ECM / power presses show up by name and time.
   local fp = _G["list_cockpit_params"]
   if fp then
     local ok, v = pcall(fp)
-    out[#out + 1] = "list_cockpit_params=" .. (ok and (type(v) == "string" and ("len" .. #v) or type(v)) or "error")
+    if ok and type(v) == "string" then
+      local cur = {}
+      for k, val in v:gmatch("([^:\n;]+):([^;\n]*)") do cur[k] = val end
+      local P = SQE_ECM.params
+      if not P then
+        P = {}; SQE_ECM.params = P; SQE_ECM.pn = 0; SQE_ECM.pcount = {}
+        local pos = 1
+        while pos <= #v do                               -- the whole list once, in 2000-character pieces
+          pcall(log.write, "SQE", log.INFO, "SQE EXPORT params dump: " .. (v:sub(pos, pos + 1999):gsub("%s+", " ")))
+          pos = pos + 2000
+        end
+      else
+        for k, val in pairs(cur) do
+          local o = P[k]
+          if o ~= nil and o ~= val and SQE_ECM.pn < 800 and (SQE_ECM.pcount[k] or 0) < 40 then
+            local a1, b1 = tonumber(o), tonumber(val)
+            if not (a1 and b1) or math.abs(a1 - b1) >= 0.05 then
+              SQE_ECM.pn = SQE_ECM.pn + 1
+              SQE_ECM.pcount[k] = (SQE_ECM.pcount[k] or 0) + 1
+              pcall(log.write, "SQE", log.INFO, string.format("SQE EXPORT param %s %s -> %s t=%.0f", k, o, val, t))
+            end
+          end
+        end
+      end
+      for k, val in pairs(cur) do P[k] = val end
+    else
+      out[#out + 1] = "list_cockpit_params=" .. (ok and type(v) or "error")
+    end
   else
     out[#out + 1] = "list_cockpit_params=missing"
-  end
-  local okd, dev = pcall(GetDevice, 0)
-  out[#out + 1] = "GetDevice0=" .. ((okd and dev) and "present" or (okd and "nil" or "error"))
-  if okd and dev then                                   -- a readable cockpit: log changes of its arguments 0..999 (first 400)
-    local A = SQE_ECM.dev_args
-    if not A then A = {}; SQE_ECM.dev_args = A; SQE_ECM.dev_n = 0 end
-    for n = 0, 999 do
-      local ok2, v = pcall(function() return dev:get_argument_value(n) end)
-      if ok2 and type(v) == "number" then
-        local o = A[n]
-        if o ~= nil and math.abs(v - o) >= 0.05 and SQE_ECM.dev_n < 400 then
-          SQE_ECM.dev_n = SQE_ECM.dev_n + 1
-          pcall(log.write, "SQE", log.INFO, string.format("SQE EXPORT dev0 arg %d %.2f -> %.2f t=%.0f", n, o, v, t))
-        end
-        A[n] = v
-      end
-    end
   end
   local s = table.concat(out, " ")
   if s ~= SQE_ECM.probe_last then
@@ -124,7 +115,7 @@ function LuaExportStart()
   if prev_start then pcall(prev_start) end
   local ok, n = pcall(function() return LoGetSelfData().Name end)
   SQE_ECM.name = ok and n or nil
-  SQE_ECM.next_t = 0; SQE_ECM.last = nil; SQE_ECM.last_w = -10; SQE_ECM.probe_t = 0; SQE_ECM.probe_last = nil; SQE_ECM.probe_n = 0; SQE_ECM.dev_args = nil; SQE_ECM.dev_n = 0
+  SQE_ECM.next_t = 0; SQE_ECM.last = nil; SQE_ECM.last_w = -10; SQE_ECM.probe_t = 0; SQE_ECM.probe_last = nil; SQE_ECM.probe_n = 0; SQE_ECM.params = nil; SQE_ECM.pn = 0
   pcall(os.remove, path())                              -- a flag left from an earlier flight must never be read as this one's
 end
 
