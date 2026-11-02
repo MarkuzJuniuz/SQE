@@ -5511,7 +5511,7 @@ def check_103_ecm_hookup(c):
     from sqe.settings import AppSettings as _AS
     assert _AS().ecm_status is True
     h_f10 = db.lua_hook("c", 1, "p", [], "P1", "G", ecm_player="f10")
-    assert "SQE ECM Switch" in h_f10 and "SQE ECM OFF" in h_f10 and "ECM ON" not in h_f10 and "addCommandForGroup" in h_f10 and "S_EVENT_ENGINE_SHUTDOWN" in h_f10 and "getDrawArgumentValue" not in h_f10 and "event id" not in h_f10 and "local FC3ECM = false" in h_f10
+    assert "SQE ECM Switch" in h_f10 and "SQE ECM OFF" in h_f10 and "ECM ON" not in h_f10 and "addCommandForGroup" in h_f10 and "S_EVENT_ENGINE_SHUTDOWN" not in h_f10 and "getDrawArgumentValue" not in h_f10 and "event id" not in h_f10 and "local FC3ECM = false" in h_f10
     lua = (_P(__file__).resolve().parent.parent / "sqe" / "data" / "sqe_ecm_export.lua").read_text()
     assert '["F-16C_50"] = { arg = 102,  enabled = true }' in lua
     for n in ("FA-18C_hornet", "F-14B", "A-10C_2"):
