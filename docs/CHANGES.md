@@ -1,6 +1,10 @@
 # CHANGES.md
 
 
+## v0.41.232, FC3 ECM: "Cockpit: ECM On / Off" messages; engine events unwired
+
+XO 2026-11-01 (low, "go"; no smoke run). (1) The on-screen message of SQE ECM Switch and SQE ECM OFF now reads "Cockpit: ECM On" / "Cockpit: ECM Off" (was "ECM on (F10)"); it is SQE's own flag, so it can read wrong if the jet and SQE drift apart (SQE ECM OFF re-syncs). The Settings tooltip is updated; the F-16C lamp message is unchanged. (2) Engine start / shutdown events no longer touch the flag (XO: not a reliable tell, ECM works with the engines off while the electrics are on, and one engine's shutdown cleared it). Death, crash, pilot death and ejection still clear it (a dead jet is not jamming). `check_103` is updated by hand and has not been run. Files: `sqe/debrief.py`, `sqe/gui/dialogs.py`, `tools/smoke_test.py`, `sqe/__init__.py`.
+
 ## v0.41.231, ECM export script: the probe is removed
 
 XO 2026-11-01 (low, "clean up"; no smoke run, per XO). His F-15C flight with the v0.41.230 probe showed that `LoGetTWSInfo` (the RWR table) holds only `Mode` (0 all flight) and the other radars as `Emitters`; nothing in it followed six ECM presses (the probe rounded Power and Azimuth to whole numbers, but `Mode` is an integer and stayed 0). With the earlier results (ECM_on, MCP flags, LoGetActivityLevel, list_indication, GetDevice(0), list_cockpit_params, the external arguments) every route the Export side offers is closed, so `sqe/data/sqe_ecm_export.lua` loses the whole probe (`flat`, `probe`, its state and the call); its header now lists what was tried. The F-16C lamp reading and the flag file are untouched. FC3 jets stay on the manual SQE ECM Switch / SQE ECM OFF. XO should press Install ECM script once more to drop the probe from his copy. `check_103` is updated by hand and has not been run. Files: `sqe/data/sqe_ecm_export.lua`, `tools/smoke_test.py`, `sqe/__init__.py`.

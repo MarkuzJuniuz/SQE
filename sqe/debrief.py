@@ -306,18 +306,18 @@ if ECMP == "f10" then                                          -- v0.41.225 (XO 
     missionCommands.addCommandForGroup(id, "SQE ECM Switch", nil, function()
       FC3ECM = not FC3ECM
       ecmLog("switch -> " .. (FC3ECM and "on" or "off"))
-      if ECMMSG then trigger.action.outTextForGroup(id, "ECM " .. (FC3ECM and "on" or "off") .. " (F10)", 6) end
+      if ECMMSG then trigger.action.outTextForGroup(id, "Cockpit: ECM " .. (FC3ECM and "On" or "Off"), 6) end
     end)
     missionCommands.addCommandForGroup(id, "SQE ECM OFF", nil, function()      -- v0.41.227 (XO): the re-sync: set SQE off whatever it thought
       FC3ECM = false
       ecmLog("sync -> off")
-      if ECMMSG then trigger.action.outTextForGroup(id, "ECM off (F10)", 6) end
+      if ECMMSG then trigger.action.outTextForGroup(id, "Cockpit: ECM Off", 6) end
     end)
     ECMF.shown = true
     ecmLog("menu added (" .. tostring(why) .. ")")
     return true
   end
-  local function ecmDrop(why)                                  -- v0.41.226: the flag goes off but the menu item STAYS (a startup event may never come for an FC3 jet)
+  local function ecmDrop(why)                                  -- the flag goes off; the menu item stays
     FC3ECM = false
     ecmLog("jammer off (" .. tostring(why) .. "), menu item kept")
   end
@@ -329,9 +329,10 @@ if ECMP == "f10" then                                          -- v0.41.225 (XO 
     return nil
   end
   timer.scheduleFunction(addF10, nil, timer.getTime() + 1)
-  -- v0.41.230: the engine events do fire for the FC3 jets (XO's F-15C logs), so shutdown / death / crash / ejection clear the flag and a startup event re-adds the item if it is missing.
+  -- v0.41.232 (XO 2026-11-01): an engine event is not a reliable tell (ECM works with the engines off while the electrics are on), so engine start / shutdown no longer touch
+  -- the flag. A dead jet is not jamming: death, crash, pilot death and ejection still clear it.
   local EVN = {}
-  for _, k in ipairs({ "S_EVENT_ENGINE_STARTUP", "S_EVENT_ENGINE_SHUTDOWN", "S_EVENT_DEAD", "S_EVENT_CRASH", "S_EVENT_PILOT_DEAD", "S_EVENT_EJECTION" }) do
+  for _, k in ipairs({ "S_EVENT_DEAD", "S_EVENT_CRASH", "S_EVENT_PILOT_DEAD", "S_EVENT_EJECTION" }) do
     local v = world.event[k]
     if v then EVN[v] = k end
   end
@@ -340,9 +341,7 @@ if ECMP == "f10" then                                          -- v0.41.225 (XO 
     local ok, nm = pcall(function() return e.initiator:getName() end)
     if not ok or nm ~= PLAYER then return end
     local k = EVN[e.id]
-    if not k then return end
-    if k == "S_EVENT_ENGINE_STARTUP" then ecmAdd("engine startup")
-    else ecmDrop(k) end
+    if k then ecmDrop(k) end
   end
   world.addEventHandler(H2)
 end
