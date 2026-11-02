@@ -5539,15 +5539,13 @@ def check_103_ecm_hookup(c):
         assert rt.eval("menu['SQE ECM Switch'] ~= nil") and rt.eval("FC3ECM == false")
         rt.execute("menu['SQE ECM Switch']()"); assert rt.eval("FC3ECM == true")
         rt.execute("menu['SQE ECM Switch']()"); assert rt.eval("FC3ECM == false")
-        rt.execute("menu['SQE ECM Switch']()"); rt.execute("ev(19)")
-        assert rt.eval("FC3ECM == false and menu['SQE ECM Switch'] ~= nil"), "shutdown clears the flag, the item stays (v0.41.226)"
-        rt.execute("menu['SQE ECM Switch']()"); assert rt.eval("FC3ECM == true"), "the switch works again after a shutdown with no startup event"
-        rt.execute("ev(18)"); assert rt.eval("menu['SQE ECM Switch'] ~= nil and FC3ECM == true"), "a startup event does not touch the flag"
+        rt.execute("menu['SQE ECM Switch']()"); rt.execute("ev(19)"); rt.execute("ev(18)")
+        assert rt.eval("FC3ECM == true and menu['SQE ECM Switch'] ~= nil"), "engine start / shutdown events no longer touch the flag (v0.41.232)"
         rt.execute("menu['SQE ECM OFF']()"); assert rt.eval("FC3ECM == false"), "SQE ECM OFF forces the flag off (the sync)"
         rt.execute("menu['SQE ECM Switch']()"); rt.execute("menu['SQE ECM OFF']()"); assert rt.eval("FC3ECM == false")
         rt.execute("menu['SQE ECM Switch']()"); rt.execute("ev(8)"); assert rt.eval("FC3ECM == false"), "death counts as off"
         rt.execute("ev(99)"); assert rt.eval("FC3ECM == false"), "an unknown event id is ignored"
-        assert rt.eval("table.concat(logs,'|'):find('jammer off') ~= nil"), "a shutdown logs the jammer-off line"
+        assert rt.eval("table.concat(logs,'|'):find('jammer off') ~= nil"), "a death logs the jammer-off line"
     print("[ecm hookup] hook text for live / f10 / off, F10 commands, export script jets (F-16C on, three off)")
 
 

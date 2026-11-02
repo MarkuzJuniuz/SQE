@@ -297,7 +297,7 @@ class SettingsDialog(QDialog):
         self.ecm_msg = QCheckBox("Show ECM status")                      # v0.41.213 (XO): a sub-option of the ECM script
         self.ecm_msg.setChecked(bool(getattr(settings, "ecm_status", True))); self.ecm_msg.setEnabled(self.ecm.isChecked())
         self.ecm.toggled.connect(self.ecm_msg.setEnabled); self.ecm_msg.setStyleSheet("margin-left:22px;")
-        self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's ECM lamp (\"ECM on\" / \"ECM off\") and the F10 SQE ECM Switch / SQE ECM OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
+        self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's ECM lamp (\"ECM on\" / \"ECM off\") and "Cockpit: ECM On" / "Cockpit: ECM Off" for the F10 SQE ECM Switch / SQE ECM OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
         v.addWidget(self.ecm_msg)
         v.addSpacing(10)
         self.ecm_state = QLabel(); v.addWidget(self.ecm_state)
