@@ -9,7 +9,11 @@
 --
 -- JETS: the F-16C is live (argument 102, "ECM Light (green)", confirmed in XO's 2026-10-28 log with a pod hung). The F/A-18C, F-14B and A-10C arguments below are
 -- from DCS-BIOS and NOT flown: they stay OFF (enabled = false) until XO has flown them with and without a pod. FC3 jets (F-15C) have no readable lamp: use
--- the mission's F10 > Other > ECM ON / ECM OFF commands instead.
+-- the mission's F10 > Other > SQE ECM Switch toggle (and SQE ECM OFF) instead.
+--
+-- FC3 JETS, WHAT WAS TRIED (2026-11, XO's F-15C flights): nothing the Export side can read follows the jet's ECM or electrical power: LoGetSightingSystemInfo.ECM_on, the
+-- LoGetMCPState flags, LoGetActivityLevel (missing), list_indication(0), GetDevice(0) (nil), list_cockpit_params (flight sensors only), the external model arguments and
+-- LoGetTWSInfo (the RWR table: Mode stayed 0, Emitters are other radars). Hence the manual F10 commands above.
 --
 -- HOW TO INSTALL: SQE does it for you (Settings > DCS integration > Install ECM script). By hand: copy THIS file to Saved Games\DCS\Scripts\sqe_ecm_export.lua and add
 -- at the END of Saved Games\DCS\Scripts\Export.lua (create it if it does not exist; this file chains the previous export functions instead of replacing them):

@@ -267,7 +267,7 @@ end
 -- jamming: a radar-guided missile fired at an aircraft with jamming equipment may be defeated partway through its flight
 -- v0.41.210 (XO 2026-10-30): the player's own jammer. ECMP "live": the F-16C's ECM lamp, written four times a second by sqe/data/sqe_ecm_export.lua (Export.lua) to
 -- Logs\SQE_ecm.flag as "<0|1> <model time>"; a missing or stale file falls back to the attack-leg window below. ECMP "f10": an FC3 jet (nothing readable in its
--- cockpit): the F10 > Other commands ECM ON / ECM OFF set the flag (starts off).
+-- cockpit): F10 > Other > SQE ECM Switch toggles the flag and SQE ECM OFF forces it off (re-sync) (starts off); engine shutdown / death clears the flag (v0.41.226: the item stays).
 local ECMP = "__ECMP__"
 local FC3ECM = false
 local ECMMSG = "__ECMMSG__" == "1"                      -- v0.41.213: Settings > Experimental > Show ECM status: the on-screen ECM messages
@@ -294,21 +294,56 @@ local function jamOn(name)
   local t = timer.getTime()
   return t >= w[1] and t <= w[2]
 end
-if ECMP == "f10" then
+if ECMP == "f10" then                                          -- v0.41.225 (XO 2026-10-31): "SQE ECM Switch" toggle + "SQE ECM OFF" sync
+  local ECMF = { shown = false, id = nil }
+  local function ecmLog(m) pcall(env.info, "SQE ECM: " .. m) end
+  local function ecmAdd(why)
+    if ECMF.shown then return true end
+    local g = Group.getByName(PGROUP)
+    if not g then return false end
+    local id = g:getID()
+    ECMF.id = id
+    missionCommands.addCommandForGroup(id, "SQE ECM Switch", nil, function()
+      FC3ECM = not FC3ECM
+      ecmLog("switch -> " .. (FC3ECM and "on" or "off"))
+      if ECMMSG then trigger.action.outTextForGroup(id, "Cockpit: ECM " .. (FC3ECM and "On" or "Off"), 6) end
+    end)
+    missionCommands.addCommandForGroup(id, "SQE ECM OFF", nil, function()      -- v0.41.227 (XO): the re-sync: set SQE off whatever it thought
+      FC3ECM = false
+      ecmLog("sync -> off")
+      if ECMMSG then trigger.action.outTextForGroup(id, "Cockpit: ECM Off", 6) end
+    end)
+    ECMF.shown = true
+    ecmLog("menu added (" .. tostring(why) .. ")")
+    return true
+  end
+  local function ecmDrop(why)                                  -- the flag goes off; the menu item stays
+    FC3ECM = false
+    ecmLog("jammer off (" .. tostring(why) .. "), menu item kept")
+  end
   local tries = 0
   local function addF10()
     tries = tries + 1
-    local g = Group.getByName(PGROUP)
-    if not g then
-      if tries < 60 then return timer.getTime() + 2 end
-      return nil
-    end
-    local id = g:getID()
-    missionCommands.addCommandForGroup(id, "ECM ON", nil, function() FC3ECM = true; if ECMMSG then trigger.action.outTextForGroup(id, "ECM on (F10)", 6) end end)
-    missionCommands.addCommandForGroup(id, "ECM OFF", nil, function() FC3ECM = false; if ECMMSG then trigger.action.outTextForGroup(id, "ECM off (F10)", 6) end end)
+    if ecmAdd("mission start") then return nil end
+    if tries < 60 then return timer.getTime() + 2 end
     return nil
   end
   timer.scheduleFunction(addF10, nil, timer.getTime() + 1)
+  -- v0.41.232 (XO 2026-11-01): an engine event is not a reliable tell (ECM works with the engines off while the electrics are on), so engine start / shutdown no longer touch
+  -- the flag. A dead jet is not jamming: death, crash, pilot death and ejection still clear it.
+  local EVN = {}
+  for _, k in ipairs({ "S_EVENT_DEAD", "S_EVENT_CRASH", "S_EVENT_PILOT_DEAD", "S_EVENT_EJECTION" }) do
+    local v = world.event[k]
+    if v then EVN[v] = k end
+  end
+  local H2 = {}
+  function H2:onEvent(e)
+    local ok, nm = pcall(function() return e.initiator:getName() end)
+    if not ok or nm ~= PLAYER then return end
+    local k = EVN[e.id]
+    if k then ecmDrop(k) end
+  end
+  world.addEventHandler(H2)
 end
 if ECMP == "live" and ECMMSG then                              -- v0.41.212 (XO): tell the pilot what SQE sees: once when the lamp file is first read, then on every on / off change
   local last = nil

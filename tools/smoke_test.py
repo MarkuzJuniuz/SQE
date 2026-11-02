@@ -5497,7 +5497,7 @@ def check_101_ui_pass_3(c):
 
 
 def check_103_ecm_hookup(c):
-    """v0.41.210: the player's jammer from the F-16C lamp (Export.lua flag file) or F10 ECM ON / OFF for FC3 jets."""
+    """v0.41.210: the player's jammer from the F-16C lamp (Export.lua flag file) or the F10 ECM Switch toggle for FC3 jets (v0.41.226: shutdown / death clears the flag, the item stays)."""
     from sqe import debrief as db
     from pathlib import Path as _P
     for mode in ("live", "f10", ""):
@@ -5511,17 +5511,41 @@ def check_103_ecm_hookup(c):
     from sqe.settings import AppSettings as _AS
     assert _AS().ecm_status is True
     h_f10 = db.lua_hook("c", 1, "p", [], "P1", "G", ecm_player="f10")
-    assert "ECM ON" in h_f10 and "ECM OFF" in h_f10 and "addCommandForGroup" in h_f10 and "local FC3ECM = false" in h_f10
+    assert "SQE ECM Switch" in h_f10 and "SQE ECM OFF" in h_f10 and "ECM ON" not in h_f10 and "addCommandForGroup" in h_f10 and "S_EVENT_ENGINE_SHUTDOWN" not in h_f10 and "getDrawArgumentValue" not in h_f10 and "event id" not in h_f10 and "local FC3ECM = false" in h_f10
     lua = (_P(__file__).resolve().parent.parent / "sqe" / "data" / "sqe_ecm_export.lua").read_text()
     assert '["F-16C_50"] = { arg = 102,  enabled = true }' in lua
     for n in ("FA-18C_hornet", "F-14B", "A-10C_2"):
         assert f'["{n}"]' in lua
+    assert "SQE EXPORT probe" not in lua and "probe(" not in lua and "LoGetTWSInfo" not in "\n".join(x for x in lua.split("\n") if not x.lstrip().startswith("--"))      # v0.41.231: the probe is gone
     assert lua.count("enabled = false }") == 3 and "LuaExportActivityNextEvent" in lua and "prev_next" in lua
     try:
         import lupa  # noqa
-        rt = lupa.LuaRuntime(); rt.eval("function() end"); rt.execute(h_f10.split("\n", 0)[0] and "return 1")
     except ImportError:
-        pass
+        lupa = None
+    if lupa:                                    # v0.41.225/226: replay the FC3 block against a mocked DCS: switch toggles, shutdown clears the flag but the item stays
+        a_ = h_f10.index('\nif ECMP == "f10" then'); b_ = h_f10.index('\nif ECMP == "live" and ECMMSG')
+        rt = lupa.LuaRuntime(unpack_returned_tuples=True)
+        rt.execute("""
+          ECMP="f10"; PGROUP="G"; PLAYER="P1"; ECMMSG=false; FC3ECM=false; menu={}; handler=nil; logs={}
+          env={info=function(m) logs[#logs+1]=m end}
+          world={event={S_EVENT_ENGINE_STARTUP=18,S_EVENT_ENGINE_SHUTDOWN=19,S_EVENT_DEAD=8}, addEventHandler=function(h) handler=h end}
+          Group={getByName=function() return {getID=function() return 7 end} end}
+          timer={getTime=function() return 0 end, scheduleFunction=function(f,a,t) f(a, 0) end}; Unit={getByName=function() return nil end}
+          trigger={action={outTextForGroup=function() end}}
+          missionCommands={addCommandForGroup=function(id,n,p,f) menu[n]=f end, removeItemForGroup=function(id,p) menu[p[1]]=nil end}
+          function ev(id) handler:onEvent({id=id, initiator={getName=function() return "P1" end}}) end
+        """)
+        rt.execute(h_f10[a_:b_])
+        assert rt.eval("menu['SQE ECM Switch'] ~= nil") and rt.eval("FC3ECM == false")
+        rt.execute("menu['SQE ECM Switch']()"); assert rt.eval("FC3ECM == true")
+        rt.execute("menu['SQE ECM Switch']()"); assert rt.eval("FC3ECM == false")
+        rt.execute("menu['SQE ECM Switch']()"); rt.execute("ev(19)"); rt.execute("ev(18)")
+        assert rt.eval("FC3ECM == true and menu['SQE ECM Switch'] ~= nil"), "engine start / shutdown events no longer touch the flag (v0.41.232)"
+        rt.execute("menu['SQE ECM OFF']()"); assert rt.eval("FC3ECM == false"), "SQE ECM OFF forces the flag off (the sync)"
+        rt.execute("menu['SQE ECM Switch']()"); rt.execute("menu['SQE ECM OFF']()"); assert rt.eval("FC3ECM == false")
+        rt.execute("menu['SQE ECM Switch']()"); rt.execute("ev(8)"); assert rt.eval("FC3ECM == false"), "death counts as off"
+        rt.execute("ev(99)"); assert rt.eval("FC3ECM == false"), "an unknown event id is ignored"
+        assert rt.eval("table.concat(logs,'|'):find('jammer off') ~= nil"), "a death logs the jammer-off line"
     print("[ecm hookup] hook text for live / f10 / off, F10 commands, export script jets (F-16C on, three off)")
 
 
