@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.234, smoke check_103: the F-15C hook no longer mentions the engine shutdown event
+
+XO 2026-11-02 ("fix it"; XO runs the smoke test himself, so none was run here). `check_103_ecm_hookup` still asserted that the FC3 (f10) hook text contains `S_EVENT_ENGINE_SHUTDOWN`; v0.41.232 unwired the engine events, so the assert failed. It now asserts the opposite (the text must NOT contain it). Test only, no behaviour change. The assertion's other terms were checked by hand against the generated hook text (all pass); the lupa replay below it was read and already matches v0.41.232, but not run. XO's own commits: none.
+
 ## v0.41.233, fix: unescaped quotes in the ECM tooltip stopped the app starting
 
 XO 2026-11-01 ("go"). v0.41.232 (#297) put `"Cockpit: ECM On"` inside a double-quoted Python string in `sqe/gui/dialogs.py` (the `ecm_msg` tooltip), a SyntaxError at import: the app would not start. The quotes are escaped now. Cause on my side: the smoke run was skipped for #297 and nothing compiled the GUI. Checked: `compileall` over `sqe` and `tools`, and the GUI dialogs section of the smoke test (`check_06_gui_dialogs_build_scan`). XO's own commits: none.
