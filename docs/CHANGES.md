@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## Docs only: CLAUDE.md smoke convention and learnings
+
+XO 2026-11-01 ("do the commit on CLAUDE.md now"). Adds the smoke convention (tactical tunables are not smoked, strategic structure is) and a short learnings list to `CLAUDE.md`. No code, no version change, no smoke run (docs-only). XO's own commits in this stretch: none.
+
 
 ## v0.41.232, FC3 ECM: "Cockpit: ECM On / Off" messages; engine events unwired
 
