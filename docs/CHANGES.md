@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.233, fix: unescaped quotes in the ECM tooltip stopped the app starting
+
+XO 2026-11-01 ("go"). v0.41.232 (#297) put `"Cockpit: ECM On"` inside a double-quoted Python string in `sqe/gui/dialogs.py` (the `ecm_msg` tooltip), a SyntaxError at import: the app would not start. The quotes are escaped now. Cause on my side: the smoke run was skipped for #297 and nothing compiled the GUI. Checked: `compileall` over `sqe` and `tools`, and the GUI dialogs section of the smoke test (`check_06_gui_dialogs_build_scan`). XO's own commits: none.
+
 ## Docs only: CLAUDE.md smoke convention and learnings
 
 XO 2026-11-01 ("do the commit on CLAUDE.md now"). Adds the smoke convention (tactical tunables are not smoked, strategic structure is) and a short learnings list to `CLAUDE.md`. No code, no version change, no smoke run (docs-only). XO's own commits in this stretch: none.
