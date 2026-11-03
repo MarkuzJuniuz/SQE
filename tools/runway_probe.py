@@ -15,6 +15,7 @@ The player slot is an immortal F-16C in the air west of the field with unlimited
 Nothing here changes a campaign. Sources for the expectation (forum.dcs.world threads 160589 and 290358, medium firmness): a bomb on the runway or a path taxiway closes the
 field for about 60 minutes whatever the damage, and AI then stop on the ground; nothing found on landing.
 
+The run also embeds SQE's own debrief hook with Senaki's runway rectangle (v0.41.254): after the bombs, SQE_state.json shows "rwy": {"probe_senaki": N}, the impact count the campaign uses (3+ closes a field).
 How XO runs it: python tools/runway_probe.py OUT.miz -> Fly it, let it run about 75 minutes of mission time (accelerate), send dcs.log (grep SQERWY)."""
 from __future__ import annotations
 
@@ -170,6 +171,10 @@ def make_probe(out_path) -> Path:
         t = triggers.TriggerStart(comment="SQE runway probe")
         t.add_action(action.DoScript(String(lua)))
         m.triggerrules.triggers.append(t)
+        # v0.41.254: the real SQE hook too, with Senaki's runway rectangle, so the probe also proves the bomb-impact counter: SQE_state.json (Saved Games/DCS/SQE/) gets "rwy": {"probe_senaki": N} while the Su-24Ms bomb; N should be 3 or more
+        from sqe import debrief, runways
+        heads = sorted({int(r.main.heading) % 180 for r in ap.runways}) or [0]
+        debrief.install_hook(m, "probe", 1, "probe", [], cfg={"rwys": [{"id": "probe_senaki", "x": float(ap.position.x), "z": float(ap.position.y), "h": heads}]})
         out = Path(out_path)
         out.parent.mkdir(parents=True, exist_ok=True)
         m.save(str(out))

@@ -58,6 +58,10 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                     "take, so you go in about 10 minutes ahead of them to clear the air. No marshal: depart, push, station, home. Your station is "
                     "short of the target and outside live SAM cover. Shoot what comes in range; do not chase into the SAMs. Hold 15 minutes, or go "
                     "home when your missiles are gone."]
+    elif obj.type.value == "STRIKE" and obj.aim == "RUNWAY":
+        sit += ["", "Runway strike. Put at least 3 bombs on the runway: that closes the whole field for 2 to 5 days (longer when their supply is low). "
+                    "Nothing launches from a cratered field and nothing lands there; its aircraft stay on the ramp. The target point is the middle of the strip; "
+                    "bombs that fall off the paved strip do not count."]
     elif obj.type.value == "DEAD" and obj.aim == "STANDOFF":
         from .difficulty import get as _gd3
         from .war import WarSimulator as _WS3

@@ -17,6 +17,7 @@ from __future__ import annotations
 import math
 
 from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM
+from . import runways
 
 NM = 1852.0
 MIN_RAID = 4                  # never fewer bombers than this ("no 2-ship raids, ever", XO)
@@ -44,7 +45,7 @@ def max_raid(d) -> int:
 
 
 def _bomber_wing(state):
-    return next((w for w in state.enemy_air if "Tu_22M3" in w.types and not state.assets[w.base_asset_id].destroyed), None)
+    return next((w for w in state.enemy_air if "Tu_22M3" in w.types and not state.assets[w.base_asset_id].destroyed and not runways.is_closed(state, w.base_asset_id)), None)
 
 
 def _carrier(state):

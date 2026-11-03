@@ -4,7 +4,7 @@ import copy
 import math
 import random
 from dataclasses import dataclass, field, asdict
-from . import threat
+from . import runways, threat
 from . import threatmap as tm
 from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM, JSOW_PER_JET
 from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER
@@ -177,7 +177,7 @@ def sweep_4ships(n_def_flights: int) -> int:
 
 class Ledger:
     def __init__(self, state: CampaignState):
-        self.free = {sid: s.available for sid, s in state.squadrons.items()}
+        self.free = {sid: (0 if runways.is_closed(state, s.base_id) else s.available) for sid, s in state.squadrons.items()}      # v0.41.254: a cratered field flies nothing
 
 
 class PackageBuilder:

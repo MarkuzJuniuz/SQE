@@ -23,7 +23,7 @@ from . import theatres, weather
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import barcap, briefing as brief, callsigns, carcass, ground, profiles, relief, sams
+from . import barcap, briefing as brief, callsigns, carcass, ground, profiles, relief, runways, sams
 from . import seacheck as seac
 from . import pydcs_patch
 from . import threatmap as tm
@@ -580,7 +580,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
                               "cvrec": self._wing_recovery(pbase, tgt.eta_s), "recov": list(self._recov),
-                              "phome": ([self._pt(pbase.x, pbase.y).x, self._pt(pbase.x, pbase.y).y] if pbase.kind == BaseKind.AIRFIELD else None)})
+                              "phome": ([self._pt(pbase.x, pbase.y).x, self._pt(pbase.x, pbase.y).y] if pbase.kind == BaseKind.AIRFIELD else None),
+                              "rwys": runways.fields_for_hook(st, self.t)})
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -1059,6 +1060,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     def _divert(self, pbase):
         fields = [b for b in self.state.bases.values() if b.kind == BaseKind.AIRFIELD and b.id != pbase.id]
+        fields = [b for b in fields if not runways.is_closed(self.state, b.id)] or fields          # v0.41.254: not a cratered field (unless every other one is)
         return min(fields, key=lambda b: dist(b.x, b.y, pbase.x, pbase.y))
 
     def _mode3(self, package, pf) -> str:
@@ -1926,6 +1928,16 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 g.points[0].tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))    # weapons free again at the attack point (below)
         return armor, ai_sead, ai_a2g
 
+    def _bomb_task(self, package, w):
+        """The bombing task at a BOMB waypoint. v0.41.254: a runway strike (a STRIKE with aim RUNWAY) uses DCS's BombingRunway on the target field, so the
+        flight lays its bombs along the strip; every other strike bombs the point."""
+        o_ = package.objective
+        a_ = self.state.assets.get(o_.target_id)
+        ap_ = self.t.airports.get(a_.airport) if (o_.aim == "RUNWAY" and a_ is not None and a_.airport) else None
+        if ap_ is not None:
+            return task.BombingRunway(airport_id=ap_.id, expend=task.Expend.All, group_attack=True)
+        return task.Bombing(self._pt(w.x, w.y), expend=task.Expend.All, group_attack=True)
+
     def _attach_waypoints(self, package, f, g, wps, first, ai_a2g, ai_sead, run_t0, push_s, tot_s, stop, hold_end, stw, armor, special):
         """Add each route point to the group with its tasks: ETAs, ROE, ECM, fuel, orbits, bombs, JSOW, CAS, SEAD attacks."""
         o = self.o
@@ -1944,7 +1956,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         wp.name = nm
                 if not o.player_is_ai:                                       # all-AI test: the player's flight now gets the AI tasks below, like any AI flight
                     if w.action == "BOMB":
-                        wp.tasks.append(task.Bombing(pt(w.x, w.y), expend=task.Expend.All, group_attack=True))
+                        wp.tasks.append(self._bomb_task(package, w))
                     continue
             if ai_a2g and w.name == "EGR":
                 wp.tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))                      # and no chasing on the way home either
@@ -1990,7 +2002,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             elif w.action == "BOMB":
                 # v0.41.16: the attack is only good until LATE_ATTACK_S after its TOT; later, the flight flies on to its egress and home (the
                 # v0.41.14 run: the lead, alone after its wingmen flamed out, bombed 30 min late and met a live SA-6)
-                bct_ = task.ControlledTask(task.Bombing(pt(w.x, w.y), expend=task.Expend.All, group_attack=True))
+                bct_ = task.ControlledTask(self._bomb_task(package, w))
                 bct_.stop_after_time(int(w.eta_s + LATE_ATTACK_S)); wp.tasks.append(bct_)
             elif w.action == "JSOW":
                 self._jsow_tasks(wp, f, armor, package, w.eta_s)

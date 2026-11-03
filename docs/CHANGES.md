@@ -1,5 +1,17 @@
 # CHANGES.md
 
+## v0.41.254, runway cratering: a field with 3 bomb hits on its runway is closed for 2-5 days
+
+XO 2026-11-03 (queue idea "disable runways"; probe results the same day: DCS closes a bombed runway for AI about 60 minutes after the last hit, an inbound pair diverts to another field by itself, and nothing in the scripting API holds it shut). SQE ignores DCS's reopen and keeps its own rule.
+- **State** (`sqe/runways.py`, `state.ground["craters"]`): a field that takes 3 or more bomb impacts on its runway rectangle is cratered for 2 days at full supply up to 5 at none (judgment call; real repair takes hours, a USAF crater team about 2 h, af.mil). The whole field closes (one runway closes it all; XO). A second hit while closed does not extend it. Both sides can be cratered; red's weapons rarely will.
+- **Effects:** a cratered field's squadrons are out of the planner (ledger = 0), its red wing sends no raids, patrols, scrambles or bombers, and a divert field skips it. Flights already in the air divert on their own (probe). A plane that runs dry because every field is shut is lost in the debrief like any crash (no special rule).
+- **The job:** `STRIKE` with `aim "RUNWAY"` against a red airfield with aircraft on it ("Crater the runway at X"); same package, SEAD and SAM-blocker rules as counter-air and any strike, so a field under a live SAM belt waits for its SEAD / DEAD. Player-flyable from day one (XO: "untuned" means a job that does not use the newer systems; this one does). The builder gives its bomb waypoint DCS's `BombingRunway` on the field. An AI-flown one that succeeds craters the field. Loadout is the flight's normal strike load (judgment call; DCS has no Durandal and posters suggest delayed-fuze or guided bombs at the runway).
+- **Hit accounting in the hook:** every bomb is followed to its last position (plus 0.25 s of its velocity); one that ends inside a field's runway rectangle (2,600 m each way x 120 m either side, along each runway heading; the same judgment-call corridor mission_builder uses) counts as a hit. The count goes to `SQE_state.json` as `"rwy"`; `apply_debrief` closes the field at 3 or more and logs fewer as overnight-fixed. Red's real Su-24 land raids use the same counter. Abstract, unflown raids do not crater (they already cost defences and parked aircraft).
+- **Briefing:** a runway strike says "put at least 3 bombs on the runway".
+- `tools/runway_probe.py` also embeds the real hook, so XO's next probe run shows `"rwy": {"probe_senaki": N}` in `SQE_state.json`.
+- Not done: a button or tool to crater a field by hand; the loadout is the normal strike one; the Lua counter is compile-checked only, not run in DCS yet (the probe run tests it).
+- Smoke: `check_120_runway_cratering` (days by supply, the rectangle, state and save/load, the ledger and red wings, the job is planned and craters on success, the mission is built with `BombingRunway` and the hook carries the fields, the Lua compiles). Full smoke run for the shared code touched (planner, builder, hook).
+
 ## v0.41.253, runway probe: raiders immortal, victims on hold-fire (tool only)
 
 XO 2026-11-03 (his first run: none of the Su-24s were alive). `tools/runway_probe.py`: the red Su-24M raiders are immortal and the blue F-16C pairs get weapons-hold and no engage task, so the run measures the runway and not a fight. Compile check; the .miz was rebuilt and its groups read back.
