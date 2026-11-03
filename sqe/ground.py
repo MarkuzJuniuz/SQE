@@ -39,6 +39,8 @@ SKIRMISH, ATTACK = 0.04, 0.14
 DECISIVE, REPULSED = 1.8, 0.55
 RETREAT_SHARE = 0.6           # what a routed force saves by falling back
 FALL_LOSS = 0.3               # aircraft lost when a field falls and its squadrons leave
+FALL_MOVE_NEAR_KM = 100       # v0.41.243: a squadron that changes field is out of the line for the nights below (judgment call, XO: "1 to 2 days"): the ground crews move too
+FALL_MOVE_NIGHTS = (1, 2)     # (new field closer than FALL_MOVE_NEAR_KM, further)
 SUPPLY_FLOOR, SUPPLY_NONE = 0.55, 0.85
 BLUE_SUPPLY_FLOOR = 0.35     # v0.41.174 (XO 2026-10-28): 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle). v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly (red 0.55, resupplied overland). Sim: a flying L3 did not lose at 0.30, an idle one lost 3 of 5; L2 unchanged (5 of 5 coalition wins in about a month). Judgment call, no public source
 SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (55% = about 11 days); no repair on a day it is struck
@@ -783,7 +785,9 @@ def check_falls(state) -> list:
         elif not held and bid in g["fallen"] and g["blue"][i] >= MIN_FORCE:
             g["fallen"].remove(bid)
             release_sites(state, bid)
-            lines.append(f"{state.bases[bid].name} is back in our hands, with its defences gone; the squadrons stay where they moved")
+            home = return_squadrons(state, bid)
+            lines.append(f"{state.bases[bid].name} is back in our hands, with its defences gone" + ("; its squadrons fly home" if home else "; the squadrons stay where they moved"))
+            lines += home
             lines += story.beat(state, "back_blue", base=state.bases[bid].name)
     return lines
 
@@ -910,6 +914,9 @@ def apply_red_fall(state, rb) -> list:
                 k = int(round(q.available * FALL_LOSS))
                 q.available = max(0, q.available - k); lost += k
                 w.sqns.remove(q); dest.sqns.append(q)
+                if q.available > 0 and q.reserve == 0 and "Tu_22M3" not in w.types:        # v0.41.243: red squadrons are out of the line while they move too
+                    q.reserve, q.available, q.rest_days = q.available, 0, 0
+                    q.move_days = FALL_MOVE_NIGHTS[0] if math.hypot(state.assets[dest.base_asset_id].x - fx, state.assets[dest.base_asset_id].y - fy) / 1000.0 < FALL_MOVE_NEAR_KM else FALL_MOVE_NIGHTS[1]
             w.squadrons = len(w.sqns); dest.squadrons = len(dest.sqns)
             lines.append(f"   its squadrons withdraw to {state.assets[dest.base_asset_id].name}, {lost} aircraft lost")
     return lines
@@ -929,8 +936,35 @@ def apply_fall(state, bid: str) -> list:
         dest = min(others, key=lambda x: (x.x - b.x) ** 2 + (x.y - b.y) ** 2)
         lost = int(round(sq.available * FALL_LOSS))
         sq.available = max(0, sq.available - lost)
+        sq.home_id = sq.home_id or bid                                      # v0.41.243: remembered, so it flies back when this field is retaken
         sq.base_id = dest.id
-        lines.append(f"   {sq.name} withdraws to {dest.name}, {lost} aircraft lost")
+        lines.append(f"   {sq.name} withdraws to {dest.name}, {lost} aircraft lost" + _settle(state, sq, math.hypot(dest.x - b.x, dest.y - b.y)))
+    return lines
+
+
+def _settle(state, sq, dist_m: float) -> str:
+    """v0.41.243: a squadron that has just changed field sits out FALL_MOVE_NIGHTS (1 or 2 nights by distance); its jets wait in `reserve` and `airwings.step` brings them
+    back. Not the player's squadron (he flies it), not one already resting. Returns the log suffix."""
+    if sq.available <= 0 or sq.reserve > 0 or (state.player and sq.id == state.player.squadron_id):
+        return ""
+    n = FALL_MOVE_NIGHTS[0] if dist_m / 1000.0 < FALL_MOVE_NEAR_KM else FALL_MOVE_NIGHTS[1]
+    sq.reserve, sq.available, sq.rest_days, sq.move_days = sq.available, 0, 0, n
+    return f"; back in the line in {n} day{'s' if n > 1 else ''}"
+
+
+def return_squadrons(state, bid: str) -> list:
+    """v0.41.243 (XO 2026-11-03): a retaken blue field gets its squadrons back (those first driven from it; `home_id`). They keep what they have after the
+    withdrawal loss, and sit out the same move nights."""
+    b, lines = state.bases[bid], []
+    for sq in state.squadrons.values():
+        if sq.home_id != bid:
+            continue
+        sq.home_id = ""
+        if sq.base_id == bid:
+            continue
+        frm = state.bases[sq.base_id]
+        sq.base_id = bid
+        lines.append(f"   {sq.name} flies home to {b.name}" + _settle(state, sq, math.hypot(frm.x - b.x, frm.y - b.y)))
     return lines
 
 
