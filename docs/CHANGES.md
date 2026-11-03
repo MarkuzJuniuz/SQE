@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.237, road-path probe (queue item m, step 1)
+
+XO 2026-11-03 (low, "go"). New `tools/road_path_probe.py` builds a tiny probe mission (one Su-25T player slot at Kutaisi, like the terrain probe). A start script calls `land.findPathOnRoads` ('roads' and 'railroads') for 20 airfield pairs (short, medium, long, both coasts, the north side, the mountain gap, plus XO's Senaki-Vaziani / Tbilisi / Mineralnye Vody roads) and logs one `SQEROAD` line per call to dcs.log: point count, path length against the straight line, call time, first and last points, the largest gap between points. It also writes the full polylines to `SQE_roadpath_probe.json` when the sandbox allows io. It changes no campaign code. The Lua was replayed against a mocked `land` (both result shapes, an error and a nil); the real call is from memory and unverified, which is what the probe tests. No smoke run (tool only; compile check). XO's own commits: none.
+
 ## v0.41.236, a pulled-back SAM spends a travel day and cannot regenerate on it
 
 XO 2026-11-03 (low, "go"). `sams.TRAVEL_DAYS` 1 and `sams.travelling()`: when a badly hurt long-range site pulls back (`sams.retreat`), or returns home, the next day it is on the road and `war.py`'s nightly regeneration skips it (record `state.sams["travel"]`, asset id to the day it set out; saves without the key load fine). Regen itself is rule-based (`sam_repair` 3 / 6 / 8% a night by level), unchanged. The 3 to 6 nm scoot of a mobile site (`relocate`) stays instant (a local shuffle). Judgment call: one day, no public figure. The wider audit of other instant movers is still open (squadrons on a base fall, `ground.py` 932 and 318 not yet read). Smoke: compile check plus `check_47_support_cap_pull_back` only (travel-day asserts added). XO's own commits: none.
