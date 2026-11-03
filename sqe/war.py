@@ -405,6 +405,8 @@ class WarSimulator:
             if t.kind == AssetKind.SAM and not t.destroyed:
                 sam += 1.5 * t.health
                 sam += 0.8 * sum(g.health for g in state.assets.values() if g.guards == t.id)     # a dug-in garrison makes the site harder
+            elif t.kind in (AssetKind.FUEL, AssetKind.DEPOT) and not t.destroyed:
+                sam += 0.8 * sum(g.health for g in state.assets.values() if g.guards == t.id and not g.destroyed)     # v0.41.241: a road site's battalion makes the strike harder
             for sid in after_sites(obj):                  # v0.41.158: a follow job: the SA-11 / SA-10 sites it waits on are blinded (follow_ready), but still there
                 x_ = state.assets.get(sid)
                 if x_ is not None and not x_.destroyed and sid not in t.defended_by:

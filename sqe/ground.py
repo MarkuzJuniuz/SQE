@@ -307,8 +307,8 @@ def snap_roads(state) -> int:
     pool = list(state.assets.values()) + list((getattr(state, "blue_assets", None) or {}).values())
     for a in pool:
         col = _is_column(a)
-        if not (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or col):
-            continue
+        if not (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or col) or a.id.startswith(("rsup_", "bsup_")):
+            continue                                                       # v0.41.241: the road sites already sit beside a road (road_sites.py)
         if not first and a.kind in (AssetKind.FUEL, AssetKind.DEPOT) and roads.snap(a.x, a.y, ROAD_SNAP_M) is not None:
             continue                                                       # the extra pass: columns and supply sites the 3 km pass could not reach
         p = roads.snap(a.x, a.y, ROAD_SNAP_COLUMN_M)                                  # v0.41.187: depots and fuel farms reach as far as columns (a supply site must be reachable by road)
