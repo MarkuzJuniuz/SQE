@@ -39,6 +39,13 @@ def _units(state):
 def step(state, d, rng) -> list:
     """Overnight: wings fall back, rest and return. -> report lines."""
     out = []
+    pid = state.player.squadron_id if state.player else None
+    pq = state.squadrons.get(pid) if pid else None
+    if pq is not None and pq.move_days > 0 and resting(pq):        # v0.41.246 (XO): the player's squadron sits out a move like any other (it never stands down to recover: that stays off for it)
+        pq.move_days -= 1
+        if pq.move_days == 0:
+            pq.available, pq.reserve, pq.rest_days = pq.reserve, 0, 0
+            out.append(f"{pq.name} has settled in at its new field with {pq.available} aircraft.")
     for side, u, name, gone in _units(state):
         rep = d.friendly_replenish if side == "blue" else d.enemy_replenish
         what = f"{name}" if side == "blue" else f"the squadron at {name}"

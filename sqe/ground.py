@@ -42,6 +42,8 @@ FALL_LOSS = 0.3               # aircraft lost when a field falls and its squadro
 FALL_MOVE_NEAR_KM = 100       # v0.41.243: a squadron that changes field is out of the line for the nights below (judgment call, XO: "1 to 2 days"): the ground crews move too
 FALL_MOVE_NIGHTS = (1, 2)     # (new field closer than FALL_MOVE_NEAR_KM, further)
 TAKEN_STAGES = (("aaa", 3), ("hawk", 6), ("pat", 9))      # v0.41.244 (XO 2026-11-03): a field we take grows its air defence in this order, on these days after the fall, alongside the 9-day takeover clock (judgment calls)
+TAKEN_FIRST_MOVER_DAY = 11    # v0.41.246 (XO 2026-11-03): the first squadron moves in 2 days after the Patriots are up (judgment call)
+FORWARD_TYPES = ("F-16C",)    # short-legged jets move forward; the long-legged F-15C and the carrier's F-14s stay where they are (XO)
 SUPPLY_FLOOR, SUPPLY_NONE = 0.55, 0.85
 BLUE_SUPPLY_FLOOR = 0.35     # v0.41.174 (XO 2026-10-28): 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle). v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly (red 0.55, resupplied overland). Sim: a flying L3 did not lose at 0.30, an idle one lost 3 of 5; L2 unchanged (5 of 5 coalition wins in about a month). Judgment call, no public source
 SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (55% = about 11 days); no repair on a day it is struck
@@ -869,7 +871,53 @@ def taken_fields_step(state) -> list:
             sams._sync(state, b)
             lines.append(f"{b.name}: {sams.BLUE_SITES[key][0]} in place" + (" (the field's defences are complete)" if rec["stage"] == len(TAKEN_STAGES) - 1 else ""))
             rec["stage"] += 1
+        if rec["stage"] >= len(TAKEN_STAGES) and not rec.get("moved") and age >= TAKEN_FIRST_MOVER_DAY:
+            lines += first_mover(state, rid, rec, b)
     return lines
+
+
+def _parking(airport: str, aircraft: str):
+    """Free parking spots of the field for the jet's type, or None when it cannot be told (no terrain)."""
+    try:
+        from . import theatres
+        from .aircraft import AIRCRAFT
+        import dcs.planes as planes
+        a = theatres.terrain().airports[airport]
+        return len(a.free_parking_slots(getattr(planes, AIRCRAFT[aircraft].dcs_class)))
+    except Exception:
+        return None
+
+
+def first_mover(state, rid: str, rec: dict, b) -> list:
+    """v0.41.246 (XO 2026-11-03, queue item h part 1, PR 2): once a taken field's defences are complete and FIRST_MOVER_DAY has passed, ONE short-legged squadron
+    (FORWARD_TYPES) moves in. XO's rule: the squadron of the most over-capacity field (jets assigned against the field's parking spots; ties: the one nearest the new
+    field), and the PLAYER's squadron first when it is one of them. It keeps its name and counts as the field's squadron; it sits out its move nights like any squadron
+    (`_settle`); `home_id` keeps its original field. No candidate or no room: nothing moves yet (it is tried again every night)."""
+    fallen = set(state.ground.get("fallen", []))
+    pend = pending_fields(state)
+    pid = state.player.squadron_id if state.player else None
+    load = {}
+    for q in state.squadrons.values():
+        load[q.base_id] = load.get(q.base_id, 0) + q.authorized
+    def over(q):
+        cap = _parking(state.bases[q.base_id].airport, q.aircraft) if state.bases[q.base_id].airport else None
+        return (load.get(q.base_id, 0) / cap) if cap else 0.0
+    cand = [q for q in state.squadrons.values()
+            if q.aircraft in FORWARD_TYPES and q.base_id != b.id and q.base_id in state.bases and state.bases[q.base_id].kind.value == "AIRFIELD"
+            and q.base_id not in fallen and q.base_id not in pend and not q.home_id]
+    if not cand:
+        return []
+    cand.sort(key=lambda q: (q.id != pid, -over(q), math.hypot(state.bases[q.base_id].x - b.x, state.bases[q.base_id].y - b.y), q.id))
+    for q in cand:
+        room = _parking(b.airport, q.aircraft)
+        if room is not None and room < q.authorized:
+            continue
+        frm = state.bases[q.base_id]
+        q.home_id = q.base_id
+        q.base_id = b.id
+        rec["moved"] = q.id
+        return [f"   {q.name} moves up from {frm.name} to {b.name}" + _settle(state, q, math.hypot(frm.x - b.x, frm.y - b.y))]
+    return []
 
 
 def taken_field_lose(state, rid: str) -> list:
@@ -884,8 +932,17 @@ def taken_field_lose(state, rid: str) -> list:
     if b is None:
         return []
     lines = []
-    if any(q.base_id == bid for q in state.squadrons.values()):
+    here = [q for q in state.squadrons.values() if q.base_id == bid]
+    if here:
         lines += apply_fall(state, bid)
+        fallen = set(g.get("fallen", []))
+        for q in here:                                                  # a squadron that came from a standing field of ours goes back there
+            h = state.bases.get(q.home_id)
+            if h is not None and h.id != bid and h.kind.value == "AIRFIELD" and h.id not in fallen and q.base_id != h.id:
+                q.base_id = h.id
+                lines.append(f"   {q.name} returns to {h.name}")
+            if q.home_id and q.base_id == q.home_id:
+                q.home_id = ""
     for k in ("pat", "hawk", "aaa"):
         state.blue_sams.pop(f"bsam_{bid}_{k}", None)
     state.bases.pop(bid, None)
@@ -1016,8 +1073,8 @@ def apply_fall(state, bid: str) -> list:
 
 def _settle(state, sq, dist_m: float) -> str:
     """v0.41.243: a squadron that has just changed field sits out FALL_MOVE_NIGHTS (1 or 2 nights by distance); its jets wait in `reserve` and `airwings.step` brings them
-    back. Not the player's squadron (he flies it), not one already resting. Returns the log suffix."""
-    if sq.available <= 0 or sq.reserve > 0 or (state.player and sq.id == state.player.squadron_id):
+    back. Not one already resting. Returns the log suffix."""
+    if sq.available <= 0 or sq.reserve > 0:                              # (v0.41.246, XO: the player's squadron sits out its nights like any other)
         return ""
     n = FALL_MOVE_NIGHTS[0] if dist_m / 1000.0 < FALL_MOVE_NEAR_KM else FALL_MOVE_NIGHTS[1]
     sq.reserve, sq.available, sq.rest_days, sq.move_days = sq.available, 0, 0, n
