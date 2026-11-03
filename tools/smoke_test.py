@@ -5680,6 +5680,8 @@ def check_105_no_garrison_cas_beyond_mountains(c):
     from sqe.models import AssetKind as _AK
     s = mk(); s.new("Coast garrisons", "F-16C", 3, seed=11); st = s.state
     gar = [a for a in st.assets.values() if a.kind == _AK.ARMOR and a.variant == "GARRISON" and not a.id.startswith(("rfwd_", "bfwd_"))]
+    road_far = {a.id for a in gar if a.id.startswith("rgar_sup_") and not _g.near_front(st, a.x, a.y)}          # v0.41.241: a road site's battalion follows the same rule (named for its nearest town)
+    gar = [a for a in gar if not a.id.startswith("rgar_sup_")]
     near = [a for a in gar if _g.near_front(st, a.x, a.y)]; far = [a for a in gar if not _g.near_front(st, a.x, a.y)]
     assert near and far and all(any(k in a.name for k in ("Sukhumi", "Gudauta", "Sochi", "Gelendzhik", "Krymsk")) for a in near), [a.name for a in near]
     assert all(any(k in a.name for k in ("Maykop", "Nalchik", "Beslan", "Mozdok")) for a in far), [a.name for a in far]
@@ -5695,7 +5697,7 @@ def check_105_no_garrison_cas_beyond_mountains(c):
         s.skip_day()
         if s.state.status != "ACTIVE":
             break
-    assert not (seen & {a.id for a in far}), ("CAS offered against a garrison beyond the mountains", seen & {a.id for a in far})
+    assert not (seen & ({a.id for a in far} | road_far)), ("CAS offered against a garrison beyond the mountains", seen & ({a.id for a in far} | road_far))
     assert seen & {a.id for a in near}, ("the coast garrisons are still offered", seen)
     print("[garrison CAS] %d coast garrisons, %d beyond the mountains never offered CAS over 25 days with every SAM dead (%d CAS targets seen)" % (len(near), len(far), len(seen)))
 
