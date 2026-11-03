@@ -4466,7 +4466,7 @@ def check_62_red_roster(c):
             assert ("MiG_21Bis" in _cnt) == (_lv62 == 1), ("MiG-21Bis on Level 1 only", _lv62, _cnt)
             _fld_tot = sum(n_ for f_ in _field.values() for n_ in f_.values()); _fld_fig = sum(n_ for f_ in _field.values() for t_, n_ in f_.items() if t_ in _EF62)
             assert (_fld_tot, _fld_fig) == _want62[_lv62], ("field jets and fighters", _lv62, _fld_tot, _fld_fig)
-            _bw = {1: 0, 2: 11, 3: 30}[_lv62]
+            _bw = {1: 0, 2: 14, 3: 30}[_lv62]       # v0.41.249: L2 11 to 14 (a 12-ship raid)
             assert _cnt.get("Tu_22M3", 0) == _bw, ("the bomber wing", _lv62, _cnt.get("Tu_22M3"))
             for _aid, _types in _field.items():
                 _ap = next(f_["airport"] for f_ in _th["red_fields"] if f_["id"] == _aid)
@@ -6215,6 +6215,38 @@ def check_118_new_squadrons(c):
 
 
 
+def check_119_raid_folds_by_time(c):
+    """v0.41.250 (XO 2026-11-03: the carrier raid is no boss fight): the carrier raid folds into any other mission that starts inside the merge time window, wherever it
+    flies, never into itself and not when merging is off; the blue CAP is sized to the raiders (about one fighter per raider). Mission composition only (the window is a tunable)."""
+    from sqe import bombers
+    real = bombers.desperation
+    bombers.desperation = lambda st, bw: 5.0
+    q_ = bombers.QUIET_DAYS
+    bombers.QUIET_DAYS = 0
+    try:
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+        ses.new("Fold", "F-16C", 3, seed=1)
+        sp = [p for p in ses.packages() if p.extra.get("setpiece")][0]
+        caps = sum(f.count for f in sp.flights if f.role.value == "CAP")
+        raiders = sp.extra["bombers"] + sp.extra["escorts"]
+        assert raiders * 0.8 <= caps <= raiders * 1.6, (caps, raiders)
+        tgt = [p for p in ses.packages() if p.number != sp.number and ses.flyable(p)][0]
+        for d in ses.state.plan:
+            if d.get("extra", {}).get("setpiece"):
+                d["start"] = tgt.start
+        sp = [p for p in ses.packages() if p.extra.get("setpiece")][0]
+        tgt = [p for p in ses.packages() if p.number == tgt.number][0]
+        assert sp.number in [x.number for x in ses.merge_candidates(tgt)], "the raid folds into a mission at the same time"
+        assert not ses.merge_candidates(sp), "nothing folds into the raid itself"
+        ses.settings.merge_mode = "off"
+        assert not ses.merge_candidates(tgt), "merging off folds nothing"
+    finally:
+        bombers.desperation = real
+        bombers.QUIET_DAYS = q_
+    print("[raid folds by time] the carrier raid joins missions at its time, blue CAP about one fighter per raider")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -6372,6 +6404,7 @@ CHECKS = [
     check_116_taken_fields,
     check_117_first_mover,
     check_118_new_squadrons,
+    check_119_raid_folds_by_time,
 ]
 
 def _borrows(fn) -> set:
