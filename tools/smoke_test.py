@@ -6004,6 +6004,24 @@ def check_113_road_sites(c):
     print("[road sites] 60 / 100 / 100 sites by level, owner by nearest airfield, plants away from the front, battalions on red only, Supply figure counts them all, saves keep them, plants build with their buildings")
 
 
+def check_114_blue_site_buildings(c):
+    """v0.41.241 (XO 2026-11-03): a blue supply site is not indestructible: buildings destroyed in a flown mission lower its health (never raises it)."""
+    from sqe.debrief import Manifest, apply_debrief
+    s = fresh_session(2, 7); st = s.state
+    aid = next(k for k, a in st.blue_assets.items() if a.kind.value in ("FUEL", "DEPOT"))
+    a = st.blue_assets[aid]; a.health = 1.0
+    names = [f"{aid}|b{i}" for i in range(4)]
+    m = Manifest(st.campaign_id, 1, "pkg1", st.day)
+    m.add("blue_site", aid, names, label=a.name, health_before=a.health)
+    apply_debrief(st, m, {"dead": names[:3], "landed": [], "time": 700})
+    assert abs(st.blue_assets[aid].health - 0.25) < 1e-6, st.blue_assets[aid].health
+    m2 = Manifest(st.campaign_id, 1, "pkg2", st.day)
+    m2.add("blue_site", aid, names, label=a.name, health_before=st.blue_assets[aid].health)
+    apply_debrief(st, m2, {"dead": [], "landed": [], "time": 700})
+    assert abs(st.blue_assets[aid].health - 0.25) < 1e-6
+    print("[blue site] 3 of 4 buildings dead -> health 25%")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -6156,6 +6174,7 @@ CHECKS = [
     check_111_step_spin,
     check_112_road_net,
     check_113_road_sites,
+    check_114_blue_site_buildings,
 ]
 
 def _borrows(fn) -> set:

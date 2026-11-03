@@ -417,7 +417,7 @@ class RaidSpawns:
         if kind == "supply":
             a = st.blue_assets[aim]
             names = self._place_buildings(self.usa, aim, a.kind, a.x, a.y, r.randint(0, 359), variant=a.variant)
-            manifest.add("blue_site", aim, names, label=a.name)
+            manifest.add("blue_site", aim, names, label=a.name, health_before=a.health)          # v0.41.241: the debrief reads the buildings back
             self._supply_built.add(aim)
             return
         if kind == "sector":
@@ -440,7 +440,7 @@ class RaidSpawns:
         names = []
         for k, u in enumerate(g.units, 1):
             u.name = f"{aim}|{k}"; names.append(u.name)
-        manifest.add("blue_site", aim, names, label=label)
+        manifest.add("blue_site", aim, names, label=label, health_before=(st.blue_assets[aim].health if aim in st.blue_assets else None))
 
     @staticmethod
     def _arm_pts(path, dx, dy, fx=None, fy=None):

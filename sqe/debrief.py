@@ -1569,8 +1569,11 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     out = {"blue_losses": [], "red_assets": [], "red_air_lost": 0, "blue_air_lost": 0, "target_damage": 0.0,
            "lines": [], "ended": bool(data.get("mission_ended")), "objective": "", "objective_type": "",
            "player": "airborne", "package_id": manifest.package_id}
+    site_cap = {}                                           # v0.41.241: blue supply sites / garrisons: the health the destroyed buildings or vehicles leave (applied after the raid's own hit, so one raid is never counted twice)
     for g in manifest.groups:
         dead = [u for u in g["units"] if u in lost]
+        if g["kind"] == "blue_site" and dead and g["units"] and g.get("health_before") is not None:
+            site_cap[g["ref"]] = min(site_cap.get(g["ref"], 1.0), float(g["health_before"]) * (len(g["units"]) - len(dead)) / len(g["units"]))
         if g["kind"] == "friendly":
             sq = state.squadrons[g["squadron"]]
             sq.available = max(0, sq.available - len(dead))
@@ -1657,6 +1660,11 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                     out["lines"].append("Raid: you left before the raiders arrived; the defences stopped them")
             else:
                 out["lines"].append(f"Raid on {where}: stopped, no bombs fell")
+    for aid_, cap_ in site_cap.items():                     # ...the buildings that really burned count: the site is at most that healthy
+        a_ = (getattr(state, "blue_assets", None) or {}).get(aid_)
+        if a_ is not None and cap_ < a_.health - 1e-6:
+            out["lines"].append(f"{a_.name}: {a_.health:.0%} -> {cap_:.0%} (buildings destroyed)")
+            a_.health = max(0.0, cap_)
     follow_ = any((p_.get("objective") or {}).get("after") for p_ in (state.plan or []) if p_.get("id") == data.get("package"))      # v0.41.158: a strike / CAS behind a SEAD
     for ref in data.get("aborted", []) or []:
         a = state.assets.get(ref)
