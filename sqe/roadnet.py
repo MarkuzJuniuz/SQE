@@ -3,10 +3,10 @@
 land.findPathOnRoads (probe result 2026-11-03: dense polylines, about 100 m between points, fast, mountain passes included) is run in DCS by
 tools/road_net_scan.py between neighbouring airfields and sector centres. This module turns the raw answer into two shipped things:
   * `simplify` / `build_net`: each route cut down to a few hundred points (Douglas-Peucker, ROUTE_TOLERANCE_M), written to <theatre>_roads_net.json;
-  * `spots_along` / `road_spots`: supply spots laid along the routes every SPOT_SPACING_M, set ROAD_OFFSET_M off the road (alternating sides, so a
+  * `spots_along` / `road_spots`: supply spots laid along the routes every SPOT_SPACING_M (5 km), set ROAD_OFFSET_M off the road (alternating sides, so a
     depot does not sit on the tarmac), no two closer than MIN_SEPARATION_M. They go into the sites file under the key "road" (supply), where a later
     step (queue item i: more supply sites, defenders, quotas) draws from them. Nothing in a campaign reads the key yet.
-Judgment calls (no public figure): the 10 km spacing, the 150 m offset, the 3 km separation, the 100 m tolerance."""
+Judgment calls (no public figure): the 5 km spacing (XO's choice), the 150 m offset, the 3 km separation, the 100 m tolerance."""
 from __future__ import annotations
 
 import json
@@ -14,7 +14,7 @@ import math
 from pathlib import Path
 
 ROUTE_TOLERANCE_M = 100.0     # Douglas-Peucker tolerance: a route may deviate this far from the measured polyline
-SPOT_SPACING_M = 10000.0      # one supply spot per this much road
+SPOT_SPACING_M = 5000.0       # one supply spot per this much road (XO 2026-11-03: 5 km; was 10 km in the first draft)
 ROAD_OFFSET_M = 150.0         # spots sit this far beside the road, alternating sides
 MIN_SEPARATION_M = 3000.0     # two spots (from overlapping routes) closer than this are one
 

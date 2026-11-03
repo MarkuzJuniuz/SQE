@@ -5904,7 +5904,7 @@ def check_111_step_spin(c):
 
 def check_112_road_net(c):
     """v0.41.238 (XO 2026-11-03, queue item m step 2): the road-net scan's data side. A route is simplified (ends kept, a bump under the tolerance
-    dropped, a corner kept); spots go along it every 10 km, off the road, deduplicated across overlapping routes; build_net writes the routes file and
+    dropped, a corner kept); spots go along it every 5 km, off the road, deduplicated across overlapping routes; build_net writes the routes file and
     adds the "road" supply key to the sites file WITHOUT touching its sectors / fields (a temp copy); the scan pairs cover the long hops. Strategic data
     only: the Lua scan is not smoked (lupa replay was done by hand)."""
     import math, shutil, sys, tempfile
@@ -5915,9 +5915,9 @@ def check_112_road_net(c):
     r = rn.simplify([(0, 0), (1000, 30), (2000, 0), (3000, 0), (3000, 5000)])
     assert r[0] == (0, 0) and r[-1] == (3000, 5000) and (3000, 0) in r and (1000, 30) not in r, r
     sp = rn.spots_along([(0, 0), (30000, 0)])
-    assert [p[0] for p in sp] == [10000, 20000, 30000] and all(abs(p[1]) == 150 for p in sp) and sp[0][1] == -sp[1][1], sp
+    assert [p[0] for p in sp] == [5000, 10000, 15000, 20000, 25000, 30000] and all(abs(p[1]) == 150 for p in sp) and sp[0][1] == -sp[1][1], sp
     two = rn.road_spots([[(0, 0), (30000, 0)], [(0, 40), (30000, 40)]])
-    assert len(two) == 3, "an overlapping route adds no second set of spots"
+    assert len(two) == 6, "an overlapping route adds no second set of spots"
     th = _th.active()
     d = tempfile.mkdtemp()
     shutil.copy(_P(th["_dir"]) / f"{th['id']}_sites.json", d)
@@ -5933,7 +5933,7 @@ def check_112_road_net(c):
     assert len(prs) >= 40 and "Kutaisi" in names and any(lab == "Kutaisi~Mozdok" for lab, _, _ in prs), len(prs)
     assert len({lab for lab, _, _ in prs}) == len(prs), "each pair once"
     assert "land.findPathOnRoads" in rs.scan_lua() and "SQEROADNET" in rs.scan_lua()
-    print("[road net] routes simplify, spots every 10 km beside the road and deduplicated, the sites file keeps its sectors and fields, %d scan pairs" % len(prs))
+    print("[road net] routes simplify, spots every 5 km beside the road and deduplicated, the sites file keeps its sectors and fields, %d scan pairs" % len(prs))
 
 
 CHECKS = [
