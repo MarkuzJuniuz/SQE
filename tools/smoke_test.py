@@ -5917,6 +5917,7 @@ def check_112_road_net(c):
     sp = rn.spots_along([(0, 0), (30000, 0)])
     assert [p[0] for p in sp] == [5000, 10000, 15000, 20000, 25000, 30000] and all(abs(p[1]) == 150 for p in sp) and sp[0][1] == -sp[1][1], sp
     two = rn.road_spots([[(0, 0), (30000, 0)], [(0, 40), (30000, 40)]])
+    assert len(rn.road_spots([[(0, 0), (30000, 0)]], keep_ok=lambda x, y: x < 20000)) == 3, "keep_ok drops a refused spot"
     assert len(two) == 6, "an overlapping route adds no second set of spots"
     th = _th.active()
     d = tempfile.mkdtemp()

@@ -158,9 +158,9 @@ def make(out_path) -> Path:
 
 def build(raw_path) -> dict:
     import json
-    from sqe import roadnet, theatres
+    from sqe import roadnet, seacheck, theatres
     th = theatres.active()
-    return roadnet.build_net(json.loads(Path(raw_path).read_text(encoding="utf-8")), th["_dir"], th["id"])
+    return roadnet.build_net(json.loads(Path(raw_path).read_text(encoding="utf-8")), th["_dir"], th["id"], keep_ok=seacheck.site_ok)      # a spot in the sea is dropped
 
 
 if __name__ == "__main__":

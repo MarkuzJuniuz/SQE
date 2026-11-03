@@ -65,13 +65,14 @@ def spots_along(route, spacing: float = SPOT_SPACING_M, offset: float = ROAD_OFF
     return out
 
 
-def road_spots(routes, existing=(), spacing: float = SPOT_SPACING_M, min_sep: float = MIN_SEPARATION_M) -> list:
-    """Supply spots for every route, deduplicated: a spot within `min_sep` of an accepted one (or of an `existing` point) is dropped."""
+def road_spots(routes, existing=(), spacing: float = SPOT_SPACING_M, min_sep: float = MIN_SEPARATION_M, keep_ok=None) -> list:
+    """Supply spots for every route, deduplicated: a spot within `min_sep` of an accepted one (or of an `existing` point) is dropped, and so is one
+    that `keep_ok(x, y)` refuses (the build step passes the dry-land check: a spot 150 m off a coast road can fall in the sea)."""
     keep = [tuple(p) for p in existing]
     new = []
     for r in routes:
         for p in spots_along(r, spacing):
-            if all(math.hypot(p[0] - q[0], p[1] - q[1]) >= min_sep for q in keep):
+            if all(math.hypot(p[0] - q[0], p[1] - q[1]) >= min_sep for q in keep) and (keep_ok is None or keep_ok(*p)):
                 keep.append(p)
                 new.append(p)
     return new
@@ -88,7 +89,7 @@ def routes_from_raw(raw) -> list:
     return out
 
 
-def build_net(raw, theatre_dir, theatre_id: str = "caucasus", spacing: float = SPOT_SPACING_M) -> dict:
+def build_net(raw, theatre_dir, theatre_id: str = "caucasus", spacing: float = SPOT_SPACING_M, keep_ok=None) -> dict:
     """Write <theatre>_roads_net.json (the simplified routes) and add {"road": {"supply": [...]}} to the sites file. Returns a summary dict."""
     theatre_dir = Path(theatre_dir)
     routes = routes_from_raw(raw)
@@ -96,7 +97,7 @@ def build_net(raw, theatre_dir, theatre_id: str = "caucasus", spacing: float = S
     sites_p = theatre_dir / f"{theatre_id}_sites.json"
     sites = json.loads(sites_p.read_text(encoding="utf-8"))
     old = [tuple(p) for sec in sites.get("sectors", []) for p in sec.get("supply", [])] + [tuple(p) for f in sites.get("fields", []) for p in f.get("supply", [])]
-    spots = road_spots(routes, existing=old, spacing=spacing)
+    spots = road_spots(routes, existing=old, spacing=spacing, keep_ok=keep_ok)
     net_p = theatre_dir / f"{theatre_id}_roads_net.json"
     net_p.write_text(json.dumps({"terrain": theatre_id, "version": 1, "tolerance_m": ROUTE_TOLERANCE_M,
                                  "routes": [[[round(x), round(y)] for x, y in r] for r in routes]}, separators=(",", ":")), encoding="utf-8")
