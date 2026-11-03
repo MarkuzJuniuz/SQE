@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.252, approach aids for the five fields we can take (kneeboard data only)
+
+XO 2026-11-03 (Mission Editor airfield panels). `kneeboard.NAV` gains Sukhumi-Babushara (NDB 489/995 on RWY 30), Gudauta (none), Sochi-Adler (ILS 111.10 RWY 06), Gelendzhik (VOR 114.30) and Krymsk (NDB 408/803); no ILS but Sochi's, no TACAN anywhere. A taken field's mission now prints its recovery row like the four home fields. Krymsk's RSBN and PRMG (Soviet aids) are left out. Read from the panel screenshots (small print): XO to confirm the numbers. Compile check and the kneeboard smoke section.
+
 ## v0.41.251, runway probe (queue idea: disable runways; tool only, no campaign change)
 
 XO 2026-11-03 ("probe it"). `tools/runway_probe.py OUT.miz` builds a Caucasus mission at Senaki-Kolkhi: two groups of four red Su-24M (SQE's raid loadout, RunwayAttack) bomb the runway about 5 minutes in; blue F-16C pairs are released from the ramp at 2, 10, 30, 55 and 70 minutes and two more land from the air at 12 and 71 minutes. A start script logs `SQERWY` lines to dcs.log (events of the RWY- aircraft, and every 20 s their position, speed, in-air flag and distance from the field), so the log shows whether a cratered runway grounds AI, whether AI can land on it, and when it reopens (forum threads say about 60 minutes: unverified). The player slot is an immortal F-16C to watch from. Docs/tool only: compile check, no smoke.
