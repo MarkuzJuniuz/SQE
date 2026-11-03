@@ -252,7 +252,7 @@ class PackageBuilder:
         elif obj.type == ObjectiveType.STRIKE and obj.aim == "SEAD":        # v0.41.144: a supply strike under a live SA-2/3/6: same, the HARM escort is required
             tmpl = [Slot(Role.STRIKE, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
         if carrier_raid(self.state, obj):                                    # v0.41.107: the setpiece: every fighter flight in reach, about one blue fighter per raider
-            k = max(2, math.ceil(SETPIECE_RATIO * n_fl))              # n_fl = bombers; raiders = bombers x 3 (2 escorts each) -> k flights of 4
+            k = max(2, math.ceil(SETPIECE_RATIO * n_fl))              # n_fl = raiders / 3 (set in build) -> k flights of 4, about one blue fighter per raider
             return [Slot(Role.CAP, 4), Slot(Role.CAP, 4)] + [Slot(Role.CAP, 4, False) for _ in range(k - 2)] + [Slot(Role.SWEEP, 2, False)]
         if is_sweep(obj):                                                    # Fighter Sweep: 4-ships only, one per 4 bandits beyond the packages' own cover
             n4 = max(1, sweep_4ships(n_fl))
@@ -278,7 +278,8 @@ class PackageBuilder:
             extra = self._raid_plan(number, obj) or {}
             n_fl = extra.get("escorts", 0) // 2
             if extra and carrier_raid(st, obj):
-                extra = {**extra, "setpiece": True}                          # v0.41.107: flown from the Missions page like any job, no merging, every flight listed
+                extra = {**extra, "setpiece": True}                          # v0.41.107: flown from the Missions page like any job, every flight listed (v0.41.250: it folds into any mission that starts near its time)
+                n_fl = math.ceil((extra["bombers"] + extra["escorts"]) / 3)  # v0.41.250: _slots sizes the blue CAP as raiders / 3 (the old 4 + 8 raid gave 4); with 1 escort per 2 bombers, bombers / 2 is no longer that
         elif obj.type == ObjectiveType.BARCAP:       # a fleet patrol meets a probing enemy flight if the enemy still has fighters
             n_fl = 1 if any(w.available > 0 for w in st.enemy_air) else 0
         else:
