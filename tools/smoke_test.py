@@ -1683,16 +1683,17 @@ def check_31l_red_arm(c):
             assert "red DEAD gate open" in _mzr and "red DEAD gate abort" in _mzr and "c_unit_dead" in _mzr and "c_flag_is_false" in _mzr, "the gate: radars dead opens it, else the abort trigger"
             assert "SQE_GOTO('Raid DEAD 1'" in _mzr and "function SQE_GOTO" in _mzr and "SwitchWaypoint" in _mzr, "the abort sends the flights to their egress"
             assert "RAID-B-1" in mz, "the bombers still fly"
-            # v0.41.126: the bombers (and the sweep / escorts) hold at the same gate and turn home with the DEAD flights if the radars stay up
-            for _gn in ("Raid Bomber 1", "Raid DEAD 1"):
+            # v0.41.240: only the DEAD flights hold at the gate; the bombers, sweep and escorts fly the clock (no GATE waypoint, no abort)
+            for _gn in ("Raid DEAD 1",):
                 assert f"SQE_GOTO('{_gn}'" in _mzr, f"the abort covers {_gn}"
-            assert "SQE_GATE_OPEN" in _mzr and "Raid Bomber 1" in _mzr.split("SQE_GATE_OPEN(")[1].split(")")[0], "the open trigger tells the Lua which groups were held"
-            assert _mzr.count('"GATE"') >= 3, "bombers and DEAD flights have a GATE waypoint"
+            assert "SQE_GOTO('Raid Bomber 1'" not in _mzr, "the bombers are not held by the gate"
+            assert "SQE_GATE_OPEN" in _mzr and "Raid DEAD 1" in _mzr.split("SQE_GATE_OPEN(")[1].split(")")[0] and "Raid Bomber 1" not in _mzr.split("SQE_GATE_OPEN(")[1].split(")")[0], "the open trigger names the DEAD flights only"
+            assert _mzr.count('"GATE"') >= 2, "the DEAD flights have a GATE waypoint"
             import re as _re
             _gf = _re.findall(r"c_flag_is_false\((\d+)\)", mz)
             assert _gf, "the abort trigger reads the gate flag"
-            assert mz.count(f'["userFlag"]="{_gf[0]}"') >= 3, "the bomber group and the two DEAD flights all orbit at the gate until that flag is set"
-            assert _mzr.count("SQE_GOTO(") >= 3, "every held group has an abort"
+            assert mz.count(f'["userFlag"]="{_gf[0]}"') >= 2, "the two DEAD flights orbit at the gate until that flag is set"
+            assert _mzr.count("SQE_GOTO(") >= 2, "every held group has an abort"
             return
         raise AssertionError("no raid with a SEAD pair in four seeds")
     finally:
