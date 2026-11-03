@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.236, a pulled-back SAM spends a travel day and cannot regenerate on it
+
+XO 2026-11-03 (low, "go"). `sams.TRAVEL_DAYS` 1 and `sams.travelling()`: when a badly hurt long-range site pulls back (`sams.retreat`), or returns home, the next day it is on the road and `war.py`'s nightly regeneration skips it (record `state.sams["travel"]`, asset id to the day it set out; saves without the key load fine). Regen itself is rule-based (`sam_repair` 3 / 6 / 8% a night by level), unchanged. The 3 to 6 nm scoot of a mobile site (`relocate`) stays instant (a local shuffle). Judgment call: one day, no public figure. The wider audit of other instant movers is still open (squadrons on a base fall, `ground.py` 932 and 318 not yet read). Smoke: compile check plus `check_47_support_cap_pull_back` only (travel-day asserts added). XO's own commits: none.
+
 ## v0.41.235, strikers and CAS wait 15 minutes at the fighters-clear gate
 
 XO 2026-11-03 (low, "go"). `strike_tasks.AIR_HOLD_STRIKE_S` 360 to 900 s and `AIR_HOLD_CAS_S` 240 to 900 s. Why: XO's runs showed packages barely waiting (6 and 4 min) while the air fight takes longer on every level, L1 included; he also overrides the old rule that CAS waits less because the troops are waiting. The hold is a tunable (judgment call), so no smoke check pins it. Fuel: the hold sits before the PUSH, where AI flights have unlimited fuel (`ai_unlimited_fuel`), and every flight still goes home on bingo, so a longer orbit cannot strand one; the player's own flight keeps real fuel and bingo. Not seen in DCS. Smoke: not run (compile check only; XO runs it). XO's own commits: none.

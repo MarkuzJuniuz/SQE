@@ -3682,6 +3682,11 @@ def check_47_support_cap_pull_back(c):
     assert all(math.isclose(g_.x - gx_, _site.x - _o[0], abs_tol=1) and math.isclose(g_.y - gy_, _site.y - _o[1], abs_tol=1) for g_, (gx_, gy_) in zip(_gar, [(a_[0], a_[1]) for a_ in _go])) or not _gar, "its garrison went with it"
     assert not _sm.retreat(_st, _gd(3), random.Random(5)) or _site.id in _st.sams["pulled"], "it does not pull back twice"
     _rt = _CS.from_dict(_st.to_dict()); assert _site.id in _rt.sams["pulled"], "saved with the campaign"
+    _d0 = _st.day
+    assert not _sm.travelling(_st, _site.id), "the night it pulls back is not yet a travel day"
+    _st.day = _d0 + 1; assert _sm.travelling(_st, _site.id), "the day after the pull-back it is on the road: no regen"
+    _st.day = _d0 + 2; assert not _sm.travelling(_st, _site.id), "two days later it regenerates again"
+    _st.day = _d0
     _site.health = 0.9; _st.day += 3; _back = []
     for _k in range(30):
         _back = _sm.retreat(_st, _gd(3), random.Random(100 + _k))

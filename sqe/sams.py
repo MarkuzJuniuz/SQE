@@ -34,6 +34,7 @@ RETREAT_HEALTH = 0.35         # a long-range site at or below this health may pu
 RETREAT_NM = (35.0, 55.0)
 RETURN_HEALTH = 0.65
 RETURN_MIN_DAYS = 2
+TRAVEL_DAYS = 1                # v0.41.236 (XO 2026-11-03): the day after a site pulls back (or returns) it is on the road and cannot regenerate. Judgment call, no public figure; scoots (3-6 nm) are local and stay instant
 BLUE_REPAIR = 0.10
 # v0.41.67: SAM orders by need (XO 2026-10-21: "SAMs can be ordered by both sides should the need arise"; "move first, build if nothing to spare").
 # A destroyed blue site is in need. The least-threatened field that has a standing site of the same kind (health at or above BLUE_FULL_DEF) sends it;
@@ -244,7 +245,7 @@ def _rec(state) -> dict:
     if not isinstance(getattr(state, "sams", None), dict):
         state.sams = {}
     r = state.sams
-    r.setdefault("down", {}); r.setdefault("moves", {}); r.setdefault("home", {})
+    r.setdefault("down", {}); r.setdefault("moves", {}); r.setdefault("home", {}); r.setdefault("travel", {})
     return r
 
 
@@ -397,6 +398,12 @@ def relocate(state, d, rng: random.Random) -> list:
     return lines
 
 
+def travelling(state, aid: str) -> bool:
+    """True while a pulled-back (or returning) site is on the road: it cannot regenerate overnight (war.py checks this before it adds health)."""
+    d0 = _rec(state)["travel"].get(aid)
+    return d0 is not None and 0 < state.day - d0 <= TRAVEL_DAYS
+
+
 def _long_range(state, a) -> bool:
     from . import threatmap as tm
     return (a.kind == AssetKind.SAM and not a.id.startswith("fsam_") and a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10)
@@ -424,6 +431,7 @@ def retreat(state, d, rng: random.Random) -> list:
             hx, hy = rec["home"]
             _shift(state, a, hx - a.x, hy - a.y)
             r["pulled"].pop(aid, None)
+            r["travel"][aid] = state.day                                # the trip home takes its day too
             lines.append(f"{a.name} is back in position")
     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
     if not fields:
@@ -447,6 +455,7 @@ def retreat(state, d, rng: random.Random) -> list:
         else:
             continue
         r["pulled"][a.id] = {"home": [a.x, a.y], "day": state.day}
+        r["travel"][a.id] = state.day                                    # tomorrow it is on the road: no regeneration
         moved = math.hypot(nx - a.x, ny - a.y) / NM
         _shift(state, a, nx - a.x, ny - a.y)
         lines.append(f"{a.name} ({a.health:.0%} left) pulled back about {moved:.0f} nm from the front to recover")
