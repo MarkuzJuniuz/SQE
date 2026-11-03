@@ -42,6 +42,9 @@ FALL_LOSS = 0.3               # aircraft lost when a field falls and its squadro
 FALL_MOVE_NEAR_KM = 100       # v0.41.243: a squadron that changes field is out of the line for the nights below (judgment call, XO: "1 to 2 days"): the ground crews move too
 FALL_MOVE_NIGHTS = (1, 2)     # (new field closer than FALL_MOVE_NEAR_KM, further)
 TAKEN_STAGES = (("aaa", 3), ("hawk", 6), ("pat", 9))      # v0.41.244 (XO 2026-11-03): a field we take grows its air defence in this order, on these days after the fall, alongside the 9-day takeover clock (judgment calls)
+TAKEN_NEW_DAY = 16            # v0.41.247 (XO 2026-11-03): one week after the Patriots, a NEW squadron is formed at the taken field (`new_squadrons.py`; judgment call)
+TAKEN_NEW_SQUADRONS = 1       # per taken field (judgment call: each is up to 18 more jets for blue; raise it if blue is thin at the front)
+SHORT_DAYS = 7                # how long a day's unfilled-slot record is kept
 TAKEN_FIRST_MOVER_DAY = 11    # v0.41.246 (XO 2026-11-03): the first squadron moves in 2 days after the Patriots are up (judgment call)
 FORWARD_TYPES = ("F-16C",)    # short-legged jets move forward; the long-legged F-15C and the carrier's F-14s stay where they are (XO)
 SUPPLY_FLOOR, SUPPLY_NONE = 0.55, 0.85
@@ -873,6 +876,12 @@ def taken_fields_step(state) -> list:
             rec["stage"] += 1
         if rec["stage"] >= len(TAKEN_STAGES) and not rec.get("moved") and age >= TAKEN_FIRST_MOVER_DAY:
             lines += first_mover(state, rid, rec, b)
+        if rec["stage"] >= len(TAKEN_STAGES) and age >= TAKEN_NEW_DAY and len(rec.get("new", [])) < TAKEN_NEW_SQUADRONS:
+            from . import new_squadrons
+            ln, sq = new_squadrons.form(state, b, _parking)
+            if sq is not None:
+                rec.setdefault("new", []).append(sq.id)
+            lines += ln
     return lines
 
 
@@ -886,6 +895,16 @@ def _parking(airport: str, aircraft: str):
         return len(a.free_parking_slots(getattr(planes, AIRCRAFT[aircraft].dcs_class)))
     except Exception:
         return None
+
+
+def note_shortfall(state, short: list) -> None:
+    """v0.41.247: the day's unfilled package slots, [(role, x, y)], kept for SHORT_DAYS days in `ground["short"]` as [day, role, x, y] (a replan of the same day replaces that day's
+    entries). `new_squadrons.need` reads them to pick the airframe of a taken field's new squadron. Nothing is recorded without a ground war."""
+    g = state.ground
+    if not g:
+        return
+    keep = [r for r in g.get("short", []) if state.day - r[0] < SHORT_DAYS and r[0] != state.day]
+    g["short"] = keep + [[state.day, r, round(x), round(y)] for r, x, y in short][:300]
 
 
 def first_mover(state, rid: str, rec: dict, b) -> list:

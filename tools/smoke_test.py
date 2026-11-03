@@ -6167,6 +6167,54 @@ def check_117_first_mover(c):
     print("[first mover] player first, else the fullest field's F-16C; F-15Cs stay; the player's squadron rests too; mission builds from the new field; retake sends it home")
 
 
+def check_118_new_squadrons(c):
+    """v0.41.247 (XO 2026-11-03, queue item h part 1, PR 3): one week after a taken field's Patriots (day 16) a NEW squadron forms there: F-16C by default, the A-10C / F-15C when
+    the planner was short of CAS / TARCAP-SWEEP slots near the field (`ground["short"]`). New id, name and callsign (none shared), full strength, tasked by the planner, saved and
+    loaded; it withdraws when the field is retaken. Strategic state only (the day, the radius and the count are tunables)."""
+    from sqe import ground as _gr, new_squadrons as _ns
+    from sqe.state import CampaignState as _CS
+    ses = fresh_session(2, 5); st = ses.state; g = st.ground
+    for rb in g["rbases"]:                                              # all three red fields fall: Sukhumi (23 spots), Gudauta (31), Sochi (68)
+        g["blue"][rb["zone"]], g["red"][rb["zone"]] = 60.0, 0.0
+    _gr._check_red_bases(st)
+    rid = "ab_sochi"; z = next(r["zone"] for r in g["rbases"] if r["id"] == rid)
+    bid = g["taken_fields"][rid]["base"]; b = st.bases[bid]; t0 = g["taken_day"][rid]
+    sk = g["taken_fields"]["ab_sukhumi"]["base"]
+    st.day = t0 + 15; _gr.taken_fields_step(st)
+    n0 = len(st.squadrons)                                              # (after the day-11 first mover, which only moves an existing squadron)
+    assert not g["taken_fields"][rid].get("new"), "not before day 16"
+    st.day = t0 + _gr.TAKEN_NEW_DAY; ln = _gr.taken_fields_step(st)
+    assert not g["taken_fields"]["ab_sukhumi"].get("new"), "Sukhumi has 23 spots: the first mover leaves under NEW_MIN_SIZE free, so no new squadron"
+    new = g["taken_fields"][rid].get("new"); assert new and len(new) == 1 and ln, g["taken_fields"][rid]
+    q = st.squadrons[new[0]]
+    assert q.aircraft == "F-16C" and q.base_id == bid and q.available == q.authorized >= _ns.NEW_MIN_SIZE and q.reserve == 0, (q.aircraft, q.base_id, q.available)
+    assert sum(x.authorized for x in st.squadrons.values() if x.base_id == bid) <= _gr._parking(b.airport, "F-16C"), "the field's parking holds them all"
+    cs = [x.callsign for x in st.squadrons.values()]; ids = [x.id for x in st.squadrons.values()]
+    assert len(set(cs)) == len(cs) and len(set(ids)) == len(ids), "callsigns and ids stay unique"
+    assert len(st.squadrons) == n0 + sum(len(r.get("new", [])) for r in g["taken_fields"].values()) == n0 + 2, "Sochi and Gudauta form one each, Sukhumi none"
+    _gr.taken_fields_step(st); assert len(g["taken_fields"][rid]["new"]) == 1, "one new squadron per field"
+    rt = _CS.from_dict(st.to_dict()); assert rt.squadrons[q.id].base_id == bid and rt.ground["taken_fields"][rid]["new"] == new
+    # the need: enough unfilled CAS slots near the field -> an A-10C squadron; the same far away -> the F-16C default
+    near = [[st.day, "CAS", round(b.x), round(b.y)]] * _ns.NEED_MIN
+    st.ground["short"] = near; assert _ns.need(st, b)[0] == "A-10C", _ns.need(st, b)
+    st.ground["short"] = [[st.day, "TARCAP", round(b.x), round(b.y)]] * _ns.NEED_MIN; assert _ns.need(st, b)[0] == "F-15C"
+    st.ground["short"] = [[st.day, "CAS", round(b.x + 900_000), round(b.y)]] * 20; assert _ns.need(st, b)[0] == "F-16C", "too far away to count"
+    st.ground["short"] = [[st.day, "CAS", round(b.x), round(b.y)]] * (_ns.NEED_MIN - 1); assert _ns.need(st, b)[0] == "F-16C", "too few to count"
+    # the planner records its shortfalls and a replan of the same day replaces them
+    st.ground["short"] = []; ses.plan_day(); n1 = len(st.ground["short"]); ses.plan_day()
+    assert len(st.ground["short"]) == n1 and all(r[0] == st.day for r in st.ground["short"]), "a replan replaces that day's record"
+    flown = False
+    for _ in range(4):
+        ses.plan_day(); flown = flown or any(f.squadron_id == q.id for p in ses.packages() for f in p.flights)
+        ses.skip_day()                                                  # the days run with the new squadron on the books
+    assert flown, "the planner tasks the new squadron"
+    g["red"][z], g["blue"][z] = 60.0, 0.0                              # the enemy retakes Sochi
+    ln = _gr._check_red_bases(st)
+    assert bid not in st.bases and st.squadrons[q.id].base_id in st.bases and st.squadrons[q.id].base_id != bid, (ln, st.squadrons[q.id].base_id)
+    print("[new squadrons] day 16, F-16C by default, A-10C / F-15C by the planner's shortfalls; unique callsigns; saved; withdraws on retake")
+
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -6323,6 +6371,7 @@ CHECKS = [
     check_115_fall_move,
     check_116_taken_fields,
     check_117_first_mover,
+    check_118_new_squadrons,
 ]
 
 def _borrows(fn) -> set:
