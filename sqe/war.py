@@ -698,7 +698,8 @@ def totals(state: CampaignState) -> dict:
     arm = [a for a in state.assets.values() if a.kind == AssetKind.ARMOR and a.variant != "GARRISON"]
     armor = sum(a.health for a in arm) / len(arm) if arm else 0.0
     c2 = [a for a in state.assets.values() if a.kind == AssetKind.C2]
-    fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
+    pend = ground.pending_fields(state)                         # v0.41.244: a taken field still being built does not drag blue's mean down
+    fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD" and b.id not in pend]
     return {"base_defense": (sum(b.defense for b in fields) / len(fields)) if fields else 1.0, "friendly_air": fa / fz, "enemy_air": ea / ez, "iads": iads, "armor": armor,
             "c2": sum(a.health for a in c2) / len(c2) if c2 else 0.0,
             "fa": fa, "fz": fz, "ea": ea, "ez": ez}
