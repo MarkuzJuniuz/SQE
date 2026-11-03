@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.245, the map draws blue's supply sites and garrisons
+
+XO 2026-11-03 ("fix that in the next PR"). The map window drew red assets only, so blue's depots, fuel points, road sites, refineries, factories and garrisons (58 on a fresh L3 campaign) never showed. `MapView.paintEvent` now draws `blue_assets` in blue with the red shapes (diamond for supplies, bar for garrisons), grey when destroyed. Checked by rendering the map offscreen (`QT_QPA_PLATFORM=offscreen`) and looking at it; compile check only, no smoke (drawing only).
+
 ## v0.41.243, squadrons rest after a base-fall withdrawal and fly home on a retake (queue items h and h2)
 
 XO 2026-11-03 ("go", effort left to Crew Chief). Before: a squadron driven off a fallen field was flying again the next morning, and on a retake nobody went back. Now (a) a squadron that withdraws sits out 1 night if the new field is under 100 km away, else 2 (`ground.FALL_MOVE_NEAR_KM`, `FALL_MOVE_NIGHTS`; judgment calls from XO's "1 to 2 days"): its jets wait in `reserve` with `move_days` set, and `airwings.step` brings them back, with no rest boost and the 30% loss kept; red squadrons moved by `apply_red_fall` do the same (not the Tu-22M3 wing); (b) `Squadron.home_id` remembers the first field it was driven from, and `ground.return_squadrons` flies it home when that field is retaken (the same move nights; a squadron driven twice still goes back to the original). The player's squadron never sits out (he flies it) but does return. Old saves: no home field recorded, so nothing returns for squadrons that moved earlier. Not done: blue squadrons manning a TAKEN red field (the rest of item h; needs a design talk). Smoke: `check_115_fall_move`.
