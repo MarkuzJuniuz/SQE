@@ -4593,7 +4593,7 @@ def check_70_overview_detail(c):
     st.log.append(f"[day {st.day}] SUKHUMI HAS FALLEN: our forces hold it"); st.log.append("[day 1] nothing to see here")
     n = _od.ground_notes(st); assert any("next attack in about 4 days" in x for x in n) and any("taken on day" in x for x in n), n
     assert _od.history(st) == [st.log[-2]], _od.history(st)
-    sr = _od.supply_rows(st); assert len(sr) == 12 + 6 and {r[0] for r in sr} == {"Coalition", "Russia"} and all(r[3] == "intact" for r in sr), sr[:3]
+    sr = _od.supply_rows(st); assert len(sr) == 12 + 6 + st.ground["road"]["red"] + st.ground["road"]["blue"] and {r[0] for r in sr} == {"Coalition", "Russia"} and all(r[3] == "intact" for r in sr), sr[:3]
     a = next(x for x in st.assets.values() if x.kind in _gr.SUPPLY_KINDS)
     g["sup_h"][a.id] = 1.0; a.health = 0.5
     assert next(r for r in _od.supply_rows(st) if r[1] == a.name)[3].startswith("struck"), "struck since last night: no repair tonight"
