@@ -74,7 +74,7 @@ RAID_LAUNCH_OUT_NM = 20       # v0.41.248 (XO 2026-11-03: the Tu-22M3s flew thro
                               # the blue CAP station (on the raid's bearing), turns home at once and never goes nearer. Judgment call: the Kh-22's published range is up to 600 km (320 nm)
                               # for the M/MA variants (Wikipedia, Kh-22, medium firmness; no Tu-22M3-specific figure), so the launch ring is a game choice, set by where the fighters stand.
 RAID_LAUNCH_MIN_NM = 100      # ...and never closer to the carrier than this (judgment call: outside FLEET_RAID_AVOID_NM 70, the cruiser's SM-2 reach measured in XO's runs, plus margin)
-RAID_LAUNCH_WINDOW_S = 240    # ...the attack task runs this long after the bombers reach the launch point, then they go home even if a missile is left (judgment call)
+RAID_LAUNCH_WINDOW_S = 120    # ...the attack task runs this long after the bombers reach the launch point, then they go home even if a missile is left (judgment call; the time a full salvo takes is NOT measured: 8 JSOWs took 106 s in XO's Hornet run)
 ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
 
@@ -824,7 +824,7 @@ class RaidSpawns:
                     elif land and aim:
                         wp.tasks.append(task.Bombing(mapping.Vector2(dx, dy)))
                     elif cvg is not None and cls is planes.Tu_22M3:
-                        ca_ = task.ControlledTask(task.AttackGroup(cvg.id))
+                        ca_ = task.ControlledTask(task.AttackGroup(cvg.id, group_attack=True, expend=task.Expend.All) if standoff else task.AttackGroup(cvg.id))      # v0.41.248: the whole group fires everything at once (XO: saturate, then home)
                         if standoff:                           # v0.41.248: fire from the launch point, then leave; the task ends after the window whatever is left
                             ca_.stop_after_time(int(hit_s + shift + RAID_LAUNCH_WINDOW_S))
                         wp.tasks.append(ca_)
