@@ -82,6 +82,8 @@ class Squadron:
     callsign: str = "Viper"
     reserve: int = 0            # aircraft pulled back to a rear field to recover (airwings.py); available is 0 while they rest
     rest_days: int = 0
+    home_id: str = ""           # v0.41.243: the field it was first driven from (ground.apply_fall); it flies back when that field is retaken. "" = not displaced
+    move_days: int = 0          # v0.41.243: nights left before a squadron that changed field is operational again (airwings.step); the jets wait in `reserve`
 
     @property
     def readiness(self) -> float:
@@ -120,6 +122,7 @@ class RedSquadron:
     available: int = -1         # serviceable jets (-1 = all of them, set in __post_init__)
     reserve: int = 0            # jets pulled back to a rear field to recover; available is 0 while they rest
     rest_days: int = 0
+    move_days: int = 0          # v0.41.243: nights left before a squadron that changed field is operational again (airwings.step)
     role: str = ""              # v0.41.106: "escort" = the Mozdok escort squadron: escorts, Mozdok patrols and scrambles only, never sent afield as reinforcement
 
     def __post_init__(self):
@@ -244,7 +247,7 @@ def wing_from_dict(w: dict) -> "EnemyAirWing":
         av = _spread(int(w.get("available", sum(auth))), [a - r for a, r in zip(auth, res)])
         for q, a, r in zip(sq, av, res):
             q["available"], q["reserve"], q["rest_days"] = a, r, (int(w.get("rest_days", 0)) if r else 0)
-    keep = {"id", "name", "aircraft", "authorized", "available", "reserve", "rest_days", "role"}
+    keep = {"id", "name", "aircraft", "authorized", "available", "reserve", "rest_days", "move_days", "role"}
     sqns = [RedSquadron(**{k: v for k, v in q.items() if k in keep}) for q in sq]
     return EnemyAirWing(w["base_asset_id"], types, len(sqns), sqns)
 

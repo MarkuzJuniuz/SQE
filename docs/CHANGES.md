@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.243, squadrons rest after a base-fall withdrawal and fly home on a retake (queue items h and h2)
+
+XO 2026-11-03 ("go", effort left to Crew Chief). Before: a squadron driven off a fallen field was flying again the next morning, and on a retake nobody went back. Now (a) a squadron that withdraws sits out 1 night if the new field is under 100 km away, else 2 (`ground.FALL_MOVE_NEAR_KM`, `FALL_MOVE_NIGHTS`; judgment calls from XO's "1 to 2 days"): its jets wait in `reserve` with `move_days` set, and `airwings.step` brings them back, with no rest boost and the 30% loss kept; red squadrons moved by `apply_red_fall` do the same (not the Tu-22M3 wing); (b) `Squadron.home_id` remembers the first field it was driven from, and `ground.return_squadrons` flies it home when that field is retaken (the same move nights; a squadron driven twice still goes back to the original). The player's squadron never sits out (he flies it) but does return. Old saves: no home field recorded, so nothing returns for squadrons that moved earlier. Not done: blue squadrons manning a TAKEN red field (the rest of item h; needs a design talk). Smoke: `check_115_fall_move`.
+
 ## v0.41.242, L3 bomber raid can fire (queue item o, step 1)
 
 XO 2026-11-03 ("go low"). XO had never seen the Mozdok Tu-22M3 raid on the carrier. A 30-day L3 sim on seeds 7, 8 and 9 held the wing all 90 days: red's estimate of blue stopping the raid sits at 0.25 to 0.28 (blue's carrier fighters always saturate the 8-jet cap), the safe window needed 0.12 or less, and the desperate test (score 1.0) never came. L3 `bomber_safe_p` 0.12 to 0.30 (`difficulty.py`), so the safe raid goes whenever the 8-day cooldown allows. Judgment call, no source (same as the rest of `bombers.py`); L2 stays at 0.06. Tunable, so no smoke check.

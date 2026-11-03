@@ -6022,6 +6022,53 @@ def check_114_blue_site_buildings(c):
     print("[blue site] 3 of 4 buildings dead -> health 25%")
 
 
+def check_115_fall_move(c):
+    """v0.41.243 (XO 2026-11-03, queue item h/h2): squadrons that withdraw from a fallen field sit out 1 to 2 nights (not the player's), remember their home field, and fly
+    home when it is retaken; red squadrons rest the same way after a red base falls. Strategic state only (the nights are a tunable)."""
+    import random as _rnd
+    from sqe import ground as _gr, airwings as _aw
+    from sqe.state import CampaignState as _CS
+    s = fresh_session(2, 5); st = s.state; d = s.d; pid = st.player.squadron_id
+    on = [q for q in st.squadrons.values() if st.bases[q.base_id].id == "senaki" and q.id != pid]
+    assert on, "senaki holds a squadron besides the player's"
+    before = {q.id: (q.available, q.authorized) for q in on}
+    st.ground["fallen"].append("senaki")
+    _gr.apply_fall(st, "senaki")
+    for q in on:
+        assert q.home_id == "senaki" and q.base_id != "senaki", "withdrawn, home remembered"
+        if before[q.id][0] > 0:
+            assert q.available == 0 and q.reserve > 0 and q.move_days in _gr.FALL_MOVE_NIGHTS, (q.available, q.reserve, q.move_days)
+    assert _CS.from_dict(st.to_dict()).squadrons[on[0].id].home_id == "senaki", "the home field survives a save"
+    rng = _rnd.Random(1)
+    for _ in range(max(_gr.FALL_MOVE_NIGHTS)):
+        _aw.step(st, d, rng)
+    assert all(q.move_days == 0 and q.reserve == 0 and (q.available > 0 or before[q.id][0] == 0) for q in on), "back in the line after their nights"
+    assert sum(q.available for q in on) > 0
+    st.ground["fallen"].remove("senaki")
+    ln = _gr.return_squadrons(st, "senaki")
+    assert ln and all(q.base_id == "senaki" and q.home_id == "" for q in on), ln
+    assert _gr.return_squadrons(st, "senaki") == [], "nothing returns twice"
+    # a squadron driven from a field and later from its refuge keeps the ORIGINAL home
+    q = on[0]; q.base_id = "kutaisi"; q.home_id = "senaki"
+    st.ground["fallen"].append("kutaisi"); _gr.apply_fall(st, "kutaisi")
+    assert q.home_id == "senaki", "home stays the first field"
+    # the player's squadron is never taken out of the line
+    pq = st.squadrons[pid]; pq.base_id = "senaki"; av = pq.available
+    st.ground["fallen"] = []; _gr.apply_fall(st, "senaki")
+    assert pq.reserve == 0 and pq.move_days == 0 and pq.available >= av - int(round(av * _gr.FALL_LOSS)) - 1
+    # red: a taken base's squadrons rest at the new field and come back
+    s2 = fresh_session(2, 5); st2 = s2.state; g2 = st2.ground
+    rb = next(r for r in g2["rbases"] if st2.enemy_air_at(r["id"]) is not None and st2.enemy_air_at(r["id"]).sqns)
+    w = st2.enemy_air_at(rb["id"]); ids = {q.id for q in w.sqns}
+    _gr.apply_red_fall(st2, rb)
+    moved = [q for x in st2.enemy_air for q in x.sqns if q.id in ids]
+    assert moved and any(q.move_days > 0 for q in moved), "red squadrons are on the move"
+    for _ in range(max(_gr.FALL_MOVE_NIGHTS)):
+        _aw.step(st2, s2.d, _rnd.Random(2))
+    assert all(q.move_days == 0 for q in moved) and any(q.available > 0 for q in moved)
+    print("[fall move] blue squadrons rest %s nights, remember home, return on retake; red rest too" % (_gr.FALL_MOVE_NIGHTS,))
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -6175,6 +6222,7 @@ CHECKS = [
     check_112_road_net,
     check_113_road_sites,
     check_114_blue_site_buildings,
+    check_115_fall_move,
 ]
 
 def _borrows(fn) -> set:

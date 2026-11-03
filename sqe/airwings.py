@@ -46,6 +46,12 @@ def step(state, d, rng) -> list:
             if gone:                                               # its rear field is no safer than a cratered one
                 u.reserve = int(u.reserve * 0.75)
                 continue
+            if getattr(u, "move_days", 0) > 0:                     # v0.41.243: a squadron that changed field (base fall or return) is on the move: no rest boost, back after its nights
+                u.move_days -= 1
+                if u.move_days == 0:
+                    u.available, u.reserve, u.rest_days = u.reserve, 0, 0
+                    out.append(f"{what[0].upper() + what[1:]} has settled in at its new field with {u.available} aircraft.")
+                continue
             u.rest_days += 1
             u.reserve = min(u.authorized, u.reserve + max(1, round(u.authorized * rep * REST_BOOST)))
             if u.rest_days >= RETURN_MIN_DAYS and u.reserve >= RETURN_FRAC * u.authorized:
