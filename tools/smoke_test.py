@@ -6069,6 +6069,50 @@ def check_115_fall_move(c):
     print("[fall move] blue squadrons rest %s nights, remember home, return on retake; red rest too" % (_gr.FALL_MOVE_NIGHTS,))
 
 
+def check_116_taken_fields(c):
+    """v0.41.244 (XO 2026-11-03, queue item h part 1, PR 1): a red field we take becomes a blue base whose defences go up in stages (AAA day 3, HAWK day 6, Patriot day 9).
+    Strategic state only (the days are tunables): the base and its three sites exist and start at 0, the stages arrive in order, the usual SAM orders leave a pending field alone,
+    a save keeps it, the full-map mission builds with it, it never counts toward the defeat rule, and the enemy retaking it removes it."""
+    from sqe import ground as _gr, sams as _sm, war as _war
+    from sqe.state import CampaignState as _CS
+    ses = fresh_session(2, 5); st = ses.state; g = st.ground
+    rb = g["rbases"][0]; rid = rb["id"]; z = rb["zone"]
+    g["blue"][z], g["red"][z] = 60.0, 0.0
+    _gr._check_red_bases(st)
+    assert rid in g["taken"] and rid in g["taken_fields"], g.get("taken_fields")
+    bid = g["taken_fields"][rid]["base"]; b = st.bases[bid]
+    assert b.kind.value == "AIRFIELD" and b.airport and b.defense == 0.0
+    sites = _sm.blue_sites(st, b); assert len(sites) == 3 and all(a.health == 0.0 for a in sites.values())
+    assert bid in _gr.pending_fields(st) and _gr.fallen_count(st) == 0
+    t0 = g["taken_day"][rid]
+    for day, want in ((t0 + 2, 0), (t0 + 3, 1), (t0 + 5, 1), (t0 + 6, 2), (t0 + 9, 3)):
+        st.day = day; _gr.taken_fields_step(st)
+        assert g["taken_fields"][rid]["stage"] == want, (day - t0, g["taken_fields"][rid])
+        assert [sites[k].health for k in ("aaa", "hawk", "pat")] == [1.0 if i < want else 0.0 for i in range(3)], (day - t0, [sites[k].health for k in ("aaa", "hawk", "pat")])
+        if want == 1:                                           # a field still being built is left to the timetable
+            import random as _r
+            _sm.blue_asks(st, ses.d, _r.Random(1)); _sm.rebuild_blue_sites(st, ses.d, _r.Random(1))
+            assert sites["hawk"].health == 0.0 and sites["pat"].health == 0.0
+    assert bid not in _gr.pending_fields(st) and b.defense == 1.0
+    assert _war.totals(st)["base_defense"] > 0.0
+    rt = _CS.from_dict(st.to_dict())
+    assert bid in rt.bases and rt.ground["taken_fields"][rid]["stage"] == 3 and len(_sm.blue_sites(rt, rt.bases[bid])) == 3
+    p_ = next(x for x in ses.packages() if ses.flyable(x))
+    ses.full_map = True
+    try:
+        ses.fly(p_.number, ses.flyable(p_)[0].id)
+    finally:
+        ses.full_map = False
+    for _ in range(5):
+        ses.plan_day(); ses.skip_day()                          # (replan: the day's plan was made before the field fell)
+    assert bid in st.bases and _gr.fallen_count(st) == 0
+    g["red"][z], g["blue"][z] = 60.0, 0.0                       # the enemy holds the sector again
+    ln = _gr._check_red_bases(st)
+    assert bid not in st.bases and rid not in g["taken_fields"] and not any(k.startswith(f"bsam_{bid}_") for k in st.blue_sams), ln
+    assert _gr.fallen_count(st) == 0
+    print("[taken field] %s: base + 3 sites at 0, stages AAA/HAWK/Patriot on days %s, save, mission, retake removes it" % (bid, [d for _, d in _gr.TAKEN_STAGES]))
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -6223,6 +6267,7 @@ CHECKS = [
     check_113_road_sites,
     check_114_blue_site_buildings,
     check_115_fall_move,
+    check_116_taken_fields,
 ]
 
 def _borrows(fn) -> set:

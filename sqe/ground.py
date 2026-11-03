@@ -41,6 +41,7 @@ RETREAT_SHARE = 0.6           # what a routed force saves by falling back
 FALL_LOSS = 0.3               # aircraft lost when a field falls and its squadrons leave
 FALL_MOVE_NEAR_KM = 100       # v0.41.243: a squadron that changes field is out of the line for the nights below (judgment call, XO: "1 to 2 days"): the ground crews move too
 FALL_MOVE_NIGHTS = (1, 2)     # (new field closer than FALL_MOVE_NEAR_KM, further)
+TAKEN_STAGES = (("aaa", 3), ("hawk", 6), ("pat", 9))      # v0.41.244 (XO 2026-11-03): a field we take grows its air defence in this order, on these days after the fall, alongside the 9-day takeover clock (judgment calls)
 SUPPLY_FLOOR, SUPPLY_NONE = 0.55, 0.85
 BLUE_SUPPLY_FLOOR = 0.35     # v0.41.174 (XO 2026-10-28): 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle). v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly (red 0.55, resupplied overland). Sim: a flying L3 did not lose at 0.30, an idle one lost 3 of 5; L2 unchanged (5 of 5 coalition wins in about a month). Judgment call, no public source
 SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (55% = about 11 days); no repair on a day it is struck
@@ -712,6 +713,7 @@ def resolve_day(state, d, rng) -> list:
             elif i + 1 < n and blue[i + 1] >= MIN_FORCE and state.day >= g.get("clock", 0):      # v0.41.143: not during the takeover clock
                 _advance(g, i + 1, "blue")
     lines += _check_red_bases(state)                     # v0.41.143: a base is taken (or retaken) on the state of the sectors before the day's reinforcements arrive
+    lines += taken_fields_step(state)                    # v0.41.244: the defences of the fields we hold go up stage by stage
     # reinforcements arrive at the zone in contact: Red's front-most zone, Blue's front-most (lowest-numbered) zone
     rz = max((i for i in range(n) if red[i] >= MIN_FORCE), default=None)
     bz = min((i for i in range(n) if blue[i] >= MIN_FORCE), default=n - 1)
@@ -823,6 +825,74 @@ def _forced_zone(state):
     return _base_zone(g, g.get("counter_id", ""))
 
 
+def taken_field_start(state, rid: str) -> list:
+    """v0.41.244 (XO 2026-11-03, queue item h part 1, PR 1): a red field we take becomes a blue base with no defences yet (`taken_field_step` builds them) and no squadrons
+    (a later PR). The base id is the field's id without the `ab_` (`sochi`); it is recorded in `ground["taken_fields"]`. Nothing happens for a field the level does not have."""
+    from .models import Base, BaseKind
+    from . import sams
+    g = state.ground
+    tf = g.setdefault("taken_fields", {})
+    a = state.assets.get(rid)
+    if a is None or rid in tf or not a.airport:
+        return []
+    bid = rid[3:] if rid.startswith("ab_") else rid
+    if bid not in state.bases:
+        state.bases[bid] = Base(bid, a.name, BaseKind.AIRFIELD, x=a.x, y=a.y, airport=a.airport, defense=0.0)
+    tf[rid] = {"base": bid, "stage": 0}
+    sams.ensure_blue_sams(state)                                       # three sites at health 0: nothing stands yet
+    return [f"   {a.name} becomes one of our fields: its air defence goes up over the next days"]
+
+
+def pending_fields(state) -> set:
+    """Ids of the taken fields whose defences are still going up (stage below the last): the usual SAM orders and rebuilds leave them alone."""
+    return {r["base"] for r in (state.ground or {}).get("taken_fields", {}).values() if r.get("stage", 0) < len(TAKEN_STAGES)}
+
+
+def taken_fields_step(state) -> list:
+    """Every night: a taken field gets its next defence stage when TAKEN_STAGES says so (low-level AAA, then HAWK, then Patriot, each to full health). A field
+    we already hold with no record (a save from before v0.41.244) is registered here, and catches up on the stages its age allows."""
+    from . import sams
+    g = state.ground or {}
+    lines = []
+    for rid in list(g.get("taken", [])):
+        if rid not in g.get("taken_fields", {}):
+            lines += taken_field_start(state, rid)
+    for rid, rec in sorted(g.get("taken_fields", {}).items()):
+        b = state.bases.get(rec["base"])
+        if b is None:
+            continue
+        age = state.day - g.get("taken_day", {}).get(rid, state.day)
+        sites = sams.blue_sites(state, b)
+        while rec["stage"] < len(TAKEN_STAGES) and age >= TAKEN_STAGES[rec["stage"]][1] and sites:
+            key = TAKEN_STAGES[rec["stage"]][0]
+            sites[key].health = 1.0
+            sams._sync(state, b)
+            lines.append(f"{b.name}: {sams.BLUE_SITES[key][0]} in place" + (" (the field's defences are complete)" if rec["stage"] == len(TAKEN_STAGES) - 1 else ""))
+            rec["stage"] += 1
+    return lines
+
+
+def taken_field_lose(state, rid: str) -> list:
+    """The enemy retakes a field we had taken: its squadrons (a later PR will put some there) withdraw like any fallen base, then the base and its three sites
+    are removed. It never entered `ground["fallen"]`, so it never counted toward the two-fallen-fields defeat rule (XO)."""
+    g = state.ground
+    rec = g.get("taken_fields", {}).pop(rid, None)
+    if rec is None:
+        return []
+    bid = rec["base"]
+    b = state.bases.get(bid)
+    if b is None:
+        return []
+    lines = []
+    if any(q.base_id == bid for q in state.squadrons.values()):
+        lines += apply_fall(state, bid)
+    for k in ("pat", "hawk", "aaa"):
+        state.blue_sams.pop(f"bsam_{bid}_{k}", None)
+    state.bases.pop(bid, None)
+    lines.append(f"{b.name} is lost to the enemy again; its defences are gone")
+    return lines
+
+
 def _check_red_bases(state) -> list:
     """A red base falls while we hold the sector on our side of it and the enemy has nothing there; it is retaken when the enemy holds that sector again."""
     g, lines = state.ground, []
@@ -837,6 +907,7 @@ def _check_red_bases(state) -> list:
             g["red_clock"] = state.day + RED_CLOCK_DAYS
             lines.append(f"{rb['name'].upper()} HAS FALLEN: our forces hold it. The next push waits for the takeover ({CLOCK_DAYS} days)")
             lines += apply_red_fall(state, rb)
+            lines += taken_field_start(state, rid)
             lines += story.beat(state, "fall_" + rid)
             c = g.get("counter")
             if rid == g.get("counter_id") and c is None:
@@ -850,6 +921,7 @@ def _check_red_bases(state) -> list:
             if a is not None:
                 a.health = max(a.health, 0.5)
             release_sites(state, rid)
+            lines += taken_field_lose(state, rid)
             c = g.get("counter")
             if c is not None and rid == g.get("counter_id"):
                 c["used"] = True

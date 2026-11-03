@@ -466,7 +466,7 @@ def blue_defence(state, d) -> list:
     """Airfield defences repair by supply; a fallen field does not. (v0.41.67: the old "lend a battery" is gone: see blue_asks.)"""
     from . import ground
     sup = ground.supply(state, "blue") if ground.active(state) else 1.0
-    fallen = set((state.ground or {}).get("fallen", []))
+    fallen = set((state.ground or {}).get("fallen", [])) | ground.pending_fields(state)          # v0.41.244: a taken field's defences go up on the stage timetable
     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD" and b.id not in fallen]
     for b in fields:
         shift_field(state, b, BLUE_REPAIR * sup)          # every standing site; a destroyed one waits for rebuild_blue_sites
@@ -508,7 +508,7 @@ def blue_asks(state, d, rng: random.Random) -> list:
             r["down"].pop(a.id, None)
             _sync(state, b)
             lines.append(f"A {BLUE_SITES[o['key']][0]} battery from {o['from_name']} arrived at {b.name}")
-    fallen = set((state.ground or {}).get("fallen", []))
+    fallen = set((state.ground or {}).get("fallen", [])) | ground.pending_fields(state)          # v0.41.244: ...and no orders to or from a field still being built
     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD" and b.id not in fallen and blue_sites(state, b)]
     busy = _blue_asked(state)
     sup = ground.supply(state, "blue") if ground.active(state) else 1.0
@@ -539,7 +539,7 @@ def rebuild_blue_sites(state, d, rng: random.Random) -> list:
     from . import ground
     track(state)
     r = _rec(state)
-    fallen = set((state.ground or {}).get("fallen", []))
+    fallen = set((state.ground or {}).get("fallen", [])) | ground.pending_fields(state)          # v0.41.244
     p = float(getattr(d, "blue_rebuild", 0.0)) * (ground.supply(state, "blue") if ground.active(state) else 1.0)
     busy = _blue_asked(state)                                                     # a battery is on its way there: no new build
     cands = sorted((a for aid, day0 in r["down"].items() for a in [state.blue_sams.get(aid)]
