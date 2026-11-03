@@ -5603,6 +5603,7 @@ def check_102_persistent_objects(c):
     assert sup(15) <= stat, ("every live supply site inside the radius is built", sup(15) - stat)
     n15 = len(stat); s.abort()
     s.settings.merge_radius_nm = 50
+    s.settings.merge_max_units = 700                              # v0.41.241: with the road sites 50 nm holds many more sites, and the default limit could be used up before the supply circle (it comes last)
     res = s.fly(pk.number, fl.id); ships, stat = _scan(s)
     assert sup(50) <= stat and len(stat) >= n15, ("a bigger radius builds more", n15, len(stat), sup(50) - stat)
     u50 = res.counts["units"]; s.abort()
