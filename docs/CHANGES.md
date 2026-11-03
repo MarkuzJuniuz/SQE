@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.236, a pulled-back SAM spends a travel day and cannot regenerate on it
+
+XO 2026-11-03 (low, "go"). `sams.TRAVEL_DAYS` 1 and `sams.travelling()`: when a badly hurt long-range site pulls back (`sams.retreat`), or returns home, the next day it is on the road and `war.py`'s nightly regeneration skips it (record `state.sams["travel"]`, asset id to the day it set out; saves without the key load fine). Regen itself is rule-based (`sam_repair` 3 / 6 / 8% a night by level), unchanged. The 3 to 6 nm scoot of a mobile site (`relocate`) stays instant (a local shuffle). Judgment call: one day, no public figure. The wider audit of other instant movers is still open (squadrons on a base fall, `ground.py` 932 and 318 not yet read). Smoke: compile check plus `check_47_support_cap_pull_back` only (travel-day asserts added). XO's own commits: none.
+
 ## v0.41.234, smoke check_103: the F-15C hook no longer mentions the engine shutdown event
 
 XO 2026-11-02 ("fix it"; XO runs the smoke test himself, so none was run here). `check_103_ecm_hookup` still asserted that the FC3 (f10) hook text contains `S_EVENT_ENGINE_SHUTDOWN`; v0.41.232 unwired the engine events, so the assert failed. It now asserts the opposite (the text must NOT contain it). Test only, no behaviour change. The assertion's other terms were checked by hand against the generated hook text (all pass); the lupa replay below it was read and already matches v0.41.232, but not run. XO's own commits: none.
