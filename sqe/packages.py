@@ -184,6 +184,7 @@ class PackageBuilder:
     def __init__(self, state: CampaignState, d=None):
         self.state, self.d = state, d
         self._tk, self._ctx = {}, (None, None)
+        self.short = []                                  # v0.41.247: (role, x, y) of every slot of the day that no squadron could fill (ground.note_shortfall)
 
     def target_xy(self, obj: Objective):
         if obj.type in _FLEET:
@@ -313,12 +314,14 @@ class PackageBuilder:
                 continue
             sq = psq if i == player_idx else self._pick_squadron(slot, tx, ty, ledger, lead_service)
             if sq is None:
+                self.short.append((slot.role.value, tx, ty))
                 continue
             count = min(slot.size, MAX_FLIGHT, ledger.free[sq.id])
             count -= count % 2
             if i == player_idx and st.bases[sq.base_id].kind == BaseKind.CARRIER:
                 count = min(count, CARRIER_PLAYER_FLIGHT_MAX)
             if count < 2:
+                self.short.append((slot.role.value, tx, ty))
                 continue
             ledger.free[sq.id] -= count
             lead_service = lead_service or AIRCRAFT[sq.aircraft].service

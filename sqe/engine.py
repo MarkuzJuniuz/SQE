@@ -176,6 +176,7 @@ class Session:
 
         def build_all(forced: set) -> list:
             sweeps.clear()
+            pb.short = []
             # Packages launch at different times of day, so an aircraft can fly more than one sortie: each package sees every
             # serviceable airframe, but no squadron is asked for more than two sorties per airframe per day.
             daily = {sid: max(0, 2 * q.available - bp["used"].get(sid, 0)) for sid, q in st.squadrons.items()}
@@ -249,6 +250,7 @@ class Session:
         pkgs = build_all(set(rng.sample(range(len(objs)), min(len(objs), 5))))     # your squadron is tasked on a handful of them
         if mine(pkgs) < 3:
             pkgs = build_all(set(range(len(objs))))
+        ground.note_shortfall(st, pb.short)                  # v0.41.247: the slots nobody could fill today (a taken field's new squadron follows the need)
         pkgs = self._drop_orphan_followers(pkgs)             # v0.41.158: a strike behind a SEAD whose package could not be crewed has nothing to go in behind
         # same-area packages are launched in the same wave (so they can be folded together), waves spread through the day
         from .packages import packages_linked
