@@ -6052,10 +6052,14 @@ def check_115_fall_move(c):
     q = on[0]; q.base_id = "kutaisi"; q.home_id = "senaki"
     st.ground["fallen"].append("kutaisi"); _gr.apply_fall(st, "kutaisi")
     assert q.home_id == "senaki", "home stays the first field"
-    # the player's squadron is never taken out of the line
-    pq = st.squadrons[pid]; pq.base_id = "senaki"; av = pq.available
+    # the player's squadron sits out its nights like any other (v0.41.246, XO)
+    pq = st.squadrons[pid]; pq.base_id = "senaki"; pq.home_id = ""; av = pq.available
     st.ground["fallen"] = []; _gr.apply_fall(st, "senaki")
-    assert pq.reserve == 0 and pq.move_days == 0 and pq.available >= av - int(round(av * _gr.FALL_LOSS)) - 1
+    assert pq.reserve > 0 and pq.available == 0 and pq.move_days in _gr.FALL_MOVE_NIGHTS, (pq.reserve, pq.available, pq.move_days)
+    for _ in range(max(_gr.FALL_MOVE_NIGHTS)):
+        _aw.step(st, d, rng)
+    assert pq.available > 0 and pq.reserve == 0 and pq.move_days == 0, "the player's squadron is back in the line"
+    assert av - int(round(av * _gr.FALL_LOSS)) - 1 <= pq.available
     # red: a taken base's squadrons rest at the new field and come back
     s2 = fresh_session(2, 5); st2 = s2.state; g2 = st2.ground
     rb = next(r for r in g2["rbases"] if st2.enemy_air_at(r["id"]) is not None and st2.enemy_air_at(r["id"]).sqns)
@@ -6111,6 +6115,56 @@ def check_116_taken_fields(c):
     assert bid not in st.bases and rid not in g["taken_fields"] and not any(k.startswith(f"bsam_{bid}_") for k in st.blue_sams), ln
     assert _gr.fallen_count(st) == 0
     print("[taken field] %s: base + 3 sites at 0, stages AAA/HAWK/Patriot on days %s, save, mission, retake removes it" % (bid, [d for _, d in _gr.TAKEN_STAGES]))
+
+
+def check_117_first_mover(c):
+    """v0.41.246 (XO 2026-11-03, queue item h part 1, PR 2): once a taken field's defences are complete and day 11 has passed, one F-16C squadron moves in: the PLAYER's squadron
+    first (when it is an F-16C), else the squadron of the most over-capacity field; it keeps its name, sits out its move nights, remembers its home, and goes home when the enemy
+    retakes the field. The F-15Cs stay. Strategic state only (the day and the nights are tunables); the mission builds from the new field."""
+    import random as _rnd
+    from sqe import ground as _gr, airwings as _aw, sams as _sm
+    from sqe.state import CampaignState as _CS
+    for who in ("player", "other"):
+        ses = fresh_session(2, 5); st = ses.state; g = st.ground; pid = st.player.squadron_id
+        if who == "other":
+            st.player.squadron_id = pid = "fs_94"                  # an F-15C pilot: the F-16C squadron of the fullest field moves instead
+        rb = g["rbases"][0]; rid = rb["id"]; z = rb["zone"]
+        g["blue"][z], g["red"][z] = 60.0, 0.0
+        _gr._check_red_bases(st)
+        bid = g["taken_fields"][rid]["base"]; b = st.bases[bid]; t0 = g["taken_day"][rid]
+        st.day = t0 + 10; _gr.taken_fields_step(st)
+        assert not g["taken_fields"][rid].get("moved"), "not before day 11"
+        st.day = t0 + _gr.TAKEN_FIRST_MOVER_DAY; ln = _gr.taken_fields_step(st)
+        mv = g["taken_fields"][rid].get("moved"); assert mv and ln, g["taken_fields"][rid]
+        q = st.squadrons[mv]
+        assert q.aircraft == "F-16C" and q.base_id == bid and q.home_id in ("senaki", "kutaisi", "kobuleti", "batumi"), (q.id, q.base_id, q.home_id)
+        if who == "player":
+            assert mv == pid, "the player's squadron goes first"
+        else:
+            assert mv != pid and st.squadrons["fs_94"].base_id != bid and st.squadrons["fs_27"].base_id != bid, "the F-15Cs stay"
+        assert q.available == 0 and q.reserve > 0 and q.move_days in _gr.FALL_MOVE_NIGHTS, (q.available, q.reserve, q.move_days)
+        _gr.taken_fields_step(st); assert sum(1 for x in st.squadrons.values() if x.base_id == bid) == 1, "one mover per field"
+        for _ in range(max(_gr.FALL_MOVE_NIGHTS)):
+            _aw.step(st, ses.d, _rnd.Random(3))
+        assert q.available > 0 and q.reserve == 0
+        rt = _CS.from_dict(st.to_dict())
+        assert rt.squadrons[mv].base_id == bid and rt.squadrons[mv].home_id == q.home_id and rt.ground["taken_fields"][rid]["moved"] == mv
+        if who == "player":
+            ses.plan_day()                                            # the day's plan with the squadron at the new field
+            pk = [x for x in ses.packages() if ses.flyable(x)]
+            assert pk, "a flyable package from the new field"
+            ses.full_map = True
+            try:
+                rr = ses.fly(pk[0].number, ses.flyable(pk[0])[0].id)
+            finally:
+                ses.full_map = False
+            assert rr is not None
+            for _ in range(3):
+                ses.plan_day(); ses.skip_day()
+        g["red"][z], g["blue"][z] = 60.0, 0.0                        # the enemy retakes the field
+        ln = _gr._check_red_bases(st)
+        assert bid not in st.bases and q.base_id in st.bases and q.base_id != bid and q.home_id == "" and _gr.fallen_count(st) == 0, (ln, q.base_id, q.home_id)
+    print("[first mover] player first, else the fullest field's F-16C; F-15Cs stay; the player's squadron rests too; mission builds from the new field; retake sends it home")
 
 
 CHECKS = [
@@ -6268,6 +6322,7 @@ CHECKS = [
     check_114_blue_site_buildings,
     check_115_fall_move,
     check_116_taken_fields,
+    check_117_first_mover,
 ]
 
 def _borrows(fn) -> set:
