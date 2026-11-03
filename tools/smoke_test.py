@@ -2259,7 +2259,7 @@ def check_31z_bomber_trump_card(c):
     dec = bombers.decide(st, d)
     assert dec["mode"] in ("hold", "safe", "desperate"), dec
     if dec["mode"] != "hold":
-        assert dec["n"] >= 4 and dec["escorts"] >= 2 * dec["n"], dec
+        assert dec["n"] >= 4 and dec["escorts"] == bombers.escorts_for(dec["n"]), dec
     assert bombers.decide(st, _get(1))["mode"] == "hold"
     if dec["mode"] != "hold":
         bombers.note_launch(st)
@@ -2360,7 +2360,7 @@ def check_31zc_raid_quiet_and_hit(c):
         assert not bombers.is_quiet(st), "the day after is not quiet"
         sp = [p for p in ses.packages() if p.extra.get("setpiece")]
         assert sp, "the staged raid launches the next day"
-        assert sp[0].extra["bombers"] >= 4 and sp[0].extra["escorts"] >= 2 * sp[0].extra["bombers"]
+        assert sp[0].extra["bombers"] >= 4 and sp[0].extra["escorts"] == (sp[0].extra["bombers"] + 1) // 2
         assert any(f.tag == "CVCAP" for f in sp[0].flights) or not (st.barcap.get("blue_flights") or []), "the carrier CAP in its window flies with the setpiece"
         # the hit: Level 3 only, then the deck is out
         d3, d2 = ses.d, __import__("sqe.difficulty", fromlist=["get"]).get(2)

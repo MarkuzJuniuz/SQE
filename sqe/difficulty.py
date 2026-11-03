@@ -31,7 +31,7 @@ class Difficulty:
     armor_columns: int = 3
     red_squadron_max: int = 12           # v0.41.52: most jets in one red squadron; a wing is cut into ceil(jets / this) typed squadrons (judgment call, no sourced Russian figure)
     bomber_wing: int = 0                 # strategic bombers (Tu-22M3) at Mozdok
-    bomber_escort_wing: int = 0          # v0.41.106: the Mozdok escort squadron (Su-27, escort-only), 2 escorts per bomber at the biggest raid (judgment call)
+    bomber_escort_wing: int = 0          # v0.41.106: the Mozdok escort squadron (Su-27, escort-only), 1 escort per 2 bombers at the biggest raid (v0.41.249; judgment call)
     bomber_policy: str = "none"          # none | desperate | normal (v0.41.105: see bombers.py; "none" = the wing never raids)
     bomber_safe_p: float = 0.0           # v0.41.105: red sends a 4-ship raid only if its estimate of blue stopping it is at most this (0 = only when desperate); judgment calls
     counterstrike: float = 0.3           # daily chance (x enemy air strength) that the enemy hits a coalition base's defences
@@ -86,7 +86,7 @@ LEVELS: dict[int, Difficulty] = {
                   sam_variants=["SA-2", "SA-3", "SA-6", "SA-11", "AAA"], sam_sites_per_cluster=3, iads=0.55,
                   enemy_skill="Good", loss_rate=0.06, base_damage=0.35, variance=0.8,
                   friendly_replenish=0.08, enemy_replenish=0.05, asset_repair=0.04, sam_repair=0.06,
-                  friendly_scale=1.0, enemy_cap_per_air=0.15, counterstrike=0.30, bomber_wing=11, bomber_escort_wing=8, bomber_policy="desperate", bomber_safe_p=0.06,
+                  friendly_scale=1.0, enemy_cap_per_air=0.15, counterstrike=0.30, bomber_wing=14, bomber_escort_wing=8, bomber_policy="desperate", bomber_safe_p=0.06,
                   forward_sams=("SA-8", "SA-8"), garrison_chance=0.6, garrison_size=0.8, react_chance=0.35, react_ratio=(0.6, 1.1),
                   ground_red=(70, 55, 15, 0, 0), ground_blue=(0, 15, 60, 70, 50), red_attack=0.45, red_reinf=5.6, blue_reinf=7.0, raid_rate=0.4, red_surge=0.03, raid_wave=0.10, raid_wave_mult=1.5, red_supply_strikes=2, red_rear_feed=0.02, raid_arm=1.0, arm_cap=2, arm_cap_free=8, raid_surprise=0.35, emerg_chance=0.09, raid_size=(2, 4), sam_rebuild=0.04, sam_scoot=0.30,
                   raid_mix=(0.20, 0.15, 0.25), blue_garrison_size=0.8, blue_rebuild=0.15, sam_retreat=0.8, sead_valve=3, air_retreat=0.8, road_sites=100, road_open=0.20, road_battalion=0.08),
