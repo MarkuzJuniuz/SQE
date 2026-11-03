@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.253, runway probe: raiders immortal, victims on hold-fire (tool only)
+
+XO 2026-11-03 (his first run: none of the Su-24s were alive). `tools/runway_probe.py`: the red Su-24M raiders are immortal and the blue F-16C pairs get weapons-hold and no engage task, so the run measures the runway and not a fight. Compile check; the .miz was rebuilt and its groups read back.
+
 ## v0.41.252, approach aids for the five fields we can take (kneeboard data only)
 
 XO 2026-11-03 (Mission Editor airfield panels). `kneeboard.NAV` gains Sukhumi-Babushara (NDB 489/995 on RWY 30), Gudauta (none), Sochi-Adler (ILS 111.10 RWY 06), Gelendzhik (VOR 114.30) and Krymsk (NDB 408/803); no ILS but Sochi's, no TACAN anywhere. A taken field's mission now prints its recovery row like the four home fields. Krymsk's RSBN and PRMG (Soviet aids) are left out. Read from the panel screenshots (small print): XO to confirm the numbers. Compile check and the kneeboard smoke section.

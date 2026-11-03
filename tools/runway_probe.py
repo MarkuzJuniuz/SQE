@@ -124,6 +124,7 @@ def make_probe(out_path) -> Path:
             ex, ey = at(270, 35)
             g.add_waypoint(_pt(m, ex, ey), 12000 * FT, 450 * KT, "EGRESS")
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
+            g.points[0].tasks.append(task.SetImmortalCommand(True))          # v0.41.253: the probe measures the runway, so the raiders cannot be shot down
             for j, u in enumerate(g.units, 1):
                 u.name = f"RWY-BOMB-{k + 1}-{j}"
                 u.pylons = {i: dict(v) for i, v in load.items()}
@@ -146,6 +147,8 @@ def make_probe(out_path) -> Path:
                 g = m.flight_group(usa, name, planes.F_16C_50, None, _pt(m, sx, sy), altitude=6000 * FT, speed=350 * KT, maintask=task.CAP, group_size=2)
                 g.land_at(ap)
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
+            g.points[0].tasks.append(task.OptROE(task.OptROE.Values.WeaponHold))          # v0.41.253: the victims never engage the raiders
+            g.points[0].tasks = [t_ for t_ in g.points[0].tasks if getattr(t_, "Id", "") not in ("EngageTargets",)]
             for j, u in enumerate(g.units, 1):
                 u.name = f"{name}-{j}"
             g.late_activation = True
