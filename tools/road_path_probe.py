@@ -30,6 +30,14 @@ PAIRS = [                     # (label, airport name, airport name): short, medi
     ("Mozdok-Nalchik", "Mozdok", "Nalchik"),
     ("Krymsk-Sochi", "Krymsk", "Sochi-Adler"),            # the long one: the coast road
     ("Kutaisi-Mozdok", "Kutaisi", "Mozdok"),              # across the mountains: expect no road or a very long detour
+    ("Senaki-Vaziani", "Senaki-Kolkhi", "Vaziani"),         # XO 2026-11-03: the roads east of Senaki-Kolkhi toward Vaziani (blue supply spots)
+    ("Kutaisi-Vaziani", "Kutaisi", "Vaziani"),
+    ("Kutaisi-Tbilisi", "Kutaisi", "Tbilisi-Lochini"),
+    ("Tbilisi-Vaziani", "Tbilisi-Lochini", "Vaziani"),
+    ("Beslan-MinVody", "Beslan", "Mineralnye Vody"),        # the far north side of the mountains (red supply spots)
+    ("Nalchik-MinVody", "Nalchik", "Mineralnye Vody"),
+    ("Mozdok-MinVody", "Mozdok", "Mineralnye Vody"),
+    ("Tbilisi-Beslan", "Tbilisi-Lochini", "Beslan"),        # over the pass (the Georgian Military Road, if DCS has it)
 ]
 
 PROBE_LUA = r'''
