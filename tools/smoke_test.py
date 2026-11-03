@@ -4738,7 +4738,7 @@ def check_75_mass_raid_build(c):
         assert ex.get("bombers", 0) >= 8 and ex.get("mass") and ex.get("escorts", 0) >= ex["bombers"] // 2, ex
         mz = _z.ZipFile(st.pending["miz"]).read("mission").decode()
         _nb, _nu = len(set(_re.findall(r"RAID-B-\d+", mz))), len(_re.findall(r'\["unitId"\]', mz))
-        assert _nb == ex["bombers"] and _nu <= 275, (_nb, _nu, ex)       # the regex counts statics too; the builder enforces its own 250
+        assert _nb == ex["bombers"] and _nu <= 330, (_nb, _nu, ex)       # the regex counts every static building whole (road sites add some, v0.41.241); the builder enforces its own 250 with statics at carcass weight
         assert any("Raid Sweep" in x for x in _re.findall(r"Raid Sweep \d", mz)), "a mass raid opens with a sweep"
     finally:
         d.raid_wave = _w0; _r.emergency_happens = _em; _eng.AI_ONLY = _aio; _eng.RAID_SCRAMBLES = _rs
