@@ -3621,7 +3621,7 @@ def check_47_support_cap_pull_back(c):
                 for _g in _cn.get("vehicle", {}).get("group", {}).values():
                     if _g["name"] == _se_.objective.target_id: _site = (_g["x"], _g["y"])
                 for _g in _cn.get("plane", {}).get("group", {}).values():
-                    if _g["task"] == "SEAD": _seads.append(_g)
+                    if _g["task"] == "SEAD" and not _g["name"].startswith("Raid"): _seads.append(_g)          # (a red raid scramble in the same mission has SEAD groups of its own)
         assert _site and len(_seads) == 2, "two SEAD flights and the site"
         for _g in _seads:
             _pts = {p_.get("name"): p_ for p_ in _g["route"]["points"].values()}
