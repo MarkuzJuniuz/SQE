@@ -5312,7 +5312,7 @@ def check_96_site_spots(c):
             xy = (round(a.x), round(a.y))
             if a.kind.value == "SAM" and a.id.startswith("sam_"):
                 tot += 1; on += xy in pools["sam"]
-            elif a.kind.value in ("FUEL", "DEPOT"):
+            elif a.kind.value in ("FUEL", "DEPOT") and not a.id.startswith("rsup_"):          # (the road sites sit on the "road" spots, check_113)
                 tots += 1; ons += xy in pools["supply"]
             elif a.id.startswith("armor_"):
                 totc += 1; onc += xy in pools["ground"]
