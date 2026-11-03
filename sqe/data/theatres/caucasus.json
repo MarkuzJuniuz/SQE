@@ -38,6 +38,7 @@
         "distance_m": 160000,
         "carrier_standoff_nm": 100
     },
+    "road_blue_airports": ["Senaki-Kolkhi", "Kutaisi", "Kobuleti", "Batumi", "Tbilisi-Lochini", "Soganlug", "Vaziani"],
     "blue_fields": [
         {
             "id": "senaki",

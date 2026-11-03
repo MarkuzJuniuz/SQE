@@ -78,6 +78,15 @@ SUPPLY_BUILDINGS = {      # v0.41.192: what a supply site looks like on the map,
     AssetKind.DEPOT: [statics.Warehouse.Warehouse, statics.Warehouse._Ammunition_depot, statics.Warehouse.Warehouse, statics.Warehouse._Ammunition_depot],
     AssetKind.FUEL: [statics.Warehouse.Tank, statics.Warehouse.Tank_2, statics.Warehouse.Tank_3, statics.Warehouse.Warehouse],
 }
+SUPPLY_PLANTS = {         # v0.41.241 (queue item i): the big sites of the road net look different. Keyed by the asset's variant; a refinery is a FUEL site, a factory a DEPOT one.
+    "REFINERY": [statics.Fortification.Chemical_tank_A, statics.Fortification.Fuel_tank, statics.Warehouse.Tank, statics.Warehouse.Tank_2, statics.Fortification.Boiler_house_A],
+    "FACTORY": [statics.Fortification.Workshop_A, statics.Fortification.Tech_combine, statics.Fortification.Hangar_A, statics.Fortification.Repair_workshop, statics.Warehouse.Warehouse],
+}
+
+
+def supply_parts(kind, variant: str = "") -> list:
+    """The static buildings of a supply site: the plant's own set for a refinery / factory, else the kind's (fuel farm / depot)."""
+    return SUPPLY_PLANTS.get(variant) or SUPPLY_BUILDINGS.get(kind) or []
 
 
 class RaidSpawns:
@@ -383,11 +392,11 @@ class RaidSpawns:
             rtb.link_unit = rtb.helipad = self.ship[base.id].units[0].id
 
     # ---- what the raiders are going for: the friendly garrison, supply site or troops they will bomb ---------------------------
-    def _place_buildings(self, country, aim, kind, cx, cy, hdg, scale=1.0):
+    def _place_buildings(self, country, aim, kind, cx, cy, hdg, scale=1.0, variant=""):
         """v0.41.192 (XO 2026-10-29: a fuel farm or depot is buildings, not trucks): the static buildings of a supply site, for either side. Returns their
         unit names `<aim>|b<n>` (the debrief reports a static's death by its UNIT name, so the unit is named, not only the group). `scale` < 1 leaves out
         some of them (a site already damaged); at least one stays."""
-        parts = SUPPLY_BUILDINGS.get(kind) or []
+        parts = supply_parts(kind, variant)
         n = max(1, round(len(parts) * scale)) if parts else 0
         names = []
         for k, vt in enumerate(parts[:n]):
@@ -407,8 +416,8 @@ class RaidSpawns:
         pt = lambda x, y: mapping.Point(x, y, self.t)
         if kind == "supply":
             a = st.blue_assets[aim]
-            names = self._place_buildings(self.usa, aim, a.kind, a.x, a.y, r.randint(0, 359))
-            manifest.add("blue_site", aim, names, label=a.name)
+            names = self._place_buildings(self.usa, aim, a.kind, a.x, a.y, r.randint(0, 359), variant=a.variant)
+            manifest.add("blue_site", aim, names, label=a.name, health_before=a.health)          # v0.41.241: the debrief reads the buildings back
             self._supply_built.add(aim)
             return
         if kind == "sector":
@@ -431,7 +440,7 @@ class RaidSpawns:
         names = []
         for k, u in enumerate(g.units, 1):
             u.name = f"{aim}|{k}"; names.append(u.name)
-        manifest.add("blue_site", aim, names, label=label)
+        manifest.add("blue_site", aim, names, label=label, health_before=(st.blue_assets[aim].health if aim in st.blue_assets else None))
 
     @staticmethod
     def _arm_pts(path, dx, dy, fx=None, fy=None):

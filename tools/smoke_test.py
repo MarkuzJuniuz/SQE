@@ -3621,7 +3621,7 @@ def check_47_support_cap_pull_back(c):
                 for _g in _cn.get("vehicle", {}).get("group", {}).values():
                     if _g["name"] == _se_.objective.target_id: _site = (_g["x"], _g["y"])
                 for _g in _cn.get("plane", {}).get("group", {}).values():
-                    if _g["task"] == "SEAD": _seads.append(_g)
+                    if _g["task"] == "SEAD" and not _g["name"].startswith("Raid"): _seads.append(_g)          # (a red raid scramble in the same mission has SEAD groups of its own)
         assert _site and len(_seads) == 2, "two SEAD flights and the site"
         for _g in _seads:
             _pts = {p_.get("name"): p_ for p_ in _g["route"]["points"].values()}
@@ -4285,7 +4285,8 @@ def check_64_supply_loop(c):
     kinds = (_AK.FUEL, _AK.DEPOT)
     for lv, n_red in ((1, 4), (2, 12), (3, 12)):
         st = fresh_session(lv, 5).state
-        assert st.ground["sup_n"] == {"red": n_red, "blue": 6} and _gr.supply(st, "blue") == 1.0, (lv, st.ground["sup_n"])
+        rd = st.ground["road"]                                          # v0.41.241: the road sites (road_sites.py) are part of the figure
+        assert st.ground["sup_n"] == {"red": n_red + rd["red"], "blue": 6 + rd["blue"]} and _gr.supply(st, "blue") == 1.0, (lv, st.ground["sup_n"], rd)
         assert "bdepot_rear" in st.blue_assets and "bdepot_fwd" in st.blue_assets
     s = fresh_session(3, 5); st = s.state; g = st.ground
     red_ids = [a.id for a in st.assets.values() if a.kind in kinds]
@@ -4325,11 +4326,11 @@ def check_64_supply_loop(c):
     sam = next(x for x in st2.assets.values() if x.kind == _AK.SAM and x.id.startswith("sam_sochi"))
     sam.x, sam.y, sam.health, sam.variant = site.x + 5000, site.y, 1.0, "SA-6"
     st2.front = 2
-    objs = _war.ObjectivePlanner(_gd(2)).plan(st2, _rnd.Random(2), limit=40)
+    objs = _war.ObjectivePlanner(_gd(2)).plan(st2, _rnd.Random(2), limit=400)
     o = next((o for o in objs if getattr(o, "target_id", "") == "depot_sochi"), None)
     assert o is not None and o.aim == "SEAD" and "SEAD escort" in o.description, "an escortable cover sends the strike with a HARM escort"
     sam.variant = "SA-10"
-    objs = _war.ObjectivePlanner(_gd(2)).plan(st2, _rnd.Random(2), limit=40)
+    objs = _war.ObjectivePlanner(_gd(2)).plan(st2, _rnd.Random(2), limit=400)
     # v0.41.158: it is offered only behind the SEAD: the strike carries the site in `after` and the same list holds that site's DEAD job
     for o in objs:
         if getattr(o, "target_id", "") == "depot_sochi" and o.type.value == "STRIKE":
@@ -4592,7 +4593,7 @@ def check_70_overview_detail(c):
     st.log.append(f"[day {st.day}] SUKHUMI HAS FALLEN: our forces hold it"); st.log.append("[day 1] nothing to see here")
     n = _od.ground_notes(st); assert any("next attack in about 4 days" in x for x in n) and any("taken on day" in x for x in n), n
     assert _od.history(st) == [st.log[-2]], _od.history(st)
-    sr = _od.supply_rows(st); assert len(sr) == 12 + 6 and {r[0] for r in sr} == {"Coalition", "Russia"} and all(r[3] == "intact" for r in sr), sr[:3]
+    sr = _od.supply_rows(st); assert len(sr) == 12 + 6 + st.ground["road"]["red"] + st.ground["road"]["blue"] and {r[0] for r in sr} == {"Coalition", "Russia"} and all(r[3] == "intact" for r in sr), sr[:3]
     a = next(x for x in st.assets.values() if x.kind in _gr.SUPPLY_KINDS)
     g["sup_h"][a.id] = 1.0; a.health = 0.5
     assert next(r for r in _od.supply_rows(st) if r[1] == a.name)[3].startswith("struck"), "struck since last night: no repair tonight"
@@ -4737,7 +4738,7 @@ def check_75_mass_raid_build(c):
         assert ex.get("bombers", 0) >= 8 and ex.get("mass") and ex.get("escorts", 0) >= ex["bombers"] // 2, ex
         mz = _z.ZipFile(st.pending["miz"]).read("mission").decode()
         _nb, _nu = len(set(_re.findall(r"RAID-B-\d+", mz))), len(_re.findall(r'\["unitId"\]', mz))
-        assert _nb == ex["bombers"] and _nu <= 275, (_nb, _nu, ex)       # the regex counts statics too; the builder enforces its own 250
+        assert _nb == ex["bombers"] and _nu <= 330, (_nb, _nu, ex)       # the regex counts every static building whole (road sites add some, v0.41.241); the builder enforces its own 250 with statics at carcass weight
         assert any("Raid Sweep" in x for x in _re.findall(r"Raid Sweep \d", mz)), "a mass raid opens with a sweep"
     finally:
         d.raid_wave = _w0; _r.emergency_happens = _em; _eng.AI_ONLY = _aio; _eng.RAID_SCRAMBLES = _rs
@@ -5311,7 +5312,7 @@ def check_96_site_spots(c):
             xy = (round(a.x), round(a.y))
             if a.kind.value == "SAM" and a.id.startswith("sam_"):
                 tot += 1; on += xy in pools["sam"]
-            elif a.kind.value in ("FUEL", "DEPOT"):
+            elif a.kind.value in ("FUEL", "DEPOT") and not a.id.startswith("rsup_"):          # (the road sites sit on the "road" spots, check_113)
                 tots += 1; ons += xy in pools["supply"]
             elif a.id.startswith("armor_"):
                 totc += 1; onc += xy in pools["ground"]
@@ -5602,6 +5603,7 @@ def check_102_persistent_objects(c):
     assert sup(15) <= stat, ("every live supply site inside the radius is built", sup(15) - stat)
     n15 = len(stat); s.abort()
     s.settings.merge_radius_nm = 50
+    s.settings.merge_max_units = 700                              # v0.41.241: with the road sites 50 nm holds many more sites, and the default limit could be used up before the supply circle (it comes last)
     res = s.fly(pk.number, fl.id); ships, stat = _scan(s)
     assert sup(50) <= stat and len(stat) >= n15, ("a bigger radius builds more", n15, len(stat), sup(50) - stat)
     u50 = res.counts["units"]; s.abort()
@@ -5678,6 +5680,8 @@ def check_105_no_garrison_cas_beyond_mountains(c):
     from sqe.models import AssetKind as _AK
     s = mk(); s.new("Coast garrisons", "F-16C", 3, seed=11); st = s.state
     gar = [a for a in st.assets.values() if a.kind == _AK.ARMOR and a.variant == "GARRISON" and not a.id.startswith(("rfwd_", "bfwd_"))]
+    road_far = {a.id for a in gar if a.id.startswith("rgar_sup_") and not _g.near_front(st, a.x, a.y)}          # v0.41.241: a road site's battalion follows the same rule (named for its nearest town)
+    gar = [a for a in gar if not a.id.startswith("rgar_sup_")]
     near = [a for a in gar if _g.near_front(st, a.x, a.y)]; far = [a for a in gar if not _g.near_front(st, a.x, a.y)]
     assert near and far and all(any(k in a.name for k in ("Sukhumi", "Gudauta", "Sochi", "Gelendzhik", "Krymsk")) for a in near), [a.name for a in near]
     assert all(any(k in a.name for k in ("Maykop", "Nalchik", "Beslan", "Mozdok")) for a in far), [a.name for a in far]
@@ -5693,7 +5697,7 @@ def check_105_no_garrison_cas_beyond_mountains(c):
         s.skip_day()
         if s.state.status != "ACTIVE":
             break
-    assert not (seen & {a.id for a in far}), ("CAS offered against a garrison beyond the mountains", seen & {a.id for a in far})
+    assert not (seen & ({a.id for a in far} | road_far)), ("CAS offered against a garrison beyond the mountains", seen & ({a.id for a in far} | road_far))
     assert seen & {a.id for a in near}, ("the coast garrisons are still offered", seen)
     print("[garrison CAS] %d coast garrisons, %d beyond the mountains never offered CAS over 25 days with every SAM dead (%d CAS targets seen)" % (len(near), len(far), len(seen)))
 
@@ -5938,6 +5942,86 @@ def check_112_road_net(c):
     print("[road net] routes simplify, spots every 5 km beside the road and deduplicated, the sites file keeps its sectors and fields, %d scan pairs" % len(prs))
 
 
+def check_113_road_sites(c):
+    """v0.41.241 (XO 2026-11-03, queue item i): supply sites along the roads of a NEW campaign. Strategic structure only (tunables like guard strength are not smoked):
+    the counts by level, owner by nearest airfield, ids and kinds, plants away from the front, battalions linked to red sites only, the Supply figure counting every
+    site (still 100% at the start), dry land, a save round trip, one seed gives the same sites, and a full-map mission builds every site (plants with their buildings)."""
+    import math, zipfile
+    from sqe import ground as _gr, theatres as _th, seacheck as _sc, sites as _sites, road_sites as _rs
+    from sqe.models import AssetKind as _AK
+    from sqe.state import CampaignState as _CS
+    th = _th.active()
+    blue_ap = set(th["road_blue_airports"])
+    pos = {n: (a.position.x, a.position.y) for n, a in _th.terrain().airports.items()}
+    want = {1: 60, 2: 100, 3: 100}
+    seen = {}
+    for lv in (1, 2, 3):
+        st = fresh_session(lv, 5).state
+        g = st.ground
+        rd = g["road"]
+        red = {k: a for k, a in st.assets.items() if k.startswith("rsup_")}
+        blue = {k: a for k, a in st.blue_assets.items() if k.startswith("bsup_")}
+        assert len(red) == rd["red"] and len(blue) == rd["blue"] and rd["red"] + rd["blue"] == want[lv], (lv, rd)
+        assert not any(k.startswith("rsup_") for k in st.blue_assets) and not any(k.startswith("bsup_") for k in st.assets)
+        for side, pool in (("red", red), ("blue", blue)):
+            for a in pool.values():
+                assert a.kind in _gr.SUPPLY_KINDS and _sc.site_ok(a.x, a.y) and _sites.on_spot(a.x, a.y), (a.id, a.name)
+                near = min(pos, key=lambda n: math.hypot(pos[n][0] - a.x, pos[n][1] - a.y))
+                assert (near in blue_ap) == (side == "blue"), (a.id, near, "owner by the nearest airfield")
+                assert all(math.hypot(a.x - px, a.y - py) >= _rs.AIRFIELD_CLEAR_M for px, py in pos.values()), (a.id, "clear of the airfields")
+        plants = [a for a in list(red.values()) + list(blue.values()) if a.variant in _rs.PLANT_VARIANTS]
+        assert sum(rd["plants"].values()) == len(plants) >= 4 and rd["plants"]["red"] >= 2 and rd["plants"]["blue"] >= 2, rd
+        for a in plants:
+            assert a.kind == (_AK.FUEL if a.variant == "REFINERY" else _AK.DEPOT)
+            assert min(math.hypot(a.x - cx, a.y - cy) for cx, cy in g["centers"]) >= _rs.PLANT_MIN_KM * 1000 - 1, (a.id, "a plant sits away from the front")
+        bats = [a for a in st.assets.values() if a.id.startswith("rgar_sup_")]
+        assert len(bats) == rd["battalions"] and all(b.guards in red and b.kind == _AK.ARMOR and b.variant == "GARRISON" for b in bats), rd
+        assert not any(a.id.startswith(("bgar_sup", "rgar_sup")) for a in st.blue_assets.values()), "no friendly battalions at road sites (#280)"
+        assert sum(1 for a in red.values() if a.variant == "ROAD0") == rd["open"], rd
+        n_all = {s_: sum(1 for a in (st.assets if s_ == "red" else st.blue_assets).values() if a.kind in _gr.SUPPLY_KINDS) for s_ in ("red", "blue")}
+        assert g["sup_n"] == n_all and _gr.supply(st, "red") == 1.0 == _gr.supply(st, "blue") and all(k in g["sup_h"] for k in list(red) + list(blue)), (lv, g["sup_n"], n_all)
+        assert all(a.tier >= 2 for a in red.values()) and all(a.tier == 1 for a in blue.values())
+        st2 = _CS.from_dict(st.to_dict())
+        assert st2.ground["road"] == rd and set(st2.assets) == set(st.assets) and set(st2.blue_assets) == set(st.blue_assets), "saves keep the road sites"
+        seen[lv] = {k: (round(a.x), round(a.y)) for k, a in list(red.items()) + list(blue.items())}
+    assert seen[2] == {k: (round(a.x), round(a.y)) for k, a in list(fresh_session(2, 5).state.assets.items()) + list(fresh_session(2, 5).state.blue_assets.items()) if k[1:5] == "sup_"}, "one seed, the same sites"
+    ses = fresh_session(3, 5)
+    ses.plan_day()
+    p_ = next(x for x in ses.packages() if ses.flyable(x))
+    ses.full_map = True
+    try:
+        rr = ses.fly(p_.number, ses.flyable(p_)[0].id)
+    finally:
+        ses.full_map = False
+    gs = {g_["ref"]: g_ for g_ in rr.manifest.groups if g_["kind"] == "asset"}
+    for a in ses.state.assets.values():
+        if a.id.startswith("rsup_") and not a.destroyed and a.id in gs:
+            u = gs[a.id]
+            assert u["units"] and u["base_count"] >= len(u["units"]), (a.id, u)
+            if a.variant in _rs.PLANT_VARIANTS:
+                assert sum(1 for n in u["units"] if "|b" in n) == 5, (a.id, u["units"])
+    assert sum(1 for k in gs if k.startswith("rsup_")) >= 40, "a full-map mission builds the road sites"
+    print("[road sites] 60 / 100 / 100 sites by level, owner by nearest airfield, plants away from the front, battalions on red only, Supply figure counts them all, saves keep them, plants build with their buildings")
+
+
+def check_114_blue_site_buildings(c):
+    """v0.41.241 (XO 2026-11-03): a blue supply site is not indestructible: buildings destroyed in a flown mission lower its health (never raises it)."""
+    from sqe.debrief import Manifest, apply_debrief
+    s = fresh_session(2, 7); st = s.state
+    aid = next(k for k, a in st.blue_assets.items() if a.kind.value in ("FUEL", "DEPOT"))
+    a = st.blue_assets[aid]; a.health = 1.0
+    names = [f"{aid}|b{i}" for i in range(4)]
+    m = Manifest(st.campaign_id, 1, "pkg1", st.day)
+    m.add("blue_site", aid, names, label=a.name, health_before=a.health)
+    apply_debrief(st, m, {"dead": names[:3], "landed": [], "time": 700})
+    assert abs(st.blue_assets[aid].health - 0.25) < 1e-6, st.blue_assets[aid].health
+    m2 = Manifest(st.campaign_id, 1, "pkg2", st.day)
+    m2.add("blue_site", aid, names, label=a.name, health_before=st.blue_assets[aid].health)
+    apply_debrief(st, m2, {"dead": [], "landed": [], "time": 700})
+    assert abs(st.blue_assets[aid].health - 0.25) < 1e-6
+    print("[blue site] 3 of 4 buildings dead -> health 25%")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -6089,6 +6173,8 @@ CHECKS = [
     check_110_package_scrub,
     check_111_step_spin,
     check_112_road_net,
+    check_113_road_sites,
+    check_114_blue_site_buildings,
 ]
 
 def _borrows(fn) -> set:
