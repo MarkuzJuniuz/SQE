@@ -70,6 +70,11 @@ GOTO_LUA = (
     "  end\n"
     "end\n"
 )
+RAID_LAUNCH_OUT_NM = 20       # v0.41.248 (XO 2026-11-03: the Tu-22M3s flew through the fighters to the carrier): a fleet raid LAUNCHES its anti-ship missiles from a point this far beyond
+                              # the blue CAP station (on the raid's bearing), turns home at once and never goes nearer. Judgment call: the Kh-22's published range is up to 600 km (320 nm)
+                              # for the M/MA variants (Wikipedia, Kh-22, medium firmness; no Tu-22M3-specific figure), so the launch ring is a game choice, set by where the fighters stand.
+RAID_LAUNCH_MIN_NM = 100      # ...and never closer to the carrier than this (judgment call: outside FLEET_RAID_AVOID_NM 70, the cruiser's SM-2 reach measured in XO's runs, plus margin)
+RAID_LAUNCH_WINDOW_S = 240    # ...the attack task runs this long after the bombers reach the launch point, then they go home even if a missile is left (judgment call)
 ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
 
@@ -736,8 +741,22 @@ class RaidSpawns:
         lane = [mshl, offset(*mshl, bearing(*mshl, *(w1 if dist(*mshl, *w1) > 15 * NM else station)), RAID_PUSH_NM * NM)]
         if dist(*mshl, dx, dy) > dist(*w1, dx, dy) + 15 * NM:
             lane.append(w1)
-        lane = self._raid_bend(lane, cvb) + [station]
-        path = lane + [(dx, dy)]
+        # v0.41.248 (XO 2026-11-03): a raid on the FLEET launches from a stand-off point and turns home; it never flies to the carrier. The point is on the raid's
+        # bearing, RAID_LAUNCH_OUT_NM beyond the blue CAP station (so the fighters meet it before it fires), at least RAID_LAUNCH_MIN_NM from the carrier, and no farther
+        # than the route's own outer point. The bombers reach it when the scramble's CAP is on station (`arrive`).
+        standoff = (not bool(ex.get("land"))) and cvg is not None and not aim
+        launch = None
+        if standoff:
+            d_l = max(dist(station[0], station[1], dx, dy) + RAID_LAUNCH_OUT_NM * NM, RAID_LAUNCH_MIN_NM * NM)
+            d_l = min(d_l, max(dist(*w1, dx, dy) - 5 * NM, RAID_LAUNCH_MIN_NM * NM * 0.5))
+            launch = offset(dx, dy, ex["brg"], d_l)
+            t_tgt = arrive                                      # (the launch point, not the carrier)
+            lane = self._raid_bend(lane, cvb) + [launch]
+            path = lane
+        else:
+            lane = self._raid_bend(lane, cvb) + [station]
+            path = lane + [(dx, dy)]
+        ox, oy = launch if standoff else (dx, dy)               # where the route ends: the launch point, else the target
         L = sum(dist(*path[i], *path[i + 1]) for i in range(len(path) - 1))
         t_leave = t_tgt - L / V
         hold_until, act_ = None, 0.0
@@ -750,14 +769,14 @@ class RaidSpawns:
             (sx, sy), seg_i = tm.point_back_along(path, back_)
             remaining = path[seg_i:]
             hit_s = back_ / V
-        egr_ = offset(dx, dy, bearing(dx, dy, *remaining[-2] if len(remaining) > 1 else (sx, sy)) + 40, RAID_EGRESS_NM * NM)
+        egr_ = offset(ox, oy, bearing(ox, oy, *remaining[-2] if len(remaining) > 1 else (sx, sy)) + 40, RAID_EGRESS_NM * NM)
         home_ = self._raid_bend([egr_, (ba.x, ba.y)], cvb)[1:]           # turn points round blue's Patriot fields, then its own field
         skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
         land = bool(ex.get("land"))
         alt = ((12000 if ex.get("raider") == "Su_25" else 20000) if land else 30000) * FT
         apt = self.t.airports.get(cvb.airport) if (land and cvb.airport and not aim) else None
 
-        fin_ = "BASE" if bool(ex.get("land")) else "FLEET"
+        fin_ = "BASE" if bool(ex.get("land")) else ("LAUNCH" if standoff else "FLEET")
         # v0.41.126: a raid with SEAD in front of it waits for the radars to go down: its bombers, sweep and escorts hold at the gate, DEAD_HOLD_NM out
         # v0.41.240 (XO 2026-11-03: the bombers never got their clear and the escorts melted at the gate): only the DEAD package waits for the radars. The
         # bombers, sweep and escorts fly the clock: they reach the target ARM_LEAD_S after the Kh-31P launch point, about 60 s after the missiles land, so the
@@ -805,7 +824,10 @@ class RaidSpawns:
                     elif land and aim:
                         wp.tasks.append(task.Bombing(mapping.Vector2(dx, dy)))
                     elif cvg is not None and cls is planes.Tu_22M3:
-                        wp.tasks.append(task.AttackGroup(cvg.id))
+                        ca_ = task.ControlledTask(task.AttackGroup(cvg.id))
+                        if standoff:                           # v0.41.248: fire from the launch point, then leave; the task ends after the window whatever is left
+                            ca_.stop_after_time(int(hit_s + shift + RAID_LAUNCH_WINDOW_S))
+                        wp.tasks.append(ca_)
             g.add_waypoint(pt(*egr_), alt, 450 * KPH, "EGR")
             if gate is not None and name in gate["names"]:
                 gate["calls"].append((name, len(g.points) + 1))        # the abort: the first leg home, past the EGR point
