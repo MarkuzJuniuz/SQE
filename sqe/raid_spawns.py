@@ -138,6 +138,22 @@ class RaidSpawns:
                 break
         return [(w.x, w.y) for w in wps]
 
+    def _raid_launch(self, package, station, w1=None):
+        """v0.41.248: where a raid on the FLEET fires from: on the raid's bearing, RAID_LAUNCH_OUT_NM beyond the blue CAP `station`, not closer than RAID_LAUNCH_MIN_NM
+        to the carrier, not past the route's outer point `w1`. None for a land raid. The raid's own route and the CAP's engage circle (so the fighters may fight up to
+        the launch point) both use it."""
+        ex = package.extra or {}
+        cv = self.state.bases.get(package.objective.target_id)
+        if ex.get("land") or ex.get("aim") or cv is None or cv.kind != BaseKind.CARRIER:
+            return None
+        dx, dy = ex.get("dest") or (cv.x, cv.y)
+        if w1 is None:
+            ba = self.state.assets[ex["bomber_wing"]]
+            w1 = offset(dx, dy, ex["brg"], min(220 * NM, 0.9 * dist(ba.x, ba.y, dx, dy)))
+        d_l = max(dist(station[0], station[1], dx, dy) + RAID_LAUNCH_OUT_NM * NM, RAID_LAUNCH_MIN_NM * NM)
+        d_l = min(d_l, max(dist(*w1, dx, dy) - 5 * NM, RAID_LAUNCH_MIN_NM * NM * 0.5))
+        return offset(dx, dy, ex["brg"], d_l)
+
     def _raid_dests(self, packages) -> list:
         """v0.41.220: where each raid scramble's raiders are going (the field, supply site, garrison or sector: `extra["dest"]`, else the field itself), for the
         packages that are raid scrambles (FLEET_DEFENSE with a raid in `extra`)."""
@@ -745,11 +761,8 @@ class RaidSpawns:
         # bearing, RAID_LAUNCH_OUT_NM beyond the blue CAP station (so the fighters meet it before it fires), at least RAID_LAUNCH_MIN_NM from the carrier, and no farther
         # than the route's own outer point. The bombers reach it when the scramble's CAP is on station (`arrive`).
         standoff = (not bool(ex.get("land"))) and cvg is not None and not aim
-        launch = None
+        launch = self._raid_launch(package, station, w1) if standoff else None
         if standoff:
-            d_l = max(dist(station[0], station[1], dx, dy) + RAID_LAUNCH_OUT_NM * NM, RAID_LAUNCH_MIN_NM * NM)
-            d_l = min(d_l, max(dist(*w1, dx, dy) - 5 * NM, RAID_LAUNCH_MIN_NM * NM * 0.5))
-            launch = offset(dx, dy, ex["brg"], d_l)
             t_tgt = arrive                                      # (the launch point, not the carrier)
             lane = self._raid_bend(lane, cvb) + [launch]
             path = lane

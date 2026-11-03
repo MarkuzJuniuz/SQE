@@ -1845,6 +1845,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if cw_ is not None:
                 cb_ = st.bases[package.objective.target_id]
                 dx_, dy_ = package.extra.get("dest") or (cb_.x, cb_.y)
+                lp_ = self._raid_launch(package, (cw_.x, cw_.y))             # v0.41.248: a fleet raid fires from its launch point: the leash takes it in
+                if lp_ is not None:
+                    dx_, dy_ = lp_
                 zone_ = self._cover_circle([(cw_.x, cw_.y), (dx_, dy_)], ((cw_.x + dx_) / 2, (cw_.y + dy_) / 2), package,
                                            A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A], bearing(cw_.x, cw_.y, dx_, dy_))
                 self._limit_engage(g, 0, stop, self._clear_zone(zone_, package))
