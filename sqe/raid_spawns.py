@@ -37,7 +37,7 @@ RAID_SWEEP_LEAD_S = 90        # ...and the raid's sweep escorts fly this far ahe
 RAID_HOLD_MAX_S = 600         # ...and one with plenty of time appears at most 10 min before it must push
 RAID_EGRESS_NM = 30           # ...off target it turns 40 degrees off its way in and leaves this far before heading home     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
 ARM_LAUNCH_NM = 40            # v0.41.84: a red SEAD pair fires its Kh-31P this far from the field (judgment call: inside the 60 nm the Kh-31 page gives, with margin for a low launch)
-ARM_LEAD_S = 150              # ...and the bombers reach the target this long after the launch point (judgment call)
+ARM_LEAD_S = 150              # ...and the bombers reach the target this long after the launch point: the Kh-31P needs about 90 s for 40 nm (from memory, about Mach 3, unchecked) and the bombers arrive about 60 s after impact (XO 2026-11-03: they ride the wave of missiles). Judgment call
 ARM_TARCAP_BEHIND_NM = 8      # v0.41.116: the SEAD package's TARCAP holds this far back along the way in from the Kh-31P launch point (blue's TARCAP_BEHIND_NM; judgment call)...
 ARM_TARCAP_LEAD_S = 120       # ...in on station this long before the missiles go (blue's TARCAP_LEAD_S)...
 ARM_TARCAP_STAY_S = 600       # ...and holds this long after (the missiles are flying; judgment call)
@@ -750,7 +750,10 @@ class RaidSpawns:
 
         fin_ = "BASE" if bool(ex.get("land")) else "FLEET"
         # v0.41.126: a raid with SEAD in front of it waits for the radars to go down: its bombers, sweep and escorts hold at the gate, DEAD_HOLD_NM out
-        gate = self._raid_gate_new(cvb, path, dx, dy, t_tgt) if (land and ex.get("arm") and not aim) else None
+        # v0.41.240 (XO 2026-11-03: the bombers never got their clear and the escorts melted at the gate): only the DEAD package waits for the radars. The
+        # bombers, sweep and escorts fly the clock: they reach the target ARM_LEAD_S after the Kh-31P launch point, about 60 s after the missiles land, so the
+        # SAM crews have to split fire between the missiles and the bombers. No radar-dead condition, no abort for them.
+        gate = self._raid_gate_new(cvb, path, dx, dy, t_tgt) if (land and ex.get("arm") and ex.get("dead") and not aim) else None
         back0 = 0.0 if hold_until is not None else back_
         def start_at(shift_s):
             """Where a group starts and which points it still has to fly, `shift_s` seconds later (+) or earlier (-) than the raid's lead."""
@@ -820,13 +823,13 @@ class RaidSpawns:
             self.warns.append(f"{ex.get('raider', 'Tu-22M3')}: no bomb or missile found; the raid is unarmed.")
         bomber_gs, nb_ = [], 0
         for gi, n_ in enumerate(sizes(ex["bombers"])):         # v0.41.108: a big raid is several groups, a minute apart on the same route
-            g = build_group(f"Raid Bomber {gi + 1}", cls_b, n_, task_b, bomber=True, shift=gi * RAID_GROUP_GAP_S, gated=True)
+            g = build_group(f"Raid Bomber {gi + 1}", cls_b, n_, task_b, bomber=True, shift=gi * RAID_GROUP_GAP_S)
             names = []
             for u in g.units:
                 nb_ += 1
                 u.name = f"RAID-B-{nb_}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", ex["bomber_wing"], names, ac=ex.get("raider", "Tu_22M3"), raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
-                         raid_arrive_s=float(hit_s + gi * RAID_GROUP_GAP_S), raid_group=g.name, **({"raid_gate_s": gate["nm"] * NM / V} if gate is not None else {}))
+                         raid_arrive_s=float(hit_s + gi * RAID_GROUP_GAP_S), raid_group=g.name)
             bomber_gs.append(g)
         self._spawn_raid_target(package, cvb, aim, dx, dy, manifest)
         if land and ex.get("arm") and not aim:
@@ -844,11 +847,11 @@ class RaidSpawns:
             ne_ = 0
             for ei, n_ in enumerate(esz):
                 if ei < n_sweep:
-                    eg = build_group(f"Raid Sweep {ei + 1}", getattr(planes, ex["escort_type"]), n_, task.FighterSweep, shift=-RAID_SWEEP_LEAD_S - 15 * ei, gated=True, fighter_nm=esc_nm_)
+                    eg = build_group(f"Raid Sweep {ei + 1}", getattr(planes, ex["escort_type"]), n_, task.FighterSweep, shift=-RAID_SWEEP_LEAD_S - 15 * ei, fighter_nm=esc_nm_)
                 else:
                     ci = ei - n_sweep
                     bg = bomber_gs[ci * len(bomber_gs) // max(1, len(esz) - n_sweep)]
-                    eg = build_group(f"Raid Escort {ci + 1}", getattr(planes, ex["escort_type"]), n_, task.Escort, shift=bomber_gs.index(bg) * RAID_GROUP_GAP_S, behind_nm=3, gated=True)
+                    eg = build_group(f"Raid Escort {ci + 1}", getattr(planes, ex["escort_type"]), n_, task.Escort, shift=bomber_gs.index(bg) * RAID_GROUP_GAP_S, behind_nm=3)
                     # v0.41.29: the escorts stay with the bombers and fight only what comes within their class's reach of them (Su-27 25 nm, the rest
                     # 15 nm), up to the bombers' egress point; home once their air-to-air missiles are gone. No chasing.
                     eg.points[0].tasks = [t_ for t_ in eg.points[0].tasks if getattr(t_, "Id", "") != "Escort"]      # pydcs's default escort task has no group
