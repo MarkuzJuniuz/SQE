@@ -5902,6 +5902,40 @@ def check_111_step_spin(c):
     print("[step spin] minus / plus outside the field step and clamp, suffix kept, text field wide; the 10 Settings number boxes use it")
 
 
+def check_112_road_net(c):
+    """v0.41.238 (XO 2026-11-03, queue item m step 2): the road-net scan's data side. A route is simplified (ends kept, a bump under the tolerance
+    dropped, a corner kept); spots go along it every 5 km, off the road, deduplicated across overlapping routes; build_net writes the routes file and
+    adds the "road" supply key to the sites file WITHOUT touching its sectors / fields (a temp copy); the scan pairs cover the long hops. Strategic data
+    only: the Lua scan is not smoked (lupa replay was done by hand)."""
+    import math, shutil, sys, tempfile
+    from pathlib import Path as _P
+    from sqe import roadnet as rn, sites as _sites, theatres as _th
+    sys.path.insert(0, str(_P(__file__).resolve().parent))
+    import road_net_scan as rs
+    r = rn.simplify([(0, 0), (1000, 30), (2000, 0), (3000, 0), (3000, 5000)])
+    assert r[0] == (0, 0) and r[-1] == (3000, 5000) and (3000, 0) in r and (1000, 30) not in r, r
+    sp = rn.spots_along([(0, 0), (30000, 0)])
+    assert [p[0] for p in sp] == [5000, 10000, 15000, 20000, 25000, 30000] and all(abs(p[1]) == 150 for p in sp) and sp[0][1] == -sp[1][1], sp
+    two = rn.road_spots([[(0, 0), (30000, 0)], [(0, 40), (30000, 40)]])
+    assert len(two) == 6, "an overlapping route adds no second set of spots"
+    th = _th.active()
+    d = tempfile.mkdtemp()
+    shutil.copy(_P(th["_dir"]) / f"{th['id']}_sites.json", d)
+    before = _sites.json.loads((_P(d) / f"{th['id']}_sites.json").read_text(encoding="utf-8"))
+    raw = [{"pair": "a", "kind": "roads", "pts": [[0, 0], [5000, 10], [30000, 0]]}, {"pair": "r", "kind": "railroads", "pts": [[0, 0], [9, 9]]}, {"pair": "e", "kind": "roads", "pts": []}]
+    s = rn.build_net(raw, d, th["id"])
+    after = _sites.json.loads((_P(d) / f"{th['id']}_sites.json").read_text(encoding="utf-8"))
+    assert s["routes"] == 1 and s["spots"] == len(after["road"]["supply"]) >= 2, s
+    assert after["sectors"] == before["sectors"] and after["fields"] == before["fields"], "the road key leaves the sector and field spots alone"
+    assert (_P(d) / f"{th['id']}_roads_net.json").is_file()
+    prs = rs.pairs()
+    names = {a for lab, _, _ in prs for a in lab.split("~")}
+    assert len(prs) >= 40 and "Kutaisi" in names and any(lab == "Kutaisi~Mozdok" for lab, _, _ in prs), len(prs)
+    assert len({lab for lab, _, _ in prs}) == len(prs), "each pair once"
+    assert "land.findPathOnRoads" in rs.scan_lua() and "SQEROADNET" in rs.scan_lua()
+    print("[road net] routes simplify, spots every 5 km beside the road and deduplicated, the sites file keeps its sectors and fields, %d scan pairs" % len(prs))
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -6052,6 +6086,7 @@ CHECKS = [
     check_109_blue_base_def_skill,
     check_110_package_scrub,
     check_111_step_spin,
+    check_112_road_net,
 ]
 
 def _borrows(fn) -> set:
