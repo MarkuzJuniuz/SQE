@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import math
 import random
+import zlib
 
 from dcs import action, condition, mapping, planes, statics, task, triggers
 from dcs.translation import String
@@ -15,6 +16,7 @@ from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
 from . import callsigns, reactive, scramble
+from . import seacheck as seac
 from . import threatmap as tm
 from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
@@ -90,8 +92,8 @@ SUPPLY_PLANTS = {         # v0.41.241 (queue item i): the big sites of the road 
 }
 
 
-ROAD_OFF_M = 70.0             # v0.41.259: a supply site's buildings stand this far to either side of the road (judgment call: the road heading is rough, see road_front.heading_at)
-ROAD_ALONG_M = 60.0           # ... and spread at most this far along it
+ROAD_OFF_M = 100.0            # v0.41.259: the centre of a supply site's block of buildings is this far to one side of the road (judgment call: no public figure; tanks need access and firebreaks; the road heading is rough, see road_front.heading_at)
+ROAD_BLOCK_M = 40.0           # ... and the buildings stand within this radius of that centre, so the nearest is about 60 m off the road
 
 
 def supply_parts(kind, variant: str = "") -> list:
@@ -446,14 +448,20 @@ class RaidSpawns:
         n = max(1, round(len(parts) * scale)) if parts else 0
         names = []
         from . import road_front, theatres
-        rh = road_front.heading_at(theatres.active(), cx, cy) if n else None     # v0.41.259 (XO 2026-11-03): the buildings stand beside the road, not on it
+        rh = road_front.heading_at(theatres.active(), cx, cy) if n else None     # v0.41.259 (XO 2026-11-03): the buildings stand in one block beside the road, not on it
+        bx, by = cx, cy
+        if rh is not None:
+            side = 1 if zlib.crc32(aim.encode()) % 2 == 0 else -1                # one side per site, the same every build
+            bx, by = offset(cx, cy, rh + 90 * side, ROAD_OFF_M)
+            if not seac.site_ok(bx, by):                                         # that side is sea or water: the other side
+                bx, by = offset(cx, cy, rh - 90 * side, ROAD_OFF_M)
+            if not seac.site_ok(bx, by):
+                rh = None
         for k, vt in enumerate(parts[:n]):
             if rh is None:
                 x, y = offset(cx, cy, k * (360 / len(parts)) + hdg, 40 + 12 * k)
             else:
-                along = max(-ROAD_ALONG_M, min(ROAD_ALONG_M, (k - (n - 1) / 2) * 25.0))
-                side = 1 if k % 2 == 0 else -1
-                x, y = offset(*offset(cx, cy, rh, along), rh + 90, side * (ROAD_OFF_M + 12.0 * (k // 2)))
+                x, y = offset(bx, by, k * (360 / len(parts)) + hdg, min(ROAD_BLOCK_M, 18.0 + 6.0 * k))
             nm = f"{aim}|b{k + 1}"          # b: never clashes with a guard vehicle `<aim>|<n>` in the same site
             sg = self.m.static_group(country, nm, vt, mapping.Point(x, y, self.t), heading=hdg)
             sg.units[0].name = nm
