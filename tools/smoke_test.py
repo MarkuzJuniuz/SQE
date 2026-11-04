@@ -1385,6 +1385,8 @@ def check_31b_red_sam_orders(c):
     for x in sites:
         x.health = 1.0
     rcv.health = 0.0
+    assert not sm.red_asks(st, d, rnd.Random(1)) and not st.sams.get("red_asks"), "v0.41.269: red borrows no battery by default"
+    sm.RED_BORROW = True                                    # (the mechanism is still tested with the switch on)
     r1 = sm.red_asks(st, d, rnd.Random(1))
     assert any("ordered" in x for x in r1), r1
     assert snd.id in st.sams["red_vacated"] or any(o["from"] != snd.id for o in st.sams["red_asks"]), "a deeper site sends it"
@@ -1401,6 +1403,7 @@ def check_31b_red_sam_orders(c):
     assert not st.sams["red_asks"], "the order is done"
     rt = type(st).from_dict(st.to_dict())
     assert rt.sams == st.sams, "red orders save and load with the SAM record"
+    sm.RED_BORROW = False
 
 
 def check_31d_barcap_areas(c):
