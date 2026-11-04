@@ -75,6 +75,7 @@ SA10_REACH_NM = 31            # v0.41.14: the farthest an SA-10 fired at our jet
 SWEEP_AFTER_TOT_S = 120       # v0.41.13: a sweep holds until 2 min after the first package it covers is over the target
 HOMEWARD_ENGAGE_NM = 20       # v0.41.5: after its hold a TARCAP / escort / sweep still engages air within this of itself on the way home
 from .packages import LONG_RANGE_A2A     # the long-range shooters; F-16 and F/A-18 are secondary air-to-air
+RAID_SEAD_LEAD_S = 180      # v0.41.255: the HARMs of the raid-intercept SEAD reach their point this long before the interceptors are on station (judgment call, XO: clear the radars before the Tomcats go in)
 STAGGER = {Role.SWEEP: -90, Role.ESCORT: -90, Role.SEAD: -60, Role.TARCAP: -TARCAP_LEAD_S}      # seconds relative to the strikers' push (BMS-style)
 
 
@@ -445,6 +446,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._barcap_zones = self._barcap_circles(package, geom)             # v0.41.138: the BARCAP circles a TARCAP's circle must meet (whatever order the flights are built in)
         striker_tots = []                                                    # v0.41.38: each ground-attack flight's own target time (strike / SEAD / CAS), for the TARCAP hold
         for idx, f in enumerate(package.flights):
+            if self._raid_sead(package, f):                  # v0.41.255: its own SEAD job on the SAMs over the raid's launch point
+                g, tot_f = self._spawn_raid_sead(package, f, plan, geom, idx, tgt.eta_s, manifest, despawn)
+                if g is None:
+                    continue
+                pkg_table.append({"callsign": f.callsign, "role": "SEAD", "push": "-", "tot": clock(tot_f) if tot_f else "-", "you": False})
+                continue
             g, tot_f = self._spawn_flight(package, f, plan, geom, tanker_xy, hav_xy, push_of(f), tgt.eta_s, rtb_s, idx, manifest, despawn)
             if f.is_player:
                 tot_f = tgt.eta_s
@@ -1927,6 +1934,61 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if not ai_sead:
                 g.points[0].tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))    # weapons free again at the attack point (below)
         return armor, ai_sead, ai_a2g
+
+    def _raid_sead(self, package, f) -> bool:
+        """v0.41.255: a SEAD flight of the carrier-raid setpiece (AI): it does not fly the fleet's route but its own HARM job."""
+        return (package.objective.type == ObjectiveType.FLEET_DEFENSE and f.role == Role.SEAD and not f.tag and not f.is_player
+                and package.objective.target_id in self.state.bases and bool((package.extra or {}).get("setpiece")))
+
+    def _raid_sead_site(self, package, geom):
+        """The live red SAM site to put the HARMs on: the one whose reach takes in the raid's launch point (the long-range one first, then the nearest).
+        None when no site reaches it. Judgment call: reach + 10 nm margin (no source, a HARM shot is fired from outside the ring)."""
+        pts = [Wpt("CAP1", geom.cap1[0], geom.cap1[1], 0, 0, "", "CAPORBIT"), Wpt("CAP2", geom.cap2[0], geom.cap2[1], 0, 0)]
+        self._leash_fleet_cap(pts, 0, geom.tx, geom.ty)
+        lp = self._raid_launch(package, (pts[0].x, pts[0].y)) or (geom.tx, geom.ty)
+        best = []
+        for a in self.state.assets.values():
+            rng = tm.RANGE_NM.get(a.variant, 0)
+            if a.kind != AssetKind.SAM or a.destroyed or a.health <= 0.25 or rng < 12:
+                continue
+            d_ = dist(a.x, a.y, lp[0], lp[1]) / NM
+            if d_ <= rng + 10:
+                best.append((0 if a.variant in tm.UMBRELLA_VARIANTS else 1, d_, a.id))
+        best.sort()
+        return self.state.assets[best[0][2]] if best else None
+
+    def _spawn_raid_sead(self, package, f, plan, geom, idx, cap_tot_s, manifest, despawn):
+        """v0.41.255 (XO 2026-11-03, the carrier-raid run: the Tomcats flew into the Sukhumi SA-10): the SEAD flights of the setpiece are flown as a normal
+        SEAD job on the site covering the raid's launch point (its own geometry, HARM point and tasks, in a stand-in DEAD/SEAD package), timed to reach
+        the HARM point RAID_SEAD_LEAD_S before the interceptors get on station. -> (group, HARM time) or (None, None) when no site reaches the launch point."""
+        from .models import Objective
+        st = self.state
+        site = self._raid_sead_site(package, geom)
+        if site is None:
+            return None, None
+        sp = copy.copy(package)
+        sp.objective = Objective(f"{package.objective.id}-sead", ObjectiveType.DEAD, site.id, package.objective.priority, "SEAD for the raid intercept", "SEAD")
+        sp.flights = [f]
+        base, spec = st.bases[f.base_id], AIRCRAFT[f.aircraft]
+        tx, ty = site.x, site.y
+        mshl = tm.safe_marshal(st, (base.x, base.y), bearing(base.x, base.y, tx, ty), (tx, ty))
+        g2 = make_geometry(base.x, base.y, tx, ty, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
+        g2.egr = (tm.first_safe_egress(st, tx, ty, g2.hdg, {site.id}) or tm.safe_egress(st, tx, ty, g2.hdg, spec.profile.egress_nm, tm.cluster_ids(site)) or g2.egr)
+        g2.tier = self._pick_tier(g2, Role.SEAD, spec.profile, tx, ty, {site.id})
+        self._flight_plans(g2, sp, tx, ty, {site.id})
+        keep = self._umbrella_keep(sp)
+        pw = plan_route(Role.SEAD, (base.x, base.y), g2, spec.profile, is_player=True, tanker_xy=None, keep_out=keep)
+        push0 = max(float(self._dep_s) + 300.0, 300.0)
+        assign_times(pw, 0.0, push0)
+        tg = objective_wp(pw) or pw[-1]
+        want = float(cap_tot_s) - RAID_SEAD_LEAD_S
+        push = push0 + (want - tg.eta_s)
+        for w_ in pw:                                            # the whole route shifts (an early SEAD pair is already underway when the mission starts, like an earlier package)
+            w_.eta_s += want - tg.eta_s
+        eg = next((w for w in pw if w.name == "EGR"), pw[-1])
+        rtb = eg.eta_s + leg_seconds(eg, Wpt("RTB", base.x, base.y, 0, 300))
+        self._spawn_opfor_ground(sp, tx, ty, manifest, [(base.x, base.y), g2.mshl, g2.push, g2.ip, (tx, ty), g2.egr])
+        return self._spawn_flight(sp, f, plan, g2, None, None, push, tg.eta_s, rtb, idx, manifest, despawn)
 
     def _bomb_task(self, package, w):
         """The bombing task at a BOMB waypoint. v0.41.254: a runway strike (a STRIKE with aim RUNWAY) uses DCS's BombingRunway on the target field, so the

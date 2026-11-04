@@ -62,7 +62,8 @@ def ai_only(st, obj) -> bool:
 
 SETPIECE_RATIO = 0.75       # blue CAP flights of 4 per bomber: 3 flights for 4 bombers + 8 escorts, i.e. about one blue fighter per raider (judgment call, XO: "overwhelming")
 _SETPIECE_TASK = {Role.CAP: "Intercept: kill the Backfires before they reach launch range, then the escorts",
-                  Role.SWEEP: "Sweep ahead of the fleet: engage the raid's escorts so the interceptors get at the bombers"}
+                  Role.SWEEP: "Sweep ahead of the fleet: engage the raid's escorts so the interceptors get at the bombers",
+                  Role.SEAD: "Suppress the SAMs covering the raid's launch point before the interceptors go in"}
 _TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM",
          Role.TARCAP: "TARCAP: on station short of the target before the package, shoot what comes in range, do not chase; stay at least 15 minutes and until the last strike flight is off target plus 5 minutes, then home",
          Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
@@ -253,7 +254,7 @@ class PackageBuilder:
             tmpl = [Slot(Role.STRIKE, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
         if carrier_raid(self.state, obj):                                    # v0.41.107: the setpiece: every fighter flight in reach, about one blue fighter per raider
             k = max(2, math.ceil(SETPIECE_RATIO * n_fl))              # n_fl = raiders / 3 (set in build) -> k flights of 4, about one blue fighter per raider
-            return [Slot(Role.CAP, 4), Slot(Role.CAP, 4)] + [Slot(Role.CAP, 4, False) for _ in range(k - 2)] + [Slot(Role.SWEEP, 2, False)]
+            return [Slot(Role.CAP, 4), Slot(Role.CAP, 4)] + [Slot(Role.CAP, 4, False) for _ in range(k - 2)] + [Slot(Role.SWEEP, 2, False)] + [Slot(Role.SEAD, 2, False), Slot(Role.SEAD, 2, False)]   # v0.41.255: two optional HARM pairs for the SAMs over the raid's launch point
         if is_sweep(obj):                                                    # Fighter Sweep: 4-ships only, one per 4 bandits beyond the packages' own cover
             n4 = max(1, sweep_4ships(n_fl))
             return [Slot(Role.SWEEP, 4)] + [Slot(Role.SWEEP, 4, False) for _ in range(n4 - 1)]

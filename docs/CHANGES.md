@@ -1,5 +1,14 @@
 # CHANGES.md
 
+## v0.41.255, carrier raid: the CAP leash, SEAD on the launch-point SAMs, escorts on the bombers' clock
+
+XO 2026-11-03 (the carrier-raid run: 82 missiles sank the carrier and two escorts, the Tomcats flew into the Sukhumi SA-10, the Su-27 escorts split from the bombers). XO said not to cut the bomber count yet; this changes the positioning first. No source for any figure below: all judgment calls.
+- **CAP leash** (`raid_spawns._leash_fleet_cap`): the fleet raid's CAP racetrack is walked back toward the fleet, 2 nm at a time, until both ends are clear of live SA-10s (45 nm) and the other SAM rings (`scramble.clear_for_station`). The engage circle was already trimmed to SAM reach by `_clear_zone`. If no clear spot exists the racetrack is left as it was.
+- **SEAD:** the carrier-raid package gets two optional HARM pairs (`packages._slots`). Each flies a normal SEAD job on the live site whose reach (+10 nm) takes in the raid's launch point, long-range site first (`mission_builder._spawn_raid_sead`, own geometry and HARM point, a stand-in DEAD/SEAD package); the HARM point is timed `RAID_SEAD_LEAD_S` = 180 s before the interceptors are on station. A pair already underway when the mission starts is air-started, like an earlier merged package. No site reaching the launch point = no SEAD flight.
+- **Escorts:** the fleet raid's escort groups no longer use the Escort task (it lets them chase out to its range). They fly the bombers' route and clock (same shift, 3 nm behind) and engage only inside a circle round themselves at each waypoint. Land raids keep the old Escort task. Not seen in DCS yet.
+- Not done: fewer bombers (`bombers.MAX_RAID`), the salvo timing (bombers fire in waves from about 205 nm out), the sunk carrier still drawn on the map.
+- Checks: compile, `check_31zb_raid_setpiece` and the full smoke.
+
 ## v0.41.254, runway cratering: a field with 3 bomb hits on its runway is closed for 2-5 days
 
 XO 2026-11-03 (queue idea "disable runways"; probe results the same day: DCS closes a bombed runway for AI about 60 minutes after the last hit, an inbound pair diverts to another field by itself, and nothing in the scripting API holds it shut). SQE ignores DCS's reopen and keeps its own rule.

@@ -257,3 +257,9 @@ _verified v0.41.219, 2026-10-31 (anchors grepped; XO has flown the F-16C lamp an
 - **Hits:** the debrief hook (`LUA_HOOK`, "runway hits" block) follows every `Weapon.Category.BOMB` from its SHOT event and tests its last position against `RWYS` (id, point, headings, from `cfg["rwys"]` = `runways.fields_for_hook`). `rwy` in `SQE_state.json`; `apply_debrief` calls `runways.add_hits`.
 - **Probe facts (2026-11-03, `tools/runway_probe.py`):** DCS holds a bombed field shut for AI about 60 min after the last hit; ramp pairs sit at speed 0; an inbound pair diverts by itself; nothing in the API holds it closed. SQE therefore keeps its own timer.
 - **Not verified:** the Lua counter inside DCS (the probe v3 run tests it).
+
+## 15. Carrier raid intercept: CAP leash, SEAD, escorts (v0.41.255, verified 2026-11-03)
+- **CAP leash:** `raid_spawns._raid_cap_station` -> for a fleet target `_leash_fleet_cap` walks the CAP1/CAP2 racetrack toward the fleet until `scramble.clear_for_station` passes at both ends. The circle comes from `_cover_circle` + `_clear_zone` in `mission_builder._engage_tasks` (the raid CAP block).
+- **SEAD:** `packages._slots` (carrier-raid branch) adds two optional `Slot(Role.SEAD, 2)`. `mission_builder._raid_sead` picks these flights out of the main flight loop; `_spawn_raid_sead` builds a stand-in DEAD/SEAD package on `_raid_sead_site` (live SAM whose reach + 10 nm covers `_raid_launch`), own geometry, `_spawn_opfor_ground` for the site, HARM point timed `RAID_SEAD_LEAD_S` (180 s) before the CAP's TOT by shifting every ETA (so it may be air-started).
+- **Escorts:** in `_spawn_raid`, fleet raids (`standoff`) give escort groups `EngageTargetsInZone` at each pre-EGR waypoint instead of `EscortTaskAction`; land raids keep `EscortTaskAction`.
+- **Not verified:** any of it in DCS. Test builds only (the build runs in a subprocess in `Session.fly`, so monkeypatching from a test does not reach it).
