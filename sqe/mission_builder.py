@@ -2011,6 +2011,16 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         best.sort()
         return self.state.assets[best[0][2]] if best else None
 
+    def _raid_sead_sites(self, package, geom, hold) -> tuple:
+        """v0.41.267 (PR 2): the sites the raid SEAD goes for: the ones that block the interceptors' lane (`_raid_blockers`, at most RAID_BLOCK_MAX), else the old single site
+        (the one whose reach takes in the launch point). -> (sites, intercept result with them ignored or None)."""
+        ids, ip = self._raid_blockers(package, geom, hold)
+        sites = [self.state.assets[i] for i in ids if i in self.state.assets]
+        if not sites:
+            one = self._raid_sead_site(package, geom)
+            sites = [one] if one is not None else []
+        return sites, ip
+
     def _raid_f14_shape(self, wps, k1, o12, ip=None, idx=0, f14=True):
         """v0.41.256 (XO 2026-11-03: the F-14 is what the intercept was made for): a raid CAP holds at its leashed station (HOLD, RAID_F14_HOLD_FT, slow), then at the push
         (the gate's own latest time, or earlier when the flag sets) dashes high and fast (PUSH, IP) to TGT and orbits there. `o12`: the racetrack as it was before the leash.
@@ -2097,16 +2107,22 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return c_[package.id]
         c_[package.id] = None
         f0 = next((f for f in package.flights if self._raid_sead(package, f)), None)
-        site = self._raid_sead_site(package, geom) if f0 is not None else None
-        if site is None:
+        n_sead = sum(1 for f in package.flights if self._raid_sead(package, f))
+        sites, ip_ = self._raid_sead_sites(package, geom, self._raid_hold_xy(package, geom)) if f0 is not None else ([], None)
+        sites = sites[:max(1, n_sead)]                                    # v0.41.267: one flight per site; a site without a flight is left alone
+        if not sites:
             return None
+        site = sites[0]
         base = self.state.bases[f0.base_id]
-        sp, g2, push, tg, rtb = self._raid_sead_route(package, f0, site, cap_tot_s)
-        self._spawn_opfor_ground(sp, site.x, site.y, manifest, [(base.x, base.y), g2.mshl, g2.push, g2.ip, (site.x, site.y), g2.egr])
+        radars, tg_s = [], 0.0
+        for st_ in sites:                                                  # v0.41.267: every site is built live; the dash flag waits for the tracking radars of ALL of them
+            sp, g2, push, tg, rtb = self._raid_sead_route(package, f0, st_, cap_tot_s)
+            self._spawn_opfor_ground(sp, st_.x, st_.y, manifest, [(base.x, base.y), g2.mshl, g2.push, g2.ip, (st_.x, st_.y), g2.egr])
+            tg_s = max(tg_s, tg.eta_s)
+            grp = self.groups_by_asset.get(st_.id)
+            radars += [u for u in (grp.units if grp is not None else []) if str(getattr(u, "type", "")) in TRACK_RADARS]
         self._flag_n += 1
         flag = self._flag_n
-        grp = self.groups_by_asset.get(site.id)
-        radars = [u for u in (grp.units if grp is not None else []) if str(getattr(u, "type", "")) in TRACK_RADARS]
         if radars:
             t_ = triggers.TriggerOnce(comment="raid SEAD: tracking radars dead, interceptors cross")
             for u in radars:
@@ -2114,7 +2130,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             t_.add_action(action.SetFlag(flag))
             self.m.triggerrules.triggers.append(t_)
         t2 = triggers.TriggerOnce(comment="raid SEAD: wait over, interceptors cross")
-        t_flag = int(max(tg.eta_s + RAID_DASH_WAIT_S, float(cap_tot_s) + 60))
+        t_flag = int(max(tg_s + RAID_DASH_WAIT_S, float(cap_tot_s) + 60))
         t2.add_condition(condition.TimeAfter(t_flag))
         t2.add_action(action.SetFlag(flag))
         say_ = String('trigger.action.outTextForCoalition(coalition.side.BLUE, "AWACS: SEAD complete. Interceptors, cleared to push toward the launch point.", 15)')
@@ -2122,10 +2138,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self.m.triggerrules.triggers.append(t2)
         if radars:
             t_.add_action(action.DoScript(say_))
-        ip_ = self._raid_intercept(package, geom, self._raid_hold_xy(package, geom))      # v0.41.265: where the interceptors dash to, on the bombers' way in (None = no safe point: the old shape)
-        if ip_ is None:
+        if ip_ is None:                                                    # v0.41.265: where the interceptors dash to, on the bombers' way in (v0.41.267: lane worked out as if the sites above were dead)
             self.warns.append("Raid interceptors: no SAM-clear intercept point on the bombers' way in; they hold at their station.")
-        c_[package.id] = {"site": site, "agm88_s": tg.eta_s, "flag": flag, "t_flag": float(t_flag), "ip": ip_}
+        c_[package.id] = {"site": site, "sites": sites, "agm88_s": tg_s, "flag": flag, "t_flag": float(t_flag), "ip": ip_}
         return c_[package.id]
 
     def _spawn_raid_sead(self, package, f, plan, geom, idx, cap_tot_s, manifest, despawn):
@@ -2137,7 +2152,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if prep is None:
             return None, None
         f.rush = True
-        sp, g2, push, tg, rtb = self._raid_sead_route(package, f, prep["site"], cap_tot_s)
+        ordn = [f_ for f_ in package.flights if self._raid_sead(package, f_)].index(f)          # v0.41.267: the n-th SEAD flight takes the n-th site (more flights than sites: the first site again)
+        sites = prep.get("sites") or [prep["site"]]
+        sp, g2, push, tg, rtb = self._raid_sead_route(package, f, sites[ordn % len(sites)], cap_tot_s)
         return self._spawn_flight(sp, f, plan, g2, None, None, push, tg.eta_s, rtb, idx, manifest, despawn)
 
     def _bomb_task(self, package, w):
