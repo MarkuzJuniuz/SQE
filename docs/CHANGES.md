@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.264, a fleet raid planned before the size cap is trimmed when the mission is built
+
+XO 2026-11-04 ("Yeah, trim the number of bombers"; his run flew 24 Tu-22M3 at Level 3 although #329 capped the raid at 16). The raid's size is stored in the saved day plan (`state.plan`), so a plan made before #329 kept its 24.
+- **`raid_spawns._spawn_raid`:** a fleet raid (not a land raid) with more bombers than `bombers.max_raid(d)` (L3 16, L2 8) is trimmed to the cap and its escorts set to one per two (never above the planned number). A mission warning says what was trimmed. The saved plan itself is not changed; new plans are already sized by `bombers.decide`.
+- Not changed: the blue cover planned for the old size stays (a few extra blue fighters on that one day).
+- Not seen in DCS. Checks: compile, a probe with a saved plan of 24 bombers, targeted smoke.
+
 ## v0.41.263, staged raid: every group keeps its own altitude the whole way (two bombers collided)
 
 XO 2026-11-03 ("Fox 3 low C"; his run: Raid Bomber 2 and 4 collided at t=1084 s). Judgment call: the 150 m step is unchanged. The run's tracks: the groups orbited the marshal stacked one above the other (0.1 to 0.4 km apart sideways, 150 to 300 m apart in height), then each climbed to one common cruise level at its own push, so group 4 climbed up into group 2 in the same column.
