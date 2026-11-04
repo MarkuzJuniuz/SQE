@@ -18,6 +18,7 @@ from pathlib import Path
 
 from dcs import action, condition, mapping, planes, ships, task, triggers, vehicles
 from dcs.mission import Mission, StartType
+from dcs.translation import String
 from dcs.point import PointAction
 from . import theatres, weather
 from dcs.unit import Skill
@@ -76,6 +77,10 @@ SWEEP_AFTER_TOT_S = 120       # v0.41.13: a sweep holds until 2 min after the fi
 HOMEWARD_ENGAGE_NM = 20       # v0.41.5: after its hold a TARCAP / escort / sweep still engages air within this of itself on the way home
 from .packages import LONG_RANGE_A2A     # the long-range shooters; F-16 and F/A-18 are secondary air-to-air
 RAID_RUSH_KTS = 500         # v0.41.256: the raid SEAD flies at least this fast to its HARM point (judgment call: a loaded Hornet's cruise-to-dash; XO: as fast as they can)
+RAID_F14_HOLD_FT = 30000    # v0.41.256 (XO 2026-11-03): the F-14 raid CAP holds high, where a jet burns least and a Phoenix leaves with the most energy (judgment call; fuel flow not checked)
+RAID_F14_DASH_FT = 35000    # ...and crosses high
+RAID_F14_HOLD_KTS = 300     # ...at an endurance speed while it waits
+RAID_F14_DASH_KTS = 650     # ...and dashes at this speed once the gate opens (judgment call)
 RAID_SEAD_LEAD_S = 240      # v0.41.256: the raid SEAD's HARMs land this long before the interceptors are due on station (judgment call; v0.41.255 had 180)
 RAID_DASH_WAIT_S = 180      # v0.41.256: the interceptors cross this long after the HARMs if the tracking radars are not all dead by then (judgment call)
 STAGGER = {Role.SWEEP: -90, Role.ESCORT: -90, Role.SEAD: -60, Role.TARCAP: -TARCAP_LEAD_S}      # seconds relative to the strikers' push (BMS-style)
@@ -411,6 +416,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._flight_plans(geom, package, tx, ty, skip1)
         pw = plan_route(pf.role, (pbase.x, pbase.y), geom, pspec.profile, is_player=True, tanker_xy=None, jsow=getattr(pf, "kit", "") == "JSOW",
                         jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), harm_deg=self._harm_deg(package, geom))
+        if package.objective.type == ObjectiveType.FLEET_DEFENSE and pf.role == Role.CAP and (package.extra or {}).get("setpiece") and not pf.tag:
+            self._raid_cap_station(package, geom, pw)               # v0.41.256: your racetrack is walked back clear of the SAMs like your wingmen's, and the card shows it
         dep_s = launch_s + 60 + dist(pbase.x, pbase.y, pw[0].x, pw[0].y) / (pspec.profile.depart_kts * 0.514444) * 1.12     # roll + climb-out to the first point (DEP off a carrier, else the marshal)
         self._dep_s = dep_s
         assign_times(pw, dep_s)
@@ -1554,11 +1561,20 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), harm_deg=self._harm_deg(package, geom))
         if getattr(f, "rush", False):
             self._rush_speeds(wps)                                    # v0.41.256: the raid SEAD
+        shaped_ = False
         if self._raid_cap(package, f):
+            k0_ = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)
+            o12_ = ((wps[k0_].x, wps[k0_].y), (wps[k0_ + 1].x, wps[k0_ + 1].y)) if (k0_ is not None and k0_ + 1 < len(wps)) else None
             self._raid_cap_station(package, geom, wps)                # v0.41.114: the station up the raid's way in, not on the player's line
+            rsp_ = getattr(self, "_rsp", {}).get(package.id)
+            if o12_ is not None and rsp_ is not None and f.aircraft.startswith("F-14") and (package.extra or {}).get("setpiece"):
+                wps = self._raid_f14_shape(wps, k0_, o12_)               # v0.41.256: HOLD (high, slow) -> PUSH -> IP -> TGT, the intercept point
+                f.gate_flag = rsp_["flag"]
+                push_s = rsp_["t_flag"]                                   # the briefed push is the gate's own latest time
+                shaped_ = True
             # v0.41.28: a raid scramble's way out to its station bends round red SAMs like a strike's (the orbit leg stays as it is)
             k1_ = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)
-            if k1_:
+            if k1_ and not shaped_:                                   # (an F-14's crossing leg goes toward the SAMs on purpose, once the gate opens)
                 wps = avoid_circles(wps[:k1_ + 1], self._zone_sams(package, True), spec.profile.max_points - (len(wps) - k1_ - 1), 1) + wps[k1_ + 1:]
         if not f.is_player or o.player_is_ai:
             terrain_clear(wps)                          # an AI flight climbs on its own schedule: its altitudes must clear the ridges on each leg
@@ -1873,7 +1889,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     # v0.41.256 (XO 2026-11-03: the Tomcats were killed by the SAMs and the missiles got through; "the gating perfect"): until the SEAD's verdict the
                     # interceptors fight only inside a SAM-clear circle round their leashed station, where the Kh-22s come to them. The DASH flag (the site's tracking
                     # radars dead, or the wait after the HARMs, see `_raid_sead_prep`) then swaps it for the full circle out to the launch point: they cross, as fast as they can.
-                    hold_ = self._clear_zone((cw_.x, cw_.y, A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]), package)
+                    hw_ = next((w for w in wps if w.action == "HOLD"), cw_)              # an F-14's hold is its own point (`_raid_f14_shape`)
+                    hold_ = self._clear_zone((hw_.x, hw_.y, A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]), package)
                     et_ = self._limit_engage(g, 0, stop, hold_)
                     if et_ is None:
                         et_ = task.ControlledTask(task.EngageTargetsInZone(mapping.Vector2(hold_[0], hold_[1]), int(hold_[2] * 1852), [task.Targets.All.Air]))
@@ -1984,6 +2001,22 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         best.sort()
         return self.state.assets[best[0][2]] if best else None
 
+    def _raid_f14_shape(self, wps, k1, o12):
+        """v0.41.256 (XO 2026-11-03: the F-14 is what the intercept was made for): an F-14 raid CAP holds at its leashed station (HOLD, RAID_F14_HOLD_FT, slow), then at the push
+        (the gate's own latest time, or earlier when the flag sets) dashes high and fast (PUSH, IP) to TGT, the old station near the launch point, and orbits there. `o12`: the
+        racetrack as it was before the leash. -> the new waypoint list."""
+        a = wps[k1]
+        (x1, y1), (x2, y2) = o12
+        hb = bearing(a.x, a.y, x1, y1)
+        d = dist(a.x, a.y, x1, y1)
+        hold = Wpt("HOLD", a.x, a.y, RAID_F14_HOLD_FT, RAID_F14_HOLD_KTS, "Hold here, outside the SAM rings; SEAD is working the radars. Push at the time or the AWACS call", "HOLD")
+        mid = [Wpt("PUSH", *offset(a.x, a.y, hb, min(1 * NM, d)), RAID_F14_DASH_FT, RAID_F14_DASH_KTS)]
+        if d > 8 * NM:
+            mid.append(Wpt("IP", *offset(x1, y1, hb + 180, 3 * NM), RAID_F14_DASH_FT, RAID_F14_DASH_KTS))
+        tgt = Wpt("TGT", x1, y1, RAID_F14_DASH_FT, 450, "Intercept point: engage the bombers at max range", "CAPORBIT")
+        cap2 = Wpt("CAP2", x2, y2, RAID_F14_DASH_FT, 450)
+        return wps[:k1] + [hold] + mid + [tgt, cap2] + wps[k1 + 2:]
+
     def _rush_speeds(self, wps) -> None:
         """v0.41.256 (XO 2026-11-03: get the SEADs to their targets as fast as they can): every point before the objective flies at least RAID_RUSH_KTS."""
         tw = objective_wp(wps)
@@ -2048,10 +2081,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             t_.add_action(action.SetFlag(flag))
             self.m.triggerrules.triggers.append(t_)
         t2 = triggers.TriggerOnce(comment="raid SEAD: wait over, interceptors cross")
-        t2.add_condition(condition.TimeAfter(int(max(tg.eta_s + RAID_DASH_WAIT_S, float(cap_tot_s) + 60))))
+        t_flag = int(max(tg.eta_s + RAID_DASH_WAIT_S, float(cap_tot_s) + 60))
+        t2.add_condition(condition.TimeAfter(t_flag))
         t2.add_action(action.SetFlag(flag))
+        say_ = String('trigger.action.outTextForCoalition(coalition.side.BLUE, "AWACS: SEAD complete. Interceptors, cleared to push toward the launch point.", 15)')
+        t2.add_action(action.DoScript(say_))
         self.m.triggerrules.triggers.append(t2)
-        c_[package.id] = {"site": site, "harm_s": tg.eta_s, "flag": flag}
+        if radars:
+            t_.add_action(action.DoScript(say_))
+        c_[package.id] = {"site": site, "harm_s": tg.eta_s, "flag": flag, "t_flag": float(t_flag)}
         return c_[package.id]
 
     def _spawn_raid_sead(self, package, f, plan, geom, idx, cap_tot_s, manifest, despawn):
@@ -2118,7 +2156,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 wp.tasks.insert(0, task.SetUnlimitedFuelCommand(True))           # and the trip home is free again
             if w.action == "HOLD":
                 ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
-                ct.stop_after_time(int(hold_leave_s(wps, push_s))); wp.tasks.append(ct)
+                ct.stop_after_time(int(hold_leave_s(wps, push_s)))
+                if getattr(f, "gate_flag", None):
+                    ct.stop_if_user_flag(f.gate_flag, True)          # v0.41.256: the raid interceptors' hold ends when the SEAD gate opens
+                wp.tasks.append(ct)
             elif w.action == "CAPORBIT":
                 ct = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(w.speed_kts * KPH)))
                 ct.stop_after_time(stop); wp.tasks.append(ct)
