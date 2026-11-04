@@ -1,5 +1,10 @@
 # CHANGES.md
 
+## v0.41.265, the build-time trim of v0.41.264 is taken out again
+
+XO 2026-11-04 ("it's just noise. I'll just make another campaign"). v0.41.264 trimmed a fleet raid saved in an old day plan down to the size cap when the mission was built. A new campaign plans raids at the cap already, so it did nothing there. Reverted: `raid_spawns._spawn_raid` is as in v0.41.263. The raid sizes of v0.41.260 (L3 16 from a wing of 24, L2 8) stay.
+- Checks: compile, targeted smoke.
+
 ## v0.41.264, a fleet raid planned before the size cap is trimmed when the mission is built
 
 XO 2026-11-04 ("Yeah, trim the number of bombers"; his run flew 24 Tu-22M3 at Level 3 although #329 capped the raid at 16). The raid's size is stored in the saved day plan (`state.plan`), so a plan made before #329 kept its 24.
