@@ -862,15 +862,6 @@ class RaidSpawns:
         ex = package.extra
         if not ex:
             return
-        from . import bombers as bmb_                          # lazy, like the planner's
-        cap_ = bmb_.max_raid(d)
-        if not ex.get("land") and int(ex.get("bombers", 0) or 0) > cap_:
-            # v0.41.264 (XO 2026-11-04): a plan saved before the cap came in (#329: L3 16, L2 8) keeps its old raid size; trim it here, escorts one per two (never more than planned)
-            n0_ = int(ex["bombers"])
-            ex = dict(ex)
-            ex["bombers"] = cap_
-            ex["escorts"] = min(int(ex.get("escorts", 0) or 0), bmb_.escorts_for(cap_))
-            self.warns.append(f"The fleet raid was planned at {n0_} bombers; trimmed to {cap_} (the Level {d.level} raid cap).")
         cvb = st.bases[package.objective.target_id]
         aim = ex.get("aim", "") or ""
         dx, dy = (ex.get("dest") or (cvb.x, cvb.y))              # where the raiders are going: the field, a supply site, a garrison or a sector
