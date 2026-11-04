@@ -81,6 +81,7 @@ RAID_F14_HOLD_FT = 30000    # v0.41.256 (XO 2026-11-03): the F-14 raid CAP holds
 RAID_F14_DASH_FT = 35000    # ...and crosses high
 RAID_F14_HOLD_KTS = 300     # ...at an endurance speed while it waits
 RAID_F14_DASH_KTS = 650     # ...and dashes at this speed once the gate opens (judgment call)
+RAID_OTHER_DASH_KTS = 600   # v0.41.265: the Hornets and Eagles that dash with them (judgment call; the F-14 is the fastest of the three at altitude)
 RAID_SEAD_LEAD_S = 240      # v0.41.256: the raid SEAD's HARMs land this long before the interceptors are due on station (judgment call; v0.41.255 had 180)
 RAID_DASH_WAIT_S = 180      # v0.41.256: the interceptors cross this long after the HARMs if the tracking radars are not all dead by then (judgment call)
 STAGGER = {Role.SWEEP: -90, Role.ESCORT: -90, Role.SEAD: -60, Role.TARCAP: -TARCAP_LEAD_S}      # seconds relative to the strikers' push (BMS-style)
@@ -1572,8 +1573,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             o12_ = ((wps[k0_].x, wps[k0_].y), (wps[k0_ + 1].x, wps[k0_ + 1].y)) if (k0_ is not None and k0_ + 1 < len(wps)) else None
             self._raid_cap_station(package, geom, wps)                # v0.41.114: the station up the raid's way in, not on the player's line
             rsp_ = getattr(self, "_rsp", {}).get(package.id)
-            if o12_ is not None and rsp_ is not None and f.aircraft.startswith("F-14") and (package.extra or {}).get("setpiece"):
-                wps = self._raid_f14_shape(wps, k0_, o12_)               # v0.41.256: HOLD (high, slow) -> PUSH -> IP -> TGT, the intercept point
+            ip_ = (rsp_ or {}).get("ip")
+            if o12_ is not None and rsp_ is not None and (f.aircraft.startswith("F-14") or ip_ is not None) and (package.extra or {}).get("setpiece"):
+                wps = self._raid_f14_shape(wps, k0_, o12_, ip_, idx, f.aircraft.startswith("F-14"))      # v0.41.256: HOLD (high, slow) -> PUSH -> IP -> TGT, the intercept point (v0.41.265: on the bombers' way in, for every raid CAP)
                 f.gate_flag = rsp_["flag"]
                 push_s = rsp_["t_flag"]                                   # the briefed push is the gate's own latest time
                 shaped_ = True
@@ -1887,6 +1889,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 lp_ = self._raid_launch(package, (cw_.x, cw_.y))             # v0.41.248: a fleet raid fires from its launch point: the leash takes it in
                 if lp_ is not None:
                     dx_, dy_ = lp_
+                    ipz_ = ((getattr(self, "_rsp", {}).get(package.id) or {}).get("ip") or {}).get("ip")
+                    if ipz_ is not None:                                         # v0.41.265: the circle that opens at the dash is round the intercept point, where the dash ends
+                        dx_, dy_ = ipz_
                 zone_ = self._cover_circle([(cw_.x, cw_.y), (dx_, dy_)], ((cw_.x + dx_) / 2, (cw_.y + dy_) / 2), package,
                                            A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A], bearing(cw_.x, cw_.y, dx_, dy_))
                 dash_ = (getattr(self, "_rsp", {}).get(package.id) or None) if lp_ is not None else None
@@ -2006,20 +2011,43 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         best.sort()
         return self.state.assets[best[0][2]] if best else None
 
-    def _raid_f14_shape(self, wps, k1, o12):
-        """v0.41.256 (XO 2026-11-03: the F-14 is what the intercept was made for): an F-14 raid CAP holds at its leashed station (HOLD, RAID_F14_HOLD_FT, slow), then at the push
-        (the gate's own latest time, or earlier when the flag sets) dashes high and fast (PUSH, IP) to TGT, the old station near the launch point, and orbits there. `o12`: the
-        racetrack as it was before the leash. -> the new waypoint list."""
+    def _raid_f14_shape(self, wps, k1, o12, ip=None, idx=0, f14=True):
+        """v0.41.256 (XO 2026-11-03: the F-14 is what the intercept was made for): a raid CAP holds at its leashed station (HOLD, RAID_F14_HOLD_FT, slow), then at the push
+        (the gate's own latest time, or earlier when the flag sets) dashes high and fast (PUSH, IP) to TGT and orbits there. `o12`: the racetrack as it was before the leash.
+        v0.41.265 (XO 2026-11-04: the dash went to the point the F-14 already held): `ip` is the intercept point on the bombers' way in (`_raid_intercept`): the dash flies its
+        lane (bends round the SAM circles), TGT is the point, CAP2 the short leg across the bombers' line. The Hornets and Eagles fly it too (`f14` False: slower dash); `idx` stacks
+        a package's flights (1,000 ft and 1.5 nm apart). -> the new waypoint list."""
         a = wps[k1]
         (x1, y1), (x2, y2) = o12
-        hb = bearing(a.x, a.y, x1, y1)
-        d = dist(a.x, a.y, x1, y1)
-        hold = Wpt("HOLD", a.x, a.y, RAID_F14_HOLD_FT, RAID_F14_HOLD_KTS, "Hold here, outside the SAM rings; SEAD is working the radars. Push at the time or the AWACS call", "HOLD")
-        mid = [Wpt("PUSH", *offset(a.x, a.y, hb, min(1 * NM, d)), RAID_F14_DASH_FT, RAID_F14_DASH_KTS)]
+        dft = RAID_F14_DASH_FT + (idx * 1000)
+        dkt = RAID_F14_DASH_KTS if f14 else RAID_OTHER_DASH_KTS
+        lat = (idx % 4 - 1.5) * 1.5 * NM
+        if ip is not None:
+            lane = list(ip["lane"]) + [ip["ip"]]
+            hb = bearing(a.x, a.y, lane[0][0], lane[0][1])
+            d = dist(a.x, a.y, lane[0][0], lane[0][1])
+        else:
+            lane = None
+            hb = bearing(a.x, a.y, x1, y1)
+            d = dist(a.x, a.y, x1, y1)
+        hold = Wpt("HOLD", a.x, a.y, RAID_F14_HOLD_FT + idx * 1000, RAID_F14_HOLD_KTS, "Hold here, outside the SAM rings; SEAD is working the radars. Push at the time or the AWACS call", "HOLD")
+        mid = [Wpt("PUSH", *offset(a.x, a.y, hb, min(1 * NM, d)), dft, dkt)]
+        if lane is not None:
+            for q in lane[:-1]:
+                mid.append(Wpt("AVD", q[0], q[1], dft, dkt, "Around a SAM site"))
+            px, py = lane[-1]
+            pb = bearing(*(lane[-2] if len(lane) > 1 else (a.x, a.y)), px, py)
+            px, py = offset(px, py, pb + 90, lat)
+            if dist(*(lane[-2] if len(lane) > 1 else (a.x, a.y)), px, py) > 8 * NM:
+                mid.append(Wpt("IP", *offset(px, py, pb + 180, 3 * NM), dft, dkt))
+            tgt = Wpt("TGT", px, py, dft, 450, "Intercept point, on the bombers' way in: engage them at max range", "CAPORBIT")
+            q2 = offset(ip["ip2"][0], ip["ip2"][1], pb + 90, lat)
+            cap2 = Wpt("CAP2", q2[0], q2[1], dft, 450)
+            return wps[:k1] + [hold] + mid + [tgt, cap2] + wps[k1 + 2:]
         if d > 8 * NM:
-            mid.append(Wpt("IP", *offset(x1, y1, hb + 180, 3 * NM), RAID_F14_DASH_FT, RAID_F14_DASH_KTS))
-        tgt = Wpt("TGT", x1, y1, RAID_F14_DASH_FT, 450, "Intercept point: engage the bombers at max range", "CAPORBIT")
-        cap2 = Wpt("CAP2", x2, y2, RAID_F14_DASH_FT, 450)
+            mid.append(Wpt("IP", *offset(x1, y1, hb + 180, 3 * NM), dft, dkt))
+        tgt = Wpt("TGT", x1, y1, dft, 450, "Intercept point: engage the bombers at max range", "CAPORBIT")
+        cap2 = Wpt("CAP2", x2, y2, dft, 450)
         return wps[:k1] + [hold] + mid + [tgt, cap2] + wps[k1 + 2:]
 
     def _rush_speeds(self, wps) -> None:
@@ -2094,7 +2122,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self.m.triggerrules.triggers.append(t2)
         if radars:
             t_.add_action(action.DoScript(say_))
-        c_[package.id] = {"site": site, "harm_s": tg.eta_s, "flag": flag, "t_flag": float(t_flag)}
+        ip_ = self._raid_intercept(package, geom, self._raid_hold_xy(package, geom))      # v0.41.265: where the interceptors dash to, on the bombers' way in (None = no safe point: the old shape)
+        if ip_ is None:
+            self.warns.append("Raid interceptors: no SAM-clear intercept point on the bombers' way in; they hold at their station.")
+        c_[package.id] = {"site": site, "harm_s": tg.eta_s, "flag": flag, "t_flag": float(t_flag), "ip": ip_}
         return c_[package.id]
 
     def _spawn_raid_sead(self, package, f, plan, geom, idx, cap_tot_s, manifest, despawn):

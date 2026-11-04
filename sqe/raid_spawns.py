@@ -98,6 +98,15 @@ RAID_STAGED_GAP_S = 15        # a staged raid's groups push this far apart (the 
 RAID_MSHL_STEP_M = 150        # each group orbits the marshal this much lower than the one before (no two share a level)
 RAID_REACH_NM = 208           # how far the Tu-22M3's X-22 shoots as DCS flies it: 380 to 385 km (208 nm) in XO's 2026-11-03 run (measured)
 RAID_MSHL_CLEAR_NM = 12       # the marshal stays this far outside that
+
+# v0.41.265 (XO 2026-11-04, the fleet-defence run: the Tomcats' dash went to the point they already held, and the Hornets and Eagles never moved up): the interceptors' dash point
+# (TGT) is on the BOMBERS' own way in, between their marshal and the missiles' ring, as far out as red's SAM circles and the fighters' own range allow, so the raid passes through the
+# fighters' engage circle before it fires. All judgment calls (no source for a fighter dash distance; the concept is the Cold War carrier "outer air battle": fighters stationed up
+# the threat axis, cued by AEW; real distances not looked up yet): tune in DCS.
+RAID_IP_MAX_NM = 160          # the longest dash from the hold point to the intercept point
+RAID_IP_STEP_NM = 5           # candidate points along the bombers' way in, this far apart
+RAID_IP_LEG_NM = 10           # the orbit leg at the intercept point, across the bombers' line
+RAID_IP_LANE_PTS = 12         # waypoint budget for the bends of the dash lane round SAM circles
 ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
 
@@ -208,6 +217,73 @@ class RaidSpawns:
             plan[n] = {"rwy": on, "t": (t0 + offs[n]) if on else None, "mk": mk}
             mk += 1
         return {"plan": plan, "T_push": T_push, "fly_s": fly_s}
+
+    def _raid_axis(self, package, station):
+        """The first part of a fleet raid's geometry, shared by the raid itself and by the interceptors' dash point: -> (ba, w1, mshl, staged_ok, apt_r), where `ba` is the bomber
+        wing's field asset, `w1` the route's outer point (at most 220 nm from the target), `mshl` the marshal (outside the missiles' reach for a staged raid)."""
+        st, ex = self.state, package.extra
+        cvb = st.bases[package.objective.target_id]
+        aim = ex.get("aim", "") or ""
+        dx, dy = (ex.get("dest") or (cvb.x, cvb.y))
+        cvg = self.ship.get(cvb.id)
+        ba = st.assets[ex["bomber_wing"]]
+        w1 = offset(dx, dy, ex["brg"], min(220 * NM, 0.9 * dist(ba.x, ba.y, dx, dy)))
+        mshl = self._raid_marshal(ba, w1, station, dx, dy)
+        apt_r = self.t.airports.get(ba.airport) if getattr(ba, "airport", None) else None
+        staged_ok = RAID_STAGE_ON and (not bool(ex.get("land"))) and cvg is not None and not aim and apt_r is not None
+        if staged_ok:
+            mshl = self._raid_marshal_out(mshl, ba, w1, dx, dy)          # v0.41.261: outside the missiles' reach
+        return ba, w1, mshl, staged_ok, apt_r
+
+    @staticmethod
+    def _seg_clear(a, b, circles) -> bool:
+        """True when the segment a-b stays outside every (x, y, nm) circle (a hair of slack: the avoid circles already carry a margin)."""
+        vx, vy = b[0] - a[0], b[1] - a[1]
+        L2 = vx * vx + vy * vy
+        for cx, cy, r in circles:
+            t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((cx - a[0]) * vx + (cy - a[1]) * vy) / L2))
+            if dist(a[0] + t * vx, a[1] + t * vy, cx, cy) < r * NM - 0.5 * NM:
+                return False
+        return True
+
+    def _raid_intercept(self, package, geom, hold):
+        """v0.41.265: where the fleet raid's interceptors dash to. On the bombers' way in (marshal to the route's outer point `w1`, beyond which they are in range of the fleet),
+        the point furthest out that (a) is outside every live SAM's circle the fighters keep out of (`_zone_sams`), (b) is at most RAID_IP_MAX_NM from the hold point `hold`, and
+        (c) can be reached from the hold along a lane that bends round those circles (`avoid_circles`) and ends clear. The orbit there is a short leg across the bombers' line.
+        -> {"ip": (x, y), "ip2": (x, y), "lane": [(x, y), ...] bends only, hold and ip excluded} or None (no such point: the interceptors keep their old shape)."""
+        ex = package.extra or {}
+        if ex.get("land") or ex.get("aim"):
+            return None
+        try:
+            ba, w1, mshl, staged_ok, apt_r = self._raid_axis(package, (hold[0], hold[1]))
+        except (KeyError, AttributeError):
+            return None
+        circles = self._zone_sams(package, True)
+        L = dist(w1[0], w1[1], mshl[0], mshl[1])
+        if L < 5 * NM:
+            return None
+        ux, uy = (mshl[0] - w1[0]) / L, (mshl[1] - w1[1]) / L          # from w1 back toward the marshal
+        for k in range(int(L / (RAID_IP_STEP_NM * NM)), -1, -1):        # furthest out first
+            s_ = k * RAID_IP_STEP_NM * NM
+            P = (w1[0] + ux * s_, w1[1] + uy * s_)
+            if dist(hold[0], hold[1], P[0], P[1]) > RAID_IP_MAX_NM * NM or any(dist(P[0], P[1], cx, cy) < r * NM for cx, cy, r in circles):
+                continue
+            pts = avoid_circles([Wpt("HOLD", hold[0], hold[1], 0, 0), Wpt("IP", P[0], P[1], 0, 0)], circles, RAID_IP_LANE_PTS, 1)
+            xy = [(w.x, w.y) for w in pts]
+            if not all(self._seg_clear(xy[i], xy[i + 1], circles) for i in range(len(xy) - 1)):
+                continue
+            perp = bearing(w1[0], w1[1], mshl[0], mshl[1]) + 90
+            for sgn in (1, -1):
+                P2 = offset(P[0], P[1], perp if sgn > 0 else perp + 180, RAID_IP_LEG_NM * NM)
+                if not any(dist(P2[0], P2[1], cx, cy) < r * NM for cx, cy, r in circles):
+                    return {"ip": P, "ip2": P2, "lane": xy[1:-1], "from_w1_nm": round(s_ / NM)}
+        return None
+
+    def _raid_hold_xy(self, package, geom):
+        """The leashed station of a fleet raid's interceptors (the first point of the racetrack that `_leash_fleet_cap` walks clear of the SAMs): their hold point."""
+        pts = [Wpt("CAP1", geom.cap1[0], geom.cap1[1], 0, 0, "", "CAPORBIT"), Wpt("CAP2", geom.cap2[0], geom.cap2[1], 0, 0)]
+        self._leash_fleet_cap(pts, 0, geom.tx, geom.ty)
+        return (pts[0].x, pts[0].y)
 
     def _raid_bend(self, pts, raided):
         """v0.41.29: a red raid's legs bend round blue's Patriot fields (raids.PATRIOT_NM; the field it raids is the one it goes for, so not that
@@ -866,20 +942,14 @@ class RaidSpawns:
         aim = ex.get("aim", "") or ""
         dx, dy = (ex.get("dest") or (cvb.x, cvb.y))              # where the raiders are going: the field, a supply site, a garrison or a sector
         cvg = self.ship.get(cvb.id)
-        ba = st.assets[ex["bomber_wing"]]
         pt = lambda x, y: mapping.Point(x, y, self.t)
         station = (sx_, sy_)
-        w1 = offset(dx, dy, ex["brg"], min(220 * NM, 0.9 * dist(ba.x, ba.y, dx, dy)))
+        ba, w1, mshl, staged_ok, apt_r = self._raid_axis(package, station)          # v0.41.265: one place for the marshal and the outer point (the interceptors' dash point uses them too)
         V = RAID_MPS
         arrive = tot_s + r.uniform(60, 150)                    # at the station: 1-2.5 min after our scramble's TOT
         t_tgt = arrive + dist(sx_, sy_, dx, dy) / V            # the raid's own TOT
         # v0.41.29: the raid flies blue's shape. Marshal on red's side (in a red SAM's cover along its way in, else just off its field), PUSH,
         # ingress bent round blue's Patriot fields (not the one it is raiding), the target at its TOT, then egress and home.
-        mshl = self._raid_marshal(ba, w1, station, dx, dy)
-        apt_r = self.t.airports.get(ba.airport) if getattr(ba, "airport", None) else None
-        staged_ok = RAID_STAGE_ON and (not bool(ex.get("land"))) and cvg is not None and not aim and apt_r is not None
-        if staged_ok:
-            mshl = self._raid_marshal_out(mshl, ba, w1, dx, dy)          # v0.41.261: outside the missiles' reach
         lane = [mshl, offset(*mshl, bearing(*mshl, *(w1 if dist(*mshl, *w1) > 15 * NM else station)), RAID_PUSH_NM * NM)]
         if dist(*mshl, dx, dy) > dist(*w1, dx, dy) + 15 * NM:
             lane.append(w1)
