@@ -45,6 +45,7 @@ local RUINS = { __RUINS__ }
 local GATES = { __GATES__ }
 local pl = { takeoff = nil, landed = nil, ka = 0, kg = 0, ks = 0 }
 local dead, ejected, landed, ended = {}, {}, {}, false
+local landAt = {}                -- unit name -> {t, p}: the time and the place (airbase or ship) of its landing
 local aborted = {}
 local gateLog = {}
 local kills = {}
@@ -157,6 +158,11 @@ local function scrubJson()
 end
 local RWYS = { __RWYS__ }                -- v0.41.254: the fields whose runways count bomb impacts: id, reference point (x north, z east), runway headings
 local rwyHits = {}
+local function landJson()
+  local o = {}
+  for n, v in pairs(landAt) do o[#o + 1] = string.format('"%s":{"t":%d,"p":"%s"}', esc(n), math.floor(v.t or 0), esc(v.p or "")) end
+  return "{" .. table.concat(o, ",") .. "}"
+end
 local function rwyJson()
   local o = {}
   for id, n in pairs(rwyHits) do o[#o + 1] = string.format('"%s":%d', esc(id), n) end
@@ -165,9 +171,9 @@ end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"scrub":%s,"tracks":%s,"rgate":%s,"rwy":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"scrub":%s,"tracks":%s,"rgate":%s,"rwy":%s,"landings":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), scrubJson(), tracksJson(), rgateJson(), rwyJson(), CFG, splashN, splashK))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), scrubJson(), tracksJson(), rgateJson(), rwyJson(), landJson(), CFG, splashN, splashK))
   f:close()
 end
 local function nameOf(obj)
@@ -481,6 +487,9 @@ function H:onEvent(e)
   if id == world.event.S_EVENT_LAND or id == world.event.S_EVENT_RUNWAY_TOUCH then
     if n and not dead[n] then
       landed[n] = true
+      local pn = nil
+      if e.place and e.place.getName then local okp, pv = pcall(function() return e.place:getName() end); if okp then pn = pv end end
+      landAt[n] = { t = timer.getTime(), p = pn }                    -- v0.41.257: when and where (a sunk carrier takes what landed on it before it went down)
       if n == PLAYER then pl.landed = timer.getTime() end
       dump()
       if DESPAWN[n] then
@@ -1683,6 +1692,9 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 out["lines"].append(f"{len(dead)} enemy aircraft from {state.assets[g['ref']].name} destroyed")
     # a raid you were sent to stop: bombers still alive when they reached their base got through
     t_now = float(data.get("time", 0) or 0)
+    from . import fleet as _fleet
+    cv_sunk_ = _fleet.sunk_in(state, data)                      # v0.41.257: the carrier went down in this mission: the ship's loss replaces the old deck-hit model
+    cv_ = _fleet.carrier_base(state)
     for g in manifest.groups:
         if g["kind"] == "enemy_air" and g.get("raid_base") and g["raid_base"] in state.bases:
             alive = [u for u in g["units"] if u not in lost]
@@ -1690,6 +1702,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             wing = state.enemy_air_at(g["ref"])
             if len(alive) < len(g["units"]):
                 out["lines"].append(f"Raid: {len(g['units']) - len(alive)} of {len(g['units'])} attack aircraft shot down")
+            if cv_sunk_ and cv_ is not None and g["raid_base"] == cv_.id:
+                continue
             rg_ = (data.get("rgate") or {}).get(g.get("raid_group", ""), {}) if g.get("raid_gate_s") is not None else {}
             arrive_ = g.get("raid_arrive_s", 0.0)
             if rg_.get("open") is not None:                       # v0.41.126: held at the gate until the radars went down: it can arrive no sooner than that plus the leg in
@@ -1800,6 +1814,7 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         out["player"] = "lost"
     elif pu in landed:
         out["player"] = "recovered"
+    out["lines"] += _fleet.apply_debrief(state, manifest, data)             # v0.41.257: ships sunk in the mission (the carrier, its escorts)
     out["kill_log"] = kill_log(manifest, data)
     for ln in out["lines"]:
         state.note(ln)

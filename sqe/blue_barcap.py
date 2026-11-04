@@ -207,7 +207,8 @@ def attach(state, pkgs: list) -> None:
         if cv is None and setp:
             cv = state.bases[obj.target_id]
         if cv is None:                                                    # v0.41.209 (XO 2026-10-30): the carrier group is in every mission now, so its scheduled CVCAP comes along when its window overlaps the sortie
-            cv = next((b for b in state.bases.values() if b.kind == BaseKind.CARRIER), None)
+            from . import fleet as _fleet
+            cv = _fleet.carrier(state)                                    # v0.41.257: none while the carrier is sunk
         if cv is not None:
             assets.append(cv)
         have = {f.tag for f in p.flights if f.tag in ("BASECAP", "CVCAP")}

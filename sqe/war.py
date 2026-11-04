@@ -233,7 +233,8 @@ class ObjectivePlanner:
                 if o.target_id in fsites:
                     pr *= 1.4                                          # v0.41.158: and a site with a strike or CAS job waiting behind its SEAD (judgment call)
             (follows if o.after else pool).append((pr, o))
-        fleet = next((b for b in state.bases.values() if b.kind.value == "CARRIER"), None)
+        from . import fleet as _fl
+        fleet = _fl.carrier(state)                                    # v0.41.257: None while the carrier is sunk
         if fleet and self.d is not None and self.d.bomber_policy != "none":
             from . import bombers                                    # v0.41.105: the bomber wing is a trump card: safe window or desperation, never fewer than 4, 2 escorts each
             dec = bombers.decide(state, self.d)
@@ -749,7 +750,7 @@ def update_status(state: CampaignState) -> str:
         elif t["friendly_air"] < 0.15:
             state.status = "DEFEAT"; state.note("DEFEAT: the coalition air component can no longer sustain operations.")
         elif ground.fallen_count(state) >= 2:
-            state.status = "DEFEAT"; state.note("DEFEAT: the front has collapsed; two of our airfields are lost.")
+            state.status = "DEFEAT"; state.note("DEFEAT: the front has collapsed; two of our bases are lost" + (" (the sunk carrier counts as one)." if ground.fleet_sunk(state) else "."))
             for ln in story.beat(state, "lose"):
                 state.note(ln)
     return state.status

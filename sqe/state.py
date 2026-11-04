@@ -78,6 +78,7 @@ class CampaignState:
     sams: dict = field(default_factory=dict)       # air defence that rebuilds and moves (sams.py): day each site went down, moves made, original positions
     blue_assets: dict = field(default_factory=dict)  # Blue supply sites (fuel farms, forward depot): same record as the enemy assets
     support_assets: dict = field(default_factory=dict)   # v0.41.87: tankers and AWACS as assets with airframe counts (support_assets.py)
+    fleet: dict = field(default_factory=dict)        # v0.41.257: the carrier group's losses (fleet.py): a sunk carrier's days away, sunk escorts; {} = all afloat
     blue_sams: dict = field(default_factory=dict)    # v0.41.62: Blue's air defence sites (bsam_<field>_pat / hawk / aaa): the same record as red's SAM assets (sams.py)
 
     # ---- helpers ------------------------------------------------------------------------
@@ -113,6 +114,7 @@ class CampaignState:
             "red_air": self.red_air,
             "barcap": self.barcap,
             "support_assets": self.support_assets,
+            "fleet": self.fleet,
             "blue_assets": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.blue_assets.items()},
             "blue_sams": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.blue_sams.items()},
             "plan": self.plan, "pending": self.pending, "history": self.history[-300:], "log": self.log[-400:],
@@ -145,6 +147,7 @@ class CampaignState:
         s.sams = d.get("sams") or {}
         s.red_air = d.get("red_air") or {}
         s.barcap = d.get("barcap") or {}
+        s.fleet = d.get("fleet") or {}                                    # missing in an older save: nothing sunk
         s.support_assets = d.get("support_assets") or {}                 # missing in an older save: support_assets.ensure
         s.blue_assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_assets") or {}).items()}
         s.blue_sams = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_sams") or {}).items()}      # missing in an older save: sams.ensure_blue_sams builds them from each field's `defense`

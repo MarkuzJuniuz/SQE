@@ -147,8 +147,10 @@ class Session:
         if st.ground is not None:
             st.ground["pilot_influence"] = bool(getattr(self.settings, "pilot_influence", True))
             st.ground["tempo_decay"] = bool(getattr(self.settings, "tempo_decay", False))      # v0.41.208
-        from . import carrier_pos
-        _cv = carrier_pos.update(st)                    # v0.41.159: the fleet repositions once a day, along the front and clear of the red airfields
+        from . import carrier_pos, fleet as _fleet
+        for _ln in _fleet.step(st):                     # v0.41.257: a sunk carrier comes back as new on its day; sunk escorts are replaced
+            st.note(_ln)
+        _cv = None if _fleet.sunk(st) else carrier_pos.update(st)      # v0.41.159: the fleet repositions once a day, along the front and clear of the red airfields
         if _cv:
             st.note(_cv)
         redair.ensure(st, self.d)                       # the enemy's air tasking for the day

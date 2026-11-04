@@ -29,6 +29,8 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     """x: date, whois, mode3, laser, bingo, joker, bullseye, divert, weather, link16(bool)."""
     pf = pkg.player_flight
     spec = AIRCRAFT[pf.aircraft]
+    _psq = state.squadrons.get(getattr(pf, "squadron_id", ""))
+    on_boat = (state.bases[_psq.base_id].kind.value == "CARRIER") if (_psq is not None and _psq.base_id in state.bases) else spec.home.value == "CARRIER"          # v0.41.257: a carrier squadron moved ashore (its ship sunk) lands at a field
     n, pname, ptext = narrative.phase(state)
     obj = pkg.objective
     threats = threat_lines(state, *tgt_xy)
@@ -119,7 +121,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     else:
         tower, jtac_at = f"ATC {plan.where('ATC')}", (plan.where("JTAC") or None)
     adm = [f"BINGO {x['bingo']} lb   JOKER {x['joker']} lb",
-           "Recovery: " + (f"carrier Case I, TACAN 74X, ICLS 11, {tower}" if spec.home.value == "CARRIER" else f"home field, tower {tower.replace('ATC ', 'on ')}"),
+           "Recovery: " + (f"carrier Case I, TACAN 74X, ICLS 11, {tower}" if on_boat else f"home field, tower {tower.replace('ATC ', 'on ')}"),
            f"Divert: {x['divert']}", "Tanker track is steerpoint TKR. Bullseye is the last steerpoint."]
     if spec.fc3:
         com = ["Frequencies: " + " | ".join(f"{e.label} {e.mhz:.3f}" for e in list(plan.comm1.values()) + list(plan.comm2.values()))]

@@ -1,5 +1,19 @@
 # CHANGES.md
 
+## v0.41.257, the fleet can be sunk
+
+XO 2026-11-03 ("we need to check why the carrier group is still up after being sunk"): a carrier sunk in a flown mission now stays sunk. All numbers are judgment calls (no public figure applies to a game carrier); tune on XO's runs.
+- **Read from the mission:** the hook reports every ship that died (carrier = `"<base name> Unit #1"`, escorts `"<base name> escort N Unit #1"`) and now also WHEN and WHERE each aircraft landed (`landings`). New module `sqe/fleet.py`, new save key `state.fleet` (an older save has none = nothing sunk; no format bump).
+- **Carrier sunk:** every aircraft that did not fly in the mission and every one that landed back aboard before it sank goes down with it. The aircraft still flying land at the nearest field; their squadron moves there like a squadron from a fallen field (`home_id`, the move nights, the player's too).
+- **Seven days away** (`fleet.SUNK_DAYS`): no carrier launches (`deck_factor` 0), no carrier squadrons in the plan (they sit ashore), no fleet BARCAP or CVCAP, no bomber raid on it, no E-2C or S-3 from it, no ships in the missions. It counts as ONE fallen base for the defeat rule while away (`ground.fallen_count`): one more fallen original field and the campaign is lost. Taken fields still never count. The Overview and the posture say so.
+- **Back as new** on day 7: a new ship, air defence 100%, the escorts with it, the carrier squadrons at full authorized strength and flying home.
+- **Escort sunk** (the carrier afloat or not): the group's air defence is cut by the escort's share (`fleet.ESCORT_DEFENSE` cruiser 30%, destroyer 25%, frigate 15%, floor 20%), the ship is missing from the missions, and it is replaced after `fleet.ESCORT_DAYS` 7.
+- **Wording:** "Fleet losses: USS Stennis sunk, 2 escorts sunk." and "Carrier sunk, returning in 7 days." ("fallen" stays for land fields.)
+- **A carrier squadron on a land field:** the support aircraft (E-3 instead of E-2C), the RTB note, the briefing's recovery line and the catapult-flight limit now go by the squadron's real base, not by the airframe's home.
+- **Unflown raids** keep the old "big hit" model (`carrier_hit`); they never sink the ship. A flown raid that sinks the carrier skips the old hit.
+- Not done: bomber count / salvo timing, the player F-14 HOLD / PUSH / TGT shape. Not seen in DCS (the hook's `landings` and the ship death names are read from XO's earlier state file, not yet from a run with this build).
+- Checks: compile, new `check_121_sunk_carrier` (debrief, rebase, defeat count, save, planner, a mission built without the ship, return), full smoke.
+
 ## v0.41.256, carrier raid, round 2: USAF share, SAMs along the bomber route, SEAD rush, the interceptors' gate
 
 XO 2026-11-03 ("fox 3 high"): the USAF wing gave no help, no SAMs across the mountains, SEADs as fast as they can, the F-14s cross once the SAMs are suppressed, a safe BARCAP for the USAF. All figures are judgment calls (no source).

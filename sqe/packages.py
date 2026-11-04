@@ -408,7 +408,8 @@ class PackageBuilder:
         if obj is not None and obj.target_id in st.bases and st.bases[obj.target_id].kind != BaseKind.CARRIER:
             return self._land_raid_plan(number, obj)
         from . import bombers
-        cv = next((b for b in st.bases.values() if b.kind == BaseKind.CARRIER), None)
+        from . import fleet as _fleet
+        cv = _fleet.carrier(st)
         dec = bombers.decide(st, self.d) if self.d is not None else {"mode": "hold"}
         if cv is None or dec["mode"] == "hold":
             return None
@@ -485,6 +486,9 @@ class PackageBuilder:
     def _support(self, pkg: Package) -> list:
         lead = pkg.player_flight or next((f for f in pkg.flights if not f.tag), pkg.flights[0])
         lead_home = AIRCRAFT[lead.aircraft].home
+        _sq = self.state.squadrons.get(getattr(lead, "squadron_id", ""))
+        if _sq is not None and _sq.base_id in self.state.bases:           # v0.41.257: a carrier squadron moved to a land field (its ship sunk) recovers there
+            lead_home = self.state.bases[_sq.base_id].kind
         awacs = AWACS_FOR[lead_home]          # E-2C for Navy leads (F-14 Link-4), E-3 for USAF leads
         from . import support_assets as sa_
         out = [SupportPlan("AWACS", awacs.dcs_class, awacs.label, awacs.altitude_ft, awacs.speed_kts)]
@@ -516,7 +520,8 @@ class PackageBuilder:
             raise NoPlayerSlot(f"{flight_id} is not a flight you can fly in this package")
         for f in pkg.flights:
             f.is_player = f is chosen
-        if AIRCRAFT[chosen.aircraft].home == BaseKind.CARRIER:
+        _sq = self.state.squadrons.get(getattr(chosen, "squadron_id", ""))
+        if (self.state.bases[_sq.base_id].kind if _sq is not None else AIRCRAFT[chosen.aircraft].home) == BaseKind.CARRIER:
             chosen.count = min(chosen.count, CARRIER_PLAYER_FLIGHT_MAX)
         pkg.support = self._support(pkg)
         return chosen
