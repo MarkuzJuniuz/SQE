@@ -83,6 +83,8 @@ RAID_F14_HOLD_KTS = 300     # ...at an endurance speed while it waits
 RAID_F14_DASH_KTS = 650     # ...and dashes at this speed once the gate opens (judgment call)
 RAID_OTHER_DASH_KTS = 600   # v0.41.265: the Hornets and Eagles that dash with them (judgment call; the F-14 is the fastest of the three at altitude)
 RAID_SEAD_LEAD_S = 240      # v0.41.256: the raid SEAD's HARMs land this long before the interceptors are due on station (judgment call; v0.41.255 had 180)
+RAID_SEAD_DONE_S = 150      # v0.41.283 (XO 2026-11-04): when the player is not the raid SEAD flyer the SEAD is already done: its HARMs landed this long before the mission starts (judgment call)
+RAID_SCRIPT_KILL = 0.5      # ...and this share of the live site's launchers and vehicles is destroyed at second 2, with all its tracking radars (a scripted result; judgment call)
 RAID_DASH_WAIT_S = 180      # v0.41.256: the interceptors cross this long after the HARMs if the tracking radars are not all dead by then (judgment call)
 RAID_HEAD_S = 300         # v0.41.278 (XO 2026-11-04: "intelligence is intelligence. Must've put two and two together"): the AI interceptors of the fleet-defence raid spawn this far along their route, as if they had launched this long before the mission began. A player's flight is not moved. Judgment call: ~50 nm at the dash speed; 0 = they start at the field
 RAID_F14_HOLD = False     # v0.41.276 (XO 2026-11-04: "the interceptors should just fly fast and bend away from SAMs"): False = the fleet-defence F-14s and F-15s have no HOLD and no gate: they leave at the start, fly the SAM-bending lane at the dash speed and wait on the intercept point. True = the v0.41.256 hold-then-dash with the SEAD gate.
@@ -2117,13 +2119,35 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         push = (pu.eta_s if pu is not None else 0.0) + 60.0      # (the flight route keeps a minute of margin before the push)
         assign_times(pw, 0.0, push)
         tg = objective_wp(pw) or pw[-1]
-        sh = (float(cap_tot_s) - RAID_SEAD_LEAD_S) - tg.eta_s       # the HARMs land RAID_SEAD_LEAD_S before the interceptors are due on station; a pair that would be late is
+        sh = ((-float(RAID_SEAD_DONE_S) if self._raid_scripted(package) else float(cap_tot_s) - RAID_SEAD_LEAD_S)) - tg.eta_s       # the HARMs land RAID_SEAD_LEAD_S before the interceptors are due on station; a pair that would be late is
         for w in pw:                                                  # already underway at the start (an earlier package folded in), flying the rush speeds
             w.eta_s += sh
         push += sh
         eg = next((w for w in pw if w.name == "EGR"), pw[-1])
         rtb = eg.eta_s + leg_seconds(eg, Wpt("RTB", base.x, base.y, 0, 300))
         return sp, g2, push, tg, rtb
+
+    def _raid_scripted(self, package) -> bool:
+        """v0.41.283 (XO 2026-11-04): the SEAD is a scripted result, already done when the mission starts, unless the player flies the raid SEAD himself."""
+        pf = package.player_flight
+        return pf is None or pf.role != Role.SEAD
+
+    def _raid_script_kills(self, grp, radars, comment) -> None:
+        """At second 2 the site's tracking radars and RAID_SCRIPT_KILL of its other units blow up (the HARMs and the strike that already happened). At least one unit is left."""
+        units = list(grp.units) if grp is not None else []
+        rad_ = {id(u) for u in radars}
+        rest = [u for u in units if id(u) not in rad_]
+        n_ = int(len(rest) * RAID_SCRIPT_KILL)
+        names = [u.name for u in radars] + [u.name for u in rest[:n_]]
+        if len(names) >= len(units):
+            names = names[:max(0, len(units) - 1)]
+        if not names:
+            return
+        lua = "".join(f'local u=Unit.getByName("{n_.replace(chr(34), "")}") if u then trigger.action.explosion(u:getPoint(), 300) end ' for n_ in names)
+        tr = triggers.TriggerOnce(comment=comment)
+        tr.add_condition(condition.TimeAfter(2))
+        tr.add_action(action.DoScript(String(lua)))
+        self.m.triggerrules.triggers.append(tr)
 
     def _raid_sead_prep(self, package, geom, cap_tot_s, manifest):
         """v0.41.256, once per carrier-raid mission, before its flights are built: the SAM site the raid SEAD goes for (built live now), when the HARMs land, and the
@@ -2141,13 +2165,17 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return None
         site = sites[0]
         base = self.state.bases[f0.base_id]
+        scripted = self._raid_scripted(package)
         radars, tg_s = [], 0.0
         for st_ in sites:                                                  # v0.41.267: every site is built live; the dash flag waits for the tracking radars of ALL of them
             sp, g2, push, tg, rtb = self._raid_sead_route(package, f0, st_, cap_tot_s)
             self._spawn_opfor_ground(sp, st_.x, st_.y, manifest, [(base.x, base.y), g2.mshl, g2.push, g2.ip, (st_.x, st_.y), g2.egr])
             tg_s = max(tg_s, tg.eta_s)
             grp = self.groups_by_asset.get(st_.id)
-            radars += [u for u in (grp.units if grp is not None else []) if str(getattr(u, "type", "")) in TRACK_RADARS]
+            site_radars = [u for u in (grp.units if grp is not None else []) if str(getattr(u, "type", "")) in TRACK_RADARS]
+            radars += site_radars
+            if scripted:
+                self._raid_script_kills(grp, site_radars, f"scripted SEAD result {st_.id}")
         self._flag_n += 1
         flag = self._flag_n
         if radars:
@@ -2157,7 +2185,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             t_.add_action(action.SetFlag(flag))
             self.m.triggerrules.triggers.append(t_)
         t2 = triggers.TriggerOnce(comment="raid SEAD: wait over, interceptors cross")
-        t_flag = int(max(tg_s + RAID_DASH_WAIT_S, float(cap_tot_s) + 60))
+        t_flag = 5 if scripted else int(max(tg_s + RAID_DASH_WAIT_S, float(cap_tot_s) + 60))          # (scripted: the radars are blown at second 2, the flag follows)
         t2.add_condition(condition.TimeAfter(t_flag))
         t2.add_action(action.SetFlag(flag))
         say_ = String('trigger.action.outTextForCoalition(coalition.side.BLUE, "AWACS: SEAD complete. Interceptors, cleared to push toward the launch point.", 15)')
