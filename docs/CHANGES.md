@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## v0.41.268, fleet defence: when no lane is clear, the interceptors go by way of a blue field
+
+XO 2026-11-04 ("fox 3 high on 3"; "my bendy bend": the F-14s wait long enough to overfly the blue bases and get closer; the Hornets and Eagles bend too). Stacked on PR2 (v0.41.267, #336).
+- **Bent lane (`raid_spawns._raid_bent`):** where neither a straight lane nor the SEAD on the blockers gives the interceptors a SAM-free dash (`_raid_blockers`), the dash goes hold point -> a blue airfield (not inside a SAM circle) -> the intercept point, each leg bent round the SAM circles. The point is the furthest out on the bombers' way in that some field reaches within `RAID_BEND_MAX_NM` 280 nm of path (judgment call from fuel at high and fast, tune in DCS); the shortest way by field when several do. Same result as `_raid_intercept`, plus `via` and `path_nm`.
+- **Shape (`mission_builder._raid_f14_shape`):** the field is a `BASE` waypoint ("Over <field>, then on to the intercept point") in every interceptor flight's dash (F-14, Hornet, Eagle). Nothing else in the shape changed.
+- Probes (Level 3, 18 builds): all found a lane; 4 went by Senaki (path 224 to 232 nm, intercept point 110 to 125 nm up the bombers' way in, against 10 to 85 nm for the straight ones).
+- Not seen in DCS. Not done: a bend preferred over a short straight lane (the straight lane puts the intercept nearer the fleet), fuel checks for the longer dash, closed fields (a cratered field is still flown over).
+
 ## v0.41.267, fleet defence: the dash limit was too short; the raid SEAD goes for the sites that block the lane
 
 XO 2026-11-04 ("fox 3 high on PR2"; design: a 4-ship per blocking radar, perhaps two). Tracing XO's run found the real reason the interceptors held: at Level 3 the bombers' way in starts 160 to 165 nm from the hold point and `RAID_IP_MAX_NM` was 160, so no dash point was ever in range (not SAMs). Six of six probe builds find a SAM-free lane with the limit at 185 nm.

@@ -2043,8 +2043,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         hold = Wpt("HOLD", a.x, a.y, RAID_F14_HOLD_FT + idx * 1000, RAID_F14_HOLD_KTS, "Hold here, outside the SAM rings; SEAD is working the radars. Push at the time or the AWACS call", "HOLD")
         mid = [Wpt("PUSH", *offset(a.x, a.y, hb, min(1 * NM, d)), dft, dkt)]
         if lane is not None:
+            vias = {(round(v[0]), round(v[1])): v[2] for v in ip.get("via", [])}       # v0.41.268: the field the bent lane goes over
             for q in lane[:-1]:
-                mid.append(Wpt("AVD", q[0], q[1], dft, dkt, "Around a SAM site"))
+                vn = vias.get((round(q[0]), round(q[1])))
+                mid.append(Wpt("BASE", q[0], q[1], dft, dkt, "Over " + vn + ", then on to the intercept point") if vn else Wpt("AVD", q[0], q[1], dft, dkt, "Around a SAM site"))
             px, py = lane[-1]
             pb = bearing(*(lane[-2] if len(lane) > 1 else (a.x, a.y)), px, py)
             px, py = offset(px, py, pb + 90, lat)
