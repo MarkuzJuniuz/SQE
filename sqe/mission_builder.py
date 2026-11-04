@@ -1719,7 +1719,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _dress_group(self, package, f, spec, g, wps, push_s, tot_s, cs_names):
         """Loadout (weather-adapted), unit names, jammer windows, skill, bingo return, and where this package's shooters launch. -> (names, run_t0)."""
         o = self.o
-        load = self.lo.for_role(f.aircraft, f.role, getattr(f, "kit", ""))
+        kit_ = getattr(f, "kit", "") or ("FLEET" if (f.aircraft == "F-14BU" and f.role in (Role.CAP, Role.SWEEP) and (package.extra or {}).get("setpiece")) else "")      # v0.41.271: 6 Phoenix for the fleet-defence Tomcats
+        load = self.lo.for_role(f.aircraft, f.role, kit_)
         if self.wx.mode != "clear":
             load, wnotes, _k, _d = weather.adapt(spec.dcs_type, load, self.wx)
             if wnotes and not f.tag:

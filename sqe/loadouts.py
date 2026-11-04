@@ -39,6 +39,8 @@ _D: dict = {
     "F-14BU": {
         # stock DCS preset AAW05: (4/2/2) HEAVY CAP, with the LANTIRN pod on station 9 swapped for the second Sparrow (the stock preset only carries one)
         "CAP": {1: "={LAU-138 wtip - AIM-9M}", 2: "={SHOULDER AIM-7P}", 3: "={F14-300gal}", 4: "={AIM_54C_Mk47}", 5: "={AIM_54C_Mk47}", 6: "={AIM_54C_Mk47}", 7: "={AIM_54C_Mk47}", 8: "={F14-300gal}", 9: "={SHOULDER AIM-7P}", 10: "={LAU-138 wtip - AIM-9M}"},
+        # v0.41.271 (XO 2026-11-04): the fleet-defence Tomcats carry 6 Phoenix + 2 Sidewinders (the 4 belly Phoenix of the heavy CAP preset and a Phoenix on each shoulder in place of the two Sparrows)
+        "FLEET": {1: "={LAU-138 wtip - AIM-9M}", 2: "={SHOULDER AIM_54C_Mk47 L}", 3: "={F14-300gal}", 4: "={AIM_54C_Mk47}", 5: "={AIM_54C_Mk47}", 6: "={AIM_54C_Mk47}", 7: "={AIM_54C_Mk47}", 8: "={F14-300gal}", 9: "={SHOULDER AIM_54C_Mk47 R}", 10: "={LAU-138 wtip - AIM-9M}"},
         # stock DCS preset: AG04: (1/0/2) 2*J84 MEDIUM STRIKE
         "STRIKE": {1: "={LAU-138 wtip - AIM-9M}", 2: "={SHOULDER AIM_54C_Mk47 L}", 3: "={F14-300gal}", 4: "={BRU-32 GBU_31_V_2B}", 7: "={BRU-32 GBU_31_V_2B}", 8: "={F14-300gal}", 9: "={F14-LANTIRN-TP}", 10: "={LAU-138 wtip - AIM-9M}"},
     },
