@@ -85,6 +85,7 @@ RAID_OTHER_DASH_KTS = 600   # v0.41.265: the Hornets and Eagles that dash with t
 RAID_SEAD_LEAD_S = 240      # v0.41.256: the raid SEAD's HARMs land this long before the interceptors are due on station (judgment call; v0.41.255 had 180)
 RAID_SEAD_DONE_S = 150      # v0.41.283 (XO 2026-11-04): when the player is not the raid SEAD flyer the SEAD is already done: its HARMs landed this long before the mission starts (judgment call)
 RAID_SCRIPT_KILL = 0.5      # ...and this share of the live site's launchers and vehicles is destroyed at second 2, with all its tracking radars (a scripted result; judgment call)
+RAID_PLAYER_WAIT_S = 300    # v0.41.284 (XO 2026-11-04: "it's unrealistic if red will wait forever"): when the player flies the raid SEAD, red's raiders spawn this long after his HARMs, the radars dead or not (judgment call; "5 minutes?")
 RAID_DASH_WAIT_S = 180      # v0.41.256: the interceptors cross this long after the HARMs if the tracking radars are not all dead by then (judgment call)
 RAID_HEAD_S = 300         # v0.41.278 (XO 2026-11-04: "intelligence is intelligence. Must've put two and two together"): the AI interceptors of the fleet-defence raid spawn this far along their route, as if they had launched this long before the mission began. A player's flight is not moved. Judgment call: ~50 nm at the dash speed; 0 = they start at the field
 RAID_F14_HOLD = False     # v0.41.276 (XO 2026-11-04: "the interceptors should just fly fast and bend away from SAMs"): False = the fleet-defence F-14s and F-15s have no HOLD and no gate: they leave at the start, fly the SAM-bending lane at the dash speed and wait on the intercept point. True = the v0.41.256 hold-then-dash with the SEAD gate.
@@ -424,8 +425,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         skip1 = {tgt_asset.id} if (tgt_asset is not None and package.objective.type == ObjectiveType.DEAD) else ()
         geom.tier = self._pick_tier(geom, pf.role, pspec.profile, tx, ty, skip1)
         self._flight_plans(geom, package, tx, ty, skip1)
-        pw = plan_route(pf.role, (pbase.x, pbase.y), geom, pspec.profile, is_player=True, tanker_xy=None, jsow=getattr(pf, "kit", "") == "JSOW",
-                        jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), agm88_deg=self._agm88_deg(package, geom))
+        pkg_p, geom_p, psite = package, geom, None           # v0.41.284: the player flying the raid SEAD gets the SEAD job on a raid site (his own stand-in package and geometry), like the AI SEAD flights
+        if self._raid_player_sead(package):
+            psite = self._raid_player_site(package, geom, pf)
+            if psite is not None:
+                pkg_p, geom_p = self._raid_sead_geom(package, pf, psite)
+        pw = plan_route(pf.role, (pbase.x, pbase.y), geom_p, pspec.profile, is_player=True, tanker_xy=None, jsow=getattr(pf, "kit", "") == "JSOW",
+                        jsow_side=self._jsow_side(pkg_p, geom_p), keep_out=self._umbrella_keep(pkg_p), agm88_deg=self._agm88_deg(pkg_p, geom_p))
         if package.objective.type == ObjectiveType.FLEET_DEFENSE and pf.role == Role.CAP and (package.extra or {}).get("setpiece") and not pf.tag:
             self._raid_cap_station(package, geom, pw)               # v0.41.256: your racetrack is walked back clear of the SAMs like your wingmen's, and the card shows it
         dep_s = launch_s + 60 + dist(pbase.x, pbase.y, pw[0].x, pw[0].y) / (pspec.profile.depart_kts * 0.514444) * 1.12     # roll + climb-out to the first point (DEP off a carrier, else the marshal)
@@ -441,6 +447,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         push_of = lambda f: P0 + (0 if f.tag else stagger(package, f.role))
         assign_times(pw, dep_s, player_push)
         tgt = objective_wp(pw) or pw[-1]
+        ptot = tgt.eta_s + RAID_SEAD_LEAD_S if psite is not None else tgt.eta_s          # v0.41.284: the time the raid's other flights work to: the interceptors are due on station RAID_SEAD_LEAD_S after your HARMs
         egr = next((w for w in pw if w.name == "EGR"), pw[-1])
         rtb_s = egr.eta_s + leg_seconds(egr, Wpt("RTB", pbase.x, pbase.y, 0, 300))
         self._p_times = (float(launch_s), float(rtb_s))                 # v0.41.97: your takeoff and landing, for the hot starts at your own field
@@ -467,15 +474,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if package.objective.type == ObjectiveType.FLEET_DEFENSE and package.objective.target_id in st.bases:
             if not self._raid_edge_on(package):                              # (v0.41.282: the edge-spawn setpiece has no push time: it is timed to blue instead)
                 self._raid_clock_prep(package, tx, ty, tgt.eta_s)             # v0.41.280: the raid's push time, known before the interceptors are built
-            self._raid_sead_prep(package, geom, tgt.eta_s, manifest)          # v0.41.256: the SEAD's site and the interceptors' DASH flag exist before the CAP flights are built
+            self._raid_sead_prep(package, geom, ptot, manifest)          # v0.41.256: the SEAD's site and the interceptors' DASH flag exist before the CAP flights are built
         for idx, f in enumerate(package.flights):
             if self._raid_sead(package, f):                  # v0.41.255: its own SEAD job on the SAMs over the raid's launch point
-                g, tot_f = self._spawn_raid_sead(package, f, plan, geom, idx, tgt.eta_s, manifest, despawn)
+                g, tot_f = self._spawn_raid_sead(package, f, plan, geom, idx, ptot, manifest, despawn)
                 if g is None:
                     continue
                 pkg_table.append({"callsign": f.callsign, "role": "SEAD", "push": "-", "tot": clock(tot_f) if tot_f else "-", "you": False})
                 continue
-            g, tot_f = self._spawn_flight(package, f, plan, geom, tanker_xy, hav_xy, push_of(f), tgt.eta_s, rtb_s, idx, manifest, despawn)
+            g, tot_f = self._spawn_flight((pkg_p if f.is_player else package), f, plan, (geom_p if f.is_player else geom), tanker_xy, hav_xy, push_of(f), (tgt.eta_s if f.is_player else ptot), rtb_s, idx, manifest, despawn)
             if f.is_player:
                 tot_f = tgt.eta_s
             if f.role in (Role.STRIKE, Role.SEAD, Role.CAS) and not f.tag and tot_f:
@@ -489,7 +496,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # ---- enemy air picture (known CAP airborne from the start + alert aircraft that scramble when detected) ----
         keep = [(p[0], p[1], 100) for p in (hav_xy,) if p is not None]          # v0.41.76: only the AWACS anchor / HAVCAP is kept clear of red's patrols (the tanker picks its own spot clear of them, threatmap.tanker_spot)
         keep += self._fleet_keepout()
-        self._spawn_air_picture(air_pkg, tx, ty, tgt.eta_s, geom, manifest, keep)
+        self._spawn_air_picture(air_pkg, tx, ty, ptot, geom, manifest, keep)
         self._spawn_cas_support(package, plan, geom, manifest)
         self._agm88_refs = []                                           # [(x, y, t)]: SEAD waves timed in this mission; merged SEAD packages on the same ground match them
         if package.objective.type == ObjectiveType.DEAD and package.objective.aim in SEAD_AIMS and package.objective.target_id:
@@ -517,12 +524,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # not just until its own station time (when the player flew the TARCAP, tgt was the TARCAP's own station: it left 7.5 min after arriving)
         own_ = [((tx, ty), max(striker_tots))] if striker_tots else []
         self._last_striker_s = max(striker_tots) if striker_tots else None
-        self._extend_holds([((tx, ty), tgt.eta_s)] + own_ + [(m_["txy"], m_["tot_s"]) for m_ in merged if not m_.get("struck") and m_.get("txy")],
+        self._extend_holds([((tx, ty), ptot)] + own_ + [(m_["txy"], m_["tot_s"]) for m_ in merged if not m_.get("struck") and m_.get("txy")],
                            egr_events=self._striker_egr)
         manifest.cur_pkg = ""
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + list(self._red_intel)
         self._spawn_supply_in_radius(package, tx, ty, manifest, only_raid=True, max_units=RAID_SUPPLY_UNITS)       # v0.41.220: what a raid scramble is about is built before the raiders and the alert pairs use the unit limit
-        self._spawn_reactive(package, extras, tx, ty, tgt.eta_s, geom, manifest, despawn)
+        self._spawn_reactive(package, extras, tx, ty, ptot, geom, manifest, despawn)
         self._dry_pass()
         self._spawn_supply_in_radius(package, tx, ty, manifest)
         self._place_carcasses()
@@ -533,7 +540,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # ---- waypoint table as the jet numbers it ------------------------------------------------------------------------------
         to_note = self._short(pbase.name)
         if pbase.kind == BaseKind.CARRIER:                       # Case III wording: the leg to DEP is the departure radial
-            to_note += f", depart radial {int(bearing(pbase.x, pbase.y, *geom.dep)):03d}"
+            to_note += f", depart radial {int(bearing(pbase.x, pbase.y, *geom_p.dep)):03d}"
         rows = [("TAKEOFF", pbase.x, pbase.y, launch_s, "", "", to_note)]
         for w in pw:
             rows.append((w.name, w.x, w.y, w.eta_s, "AGL 0" if w.agl else (f"{w.alt_ft}AGL" if w.rad else f"{w.alt_ft // 1000}K"), w.speed_kts, w.note))
@@ -603,13 +610,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" for u in g_["units"]],
                          sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM, jams=(self._jams if o.ecm_script else {}), jamw=(self._jamw if o.ecm_script else {}),
                          watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and not f_.is_player],
-                         done_after=max([float(tgt.eta_s)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
+                         done_after=max([float(ptot)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
                          rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts, cover=self._cover, ecm_player=self._ecm_player, ecm_msg=bool(o.ecm_status),
                          scrub=self._scrub, tune_flags=tune_flags, tune_mhz=tune_mhz, awacs_unit=f"{awl} 1-1" if any(s.slot == "AWACS" for s in package.support) else "",
                          dmg=({**self._ulabels, **{k: "*" + v for k, v in self._support_lbl.items()}} if o.damage_calls else {}), dmg_on=bool(o.damage_calls),
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
-                              "cvrec": self._wing_recovery(pbase, tgt.eta_s), "recov": list(self._recov),
+                              "cvrec": self._wing_recovery(pbase, ptot), "recov": list(self._recov),
                               "phome": ([self._pt(pbase.x, pbase.y).x, self._pt(pbase.x, pbase.y).y] if pbase.kind == BaseKind.AIRFIELD else None),
                               "rwys": runways.fields_for_hook(st, self.t)})
             tdata = ""
@@ -2015,10 +2022,43 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 g.points[0].tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))    # weapons free again at the attack point (below)
         return armor, ai_sead, ai_a2g
 
+    def _raid_sead_any(self, package, f) -> bool:
+        """A SEAD flight of the carrier-raid setpiece, yours or the AI's."""
+        return (package.objective.type == ObjectiveType.FLEET_DEFENSE and f.role == Role.SEAD and not f.tag
+                and package.objective.target_id in self.state.bases and bool((package.extra or {}).get("setpiece")))
+
     def _raid_sead(self, package, f) -> bool:
         """v0.41.255: a SEAD flight of the carrier-raid setpiece (AI): it does not fly the fleet's route but its own HARM job."""
-        return (package.objective.type == ObjectiveType.FLEET_DEFENSE and f.role == Role.SEAD and not f.tag and not f.is_player
-                and package.objective.target_id in self.state.bases and bool((package.extra or {}).get("setpiece")))
+        return self._raid_sead_any(package, f) and not f.is_player
+
+    def _raid_player_sead(self, package) -> bool:
+        pf = package.player_flight
+        return pf is not None and self._raid_sead_any(package, pf)
+
+    def _raid_player_site(self, package, geom, pf):
+        """v0.41.284: the raid site the player's SEAD flight goes for: the n-th SEAD flight takes the n-th site, as for the AI flights. None when no site reaches the raid."""
+        flights = [f_ for f_ in package.flights if self._raid_sead_any(package, f_)]
+        sites, _ip = self._raid_sead_sites(package, geom, self._raid_hold_xy(package, geom))
+        sites = sites[:max(1, len(flights))]
+        if not sites:
+            return None
+        return sites[flights.index(pf) % len(sites)]
+
+    def _raid_sead_geom(self, package, f, site):
+        """The stand-in SEAD package and its geometry for one raid SEAD flight (yours or the AI's) on `site`. -> (sp, g2)."""
+        from .models import Objective
+        st = self.state
+        sp = copy.copy(package)
+        sp.objective = Objective(f"{package.objective.id}-sead", ObjectiveType.DEAD, site.id, package.objective.priority, "SEAD for the raid intercept", "SEAD")
+        sp.flights = [f]
+        base, spec = st.bases[f.base_id], AIRCRAFT[f.aircraft]
+        tx, ty = site.x, site.y
+        mshl = tm.safe_marshal(st, (base.x, base.y), bearing(base.x, base.y, tx, ty), (tx, ty))
+        g2 = make_geometry(base.x, base.y, tx, ty, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
+        g2.egr = (tm.first_safe_egress(st, tx, ty, g2.hdg, {site.id}) or tm.safe_egress(st, tx, ty, g2.hdg, spec.profile.egress_nm, tm.cluster_ids(site)) or g2.egr)
+        g2.tier = self._pick_tier(g2, Role.SEAD, spec.profile, tx, ty, {site.id})
+        self._flight_plans(g2, sp, tx, ty, {site.id})
+        return sp, g2
 
     def _raid_sead_site(self, package, geom):
         """The live red SAM site to put the HARMs on: the one whose reach takes in the raid's launch point (the long-range one first, then the nearest).
@@ -2100,18 +2140,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     def _raid_sead_route(self, package, f, site, cap_tot_s):
         """The stand-in SEAD package, geometry and rush route of one raid SEAD flight on `site`. -> (sp, g2, push, tg, rtb)."""
-        from .models import Objective
         st = self.state
-        sp = copy.copy(package)
-        sp.objective = Objective(f"{package.objective.id}-sead", ObjectiveType.DEAD, site.id, package.objective.priority, "SEAD for the raid intercept", "SEAD")
-        sp.flights = [f]
+        sp, g2 = self._raid_sead_geom(package, f, site)
         base, spec = st.bases[f.base_id], AIRCRAFT[f.aircraft]
-        tx, ty = site.x, site.y
-        mshl = tm.safe_marshal(st, (base.x, base.y), bearing(base.x, base.y, tx, ty), (tx, ty))
-        g2 = make_geometry(base.x, base.y, tx, ty, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
-        g2.egr = (tm.first_safe_egress(st, tx, ty, g2.hdg, {site.id}) or tm.safe_egress(st, tx, ty, g2.hdg, spec.profile.egress_nm, tm.cluster_ids(site)) or g2.egr)
-        g2.tier = self._pick_tier(g2, Role.SEAD, spec.profile, tx, ty, {site.id})
-        self._flight_plans(g2, sp, tx, ty, {site.id})
         pw = plan_route(Role.SEAD, (base.x, base.y), g2, spec.profile, is_player=True, tanker_xy=None, keep_out=self._umbrella_keep(sp))
         self._rush_speeds(pw)
         assign_times(pw, 0.0)                                    # as early as the route allows: no hold
@@ -2157,8 +2188,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if package.id in c_:
             return c_[package.id]
         c_[package.id] = None
-        f0 = next((f for f in package.flights if self._raid_sead(package, f)), None)
-        n_sead = sum(1 for f in package.flights if self._raid_sead(package, f))
+        f0 = next((f for f in package.flights if self._raid_sead_any(package, f)), None)
+        n_sead = sum(1 for f in package.flights if self._raid_sead_any(package, f))
         sites, ip_ = self._raid_sead_sites(package, geom, self._raid_hold_xy(package, geom)) if f0 is not None else ([], None)
         sites = sites[:max(1, n_sead)]                                    # v0.41.267: one flight per site; a site without a flight is left alone
         if not sites:
@@ -2185,7 +2216,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             t_.add_action(action.SetFlag(flag))
             self.m.triggerrules.triggers.append(t_)
         t2 = triggers.TriggerOnce(comment="raid SEAD: wait over, interceptors cross")
-        t_flag = 5 if scripted else int(max(tg_s + RAID_DASH_WAIT_S, float(cap_tot_s) + 60))          # (scripted: the radars are blown at second 2, the flag follows)
+        t_flag = 5 if scripted else int(max(tg_s + (RAID_DASH_WAIT_S if package.player_flight is None or not self._raid_player_sead(package) else RAID_PLAYER_WAIT_S), float(cap_tot_s) + 60))          # (scripted: the radars are blown at second 2, the flag follows)
         t2.add_condition(condition.TimeAfter(t_flag))
         t2.add_action(action.SetFlag(flag))
         say_ = String('trigger.action.outTextForCoalition(coalition.side.BLUE, "AWACS: SEAD complete. Interceptors, cleared to push toward the launch point.", 15)')
@@ -2207,8 +2238,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if prep is None:
             return None, None
         f.rush = True
-        ordn = [f_ for f_ in package.flights if self._raid_sead(package, f_)].index(f)          # v0.41.267: the n-th SEAD flight takes the n-th site (more flights than sites: the first site again)
+        ordn = [f_ for f_ in package.flights if self._raid_sead_any(package, f_)].index(f)          # v0.41.267: the n-th SEAD flight takes the n-th site
         sites = prep.get("sites") or [prep["site"]]
+        if ordn >= len(sites):                                                                       # v0.41.284 (XO 2026-11-04: "if multiple SAMs then SEAD is sized to it"): no site, no flight
+            return None, None
         sp, g2, push, tg, rtb = self._raid_sead_route(package, f, sites[ordn % len(sites)], cap_tot_s)
         return self._spawn_flight(sp, f, plan, g2, None, None, push, tg.eta_s, rtb, idx, manifest, despawn)
 

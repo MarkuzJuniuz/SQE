@@ -519,7 +519,15 @@ class Session:
         if pkg.objective.type in AI_ONLY and not pkg.extra.get("setpiece"):    # v0.41.27: AI-only for now (BARCAP, land-raid intercepts); v0.41.107: the carrier raid is a flyable setpiece
             return []
         opts = pkg.player_options(self.state.player.aircraft)
+        if pkg.extra.get("setpiece") and not self._raid_sam_live():                    # v0.41.284 (XO 2026-11-04: "if there are no SAMs then no SEAD offered")
+            opts = [f for f in opts if f.role != Role.SEAD]
         return [f for f in opts if f.squadron_id == self.state.player.squadron_id] if squadron_only else opts
+
+    def _raid_sam_live(self) -> bool:
+        """Is any red SAM site alive that a raid SEAD flight could be sent against (the builder's own filter: a long-range type, not nearly dead)?"""
+        from . import threatmap as tm
+        from .models import AssetKind
+        return any(a.kind == AssetKind.SAM and not a.destroyed and a.health > 0.25 and tm.RANGE_NM.get(a.variant, 0) >= 12 for a in self.state.assets.values())
 
     # ---- merge area: a circle around the package's target, kept inside the area where targets exist ---------------------
     def merge_radius_m(self) -> float:

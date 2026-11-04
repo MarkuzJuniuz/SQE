@@ -1,5 +1,15 @@
 # CHANGES.md
 
+## v0.41.284, you can fly the raid SEAD: your route goes to a raid site; red's timer is 5 minutes
+
+XO 2026-11-04 ("only SEAD flyers get the different option"; "5 minutes timer?"; "if there are no SAMs then no SEAD offered. If multiple SAMs then SEAD is sized to it"; "fox 3 high"). Before this the SEAD slot of the carrier raid could be picked, but a player SEAD flight flew a route to the package's own point, not a site.
+- **Your route.** A player in the raid SEAD slot gets the same SEAD job the AI flights fly: stand-in package and geometry on the raid site (`_raid_sead_geom`, shared with the AI route), MSHL, PUSH, IP, TGT (HARM point), EGR. The n-th SEAD flight takes the n-th site.
+- **Timing flips.** Blue's interceptors are due on station `RAID_SEAD_LEAD_S` (240 s) after YOUR HARM time (`ptot`), not the other way round. The other SEAD pair is timed to yours.
+- **Red's timer.** The DASH flag, which also releases the edge-spawned bombers, is set when the sites' tracking radars are dead or `RAID_PLAYER_WAIT_S` (300 s, judgment call) after your HARMs, whichever is first. Red does not wait forever.
+- **Sizing.** At most one SEAD flight per blocking site; a flight with no site is not built (before, it repeated the first site). The SEAD slot is not offered when no red SAM of a long-range type is alive (`Session._raid_sam_live`). Not done: counting the blocking sites at planning time, so a second SEAD slot can still be listed when only one site blocks.
+- Flying anything else is unchanged from v0.41.283 (the SEAD is a scripted result).
+Probed L3, Hornet SEAD player, seeds 3 and 4: route MSHL, PUSH, IP, TGT (1343 s), EGR; the raiders' activation is time AND flag. CAP builds (F/A-18C, F-14BU) still work. Full smoke passed. Not seen in DCS.
+
 ## v0.41.283, the raid SEAD is already done when you fly the Tomcat (or any non-SEAD jet)
 
 XO 2026-11-04 ("if the flyer is Tomcat, then script the SAMs to be already successfully suppressed ... those flights are already on their way home"; "fox 3 medium"). In the carrier raid setpiece, when the player does not fly the raid SEAD flight (`MissionBuilder._raid_scripted`): the SEAD flights are placed already past their HARM time (`RAID_SEAD_DONE_S` 150 s before the start), so they are homebound at second 0; the blocking sites' tracking radars and half of their other units (`RAID_SCRIPT_KILL`) are blown up by a trigger at second 2 (`trigger.action.explosion`, power 300: whether that kills a launcher is NOT tested in DCS); the DASH flag is set at second 5 so the bombers' activation (time AND flag) is not held up. Judgment calls: 150 s, 50%, power 300.
