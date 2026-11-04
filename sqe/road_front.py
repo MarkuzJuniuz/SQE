@@ -102,3 +102,21 @@ def site_side(state, th: dict, rts: list, sides: list, x: float, y: float) -> st
     if hit is not None:
         return sides[hit[0]][hit[1]]
     return cut_side(state, x, y) or field_side(th, x, y)
+
+
+def heading_at(th: dict, x: float, y: float, max_m: float = 400.0):
+    """v0.41.259: the rough heading (degrees, DCS x north / y east, same turn as routes.bearing) of the road stretch nearest to (x, y) within max_m, or None (no road net or no road that
+    close). The stretches are about 900 m long (a road's bends are not in them), so this is a heading for placing things beside the road, not a road centre line."""
+    rts = routes(th)
+    if not rts:
+        return None
+    best, hdg = max_m, None
+    for r in rts:
+        for i in range(len(r) - 1):
+            ax, ay = r[i]; bx, by = r[i + 1]
+            dx, dy = bx - ax, by - ay
+            t = max(0.0, min(1.0, ((x - ax) * dx + (y - ay) * dy) / max(1.0, dx * dx + dy * dy)))
+            d = math.hypot(x - (ax + t * dx), y - (ay + t * dy))
+            if d < best and (dx or dy):
+                best, hdg = d, math.degrees(math.atan2(dy, dx)) % 360
+    return hdg
