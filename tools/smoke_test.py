@@ -5968,8 +5968,9 @@ def check_113_road_sites(c):
         for side, pool in (("red", red), ("blue", blue)):
             for a in pool.values():
                 assert a.kind in _gr.SUPPLY_KINDS and _sc.site_ok(a.x, a.y) and _sites.on_spot(a.x, a.y), (a.id, a.name)
-                near = min(pos, key=lambda n: math.hypot(pos[n][0] - a.x, pos[n][1] - a.y))
-                assert (near in blue_ap) == (side == "blue"), (a.id, near, "owner by the nearest airfield")
+                from sqe import road_front as _rf, theatres as _tha                    # v0.41.258: the owner is the side its road connects to (was the nearest airfield)
+                _th_, _rts_ = _tha.active(), _rf.routes(_tha.active())
+                assert _rf.site_side(st, _th_, _rts_, _rf.route_sides(st, _th_, _rts_), a.x, a.y) == side, (a.id, "owner by the road it connects to")
                 assert all(math.hypot(a.x - px, a.y - py) >= _rs.AIRFIELD_CLEAR_M for px, py in pos.values()), (a.id, "clear of the airfields")
         plants = [a for a in list(red.values()) + list(blue.values()) if a.variant in _rs.PLANT_VARIANTS]
         assert sum(rd["plants"].values()) == len(plants) >= 4 and rd["plants"]["red"] >= 2 and rd["plants"]["blue"] >= 2, rd
@@ -6003,7 +6004,7 @@ def check_113_road_sites(c):
             if a.variant in _rs.PLANT_VARIANTS:
                 assert sum(1 for n in u["units"] if "|b" in n) == 5, (a.id, u["units"])
     assert sum(1 for k in gs if k.startswith("rsup_")) >= 40, "a full-map mission builds the road sites"
-    print("[road sites] 60 / 100 / 100 sites by level, owner by nearest airfield, plants away from the front, battalions on red only, Supply figure counts them all, saves keep them, plants build with their buildings")
+    print("[road sites] 60 / 100 / 100 sites by level, owner by road connection, plants away from the front, battalions on red only, Supply figure counts them all, saves keep them, plants build with their buildings")
 
 
 def check_114_blue_site_buildings(c):
