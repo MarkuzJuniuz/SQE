@@ -51,6 +51,7 @@ SAM_DEBT_CAP = 0.15                     # all open debt of a side together, so a
 _DEBT_LONG, _DEBT_MEDIUM = ("SA-10", "Patriot"), ("SA-11", "SA-6", "HAWK", "Hawk")
 ORDER_MIN_GAP_NM = 20.0       # the sender must sit this much further from the nearest enemy fighter field than the receiver
 ASKS_PER_NIGHT = 1
+RED_BORROW = False             # v0.41.269 (XO 2026-11-04): red does NOT order a battery from a deeper site. The 8-seed L3 skip-day sims: borrowing emptied the rear (no healthy SA-10 beyond the line in play by day 22, 2 left without it), so the line broke like wet paper. A destroyed site is rebuilt in place after ORDER_DAYS (blue keeps its orders). True = the old rule
 
 # v0.41.30: every blue airfield's air defence at doctrinal strength (XO 2026-10-16: "all bases are important", red-like firepower).
 # Sources: FM 44-85 App. B, a Patriot fire unit = 1 radar, 1 ECS, 1 power plant, 1 antenna mast group and 8 launching stations;
@@ -355,7 +356,7 @@ def red_asks(state, d, rng: random.Random) -> list:
     sites = [x for x in state.assets.values() if x.kind == AssetKind.SAM and not x.id.startswith("fsam_")]
     needy = sorted((a for a in sites if a.destroyed and a.tier <= state.front + 2 and not _parent_down(state, a)
                     and a.id not in busy and a.id not in vacated), key=lambda a: (a.tier, -a.value, a.id))
-    for a in needy[:ASKS_PER_NIGHT if not orders else 0]:           # v0.41.196: one order in flight per side
+    for a in needy[:ASKS_PER_NIGHT if (not orders and RED_BORROW) else 0]:           # v0.41.196: one order in flight per side (v0.41.269: none while RED_BORROW is off)
         donors = sorted((x for x in sites if x.variant == a.variant and not x.destroyed and x.health >= BLUE_FULL_DEF and x.tier > a.tier
                          and x.id not in busy and not _parent_down(state, x)), key=lambda x: (-x.tier, x.id))
         if not donors:
