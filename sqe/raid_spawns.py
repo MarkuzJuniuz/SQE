@@ -90,6 +90,10 @@ SUPPLY_PLANTS = {         # v0.41.241 (queue item i): the big sites of the road 
 }
 
 
+ROAD_OFF_M = 70.0             # v0.41.259: a supply site's buildings stand this far to either side of the road (judgment call: the road heading is rough, see road_front.heading_at)
+ROAD_ALONG_M = 60.0           # ... and spread at most this far along it
+
+
 def supply_parts(kind, variant: str = "") -> list:
     """The static buildings of a supply site: the plant's own set for a refinery / factory, else the kind's (fuel farm / depot)."""
     return SUPPLY_PLANTS.get(variant) or SUPPLY_BUILDINGS.get(kind) or []
@@ -441,8 +445,15 @@ class RaidSpawns:
         parts = supply_parts(kind, variant)
         n = max(1, round(len(parts) * scale)) if parts else 0
         names = []
+        from . import road_front, theatres
+        rh = road_front.heading_at(theatres.active(), cx, cy) if n else None     # v0.41.259 (XO 2026-11-03): the buildings stand beside the road, not on it
         for k, vt in enumerate(parts[:n]):
-            x, y = offset(cx, cy, k * (360 / len(parts)) + hdg, 40 + 12 * k)
+            if rh is None:
+                x, y = offset(cx, cy, k * (360 / len(parts)) + hdg, 40 + 12 * k)
+            else:
+                along = max(-ROAD_ALONG_M, min(ROAD_ALONG_M, (k - (n - 1) / 2) * 25.0))
+                side = 1 if k % 2 == 0 else -1
+                x, y = offset(*offset(cx, cy, rh, along), rh + 90, side * (ROAD_OFF_M + 12.0 * (k // 2)))
             nm = f"{aim}|b{k + 1}"          # b: never clashes with a guard vehicle `<aim>|<n>` in the same site
             sg = self.m.static_group(country, nm, vt, mapping.Point(x, y, self.t), heading=hdg)
             sg.units[0].name = nm

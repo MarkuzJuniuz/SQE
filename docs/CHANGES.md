@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## v0.41.259, a supply site's buildings stand beside the road
+
+XO 2026-11-03 (a DCS screenshot: a fuel farm's tank stood against the pavement; "Can we make buildings away from roads?"). Cosmetic: placement only, nothing in the saved campaign changes, so no new campaign is needed. Judgment calls (the offset); tune on XO's runs.
+- **`raid_spawns._place_buildings`:** the buildings of a fuel farm or depot (both sides, plants too) used to sit in a ring 40 to 100 m round the site point, and that point is ON the road, so some landed on it. Now they stand `ROAD_OFF_M` (70 m, plus 12 m per pair) to alternate sides of the road, spread at most `ROAD_ALONG_M` (60 m) along it. The guard and the truck stay on the road.
+- **`road_front.heading_at`:** the heading of the nearest stretch of the shipped road net within 400 m. The stretches are about 900 m long (bends are not in them), so the heading is rough; the 70 m offset leaves room for that. No road within 400 m (14 of 118 sites on one seed): the old ring.
+- Not seen in DCS. Not checked: a building on a slope or in a field edge.
+- Checks: compile, `check_93_supply_buildings`, `check_113_road_sites` (placement is tactical, so no new check).
+
 ## Docs only: CLAUDE.md, the go word and "untuned"
 
 XO 2026-11-03. The go word for a code change is "fox 3" (with an optional effort). "Untuned" means a job type that does not use the newer AI systems (SAM avoidance, station rules); new jobs are flyable from day one. No code, no smoke.
