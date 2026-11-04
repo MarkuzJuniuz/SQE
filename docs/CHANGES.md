@@ -1,5 +1,16 @@
 # CHANGES.md
 
+## v0.41.282, the carrier raid is a scripted setpiece; red fields are red in every mission
+
+XO 2026-11-04 ("I give up with procedurally generated schedules"; "fox 3 high"). Two changes.
+
+**Setpiece raid** (`raid_spawns.py`, `RAID_EDGE`). The fleet raid's bombers and escorts no longer taxi, queue, assemble or gate. They appear already airborne at the edge of the map on the raid's bearing, activated by one trigger: the time has come AND the SEAD flag is set. The time puts the bombers on blue's intercept point `RAID_MEET_LEAD_S` (120 s) after the last interceptor (the interceptor routes record when they reach it, `_edge_blue`). If the flight from the edge would take longer than that allows, the spawn is moved in along the same line instead (never earlier than 60 s). The interceptors dash at once on the SAM-bending lane, as before. The raid bearing is now 20 to 40 degrees (was 8 to 40). Story: the bombers and escorts came from Mozdok round the north, beyond the map. The numbers are still the Mozdok wing's (`bombers.decide`), unchanged. The edge is the map border minus 10 nm, but at most 330 nm from the carrier (judgment call: fuel for the way in and home). The staged raid (ramp starts, wait-all, v0.41.274 to .277) is left in the code behind `RAID_EDGE = False`.
+Probed on six L3 seeds (1 to 6): an intercept point on all, spawn at the cap, activation 900 to 1960 s.
+
+**Red fields red** (`mission_builder.py`). Every airfield in the theatre's `red_fields` list is set red in every mission, also the ones this level's roster leaves out (they stayed neutral, and jets that RTB to the nearest field landed on them).
+
+Not in this PR: spawning all red route SAMs and trimming the furthest (PR B).
+
 ## v0.41.281, a raid on a field is "raid defense", not "fleet defense"
 
 XO 2026-11-04 ("even an intercept raid on Kobuleti or the Oil Refinery is called FLEET DEFENSE"; "fox 3 low"). New `Package.kind`: a raid intercept on a field, supply site or garrison (`extra["land"]`) reads RAID_DEFENSE; only the carrier raid keeps FLEET_DEFENSE. The package list, the "Also in this mission" line and the Overview tasking line use it. The objective type itself, saved campaigns and every rule that tests it are unchanged. Other screens that print the raw type name, if any, are not checked.

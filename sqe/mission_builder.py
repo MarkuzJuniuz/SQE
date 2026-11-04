@@ -377,6 +377,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         for a in st.assets.values():
             if a.kind == AssetKind.AIRFIELD and a.airport:
                 self.t.airports[a.airport].set_red()
+        # v0.41.282 (XO 2026-11-04): every red-held field in the theatre data is red in every mission, also the ones this level's roster left out (they stayed neutral, and
+        # long-legged jets that RTB to the nearest field landed on them)
+        for f_ in theatres.active().get("red_fields", []):
+            if f_.get("airport") in self.t.airports:
+                self.t.airports[f_["airport"]].set_red()
         # v0.41.28: a raid scramble also builds the field the raid is coming for (the XO's Kobuleti run: the raided field had no defences
         # because nothing launched from it)
         raided_ = [package.objective.target_id] if (package.objective.type == ObjectiveType.FLEET_DEFENSE and package.objective.target_id in st.bases) else []
@@ -458,7 +463,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._barcap_zones = self._barcap_circles(package, geom)             # v0.41.138: the BARCAP circles a TARCAP's circle must meet (whatever order the flights are built in)
         striker_tots = []                                                    # v0.41.38: each ground-attack flight's own target time (strike / SEAD / CAS), for the TARCAP hold
         if package.objective.type == ObjectiveType.FLEET_DEFENSE and package.objective.target_id in st.bases:
-            self._raid_clock_prep(package, tx, ty, tgt.eta_s)                 # v0.41.280: the raid's push time, known before the interceptors are built
+            if not self._raid_edge_on(package):                              # (v0.41.282: the edge-spawn setpiece has no push time: it is timed to blue instead)
+                self._raid_clock_prep(package, tx, ty, tgt.eta_s)             # v0.41.280: the raid's push time, known before the interceptors are built
             self._raid_sead_prep(package, geom, tgt.eta_s, manifest)          # v0.41.256: the SEAD's site and the interceptors' DASH flag exist before the CAP flights are built
         for idx, f in enumerate(package.flights):
             if self._raid_sead(package, f):                  # v0.41.255: its own SEAD job on the SAMs over the raid's launch point
@@ -1605,6 +1611,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 act_raw = int(meet_ - nat) if meet_ is not None else -RAID_HEAD_S     # v0.41.280: timed to the raid; without a raid clock the v0.41.278 head start (already airborne)
             act_s = max(0, act_raw)
             assign_times(wps, float(act_raw), push_s)
+            if shaped_ and self._raid_edge_on(package):               # v0.41.282: when blue is on the intercept point; the setpiece's raiders are timed to the last of them
+                tw_ = next((w for w in wps if w.name == "TGT" and w.action == "CAPORBIT"), None)
+                if tw_ is not None:
+                    eb_ = self.__dict__.setdefault("_edge_blue", {})
+                    eb_[package.id] = max(eb_.get(package.id, 0.0), float(tw_.eta_s))
             self._hot = self._hot_slot(package, f, base, wps, act_raw, hold_i is not None)
             if act_raw < 0:                              # its schedule began before the mission did (an earlier package folded in): it is already underway
                 # v0.41.23: its time on station counts: the points after the station come that much later, and a flight still within its

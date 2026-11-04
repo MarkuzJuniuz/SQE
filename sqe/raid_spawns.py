@@ -95,6 +95,12 @@ RAID_TAXI_S = 480             # ...the allowance for the taxi in the plan (v0.40
 RAID_WAIT_ALL = True          # XO 2026-11-04: no push until everybody is up: a staged group holds at the marshal until its planned time has passed AND every group that took off is at the marshal
 RAID_ASM_ZONE_NM = 20         # ...at the marshal = inside this circle round it
 RAID_ASM_MAX_S = 1800         # ...a safety net, not a rule: the hold ends this long after its planned time whether or not everybody is up (the Tu-22M3 burns about 0.6% fuel a minute in the cruise, more in the orbit; judgment call)
+RAID_EDGE = True              # v0.41.282 (XO 2026-11-04: "I give up with procedurally generated schedules"): the fleet raid is a SETPIECE. Its bombers and escorts spawn already airborne at the
+                              # edge of the map on the raid's bearing (they came from Mozdok round the north, beyond the map), with no marshal, ramp, taxi or gate. They are activated once the
+                              # SEAD flag is set AND the time has come that puts them on the intercept point RAID_MEET_LEAD_S after blue. Story, not simulation: judgment call
+RAID_EDGE_MARGIN_NM = 10      # ...the spawn is this far inside the map edge
+RAID_EDGE_MAX_NM = 330        # ...and at most this far from the carrier (judgment call: Tu-22M3 fuel for the way in plus the way home to Mozdok)
+RAID_EDGE_MIN_ACT_S = 60      # ...the earliest activation; a spawn that would need to be earlier is moved in along the route instead
 RAID_BOMBER_BATCH = 2         # bombers per runway batch (XO: 2 at a time for the big ones)
 RAID_FIGHTER_BATCH = 4        # fighters per runway batch (XO: 4 at a time)
 RAID_BOMBER_GAP_S = 120       # runway time one bomber batch takes before the next may go (not measured; the hook's alert stagger is 60 s)
@@ -241,10 +247,62 @@ class RaidSpawns:
         w1 = offset(dx, dy, ex["brg"], min(220 * NM, 0.9 * dist(ba.x, ba.y, dx, dy)))
         mshl = self._raid_marshal(ba, w1, station, dx, dy)
         apt_r = self.t.airports.get(ba.airport) if getattr(ba, "airport", None) else None
-        staged_ok = RAID_STAGE_ON and (not bool(ex.get("land"))) and cvg is not None and not aim and apt_r is not None
+        staged_ok = RAID_STAGE_ON and (not bool(ex.get("land"))) and cvg is not None and not aim and apt_r is not None and not self._raid_edge_on(package)
+        if self._raid_edge_on(package):
+            mshl = self._raid_edge(dx, dy, ex["brg"])                       # v0.41.282: the bombers' way in starts at the map edge
         if staged_ok:
             mshl = self._raid_marshal_out(mshl, ba, w1, dx, dy)          # v0.41.261: outside the missiles' reach
         return ba, w1, mshl, staged_ok, apt_r
+
+    def _raid_edge_on(self, package) -> bool:
+        """v0.41.282: a carrier raid by the bomber wing (not a land raid, not an aimed one) is the edge-spawn setpiece."""
+        ex = package.extra or {}
+        cvb = self.state.bases.get(package.objective.target_id)
+        return bool(RAID_EDGE and cvb is not None and self.ship.get(cvb.id) is not None and not ex.get("land") and not (ex.get("aim") or "")
+                    and ex.get("bomber_wing") and ex.get("brg") is not None)
+
+    def _raid_edge(self, dx, dy, brg):
+        """The point where the ray from the carrier on `brg` leaves the map (RAID_EDGE_MARGIN_NM inside it), at most RAID_EDGE_MAX_NM out."""
+        b = self.t.bounds                                      # x runs north (bottom..top), y east (left..right)
+        m = RAID_EDGE_MARGIN_NM * NM
+        c, s_ = math.cos(math.radians(brg)), math.sin(math.radians(brg))
+        ts = []
+        if c > 1e-6:
+            ts.append((b.top - m - dx) / c)
+        elif c < -1e-6:
+            ts.append((b.bottom + m - dx) / c)
+        if s_ > 1e-6:
+            ts.append((b.right - m - dy) / s_)
+        elif s_ < -1e-6:
+            ts.append((b.left + m - dy) / s_)
+        ts = [t_ for t_ in ts if t_ > 0]
+        t = min(min(ts) if ts else 0.0, RAID_EDGE_MAX_NM * NM)
+        return offset(dx, dy, brg, t)
+
+    def _raid_edge_spawn(self, package, edge_xy, V):
+        """v0.41.282: where the setpiece's raiders appear and when they may. Blue's intercept-point time was recorded by the interceptors' routes (`_edge_blue`, built first); the
+        bombers must be on the point RAID_MEET_LEAD_S after that. From the map edge when the flight there takes less than that, else moved in along the line (never earlier
+        than RAID_EDGE_MIN_ACT_S). -> (spawn xy, earliest activation s). The SEAD flag is a second condition on top of the time (see `_late_edge`)."""
+        rsp = (getattr(self, "_rsp", {}) or {}).get(package.id) or {}
+        ip = (rsp.get("ip") or {}).get("ip")
+        tb = (getattr(self, "_edge_blue", {}) or {}).get(package.id)
+        if ip is None or tb is None:
+            return edge_xy, float(RAID_EDGE_MIN_ACT_S)
+        t_arr = tb + RAID_MEET_LEAD_S
+        d_ip = dist(edge_xy[0], edge_xy[1], ip[0], ip[1])
+        d_sp = min(d_ip, max(0.0, V * (t_arr - RAID_EDGE_MIN_ACT_S)))
+        xy = edge_xy if d_sp >= d_ip else offset(ip[0], ip[1], bearing(ip[0], ip[1], edge_xy[0], edge_xy[1]), d_sp)
+        return xy, max(float(RAID_EDGE_MIN_ACT_S), t_arr - d_sp / V)
+
+    def _late_edge(self, g, seconds, flag) -> None:
+        """Late activation for a setpiece group: the time has passed AND the SEAD flag is set (both conditions in one trigger)."""
+        g.late_activation = True
+        trig = triggers.TriggerOnce(comment=f"setpiece {g.name}")
+        trig.add_condition(condition.TimeAfter(int(seconds)))
+        if flag:
+            trig.add_condition(condition.FlagIsTrue(int(flag)))
+        trig.add_action(action.ActivateGroup(g.id))
+        self.m.triggerrules.triggers.append(trig)
 
     @staticmethod
     def _seg_clear(a, b, circles) -> bool:
@@ -1102,6 +1160,11 @@ class RaidSpawns:
         station = (sx_, sy_)
         ba, w1, mshl, staged_ok, apt_r = self._raid_axis(package, station)          # v0.41.265: one place for the marshal and the outer point (the interceptors' dash point uses them too)
         V = RAID_MPS
+        edge = self._raid_edge_on(package)
+        t_act = 0.0
+        if edge:
+            mshl, t_act = self._raid_edge_spawn(package, mshl, RAID_MPS)          # v0.41.282: the setpiece: appears at the map edge, once SEAD is done
+        edge_flag = ((getattr(self, "_rsp", {}) or {}).get(package.id) or {}).get("flag")
         u_ = (getattr(self, "_rclock", {}).get(package.id) or {}).get("u")          # (v0.41.280: drawn earlier by `_raid_clock_prep`, the same number)
         arrive = tot_s + (u_ if u_ is not None else r.uniform(60, 150))                    # at the station: 1-2.5 min after our scramble's TOT
         t_tgt = arrive + dist(sx_, sy_, dx, dy) / V            # the raid's own TOT
@@ -1131,7 +1194,11 @@ class RaidSpawns:
         stg = self._raid_stage(ex, ba, path, arrive, V, dx, dy, L) if (staged_ok and standoff) else None
         t_leave = stg["T_push"] if stg else t_tgt - L / V      # v0.41.261: a staged raid pushes when it has assembled (and blue's CAP is up), see _raid_stage
         hold_until, act_ = None, 0.0
-        if t_leave >= 0:                                       # it holds at its marshal until it must push, appearing at most RAID_HOLD_MAX_S before
+        if edge:                                               # v0.41.282: appears at the start of its route, activated at t_act (and the SEAD flag)
+            back_ = L
+            (sx, sy), remaining = path[0], path[1:]
+            hit_s = t_act + L / V
+        elif t_leave >= 0:                                       # it holds at its marshal until it must push, appearing at most RAID_HOLD_MAX_S before
             (sx, sy), remaining = path[0], path[1:]
             hold_until, act_ = t_leave, max(0.0, t_leave - RAID_HOLD_MAX_S)
             hit_s = t_leave + L / V
@@ -1156,6 +1223,12 @@ class RaidSpawns:
         back0 = 0.0 if hold_until is not None else back_
         def start_at(shift_s):
             """Where a group starts and which points it still has to fly, `shift_s` seconds later (+) or earlier (-) than the raid's lead."""
+            if edge:                                           # later: behind the spawn point on the line; earlier: that far ahead along the route
+                if shift_s >= 0:
+                    p0 = path[0]
+                    return (offset(p0[0], p0[1], bearing(path[1][0], path[1][1], p0[0], p0[1]), shift_s * V) if shift_s else p0), path[1:], None, t_act
+                p_, si = tm.point_back_along(path, min(L, max(RAID_MIN_NM * NM * 0.5, L + shift_s * V)))
+                return p_, path[max(1, si):], None, t_act
             if hold_until is not None:
                 h = max(0.0, hold_until + shift_s)
                 return path[0], path[1:], h, max(0.0, h - RAID_HOLD_MAX_S)
@@ -1264,7 +1337,9 @@ class RaidSpawns:
                 g.add_waypoint(pt(*q), r_alt, 450 * KPH, "RTB" if k == len(home_) - 1 else "AVD")
             g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
             g.set_skill(skill)
-            if act >= 30 and not g.late_activation:
+            if edge:
+                self._late_edge(g, act, edge_flag)
+            elif act >= 30 and not g.late_activation:
                 self._late(g, act)
             return g
 
