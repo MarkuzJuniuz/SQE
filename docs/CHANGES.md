@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## Docs only: CLAUDE.md, the go word and "untuned"
+
+XO 2026-11-03. The go word for a code change is "fox 3" (with an optional effort). "Untuned" means a job type that does not use the newer AI systems (SAM avoidance, station rules); new jobs are flyable from day one. No code, no smoke.
+
 ## v0.41.255, carrier raid: the CAP leash, SEAD on the launch-point SAMs, escorts on the bombers' clock
 
 XO 2026-11-03 (the carrier-raid run: 82 missiles sank the carrier and two escorts, the Tomcats flew into the Sukhumi SA-10, the Su-27 escorts split from the bombers). XO said not to cut the bomber count yet; this changes the positioning first. No source for any figure below: all judgment calls.
