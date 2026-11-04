@@ -13,7 +13,7 @@ from . import threatmap as tm
 from .aircraft import AIRCRAFT
 from .loadouts import JSOW_PER_JET
 from .models import SEAD_AIMS, AssetKind, ObjectiveType, Role
-from .routes import AVOID_NM, FT, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, NM, assign_times, bearing, dist, objective_wp, offset, plan_route
+from .routes import AVOID_NM, FT, AGM88_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, NM, assign_times, bearing, dist, objective_wp, offset, plan_route
 
 JSOW_ATTACK_S = 120           # v0.41.46: a JSOW slinger's release tasks end this long after the launch point's ETA, and it turns for home (judgment call; XO's run: releases came 25-60 s before the point)
 JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
@@ -43,7 +43,7 @@ class StrikeTasks:
         # Viper 5-2 fired at another package's SA-6 from 89 km; the radar went quiet and the HARM homed on Squid 1-4's radar instead.
         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
         # v0.41.24: no clear HARM axis: the neighbouring sites still in reach of the launch point get these HARMs first
-        for nid_ in getattr(self, "_harm_threat", {}).get(package.id, []):
+        for nid_ in getattr(self, "_agm88_threat", {}).get(package.id, []):
             ng_ = self.groups_by_asset.get(nid_)
             if ng_ is not None:
                 cth = task.ControlledTask(task.AttackGroup(ng_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
@@ -145,20 +145,20 @@ class StrikeTasks:
         ct2.stop_after_time(t0 + 1080)
         wp.tasks.append(ct2)
 
-    def _harm_time(self, package, geom, base, P0):
+    def _agm88_time(self, package, geom, base, P0):
         """When this package's AI HARM flights reach their HARM point in this mission (push time + the push-to-HARM-point leg on its geometry)."""
         sf = next((f for f in package.flights if f.role == Role.SEAD and not f.tag), None)
         if sf is None:
             return None
         from .mission_builder import stagger                # the builder's module imports this one, so it is imported here, when called
         spec = AIRCRAFT[sf.aircraft]
-        wps = plan_route(Role.SEAD, (base.x, base.y), geom, spec.profile, is_player=False, tanker_xy=None, keep_out=self._umbrella_keep(package), harm_deg=self._harm_deg(package, geom))
+        wps = plan_route(Role.SEAD, (base.x, base.y), geom, spec.profile, is_player=False, tanker_xy=None, keep_out=self._umbrella_keep(package), agm88_deg=self._agm88_deg(package, geom))
         assign_times(wps, 0.0, P0 + stagger(package, Role.SEAD))
         tw = objective_wp(wps)
         return tw.eta_s if tw is not None and tw.action == "SEAD" else None
 
     def _umbrella_keep(self, package):
-        """plan_route's keep_out for a package's HARM point: the umbrella SA-10's reach (HARM_LAUNCH_NM) when the target sits under one and,
+        """plan_route's keep_out for a package's HARM point: the umbrella SA-10's reach (AGM88_LAUNCH_NM) when the target sits under one and,
         v0.41.24, every other live SA-2/3/6/11/10 the package is not sent against, by its reach (the v0.41.23 run: a Gudauta SEAD flight's HARM
         point sat 30 nm from the Sukhumi S-300 another package was attacking, and three Hornets died to it). None when there is nothing to keep out of."""
         if not package.objective.target_id or package.objective.target_id not in self.state.assets:
@@ -167,31 +167,31 @@ class StrikeTasks:
         if package.objective.type == ObjectiveType.DEAD:
             um = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
             if um:
-                out.append((um.x, um.y, HARM_LAUNCH_NM))
+                out.append((um.x, um.y, AGM88_LAUNCH_NM))
         out += self._zone_sams(package)
         return out or None
 
-    def _harm_deg(self, package, geom) -> float:
+    def _agm88_deg(self, package, geom) -> float:
         """v0.41.24: the HARM shooters' approach, in degrees off the package axis: the first of 0, 15, 30 either side whose launch point (pushed
         out as plan_route pushes it, up to 40 nm further) and IP clear the umbrella and every other SAM the package is not sent against. None
-        clear: the one with the most room, and the package's HARM flights also fire on the sites still in reach (self._harm_threat)."""
+        clear: the one with the most room, and the package's HARM flights also fire on the sites still in reach (self._agm88_threat)."""
         tid = package.objective.target_id
         if not tid or tid not in self.state.assets:
             return 0
-        c_ = getattr(self, "_harm_c", {})
+        c_ = getattr(self, "_agm88_c", {})
         if package.id in c_:
             return c_[package.id]
         kos = self._umbrella_keep(package) or []
-        h0 = max(8.0, min(HARM_LAUNCH_NM, geom.d / NM * 0.8 - 6))
+        h0 = max(8.0, min(AGM88_LAUNCH_NM, geom.d / NM * 0.8 - 6))
         def place(deg):
             ax = geom.hdg + 180 + deg
             hn = h0
-            while hn < HARM_LAUNCH_NM + 40 and any(dist(*offset(geom.tx, geom.ty, ax, hn * NM), kx, ky) < knm * NM for kx, ky, knm in kos):
+            while hn < AGM88_LAUNCH_NM + 40 and any(dist(*offset(geom.tx, geom.ty, ax, hn * NM), kx, ky) < knm * NM for kx, ky, knm in kos):
                 hn += 1.0
             pts = [offset(geom.tx, geom.ty, ax, (hn + k) * NM) for k in (0, 6)]
             return pts, min((dist(x, y, kx, ky) / NM - knm for x, y in pts for kx, ky, knm in kos), default=999.0)
         best = None
-        for deg in self.HARM_AXES:
+        for deg in self.AGM88_AXES:
             pts, sl = place(deg)
             if sl >= 0:
                 best = (deg, sl, pts)
@@ -202,10 +202,10 @@ class StrikeTasks:
             zs = self._zone_sams(package)
             ids = [a.id for a in self.state.assets.values() if (a.x, a.y, AVOID_NM.get(a.variant)) in zs
                    and any(dist(x, y, a.x, a.y) < AVOID_NM[a.variant] * NM for x, y in best[2])]
-            self._harm_threat = getattr(self, "_harm_threat", {})
-            self._harm_threat[package.id] = ids
+            self._agm88_threat = getattr(self, "_agm88_threat", {})
+            self._agm88_threat[package.id] = ids
         c_[package.id] = best[0]
-        self._harm_c = c_
+        self._agm88_c = c_
         return best[0]
 
     def _jsow_side(self, package, geom) -> float:

@@ -100,7 +100,7 @@ class FighterStations:
             try:
                 wps = plan_route(f.role, (base.x, base.y), geom, AIRCRAFT[f.aircraft].profile, is_player=False, tanker_xy=None,
                                  jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package),
-                                 harm_deg=self._harm_deg(package, geom))
+                                 agm88_deg=self._agm88_deg(package, geom))
             except ValueError:
                 continue
             lp_ = next((w for w in wps if w.action in ("SEAD", "JSOW")), None) or next((w for w in wps if w.name == "IP"), None)
