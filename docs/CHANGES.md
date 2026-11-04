@@ -1,5 +1,10 @@
 # CHANGES.md
 
+## v0.41.283, the raid SEAD is already done when you fly the Tomcat (or any non-SEAD jet)
+
+XO 2026-11-04 ("if the flyer is Tomcat, then script the SAMs to be already successfully suppressed ... those flights are already on their way home"; "fox 3 medium"). In the carrier raid setpiece, when the player does not fly the raid SEAD flight (`MissionBuilder._raid_scripted`): the SEAD flights are placed already past their HARM time (`RAID_SEAD_DONE_S` 150 s before the start), so they are homebound at second 0; the blocking sites' tracking radars and half of their other units (`RAID_SCRIPT_KILL`) are blown up by a trigger at second 2 (`trigger.action.explosion`, power 300: whether that kills a launcher is NOT tested in DCS); the DASH flag is set at second 5 so the bombers' activation (time AND flag) is not held up. Judgment calls: 150 s, 50%, power 300.
+Probed (L3, F-14BU, seeds 3 and 4): both SEAD pairs homebound, both sites get their explosion trigger. Not in this PR: the player flying the raid SEAD himself (his route today goes to the package's own point, not to a site; the timer of 5 minutes and the SEAD sizing wait for that PR).
+
 ## v0.41.282, the carrier raid is a scripted setpiece; red fields are red in every mission
 
 XO 2026-11-04 ("I give up with procedurally generated schedules"; "fox 3 high"). Two changes.
