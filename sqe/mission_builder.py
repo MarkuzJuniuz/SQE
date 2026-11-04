@@ -1334,7 +1334,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 u.name = f"ENM-FM-{pf['wing']}-{n}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", pf["wing"], names, ac=pf["type"])
 
-    def _spawn_opfor_ground(self, package, tx, ty, manifest, polyline=None, route_sites=None):
+    def _spawn_opfor_ground(self, package, tx, ty, manifest, polyline=None, route_sites=None, route_near=None):
         st, obj = self.state, package.objective
         from .war import blinded_today
         # the DEAD stage of a SEAD-first pair: if the SEAD package blinded the site (the day's verdict), its radars are already gone when the mission starts
@@ -1354,11 +1354,16 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             relevant += [g for g in st.assets.values() if g.guards == tgt.id]            # a SAM site's dug-in garrison is part of its cluster
             relevant += fol_
         if polyline:                         # every SAM site whose ring touches the route is live from the start
-            relevant += tm.corridor_sam_sites(st, polyline, tgt, **({"max_route": route_sites} if route_sites else {}))
+            cs_ = tm.corridor_sam_sites(st, polyline, tgt, **({"max_route": route_sites} if route_sites else {}))
+            if route_near is not None:                                  # v0.41.285: nearest to this point first, so the unit limit trims the furthest (see `_spawn_raid`)
+                cs_.sort(key=lambda a_: dist(a_.x, a_.y, route_near[0], route_near[1]))
+            route_ids = {a_.id for a_ in cs_}
+            relevant += cs_
         ewrs = sorted((a for a in st.assets.values() if a.kind == AssetKind.EWR and not a.destroyed),
                       key=lambda a: tm.poly_dist(a.x, a.y, polyline) if polyline else dist(a.x, a.y, tx, ty))
         relevant += [a for a in ewrs[:2] if (tm.poly_dist(a.x, a.y, polyline) if polyline else 0) < 80 * NM]
         seen = set()
+        cut_ = False                                                    # v0.41.285: once a route site does not fit, the rest of them (further out) are left out too
         for a in relevant:
             if a.id in seen or a.destroyed:
                 continue
@@ -1369,6 +1374,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     manifest.mark_primary(a.id, manifest.cur_pkg or package.id)
                 continue
             comp = SITES.get(a.variant) if a.kind in (AssetKind.SAM, AssetKind.EWR) else SOFT.get(a.kind)
+            if route_near is not None and a.id in route_ids and a.id not in self.groups_by_asset and (cut_ or self._units_room() < sum(n_ for _, n_ in (comp or [])) + 2):
+                cut_ = True
+                self.warns.append(f"{a.name}: left out to stay under the unit limit (furthest from the intercept point first)")
+                continue
             if comp and route_sites and self._units_room() < sum(n_ for _, n_ in comp) + 2:
                 self.warns.append(f"{a.name}: left out to stay under the unit limit")        # v0.41.256: the raid's extra route sites never push the mission over it
                 continue

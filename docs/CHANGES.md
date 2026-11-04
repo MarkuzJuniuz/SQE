@@ -1,5 +1,10 @@
 # CHANGES.md
 
+## v0.41.285, every red SAM along the carrier raid's way in is live; the unit limit trims the furthest from the intercept point
+
+XO 2026-11-04 ("all of red's SAMs spawn, furthest ones out from the intercept point are trimmed off"; "fox 3 medium"). `RAID_ROUTE_SAMS` 5 to 99 (all the sites whose ring reaches the bombers' route, as `threatmap.corridor_sam_sites` picks them). `_spawn_opfor_ground(..., route_near=)` builds them nearest the intercept point first (the launch point when there is none); the first one that does not fit the unit limit, and every one further out, is left out with a warning. The sites the raid SEAD goes for are built before and are never trimmed. Only the raid's route sites use the new order; every other mission is unchanged.
+Probed (L3, 6 seeds): 1 to 3 route sites built beyond the SEAD's, units 150 to 164 of 250, nothing left out. With the limit forced to 150 (seeds 2 and 6): 1 and 3 sites left out, none built past the limit. Targeted smoke (21, 22, 26, 31zb, 31zc) passed. Not seen in DCS.
+
 ## v0.41.284, you can fly the raid SEAD: your route goes to a raid site; red's timer is 5 minutes
 
 XO 2026-11-04 ("only SEAD flyers get the different option"; "5 minutes timer?"; "if there are no SAMs then no SEAD offered. If multiple SAMs then SEAD is sized to it"; "fox 3 high"). Before this the SEAD slot of the carrier raid could be picked, but a player SEAD flight flew a route to the package's own point, not a site.
