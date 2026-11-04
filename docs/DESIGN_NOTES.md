@@ -169,6 +169,8 @@ How to check a mission without the ME: unzip the `.miz`, parse `mission` with `d
 
 **AI home legs and terrain (v0.41.49, 2026-10-20; _verified v0.41.49_).** `plan_route` waypoints get `terrain_clear`, but the RCV point is added later in `_spawn_flight` (airfield flights) at 3,000-6,000 ft; an AI flight drops to the next point's altitude right after the last one, so a lone F-16 flew 100 nm level at 3,000 ft MSL over rising ground and died. `routes.home_leg_ft` now sets the RCV altitude from the leg's ground (+1,000 ft, +2,000 ft over mountains, cap 20,000 ft); the support-CAP branch runs `terrain_clear` too. Carrier recovery points (RTB 2,000 ft) are over water and unchecked. The Lua death record carries `x`, `z` and `ground_m` (`land.getHeight`; 0 over sea).
 
+**Staged fleet raid (v0.41.261, XO 2026-11-03; _verified v0.41.261, not seen in DCS_).** `raid_spawns._spawn_raid` with `RAID_STAGE_ON`: marshal pushed outside X-22 reach (`_raid_marshal_out`, `RAID_REACH_NM` 208 + `RAID_MSHL_CLEAR_NM` 12), half of each group on the marshal at t=0, the rest from the runway in batches (`_raid_stage`: fighters 4 / 60 s, bombers 2 / 90 s), push when assembled. The Tu-22M3 "engage ships" task is moved from wp0 to the PUSH point. All constants are judgment calls.
+
 ## 9. Planned air cover, support assets and scrambles (v0.41.85 to v0.41.94)
 _verified v0.41.94, 2026-10-22 (call-in bullet v0.41.111; read from the code; XO's runs of 2026-10-21 confirm the red patrol spread, the scramble stations and the hot-ramp circle)_
 

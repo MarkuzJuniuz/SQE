@@ -1,5 +1,15 @@
 # CHANGES.md
 
+## v0.41.261, staged fleet raid: half the bombers already on the marshal, the rest take off in batches, no "shoot at ships" order at the start
+
+XO 2026-11-03 ("Fox 3 high"; a fleet-defence run where the bombers spawned 401 km out and fired X-22s at t=87 s). Weapons keep their full range. All figures are judgment calls; XO: "We'll tune on the way." Doctrine point (CIMSEC, "Kamikazes: The Legacy of Soviet Naval Aviation, Pt. 2", medium firmness): a regiment took about 30 minutes to get airborne and assemble, then went in together.
+- **Marshal (`raid_spawns._raid_marshal_out`):** at least 220 nm (X-22 reach 208 nm measured 380 to 385 km in XO's run, plus 12 nm) from the target, else the nearest point on the way out that is.
+- **Staging (`_raid_stage`):** half of each fighter and bomber group (`RAID_MARSHAL_FRAC`) starts airborne on the marshal at t=0; the rest start on the Mozdok runway in batches (fighters 4 at a time, 60 s apart; bombers 2 at a time, 90 s apart), fly to the marshal and wait. The raid pushes when the last one has joined (or at the planned time, whichever is later). Takes effect only for sea raids with a runway and no "aim" flag; land raids and a missing runway use the old shape.
+- **No early shot:** pydcs put an automatic "engage ships" order on the first waypoint; for Tu-22M3 it now sits on the PUSH point instead.
+- Not changed: the LAUNCH point, blue's CAP stations (forward stations are a separate job), land raids. The bombers still fly on to LAUNCH after firing. `RAID_STAGE_ON = False` restores the old raid (the engage order still starts at the PUSH).
+- Not seen in DCS. Mozdok's DCS runway length not checked (real: 3,485 m and 3,000 m). Batch gaps, join time, climb allowance and group gap are guesses.
+- Checks: compile, targeted smoke, lock-flag dump (first points time-locked, the rest speed-locked).
+
 ## v0.41.260, smaller bomber raids: Level 3 raid of 16 from a wing of 24, Level 2 raid of 8
 
 XO 2026-11-03 (a fleet-defence run: 24 Tu-22M3 sank the carrier and all three escorts; "Make L3 only have 24 bombers in Mozdok, launch 16 at a time. L2 ... 8"). Judgment calls; tune on XO's runs.
