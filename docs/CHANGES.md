@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.276, the fleet-defence interceptors have no hold
+
+XO 2026-11-04 ("fox 3 medium": "the interceptors should just fly fast and bend away from SAMs"; the F-15s "go straight to the point"). `mission_builder.RAID_F14_HOLD = False`: the carrier raid's F-14 and F-15 interceptors lose the HOLD point and the SEAD gate. They leave at the start, fly the SAM-bending lane (direct or bent over a blue field) at the dash speed and wait on the intercept point; their engage circle round it is on from the start (it was swapped in by the DASH flag). The SEAD still goes at the SAM sites that block the lane, but nothing waits on it. `True` brings the v0.41.256 hold back. New `raid_spawns.RAID_SA11_NM = 26`: the interceptors' lane keeps 26 nm from a live SA-11 (the shared `AVOID_NM` stays 20 for every other flight): in the v0.41.272 run the SA-11s engaged at 23 to 26 nm. Judgment call. The bombers are not re-timed (the v0.41.274 takeoff queue pushes them later). Not checked: the interceptors' fuel for the wait on the point. Not seen in DCS.
+
 ## v0.41.275, the fleet raid arrives on the bearing of its own field
 
 XO 2026-11-04 ("fox 3 low"): the Tu-22Ms looped from Mozdok down past Maykop and back west. `packages._raid_plan` picked the raid's bearing at random between 8 and 40 degrees from the carrier, whatever the bombers' field; the field lay at about 60 degrees, so the route was ~280 nm instead of ~180 nm. The bearing is now the one from the carrier to the bombers' field, plus or minus 10 degrees (the jitter is a judgment call). The interceptors' intercept point is built on the same axis and moves with it. Not seen in DCS.
