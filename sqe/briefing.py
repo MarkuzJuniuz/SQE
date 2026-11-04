@@ -29,6 +29,8 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     """x: date, whois, mode3, laser, bingo, joker, bullseye, divert, weather, link16(bool)."""
     pf = pkg.player_flight
     spec = AIRCRAFT[pf.aircraft]
+    _psq = state.squadrons.get(getattr(pf, "squadron_id", ""))
+    on_boat = (state.bases[_psq.base_id].kind.value == "CARRIER") if (_psq is not None and _psq.base_id in state.bases) else spec.home.value == "CARRIER"          # v0.41.257: a carrier squadron moved ashore (its ship sunk) lands at a field
     n, pname, ptext = narrative.phase(state)
     obj = pkg.objective
     threats = threat_lines(state, *tgt_xy)
@@ -44,7 +46,9 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         sit += ["", (f"Intelligence reports {e['bombers']} {rtype} with free-fall bombs inbound toward {what}, "
                      f"approaching from a bearing of about {e['brg']:.0f} degrees." if e.get("land") else
                      f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
-                     f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier. They will launch from about 100 nm out and turn for home; stop them before they fire.")
+                     f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier. They will launch from about 100 nm out and turn for home; stop them before they fire."
+                     + (" SEAD flights are working the long-range SAMs over their launch point. Hold on your station, outside the SAM rings, and engage what comes to you; "
+                        "you are free to cross toward the launch point when AWACS calls SEAD complete, or at the push time on the card." if e.get("setpiece") else ""))
                     + (f" They are escorted by {e['escorts']} fighters." if e.get("escorts") else
                        (" They have no escort." if e.get("land") else " They have no escort: the enemy cannot reach this far with fighters. It is a last throw of the dice."))]
     n_def = x.get("n_def", pkg.n_def)
@@ -117,7 +121,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     else:
         tower, jtac_at = f"ATC {plan.where('ATC')}", (plan.where("JTAC") or None)
     adm = [f"BINGO {x['bingo']} lb   JOKER {x['joker']} lb",
-           "Recovery: " + (f"carrier Case I, TACAN 74X, ICLS 11, {tower}" if spec.home.value == "CARRIER" else f"home field, tower {tower.replace('ATC ', 'on ')}"),
+           "Recovery: " + (f"carrier Case I, TACAN 74X, ICLS 11, {tower}" if on_boat else f"home field, tower {tower.replace('ATC ', 'on ')}"),
            f"Divert: {x['divert']}", "Tanker track is steerpoint TKR. Bullseye is the last steerpoint."]
     if spec.fc3:
         com = ["Frequencies: " + " | ".join(f"{e.label} {e.mhz:.3f}" for e in list(plan.comm1.values()) + list(plan.comm2.values()))]

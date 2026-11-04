@@ -4,6 +4,34 @@
 
 XO 2026-11-03. The go word for a code change is "fox 3" (with an optional effort). "Untuned" means a job type that does not use the newer AI systems (SAM avoidance, station rules); new jobs are flyable from day one. No code, no smoke.
 
+## v0.41.257, the fleet can be sunk
+
+XO 2026-11-03 ("we need to check why the carrier group is still up after being sunk"): a carrier sunk in a flown mission now stays sunk. All numbers are judgment calls (no public figure applies to a game carrier); tune on XO's runs.
+- **Read from the mission:** the hook reports every ship that died (carrier = `"<base name> Unit #1"`, escorts `"<base name> escort N Unit #1"`) and now also WHEN and WHERE each aircraft landed (`landings`). New module `sqe/fleet.py`, new save key `state.fleet` (an older save has none = nothing sunk; no format bump).
+- **Carrier sunk:** every aircraft that did not fly in the mission and every one that landed back aboard before it sank goes down with it. The aircraft still flying land at the nearest field; their squadron moves there like a squadron from a fallen field (`home_id`, the move nights, the player's too).
+- **Seven days away** (`fleet.SUNK_DAYS`): no carrier launches (`deck_factor` 0), no carrier squadrons in the plan (they sit ashore), no fleet BARCAP or CVCAP, no bomber raid on it, no E-2C or S-3 from it, no ships in the missions. It counts as ONE fallen base for the defeat rule while away (`ground.fallen_count`): one more fallen original field and the campaign is lost. Taken fields still never count. The Overview and the posture say so.
+- **Back as new** on day 7: a new ship, air defence 100%, the escorts with it, the carrier squadrons at full authorized strength and flying home.
+- **Escort sunk** (the carrier afloat or not): the group's air defence is cut by the escort's share (`fleet.ESCORT_DEFENSE` cruiser 30%, destroyer 25%, frigate 15%, floor 20%), the ship is missing from the missions, and it is replaced after `fleet.ESCORT_DAYS` 7.
+- **Wording:** "Fleet losses: USS Stennis sunk, 2 escorts sunk." and "Carrier sunk, returning in 7 days." ("fallen" stays for land fields.)
+- **A carrier squadron on a land field:** the support aircraft (E-3 instead of E-2C), the RTB note, the briefing's recovery line and the catapult-flight limit now go by the squadron's real base, not by the airframe's home.
+- **Unflown raids** keep the old "big hit" model (`carrier_hit`); they never sink the ship. A flown raid that sinks the carrier skips the old hit.
+- Not done: bomber count / salvo timing, the player F-14 HOLD / PUSH / TGT shape. Not seen in DCS (the hook's `landings` and the ship death names are read from XO's earlier state file, not yet from a run with this build).
+- Checks: compile, new `check_121_sunk_carrier` (debrief, rebase, defeat count, save, planner, a mission built without the ship, return), full smoke.
+
+## v0.41.256, carrier raid, round 2: USAF share, SAMs along the bomber route, SEAD rush, the interceptors' gate
+
+XO 2026-11-03 ("fox 3 high"): the USAF wing gave no help, no SAMs across the mountains, SEADs as fast as they can, the F-14s cross once the SAMs are suppressed, a safe BARCAP for the USAF. All figures are judgment calls (no source).
+- **USAF share:** half of the fleet raid's optional CAP flights are land-based (`Slot.land`, `packages.SETPIECE_LAND_SHARE` 0.5): a land squadron fills them, long-range fighters (F-15C) first, whatever the lead's service. None in reach = the usual pick. Cause found: `_pick_squadron` prefers the lead's service and the carrier squadrons are at distance zero, so the Navy filled every slot.
+- **SAMs along the bomber route:** `_spawn_raid` feeds the bombers' route to `_spawn_opfor_ground` (`raid_spawns.RAID_ROUTE_SAMS` 5 sites touching it, was 2 for any route); a site is skipped with a warning when the unit limit leaves no room (`_units_room`). Test build: 8 to 16-20 S-300 launchers, 232-241 units (limit 250).
+- **SEAD rush:** the raid SEAD flies at least `RAID_RUSH_KTS` 500 to its HARM point, and the HARMs land `RAID_SEAD_LEAD_S` 240 s before the interceptors are due on station (a pair that would be late is air-started en route, like an earlier package).
+- **The gate:** until the SEAD's verdict the raid CAP fights only inside a SAM-clear circle round its leashed station (where it shoots the volleys). A mission flag (`_raid_sead_prep`) is set when every tracking radar of the SEAD's site is dead, else `RAID_DASH_WAIT_S` 180 s after the HARMs and never before the CAP is on station + 60 s; it swaps that circle for the full circle out to the launch point (ControlledTask with `start_if_user_flag` / `stop_if_user_flag`). The flag is a Mission Editor trigger, no Lua.
+- **Safe BARCAP for the USAF:** read-only check on 3 seeds: the nearest SAM-clear point is 18 to 32 nm from the launch point, i.e. the leashed station, inside an F-15C's reach. The USAF flights use that station and gate; no separate station was built.
+- **F-14 raid CAPs (XO: "what it was made for"):** an AI F-14 flight of the carrier raid holds at its leashed station (HOLD, `RAID_F14_HOLD_FT` 30,000 ft, 300 kt), then at the gate's push time or on the flag (PUSH, IP at `RAID_F14_DASH_FT` 35,000 ft, `RAID_F14_DASH_KTS` 650) dashes to TGT, the old station near the launch point, and orbits there at 450 kt (`_raid_f14_shape`). The HOLD orbit ends on the gate flag (`stop_if_user_flag`); the briefed push is the gate's latest time. Max-range Phoenix shots were already set on every raid CAP. The F-14 crossing leg is not bent round SAM rings (it goes toward them on purpose, after the SEAD). The hold, dash and speeds are judgment calls; F-14 fuel flow not checked.
+- **Your own jet (any airframe) in the carrier raid CAP:** your racetrack is walked back with the same leash as the AI's (before, the card showed the old station near the SA-10 while the wingmen held the safe one). An F-14 pilot does NOT get the HOLD / PUSH / TGT shape yet (that touches the player's push timeline; talk first).
+- **For every jet:** a briefing line (hold outside the SAM rings, free to cross when AWACS calls SEAD complete or at the push time) and an on-screen "AWACS: SEAD complete" text when the gate flag is set by either trigger.
+- Not done: fewer bombers, the salvo timing, the sunk carrier on the map. Not seen in DCS.
+- Checks: compile, `check_31zb_raid_setpiece` (land-based flight present, dash flag in the mission), full smoke.
+
 ## v0.41.255, carrier raid: the CAP leash, SEAD on the launch-point SAMs, escorts on the bombers' clock
 
 XO 2026-11-03 (the carrier-raid run: 82 missiles sank the carrier and two escorts, the Tomcats flew into the Sukhumi SA-10, the Su-27 escorts split from the bombers). XO said not to cut the bomber count yet; this changes the positioning first. No source for any figure below: all judgment calls.

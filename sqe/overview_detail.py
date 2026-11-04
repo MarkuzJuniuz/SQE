@@ -59,6 +59,9 @@ def ground_notes(state) -> list:
     for bid in g.get("fallen", []):
         if bid in state.bases:
             out.append(f"{state.bases[bid].name}: LOST")
+    from . import fleet as _fleet
+    if _fleet.status_line(state):
+        out.append(_fleet.status_line(state))
     return out
 
 

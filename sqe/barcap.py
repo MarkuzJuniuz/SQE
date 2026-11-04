@@ -15,6 +15,7 @@ Where each number came from (CLAUDE.md doctrine rule):
 """
 from __future__ import annotations
 import math
+from . import fleet
 from .models import AssetKind, BaseKind
 from .routes import NM, bearing, dist, offset
 
@@ -85,7 +86,7 @@ def _enemy_rings(state, side: str) -> list:
     sites = state.blue_sams.values() if side == "red" else (a for a in state.assets.values() if a.kind == AssetKind.SAM)
     rings = [(s.x, s.y, RANGE_NM.get(s.variant, 0) * NM) for s in sites if not s.destroyed and RANGE_NM.get(s.variant, 0) >= SERIOUS_NM]
     if side == "red":                                       # v0.41.76: the ships' reach is a ring too (it replaces the old fixed 130 nm keep-out round the boat)
-        rings += [(b.x, b.y, FLEET_REACH_NM * NM) for b in state.bases.values() if b.kind == BaseKind.CARRIER]
+        rings += [(b.x, b.y, FLEET_REACH_NM * NM) for b in state.bases.values() if b.kind == BaseKind.CARRIER and not fleet.is_sunk_base(state, b.id)]
     return rings
 
 
@@ -121,7 +122,7 @@ def plan_areas(state, side: str) -> list:
     else:
         assets = []
         for b in state.bases.values():
-            if b.kind not in (BaseKind.AIRFIELD, BaseKind.CARRIER):
+            if b.kind not in (BaseKind.AIRFIELD, BaseKind.CARRIER) or fleet.is_sunk_base(state, b.id):          # v0.41.257: a sunk carrier has no patrol area
                 continue
             tps = [sq.aircraft for sq in state.squadrons.values() if sq.base_id == b.id and sq.available > 0]
             assets.append((b.id, b.name, b.x, b.y, STATION_FLEET_NM if b.kind == BaseKind.CARRIER else STATION_BASE_NM, tps))

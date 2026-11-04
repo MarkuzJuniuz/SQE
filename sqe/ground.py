@@ -1116,8 +1116,16 @@ def return_squadrons(state, bid: str) -> list:
     return lines
 
 
+def fleet_sunk(state) -> bool:
+    from . import fleet
+    return fleet.sunk(state)
+
+
 def fallen_count(state) -> int:
-    return len(state.ground.get("fallen", [])) if active(state) else 0
+    if not active(state):
+        return 0
+    from . import fleet
+    return len(state.ground.get("fallen", [])) + fleet.counts_as_fallen(state)          # v0.41.257 (XO): a sunk carrier is one lost base until it returns
 
 
 def repair_blue(state, d) -> None:

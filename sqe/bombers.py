@@ -49,7 +49,8 @@ def _bomber_wing(state):
 
 
 def _carrier(state):
-    return next((b for b in state.bases.values() if b.kind.value == "CARRIER"), None)
+    from . import fleet
+    return fleet.carrier(state)                                    # v0.41.257: None while the carrier is sunk: no raid on a ship that is not there
 
 
 def escort_options(state, bw, cv):

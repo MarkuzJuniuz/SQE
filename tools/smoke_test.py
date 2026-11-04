@@ -2317,6 +2317,7 @@ def check_31zb_raid_setpiece(c):
             caps = [f for f in p.flights if f.role.value == "CAP"]
             assert len(caps) >= 2 and sum(f.count for f in caps) >= p.extra["bombers"], (len(caps), p.extra)
             assert not ses.merge_candidates(p)
+            assert any(ses.state.bases[f.base_id].kind.value != "CARRIER" for f in caps), "v0.41.256: a share of the fleet raid's CAP flights is land-based (USAF)"
             mine = ses.flyable(p, squadron_only=False)
             res[ac] = (ses, p, mine)
         ses, p, mine = res["F-14BU"]
@@ -2329,6 +2330,7 @@ def check_31zb_raid_setpiece(c):
         assert len(set(re.findall(r'"(RAID-B-\d+)"', mz))) == nb_ and len(set(re.findall(r'"(RAID-E-\d+)"', mz))) == ne_, "every bomber and escort is in the mission"
         assert (nb_ <= 4) or "Raid Bomber 2" in mz, "a raid of more than 4 bombers is several groups"
         assert (ne_ <= 8) or "Raid Sweep 1" in mz, "a big raid sends a sweep ahead of the bombers"
+        assert "raid SEAD: wait over" in mz or not any(f.role.value == "SEAD" for f in p.flights), "v0.41.256: the raid SEAD's dash flag is in the mission"
         ses_a, pa, mine_a = res["A-10C"]
         assert not mine_a, "an A-10 cannot"
         assert "Skip Turn" in " ".join(narrative.setpiece_text(ses_a.state, pa, False, "A-10C"))
@@ -6333,6 +6335,82 @@ def check_120_runway_cratering(c):
     print("[runway cratering] 3 hits close a field for 2-5 days by supply; saved; its squadrons and red wing fly nothing; hook list and Lua compile")
 
 
+def check_121_sunk_carrier(c):
+    """v0.41.257 (XO 2026-11-03): a carrier sunk in a flown mission. Strategic state only (the days and shares are tunables): the debrief reads the ship's death, the aircraft that
+    did not fly or that landed aboard before it sank are lost, the flying survivors land at a field and their squadron moves there, the carrier counts as one lost base for the defeat rule
+    while it is away, the planner and the mission leave the ship out, a sunk escort cuts the air defence, the save keeps it all, and the ship comes back as new on its day."""
+    from sqe import fleet as _fl, ground as _gr, debrief as _db
+    from sqe.state import CampaignState as _CS
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke sunk", "F-14BU", 3, seed=5)
+    st = ses.state
+    cv = _fl.carrier_base(st); assert cv is not None
+    sqs = sorted((q for q in st.squadrons.values() if q.base_id == cv.id), key=lambda q: q.id)
+    assert sqs, "the carrier holds squadrons"
+    q0 = st.squadrons[st.player.squadron_id]; assert q0 in sqs, "the player's squadron is on the boat"
+    q0.available = min(q0.authorized, 10)
+    n0 = q0.available
+    assert _gr.fallen_count(st) == 0 and not _fl.sunk(st)
+    cvu, escu = _fl.unit_names(cv)
+    man = _db.Manifest(st.campaign_id, 1, "p1", st.day)
+    man.add("friendly", "f1", ["u_a", "u_b", "u_c", "u_d"], squadron=q0.id, callsign="Test 1")
+    data = {"dead": [cvu, escu[0], escu[1], "u_d"], "ejected": [], "landed": ["u_a", "u_c"], "time": 1000,
+            "deaths": [{"n": cvu, "t": 500}], "landings": {"u_a": {"t": 100, "p": cvu}, "u_c": {"t": 900, "p": "Kutaisi"}}}
+    out = _db.apply_debrief(st, man, data)
+    txt = "\n".join(out["lines"])
+    assert "Fleet losses: " in txt and "2 escorts sunk" in txt and "Carrier sunk, returning in 7 days." in txt, txt
+    assert _fl.sunk(st) and _fl.days_left(st) == _fl.SUNK_DAYS and _gr.fallen_count(st) == (1 if _gr.active(st) else 0)
+    # u_d died (-1); u_a landed aboard before the sinking (lost with it); u_b still flying and u_c landed ashore after it: 2 survivors
+    assert q0.base_id != cv.id and q0.home_id == cv.id and q0.reserve == 2 and q0.available == 0, (q0.base_id, q0.home_id, q0.reserve, q0.available)
+    assert all(q.base_id != cv.id and q.home_id == cv.id for q in sqs), "every carrier squadron moved ashore"
+    assert all(q.available + q.reserve <= 2 for q in sqs if q is not q0) and n0 > 2
+    from sqe import carrier_hit as _ch
+    assert _ch.deck_factor(st) == 0.0
+    assert _CS.from_dict(st.to_dict()).fleet == st.fleet, "the save keeps the sunk carrier"
+    # the next days: no ship in the planning, none in the mission
+    ses.skip_day(); st = ses.state
+    assert _fl.sunk(st) and _fl.days_left(st) == _fl.SUNK_DAYS - 1
+    assert not any(p.extra.get("setpiece") for p in ses.packages()), "no raid on a ship that is not there"
+    assert not any(f.base_id == cv.id for p in ses.packages() for f in p.flights), "nothing launches from the sunk carrier"
+    for _ in range(3):
+        if any(ses.flyable(p) for p in ses.packages()):
+            break
+        ses.skip_day(); st = ses.state
+    opts = [p for p in ses.packages() if ses.flyable(p)]
+    assert opts, "the player's squadron (moved ashore) flies again after its nights"
+    if opts:
+        pk = opts[0]
+        ses.fly(pk.number, ses.flyable(pk)[0].id)
+        z = zipfile.ZipFile(ses.settings.sortie_miz)
+        from dcs import lua as _lua
+        m = _lua.loads(z.read("mission").decode())
+        def _types(o, acc):
+            if isinstance(o, dict):
+                if o.get("type") == "Stennis":
+                    acc.append(o)
+                for v in o.values():
+                    _types(v, acc)
+            elif isinstance(o, (list, tuple)):
+                for v in o:
+                    _types(v, acc)
+            return acc
+        assert not _types(m, []), "the sunk carrier is not in the mission"
+    # return: a new ship on its day, full squadrons, defence full, flying home
+    st.day = st.fleet["returns_day"]
+    ln = _fl.step(st)
+    assert ln and not _fl.sunk(st) and cv.defense == 1.0 and _gr.fallen_count(st) == 0, ln
+    assert all(q.base_id == cv.id and q.home_id == "" and q.available == q.authorized and q.reserve == 0 and q.move_days == 0 for q in sqs)
+    # a sunk escort alone: the air defence is cut until it is replaced
+    man2 = _db.Manifest(st.campaign_id, 2, "p2", st.day)
+    out2 = _db.apply_debrief(st, man2, {"dead": [escu[0]], "ejected": [], "landed": [], "time": 900, "deaths": []})
+    assert "1 escort sunk" in "\n".join(out2["lines"]) and not _fl.sunk(st) and cv.defense <= 1.0 - _fl.ESCORT_DEFENSE[0] + 1e-9 and _fl.escort_out(st, 0)
+    st.day += _fl.ESCORT_DAYS
+    ln2 = _fl.step(st)
+    assert ln2 and not _fl.escort_out(st, 0) and cv.defense > 1.0 - _fl.ESCORT_DEFENSE[0], ln2
+    print("[sunk carrier] ship, aircraft and escorts lost in the debrief, squadrons ashore, one lost base while away, planner and mission without it, back as new on day 7")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -6492,6 +6570,7 @@ CHECKS = [
     check_118_new_squadrons,
     check_119_raid_folds_by_time,
     check_120_runway_cratering,
+    check_121_sunk_carrier,
 ]
 
 def _borrows(fn) -> set:
