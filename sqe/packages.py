@@ -425,7 +425,7 @@ class PackageBuilder:
         # v0.41.279 (XO 2026-11-04): back to a random 8 to 40 degrees. v0.41.275 pointed it at the bombers' field, but Mozdok lies ~213 nm from the carrier, just outside the
         # X-22's 208 nm reach: on the straight line only 30 to 50 nm of way in is left outside the ring, the SAM circles cover it, and the interceptors find no intercept point.
         # The dogleg is what gives blue the room. Probed (seed 3, L3): bearing 20 gives a lane for every interceptor, bearing 60 none.
-        return {"brg": round(rnd.uniform(8, 40), 1), "bombers": dec["n"], "bomber_wing": bw_id,
+        return {"brg": round(rnd.uniform(20, 40), 1), "bombers": dec["n"], "bomber_wing": bw_id,
                 "escort_wing": dec["wing"], "escort_type": dec["type"], "escorts": dec["escorts"], "mode": dec["mode"]}
 
     def _pick_squadron(self, slot: Slot, tx, ty, ledger: Ledger, lead_service):
