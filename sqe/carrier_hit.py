@@ -38,6 +38,9 @@ def big(state, d, rng):
 
 def deck_factor(state) -> float:
     """Share of the carrier squadrons' sorties available today: 0 the day after a big hit, 0.5 the day after that, else 1."""
+    from . import fleet
+    if fleet.sunk(state):                                     # v0.41.257: no ship, no deck
+        return 0.0
     to = (state.raids or {}).get("deck_out_to")
     if to is None:
         return 1.0

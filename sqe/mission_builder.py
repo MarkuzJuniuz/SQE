@@ -1072,7 +1072,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     def _rtb_note(self, spec, pbase=None):
         nm = self._short(pbase.name) if pbase is not None else ""
-        if spec.home == BaseKind.CARRIER:
+        if (pbase.kind if pbase is not None else spec.home) == BaseKind.CARRIER:
             return f"{nm}: Case I TACAN {self.o.carrier_tacan} ICLS {self.o.carrier_icls}".lstrip(": ")
         return (f"{nm}: Land. Tower, ATC frequency" if spec.fc3 else f"{nm}: Land. Tower COMM2 CH2").lstrip(": ")
 
@@ -1118,6 +1118,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """v0.41.220: `near` = (x, y) of a raid target this field is built to cover (a neighbour of the raided field): it then gets only what reaches that point, the
         Patriot inside PATRIOT_NM, the HAWK inside HAWK_NM, the AAA inside COVER_AAA_NM (a full field is about 30 units)."""
         o = self.o
+        from . import fleet as _fleet
+        if base.kind == BaseKind.CARRIER and _fleet.sunk(self.state):      # v0.41.257: the ship is on the bottom: no carrier group in the mission
+            return
         if base.kind == BaseKind.AIRFIELD:
             self.apt[base.id] = self.t.airports[base.airport]
             bt = dict(sams.blue_battery(base, self.state))      # v0.41.30: doctrinal batteries, every field alike; v0.41.62: read from the field's three sites (sams.py)
@@ -1175,6 +1178,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self.ship[base.id] = cv
         if o.carrier_escorts:      # the fleet is never alone: a cruiser and two escorts station-keeping on the carrier
             for k, (cls, ang, nm) in enumerate(((ships.TICONDEROG, 40, 3.0), (ships.USS_Arleigh_Burke_IIa, -40, 3.0), (ships.PERRY, 180, 3.5))):
+                if _fleet.escort_out(self.state, k):               # v0.41.257: a sunk escort is missing until it is replaced
+                    continue
                 ex, ey = offset(base.x, base.y, hdg + ang, nm * NM)
                 ep = mapping.Point(ex, ey, self.t)
                 eg = self.m.ship_group(self.usa, f"{base.name} escort {k + 1}", cls, ep, heading=hdg)

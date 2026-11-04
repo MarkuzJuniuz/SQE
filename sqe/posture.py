@@ -123,8 +123,11 @@ def _warnings(state) -> list:
     elif c and c.get("arrived") and not c.get("resolved") and not c.get("used") and state.day <= c.get("until", -1):
         d = int(c["until"]) - state.day
         out.append(("counter_on", "The enemy counter-force is attacking" + (f" for {_days(d)} more" if d else " today")))
-    if len(g["fallen"]) == 1:
-        out.append(("lost", "One of our airfields has fallen: if a second one is lost the campaign is lost"))
+    from . import fleet as _fleet
+    n_lost_ = len(g["fallen"]) + _fleet.counts_as_fallen(state)
+    if n_lost_ == 1:
+        out.append(("lost", "The carrier is sunk and counts as a lost base until it returns: if one more falls the campaign is lost" if _fleet.sunk(state)
+                    else "One of our airfields has fallen: if a second one is lost the campaign is lost"))
     clock = int(g.get("clock", 0))
     if g["taken"] and clock > state.day:
         out.append(("clock", f"Takeover under way: our next attack in about {_days(clock - state.day)}"))
@@ -149,7 +152,7 @@ def posture(state) -> tuple:
     nxt = objective(state)
     if "counter_on" in kinds:
         lab = "Counter-force"
-    elif g["fallen"] or kinds & {"fall", "retake"}:
+    elif g["fallen"] or kinds & {"fall", "retake"} or "lost" in kinds:
         lab = "Under pressure"
     elif "clock" in kinds or "counter_due" in kinds:
         lab = "Consolidating"
@@ -218,6 +221,10 @@ def front_lines(state) -> list:
     g = state.ground
     if g["fallen"]:
         out.append("Lost: " + ", ".join(state.bases[x].name for x in g["fallen"] if x in state.bases))
+    from . import fleet as _fleet
+    _fl = _fleet.status_line(state)
+    if _fl:
+        out.append(_fl)
     out.append(odds_line(state))
     return out
 
