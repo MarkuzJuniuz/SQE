@@ -448,14 +448,14 @@ class ForcesPage(QWidget):
         sqs = list(st.squadrons.values()); self.sq.setRowCount(len(sqs))
         for i, s in enumerate(sqs):
             sp = AIRCRAFT[s.aircraft]
-            for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.available} / {s.authorized}")):
+            for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.available} / {s.authorized}" + (f" (refitting, {s.reserve})" if s.reserve else ""))):
                 self.sq.setItem(i, j, _item(v))
             self.sq.setCellWidget(i, 5, self._bar(s.readiness, theme.BLUE))
         rows_ = [(w, q) for w in st.enemy_air for q in w.sqns]                     # v0.41.208 (XO): laid out like the Coalition squadrons (no squadron names): one row per airframe, its base, serviceable and strength
         self.ea.setRowCount(len(rows_))
         for i, (w, q) in enumerate(rows_):
             for j, v in enumerate((q.aircraft.replace("_", "-"), st.assets[w.base_asset_id].name,
-                                   f"{q.available} / {q.authorized}" + (f" (resting, {q.reserve})" if q.reserve else ""))):
+                                   f"{q.available} / {q.authorized}" + (f" (refitting, {q.reserve})" if q.reserve else ""))):
                 self.ea.setItem(i, j, _item(v))
             self.ea.setCellWidget(i, 3, self._bar(q.available / max(1, q.authorized), theme.RED))
         from .. import sams as _sams, support_assets as _sa

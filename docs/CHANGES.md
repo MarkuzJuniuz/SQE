@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.262, squadron tables show "(refitting, N)" for both sides
+
+XO 2026-11-03 ("Is resting the proper term for jets?"; the F-15Cs at Senaki-Kolkhi showed 0 for days). Display only; nothing in the save changes. "Reconstitution" is the doctrinal word, "refit" the plain one.
+- **Blue Squadrons table (`gui/app.py`):** a squadron on a rear field now shows `0 / 12 (refitting, N)`; it showed only the 0 before.
+- **Red table:** "resting" renamed "refitting".
+- Checks: compile (display code, no smoke).
+
 ## v0.41.261, staged fleet raid: half the bombers already on the marshal, the rest take off in batches, no "shoot at ships" order at the start
 
 XO 2026-11-03 ("Fox 3 high"; a fleet-defence run where the bombers spawned 401 km out and fired X-22s at t=87 s). Weapons keep their full range. All figures are judgment calls; XO: "We'll tune on the way." Doctrine point (CIMSEC, "Kamikazes: The Legacy of Soviet Naval Aviation, Pt. 2", medium firmness): a regiment took about 30 minutes to get airborne and assemble, then went in together.
