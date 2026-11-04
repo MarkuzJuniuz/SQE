@@ -70,6 +70,7 @@ def cas_cover(state, a) -> tuple:
     return cov, [x for x in cov if x.variant not in ESCORTABLE]
 
 
+SUPPLY_FIRST_BONUS = 45.0   # v0.41.273 (XO 2026-11-04, fox 3 medium): added to the score of a supply strike (fuel / depot / plant, not a runway strike) so it outranks an ordinary DEAD job (SAM scores 25-42, 60-100 when it blocks something: the belt-clearing SEAD keeps its place; supply strikes score 1.5-7 on their own). Judgment call; 0 = the old order
 FOLLOW_MAX_SITES = 2    # v0.41.158: a strike / CAS target under at most this many SA-11 / SA-10 sites goes in behind their SEAD; under more it stays DEAD-first (judgment call: two is what one gate sequence and one day's package limit can carry)
 FOLLOW_GAP_MIN = 10     # a follow job starts this long after the SEAD / standoff package of its site (same gap as the Close DEAD stage)
 
@@ -232,6 +233,8 @@ class ObjectivePlanner:
                 pr *= 1.8                                              # clear the belt first
                 if o.target_id in fsites:
                     pr *= 1.4                                          # v0.41.158: and a site with a strike or CAS job waiting behind its SEAD (judgment call)
+            if o.type == ObjectiveType.STRIKE and o.aim != "RUNWAY" and state.assets[o.target_id].kind in (AssetKind.FUEL, AssetKind.DEPOT):
+                pr += SUPPLY_FIRST_BONUS                           # v0.41.273: supplies before the ordinary DEAD jobs, behind the belt-clearing SEAD
             (follows if o.after else pool).append((pr, o))
         from . import fleet as _fl
         fleet = _fl.carrier(state)                                    # v0.41.257: None while the carrier is sunk

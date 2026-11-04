@@ -1922,7 +1922,10 @@ def check_31v_hot_runway(c):
         ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, hot_runway_starts=on))
         (TMP / "saves").mkdir(parents=True, exist_ok=True)
         ses.new("Hot runway", "F-16C", 2, seed=7)
-        pk = next(p for p in ses.packages() if ses.flyable(p))
+        def _others(p_):         # v0.41.273: pick a package by what the check needs (AI flights from another land field), not "the first of the day" (the plan's order moves)
+            fl_ = ses.flyable(p_)
+            return bool(fl_) and any(f_.base_id != fl_[0].base_id and ses.state.bases[f_.base_id].kind.value == "AIRFIELD" for f_ in p_.flights)
+        pk = next((p for p in ses.packages() if _others(p)), None) or next(p for p in ses.packages() if ses.flyable(p))
         pfl = ses.flyable(pk)[0]
         pbase = ses.state.bases[pfl.base_id].name.split(" ")[0]
         r = ses.fly(pk.number, pfl.id)
@@ -6443,6 +6446,7 @@ def check_122_road_site_flip(c):
     assert all(x.health <= 0 for x in st.assets.values() if getattr(x, "guards", "") in gone), "its battalion is gone"
     assert any("(captured)" in r[1] for r in _od.supply_rows(st)), "the Overview calls it captured"
     assert _CS.from_dict(st.to_dict()).ground["road_flips"] == g["road_flips"]
+    ses.plan_day()                                                  # v0.41.273: the sites flipped by hand, so the day's plan is made again (the game flips overnight, after the day is resolved, and plans after)
     ses.skip_day()                                                  # the daily round (supply figure, repairs, the plan) runs with flipped sites
     # the other way: the front pushed all the way to our end, our sites on the cut's red side go to the enemy
     st = ses.state; g = st.ground
