@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.274, the fleet raid starts with one bomber pair and four escorts airborne
+
+XO 2026-11-04 ("fox 3 low"): intelligence has already spotted the movement. `raid_spawns.RAID_BOMBERS_UP = 1` bomber group (a pair) and `RAID_GUARD_UP = 1` escort group (up to 4 jets, an Escort group rather than a Sweep) start airborne on the marshal. Everything else takes off from the field: the remaining bomber pairs first, the rest of the escorts and sweeps last. The push is still the later of the old ring time and "last takeoff + climb + join", so a big raid now pushes about 8 to 10 minutes later (more time for blue). Takeoff gaps (90 s bombers, 60 s fighters) are judgment calls. Not checked: Tu-22M3 fuel through the longer marshal wait. Not seen in DCS.
+
 ## v0.41.273, supply strikes outrank ordinary DEAD jobs in the daily plan
 
 XO 2026-11-04 ("SEAD still takes priority but DEAD doesn't; once suppressed it should be a mad dash of hitting supplies"; "fox 3 medium"). `war.SUPPLY_FIRST_BONUS` 45 is added to the score of a supply strike (fuel, depot, plant; not the runway strike) in `ObjectivePlanner.plan`, so it ranks above a DEAD job on a SAM that blocks nothing (SAM jobs score 25 to 42; a blocking SAM x1.8, and x1.4 more with a job waiting behind it, so 60 to 100: the belt-clearing SEAD keeps its place; supply strikes scored 1.5 to 7 before). Judgment call; 0 gives the old order. 24-day skip-day planning sims (7 to 8 seeds a level): supply strikes planned L3 14.7 to 24.6, L2 66.9 to 87.1; DEAD jobs L3 54.9 to 58.1, L2 34.6 to 32.8; CAS L3 50.1 to 39.9; the front moved the same. Side effect: strikes on other targets (runway strikes among them) drop (L3 10.3 to 3.9) because the strike type has a cap of 3 a day. Only 5 to 10 of 77 supply sites are open before the front moves about day 16 (`_open`), so the dash comes with the front. Not seen in DCS.

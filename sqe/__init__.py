@@ -1,7 +1,7 @@
 """Squadron Campaign Engine (SQE): abstracted war + one fully generated DCS package per sortie."""
 APP_NAME = "Squadron Campaign Engine"
 SHORT = "SQE"
-__version__ = "0.41.273"
+__version__ = "0.41.274"
 
 CAMPAIGN_EXT = ".sqe"
 FORMAT_VERSION = 6

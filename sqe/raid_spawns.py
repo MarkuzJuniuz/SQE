@@ -86,7 +86,9 @@ RAID_LAUNCH_WINDOW_S = 120    # ...the attack task runs this long after the bomb
 # Pt. 2" (medium firmness, one article): a regiment's takeoff took about half an hour, then a cruise formation, the split about 500 km from the task force, and a salvo had to land
 # within 1 min (best) or 2 min (satisfactory).
 RAID_STAGE_ON = True          # False = the old raid (airborne at its marshal from the start, no runway takeoffs; the engage order still starts at the PUSH)
-RAID_MARSHAL_FRAC = 0.5       # share of the bombers (and of the fighter groups) already airborne on the marshal at the start; the rest take off
+RAID_MARSHAL_FRAC = 0.5       # (no longer used by the fleet raid, see RAID_BOMBERS_UP) share of the groups already airborne on the marshal at the start
+RAID_BOMBERS_UP = 1           # v0.41.274 (XO 2026-11-04: intelligence has spotted the movement): this many bomber groups (a pair each) are airborne on the marshal at the start...
+RAID_GUARD_UP = 1             # ...with this many escort groups (up to 4 jets) guarding them; every other group takes off, the bombers first and the rest of the escorts last
 RAID_BOMBER_BATCH = 2         # bombers per runway batch (XO: 2 at a time for the big ones)
 RAID_FIGHTER_BATCH = 4        # fighters per runway batch (XO: 4 at a time)
 RAID_BOMBER_GAP_S = 90        # runway time one bomber batch takes before the next may go (not measured; the hook's alert stagger is 60 s)
@@ -200,9 +202,9 @@ class RaidSpawns:
         n_sweep = len(esz) // 2 if len(esz) >= 3 else (1 if (ex.get("mass") and len(esz) >= 2) else 0)
         fighters = [f"Raid Sweep {i + 1}" for i in range(n_sweep)] + [f"Raid Escort {i + 1}" for i in range(len(esz) - n_sweep)]
         bombers = [f"Raid Bomber {i + 1}" for i in range(nbg)]
-        on_f = math.ceil(len(fighters) * RAID_MARSHAL_FRAC)
-        on_b = math.ceil(len(bombers) * RAID_MARSHAL_FRAC)
-        queue = [(n, RAID_FIGHTER_GAP_S) for n in fighters[on_f:]] + [(n, RAID_BOMBER_GAP_S) for n in bombers[on_b:]]
+        guards = ([n for n in fighters if "Escort" in n] or fighters)[:RAID_GUARD_UP]          # the guard is an escort group, not a sweep
+        up_b = bombers[:RAID_BOMBERS_UP]
+        queue = [(n, RAID_BOMBER_GAP_S) for n in bombers if n not in up_b] + [(n, RAID_FIGHTER_GAP_S) for n in fighters if n not in guards]          # bombers first, the rest of the escorts last
         offs, o = {}, 0.0
         for n, gap in queue:
             offs[n] = o
