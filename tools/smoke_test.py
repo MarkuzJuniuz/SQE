@@ -1922,7 +1922,10 @@ def check_31v_hot_runway(c):
         ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, hot_runway_starts=on))
         (TMP / "saves").mkdir(parents=True, exist_ok=True)
         ses.new("Hot runway", "F-16C", 2, seed=7)
-        pk = next(p for p in ses.packages() if ses.flyable(p))
+        def _others(p_):         # v0.41.273: pick a package by what the check needs (AI flights from another land field), not "the first of the day" (the plan's order moves)
+            fl_ = ses.flyable(p_)
+            return bool(fl_) and any(f_.base_id != fl_[0].base_id and ses.state.bases[f_.base_id].kind.value == "AIRFIELD" for f_ in p_.flights)
+        pk = next((p for p in ses.packages() if _others(p)), None) or next(p for p in ses.packages() if ses.flyable(p))
         pfl = ses.flyable(pk)[0]
         pbase = ses.state.bases[pfl.base_id].name.split(" ")[0]
         r = ses.fly(pk.number, pfl.id)
