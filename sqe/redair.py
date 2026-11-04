@@ -21,7 +21,7 @@ from __future__ import annotations
 import hashlib
 import math
 import random
-from . import barcap
+from . import barcap, runways
 from .loadouts import ENEMY_FIGHTERS
 from .models import AssetKind, BaseKind
 from .routes import NM, bearing, dist, offset
@@ -81,7 +81,7 @@ def plan(state, d) -> dict:
         types = [t for t in w.types_up if t in ENEMY_FIGHTERS]            # v0.41.53: only a fighter squadron with a pair serviceable flies patrols
         a = state.assets.get(w.base_asset_id)
         fav = w.available_of(ENEMY_FIGHTERS)                              # ...and the patrols are cut from its fighters, not from attack squadrons
-        if not types or a is None or a.destroyed or fav < 2:
+        if not types or a is None or a.destroyed or fav < 2 or runways.is_closed(state, w.base_asset_id):      # v0.41.254: a cratered field flies no patrols
             continue
         pairs = fav // 2
         bud[w.base_asset_id] = DAILY_SORTIES * w.available                # the day's sortie budget is still the whole wing's (raids share it)

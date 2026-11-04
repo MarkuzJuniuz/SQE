@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 import random
 from .models import Objective, ObjectiveType, BaseKind, Role, AssetKind
-from . import redair
+from . import redair, runways
 
 NM = 1852.0
 RAID_RESERVE = 0.6            # an emergency is offered only if the event is within this share of the squadron's combat radius
@@ -49,7 +49,7 @@ def raider_wings(state, kind: str = "field", budget: bool = True) -> list:
     out = []
     for w in state.enemy_air:
         a = state.assets.get(w.base_asset_id)
-        if w.available < 2 or a is None or a.destroyed or (budget and not redair.can(state, w.base_asset_id, 2)):
+        if w.available < 2 or a is None or a.destroyed or runways.is_closed(state, w.base_asset_id) or (budget and not redair.can(state, w.base_asset_id, 2)):
             continue
         t = next((t for t in pref if t in w.types_up), None)        # v0.41.53: a squadron of that type with a pair serviceable
         if t:

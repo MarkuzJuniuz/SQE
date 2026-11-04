@@ -5440,7 +5440,7 @@ def check_99_fighters_clear_gate(c):
     mis2 = _zf.ZipFile(got.miz).read("mission").decode("utf8", "ignore")
     caps2 = _re.findall(r"\{t=\d+, site=[^\n]*?acap=(\d+)", mis2)
     assert str(AIR_HOLD_CAS_S) in caps2, ("a plain CAS flight carries the gate with the shorter cap", caps2[:4])
-    assert inspect.getsource(_MB._attach_waypoints).count("expend=task.Expend.All") == 2, "both bombing tasks drop the whole load"
+    assert inspect.getsource(_MB._bomb_task).count("expend=task.Expend.All") == 2, "both bombing tasks (the point and the runway) drop the whole load"      # v0.41.254: the tasks moved into _bomb_task
     hk = _db.lua_hook("c", 1, "p", [], "Hornet 1-1", "Hornet 1", [], None, "a.wav", "b.wav", {}, [],
                       [{"id": "t", "label": "Target", "who": "W", "prim": True, "units": [], "trk": [], "srch": []}], [],
                       [{"t": 100, "site": "t", "grp": "Hornet 2", "from": 3, "to": 5, "ai": True, "dead": True, "you": False, "gm": 70000, "acap": 240, "tx": 1.0, "tz": 2.0}], True)
@@ -6247,6 +6247,92 @@ def check_119_raid_folds_by_time(c):
     print("[raid folds by time] the carrier raid joins missions at its time, blue CAP about one fighter per raider")
 
 
+def check_120_runway_cratering(c):
+    """v0.41.254 (XO 2026-11-03): a field whose runway took 3 or more bomb hits is CRATERED for 2-5 days by supply (state.ground["craters"]); its squadrons fly nothing,
+    red wings there launch nothing, divert fields skip it; a runway strike (STRIKE, aim RUNWAY) is planned against red fields and is built with BombingRunway; the hook counts
+    bomb impacts on the runway (the geometry twin is tested here, the Lua only compiled). Strategic state only (the days and the hit count are tunables)."""
+    from sqe import runways as rw, ground as _gr
+    from sqe.state import CampaignState as _CS
+    # the day count: 2 at full supply, 5 at none, rounded between
+    assert rw.close_days(1.0) == 2 and rw.close_days(0.35) == 5 and rw.close_days(0.0) == 5 and rw.close_days(0.67) in (3, 4), (rw.close_days(0.67),)
+    # the rectangle test: on the strip, beside it, past the end
+    assert rw.inside(0, 0, 90) and rw.inside(0, 2500, 90) and rw.inside(80, 0, 90) and not rw.inside(300, 0, 90) and not rw.inside(0, 2700, 90) and rw.inside(2500, 0, 0)
+    ses = fresh_session(3, 7); st = ses.state
+    blue = next(b for b in st.bases.values() if b.kind.value == "AIRFIELD")
+    sqs = [q for q in st.squadrons.values() if q.base_id == blue.id]
+    red = next(a for a in st.assets.values() if a.kind.value == "AIRFIELD" and st.enemy_air_at(a.id))
+    assert not rw.is_closed(st, blue.id) and not rw.closed_ids(st)
+    ln = rw.add_hits(st, blue.id, 2); assert "not enough" in ln and not rw.is_closed(st, blue.id), ln
+    assert rw.add_hits(st, blue.id, 0) is None
+    ln = rw.add_hits(st, blue.id, 3); assert rw.is_closed(st, blue.id) and "CRATERED" in ln, ln
+    c0 = st.ground["craters"][blue.id]; n = c0["until"] - c0["day"]; assert 2 <= n <= 5, n
+    rw.crater(st, blue.id, 4); assert st.ground["craters"][blue.id]["until"] == c0["until"], "a second hit does not extend the timer"
+    assert rw.is_closed(st, blue.id, st.day + n - 1) and not rw.is_closed(st, blue.id, st.day + n), "closed until the day it ends"
+    rt = _CS.from_dict(st.to_dict()); assert rt.ground["craters"][blue.id]["until"] == c0["until"] and rw.is_closed(rt, blue.id), "saved and loaded"
+    # supply decides the length: a starved side waits longer than a full one
+    st.ground["craters"].clear()
+    # a cratered field flies nothing: no flight of the day comes from it
+    rw.crater(st, blue.id); ses.plan_day()
+    assert not any(f.base_id == blue.id for p in ses.packages() for f in p.flights if not f.tag), "no package flight leaves a cratered field"
+    from sqe.packages import Ledger
+    assert all(Ledger(st).free[q.id] == 0 for q in sqs), "the planner's ledger has no aircraft at a cratered field"
+    st.ground["craters"].clear()
+    assert any(Ledger(st).free[q.id] > 0 for q in sqs) or not sqs, "...and has them once the field is open again"
+    # red: a cratered field's wing is out of the raid and patrol lists
+    from sqe import raids as _rd
+    st.ground["craters"][red.id] = {"day": st.day, "until": st.day + 3, "hits": 3, "side": "red"}
+    w = st.enemy_air_at(red.id)
+    assert w not in [x[0] for x in _rd.raider_wings(st, "field", budget=False)], "a cratered field sends no raid"
+    st.ground["craters"].clear()
+    assert w in [x[0] for x in _rd.raider_wings(st, "field", budget=False)] or w.available < 2 or not any(t in w.types_up for t in ("Su_24M", "Su_25")), "...and does once it is open"
+    st.ground["craters"].clear()
+    # the hook's field list and the Lua compile with fields
+    from sqe import theatres, debrief
+    fl = rw.fields_for_hook(st, theatres.terrain())
+    assert fl and all(f["h"] and isinstance(f["x"], float) for f in fl) and {blue.id, red.id} <= {f["id"] for f in fl}, fl
+    lua = debrief.lua_hook("c", 1, "p", [], cfg={"rwys": fl})
+    assert "rwyHits[f.id]" in lua and f'id="{blue.id}"' in lua
+    try:
+        import lupa
+        res_ = lupa.LuaRuntime(unpack_returned_tuples=True).eval("function(s) return load(s) end")(lua)
+        fn, err = (res_ if isinstance(res_, tuple) else (res_, None))
+        assert fn is not None, f"hook does not compile with fields: {err}"
+    except ImportError:
+        pass
+    # the planner offers a runway strike against a red field with aircraft on it
+    from sqe.war import ObjectivePlanner, WarSimulator
+    from sqe.difficulty import get as _gd
+    import random as _rn
+    for a_ in st.assets.values():
+        if a_.kind.value == "SAM":
+            a_.health = 0.0                                              # no live SAM cover: nothing blocks the field (an airfield under a live SAM belt waits for its SEAD / DEAD, like counter-air)
+    objs = [o for o in ObjectivePlanner(_gd(3)).plan(st, _rn.Random(1), 40) if o.aim == "RUNWAY"]
+    assert objs and all(o.type.value == "STRIKE" and o.target_id in st.assets for o in objs), "a runway strike is planned against a red field"
+    st.ground["craters"][objs[0].target_id] = {"day": st.day, "until": st.day + 3, "hits": 3, "side": "red"}
+    assert not any(o.aim == "RUNWAY" and o.target_id == objs[0].target_id for o in ObjectivePlanner(_gd(3)).plan(st, _rn.Random(1), 40)), "no runway strike on a field that is already cratered"
+    st.ground["craters"].clear()
+    # the abstract resolve craters the field on success
+    from sqe.models import Objective, ObjectiveType
+    pkg = next(p for p in ses.packages() if p.flights and p.objective.type not in (ObjectiveType.FLEET_DEFENSE, ObjectiveType.BARCAP))
+    o2 = Objective("x", ObjectiveType.STRIKE, objs[0].target_id, 5.0, "Crater the runway"); o2.aim = "RUNWAY"
+    pkg.objective = o2
+    res = WarSimulator(_gd(3)).resolve_abstract(st, pkg, force={"success": True})
+    assert rw.is_closed(st, objs[0].target_id), res
+    st.ground["craters"].clear()
+    # built as a mission (a session of its own): the strike flight gets DCS's BombingRunway on the field, and the hook carries the runway fields
+    ses2 = fresh_session(3, 7); st2 = ses2.state
+    p0 = next(p for p in ses2.packages() if ses2.flyable(p) and p.objective.type.value in ("STRIKE", "CAS", "DEAD"))
+    rf = next(a for a in st2.assets.values() if a.kind.value == "AIRFIELD" and st2.enemy_air_at(a.id)).id
+    for d in st2.plan:
+        if d.get("id") == p0.id:
+            d["objective"].update(type="STRIKE", target_id=rf, aim="RUNWAY", description="Crater the runway", after="")
+    p1 = next(p for p in ses2.packages() if p.number == p0.number)
+    ses2.fly(p1.number, ses2.flyable(p1)[0].id)
+    mz_ = zipfile.ZipFile(ses2.settings.sortie_miz).read("mission").decode()
+    assert "BombingRunway" in mz_ and "rwyHits" in mz_, "a runway strike is built with BombingRunway and the hook counts runway hits"
+    print("[runway cratering] 3 hits close a field for 2-5 days by supply; saved; its squadrons and red wing fly nothing; hook list and Lua compile")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -6405,6 +6491,7 @@ CHECKS = [
     check_117_first_mover,
     check_118_new_squadrons,
     check_119_raid_folds_by_time,
+    check_120_runway_cratering,
 ]
 
 def _borrows(fn) -> set:

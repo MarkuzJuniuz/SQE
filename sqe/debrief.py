@@ -13,6 +13,7 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from .models import AssetKind
 from .state import CampaignState
+from .runways import RUNWAY_HALF_LEN_M, RUNWAY_HALF_WIDTH_M
 
 LUA_HOOK = r'''
 -- SQE debrief hook | campaign __CAMPAIGN__ | sortie __SORTIE__ | package __PKG__
@@ -154,12 +155,19 @@ local function scrubJson()
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
+local RWYS = { __RWYS__ }                -- v0.41.254: the fields whose runways count bomb impacts: id, reference point (x north, z east), runway headings
+local rwyHits = {}
+local function rwyJson()
+  local o = {}
+  for id, n in pairs(rwyHits) do o[#o + 1] = string.format('"%s":%d', esc(id), n) end
+  return "{" .. table.concat(o, ",") .. "}"
+end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"scrub":%s,"tracks":%s,"rgate":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"scrub":%s,"tracks":%s,"rgate":%s,"rwy":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), scrubJson(), tracksJson(), rgateJson(), CFG, splashN, splashK))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), scrubJson(), tracksJson(), rgateJson(), rwyJson(), CFG, splashN, splashK))
   f:close()
 end
 local function nameOf(obj)
@@ -558,6 +566,52 @@ function H:onEvent(e)
   elseif id == world.event.S_EVENT_MISSION_END then
     ended = true; dump()
   end
+end
+-- v0.41.254: runway hits. Every bomb is followed to its last known position; one that ends inside a field's runway rectangle is a hit on that field
+-- (the hook cannot be told where a bomb landed, so this is the position it vanished at plus a quarter second of its velocity; judgment call, a few metres).
+if #RWYS > 0 then
+  local RWY_LEN, RWY_WID, RWY_DT = __RWYLEN__, __RWYWID__, 0.25
+  local RWYW = {}
+  local function rwyTest(p)
+    for _, f in ipairs(RWYS) do
+      local dx, dz = p.x - f.x, p.z - f.z
+      if math.abs(dx) < RWY_LEN + 500 and math.abs(dz) < RWY_LEN + 500 then
+        for _, h in ipairs(f.h) do
+          local r = math.rad(h)
+          local along = dx * math.cos(r) + dz * math.sin(r)
+          local across = -dx * math.sin(r) + dz * math.cos(r)
+          if math.abs(along) <= RWY_LEN and math.abs(across) <= RWY_WID then
+            rwyHits[f.id] = (rwyHits[f.id] or 0) + 1
+            dump()
+            return
+          end
+        end
+      end
+    end
+  end
+  local H4 = {}
+  function H4:onEvent(e)
+    if e.id == world.event.S_EVENT_SHOT and e.weapon then
+      local ok, cat = pcall(function() return e.weapon:getCategory() end)
+      if ok and cat == Weapon.Category.BOMB then RWYW[#RWYW + 1] = { w = e.weapon } end
+    end
+  end
+  world.addEventHandler(H4)
+  timer.scheduleFunction(function(_, t)
+    local keep = {}
+    for _, s in ipairs(RWYW) do
+      local ok, ex = pcall(function() return s.w:isExist() end)
+      if ok and ex then
+        pcall(function() s.p = s.w:getPoint(); s.v = s.w:getVelocity() end)
+        keep[#keep + 1] = s
+      elseif s.p then
+        local v = s.v or { x = 0, y = 0, z = 0 }
+        pcall(rwyTest, { x = s.p.x + v.x * RWY_DT, y = s.p.y + v.y * RWY_DT, z = s.p.z + v.z * RWY_DT })
+      end
+    end
+    RWYW = keep
+    return t + RWY_DT
+  end, nil, timer.getTime() + 1)
 end
 world.addEventHandler(H)
 timer.scheduleFunction(function(_, t)
@@ -1422,7 +1476,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
                    for r in (ruins or []))
     gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}, acap={int(x.get("acap") or 0)}{_umbrella_lua(x)}{(", tx=%.1f, tz=%.1f" % (float(x["tx"]), float(x["tz"]))) if x.get("tx") is not None else ""}}}'
                    for x in (gates or []))
-    return (LUA_HOOK.replace("__SCRUB__", sc).replace("__SCRUBFRAC__", repr(float(SCRUB_LOSS_FRAC))).replace("__SCRUBGRACE__", f"{float(SCRUB_STRIKE_GRACE_S):.0f}").replace("__SCRUBLEAD__", f"{float(SCRUB_COVER_LEAD_S):.0f}")
+    return (LUA_HOOK.replace("__RWYS__", ", ".join("{id=%s, x=%.1f, z=%.1f, h={%s}}" % (_lq(r["id"]), r["x"], r["z"], ", ".join(str(int(h_)) for h_ in r["h"])) for r in (cfg or {}).get("rwys", []))).replace("__RWYLEN__", f"{RUNWAY_HALF_LEN_M:.0f}").replace("__RWYWID__", f"{RUNWAY_HALF_WIDTH_M:.0f}").replace("__SCRUB__", sc).replace("__SCRUBFRAC__", repr(float(SCRUB_LOSS_FRAC))).replace("__SCRUBGRACE__", f"{float(SCRUB_STRIKE_GRACE_S):.0f}").replace("__SCRUBLEAD__", f"{float(SCRUB_COVER_LEAD_S):.0f}")
             .replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
             .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
@@ -1437,7 +1491,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__PHOME__", ("{ x = %.1f, z = %.1f }" % tuple((cfg or {})["phome"])) if (cfg or {}).get("phome") else "nil")
             .replace("__CVREC__", _cvrec_lua((cfg or {}).get("cvrec")))
             .replace("__RECOV__", _recov_lua((cfg or {}).get("recov")))
-            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov")}).replace("'", "")))
+            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov", "rwys")}).replace("'", "")))
 
 
 def _recov_lua(rs) -> str:
@@ -1671,6 +1725,12 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         if a is not None:
             out["lines"].append((f"Attack called off behind {a.name}" if follow_ else f"DEAD called off on {a.name}") +
                                 ": its radars were still up when the strike flight reached the gate, so it turned back without attacking.")
+    from . import runways as _rw                           # v0.41.254: bomb impacts on a runway (the hook counts them); 3 or more close the field
+    for fid_, n_ in sorted((data.get("rwy") or {}).items()):
+        if fid_ in state.assets or fid_ in state.bases:
+            ln_ = _rw.add_hits(state, fid_, int(n_))
+            if ln_:
+                out["lines"].append(ln_)
     # alert / scramble groups (v0.40.8): called, airborne, or stuck on the ground; and the build's settings, so test runs can be told apart
     ms_ = lambda t_: f"{int(t_) // 60:d}:{int(t_) % 60:02d}"                  # v0.41.208 (XO): scrambles are numbered in the order the build lists them (the briefing's QRA list uses the same numbers)
     for n_, al in enumerate(data.get("alerts", []) or [], 1):

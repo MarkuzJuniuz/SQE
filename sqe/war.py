@@ -5,7 +5,7 @@ import math
 import random
 from . import threatmap as tm
 from . import ground, theatres, tempo, story
-from . import raids, sams, ecm, airwings
+from . import raids, runways, sams, ecm, airwings
 from .raids import hit as raids_hit
 from .difficulty import Difficulty
 from .models import SEAD_AIMS, Objective, ObjectiveType, AssetKind, Role
@@ -217,6 +217,11 @@ class ObjectivePlanner:
                     pr = a.value * 1.2 * (w.available / max(1, w.authorized))
                     cand.append((pr, Objective("", ObjectiveType.COUNTER_AIR, a.id, pr, f"Counter-air at {a.name} ({w.available} aircraft)"),
                                  self._blockers(state, a) + covering_sams(state, a), locked))
+                if not runways.is_closed(state, a.id):         # v0.41.254: crater the runway (a STRIKE with aim RUNWAY); 3 bomb hits close the field for 2-5 days
+                    prr = a.value * 0.9 * (w.available / max(1, w.authorized))
+                    o_ = Objective("", ObjectiveType.STRIKE, a.id, prr, f"Crater the runway at {a.name} ({w.available} aircraft)")
+                    o_.aim = "RUNWAY"
+                    cand.append((prr, o_, self._blockers(state, a) + covering_sams(state, a), locked))
         blocking = {x.id for c in cand for x in c[2]} | {sid for c in cand for sid in after_sites(c[1])}      # sites that stand in front of something else
         pool, follows = [], []
         fsites = {sid for c in cand if not c[2] and not c[3] for sid in after_sites(c[1])}
@@ -612,7 +617,9 @@ class WarSimulator:
                     state.note("   the friendly position was hard pressed")
                 else:
                     state.note("   the friendly position was overrun; the column advances")
-            if success:
+            if success and obj.aim == "RUNWAY":
+                lines.append("   " + runways.crater(state, t.id))             # v0.41.254: an AI-flown runway strike that succeeds craters the field
+            elif success:
                 t.health = max(0.0, t.health - d.base_damage * (0.5 + p) * (ground.AIR_EFFECT if z is not None else 1.0))
                 lines.append(f"   {t.name} now at {t.health:.0%}")
                 if obj.type == ObjectiveType.COUNTER_AIR:
@@ -621,7 +628,7 @@ class WarSimulator:
                         k = min(w.available, max(1, round(w.available * 0.3 * p)))
                         w.available -= k
                         lines.append(f"   {k} enemy aircraft destroyed at {t.name}")
-            else:
+            elif obj.aim != "RUNWAY":
                 t.health = max(0.0, t.health - 0.1 * d.base_damage)
         elif success:
             w = max(state.enemy_air, key=lambda w: w.available, default=None)
