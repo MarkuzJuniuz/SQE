@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.277, the fleet raid starts hot on the ramp and waits for everybody
+
+XO 2026-11-04 ("if we stagger them during taxiing DCS will do fine. Let's just try it first"; "no push until everybody is up"; "fox 3 medium"). `raid_spawns.RAID_RAMP_START = True`: the staged groups that take off start hot on the ramp, uncontrolled, and a timed trigger starts each one (the same 90 s and 60 s gaps); a group the ramp has no parking for falls back to the runway start. The plan adds `RAID_TAXI_S = 300` to the time it takes a batch to reach the marshal (judgment call; v0.40.10 measured 3 to 11 minutes for alert pairs). `RAID_WAIT_ALL = True`: a staged group no longer leaves its marshal at a fixed time. Its orbit ends on a flag that a trigger sets once the planned time has passed AND a unit of every group that took off is inside a `RAID_ASM_ZONE_NM = 20` circle round the marshal. Safety net: `RAID_ASM_MAX_S = 1800`, the flag is also set that long after the planned time, so one stuck group cannot hold the raid until the fuel is gone (set it high to remove it). Each group keeps its own planned time, so the salvo spread and the sweep's lead survive when everyone is on time. Not seen in DCS (AI taxiing is the unknown).
+
 ## v0.41.275, the fleet raid arrives on the bearing of its own field
 
 XO 2026-11-04 ("fox 3 low"): the Tu-22Ms looped from Mozdok down past Maykop and back west. `packages._raid_plan` picked the raid's bearing at random between 8 and 40 degrees from the carrier, whatever the bombers' field; the field lay at about 60 degrees, so the route was ~280 nm instead of ~180 nm. The bearing is now the one from the carrier to the bombers' field, plus or minus 10 degrees (the jitter is a judgment call). The interceptors' intercept point is built on the same axis and moves with it. Not seen in DCS.

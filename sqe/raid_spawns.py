@@ -89,6 +89,11 @@ RAID_STAGE_ON = True          # False = the old raid (airborne at its marshal fr
 RAID_MARSHAL_FRAC = 0.5       # (no longer used by the fleet raid, see RAID_BOMBERS_UP) share of the groups already airborne on the marshal at the start
 RAID_BOMBERS_UP = 1           # v0.41.274 (XO 2026-11-04: intelligence has spotted the movement): this many bomber groups (a pair each) are airborne on the marshal at the start...
 RAID_GUARD_UP = 1             # ...with this many escort groups (up to 4 jets) guarding them; every other group takes off, the bombers first and the rest of the escorts last
+RAID_RAMP_START = True        # v0.41.277 (XO 2026-11-04: "if we stagger them during taxiing DCS will do fine"): the groups that take off start hot on the ramp and taxi out (a timed start), instead of appearing on the runway. False = the old runway start. A group the ramp has no parking for falls back to the runway
+RAID_TAXI_S = 300             # ...the allowance for the taxi in the plan (v0.40.10 measured 3 to 11 min from the call to the air for alert pairs); judgment call, tune in DCS
+RAID_WAIT_ALL = True          # XO 2026-11-04: no push until everybody is up: a staged group holds at the marshal until its planned time has passed AND every group that took off is at the marshal
+RAID_ASM_ZONE_NM = 20         # ...at the marshal = inside this circle round it
+RAID_ASM_MAX_S = 1800         # ...a safety net, not a rule: the hold ends this long after its planned time whether or not everybody is up (the Tu-22M3 burns about 0.6% fuel a minute in the cruise, more in the orbit; judgment call)
 RAID_BOMBER_BATCH = 2         # bombers per runway batch (XO: 2 at a time for the big ones)
 RAID_FIGHTER_BATCH = 4        # fighters per runway batch (XO: 4 at a time)
 RAID_BOMBER_GAP_S = 90        # runway time one bomber batch takes before the next may go (not measured; the hook's alert stagger is 60 s)
@@ -210,7 +215,7 @@ class RaidSpawns:
             offs[n] = o
             o += gap
         o_last = max(offs.values(), default=0.0)
-        fly_s = dist(ba.x, ba.y, path[0][0], path[0][1]) / (V * 0.85) + RAID_CLIMB_S
+        fly_s = dist(ba.x, ba.y, path[0][0], path[0][1]) / (V * 0.85) + RAID_CLIMB_S + (RAID_TAXI_S if RAID_RAMP_START else 0.0)
         T_asm = (RAID_FIRST_TAKEOFF_S + o_last + fly_s + RAID_JOIN_S) if queue else 0.0
         t_want = arrive - self._ring_dist(path, dx, dy, RAID_REACH_NM * NM) / V
         T_push = max(t_want, T_asm)
@@ -806,6 +811,25 @@ class RaidSpawns:
         return {"flag": self._flag_n, "radars": radars, "hold": offset(dx, dy, brg_, nm_ * NM), "nm": nm_,
                 "t_abort": t_arm + DEAD_GATE_WAIT_S, "calls": [], "names": [], "n": 0}
 
+    def _raid_asm_triggers(self, asm, path, pt) -> None:
+        """v0.41.277 (XO 2026-11-04: "no push until everybody is up"): one trigger per staged group. Its flag is set when the group's planned leave time has passed AND every group
+        that took off has a unit inside the marshal circle (conditions in one trigger are all required). A second trigger sets the same flag RAID_ASM_MAX_S after the planned
+        time, so a group that never gets off the ground cannot hold the raid until its fuel is gone."""
+        if not asm["groups"]:
+            return
+        zone = self.m.triggers.add_triggerzone(pt(*path[0]), RAID_ASM_ZONE_NM * NM, True, "raid marshal")
+        for name_, g_, flag_, leave_ in asm["groups"]:
+            tr = triggers.TriggerOnce(comment=f"raid {name_} pushes: planned time and everybody up")
+            tr.add_condition(condition.TimeAfter(int(leave_)))
+            for gu in asm["up"]:
+                tr.add_condition(condition.PartOfGroupInZone(gu.id, zone.id))
+            tr.add_action(action.SetFlag(flag_))
+            self.m.triggerrules.triggers.append(tr)
+            t2 = triggers.TriggerOnce(comment=f"raid {name_} pushes: the wait is over")
+            t2.add_condition(condition.TimeAfter(int(leave_ + RAID_ASM_MAX_S)))
+            t2.add_action(action.SetFlag(flag_))
+            self.m.triggerrules.triggers.append(t2)
+
     def _raid_gate_join(self, gate, g, wp, fighter_nm=None):
         """A group that holds at the gate: its GATE waypoint (or its first point, when it appears there) orbits until the gate's flag is set, at its own level
         (GATE_ALT_STEP_M apart); a fighter group also engages air inside its class's circle meanwhile. The abort sends it to its first leg home, past the EGR
@@ -1106,6 +1130,20 @@ class RaidSpawns:
             p_, si = tm.point_back_along(path, b)
             return p_, path[si:], None, 0.0
 
+        asm = {"groups": [], "up": [], "pos": None}              # v0.41.277: the staged groups (name, group, flag, planned leave) and the ones that take off
+
+        def hold_stop(ct_, g_, name_, hold_, from_ground=False):
+            """A staged group's marshal orbit ends at its planned time (the old rule) or, with RAID_WAIT_ALL, on its own flag, which `asm_triggers` sets once that time has passed
+            and everybody who took off is at the marshal."""
+            if stg and RAID_WAIT_ALL and name_ in stg["plan"]:
+                self._flag_n += 1
+                ct_.stop_if_user_flag(self._flag_n, True)
+                asm["groups"].append((name_, g_, self._flag_n, float(hold_)))
+                if from_ground:
+                    asm["up"].append(g_)
+            else:
+                ct_.stop_after_time(int(hold_))
+
         def build_group(name, cls, count, task_cls, bomber=False, shift=0.0, behind_nm=0.0, gated=False, fighter_nm=None):
             pos, rem, hold, act = start_at(shift)
             gi_, at_gate = None, False
@@ -1125,12 +1163,26 @@ class RaidSpawns:
             r_alt = m_alt if sl else alt                       # v0.41.263: a staged group keeps its own level the whole way (they used to climb to one common level and meet)
             g = None
             if sl is not None and sl["rwy"]:
-                g = self._from_airport(self.red, name, cls, apt_r, task_cls, StartType.Runway, count, quiet=True)
+                ramp_ = False
+                g = self._from_airport(self.red, name, cls, apt_r, task_cls, StartType.Warm, count, quiet=True) if RAID_RAMP_START else None          # v0.41.277: hot on the ramp, started by a timer
+                if g is not None:
+                    ramp_ = True
+                else:
+                    g = self._from_airport(self.red, name, cls, apt_r, task_cls, StartType.Runway, count, quiet=True)
                 if g is not None:
                     mw = g.add_waypoint(pt(*pos), m_alt, 450 * KPH, "MSHL")
                     ct_ = task.ControlledTask(task.OrbitAction(int(m_alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
-                    ct_.stop_after_time(int(hold)); mw.tasks.append(ct_)
-                    self._late(g, max(5.0, sl["t"]), "take off")
+                    hold_stop(ct_, g, name, hold, True); mw.tasks.append(ct_)
+                    if ramp_:
+                        g.add_trigger_action(task.StartCommand())
+                        g.uncontrolled = True
+                        trs_ = triggers.TriggerOnce(comment=f"start {name}")
+                        trs_.add_condition(condition.TimeAfter(int(max(5.0, sl["t"]))))
+                        trs_.add_action(action.AITaskPush(g.id, 1))
+                        self.m.triggerrules.triggers.append(trs_)
+                    else:
+                        self._late(g, max(5.0, sl["t"]), "take off")
+                    asm["pos"] = pos
                     act = 0.0
                 else:
                     sl = None
@@ -1142,7 +1194,7 @@ class RaidSpawns:
                 g = self.m.flight_group(self.red, name, cls, None, pt(*pos), altitude=m_alt, speed=450 * KPH, maintask=task_cls, group_size=count)
                 if hold is not None:                           # its marshal: orbit until it must push
                     ct_ = task.ControlledTask(task.OrbitAction(int(m_alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
-                    ct_.stop_after_time(int(hold)); g.points[0].tasks.append(ct_)
+                    hold_stop(ct_, g, name, hold, False); g.points[0].tasks.append(ct_)
                     g.points[0].name = "MSHL"
             if at_gate:
                 g.points[0].name = "GATE"
@@ -1249,5 +1301,6 @@ class RaidSpawns:
                     ne_ += 1
                     u.name = f"RAID-E-{ne_}"; u.pylons = copy.deepcopy(eload); en.append(u.name); self._note_jam(u)
                 manifest.add("enemy_air", ex["escort_wing"], en, ac=ex["escort_type"])
+        self._raid_asm_triggers(asm, path, pt)
         if gate is not None:
             self._raid_gate_close(gate)
