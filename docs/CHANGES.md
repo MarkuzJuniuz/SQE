@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.270, the carrier raid folds into no mission
+
+XO 2026-11-04 ("fox 3 low"): the raid stays on the package list but is merged with nothing: it is red aiming for the king, a setpiece of its own, and the numbers stay its own. The fold-in block of v0.41.250 is out of `engine.merge_candidates`; the small bomber raids and every other package merge as before. `check_119` now asserts the raid is not a merge candidate of a mission at its time. Not seen in DCS.
+
 ## v0.41.269, red no longer borrows SAM batteries from its rear
 
 XO 2026-11-04 ("fox 3 low"): the line stalls at Sukhumi for days, then breaks like wet paper because the rear has been stripped. `sams.RED_BORROW = False`: `red_asks` takes no new order (orders already in flight still arrive). A destroyed red site is rebuilt in place by `sams.rebuild` after `ORDER_DAYS` 14 (unchanged). Blue's orders (`blue_asks`) are unchanged. 8-seed Level 3 skip-day sims (45 days): today no healthy SA-10 beyond the line in play at day 22, with no borrowing two; red SAM sites destroyed at day 20 12.6 against 8.5. The front moved on day 13 and 27 in every run (the 14-day stall timer): the sims cannot show how fast a flown line breaks. Rebuild times of 5 or 8 days and a "no regeneration unless pulled back" rule changed nothing measurable and are not in. Not seen in DCS. `check_` for red orders now sets the switch on to keep the mechanism tested, and asserts none by default.

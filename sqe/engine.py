@@ -605,13 +605,7 @@ class Session:
                 out.append((d, hm(p), p.number, p))
         out.sort(key=lambda r: (not (r[3].objective.type == ObjectiveType.COUNTER_AIR and r[3].objective.aim == "SWEEP"),) + r[:3])     # a Fighter Sweep first: the unit limit drops the strike packages before it
         picked = [r[3] for r in out[:6]]
-        if not pkg.extra.get("setpiece"):
-            # v0.41.250 (XO 2026-11-03): the carrier raid is no boss fight: it folds into any mission that starts inside the same time window, wherever it flies (the raid is out
-            # at sea, so no area rule can catch it). It takes the sixth place at most, and the unit limit drops it last (`_drop_one`).
-            sp = [p for p in self.packages() if p.extra.get("setpiece") and p.number != pkg.number and not p.extra.get("scrub")
-                  and -back <= hm(p) - hm(pkg) <= fwd and any(not f.tag for f in p.flights)]
-            if sp:
-                picked = picked[:5] + sp[:1]
+        # v0.41.270 (XO 2026-11-04): the carrier raid folds into no mission: it is red aiming for the king, a setpiece of its own (v0.41.250 folded it into any mission at its time)
         return picked
 
     @staticmethod

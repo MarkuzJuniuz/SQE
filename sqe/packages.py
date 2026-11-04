@@ -283,7 +283,7 @@ class PackageBuilder:
             extra = self._raid_plan(number, obj) or {}
             n_fl = extra.get("escorts", 0) // 2
             if extra and carrier_raid(st, obj):
-                extra = {**extra, "setpiece": True}                          # v0.41.107: flown from the Missions page like any job, every flight listed (v0.41.250: it folds into any mission that starts near its time)
+                extra = {**extra, "setpiece": True}                          # v0.41.107: flown from the Missions page like any job, every flight listed (v0.41.270: it folds into no other mission)
                 n_fl = math.ceil((extra["bombers"] + extra["escorts"]) / 3)  # v0.41.250: _slots sizes the blue CAP as raiders / 3 (the old 4 + 8 raid gave 4); with 1 escort per 2 bombers, bombers / 2 is no longer that
         elif obj.type == ObjectiveType.BARCAP:       # a fleet patrol meets a probing enemy flight if the enemy still has fighters
             n_fl = 1 if any(w.available > 0 for w in st.enemy_air) else 0
