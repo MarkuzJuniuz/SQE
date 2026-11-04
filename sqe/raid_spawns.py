@@ -110,6 +110,7 @@ RAID_MSHL_CLEAR_NM = 12       # the marshal stays this far outside that
 # (TGT) is on the BOMBERS' own way in, between their marshal and the missiles' ring, as far out as red's SAM circles and the fighters' own range allow, so the raid passes through the
 # fighters' engage circle before it fires. All judgment calls (no source for a fighter dash distance; the concept is the Cold War carrier "outer air battle": fighters stationed up
 # the threat axis, cued by AEW; real distances not looked up yet): tune in DCS.
+RAID_SA11_NM = 26             # v0.41.276: the interceptors keep this far from a live SA-11 (AVOID_NM says 20). Judgment call: in XO's 2026-11-04 run the SA-11s engaged the Tomcats at 23 to 26 nm (shots of 42 to 49 km measured by the hook)
 RAID_IP_MAX_NM = 185          # the longest dash from the hold point to the intercept point (v0.41.267: was 160, but the bombers' way in starts 160-165 nm out at Level 3: no point was ever in range; judgment call, tune in DCS)
 RAID_BEND_MAX_NM = 280        # v0.41.268 (XO 2026-11-04): the longest dash by way of a blue field (hold -> field -> intercept point); judgment call from fuel at high and fast, tune in DCS
 RAID_IP_STEP_NM = 5           # candidate points along the bombers' way in, this far apart
@@ -257,7 +258,7 @@ class RaidSpawns:
 
     def _raid_circles(self, package) -> list:
         """(id, x, y, nm) of the live SAM circles the interceptors keep out of (the same filter as `_zone_sams` for fighters, with the site ids)."""
-        return [(a.id, a.x, a.y, AVOID_NM[a.variant]) for a in self.state.assets.values()
+        return [(a.id, a.x, a.y, max(AVOID_NM[a.variant], RAID_SA11_NM) if a.variant == "SA-11" else AVOID_NM[a.variant]) for a in self.state.assets.values()
                 if a.kind == AssetKind.SAM and a.variant in AVOID_NM and not a.destroyed and a.health > 0.25 and not getattr(a, "suppressed", False)]
 
     def _raid_blockers(self, package, geom, hold) -> tuple:
