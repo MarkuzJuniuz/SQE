@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.274, the fleet raid starts with one bomber pair and four escorts airborne
+
+XO 2026-11-04 ("fox 3 low"): intelligence has already spotted the movement. `raid_spawns.RAID_BOMBERS_UP = 1` bomber group (a pair) and `RAID_GUARD_UP = 1` escort group (up to 4 jets, an Escort group rather than a Sweep) start airborne on the marshal. Everything else takes off from the field: the remaining bomber pairs first, the rest of the escorts and sweeps last. The push is still the later of the old ring time and "last takeoff + climb + join", so a big raid now pushes about 8 to 10 minutes later (more time for blue). Takeoff gaps (90 s bombers, 60 s fighters) are judgment calls. Not checked: Tu-22M3 fuel through the longer marshal wait. Not seen in DCS.
+
 ## v0.41.272, the one-scramble-per-sortie cap is off (a test)
 
 XO 2026-11-04 ("fox 3 low"): `raids.EMERG_CAP = False`. A raid scramble can now be offered on every Fly click, not only when the last sortie had none (the quiet day before the carrier raid still blocks them). `True` brings the old rule back. Not seen in DCS. If it swamps the flights list, the next step is the scramble flights shown beside the merged packages.
