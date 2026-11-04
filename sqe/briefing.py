@@ -44,7 +44,9 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         sit += ["", (f"Intelligence reports {e['bombers']} {rtype} with free-fall bombs inbound toward {what}, "
                      f"approaching from a bearing of about {e['brg']:.0f} degrees." if e.get("land") else
                      f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
-                     f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier. They will launch from about 100 nm out and turn for home; stop them before they fire.")
+                     f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier. They will launch from about 100 nm out and turn for home; stop them before they fire."
+                     + (" SEAD flights are working the long-range SAMs over their launch point. Hold on your station, outside the SAM rings, and engage what comes to you; "
+                        "you are free to cross toward the launch point when AWACS calls SEAD complete, or at the push time on the card." if e.get("setpiece") else ""))
                     + (f" They are escorted by {e['escorts']} fighters." if e.get("escorts") else
                        (" They have no escort." if e.get("land") else " They have no escort: the enemy cannot reach this far with fighters. It is a last throw of the dice."))]
     n_def = x.get("n_def", pkg.n_def)
