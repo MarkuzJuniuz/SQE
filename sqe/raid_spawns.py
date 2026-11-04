@@ -78,6 +78,26 @@ RAID_LAUNCH_OUT_NM = 20       # v0.41.248 (XO 2026-11-03: the Tu-22M3s flew thro
                               # for the M/MA variants (Wikipedia, Kh-22, medium firmness; no Tu-22M3-specific figure), so the launch ring is a game choice, set by where the fighters stand.
 RAID_LAUNCH_MIN_NM = 100      # ...and never closer to the carrier than this (judgment call: outside FLEET_RAID_AVOID_NM 70, the cruiser's SM-2 reach measured in XO's runs, plus margin)
 RAID_LAUNCH_WINDOW_S = 120    # ...the attack task runs this long after the bombers reach the launch point, then they go home even if a missile is left (judgment call; the time a full salvo takes is NOT measured: 8 JSOWs took 106 s in XO's Hornet run)
+
+# v0.41.261 (XO 2026-11-03, the fleet-defence run: 24 Tu-22M3 fired their X-22s from 380 km, 87 s into the mission, and sank the carrier and all three escorts): a fleet raid ASSEMBLES
+# before it comes in. Half of it is already airborne on its marshal; the rest take off from the bombers' field in batches and join; the whole raid pushes together; its marshal is
+# outside the missiles' reach, and the "engage ships" order starts at the PUSH, not at the first waypoint (so nothing fires while it assembles). The weapons keep their full range.
+# All the numbers are judgment calls (no measured takeoff times for the Tu-22M3 in XO's runs); tune in DCS. Doctrine support: CIMSEC, "Kamikazes: The Legacy of Soviet Naval Aviation,
+# Pt. 2" (medium firmness, one article): a regiment's takeoff took about half an hour, then a cruise formation, the split about 500 km from the task force, and a salvo had to land
+# within 1 min (best) or 2 min (satisfactory).
+RAID_STAGE_ON = True          # False = the old raid (airborne at its marshal from the start, no runway takeoffs; the engage order still starts at the PUSH)
+RAID_MARSHAL_FRAC = 0.5       # share of the bombers (and of the fighter groups) already airborne on the marshal at the start; the rest take off
+RAID_BOMBER_BATCH = 2         # bombers per runway batch (XO: 2 at a time for the big ones)
+RAID_FIGHTER_BATCH = 4        # fighters per runway batch (XO: 4 at a time)
+RAID_BOMBER_GAP_S = 90        # runway time one bomber batch takes before the next may go (not measured; the hook's alert stagger is 60 s)
+RAID_FIGHTER_GAP_S = 60       # ... one fighter batch
+RAID_FIRST_TAKEOFF_S = 30     # the first batch takes off this long after the mission starts
+RAID_JOIN_S = 60              # the raid pushes this long after the last batch reaches the marshal
+RAID_CLIMB_S = 180            # allowance for the climb from the runway to the marshal
+RAID_STAGED_GAP_S = 15        # a staged raid's groups push this far apart (the salvo spread; the old raid used RAID_GROUP_GAP_S 60 s)
+RAID_MSHL_STEP_M = 150        # each group orbits the marshal this much lower than the one before (no two share a level)
+RAID_REACH_NM = 208           # how far the Tu-22M3's X-22 shoots as DCS flies it: 380 to 385 km (208 nm) in XO's 2026-11-03 run (measured)
+RAID_MSHL_CLEAR_NM = 12       # the marshal stays this far outside that
 ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
 
@@ -126,6 +146,68 @@ class RaidSpawns:
             return best
         h_ = bearing(ba.x, ba.y, *w1)
         return offset(ba.x, ba.y, h_, min(10 * NM, 0.3 * dist(ba.x, ba.y, *w1)))
+
+    def _raid_marshal_out(self, mshl, ba, w1, dx, dy):
+        """v0.41.261: a staged fleet raid's marshal stays outside the missiles' reach (RAID_REACH_NM + RAID_MSHL_CLEAR_NM from the target): the marshal found by
+        `_raid_marshal` when it is far enough, else the point on the way from the field to `w1` that is, nearest to w1; the field itself when even that is inside."""
+        need = (RAID_REACH_NM + RAID_MSHL_CLEAR_NM) * NM
+        if dist(mshl[0], mshl[1], dx, dy) >= need:
+            return mshl
+        best = None
+        for k in range(0, 101):
+            q = (ba.x + (w1[0] - ba.x) * k / 100.0, ba.y + (w1[1] - ba.y) * k / 100.0)
+            if dist(q[0], q[1], dx, dy) >= need:
+                best = q
+        return best if best is not None else (ba.x, ba.y)
+
+    @staticmethod
+    def _ring_dist(path, dx, dy, ring_m):
+        """The distance along `path` to the first point within ring_m of (dx, dy); 0 when it starts inside, the whole length when it never gets in."""
+        run = 0.0
+        for i in range(len(path) - 1):
+            a, b = path[i], path[i + 1]
+            L = dist(a[0], a[1], b[0], b[1])
+            n = max(1, int(L // 1000))
+            for k in range(n + 1):
+                q = (a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n)
+                if dist(q[0], q[1], dx, dy) <= ring_m:
+                    return run + L * k / n
+            run += L
+        return run
+
+    def _raid_stage(self, ex, ba, path, arrive, V, dx, dy, L):
+        """v0.41.261: the plan of a staged fleet raid: which groups start airborne on the marshal and which take off (and when), and the time it pushes. -> dict
+        {"plan": {group name: {"rwy": bool, "t": takeoff s | None, "mk": marshal level}}, "T_push": s, "fly_s": s}.
+        The push is when the raid would reach the missiles' ring as blue's CAP comes on station (the old rule reached the launch point then), but no earlier than the
+        last batch has joined plus RAID_JOIN_S: a raid that cannot assemble in time is late, not thin."""
+        def split(n, cap):
+            k = max(1, math.ceil(n / cap))
+            return [n // k + (1 if i < n % k else 0) for i in range(k)]
+        nb, ne = int(ex["bombers"]), int(ex.get("escorts", 0) or 0)
+        nbg = len(split(nb, RAID_BOMBER_BATCH)) if nb else 0
+        esz = split(ne, RAID_FIGHTER_BATCH) if ne else []
+        n_sweep = len(esz) // 2 if len(esz) >= 3 else (1 if (ex.get("mass") and len(esz) >= 2) else 0)
+        fighters = [f"Raid Sweep {i + 1}" for i in range(n_sweep)] + [f"Raid Escort {i + 1}" for i in range(len(esz) - n_sweep)]
+        bombers = [f"Raid Bomber {i + 1}" for i in range(nbg)]
+        on_f = math.ceil(len(fighters) * RAID_MARSHAL_FRAC)
+        on_b = math.ceil(len(bombers) * RAID_MARSHAL_FRAC)
+        queue = [(n, RAID_FIGHTER_GAP_S) for n in fighters[on_f:]] + [(n, RAID_BOMBER_GAP_S) for n in bombers[on_b:]]
+        offs, o = {}, 0.0
+        for n, gap in queue:
+            offs[n] = o
+            o += gap
+        o_last = max(offs.values(), default=0.0)
+        fly_s = dist(ba.x, ba.y, path[0][0], path[0][1]) / (V * 0.85) + RAID_CLIMB_S
+        T_asm = (RAID_FIRST_TAKEOFF_S + o_last + fly_s + RAID_JOIN_S) if queue else 0.0
+        t_want = arrive - self._ring_dist(path, dx, dy, RAID_REACH_NM * NM) / V
+        T_push = max(t_want, T_asm)
+        t0 = T_push - RAID_JOIN_S - fly_s - o_last
+        plan, mk = {}, 0
+        for n in fighters + bombers:
+            on = n in offs
+            plan[n] = {"rwy": on, "t": (t0 + offs[n]) if on else None, "mk": mk}
+            mk += 1
+        return {"plan": plan, "T_push": T_push, "fly_s": fly_s}
 
     def _raid_bend(self, pts, raided):
         """v0.41.29: a red raid's legs bend round blue's Patriot fields (raids.PATRIOT_NM; the field it raids is the one it goes for, so not that
@@ -794,6 +876,10 @@ class RaidSpawns:
         # v0.41.29: the raid flies blue's shape. Marshal on red's side (in a red SAM's cover along its way in, else just off its field), PUSH,
         # ingress bent round blue's Patriot fields (not the one it is raiding), the target at its TOT, then egress and home.
         mshl = self._raid_marshal(ba, w1, station, dx, dy)
+        apt_r = self.t.airports.get(ba.airport) if getattr(ba, "airport", None) else None
+        staged_ok = RAID_STAGE_ON and (not bool(ex.get("land"))) and cvg is not None and not aim and apt_r is not None
+        if staged_ok:
+            mshl = self._raid_marshal_out(mshl, ba, w1, dx, dy)          # v0.41.261: outside the missiles' reach
         lane = [mshl, offset(*mshl, bearing(*mshl, *(w1 if dist(*mshl, *w1) > 15 * NM else station)), RAID_PUSH_NM * NM)]
         if dist(*mshl, dx, dy) > dist(*w1, dx, dy) + 15 * NM:
             lane.append(w1)
@@ -815,12 +901,13 @@ class RaidSpawns:
             self._spawn_opfor_ground(package, dx, dy, manifest, list(path), route_sites=RAID_ROUTE_SAMS)
         ox, oy = launch if standoff else (dx, dy)               # where the route ends: the launch point, else the target
         L = sum(dist(*path[i], *path[i + 1]) for i in range(len(path) - 1))
-        t_leave = t_tgt - L / V
+        stg = self._raid_stage(ex, ba, path, arrive, V, dx, dy, L) if (staged_ok and standoff) else None
+        t_leave = stg["T_push"] if stg else t_tgt - L / V      # v0.41.261: a staged raid pushes when it has assembled (and blue's CAP is up), see _raid_stage
         hold_until, act_ = None, 0.0
         if t_leave >= 0:                                       # it holds at its marshal until it must push, appearing at most RAID_HOLD_MAX_S before
             (sx, sy), remaining = path[0], path[1:]
             hold_until, act_ = t_leave, max(0.0, t_leave - RAID_HOLD_MAX_S)
-            hit_s = t_tgt
+            hit_s = t_leave + L / V
         else:                                                  # no time to hold: already on its way in, but never closer than RAID_MIN_NM (then it is late)
             back_ = min(L, max(RAID_MIN_NM * NM, V * t_tgt))
             (sx, sy), seg_i = tm.point_back_along(path, back_)
@@ -863,11 +950,29 @@ class RaidSpawns:
             if behind_nm and rem:
                 pos = offset(pos[0], pos[1], bearing(rem[0][0], rem[0][1], pos[0], pos[1]), behind_nm * NM)
             nm_ = (["PUSH"] + ["ING"] * (len(rem) - 2) + [fin_]) if hold is not None else (["ING"] * (len(rem) - 1) + [fin_])
-            g = self.m.flight_group(self.red, name, cls, None, pt(*pos), altitude=alt, speed=450 * KPH, maintask=task_cls, group_size=count)
-            if hold is not None:                               # its marshal: orbit until it must push
-                ct_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
-                ct_.stop_after_time(int(hold)); g.points[0].tasks.append(ct_)
-                g.points[0].name = "MSHL"
+            sl = stg["plan"].get(name) if (stg and hold is not None) else None          # v0.41.261: a staged raid's group: on the marshal from the start, or off the runway
+            m_alt = alt - (sl["mk"] * RAID_MSHL_STEP_M if sl else 0.0)
+            g = None
+            if sl is not None and sl["rwy"]:
+                g = self._from_airport(self.red, name, cls, apt_r, task_cls, StartType.Runway, count, quiet=True)
+                if g is not None:
+                    mw = g.add_waypoint(pt(*pos), m_alt, 450 * KPH, "MSHL")
+                    ct_ = task.ControlledTask(task.OrbitAction(int(m_alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
+                    ct_.stop_after_time(int(hold)); mw.tasks.append(ct_)
+                    self._late(g, max(5.0, sl["t"]), "take off")
+                    act = 0.0
+                else:
+                    sl = None
+            if g is None:
+                if sl is not None:                             # on the marshal from the start, side by side and one level apart
+                    h_ = bearing(rem[0][0], rem[0][1], pos[0], pos[1]) + 90
+                    pos = offset(pos[0], pos[1], h_, ((sl["mk"] % 4) - 1.5) * 600.0)
+                    act = 0.0
+                g = self.m.flight_group(self.red, name, cls, None, pt(*pos), altitude=m_alt, speed=450 * KPH, maintask=task_cls, group_size=count)
+                if hold is not None:                           # its marshal: orbit until it must push
+                    ct_ = task.ControlledTask(task.OrbitAction(int(m_alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
+                    ct_.stop_after_time(int(hold)); g.points[0].tasks.append(ct_)
+                    g.points[0].name = "MSHL"
             if at_gate:
                 g.points[0].name = "GATE"
                 self._raid_gate_join(gate, g, g.points[0], fighter_nm)
@@ -885,6 +990,17 @@ class RaidSpawns:
                         if standoff:                           # v0.41.248: fire from the launch point, then leave; the task ends after the window whatever is left
                             ca_.stop_after_time(int(hit_s + shift + RAID_LAUNCH_WINDOW_S))
                         wp.tasks.append(ca_)
+            if bomber and standoff and cls is planes.Tu_22M3:
+                # v0.41.261 (XO 2026-11-03: "they don't get that shoot-at-ships order on the start"): pydcs puts the anti-ship "engage ships" order on the FIRST point, so a raid
+                # fired from wherever it was the moment the carrier was in range (380 km, 87 s into the run). It now starts at the PUSH, the first point after the marshal.
+                eng_ = [t_ for t_ in g.points[0].tasks if getattr(t_, "Id", "") == "EngageTargets"]
+                if eng_ and len(g.points) > 1:
+                    g.points[0].tasks = [t_ for t_ in g.points[0].tasks if t_ not in eng_]
+                    pi_ = next((i_ for i_, p_ in enumerate(g.points) if getattr(p_, "name", "") == "PUSH"), None)
+                    if pi_ is None:
+                        pi_ = 2 if (sl is not None and sl["rwy"]) else 1
+                    for t_ in reversed(eng_):
+                        g.points[pi_].tasks.insert(0, t_)
             g.add_waypoint(pt(*egr_), alt, 450 * KPH, "EGR")
             if gate is not None and name in gate["names"]:
                 gate["calls"].append((name, len(g.points) + 1))        # the abort: the first leg home, past the EGR point
@@ -892,13 +1008,13 @@ class RaidSpawns:
                 g.add_waypoint(pt(*q), alt, 450 * KPH, "RTB" if k == len(home_) - 1 else "AVD")
             g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
             g.set_skill(skill)
-            if act >= 30:
+            if act >= 30 and not g.late_activation:
                 self._late(g, act)
             return g
 
-        def sizes(n):
-            """pydcs makes one group of at most 4: a bigger raid is several groups of nearly equal size (12 -> 4+4+4, 6 -> 3+3)."""
-            k = max(1, math.ceil(n / 4))
+        def sizes(n, cap=4):
+            """pydcs makes one group of at most 4: a bigger raid is several groups of nearly equal size (12 -> 4+4+4, 6 -> 3+3). A staged raid's bombers go in pairs (RAID_BOMBER_BATCH)."""
+            k = max(1, math.ceil(n / cap))
             return [n // k + (1 if i < n % k else 0) for i in range(k)]
 
         if land:
@@ -910,14 +1026,15 @@ class RaidSpawns:
         if not load:
             self.warns.append(f"{ex.get('raider', 'Tu-22M3')}: no bomb or missile found; the raid is unarmed.")
         bomber_gs, nb_ = [], 0
-        for gi, n_ in enumerate(sizes(ex["bombers"])):         # v0.41.108: a big raid is several groups, a minute apart on the same route
-            g = build_group(f"Raid Bomber {gi + 1}", cls_b, n_, task_b, bomber=True, shift=gi * RAID_GROUP_GAP_S)
+        gap_ = RAID_STAGED_GAP_S if stg else RAID_GROUP_GAP_S
+        for gi, n_ in enumerate(sizes(ex["bombers"], RAID_BOMBER_BATCH if stg else 4)):         # v0.41.108: a big raid is several groups, a minute apart on the same route
+            g = build_group(f"Raid Bomber {gi + 1}", cls_b, n_, task_b, bomber=True, shift=gi * gap_)
             names = []
             for u in g.units:
                 nb_ += 1
                 u.name = f"RAID-B-{nb_}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", ex["bomber_wing"], names, ac=ex.get("raider", "Tu_22M3"), raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
-                         raid_arrive_s=float(hit_s + gi * RAID_GROUP_GAP_S), raid_group=g.name)
+                         raid_arrive_s=float(hit_s + gi * gap_), raid_group=g.name)
             bomber_gs.append(g)
         self._spawn_raid_target(package, cvb, aim, dx, dy, manifest)
         if land and ex.get("arm") and not aim:
@@ -927,7 +1044,7 @@ class RaidSpawns:
         if ex.get("escorts"):
             # v0.41.108: the escorts of a big raid split in two jobs. Half (at least 3 groups) fly a sweep RAID_SWEEP_LEAD_S ahead of the bombers on the same
             # route and fight what they meet; the rest escort the bomber groups (spread over them). A small raid keeps its single escort group.
-            esz = sizes(ex["escorts"])
+            esz = sizes(ex["escorts"], RAID_FIGHTER_BATCH)
             n_sweep = len(esz) // 2 if len(esz) >= 3 else (1 if (ex.get("mass") and len(esz) >= 2) else 0)        # v0.41.156: a mass raid (8 or more bombers) always opens with a sweep
             eload = enemy_cap_loadout(ex["escort_type"])
             from .mission_builder import AAM_WEAPONS            # lazy: the builder's module imports this one
@@ -939,7 +1056,7 @@ class RaidSpawns:
                 else:
                     ci = ei - n_sweep
                     bg = bomber_gs[ci * len(bomber_gs) // max(1, len(esz) - n_sweep)]
-                    eg = build_group(f"Raid Escort {ci + 1}", getattr(planes, ex["escort_type"]), n_, task.Escort, shift=bomber_gs.index(bg) * RAID_GROUP_GAP_S, behind_nm=3)
+                    eg = build_group(f"Raid Escort {ci + 1}", getattr(planes, ex["escort_type"]), n_, task.Escort, shift=bomber_gs.index(bg) * gap_, behind_nm=3)
                     # v0.41.29: the escorts stay with the bombers and fight only what comes within their class's reach of them (Su-27 25 nm, the rest
                     # 15 nm), up to the bombers' egress point; home once their air-to-air missiles are gone. No chasing.
                     eg.points[0].tasks = [t_ for t_ in eg.points[0].tasks if getattr(t_, "Id", "") != "Escort"]      # pydcs's default escort task has no group
@@ -948,6 +1065,8 @@ class RaidSpawns:
                         # route and clock (same shift, 3 nm behind) and engage only inside a circle round themselves, a waypoint at a time, so a fight cannot
                         # pull them off the route (no Escort task: that one lets them chase out to its distance and they never come back)
                         for k_, pt_ in enumerate(eg.points[:len(eg.points) - len(home_)]):
+                            if str(getattr(pt_, "type", "")) == "TakeOff":          # (a staged escort starts on the runway: no fighting zone round the field)
+                                continue
                             pt_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(pt_.position.x, pt_.position.y), int(esc_nm_ * NM), [task.Targets.All.Air]))
                     else:
                         eg.points[0].tasks.insert(0, task.EscortTaskAction(group_id=bg.id, engagement_max_dist=int(esc_nm_ * NM), lastwpt=len(bg.points) - 1 - len(home_),
