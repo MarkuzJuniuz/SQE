@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## Docs only: CLAUDE.md, the go word and "untuned"
+
+XO 2026-11-03. The go word for a code change is "fox 3" (with an optional effort). "Untuned" means a job type that does not use the newer AI systems (SAM avoidance, station rules); new jobs are flyable from day one. No code, no smoke.
+
 ## v0.41.257, the fleet can be sunk
 
 XO 2026-11-03 ("we need to check why the carrier group is still up after being sunk"): a carrier sunk in a flown mission now stays sunk. All numbers are judgment calls (no public figure applies to a game carrier); tune on XO's runs.
