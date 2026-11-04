@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.276, the fleet-defence interceptors have no hold
+
+XO 2026-11-04 ("fox 3 medium": "the interceptors should just fly fast and bend away from SAMs"; the F-15s "go straight to the point"). `mission_builder.RAID_F14_HOLD = False`: the carrier raid's F-14 and F-15 interceptors lose the HOLD point and the SEAD gate. They leave at the start, fly the SAM-bending lane (direct or bent over a blue field) at the dash speed and wait on the intercept point; their engage circle round it is on from the start (it was swapped in by the DASH flag). The SEAD still goes at the SAM sites that block the lane, but nothing waits on it. `True` brings the v0.41.256 hold back. New `raid_spawns.RAID_SA11_NM = 26`: the interceptors' lane keeps 26 nm from a live SA-11 (the shared `AVOID_NM` stays 20 for every other flight): in the v0.41.272 run the SA-11s engaged at 23 to 26 nm. Judgment call. The bombers are not re-timed (the v0.41.274 takeoff queue pushes them later). Not checked: the interceptors' fuel for the wait on the point. Not seen in DCS.
+
 ## v0.41.274, the fleet raid starts with one bomber pair and four escorts airborne
 
 XO 2026-11-04 ("fox 3 low"): intelligence has already spotted the movement. `raid_spawns.RAID_BOMBERS_UP = 1` bomber group (a pair) and `RAID_GUARD_UP = 1` escort group (up to 4 jets, an Escort group rather than a Sweep) start airborne on the marshal. Everything else takes off from the field: the remaining bomber pairs first, the rest of the escorts and sweeps last. The push is still the later of the old ring time and "last takeoff + climb + join", so a big raid now pushes about 8 to 10 minutes later (more time for blue). Takeoff gaps (90 s bombers, 60 s fighters) are judgment calls. Not checked: Tu-22M3 fuel through the longer marshal wait. Not seen in DCS.
