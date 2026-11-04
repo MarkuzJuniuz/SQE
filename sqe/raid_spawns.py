@@ -35,7 +35,7 @@ RAID_MSHL_MIN_NM = 60         # ...its marshal is at least this far from the tar
 RAID_MPS = 232.0              # a red raid's speed (450 kts), the same figure its placement always used
 RAID_MIN_NM = 40              # ...a raid with no time to hold starts no closer than this to its target (it is late instead)
 RAID_GROUP_GAP_S = 60         # v0.41.108: the bomber groups of a big raid follow each other, this far apart (judgment call)
-RAID_ROUTE_SAMS = 5            # v0.41.256: red SAM sites along a fleet raid's way in that are built in the mission (judgment call: the default is 2; the unit limit still binds)
+RAID_ROUTE_SAMS = 99            # v0.41.256: red SAM sites along a fleet raid's way in that are built in the mission (judgment call: the default is 2; the unit limit still binds)
 RAID_SWEEP_LEAD_S = 90        # ...and the raid's sweep escorts fly this far ahead of the first bomber group (judgment call)
 RAID_HOLD_MAX_S = 600         # ...and one with plenty of time appears at most 10 min before it must push
 RAID_EGRESS_NM = 30           # ...off target it turns 40 degrees off its way in and leaves this far before heading home     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
@@ -1188,7 +1188,8 @@ class RaidSpawns:
         if standoff:
             # v0.41.256 (XO 2026-11-03: no SAMs across the mountains, so blue's F-15s could bum-rush the bombers): the red SAM sites whose ring touches the bombers' way in
             # (the route starts at most 220 nm from the fleet) are live in the mission, RAID_ROUTE_SAMS of them beyond the ones already built; the unit limit still binds
-            self._spawn_opfor_ground(package, dx, dy, manifest, list(path), route_sites=RAID_ROUTE_SAMS)
+            near_ = ((getattr(self, "_rsp", {}) or {}).get(package.id) or {}).get("ip")                  # v0.41.285 (XO 2026-11-04): every route SAM is live; the unit limit trims the ones furthest from the intercept point
+            self._spawn_opfor_ground(package, dx, dy, manifest, list(path), route_sites=RAID_ROUTE_SAMS, route_near=(near_["ip"] if near_ else launch))
         ox, oy = launch if standoff else (dx, dy)               # where the route ends: the launch point, else the target
         L = sum(dist(*path[i], *path[i + 1]) for i in range(len(path) - 1))
         stg = self._raid_stage(ex, ba, path, arrive, V, dx, dy, L) if (staged_ok and standoff) else None
