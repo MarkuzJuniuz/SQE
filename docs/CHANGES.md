@@ -1,5 +1,14 @@
 # CHANGES.md
 
+## v0.41.286, more fields red in every mission; the raid CAP dashes at 500 kt
+
+XO 2026-11-04 ("Mineralnye Vody ... qualifies"; "add all the bases beyond the mountains to red"; "speeds shouldn't be gas-guzzling in afterburners all the way"; "2 fox 3 low").
+- **Red fields.** New theatre key `red_extra_airports` (Caucasus: Mineralnye Vody, Krasnodar-Center, Krasnodar-Pashkovsky, Anapa-Vityazevo, Novorossiysk): set red in every mission, no campaign asset, no new campaign needed. A field we took (a blue base) is never turned red by the `red_fields` loop any more. Reason: in XO's run a Hornet landed at Mineralnye Vody, a neutral field after the dash.
+- **Dash speed.** `RAID_F14_DASH_KTS` 650 to 500 and `RAID_OTHER_DASH_KTS` 600 to 500 (judgment call; XO: not afterburner all the way). The raiders' timing follows the interceptors' route times, so the meeting time moves with the speed.
+- **Not changed, on purpose.** The intercept point. Measured (L3, 6 seeds): it sits 20 nm beyond `w1`, held there by `RAID_IP_MAX_NM` 185 from the hold point, and `w1` is already on the plains north of the mountains, so there is at most about 20 nm to gain by pulling it back and a tighter limit could lose the lane. A ridge cap was tried and had no effect (no mountain between `w1` and the edge); it was removed. Putting the meeting just short of the mountains needs the launch geometry moved too: XO's call.
+- **SEAD timer.** Checked, nothing to change: the interceptors' due time and the red flag are clock times from the package's TGT (+240 s, +300 s), not from the HARM launch.
+Compile check and targeted smoke (31zb, 26, 22) passed. Not seen in DCS.
+
 ## v0.41.285, every red SAM along the carrier raid's way in is live; the unit limit trims the furthest from the intercept point
 
 XO 2026-11-04 ("all of red's SAMs spawn, furthest ones out from the intercept point are trimmed off"; "fox 3 medium"). `RAID_ROUTE_SAMS` 5 to 99 (all the sites whose ring reaches the bombers' route, as `threatmap.corridor_sam_sites` picks them). `_spawn_opfor_ground(..., route_near=)` builds them nearest the intercept point first (the launch point when there is none); the first one that does not fit the unit limit, and every one further out, is left out with a warning. The sites the raid SEAD goes for are built before and are never trimmed. Only the raid's route sites use the new order; every other mission is unchanged.

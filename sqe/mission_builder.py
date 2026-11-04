@@ -80,8 +80,8 @@ RAID_RUSH_KTS = 500         # v0.41.256: the raid SEAD flies at least this fast 
 RAID_F14_HOLD_FT = 30000    # v0.41.256 (XO 2026-11-03): the F-14 raid CAP holds high, where a jet burns least and a Phoenix leaves with the most energy (judgment call; fuel flow not checked)
 RAID_F14_DASH_FT = 35000    # ...and crosses high
 RAID_F14_HOLD_KTS = 300     # ...at an endurance speed while it waits
-RAID_F14_DASH_KTS = 650     # ...and dashes at this speed once the gate opens (judgment call)
-RAID_OTHER_DASH_KTS = 600   # v0.41.265: the Hornets and Eagles that dash with them (judgment call; the F-14 is the fastest of the three at altitude)
+RAID_F14_DASH_KTS = 500     # ...and dashes at this speed once the gate opens (judgment call; v0.41.286 XO 2026-11-04: was 650, "shouldn't be gas-guzzling in afterburners all the way", and the intercept point is now short of the mountains, so the lane is shorter)
+RAID_OTHER_DASH_KTS = 500   # v0.41.286: was 600 (see RAID_F14_DASH_KTS). v0.41.265: the Hornets and Eagles that dash with them (judgment call; the F-14 is the fastest of the three at altitude)
 RAID_SEAD_LEAD_S = 240      # v0.41.256: the raid SEAD's HARMs land this long before the interceptors are due on station (judgment call; v0.41.255 had 180)
 RAID_SEAD_DONE_S = 150      # v0.41.283 (XO 2026-11-04): when the player is not the raid SEAD flyer the SEAD is already done: its HARMs landed this long before the mission starts (judgment call)
 RAID_SCRIPT_KILL = 0.5      # ...and this share of the live site's launchers and vehicles is destroyed at second 2, with all its tracking radars (a scripted result; judgment call)
@@ -382,9 +382,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 self.t.airports[a.airport].set_red()
         # v0.41.282 (XO 2026-11-04): every red-held field in the theatre data is red in every mission, also the ones this level's roster left out (they stayed neutral, and
         # long-legged jets that RTB to the nearest field landed on them)
+        blue_aps_ = {bs.airport for bs in st.bases.values() if bs.kind == BaseKind.AIRFIELD}      # (a field we took is a blue base: it stays blue)
         for f_ in theatres.active().get("red_fields", []):
-            if f_.get("airport") in self.t.airports:
+            if f_.get("airport") in self.t.airports and f_["airport"] not in blue_aps_:
                 self.t.airports[f_["airport"]].set_red()
+        # v0.41.286 (XO 2026-11-04): and the fields beyond the mountains that are not part of the war (Mineralnye Vody and the Krasnodar / Anapa / Novorossiysk fields): a jet
+        # that runs dry or is chased north landed on a neutral one. Mission-only list, no campaign asset
+        for ap_ in theatres.active().get("red_extra_airports", []):
+            if ap_ in self.t.airports:
+                self.t.airports[ap_].set_red()
         # v0.41.28: a raid scramble also builds the field the raid is coming for (the XO's Kobuleti run: the raided field had no defences
         # because nothing launched from it)
         raided_ = [package.objective.target_id] if (package.objective.type == ObjectiveType.FLEET_DEFENSE and package.objective.target_id in st.bases) else []
