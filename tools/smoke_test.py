@@ -6222,7 +6222,7 @@ def check_118_new_squadrons(c):
 
 
 def check_119_raid_folds_by_time(c):
-    """v0.41.250 (XO 2026-11-03: the carrier raid is no boss fight): the carrier raid folds into any other mission that starts inside the merge time window, wherever it
+    """v0.41.250 (XO 2026-11-03: the carrier raid is no boss fight; v0.41.270, XO 2026-11-04: now it folds into NOTHING, the asserts below check that): the carrier raid used to fold into any other mission that starts inside the merge time window, wherever it
     flies, never into itself and not when merging is off; the blue CAP is sized to the raiders (about one fighter per raider). Mission composition only (the window is a tunable)."""
     from sqe import bombers
     real = bombers.desperation
@@ -6243,14 +6243,14 @@ def check_119_raid_folds_by_time(c):
                 d["start"] = tgt.start
         sp = [p for p in ses.packages() if p.extra.get("setpiece")][0]
         tgt = [p for p in ses.packages() if p.number == tgt.number][0]
-        assert sp.number in [x.number for x in ses.merge_candidates(tgt)], "the raid folds into a mission at the same time"
+        assert sp.number not in [x.number for x in ses.merge_candidates(tgt)], "v0.41.270: the carrier raid folds into no mission, even at the same time"
         assert not ses.merge_candidates(sp), "nothing folds into the raid itself"
         ses.settings.merge_mode = "off"
         assert not ses.merge_candidates(tgt), "merging off folds nothing"
     finally:
         bombers.desperation = real
         bombers.QUIET_DAYS = q_
-    print("[raid folds by time] the carrier raid joins missions at its time, blue CAP about one fighter per raider")
+    print("[raid folds by time] the carrier raid folds into no mission (v0.41.270), blue CAP about one fighter per raider")
 
 
 def check_120_runway_cratering(c):
