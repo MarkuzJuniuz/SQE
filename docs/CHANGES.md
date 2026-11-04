@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.281, a raid on a field is "raid defense", not "fleet defense"
+
+XO 2026-11-04 ("even an intercept raid on Kobuleti or the Oil Refinery is called FLEET DEFENSE"; "fox 3 low"). New `Package.kind`: a raid intercept on a field, supply site or garrison (`extra["land"]`) reads RAID_DEFENSE; only the carrier raid keeps FLEET_DEFENSE. The package list, the "Also in this mission" line and the Overview tasking line use it. The objective type itself, saved campaigns and every rule that tests it are unchanged. Other screens that print the raw type name, if any, are not checked.
+
 ## v0.41.280, the interceptors are timed to the raid
 
 XO 2026-11-04 (the v0.41.279 run: the Senaki Eagles were over Mozdok at 750 s and shot 13 Tu-22M3 and 4 Su-27 taking off and climbing; "fox 3 medium. Do what you recommend"). The raid's push time is now worked out BEFORE the interceptors are built (`raid_spawns._raid_clock_prep`: marshal, lane, launch point and assembly plan, no build; it draws the arrival jitter, and `_spawn_raid` uses that same number). Each AI interceptor of the carrier raid leaves so that it is on the intercept point `RAID_MEET_LEAD_S = 120` s before the bombers' planned arrival there (their push + the flight from the marshal). A flight that cannot make it in time spawns already underway (as before), one that is early waits on the ground or is activated late. `RAID_HEAD_S` is now only the fallback when there is no raid clock. The ramp start and the wait-for-everybody gate stay: with blue timed to the push, red's assembly length no longer decides the balance. The engage circle round the point (which reaches Mozdok) is unchanged; if blue still shoots the raid at the marshal, the next step is to pull the circle off the field. Not seen in DCS.

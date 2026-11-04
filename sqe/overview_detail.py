@@ -138,7 +138,7 @@ def tempo_lines(state) -> list:
     return out
 
 
-TYPE_WORDS = (("CAS", "CAS"), ("STRIKE", "strike"), ("DEAD", "SEAD / DEAD"), ("COUNTER_AIR", "counter-air"), ("BARCAP", "patrol"), ("FLEET_DEFENSE", "fleet defence"))
+TYPE_WORDS = (("CAS", "CAS"), ("STRIKE", "strike"), ("DEAD", "SEAD / DEAD"), ("COUNTER_AIR", "counter-air"), ("BARCAP", "patrol"), ("FLEET_DEFENSE", "fleet defence"), ("RAID_DEFENSE", "raid defence"))
 
 
 def tasking(sess) -> tuple:
@@ -150,7 +150,7 @@ def tasking(sess) -> tuple:
     n_you = sum(1 for p in pk if sess.flyable(p))
     kinds = {}
     for p in pk:
-        kinds[p.objective.type.value] = kinds.get(p.objective.type.value, 0) + 1
+        kinds[p.kind] = kinds.get(p.kind, 0) + 1
     parts = [f"{kinds[k]} {w}" for k, w in TYPE_WORDS if kinds.get(k)]
     head = f"{len(pk)} package{'s' if len(pk) != 1 else ''}"
     if not pk:

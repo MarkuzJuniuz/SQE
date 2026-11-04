@@ -119,6 +119,13 @@ class Package:
     extra: dict = field(default_factory=dict)   # mission-type extras (raid bearing, bomber count, escorts...)
 
     @property
+    def kind(self) -> str:
+        """v0.41.281 (XO 2026-11-04): the type the player sees. Every raid intercept is FLEET_DEFENSE inside (the carrier raid came first), but a raid on a field, a supply site or a
+        garrison (`extra["land"]`) reads RAID_DEFENSE; only the carrier raid stays FLEET_DEFENSE."""
+        t = self.objective.type.value
+        return "RAID_DEFENSE" if (t == "FLEET_DEFENSE" and (self.extra or {}).get("land")) else t
+
+    @property
     def player_flight(self):
         return next((f for f in self.flights if f.is_player), None)
 

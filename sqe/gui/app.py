@@ -287,7 +287,7 @@ class MissionsPage(QWidget):
             ok = bool(sess.flyable(p))
             night = is_night(st.campaign_date(), p.start)
             extra = sess.merge_candidates(p) if ok else []
-            it = QListWidgetItem(f"#{p.number}  {p.objective.type.value.replace('_', ' ')}   {p.start}{' (night)' if night else ''}"
+            it = QListWidgetItem(f"#{p.number}  {p.kind.replace('_', ' ')}   {p.start}{' (night)' if night else ''}"
                                  f"{'   [JOINT]' if p.joint else ''}{f'   +{len(extra)} package' + ('s' if len(extra) > 1 else '') if extra else ''}"
                                  f"\n{p.objective.description}" + ("" if ok else "\n(no flight for your aircraft)"))
             it.setData(Qt.UserRole, p.number); it.setSizeHint(QSize(0, 66))
@@ -396,7 +396,7 @@ class MissionsPage(QWidget):
         for x in mem:                                       # the packages that fly with this one: each with its own flights and FLY button
             line = QFrame(); line.setFrameShape(QFrame.HLine); line.setStyleSheet(f"color:{theme.DIM};"); self.bl.addWidget(line)
             xnight = is_night(st.campaign_date(), x.start)
-            self.bl.addWidget(self._label(f"Also in this mission: #{x.number}  {x.objective.type.value.replace('_', ' ')}   {x.start}{' (night)' if xnight else ''}", "h2", theme.AMBER))
+            self.bl.addWidget(self._label(f"Also in this mission: #{x.number}  {x.kind.replace('_', ' ')}   {x.start}{' (night)' if xnight else ''}", "h2", theme.AMBER))
             self.bl.addWidget(self._label(x.objective.description, "title"))
             xt, xyours = self._flight_table(x)
             if xyours:
