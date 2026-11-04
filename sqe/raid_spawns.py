@@ -952,6 +952,7 @@ class RaidSpawns:
             nm_ = (["PUSH"] + ["ING"] * (len(rem) - 2) + [fin_]) if hold is not None else (["ING"] * (len(rem) - 1) + [fin_])
             sl = stg["plan"].get(name) if (stg and hold is not None) else None          # v0.41.261: a staged raid's group: on the marshal from the start, or off the runway
             m_alt = alt - (sl["mk"] * RAID_MSHL_STEP_M if sl else 0.0)
+            r_alt = m_alt if sl else alt                       # v0.41.263: a staged group keeps its own level the whole way (they used to climb to one common level and meet)
             g = None
             if sl is not None and sl["rwy"]:
                 g = self._from_airport(self.red, name, cls, apt_r, task_cls, StartType.Runway, count, quiet=True)
@@ -977,7 +978,7 @@ class RaidSpawns:
                 g.points[0].name = "GATE"
                 self._raid_gate_join(gate, g, g.points[0], fighter_nm)
             for k, q in enumerate(rem):
-                wp = g.add_waypoint(pt(*q), alt, 450 * KPH, "GATE" if k == gi_ else nm_[k])
+                wp = g.add_waypoint(pt(*q), r_alt, 450 * KPH, "GATE" if k == gi_ else nm_[k])
                 if k == gi_:
                     self._raid_gate_join(gate, g, wp, fighter_nm)
                 if k == len(rem) - 1 and bomber:
@@ -1001,11 +1002,11 @@ class RaidSpawns:
                         pi_ = 2 if (sl is not None and sl["rwy"]) else 1
                     for t_ in reversed(eng_):
                         g.points[pi_].tasks.insert(0, t_)
-            g.add_waypoint(pt(*egr_), alt, 450 * KPH, "EGR")
+            g.add_waypoint(pt(*egr_), r_alt, 450 * KPH, "EGR")
             if gate is not None and name in gate["names"]:
                 gate["calls"].append((name, len(g.points) + 1))        # the abort: the first leg home, past the EGR point
             for k, q in enumerate(home_):
-                g.add_waypoint(pt(*q), alt, 450 * KPH, "RTB" if k == len(home_) - 1 else "AVD")
+                g.add_waypoint(pt(*q), r_alt, 450 * KPH, "RTB" if k == len(home_) - 1 else "AVD")
             g.points[0].tasks.append(task.OptRTBOnBingoFuel(True))
             g.set_skill(skill)
             if act >= 30 and not g.late_activation:

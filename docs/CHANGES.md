@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## v0.41.263, staged raid: every group keeps its own altitude the whole way (two bombers collided)
+
+XO 2026-11-03 ("Fox 3 low C"; his run: Raid Bomber 2 and 4 collided at t=1084 s). Judgment call: the 150 m step is unchanged. The run's tracks: the groups orbited the marshal stacked one above the other (0.1 to 0.4 km apart sideways, 150 to 300 m apart in height), then each climbed to one common cruise level at its own push, so group 4 climbed up into group 2 in the same column.
+- **`raid_spawns._spawn_raid`:** a staged group (`sl` set) flies every point after the marshal (the way in, EGR, the way home) at its own marshal level `m_alt` instead of the common `alt`. An unstaged raid and land raids are unchanged.
+- Result in a probe at Level 3: eight bomber groups at 8,844 down to 7,794 m, escorts at 9,144 and 8,994, no two groups on one level on any point.
+- Cost: the lowest bombers fire X-22s about 1,000 m lower than before (about 5,000 ft). Whether that changes the weapon's range was not checked.
+- Not seen in DCS. Checks: compile, probe dump, targeted smoke.
+
 ## v0.41.262, squadron tables show "(refitting, N)" for both sides
 
 XO 2026-11-03 ("Is resting the proper term for jets?"; the F-15Cs at Senaki-Kolkhi showed 0 for days). Display only; nothing in the save changes. "Reconstitution" is the doctrinal word, "refit" the plain one.
