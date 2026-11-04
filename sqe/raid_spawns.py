@@ -333,13 +333,33 @@ class RaidSpawns:
         st = self.state
         tb = st.bases.get(package.objective.target_id)
         k1 = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)
-        if tb is None or tb.kind != BaseKind.AIRFIELD or k1 is None or k1 + 1 >= len(wps):
+        if k1 is None or k1 + 1 >= len(wps):
             return
         tx, ty = geom.tx, geom.ty
+        if tb is None or tb.kind != BaseKind.AIRFIELD:
+            self._leash_fleet_cap(wps, k1, tx, ty)
+            return
         (sx, sy), _why = scramble.blue_station(st, tx, ty, scramble.raid_origin(st, package, tx, ty))
         leg = max(dist(wps[k1].x, wps[k1].y, wps[k1 + 1].x, wps[k1 + 1].y), 5 * NM)
         wps[k1].x, wps[k1].y = sx, sy
         wps[k1 + 1].x, wps[k1 + 1].y = offset(sx, sy, bearing(sx, sy, tx, ty) + 90, leg)
+
+    def _leash_fleet_cap(self, wps, k1, tx, ty) -> None:
+        """v0.41.255 (XO 2026-11-03, the carrier-raid run: the Tomcats' racetrack ended 17 nm from the Sukhumi SA-10 and the CAP flew in its reach).
+        The fleet raid's CAP racetrack is walked back toward the fleet, 2 nm at a time, until both ends are clear of live SA-10s and SAM rings
+        (scramble.clear_for_station). Same orbit leg and heading; no clear spot = left as is. Judgment call: the 45 nm SA-10 figure is SQE's own station margin."""
+        a, b = wps[k1], wps[k1 + 1]
+        leg_b, leg_d = bearing(a.x, a.y, b.x, b.y), dist(a.x, a.y, b.x, b.y)
+        home_b = bearing(a.x, a.y, tx, ty)
+        d0 = dist(a.x, a.y, tx, ty)
+        for step in range(0, int(d0 / (2 * NM)) + 1):
+            x, y = offset(a.x, a.y, home_b, step * 2 * NM)
+            x2, y2 = offset(x, y, leg_b, leg_d)
+            if scramble.clear_for_station(self.state, x, y) and scramble.clear_for_station(self.state, x2, y2):
+                break
+        else:
+            return
+        a.x, a.y, b.x, b.y = x, y, x2, y2
 
     def _blue_callins(self, package, raid_x, fleet_obj, tx, ty, tot_s) -> None:
         """v0.41.112 (XO 2026-10-22): the BASECAP call-in, blue side. In a defensive mission (a raid on blue, or the fleet under attack) the blue
@@ -899,8 +919,15 @@ class RaidSpawns:
                     # v0.41.29: the escorts stay with the bombers and fight only what comes within their class's reach of them (Su-27 25 nm, the rest
                     # 15 nm), up to the bombers' egress point; home once their air-to-air missiles are gone. No chasing.
                     eg.points[0].tasks = [t_ for t_ in eg.points[0].tasks if getattr(t_, "Id", "") != "Escort"]      # pydcs's default escort task has no group
-                    eg.points[0].tasks.insert(0, task.EscortTaskAction(group_id=bg.id, engagement_max_dist=int(esc_nm_ * NM), lastwpt=len(bg.points) - 1 - len(home_),
-                                                                        targets=[task.Targets.All.Air.id], position={"x": -1000, "y": 300, "z": 500}))
+                    if standoff:
+                        # v0.41.255 (XO 2026-11-03, the carrier-raid run: the Su-27 escorts split from the bombers): the fleet raid's escorts fly the bombers' own
+                        # route and clock (same shift, 3 nm behind) and engage only inside a circle round themselves, a waypoint at a time, so a fight cannot
+                        # pull them off the route (no Escort task: that one lets them chase out to its distance and they never come back)
+                        for k_, pt_ in enumerate(eg.points[:len(eg.points) - len(home_)]):
+                            pt_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(pt_.position.x, pt_.position.y), int(esc_nm_ * NM), [task.Targets.All.Air]))
+                    else:
+                        eg.points[0].tasks.insert(0, task.EscortTaskAction(group_id=bg.id, engagement_max_dist=int(esc_nm_ * NM), lastwpt=len(bg.points) - 1 - len(home_),
+                                                                            targets=[task.Targets.All.Air.id], position={"x": -1000, "y": 300, "z": 500}))
                 rtbe_ = task.OptRTBOnOutOfAmmo(); rtbe_.params["action"]["params"]["value"] = AAM_WEAPONS
                 eg.points[0].tasks.append(rtbe_)
                 en = []
