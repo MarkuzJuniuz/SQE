@@ -19,6 +19,7 @@ from .models import Objective, ObjectiveType, BaseKind, Role, AssetKind
 from . import redair, runways
 
 NM = 1852.0
+EMERG_CAP = False             # v0.41.272 (XO 2026-11-04, a test): False = no cap, a raid scramble can be offered on every Fly click; True = none right after a sortie that had one (the old rule)
 RAID_RESERVE = 0.6            # an emergency is offered only if the event is within this share of the squadron's combat radius
 BASE_LOSS = 0.06              # airfield defence lost per bomber that gets through
 RAID_PRIORITY = 8.0
@@ -466,7 +467,7 @@ def emergency_seed(state, package_number: int, flight_id) -> random.Random:
 
 def emergency_happens(state, d, rng: random.Random) -> bool:
     """The per-sortie dice, with the cap: none right after a sortie that had one."""
-    if (state.raids or {}).get("last_emerg", -9) == state.sortie_counter:
+    if EMERG_CAP and (state.raids or {}).get("last_emerg", -9) == state.sortie_counter:
         return False
     from . import bombers
     if bombers.is_quiet(state):

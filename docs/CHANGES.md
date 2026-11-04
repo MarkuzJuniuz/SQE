@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.272, the one-scramble-per-sortie cap is off (a test)
+
+XO 2026-11-04 ("fox 3 low"): `raids.EMERG_CAP = False`. A raid scramble can now be offered on every Fly click, not only when the last sortie had none (the quiet day before the carrier raid still blocks them). `True` brings the old rule back. Not seen in DCS. If it swamps the flights list, the next step is the scramble flights shown beside the merged packages.
+
 ## v0.41.271, the fleet-defence Tomcats carry 6 Phoenix
 
 XO 2026-11-04 ("I think it's 6 Phoenixes, 2 Sidewinders"; "fox 3 low", for the fleet-defence raid only). New `FLEET` loadout for the F-14BU in `loadouts.py`: the 4 belly AIM-54C of the heavy CAP preset, a shoulder AIM-54C on each side (stations 2 and 9, the `SHOULDER AIM_54C_Mk47 L` / `R` CLSIDs, both in pydcs) in place of the two Sparrows, 2 AIM-9M, 2 tanks. `_dress_group` uses it for the F-14BU CAP and SWEEP flights of the carrier setpiece; every other F-14 CAP flight keeps the stock heavy CAP (4 Phoenix, 2 Sparrow, 2 Sidewinder). A custom CAP loadout captured with `capture_loadouts.py` does not apply to these flights (name the group `F-14BU:FLEET`). Not seen in DCS.
