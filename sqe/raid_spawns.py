@@ -90,13 +90,13 @@ RAID_MARSHAL_FRAC = 0.5       # (no longer used by the fleet raid, see RAID_BOMB
 RAID_BOMBERS_UP = 1           # v0.41.274 (XO 2026-11-04: intelligence has spotted the movement): this many bomber groups (a pair each) are airborne on the marshal at the start...
 RAID_GUARD_UP = 1             # ...with this many escort groups (up to 4 jets) guarding them; every other group takes off, the bombers first and the rest of the escorts last
 RAID_RAMP_START = True        # v0.41.277 (XO 2026-11-04: "if we stagger them during taxiing DCS will do fine"): the groups that take off start hot on the ramp and taxi out (a timed start), instead of appearing on the runway. False = the old runway start. A group the ramp has no parking for falls back to the runway
-RAID_TAXI_S = 300             # ...the allowance for the taxi in the plan (v0.40.10 measured 3 to 11 min from the call to the air for alert pairs); judgment call, tune in DCS
+RAID_TAXI_S = 480             # ...the allowance for the taxi in the plan (v0.40.10 measured 3 to 11 min from the call to the air for alert pairs); judgment call, tune in DCS
 RAID_WAIT_ALL = True          # XO 2026-11-04: no push until everybody is up: a staged group holds at the marshal until its planned time has passed AND every group that took off is at the marshal
 RAID_ASM_ZONE_NM = 20         # ...at the marshal = inside this circle round it
 RAID_ASM_MAX_S = 1800         # ...a safety net, not a rule: the hold ends this long after its planned time whether or not everybody is up (the Tu-22M3 burns about 0.6% fuel a minute in the cruise, more in the orbit; judgment call)
 RAID_BOMBER_BATCH = 2         # bombers per runway batch (XO: 2 at a time for the big ones)
 RAID_FIGHTER_BATCH = 4        # fighters per runway batch (XO: 4 at a time)
-RAID_BOMBER_GAP_S = 90        # runway time one bomber batch takes before the next may go (not measured; the hook's alert stagger is 60 s)
+RAID_BOMBER_GAP_S = 120       # runway time one bomber batch takes before the next may go (not measured; the hook's alert stagger is 60 s)
 RAID_FIGHTER_GAP_S = 60       # ... one fighter batch
 RAID_FIRST_TAKEOFF_S = 30     # the first batch takes off this long after the mission starts
 RAID_JOIN_S = 60              # the raid pushes this long after the last batch reaches the marshal
