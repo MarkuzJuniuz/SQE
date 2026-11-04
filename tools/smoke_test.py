@@ -3087,7 +3087,7 @@ def check_39_dcs_refuses_mission_whose(c):
             _red = {g_["groupId"]: (g_["name"], [(u_["x"], u_["y"]) for u_ in g_["units"].values()]) for co_ in _M3["coalition"]["red"]["country"].values()
                     for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()}
             _torpos = [xy_ for n_, xys_ in _red.values() if n_ in _cov(_p3) for xy_ in xys_]
-            _harm, _jsow = [], 0
+            _agm88, _jsow = [], 0
             for co_ in _M3["coalition"]["blue"]["country"].values():
                 for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
                     seq_ = []
@@ -3101,9 +3101,9 @@ def check_39_dcs_refuses_mission_whose(c):
                             elif tid_ == "Bombing" and any(_m3.hypot(prm_["x"] - a_, prm_["y"] - b_) < 150 for a_, b_ in _torpos):
                                 _jsow += 1
                     if seq_:
-                        _harm.append(seq_)
-            assert any(sq_[0] in _cov(_p3) and _p3.objective.target_id in sq_ for sq_ in _harm), "the second HARM flight opens on the Tors, then joins on the site"
-            assert any(_p3.objective.target_id in sq_ and sq_[-1] in _cov(_p3) and sq_.index(_p3.objective.target_id) < len(sq_) - 1 for sq_ in _harm), \
+                        _agm88.append(seq_)
+            assert any(sq_[0] in _cov(_p3) and _p3.objective.target_id in sq_ for sq_ in _agm88), "the second HARM flight opens on the Tors, then joins on the site"
+            assert any(_p3.objective.target_id in sq_ and sq_[-1] in _cov(_p3) and sq_.index(_p3.objective.target_id) < len(sq_) - 1 for sq_ in _agm88), \
                 "the HARM flights end with a second pass at the Tors that guard the site (v0.39.22)"
             assert _jsow >= 1, ("the JSOW flight aims at the Tors that guard the site", _sd3, len(_torpos))
         except AssertionError:
@@ -3134,7 +3134,7 @@ def check_39_dcs_refuses_mission_whose(c):
     _ss = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, flight_filter="all"))
     _ss.new("Sat", "F-16C", 3, seed=1); _ss.state.campaign_id = f"{0x70a0001:010x}"; _ss.plan_day()
     _A4 = _ss.state.assets; _sd4 = [p_ for p_ in _ss.packages() if p_.objective.aim in ("SEAD", "STANDOFF")]
-    _arr = [int(p_.start[:2]) * 60 + int(p_.start[3:5]) + _ss._harm_leg_s(p_) / 60 for p_ in _sd4]
+    _arr = [int(p_.start[:2]) * 60 + int(p_.start[3:5]) + _ss._agm88_leg_s(p_) / 60 for p_ in _sd4]
     assert len(_sd4) >= 2 and max(_arr) - min(_arr) <= 1.5, ("SEAD packages on one cluster reach their HARM points together", _arr)
     _pus = [p_ for p_ in _sd4 if _tm9.umbrella_site(_ss.state, _A4[p_.objective.target_id]) and _ss.flyable(p_) and any(f_.kit == "JSOW" for f_ in p_.flights)]
     _pu = next((p_ for p_ in _pus if any(_ss.state.bases[f_.base_id].kind.value == "CARRIER" for f_ in p_.flights)), _pus[0])       # v0.41.65: prefer a package with carrier flights, the [cv recover] check below needs one (it passed by luck of the layout before)
@@ -4468,7 +4468,7 @@ def check_62_red_roster(c):
             assert ("MiG_21Bis" in _cnt) == (_lv62 == 1), ("MiG-21Bis on Level 1 only", _lv62, _cnt)
             _fld_tot = sum(n_ for f_ in _field.values() for n_ in f_.values()); _fld_fig = sum(n_ for f_ in _field.values() for t_, n_ in f_.items() if t_ in _EF62)
             assert (_fld_tot, _fld_fig) == _want62[_lv62], ("field jets and fighters", _lv62, _fld_tot, _fld_fig)
-            _bw = {1: 0, 2: 14, 3: 30}[_lv62]       # v0.41.249: L2 11 to 14 (a 12-ship raid)
+            _bw = {1: 0, 2: 14, 3: 24}[_lv62]       # v0.41.249: L2 11 to 14 (a 12-ship raid); v0.41.260: L3 30 to 24
             assert _cnt.get("Tu_22M3", 0) == _bw, ("the bomber wing", _lv62, _cnt.get("Tu_22M3"))
             for _aid, _types in _field.items():
                 _ap = next(f_["airport"] for f_ in _th["red_fields"] if f_["id"] == _aid)

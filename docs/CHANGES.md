@@ -1,5 +1,15 @@
 # CHANGES.md
 
+## v0.41.266, fleet defence: the interceptors dash to a point on the bombers' way in; anti-radiation-missile names renamed
+
+XO 2026-11-04 ("I think this PR is important for the fleet defense to work", fox 3 medium). In XO's run the Tomcats' dash went to the point they already held (HOLD, PUSH and TGT on one coordinate), and the Hornets and Eagles had no dash at all. Judgment calls throughout (no source for a fighter dash distance; the concept is the Cold War carrier "outer air battle", real figures not looked up yet); tune in DCS.
+- **Dash point (`raid_spawns._raid_intercept`):** on the bombers' own way in, between their marshal and the route's outer point, the furthest point that is outside every SAM circle the fighters keep out of, within `RAID_IP_MAX_NM` 160 nm of the hold point and reachable along a lane bent round those circles. None found: the old shape, and a mission warning says so. Not found in all four Level 3 probes I ran, found in some Level 2 ones: at Level 3 the interceptors will often still hold.
+- **Who dashes (`mission_builder._raid_f14_shape`):** the F-14s (650 kt) and now the Hornets and Eagles (`RAID_OTHER_DASH_KTS` 600), stacked 1,000 ft and 1.5 nm apart per flight. The circle that opens at the dash is round the dash point.
+- **Shared geometry:** `_raid_axis` holds the raid's marshal and outer point so the raid and the dash point agree.
+- **Rename (XO: "rename all of the variables with harm on them"):** `HARM_LAUNCH_NM` to `AGM88_LAUNCH_NM`, `HARM_AXES` to `AGM88_AXES`, `harm_nm` / `harm_deg` / `harm_ax` / `harm_s` and the `_harm_*` helpers to `agm88_*` / `_agm88_*` (code, tests and the raid state key `harm_s`, which lives only inside the builder). Text, comments and the weapon-name match in `weather.py` are unchanged. Old CHANGES entries keep the old names.
+- **Smoke:** `check_62` still expected the Level 3 bomber wing of 30 (missed in v0.41.260); now 24.
+- Not seen in DCS. Not done: the SEAD-on-blockers job (PR 2).
+
 ## v0.41.265, the build-time trim of v0.41.264 is taken out again
 
 XO 2026-11-04 ("it's just noise. I'll just make another campaign"). v0.41.264 trimmed a fleet raid saved in an old day plan down to the size cap when the mission was built. A new campaign plans raids at the cap already, so it did nothing there. Reverted: `raid_spawns._spawn_raid` is as in v0.41.263. The raid sizes of v0.41.260 (L3 16 from a wing of 24, L2 8) stay.

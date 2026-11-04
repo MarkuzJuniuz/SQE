@@ -316,12 +316,12 @@ class Session:
         self.refresh_weather()
         return self.packages()
 
-    def _harm_leg_s(self, p) -> float | None:
+    def _agm88_leg_s(self, p) -> float | None:
         """Seconds from PUSH to the HARM point for this SEAD package's first HARM flight, from the same marshal, geometry and route the
         mission builder will use (an umbrella keep-out included). Within one mission every package pushes exactly its start difference after
         the others, so this leg is all that separates their HARM times."""
         from .models import BaseKind
-        from .routes import HARM_LAUNCH_NM, assign_times, bearing, make_geometry, objective_wp, plan_route
+        from .routes import AGM88_LAUNCH_NM, assign_times, bearing, make_geometry, objective_wp, plan_route
         from . import threatmap as tm
         st = self.state
         fl = [f for f in p.flights if f.role == Role.SEAD and not f.tag and getattr(f, "base_id", None) in st.bases]
@@ -340,7 +340,7 @@ class Session:
             g = make_geometry(bx, by, tgt.x, tgt.y, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
             um = tm.umbrella_site(st, tgt)
             wps = plan_route(Role.SEAD, (bx, by), g, spec.profile, is_player=False, tanker_xy=None,
-                             keep_out=(um.x, um.y, HARM_LAUNCH_NM) if um else None)
+                             keep_out=(um.x, um.y, AGM88_LAUNCH_NM) if um else None)
             assign_times(wps, 0.0)
             push, obj = next(w for w in wps if w.name == "PUSH"), objective_wp(wps)
             return obj.eta_s - push.eta_s
@@ -360,7 +360,7 @@ class Session:
         for p in pkgs:
             if p.objective.type != ObjectiveType.DEAD or not p.objective.target_id or p.objective.target_id not in st.assets:
                 continue
-            leg = self._harm_leg_s(p)
+            leg = self._agm88_leg_s(p)
             if leg is None:
                 continue
             sead.append((p, st.assets[p.objective.target_id], leg))
