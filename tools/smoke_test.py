@@ -6446,6 +6446,7 @@ def check_122_road_site_flip(c):
     assert all(x.health <= 0 for x in st.assets.values() if getattr(x, "guards", "") in gone), "its battalion is gone"
     assert any("(captured)" in r[1] for r in _od.supply_rows(st)), "the Overview calls it captured"
     assert _CS.from_dict(st.to_dict()).ground["road_flips"] == g["road_flips"]
+    ses.plan_day()                                                  # v0.41.273: the sites flipped by hand, so the day's plan is made again (the game flips overnight, after the day is resolved, and plans after)
     ses.skip_day()                                                  # the daily round (supply figure, repairs, the plan) runs with flipped sites
     # the other way: the front pushed all the way to our end, our sites on the cut's red side go to the enemy
     st = ses.state; g = st.ground
