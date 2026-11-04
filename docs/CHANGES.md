@@ -4,15 +4,15 @@
 
 XO 2026-11-03. The go word for a code change is "fox 3" (with an optional effort). "Untuned" means a job type that does not use the newer AI systems (SAM avoidance, station rules); new jobs are flyable from day one. No code, no smoke.
 
-## v0.41.258, road supply sites change hands with the front
+## v0.41.258, road supply sites belong to the side their road connects to
 
-XO 2026-11-03 ("red supplies on the plains that belong to blue... how would they even get their goods through?"). Judgment calls (margin, cap, corridor); tune on XO's runs.
-- **Flip (`road_sites.flip`, called at the end of `ground.resolve_day`):** a road supply site (`rsup_` / `bsup_`, fuel points and supply dumps) the front has passed changes hands with its stock, in both directions, using the same move as a captured field's sites (`ground._move_sites`; the Overview lists it as "(captured)"). It flips when the line has gone `FLIP_MARGIN_KM` 8 km past it, at most `FLIP_PER_DAY` 2 a day, the ones nearest the line first. Only sites within `CORRIDOR_KM` 60 km of the line of sectors count: the north of the mountains stays red whatever the front does, and the plants (90 km+ from the front) never flip.
-- A red site that flips takes its dug-in battalion with it (the battalion is set to destroyed, not removed: a postponed job may still name it). A flipped ROAD0 / ROADB becomes ROAD.
-- **Placement at the start (item 1):** read-only check on 3 seeds (L1, L2, L3): no road site stood on the wrong side of the line when the campaign began (the only two near the corridor are 4 to 6 km off the line at L3). The oddity comes later, as the front moves, so the fix is the flip, not a placement change.
-- Old saves get the flip too (no new state needed; `ground["road_flips"]` records each one).
-- Not seen in DCS. Not done: the daily supply round still bombs a site by its owner at the time.
-- Checks: compile, new `check_122_road_site_flip`, full smoke.
+XO 2026-11-03 ("red supplies on the plains that belong to blue... how would they even get their goods through?"; "on campaign starts everything from the front connected to the road and away from it belongs to that side... road connections cut by the front is an easier thing to digest"). Judgment calls (corridor width); tune on XO's runs.
+- **New `sqe/road_front.py`:** the shipped road net (`caucasus_roads_net.json`: 69 routes that join into one network, checked) tells which side a road site belongs to. The front is a cut across the roads at the line of sectors. A road point near that line (`CORRIDOR_KM` 60) is on the side of the cut it lies on; the two ends of every road take the side of the nearest airfield (the theatre's `road_blue_airports`, the old rule); every other point takes the side of the nearest of those anchors along the road. A site belongs to the side of the road stretch it sits beside.
+- **Campaign start (`road_sites.build`):** the owner of a road site is that road side, not the nearest airfield by straight line. A theatre without a road net keeps the old rule. New campaigns only.
+- **During the war (`road_sites.flip`, end of `ground.resolve_day`):** the night the front cuts a site's road off from its owner, the site changes hands with its stock, in both directions (the same move as a captured field's sites, `ground._move_sites`; the Overview lists it as "(captured)"). No margin and no daily cap: the rule is the cut. A flipped ROAD0 / ROADB becomes ROAD. A red site that goes to Blue has its battalion set to destroyed (not removed: a postponed job may still name it). Works on old saves too (`ground["road_flips"]` records each flip).
+- Read-only check on 4 seeds (L1 to L3): night one flips nothing; the closest red road site to a blue airfield is 46 to 113 km away.
+- Not seen in DCS. The 8 km margin and 2-a-day cap of the first draft are gone.
+- Checks: compile, new `check_122_road_site_flip` (owner by road at the start, flips both ways, far sites stay, battalion, Overview, save, a skipped day), full smoke.
 
 ## v0.41.257, the fleet can be sunk
 

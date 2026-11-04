@@ -6412,43 +6412,38 @@ def check_121_sunk_carrier(c):
 
 
 def check_122_road_site_flip(c):
-    """v0.41.258 (XO 2026-11-03): a road supply site the front has passed changes hands with its stock, both ways, at most FLIP_PER_DAY a day, nearest the line first; the red
-    battalion that guarded it goes; a site far from the corridor (north of the mountains) never flips; the Overview shows it as captured; a save keeps the record.
-    Strategic state only (the margin and the cap are tunables)."""
-    from sqe import ground as _gr, road_sites as _rs, overview_detail as _od
+    """v0.41.258 (XO 2026-11-03): a road supply site belongs to the side its road connects to (road_front.py). At the start of a campaign every red road site is on a road that
+    connects to red and every blue one to blue, with no site flipping on night one; when the front cuts a site off from its owner it changes hands with its stock, both ways; the red
+    battalion that guarded it is destroyed; the Overview shows it as captured; sites far from the front on a road to their own side stay; a save keeps the record.
+    Strategic state only (the corridor width is a tunable)."""
+    from sqe import ground as _gr, road_sites as _rs, road_front as _rf, overview_detail as _od, theatres as _th
     from sqe.state import CampaignState as _CS
     ses = fresh_session(2, 5); st = ses.state; g = st.ground
-    near = sorted(((_gr.path_pos(g, a.x, a.y), a) for a in st.assets.values() if _rs.is_road(a) and a.kind in _gr.SUPPLY_KINDS), key=lambda t: t[0][0])
-    corr = [(k, a) for (k, lat), a in near if lat <= _rs.CORRIDOR_KM]
-    far = [a for (k, lat), a in near if lat > _rs.CORRIDOR_KM]
-    assert corr and far, "red road sites both in and beyond the corridor"
-    g["line_km"] = _gr.line_km(g)
-    assert _rs.flip(st) == [], "the start of a campaign flips nothing"
-    # the front is pushed back past the site nearest the red end: it flips to us, the far ones stay
-    k0, a0 = corr[-1]
-    g["line_km"] = k0 - _rs.FLIP_MARGIN_KM - 1.0
-    n_red = len(st.assets)
-    ln = _rs.flip(st)
-    assert 1 <= len(ln) <= _rs.FLIP_PER_DAY and all("ours now" in x for x in ln), ln
-    flipped = [i for i in (a.id for _k, a in corr) if i in st.blue_assets]
-    assert len(flipped) == len(ln) and all(i not in st.assets for i in flipped), flipped
-    assert not any(a.id in st.blue_assets for a in far), "a site beyond the corridor never flips"
-    assert all(x.health <= 0 for x in st.assets.values() if getattr(x, "guards", "") in flipped), "its battalion is gone"
-    rows = _od.supply_rows(st)
-    assert any("(captured)" in r[1] for r in rows), rows
-    assert _CS.from_dict(st.to_dict()).ground["road_flips"] == g["road_flips"]
-    # the cap: with the line at the red end every corridor site is behind us, but only FLIP_PER_DAY go a day
+    th = _th.active(); rts = _rf.routes(th); assert rts and len(rts) > 20, "the theatre's road net is shipped"
+    sides = _rf.route_sides(st, th, rts)
+    red0 = [a for a in st.assets.values() if _rs.is_road(a) and a.kind in _gr.SUPPLY_KINDS]
+    blue0 = [a for a in st.blue_assets.values() if _rs.is_road(a) and a.kind in _gr.SUPPLY_KINDS]
+    assert red0 and blue0
+    assert all(_rf.site_side(st, th, rts, sides, a.x, a.y) == "red" for a in red0), "every red road site is on a road that connects to red"
+    assert all(_rf.site_side(st, th, rts, sides, a.x, a.y) == "blue" for a in blue0), "every blue road site is on a road that connects to blue"
+    assert _rs.flip(st) == [], "night one flips nothing"
+    # the front pushed all the way back: every red site the cut now puts on our side comes over, the ones on roads to the north stay red
     g["line_km"] = 0.0
-    assert len(_rs.flip(st)) <= _rs.FLIP_PER_DAY
-    # the other way: a blue site with the line pushed past it goes to red
-    b = next(a for a in st.blue_assets.values() if _rs.is_road(a) and a.id.startswith("bsup_") and _gr.path_pos(g, a.x, a.y)[1] <= _rs.CORRIDOR_KM)
-    g["line_km"] = _gr.path_pos(g, b.x, b.y)[0] + _rs.FLIP_MARGIN_KM + 1.0
-    ln2 = _rs.flip(st)
-    to_red = [f["id"] for f in g["road_flips"] if f["to"] == "red"]
-    assert ln2 and 1 <= len(to_red) <= _rs.FLIP_PER_DAY and all(i in st.assets and i not in st.blue_assets for i in to_red) and all("enemy holds it" in x for x in ln2), ln2
+    ln = _rs.flip(st)
+    assert ln and all("ours now" in x for x in ln), ln
+    gone = [f["id"] for f in g["road_flips"]]
+    assert all(i in st.blue_assets and i not in st.assets for i in gone)
+    assert len(gone) < len(red0), "the sites far to the north stay red"
+    assert all(x.health <= 0 for x in st.assets.values() if getattr(x, "guards", "") in gone), "its battalion is gone"
+    assert any("(captured)" in r[1] for r in _od.supply_rows(st)), "the Overview calls it captured"
+    assert _CS.from_dict(st.to_dict()).ground["road_flips"] == g["road_flips"]
     ses.skip_day()                                                  # the daily round (supply figure, repairs, the plan) runs with flipped sites
-    assert ses.state.ground["road_flips"]
-    print("[road site flip] sites the front passed change hands both ways, capped per day, battalion gone, far sites stay, saved")
+    # the other way: the front pushed all the way to our end, our sites on the cut's red side go to the enemy
+    st = ses.state; g = st.ground
+    g["line_km"] = _gr._path(g)[-1] / 1000.0
+    ln2 = _rs.flip(st)
+    assert ln2 and any("enemy holds it" in x for x in ln2), ln2
+    print("[road site flip] owner by road connection at the start, sites cut off by the front change hands both ways, battalion gone, far sites stay, saved")
 
 
 CHECKS = [
