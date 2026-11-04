@@ -89,6 +89,7 @@ RAID_STAGE_ON = True          # False = the old raid (airborne at its marshal fr
 RAID_MARSHAL_FRAC = 0.5       # (no longer used by the fleet raid, see RAID_BOMBERS_UP) share of the groups already airborne on the marshal at the start
 RAID_BOMBERS_UP = 1           # v0.41.274 (XO 2026-11-04: intelligence has spotted the movement): this many bomber groups (a pair each) are airborne on the marshal at the start...
 RAID_GUARD_UP = 1             # ...with this many escort groups (up to 4 jets) guarding them; every other group takes off, the bombers first and the rest of the escorts last
+RAID_MEET_LEAD_S = 120        # v0.41.280 (XO 2026-11-04: blue got over Mozdok while the bombers were still taking off and shot the raid on the ramp): the interceptors are timed to be on the intercept point this long before the bombers' planned arrival there (their push + the flight from the marshal). Judgment call
 RAID_RAMP_START = True        # v0.41.277 (XO 2026-11-04: "if we stagger them during taxiing DCS will do fine"): the groups that take off start hot on the ramp and taxi out (a timed start), instead of appearing on the runway. False = the old runway start. A group the ramp has no parking for falls back to the runway
 RAID_TAXI_S = 480             # ...the allowance for the taxi in the plan (v0.40.10 measured 3 to 11 min from the call to the air for alert pairs); judgment call, tune in DCS
 RAID_WAIT_ALL = True          # XO 2026-11-04: no push until everybody is up: a staged group holds at the marshal until its planned time has passed AND every group that took off is at the marshal
@@ -831,6 +832,36 @@ class RaidSpawns:
             t2.add_action(action.SetFlag(flag_))
             self.m.triggerrules.triggers.append(t2)
 
+    def _raid_clock_prep(self, package, sx_, sy_, tot_s) -> None:
+        """v0.41.280: the fleet raid's push time, known BEFORE the interceptors are built (they are built first, the raiders after). It repeats the first half of `_spawn_raid`
+        (marshal, lane, launch point, assembly plan) without building anything, and draws the raid's arrival jitter here so `_spawn_raid` uses the same number. Stores
+        `self._rclock[package.id] = {"t_leave", "mshl", "u"}`; nothing when the package is not a staged fleet raid (the interceptors then keep their head start)."""
+        ex = package.extra or {}
+        try:
+            cvb = self.state.bases[package.objective.target_id]
+            station = (sx_, sy_)
+            aim = ex.get("aim", "") or ""
+            if ex.get("land") or aim or self.ship.get(cvb.id) is None or not ex.get("bomber_wing"):
+                return
+            dx, dy = (ex.get("dest") or (cvb.x, cvb.y))
+            ba, w1, mshl, staged_ok, apt_r = self._raid_axis(package, station)
+            V = RAID_MPS
+            u = self.vrng.uniform(60, 150)
+            if not hasattr(self, "_rclock"):
+                self._rclock = {}
+            self._rclock[package.id] = {"u": u, "mshl": mshl, "t_leave": None}
+            arrive = tot_s + u
+            lane = [mshl, offset(*mshl, bearing(*mshl, *(w1 if dist(*mshl, *w1) > 15 * NM else station)), RAID_PUSH_NM * NM)]
+            if dist(*mshl, dx, dy) > dist(*w1, dx, dy) + 15 * NM:
+                lane.append(w1)
+            launch = self._raid_launch(package, station, w1)
+            path = self._raid_bend(lane, cvb) + [launch]
+            L = sum(dist(*path[i], *path[i + 1]) for i in range(len(path) - 1))
+            stg = self._raid_stage(ex, ba, path, arrive, V, dx, dy, L) if staged_ok else None
+            self._rclock[package.id]["t_leave"] = stg["T_push"] if stg else arrive - L / V
+        except (KeyError, AttributeError, TypeError, IndexError):
+            return
+
     def _raid_gate_join(self, gate, g, wp, fighter_nm=None):
         """A group that holds at the gate: its GATE waypoint (or its first point, when it appears there) orbits until the gate's flag is set, at its own level
         (GATE_ALT_STEP_M apart); a fighter group also engages air inside its class's circle meanwhile. The abort sends it to its first leg home, past the EGR
@@ -1071,7 +1102,8 @@ class RaidSpawns:
         station = (sx_, sy_)
         ba, w1, mshl, staged_ok, apt_r = self._raid_axis(package, station)          # v0.41.265: one place for the marshal and the outer point (the interceptors' dash point uses them too)
         V = RAID_MPS
-        arrive = tot_s + r.uniform(60, 150)                    # at the station: 1-2.5 min after our scramble's TOT
+        u_ = (getattr(self, "_rclock", {}).get(package.id) or {}).get("u")          # (v0.41.280: drawn earlier by `_raid_clock_prep`, the same number)
+        arrive = tot_s + (u_ if u_ is not None else r.uniform(60, 150))                    # at the station: 1-2.5 min after our scramble's TOT
         t_tgt = arrive + dist(sx_, sy_, dx, dy) / V            # the raid's own TOT
         # v0.41.29: the raid flies blue's shape. Marshal on red's side (in a red SAM's cover along its way in, else just off its field), PUSH,
         # ingress bent round blue's Patriot fields (not the one it is raiding), the target at its TOT, then egress and home.

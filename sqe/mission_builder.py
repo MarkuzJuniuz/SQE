@@ -37,7 +37,7 @@ from .difficulty import Difficulty, ai_skill
 from .fighter_stations import FighterStations, ESCORT_AFTER_TOT_S, TARCAP_AFTER_TOT_S, axis_station
 from .support_caps import SupportCaps
 from .red_air_picture import RedAirPicture, A2A_ZONE_NM
-from .raid_spawns import RAID_SUPPLY_UNITS, SUPPLY_BUILDINGS, RaidSpawns, supply_parts
+from .raid_spawns import RAID_MEET_LEAD_S, RAID_MPS, RAID_SUPPLY_UNITS, SUPPLY_BUILDINGS, RaidSpawns, supply_parts
 from . import road_sites
 from .strike_tasks import StrikeTasks, DEAD_GATE_KM, SEAD_WAVE_KM, TRACK_RADARS, SEARCH_RADARS, KPH
 from . import kneeboard
@@ -458,6 +458,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._barcap_zones = self._barcap_circles(package, geom)             # v0.41.138: the BARCAP circles a TARCAP's circle must meet (whatever order the flights are built in)
         striker_tots = []                                                    # v0.41.38: each ground-attack flight's own target time (strike / SEAD / CAS), for the TARCAP hold
         if package.objective.type == ObjectiveType.FLEET_DEFENSE and package.objective.target_id in st.bases:
+            self._raid_clock_prep(package, tx, ty, tgt.eta_s)                 # v0.41.280: the raid's push time, known before the interceptors are built
             self._raid_sead_prep(package, geom, tgt.eta_s, manifest)          # v0.41.256: the SEAD's site and the interceptors' DASH flag exist before the CAP flights are built
         for idx, f in enumerate(package.flights):
             if self._raid_sead(package, f):                  # v0.41.255: its own SEAD job on the SAMs over the raid's launch point
@@ -1569,7 +1570,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), agm88_deg=self._agm88_deg(package, geom))
         if getattr(f, "rush", False):
             self._rush_speeds(wps)                                    # v0.41.256: the raid SEAD
-        shaped_ = False
+        shaped_, meet_ = False, None
         if self._raid_cap(package, f):
             k0_ = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)
             o12_ = ((wps[k0_].x, wps[k0_].y), (wps[k0_ + 1].x, wps[k0_ + 1].y)) if (k0_ is not None and k0_ + 1 < len(wps)) else None
@@ -1582,6 +1583,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     f.gate_flag = rsp_["flag"]
                 push_s = rsp_["t_flag"]                                   # the briefed push is the gate's own latest time
                 shaped_ = True
+                rc_ = getattr(self, "_rclock", {}).get(package.id)
+                if rc_ and rc_.get("t_leave") is not None and ip_ is not None and not RAID_F14_HOLD:
+                    # v0.41.280: be on the intercept point RAID_MEET_LEAD_S before the bombers get there (their push + the flight from the marshal)
+                    meet_ = rc_["t_leave"] + dist(rc_["mshl"][0], rc_["mshl"][1], ip_["ip"][0], ip_["ip"][1]) / RAID_MPS - RAID_MEET_LEAD_S
             # v0.41.28: a raid scramble's way out to its station bends round red SAMs like a strike's (the orbit leg stays as it is)
             k1_ = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)
             if k1_ and not shaped_:                                   # (an F-14's crossing leg goes toward the SAMs on purpose, once the gate opens)
@@ -1597,7 +1602,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             nat = wps[hold_i + 1].eta_s if hold_i is not None else next((w.eta_s for w in wps if w.action == "CAPORBIT"), wps[-1].eta_s)
             act_raw = int(push_s - nat - (120 if hold_i is not None else 60))      # arrive ~2 min early, hold, push on time
             if shaped_ and not RAID_F14_HOLD:
-                act_raw = -RAID_HEAD_S                                              # v0.41.276: no hold: the interceptors leave at the start and wait on the intercept point; v0.41.278: with a head start (already airborne)
+                act_raw = int(meet_ - nat) if meet_ is not None else -RAID_HEAD_S     # v0.41.280: timed to the raid; without a raid clock the v0.41.278 head start (already airborne)
             act_s = max(0, act_raw)
             assign_times(wps, float(act_raw), push_s)
             self._hot = self._hot_slot(package, f, base, wps, act_raw, hold_i is not None)
