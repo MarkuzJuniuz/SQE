@@ -2083,7 +2083,7 @@ def check_31wg_sead_every_covering_battery(c):
     old = (LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise)
     LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise = 1.0, 3.0, 0.0
     try:
-        for seed in (12, 16, 5, 20):
+        for seed in (12, 16, 5, 20, 3, 7, 9, 14, 2, 8):
             s = fresh_session(); s.new("Red SEAD all", "F-15C", 3, seed=seed); st = s.state
             rp = None
             for _day in range(10):
