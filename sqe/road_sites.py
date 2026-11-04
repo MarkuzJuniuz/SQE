@@ -26,6 +26,7 @@ from __future__ import annotations
 import math
 import random
 
+from . import road_front
 from .models import AssetKind, EnemyAsset
 
 RED_SHARE = 0.65              # share of the campaign's road sites that are red's (judgment call: red has the whole north, we have the Georgian side)
@@ -58,6 +59,37 @@ def guard_comp(a, level: int) -> list:
         return list(TRUCK)
     g = GUARD.get(level, GUARD[2])
     return [(t, n * (2 if a.variant in PLANT_VARIANTS else 1)) for t, n in g]
+
+
+def flip(state) -> list:
+    """v0.41.258 (XO 2026-11-03: "red supplies on the plains that belong to blue... how would they even get their goods through?"; "road connections cut by the front"): a road
+    supply site belongs to the side its road connects to (road_front.py). The night the front cuts a site off from its owner, it changes hands with its stock, both ways (the same move
+    as a captured field's sites; the Overview lists it as "(captured)"). The red battalion that guarded a site that goes to Blue is destroyed. -> log lines."""
+    from . import ground, theatres
+    g = state.ground
+    if not ground.active(state) or not g.get("centers"):
+        return []
+    th = theatres.active()
+    rts = road_front.routes(th)
+    if not rts:
+        return []
+    sides = road_front.route_sides(state, th, rts)
+    lines = []
+    for pool, own in ((state.assets, "red"), (state.blue_assets, "blue")):
+        for a in sorted((x for x in pool.values() if is_road(x) and x.kind in ground.SUPPLY_KINDS), key=lambda x: x.id):
+            if road_front.site_side(state, th, rts, sides, a.x, a.y) == own:
+                continue
+            to_blue = own == "red"
+            if a.variant in ("ROAD0", "ROADB"):
+                a.variant = "ROAD"
+            ground._move_sites(state, [a.id], to_blue=to_blue)
+            if to_blue:
+                for x in state.assets.values():
+                    if getattr(x, "guards", "") == a.id:
+                        x.health = 0.0                               # the battalion that held it is gone (kept as a destroyed asset: a postponed job may still name it)
+            g.setdefault("road_flips", []).append({"id": a.id, "day": state.day, "to": "blue" if to_blue else "red"})
+            lines.append(f"{a.name}: the front has cut its road, it is ours now, with its stock" if to_blue else f"{a.name}: the front has cut its road, the enemy holds it now, with its stock")
+    return lines
 
 
 def guard_units(a, level: int) -> int:
@@ -122,13 +154,15 @@ def build(st, th: dict, d, ap: dict, rng: random.Random | None = None) -> dict:
     taken_assets = [(a.x, a.y) for pool in (st.assets, getattr(st, "blue_assets", None) or {}) for a in pool.values()
                     if a.kind in (AssetKind.FUEL, AssetKind.DEPOT, AssetKind.C2)]          # supply and command sites only: the SAM and column spots shift from run to run (hash order), the sites must not
     cands = {"red": [], "blue": []}
+    rts = road_front.routes(th)
+    rsides = road_front.route_sides(st, th, rts) if rts else None
     for x, y in spots:
         near = min(names, key=lambda n: math.hypot(ap[n][0] - x, ap[n][1] - y))
         if math.hypot(ap[near][0] - x, ap[near][1] - y) < AIRFIELD_CLEAR_M:
             continue
         if any(math.hypot(x - tx, y - ty) < ASSET_CLEAR_M for tx, ty in taken_assets):
             continue
-        side = "blue" if near in blue_ap else "red"
+        side = road_front.site_side(st, th, rts, rsides, x, y) if rts else ("blue" if near in blue_ap else "red")          # v0.41.258: the side its road connects to (road_front.py)
         tier = 1
         if side == "red" and red_fields:
             fid = min(red_fields, key=lambda f: math.hypot(f[1][0] - x, f[1][1] - y))[0]

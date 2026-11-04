@@ -2083,7 +2083,7 @@ def check_31wg_sead_every_covering_battery(c):
     old = (LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise)
     LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise = 1.0, 3.0, 0.0
     try:
-        for seed in (12, 16, 5, 20):
+        for seed in (12, 16, 5, 20, 3, 7, 9, 14, 2, 8):
             s = fresh_session(); s.new("Red SEAD all", "F-15C", 3, seed=seed); st = s.state
             rp = None
             for _day in range(10):
@@ -5968,8 +5968,9 @@ def check_113_road_sites(c):
         for side, pool in (("red", red), ("blue", blue)):
             for a in pool.values():
                 assert a.kind in _gr.SUPPLY_KINDS and _sc.site_ok(a.x, a.y) and _sites.on_spot(a.x, a.y), (a.id, a.name)
-                near = min(pos, key=lambda n: math.hypot(pos[n][0] - a.x, pos[n][1] - a.y))
-                assert (near in blue_ap) == (side == "blue"), (a.id, near, "owner by the nearest airfield")
+                from sqe import road_front as _rf, theatres as _tha                    # v0.41.258: the owner is the side its road connects to (was the nearest airfield)
+                _th_, _rts_ = _tha.active(), _rf.routes(_tha.active())
+                assert _rf.site_side(st, _th_, _rts_, _rf.route_sides(st, _th_, _rts_), a.x, a.y) == side, (a.id, "owner by the road it connects to")
                 assert all(math.hypot(a.x - px, a.y - py) >= _rs.AIRFIELD_CLEAR_M for px, py in pos.values()), (a.id, "clear of the airfields")
         plants = [a for a in list(red.values()) + list(blue.values()) if a.variant in _rs.PLANT_VARIANTS]
         assert sum(rd["plants"].values()) == len(plants) >= 4 and rd["plants"]["red"] >= 2 and rd["plants"]["blue"] >= 2, rd
@@ -6003,7 +6004,7 @@ def check_113_road_sites(c):
             if a.variant in _rs.PLANT_VARIANTS:
                 assert sum(1 for n in u["units"] if "|b" in n) == 5, (a.id, u["units"])
     assert sum(1 for k in gs if k.startswith("rsup_")) >= 40, "a full-map mission builds the road sites"
-    print("[road sites] 60 / 100 / 100 sites by level, owner by nearest airfield, plants away from the front, battalions on red only, Supply figure counts them all, saves keep them, plants build with their buildings")
+    print("[road sites] 60 / 100 / 100 sites by level, owner by road connection, plants away from the front, battalions on red only, Supply figure counts them all, saves keep them, plants build with their buildings")
 
 
 def check_114_blue_site_buildings(c):
@@ -6411,6 +6412,41 @@ def check_121_sunk_carrier(c):
     print("[sunk carrier] ship, aircraft and escorts lost in the debrief, squadrons ashore, one lost base while away, planner and mission without it, back as new on day 7")
 
 
+def check_122_road_site_flip(c):
+    """v0.41.258 (XO 2026-11-03): a road supply site belongs to the side its road connects to (road_front.py). At the start of a campaign every red road site is on a road that
+    connects to red and every blue one to blue, with no site flipping on night one; when the front cuts a site off from its owner it changes hands with its stock, both ways; the red
+    battalion that guarded it is destroyed; the Overview shows it as captured; sites far from the front on a road to their own side stay; a save keeps the record.
+    Strategic state only (the corridor width is a tunable)."""
+    from sqe import ground as _gr, road_sites as _rs, road_front as _rf, overview_detail as _od, theatres as _th
+    from sqe.state import CampaignState as _CS
+    ses = fresh_session(2, 5); st = ses.state; g = st.ground
+    th = _th.active(); rts = _rf.routes(th); assert rts and len(rts) > 20, "the theatre's road net is shipped"
+    sides = _rf.route_sides(st, th, rts)
+    red0 = [a for a in st.assets.values() if _rs.is_road(a) and a.kind in _gr.SUPPLY_KINDS]
+    blue0 = [a for a in st.blue_assets.values() if _rs.is_road(a) and a.kind in _gr.SUPPLY_KINDS]
+    assert red0 and blue0
+    assert all(_rf.site_side(st, th, rts, sides, a.x, a.y) == "red" for a in red0), "every red road site is on a road that connects to red"
+    assert all(_rf.site_side(st, th, rts, sides, a.x, a.y) == "blue" for a in blue0), "every blue road site is on a road that connects to blue"
+    assert _rs.flip(st) == [], "night one flips nothing"
+    # the front pushed all the way back: every red site the cut now puts on our side comes over, the ones on roads to the north stay red
+    g["line_km"] = 0.0
+    ln = _rs.flip(st)
+    assert ln and all("ours now" in x for x in ln), ln
+    gone = [f["id"] for f in g["road_flips"]]
+    assert all(i in st.blue_assets and i not in st.assets for i in gone)
+    assert len(gone) < len(red0), "the sites far to the north stay red"
+    assert all(x.health <= 0 for x in st.assets.values() if getattr(x, "guards", "") in gone), "its battalion is gone"
+    assert any("(captured)" in r[1] for r in _od.supply_rows(st)), "the Overview calls it captured"
+    assert _CS.from_dict(st.to_dict()).ground["road_flips"] == g["road_flips"]
+    ses.skip_day()                                                  # the daily round (supply figure, repairs, the plan) runs with flipped sites
+    # the other way: the front pushed all the way to our end, our sites on the cut's red side go to the enemy
+    st = ses.state; g = st.ground
+    g["line_km"] = _gr._path(g)[-1] / 1000.0
+    ln2 = _rs.flip(st)
+    assert ln2 and any("enemy holds it" in x for x in ln2), ln2
+    print("[road site flip] owner by road connection at the start, sites cut off by the front change hands both ways, battalion gone, far sites stay, saved")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -6571,6 +6607,7 @@ CHECKS = [
     check_119_raid_folds_by_time,
     check_120_runway_cratering,
     check_121_sunk_carrier,
+    check_122_road_site_flip,
 ]
 
 def _borrows(fn) -> set:

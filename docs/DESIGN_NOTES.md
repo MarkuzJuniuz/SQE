@@ -280,3 +280,8 @@ _verified v0.41.219, 2026-10-31 (anchors grepped; XO has flown the F-16C lamp an
 - Defeat: `ground.fallen_count` = fallen fields + `fleet.counts_as_fallen` (1 while sunk); `posture` and `overview_detail` print the status.
 - A squadron of Navy jets on a land field: `packages._support` (AWACS, tanker), `assign_player` (the catapult limit), `mission_builder._rtb_note` and `briefing` (recovery line) read the squadron's base, not `AIRCRAFT[...].home`.
 - Open: the escort ships are three fixed slots (cruiser, destroyer, frigate) in `_place_base`; the hook's ship death names are read from XO's state file, not yet from a run with this build.
+
+## 18. Road sites belong to the side their road connects to (v0.41.258, verified 2026-11-03)
+- Where: `sqe/road_front.py` (`routes`, `route_sides`, `site_side`, `field_side`, `cut_side`); used by `road_sites.build` (owner at the campaign start) and `road_sites.flip` (called from `ground.resolve_day` after `check_falls`).
+- Rule: the front is a cut across the shipped road net at `g["line_km"]` (`ground.path_pos`: km along the sector centres, km sideways; larger km = the Blue end). Road points within `CORRIDOR_KM` 60 of the line of sectors are on the cut's side; the two ends of each route have the side of the nearest airport (`th["road_blue_airports"]`); other points take the nearest anchor along the road. A site takes the side of the nearest road stretch within `SNAP_M` 3 km, else the cut, else the nearest airport.
+- flip: a site whose road side is not its pool's side changes pool (`ground._move_sites`, the id stays, so the Overview prints "(captured)"); the red battalion (`guards` = the site) gets health 0; `g["road_flips"]` logs each. No margin, no cap. Not seen in DCS.

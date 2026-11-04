@@ -4,6 +4,16 @@
 
 XO 2026-11-03. The go word for a code change is "fox 3" (with an optional effort). "Untuned" means a job type that does not use the newer AI systems (SAM avoidance, station rules); new jobs are flyable from day one. No code, no smoke.
 
+## v0.41.258, road supply sites belong to the side their road connects to
+
+XO 2026-11-03 ("red supplies on the plains that belong to blue... how would they even get their goods through?"; "on campaign starts everything from the front connected to the road and away from it belongs to that side... road connections cut by the front is an easier thing to digest"). Judgment calls (corridor width); tune on XO's runs.
+- **New `sqe/road_front.py`:** the shipped road net (`caucasus_roads_net.json`: 69 routes that join into one network, checked) tells which side a road site belongs to. The front is a cut across the roads at the line of sectors. A road point near that line (`CORRIDOR_KM` 60) is on the side of the cut it lies on; the two ends of every road take the side of the nearest airfield (the theatre's `road_blue_airports`, the old rule); every other point takes the side of the nearest of those anchors along the road. A site belongs to the side of the road stretch it sits beside.
+- **Campaign start (`road_sites.build`):** the owner of a road site is that road side, not the nearest airfield by straight line. A theatre without a road net keeps the old rule. New campaigns only.
+- **During the war (`road_sites.flip`, end of `ground.resolve_day`):** the night the front cuts a site's road off from its owner, the site changes hands with its stock, in both directions (the same move as a captured field's sites, `ground._move_sites`; the Overview lists it as "(captured)"). No margin and no daily cap: the rule is the cut. A flipped ROAD0 / ROADB becomes ROAD. A red site that goes to Blue has its battalion set to destroyed (not removed: a postponed job may still name it). Works on old saves too (`ground["road_flips"]` records each flip).
+- Read-only check on 4 seeds (L1 to L3): night one flips nothing; the closest red road site to a blue airfield is 46 to 113 km away.
+- Not seen in DCS. The 8 km margin and 2-a-day cap of the first draft are gone.
+- Checks: compile, new `check_122_road_site_flip` (owner by road at the start, flips both ways, far sites stay, battalion, Overview, save, a skipped day), full smoke.
+
 ## v0.41.257, the fleet can be sunk
 
 XO 2026-11-03 ("we need to check why the carrier group is still up after being sunk"): a carrier sunk in a flown mission now stays sunk. All numbers are judgment calls (no public figure applies to a game carrier); tune on XO's runs.
