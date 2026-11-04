@@ -104,6 +104,7 @@ RAID_MSHL_CLEAR_NM = 12       # the marshal stays this far outside that
 # fighters' engage circle before it fires. All judgment calls (no source for a fighter dash distance; the concept is the Cold War carrier "outer air battle": fighters stationed up
 # the threat axis, cued by AEW; real distances not looked up yet): tune in DCS.
 RAID_IP_MAX_NM = 185          # the longest dash from the hold point to the intercept point (v0.41.267: was 160, but the bombers' way in starts 160-165 nm out at Level 3: no point was ever in range; judgment call, tune in DCS)
+RAID_BEND_MAX_NM = 280        # v0.41.268 (XO 2026-11-04): the longest dash by way of a blue field (hold -> field -> intercept point); judgment call from fuel at high and fast, tune in DCS
 RAID_IP_STEP_NM = 5           # candidate points along the bombers' way in, this far apart
 RAID_IP_LEG_NM = 10           # the orbit leg at the intercept point, across the bombers' line
 RAID_IP_LANE_PTS = 12         # waypoint budget for the bends of the dash lane round SAM circles
@@ -261,15 +262,15 @@ class RaidSpawns:
             return [], ip
         ex = package.extra or {}
         if ex.get("land") or ex.get("aim"):
-            return [], None
+            return [], self._raid_bent(package, geom, hold)
         try:
             ba, w1, mshl, staged_ok, apt_r = self._raid_axis(package, (hold[0], hold[1]))
         except (KeyError, AttributeError):
-            return [], None
+            return [], self._raid_bent(package, geom, hold)
         circ = self._raid_circles(package)
         L = dist(w1[0], w1[1], mshl[0], mshl[1])
         if L < 5 * NM:
-            return [], None
+            return [], self._raid_bent(package, geom, hold)
         ux, uy = (mshl[0] - w1[0]) / L, (mshl[1] - w1[1]) / L
         target = None
         for k in range(int(L / (RAID_IP_STEP_NM * NM)), -1, -1):
@@ -278,7 +279,7 @@ class RaidSpawns:
                 target = P
                 break
         if target is None:
-            return [], None
+            return [], self._raid_bent(package, geom, hold)
         vx, vy = target[0] - hold[0], target[1] - hold[1]
         L2 = vx * vx + vy * vy
         deep = []                                                          # the circles the straight line to the SAM-free point cuts into, deepest first
@@ -295,7 +296,53 @@ class RaidSpawns:
                 ip = self._raid_intercept(package, geom, hold, ignore=combo)
                 if ip is not None:
                     return list(combo), ip
-        return [], None                                                    # not clearable with the flights the setpiece has: the SEAD keeps its old single site
+        return [], self._raid_bent(package, geom, hold)                                                    # not clearable with the flights the setpiece has: the SEAD keeps its old single site
+
+    def _raid_bent(self, package, geom, hold):
+        """v0.41.268 (PR 3; XO 2026-11-04: "the F-14s have so much time to wait on orbit they could overfly on blue bases and get closer"): the intercept lane when none is clear
+        straight from the hold point. The dash goes hold -> a blue field -> the intercept point, each leg bent round the SAM circles; the point is the furthest out on the bombers'
+        way in that some field reaches within RAID_BEND_MAX_NM (the shortest way by field when several do). Same result shape as `_raid_intercept`, plus "via": [(x, y, field name)].
+        -> dict or None (no field, or no point reachable: the interceptors hold at their station)."""
+        ex = package.extra or {}
+        if ex.get("land") or ex.get("aim"):
+            return None
+        try:
+            ba, w1, mshl, staged_ok, apt_r = self._raid_axis(package, (hold[0], hold[1]))
+        except (KeyError, AttributeError):
+            return None
+        circles = [(cx, cy, r) for _i, cx, cy, r in self._raid_circles(package)]
+        L = dist(w1[0], w1[1], mshl[0], mshl[1])
+        if L < 5 * NM:
+            return None
+        fields = [b for b in self.state.bases.values() if b.kind == BaseKind.AIRFIELD and b.id not in self.state.assets
+                  and not any(dist(b.x, b.y, cx, cy) < r * NM for cx, cy, r in circles)]
+        if not fields:
+            return None
+        ux, uy = (mshl[0] - w1[0]) / L, (mshl[1] - w1[1]) / L
+        for k in range(int(L / (RAID_IP_STEP_NM * NM)), -1, -1):
+            s_ = k * RAID_IP_STEP_NM * NM
+            P = (w1[0] + ux * s_, w1[1] + uy * s_)
+            if any(dist(P[0], P[1], cx, cy) < r * NM for cx, cy, r in circles):
+                continue
+            best = None
+            for b in fields:
+                leg1 = avoid_circles([Wpt("HOLD", hold[0], hold[1], 0, 0), Wpt("BASE", b.x, b.y, 0, 0)], circles, RAID_IP_LANE_PTS, 1)
+                leg2 = avoid_circles([Wpt("BASE", b.x, b.y, 0, 0), Wpt("IP", P[0], P[1], 0, 0)], circles, RAID_IP_LANE_PTS, 1)
+                xy = [(w.x, w.y) for w in leg1] + [(w.x, w.y) for w in leg2[1:]]
+                if not all(self._seg_clear(xy[i], xy[i + 1], circles) for i in range(len(xy) - 1)):
+                    continue
+                n_ = sum(dist(xy[i][0], xy[i][1], xy[i + 1][0], xy[i + 1][1]) for i in range(len(xy) - 1))
+                if n_ <= RAID_BEND_MAX_NM * NM and (best is None or n_ < best[0]):
+                    best = (n_, b, xy)
+            if best is None:
+                continue
+            _n, b, xy = best
+            perp = bearing(w1[0], w1[1], mshl[0], mshl[1]) + 90
+            for sgn in (1, -1):
+                P2 = offset(P[0], P[1], perp if sgn > 0 else perp + 180, RAID_IP_LEG_NM * NM)
+                if not any(dist(P2[0], P2[1], cx, cy) < r * NM for cx, cy, r in circles):
+                    return {"ip": P, "ip2": P2, "lane": xy[1:-1], "from_w1_nm": round(s_ / NM), "via": [(b.x, b.y, b.name)], "path_nm": round(_n / NM)}
+        return None
 
     def _raid_intercept(self, package, geom, hold, ignore=()):
         """v0.41.265: where the fleet raid's interceptors dash to. On the bombers' way in (marshal to the route's outer point `w1`, beyond which they are in range of the fleet),
