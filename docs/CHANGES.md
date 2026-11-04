@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.279, the fleet raid's bearing is random again (v0.41.275 undone)
+
+XO 2026-11-04 ("fox 3 low"). v0.41.275 pointed the raid at the bearing of its field. Mozdok is about 213 nm from the carrier and the X-22 reaches 208 nm, so on that straight line only 30 to 50 nm of way in lay outside the missile ring, the SAM circles covered it, and no intercept point existed: the F-14s fell back to the old station shape and the F-15s and F-18s got no lane. Probe, seed 3, L3: bearing 20 finds the point (85 nm from the route's outer point), bearing 60 finds none. `packages._raid_plan` picks 8 to 40 degrees at random again. The dogleg that comes with it is what gives blue the room; a deliberate standoff arc that does not look like a loop is a separate design job. Not seen in DCS.
+
 ## v0.41.278, the interceptors launch before the mission starts; red takes longer to assemble
 
 XO 2026-11-04 ("intelligence is intelligence. Must've put two and two together"; "do both, fox 3 medium"). (1) `mission_builder.RAID_HEAD_S = 300`: the AI interceptors of the fleet-defence raid (F-14, F-15, Hornets) spawn 300 s along their route (about 50 nm at the dash speed), as if they had launched before the mission began. A player's flight is not moved (the player still leaves at the planned departure; an earlier takeoff is fine). 0 puts them back at their field. (2) Red's assembly: `RAID_TAXI_S` 300 to 480 and `RAID_BOMBER_GAP_S` 90 to 120, so the raid pushes later. Both are judgment calls (CIMSEC: a regiment's takeoff took about half an hour). The intercept point stays far out: nearer, the missiles are already flying. Not seen in DCS.
