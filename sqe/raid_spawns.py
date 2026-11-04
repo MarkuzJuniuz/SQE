@@ -103,10 +103,11 @@ RAID_MSHL_CLEAR_NM = 12       # the marshal stays this far outside that
 # (TGT) is on the BOMBERS' own way in, between their marshal and the missiles' ring, as far out as red's SAM circles and the fighters' own range allow, so the raid passes through the
 # fighters' engage circle before it fires. All judgment calls (no source for a fighter dash distance; the concept is the Cold War carrier "outer air battle": fighters stationed up
 # the threat axis, cued by AEW; real distances not looked up yet): tune in DCS.
-RAID_IP_MAX_NM = 160          # the longest dash from the hold point to the intercept point
+RAID_IP_MAX_NM = 185          # the longest dash from the hold point to the intercept point (v0.41.267: was 160, but the bombers' way in starts 160-165 nm out at Level 3: no point was ever in range; judgment call, tune in DCS)
 RAID_IP_STEP_NM = 5           # candidate points along the bombers' way in, this far apart
 RAID_IP_LEG_NM = 10           # the orbit leg at the intercept point, across the bombers' line
 RAID_IP_LANE_PTS = 12         # waypoint budget for the bends of the dash lane round SAM circles
+RAID_BLOCK_MAX = 2            # v0.41.267 (XO 2026-11-04, PR 2): the most SAM sites the raid SEAD goes for (one 4-ship each; the setpiece lists two SEAD flights): the ones that stop the interceptors' lane
 ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
 
@@ -246,7 +247,57 @@ class RaidSpawns:
                 return False
         return True
 
-    def _raid_intercept(self, package, geom, hold):
+    def _raid_circles(self, package) -> list:
+        """(id, x, y, nm) of the live SAM circles the interceptors keep out of (the same filter as `_zone_sams` for fighters, with the site ids)."""
+        return [(a.id, a.x, a.y, AVOID_NM[a.variant]) for a in self.state.assets.values()
+                if a.kind == AssetKind.SAM and a.variant in AVOID_NM and not a.destroyed and a.health > 0.25 and not getattr(a, "suppressed", False)]
+
+    def _raid_blockers(self, package, geom, hold) -> tuple:
+        """v0.41.267 (PR 2): the SAM sites that stop the interceptors' dash, as many as the raid SEAD can take (RAID_BLOCK_MAX). Greedy: while `_raid_intercept` finds no
+        lane, take the circle the straight line from the hold point to the furthest SAM-free point on the bombers' way in cuts deepest, as if it were already dead.
+        -> (site ids, intercept result with those sites ignored or None). ([], result) when the lane is already clear; ([], None) when there is no SAM-free point at all."""
+        ip = self._raid_intercept(package, geom, hold)
+        if ip is not None:
+            return [], ip
+        ex = package.extra or {}
+        if ex.get("land") or ex.get("aim"):
+            return [], None
+        try:
+            ba, w1, mshl, staged_ok, apt_r = self._raid_axis(package, (hold[0], hold[1]))
+        except (KeyError, AttributeError):
+            return [], None
+        circ = self._raid_circles(package)
+        L = dist(w1[0], w1[1], mshl[0], mshl[1])
+        if L < 5 * NM:
+            return [], None
+        ux, uy = (mshl[0] - w1[0]) / L, (mshl[1] - w1[1]) / L
+        target = None
+        for k in range(int(L / (RAID_IP_STEP_NM * NM)), -1, -1):
+            P = (w1[0] + ux * k * RAID_IP_STEP_NM * NM, w1[1] + uy * k * RAID_IP_STEP_NM * NM)
+            if dist(hold[0], hold[1], P[0], P[1]) <= RAID_IP_MAX_NM * NM and not any(dist(P[0], P[1], cx, cy) < r * NM for _i, cx, cy, r in circ):
+                target = P
+                break
+        if target is None:
+            return [], None
+        vx, vy = target[0] - hold[0], target[1] - hold[1]
+        L2 = vx * vx + vy * vy
+        deep = []                                                          # the circles the straight line to the SAM-free point cuts into, deepest first
+        for i_, cx, cy, r in circ:
+            t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((cx - hold[0]) * vx + (cy - hold[1]) * vy) / L2))
+            d_ = dist(hold[0] + t * vx, hold[1] + t * vy, cx, cy) - r * NM        # negative: the line is inside the circle
+            if d_ < 0:
+                deep.append((d_, i_))
+        deep.sort()
+        ids = [i_ for _d, i_ in deep][:6]
+        import itertools
+        for n in range(1, RAID_BLOCK_MAX + 1):                            # fewest flights first: one site, then pairs
+            for combo in itertools.combinations(ids, n):
+                ip = self._raid_intercept(package, geom, hold, ignore=combo)
+                if ip is not None:
+                    return list(combo), ip
+        return [], None                                                    # not clearable with the flights the setpiece has: the SEAD keeps its old single site
+
+    def _raid_intercept(self, package, geom, hold, ignore=()):
         """v0.41.265: where the fleet raid's interceptors dash to. On the bombers' way in (marshal to the route's outer point `w1`, beyond which they are in range of the fleet),
         the point furthest out that (a) is outside every live SAM's circle the fighters keep out of (`_zone_sams`), (b) is at most RAID_IP_MAX_NM from the hold point `hold`, and
         (c) can be reached from the hold along a lane that bends round those circles (`avoid_circles`) and ends clear. The orbit there is a short leg across the bombers' line.
@@ -258,7 +309,7 @@ class RaidSpawns:
             ba, w1, mshl, staged_ok, apt_r = self._raid_axis(package, (hold[0], hold[1]))
         except (KeyError, AttributeError):
             return None
-        circles = self._zone_sams(package, True)
+        circles = [(cx, cy, r) for i_, cx, cy, r in self._raid_circles(package) if i_ not in ignore]          # (v0.41.267: `ignore` = sites the raid SEAD is sent against)
         L = dist(w1[0], w1[1], mshl[0], mshl[1])
         if L < 5 * NM:
             return None

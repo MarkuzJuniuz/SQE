@@ -1,5 +1,14 @@
 # CHANGES.md
 
+## v0.41.267, fleet defence: the dash limit was too short; the raid SEAD goes for the sites that block the lane
+
+XO 2026-11-04 ("fox 3 high on PR2"; design: a 4-ship per blocking radar, perhaps two). Tracing XO's run found the real reason the interceptors held: at Level 3 the bombers' way in starts 160 to 165 nm from the hold point and `RAID_IP_MAX_NM` was 160, so no dash point was ever in range (not SAMs). Six of six probe builds find a SAM-free lane with the limit at 185 nm.
+- **Dash limit:** `RAID_IP_MAX_NM` 160 to 185 nm. Judgment call (no public figure for a CAP vignette dash), tune in DCS.
+- **Blockers (`raid_spawns._raid_blockers`, `_raid_circles`):** when no lane is clear, find the sites that stop it: the circles the line from the hold point to the furthest SAM-free point on the way in cuts, fewest first (one site, then pairs, at most `RAID_BLOCK_MAX` 2), taken as if dead. Not clearable with two flights: the raid SEAD keeps its old single site and the interceptors their old shape. `_raid_intercept` takes an `ignore` set.
+- **SEAD (`mission_builder._raid_sead_sites`, `_raid_sead_prep`, `_spawn_raid_sead`):** the n-th SEAD flight goes for the n-th blocking site; every site is built live, and the dash flag waits for the tracking radars of all of them (or the old timer after the HARMs). The lane for the interceptors is worked out with those sites ignored.
+- **Planner (`packages.py`):** the carrier setpiece lists two optional 4-ship SEAD flights (were 2-ships).
+- Not seen in DCS. Left out: escorts for the SEAD flights, picking F-16Cs for the mountain sites (the planner picks the squadrons), a third blocker, protection of the units' budget, a dash that still goes on the timer when the SEAD failed.
+
 ## v0.41.266, fleet defence: the interceptors dash to a point on the bombers' way in; anti-radiation-missile names renamed
 
 XO 2026-11-04 ("I think this PR is important for the fleet defense to work", fox 3 medium). In XO's run the Tomcats' dash went to the point they already held (HOLD, PUSH and TGT on one coordinate), and the Hornets and Eagles had no dash at all. Judgment calls throughout (no source for a fighter dash distance; the concept is the Cold War carrier "outer air battle", real figures not looked up yet); tune in DCS.
