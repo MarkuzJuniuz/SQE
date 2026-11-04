@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.275, the fleet raid arrives on the bearing of its own field
+
+XO 2026-11-04 ("fox 3 low"): the Tu-22Ms looped from Mozdok down past Maykop and back west. `packages._raid_plan` picked the raid's bearing at random between 8 and 40 degrees from the carrier, whatever the bombers' field; the field lay at about 60 degrees, so the route was ~280 nm instead of ~180 nm. The bearing is now the one from the carrier to the bombers' field, plus or minus 10 degrees (the jitter is a judgment call). The interceptors' intercept point is built on the same axis and moves with it. Not seen in DCS.
+
 ## v0.41.274, the fleet raid starts with one bomber pair and four escorts airborne
 
 XO 2026-11-04 ("fox 3 low"): intelligence has already spotted the movement. `raid_spawns.RAID_BOMBERS_UP = 1` bomber group (a pair) and `RAID_GUARD_UP = 1` escort group (up to 4 jets, an Escort group rather than a Sweep) start airborne on the marshal. Everything else takes off from the field: the remaining bomber pairs first, the rest of the escorts and sweeps last. The push is still the later of the old ring time and "last takeoff + climb + join", so a big raid now pushes about 8 to 10 minutes later (more time for blue). Takeoff gaps (90 s bombers, 60 s fighters) are judgment calls. Not checked: Tu-22M3 fuel through the longer marshal wait. Not seen in DCS.

@@ -414,7 +414,12 @@ class PackageBuilder:
         if cv is None or dec["mode"] == "hold":
             return None
         rnd = random.Random(f"{st.campaign_id}:{st.day}:{number}:raid")
-        return {"brg": round(rnd.uniform(8, 40), 1), "bombers": dec["n"], "bomber_wing": next(w.base_asset_id for w in st.enemy_air if "Tu_22M3" in w.types),
+        bw_id = next(w.base_asset_id for w in st.enemy_air if "Tu_22M3" in w.types)
+        # v0.41.275 (XO 2026-11-04: the Tu-22s looped from Mozdok down past Maykop and back west): the raid arrives on the bearing from the carrier to the bombers' own
+        # field, give or take 10 degrees (was a random 8 to 40 whatever the field, a dogleg of ~100 nm in a run where the field lay at 60 degrees). Judgment call: the jitter.
+        bf = st.assets.get(bw_id)
+        brg = (math.degrees(math.atan2(bf.y - cv.y, bf.x - cv.x)) + rnd.uniform(-10, 10)) % 360 if bf is not None else rnd.uniform(8, 40)
+        return {"brg": round(brg, 1), "bombers": dec["n"], "bomber_wing": bw_id,
                 "escort_wing": dec["wing"], "escort_type": dec["type"], "escorts": dec["escorts"], "mode": dec["mode"]}
 
     def _pick_squadron(self, slot: Slot, tx, ty, ledger: Ledger, lead_service):
