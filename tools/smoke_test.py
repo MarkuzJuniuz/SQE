@@ -952,6 +952,7 @@ def check_21_raids_emergencies(c):
     assert 8 <= _nw <= 36 and _ns >= 1, (_nw, _ns)
     _st.day = 5; s.plan_day(); _a = [d_["objective"]["description"] for d_ in _st.plan]; s.plan_day(); assert _a == [d_["objective"]["description"] for d_ in _st.plan], "a day replans the same"
     # per-sortie dice: roughly the table, never two in a row, and asking twice gives the same answer
+    _rd.EMERG_CAP = True                                    # v0.41.272: the cap is off by default; this part tests the rule itself
     _hits = _tot = 0
     for _ in range(150):
         s.plan_day(); _st.day += 1
@@ -965,6 +966,7 @@ def check_21_raids_emergencies(c):
                     _st.raids["last_emerg"] = _st.sortie_counter                         # as fly() leaves it: that sortie had one
                     assert s.emergency_for(p_.number, "x") is None, "none in two sorties in a row"
     assert 0.045 <= _hits / _tot <= 0.16, (_hits, _tot)
+    _rd.EMERG_CAP = False
     # an emergency forced: scramble (fighter) and decline (folds in or odds); both build a mission
     _rd.emergency_happens = lambda st_, d_, rng_: True
     try:
