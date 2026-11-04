@@ -9,7 +9,7 @@ Sources and judgment calls (the numbers below are JUDGMENT CALLS unless a source
   (Gordon and Rigmant, quoted on forum.dcs.world). That supports "in numbers, with escorts". It does NOT support "only when no losses are expected":
   that rule is XO's game design (a small wing, so the bombers are precious), mirrored by sending everything when desperate.
 - Escort ratio (XO 2026-11-03, v0.41.249): ONE escort per TWO bombers, what XO reads public sources to suggest for red doctrine (not checked by Crew Chief; the
-  earlier rule was 2 per bomber, after a 4 + 4 raid "didn't last long"). A raid is the FULL size or none (24 bombers + 12 escorts at L3, 12 + 6 at L2), except
+  earlier rule was 2 per bomber, after a 4 + 4 raid "didn't last long"). A raid is the FULL size or none (16 bombers + 8 escorts at L3, 8 + 4 at L2), except
   when desperate, which sends what it has. If red cannot field them, it holds.
 - Safe / desperate thresholds, cooldowns and the Mozdok weight are judgment calls, tuned on the 100-day background sims."""
 from __future__ import annotations
@@ -22,7 +22,7 @@ from . import runways
 NM = 1852.0
 MIN_RAID = 4                  # never fewer bombers than this ("no 2-ship raids, ever", XO)
 ESCORT_PER_BOMBER = 0.5       # escorts per bomber (XO 2026-11-03: 1 escort per 2 bombers; was 2 per bomber)
-MAX_RAID = {2: 12, 3: 24}     # v0.41.249 (XO 2026-11-03): the full raid by level (L2 12 is XO's guess, "12(?)"); L1 has no bomber wing
+MAX_RAID = {2: 8, 3: 16}      # v0.41.260 (XO 2026-11-03): the full raid by level, L3 16 of the 24 at Mozdok, L2 8 of 14 (judgment calls: public sources give no raid size; the IISS count of about 55 to 57 Tu-22M3 in all of Russia says 24 in one raid is too many); was 12 / 24 (v0.41.249); L1 has no bomber wing
 QUIET_DAYS = 1                # days red goes quiet before a staged raid launches (XO: "mysteriously quiet for a day or two"; 0 = no quiet day)
 COOLDOWN_SAFE = 8
 COOLDOWN_DESPERATE = 5

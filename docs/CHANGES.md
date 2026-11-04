@@ -1,5 +1,14 @@
 # CHANGES.md
 
+## v0.41.260, smaller bomber raids: Level 3 raid of 16 from a wing of 24, Level 2 raid of 8
+
+XO 2026-11-03 (a fleet-defence run: 24 Tu-22M3 sank the carrier and all three escorts; "Make L3 only have 24 bombers in Mozdok, launch 16 at a time. L2 ... 8"). Judgment calls; tune on XO's runs.
+- **Raid size (`bombers.MAX_RAID`):** Level 3 24 to 16, Level 2 12 to 8. Escorts stay 1 per 2 bombers (8 and 4). Takes effect at once, in existing campaigns too.
+- **Mozdok wing (`difficulty.bomber_wing`):** Level 3 30 to 24. Level 2 stays 14. The wing size is set when a campaign is created, so an existing campaign keeps its old wing until a new one is started.
+- **Source note:** public figures (IISS 2024 and 2025: about 55 to 57 Tu-22M3 in all of Russia; a 2023 Ukrainian estimate of about 27 operable; Butowski 2014: about 40 / 28 / 10 at three bases) say a raid of 24 from one field is most of the operable fleet. No source gives a raid size; the Soviet-era regiment-scale strike is the only support for large raids.
+- Not changed: raid timing, takeoff, marshal, salvo spread (a separate, heavy job).
+- Checks: compile, `check_31z_bomber_trump_card` and `check_119_raid_folds_by_time`.
+
 ## v0.41.259, a supply site's buildings stand beside the road
 
 XO 2026-11-03 (a DCS screenshot: a fuel farm's tank stood against the pavement; "Can we make buildings away from roads?"). Cosmetic: placement only, nothing in the saved campaign changes, so no new campaign is needed. Judgment calls (the offset); tune on XO's runs.
