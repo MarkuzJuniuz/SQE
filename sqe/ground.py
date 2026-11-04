@@ -580,6 +580,20 @@ def line_xy(g) -> tuple:
     return tuple(c[-1])
 
 
+def path_pos(g, x: float, y: float) -> tuple:
+    """(km along the line of zone centres, km sideways from it) of a DCS point: the nearest point on the polyline. v0.41.258: road sites are judged by this."""
+    c, path = g["centers"], _path(g)
+    best = (1e18, 0.0)
+    for i in range(1, len(c)):
+        ax, ay = c[i - 1]; bx, by = c[i]
+        dx, dy = bx - ax, by - ay
+        t = max(0.0, min(1.0, ((x - ax) * dx + (y - ay) * dy) / max(1.0, dx * dx + dy * dy)))
+        d = math.hypot(x - (ax + t * dx), y - (ay + t * dy))
+        if d < best[0]:
+            best = (d, (path[i - 1] + t * (path[i] - path[i - 1])) / 1000.0)
+    return best[1], best[0] / 1000.0
+
+
 # ---- the daily fight ------------------------------------------------------------------------------------------------------------
 def _clamp(v, lo, hi):
     return max(lo, min(hi, v))
@@ -744,6 +758,8 @@ def resolve_day(state, d, rng) -> list:
     if abs(g["line_km"] - km0) >= 1.0:
         lines.append(f"The front line moved {abs(g['line_km'] - km0):.0f} km {'toward our airfields' if g['line_km'] > km0 else 'back toward the enemy'}")
     lines += check_falls(state)
+    from . import road_sites
+    lines += road_sites.flip(state)                      # v0.41.258: the road sites the front has passed change hands
     lines += _update_win(state)
     push(state)
     return lines

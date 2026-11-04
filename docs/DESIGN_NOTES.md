@@ -280,3 +280,8 @@ _verified v0.41.219, 2026-10-31 (anchors grepped; XO has flown the F-16C lamp an
 - Defeat: `ground.fallen_count` = fallen fields + `fleet.counts_as_fallen` (1 while sunk); `posture` and `overview_detail` print the status.
 - A squadron of Navy jets on a land field: `packages._support` (AWACS, tanker), `assign_player` (the catapult limit), `mission_builder._rtb_note` and `briefing` (recovery line) read the squadron's base, not `AIRCRAFT[...].home`.
 - Open: the escort ships are three fixed slots (cruiser, destroyer, frigate) in `_place_base`; the hook's ship death names are read from XO's state file, not yet from a run with this build.
+
+## 18. Road sites change hands (v0.41.258, verified 2026-11-03)
+- Where: `road_sites.flip(state)`, called from `ground.resolve_day` after `check_falls`; position from `ground.path_pos(g, x, y)` = (km along the sector centres, km sideways). Larger km = the Blue end; `g["line_km"]` is where the front stands, so a red site is behind us when `k - line_km >= FLIP_MARGIN_KM`, a blue one behind red when `line_km - k >= FLIP_MARGIN_KM`.
+- Rules: corridor only (`CORRIDOR_KM` 60), `FLIP_PER_DAY` 2, nearest the line first; move by `ground._move_sites` (the id stays, so the Overview prints "(captured)"); the guarding `rgar_sup_NNN` gets health 0; `g["road_flips"]` keeps the log. Not seen in DCS.
+

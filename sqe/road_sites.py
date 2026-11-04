@@ -60,6 +60,47 @@ def guard_comp(a, level: int) -> list:
     return [(t, n * (2 if a.variant in PLANT_VARIANTS else 1)) for t, n in g]
 
 
+CORRIDOR_KM = 60.0            # only sites this near the line of sectors are judged by the front (the north of the mountains is red whatever the front does)
+FLIP_MARGIN_KM = 8.0          # a site changes hands when the line has gone this far past it (judgment call)
+FLIP_PER_DAY = 2              # at most this many a day, the ones nearest the line first (judgment call: a front that jumps does not swing the supply figure at once)
+
+
+def flip(state) -> list:
+    """v0.41.258 (XO 2026-11-03: "red supplies on the plains that belong to blue... how would they get their goods through?"): a road site the front has passed changes hands
+    with its stock, in both directions. A red site flips to Blue when the line is FLIP_MARGIN_KM or more on the red side of it; a Blue one to Red the other way. The red battalion that
+    guarded a flipped site is destroyed. -> log lines."""
+    from . import ground
+    g = state.ground
+    if not ground.active(state) or not g.get("centers"):
+        return []
+    lk = float(g.get("line_km", ground.line_km(g)))
+    cand = []
+    for pool, to_blue in ((state.assets, True), (state.blue_assets, False)):
+        for a in pool.values():
+            if not is_road(a) or a.kind not in ground.SUPPLY_KINDS:
+                continue
+            k, lat = ground.path_pos(g, a.x, a.y)
+            if lat > CORRIDOR_KM:
+                continue
+            past = (k - lk) if to_blue else (lk - k)               # km the line has gone beyond the site (larger km = the Blue end)
+            if past >= FLIP_MARGIN_KM:
+                cand.append((past, a.id, to_blue))
+    lines = []
+    for _past, aid, to_blue in sorted(cand, reverse=True)[:FLIP_PER_DAY]:
+        src, dst = (state.assets, state.blue_assets) if to_blue else (state.blue_assets, state.assets)
+        a = src[aid]
+        if a.variant in ("ROAD0", "ROADB"):
+            a.variant = "ROAD"
+        ground._move_sites(state, [aid], to_blue=to_blue)
+        if to_blue:
+            for x in state.assets.values():
+                if getattr(x, "guards", "") == aid:
+                    x.health = 0.0                                   # the battalion that held it is gone (kept as a destroyed asset: a postponed job may still name it)
+        g.setdefault("road_flips", []).append({"id": aid, "day": state.day, "to": "blue" if to_blue else "red"})
+        lines.append(f"{a.name}: the front has passed it, it is ours now, with its stock" if to_blue else f"{a.name}: the front has passed it, the enemy holds it now, with its stock")
+    return lines
+
+
 def guard_units(a, level: int) -> int:
     return sum(n for _t, n in guard_comp(a, level))
 
