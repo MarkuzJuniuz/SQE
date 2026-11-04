@@ -2317,6 +2317,7 @@ def check_31zb_raid_setpiece(c):
             caps = [f for f in p.flights if f.role.value == "CAP"]
             assert len(caps) >= 2 and sum(f.count for f in caps) >= p.extra["bombers"], (len(caps), p.extra)
             assert not ses.merge_candidates(p)
+            assert any(ses.state.bases[f.base_id].kind.value != "CARRIER" for f in caps), "v0.41.256: a share of the fleet raid's CAP flights is land-based (USAF)"
             mine = ses.flyable(p, squadron_only=False)
             res[ac] = (ses, p, mine)
         ses, p, mine = res["F-14BU"]
@@ -2329,6 +2330,7 @@ def check_31zb_raid_setpiece(c):
         assert len(set(re.findall(r'"(RAID-B-\d+)"', mz))) == nb_ and len(set(re.findall(r'"(RAID-E-\d+)"', mz))) == ne_, "every bomber and escort is in the mission"
         assert (nb_ <= 4) or "Raid Bomber 2" in mz, "a raid of more than 4 bombers is several groups"
         assert (ne_ <= 8) or "Raid Sweep 1" in mz, "a big raid sends a sweep ahead of the bombers"
+        assert "raid SEAD: wait over" in mz or not any(f.role.value == "SEAD" for f in p.flights), "v0.41.256: the raid SEAD's dash flag is in the mission"
         ses_a, pa, mine_a = res["A-10C"]
         assert not mine_a, "an A-10 cannot"
         assert "Skip Turn" in " ".join(narrative.setpiece_text(ses_a.state, pa, False, "A-10C"))

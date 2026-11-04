@@ -1,5 +1,16 @@
 # CHANGES.md
 
+## v0.41.256, carrier raid, round 2: USAF share, SAMs along the bomber route, SEAD rush, the interceptors' gate
+
+XO 2026-11-03 ("fox 3 high"): the USAF wing gave no help, no SAMs across the mountains, SEADs as fast as they can, the F-14s cross once the SAMs are suppressed, a safe BARCAP for the USAF. All figures are judgment calls (no source).
+- **USAF share:** half of the fleet raid's optional CAP flights are land-based (`Slot.land`, `packages.SETPIECE_LAND_SHARE` 0.5): a land squadron fills them, long-range fighters (F-15C) first, whatever the lead's service. None in reach = the usual pick. Cause found: `_pick_squadron` prefers the lead's service and the carrier squadrons are at distance zero, so the Navy filled every slot.
+- **SAMs along the bomber route:** `_spawn_raid` feeds the bombers' route to `_spawn_opfor_ground` (`raid_spawns.RAID_ROUTE_SAMS` 5 sites touching it, was 2 for any route); a site is skipped with a warning when the unit limit leaves no room (`_units_room`). Test build: 8 to 16-20 S-300 launchers, 232-241 units (limit 250).
+- **SEAD rush:** the raid SEAD flies at least `RAID_RUSH_KTS` 500 to its HARM point, and the HARMs land `RAID_SEAD_LEAD_S` 240 s before the interceptors are due on station (a pair that would be late is air-started en route, like an earlier package).
+- **The gate:** until the SEAD's verdict the raid CAP fights only inside a SAM-clear circle round its leashed station (where it shoots the volleys). A mission flag (`_raid_sead_prep`) is set when every tracking radar of the SEAD's site is dead, else `RAID_DASH_WAIT_S` 180 s after the HARMs and never before the CAP is on station + 60 s; it swaps that circle for the full circle out to the launch point (ControlledTask with `start_if_user_flag` / `stop_if_user_flag`). The flag is a Mission Editor trigger, no Lua.
+- **Safe BARCAP for the USAF:** read-only check on 3 seeds: the nearest SAM-clear point is 18 to 32 nm from the launch point, i.e. the leashed station, inside an F-15C's reach. The USAF flights use that station and gate; no separate station was built.
+- Not done: fewer bombers, the salvo timing, the sunk carrier on the map. Not seen in DCS.
+- Checks: compile, `check_31zb_raid_setpiece` (land-based flight present, dash flag in the mission), full smoke.
+
 ## v0.41.255, carrier raid: the CAP leash, SEAD on the launch-point SAMs, escorts on the bombers' clock
 
 XO 2026-11-03 (the carrier-raid run: 82 missiles sank the carrier and two escorts, the Tomcats flew into the Sukhumi SA-10, the Su-27 escorts split from the bombers). XO said not to cut the bomber count yet; this changes the positioning first. No source for any figure below: all judgment calls.

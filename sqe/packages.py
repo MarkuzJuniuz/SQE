@@ -31,6 +31,7 @@ class Slot:
     only_if_defended: bool = False
     tag: str = ""                      # "" | HAVCAP | BASECAP (support flights: AI only)
     kit: str = ""                      # "" | JSOW (a strike slot that only JSOW-capable jets fill, see loadouts.JSOW_PER_JET)
+    land: bool = False                 # v0.41.256: a land-based squadron fills it when one reaches (the fleet raid's USAF share), long-range fighters first; any squadron when none does
 
 
 TEMPLATES = {
@@ -60,6 +61,7 @@ def ai_only(st, obj) -> bool:
     return obj.type in AI_ONLY and not carrier_raid(st, obj)
 
 
+SETPIECE_LAND_SHARE = 0.5   # v0.41.256: the part of the fleet raid's optional CAP flights that land-based squadrons fill first (judgment call; XO: the USAF wing should dispatch what it can)
 SETPIECE_RATIO = 0.75       # blue CAP flights of 4 per bomber: 3 flights for 4 bombers + 8 escorts, i.e. about one blue fighter per raider (judgment call, XO: "overwhelming")
 _SETPIECE_TASK = {Role.CAP: "Intercept: kill the Backfires before they reach launch range, then the escorts",
                   Role.SWEEP: "Sweep ahead of the fleet: engage the raid's escorts so the interceptors get at the bombers",
@@ -254,7 +256,9 @@ class PackageBuilder:
             tmpl = [Slot(Role.STRIKE, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
         if carrier_raid(self.state, obj):                                    # v0.41.107: the setpiece: every fighter flight in reach, about one blue fighter per raider
             k = max(2, math.ceil(SETPIECE_RATIO * n_fl))              # n_fl = raiders / 3 (set in build) -> k flights of 4, about one blue fighter per raider
-            return [Slot(Role.CAP, 4), Slot(Role.CAP, 4)] + [Slot(Role.CAP, 4, False) for _ in range(k - 2)] + [Slot(Role.SWEEP, 2, False)] + [Slot(Role.SEAD, 2, False), Slot(Role.SEAD, 2, False)]   # v0.41.255: two optional HARM pairs for the SAMs over the raid's launch point
+            n_land = SETPIECE_LAND_SHARE * (k - 2)                    # v0.41.256 (XO 2026-11-03: the USAF wing gave no help): a share of the optional flights is land-based (F-15C first)
+            n_land = int(n_land)
+            return [Slot(Role.CAP, 4), Slot(Role.CAP, 4)] + [Slot(Role.CAP, 4, False, land=i < n_land) for i in range(k - 2)] + [Slot(Role.SWEEP, 2, False)] + [Slot(Role.SEAD, 2, False), Slot(Role.SEAD, 2, False)]   # v0.41.255: two optional HARM pairs for the SAMs over the raid's launch point
         if is_sweep(obj):                                                    # Fighter Sweep: 4-ships only, one per 4 bandits beyond the packages' own cover
             n4 = max(1, sweep_4ships(n_fl))
             return [Slot(Role.SWEEP, 4)] + [Slot(Role.SWEEP, 4, False) for _ in range(n4 - 1)]
@@ -421,11 +425,15 @@ class PackageBuilder:
                  and (slot.kit != "JSOW" or sq.aircraft in JSOW_PER_JET) and (not sweep_ or sq.aircraft in LONG_RANGE_A2A)]
         if not cands:
             return None
+        if slot.land:                                            # v0.41.256: the fleet raid's USAF share: land-based squadrons only, the lead's service does not matter; none reach = the usual pick
+            land_ = [c for c in cands if self.state.bases[c.base_id].kind != BaseKind.CARRIER]
+            if land_:
+                cands, lead_service = land_, None
         # TARCAP and sweep: the long-range shooters (F-15C, F-14) first, F-16 / F/A-18 behind them. The package escort (v0.41.1) the other
         # way round: F-16 / F/A-18 first (it stays with the package and fights close), an F-15C / F-14 only when none is free.
         obj_ = self._ctx[0] if self._ctx else None
         escort = slot.role in (Role.ESCORT, Role.SWEEP) and obj_ is not None and not is_sweep(obj_)
-        long_first = slot.role in (Role.TARCAP, Role.ESCORT, Role.SWEEP) and not escort
+        long_first = (slot.role in (Role.TARCAP, Role.ESCORT, Role.SWEEP) and not escort) or slot.land
         def key(sq):
             k = self._dist_nm(sq.id, tx, ty) - 40 * (ledger.free[sq.id] / max(1, sq.authorized))
             if long_first and sq.aircraft not in LONG_RANGE_A2A:
