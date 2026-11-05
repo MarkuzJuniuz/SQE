@@ -131,6 +131,8 @@ class Package:
     @property
     def title(self) -> str:
         """v0.41.304 (XO 2026-11-05): the name the player reads in the list: what is being defended, then the job ("Fleet Defense: Intercept"). The other jobs read as their type."""
+        if (self.extra or {}).get("raid_prep"):                   # v0.41.305: a SEAD / Standoff DEAD package that opens the carrier raid's lane
+            return "Fleet Defense: " + ("Standoff DEAD" if self.objective.aim == "STANDOFF" else "SEAD")
         if self.objective.type != ObjectiveType.FLEET_DEFENSE:
             return self.kind.replace("_", " ")
         ex = self.extra or {}
@@ -143,7 +145,7 @@ class Package:
     @property
     def urgent(self) -> bool:
         """Red's raids and troops in contact are what red is doing to you now: the list draws them with a red border (v0.41.304, XO 2026-11-05: "no more hidden ones")."""
-        return self.objective.type == ObjectiveType.FLEET_DEFENSE or bool((self.extra or {}).get("tic"))
+        return self.objective.type == ObjectiveType.FLEET_DEFENSE or bool((self.extra or {}).get("tic")) or bool((self.extra or {}).get("raid_prep"))
 
     @property
     def player_flight(self):

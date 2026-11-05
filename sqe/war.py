@@ -406,6 +406,10 @@ def flight_weight(f) -> float:
     return w
 
 
+RAID_SAM_PRESSURE = 0.12     # v0.41.305: blue's intercept strength lost per live SAM site that still threatens the carrier raid's lane (judgment call, no source: three live sites cost about a third)
+RAID_SAM_FLOOR = 0.4         # ...never below this share
+
+
 class WarSimulator:
     def __init__(self, d: Difficulty, rng: random.Random | None = None):
         self.d, self.rng = d, rng or random.Random()
@@ -497,6 +501,10 @@ class WarSimulator:
                 up_, psq_ = blue_barcap.patrol_up(state, rng, fb_, (wa_.x, wa_.y))
                 if up_:
                     strength += blue_barcap.PATROL_RAID_WEIGHT * ROLE_WEIGHT[Role.CAP]
+        live_ = [state.assets[x] for x in (pkg.extra.get("prep_sites") or []) if x in state.assets
+                 and not state.assets[x].destroyed and state.assets[x].health > 0.25 and not getattr(state.assets[x], "suppressed", False)]
+        if live_:                                                          # v0.41.305 (XO 2026-11-05: "the war planner takes into account what happened on those packages"): each SAM site still threatening the lane (the SEAD / DEAD packages ahead of the raid did not take it down) costs blue's fighters reach
+            strength *= max(RAID_SAM_FLOOR, 1.0 - RAID_SAM_PRESSURE * len(live_))
         nb_ = int(pkg.extra.get("bombers", 4)) if pkg.extra else 4
         p = strength / (strength + 2.5 + 2.0 * d.iads + 0.4 * esc + 0.25 * max(0, nb_ - 4))     # v0.41.155 (red zerg): a mass raid is harder to stop (judgment call)
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)

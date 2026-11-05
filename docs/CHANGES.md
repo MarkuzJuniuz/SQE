@@ -1,5 +1,14 @@
 # CHANGES.md
 
+## v0.41.305, the fleet raid's SEAD / Standoff DEAD are their own packages ahead of it
+
+XO 2026-11-05 ("fox 3 high"; "for the F/A-18 and perhaps F-16 just offer them as SEAD / SO DEAD packages that go before the Fleet Defense, they're tuned already ... then the intercept is resolved by the war planner taking into account what happened on those packages"; "the F-14 / F-15 ones stay as they are, all SAMs suppressed at the start"). Needs a NEW campaign day (a stored plan keeps its packages). Plan: `claude/raid-sead-plan.md`, queue item S2.
+- **Planner.** On a carrier-raid day `Session._raid_prep_objectives` finds the live SAM sites that threaten the raid's intercept line (`threatmap.raid_inbound_sites`, with the bearing and bomber wing the raid itself will get: the objectives are appended after the day's jobs so the raid keeps its index) and makes one Standoff DEAD job (long-range sites, `war.long_range_site`) or SEAD job (the rest) for each site that has no DEAD job in the day's list. They are built right after the raid, before the other jobs take the squadrons' sorties, and start `RAID_PREP_LEAD_MIN` (20) minutes before the raid package (judgment call from the plan doc's measured run; tune). The day's own Standoff DEAD on a blocking site that would fall after the raid is pulled ahead of it; a SEAD plus Close DEAD pair keeps its own staging.
+- **Names.** "Fleet Defense: Standoff DEAD" / "Fleet Defense: SEAD" (`extra["raid_prep"]`, red border like the other raid jobs). They are ordinary jobs otherwise: flyable by a Viper or Hornet, merge by the normal rules.
+- **War sim.** The raid package remembers its sites (`extra["prep_sites"]`). `_resolve_raid` costs blue's intercept strength `RAID_SAM_PRESSURE` (0.12, judgment call) per site still live and not suppressed when the raid resolves, never below `RAID_SAM_FLOOR` (0.4 of it). The SEAD / DEAD packages go in earlier, so their result comes first.
+- **Unchanged.** The raid package keeps its own SEAD seats (AI-only since #364): they are the scripted result for a Tomcat or Eagle seat, so SAMs are still suppressed at the start there.
+- **Seen in probes (L3, seed 1, the day's DEAD jobs removed to force new ones).** 2 of 5 blocking sites got packages (the squadrons ran out of JSOW jets for the rest; those sites stay live and cost the raid odds), one flyable by an F-16C and built into a mission. With the normal day plan every blocking site already had its own DEAD job. Smoke `check_128_raid_prep_packages`. Not seen in DCS.
+
 ## v0.41.304, no more dice: red's planned raids are listed (red border), with plain names
 
 XO 2026-11-05 ("fox 3 high"; "I don't like the dice rolls anymore, red sucks when attacking blue bases"; "show the scrambles with red borders on the main UI, no more hidden ones"). PR B of the planned-scramble work; needs a NEW campaign (a stored day plan keeps its old packages). Plan: `claude/sqe-queue.md` item S.
