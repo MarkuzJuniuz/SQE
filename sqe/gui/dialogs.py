@@ -456,9 +456,10 @@ class ScrambleChoiceDialog(QDialog):
     flight you can fly, in BOTH packages. The scramble block is in a red frame and carries the emergency text ("why it was offered"); its buttons are greyed out when your
     squadron cannot take it. Pressing a FLY button ends the dialog: `take_scramble` says which package it was in and `fid` which flight. Closing the dialog any other way
     (Esc, the window's close button) leaves `fid` None and `take_scramble` False, the same as picking your own tasking (flying never stops here, only the scramble choice does)."""
-    def __init__(self, parent, sess, pkg, ev: dict, number: int):
+    def __init__(self, parent, sess, pkg, ev: dict, number: int, flight_id: str | None = None):
         super().__init__(parent)
         self.setWindowTitle(ev["title"]); self.setMinimumSize(720, 640)
+        self._flight_id = flight_id                              # v0.41.300: the flight clicked in the package details pane; the only flyable one in your own package
         self.take_scramble = False; self.fid = None
         self._sess = sess; self._eligible = bool(ev["eligible"])
         epkg = ev["package"]
@@ -507,6 +508,8 @@ class ScrambleChoiceDialog(QDialog):
         hh.resizeSection(5, 100)
         t.setRowCount(len(p.flights)); t.setFixedHeight(64 + 42 * len(p.flights))
         opts = {x.id for x in (sess.flyable(p, squadron_only=False) if is_scramble else sess.flyable(p))}      # a scramble is taken with the aircraft you fly, whatever squadron its flight sits in (as assign_player does)
+        if not is_scramble and self._flight_id in opts:
+            opts = {self._flight_id}                  # v0.41.300 (XO 2026-11-05): in your own package only the flight you clicked is flyable (no flight clicked: all you could fly)
         sp = bool(p.extra.get("setpiece"))
         for i, fl in enumerate(p.flights):
             spec = AIRCRAFT[fl.aircraft]; yours = fl.id in opts
