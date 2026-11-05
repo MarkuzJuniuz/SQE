@@ -158,7 +158,7 @@ def stagger(package, role) -> int:
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
 from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import jsow_launch_xy, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, SA10_STATION_NM, AVOID_NM, avoid_circles, AGM88_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
+from .routes import jsow_launch_xy, SLAM_LAUNCH_NM, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, SA10_STATION_NM, AVOID_NM, avoid_circles, AGM88_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
 from .state import CampaignState
 
 F = VehicleGroup.Formation
@@ -1673,9 +1673,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         sp = None
         if not f.is_player:
             sp = self._spawn_point(f, base, geom)
-        wps = plan_route(f.role, (base.x, base.y), geom, spec.profile, is_player=f.is_player, tanker_xy=None, stack_idx=idx,
+        wps = plan_route(f.role, (base.x, base.y), geom, self._flight_profile(f, package), is_player=f.is_player, tanker_xy=None, stack_idx=idx,
                          spawn=sp[0] if sp else None, spawn_alt_ft=sp[1] if sp else 0, spawn_kts=sp[2] if sp else 0,
-                         jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), agm88_deg=self._agm88_deg(package, geom))
+                         jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), agm88_deg=self._agm88_deg(package, geom),
+                         rel=self._rel_kind(package, f))
         if getattr(f, "rush", False):
             self._rush_speeds(wps)                                    # v0.41.256: the raid SEAD
         shaped_, meet_ = False, None
@@ -2355,7 +2356,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         ap_ = self.t.airports.get(a_.airport) if (o_.aim == "RUNWAY" and a_ is not None and a_.airport) else None
         if ap_ is not None:
             return task.BombingRunway(airport_id=ap_.id, expend=task.Expend.All, group_attack=True)
-        return task.Bombing(self._pt(w.x, w.y), expend=task.Expend.All, group_attack=True)
+        return task.Bombing(self._pt(*(w.aim or (w.x, w.y))), expend=task.Expend.All, group_attack=True)       # v0.41.299: a release point (JDAM, SLAM-ER) bombs the target, not itself
 
     def _attach_waypoints(self, package, f, g, wps, first, ai_a2g, ai_sead, run_t0, push_s, tot_s, stop, hold_end, stw, armor, special):
         """Add each route point to the group with its tasks: ETAs, ROE, ECM, fuel, orbits, bombs, JSOW, CAS, SEAD attacks."""
@@ -2829,6 +2830,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         (COUNTER_AIR) goes in as before."""
         geom.tiers, geom.stand = {}, {}
         geom.ai_player = bool(self.o.player_is_ai)
+        geom.launch_nm = SLAM_LAUNCH_NM if (package.objective.type == ObjectiveType.STRIKE and package.objective.aim == "STANDOFF") else 0.0      # v0.41.299: the Standoff Strike's launch distance
         from .packages import is_sweep
         geom.sweep = is_sweep(package.objective)
         tid_ = package.objective.target_id
@@ -2855,7 +2857,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         for f in package.flights:
             if f.tag:
                 continue
-            prof = AIRCRAFT[f.aircraft].profile
+            prof = self._flight_profile(f, package)                                   # v0.41.299: a JDAM / SLAM-ER striker has its own (high, no LOW) profile
             key = (f.role, id(prof))
             if key not in geom.tiers:
                 geom.tiers[key] = self._pick_tier(geom, f.role, prof, tx, ty, skip)
@@ -2871,7 +2873,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 geom.stand[key] = profiles.cas_station(self.state, pts, alt_, geom.egr)       # v0.41.177: close enough to cover the A-10s
             if geom.sweep:
                 geom.stand[key] = self._sweep_station(geom.stand[key], tx, ty, pts[0], package)
-            elif f.role in (Role.ESCORT, Role.SWEEP, Role.TARCAP) and any(getattr(x_, "kit", "") == "JSOW" for x_ in package.flights):
+            elif f.role in (Role.ESCORT, Role.SWEEP, Role.TARCAP) and any(getattr(x_, "kit", "") in ("JSOW", "SLAM") for x_ in package.flights):      # v0.41.299: the SLAM-ER flight is shepherded the same way
                 # v0.41.42 (XO 2026-10-20): the package escort shepherds the JSOW flight, not the HARM shooters' station: it holds ESCORT_BEHIND_NM
                 # behind the JSOW launch point (on its own axis), where the JSOW jets release and turn home (the 2026-10-20 run lost all five to MiG-29s
                 # with the escort 20 nm away). Not kept out of SAM cover: that is the shepherd's risk. It leaves from the station, not by the package egress.

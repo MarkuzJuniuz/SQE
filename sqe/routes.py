@@ -40,6 +40,7 @@ class Wpt:
     agl: bool = False       # altitude is metres/feet above ground (the player's TGT sits on the ground so sensors and weapons can slave to it)
     rad: bool = False       # alt_ft is height above the ground (the LOW tier): DCS "radio altitude", so the flight follows the terrain
     orbit: bool = False     # a fighter stand-off point: the flight holds here (an orbit) instead of flying on to the target
+    aim: tuple | None = None  # v0.41.299: a release point short of the target (JDAM, SLAM-ER): the (x, y) the bombing task is aimed at; None = this point itself
 
 
 @dataclass
@@ -55,6 +56,7 @@ class Geometry:
     sweep: bool = False     # a Fighter Sweep package: no marshal, DEP - PUSH - station - home
     jsow_keep: list = None  # [(x, y, nm)]: live SAMs a JSOW launch point stays this far from (v0.41.3; v0.41.46: nm is each entry's own ring, the target cluster's SAMs included)
     carrier: bool = False   # v0.41.12: the flight's base is a carrier (only then a DEP point after take-off)
+    launch_nm: float = 0.0  # v0.41.299: a Standoff Strike's launch distance from the target (SLAM_LAUNCH_NM); 0 = the JSOW rule
     sa10_avoid: list = None # [(x, y, nm)]: live medium / long-range SAMs (not the target) an AI flight's route bends around (v0.41.11; all gate SAMs since v0.41.20)
 
 
@@ -65,6 +67,11 @@ JSOW_LAUNCH_NM = 30.0      # an AI JSOW flight's launch point. v0.41.46 (was 20)
 JSOW_HIGH_ALT_FT = 33000      # ...and when it is pushed out past JSOW_LAUNCH_NM, the flight releases from this high
 JSOW_MAX_NM = 45.0           # a JSOW launch point is never farther than this from its target (v0.41.3 run: AGM-154As released at 30-40 nm from 33,000 ft hit; was 40)
 JSOW_KEEP_HIGH_NM = 40.0     # a pushed-out JSOW flight is high, where an SA-10 reaches farther: its launch point stays this far from one (v0.41.3 run: 30.6 nm lost all four)
+JDAM_RELEASE_NM = 8.0      # v0.41.299 (XO 2026-11-05): an AI JDAM striker releases this far short of the target and turns home, instead of overflying it with the bomb task on the target waypoint.
+                           # JUDGMENT CALL from published figures: DCS players' tests put the release cue at 9.3 nm (GBU-31, 30,000 ft, just under Mach 1) to 12.5 nm (GBU-38, 33,000 ft, just over Mach 1)
+                           # (forum.dcs.world "jdam 31 distance reduced"); real JDAM: "up to approximately 15 miles" (GlobalSecurity). 8 nm sits inside the lowest of those. Nothing published on where the AI releases
+JDAM_ALT_FT = 30000        # v0.41.299: ...from this height (the figures above are at 30,000 ft and up; range grows with release altitude). The LOW tier is closed to these flights: a JDAM released at 500 ft has almost no reach
+SLAM_LAUNCH_NM = 120.0     # v0.41.299: a Standoff Strike's launch point (AGM-84H SLAM-ER, over 155 nm in the open sources; red alert pairs reach about 130 nm): judgment call, clamped to 0.8 of the route
 LOW_LEG_NM = 30.0          # v0.41.16: a low-level (terrain-following) attack descends this far from the target
 SWEEP_PUSH_NM = 15.0       # v0.41.12: a sweep's PUSH, this far from its base toward the target
 AGM88_LAUNCH_NM = 35.0      # v0.41.11: 35 (was 30): the Sukhumi SA-10 engaged HARM shooters at 54-57 km (31 nm); the AI fires from 35-38 nm anyway.
@@ -102,6 +109,8 @@ def jsow_launch_nm(g, jsow_side: float) -> float:
     the HARM point does (the v0.41.1 runs lost whole JSOW flights to the SA-10s at 13-24 nm), moving out along its axis up to JSOW_MAX_NM (the glide
     range from altitude); v0.41.4: 40 nm from an SA-10, not the HARM shooters' 30, because the JSOW jets go in at 33,000 ft.
     v0.41.42: pulled out of plan_route so the builder can ask where the JSOW flight will launch (the escort stations itself there)."""
+    if g.launch_nm > 0:                                      # v0.41.299: a Standoff Strike launches from as far out as the route allows (no SAM keep-out: the job exists only without SAM trouble)
+        return max(8.0, min(g.launch_nm, g.d / NM * 0.8 - 6))
     nm = max(8.0, min(JSOW_LAUNCH_NM, g.d / NM * 0.8 - 6))
     if g.jsow_keep:
         jh_ = g.hdg + 180 + JSOW_AXIS_DEG * jsow_side
@@ -117,7 +126,7 @@ def jsow_launch_xy(g, jsow_side: float) -> tuple:
 
 def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_player: bool,
                tanker_xy: tuple | None, stack_idx: int = 0, spawn: tuple | None = None, spawn_alt_ft: int = 0,
-               spawn_kts: int = 0, jsow: bool = False, jsow_side: float = 0, keep_out=None, agm88_deg: float = 0) -> list[Wpt]:
+               spawn_kts: int = 0, jsow: bool = False, jsow_side: float = 0, keep_out=None, agm88_deg: float = 0, rel: str = "") -> list[Wpt]:
     """Waypoints from start (takeoff for the player, an in-air 'just departed' spawn for AI) to egress. RTB is added by the builder."""
     wp: list[Wpt] = []
     bx, by = own_base
@@ -155,8 +164,16 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         while agm88_nm < AGM88_LAUNCH_NM + 40 and any(dist(*offset(g.tx, g.ty, agm88_ax, agm88_nm * NM), kx, ky) < knm * NM for kx, ky, knm in kos_):
             agm88_nm += 1.0
     jsow_hdg = g.hdg + 180 + JSOW_AXIS_DEG * jsow_side         # the JSOW flight comes in on its own axis, off the HARM shooters' (multi-axis)
+    # v0.41.299: a release point short of the target ("JDAM": 8 nm; "SLAM": the Standoff Strike's launch point), straight in along the package axis
+    rel_on = bool(rel) and role == Role.STRIKE and not human and not jsow
+    rel_hdg = g.hdg + 180
+    rel_nm = ((max(4.0, min(JDAM_RELEASE_NM, g.d / NM * 0.5)) if rel == "JDAM" else jsow_launch_nm(g, 0.0)) if rel_on else 0.0)
     if (role == Role.SEAD or (jsow and role == Role.STRIKE)) and not human:      # the IP sits 6 nm before the launch point (farther out than the usual IP)
         far = offset(g.tx, g.ty, agm88_ax if role == Role.SEAD else jsow_hdg, ((agm88_nm if role == Role.SEAD else jsow_nm) + 6) * NM)
+        if dist(g.tx, g.ty, *far) > dist(g.tx, g.ty, *g.ip):
+            ip_xy = far
+    elif rel_on and rel == "SLAM":                              # the IP 6 nm before the launch point; a JDAM release keeps the usual IP (it is farther out already)
+        far = offset(g.tx, g.ty, rel_hdg, (rel_nm + 6) * NM)
         if dist(g.tx, g.ty, *far) > dist(g.tx, g.ty, *g.ip):
             ip_xy = far
     # v0.41.10: deconfliction. AI flights cross PUSH and EGR on their own lane, 1.5 nm apart sideways by stack slot (at most 4.5 nm), so a
@@ -201,6 +218,10 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     # never get a ground-level point (they would descend to it).
     if role == Role.STRIKE and jsow and not human:             # a JSOW slinger never crosses the site: it releases from its launch point and goes home
         wp.append(Wpt("JSOW", *offset(g.tx, g.ty, jsow_hdg, jsow_nm * NM), ialt, p.attack_kts, "JSOW launch point", "JSOW", rad=irad))
+    elif rel_on:                                                # v0.41.299: releases from here, bomb task aimed at the target; the flight never crosses it
+        wp.append(Wpt("SLAM" if rel == "SLAM" else "REL", *offset(g.tx, g.ty, rel_hdg, rel_nm * NM), ialt, p.attack_kts,
+                      ("Standoff Strike launch point: SLAM-ER on the target, then home" if rel == "SLAM" else f"JDAM release point, {rel_nm:.0f} nm short of the target: release and turn home"),
+                      "BOMB", rad=irad, aim=(g.tx, g.ty)))
     elif role == Role.STRIKE:
         wp.append(Wpt("TGT", g.tx, g.ty, 0 if human else ialt, p.attack_kts, p.tgt_note, "BOMB", agl=human, rad=irad and not human))
     elif role == Role.SEAD and human:
@@ -219,12 +240,14 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         wp.append(Wpt("TGT", so[0], so[1], ialt, p.cap_kts, f"TARCAP: hold here, {so[3]:.0f} nm short of the target, outside {'/'.join(so[2])} cover", "TARCAP", rad=irad, orbit=True))
     else:
         wp.append(Wpt("TGT", g.tx, g.ty, ialt, p.attack_kts, "TARCAP: cover the strikers over target", "TARCAP", rad=irad))
-    standoff = not human and (role == Role.SEAD or (jsow and role == Role.STRIKE))
+    standoff = not human and (role == Role.SEAD or (jsow and role == Role.STRIKE) or rel_on)
     if standoff:
         # a HARM or JSOW flight fires from stand-off range and goes home the way it came. The package egress lies beyond the target for the
         # strikers that overfly it: in the v0.39.21 run the JSOW Hornets released, then crossed the Sukhumi cluster to it and met the Su-27s.
-        sax = agm88_ax if role == Role.SEAD else jsow_hdg
-        snm = (agm88_nm if role == Role.SEAD else jsow_nm) + STANDOFF_EGRESS_NM
+        sax = agm88_ax if role == Role.SEAD else (rel_hdg if rel_on else jsow_hdg)
+        snm = (agm88_nm if role == Role.SEAD else (rel_nm if rel_on else jsow_nm)) + STANDOFF_EGRESS_NM
+        if rel_on:
+            snm = min(snm, max(rel_nm + 4.0, g.d / NM * 0.9))        # never past the flight's own base
         wp.append(Wpt("EGR", *offset(g.tx, g.ty, sax, snm * NM), ialt, p.egress_kts, "Exit: back out along the approach", rad=irad))
     elif not (so and role in (Role.ESCORT, Role.SWEEP, Role.TARCAP)):         # a stand-off fighter never crosses the target area: it goes home from its hold
         wp.append(Wpt("EGR", *lane_xy(g.egr), ialt + (1000 * (stack_idx % 3) if lane else 0), p.egress_kts, "Exit threat area", rad=irad))

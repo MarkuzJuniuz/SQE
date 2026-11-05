@@ -98,9 +98,9 @@ class FighterStations:
                 continue
             base = self.state.bases[f.base_id]
             try:
-                wps = plan_route(f.role, (base.x, base.y), geom, AIRCRAFT[f.aircraft].profile, is_player=False, tanker_xy=None,
+                wps = plan_route(f.role, (base.x, base.y), geom, self._flight_profile(f, package), is_player=False, tanker_xy=None,
                                  jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package),
-                                 agm88_deg=self._agm88_deg(package, geom))
+                                 agm88_deg=self._agm88_deg(package, geom), rel=self._rel_kind(package, f))
             except ValueError:
                 continue
             lp_ = next((w for w in wps if w.action in ("SEAD", "JSOW")), None) or next((w for w in wps if w.name == "IP"), None)

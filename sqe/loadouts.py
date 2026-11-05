@@ -9,6 +9,7 @@ from .models import Role
 
 # Taken from DCS's own stock presets (the lists you pick from in the Mission Editor). "=<CLSID>" is a raw weapon id; anything else is a
 # weapon-name stem looked up on the pylon. The comment above each line names the stock preset it was copied from.
+JDAM_JETS = {"F-16C", "FA-18C", "F-14BU"}       # v0.41.299: the jets whose STRIKE loadout is JDAMs (GBU-31 / GBU-38): their AI strikes release short of the target (routes.JDAM_RELEASE_NM)
 SLAM_PER_JET = {"FA-18C": 2}                  # v0.41.298: AGM-84H SLAM-ER per jet in the Standoff Strike kit (a Hornet job: no F-16 SLAM-ER in DCS)
 JSOW_PER_JET = {"FA-18C": 2, "F-16C": 2}      # AGM-154A JSOW CEB per jet in the JSOW kit; only these jets fly the JSOW slot of a SEAD package
 
