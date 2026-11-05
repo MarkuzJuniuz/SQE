@@ -2356,7 +2356,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         ap_ = self.t.airports.get(a_.airport) if (o_.aim == "RUNWAY" and a_ is not None and a_.airport) else None
         if ap_ is not None:
             return task.BombingRunway(airport_id=ap_.id, expend=task.Expend.All, group_attack=True)
-        return task.Bombing(self._pt(*(w.aim or (w.x, w.y))), expend=task.Expend.All, group_attack=True)       # v0.41.299: a release point (JDAM, SLAM-ER) bombs the target, not itself
+        wt_ = task.WeaponType.CruiseMissile if w.name == "SLAM" else task.WeaponType.Auto         # v0.41.302: the Standoff Strike's SLAM-ER is a missile; XO's run: the default filter fired nothing
+        return task.Bombing(self._pt(*(w.aim or (w.x, w.y))), weapon_type=wt_, expend=task.Expend.All, group_attack=True)       # v0.41.299: a release point (JDAM, SLAM-ER) bombs the target, not itself
 
     def _attach_waypoints(self, package, f, g, wps, first, ai_a2g, ai_sead, run_t0, push_s, tot_s, stop, hold_end, stw, armor, special):
         """Add each route point to the group with its tasks: ETAs, ROE, ECM, fuel, orbits, bombs, JSOW, CAS, SEAD attacks."""
