@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## Docs only: builds allowed on any Opus version
+
+XO 2026-11-04 ("Switching to Opus 5. Change our rules to allow builds on any Opus version."). The model rule in `CLAUDE.md` now reads "Sonnet 5.5 or higher, or any Opus version", in the standing rules and in the session-start model check. Talking and planning stay open to any model. No code, no version change, no smoke (docs-only). XO's own commits: none.
+
 ## v0.41.286, more fields red in every mission; the raid CAP dashes at 500 kt
 
 XO 2026-11-04 ("Mineralnye Vody ... qualifies"; "add all the bases beyond the mountains to red"; "speeds shouldn't be gas-guzzling in afterburners all the way"; "2 fox 3 low").

@@ -9,7 +9,7 @@ Repo: github.com/MarkuzJuniuz/SQE
 XO opens a Crew Chief session with "Hello Crew Chief" or "Hi Crew Chief". Only that greeting starts this routine; a chat that does not open that way is NOT assumed to be for Crew Chief, so answer it normally. (Other roles, e.g. Ops O and PAO, may get their own greeting later.) On the greeting, answer "Hello XO" and do this before anything else:
 1. You have read this file. Read `claude/sqe-queue.md` in the Project (if no Project is attached, ask XO to paste it).
 2. First `git remote set-url origin https://github.com/MarkuzJuniuz/SQE.git` (always; see Setup), then `git pull` on `crew-chief-working` (fix the refspecs if fetch errors, see Setup). If this chat has no repo yet, attach it yourself: call `add_repo` (owner `MarkuzJuniuz`, repo `SQE`, access `push`), run the clone command it returns, then call `register_repo_root`. XO may have to approve the add. (XO's earlier chats worked this way, no Claude Code page needed.) Do not pre-check the repo with curl or `gh`. If `add_repo` is not among your tools or is denied, say so in one line and do not pretend: work from the Project copies (`claude/crew-chief-rules.md` is this file, `claude/design-notes.md` is the design notes) for talking, planning and the queue only, because without a shell you cannot pull, run scripts, push or open PRs. Then tell XO the fallback for builds: open claude.ai/code, pick MarkuzJuniuz/SQE and branch `crew-chief-working`, then "Hello Crew Chief". XO may attach the run files to a plain chat if he only wants a read.
-3. Check the model: building needs Sonnet 5.5 or higher. Say so if the session is on something lower.
+3. Check the model: building needs Sonnet 5.5 or higher, or any Opus version. Say so if the session is on something lower.
 4. Reply in a few lines: the gate date and whether it has passed (check today's date), the next item in the queue, light or heavy, and which files you need from XO (states, `.miz`, `dcs.log`, Remarks.txt).
 5. If XO gave a job in the same message, confirm it fits the queue and the gate. If he did not, ask which one.
 Do not start building until XO says go.
@@ -31,7 +31,7 @@ Plain Project chats cannot read the repo, so the Project holds copies of `CLAUDE
 4. Add what you learned to the doc and update the section's "verified" stamp. XO's rule (2026-10-16): fixes to `docs/DESIGN_NOTES.md` alone are pushed directly to `crew-chief-working` (no PR). Anything else, code included, still goes through a PR.
 
 ## Standing rules
-- Build only on **Sonnet 5.5 or higher**. Talking and planning on any model is fine.
+- Build only on **Sonnet 5.5 or higher, or any Opus version** (XO 2026-11-04). Talking and planning on any model is fine.
 - XO merges PRs himself. You never merge. `main` needs a PR.
 - Work on `crew-chief-working` (XO commits small changes straight to it). Pull before each build. PRs go into it.
 - **XO deletes branches after merging (habit, 2026-10-31), so `crew-chief-working` may be gone.** Check `git ls-remote --heads origin crew-chief-working` at session start and before every build. If it is missing, recreate it from `main` (`git fetch origin; git checkout -B crew-chief-working origin/main; git push -u origin crew-chief-working`) and carry on; no need to ask XO. Never recreate it from an old local copy.
