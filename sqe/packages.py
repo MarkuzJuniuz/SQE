@@ -57,7 +57,9 @@ def carrier_raid(st, obj) -> bool:
 
 
 def ai_only(st, obj) -> bool:
-    """Is this job AI-only? BARCAP and land-raid intercepts are; the carrier raid is a setpiece the player can fly."""
+    """Is this job AI-only? BARCAP is. Raid intercepts (the carrier raid and, since v0.41.303, raids on fields, supply sites and garrisons) are player-flyable."""
+    if obj.type == ObjectiveType.FLEET_DEFENSE:                  # v0.41.303 (XO 2026-11-05): a raid on a field, a supply site or a garrison is player-flyable like the carrier raid
+        return False
     return obj.type in AI_ONLY and not carrier_raid(st, obj)
 
 

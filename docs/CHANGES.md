@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## v0.41.303, raids on fields, supply sites and garrisons are player-flyable
+
+XO 2026-11-05 ("fox 3 medium"). PR A of the planned-scramble work (his decisions: red's planned raids become scrambles, no more dice; plan in `claude/sqe-queue.md` item S).
+- **Found.** A raid scramble was never flyable: `Session.flyable` returned nothing for any FLEET_DEFENSE job that was not the carrier setpiece (the v0.41.27 "AI-only for now" rule), so the offer was only a text line and the war sim handled the raid. Probe (F-14BU, F-16C, seeds 1 to 3): eligible, 0 flyable flights.
+- **Audit.** Raids on a field, a supply site or a garrison share the carrier raid's builder: the same intercept point (`raid_spawns._raid_intercept`), SAM-free lane and SEAD for blockers (the bend through a blue field and the edge spawn are carrier-only). With the gate lifted in a probe, an F-14BU and an F-16C raid scramble both built and wrote a mission with MSHL / PUSH / IP / TGT / RTB. Not checked: the tracks against the SAM circles in a flown run, and the F/A-18C seat (the probe cannot start one).
+- `Session.flyable`: only BARCAP is AI-only now. `packages.ai_only`: a FLEET_DEFENSE job is never AI-only. `plan_day`: a raid job always tries a player slot (it was one of five random jobs).
+- Smoke `check_126_land_raid_flyable`: a raid scramble offers a flight, builds and writes a mission; BARCAP stays AI-only. Full smoke at the checkpoint (shared code). Not seen in DCS; watch the first flown land-raid intercept.
+
 ## v0.41.302, the Standoff Strike's SLAM-ER launch point asks for a cruise missile
 
 XO 2026-11-05 ("fox 3 low"; his run: F/A-18 Standoff Strike "didn't even come close"). Light, stacked on #372 (v0.41.301).
