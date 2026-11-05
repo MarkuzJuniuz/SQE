@@ -129,6 +129,23 @@ class Package:
         return "RAID_DEFENSE" if (t == "FLEET_DEFENSE" and (self.extra or {}).get("land")) else t
 
     @property
+    def title(self) -> str:
+        """v0.41.304 (XO 2026-11-05): the name the player reads in the list: what is being defended, then the job ("Fleet Defense: Intercept"). The other jobs read as their type."""
+        if self.objective.type != ObjectiveType.FLEET_DEFENSE:
+            return self.kind.replace("_", " ")
+        ex = self.extra or {}
+        if not ex.get("land"):
+            return "Fleet Defense: Intercept"
+        aim = self.objective.aim or ""
+        what = "Base" if not aim else ("Troop" if aim.startswith("sector:") else ("Garrison" if aim.startswith(("bgar_", "bfwd_")) else "Supply"))
+        return f"{what} Defense: Intercept"
+
+    @property
+    def urgent(self) -> bool:
+        """Red's raids and troops in contact are what red is doing to you now: the list draws them with a red border (v0.41.304, XO 2026-11-05: "no more hidden ones")."""
+        return self.objective.type == ObjectiveType.FLEET_DEFENSE or bool((self.extra or {}).get("tic"))
+
+    @property
     def player_flight(self):
         return next((f for f in self.flights if f.is_player), None)
 

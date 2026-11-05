@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+import re
 import random
 import time
 from pathlib import Path
@@ -17,6 +18,7 @@ from . import raids, redair, sams, ground, tempo
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import AI_ONLY, ai_only, carrier_raid, Ledger, NoPlayerSlot, Package, PackageBuilder
 
+DICE_EMERGENCIES = False   # v0.41.304 (XO 2026-11-05: "no more dice"): the per-sortie emergency roll is off; red's planned raids are listed packages (and planned CAS marks troops in contact). Code removed in a later PR.
 RAID_SCRAMBLES = True      # v0.41.27: emergency raid scrambles are off while intercepts are AI-only (troops in contact stay)
 from .scenario import new_campaign
 from . import theatres
@@ -316,6 +318,17 @@ class Session:
         for p in pkgs:
             if sweeps.get(id(p)):
                 p.extra["covers"] = sorted(c.number for c in sweeps[id(p)])           # the packages this Fighter Sweep goes in ahead of
+        # v0.41.304 (XO 2026-11-05: no dice, "only what red actually tries", no hidden ones): every raid red plans is a listed, flyable package; an unwarned one says so, and the
+        # contested sector under the hardest pressure marks its planned CAS as troops in contact. An unwarned raid that could not be built is still settled overnight.
+        _unw = lambda o: bool(re.search(r"-s\d+$", o.id or ""))
+        built_ = {p.objective.id for p in pkgs}
+        st.raids["surprise"] = int(st.raids.get("surprise", 0)) + sum(1 for o in objs if _unw(o) and o.id not in built_)
+        _hot = raids.hot_sector(st)
+        for p in pkgs:
+            if p.objective.type == ObjectiveType.FLEET_DEFENSE and _unw(p.objective):
+                p.extra["unwarned"] = True
+            if _hot is not None and p.objective.type == ObjectiveType.CAS and p.objective.target_id == f"armor_{_hot + 1}":
+                p.extra["tic"] = True
         st.plan = [p.to_dict() for p in pkgs]
         self._cast_sead(pkgs)
         self.refresh_weather()
@@ -684,7 +697,7 @@ class Session:
         (and any flight of this one, `flight_id` no longer matters) gets None. The answer is fixed by the campaign and the day: asking twice never re-rolls it.
         Returns None, or a dict: kind 'RAID' | 'CAS', package (the emergency, ready to fly), eligible (your squadron can take it), reason (why not), title, text, time, host."""
         st = self.state
-        if not getattr(self.settings, "emergencies", True):
+        if not DICE_EMERGENCIES or not getattr(self.settings, "emergencies", True):
             return None
         key = f"{st.day}:{st.sortie_counter}"
         cache = (st.raids or {}).get("emerg")

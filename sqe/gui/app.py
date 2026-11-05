@@ -5,11 +5,11 @@ import traceback
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QSize, QUrl
-from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QPen
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
                                QHeaderView, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QProgressBar,
                                QPushButton, QCheckBox, QScrollArea, QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser,
-                               QSizePolicy, QVBoxLayout, QWidget)
+                               QSizePolicy, QStyledItemDelegate, QVBoxLayout, QWidget)
 
 from .. import APP_NAME, CAMPAIGN_EXT, __version__, narrative, overview_detail, posture, story
 from ..aircraft import AIRCRAFT
@@ -23,6 +23,21 @@ from . import theme
 from .dialogs import DayResolvedDialog, DebriefDialog, NewCampaignDialog, ScrambleChoiceDialog, SettingsDialog, WaitingDialog
 from .widgets import MapView, SideCard, StatCard, card
 from . import overview_view as V
+
+URGENT_ROLE = Qt.UserRole + 1
+
+
+class UrgentDelegate(QStyledItemDelegate):
+    """v0.41.304 (XO 2026-11-05: "show the scrambles with red borders on the main UI"): a job red is doing to you now (a raid on your fleet, field or supply site, troops in contact)
+    keeps the normal row and gets a red border."""
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+        if index.data(URGENT_ROLE):
+            painter.save()
+            painter.setPen(QPen(QColor("#d8453b"), 2))
+            painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
+            painter.restore()
+
 
 RELEASES_URL = "https://github.com/MarkuzJuniuz/SQE/releases/latest"
 
@@ -228,7 +243,7 @@ class MissionsPage(QWidget):
         self.flt.setToolTip("My squadron: only packages with a flight from your squadron.  All: every package of the day, for looking only: you can fly only your own squadron's flights.")
         frow.addWidget(self.flt, 1); left.addLayout(frow)
         self.flt.currentIndexChanged.connect(self._filter_changed)
-        self.lst = QListWidget(); left.addWidget(self.lst, 1); self.lst.currentRowChanged.connect(self._show)
+        self.lst = QListWidget(); self.lst.setItemDelegate(UrgentDelegate(self.lst)); left.addWidget(self.lst, 1); self.lst.currentRowChanged.connect(self._show)
         right = QVBoxLayout(); root.addLayout(right, 6)
         self.c = card(); right.addWidget(self.c, 1)
         L = self.c.layout()
@@ -282,10 +297,10 @@ class MissionsPage(QWidget):
             ok = bool(sess.flyable(p))
             night = is_night(st.campaign_date(), p.start)
             extra = sess.merge_candidates(p) if ok else []
-            it = QListWidgetItem(f"#{p.number}  {p.kind.replace('_', ' ')}   {p.start}{' (night)' if night else ''}"
+            it = QListWidgetItem(f"#{p.number}  {p.title}   {p.start}{' (night)' if night else ''}"
                                  f"{'   [JOINT]' if p.joint else ''}{f'   +{len(extra)} package' + ('s' if len(extra) > 1 else '') if extra else ''}"
-                                 f"\n{p.objective.description}" + ("" if ok else "\n(no flight for your aircraft)"))
-            it.setData(Qt.UserRole, p.number); it.setSizeHint(QSize(0, 66))
+                                 f"\n{p.objective.description}{' (no warning)' if (p.extra or {}).get('unwarned') else ''}" + ("" if ok else "\n(no flight for your aircraft)"))
+            it.setData(Qt.UserRole, p.number); it.setData(URGENT_ROLE, p.urgent); it.setSizeHint(QSize(0, 66))
             if not ok:
                 it.setForeground(QColor(theme.DIM))
             self.lst.addItem(it)
@@ -391,7 +406,7 @@ class MissionsPage(QWidget):
         for x in mem:                                       # the packages that fly with this one: each with its own flights and FLY button
             line = QFrame(); line.setFrameShape(QFrame.HLine); line.setStyleSheet(f"color:{theme.DIM};"); self.bl.addWidget(line)
             xnight = is_night(st.campaign_date(), x.start)
-            self.bl.addWidget(self._label(f"Also in this mission: #{x.number}  {x.kind.replace('_', ' ')}   {x.start}{' (night)' if xnight else ''}", "h2", theme.AMBER))
+            self.bl.addWidget(self._label(f"Also in this mission: #{x.number}  {x.title}   {x.start}{' (night)' if xnight else ''}", "h2", theme.AMBER))
             self.bl.addWidget(self._label(x.objective.description, "title"))
             xt, xyours = self._flight_table(x)
             if xyours:
