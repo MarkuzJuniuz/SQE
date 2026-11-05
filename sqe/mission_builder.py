@@ -65,6 +65,8 @@ TARCAP_PKG_ZONE_NM = 15       # v0.41.185 (XO 2026-10-28: the CAS / strike TARCA
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
 TARCAP_BARCAP_OVERLAP_NM = 4   # v0.41.138: the TARCAP circle reaches this far (less 2 nm of margin) inside the nearest BARCAP circle, so there is no unguarded strip between them (judgment call: a few miles so a bandit crossing from one to the other is always inside one)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
+SLAM_AIMS = 2                # v0.41.309: aim points (buildings) of a SLAM-ER launch, a missile each per jet's two (the Standoff Strike kit carries two AGM-84H a jet)
+SLAM_ATTACK_S = 90            # v0.41.309: the SLAM-ER launch window after the launch point's ETA, then return fire (judgment call; XO's run fired its four in 20 s; the JSOW window is 120)
 LATE_ATTACK_S = 600           # v0.41.16: an AI strike flight drops only within this of its TOT
 CV_PATTERN_NM = 6             # v0.41.72: an AI carrier flight within this of the boat...
 CV_PATTERN_S = 90             # ...for this long (about two laps of the pattern) is recovered
@@ -290,6 +292,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []
         self._ecm_player = ""                           # v0.41.210: how the hook learns the player's jammer: "live" (F-16C lamp via Export.lua), "f10" (FC3 jet), "" (old attack-leg window)
         self._raid_xy = []                              # v0.41.220: where each raid scramble's raiders are going (the supply circle runs round these too)
+        self._bld_xy = {}                               # v0.41.309: supply site id -> where its buildings stand (`_place_buildings`), the Standoff Strike aims at them
         self._supply_built = set()                      # v0.41.209: blue supply sites already put on the map this mission (a raid target is one)
         self._rwy_rel, self._hot = {}, None                            # v0.41.96: release times already given per runway; the hot-runway slot of the flight being built
         self._launch_pts = {}                                          # package id -> [(x, y)] where its HARM / JSOW / strike flights launch (the cover zone)             # alert groups waiting for a runway (the hook lines them up), trigger flags, your runway
@@ -2369,6 +2372,31 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         wt_ = task.WeaponType.CruiseMissile if w.name == "SLAM" else task.WeaponType.Auto         # v0.41.302: the Standoff Strike's SLAM-ER is a missile; XO's run: the default filter fired nothing
         return task.Bombing(self._pt(*(w.aim or (w.x, w.y))), weapon_type=wt_, expend=task.Expend.All, group_attack=True)       # v0.41.299: a release point (JDAM, SLAM-ER) bombs the target, not itself
 
+    def _slam_aims(self, package, w) -> list:
+        """v0.41.309 (XO 2026-11-05: "how do we make the 18 just focus on their target? one hit the bunker, the rest targeted god knows what"): the aim points of a SLAM-ER
+        launch: up to `SLAM_AIMS` of the target site's buildings (the first one, then the one furthest from it), a missile each. A single Bombing task on the site's centre
+        sent one missile at the guard vehicles and left the rest to hunt radars under weapons free (XO's run). No buildings known: the waypoint's own aim point."""
+        spots = list(self._bld_xy.get(package.objective.target_id) or [])
+        if len(spots) > SLAM_AIMS:
+            far = max(spots[1:], key=lambda s_: dist(s_[0], s_[1], spots[0][0], spots[0][1]))
+            spots = [spots[0], far][:SLAM_AIMS]
+        return spots or [tuple(w.aim or (w.x, w.y))]
+
+    def _bomb_tasks(self, package, w) -> list:
+        """The bombing tasks of a BOMB waypoint: one, except a SLAM-ER launch (`_slam_aims`: one Bombing task per aim point, one missile each, over once `SLAM_ATTACK_S` has passed)."""
+        if w.name != "SLAM":
+            return [self._bomb_task(package, w)]
+        out = []
+        for x_, y_ in self._slam_aims(package, w):
+            ct_ = task.ControlledTask(task.Bombing(self._pt(x_, y_), weapon_type=task.WeaponType.CruiseMissile, expend=task.Expend.One, group_attack=True))
+            if w.eta_s is not None:
+                ct_.stop_after_time(int(w.eta_s + SLAM_ATTACK_S))
+            out.append(ct_)
+        if w.eta_s is not None:
+            rf_ = task.ControlledTask(task.OptROE(task.OptROE.Values.ReturnFire)); rf_.start_after_time(int(w.eta_s + SLAM_ATTACK_S))      # then no more hunting, as with the JSOWs
+            out.append(rf_)
+        return out
+
     def _attach_waypoints(self, package, f, g, wps, first, ai_a2g, ai_sead, run_t0, push_s, tot_s, stop, hold_end, stw, armor, special):
         """Add each route point to the group with its tasks: ETAs, ROE, ECM, fuel, orbits, bombs, JSOW, CAS, SEAD attacks."""
         o = self.o
@@ -2387,7 +2415,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         wp.name = nm
                 if not o.player_is_ai:                                       # all-AI test: the player's flight now gets the AI tasks below, like any AI flight
                     if w.action == "BOMB":
-                        wp.tasks.append(self._bomb_task(package, w))
+                        wp.tasks += self._bomb_tasks(package, w)
                     continue
             if ai_a2g and w.name == "EGR":
                 wp.tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))                      # and no chasing on the way home either
@@ -2436,8 +2464,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             elif w.action == "BOMB":
                 # v0.41.16: the attack is only good until LATE_ATTACK_S after its TOT; later, the flight flies on to its egress and home (the
                 # v0.41.14 run: the lead, alone after its wingmen flamed out, bombed 30 min late and met a live SA-6)
-                bct_ = task.ControlledTask(self._bomb_task(package, w))
-                bct_.stop_after_time(int(w.eta_s + LATE_ATTACK_S)); wp.tasks.append(bct_)
+                if w.name == "SLAM":
+                    wp.tasks += self._bomb_tasks(package, w)
+                else:
+                    bct_ = task.ControlledTask(self._bomb_task(package, w))
+                    bct_.stop_after_time(int(w.eta_s + LATE_ATTACK_S)); wp.tasks.append(bct_)
             elif w.action == "JSOW":
                 self._jsow_tasks(wp, f, armor, package, w.eta_s)
             elif w.action == "CAS":
