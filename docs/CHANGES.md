@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## Docs only: any Sonnet or any Opus version OK for builds (XO 2026-11-04)
+
+XO clarified further: any Sonnet version is fine, not just 5.5+. Any Opus version is also fine. Both rule lines in `CLAUDE.md` updated again. No code, no version change, no smoke.
+
 ## Docs only: builds allowed on any Opus version
 
 XO 2026-11-04 ("Switching to Opus 5. Change our rules to allow builds on any Opus version."). The model rule in `CLAUDE.md` now reads "Sonnet 5.5 or higher, or any Opus version", in the standing rules and in the session-start model check. Talking and planning stay open to any model. No code, no version change, no smoke (docs-only). XO's own commits: none.
