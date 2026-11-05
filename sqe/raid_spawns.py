@@ -34,6 +34,8 @@ RAID_PUSH_NM = 10             # v0.41.29: a raid's PUSH, this far from its marsh
 RAID_MSHL_MIN_NM = 60         # ...its marshal is at least this far from the target (judgment call: well outside blue's Patriot reach)
 RAID_MPS = 232.0              # a red raid's speed (450 kts), the same figure its placement always used
 RAID_MIN_NM = 40              # ...a raid with no time to hold starts no closer than this to its target (it is late instead)
+RAID_ESCORT_AHEAD_NM = 4.0    # v0.41.296 (XO 2026-11-05: "the Su-27s are in front of their package"; he first thought 10 nm too much): the fleet raid's escort group flies this far AHEAD of the bomber group it guards. JUDGMENT CALL: no public source gives a spacing (Chipman 1990 says Su-27s "may be tasked to escort" Badgers / Backfires; CIMSEC's Backfire piece has no formation detail)
+RAID_ECHELON_NM = 1.5         # ...and the bomber groups of the fleet raid fly in a loose echelon: group by group this far to the side of the line (centred on it), each one RAID_GROUP_GAP_S behind the last. JUDGMENT CALL, same as above
 RAID_GROUP_GAP_S = 60         # v0.41.108: the bomber groups of a big raid follow each other, this far apart (judgment call)
 RAID_ROUTE_SAMS = 99            # v0.41.256: red SAM sites along a fleet raid's way in that are built in the mission (judgment call: the default is 2; the unit limit still binds)
 RAID_SWEEP_LEAD_S = 90        # ...and the raid's sweep escorts fly this far ahead of the first bomber group (judgment call)
@@ -1244,7 +1246,7 @@ class RaidSpawns:
             else:
                 ct_.stop_after_time(int(hold_))
 
-        def build_group(name, cls, count, task_cls, bomber=False, shift=0.0, behind_nm=0.0, gated=False, fighter_nm=None):
+        def build_group(name, cls, count, task_cls, bomber=False, shift=0.0, behind_nm=0.0, gated=False, fighter_nm=None, lateral_nm=0.0):
             pos, rem, hold, act = start_at(shift)
             gi_, at_gate = None, False
             if gated and gate is not None:
@@ -1256,7 +1258,13 @@ class RaidSpawns:
                     gi_ = next((i for i, q in enumerate(rem) if dist(q[0], q[1], dx, dy) <= gd_), len(rem) - 1)
                     rem = rem[:gi_] + [gate["hold"]] + rem[gi_:]
             if behind_nm and rem:
-                pos = offset(pos[0], pos[1], bearing(rem[0][0], rem[0][1], pos[0], pos[1]), behind_nm * NM)
+                pos = offset(pos[0], pos[1], bearing(rem[0][0], rem[0][1], pos[0], pos[1]), behind_nm * NM)      # (negative: ahead of its start)
+            if lateral_nm and edge and rem:                    # v0.41.296: the echelon: the whole route is shifted to the side, leg by leg, not only the start
+                _prev, _rem2 = pos, []
+                for q in rem:
+                    _rem2.append(offset(q[0], q[1], bearing(_prev[0], _prev[1], q[0], q[1]) + 90, lateral_nm * NM)); _prev = q
+                pos = offset(pos[0], pos[1], bearing(pos[0], pos[1], rem[0][0], rem[0][1]) + 90, lateral_nm * NM)
+                rem = _rem2
             nm_ = (["PUSH"] + ["ING"] * (len(rem) - 2) + [fin_]) if hold is not None else (["ING"] * (len(rem) - 1) + [fin_])
             sl = stg["plan"].get(name) if (stg and hold is not None) else None          # v0.41.261: a staged raid's group: on the marshal from the start, or off the runway
             m_alt = alt - (sl["mk"] * RAID_MSHL_STEP_M if sl else 0.0)
@@ -1352,8 +1360,10 @@ class RaidSpawns:
             self.warns.append(f"{ex.get('raider', 'Tu-22M3')}: no bomb or missile found; the raid is unarmed.")
         bomber_gs, nb_ = [], 0
         gap_ = RAID_STAGED_GAP_S if stg else RAID_GROUP_GAP_S
-        for gi, n_ in enumerate(sizes(ex["bombers"], RAID_BOMBER_BATCH if stg else 4)):         # v0.41.108: a big raid is several groups, a minute apart on the same route
-            g = build_group(f"Raid Bomber {gi + 1}", cls_b, n_, task_b, bomber=True, shift=gi * gap_)
+        bsz_ = sizes(ex["bombers"], RAID_BOMBER_BATCH if stg else 4)
+        lat_ = [(i_ - (len(bsz_) - 1) / 2.0) * RAID_ECHELON_NM if len(bsz_) > 1 else 0.0 for i_ in range(len(bsz_))]         # v0.41.296: echelon, centred on the route
+        for gi, n_ in enumerate(bsz_):         # v0.41.108: a big raid is several groups, a minute apart on the same route
+            g = build_group(f"Raid Bomber {gi + 1}", cls_b, n_, task_b, bomber=True, shift=gi * gap_, lateral_nm=lat_[gi])
             names = []
             for u in g.units:
                 nb_ += 1
@@ -1381,7 +1391,7 @@ class RaidSpawns:
                 else:
                     ci = ei - n_sweep
                     bg = bomber_gs[ci * len(bomber_gs) // max(1, len(esz) - n_sweep)]
-                    eg = build_group(f"Raid Escort {ci + 1}", getattr(planes, ex["escort_type"]), n_, task.Escort, shift=bomber_gs.index(bg) * gap_, behind_nm=3)
+                    eg = build_group(f"Raid Escort {ci + 1}", getattr(planes, ex["escort_type"]), n_, task.Escort, shift=bomber_gs.index(bg) * gap_, behind_nm=(-RAID_ESCORT_AHEAD_NM if edge else 3), lateral_nm=lat_[bomber_gs.index(bg)])
                     # v0.41.29: the escorts stay with the bombers and fight only what comes within their class's reach of them (Su-27 25 nm, the rest
                     # 15 nm), up to the bombers' egress point; home once their air-to-air missiles are gone. No chasing.
                     eg.points[0].tasks = [t_ for t_ in eg.points[0].tasks if getattr(t_, "Id", "") != "Escort"]      # pydcs's default escort task has no group
