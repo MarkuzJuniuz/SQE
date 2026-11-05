@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.310, the wind blows down the ILS runways
+
+XO 2026-11-05 ("DCS ILS unusable in bad weather"; "Fox 3 low"). DCS picks the active runway by wind, so a wind from the wrong side puts the ILS on the departure end.
+- **Window.** `weather.ILS_WIND` (70 to 120 degrees, wind-from). The runways are Batumi 130, Kobuleti 70, Kutaisi 70, Senaki 90, Sochi 60, so this gives at least a 50% headwind on each. Judgment call; the magnetic-versus-true offset (about 6 degrees) is from memory and unchecked.
+- **Where.** Procedural anchors draw their direction inside the window (same one random draw as before); the fixed modes use 95. Clear weather stays calm, as before.
+- **Probe.** 10,620 forecasts (every mode, 5 campaigns, 59 days, 6 hours): all inside the window. Not seen in DCS; open question is how DCS picks the runway at very light wind.
+
 ## v0.41.309, the Standoff Strike's SLAM-ERs aim at the site's buildings, one each
 
 XO 2026-11-05 ("how do we make the 18 just focus on their target? it shot one on the bunker looking thing then the rest targeted god knows what"; "fox 3 medium"). From his 12:31 run: the SLAM waypoint had weapons free and ONE Bombing task on the site's centre point; of four AGM-84H one hit the guard vehicles (Shilka, Strela) at the target and the other three went at the Sukhumi and Gudauta EWRs and an S-300 search radar (t=746 to 757), so the depot stood.
