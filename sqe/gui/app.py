@@ -770,7 +770,7 @@ class MainWindow(QMainWindow):
             sess.abort()                                    # v0.41.149: discarding gives back what the sortie used, a scramble included (so it is offered again)
         if sess.settings.problems():
             QMessageBox.warning(self, "Settings", "\n".join(sess.settings.problems())); self.settings(); return
-        scramble = False
+        scramble = False; scramble_fid = None
         try:
             ev = sess.emergency_for(number, flight_id)
         except Exception:
@@ -778,12 +778,17 @@ class MainWindow(QMainWindow):
         if ev:
             pkg = next((p for p in sess.packages() if p.number == number), None)
             if pkg is not None:
-                dlg = ScrambleChoiceDialog(self, sess.state.campaign_date(), pkg, ev, number)
+                dlg = ScrambleChoiceDialog(self, sess, pkg, ev, number)
                 dlg.exec()
                 scramble = dlg.take_scramble
+                if dlg.fid is not None:                         # v0.41.294: the FLY button you pressed names the flight, in either package
+                    if scramble:
+                        scramble_fid = dlg.fid
+                    else:
+                        flight_id = dlg.fid
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            res = sess.fly(number, flight_id, scramble=scramble)
+            res = sess.fly(number, flight_id, scramble=scramble, scramble_fid=scramble_fid)
         except Exception:
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "Could not build the mission", traceback.format_exc()); return

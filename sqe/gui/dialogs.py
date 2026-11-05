@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QCheckBox, QSpinBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
                                QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
-                               QTextBrowser, QVBoxLayout, QHeaderView, QTabWidget, QWidget, QScrollArea)
+                               QTextBrowser, QVBoxLayout, QHeaderView, QTabWidget, QWidget, QScrollArea, QAbstractItemView)
 from .. import settings as S
 from ..aircraft import AIRCRAFT
 from ..difficulty import LEVELS
@@ -451,67 +451,86 @@ class WaitingDialog(QDialog):
 
 
 class ScrambleChoiceDialog(QDialog):
-    """v0.41.288 (XO 2026-11-04, "fox 3 medium": make scramble choices feel like picking a mission, not clearing an error). Replaces the old
-    QMessageBox popup. Shown exactly like the Missions pane's own list -- the package you clicked FLY on, and the scramble next to it in the same
-    two-line row format, ordered by start time -- with the scramble row in a red frame and "why it was offered" (ev['text']) standing in for its
-    description. One FLY button acts on whichever row is selected; it is disabled on the scramble row when your squadron cannot take it (XO: "a
-    greyed out button"), same as the Missions pane greys out a flight you cannot fly. Closing the dialog any other way (Esc, the window's own
-    close button) is the same as picking your own tasking -- flying never stops here, only the scramble choice does.
-    After exec(), `take_scramble` is True iff the scramble was picked and FLY was pressed (the same contract _emergency_popup returned)."""
-    def __init__(self, parent, campaign_date, pkg, ev: dict, number: int):
+    """v0.41.294 (XO 2026-11-05, "fox 3 medium"): the scramble choice looks like the Missions pane's detail panel. A tall, scrollable page with one block per package, ordered
+    by start time: the objective title, the amber "Mission start HH:MM local (day/night) - weather" line, the intent text and the flight table with a FLY button on every
+    flight you can fly, in BOTH packages. The scramble block is in a red frame and carries the emergency text ("why it was offered"); its buttons are greyed out when your
+    squadron cannot take it. Pressing a FLY button ends the dialog: `take_scramble` says which package it was in and `fid` which flight. Closing the dialog any other way
+    (Esc, the window's close button) leaves `fid` None and `take_scramble` False, the same as picking your own tasking (flying never stops here, only the scramble choice does)."""
+    def __init__(self, parent, sess, pkg, ev: dict, number: int):
         super().__init__(parent)
-        self.setWindowTitle(ev["title"]); self.setMinimumWidth(560)
-        self.take_scramble = False
-        self._eligible = bool(ev["eligible"])
+        self.setWindowTitle(ev["title"]); self.setMinimumSize(720, 640)
+        self.take_scramble = False; self.fid = None
+        self._sess = sess; self._eligible = bool(ev["eligible"])
         epkg = ev["package"]
-        lay = QVBoxLayout(self); lay.setSpacing(10)
-        title = QLabel("Choose which mission to fly"); title.setObjectName("title"); lay.addWidget(title)
-        self.lst = QListWidget(); self.lst.setSpacing(4)
-        rows = sorted(((pkg.start, False), (epkg.start, True)))        # XO: order by time
-        for _start, is_scramble in rows:
-            it = QListWidgetItem()
-            it.setData(Qt.UserRole, is_scramble)
-            it.setSizeHint(QSize(0, 70))
-            self.lst.addItem(it)
-            if is_scramble:
-                self.lst.setItemWidget(it, self._scramble_row(campaign_date, epkg, ev))
-            else:
-                it.setText(self._row_text(campaign_date, pkg, pkg.objective.description))
-        self.lst.setCurrentRow(next(i for i, (_, s) in enumerate(rows) if not s))      # default: the tasking you already had, not the scramble
-        self.lst.currentRowChanged.connect(self._update_fly)
-        lay.addWidget(self.lst)
+        outer = QVBoxLayout(self); outer.setSpacing(10)
+        title = QLabel("Choose which mission to fly"); title.setObjectName("title"); outer.addWidget(title)
+        sc = QScrollArea(); sc.setWidgetResizable(True); sc.setFrameShape(QFrame.NoFrame)
+        body = QWidget(); bl = QVBoxLayout(body); bl.setSpacing(14); bl.setContentsMargins(0, 0, 6, 0)
+        for _start, is_scramble in sorted(((_hm(pkg.start), False), (_hm(epkg.start), True))):      # XO: order by time
+            bl.addWidget(self._block(epkg if is_scramble else pkg, is_scramble, ev))
+        bl.addStretch(1); sc.setWidget(body); outer.addWidget(sc, 1)
         note = (f"Taking the scramble leaves package #{number} to the other squadrons (postponed a day if they cannot cover both). "
                 "Staying with your tasking leaves the emergency to the war simulation" +
                 (", or folds it into your mission as AI." if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else "."))
-        note_l = QLabel(note); note_l.setObjectName("small"); note_l.setWordWrap(True); lay.addWidget(note_l)
-        row = QHBoxLayout(); row.addStretch(1)
-        self.fly = QPushButton("FLY"); self.fly.setObjectName("fly"); self.fly.setFixedWidth(100); self.fly.clicked.connect(self._accept)
-        row.addWidget(self.fly); lay.addLayout(row)
-        self._update_fly(self.lst.currentRow())
+        note_l = QLabel(note); note_l.setObjectName("small"); note_l.setWordWrap(True); outer.addWidget(note_l)
 
-    @staticmethod
-    def _row_text(campaign_date, p, desc: str) -> str:
-        night = is_night(campaign_date, p.start)
-        return (f"#{p.number}  {p.kind.replace('_', ' ')}   {p.start}{' (night)' if night else ''}"
-                f"{'   [JOINT]' if getattr(p, 'joint', False) else ''}\n{desc}")
-
-    def _scramble_row(self, campaign_date, epkg, ev: dict) -> QFrame:
-        f = QFrame(); f.setObjectName("scrambleRow")
-        f.setStyleSheet(f"QFrame#scrambleRow {{ border: 1px solid {theme.RED}; border-radius: 8px; }}")
-        lay = QVBoxLayout(f); lay.setContentsMargins(10, 8, 10, 8); lay.setSpacing(2)
-        l = QLabel(self._row_text(campaign_date, epkg, ev["text"])); l.setWordWrap(True)
-        if not self._eligible:
-            l.setStyleSheet(f"color:{theme.DIM};")
-        lay.addWidget(l)
+    def _block(self, p, is_scramble: bool, ev: dict) -> QFrame:
+        sess = self._sess
+        f = QFrame(); f.setObjectName("scrambleRow" if is_scramble else "ownRow")
+        if is_scramble:
+            f.setStyleSheet(f"QFrame#scrambleRow {{ border: 1px solid {theme.RED}; border-radius: 8px; }}")
+        lay = QVBoxLayout(f); lay.setContentsMargins(12, 10, 12, 10); lay.setSpacing(6)
+        night = is_night(sess.state.campaign_date(), p.start)
+        t = QLabel(("SCRAMBLE: " if is_scramble else "") + p.objective.description); t.setObjectName("title"); t.setWordWrap(True); lay.addWidget(t)
+        from .. import weather as _wx
+        w = sess.wx_of(p)
+        wxt = (_wx.describe(w) if w else "clear weather") if not is_scramble else (_wx.describe(w) if w else "weather as at takeoff")
+        h = QLabel(f"#{p.number}  Mission start {p.start} local ({'night' if night else 'day'})   -   {wxt}"); h.setObjectName("h2")
+        h.setStyleSheet(f"color:{theme.AMBER};"); h.setWordWrap(True); lay.addWidget(h)
+        intent = QLabel(ev["text"] if is_scramble else p.objective.description); intent.setWordWrap(True); intent.setObjectName("dim"); lay.addWidget(intent)
+        if is_scramble and not self._eligible:
+            r = QLabel(ev.get("reason") or "Your squadron cannot take this one."); r.setWordWrap(True); r.setStyleSheet(f"color:{theme.RED};"); lay.addWidget(r)
+        lay.addWidget(self._table(p, is_scramble))
         return f
 
-    def _update_fly(self, row: int):
-        is_scramble = bool(self.lst.item(row).data(Qt.UserRole))
-        self.fly.setEnabled(not is_scramble or self._eligible)       # XO: a greyed-out button when your squadron cannot take the scramble
+    def _table(self, p, is_scramble: bool):
+        from .app import _tbl, _item                      # (imported here: app imports this module)
+        sess = self._sess; st = sess.state
+        t = _tbl(["Flight", "Aircraft", "Qty", "Task", "Based at", ""])
+        t.setSelectionMode(QAbstractItemView.NoSelection); t.setFocusPolicy(Qt.NoFocus)
+        t.setStyleSheet("QTableWidget::item:selected, QTableWidget::item:hover, QTableWidget::item:focus { background: transparent; border: none; }")
+        t.verticalHeader().setDefaultSectionSize(42)
+        t.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff); t.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        hh = t.horizontalHeader()
+        for c, m in enumerate((QHeaderView.ResizeToContents, QHeaderView.Stretch, QHeaderView.ResizeToContents, QHeaderView.Stretch, QHeaderView.Stretch, QHeaderView.Fixed)):
+            hh.setSectionResizeMode(c, m)
+        hh.resizeSection(5, 100)
+        t.setRowCount(len(p.flights)); t.setFixedHeight(64 + 42 * len(p.flights))
+        opts = {x.id for x in (sess.flyable(p, squadron_only=False) if is_scramble else sess.flyable(p))}      # a scramble is taken with the aircraft you fly, whatever squadron its flight sits in (as assign_player does)
+        sp = bool(p.extra.get("setpiece"))
+        for i, fl in enumerate(p.flights):
+            spec = AIRCRAFT[fl.aircraft]; yours = fl.id in opts
+            vals = (fl.callsign, spec.display, fl.count, fl.task, st.bases[fl.base_id].name.replace(" AB", ""))
+            for j, v in enumerate(vals):
+                t.setItem(i, j, _item(v, theme.GREEN if (yours and j == 0) else (theme.DIM if (fl.tag or (sp and not yours)) else None), center=(j == 2)))
+            if yours:
+                b = QPushButton("FLY"); b.setObjectName("fly"); b.setFixedSize(84, 30)
+                b.setEnabled(self._eligible or not is_scramble)       # XO: a greyed-out button when your squadron cannot take the scramble
+                b.clicked.connect(lambda _=0, fid=fl.id, sc=is_scramble: self._pick(sc, fid))
+                cont = QWidget(); cl = QHBoxLayout(cont); cl.setContentsMargins(4, 4, 4, 4); cl.addWidget(b, 0, Qt.AlignCenter)
+                t.setCellWidget(i, 5, cont)
+            else:
+                t.setItem(i, 5, _item("AI Support" if fl.tag else ("On alert (AI)" if sp else f"AI {spec.service}"), theme.DIM))
+        return t
 
-    def _accept(self):
-        self.take_scramble = bool(self.lst.item(self.lst.currentRow()).data(Qt.UserRole))
+    def _pick(self, is_scramble: bool, fid: str):
+        self.take_scramble = bool(is_scramble); self.fid = fid
         self.accept()
+
+
+def _hm(s: str) -> int:
+    h, m = str(s).split(":")[:2]
+    return int(h) * 60 + int(m)
 
 
 class DayResolvedDialog(QDialog):
