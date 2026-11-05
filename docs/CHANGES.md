@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.302, the Standoff Strike's SLAM-ER launch point asks for a cruise missile
+
+XO 2026-11-05 ("fox 3 low"; his run: F/A-18 Standoff Strike "didn't even come close"). Light, stacked on #372 (v0.41.301).
+- **Found in his run.** Hornet 1 (the AI flew the player's seat) had full fuel and both AGM-84H, climbed to 30,000 ft at 500 kt as planned, passed 5.9 nm from the SLAM launch point at t=750 and fired nothing (no shot in the state file), then dropped to 5,000 ft and flew home. Not a fuel problem. The target was still about 80 nm away (SLAM-ER reach over 155 nm). The launch point's Bombing task carried DCS's default weapon filter (`weaponType` 9663676414).
+- `_bomb_task`: the waypoint named SLAM now uses `WeaponType.CruiseMissile` (a DCS forum thread, forum.dcs.world/topic/189123, says cruise missiles use the Bombing task with that weapon type; no flag values given there, so this is a best guess). Every other bomb waypoint is unchanged. The hook already logs every shot by name, so an AGM_84 shot will show in `shots`.
+- **Not verified in DCS.** If the Hornets still fire nothing, the next try is another weapon filter or a different task. Compile check only (tactical, not smoked). Not seen in DCS.
+
 ## v0.41.301, the fleet-defence fight moves 25 nm further out
 
 XO 2026-11-05 ("fox 3 low"; his run: "good performance for fleet defense, push the battle further by 25 nm by my measurements so the intercept package won't run out of missiles firing at the barrage"). Tunables only.
