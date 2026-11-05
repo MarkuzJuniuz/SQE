@@ -119,7 +119,7 @@ RAID_MSHL_CLEAR_NM = 12       # the marshal stays this far outside that
 # (TGT) is on the BOMBERS' own way in, between their marshal and the missiles' ring, as far out as red's SAM circles and the fighters' own range allow, so the raid passes through the
 # fighters' engage circle before it fires. All judgment calls (no source for a fighter dash distance; the concept is the Cold War carrier "outer air battle": fighters stationed up
 # the threat axis, cued by AEW; real distances not looked up yet): tune in DCS.
-RAID_IP_MAX_NM = 185          # the longest dash from the hold point to the intercept point (v0.41.267: was 160, but the bombers' way in starts 160-165 nm out at Level 3: no point was ever in range; judgment call, tune in DCS)
+RAID_IP_MAX_NM = 210          # v0.41.301: was 185, the point moved out 25 nm. The longest dash from the hold point to the intercept point (v0.41.267: was 160, but the bombers' way in starts 160-165 nm out at Level 3: no point was ever in range; judgment call, tune in DCS)
 RAID_BEND_MAX_NM = 280        # v0.41.268 (XO 2026-11-04): the longest dash by way of a blue field (hold -> field -> intercept point); judgment call from fuel at high and fast, tune in DCS
 RAID_IP_STEP_NM = 5           # candidate points along the bombers' way in, this far apart
 RAID_IP_LEG_NM = 10           # the orbit leg at the intercept point, across the bombers' line
