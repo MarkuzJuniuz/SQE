@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.295, the buildings of a supply site no longer overlap
+
+XO 2026-11-05 ("fox 3 low"; his screenshot of `rsup_064`: two warehouses and an ammo bunker clipped into each other). Light: `_place_buildings` only.
+- **Measured.** In his miz the three buildings stood 30 to 38 m apart, each on a ring of 18 to 30 m round the block's centre (`ROAD_BLOCK_M` 40 cap). A DCS warehouse is about 30 to 40 m long, so they overlapped.
+- **The change.** One ring round the block's centre, sized so neighbours keep `BUILDING_GAP_M` 55 m (judgment call) centre to centre; each building turns a little (heading plus a fixed offset per building). If part of the ring is in the water the whole block moves (8 directions) instead of being squeezed; if nothing fits it stays where it was. `ROAD_BLOCK_M` is gone; `ROAD_OFF_M` (100 m off the road) is unchanged. Applies to fuel farms, depots, refineries and factories, both sides.
+- **Checked.** A built full-map mission on two fresh campaigns (118 and 70 sites): the smallest gap between two buildings of one site is 55 m; the first try, without the move, collapsed three coastal fuel farms to 0. Smoke check_93, 113 and 114. Sites are about 100 to 150 m across now. Not seen in DCS.
+
 ## v0.41.294, the scramble choice is a tall page like the Missions pane, with a FLY button on every flight of both packages
 
 XO 2026-11-05 ("fox 3 medium"). Stacked on nothing: #361 to #364 are merged.

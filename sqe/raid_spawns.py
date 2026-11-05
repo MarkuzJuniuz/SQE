@@ -139,7 +139,7 @@ SUPPLY_PLANTS = {         # v0.41.241 (queue item i): the big sites of the road 
 
 
 ROAD_OFF_M = 100.0            # v0.41.259: the centre of a supply site's block of buildings is this far to one side of the road (judgment call: no public figure; tanks need access and firebreaks; the road heading is rough, see road_front.heading_at)
-ROAD_BLOCK_M = 40.0           # ... and the buildings stand within this radius of that centre, so the nearest is about 60 m off the road
+BUILDING_GAP_M = 55.0         # v0.41.295 (XO 2026-11-05: a depot's warehouses and ammo bunker overlapped, 30 to 38 m apart): the least distance between two buildings of one site, centre to centre. Judgment call: a DCS warehouse is about 30 to 40 m long; measured on XO's rsup_064
 
 
 def supply_parts(kind, variant: str = "") -> list:
@@ -767,13 +767,19 @@ class RaidSpawns:
                 bx, by = offset(cx, cy, rh - 90 * side, ROAD_OFF_M)
             if not seac.site_ok(bx, by):
                 rh = None
+        ring = BUILDING_GAP_M / (2 * math.sin(math.pi / n)) if n > 1 else 0.0      # v0.41.295: one ring round the block's centre, big enough that neighbours keep BUILDING_GAP_M apart
+        spots = [offset(bx, by, k * (360 / n) + hdg, ring) for k in range(n)]
+        if not all(seac.site_ok(x, y) for x, y in spots):                          # part of the ring is in the water: move the whole block (never squeeze it, the buildings would overlap again); none fits: as it was, no water test
+            for ang in range(0, 360, 45):
+                bx2, by2 = offset(bx, by, ang, ring + 30.0)
+                cand = [offset(bx2, by2, k * (360 / n) + hdg, ring) for k in range(n)]
+                if all(seac.site_ok(x, y) for x, y in cand):
+                    spots = cand
+                    break
         for k, vt in enumerate(parts[:n]):
-            if rh is None:
-                x, y = offset(cx, cy, k * (360 / len(parts)) + hdg, 40 + 12 * k)
-            else:
-                x, y = offset(bx, by, k * (360 / len(parts)) + hdg, min(ROAD_BLOCK_M, 18.0 + 6.0 * k))
+            x, y = spots[k]
             nm = f"{aim}|b{k + 1}"          # b: never clashes with a guard vehicle `<aim>|<n>` in the same site
-            sg = self.m.static_group(country, nm, vt, mapping.Point(x, y, self.t), heading=hdg)
+            sg = self.m.static_group(country, nm, vt, mapping.Point(x, y, self.t), heading=hdg + (k * 37 % 61 - 30))      # a little turn per building, so a site does not look like a parade
             sg.units[0].name = nm
             names.append(nm)
         return names
