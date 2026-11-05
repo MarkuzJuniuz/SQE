@@ -150,19 +150,25 @@ def _state_on(campaign_id: str, start: date, k: int, clim: dict) -> int:
     return seq[k]
 
 
+# Wind-from window (degrees) that keeps the ILS runway the active one at every blue field (runways 060-130; a 70-120 wind gives
+# at least a 50% headwind on each). DCS picks the runway by wind, and in low cloud/visibility the ILS is the only way in.
+# Judgment call (XO 2026-11-05); magnetic vs true offset (~6 deg) unchecked.
+ILS_WIND = (70.0, 120.0)
+
+
 def _anchor(campaign_id: str, k: int, state: str, clim: dict, month: int) -> dict:
     """The 06:00 picture of a day in `state`, with seeded variation."""
     r = _rng(campaign_id, "wxp", k)
     (c0, c1), (b0, b1), (v0, v1), wf, turb, dq, dt = _P[state]
     u = lambda a, b: a + (b - a) * r.random()
     return {"cover": u(c0, c1), "base": u(b0, b1), "vis": u(v0, v1), "wind": clim["wind_ms"][month - 1] * wf * u(0.8, 1.25),
-            "dir": u(0, 360), "turb": turb, "qnh": 761 + dq + u(-2, 2), "dt": dt + u(-2.0, 2.0),
+            "dir": u(ILS_WIND[0], ILS_WIND[1]), "turb": turb, "qnh": 761 + dq + u(-2, 2), "dt": dt + u(-2.0, 2.0),
             "fog": r.random() < clim["fog"][month - 1] and state in ("OVERCAST", "RAIN", "SCATTERED", "BROKEN")}
 
 
 def _fixed(state: str, clim: dict, month: int) -> dict:
     (c0, c1), (b0, b1), (v0, v1), wf, turb, dq, dt = _P[state]
-    return {"cover": (c0 + c1) / 2, "base": (b0 + b1) / 2, "vis": (v0 + v1) / 2, "wind": clim["wind_ms"][month - 1] * wf, "dir": 250.0,
+    return {"cover": (c0 + c1) / 2, "base": (b0 + b1) / 2, "vis": (v0 + v1) / 2, "wind": clim["wind_ms"][month - 1] * wf, "dir": sum(ILS_WIND) / 2,
             "turb": turb, "qnh": 761 + dq, "dt": dt, "fog": False}
 
 
