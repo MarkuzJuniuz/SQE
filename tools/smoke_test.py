@@ -61,6 +61,8 @@ def check_00_setup(c):
     from sqe import raids as _r0
     _EMERG = _r0.emergency_happens
     _r0.emergency_happens = lambda *a, **k: False
+    import sqe.engine as _e0
+    _e0.DICE_EMERGENCIES = True            # v0.41.304: the game ships with the dice off; the emergency machinery stays until it is removed, so its checks run with them on (check_127 tests the shipped default)
     print(f"SQE smoke test, version {sqe.__version__}  (isolated temp data: {TMP})")
     mk = lambda: Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
     s = mk()
@@ -948,7 +950,7 @@ def check_21_raids_emergencies(c):
     _nw = _ns = 0
     for _ in range(60):
         _st.ground["flown_day"] = _st.day; s.plan_day(); _st.day += 1          # flown every day: the idle surge (v0.41.155) stays out of the rate check
-        _nw += sum(1 for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land")); _ns += _st.raids["surprise"]
+        _nw += sum(1 for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land")); _ns += _st.raids["surprise"] + sum(1 for p_ in s.packages() if p_.extra.get("unwarned"))
     assert 8 <= _nw <= 36 and _ns >= 1, (_nw, _ns)
     _st.day = 5; s.plan_day(); _a = [d_["objective"]["description"] for d_ in _st.plan]; s.plan_day(); assert _a == [d_["objective"]["description"] for d_ in _st.plan], "a day replans the same"
     # v0.41.290 (XO 2026-11-04: "it should have time"): the dice are thrown once per day and sortie slot (roughly the table), the emergency has a time of its own and is offered on
@@ -6609,6 +6611,36 @@ def check_126_land_raid_flyable(c):
     print("[land raid flyable] a raid scramble offers the player a flight and builds a mission; BARCAP stays AI-only")
 
 
+def check_127_planned_raids_listed(c):
+    """v0.41.304 (XO 2026-11-05: no dice, "only what red actually tries", no hidden ones): the game ships with the emergency dice off; every raid red plans (unwarned ones too)
+    is a listed package; titles read "<what is defended> Defense: Intercept"; planned CAS in the hardest-pressed sector is marked troops in contact."""
+    import sqe.engine as _eng
+    from sqe.models import ObjectiveType as _OT
+    real = _eng.DICE_EMERGENCIES
+    _eng.DICE_EMERGENCIES = False
+    try:
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+        ses.new("Planned", "F-16C", 3, seed=1)
+        titles, unw, tic = set(), 0, 0
+        for _ in range(12):
+            ps = ses.packages()
+            assert not any(ses.emergency_for(p.number) for p in ps), "no dice emergency is ever offered"
+            for p in ps:
+                if p.objective.type == _OT.FLEET_DEFENSE:
+                    titles.add(p.title)
+                    assert p.urgent and p.title.endswith("Defense: Intercept"), p.title
+                    unw += 1 if p.extra.get("unwarned") else 0
+                if p.extra.get("tic"):
+                    tic += 1
+                    assert p.urgent and p.objective.type == _OT.CAS
+            ses.skip_day()
+        assert titles, "a raid was planned in twelve days"
+    finally:
+        _eng.DICE_EMERGENCIES = real
+    print(f"[planned raids] listed with titles {sorted(titles)}, {unw} unwarned, {tic} troops in contact, no dice emergency")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -6774,6 +6806,7 @@ CHECKS = [
     check_124_standoff_strike,
     check_125_release_points,
     check_126_land_raid_flyable,
+    check_127_planned_raids_listed,
 ]
 
 def _borrows(fn) -> set:

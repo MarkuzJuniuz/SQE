@@ -1,5 +1,16 @@
 # CHANGES.md
 
+## v0.41.304, no more dice: red's planned raids are listed (red border), with plain names
+
+XO 2026-11-05 ("fox 3 high"; "I don't like the dice rolls anymore, red sucks when attacking blue bases"; "show the scrambles with red borders on the main UI, no more hidden ones"). PR B of the planned-scramble work; needs a NEW campaign (a stored day plan keeps its old packages). Plan: `claude/sqe-queue.md` item S.
+- **No dice.** `engine.DICE_EMERGENCIES = False`: `emergency_for` offers nothing, so the per-sortie emergency roll (`emerg_chance`) and the scramble dialog never come up. The code stays until the last PR of the series removes it (the Settings "Emergencies" box does nothing meanwhile).
+- **Every raid red plans is a listed package.** `raids.todays_raids` builds the unwarned raids as packages too (id `...-s<n>`, the list line adds "(no warning)"); before, they were only a count settled overnight. One that cannot be built is still settled overnight (`state.raids["surprise"]` now counts only those).
+- **Names** (`Package.title`): "Fleet Defense: Intercept" (the carrier raid), "Base Defense: Intercept", "Supply Defense: Intercept", "Garrison Defense: Intercept", "Troop Defense: Intercept". Other jobs read as before. The list and the "also in this mission" lines use it; `Package.kind` is unchanged (state, code and smoke still key on it).
+- **Red border.** The Missions list draws a red border round a raid intercept and a troops-in-contact CAS (`UrgentDelegate`, `Package.urgent`). Rendered offscreen: the border shows on a selected row; not looked at beyond that.
+- **Troops in contact** is no longer a roll: the planned CAS on the armor of the sector under the hardest red pressure (`raids.hot_sector`) is marked (`extra["tic"]`), one per day at most.
+- Fleet defense stays one a day (the staged bomber raid), supply defense can come every day, a declined raid is settled by the war sim as before.
+- **Checked.** Probe (L3 and L2, 8 days): raids listed with the new names, unwarned ones among them, flyable for a seat that can take them; full smoke (the old emergency checks run with the dice switched on in `check_00_setup`; new `check_127_planned_raids_listed` tests the shipped default; `check_21` counts unwarned packages). Not seen in DCS.
+
 ## v0.41.303, raids on fields, supply sites and garrisons are player-flyable
 
 XO 2026-11-05 ("fox 3 medium"). PR A of the planned-scramble work (his decisions: red's planned raids become scrambles, no more dice; plan in `claude/sqe-queue.md` item S).

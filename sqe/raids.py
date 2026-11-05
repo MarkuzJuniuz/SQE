@@ -345,7 +345,7 @@ def _commit(state, d, base, aim: str) -> None:
 
 
 def todays_raids(state, d, rng: random.Random) -> tuple:
-    """-> (objectives of the announced raids, number of surprise raids). One draw per day; the same seed gives the same answer."""
+    """-> (objectives of every raid red plans today, the unwarned ones with an id like obj-d3-s2; number of unwarned raids that could not be built, settled overnight). One draw per day; the same seed gives the same answer."""
     from . import bombers
     if bombers.is_quiet(state):                             # v0.41.109: the quiet day before the carrier raid
         return [], 0
@@ -354,16 +354,17 @@ def todays_raids(state, d, rng: random.Random) -> tuple:
     n = int(rate) + (1 if rng.random() < rate - int(rate) else 0)
     warned, surprise = [], 0
     for _ in range(n):
-        if rng.random() < d.raid_surprise:
-            surprise += 1
-            continue
+        unwarned = rng.random() < d.raid_surprise
         pa = pick_aim(state, d, rng)
         if pa is not None and all((o.target_id, o.aim) != (pa[0].id, pa[1]) for o in warned):
             base, aim = pa
             o = raid_objective(base, aim, describe(state, base, aim))
-            o.id = f"obj-d{state.day}-r{len(warned) + 1}"
+            # v0.41.304 (XO 2026-11-05: "no more hidden ones"): an unwarned raid is listed like the others (id ...-s<n>, the package reads "no warning"); it used to be only a count settled overnight
+            o.id = f"obj-d{state.day}-{'s' if unwarned else 'r'}{len(warned) + 1}"
             _commit(state, d, base, aim)
             warned.append(o)
+        elif unwarned:
+            surprise += 1                                    # no target to build it on: it still happens, settled overnight as before
     return warned, surprise
 
 
