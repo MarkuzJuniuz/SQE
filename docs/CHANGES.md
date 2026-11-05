@@ -1,5 +1,15 @@
 # CHANGES.md
 
+## v0.41.289, the carrier raid's battle moves in to about 170 nm
+
+XO 2026-11-04 ("make the actual battle where the ruler is"; past it the map is featureless; "the carrier group could take some of the initial salvos"; "fox 3 medium").
+- **Nearest first, from 170 nm.** `_raid_intercept` and `_raid_bent` now take their candidate intercept points from the new `_raid_ip_points`: on the raid's bearing, starting `RAID_IP_NEAR_NM` (170 nm) from the carrier and working outward, nearest first. Before, they picked the furthest point out from the route's outer point `w1` (220 nm). In XO's run that put the fight 240 to 330 nm out, with ejections around 300 nm over the steppe. The 170 is a judgment call taken from XO's F10 ruler, which measured 165 to 175 nm from the carrier on his screenshot (fitted to 10 airfields).
+- **Inside the X-22's reach on purpose.** The bombers still launch 20 nm beyond the fighters' station (`_raid_launch`), now at about 190 nm, inside the 208 nm reach. The carrier group can take the first salvos. The bombers have no hold-fire rule.
+- **SEAD threat line** (`threatmap.raid_inbound_sites`) now runs out to `RAID_THREAT_OUT_NM` (190 nm, the intercept band plus the launch point) instead of `w1` (220 nm).
+- The orbit leg at the intercept point is laid across the raid's bearing (the bearing from `w1` to the marshal breaks for a point inside `w1`).
+- Probe (L3, `F-14BU`, seeds 1/3/4/7): intercept point at 170 nm on every seed (old code 240), launch at 190 (old 215), 215 to 240 units. Seen before this change too: on some seeds a package has one more SEAD slot than SEAD groups built. Not looked into.
+Full smoke test passed (`SMOKE TEST PASSED`, exit 0). Not seen in DCS.
+
 ## v0.41.288, the emergency/scramble choice is now its own dialog, not a QMessageBox
 
 XO 2026-11-04 (make scramble choices feel like picking a mission, not clearing an error; "fox 3 medium").
