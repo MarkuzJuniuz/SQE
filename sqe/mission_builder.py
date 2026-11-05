@@ -88,6 +88,7 @@ RAID_SCRIPT_KILL = 0.5      # ...and this share of the live site's launchers and
 RAID_PLAYER_WAIT_S = 300    # v0.41.284 (XO 2026-11-04: "it's unrealistic if red will wait forever"): when the player flies the raid SEAD, red's raiders spawn this long after his HARMs, the radars dead or not (judgment call; "5 minutes?")
 RAID_DASH_WAIT_S = 180      # v0.41.256: the interceptors cross this long after the HARMs if the tracking radars are not all dead by then (judgment call)
 RAID_HEAD_S = 300         # v0.41.278 (XO 2026-11-04: "intelligence is intelligence. Must've put two and two together"): the AI interceptors of the fleet-defence raid spawn this far along their route, as if they had launched this long before the mission began. A player's flight is not moved. Judgment call: ~50 nm at the dash speed; 0 = they start at the field
+RAID_SAM_RESERVE = 50    # v0.41.291 (XO 2026-11-04: spawn every red SAM, "trim the furthest when over budget"): the carrier-defence setpiece's extra SAM sites stop this many units short of the limit, so the relief sorties, standby pairs and wrecks built after them still fit. Judgment call from probes: the old build spent 36 to 50 units after its SAMs.
 RAID_F14_HOLD = False     # v0.41.276 (XO 2026-11-04: "the interceptors should just fly fast and bend away from SAMs"): False = the fleet-defence F-14s and F-15s have no HOLD and no gate: they leave at the start, fly the SAM-bending lane at the dash speed and wait on the intercept point. True = the v0.41.256 hold-then-dash with the SEAD gate.
 STAGGER = {Role.SWEEP: -90, Role.ESCORT: -90, Role.SEAD: -60, Role.TARCAP: -TARCAP_LEAD_S}      # seconds relative to the strikers' push (BMS-style)
 
@@ -1340,7 +1341,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 u.name = f"ENM-FM-{pf['wing']}-{n}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", pf["wing"], names, ac=pf["type"])
 
-    def _spawn_opfor_ground(self, package, tx, ty, manifest, polyline=None, route_sites=None, route_near=None):
+    def _spawn_opfor_ground(self, package, tx, ty, manifest, polyline=None, route_sites=None, route_near=None, all_sams=False):
         st, obj = self.state, package.objective
         from .war import blinded_today
         # the DEAD stage of a SEAD-first pair: if the SEAD package blinded the site (the day's verdict), its radars are already gone when the mission starts
@@ -1359,10 +1360,16 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             relevant = [tgt] + dfn[:2]                                                   # the two nearest defenders; more only costs VR frame rate
             relevant += [g for g in st.assets.values() if g.guards == tgt.id]            # a SAM site's dug-in garrison is part of its cluster
             relevant += fol_
+        extra_ids_ = set()                   # v0.41.291: the SAM sites `all_sams` adds beyond the route's own (they leave RAID_SAM_RESERVE units free for the flights built after)
         if polyline:                         # every SAM site whose ring touches the route is live from the start
             cs_ = tm.corridor_sam_sites(st, polyline, tgt, **({"max_route": route_sites} if route_sites else {}))
+            if all_sams:                     # v0.41.291 (XO 2026-11-04: "spawn all red SAMs", the carrier-defence setpiece only): every live SAM site, not just the ones whose ring touches the route
+                have_ = {a_.id for a_ in cs_}
+                extra_ = [a_ for a_ in st.assets.values() if a_.kind == AssetKind.SAM and not a_.destroyed and a_.id not in have_]
+                cs_ = cs_ + extra_
+                extra_ids_ = {a_.id for a_ in extra_}
             if route_near is not None:                                  # v0.41.285: nearest to this point first, so the unit limit trims the furthest (see `_spawn_raid`)
-                cs_.sort(key=lambda a_: dist(a_.x, a_.y, route_near[0], route_near[1]))
+                cs_.sort(key=lambda a_: (a_.id in extra_ids_, dist(a_.x, a_.y, route_near[0], route_near[1])))      # (v0.41.291: the route's own sites first, then the extras `all_sams` adds)
             route_ids = {a_.id for a_ in cs_}
             relevant += cs_
         ewrs = sorted((a for a in st.assets.values() if a.kind == AssetKind.EWR and not a.destroyed),
@@ -1370,6 +1377,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         relevant += [a for a in ewrs[:2] if (tm.poly_dist(a.x, a.y, polyline) if polyline else 0) < 80 * NM]
         seen = set()
         cut_ = False                                                    # v0.41.285: once a route site does not fit, the rest of them (further out) are left out too
+        cut_names_ = []
         for a in relevant:
             if a.id in seen or a.destroyed:
                 continue
@@ -1380,15 +1388,20 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     manifest.mark_primary(a.id, manifest.cur_pkg or package.id)
                 continue
             comp = SITES.get(a.variant) if a.kind in (AssetKind.SAM, AssetKind.EWR) else SOFT.get(a.kind)
-            if route_near is not None and a.id in route_ids and a.id not in self.groups_by_asset and (cut_ or self._units_room() < sum(n_ for _, n_ in (comp or [])) + 2):
+            if route_near is not None and a.id in route_ids and a.id not in self.groups_by_asset and (cut_ or self._units_room() < sum(n_ for _, n_ in (comp or [])) + 2 + (RAID_SAM_RESERVE if a.id in extra_ids_ else 0)):
                 cut_ = True
-                self.warns.append(f"{a.name}: left out to stay under the unit limit (furthest from the intercept point first)")
+                if all_sams:
+                    cut_names_.append(a.name)                            # one warning for the whole tail (v0.41.291: up to every SAM site is a candidate)
+                else:
+                    self.warns.append(f"{a.name}: left out to stay under the unit limit (furthest from the intercept point first)")
                 continue
             if comp and route_sites and self._units_room() < sum(n_ for _, n_ in comp) + 2:
                 self.warns.append(f"{a.name}: left out to stay under the unit limit")        # v0.41.256: the raid's extra route sites never push the mission over it
                 continue
             if comp:
                 self._spawn_site(a, comp, manifest, primary=is_tgt)
+        if cut_names_:
+            self.warns.append(f"{len(cut_names_)} SAM sites left out to stay under the {self.o.max_units}-unit limit (furthest from the intercept point first): " + ", ".join(cut_names_[:6]) + (", ..." if len(cut_names_) > 6 else ""))
 
     def _spawn_site(self, a, comp, manifest, primary):
         """ONE group per site: a SAM battery needs its search/track radars, launchers and command post together."""

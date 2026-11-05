@@ -1,5 +1,15 @@
 # CHANGES.md
 
+## v0.41.291, the carrier-defence setpiece spawns every live red SAM site
+
+XO 2026-11-04 ("how many times do I need to ask to SPAWN ALL RED SAMS?!? Just trim the furthest ones when overbudget"; "this setpiece mission only which is the carrier defense will spawn all red SAMs"; "fox 3 medium"). Stacked on v0.41.290 (#361).
+- **What changed.** `_spawn_opfor_ground` has a new `all_sams` switch, passed only by the carrier-raid setpiece (`_spawn_raid`, `extra["setpiece"]`). It adds every live SAM site in the campaign (`AssetKind.SAM`, not destroyed, including the short-range SA-15/19/8 and field SAMs) to the sites whose ring touches the bombers' route. Nothing else in the game changed: other missions build exactly what they did.
+- **Order and trim.** The route's own sites come first (as before), then the extras, nearest to the intercept point first; the first one that does not fit stops the rest (furthest first). The 250-unit limit still binds. One warning names the whole trimmed tail instead of one line per site.
+- **Reserve.** The extras stop `RAID_SAM_RESERVE` (50) units short of the limit, so the relief sorties, standby pairs and wrecks built after them are not squeezed out (the first version lost 6 flights on a fresh seed). Judgment call from probes: the old build spent 36 to 50 units after its SAMs. Lower it to give SAMs more room.
+- **Measured (all-AI, L3).** XO's Iron Tide save (day 20): 0 SAM sites in the old mission, 21 of 31 now; plane groups 24 and 24; the interceptors still fly to 170 nm. Fresh campaigns (seeds 1 and 3): unchanged, 9 sites each (the base mission is already at 186 to 212 units when the SAMs are placed, so the reserve leaves no room for extras).
+- The planner's SAM circles (`_raid_circles`) still count every live SAM, spawned or not. A site trimmed by the limit is the furthest from the intercept point, so it is not near the line.
+- Full smoke test passed (`SMOKE TEST PASSED`, exit 0). Not seen in DCS.
+
 ## v0.41.290, the interceptors' dash no longer waits on a SEAD job
 
 XO 2026-11-04 ("Why the heck did the interceptors orbit on the water again?", "it's a setpiece, none of the old things matter"; "fox 3 medium"). Found on XO's Iron Tide save (day 20, package 4).
