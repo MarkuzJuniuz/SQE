@@ -3,13 +3,15 @@ import html
 import json
 import time
 from pathlib import Path
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QSize, QTimer
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QCheckBox, QSpinBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
-                               QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
+                               QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
                                QTextBrowser, QVBoxLayout, QHeaderView, QTabWidget, QWidget, QScrollArea)
 from .. import settings as S
 from ..aircraft import AIRCRAFT
 from ..difficulty import LEVELS
+from ..timeofday import is_night
 from . import theme
 from .widgets import StepSpin, card
 
@@ -446,6 +448,70 @@ class WaitingDialog(QDialog):
 
     def reject(self):          # closing the window keeps the sortie pending; Debrief via the Missions page
         self.timer.stop(); super().reject()
+
+
+class ScrambleChoiceDialog(QDialog):
+    """v0.41.288 (XO 2026-11-04, "fox 3 medium": make scramble choices feel like picking a mission, not clearing an error). Replaces the old
+    QMessageBox popup. Shown exactly like the Missions pane's own list -- the package you clicked FLY on, and the scramble next to it in the same
+    two-line row format, ordered by start time -- with the scramble row in a red frame and "why it was offered" (ev['text']) standing in for its
+    description. One FLY button acts on whichever row is selected; it is disabled on the scramble row when your squadron cannot take it (XO: "a
+    greyed out button"), same as the Missions pane greys out a flight you cannot fly. Closing the dialog any other way (Esc, the window's own
+    close button) is the same as picking your own tasking -- flying never stops here, only the scramble choice does.
+    After exec(), `take_scramble` is True iff the scramble was picked and FLY was pressed (the same contract _emergency_popup returned)."""
+    def __init__(self, parent, campaign_date, pkg, ev: dict, number: int):
+        super().__init__(parent)
+        self.setWindowTitle(ev["title"]); self.setMinimumWidth(560)
+        self.take_scramble = False
+        self._eligible = bool(ev["eligible"])
+        epkg = ev["package"]
+        lay = QVBoxLayout(self); lay.setSpacing(10)
+        title = QLabel("Choose which mission to fly"); title.setObjectName("title"); lay.addWidget(title)
+        self.lst = QListWidget(); self.lst.setSpacing(4)
+        rows = sorted(((pkg.start, False), (epkg.start, True)))        # XO: order by time
+        for _start, is_scramble in rows:
+            it = QListWidgetItem()
+            it.setData(Qt.UserRole, is_scramble)
+            it.setSizeHint(QSize(0, 70))
+            self.lst.addItem(it)
+            if is_scramble:
+                self.lst.setItemWidget(it, self._scramble_row(campaign_date, epkg, ev))
+            else:
+                it.setText(self._row_text(campaign_date, pkg, pkg.objective.description))
+        self.lst.setCurrentRow(next(i for i, (_, s) in enumerate(rows) if not s))      # default: the tasking you already had, not the scramble
+        self.lst.currentRowChanged.connect(self._update_fly)
+        lay.addWidget(self.lst)
+        note = (f"Taking the scramble leaves package #{number} to the other squadrons (postponed a day if they cannot cover both). "
+                "Staying with your tasking leaves the emergency to the war simulation" +
+                (", or folds it into your mission as AI." if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else "."))
+        note_l = QLabel(note); note_l.setObjectName("small"); note_l.setWordWrap(True); lay.addWidget(note_l)
+        row = QHBoxLayout(); row.addStretch(1)
+        self.fly = QPushButton("FLY"); self.fly.setObjectName("fly"); self.fly.setFixedWidth(100); self.fly.clicked.connect(self._accept)
+        row.addWidget(self.fly); lay.addLayout(row)
+        self._update_fly(self.lst.currentRow())
+
+    @staticmethod
+    def _row_text(campaign_date, p, desc: str) -> str:
+        night = is_night(campaign_date, p.start)
+        return (f"#{p.number}  {p.kind.replace('_', ' ')}   {p.start}{' (night)' if night else ''}"
+                f"{'   [JOINT]' if getattr(p, 'joint', False) else ''}\n{desc}")
+
+    def _scramble_row(self, campaign_date, epkg, ev: dict) -> QFrame:
+        f = QFrame(); f.setObjectName("scrambleRow")
+        f.setStyleSheet(f"QFrame#scrambleRow {{ border: 1px solid {theme.RED}; border-radius: 8px; }}")
+        lay = QVBoxLayout(f); lay.setContentsMargins(10, 8, 10, 8); lay.setSpacing(2)
+        l = QLabel(self._row_text(campaign_date, epkg, ev["text"])); l.setWordWrap(True)
+        if not self._eligible:
+            l.setStyleSheet(f"color:{theme.DIM};")
+        lay.addWidget(l)
+        return f
+
+    def _update_fly(self, row: int):
+        is_scramble = bool(self.lst.item(row).data(Qt.UserRole))
+        self.fly.setEnabled(not is_scramble or self._eligible)       # XO: a greyed-out button when your squadron cannot take the scramble
+
+    def _accept(self):
+        self.take_scramble = bool(self.lst.item(self.lst.currentRow()).data(Qt.UserRole))
+        self.accept()
 
 
 class DayResolvedDialog(QDialog):
