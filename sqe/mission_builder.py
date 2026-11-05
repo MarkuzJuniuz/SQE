@@ -50,6 +50,7 @@ TARCAP_LEAD_S = 120           # v0.41.115 (was 0; XO 2026-10-22: fighters in fir
                               # v0.41.0's 5-minute head start, which let the SA-10 kill six waiting Eagles (judgment call). v0.41.1 had it arrive WITH the HARM shooters.
 FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
+PARKED_MAX = 12               # v0.41.297 (XO 2026-11-05: a counter-air strike has nothing to hit, the ramp is empty): at most this many static jets stand on the target field's ramp. Judgment call: a statics-count cap for VR; the wing's true strength stays in the state (a static costs `carcass_weight` of a unit)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
 SCRUB_POINT_NM = 20           # v0.41.223: a package flight's SCRUB point (where a scrubbed flight goes first) sits this far from its home field, on the bearing of its route's last point (the same shape as the stand-off ABORT point)
 BLUE_BASE_DEF_SKILL = "Excellent"   # v0.41.222 (XO 2026-10-31): blue's base Patriot / HAWK / AAA are always the top DCS skill, whatever the Blue skill setting or the level says. Why: under "level" they were left at pydcs's Average while red's sites run at the level's skill (High on L3), and XO saw them barely fire. Judgment call (no public figure for operator quality).
@@ -537,6 +538,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + list(self._red_intel)
         self._spawn_supply_in_radius(package, tx, ty, manifest, only_raid=True, max_units=RAID_SUPPLY_UNITS)       # v0.41.220: what a raid scramble is about is built before the raiders and the alert pairs use the unit limit
         self._spawn_reactive(package, extras, tx, ty, ptot, geom, manifest, despawn)
+        self._spawn_parked_jets(package, manifest)
         self._dry_pass()
         self._spawn_supply_in_radius(package, tx, ty, manifest)
         self._place_carcasses()
@@ -614,7 +616,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 gt_["seads"] = list(self._sead_grps.get(gt_["site"], []))
             install_hook(m, st.campaign_id, manifest.sortie, package.id, despawn if o.ai_despawn_on_land else [], manifest.player_unit,
                          group=pf.callsign, calls=[(t_, x_, f"TO {pf.callsign.upper()}:" in x_.upper()) for t_, x_ in calls], wps=[], sound=sound, sound_you=sound_you, flights=self._ulabels,
-                         enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" for u in g_["units"]],
+                         enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" and not g_.get("parked") for u in g_["units"]],
                          sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM, jams=(self._jams if o.ecm_script else {}), jamw=(self._jamw if o.ecm_script else {}),
                          watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and not f_.is_player],
                          done_after=max([float(ptot)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
@@ -1266,7 +1268,70 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         o = package.objective
         if o.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
             return tx, ty
+        if o.type == ObjectiveType.COUNTER_AIR and o.aim != "SWEEP":          # v0.41.297: a counter-air strike goes for the ramp, where the jets park, not the airfield's reference point (the garrison)
+            r_ = self._ramp_xy(self.state.assets[o.target_id])
+            if r_ is not None:
+                return r_
         return self._site_center(self.state.assets[o.target_id])
+
+    def _ramp_xy(self, a):
+        """The middle of an airfield's aircraft ramp: the parking slot nearest to the centre of all its airplane slots (a real paved spot). None: no airport or no airplane slots."""
+        ap = self.t.airports.get(a.airport) if getattr(a, "airport", None) else None
+        slots = [q for q in (ap.parking_slots if ap else []) if q.airplanes]
+        if not slots:
+            return None
+        cx_ = sum(q.position.x for q in slots) / len(slots); cy_ = sum(q.position.y for q in slots) / len(slots)
+        q = min(slots, key=lambda q_: dist(q_.position.x, q_.position.y, cx_, cy_))
+        return q.position.x, q.position.y
+
+    def _spawn_parked_jets(self, package, manifest) -> None:
+        """v0.41.297 (XO 2026-11-05, "if those jets are really available on that field then spawn them parked"): a counter-air strike (not the sweep) finds the target field's jets
+        parked on the ramp, as static aircraft on free parking spots. How many: the wing's serviceable jets of each type, minus the jets this mission launches from that field
+        (alert pairs, raid and CAP flights are in `manifest` by now: they are in the air, not on the ramp), at most PARKED_MAX, the free parking spots, and what the unit limit leaves.
+        They are an `enemy_air` group of the wing marked `parked`, so a destroyed one comes off the wing in the debrief like a shot-down flight."""
+        o = package.objective
+        if o.type != ObjectiveType.COUNTER_AIR or o.aim == "SWEEP":
+            return
+        st = self.state
+        a = st.assets.get(o.target_id)
+        w = st.enemy_air_at(o.target_id) if a is not None else None
+        ap = self.t.airports.get(a.airport) if (a is not None and getattr(a, "airport", None)) else None
+        if w is None or ap is None or a.destroyed:
+            return
+        left = {}
+        for q in w.sqns:
+            left[q.aircraft] = left.get(q.aircraft, 0) + q.available
+        for g in manifest.groups:                                               # in the air, not parked
+            if g["kind"] == "enemy_air" and g["ref"] == a.id and not g.get("parked"):
+                for _ in g["units"]:
+                    t_ = g.get("ac") if left.get(g.get("ac"), 0) > 0 else max(left, key=left.get, default=None)
+                    if t_ is not None and left.get(t_, 0) > 0:
+                        left[t_] -= 1
+        # a mixed wing parks its types in turn, so a cut at PARKED_MAX keeps the mix
+        pools = {t_: n_ for t_, n_ in left.items() if n_ > 0}
+        seq = []
+        while pools and len(seq) < PARKED_MAX:
+            for t_ in list(pools):
+                seq.append(t_); pools[t_] -= 1
+                if pools[t_] <= 0:
+                    del pools[t_]
+        rw_h = ap.runways[0].heading if ap.runways else 0.0
+        made, names_by = 0, {}
+        for t_ in seq:
+            cls = getattr(planes, t_, None)
+            if cls is None or self._units_room() < self.o.carcass_weight:
+                continue
+            slot = ap.free_parking_slot(cls)
+            if slot is None:
+                continue
+            made += 1
+            nm = f"PARK {a.id}|{made}"
+            sg = self.m.static_group(self.red, nm, cls, mapping.Point(slot.position.x, slot.position.y, self.t), heading=rw_h)
+            sg.units[0].name = nm
+            slot.unit_id = sg.units[0].id
+            names_by.setdefault(t_, []).append(nm)
+        for t_, names in names_by.items():
+            manifest.add("enemy_air", a.id, names, ac=t_, parked=True)
 
     def _vary_comp(self, a, comp):
         r, out = self.vrng, []

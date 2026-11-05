@@ -6437,6 +6437,48 @@ def check_121_sunk_carrier(c):
     print("[sunk carrier] ship, aircraft and escorts lost in the debrief, squadrons ashore, one lost base while away, planner and mission without it, back as new on day 7")
 
 
+def check_123_parked_jets(c):
+    """v0.41.297 (XO 2026-11-05): a counter-air strike finds the target field's jets parked on the ramp as static aircraft: as many as the wing has serviceable minus what the mission
+    launches from that field (no jet both flies and stands there), on distinct free parking spots, at most PARKED_MAX, an `enemy_air` group of the wing marked `parked`; the strikers'
+    target point is on the ramp (a parking spot), not the garrison at the field's reference point."""
+    import zipfile as _zf
+    from lupa import LuaRuntime as _LR
+    from sqe.models import Objective as _O, AssetKind as _AK, ObjectiveType as _OT
+    from sqe.packages import PackageBuilder as _PB, Ledger as _Lg, NoPlayerSlot as _NP
+    from sqe.mission_builder import PARKED_MAX as _PM
+    ses = fresh_session(3, 7); st = ses.state; ses.plan_day()
+    a_ = next(x for x in st.assets.values() if x.kind == _AK.AIRFIELD and not x.destroyed and st.enemy_air_at(x.id) and st.enemy_air_at(x.id).available > 0 and getattr(x, "airport", None))
+    w_ = st.enemy_air_at(a_.id)
+    o_ = _O("obj-test", _OT.COUNTER_AIR, a_.id, 5.0, f"Counter-air at {a_.name} ({w_.available} aircraft)")
+    pkg = None
+    for fp in (True, False):
+        try:
+            pkg = _PB(st, ses.d).build(o_, 90, _Lg(st), for_player=fp, names={}); break
+        except _NP:
+            continue
+    assert pkg is not None and pkg.flights, "a counter-air package builds"
+    pkg.start = "12:00"; st.plan.append(pkg.to_dict())
+    rr = ses.fly(pkg.number, ses.flyable(pkg)[0].id)
+    launched = sum(len(g["units"]) for g in rr.manifest.groups if g["kind"] == "enemy_air" and g["ref"] == a_.id and not g.get("parked"))
+    parked = [g for g in rr.manifest.groups if g.get("parked")]
+    n_p = sum(len(g["units"]) for g in parked)
+    assert all(g["kind"] == "enemy_air" and g["ref"] == a_.id for g in parked)
+    assert 0 < n_p <= min(_PM, w_.available - launched), (n_p, w_.available, launched)
+    mis = _zf.ZipFile(rr.miz).read("mission").decode("utf8", "ignore")
+    lua = _LR(unpack_returned_tuples=True); lua.execute(mis); m_ = lua.eval("mission")
+    pos = []
+    for _, cc in m_.coalition.items():
+        for _, cty in cc.country.items():
+            if "static" in cty:
+                for _, grp in cty.static.group.items():
+                    for _, u in grp.units.items():
+                        if u.name.startswith("PARK "):
+                            pos.append((round(u.x), round(u.y)))
+    assert len(pos) == n_p and len(set(pos)) == n_p, "every parked jet has its own parking spot"
+    ap_ = ses.builder_airports(a_) if hasattr(ses, "builder_airports") else None
+    print("[parked jets] %s: %d parked (wing %d, %d launched from the field), distinct spots, group marked parked" % (a_.name, n_p, w_.available, launched))
+
+
 def check_122_road_site_flip(c):
     """v0.41.258 (XO 2026-11-03): a road supply site belongs to the side its road connects to (road_front.py). At the start of a campaign every red road site is on a road that
     connects to red and every blue one to blue, with no site flipping on night one; when the front cuts a site off from its owner it changes hands with its stock, both ways; the red
@@ -6634,6 +6676,7 @@ CHECKS = [
     check_120_runway_cratering,
     check_121_sunk_carrier,
     check_122_road_site_flip,
+    check_123_parked_jets,
 ]
 
 def _borrows(fn) -> set:

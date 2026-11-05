@@ -1,5 +1,14 @@
 # CHANGES.md
 
+## v0.41.297, a counter-air strike finds the field's jets parked on the ramp (PR 1 of 2)
+
+XO 2026-11-05 ("if those jets are really available on that field then yeah spawn them parked"; "fox 3 medium"). His run: a counter-air strike on Sukhumi had nothing to hit (the target point was the garrison at the field's reference point; red jets exist in a mission only as flights that launch).
+- **Spawn.** For a counter-air strike (not the Fighter Sweep) the target field's jets stand on the ramp as static aircraft on free parking spots (`_spawn_parked_jets`). How many: the wing's serviceable jets per type minus the jets this mission launches from that field (alert pairs, raid, CAP: they are in the air, not on the ramp), at most `PARKED_MAX` 12 (judgment call), the free parking spots, and what the unit limit leaves (a static costs `carcass_weight`). Types are parked in turn, so a cut keeps the wing's mix.
+- **Target.** The strikers' target point is now the ramp: the parking spot nearest the middle of the field's airplane slots (`_ramp_xy`), not the garrison's point. The garrison stays where it was.
+- **Debrief.** The parked jets are an `enemy_air` group of the wing marked `parked`, so a destroyed one comes off the wing like a shot-down flight (`w.lose(type, n)`, the same path). They are left out of the hook's "splash one" list. Not seen in DCS: whether the hook counts a destroyed static jet dead as it does the supply buildings.
+- **Not done (PR 2):** the counter-air job text and briefing do not mention the ramp yet; the abstract war and the flown mission are not compared for the jets' count beyond the debrief path above.
+- **Probe** on Sukhumi: wing 7, launched 2 gives 5 parked, launched 0 gives 7, launched 4 gives 3; the strike's TGT is on a parking spot. Smoke: new check_123 (distinct spots, count within wing minus launched and `PARKED_MAX`, group marked parked), plus check_22, 31zb, 93, 114.
+
 ## v0.41.296, the fleet raid flies a formation: escorts ahead, bomber groups in a loose echelon
 
 XO 2026-11-05 ("fox 3 low"; "the Su-27s are in front of their package", he first thought 10 nm too much). Fleet raid (edge-spawn setpiece) only; land raids and staged raids unchanged.
