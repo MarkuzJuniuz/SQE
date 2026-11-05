@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## Housekeeping, `.gitignore` for Python caches
+
+XO 2026-11-05 ("you could do your gitignores without asking me"). Added `.gitignore` (`__pycache__/`, `*.pyc`) and untracked the 72 `.pyc` files that had been committed, so they no longer show as modified. No code change, no version bump.
+
 ## v0.41.305, the fleet raid's SEAD / Standoff DEAD are their own packages ahead of it
 
 XO 2026-11-05 ("fox 3 high"; "for the F/A-18 and perhaps F-16 just offer them as SEAD / SO DEAD packages that go before the Fleet Defense, they're tuned already ... then the intercept is resolved by the war planner taking into account what happened on those packages"; "the F-14 / F-15 ones stay as they are, all SAMs suppressed at the start"). Needs a NEW campaign day (a stored plan keeps its packages). Plan: `claude/raid-sead-plan.md`, queue item S2.
