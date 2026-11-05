@@ -319,3 +319,6 @@ Not seen in DCS unless a line says so; read from the code and the smoke checks (
 - **Job names (v0.41.306).** `Package.title` (list row and "Also in this mission") from `_job_name`: Strike, Standoff Strike, Runway Strike, SEAD, Standoff DEAD, Close DEAD, Close Air Support (Troops in Contact), Fighter Sweep, Counter-Air, Combat Air Patrol, and `<What> Defense: Intercept` for raids. Display only; the second line is `Objective.description` and a saved plan keeps its old text.
 - **Counter-air text (v0.41.308).** The job says "strike the jets on the ramp (N aircraft at the field)"; the briefing's target line ends with the jets parked in this mission (`mission_builder._ramp_line`). Whether the hook counts a destroyed parked jet dead is not seen yet.
 
+
+## 22. Weather wind direction (v0.41.310, verified 2026-11-05)
+- **ILS wind.** `weather.ILS_WIND` (70 to 120 degrees, wind-from): `_anchor` draws the direction inside it and `_fixed` uses 95, so DCS keeps the ILS runway active at the blue fields (runways 060 to 130). Clear weather stays calm. Judgment call; the magnetic-versus-true offset is unchecked; not seen in DCS.
