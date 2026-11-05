@@ -2093,8 +2093,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         return self.state.assets[best[0][2]] if best else None
 
     def _raid_sead_sites(self, package, geom, hold) -> tuple:
-        """v0.41.267 (PR 2): the sites the raid SEAD goes for: the ones that block the interceptors' lane (`_raid_blockers`, at most RAID_BLOCK_MAX), else the old single site
-        (the one whose reach takes in the launch point). -> (sites, intercept result with them ignored or None)."""
+        """v0.41.287 (XO 2026-11-04): the sites the raid SEAD goes for: every one that threatens the intercept line (`_raid_blockers`, now every
+        threatening site, not just the minimum to open a lane), else the old single site (the one whose reach takes in the launch point).
+        -> (sites, intercept result with them ignored or None)."""
         ids, ip = self._raid_blockers(package, geom, hold)
         sites = [self.state.assets[i] for i in ids if i in self.state.assets]
         if not sites:
