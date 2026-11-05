@@ -985,7 +985,7 @@ def check_22_raid_intercepts_ai_only(c):
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
     assert ("Su-24M" in _mz or "Su-25" in _mz) and "RAID-B-1" in _mz, "the raiders are in the mission"
     _s22 = s
-    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_aio27', '_eng27', '_mz', '_rs27', '_s22', '_st',)})
+    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_aio27', '_eng27', '_mz', '_s22', '_st',)})
 
 
 def check_23_raid_scramble_you_fly(c):
@@ -1033,7 +1033,7 @@ def check_26_raid_flies_blue_s(c):
 
 
 def check_27_raid_s_route_bends(c):
-    _aio27, _rs27, _st, s = c._aio27, c._rs27, c._st, c._s22          # the session section 22 built the raid mission in
+    _aio27, _st, s = c._aio27, c._st, c._s22          # the session section 22 built the raid mission in
     from sqe import raids as _rd
 
     # v0.41.31: a raid's route bends round the carrier group (FLEET_RAID_AVOID_NM), and red's target pick shies from it like a Patriot field
