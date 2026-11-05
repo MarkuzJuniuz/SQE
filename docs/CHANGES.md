@@ -1,5 +1,11 @@
 # CHANGES.md
 
+## v0.41.300, the scramble choice offers only the flight you clicked in your own package
+
+XO 2026-11-05 ("fox 3 low"). Light, GUI only. Stacked on #370 (v0.41.299).
+- `ScrambleChoiceDialog(..., flight_id)`: in your own package only the flight you clicked in the package details pane has a FLY button (the other flights of your squadron read "AI <service>"); the scramble package still lists every flight of your aircraft type. No flight clicked (`flight_id` None): all you could fly, as before. `app.do_fly` passes the clicked flight.
+- **Checked** with an offscreen probe over a campaign's scrambles: two flyable flights, one clicked gives 1 FLY button, none clicked gives 2; scramble block unchanged. Compile check only (no code outside the dialog).
+
 ## v0.41.299, AI JDAM strikers release short of the target; the Standoff Strike builder (PR 2 of 2)
 
 XO 2026-11-05 ("check the current JDAM profiles ... F-16s needing to go in so close like A-10s"; "published figures first"; "if on high can you do it with PR2?"; "Fox 3 high"). Stacked on #369 (v0.41.298). One commit: the two parts share the release-point code.

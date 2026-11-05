@@ -778,7 +778,7 @@ class MainWindow(QMainWindow):
         if ev:
             pkg = next((p for p in sess.packages() if p.number == number), None)
             if pkg is not None:
-                dlg = ScrambleChoiceDialog(self, sess, pkg, ev, number)
+                dlg = ScrambleChoiceDialog(self, sess, pkg, ev, number, flight_id)
                 dlg.exec()
                 scramble = dlg.take_scramble
                 if dlg.fid is not None:                         # v0.41.294: the FLY button you pressed names the flight, in either package
