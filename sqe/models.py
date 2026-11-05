@@ -45,6 +45,7 @@ class ObjectiveType(str, Enum):
 
 # DEAD packages by aim. "SEAD": HARMs suppress the radars, a Close DEAD package follows. "DEAD": that Close DEAD package (GBUs, radar gate).
 # "STANDOFF": one package against a site under a long-range SAM (SA-10): HARM shooters and a Standoff DEAD flight of JSOWs, together.
+# STRIKE has an aim "STANDOFF" too (v0.41.298): a supply strike under heavy fighter cover, flown as Standoff Strike (Hornets with SLAM-ER, released far out).
 # "" : the combined package the valve falls back to after repeated failed SEAD days.
 SEAD_AIMS = ("SEAD", "STANDOFF")        # packages with HARM shooters timed on the salvo
 
@@ -53,6 +54,8 @@ def task_label(f, obj) -> str:
     """Short role label for package tables and the radio: SEAD, SO DEAD (Standoff DEAD, JSOW), DEAD (Close DEAD, GBU) or the role."""
     if getattr(f, "tag", ""):
         return f.tag
+    if getattr(f, "kit", "") == "SLAM":
+        return "SO STRIKE"                  # v0.41.298: the Standoff Strike flight (SLAM-ER)
     if getattr(f, "kit", "") == "JSOW":
         return "SO DEAD" if obj.aim == "STANDOFF" else "JSOW"
     if f.role.value == "STRIKE" and obj.type.value == "DEAD":

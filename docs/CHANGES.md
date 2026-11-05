@@ -1,5 +1,17 @@
 # CHANGES.md
 
+## v0.41.298, Standoff Strike: a supply strike under heavy fighter cover goes out as SLAM-ER Hornets (PR 1 of 2, the planner)
+
+XO 2026-11-05 ("A1, Standoff Strike (title case), C1, like SO DEAD. Fox 3 high"). His point: "it's mostly jets that trouble our strikes" at L3. Planner only; the builder (release point, route, SLAM-ER attack) is PR 2.
+- **The job.** A supply strike (fuel / depot / plant, not a runway strike) with no SAM complication (no live gate SAM covering it, no SEAD escort, no follow-after) becomes `STRIKE` with aim `STANDOFF`, "Standoff Strike: <site>", when `STANDOFF_MIN_DEF_FLIGHTS` (4) red 2-ship fighter flights can reach it (`threat.defender_flights`, the planner's own count) and a Hornet squadron has 2 serviceable jets. JUDGMENT CALL on the threshold: a probe of fresh campaigns showed "any fighters in reach" turns every supply strike into one at every level (L1: 36 of 43 sites; L3: all); 4 flights is nearly every supply site at L3 and none at L1 / L2, and the job falls away as red's fighters are shot down. 0 turns it off.
+- **The package.** Template: a `Slot(STRIKE, 4, kit="SLAM")` (Hornets only: `SLAM_PER_JET`, no SLAM-ER on the DCS F-16C) plus the usual TARCAP / escort from the fighter count. Like the Standoff DEAD, no Hornet free today means the job waits (`NoPlayerSlot`), it is not flown as a plain strike. A player Hornet pilot gets the strike slot; any other pilot the TARCAP or escort. The kit fix: `KIT_JETS` replaces the JSOW-only checks in the slot filter and the squadron pick.
+- **Loadout.** New `"SLAM"` kit for the Hornet: the JSOW layout with AGM-84H on stations 2 and 8 (2 per jet). A starting point, not a Mission Editor capture.
+- **Labels.** Flight tag `SO STRIKE`, briefing word "Standoff Strike".
+- **War sim.** The odds count red's fighter cover at `STANDOFF_AIR_FACTOR` 0.5 (judgment call, no source).
+- **Checked.** Probes: L1 plans stay plain strikes; with the SAM belt down at L3 all four supply strikes of the day are Standoff Strikes; the package builds for AI and for a Hornet player and survives a save; a mission builds for a Hornet pilot (SLAM kit flight flies as a normal strike until PR 2). A fresh L3 campaign has no Standoff Strike on day 1, because every supply site starts under SA-10 / SA-11 / SA-6 cover (the SAM jobs come first). Smoke: new check_124 (L3 jobs, kit and aircraft, TARCAP, save round trip, L1 plain).
+- **Not done (PR 2):** the mission builder still flies the SLAM flight like a plain strike route (the launch point ~120 nm out, the release, the TARCAP over the launch point); the briefing text is the generic strike one; no magazine tracking. Merge PR 2 with this one, or fly a Standoff Strike only to look at the job list.
+- **Not done (later):** the F-16 JSOW counter-air salvo; the arming screen.
+
 ## v0.41.297, a counter-air strike finds the field's jets parked on the ramp (PR 1 of 2)
 
 XO 2026-11-05 ("if those jets are really available on that field then yeah spawn them parked"; "fox 3 medium"). His run: a counter-air strike on Sukhumi had nothing to hit (the target point was the garrison at the field's reference point; red jets exist in a mission only as flights that launch).
