@@ -4069,18 +4069,18 @@ def check_55_tanker_track_keeps_clear(c):
 def check_56_barcap_intercepts_ai_only(c):
     s = fresh_session()
     # v0.41.27: BARCAP and the intercepts are AI-only: planned and listed, never offered to you; raid scrambles off, troops in contact stay
-    from sqe.packages import AI_ONLY as _AIO
+    from sqe.models import ObjectiveType as _OT56
     _n27 = 0
     for _ac in ("F-14BU", "F-16C"):
         for _sd in (3, 4, 5):
             s.new("AIOnly", _ac, 2, seed=_sd); s.plan_day()
             for p_ in s.packages():
-                if p_.objective.type in _AIO:
+                if p_.objective.type == _OT56.BARCAP:                    # v0.41.303: only BARCAP is AI-only now; raids on fields, supply sites and garrisons are flyable
                     _n27 += 1
                     assert not s.flyable(p_, squadron_only=False), ("an AI-only job is never offered to you", p_.objective.description)
                     assert not any(f_.is_player for f_ in p_.flights), "nobody is put in an AI-only job"
     assert _n27, "AI-only jobs are still planned"
-    print(f"[ai-only] {_n27} BARCAP / intercept jobs planned and played by the AI, none offered to you")
+    print(f"[ai-only] {_n27} BARCAP jobs planned and played by the AI, none offered to you (v0.41.303: raid intercepts are flyable)")
 
 
 def check_57_pydcs_s_scattered_formation(c):
@@ -6581,6 +6581,34 @@ def check_122_road_site_flip(c):
     print("[road site flip] owner by road connection at the start, sites cut off by the front change hands both ways, battalion gone, far sites stay, saved")
 
 
+def check_126_land_raid_flyable(c):
+    """v0.41.303 (XO 2026-11-05): a raid on a field, a supply site or a garrison is player-flyable like the carrier raid (it was AI-only, a text line). Strategic: a raid
+    scramble package offers the player a flight, BARCAP stays AI-only, and the sortie builds and writes a mission file with the scramble taken."""
+    from sqe import raids
+    from sqe.models import ObjectiveType as _OT
+    real = raids.emergency_happens
+    raids.emergency_happens = lambda *a, **k: True
+    try:
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+        ses.new("LandRaid", "F-16C", 3, seed=2)
+        assert not any(ses.flyable(p) for p in ses.packages() if p.objective.type == _OT.BARCAP), "BARCAP stays AI-only"
+        host = ev = None
+        for p in ses.packages():
+            e_ = ses.emergency_for(p.number)
+            if e_ and e_["kind"] == "RAID":
+                host, ev = p, e_
+                break
+        assert ev is not None, "a raid scramble came up"
+        fl = ses.flyable(ev["package"], squadron_only=False)
+        assert fl, "the raid scramble offers the player a flight"
+        ses.fly(host.number, None, scramble=True, scramble_fid=fl[0].id)
+        assert list((TMP / "saves").glob("**/SQE_Sortie.miz")), "the sortie was written"
+    finally:
+        raids.emergency_happens = real
+    print("[land raid flyable] a raid scramble offers the player a flight and builds a mission; BARCAP stays AI-only")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -6745,6 +6773,7 @@ CHECKS = [
     check_123_parked_jets,
     check_124_standoff_strike,
     check_125_release_points,
+    check_126_land_raid_flyable,
 ]
 
 def _borrows(fn) -> set:

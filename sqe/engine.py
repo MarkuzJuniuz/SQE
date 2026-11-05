@@ -199,7 +199,7 @@ class Session:
                 for sid in ledger.free:
                     ledger.free[sid] = min(ledger.free[sid], daily[sid])
                 pkg = None
-                for fp in ((True, False) if (((i - 1) in forced or carrier_raid(st, o)) and not ai_only(st, o)) else (False,)):
+                for fp in ((True, False) if (((i - 1) in forced or carrier_raid(st, o) or o.type == ObjectiveType.FLEET_DEFENSE) and not ai_only(st, o)) else (False,)):
                     try:
                         pkg = pb.build(o, i, ledger, for_player=fp, names=names)
                         break
@@ -521,7 +521,7 @@ class Session:
             squadron_only = self.settings.flight_filter != "all"
         if pkg.extra.get("scrub"):                                       # scrubbed for weather: nobody flies it, the war sim ignores it
             return []
-        if pkg.objective.type in AI_ONLY and not pkg.extra.get("setpiece"):    # v0.41.27: AI-only for now (BARCAP, land-raid intercepts); v0.41.107: the carrier raid is a flyable setpiece
+        if pkg.objective.type == ObjectiveType.BARCAP:                       # v0.41.27: BARCAP is AI-only; v0.41.107: the carrier raid is a flyable setpiece; v0.41.303 (XO 2026-11-05): so are the land raids
             return []
         opts = pkg.player_options(self.state.player.aircraft)
         if pkg.extra.get("setpiece"):                    # v0.41.293 (XO 2026-11-04: "make the SEAD/DEAD seats not flyable by the player", for now, until the SEAD teams are their own packages): the carrier raid's SEAD is AI-only (v0.41.284: only offered while a SAM was alive)
