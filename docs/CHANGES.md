@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.301, the fleet-defence fight moves 25 nm further out
+
+XO 2026-11-05 ("fox 3 low"; his run: "good performance for fleet defense, push the battle further by 25 nm by my measurements so the intercept package won't run out of missiles firing at the barrage"). Tunables only.
+- **Found in his run.** The fight sat 190 to 193 nm from the carrier (Tomcats fired from about 118 nm). The Tu-22M3s fired their first X-22 volley at t=347 from about 205 nm, 90 s before the first Phoenix; every bomber that died had fired 2 to 3 X-22s (46 in all, none hit a ship). The Tomcats and Eagles were dry of long-range missiles by about t=500, then fired AIM-9s at the X-22s.
+- `routes.RAID_IP_NEAR_NM` 120 to 145, `RAID_THREAT_OUT_NM` 140 to 165, `raid_spawns.RAID_IP_MAX_NM` 185 to 210. Judgment call from XO's measurement and the 205 nm X-22 reach (the fight lands near 215 nm).
+- **Checked.** Lane probe, level 3, seeds 1, 3, 4, 7, 9, 11: every build found a straight SAM-free point at 145 nm (no bend through a field needed), hold 57 to 59 nm from the target. Compile check. Not seen in DCS.
+
 ## v0.41.300, the scramble choice offers only the flight you clicked in your own package
 
 XO 2026-11-05 ("fox 3 low"). Light, GUI only. Stacked on #370 (v0.41.299).
