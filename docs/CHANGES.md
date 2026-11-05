@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.309, the Standoff Strike's SLAM-ERs aim at the site's buildings, one each
+
+XO 2026-11-05 ("how do we make the 18 just focus on their target? it shot one on the bunker looking thing then the rest targeted god knows what"; "fox 3 medium"). From his 12:31 run: the SLAM waypoint had weapons free and ONE Bombing task on the site's centre point; of four AGM-84H one hit the guard vehicles (Shilka, Strela) at the target and the other three went at the Sukhumi and Gudauta EWRs and an S-300 search radar (t=746 to 757), so the depot stood.
+- **Aim points.** `MissionBuilder._slam_aims`: two of the target site's buildings (the first, and the one furthest from it; `SLAM_AIMS` 2, the kit carries two SLAM-ERs a jet), a Bombing task each with `Expend.One` and `CruiseMissile`, group attack. `_place_buildings` now records where each building stands (`self._bld_xy`). No buildings known: the old single aim point.
+- **Window.** Each task stops `SLAM_ATTACK_S` 90 s after the launch point's ETA and a timed return fire follows, as the JSOWs have (their window is 120 s). Judgment call: the four shots took 20 s in his run.
+- **Not seen in DCS:** whether the AI now puts all four on the buildings. If a radar still draws a missile, the next step is a stricter rules-of-engagement setting at that waypoint (designated targets only), unproven with a point-bombing task. Compile check and `check_125` only (tactical).
+
 ## v0.41.308, the counter-air text names the ramp (PR 2 of the parked jets)
 
 XO 2026-11-05 ("do text now"; "fox 3 low"). Text only. The job reads "Counter-air at <field>: strike the jets on the ramp (N aircraft at the field)" (it said only "N aircraft"), and the briefing's target line of a counter-air strike (not the sweep) ends with the jets parked in THIS mission ("N aircraft stand parked on the ramp." or "No aircraft are parked on the ramp today."): the parked statics, not the wing's total (some are airborne, the cap is 12). Saved day plans keep the old job text. Compile check and `check_123` only; the briefing line was not read in a built mission.

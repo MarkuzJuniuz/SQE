@@ -784,6 +784,7 @@ class RaidSpawns:
             sg = self.m.static_group(country, nm, vt, mapping.Point(x, y, self.t), heading=hdg + (k * 37 % 61 - 30))      # a little turn per building, so a site does not look like a parade
             sg.units[0].name = nm
             names.append(nm)
+            self._bld_xy.setdefault(aim, []).append((x, y))          # v0.41.309: where each building stands, for the SLAM-ER aim points
         return names
 
     def _spawn_raid_target(self, package, base, aim, dx, dy, manifest):
