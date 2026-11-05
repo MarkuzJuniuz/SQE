@@ -2206,9 +2206,17 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         c_[package.id] = None
         f0 = next((f for f in package.flights if self._raid_sead_any(package, f)), None)
         n_sead = sum(1 for f in package.flights if self._raid_sead_any(package, f))
-        sites, ip_ = self._raid_sead_sites(package, geom, self._raid_hold_xy(package, geom)) if f0 is not None else ([], None)
-        sites = sites[:max(1, n_sead)]                                    # v0.41.267: one flight per site; a site without a flight is left alone
+        setp_ = bool((package.extra or {}).get("setpiece"))
+        sites, ip_ = self._raid_sead_sites(package, geom, self._raid_hold_xy(package, geom)) if (f0 is not None or setp_) else ([], None)
+        sites = sites[:max(1, n_sead)] if f0 is not None else []          # v0.41.267: one flight per site; a site without a flight is left alone
         if not sites:
+            # v0.41.290 (XO 2026-11-04: "it's a setpiece, none of the old things matter"): the interceptors' dash to the intercept point does not depend on a SEAD job. With no SAM
+            # to work (or no SEAD flight) the point is kept and there is no DASH flag to wait on; before, this returned None and the interceptors held at the station over the water.
+            if setp_ and ip_ is not None:
+                c_[package.id] = {"site": None, "sites": [], "agm88_s": 0.0, "flag": None, "t_flag": float(cap_tot_s) + 60.0, "ip": ip_}
+                return c_[package.id]
+            if setp_:
+                self.warns.append("Raid interceptors: no SAM-clear intercept point on the bombers' way in; they hold at their station.")
             return None
         site = sites[0]
         base = self.state.bases[f0.base_id]
@@ -2251,7 +2259,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         as fast as they can (RAID_RUSH_KTS, no wait for the interceptors; the interceptors wait for them instead, see `_raid_sead_prep`).
         -> (group, HARM time) or (None, None) when no site reaches the launch point."""
         prep = self._raid_sead_prep(package, geom, cap_tot_s, manifest)
-        if prep is None:
+        if prep is None or not prep.get("sites"):          # (v0.41.290: a prep with no site only carries the intercept point)
             return None, None
         f.rush = True
         ordn = [f_ for f_ in package.flights if self._raid_sead_any(package, f_)].index(f)          # v0.41.267: the n-th SEAD flight takes the n-th site

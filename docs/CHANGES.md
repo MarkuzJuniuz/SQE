@@ -1,5 +1,14 @@
 # CHANGES.md
 
+## v0.41.290, the interceptors' dash no longer waits on a SEAD job
+
+XO 2026-11-04 ("Why the heck did the interceptors orbit on the water again?", "it's a setpiece, none of the old things matter"; "fox 3 medium"). Found on XO's Iron Tide save (day 20, package 4).
+- **The bug.** `_raid_sead_prep` returned `None` whenever no SAM site needed a SEAD job (here every SAM on the bombers' line was already a wreck, and the one SEAD flight, Hornet 2, had no site). The intercept point worked out a few lines earlier was thrown away with it, so no interceptor got the dash and all of them held the carrier station 56 to 80 nm out, over the water, while the Tu-22M3s flew past 140 nm away.
+- **The fix.** For the setpiece, `_raid_sead_prep` now keeps the intercept point when there is no site (or no SEAD flight at all): it returns `{"site": None, "sites": [], "flag": None, "ip": ...}`. No DASH flag to wait on (`_late_edge` already accepts none). `_spawn_raid_sead` builds nothing for a prep with no site. Without an intercept point it still returns `None`, and the mission now says so in its warnings.
+- Replay on XO's save (all-AI): Uzi 1, Hornet 1, Springfield 1, Squid 1, Dodge 1, Enfield 1 all fly to the intercept point at 170 nm; before, none did. A fresh L3 campaign is unchanged.
+- Targeted smoke (`check_22`, `check_26`, `check_27`) passed, exit 0; compile check clean. Not seen in DCS.
+- Still open (XO 2026-11-04: "SPAWN ALL RED SAMS", trim the furthest when over the limit): the planner avoids every live SAM in the campaign, the mission only builds the ones near the route. Separate PR.
+
 ## v0.41.289, the carrier raid's battle moves in to about 170 nm
 
 XO 2026-11-04 ("make the actual battle where the ruler is"; past it the map is featureless; "the carrier group could take some of the initial salvos"; "fox 3 medium").
