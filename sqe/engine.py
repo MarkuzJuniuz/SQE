@@ -805,7 +805,7 @@ class Session:
         return f"Our {who}{frm} are scrambling to intercept."
 
     # ---- fly ---------------------------------------------------------------------------------------
-    def fly(self, package_number: int, flight_id: str | None, scramble: bool = False):
+    def fly(self, package_number: int, flight_id: str | None, scramble: bool = False, scramble_fid: str | None = None):
         """Build the sortie. If an emergency came up for this package (emergency_for) and `scramble` is True and your squadron can take it, you fly the
         emergency and the package you were tasked with goes to the war simulation (or is postponed a day if the squadron cannot cover both). Otherwise the
         emergency is folded into your mission (CAS or raid; v0.41.124: wherever it is, the circle is only the anchor for your own package's finds)."""
@@ -829,7 +829,8 @@ class Session:
             if epkg.extra.get("scrub"):
                 scramble = False                                                              # weather scrubs it: nothing flies
             if scramble and ev["eligible"]:
-                orig, pkg, flight_id = pkg, epkg, None
+                orig, pkg = pkg, epkg
+                flight_id = scramble_fid if scramble_fid in {x.id for x in self.flyable(epkg, squadron_only=False)} else None      # v0.41.294: the flight picked in the scramble package (else the default)
                 hidden_in = orig
                 self._postpone_if_short(orig, epkg)
                 st.note(f"EMERGENCY: you were scrambled to {ev['where']} ({ev['kind'].lower()}); package #{orig.number} is left to the other squadrons.")

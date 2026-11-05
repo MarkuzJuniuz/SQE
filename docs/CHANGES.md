@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## v0.41.294, the scramble choice is a tall page like the Missions pane, with a FLY button on every flight of both packages
+
+XO 2026-11-05 ("fox 3 medium"). Stacked on nothing: #361 to #364 are merged.
+- **Dialog.** `ScrambleChoiceDialog` is now a scrollable page, one block per package ordered by start time: objective title, the amber "Mission start HH:MM local (day/night) - weather" line, the intent text and the flight table. The scramble block is in a red frame, titled "SCRAMBLE:", with the emergency text; when your squadron cannot take it the reason shows and its buttons are greyed out. The single FLY button and the list are gone.
+- **Flight choice.** Pressing FLY on a flight in either package ends the dialog and names that flight. New `Session.fly(..., scramble_fid=None)`: the flight you pick in the scramble package is the one you fly (checked against what you can fly there, else the default as before). The flight you pick in your own package replaces the one you clicked in the Missions pane.
+- **Which flights get a button.** Your own package: as in the Missions pane. The scramble: any flight your aircraft can fly, whatever squadron it sits in (as `assign_player` does when you take it).
+- Checked with an offscreen probe over 30 seeds (button counts, greyed-out case, the click returns package and flight). Compile check clean. Not seen on screen.
+
 ## v0.41.293, the carrier raid's battle moves in another 50 nm; the raid SEAD seats are AI-only
 
 XO 2026-11-04 (his screenshot ruler, 50.05 nm along 211 degrees: "move the battlesite closer by 50nm"; "make the SEAD/DEAD seats not flyable by the player"; "fox 3 low"). Stacked on #363 (v0.41.292).
