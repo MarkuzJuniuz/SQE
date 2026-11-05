@@ -1,5 +1,15 @@
 # CHANGES.md
 
+## v0.41.292, the scramble has its own time and is offered on one package
+
+XO 2026-11-04 ("it should have time"; offer it on the package that goes after it time-wise, the only one, or the last one of the day; "fox 3 high"). Engine only; the scramble dialog redesign is the next PR.
+- **One roll per day.** `Session.emergency_for` used to roll per package and flight (every FLY click was a new chance, and the emergency just took the clicked package's start). `Session._roll_emergency` now throws the dice once per day and sortie slot, caches it in `state.raids["emerg"]`, and ignores `flight_id`. `raids.emergency_seed(state)` lost its package and flight arguments. The chance is the difficulty table's, now per day.
+- **A time of its own.** On a hit the time is drawn between the first and last start of the packages you can fly (judgment call). The emergency package starts then (`ev["time"]`, minutes of day).
+- **One host package.** Offered on the first package of yours starting at or after that time, else the last one. Every other package, and every other flight of the host, gets nothing.
+- **In `fly`:** a scramble you take is flown at its own time, so the packages that come along are the ones near that time. A scramble you don't take is folded into your mission only when it started within `merge_back_min` (15 min) before your package; an earlier one is settled by the war simulation.
+- **Smoke:** `check_21` tests the new rule (one host, own time, host rule, no re-roll, cap, rate). `check_31wc` expects the fold only inside the window. `check_22` used the global `_rd` (the `random` module) instead of the raids module, so its forced dice never worked and it passed by luck; fixed.
+- Smoke: check_21 dice section rewritten for the day-level roll, check_22 fixed (its forced dice never worked: `_rd` was the `random` module), check_31w and check_31wc test the time window. Full smoke test passed (`SMOKE TEST PASSED`, exit 0). Not seen in DCS.
+
 ## v0.41.291, the carrier-defence setpiece spawns every live red SAM site
 
 XO 2026-11-04 ("how many times do I need to ask to SPAWN ALL RED SAMS?!? Just trim the furthest ones when overbudget"; "this setpiece mission only which is the carrier defense will spawn all red SAMs"; "fox 3 medium"). Stacked on v0.41.290 (#361).

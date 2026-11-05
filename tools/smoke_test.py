@@ -951,20 +951,29 @@ def check_21_raids_emergencies(c):
         _nw += sum(1 for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land")); _ns += _st.raids["surprise"]
     assert 8 <= _nw <= 36 and _ns >= 1, (_nw, _ns)
     _st.day = 5; s.plan_day(); _a = [d_["objective"]["description"] for d_ in _st.plan]; s.plan_day(); assert _a == [d_["objective"]["description"] for d_ in _st.plan], "a day replans the same"
-    # per-sortie dice: roughly the table, never two in a row, and asking twice gives the same answer
+    # v0.41.290 (XO 2026-11-04: "it should have time"): the dice are thrown once per day and sortie slot (roughly the table), the emergency has a time of its own and is offered on
+    # exactly one package (the first you can fly at or after that time, else the last), asking again or with another flight never re-rolls, and the cap still holds
     _rd.EMERG_CAP = True                                    # v0.41.272: the cap is off by default; this part tests the rule itself
     _hits = _tot = 0
+    _hm_ = lambda x_: int(x_[:2]) * 60 + int(x_[3:5])
     for _ in range(150):
         s.plan_day(); _st.day += 1
-        for p_ in s.packages():
-            if s.flyable(p_):
-                _st.sortie_counter += 1; _tot += 1
-                e1 = s.emergency_for(p_.number, None); e2 = s.emergency_for(p_.number, None)
-                assert (e1 is None) == (e2 is None) and (e1 is None or e1["kind"] == e2["kind"]), "reopening never re-rolls"
-                if e1:
-                    _hits += 1
-                    _st.raids["last_emerg"] = _st.sortie_counter                         # as fly() leaves it: that sortie had one
-                    assert s.emergency_for(p_.number, "x") is None, "none in two sorties in a row"
+        fl_ = sorted((p_ for p_ in s.packages() if s.flyable(p_)), key=lambda p_: (_hm_(p_.start), p_.number))
+        if not fl_:
+            continue
+        _st.sortie_counter += 1; _tot += 1
+        evs = [(p_, s.emergency_for(p_.number, None)) for p_ in fl_]
+        got = [(p_, e_) for p_, e_ in evs if e_]
+        assert len(got) <= 1, "one package carries the day's emergency"
+        assert all((s.emergency_for(p_.number, "x") is None) == (e_ is None) for p_, e_ in evs), "reopening, or another flight, never re-rolls"
+        if got:
+            _hits += 1; p_, e1 = got[0]; t_ = e1["time"]
+            assert e1["package"].start == f"{t_ // 60:02d}:{t_ % 60:02d}", "the emergency starts at its own time"
+            assert _hm_(fl_[0].start) <= t_ <= _hm_(fl_[-1].start), "its time lies in the day's flying"
+            assert p_ is next((q_ for q_ in fl_ if _hm_(q_.start) >= t_), fl_[-1]), "offered on the first package at or after its time"
+            _st.raids["last_emerg"] = _st.sortie_counter                         # as fly() leaves it: that sortie had one
+            _st.raids.pop("emerg", None)
+            assert all(s.emergency_for(q_.number, None) is None for q_ in fl_), "none in two sorties in a row (the cap)"
     assert 0.045 <= _hits / _tot <= 0.16, (_hits, _tot)
     _rd.EMERG_CAP = False
     # an emergency forced: scramble (fighter) and decline (folds in or odds); both build a mission
@@ -1022,6 +1031,7 @@ def boost_su24(st, n=24):
 
 def check_22_raid_intercepts_ai_only(c):
     _ev_orig = c._ev_orig
+    _rd = c._rd                  # v0.41.290: this was the global `_rd` (not the raids module), so the forced dice below never took effect; it passed by luck over many per-package rolls
     s = fresh_session()
     # v0.41.27: raid intercepts are AI-only for now; the build itself is still tested (it comes back), with the AI-only list lifted here
     import sqe.engine as _eng27
@@ -1998,7 +2008,8 @@ def check_31w_raid_scramble_merge(c):
                 if not ses.flyable(p):
                     continue
                 ev = ses.emergency_for(p.number, None)
-                if ev and ev["kind"] == "RAID" and ses._inside_merge(p, ev["package"]):
+                # v0.41.292: the scramble has its own time and is folded in only when it started no more than merge_back_min before your package, so test one that did
+                if ev and ev["kind"] == "RAID" and ses._inside_merge(p, ev["package"]) and (int(p.start[:2]) * 60 + int(p.start[3:5])) - ev["time"] <= ses.settings.merge_back_min:
                     line = ses.dispatch_line(ev["package"])
                     assert line.startswith("Our ") and "cannot" not in line.lower(), line
                     ses.fly(p.number, None, scramble=False)
@@ -2009,7 +2020,7 @@ def check_31w_raid_scramble_merge(c):
             st.day += 1
             boost_su24(st)
             ses.plan_day()
-        raise AssertionError("no raid scramble inside the merge circle in 40 days")
+        raise AssertionError("no raid scramble inside the merge circle and the time window in 40 days")
     finally:
         rd.emergency_happens = keep
 
@@ -2157,17 +2168,23 @@ def check_31wc_scramble_folds_outside_circle(c):
         (TMP / "saves").mkdir(parents=True, exist_ok=True)
         ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=5))
         ses.new("Fold outside", "F-16C", 2, seed=4)
-        st = ses.state; boost_su24(st)
+        st = ses.state; boost_su24(st); seen = {}
         for _ in range(40):
             for p in ses.packages():
                 if not ses.flyable(p):
                     continue
                 ev = ses.emergency_for(p.number, None)
                 if ev and ev["kind"] == "RAID" and not ses._inside_merge(p, ev["package"]):
+                    # v0.41.290: the scramble has its own time, so it is folded in only when it started no more than merge_back_min before your package (an earlier one is the war's)
+                    near = (int(p.start[:2]) * 60 + int(p.start[3:5])) - ev["time"] <= ses.settings.merge_back_min
                     ses.fly(p.number, None, scramble=False)
-                    assert any(m["type"] == "FLEET_DEFENSE" for m in st.pending["merged"]), "the raid scramble is folded in although its field is outside the circle"
-                    print("[fold outside circle] a raid scramble outside the 5 nm merge circle is folded into the mission")
-                    return
+                    folded = any(m["type"] == "FLEET_DEFENSE" for m in st.pending["merged"])
+                    assert folded == near, ("the raid scramble is folded in although its field is outside the circle, when it started inside your window (and only then)", folded, near)
+                    ses.abort()
+                    seen[near] = seen.get(near, 0) + 1
+                    if seen.get(True):
+                        print("[fold outside circle] a raid scramble outside the 5 nm merge circle is folded into the mission when it started in your window" + (", and left to the war when earlier" if seen.get(False) else ""))
+                        return
             st.day += 1
             boost_su24(st)
             ses.plan_day()

@@ -34,6 +34,11 @@ LATE_SEAD_MIN = 15           # launch option --late-sead: SEAD-stage packages go
                              # about 5 min ahead of them and reaches its gate with the radars still up: it holds (HOLD_S = 12 min) and goes in once
                              # the late SEAD blinds the site. A test of the hold; it changes that day's plan in the save.
 
+def _hm(start: str) -> int:
+    """A package's "HH:MM" start as minutes since midnight."""
+    return int(start[:2]) * 60 + int(start[3:5])
+
+
 class Session:
     def __init__(self, settings: AppSettings):
         self.settings = settings
@@ -673,30 +678,45 @@ class Session:
 
     # ---- emergencies: something breaks out while you are about to fly (raids.py) ----------------------------------------
     def emergency_for(self, package_number: int, flight_id: str | None = None) -> dict | None:
-        """The emergency, if any, that comes with flying this package right now. The answer is fixed by the campaign, the day and the package: asking
-        twice (or reopening the dialog) never re-rolls it. Returns None, or a dict:
-          kind 'RAID' | 'CAS', package (the emergency, ready to fly), eligible (your squadron can take it), reason (why not), title, text."""
-        st, d = self.state, self.d
+        """The emergency, if any, that comes with flying this package right now. v0.41.290 (XO 2026-11-04: "it should have time"): the emergency is rolled ONCE per
+        sortie slot (day + sortie counter), not per package and flight, and it has a time of its own (`ev["time"]`, minutes since midnight; its package starts then). It is
+        offered on exactly one package: the first one you can fly that starts at or after that time, else the last one of the day (`_roll_emergency`). So any other package
+        (and any flight of this one, `flight_id` no longer matters) gets None. The answer is fixed by the campaign and the day: asking twice never re-rolls it.
+        Returns None, or a dict: kind 'RAID' | 'CAS', package (the emergency, ready to fly), eligible (your squadron can take it), reason (why not), title, text, time, host."""
+        st = self.state
         if not getattr(self.settings, "emergencies", True):
             return None
-        key = f"{st.day}:{package_number}:{flight_id}:{st.sortie_counter}"
+        key = f"{st.day}:{st.sortie_counter}"
         cache = (st.raids or {}).get("emerg")
-        if cache and cache.get("key") == key:
-            return None if cache.get("none") else self._emerg_view(cache)
-        pkg = next((p for p in self.packages() if p.number == package_number), None)
-        if pkg is None or not self.flyable(pkg):
+        if not (cache and cache.get("key") == key):
+            cache = self._roll_emergency(key)
+        if cache.get("none") or cache.get("host") != package_number:
             return None
-        rng = raids.emergency_seed(st, package_number, flight_id)
-        ev = self._make_emergency(pkg, rng) if raids.emergency_happens(st, d, rng) else None
+        return self._emerg_view(cache)
+
+    def _roll_emergency(self, key: str) -> dict:
+        """v0.41.290: the day's one emergency roll. The dice (`raids.emergency_happens`, the difficulty table's chance per sortie) are thrown once; on a hit the emergency's time
+        is drawn between the first and the last start of the packages you can fly (judgment call, XO's rule: "offer it on the package that goes after it time-wise"), and its
+        host is the first of those packages starting at or after that time (the last one when none does). Cached in `state.raids["emerg"]`."""
+        st, d = self.state, self.d
+        cands = sorted((p for p in self.packages() if self.flyable(p)), key=lambda p: (_hm(p.start), p.number))
+        rng = raids.emergency_seed(st)
+        entry = {"key": key, "none": True}
+        if cands and raids.emergency_happens(st, d, rng):
+            t = int(round(rng.uniform(_hm(cands[0].start), _hm(cands[-1].start))))
+            host = next((p for p in cands if _hm(p.start) >= t), cands[-1])
+            ev = self._make_emergency(host, rng, t)
+            if ev is not None:
+                entry = {"key": key, **ev, "host": host.number, "time": t}
         if st.raids is None:
             st.raids = {}
-        st.raids["emerg"] = {"key": key, "none": True} if ev is None else {"key": key, **ev}
-        return None if ev is None else self._emerg_view(st.raids["emerg"])
+        st.raids["emerg"] = entry
+        return entry
 
     def _emerg_view(self, c: dict) -> dict:
         return {**c, "package": Package.from_dict(c["pkg"])}
 
-    def _make_emergency(self, pkg: Package, rng) -> dict | None:
+    def _make_emergency(self, pkg: Package, rng, t: int) -> dict | None:
         st, d = self.state, self.d
         psq = st.squadrons[st.player.squadron_id]
         spec = AIRCRAFT[psq.aircraft]
@@ -756,7 +776,7 @@ class Session:
             return None
         if ok is False and not why:
             why = f"{psq.name} cannot reach it or has no free pair"
-        epkg.start = pkg.start
+        epkg.start = f"{t // 60:02d}:{t % 60:02d}"                     # v0.41.290: the emergency has its own time (it was the clicked package's start)
         epkg.extra = {**epkg.extra, "emergency": kind, "past": True}
         for f in epkg.flights:
             f.is_player = False
@@ -815,7 +835,10 @@ class Session:
                 st.note(f"EMERGENCY: you were scrambled to {ev['where']} ({ev['kind'].lower()}); package #{orig.number} is left to the other squadrons.")
             else:
                 st.note(f"EMERGENCY at {ev['where']}: " + ("you stayed with your tasking." if ev["eligible"] else self.dispatch_line(epkg)) + " The war handles it.")
-                if epkg.objective.type in (ObjectiveType.CAS, ObjectiveType.FLEET_DEFENSE) and pkg.objective.type != ObjectiveType.FLEET_DEFENSE:      # v0.41.124 (XO 2026-10-23): no circle test, the emergency is yours to meet whenever it started in your package's window
+                # v0.41.124 (XO 2026-10-23): no circle test, the emergency is yours to meet whenever it started in your package's window. v0.41.290: it has its own time now, so
+                # "in your window" is the usual merge_back_min before your start; an emergency further back is settled by the war simulation (a mission can't start hours early)
+                if (epkg.objective.type in (ObjectiveType.CAS, ObjectiveType.FLEET_DEFENSE) and pkg.objective.type != ObjectiveType.FLEET_DEFENSE
+                        and _hm(pkg.start) - _hm(epkg.start) <= max(0, int(getattr(self.settings, "merge_back_min", 15)))):
                     lead_extras = [epkg]
         PackageBuilder(st, self.d).assign_player(pkg, flight_id)
         self.options.hold_minutes = int(self.settings.hold_minutes)

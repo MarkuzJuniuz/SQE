@@ -461,8 +461,9 @@ def overnight(state, d, rng: random.Random) -> list:
 
 
 # ---- emergencies ---------------------------------------------------------------------------------------------------------------
-def emergency_seed(state, package_number: int, flight_id) -> random.Random:
-    return random.Random(f"{state.campaign_id}:{state.day}:{package_number}:{flight_id}:emergency")
+def emergency_seed(state) -> random.Random:
+    """v0.41.290: one seed per day and sortie slot (it was per package and flight): the emergency is rolled once, not once per click."""
+    return random.Random(f"{state.campaign_id}:{state.day}:{state.sortie_counter}:emergency")
 
 
 def emergency_happens(state, d, rng: random.Random) -> bool:
