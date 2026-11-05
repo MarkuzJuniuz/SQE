@@ -6641,6 +6641,37 @@ def check_127_planned_raids_listed(c):
     print(f"[planned raids] listed with titles {sorted(titles)}, {unw} unwarned, {tic} troops in contact, no dice emergency")
 
 
+def check_128_raid_prep_packages(c):
+    """v0.41.305 (XO 2026-11-05: the carrier raid's SEAD / Standoff DEAD are their own packages ahead of it, "tuned already"): on a carrier-raid day the SAM sites that threaten the
+    lane get their own SEAD / Standoff DEAD packages (named "Fleet Defense: ..."), starting before the raid, flyable like any DEAD job, and the raid remembers its sites for the war sim.
+    The day's own DEAD jobs are removed here so the new packages are the ones tested. Strategic: the plan structure and a build; the lead time is a tunable."""
+    from sqe.war import ObjectivePlanner
+    real = ObjectivePlanner.plan
+    ObjectivePlanner.plan = lambda self, st, rng, limit=14: [o for o in real(self, st, rng, limit=limit) if o.type.value != "DEAD"]
+    try:
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+        ses.new("RaidPrep", "F-16C", 3, seed=1)
+        ses.skip_day()
+        ps = ses.packages()
+        raid = next((p for p in ps if p.extra.get("setpiece")), None)
+        assert raid is not None, "a carrier raid day"
+        pre = [p for p in ps if p.extra.get("raid_prep")]
+        assert pre and raid.extra.get("prep_sites"), "the raid's blocking sites got their own packages"
+        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
+        for p in pre:
+            assert hm(p) < hm(raid) and p.title.startswith("Fleet Defense: ") and p.objective.type.value == "DEAD", (p.title, p.start, raid.start)
+        fl = [p for p in pre if ses.flyable(p)]
+        if fl:
+            ses.fly(fl[0].number, ses.flyable(fl[0])[0].id)
+            assert list((TMP / "saves").glob("**/SQE_Sortie.miz")), "a prep package builds"
+            ses.abort()
+        ses.skip_day()
+    finally:
+        ObjectivePlanner.plan = real
+    print(f"[raid prep] {len(pre)} SEAD / Standoff DEAD packages ahead of the carrier raid for {len(raid.extra['prep_sites'])} sites; builds; the war sim resolves the day")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -6807,6 +6838,7 @@ CHECKS = [
     check_125_release_points,
     check_126_land_raid_flyable,
     check_127_planned_raids_listed,
+    check_128_raid_prep_packages,
 ]
 
 def _borrows(fn) -> set:

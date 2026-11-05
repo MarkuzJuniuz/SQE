@@ -31,6 +31,7 @@ from .war import ObjectivePlanner, WarSimulator, update_status
 SEAD_SYNC_KM = 60            # SEAD packages whose targets are this close together are synchronised (the same ground, the same defence)
 SEAD_SYNC_ON = True          # off only in tests that need an unsynchronised day (the merge-underway case)
 SWEEP_AREA_KM = 60           # packages whose targets are this close together share one Fighter Sweep
+RAID_PREP_LEAD_MIN = 20      # v0.41.305 (XO 2026-11-05): the SEAD / Standoff DEAD packages that open the fleet-defence lane start this long before the raid package (the plan doc measured about 20 min from launch to homebound HARMs; judgment call, tune)
 SWEEP_LEAD_MIN = 10          # the sweep starts this much ahead of the first package it covers
 LATE_SEAD_MIN = 15           # launch option --late-sead: SEAD-stage packages go in this much later, so the DEAD stage (10 min behind) arrives
                              # about 5 min ahead of them and reaches its gate with the radars still up: it holds (HOLD_S = 12 min) and goes in once
@@ -175,6 +176,9 @@ class Session:
         objs = carry + [o for o in objs if o not in _late] + warned + _late        # postponed from yesterday first, then the day's job list, then the announced raids, then the supply strikes and road battalions
         st.raids = {**keep, "day": st.day, "surprise": n_surprise, "carry": []}
         pb = PackageBuilder(st, self.d)
+        prep_ids = self._raid_prep_objectives(pb, objs)          # v0.41.305: the carrier raid's blocking SAM sites get their own SEAD / Standoff DEAD packages, appended AFTER the day's jobs (the raid keeps its index, so its bearing is the one planned here)
+        objs = objs + prep_ids[0]
+        prep_obj_ids = {o.id for o in prep_ids[0]}                # built right after the raid itself, before the day's other jobs take the squadrons' sorties
         psq = st.player.squadron_id if st.player else None
         from . import blue_barcap, support_assets
         support_assets.plan(st)                          # v0.41.87: when each AWACS / tanker type has an aircraft on orbit today (before the guards, v0.41.88)
@@ -196,7 +200,7 @@ class Session:
                     if st.bases[q.base_id].kind == BaseKind.CARRIER:
                         daily[sid] = int(daily[sid] * _df)
             out, names = [], {}          # callsign counter for the whole day: Enfield 1, Enfield 2 ... never two Enfield 1s
-            for i, o in sorted(enumerate(objs, 1), key=lambda t: not carrier_raid(st, t[1])):      # v0.41.107: the setpiece is built FIRST (it is rare and needs the carrier squadrons), numbers unchanged
+            for i, o in sorted(enumerate(objs, 1), key=lambda t: (0 if carrier_raid(st, t[1]) else (1 if t[1].id in prep_obj_ids else 2))):      # v0.41.107: the setpiece is built FIRST (it is rare and needs the carrier squadrons), numbers unchanged
                 ledger = Ledger(st)
                 for sid in ledger.free:
                     ledger.free[sid] = min(ledger.free[sid], daily[sid])
@@ -285,6 +289,7 @@ class Session:
         self._sync_sead(pkgs)                                        # SEAD flights on the same ground (within SEAD_SYNC_KM) arrive together, not one after another
         self._stage_times(pkgs)                                      # a DEAD stage goes in DEAD_STAGE_GAP_MIN after the SEAD stage of the same site
         self._late_sead(pkgs)                                        # test option --late-sead: the SEAD stage goes in late, so the DEAD stage holds
+        self._time_raid_prep(pkgs, prep_ids)                         # v0.41.305: the carrier raid's SEAD / Standoff DEAD packages go in RAID_PREP_LEAD_MIN ahead of it (before the sweeps are timed from their packages)
         from . import sweep as sweep_
         dropped = set()
         for p in pkgs:                                               # a Fighter Sweep starts SWEEP_LEAD_MIN ahead of the first package it covers (after every other timing step)
@@ -485,6 +490,57 @@ class Session:
     def packages(self) -> list:
         """The tasking order. Emergency packages (flown, folded in or settled by odds) are in the plan but are not listed."""
         return [p for p in (Package.from_dict(d) for d in self.state.plan) if not p.extra.get("past")]
+
+    def _raid_prep_objectives(self, pb, objs: list) -> tuple:
+        """v0.41.305 (XO 2026-11-05: "just offer them as SEAD / SO DEAD packages that go before the fleet defense ... they're tuned already"): for the carrier raid, one SEAD or
+        Standoff DEAD job per live SAM site that threatens its intercept line (`tm.raid_inbound_sites`, the same list the raid's own scripted SEAD uses), skipping a site that
+        already has a DEAD job in the day's list. -> (new objectives, {site id: objective id of the raid's own job it serves}, the raid's objective id). Appended after the day's
+        jobs so the raid's index (and so its planned bearing) does not move. The raid package keeps its own SEAD seats: they are the scripted result for a Tomcat / Eagle seat."""
+        from . import threatmap as tm
+        from .war import long_range_site
+        st = self.state
+        i = next((n for n, o in enumerate(objs, 1) if carrier_raid(st, o)), None)
+        if i is None:
+            return [], {}, ""
+        o_r = objs[i - 1]
+        ex = pb._raid_plan(i, o_r) or {}
+        b = st.bases.get(o_r.target_id)
+        if b is None or ex.get("bomber_wing") not in st.assets or ex.get("brg") is None:
+            return [], {}, o_r.id
+        dest = ex.get("dest") or (b.x, b.y)
+        have = {o.target_id for o in objs if o.type == ObjectiveType.DEAD}
+        new, sites = [], {}
+        for a, _r in tm.raid_inbound_sites(st, (dest[0], dest[1]), ex["brg"], ex["bomber_wing"]):
+            sites[a.id] = o_r.id
+            if a.id in have:
+                continue
+            tail = f" ({a.health:.0%} left)" if a.health < 0.85 else ""
+            if long_range_site(st, a):
+                o = Objective(f"obj-d{st.day}-p{len(new) + 1}", ObjectiveType.DEAD, a.id, o_r.priority, f"Standoff DEAD: destroy {a.name}{tail}", "STANDOFF")
+            else:
+                o = Objective(f"obj-d{st.day}-p{len(new) + 1}", ObjectiveType.DEAD, a.id, o_r.priority, f"SEAD: suppress {a.name}{tail}", "SEAD")
+            new.append(o)
+        return new, sites, o_r.id
+
+    def _time_raid_prep(self, pkgs: list, prep) -> None:
+        """Start the raid prep packages RAID_PREP_LEAD_MIN before the carrier raid (and pull a Standoff DEAD of the day that would fall after it ahead of it); the raid package remembers its sites (`prep_sites`) for the war sim."""
+        new, sites, raid_oid = prep
+        if not sites:
+            return
+        raid = next((p for p in pkgs if p.objective.id == raid_oid), None)
+        if raid is None:
+            return
+        raid.extra["prep_sites"] = sorted(sites)
+        hm = int(raid.start[:2]) * 60 + int(raid.start[3:5])
+        m = max(0, hm - RAID_PREP_LEAD_MIN)
+        ids = {o.id for o in new}
+        for p in pkgs:
+            if p.objective.id in ids:                                      # a package made for the raid: named for it, and ahead of it
+                p.extra["raid_prep"] = raid_oid
+                p.start = f"{m // 60:02d}:{m % 60:02d}"
+            elif (p.objective.type == ObjectiveType.DEAD and p.objective.target_id in sites and p.objective.aim == "STANDOFF"
+                  and int(p.start[:2]) * 60 + int(p.start[3:5]) > m):          # the day's own Standoff DEAD on a blocking site that would go in after the raid: it goes in ahead of it (a SEAD / Close DEAD pair keeps its own staging)
+                p.start = f"{m // 60:02d}:{m % 60:02d}"
 
     def _carried(self, objs: list) -> list:
         """Objectives postponed yesterday (no aircraft left for them after an emergency scramble), if they are still worth flying and not already in the list."""
