@@ -11,7 +11,8 @@ from .difficulty import Difficulty
 from .models import SEAD_AIMS, Objective, ObjectiveType, AssetKind, Role
 from .packages import Package
 from .state import CampaignState
-from .loadouts import ENEMY_FIGHTERS
+from .loadouts import ENEMY_FIGHTERS, SLAM_PER_JET
+from . import threat
 
 JET_CAS_FACTOR = 0.7       # v0.41.188: an AI-flown F-16C / F/A-18C CAS sortie counts 0.7 of an A-10C one (judgment call: Mavericks only, no gun or CBU, one pass; no public source). A player's own sortie is scored from the debrief.
 ROLE_WEIGHT = {Role.STRIKE: 1.0, Role.SEAD: 0.9, Role.TARCAP: 0.6, Role.ESCORT: 0.7, Role.SWEEP: 0.7, Role.CAP: 0.6, Role.CAS: 1.0}
@@ -70,6 +71,8 @@ def cas_cover(state, a) -> tuple:
     return cov, [x for x in cov if x.variant not in ESCORTABLE]
 
 
+STANDOFF_MIN_DEF_FLIGHTS = 4   # v0.41.298 (XO 2026-11-05, Standoff Strike): a supply strike (fuel / depot / plant) with no SAM complication becomes a Standoff Strike (SLAM-ER Hornets) when this many red 2-ship fighter flights can reach the target (threat.defender_flights, the planner's own count). 0 = never. Judgment call: probe of fresh campaigns, 4 flights = nearly every supply site at L3, none at L1 / L2; it falls away as red's fighters are shot down. 1 would make every supply strike a standoff one at every level
+STANDOFF_AIR_FACTOR = 0.5      # v0.41.298: a Standoff Strike's odds count red's fighter cover at this share (released far out, outside the fighters' reach). Judgment call, no source
 SUPPLY_FIRST_BONUS = 45.0   # v0.41.273 (XO 2026-11-04, fox 3 medium): added to the score of a supply strike (fuel / depot / plant, not a runway strike) so it outranks an ordinary DEAD job (SAM scores 25-42, 60-100 when it blocks something: the belt-clearing SEAD keeps its place; supply strikes score 1.5-7 on their own). Judgment call; 0 = the old order
 FOLLOW_MAX_SITES = 2    # v0.41.158: a strike / CAS target under at most this many SA-11 / SA-10 sites goes in behind their SEAD; under more it stays DEAD-first (judgment call: two is what one gate sequence and one day's package limit can carry)
 FOLLOW_GAP_MIN = 10     # a follow job starts this long after the SEAD / standoff package of its site (same gap as the Close DEAD stage)
@@ -159,6 +162,11 @@ class ObjectivePlanner:
                         o_.aim = "SEAD"                                  # and the SA-2/3/6 round it get the HARM escort, as above
                     o_.description += f" (after the SEAD on {' and '.join(x.name for x in fol)}" + (", with a SEAD escort)" if soft else ")")
                     cov = []
+                if (o_.aim == "" and not o_.after and not cov and a.kind in ground.SUPPLY_KINDS and STANDOFF_MIN_DEF_FLIGHTS > 0
+                        and any(q.aircraft in SLAM_PER_JET and q.available >= 2 for q in state.squadrons.values())
+                        and threat.defender_flights(threat.expected_defenders(state, a.x, a.y, self.d.iads if self.d else 0.5)) >= STANDOFF_MIN_DEF_FLIGHTS):
+                    o_.aim = "STANDOFF"                                  # v0.41.298: red fighters are the trouble here, not SAMs: SLAM-ER Hornets, released far out
+                    o_.description = f"Standoff Strike: {a.name}"
                 cand.append((pr, o_, self._blockers(state, a) + cov, locked))
             elif a.kind == AssetKind.SAM and a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10:      # short-range SAMs are CAS's problem, not a SEAD/DEAD package's
                 covered = sum(x.value for x in state.assets.values() if a.id in x.defended_by and not x.destroyed) / 3.0
@@ -424,6 +432,8 @@ class WarSimulator:
             if has_sead:
                 sam *= 0.5
         air = _air_cover(state, self.d.iads)
+        if obj.type == ObjectiveType.STRIKE and obj.aim == "STANDOFF":
+            air *= STANDOFF_AIR_FACTOR                    # v0.41.298: released outside the fighters' reach
         defense = sam + air
         if obj.type == ObjectiveType.STRIKE and obj.aim == "SEAD":
             # v0.41.144: a supply strike under escortable SAM cover goes in at the SEAD flight's own chance (the salvo-size rule of sead_p: the HARMs

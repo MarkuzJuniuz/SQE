@@ -6479,6 +6479,40 @@ def check_123_parked_jets(c):
     print("[parked jets] %s: %d parked (wing %d, %d launched from the field), distinct spots, group marked parked" % (a_.name, n_p, w_.available, launched))
 
 
+def check_124_standoff_strike(c):
+    """v0.41.298 (XO 2026-11-05): a supply strike with no SAM complication becomes a Standoff Strike (SLAM-ER Hornets) when many red fighter flights reach the target. With the SAM
+    belt down at L3 the supply jobs are Standoff Strikes: the strike slot is a Hornet with the SLAM kit, the package survives a save, and at L1 the job stays a plain strike. Strategic
+    structure only (the threshold and the odds factor are tunables)."""
+    import random as _rnd
+    from sqe import war as _war
+    from sqe.models import AssetKind as _AK, ObjectiveType as _OT
+    from sqe.packages import Package as _Pk, PackageBuilder as _PB, Ledger as _Lg
+    assert _war.STANDOFF_MIN_DEF_FLIGHTS > 0
+    got = {}
+    for lvl in (1, 3):
+        ses = fresh_session(lvl, 7); st = ses.state
+        for a in st.assets.values():
+            if a.kind == _AK.SAM:
+                a.health = 0.0                                            # the belt rolled back: nothing but fighters left to fear
+        objs = _war.ObjectivePlanner(ses.d).plan(st, _rnd.Random(3), limit=8)
+        got[lvl] = [o for o in objs if o.type == _OT.STRIKE and o.aim != "RUNWAY"]
+        assert got[lvl], f"L{lvl}: supply strikes are planned"
+    assert all(o.aim == "STANDOFF" and o.description.startswith("Standoff Strike") for o in got[3]), [(o.aim, o.description) for o in got[3]]
+    assert all(o.aim == "" for o in got[1]), "L1: plain strikes (few fighters in reach)"
+    ses = fresh_session(3, 7); st = ses.state
+    for a in st.assets.values():
+        if a.kind == _AK.SAM:
+            a.health = 0.0
+    o = next(o for o in _war.ObjectivePlanner(ses.d).plan(st, _rnd.Random(3), limit=8) if o.aim == "STANDOFF" and o.type == _OT.STRIKE)
+    pk = _PB(st, ses.d).build(o, 1, _Lg(st), for_player=False)
+    sl = [f for f in pk.flights if f.kit == "SLAM"]
+    assert len(sl) == 1 and sl[0].aircraft == "FA-18C" and sl[0].role.value == "STRIKE", [(f.aircraft, f.role.value, f.kit) for f in pk.flights]
+    assert any(f.role.value == "TARCAP" for f in pk.flights), "the fighters it fears are covered"
+    back = _Pk.from_dict(pk.to_dict())
+    assert [(f.kit, f.aircraft) for f in back.flights] == [(f.kit, f.aircraft) for f in pk.flights] and back.objective.aim == "STANDOFF"
+    print("[standoff strike] L3 supply strikes -> Standoff Strike (%d), SLAM Hornet flight of %d, TARCAP, save round trip; L1 stays plain (%d)" % (len(got[3]), sl[0].count, len(got[1])))
+
+
 def check_122_road_site_flip(c):
     """v0.41.258 (XO 2026-11-03): a road supply site belongs to the side its road connects to (road_front.py). At the start of a campaign every red road site is on a road that
     connects to red and every blue one to blue, with no site flipping on night one; when the front cuts a site off from its owner it changes hands with its stock, both ways; the red
@@ -6677,6 +6711,7 @@ CHECKS = [
     check_121_sunk_carrier,
     check_122_road_site_flip,
     check_123_parked_jets,
+    check_124_standoff_strike,
 ]
 
 def _borrows(fn) -> set:

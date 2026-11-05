@@ -152,4 +152,4 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
 def _long_label(f, obj) -> str:
     """The flight's job in words, for 'tasked as ...'."""
     from .models import task_label
-    return {"SO DEAD": "Standoff DEAD", "DEAD": "Close DEAD"}.get(task_label(f, obj), task_label(f, obj))
+    return {"SO DEAD": "Standoff DEAD", "SO STRIKE": "Standoff Strike", "DEAD": "Close DEAD"}.get(task_label(f, obj), task_label(f, obj))

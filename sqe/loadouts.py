@@ -9,6 +9,7 @@ from .models import Role
 
 # Taken from DCS's own stock presets (the lists you pick from in the Mission Editor). "=<CLSID>" is a raw weapon id; anything else is a
 # weapon-name stem looked up on the pylon. The comment above each line names the stock preset it was copied from.
+SLAM_PER_JET = {"FA-18C": 2}                  # v0.41.298: AGM-84H SLAM-ER per jet in the Standoff Strike kit (a Hornet job: no F-16 SLAM-ER in DCS)
 JSOW_PER_JET = {"FA-18C": 2, "F-16C": 2}      # AGM-154A JSOW CEB per jet in the JSOW kit; only these jets fly the JSOW slot of a SEAD package
 
 _D: dict = {
@@ -27,6 +28,8 @@ _D: dict = {
     "FA-18C": {
         # JSOW slinger (SEAD package), XO's own Mission Editor loadout (2026-10-20): AIM-9X*2, AIM-120C-5*2, AGM-154A on 2 and 8 (2 per jet), FUEL*2 (on 3 and 7), Litening pod on 5
         "JSOW": {1: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 2: "={AGM-154A}", 3: "={FPU_8A_FUEL_TANK}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 6: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 7: "={FPU_8A_FUEL_TANK}", 8: "={AGM-154A}", 9: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}"},
+        # SLAM-ER kit (Standoff Strike), v0.41.298: the JSOW layout with an AGM-84H SLAM-ER on 2 and 8 (2 per jet); a starting point, not XO's Mission Editor capture
+        "SLAM": {1: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 2: "={AGM_84H}", 3: "={FPU_8A_FUEL_TANK}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 6: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 7: "={FPU_8A_FUEL_TANK}", 8: "={AGM_84H}", 9: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}"},
         # stock DCS preset: AIM-9X*2, AIM-120C-5*6, FUEL*3
         "CAP": {1: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 2: "=LAU-115_2*LAU-127_AIM-120C", 3: "={FPU_8A_FUEL_TANK}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={FPU_8A_FUEL_TANK}", 6: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 7: "={FPU_8A_FUEL_TANK}", 8: "=LAU-115_2*LAU-127_AIM-120C", 9: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}"},
         # stock DCS preset: AIM-9X*2, AIM-120C-5*1, GBU-38*4, GBU-12*4, ATFLIR, FUEL

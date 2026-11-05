@@ -6,7 +6,7 @@ import random
 from dataclasses import dataclass, field, asdict
 from . import runways, threat
 from . import threatmap as tm
-from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM, JSOW_PER_JET
+from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM, JSOW_PER_JET, SLAM_PER_JET
 from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER
 from .models import Objective, ObjectiveType, Role, BaseKind, RefuelMethod
 from .state import CampaignState
@@ -30,7 +30,7 @@ class Slot:
     required: bool = True
     only_if_defended: bool = False
     tag: str = ""                      # "" | HAVCAP | BASECAP (support flights: AI only)
-    kit: str = ""                      # "" | JSOW (a strike slot that only JSOW-capable jets fill, see loadouts.JSOW_PER_JET)
+    kit: str = ""                      # "" | JSOW | SLAM (a strike slot that only JSOW- / SLAM-ER-capable jets fill, see loadouts.JSOW_PER_JET, SLAM_PER_JET)
     land: bool = False                 # v0.41.256: a land-based squadron fills it when one reaches (the fleet raid's USAF share), long-range fighters first; any squadron when none does
 
 
@@ -70,7 +70,8 @@ _TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM",
          Role.TARCAP: "TARCAP: on station short of the target before the package, shoot what comes in range, do not chase; stay at least 15 minutes and until the last strike flight is off target plus 5 minutes, then home",
          Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
 _DEAD_TASK = {Role.SEAD: "SEAD: suppress the radars ahead of the DEAD flight", Role.STRIKE: "Close DEAD: destroy the SAM site with GBUs (the SEAD package goes in ahead of you; call it off if the radars are up)"}
-_KIT_TASK = {"JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers and covering Tors, on the HARM salvo's time; stand-off release, then home"}
+KIT_JETS = {"JSOW": JSOW_PER_JET, "SLAM": SLAM_PER_JET}      # v0.41.298: the airframes that can fill each kit slot
+_KIT_TASK = {"SLAM": "Standoff Strike: AGM-84H SLAM-ER on the target from far out, released outside the fighters' reach; then home", "JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers and covering Tors, on the HARM salvo's time; stand-off release, then home"}
 _SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
 _ESC_TASK = "Escort: hold your station with the package, shoot what comes in range, do not chase; leave when the strikers are off target"
 _TASK[Role.ESCORT] = _ESC_TASK
@@ -268,6 +269,8 @@ class PackageBuilder:
             nb = self._cluster_sites(obj)
             tmpl = [Slot(Role.SEAD, 4 if nb >= SALVO_4_NEIGHBOURS else 2), Slot(Role.STRIKE, 4, kit="JSOW"),
                     Slot(Role.SEAD, 4 if nb >= SALVO_8_NEIGHBOURS else 2)]     # the JSOW flight is picked before the second HARM flight: without it nothing is destroyed
+        elif obj.type == ObjectiveType.STRIKE and obj.aim == "STANDOFF":    # v0.41.298: a supply strike under heavy fighter cover: SLAM-ER Hornets, the TARCAP / escort added below
+            tmpl = [Slot(Role.STRIKE, 4, kit="SLAM"), Slot(Role.TARCAP, 2)]
         elif obj.type == ObjectiveType.CAS and obj.aim == "SEAD":           # v0.41.20: CAS under a live SA-2/3/6: the HARM escort is not optional
             tmpl = [Slot(Role.CAS, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
         elif obj.type == ObjectiveType.STRIKE and obj.aim == "SEAD":        # v0.41.144: a supply strike under a live SA-2/3/6: same, the HARM escort is required
@@ -317,7 +320,7 @@ class PackageBuilder:
         if for_player and pp:
             psq = st.squadrons[pp.squadron_id]
             spec = AIRCRAFT[psq.aircraft]
-            ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles and (s.kit != "JSOW" or psq.aircraft in JSOW_PER_JET)
+            ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles and (not s.kit or psq.aircraft in KIT_JETS.get(s.kit, ()))
                   and (not is_sweep(obj) or psq.aircraft in LONG_RANGE_A2A)                    # v0.41.15: no BVR sweep in an F-16 / F/A-18
                   and self._in_range(psq.id, tx, ty) and ledger.free[psq.id] >= 2]
             if obj.type == ObjectiveType.CAS and psq.aircraft != "A-10C" and not self._hot:
@@ -353,7 +356,12 @@ class PackageBuilder:
             chosen.append((slot, sq, count, i == player_idx))
         if not chosen:
             raise NoPlayerSlot("no squadron could fly this objective")
-        if obj.aim == "STANDOFF" and not any(sl_.kit == "JSOW" for sl_, *_ in chosen):
+        if obj.aim == "STANDOFF" and obj.type == ObjectiveType.STRIKE and not any(sl_.kit == "SLAM" for sl_, *_ in chosen):
+            # v0.41.298: no SLAM-ER Hornets free: the Standoff Strike waits for another day (a plain strike under that fighter cover is the loss it exists to avoid)
+            for sl_, sq_, n_, _ in chosen:
+                ledger.free[sq_.id] += n_
+            raise NoPlayerSlot("no SLAM-ER-capable squadron free for the Standoff Strike today")
+        if obj.aim == "STANDOFF" and obj.type == ObjectiveType.DEAD and not any(sl_.kit == "JSOW" for sl_, *_ in chosen):
             # v0.41.19: no JSOW jets free today: the Standoff DEAD waits for another day (the planner offers it again) rather than going without them
             for sl_, sq_, n_, _ in chosen:
                 ledger.free[sq_.id] += n_
@@ -446,7 +454,7 @@ class PackageBuilder:
         sweep_ = obj0_ is not None and is_sweep(obj0_)            # v0.41.15: a Fighter Sweep flies long-range fighters only (F-15C, F-14)
         cands = [sq for sq in self.state.squadrons.values()
                  if slot.role in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2 and self._in_range(sq.id, tx, ty)
-                 and (slot.kit != "JSOW" or sq.aircraft in JSOW_PER_JET) and (not sweep_ or sq.aircraft in LONG_RANGE_A2A)]
+                 and (not slot.kit or sq.aircraft in KIT_JETS.get(slot.kit, ())) and (not sweep_ or sq.aircraft in LONG_RANGE_A2A)]
         if not cands:
             return None
         if slot.land:                                            # v0.41.256: the fleet raid's USAF share: land-based squadrons only, the lead's service does not matter; none reach = the usual pick
