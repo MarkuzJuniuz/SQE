@@ -459,6 +459,8 @@ class ScrambleChoiceDialog(QDialog):
     def __init__(self, parent, sess, pkg, ev: dict, number: int):
         super().__init__(parent)
         self.setWindowTitle(ev["title"]); self.setMinimumSize(720, 640)
+        scr_ = self.screen().availableGeometry().height() if self.screen() else 1000
+        self.resize(780, max(640, min(980, int(scr_ * 0.92))))        # v0.41.294: tall, so both blocks show without scrolling on most screens
         self.take_scramble = False; self.fid = None
         self._sess = sess; self._eligible = bool(ev["eligible"])
         epkg = ev["package"]
@@ -466,10 +468,16 @@ class ScrambleChoiceDialog(QDialog):
         title = QLabel("Choose which mission to fly"); title.setObjectName("title"); outer.addWidget(title)
         sc = QScrollArea(); sc.setWidgetResizable(True); sc.setFrameShape(QFrame.NoFrame)
         body = QWidget(); bl = QVBoxLayout(body); bl.setSpacing(14); bl.setContentsMargins(0, 0, 6, 0)
-        for _start, is_scramble in sorted(((_hm(pkg.start), False), (_hm(epkg.start), True))):      # XO: order by time
-            bl.addWidget(self._block(epkg if is_scramble else pkg, is_scramble, ev))
+        self._can_take = self._eligible and bool(sess.flyable(epkg, squadron_only=False))
+        if self._can_take:
+            for _start, is_scramble in sorted(((_hm(pkg.start), False), (_hm(epkg.start), True))):      # XO: order by time
+                bl.addWidget(self._block(epkg if is_scramble else pkg, is_scramble, ev))
+        else:                                    # XO 2026-11-05: nothing to choose, so no pretend choice: your mission, and the in-universe line for who answers the emergency
+            bl.addWidget(self._block(pkg, False, ev))
+            fl = QLabel(sess.dispatch_line(epkg)); fl.setWordWrap(True); fl.setObjectName("h2"); fl.setStyleSheet(f"color:{theme.RED};")
+            bl.addWidget(fl)
         bl.addStretch(1); sc.setWidget(body); outer.addWidget(sc, 1)
-        note = (f"Taking the scramble leaves package #{number} to the other squadrons (postponed a day if they cannot cover both). "
+        note = ("The war simulation handles the emergency" + (", or folds it into your mission as AI." if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else ".")) if not self._can_take else (f"Taking the scramble leaves package #{number} to the other squadrons (postponed a day if they cannot cover both). "
                 "Staying with your tasking leaves the emergency to the war simulation" +
                 (", or folds it into your mission as AI." if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else "."))
         note_l = QLabel(note); note_l.setObjectName("small"); note_l.setWordWrap(True); outer.addWidget(note_l)
