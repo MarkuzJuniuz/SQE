@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.308, the counter-air text names the ramp (PR 2 of the parked jets)
+
+XO 2026-11-05 ("do text now"; "fox 3 low"). Text only. The job reads "Counter-air at <field>: strike the jets on the ramp (N aircraft at the field)" (it said only "N aircraft"), and the briefing's target line of a counter-air strike (not the sweep) ends with the jets parked in THIS mission ("N aircraft stand parked on the ramp." or "No aircraft are parked on the ramp today."): the parked statics, not the wing's total (some are airborne, the cap is 12). Saved day plans keep the old job text. Compile check and `check_123` only; the briefing line was not read in a built mission.
+
 ## v0.41.307, the dead dice code is gone (cleanup S3)
 
 XO 2026-11-05 ("fox 3 low S3"). Since v0.41.304 red's planned raids are listed packages and nothing rolls an emergency any more; this removes the machinery that was left. No change in the game.

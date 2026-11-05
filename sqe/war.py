@@ -224,7 +224,7 @@ class ObjectivePlanner:
                 w = state.enemy_air_at(a.id)
                 if w and w.available > 0:
                     pr = a.value * 1.2 * (w.available / max(1, w.authorized))
-                    cand.append((pr, Objective("", ObjectiveType.COUNTER_AIR, a.id, pr, f"Counter-air at {a.name} ({w.available} aircraft)"),
+                    cand.append((pr, Objective("", ObjectiveType.COUNTER_AIR, a.id, pr, f"Counter-air at {a.name}: strike the jets on the ramp ({w.available} aircraft at the field)"),
                                  self._blockers(state, a) + covering_sams(state, a), locked))
                 if not runways.is_closed(state, a.id):         # v0.41.254: crater the runway (a STRIKE with aim RUNWAY); 3 bomb hits close the field for 2-5 days
                     prr = a.value * 0.9 * (w.available / max(1, w.authorized))
