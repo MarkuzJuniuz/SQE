@@ -590,7 +590,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if package.objective.type in (ObjectiveType.STRIKE, ObjectiveType.CAS, ObjectiveType.DEAD, ObjectiveType.COUNTER_AIR):
             x["target_line"] = (f"Target position {latlon(tx, ty, self.t)}, bearing {int(bearing(pbase.x, pbase.y, tx, ty)):03d} degrees, "
                                 f"{dist(pbase.x, pbase.y, tx, ty) / NM:.0f} nm from {pbase.name}."
-                                + (f" {_ta.name} stands at {_ta.health:.0%} strength." if _ta is not None else ""))
+                                + (f" {_ta.name} stands at {_ta.health:.0%} strength." if _ta is not None else "")
+                                + self._ramp_line(package, manifest))
         tune_flags, tune_mhz = [], 0.0
         if o.awacs_tuned and not o.player_is_ai and any(s.slot == "AWACS" for s in package.support):
             tune_mhz = float(plan.freq("AWACS"))
@@ -1283,6 +1284,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         cx_ = sum(q.position.x for q in slots) / len(slots); cy_ = sum(q.position.y for q in slots) / len(slots)
         q = min(slots, key=lambda q_: dist(q_.position.x, q_.position.y, cx_, cy_))
         return q.position.x, q.position.y
+
+    @staticmethod
+    def _ramp_line(package, manifest) -> str:
+        """v0.41.308 (XO 2026-11-05): a counter-air strike says how many jets stand on the target's ramp in THIS mission (the parked statics, not the wing's total: some are airborne or over the cap)."""
+        o = package.objective
+        if o.type != ObjectiveType.COUNTER_AIR or o.aim == "SWEEP":
+            return ""
+        n = sum(len(g["units"]) for g in manifest.groups if g["kind"] == "enemy_air" and g.get("parked") and g["ref"] == o.target_id)
+        return f" {n} aircraft stand parked on the ramp." if n else " No aircraft are parked on the ramp today."
 
     def _spawn_parked_jets(self, package, manifest) -> None:
         """v0.41.297 (XO 2026-11-05, "if those jets are really available on that field then spawn them parked"): a counter-air strike (not the sweep) finds the target field's jets
