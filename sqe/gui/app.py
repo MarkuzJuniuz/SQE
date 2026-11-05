@@ -20,7 +20,7 @@ from ..engine import Session
 from ..packages import PackageBuilder, folded_n_def
 from ..settings import AppSettings
 from . import theme
-from .dialogs import DayResolvedDialog, DebriefDialog, NewCampaignDialog, ScrambleChoiceDialog, SettingsDialog, WaitingDialog
+from .dialogs import DayResolvedDialog, DebriefDialog, NewCampaignDialog, SettingsDialog, WaitingDialog
 from .widgets import MapView, SideCard, StatCard, card
 from . import overview_view as V
 
@@ -782,28 +782,12 @@ class MainWindow(QMainWindow):
                 "A sortie is already built and waiting for results. Discard it and build a new one?") != QMessageBox.Yes:
             return
         if sess.state.pending:
-            sess.abort()                                    # v0.41.149: discarding gives back what the sortie used, a scramble included (so it is offered again)
+            sess.abort()
         if sess.settings.problems():
             QMessageBox.warning(self, "Settings", "\n".join(sess.settings.problems())); self.settings(); return
-        scramble = False; scramble_fid = None
-        try:
-            ev = sess.emergency_for(number, flight_id)
-        except Exception:
-            ev = None
-        if ev:
-            pkg = next((p for p in sess.packages() if p.number == number), None)
-            if pkg is not None:
-                dlg = ScrambleChoiceDialog(self, sess, pkg, ev, number, flight_id)
-                dlg.exec()
-                scramble = dlg.take_scramble
-                if dlg.fid is not None:                         # v0.41.294: the FLY button you pressed names the flight, in either package
-                    if scramble:
-                        scramble_fid = dlg.fid
-                    else:
-                        flight_id = dlg.fid
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            res = sess.fly(number, flight_id, scramble=scramble, scramble_fid=scramble_fid)
+            res = sess.fly(number, flight_id)
         except Exception:
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "Could not build the mission", traceback.format_exc()); return

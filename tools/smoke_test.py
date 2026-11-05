@@ -48,21 +48,15 @@ class Ctx:
     """Shared state between the check sections: a section reads what it borrows from here at the top and leaves what later sections need at the bottom."""
 
 
-def fresh_session(level=3, seed=7):
+def fresh_session(level=3, seed=7, ac="F-16C"):
     """A new campaign of its own for a section that needs a session (instead of borrowing setup's, which earlier sections have changed)."""
     ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
-    ses.new("Smoke fresh", "F-16C", level, seed=seed)
+    ses.new("Smoke fresh", ac, level, seed=seed)
     return ses
 
 
 def check_00_setup(c):
-    global _EMERG
-    from sqe import raids as _r0
-    _EMERG = _r0.emergency_happens
-    _r0.emergency_happens = lambda *a, **k: False
-    import sqe.engine as _e0
-    _e0.DICE_EMERGENCIES = True            # v0.41.304: the game ships with the dice off; the emergency machinery stays until it is removed, so its checks run with them on (check_127 tests the shipped default)
     print(f"SQE smoke test, version {sqe.__version__}  (isolated temp data: {TMP})")
     mk = lambda: Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
     s = mk()
@@ -942,8 +936,6 @@ def check_21_raids_emergencies(c):
     # ---- raids and emergencies ----
     from sqe import raids as _rd
     from sqe.packages import Package as _Pk
-    _ev_orig = _EMERG
-    _rd.emergency_happens = _EMERG                       # switched back on here (it is off above so the other tests are not at the mercy of the dice)
     s.new("Raids 2", "F-16C", 2, seed=4); _st = s.state
     _st.campaign_id = "5a0e1b2c3d"; s.plan_day()                  # the dice are seeded from the campaign id, which is random: pin it so the rate checks repeat
     # rates over a long run follow the difficulty table, and the same day plans the same raids
@@ -953,74 +945,23 @@ def check_21_raids_emergencies(c):
         _nw += sum(1 for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land")); _ns += _st.raids["surprise"] + sum(1 for p_ in s.packages() if p_.extra.get("unwarned"))
     assert 8 <= _nw <= 36 and _ns >= 1, (_nw, _ns)
     _st.day = 5; s.plan_day(); _a = [d_["objective"]["description"] for d_ in _st.plan]; s.plan_day(); assert _a == [d_["objective"]["description"] for d_ in _st.plan], "a day replans the same"
-    # v0.41.290 (XO 2026-11-04: "it should have time"): the dice are thrown once per day and sortie slot (roughly the table), the emergency has a time of its own and is offered on
-    # exactly one package (the first you can fly at or after that time, else the last), asking again or with another flight never re-rolls, and the cap still holds
-    _rd.EMERG_CAP = True                                    # v0.41.272: the cap is off by default; this part tests the rule itself
-    _hits = _tot = 0
-    _hm_ = lambda x_: int(x_[:2]) * 60 + int(x_[3:5])
-    for _ in range(150):
-        s.plan_day(); _st.day += 1
-        fl_ = sorted((p_ for p_ in s.packages() if s.flyable(p_)), key=lambda p_: (_hm_(p_.start), p_.number))
-        if not fl_:
-            continue
-        _st.sortie_counter += 1; _tot += 1
-        evs = [(p_, s.emergency_for(p_.number, None)) for p_ in fl_]
-        got = [(p_, e_) for p_, e_ in evs if e_]
-        assert len(got) <= 1, "one package carries the day's emergency"
-        assert all((s.emergency_for(p_.number, "x") is None) == (e_ is None) for p_, e_ in evs), "reopening, or another flight, never re-rolls"
-        if got:
-            _hits += 1; p_, e1 = got[0]; t_ = e1["time"]
-            assert e1["package"].start == f"{t_ // 60:02d}:{t_ % 60:02d}", "the emergency starts at its own time"
-            assert _hm_(fl_[0].start) <= t_ <= _hm_(fl_[-1].start), "its time lies in the day's flying"
-            assert p_ is next((q_ for q_ in fl_ if _hm_(q_.start) >= t_), fl_[-1]), "offered on the first package at or after its time"
-            _st.raids["last_emerg"] = _st.sortie_counter                         # as fly() leaves it: that sortie had one
-            _st.raids.pop("emerg", None)
-            assert all(s.emergency_for(q_.number, None) is None for q_ in fl_), "none in two sorties in a row (the cap)"
-    assert 0.045 <= _hits / _tot <= 0.16, (_hits, _tot)
-    _rd.EMERG_CAP = False
-    # an emergency forced: scramble (fighter) and decline (folds in or odds); both build a mission
-    _rd.emergency_happens = lambda st_, d_, rng_: True
-    try:
-        for _ac, _lv, _seed in (("F-16C", 2, 4), ("A-10C", 2, 9), ("FA-18C", 3, 3)):
-            for _scr in (True, False):
-                s.new(f"Emerg {_ac}{_scr}", _ac, _lv, seed=_seed); _st = s.state
-                _p = None
-                import sqe.engine as _eng
-                for _day in range(10):                         # v0.41.28: troops in contact, and raids while RAID_SCRAMBLES is on: find a day with one
-                    _p = next((p_ for p_ in s.packages() if s.flyable(p_) and s.emergency_for(p_.number, None)), None)
-                    if _p:
-                        break
-                    _st.day += 1; s.plan_day()
-                if _p is None:
-                    continue
-                _ev = s.emergency_for(_p.number, None); assert _ev["kind"] in (("CAS", "RAID") if _eng.RAID_SCRAMBLES else ("CAS",)) and _ev["title"] and _ev["text"], "a raid scramble only while RAID_SCRAMBLES is on"
-                _res = s.fly(_p.number, None, scramble=_scr)
-                assert _st.pending and _res.counts["units"] > 0
-                if _scr and _ev["eligible"]:
-                    assert "Intercept a raid" in _st.pending["objective"] or "EMERGENCY" in _st.pending["objective"]
-                assert all(p_.number != _st.pending["package"] or True for p_ in s.packages())
-                assert all(not x_.extra.get("past") for x_ in s.packages()), "emergency packages are not listed"
-        # postponement: the squadron cannot cover both
-        s.new("Emerg post", "A-10C", 2, seed=9); _st = s.state
-        _p = None
-        for _day in range(8):                                                       # any day that has a troops-in-contact emergency for an A-10 package
-            _p = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "CAS"), None)
-            if _p:
-                break
-            _st.day += 1; s.plan_day()
-        assert _p is not None
-        _ev = s.emergency_for(_p.number, None)
-        _st.squadrons[_st.player.squadron_id].available = _ev["package"].flights[0].count
-        s.fly(_p.number, None, scramble=True)
-        assert _st.raids["carry"], "the displaced package is postponed"
-        _n_before = len(_st.raids["carry"]); _tgt = _st.raids["carry"][0]["target_id"]
-        s.state.status = "ACTIVE"; _war.WarSimulator(_gd(2), _rnd.Random(3)).end_day(_st); s.plan_day()
-        assert any(p_.objective.target_id == _tgt for p_ in s.packages()) or _tgt in _st.assets and _st.assets[_tgt].destroyed, "postponed objective returns next day"
-    finally:
-        _rd.emergency_happens = _ev_orig
     # the land raid is built with Su-24M bombers, and the debrief applies what got through
     import zipfile as _zf
-    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_ev_orig', '_rd', '_st', '_zf',)})
+    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_rd', '_st', '_zf',)})
+
+
+def land_raid_pkg(s, st, days=10, boost=True, replan=False):
+    """A planned land raid (a raid on a field, a supply site or a garrison) the player has a flight for, looking over `days` days (v0.41.307: the planned raids replace the dice)."""
+    for _ in range(days):
+        if boost:
+            boost_su24(st)
+        if replan or boost:
+            s.plan_day()
+        rp = next((p_ for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land") and s.flyable(p_, squadron_only=False)), None)
+        if rp:
+            return rp
+        st.day += 1
+    return None
 
 
 def boost_su24(st, n=24):
@@ -1032,40 +973,19 @@ def boost_su24(st, n=24):
 
 
 def check_22_raid_intercepts_ai_only(c):
-    _ev_orig = c._ev_orig
-    _rd = c._rd                  # v0.41.290: this was the global `_rd` (not the raids module), so the forced dice below never took effect; it passed by luck over many per-package rolls
+    _rd = c._rd
     s = fresh_session()
-    # v0.41.27: raid intercepts are AI-only for now; the build itself is still tested (it comes back), with the AI-only list lifted here
+    # v0.41.27: raid intercepts were AI-only for a while; the build itself is tested here with the AI-only list lifted (v0.41.307: through a planned raid package, the dice are gone)
     import sqe.engine as _eng27
     _aio27, _eng27.AI_ONLY = _eng27.AI_ONLY, ()
-    _rs27, _eng27.RAID_SCRAMBLES = _eng27.RAID_SCRAMBLES, True
     s.new("Raid build", "F-16C", 2, seed=4); _st = s.state
-    _rp = None
-    for _day in range(10):
-        _rp = None       # v0.41.88: always the scramble path (a planned raid package resolves overnight, not at the debrief)
-        if _rp:
-            break
-        _st.day += 1; s.plan_day()
-    if _rp is None:
-        _rd.emergency_happens = lambda st_, d_, rng_: True
-        try:
-            _rp0 = None
-            for _day in range(8):
-                boost_su24(_st); s.plan_day() if _day == 0 else None
-                _rp0 = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "RAID" and s.emergency_for(p_.number, None)["eligible"]), None)
-                if _rp0:
-                    break
-                _st.day += 1; boost_su24(_st); s.plan_day()
-            assert _rp0 is not None
-            s.fly(_rp0.number, None, scramble=True)
-        finally:
-            _rd.emergency_happens = _ev_orig
-    else:
-        s.fly(_rp.number, None)
+    _rp = land_raid_pkg(s, _st, 8)
+    assert _rp is not None, "a land raid was planned"
+    s.fly(_rp.number, s.flyable(_rp, squadron_only=False)[0].id)
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
     assert ("Su-24M" in _mz or "Su-25" in _mz) and "RAID-B-1" in _mz, "the raiders are in the mission"
     _s22 = s
-    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_aio27', '_eng27', '_mz', '_rs27', '_s22', '_st',)})
+    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_aio27', '_eng27', '_mz', '_s22', '_st',)})
 
 
 def check_23_raid_scramble_you_fly(c):
@@ -1113,7 +1033,7 @@ def check_26_raid_flies_blue_s(c):
 
 
 def check_27_raid_s_route_bends(c):
-    _aio27, _rs27, _st, s = c._aio27, c._rs27, c._st, c._s22          # the session section 22 built the raid mission in
+    _aio27, _st, s = c._aio27, c._st, c._s22          # the session section 22 built the raid mission in
     from sqe import raids as _rd
 
     # v0.41.31: a raid's route bends round the carrier group (FLEET_RAID_AVOID_NM), and red's target pick shies from it like a Patriot field
@@ -1141,7 +1061,6 @@ def check_27_raid_s_route_bends(c):
     _rt = _CS.from_dict(_st.to_dict()); assert _rt.raids == _st.raids
     _o = _st.to_dict(); _o.pop("raids"); assert _CS.from_dict(_o).raids == {}
     _eng27.AI_ONLY = _aio27
-    _eng27.RAID_SCRAMBLES = _rs27
     from types import SimpleNamespace as _NS
     from dcs import task as _tk
     from sqe.mission_builder import MissionBuilder as _MBg
@@ -1638,7 +1557,6 @@ def check_31l_red_arm(c):
     from sqe.difficulty import LEVELS
     assert LEVELS[1].raid_arm == 0 and LEVELS[2].raid_arm > 0 and LEVELS[3].raid_arm > 0 and LEVELS[2].arm_cap == 2 and LEVELS[3].arm_cap == 8, "red SEAD by level (v0.41.125: no dice, L2 a pair)"
     aio, eng.AI_ONLY = eng.AI_ONLY, ()
-    rs, eng.RAID_SCRAMBLES = eng.RAID_SCRAMBLES, True
     from sqe import raids as _rd
     old, pick0 = (LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise), _rd.pick_aim
     LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise = 1.0, 3.0, 0.0       # every day brings announced raids
@@ -1716,7 +1634,7 @@ def check_31l_red_arm(c):
     finally:
         LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise = old
         _rd.pick_aim = pick0
-        eng.AI_ONLY, eng.RAID_SCRAMBLES = aio, rs
+        eng.AI_ONLY = aio
 
 
 def check_31m_blue_barcap_plan(c):
@@ -1993,40 +1911,6 @@ def check_31v_hot_runway(c):
     print(f"[hot runway] {len(ents)} AI flights released from runways, a minute apart per runway; off: none; your field: {len(own)} released after your takeoff")
 
 
-def check_31w_raid_scramble_merge(c):
-    """v0.41.101: a raid scramble you do not take (and that is not planned on your own tasking) is folded into your mission as AI when the raided field lies inside
-    the merge circle: the scramblers and the raiders are both in the mission. The popup / note text is in-universe (who was dispatched), never the reason."""
-    import zipfile
-    from sqe import raids as rd
-    keep = rd.emergency_happens
-    rd.emergency_happens = lambda a, b, c_: True
-    try:
-        (TMP / "saves").mkdir(parents=True, exist_ok=True)
-        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=400))
-        ses.new("Raid merge", "F-16C", 2, seed=4)
-        st = ses.state
-        for _ in range(40):
-            for p in ses.packages():
-                if not ses.flyable(p):
-                    continue
-                ev = ses.emergency_for(p.number, None)
-                # v0.41.292: the scramble has its own time and is folded in only when it started no more than merge_back_min before your package, so test one that did
-                if ev and ev["kind"] == "RAID" and ses._inside_merge(p, ev["package"]) and (int(p.start[:2]) * 60 + int(p.start[3:5])) - ev["time"] <= ses.settings.merge_back_min:
-                    line = ses.dispatch_line(ev["package"])
-                    assert line.startswith("Our ") and "cannot" not in line.lower(), line
-                    ses.fly(p.number, None, scramble=False)
-                    assert any(m["type"] == "FLEET_DEFENSE" for m in st.pending["merged"]), "the raid scramble is folded in"
-                    txt = zipfile.ZipFile(st.pending["miz"]).read("mission").decode("utf8", "ignore")
-                    assert "RAID-B-1" in txt, "the raiders are in the mission"
-                    return
-            st.day += 1
-            boost_su24(st)
-            ses.plan_day()
-        raise AssertionError("no raid scramble inside the merge circle and the time window in 40 days")
-    finally:
-        rd.emergency_happens = keep
-
-
 def check_31we_red_gate_debrief(c):
     """v0.41.126: a red raid that held at the gate and turned back (or was still held when the mission ended) is 'stopped, no bombs fell'; one whose gate
     opened at time T reaches the field no sooner than T plus the leg in; and the Lua hook writes the gate record."""
@@ -2159,78 +2043,6 @@ def check_31wd_red_sead_first(c):
     far = next((a for a in st.assets.values() if raids.cover_field(st, a.x, a.y) is None), None)
     assert raids.arm_jets(st, fld, 10, 4, cap=2, cap_free=8) == 2 and raids.arm_jets(st, fld, 12, 4, cap=2, cap_free=8) >= 4, "arm_jets cap and the spare-jet lift"
     print("[red SEAD first] covered target: L3 SEAD by batteries, L2 a pair (full with 8 spare), L1 and Su-25 none; no spare jets: no raid")
-
-
-def check_31wc_scramble_folds_outside_circle(c):
-    """v0.41.124: a raid scramble you do not take is folded into your mission wherever the raided field is: the merge circle is not tested."""
-    from sqe import raids as rd
-    keep = rd.emergency_happens
-    rd.emergency_happens = lambda a, b, c_: True
-    try:
-        (TMP / "saves").mkdir(parents=True, exist_ok=True)
-        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=5))
-        ses.new("Fold outside", "F-16C", 2, seed=4)
-        st = ses.state; boost_su24(st); seen = {}
-        for _ in range(40):
-            for p in ses.packages():
-                if not ses.flyable(p):
-                    continue
-                ev = ses.emergency_for(p.number, None)
-                if ev and ev["kind"] == "RAID" and not ses._inside_merge(p, ev["package"]):
-                    # v0.41.290: the scramble has its own time, so it is folded in only when it started no more than merge_back_min before your package (an earlier one is the war's)
-                    near = (int(p.start[:2]) * 60 + int(p.start[3:5])) - ev["time"] <= ses.settings.merge_back_min
-                    ses.fly(p.number, None, scramble=False)
-                    folded = any(m["type"] == "FLEET_DEFENSE" for m in st.pending["merged"])
-                    assert folded == near, ("the raid scramble is folded in although its field is outside the circle, when it started inside your window (and only then)", folded, near)
-                    ses.abort()
-                    seen[near] = seen.get(near, 0) + 1
-                    if seen.get(True):
-                        print("[fold outside circle] a raid scramble outside the 5 nm merge circle is folded into the mission when it started in your window" + (", and left to the war when earlier" if seen.get(False) else ""))
-                        return
-            st.day += 1
-            boost_su24(st)
-            ses.plan_day()
-        raise AssertionError("no raid scramble outside the merge circle in 40 days")
-    finally:
-        rd.emergency_happens = keep
-
-
-def check_31wb_scramble_takes_hidden_packages(c):
-    """v0.41.121: when you take an emergency scramble, the packages that were listed inside the package you were tasked with come along (inside the
-    -merge_back_min / +30 min window round the scramble's start), together with the scramble's own finds, at most six."""
-    from sqe import raids as rd
-    keep = rd.emergency_happens
-    rd.emergency_happens = lambda a, b, c_: True
-    try:
-        (TMP / "saves").mkdir(parents=True, exist_ok=True)
-        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=400))
-        ses.new("Scramble members", "F-16C", 2, seed=4)
-        st = ses.state; boost_su24(st)
-        hm = lambda p_: int(p_.start[:2]) * 60 + int(p_.start[3:5])
-        for _ in range(40):
-            for p in ses.packages():
-                if not ses.flyable(p) or not ses.merge_candidates(p):
-                    continue
-                ev = ses.emergency_for(p.number, None)
-                if not (ev and ev["eligible"]):
-                    continue
-                hidden = list(ses.merge_candidates(p))
-                scr = ev["package"]
-                ses.fly(p.number, None, scramble=True)
-                merged = {m_["number"] for m_ in st.pending["merged"]} if st.pending["merged"] and "number" in st.pending["merged"][0] else None
-                if merged is None:
-                    return
-                inside = [x for x in hidden if -15 <= hm(x) - hm(scr) <= 30 and x.number != scr.number]
-                assert len(merged) <= 6, merged
-                # (v0.41.158: a day of six standoff packages can hit the mission's unit limit, which drops the furthest first, so not every package inside the window need come along)
-                assert any(x.number in merged for x in inside) or not inside, "a package hidden in the original comes along"
-                return
-            st.day += 1
-            boost_su24(st)
-            ses.plan_day()
-        raise AssertionError("no scramble with a package hidden in the original in 40 days")
-    finally:
-        rd.emergency_happens = keep
 
 
 def check_31x_forward_garrisons(c):
@@ -2513,36 +2325,27 @@ def check_31ze_blue_callin(c):
     import re as _re
     import zipfile as _zf
     import dcs.lua as dlua
-    from sqe import raids as rd
     found = None
-    keep = rd.emergency_happens
-    rd.emergency_happens = lambda a, b, c_: True
-    try:
-        for jet, lvl, seed in (("F-16C", 2, 4), ("F-16C", 3, 7), ("FA-18C", 2, 5), ("F-15C", 3, 11), ("F-16C", 2, 13), ("F-14BU", 3, 3), ("FA-18C", 3, 17), ("F-15C", 2, 19)):
-            random.seed(seed)
-            (TMP / "saves").mkdir(parents=True, exist_ok=True)
-            s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=400))
-            s.new("Blue call-in", jet, lvl, seed=seed)
-            for _day in range(25):
-                for pk in [p_ for p_ in s.packages() if s.flyable(p_)]:
-                    ev = s.emergency_for(pk.number, None)
-                    if not (ev and ev["kind"] == "RAID" and s._inside_merge(pk, ev["package"])):
-                        continue
-                    s.fly(pk.number, None, scramble=False)
-                    raw = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
-                    calls = set(_re.findall(r"SQE_CALLIN\('([^']+)',(\d+),(\d+),(\d+),(\d+)\)", raw))
-                    s.state.pending = None
-                    if calls:
-                        found = (raw, calls)
-                        break
-                if found:
+    for jet, lvl, seed in (("F-16C", 2, 4), ("F-16C", 3, 7), ("FA-18C", 2, 5), ("F-15C", 3, 11), ("F-16C", 2, 13), ("F-14BU", 3, 3), ("FA-18C", 3, 17), ("F-15C", 2, 19)):
+        random.seed(seed)
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=400))
+        s.new("Blue call-in", jet, lvl, seed=seed)
+        for _day in range(25):
+            for pk in [p_ for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land") and s.flyable(p_, squadron_only=False)]:
+                s.fly(pk.number, s.flyable(pk, squadron_only=False)[0].id)
+                raw = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
+                calls = set(_re.findall(r"SQE_CALLIN\('([^']+)',(\d+),(\d+),(\d+),(\d+)\)", raw))
+                s.state.pending = None
+                if calls:
+                    found = (raw, calls)
                     break
-                s.state.day += 1
-                s.plan_day()
             if found:
                 break
-    finally:
-        rd.emergency_happens = keep
+            s.state.day += 1
+            s.plan_day()
+        if found:
+            break
     assert found, "some raid-defence mission has a blue patrol answering the hotspot"
     raw, calls = found
     m = dlua.loads(raw)["mission"]
@@ -2581,9 +2384,6 @@ def check_31y_unit_cap_merged(c):
     assert Session._drop_one([sw, a]) == [sw], "the sweep stays while a strike is left"
     assert Session._drop_one([sw]) == [], "a lone sweep can still go"
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
-    from sqe import raids as _rd
-    _keep_em = _rd.emergency_happens
-    _rd.emergency_happens = lambda a_, b_, c__: False
     def build(limit, fwd=30):
         ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=60, merge_max_units=limit, merge_fwd_min=fwd))
         ses.new("Unit cap", "F-16C", 3, seed=4)
@@ -2599,7 +2399,6 @@ def check_31y_unit_cap_merged(c):
     assert m0 >= 1, "a package merged in"
     r1, m1, _n = build(60)                               # a tiny limit: the packages go, the base mission stays
     r2, m2, n0 = build(250, fwd=0)                       # later packages off: no more candidates than with 30 minutes
-    _rd.emergency_happens = _keep_em
     assert m1 <= m0 and (m1 == 0 or r1.counts["units"] <= 60), ("merged packages are dropped for the limit", m0, m1, r1.counts)
     assert n0 <= n30, ("the later-packages window narrows the candidates", n0, n30)
     assert AppSettings().merge_radius_nm == 15 and AppSettings().merge_fwd_min == 30
@@ -4568,45 +4367,6 @@ def check_68_overview(c):
     print("[overview] posture labels and endings, front, odds (battalions + word), warnings, supply %, air defence with SAM orders, no jet counts or carrier line")
 
 
-def check_69_scramble_undo(c):
-    """v0.41.149 (XO 2026-10-27): cancel a sortie that came with a scramble, press Fly again: the scramble is offered again, the plan is as it was."""
-    import sqe.raids as _rd2
-    keep = _rd2.emergency_happens
-    _rd2.emergency_happens = lambda st_, d_, rng_: True
-    try:
-        done = 0
-        for _ac, _lv, _seed in (("F-16C", 2, 4), ("A-10C", 2, 9), ("FA-18C", 3, 3)):
-            s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False)); s.new(f"Undo {_ac}", _ac, _lv, seed=_seed); st = s.state
-            p_ = ev = None
-            for _day in range(10):
-                p_ = next((x for x in s.packages() if s.flyable(x) and (s.emergency_for(x.number, None) or {}).get("eligible")), None)
-                if p_:
-                    break
-                st.day += 1; s.plan_day()
-            if p_ is None:
-                continue
-            ev = s.emergency_for(p_.number, None)
-            before = (json.dumps(st.plan, sort_keys=True), json.dumps(st.raids, sort_keys=True), len(st.log), st.sortie_counter)
-            s.fly(p_.number, None, scramble=True)
-            assert st.pending and "undo" in st.pending
-            assert json.dumps(st.plan, sort_keys=True) != before[0], "the scramble put its package in the plan"
-            s.abort()
-            assert (json.dumps(st.plan, sort_keys=True), json.dumps(st.raids, sort_keys=True), len(st.log), st.sortie_counter) == before, "cancelling gives everything back"
-            ev2 = s.emergency_for(p_.number, None)
-            assert ev2 and ev2["title"] == ev["title"] and ev2["eligible"], "the scramble is offered again after a cancel"
-            s.fly(p_.number, None, scramble=True)                  # and it can be taken again
-            assert st.pending and st.pending["objective"]
-            s.fly(p_.number, None, scramble=True)                  # a rebuild without a cancel (Discard) also gives it back
-            assert sum(1 for d_ in st.plan if d_["extra"].get("emergency") or d_["objective"]["description"] == ev["package"].objective.description) <= 1 or True
-            s.abort()
-            assert json.dumps(st.plan, sort_keys=True) == before[0]
-            done += 1
-        assert done, "no scramble found to test"
-    finally:
-        _rd2.emergency_happens = keep
-    print(f"[scramble undo] {done} campaigns: cancel and fly again offers the scramble again, plan, raid record and log restored")
-
-
 def check_70_overview_detail(c):
     """v0.41.149: the Situation panel and the Ground / Supply / Air defence / Air tabs (sqe/overview_detail.py)."""
     from sqe import overview_detail as _od, ground as _gr, tempo as _tp
@@ -4744,12 +4504,9 @@ def check_75_mass_raid_build(c):
     import sqe.engine as _eng
     from sqe import raids as _r
     _aio, _eng.AI_ONLY = _eng.AI_ONLY, ()
-    _rs, _eng.RAID_SCRAMBLES = _eng.RAID_SCRAMBLES, True
-    _em = _r.emergency_happens
-    s = fresh_session(3, 6); st = s.state; d = s.d
+    s = fresh_session(3, 9, "F-14BU"); st = s.state; d = s.d                 # v0.41.307: the planned land raids a Tomcat seat can fly (an F-16C seldom has one in reach)
     _w0 = d.raid_wave; d.raid_wave = 1.0
     try:
-        _r.emergency_happens = lambda *a, **k: True
         boost_su24(st, 40)
         for w_ in st.enemy_air:
             for q_ in w_.sqns:
@@ -4757,12 +4514,12 @@ def check_75_mass_raid_build(c):
         rp = None
         for _ in range(10):
             s.plan_day()
-            rp = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "RAID" and s.emergency_for(p_.number, None)["eligible"]), None)
+            rp = next((p_ for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land") and s.flyable(p_, squadron_only=False)), None)
             if rp:
                 break
             st.day += 1
         assert rp is not None
-        s.fly(rp.number, None, scramble=True)
+        s.fly(rp.number, s.flyable(rp, squadron_only=False)[0].id)
         ex = st.pending["package_dict"].get("extra") or {}
         assert ex.get("bombers", 0) >= 8 and ex.get("mass") and ex.get("escorts", 0) >= ex["bombers"] // 2, ex
         mz = _z.ZipFile(st.pending["miz"]).read("mission").decode()
@@ -4770,9 +4527,9 @@ def check_75_mass_raid_build(c):
         assert _nb == ex["bombers"] and _nu <= 330, (_nb, _nu, ex)       # the regex counts every static building whole (road sites add some, v0.41.241); the builder enforces its own 250 with statics at carcass weight
         assert any("Raid Sweep" in x for x in _re.findall(r"Raid Sweep \d", mz)), "a mass raid opens with a sweep"
     finally:
-        d.raid_wave = _w0; _r.emergency_happens = _em; _eng.AI_ONLY = _aio; _eng.RAID_SCRAMBLES = _rs
-    assert d.emerg_chance >= 0.3 and d.level == 3
-    print("[mass raid] 8+ bombers: escorts 1 per 2 plus a sweep, SEAD and DEAD groups, under the unit limit; L3 scramble chance 33%")
+        d.raid_wave = _w0; _eng.AI_ONLY = _aio
+    assert d.level == 3
+    print("[mass raid] 8+ bombers: escorts 1 per 2 plus a sweep, SEAD and DEAD groups, under the unit limit")
 
 
 def check_76_cas_task_force(c):
@@ -5774,23 +5531,20 @@ def check_107_raid_cover_fields(c):
     from sqe.raid_spawns import COVER_AAA_NM, COVER_FIELDS_MAX
     from sqe.routes import NM as _NM
     _aio, _eng.AI_ONLY = _eng.AI_ONLY, ()
-    _rs, _eng.RAID_SCRAMBLES = _eng.RAID_SCRAMBLES, True
-    _em = _r.emergency_happens
     seen_extra = 0
     try:
-        _r.emergency_happens = lambda *a, **k: True
-        for seed in (3, 6):
-            s = fresh_session(seed, 6); st = s.state
+        for seed in (9, 3):
+            s = fresh_session(3, seed, "F-14BU"); st = s.state
             boost_su24(st, 40)
             rp = None
             for _ in range(12):
                 s.plan_day()
-                rp = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "RAID" and s.emergency_for(p_.number, None)["eligible"]), None)
+                rp = next((p_ for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land") and s.flyable(p_, squadron_only=False)), None)
                 if rp:
                     break
                 st.day += 1
-            assert rp is not None, ("no raid scramble", seed)
-            s.fly(rp.number, None, scramble=True)
+            assert rp is not None, ("no land raid", seed)
+            s.fly(rp.number, s.flyable(rp, squadron_only=False)[0].id)
             pk = st.pending["package_dict"]; ex = pk.get("extra") or {}
             tb = st.bases[pk["objective"]["target_id"]]
             dest = ex.get("dest") or (tb.x, tb.y)
@@ -5810,7 +5564,7 @@ def check_107_raid_cover_fields(c):
             for aid in near:
                 assert ("%s|b" % aid) in mz or any("supply sites inside" in w_ for w_ in (st.pending.get("warns") or [])), ("a supply site near the raid target is missing", seed, aid)
     finally:
-        _r.emergency_happens = _em; _eng.AI_ONLY = _aio; _eng.RAID_SCRAMBLES = _rs
+        _eng.AI_ONLY = _aio
     print("[raid cover fields] covering fields built (nearest %d), neighbours without flights get no far AAA (%d checked), supply circle also round the raid target" % (COVER_FIELDS_MAX, seen_extra))
 
 def check_108_static_weight(c):
@@ -6586,29 +6340,18 @@ def check_122_road_site_flip(c):
 def check_126_land_raid_flyable(c):
     """v0.41.303 (XO 2026-11-05): a raid on a field, a supply site or a garrison is player-flyable like the carrier raid (it was AI-only, a text line). Strategic: a raid
     scramble package offers the player a flight, BARCAP stays AI-only, and the sortie builds and writes a mission file with the scramble taken."""
-    from sqe import raids
     from sqe.models import ObjectiveType as _OT
-    real = raids.emergency_happens
-    raids.emergency_happens = lambda *a, **k: True
-    try:
-        (TMP / "saves").mkdir(parents=True, exist_ok=True)
-        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
-        ses.new("LandRaid", "F-16C", 3, seed=2)
-        assert not any(ses.flyable(p) for p in ses.packages() if p.objective.type == _OT.BARCAP), "BARCAP stays AI-only"
-        host = ev = None
-        for p in ses.packages():
-            e_ = ses.emergency_for(p.number)
-            if e_ and e_["kind"] == "RAID":
-                host, ev = p, e_
-                break
-        assert ev is not None, "a raid scramble came up"
-        fl = ses.flyable(ev["package"], squadron_only=False)
-        assert fl, "the raid scramble offers the player a flight"
-        ses.fly(host.number, None, scramble=True, scramble_fid=fl[0].id)
-        assert list((TMP / "saves").glob("**/SQE_Sortie.miz")), "the sortie was written"
-    finally:
-        raids.emergency_happens = real
-    print("[land raid flyable] a raid scramble offers the player a flight and builds a mission; BARCAP stays AI-only")
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    ses.new("LandRaid", "F-14BU", 3, seed=9)
+    assert not any(ses.flyable(p) for p in ses.packages() if p.objective.type == _OT.BARCAP), "BARCAP stays AI-only"
+    host = land_raid_pkg(ses, ses.state, 12)
+    assert host is not None, "a land raid was planned"
+    fl = ses.flyable(host, squadron_only=False)
+    assert fl, "the planned raid offers the player a flight"
+    ses.fly(host.number, fl[0].id)
+    assert list((TMP / "saves").glob("**/SQE_Sortie.miz")), "the sortie was written"
+    print("[land raid flyable] a planned land raid offers the player a flight and builds a mission; BARCAP stays AI-only")
 
 
 def check_127_planned_raids_listed(c):
@@ -6616,16 +6359,13 @@ def check_127_planned_raids_listed(c):
     is a listed package; titles read "<what is defended> Defense: Intercept"; planned CAS in the hardest-pressed sector is marked troops in contact."""
     import sqe.engine as _eng
     from sqe.models import ObjectiveType as _OT
-    real = _eng.DICE_EMERGENCIES
-    _eng.DICE_EMERGENCIES = False
-    try:
+    if True:
         (TMP / "saves").mkdir(parents=True, exist_ok=True)
         ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
         ses.new("Planned", "F-16C", 3, seed=1)
         titles, unw, tic = set(), 0, 0
         for _ in range(12):
             ps = ses.packages()
-            assert not any(ses.emergency_for(p.number) for p in ps), "no dice emergency is ever offered"
             for p in ps:
                 if p.objective.type == _OT.FLEET_DEFENSE:
                     titles.add(p.title)
@@ -6636,9 +6376,7 @@ def check_127_planned_raids_listed(c):
                     assert p.urgent and p.objective.type == _OT.CAS
             ses.skip_day()
         assert titles, "a raid was planned in twelve days"
-    finally:
-        _eng.DICE_EMERGENCIES = real
-    print(f"[planned raids] listed with titles {sorted(titles)}, {unw} unwarned, {tic} troops in contact, no dice emergency")
+    print(f"[planned raids] listed with titles {sorted(titles)}, {unw} unwarned, {tic} troops in contact, no dice")
 
 
 def check_128_raid_prep_packages(c):
@@ -6719,9 +6457,6 @@ CHECKS = [
     check_31m_blue_barcap_plan,
     check_31n_blue_patrol_vs_raids,
     check_31v_hot_runway,
-    check_31w_raid_scramble_merge,
-    check_31wb_scramble_takes_hidden_packages,
-    check_31wc_scramble_folds_outside_circle,
     check_31wd_red_sead_first,
     check_31we_red_gate_debrief,
     check_31wg_sead_every_covering_battery,
@@ -6779,7 +6514,6 @@ CHECKS = [
     check_66_l1_raids,
     check_67_air_tempo,
     check_68_overview,
-    check_69_scramble_undo,
     check_70_overview_detail,
     check_71_story,
     check_72_window_size,

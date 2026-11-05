@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## v0.41.307, the dead dice code is gone (cleanup S3)
+
+XO 2026-11-05 ("fox 3 low S3"). Since v0.41.304 red's planned raids are listed packages and nothing rolls an emergency any more; this removes the machinery that was left. No change in the game.
+- **Removed.** `Session.emergency_for` / `_roll_emergency` / `_make_emergency` / `_emerg_view` / `dispatch_line` / `_postpone_if_short` / `_restore_undo`, `engine.DICE_EMERGENCIES` and `RAID_SCRAMBLES`; `raids.emergency_seed` / `emergency_happens` / `eligible` / `pick_target`, `EMERG_CAP`, `RAID_RESERVE`; the `ScrambleChoiceDialog` and its call in `do_fly`; `Difficulty.emerg_chance`; the `emergencies` setting (old settings files load fine: unknown keys are skipped).
+- **`Session.fly(package, flight)`** lost the `scramble` and `scramble_fid` arguments; a sortie built before this version that carried an `undo` record just ignores it.
+- **Kept.** `Package.extra["past"]` still hides a package from the list (an old saved day may hold one); `raids.hot_sector` (troops in contact); `st.raids["carry"]` (postponed jobs).
+- **Smoke.** The checks that only tested the dice are gone (`check_31w`, `31wb`, `31wc`, `check_69`, the dice half of `check_21`); the ones that used the dice to get a raid package (`check_22`, `31ze`, `75`, `107`, `126`) take a planned land raid instead (`land_raid_pkg`; checks 75 and 107 fly a Tomcat seat because an F-16C seldom has a land raid in reach).
+
 ## v0.41.306, uniform Title Case job names
 
 XO 2026-11-05 ("fox 3 low"; names "uniform and in title case"). `Package.title` (the row in the list and "Also in this mission") now names every job from its type and aim: Strike, Standoff Strike, Runway Strike, SEAD, Standoff DEAD, Close DEAD, Close Air Support (troops in contact: "Close Air Support: Troops in Contact"), Fighter Sweep, Counter-Air, Combat Air Patrol. The raid jobs keep "<What> Defense: Intercept" and "Fleet Defense: SEAD / Standoff DEAD". Display only: no job, id or save field changed, so old saves read the new names. Judgment calls: the combined valve DEAD reads plain "DEAD"; the Overview's prose counts ("2 strike, 1 patrol") and the second-line descriptions are unchanged.
