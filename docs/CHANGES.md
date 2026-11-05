@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.296, the fleet raid flies a formation: escorts ahead, bomber groups in a loose echelon
+
+XO 2026-11-05 ("fox 3 low"; "the Su-27s are in front of their package", he first thought 10 nm too much). Fleet raid (edge-spawn setpiece) only; land raids and staged raids unchanged.
+- **Escorts ahead.** Each escort group starts `RAID_ESCORT_AHEAD_NM` 4 nm AHEAD of the bomber group it guards (it was 3 nm behind) and flies the same clock and route. JUDGMENT CALL: public sources give no spacing (Chipman, Airpower Journal 1990: Su-27s "may be tasked to escort" Badgers / Backfires; CIMSEC's Backfire piece has no formation detail). The sweeps still lead by `RAID_SWEEP_LEAD_S` 90 s.
+- **Echelon.** The bomber groups (up to 4 jets each) keep their 60 s trail and also fly `RAID_ECHELON_NM` 1.5 nm further to the side of the line each, centred on it (judgment call). The route is shifted leg by leg, not only the start, and each escort group takes its bomber group's side.
+- **Measured** on a built raid on XO's Iron Tide save: four bomber groups 7.5 nm apart along the line and 1.5 nm apart sideways; the escorts 4.0 nm ahead of their group on the same side. Targeted smoke (check_22, 26, 27, 31zb) passed. Not seen in DCS.
+
 ## v0.41.295, the buildings of a supply site no longer overlap
 
 XO 2026-11-05 ("fox 3 low"; his screenshot of `rsup_064`: two warehouses and an ammo bunker clipped into each other). Light: `_place_buildings` only.
