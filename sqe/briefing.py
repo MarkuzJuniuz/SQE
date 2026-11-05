@@ -66,6 +66,14 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         sit += ["", "Runway strike. Put at least 3 bombs on the runway: that closes the whole field for 2 to 5 days (longer when their supply is low). "
                     "Nothing launches from a cratered field and nothing lands there; its aircraft stay on the ramp. The target point is the middle of the strip; "
                     "bombs that fall off the paved strip do not count."]
+    elif obj.type.value == "STRIKE" and obj.aim == "STANDOFF":
+        sit += ["", "Standoff Strike. Red fighters in reach make a plain bombing run a bad bet here, so the strike goes out as SLAM-ER Hornets: they launch "
+                    "their AGM-84Hs from a long way out (up to about 120 nm from the target, as far as the route allows), outside the reach of the fighters "
+                    "over the target, and turn straight home. Nobody crosses the target area. The TARCAP and the escort hold behind the launch point and "
+                    "cover the way home. The missiles fly on without you; judge the result at the debrief."]
+        if getattr(pf, "kit", "") == "SLAM":
+            sit += ["", "You are the Standoff Strike flight. Your route ends at the target point and you set your own launch point: launch as far out as you "
+                        "get a shot, stay clear of the fighters over the target, then turn home with the package. The AI SLAM-ER flights launch from about 120 nm out."]
     elif obj.type.value == "DEAD" and obj.aim == "STANDOFF":
         from .difficulty import get as _gd3
         from .war import WarSimulator as _WS3

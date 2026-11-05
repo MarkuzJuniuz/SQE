@@ -6513,6 +6513,38 @@ def check_124_standoff_strike(c):
     print("[standoff strike] L3 supply strikes -> Standoff Strike (%d), SLAM Hornet flight of %d, TARCAP, save round trip; L1 stays plain (%d)" % (len(got[3]), sl[0].count, len(got[1])))
 
 
+def check_125_release_points(c):
+    """v0.41.299 (XO 2026-11-05): the AI JDAM strikers release short of the target and a Standoff Strike's SLAM-ER Hornets launch from far out. Builds a Standoff Strike mission
+    (SAM belt down at L3) and a plain strike with an AI F-16 strike flight at L1: both build and write a mission file. Crash protection for the new route points only (the
+    distances and altitudes are tunables and are judged in the sim)."""
+    from sqe.models import AssetKind as _AK
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))             # a Hornet pilot: the SLAM-ER strike slot is his
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke release", "FA-18C", 3, seed=7)
+    for a in ses.state.assets.values():
+        if a.kind == _AK.SAM:
+            a.health = 0.0
+    ses.plan_day()
+    pk = next((p for p in ses.packages() if p.objective.aim == "STANDOFF" and p.objective.type.value == "STRIKE" and ses.flyable(p)), None)
+    assert pk is not None, "a Standoff Strike is flyable with the SAM belt down at L3"
+    assert any(f.kit == "SLAM" for f in pk.flights)
+    r = ses.fly(pk.number, ses.flyable(pk)[0].id)
+    assert r.miz.exists()
+    ses = fresh_session(1, 7)
+    n = 0
+    for p in ses.packages():
+        if p.objective.type.value != "STRIKE" or p.objective.aim == "RUNWAY":
+            continue
+        ids = {f.id: f for f in p.flights}
+        pick = next((x for x in ses.flyable(p) if ids[x.id].role.value != "STRIKE"), None)       # fly an escort: the F-16 strike flight is the AI's
+        if pick is None or not any(f.role.value == "STRIKE" and f.aircraft == "F-16C" for f in p.flights):
+            continue
+        assert ses.fly(p.number, pick.id).miz.exists()
+        n += 1
+        break
+    print("[release points] Standoff Strike mission built; plain strike with an AI F-16 flight built (%d)" % n)
+
+
 def check_122_road_site_flip(c):
     """v0.41.258 (XO 2026-11-03): a road supply site belongs to the side its road connects to (road_front.py). At the start of a campaign every red road site is on a road that
     connects to red and every blue one to blue, with no site flipping on night one; when the front cuts a site off from its owner it changes hands with its stock, both ways; the red
@@ -6712,6 +6744,7 @@ CHECKS = [
     check_122_road_site_flip,
     check_123_parked_jets,
     check_124_standoff_strike,
+    check_125_release_points,
 ]
 
 def _borrows(fn) -> set:

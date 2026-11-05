@@ -4,6 +4,7 @@ A mixin: `MissionBuilder` inherits these methods (like a C# partial class). They
 and the other fields the builder sets up; nothing here is called from outside the builder.
 """
 from __future__ import annotations
+import dataclasses
 import math
 import random
 
@@ -11,9 +12,9 @@ from dcs import mapping, task
 
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
-from .loadouts import JSOW_PER_JET
+from .loadouts import JSOW_PER_JET, JDAM_JETS
 from .models import SEAD_AIMS, AssetKind, ObjectiveType, Role
-from .routes import AVOID_NM, FT, AGM88_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, NM, assign_times, bearing, dist, objective_wp, offset, plan_route
+from .routes import AVOID_NM, FT, AGM88_LAUNCH_NM, JDAM_ALT_FT, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, NM, assign_times, bearing, dist, objective_wp, offset, plan_route
 
 JSOW_ATTACK_S = 120           # v0.41.46: a JSOW slinger's release tasks end this long after the launch point's ETA, and it turns for home (judgment call; XO's run: releases came 25-60 s before the point)
 JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
@@ -104,7 +105,7 @@ class StrikeTasks:
             from .war import after_sites, site_blind_today
             live_ = [x for x in after_sites(obj_) if x in self.state.assets and not self.state.assets[x].destroyed]
             gsite_ = next((x for x in live_ if not site_blind_today(self.state, x)), live_[0] if live_ else "")
-        air_only_ = (not fol_) and obj_.type in (ObjectiveType.STRIKE, ObjectiveType.CAS) and f.role in (Role.STRIKE, Role.CAS)      # v0.41.203: the fighters-clear gate on its own
+        air_only_ = (not fol_) and obj_.type in (ObjectiveType.STRIKE, ObjectiveType.CAS) and f.role in (Role.STRIKE, Role.CAS) and obj_.aim != "STANDOFF"      # v0.41.203: the fighters-clear gate on its own
         if (not f.tag and ((obj_.type == ObjectiveType.DEAD and obj_.aim not in SEAD_AIMS) or fol_ or air_only_) and gsite_ and tot_s is not None
                 and f.role in (Role.STRIKE, Role.CAS, Role.TARCAP, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10
                 and (f.role in (Role.STRIKE, Role.CAS) or stw is None)):               # a TARCAP / escort on its own station is already outside the threat
@@ -122,7 +123,7 @@ class StrikeTasks:
                 bx, by = offset(base.x, base.y, bearing(base.x, base.y, lw.x, lw.y), 20 * NM)   # does not cut straight from cruise altitude to the runway
                 g.add_waypoint(pt(bx, by), min(lw.alt_ft, 9000) * FT, 320 * KPH, "ABORT")
                 to_ = len(g.points)
-            leg_ = [(w.x, w.y) for w in wps if w.name in ("IP", "TGT")]
+            leg_ = [(w.x, w.y) for w in wps if w.name in ("IP", "TGT", "REL")]
             also_ = [a_.id for a_, _ in self._cover_tors(package, leg_)]          # the route check: the Tors that cover the site or the run in
             tga_ = st.assets.get(gsite_)
             um_ = tm.umbrella_site(st, tga_)
@@ -208,13 +209,40 @@ class StrikeTasks:
         self._agm88_c = c_
         return best[0]
 
+    def _rel_kind(self, package, f) -> str:
+        """v0.41.299 (XO 2026-11-05): "SLAM" for a Standoff Strike's SLAM-ER flight, "JDAM" for an AI striker that drops JDAMs (F-16C, F/A-18C, F-14B) on a strike or a counter-air
+        strike (not a runway strike: it lays its bombs along the strip), else "". These flights release short of the target (routes.plan_route `rel`) and fly the high profile. A person's
+        own flight is never one (he flies the run himself); in the all-AI test it is."""
+        if f.tag or f.role != Role.STRIKE or (f.is_player and not self.o.player_is_ai):
+            return ""
+        if getattr(f, "kit", "") == "SLAM":
+            return "SLAM"
+        o = package.objective
+        if getattr(f, "kit", "") or f.aircraft not in JDAM_JETS or o.aim == "RUNWAY":
+            return ""
+        return "JDAM" if (o.type == ObjectiveType.STRIKE or (o.type == ObjectiveType.COUNTER_AIR and o.aim != "SWEEP")) else ""
+
+    def _flight_profile(self, f, package):
+        """The route profile a flight is planned with. A release-point striker (_rel_kind) gets its jet's profile with the strike altitude raised to JDAM_ALT_FT and the LOW tier closed
+        (a JDAM released at 500 ft has almost no reach); one copy per jet, so the (role, profile) keys of the tier table stay stable. Everyone else: the jet's own profile."""
+        p = AIRCRAFT[f.aircraft].profile
+        if not self._rel_kind(package, f):
+            return p
+        cache = self.__dict__.setdefault("_rel_profiles", {})
+        q = cache.get(f.aircraft)
+        if q is None:
+            base_ = p.alt_ft.get(Role.STRIKE, 20000)
+            q = cache[f.aircraft] = dataclasses.replace(p, alt_ft={**p.alt_ft, Role.STRIKE: max(base_, JDAM_ALT_FT)}, no_low=True,
+                                                        med_alt_ft=p.med_alt_ft or max(10000, int(round(base_ * 0.6 / 1000.0)) * 1000))
+        return q
+
     def _jsow_side(self, package, geom) -> float:
         """The JSOW flight's approach, as a multiple of JSOW_AXIS_DEG off the HARM shooters' axis. v0.41.22: the first axis (30, 50, 15 or
         70 degrees either side) whose launch point and IP sit outside the reach of every other live SA-2/3/6/11/10 (the v0.41.21 scan: JSOW flights
         launched 20 nm from a neighbouring SA-2 nobody was suppressing). None clear: the axis with the most room, and the package's second HARM
         flight is also tasked on the sites still in reach (self._jsow_threat)."""
         tid = package.objective.target_id
-        if package.objective.aim not in SEAD_AIMS or not tid:
+        if package.objective.aim not in SEAD_AIMS or package.objective.type != ObjectiveType.DEAD or not tid:        # v0.41.299: a Standoff Strike (STRIKE, aim STANDOFF) has no HARM shooters to come in beside
             return 0
         c_ = getattr(self, "_jsow_c", {})
         if package.id in c_:
