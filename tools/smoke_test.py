@@ -6343,7 +6343,7 @@ def check_126_land_raid_flyable(c):
     from sqe.models import ObjectiveType as _OT
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
     ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
-    ses.new("LandRaid", "F-16C", 3, seed=2)
+    ses.new("LandRaid", "F-14BU", 3, seed=9)
     assert not any(ses.flyable(p) for p in ses.packages() if p.objective.type == _OT.BARCAP), "BARCAP stays AI-only"
     host = land_raid_pkg(ses, ses.state, 12)
     assert host is not None, "a land raid was planned"
