@@ -20,16 +20,11 @@ from ..engine import Session
 from ..packages import PackageBuilder, folded_n_def
 from ..settings import AppSettings
 from . import theme
-from .dialogs import DayResolvedDialog, DebriefDialog, NewCampaignDialog, SettingsDialog, WaitingDialog
+from .dialogs import DayResolvedDialog, DebriefDialog, NewCampaignDialog, ScrambleChoiceDialog, SettingsDialog, WaitingDialog
 from .widgets import MapView, SideCard, StatCard, card
 from . import overview_view as V
 
 RELEASES_URL = "https://github.com/MarkuzJuniuz/SQE/releases/latest"
-
-
-def _game_note(text: str) -> str:
-    """v0.41.133 (XO 2026-10-24): game-mechanics text in an in-universe popup: a small grey "SQE NOTE" label, then the text in grey italics, in parentheses."""
-    return f'<span style="color:#8b97a8;"><small>SQE NOTE</small><br><i>({text})</i></span>'
 
 
 def _tbl(headers, stretch_last=True) -> QTableWidget:
@@ -781,7 +776,11 @@ class MainWindow(QMainWindow):
         except Exception:
             ev = None
         if ev:
-            scramble = self._emergency_popup(ev, number)
+            pkg = next((p for p in sess.packages() if p.number == number), None)
+            if pkg is not None:
+                dlg = ScrambleChoiceDialog(self, sess.state.campaign_date(), pkg, ev, number)
+                dlg.exec()
+                scramble = dlg.take_scramble
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
             res = sess.fly(number, flight_id, scramble=scramble)
@@ -790,27 +789,6 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Could not build the mission", traceback.format_exc()); return
         QApplication.restoreOverrideCursor()
         self.refresh_all(); self.wait_for_results()
-
-    def _emergency_popup(self, ev, number) -> bool:
-        """An emergency came up as you clicked Fly. Returns True when you take it."""
-        epkg = ev["package"]
-        box = QMessageBox(self); box.setIcon(QMessageBox.Warning); box.setWindowTitle(ev["title"])
-        if ev["eligible"]:
-            box.setText(f"<b>{ev['title']}</b><br>{ev['text']}")
-            box.setTextFormat(Qt.RichText); box.setInformativeText(f"Your squadron can answer it: {epkg.objective.description}.<br><br>" + _game_note(
-                                   f"If you scramble, the package you were tasked with (#{number}) is left to the other squadrons and is settled by the war "
-                                   f"simulation (or postponed a day if there are not enough aircraft for both). If you stay with your tasking, the emergency "
-                                   f"is settled without you" + (" or flown by AI inside your mission." if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else ".")))
-            go = box.addButton("Scramble", QMessageBox.AcceptRole); box.addButton("Stay with my tasking", QMessageBox.RejectRole)
-            box.exec()
-            return box.clickedButton() is go
-        box.setText(f"<b>{ev['title']}</b><br>{ev['text']}")
-        box.setTextFormat(Qt.RichText); box.setInformativeText(f"{self.session.dispatch_line(epkg)}<br><br>" + _game_note(
-                               ("If it lies inside your mission area it is joined to your mission as AI; otherwise the war simulation settles it."
-                                if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else "The war simulation settles it.")
-                               + " Your own tasking goes ahead as planned."))
-        box.addButton("Understood", QMessageBox.AcceptRole); box.exec()
-        return False
 
     def eventFilter(self, obj, ev):
         """Developer secret (XO 2026-10-27): Ctrl+Space skips the day, in AI-Test only (v0.41.154). Done here and not as a QShortcut because a list or text box that has the focus (the Missions

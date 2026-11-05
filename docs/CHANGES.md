@@ -1,5 +1,14 @@
 # CHANGES.md
 
+## v0.41.288, the emergency/scramble choice is now its own dialog, not a QMessageBox
+
+XO 2026-11-04 (make scramble choices feel like picking a mission, not clearing an error; "fox 3 medium").
+- **New `gui/dialogs.ScrambleChoiceDialog`**, replacing `MainWindow._emergency_popup`. Two rows in the Missions pane's own two-line format, ordered by start time: the package you clicked FLY on, and the scramble next to it in a red-bordered frame with the reason it was offered (`ev["text"]`) in place of its description.
+- One FLY button acts on whichever row is selected; it is disabled on the scramble row when your squadron cannot take it (`ev["eligible"]` false), same as the Missions pane greys out a flight you cannot fly. Default selection is always the package you clicked, never the scramble.
+- Closing the dialog any other way (Esc, the window's close button) counts as staying with your own tasking -- flying is never blocked here, same contract the old popup had. No change to `engine.py`'s scramble/emergency logic.
+- `gui/app.py`'s now-unused `_emergency_popup` and `_game_note` helper removed.
+Compile check and targeted smoke (`check_06_gui_dialogs_build_scan`, `check_21_raids_emergencies`, `check_23_raid_scramble_you_fly`, `check_69_scramble_undo`) passed; a headless-Qt probe exercised both the eligible and ineligible scramble paths directly. Not seen in DCS.
+
 ## v0.41.287, every SAM threatening the carrier raid's intercept line gets its own SEAD/DEAD flight
 
 XO 2026-11-04 ("every SAM threatening the intercept line", "I haven't seen anything higher than 150 yet"; "2 fox 3 high").
