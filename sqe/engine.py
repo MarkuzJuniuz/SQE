@@ -524,7 +524,7 @@ class Session:
         if pkg.objective.type in AI_ONLY and not pkg.extra.get("setpiece"):    # v0.41.27: AI-only for now (BARCAP, land-raid intercepts); v0.41.107: the carrier raid is a flyable setpiece
             return []
         opts = pkg.player_options(self.state.player.aircraft)
-        if pkg.extra.get("setpiece") and not self._raid_sam_live():                    # v0.41.284 (XO 2026-11-04: "if there are no SAMs then no SEAD offered")
+        if pkg.extra.get("setpiece"):                    # v0.41.293 (XO 2026-11-04: "make the SEAD/DEAD seats not flyable by the player", for now, until the SEAD teams are their own packages): the carrier raid's SEAD is AI-only (v0.41.284: only offered while a SAM was alive)
             opts = [f for f in opts if f.role != Role.SEAD]
         return [f for f in opts if f.squadron_id == self.state.player.squadron_id] if squadron_only else opts
 

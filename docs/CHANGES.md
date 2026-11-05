@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## v0.41.293, the carrier raid's battle moves in another 50 nm; the raid SEAD seats are AI-only
+
+XO 2026-11-04 (his screenshot ruler, 50.05 nm along 211 degrees: "move the battlesite closer by 50nm"; "make the SEAD/DEAD seats not flyable by the player"; "fox 3 low"). Stacked on #363 (v0.41.292).
+- **Measured first.** In XO's v0.41.291 run the bombers died at 227 to 246 nm from the carrier, not at the 170 nm point: the F-14s fired their first Phoenixes at t=789 s from about 158 nm (still dashing) at Tu-22s 79 nm beyond, so the fight sits about 62 nm past the point.
+- **The change.** `RAID_IP_NEAR_NM` 170 to 120 and `RAID_THREAT_OUT_NM` 190 to 140 (`routes.py`). Probe: the point is at 120 nm and the launch point at 140 on XO's Iron Tide save and on fresh seeds 1 and 3; the launch stays above `RAID_LAUNCH_MIN_NM` (100). If the 62 nm offset holds the fight lands near 182 nm: an ESTIMATE, to check against XO's next ruler.
+- **SEAD seats.** `Session.flyable` drops the carrier raid's SEAD flights for the player always (before: only while no SAM was alive). The builder's player-SEAD path stays, unreachable, until the SEAD teams are their own packages (plan in `claude/raid-sead-plan.md`).
+- Targeted smoke (check_22, 26, 27, 31zb) passed; compile check clean. Not seen in DCS.
+
 ## v0.41.292, the scramble has its own time and is offered on one package
 
 XO 2026-11-04 ("it should have time"; offer it on the package that goes after it time-wise, the only one, or the last one of the day; "fox 3 high"). Engine only; the scramble dialog redesign is the next PR.
