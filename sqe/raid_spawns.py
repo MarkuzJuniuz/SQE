@@ -24,7 +24,7 @@ from .loadouts import ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, e
 from .models import AssetKind, BaseKind, ObjectiveType, Role
 from .red_air_picture import A2A_ZONE_NM, CALLIN_LUA, CALLIN_LUA_DELAY_S, CALLIN_MIN_NM, CALLIN_REACH_NM, RED_LONG_RANGE
 from .support_caps import SUPPORT_CAP_ZONE_NM
-from .routes import AVOID_NM, FT, NM, RAID_SA11_NM, Wpt, avoid_circles, bearing, dist, offset
+from .routes import AVOID_NM, FT, NM, RAID_IP_NEAR_NM, RAID_SA11_NM, Wpt, avoid_circles, bearing, dist, offset
 from .strike_tasks import KPH
 
 F = VehicleGroup.Formation
@@ -341,9 +341,31 @@ class RaidSpawns:
             return ids, None
         return ids, self._raid_bent(package, geom, hold, ignore=ids)
 
+    def _raid_ip_points(self, package, w1, mshl) -> list:
+        """v0.41.289 (XO 2026-11-04: the battle where his ruler is, not out over the featureless steppe): the candidate intercept points on the bombers' way in, NEAREST
+        FIRST: on the raid's bearing from RAID_IP_NEAR_NM out to the route's outer point w1, then on from w1 toward the marshal, every RAID_IP_STEP_NM.
+        -> [((x, y), nm from w1; negative = inside it), ...]. (Before: the same line from w1 out only, searched furthest first.)"""
+        ex = package.extra or {}
+        cvb = self.state.bases[package.objective.target_id]
+        dx, dy = ex.get("dest") or (cvb.x, cvb.y)
+        step = RAID_IP_STEP_NM * NM
+        d_w1 = dist(dx, dy, w1[0], w1[1])
+        out = []
+        s = min(RAID_IP_NEAR_NM * NM, d_w1)
+        while s < d_w1 - 1:
+            out.append((offset(dx, dy, ex["brg"], s), (s - d_w1) / NM))
+            s += step
+        L = dist(w1[0], w1[1], mshl[0], mshl[1])
+        if L >= 1:
+            ux, uy = (mshl[0] - w1[0]) / L, (mshl[1] - w1[1]) / L
+            out += [((w1[0] + ux * k * step, w1[1] + uy * k * step), k * RAID_IP_STEP_NM) for k in range(int(L / step) + 1)]
+        else:
+            out.append((tuple(w1), 0.0))
+        return out
+
     def _raid_bent(self, package, geom, hold, ignore=()):
         """v0.41.268 (PR 3; XO 2026-11-04: "the F-14s have so much time to wait on orbit they could overfly on blue bases and get closer"): the intercept lane when none is clear
-        straight from the hold point. The dash goes hold -> a blue field -> the intercept point, each leg bent round the SAM circles; the point is the furthest out on the bombers'
+        straight from the hold point. The dash goes hold -> a blue field -> the intercept point, each leg bent round the SAM circles; the point is (v0.41.289) the NEAREST from RAID_IP_NEAR_NM out on the bombers'
         way in that some field reaches within RAID_BEND_MAX_NM (the shortest way by field when several do). Same result shape as `_raid_intercept`, plus "via": [(x, y, field name)].
         v0.41.287: `ignore` = sites the raid SEAD is sent against (treated as dead for this geometry, as `_raid_intercept` already does).
         -> dict or None (no field, or no point reachable: the interceptors hold at their station)."""
@@ -355,17 +377,11 @@ class RaidSpawns:
         except (KeyError, AttributeError):
             return None
         circles = [(cx, cy, r) for i_, cx, cy, r in self._raid_circles(package) if i_ not in ignore]
-        L = dist(w1[0], w1[1], mshl[0], mshl[1])
-        if L < 5 * NM:
-            return None
         fields = [b for b in self.state.bases.values() if b.kind == BaseKind.AIRFIELD and b.id not in self.state.assets
                   and not any(dist(b.x, b.y, cx, cy) < r * NM for cx, cy, r in circles)]
         if not fields:
             return None
-        ux, uy = (mshl[0] - w1[0]) / L, (mshl[1] - w1[1]) / L
-        for k in range(int(L / (RAID_IP_STEP_NM * NM)), -1, -1):
-            s_ = k * RAID_IP_STEP_NM * NM
-            P = (w1[0] + ux * s_, w1[1] + uy * s_)
+        for P, s_nm in self._raid_ip_points(package, w1, mshl):          # v0.41.289: nearest first, from RAID_IP_NEAR_NM
             if any(dist(P[0], P[1], cx, cy) < r * NM for cx, cy, r in circles):
                 continue
             best = None
@@ -381,16 +397,16 @@ class RaidSpawns:
             if best is None:
                 continue
             _n, b, xy = best
-            perp = bearing(w1[0], w1[1], mshl[0], mshl[1]) + 90
+            perp = ex["brg"] + 90                                           # v0.41.289: across the bombers' line (bearing w1 -> marshal breaks for a point inside w1)
             for sgn in (1, -1):
                 P2 = offset(P[0], P[1], perp if sgn > 0 else perp + 180, RAID_IP_LEG_NM * NM)
                 if not any(dist(P2[0], P2[1], cx, cy) < r * NM for cx, cy, r in circles):
-                    return {"ip": P, "ip2": P2, "lane": xy[1:-1], "from_w1_nm": round(s_ / NM), "via": [(b.x, b.y, b.name)], "path_nm": round(_n / NM)}
+                    return {"ip": P, "ip2": P2, "lane": xy[1:-1], "from_w1_nm": round(s_nm), "via": [(b.x, b.y, b.name)], "path_nm": round(_n / NM)}
         return None
 
     def _raid_intercept(self, package, geom, hold, ignore=()):
         """v0.41.265: where the fleet raid's interceptors dash to. On the bombers' way in (marshal to the route's outer point `w1`, beyond which they are in range of the fleet),
-        the point furthest out that (a) is outside every live SAM's circle the fighters keep out of (`_zone_sams`), (b) is at most RAID_IP_MAX_NM from the hold point `hold`, and
+        the point (v0.41.289: nearest first from RAID_IP_NEAR_NM, `_raid_ip_points`; was the furthest out from w1) that (a) is outside every live SAM's circle the fighters keep out of (`_zone_sams`), (b) is at most RAID_IP_MAX_NM from the hold point `hold`, and
         (c) can be reached from the hold along a lane that bends round those circles (`avoid_circles`) and ends clear. The orbit there is a short leg across the bombers' line.
         -> {"ip": (x, y), "ip2": (x, y), "lane": [(x, y), ...] bends only, hold and ip excluded} or None (no such point: the interceptors keep their old shape)."""
         ex = package.extra or {}
@@ -401,24 +417,18 @@ class RaidSpawns:
         except (KeyError, AttributeError):
             return None
         circles = [(cx, cy, r) for i_, cx, cy, r in self._raid_circles(package) if i_ not in ignore]          # (v0.41.267: `ignore` = sites the raid SEAD is sent against)
-        L = dist(w1[0], w1[1], mshl[0], mshl[1])
-        if L < 5 * NM:
-            return None
-        ux, uy = (mshl[0] - w1[0]) / L, (mshl[1] - w1[1]) / L          # from w1 back toward the marshal
-        for k in range(int(L / (RAID_IP_STEP_NM * NM)), -1, -1):        # furthest out first
-            s_ = k * RAID_IP_STEP_NM * NM
-            P = (w1[0] + ux * s_, w1[1] + uy * s_)
+        for P, s_nm in self._raid_ip_points(package, w1, mshl):          # v0.41.289: nearest first, from RAID_IP_NEAR_NM (was: furthest out first, from w1)
             if dist(hold[0], hold[1], P[0], P[1]) > RAID_IP_MAX_NM * NM or any(dist(P[0], P[1], cx, cy) < r * NM for cx, cy, r in circles):
                 continue
             pts = avoid_circles([Wpt("HOLD", hold[0], hold[1], 0, 0), Wpt("IP", P[0], P[1], 0, 0)], circles, RAID_IP_LANE_PTS, 1)
             xy = [(w.x, w.y) for w in pts]
             if not all(self._seg_clear(xy[i], xy[i + 1], circles) for i in range(len(xy) - 1)):
                 continue
-            perp = bearing(w1[0], w1[1], mshl[0], mshl[1]) + 90
+            perp = ex["brg"] + 90                                           # v0.41.289: across the bombers' line
             for sgn in (1, -1):
                 P2 = offset(P[0], P[1], perp if sgn > 0 else perp + 180, RAID_IP_LEG_NM * NM)
                 if not any(dist(P2[0], P2[1], cx, cy) < r * NM for cx, cy, r in circles):
-                    return {"ip": P, "ip2": P2, "lane": xy[1:-1], "from_w1_nm": round(s_ / NM)}
+                    return {"ip": P, "ip2": P2, "lane": xy[1:-1], "from_w1_nm": round(s_nm)}
         return None
 
     def _raid_hold_xy(self, package, geom):

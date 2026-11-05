@@ -7,7 +7,7 @@ objectives instead, so the war advances belt by belt instead of jumping straight
 from __future__ import annotations
 import math
 from .models import AssetKind
-from .routes import AVOID_NM, RAID_SA11_NM, dist, offset
+from .routes import AVOID_NM, RAID_SA11_NM, RAID_THREAT_OUT_NM, dist, offset
 
 NM = 1852.0
 UMBRELLA_VARIANTS = ("SA-10",)   # long-range sites whose reach covers their neighbours: in a cluster they are the first thing a SEAD wave has to beat
@@ -67,15 +67,15 @@ def raid_avoid_nm(variant: str) -> float:
 
 def raid_inbound_sites(state, target_xy, brg, bomber_wing_id) -> list:
     """v0.41.287 (XO 2026-11-04: "every SAM threatening the intercept line", not just the minimum needed to open a lane): the live, undestroyed,
-    unsuppressed red SAM sites whose reach (`raid_avoid_nm`) touches the carrier raid's straight way in -- the target out to the route's outer
-    point w1, at most 220 nm out on `brg` (the same w1 raid_spawns._raid_axis uses, worked out here without the marshal/staged-raid geometry,
-    which this doesn't need). Every one of these threatens the line, whether it sits on it or well back toward the target (a long-ranged site
-    can still reach the lane from there). -> [(asset, nm), ...], nearest-threatening-first is not guaranteed (order is state.assets' own)."""
+    unsuppressed red SAM sites whose reach (`raid_avoid_nm`) touches the carrier raid's straight way in -- the target out to RAID_THREAT_OUT_NM
+    on `brg` (v0.41.289: the intercept band round RAID_IP_NEAR_NM plus the bombers' launch point; it was the route's outer point w1, 220 nm),
+    never past 0.9 of the way to the bomber wing's field. Every one of these threatens the line, whether it sits on it or well back toward the
+    target (a long-ranged site can still reach the lane from there). -> [(asset, nm), ...], order is state.assets' own."""
     ba = state.assets.get(bomber_wing_id)
     if ba is None:
         return []
     dx, dy = target_xy
-    w1 = offset(dx, dy, brg, min(220 * NM, 0.9 * dist(ba.x, ba.y, dx, dy)))
+    w1 = offset(dx, dy, brg, min(RAID_THREAT_OUT_NM * NM, 0.9 * dist(ba.x, ba.y, dx, dy)))
     out = []
     for a in state.assets.values():
         if a.kind != AssetKind.SAM or a.destroyed or a.health <= 0.25 or getattr(a, "suppressed", False):

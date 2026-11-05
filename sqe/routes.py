@@ -243,6 +243,11 @@ AVOID_NM = {"SA-10": SA10_AVOID_NM, "SA-11": 20.0, "SA-2": 26.0, "SA-6": 16.0, "
 RAID_SA11_NM = 26.0        # v0.41.276: the carrier raid's interceptors keep this far from a live SA-11 (AVOID_NM says 20). Judgment call: in XO's 2026-11-04 run the SA-11s
                            # engaged the Tomcats at 23 to 26 nm (shots of 42 to 49 km measured by the hook). Lives here (not raid_spawns.py) so threatmap.py can share it
                            # without a circular import (v0.41.287).
+RAID_IP_NEAR_NM = 170.0    # v0.41.289 (XO 2026-11-04: "make the actual battle where the ruler is"; beyond it the map is featureless): the carrier raid's interceptors meet the
+                           # bombers from this far out, nearest point first (before: the furthest point out from 220 nm). Judgment call from XO's F10 ruler, measured at 165 to 175 nm
+                           # from the carrier on his screenshot (fitted to 10 airfields). Inside the Tu-22M3's 208 nm X-22 reach on purpose: the carrier group takes the first salvos.
+RAID_THREAT_OUT_NM = 190.0 # ...and the SEAD threat line (threatmap.raid_inbound_sites) runs from the target this far out: the intercept band plus the 20 nm the bombers launch
+                           # beyond the fighters' station (raid_spawns.RAID_LAUNCH_OUT_NM). Was the route's outer point w1, 220 nm.
 
 
 def avoid_circles(wp: list, circles: list, max_points: int, first: int) -> list:
