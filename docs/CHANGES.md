@@ -1,5 +1,14 @@
 # CHANGES.md
 
+## v0.41.287, every SAM threatening the carrier raid's intercept line gets its own SEAD/DEAD flight
+
+XO 2026-11-04 ("every SAM threatening the intercept line", "I haven't seen anything higher than 150 yet"; "2 fox 3 high").
+- **Threat count, not a fixed two.** New `threatmap.raid_inbound_sites`: every live, unsuppressed red SAM whose reach (`raid_avoid_nm`, the same `AVOID_NM` figures the lane-avoidance already uses, SA-11 bumped) touches the bombers' straight way in (target out to `w1`, 220 nm on the raid's bearing). Run once in `packages._slots` (sizes the SEAD slots, one 4-ship per threatening site, floor 1) and again in `raid_spawns._raid_blockers` (picks the sites and feeds them to `_raid_intercept`/`_raid_bent` as `ignore`, so none counts as live for the lane geometry).
+- **Retired:** `RAID_BLOCK_MAX` (the old cap of 2, PR 2/v0.41.267) and the greedy minimal-combination search in `_raid_blockers`. `_raid_bent` takes an `ignore` set too, same as `_raid_intercept` already did.
+- **Moved:** `RAID_SA11_NM` from `raid_spawns.py` to `routes.py` (next to `AVOID_NM`) so `threatmap.py` can share it without a circular import.
+- **Measured (L3, `F-14BU`, AI test, seeds 1/3/4):** the setpiece alone now runs 226-245 units (3 to 6 threatening sites, matching SEAD flights 1:1) against the 250 default `merge_max_units` -- no "trimmed to fit" warning on any seed, but noticeably closer to the ceiling than the old fixed-two-SEAD build. A save still on the old 150 default (pre-v0.41.131) would need checking.
+Full smoke test passed (`SMOKE TEST PASSED`, exit 0). Not seen in DCS.
+
 ## Docs only: any Sonnet or any Opus version OK for builds (XO 2026-11-04)
 
 XO clarified further: any Sonnet version is fine, not just 5.5+. Any Opus version is also fine. Both rule lines in `CLAUDE.md` updated again. No code, no version change, no smoke.

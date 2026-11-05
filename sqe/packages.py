@@ -243,8 +243,19 @@ class PackageBuilder:
         a = self.state.assets[obj.target_id]
         return any(not self.state.assets[d].destroyed for d in a.defended_by)
 
+    def _raid_threat_count(self, obj, extra) -> int:
+        """v0.41.287 (XO 2026-11-04: "every SAM threatening the intercept line"): how many live red SAM sites threaten the carrier raid's
+        intercept line (`tm.raid_inbound_sites`) -- one SEAD/DEAD 4-ship goes to each, not a fixed two (the old RAID_BLOCK_MAX). At least 1,
+        so the setpiece always carries a SEAD flight even when the geometry can't be read yet (no bearing or bomber wing decided)."""
+        b = self.state.bases.get(obj.target_id)
+        if b is None or extra.get("bomber_wing") not in self.state.assets or extra.get("brg") is None:
+            return 1
+        dx, dy = extra.get("dest") or (b.x, b.y)
+        return max(1, len(tm.raid_inbound_sites(self.state, (dx, dy), extra["brg"], extra["bomber_wing"])))
+
     # ---- slot list sized to the threat ---------------------------------------------------------------------
-    def _slots(self, obj, defended, n_fl) -> list:
+    def _slots(self, obj, defended, n_fl, extra=None) -> list:
+        extra = extra or {}
         tmpl = TEMPLATES[obj.type]
         if obj.type == ObjectiveType.DEAD and obj.aim == "SEAD":            # SEAD first: a package that only suppresses the radars...
             tmpl = [Slot(Role.SEAD, 2), Slot(Role.SEAD, 2, False)]
@@ -265,7 +276,8 @@ class PackageBuilder:
             k = max(2, math.ceil(SETPIECE_RATIO * n_fl))              # n_fl = raiders / 3 (set in build) -> k flights of 4, about one blue fighter per raider
             n_land = SETPIECE_LAND_SHARE * (k - 2)                    # v0.41.256 (XO 2026-11-03: the USAF wing gave no help): a share of the optional flights is land-based (F-15C first)
             n_land = int(n_land)
-            return [Slot(Role.CAP, 4), Slot(Role.CAP, 4)] + [Slot(Role.CAP, 4, False, land=i < n_land) for i in range(k - 2)] + [Slot(Role.SWEEP, 2, False)] + [Slot(Role.SEAD, 4, False), Slot(Role.SEAD, 4, False)]   # v0.41.267: two 4-ships (one per blocking site, PR 2); v0.41.255: two optional HARM pairs for the SAMs over the raid's launch point
+            n_sead = self._raid_threat_count(obj, extra)              # v0.41.287: one 4-ship per site that threatens the intercept line, not a fixed two
+            return [Slot(Role.CAP, 4), Slot(Role.CAP, 4)] + [Slot(Role.CAP, 4, False, land=i < n_land) for i in range(k - 2)] + [Slot(Role.SWEEP, 2, False)] + [Slot(Role.SEAD, 4, False) for _ in range(n_sead)]
         if is_sweep(obj):                                                    # Fighter Sweep: 4-ships only, one per 4 bandits beyond the packages' own cover
             n4 = max(1, sweep_4ships(n_fl))
             return [Slot(Role.SWEEP, 4)] + [Slot(Role.SWEEP, 4, False) for _ in range(n4 - 1)]
@@ -298,7 +310,7 @@ class PackageBuilder:
             n_fl = threat.defender_flights(threat.expected_defenders(st, tx, ty, iads))
         self._hot = n_fl >= CAS_JET_MIN_DEF_FLIGHTS                                  # v0.41.188: red fighters can reach the target: CAS jets first
         pkg = Package(id=f"pkg{number}", number=number, objective=obj, n_def=2 * n_fl, extra=extra)
-        slots = self._slots(obj, self._defended(obj), n_fl)
+        slots = self._slots(obj, self._defended(obj), n_fl, extra)
         pp = st.player
 
         player_idx, lead_service, psq = None, None, None
