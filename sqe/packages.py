@@ -134,13 +134,28 @@ class Package:
         if (self.extra or {}).get("raid_prep"):                   # v0.41.305: a SEAD / Standoff DEAD package that opens the carrier raid's lane
             return "Fleet Defense: " + ("Standoff DEAD" if self.objective.aim == "STANDOFF" else "SEAD")
         if self.objective.type != ObjectiveType.FLEET_DEFENSE:
-            return self.kind.replace("_", " ")
+            return self._job_name()
         ex = self.extra or {}
         if not ex.get("land"):
             return "Fleet Defense: Intercept"
         aim = self.objective.aim or ""
         what = "Base" if not aim else ("Troop" if aim.startswith("sector:") else ("Garrison" if aim.startswith(("bgar_", "bfwd_")) else "Supply"))
         return f"{what} Defense: Intercept"
+
+    def _job_name(self) -> str:
+        """v0.41.306 (XO 2026-11-05: uniform Title Case names): the job's name for the list, from its type and aim."""
+        o = self.objective; aim = o.aim or ""; ty = o.type
+        if ty == ObjectiveType.DEAD:
+            return {"SEAD": "SEAD", "STANDOFF": "Standoff DEAD", "DEAD": "Close DEAD"}.get(aim, "DEAD")
+        if ty == ObjectiveType.STRIKE:
+            return "Standoff Strike" if aim == "STANDOFF" else ("Runway Strike" if (o.description or "").startswith("Crater") else "Strike")
+        if ty == ObjectiveType.CAS:
+            return "Close Air Support: Troops in Contact" if (self.extra or {}).get("tic") else "Close Air Support"
+        if ty == ObjectiveType.COUNTER_AIR:
+            return "Fighter Sweep" if aim == "SWEEP" else "Counter-Air"
+        if ty == ObjectiveType.BARCAP:
+            return "Combat Air Patrol"
+        return self.kind.replace("_", " ").title()
 
     @property
     def urgent(self) -> bool:
