@@ -1,5 +1,11 @@
 # CHANGES.md
 
+## v0.41.314, sweep and escort: the hunt starts near the station, not at takeoff
+
+XO 2026-11-06 (CBU counter-air run: "blue air cover left it out to dry, then MiGs took off"; "fox 3 medium"). Cause, from the run's mission and state file: the sweep flight's engage task (air targets within 40 nm of the target) was live from the spawn point, so Venom 1 ran down the Su-27s at about 880 kt from 250 km out (plan: 540 kt), killed all four by t=1000, and went home (most likely bingo fuel; the DCS log has no fuel line, so unproven) while the strikers were still 100 km out (TOT 1886). Two of its jets then died on the way home over 4,400 m terrain (suspected mountain impact, unproven), the escort count fell to half, and the package scrubbed at t=1445 as designed.
+- **Fix.** `mission_builder` `_engage_tasks`: the SWEEP and ESCORT engage task now starts `fighter_stations.ENGAGE_LEAD_S` (240 s, judgment call: about 35 nm at cruise) before the flight's station ETA, in addition to its existing stop at the end of the hold. Before that the flight follows its route at planned speed. The hold itself already runs to the first package's TOT plus the after-time. TARCAP is unchanged (not in this run). Cost of a wrong guess: a sweep that meets red a little later, or too late to catch a scramble.
+- **Not changed:** the RTB altitude over the main Caucasus ridge (suspected, one sample), and the sweep's fuel check in the planner.
+
 ## v0.41.313, counter-air strikes: the strike pair is required, CBU-103s on a quiet ramp, JSOW-As under air cover
 
 XO 2026-11-06 (his Day 24 screenshot: the job read "strike the jets on the ramp (75 aircraft at the field)" but the only flight was the Fighter Sweep; "fox 3 low", then "fox 3 medium": "CBU-103s for easy pickings", "both JSOW-As for standoff, not the SLAM-ER").
