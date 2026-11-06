@@ -50,7 +50,7 @@ TARCAP_LEAD_S = 120           # v0.41.115 (was 0; XO 2026-10-22: fighters in fir
                               # v0.41.0's 5-minute head start, which let the SA-10 kill six waiting Eagles (judgment call). v0.41.1 had it arrive WITH the HARM shooters.
 FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
-PARKED_MAX = 12               # v0.41.297 (XO 2026-11-05: a counter-air strike has nothing to hit, the ramp is empty): at most this many static jets stand on the target field's ramp. Judgment call: a statics-count cap for VR; the wing's true strength stays in the state (a static costs `carcass_weight` of a unit)
+PARKED_MAX = 8               # v0.41.297 (XO 2026-11-05: a counter-air strike has nothing to hit, the ramp is empty): at most this many parked jets (v0.41.324: real units, was 12 statics) stand on the target field's ramp. Judgment call: a statics-count cap for VR; the wing's true strength stays in the state (a static costs `carcass_weight` of a unit)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
 SCRUB_POINT_NM = 20           # v0.41.223: a package flight's SCRUB point (where a scrubbed flight goes first) sits this far from its home field, on the bearing of its route's last point (the same shape as the stand-off ABORT point)
 BLUE_BASE_DEF_SKILL = "Excellent"   # v0.41.222 (XO 2026-10-31): blue's base Patriot / HAWK / AAA are always the top DCS skill, whatever the Blue skill setting or the level says. Why: under "level" they were left at pydcs's Average while red's sites run at the level's skill (High on L3), and XO saw them barely fire. Judgment call (no public figure for operator quality).
@@ -621,13 +621,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 gt_["seads"] = list(self._sead_grps.get(gt_["site"], []))
             install_hook(m, st.campaign_id, manifest.sortie, package.id, despawn if o.ai_despawn_on_land else [], manifest.player_unit,
                          group=pf.callsign, calls=[(t_, x_, f"TO {pf.callsign.upper()}:" in x_.upper()) for t_, x_ in calls], wps=[], sound=sound, sound_you=sound_you, flights=self._ulabels,
-                         enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" and not g_.get("parked") for u in g_["units"]],
+                         enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" for u in g_["units"]],      # v0.41.324: the parked jets are real aircraft now: kills on them are attributed like any red jet
                          sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM, jams=(self._jams if o.ecm_script else {}), jamw=(self._jamw if o.ecm_script else {}),
                          watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and (not f_.is_player or o.player_is_ai)],      # v0.41.317: the all-AI test flight is watched too (AWACS said "no further tasking" while it was still inbound)
                         
                          done_after=max([float(ptot)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
                          rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts, cover=self._cover, ecm_player=self._ecm_player, ecm_msg=bool(o.ecm_status),
-                         scrub=self._scrub, parked=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" and g_.get("parked") for u in g_["units"]], tune_flags=tune_flags, tune_mhz=tune_mhz, awacs_unit=f"{awl} 1-1" if any(s.slot == "AWACS" for s in package.support) else "",
+                         scrub=self._scrub, tune_flags=tune_flags, tune_mhz=tune_mhz, awacs_unit=f"{awl} 1-1" if any(s.slot == "AWACS" for s in package.support) else "",
                          dmg=({**self._ulabels, **{k: "*" + v for k, v in self._support_lbl.items()}} if o.damage_calls else {}), dmg_on=bool(o.damage_calls),
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
@@ -1301,7 +1301,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     def _spawn_parked_jets(self, package, manifest) -> None:
         """v0.41.297 (XO 2026-11-05, "if those jets are really available on that field then spawn them parked"): a counter-air strike (not the sweep) finds the target field's jets
-        parked on the ramp, as static aircraft on free parking spots. How many: the wing's serviceable jets of each type, minus the jets this mission launches from that field
+        parked on the ramp, as real uncontrolled aircraft on free parking spots. How many: the wing's serviceable jets of each type, minus the jets this mission launches from that field
         (alert pairs, raid and CAP flights are in `manifest` by now: they are in the air, not on the ramp), at most PARKED_MAX, the free parking spots, and what the unit limit leaves.
         They are an `enemy_air` group of the wing marked `parked`, so a destroyed one comes off the wing in the debrief like a shot-down flight."""
         o = package.objective
@@ -1334,17 +1334,22 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         made, names_by = 0, {}
         for t_ in seq:
             cls = getattr(planes, t_, None)
-            if cls is None or self._units_room() < self.o.carcass_weight:
+            if cls is None or self._units_room() < 1:
                 continue
             slot = ap.free_parking_slot(cls)
             if slot is None:
                 continue
+            # v0.41.324 (XO 2026-11-06, "put untasked real jets"): a real, cold, uncontrolled aircraft on its parking spot. A destroyed static gave the hook no name
+            # it could count; a real unit dies like any other aircraft. One group each, named for the ramp (a full unit each in the unit budget).
+            nm = f"PARK {a.id}|{made + 1}"
+            try:
+                pg = self.m.flight_group_from_airport(self.red, nm, cls, ap, start_type=StartType.Cold, group_size=1, parking_slots=[slot])
+            except Exception:
+                continue
             made += 1
-            nm = f"PARK {a.id}|{made}"
-            sg = self.m.static_group(self.red, nm, cls, mapping.Point(slot.position.x, slot.position.y, self.t), heading=rw_h)
-            sg.units[0].name = nm
+            pg.uncontrolled = True
+            pg.units[0].name = nm
             self._ramp_pts.append((slot.position.x, slot.position.y))        # v0.41.313: where the JSOW-As of a Standoff Counter-Air aim
-            slot.unit_id = sg.units[0].id
             names_by.setdefault(t_, []).append(nm)
         for t_, names in names_by.items():
             manifest.add("enemy_air", a.id, names, ac=t_, parked=True)
