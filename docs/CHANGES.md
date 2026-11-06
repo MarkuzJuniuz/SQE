@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.332, the hook logs where every bomb ended
+
+XO 2026-11-06 ("log the impacts then", "fox 3 low"): the CBU strike on the ramp left no record of where the bombs landed, so a miss and a no-kill could not be told apart. The Lua hook now follows every bomb (category BOMB) to its last position plus a quarter second of its velocity and writes `imp` in `SQE_state.json`: `{t, w (type), by (shooter), x, y (height), z, g (ground height)}`, at most 80. A cluster bomb vanishes where its dispenser opens, so `y - g` is that opening height; the bomblets land beyond it and are not followed. Logging only, the debrief does not read it. Checked in the stub-DCS hook simulator. XO's note: if the ramp strike still does not work, the counter-air mission is dropped at release and the runway-crater mission is tested instead.
+
 ## v0.41.331, the ramp strike aims at the parked jet nearest the middle; the job text loses the count
 
 XO 2026-11-06 ("center on one of the jets close to the original center. Then remove the text that says the number", "fox 3 low"). After v0.41.329 the aim was exactly the middle of the nine parked jets, an empty spot between them; the run showed no jet destroyed (cause unknown: the hook does not follow CBU impacts). `_retarget_ramp_tasks` now aims at the real jet nearest that middle (heading along the line unchanged). The counter-air job text ("strike the jets on the ramp", "JSOW-As on the ramp") no longer carries a count, since the number parked is only known when the mission is built; the briefing still gives it. Saved day plans keep their old text. Not seen in DCS.
