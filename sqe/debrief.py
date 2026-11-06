@@ -1128,10 +1128,10 @@ do   -- v0.41.319: XO's JDAM run (the strikers crossed the target and nothing dr
   timer.scheduleFunction(function(_, t)
     for _, gt in ipairs(GATES) do
       if gt.dead and not seen[gt.grp] then
-        seen[gt.grp] = true
+        seen[gt.grp] = gt
       end
     end
-    for gname in pairs(seen) do
+    for gname, gt in pairs(seen) do
       pcall(function()
         local g = Group.getByName(gname)
         if g then
@@ -1145,6 +1145,16 @@ do   -- v0.41.319: XO's JDAM run (the strikers crossed the target and nothing dr
           local now = math.floor(timer.getTime())
           if not b then if n > 0 then BOMBLOG[gname] = { first = n, last = n, t0 = now, t = now } end
           elseif n ~= b.last then b.last = n; b.t = now end
+          -- v0.41.319 (XO's JDAM runs: the AI strikers crossed the target and never released): a gated AI striker that has come within 12 km of its aim point with
+          -- every bomb still on, and has been through a gate resume, gets the bombing task pushed once by hand (the resume's resetTask may have wiped the waypoint's)
+          b = BOMBLOG[gname]
+          if b and gt.ai and gt.bx and not b.pushed and n > 0 and n == b.first and gt.resumed then
+            local d = gdist(gname, { x = gt.bx, z = gt.bz })
+            if d and d <= 12000 then
+              b.pushed = now
+              g:getController():pushTask({ id = "Bombing", params = { point = { x = gt.bx, y = gt.bz }, weaponType = 9663676414, expend = "All", attackQtyLimit = false, groupAttack = true } })
+            end
+          end
         end
       end)
     end
@@ -1165,6 +1175,7 @@ local function resume(gs, how)
         e.cmd = pcall(function()
           local c = g:getController()
           c:resetTask()
+          gt.resumed = true
           c:setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = gt.from, goToWaypointIndex = gt.from } })
         end)
       end
@@ -1539,7 +1550,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
                    f'units={lst(x["units"])}, trk={lst(x["trk"])}, srch={lst(x["srch"])}}}' for x in (sites or []))
     ru = ", ".join(f'{{x={r["x"]:.1f}, z={r["z"]:.1f}, n={int(r["n"])}, r={float(r["r"]):.0f}, p={int(r["p"])}, dn={float(r["dn"]):.2f}, pw={int(r["pw"])}, s={float(r["s"]):.2f}}}'
                    for r in (ruins or []))
-    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}, acap={int(x.get("acap") or 0)}{_umbrella_lua(x)}{(", tx=%.1f, tz=%.1f" % (float(x["tx"]), float(x["tz"]))) if x.get("tx") is not None else ""}}}'
+    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}, acap={int(x.get("acap") or 0)}{_umbrella_lua(x)}{(", tx=%.1f, tz=%.1f" % (float(x["tx"]), float(x["tz"]))) if x.get("tx") is not None else ""}{(", bx=%.1f, bz=%.1f" % (float(x["bx"]), float(x["bz"]))) if x.get("bx") is not None else ""}}}'
                    for x in (gates or []))
     return (LUA_HOOK.replace("__RWYS__", ", ".join("{id=%s, x=%.1f, z=%.1f, h={%s}}" % (_lq(r["id"]), r["x"], r["z"], ", ".join(str(int(h_)) for h_ in r["h"])) for r in (cfg or {}).get("rwys", []))).replace("__RWYLEN__", f"{RUNWAY_HALF_LEN_M:.0f}").replace("__RWYWID__", f"{RUNWAY_HALF_WIDTH_M:.0f}").replace("__SCRUB__", sc).replace("__SCRUBFRAC__", repr(float(SCRUB_LOSS_FRAC))).replace("__SCRUBGRACE__", f"{float(SCRUB_STRIKE_GRACE_S):.0f}").replace("__SCRUBLEAD__", f"{float(SCRUB_COVER_LEAD_S):.0f}")
             .replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
