@@ -623,7 +623,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          group=pf.callsign, calls=[(t_, x_, f"TO {pf.callsign.upper()}:" in x_.upper()) for t_, x_ in calls], wps=[], sound=sound, sound_you=sound_you, flights=self._ulabels,
                          enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" and not g_.get("parked") for u in g_["units"]],
                          sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM, jams=(self._jams if o.ecm_script else {}), jamw=(self._jamw if o.ecm_script else {}),
-                         watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and not f_.is_player],
+                         watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and (not f_.is_player or o.player_is_ai)],      # v0.41.317: the all-AI test flight is watched too (AWACS said "no further tasking" while it was still inbound)
+                        
                          done_after=max([float(ptot)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
                          rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts, cover=self._cover, ecm_player=self._ecm_player, ecm_msg=bool(o.ecm_status),
                          scrub=self._scrub, tune_flags=tune_flags, tune_mhz=tune_mhz, awacs_unit=f"{awl} 1-1" if any(s.slot == "AWACS" for s in package.support) else "",
