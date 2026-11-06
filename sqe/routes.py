@@ -67,7 +67,9 @@ JSOW_LAUNCH_NM = 30.0      # an AI JSOW flight's launch point. v0.41.46 (was 20)
 JSOW_HIGH_ALT_FT = 33000      # ...and when it is pushed out past JSOW_LAUNCH_NM, the flight releases from this high
 JSOW_MAX_NM = 45.0           # a JSOW launch point is never farther than this from its target (v0.41.3 run: AGM-154As released at 30-40 nm from 33,000 ft hit; was 40)
 JSOW_KEEP_HIGH_NM = 40.0     # a pushed-out JSOW flight is high, where an SA-10 reaches farther: its launch point stays this far from one (v0.41.3 run: 30.6 nm lost all four)
-JDAM_RELEASE_NM = 8.0      # v0.41.299 (XO 2026-11-05): an AI JDAM striker releases this far short of the target and turns home, instead of overflying it with the bomb task on the target waypoint.
+JDAM_BREAK_NM = 12.0       # v0.41.312 (XO 2026-11-06): after the release the flight breaks away this far to the SIDE (about 90 degrees), not back along the approach (see JDAM_RELEASE_NM)
+JDAM_RELEASE_NM = 5.0      # v0.41.312: was 8.0. XO's Viper 5 run (2026-11-05) never released: a U-turn at the release point makes the AI cut the corner 10 km short (the SLAM-ER Hornet cut 7.5 km short and still fired, its reach is 130 nm). A 90-degree break cuts about 4 to 7 km (turn radius at 420-500 kt, 45 degrees of bank: judgment call), so 5 nm keeps that turn inside the 9.3 nm cue.
+                           # (older note, v0.41.299, XO 2026-11-05): an AI JDAM striker releases this far short of the target and turns home, instead of overflying it with the bomb task on the target waypoint.
                            # JUDGMENT CALL from published figures: DCS players' tests put the release cue at 9.3 nm (GBU-31, 30,000 ft, just under Mach 1) to 12.5 nm (GBU-38, 33,000 ft, just over Mach 1)
                            # (forum.dcs.world "jdam 31 distance reduced"); real JDAM: "up to approximately 15 miles" (GlobalSecurity). 8 nm sits inside the lowest of those. Nothing published on where the AI releases
 JDAM_ALT_FT = 30000        # v0.41.299: ...from this height (the figures above are at 30,000 ft and up; range grows with release altitude). The LOW tier is closed to these flights: a JDAM released at 500 ft has almost no reach
@@ -248,7 +250,17 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         snm = (agm88_nm if role == Role.SEAD else (rel_nm if rel_on else jsow_nm)) + STANDOFF_EGRESS_NM
         if rel_on:
             snm = min(snm, max(rel_nm + 4.0, g.d / NM * 0.9))        # never past the flight's own base
-        wp.append(Wpt("EGR", *offset(g.tx, g.ty, sax, snm * NM), ialt, p.egress_kts, "Exit: back out along the approach", rad=irad))
+        if rel_on and rel == "JDAM":                              # v0.41.312: break to the side (about 90 degrees) so the AI does not cut a U-turn corner short of the release point
+            rx_, ry_ = offset(g.tx, g.ty, rel_hdg, rel_nm * NM)
+            best_ = None
+            for sd_ in (1, -1):                                   # the side that stays clearer of the SAM rings the route already avoids (right when equal or none)
+                e_ = offset(rx_, ry_, g.hdg + 90 * sd_, JDAM_BREAK_NM * NM)
+                clr_ = min((dist(*e_, kx, ky) - knm * NM for kx, ky, knm in (g.sa10_avoid or [])), default=0.0)
+                if best_ is None or clr_ > best_[0]:
+                    best_ = (clr_, e_)
+            wp.append(Wpt("EGR", *best_[1], ialt, p.egress_kts, "Exit: break away to the side, then home", rad=irad))
+        else:
+            wp.append(Wpt("EGR", *offset(g.tx, g.ty, sax, snm * NM), ialt, p.egress_kts, "Exit: back out along the approach", rad=irad))
     elif not (so and role in (Role.ESCORT, Role.SWEEP, Role.TARCAP)):         # a stand-off fighter never crosses the target area: it goes home from its hold
         wp.append(Wpt("EGR", *lane_xy(g.egr), ialt + (1000 * (stack_idx % 3) if lane else 0), p.egress_kts, "Exit threat area", rad=irad))
     if not human and g.sa10_avoid and role in (Role.STRIKE, Role.SEAD, Role.CAS):
