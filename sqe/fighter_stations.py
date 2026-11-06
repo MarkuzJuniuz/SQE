@@ -16,6 +16,8 @@ ESCORT_AFTER_TOT_S = 180      # an escort (ESCORT role) holds its station until 
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
 HOLD_AREA_KM = 60             # v0.41.10: packages whose targets are this close share their TARCAP / escort holds (the sweep area)
 ENGAGE_LEAD_S = 240           # v0.41.314: a sweep / escort starts hunting this long before it reaches its station, not from takeoff (judgment call, ~35 nm at cruise; XO's run: engage live from the spawn point burned the fuel in afterburner)
+GATE_AIR_HOLD_S = 900          # v0.41.315: = strike_tasks.AIR_HOLD_STRIKE_S, the longest the fighters-clear gate holds strikers (keep the two in step)
+GATE_RADAR_HOLD_S = 720        # ...= the Lua hook HOLD_S, the longest a DEAD flight holds for the radars
 HOLD_EXTEND_MAX_S = 1800      # ...extended at most this much past their own package
 LRA_BACK_NM = 8               # v0.41.139 (XO 2026-10-27): in a package with a short-range and a long-range fighter flight (TARCAP + escort), the long-range one stands this far behind the short-range one (away from the target)...
 LRA_SIDE_NM = 6               # ...and this far to one side (judgment call: the sweep circles are 25 and 15 nm, so 10 nm between the two sets of jets; the lateral gap is for friendly-fire safety with active missiles in the air, DCS behaviour unverified)
@@ -42,6 +44,21 @@ def axis_station(centre, threat, jsow_xy, near_nm, min_jsow_nm, clear, cur=None)
 
 
 class FighterStations:
+    @staticmethod
+    def _gate_slack_s(package) -> int:
+        """v0.41.315 (XO 2026-11-06 run: the cover left at TOT + 4 min, the strikers sat at the fighters-clear gate until t=2260 and bombed at 2600, 12 min
+        after the cover went home). A package whose strikers can be held at a gate (a strike / CAS with the air gate, a DEAD with the radar gate) keeps
+        its cover up for the longest hold the gate allows: AIR_HOLD_STRIKE_S for the air gate, HOLD_S (12 min, in the Lua hook) for the radar gate.
+        A stand-off job and the SEAD aims have no gate."""
+        o = package.objective
+        if o.aim in ("STANDOFF", "SEAD"):
+            return 0
+        if o.type in (ObjectiveType.STRIKE, ObjectiveType.CAS):
+            return GATE_AIR_HOLD_S
+        if o.type == ObjectiveType.DEAD:
+            return GATE_RADAR_HOLD_S
+        return 0
+
     def _extend_holds(self, events, egr_events=()) -> None:
         """v0.41.10: a TARCAP / escort holds until the LAST package over its target area is off target (TOT + its after-time), not just its own
         package. The v0.41.8 sweep run: the F-15 TARCAPs went home 5 min after their own TOT while later packages were still coming through
@@ -54,7 +71,7 @@ class FighterStations:
                 last = min(later_) if later_ else 0
             else:
                 last = max(near_ + [0])
-            want = last + h["after"]
+            want = last + h["after"] + h.get("gate_s", 0)
             if h["after"] == ESCORT_AFTER_TOT_S:         # an escort sticks to the last striker until it is out (egress point), like a shepherd
                 eg_ = [t_ for (ex, ey), t_ in egr_events if dist(ex, ey, hx, hy) <= HOLD_AREA_KM * 1000]
                 want = max(want, max(eg_ + [0]) + ESCORT_AFTER_EGR_S)
