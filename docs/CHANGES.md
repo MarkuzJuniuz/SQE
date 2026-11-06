@@ -1,5 +1,11 @@
 # CHANGES.md
 
+## v0.41.313, a counter-air strike always has its strike pair
+
+XO 2026-11-06 (his Day 24 screenshot: the job read "strike the jets on the ramp (75 aircraft at the field)" but the only flight was the Fighter Sweep; "fox 3 low"). The counter-air template had the 2-ship STRIKE slot optional, so a package could be planned with the sweep flight alone and the job text promised a ramp strike nobody flew. `packages.TEMPLATES[COUNTER_AIR]` now makes the strike pair required (the sweep flight stays). The pure Fighter Sweep job has its own slots (`is_sweep`) and is not touched.
+- **Cost:** a counter-air job is planned only when both a strike pair and a sweep flight are in reach, so on some days it will not appear.
+- **Probe** (L2 and L3, 6 seeds, F-16C and F-14BU, 3 days each): 11 counter-air strike packages, all with a strike flight; 4 flyable for the player. The full smoke was NOT run (XO: hold it); not seen in DCS.
+
 ## v0.41.312, the AI JDAM strikers break to the side after the release point
 
 XO 2026-11-06 ("Viper 5 turned back and landed", then "JDAM release point first, fox 3 medium"). XO's run: an F-16C strike (v0.41.299 release-point shape) never released: no shot, no kill, GBU-31s still loaded, no scrub or gate abort. The jet flew a U-turn about 10 km short of the release point and went home (first run to fly that shape; the SLAM-ER Hornet in the earlier run cut the same corner 7.5 km short and still fired, its reach is 130 nm).

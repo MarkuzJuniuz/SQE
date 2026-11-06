@@ -38,7 +38,7 @@ TEMPLATES = {
     ObjectiveType.STRIKE: [Slot(Role.STRIKE, 4), Slot(Role.TARCAP, 2), Slot(Role.SEAD, 2, False, True)],
     # SEAD only blinds the radars; the DEAD flight (the strikers) kills the site right behind it. Both fly in the same package.
     ObjectiveType.DEAD: [Slot(Role.SEAD, 2), Slot(Role.STRIKE, 4), Slot(Role.TARCAP, 2)],
-    ObjectiveType.COUNTER_AIR: [Slot(Role.SWEEP, 4), Slot(Role.STRIKE, 2, False)],
+    ObjectiveType.COUNTER_AIR: [Slot(Role.SWEEP, 4), Slot(Role.STRIKE, 2)],       # v0.41.313 (XO 2026-11-06): the strikers are the point of the job (the ramp), so the pair is required; the Fighter Sweep has its own path (is_sweep)
     ObjectiveType.BARCAP: [Slot(Role.CAP, 2), Slot(Role.CAP, 2, False)],
     ObjectiveType.CAS: [Slot(Role.CAS, 4), Slot(Role.TARCAP, 2, False), Slot(Role.SEAD, 2, False, True)],
     ObjectiveType.FLEET_DEFENSE: [Slot(Role.CAP, 4), Slot(Role.CAP, 2, False), Slot(Role.SWEEP, 2, False)],
