@@ -2429,6 +2429,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # reaches that waypoint, and the TGT waypoint IS the target, so the bomb task started with no run-in left. DCS forum threads on AI bombing runs (forum.dcs.world
         # topic 241006, 369730: "task on the IP, 25 to 30 nm out") put it on the approach point. So an AI striker's bomb task sits on the IP, aimed at the target.
         ip_tgt_ = None
+        ca_ramp_ = package.objective.type == ObjectiveType.COUNTER_AIR and package.objective.aim not in ("SWEEP", "STANDOFF")      # v0.41.325
         if ai_a2g and f.role == Role.STRIKE and not f.tag and package.objective.aim not in ("RUNWAY", "STANDOFF"):
             ws_ = list(wps[first:])
             tg_i = next((k for k, w_ in enumerate(ws_) if w_.name == "TGT" and w_.action == "BOMB"), None)
@@ -2455,9 +2456,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if f.aircraft in SHOOTS_BACK:
                     wp.tasks.append(task.OptRestrictAirToAirAttack(False))                       # self-defence only: return fire, at whoever shoots
             if ai_a2g and not ai_sead and w.action in ("BOMB", "CAS"):
-                wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))                      # the ground target; aircraft stay off limits (restricted)
+                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire if ca_ramp_ else task.OptROE.Values.WeaponFree))   # the ground target; aircraft stay off limits (restricted); v0.41.325: a ramp strike attacks its designated point only
             if ip_tgt_ is not None and w.name == "IP":
-                wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))                      # v0.41.322: the attack starts here, on the way in
+                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire if ca_ramp_ else task.OptROE.Values.WeaponFree))   # v0.41.322: the attack starts here, on the way in; v0.41.325: ramp strike = designated target only (XO: no hunting)
                 bip_ = task.ControlledTask(self._bomb_task(package, ip_tgt_))
                 bip_.stop_after_time(int(ip_tgt_.eta_s + LATE_ATTACK_S)); wp.tasks.append(bip_)
             if run_t0 is not None:
