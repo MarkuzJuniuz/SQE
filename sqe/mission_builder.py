@@ -68,6 +68,7 @@ COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this c
 SLAM_AIMS = 2                # v0.41.309: aim points (buildings) of a SLAM-ER launch, a missile each per jet's two (the Standoff Strike kit carries two AGM-84H a jet)
 SLAM_ATTACK_S = 90            # v0.41.309: the SLAM-ER launch window after the launch point's ETA, then return fire (judgment call; XO's run fired its four in 20 s; the JSOW window is 120)
 LATE_ATTACK_S = 600           # v0.41.16: an AI strike flight drops only within this of its TOT
+RAMP_AXIS_MIN_M = 150          # v0.41.326: a ramp line shorter than this is bombed from any heading (judgment call)
 CV_PATTERN_NM = 6             # v0.41.72: an AI carrier flight within this of the boat...
 CV_PATTERN_S = 90             # ...for this long (about two laps of the pattern) is recovered
 CV_RECOVER_NM = 10            # v0.41.17: AI carrier flights (and your wingmen) are recovered this far from the boat instead of joining the deck queue
@@ -2392,7 +2393,14 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 span_ = 0.0
             # v0.41.323 (XO's L3 run: the carpet task's aim point was the ramp, but the CBU jets looped 6 to 20 km off it and dropped on the depot guards): the plain point
             # bomb task at the middle of the ramp, the same task that put the GBU-31s on their aim point. The cluster bombs' bomblets cover the ramp. `span_` is unused now.
-            return task.Bombing(self._pt(cx_, cy_), weapon_type=task.WeaponType.Auto, expend=task.Expend.All, group_attack=True)
+            # v0.41.326 (XO 2026-11-06: cover more of the ramp): the pass runs ALONG the line of parked jets, so one run lays the bombs down its length. DCS takes one aim point and
+            # one attack heading per task (no per-jet points, no release spacing from a script). Heading = the bearing between the two jets furthest apart (x north, y east),
+            # only when the ramp is longer than `RAMP_AXIS_MIN_M` (judgment call); otherwise the plain point as before. Not seen in DCS.
+            dir_ = None
+            if pts_ and span_ >= RAMP_AXIS_MIN_M:
+                p1_, p2_ = max(((p, q) for p in pts_ for q in pts_), key=lambda pq: dist(pq[0][0], pq[0][1], pq[1][0], pq[1][1]))
+                dir_ = int(round(math.degrees(math.atan2(p2_[1] - p1_[1], p2_[0] - p1_[0])))) % 360
+            return task.Bombing(self._pt(cx_, cy_), weapon_type=task.WeaponType.Auto, expend=task.Expend.All, group_attack=True, direction=dir_)
         wt_ = task.WeaponType.CruiseMissile if w.name == "SLAM" else task.WeaponType.Auto         # v0.41.302: the Standoff Strike's SLAM-ER is a missile; XO's run: the default filter fired nothing
         return task.Bombing(self._pt(*(w.aim or (w.x, w.y))), weapon_type=wt_, expend=task.Expend.All, group_attack=True)       # v0.41.299: a release point (JDAM, SLAM-ER) bombs the target, not itself
 

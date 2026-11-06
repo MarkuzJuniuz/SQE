@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.326, the ramp pass runs along the line of parked jets
+
+XO 2026-11-06 ("make their target area cover more ground", "fox 3 medium"). The counter-air bomb task keeps its aim point (the ramp centre) and now also carries an attack heading: the bearing between the two parked jets furthest apart, when that line is longer than `RAMP_AXIS_MIN_M` 150 m (judgment call). One pass then lays the bombs down the ramp's length. DCS limits: one aim point and one heading per task, no per-jet points and no release spacing from a script; the sense of the heading (either end first) is arbitrary, so the flight may turn to line up. Per-flight jitter NOT built. Not seen in DCS; if the jets loop or miss, drop the `direction` argument.
+
 ## v0.41.325, ramp strikers attack the designated point only (no hunting)
 
 XO 2026-11-06 ("focus on the ramp, drop all in one go, then head home", "fox 3 low"). In his run one CBU jet dropped on the ramp, the other on the ammo depot, then both spent the rest on the depot. Cause (a reading of the code, not proven): the counter-air strikers were weapons free from the IP, which lets the AI pick any ground target it sees. Counter-air strike flights (not sweeps or stand-off) now get ROE Open Fire (DCS: attack designated targets only) at the IP and the target point; everything else keeps weapons free. Egress still goes to return fire. Not seen in DCS: the risk is that DCS does not count the bombing point as designated and nothing is released; if so, revert these two ROE lines to WeaponFree.
