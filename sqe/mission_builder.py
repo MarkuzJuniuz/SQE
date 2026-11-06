@@ -1971,6 +1971,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             hold_ = None
             if hold_end is not None:
                 hold_ = {"cts": [zct_], "starts": [], "tgt": (geom.tx, geom.ty), "end": int(hold_end), "eta": int(stw.eta_s),
+                         "gate_s": self._gate_slack_s(package),     # v0.41.315: the strikers may sit at a gate this long before TOT; the cover stays for it
                          "first": stw.action == "SWEEP",           # v0.41.13: a sweep holds until the FIRST package it covers is over the target
                          "after": SWEEP_AFTER_TOT_S if stw.action == "SWEEP" else TARCAP_AFTER_TOT_S if stw.action == "TARCAP" else ESCORT_AFTER_TOT_S}
                 self._holds.append(hold_)
@@ -2373,6 +2374,17 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         ap_ = self.t.airports.get(a_.airport) if (o_.aim == "RUNWAY" and a_ is not None and a_.airport) else None
         if ap_ is not None:
             return task.BombingRunway(airport_id=ap_.id, expend=task.Expend.All, group_attack=True)
+        if o_.type == ObjectiveType.COUNTER_AIR and o_.aim not in ("SWEEP", "STANDOFF") and w.name != "SLAM":
+            # v0.41.316 (XO 2026-11-06: cluster bombs are not aimed at single things, and the AI F-16s with CBU-103s flew over the ramp without a release): an area
+            # (carpet) attack over the middle of the parked jets, as long as the ramp is wide (judgment call, clamped; DCS behaviour on static aircraft unverified)
+            pts_ = list(getattr(self, "_ramp_pts", []) or [])
+            if pts_:
+                cx_, cy_ = sum(q[0] for q in pts_) / len(pts_), sum(q[1] for q in pts_) / len(pts_)
+                span_ = max((dist(p[0], p[1], q[0], q[1]) for p in pts_ for q in pts_), default=0.0)
+            else:
+                cx_, cy_ = w.aim or (w.x, w.y)
+                span_ = 0.0
+            return task.CarpetBombing(self._pt(cx_, cy_), expend=task.Expend.All, group_attack=True, carpet_length=float(min(2500.0, max(800.0, span_ + 200.0))))
         wt_ = task.WeaponType.CruiseMissile if w.name == "SLAM" else task.WeaponType.Auto         # v0.41.302: the Standoff Strike's SLAM-ER is a missile; XO's run: the default filter fired nothing
         return task.Bombing(self._pt(*(w.aim or (w.x, w.y))), weapon_type=wt_, expend=task.Expend.All, group_attack=True)       # v0.41.299: a release point (JDAM, SLAM-ER) bombs the target, not itself
 

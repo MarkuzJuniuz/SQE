@@ -1,5 +1,18 @@
 # CHANGES.md
 
+## v0.41.316, counter-air strikers carpet-bomb the ramp
+
+XO 2026-11-06 (CBU run: the AI F-16s crossed the target at 20,000 ft with their CBU-103s and released nothing, one was shot down by the airfield's scramble, the package scrubbed; "make them area bomb", "fox 3 low"). Cluster bombs are not aimed at single things, and the CBU-103 is a wind-corrected dispenser that the AI may treat like a JDAM (the release behaviour in DCS is unverified).
+- **Change.** `mission_builder._bomb_task`: a counter-air strike (not the sweep, not the stand-off one) gets DCS's CarpetBombing over the middle of the parked jets (the centroid of the ramp points), expend all, group attack, carpet length = the ramp's span + 200 m clamped to 800 to 2,500 m (judgment call). Before: a Bombing task on a single point.
+- **If it still does not drop:** the next step is the JDAM-style release point and side break (`routes.py`, v0.41.312) for the CBU kit, about 3 nm (judgment call). Cost of a wrong guess here: the Vipers fly the same route and still do not release.
+
+## v0.41.315, cover stays while the strikers sit at a gate
+
+XO 2026-11-06 (F-16C Strike on a depot near Beslan: "they're so close already yet they went home"; "fox 3 medium"). From the run: the strikers (Viper 6) held at the fighters-clear gate from t=1778 until the air was clear at t=2260 and released near t=2600; the cover's station hold ended at a fixed 2079 (TOT 1853 plus about 4 min), so your cover flight went home with the strikers still 80 km out.
+- **Fix.** `fighter_stations._gate_slack_s`: a package whose strikers can be held at a gate keeps its cover up for the longest hold the gate allows: 900 s (`GATE_AIR_HOLD_S`, = `strike_tasks.AIR_HOLD_STRIKE_S`) for a strike / CAS with the air gate, 720 s (`GATE_RADAR_HOLD_S`, = the hook's `HOLD_S`) for a DEAD. The hold extension (`_extend_holds`) adds it. Stand-off jobs and SEAD aims have no gate. `HOLD_EXTEND_MAX_S` (1800 s) still caps the total.
+- **Cost of a wrong guess:** cover flights in gated packages stay up to 12 to 15 min longer even when the strikers never hold (fuel). If that burns too much, the follow-up is a hook flag that releases the cover when the strikers are off target (DCS behaviour not verified).
+- Checked on built DEAD packages: sweep/escort stop times moved to the planned TOT plus the 720 s gate hold (TARCAP unchanged where it had no start condition).
+
 ## v0.41.314, sweep and escort: the hunt starts near the station, not at takeoff
 
 XO 2026-11-06 (CBU counter-air run: "blue air cover left it out to dry, then MiGs took off"; "fox 3 medium"). Cause, from the run's mission and state file: the sweep flight's engage task (air targets within 40 nm of the target) was live from the spawn point, so Venom 1 ran down the Su-27s at about 880 kt from 250 km out (plan: 540 kt), killed all four by t=1000, and went home (most likely bingo fuel; the DCS log has no fuel line, so unproven) while the strikers were still 100 km out (TOT 1886). Two of its jets then died on the way home over 4,400 m terrain (suspected mountain impact, unproven), the escort count fell to half, and the package scrubbed at t=1445 as designed.
