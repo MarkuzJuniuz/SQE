@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.312, the AI JDAM strikers break to the side after the release point
+
+XO 2026-11-06 ("Viper 5 turned back and landed", then "JDAM release point first, fox 3 medium"). XO's run: an F-16C strike (v0.41.299 release-point shape) never released: no shot, no kill, GBU-31s still loaded, no scrub or gate abort. The jet flew a U-turn about 10 km short of the release point and went home (first run to fly that shape; the SLAM-ER Hornet in the earlier run cut the same corner 7.5 km short and still fired, its reach is 130 nm).
+- **Cause (a read of the track, not proven).** The route went IP, release point, then straight back along the approach, a 180 degree reversal. DCS cuts such a corner far short, so the jet turned outside the JDAM's release range and the bomb task never started.
+- **Fix** (`routes.plan_route`, JDAM only; SLAM and JSOW unchanged): the egress now breaks about 90 degrees to the side of the release point, `JDAM_BREAK_NM` 12 nm out, on the side that stays clearer of the SAM rings the route already avoids (right when equal). `JDAM_RELEASE_NM` 8 to 5: at 420 to 500 kt with 45 degrees of bank a 90 degree turn cuts about 4 to 7 km, so 5 nm keeps the turn start inside the 9.3 nm release cue (judgment call; the cue figure is from DCS players' tests).
+- **Not seen in DCS.** Probe: the built route turns exactly 90 degrees, 12 nm to the egress point. Whether the AI now releases is for the next run. A SAM-covered strike still uses the stand-off routes, not this one.
+
 ## v0.41.311, the Missions list keeps your pick when you press FLY
 
 XO 2026-11-05 ("fox 3 low"): pressing FLY rebuilt the list and jumped to the first package behind the waiting window. `MissionsPage.refresh` now remembers the selected package number and reselects it (same day only; a new day, or a package that is gone, starts on the first row as before). Not seen in the real UI; the smoke test cannot see layout, compile check only.
