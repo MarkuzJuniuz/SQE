@@ -168,12 +168,20 @@ local function rwyJson()
   for id, n in pairs(rwyHits) do o[#o + 1] = string.format('"%s":%d', esc(id), n) end
   return "{" .. table.concat(o, ",") .. "}"
 end
+local IMPACTS = {}                        -- v0.41.332 (XO 2026-11-06): where every bomb ended (a cluster bomb: where its dispenser opened), at most 80
+local function impJson()
+  local o = {}
+  for _, e in ipairs(IMPACTS) do
+    o[#o + 1] = string.format('{"t":%d,"w":"%s","by":"%s","x":%d,"y":%d,"z":%d,"g":%d}', e.t, esc(e.w), esc(e.by), e.x, e.y, e.z, e.g)
+  end
+  return "[" .. table.concat(o, ",") .. "]"
+end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"scrub":%s,"tracks":%s,"rgate":%s,"rwy":%s,"landings":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"scrub":%s,"tracks":%s,"rgate":%s,"rwy":%s,"imp":%s,"landings":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), scrubJson(), tracksJson(), rgateJson(), rwyJson(), landJson(), CFG, splashN, splashK))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), scrubJson(), tracksJson(), rgateJson(), rwyJson(), impJson(), landJson(), CFG, splashN, splashK))
   f:close()
 end
 local function nameOf(obj)
@@ -620,6 +628,43 @@ if #RWYS > 0 then
     end
     RWYW = keep
     return t + RWY_DT
+  end, nil, timer.getTime() + 1)
+end
+-- v0.41.332: bomb impact log. Every bomb is followed to its last known position (plus a quarter second of its velocity); the point goes into the state file with the
+-- ground height under it. A cluster bomb vanishes where its dispenser opens (above the ground), so `y` minus `g` is that opening height. The debrief does not use it yet.
+do
+  local IMPW = {}
+  local H5 = {}
+  function H5:onEvent(e)
+    if e.id == world.event.S_EVENT_SHOT and e.weapon then
+      local ok, cat = pcall(function() return e.weapon:getCategory() end)
+      if ok and cat == Weapon.Category.BOMB then
+        local tn, by = "?", "?"
+        pcall(function() tn = e.weapon:getTypeName() end)
+        pcall(function() by = e.initiator:getName() end)
+        IMPW[#IMPW + 1] = { w = e.weapon, tn = tn, by = by }
+      end
+    end
+  end
+  world.addEventHandler(H5)
+  timer.scheduleFunction(function(_, t)
+    local keep = {}
+    for _, s in ipairs(IMPW) do
+      local ok, ex = pcall(function() return s.w:isExist() end)
+      if ok and ex then
+        pcall(function() s.p = s.w:getPoint(); s.v = s.w:getVelocity() end)
+        keep[#keep + 1] = s
+      elseif s.p and #IMPACTS < 80 then
+        local v = s.v or { x = 0, y = 0, z = 0 }
+        local x, y, z = s.p.x + v.x * 0.25, s.p.y + v.y * 0.25, s.p.z + v.z * 0.25
+        local g = 0
+        pcall(function() g = land.getHeight({ x = x, y = z }) end)
+        IMPACTS[#IMPACTS + 1] = { t = math.floor(timer.getTime()), w = s.tn, by = s.by, x = x, y = y, z = z, g = g }
+        dump()
+      end
+    end
+    IMPW = keep
+    return t + 0.25
   end, nil, timer.getTime() + 1)
 end
 world.addEventHandler(H)
