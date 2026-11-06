@@ -295,6 +295,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._ecm_player = ""                           # v0.41.210: how the hook learns the player's jammer: "live" (F-16C lamp via Export.lua), "f10" (FC3 jet), "" (old attack-leg window)
         self._raid_xy = []                              # v0.41.220: where each raid scramble's raiders are going (the supply circle runs round these too)
         self._bld_xy = {}                   # v0.41.309: supply site id -> where its buildings stand (`_place_buildings`), the Standoff Strike aims at them
+        self._ramp_tasks = []               # v0.41.329: the counter-air Bombing tasks made before the jets spawn; `_retarget_ramp_tasks` re-aims them
         self._ramp_pts = []                 # v0.41.313: the parked static jets' positions of this mission (counter-air strike)
         self._supply_built = set()                      # v0.41.209: blue supply sites already put on the map this mission (a raid target is one)
         self._rwy_rel, self._hot = {}, None                            # v0.41.96: release times already given per runway; the hot-runway slot of the flight being built
@@ -1355,6 +1356,25 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             names_by.setdefault(t_, []).append(nm)
         for t_, names in names_by.items():
             manifest.add("enemy_air", a.id, names, ac=t_, parked=True)
+        self._retarget_ramp_tasks()
+
+    def _retarget_ramp_tasks(self) -> None:
+        """v0.41.329 (XO 2026-11-06: "no way to aim at the parked jets once they are spawned?"): the strike flights are built before the jets exist, so their bomb tasks were made on
+        an estimate (the ramp slots' middle). Now the jets are placed: every counter-air bomb task made by `_bomb_task` is pointed at the middle of the real jets and, when they stand
+        in a line longer than `RAMP_AXIS_MIN_M`, given the heading along it. DCS takes one point per task, so it is the middle of the cluster, not one jet. No jets: unchanged."""
+        pts_ = list(self._ramp_pts)
+        if not pts_ or not self._ramp_tasks:
+            return
+        cx_, cy_ = sum(q[0] for q in pts_) / len(pts_), sum(q[1] for q in pts_) / len(pts_)
+        span_ = max((dist(p[0], p[1], q[0], q[1]) for p in pts_ for q in pts_), default=0.0)
+        dir_ = None
+        if span_ >= RAMP_AXIS_MIN_M:
+            p1_, p2_ = max(((p, q) for p in pts_ for q in pts_), key=lambda pq: dist(pq[0][0], pq[0][1], pq[1][0], pq[1][1]))
+            dir_ = int(round(math.degrees(math.atan2(p2_[1] - p1_[1], p2_[0] - p1_[0])))) % 360
+        for bt_ in self._ramp_tasks:
+            bt_.params["x"], bt_.params["y"] = cx_, cy_
+            bt_.params["directionEnabled"] = dir_ is not None
+            bt_.params["direction"] = dir_ if dir_ is not None else 0
 
     def _vary_comp(self, a, comp):
         r, out = self.vrng, []
@@ -2411,7 +2431,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if pts_ and span_ >= RAMP_AXIS_MIN_M:
                 p1_, p2_ = max(((p, q) for p in pts_ for q in pts_), key=lambda pq: dist(pq[0][0], pq[0][1], pq[1][0], pq[1][1]))
                 dir_ = int(round(math.degrees(math.atan2(p2_[1] - p1_[1], p2_[0] - p1_[0])))) % 360
-            return task.Bombing(self._pt(cx_, cy_), weapon_type=task.WeaponType.Auto, expend=task.Expend.All, group_attack=True, direction=dir_)
+            bt2_ = task.Bombing(self._pt(cx_, cy_), weapon_type=task.WeaponType.Auto, expend=task.Expend.All, group_attack=True, direction=dir_)
+            self._ramp_tasks.append(bt2_)
+            return bt2_
         wt_ = task.WeaponType.CruiseMissile if w.name == "SLAM" else task.WeaponType.Auto         # v0.41.302: the Standoff Strike's SLAM-ER is a missile; XO's run: the default filter fired nothing
         return task.Bombing(self._pt(*(w.aim or (w.x, w.y))), weapon_type=wt_, expend=task.Expend.All, group_attack=True)       # v0.41.299: a release point (JDAM, SLAM-ER) bombs the target, not itself
 
