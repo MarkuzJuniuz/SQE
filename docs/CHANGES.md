@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.331, the ramp strike aims at the parked jet nearest the middle; the job text loses the count
+
+XO 2026-11-06 ("center on one of the jets close to the original center. Then remove the text that says the number", "fox 3 low"). After v0.41.329 the aim was exactly the middle of the nine parked jets, an empty spot between them; the run showed no jet destroyed (cause unknown: the hook does not follow CBU impacts). `_retarget_ramp_tasks` now aims at the real jet nearest that middle (heading along the line unchanged). The counter-air job text ("strike the jets on the ramp", "JSOW-As on the ramp") no longer carries a count, since the number parked is only known when the mission is built; the briefing still gives it. Saved day plans keep their old text. Not seen in DCS.
+
 ## v0.41.330, the counter-air job text says "serviceable", not a parked count
 
 XO 2026-11-06 ("check the number mentioned in title. I think last I saw 86", "fox 3 low"). The job text read "(N aircraft at the field)" with N the red wing's serviceable total (`w.available`), which is not what stands on the ramp (at most `PARKED_MAX` 8 in the mission). The text now reads "(N serviceable at the field)"; the briefing keeps the real parked count. Saved day plans keep their old text; only newly planned days change.
