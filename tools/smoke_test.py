@@ -5226,7 +5226,7 @@ def check_99_fighters_clear_gate(c):
     mis2 = _zf.ZipFile(got.miz).read("mission").decode("utf8", "ignore")
     caps2 = _re.findall(r"\{t=\d+, site=[^\n]*?acap=(\d+)", mis2)
     assert str(AIR_HOLD_CAS_S) in caps2, ("a plain CAS flight carries the gate with the shorter cap", caps2[:4])
-    assert inspect.getsource(_MB._bomb_task).count("expend=task.Expend.All") == 2, "both bombing tasks (the point and the runway) drop the whole load"      # v0.41.254: the tasks moved into _bomb_task
+    assert inspect.getsource(_MB._bomb_task).count("expend=task.Expend.All") == 3, "all three bombing tasks (point, runway, ramp carpet) drop the whole load"      # v0.41.254: the tasks moved into _bomb_task
     hk = _db.lua_hook("c", 1, "p", [], "Hornet 1-1", "Hornet 1", [], None, "a.wav", "b.wav", {}, [],
                       [{"id": "t", "label": "Target", "who": "W", "prim": True, "units": [], "trk": [], "srch": []}], [],
                       [{"t": 100, "site": "t", "grp": "Hornet 2", "from": 3, "to": 5, "ai": True, "dead": True, "you": False, "gm": 70000, "acap": 240, "tx": 1.0, "tz": 2.0}], True)
