@@ -1367,6 +1367,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return
         cx_, cy_ = sum(q[0] for q in pts_) / len(pts_), sum(q[1] for q in pts_) / len(pts_)
         span_ = max((dist(p[0], p[1], q[0], q[1]) for p in pts_ for q in pts_), default=0.0)
+        cx_, cy_ = min(pts_, key=lambda q: dist(q[0], q[1], cx_, cy_))       # v0.41.331 (XO): aim at the jet nearest the middle, not at the empty middle
         dir_ = None
         if span_ >= RAMP_AXIS_MIN_M:
             p1_, p2_ = max(((p, q) for p in pts_ for q in pts_), key=lambda pq: dist(pq[0][0], pq[0][1], pq[1][0], pq[1][1]))
