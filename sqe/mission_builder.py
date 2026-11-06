@@ -68,6 +68,7 @@ COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this c
 SLAM_AIMS = 2                # v0.41.309: aim points (buildings) of a SLAM-ER launch, a missile each per jet's two (the Standoff Strike kit carries two AGM-84H a jet)
 SLAM_ATTACK_S = 90            # v0.41.309: the SLAM-ER launch window after the launch point's ETA, then return fire (judgment call; XO's run fired its four in 20 s; the JSOW window is 120)
 LATE_ATTACK_S = 600           # v0.41.16: an AI strike flight drops only within this of its TOT
+RAMP_CLUSTER_M = 250          # v0.41.328: the parking slots this close to the ramp middle give the pass its heading (judgment call: the parked jets stood in about 300 m)
 RAMP_AXIS_MIN_M = 150          # v0.41.326: a ramp line shorter than this is bombed from any heading (judgment call)
 CV_PATTERN_NM = 6             # v0.41.72: an AI carrier flight within this of the boat...
 CV_PATTERN_S = 90             # ...for this long (about two laps of the pattern) is recovered
@@ -294,6 +295,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._ecm_player = ""                           # v0.41.210: how the hook learns the player's jammer: "live" (F-16C lamp via Export.lua), "f10" (FC3 jet), "" (old attack-leg window)
         self._raid_xy = []                              # v0.41.220: where each raid scramble's raiders are going (the supply circle runs round these too)
         self._bld_xy = {}                   # v0.41.309: supply site id -> where its buildings stand (`_place_buildings`), the Standoff Strike aims at them
+        self._ramp_tasks = []               # v0.41.329: the counter-air Bombing tasks made before the jets spawn; `_retarget_ramp_tasks` re-aims them
         self._ramp_pts = []                 # v0.41.313: the parked static jets' positions of this mission (counter-air strike)
         self._supply_built = set()                      # v0.41.209: blue supply sites already put on the map this mission (a raid target is one)
         self._rwy_rel, self._hot = {}, None                            # v0.41.96: release times already given per runway; the hot-runway slot of the flight being built
@@ -1354,6 +1356,25 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             names_by.setdefault(t_, []).append(nm)
         for t_, names in names_by.items():
             manifest.add("enemy_air", a.id, names, ac=t_, parked=True)
+        self._retarget_ramp_tasks()
+
+    def _retarget_ramp_tasks(self) -> None:
+        """v0.41.329 (XO 2026-11-06: "no way to aim at the parked jets once they are spawned?"): the strike flights are built before the jets exist, so their bomb tasks were made on
+        an estimate (the ramp slots' middle). Now the jets are placed: every counter-air bomb task made by `_bomb_task` is pointed at the middle of the real jets and, when they stand
+        in a line longer than `RAMP_AXIS_MIN_M`, given the heading along it. DCS takes one point per task, so it is the middle of the cluster, not one jet. No jets: unchanged."""
+        pts_ = list(self._ramp_pts)
+        if not pts_ or not self._ramp_tasks:
+            return
+        cx_, cy_ = sum(q[0] for q in pts_) / len(pts_), sum(q[1] for q in pts_) / len(pts_)
+        span_ = max((dist(p[0], p[1], q[0], q[1]) for p in pts_ for q in pts_), default=0.0)
+        dir_ = None
+        if span_ >= RAMP_AXIS_MIN_M:
+            p1_, p2_ = max(((p, q) for p in pts_ for q in pts_), key=lambda pq: dist(pq[0][0], pq[0][1], pq[1][0], pq[1][1]))
+            dir_ = int(round(math.degrees(math.atan2(p2_[1] - p1_[1], p2_[0] - p1_[0])))) % 360
+        for bt_ in self._ramp_tasks:
+            bt_.params["x"], bt_.params["y"] = cx_, cy_
+            bt_.params["directionEnabled"] = dir_ is not None
+            bt_.params["direction"] = dir_ if dir_ is not None else 0
 
     def _vary_comp(self, a, comp):
         r, out = self.vrng, []
@@ -2389,8 +2410,18 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 cx_, cy_ = sum(q[0] for q in pts_) / len(pts_), sum(q[1] for q in pts_) / len(pts_)
                 span_ = max((dist(p[0], p[1], q[0], q[1]) for p in pts_ for q in pts_), default=0.0)
             else:
-                cx_, cy_ = w.aim or (w.x, w.y)
-                span_ = 0.0
+                # v0.41.328 (XO's run: the strike flights are built BEFORE the parked jets spawn, so this list is empty here and the aim fell back to the airfield point, 1.2 km short
+                # of the jets): the middle of the field's real parking slots, and the line of the slots within `RAMP_CLUSTER_M` of it for the heading
+                ra_ = self.state.assets.get(o_.target_id)
+                r_ = self._ramp_xy(ra_) if ra_ is not None else None
+                if r_ is not None:
+                    cx_, cy_ = r_
+                    ap2_ = self.t.airports.get(ra_.airport) if getattr(ra_, "airport", None) else None
+                    pts_ = [(q.position.x, q.position.y) for q in (ap2_.parking_slots if ap2_ else []) if q.airplanes and dist(q.position.x, q.position.y, cx_, cy_) <= RAMP_CLUSTER_M]
+                    span_ = max((dist(p[0], p[1], q[0], q[1]) for p in pts_ for q in pts_), default=0.0)
+                else:
+                    cx_, cy_ = w.aim or (w.x, w.y)
+                    span_ = 0.0
             # v0.41.323 (XO's L3 run: the carpet task's aim point was the ramp, but the CBU jets looped 6 to 20 km off it and dropped on the depot guards): the plain point
             # bomb task at the middle of the ramp, the same task that put the GBU-31s on their aim point. The cluster bombs' bomblets cover the ramp. `span_` is unused now.
             # v0.41.326 (XO 2026-11-06: cover more of the ramp): the pass runs ALONG the line of parked jets, so one run lays the bombs down its length. DCS takes one aim point and
@@ -2400,7 +2431,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if pts_ and span_ >= RAMP_AXIS_MIN_M:
                 p1_, p2_ = max(((p, q) for p in pts_ for q in pts_), key=lambda pq: dist(pq[0][0], pq[0][1], pq[1][0], pq[1][1]))
                 dir_ = int(round(math.degrees(math.atan2(p2_[1] - p1_[1], p2_[0] - p1_[0])))) % 360
-            return task.Bombing(self._pt(cx_, cy_), weapon_type=task.WeaponType.Auto, expend=task.Expend.All, group_attack=True, direction=dir_)
+            bt2_ = task.Bombing(self._pt(cx_, cy_), weapon_type=task.WeaponType.Auto, expend=task.Expend.All, group_attack=True, direction=dir_)
+            self._ramp_tasks.append(bt2_)
+            return bt2_
         wt_ = task.WeaponType.CruiseMissile if w.name == "SLAM" else task.WeaponType.Auto         # v0.41.302: the Standoff Strike's SLAM-ER is a missile; XO's run: the default filter fired nothing
         return task.Bombing(self._pt(*(w.aim or (w.x, w.y))), weapon_type=wt_, expend=task.Expend.All, group_attack=True)       # v0.41.299: a release point (JDAM, SLAM-ER) bombs the target, not itself
 

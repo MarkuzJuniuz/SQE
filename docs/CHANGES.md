@@ -1,5 +1,17 @@
 # CHANGES.md
 
+## v0.41.330, the counter-air job text says "serviceable", not a parked count
+
+XO 2026-11-06 ("check the number mentioned in title. I think last I saw 86", "fox 3 low"). The job text read "(N aircraft at the field)" with N the red wing's serviceable total (`w.available`), which is not what stands on the ramp (at most `PARKED_MAX` 8 in the mission). The text now reads "(N serviceable at the field)"; the briefing keeps the real parked count. Saved day plans keep their old text; only newly planned days change.
+
+## v0.41.329, the ramp strike is re-aimed at the real jets once they spawn
+
+XO 2026-11-06 ("no way to aim directly at parked jets or get it after they're spawned?", "fox 3 low"). The strike flights are built before `_spawn_parked_jets`, so their counter-air Bombing tasks were made on an estimate (v0.41.328: the ramp slots' middle). `_bomb_task` now keeps each counter-air task, and `_retarget_ramp_tasks` (called at the end of `_spawn_parked_jets`) sets its point to the middle of the real parked jets and the heading along the line of the two furthest apart (longer than `RAMP_AXIS_MIN_M` 150 m). DCS takes one point per task, so it is the cluster's middle, not one jet. No jets spawned: the v0.41.328 estimate stays. Not seen in DCS; check the .miz aim point against the `PARK` jets' tracks.
+
+## v0.41.328, the ramp strike aims at the real ramp (the aim fell back to the airfield point)
+
+XO's v0.41.327 run: the F-16s released CBU-103s but "dropped on the runway". The .miz showed the Bombing task 1.2 km short of the parked jets. Cause: the strike flights are built before `_spawn_parked_jets`, so `_ramp_pts` is empty when `_bomb_task` runs; the aim fell back to the airfield point and the v0.41.326 attack heading was never computed (`directionEnabled=false`). Now, with no jets yet, the aim is the middle of the field's airplane parking slots (`_ramp_xy`, which exists at build time) and the heading comes from the slots within `RAMP_CLUSTER_M` 250 m of it (judgment call), longer than `RAMP_AXIS_MIN_M` 150 m. The slot middle is an estimate of where the jets stand, not their exact spots. The Standoff Counter-Air JSOWs already used `_ramp_xy` as their fallback and are unchanged. Open Fire did not stop the release (both jets dropped). Not seen in DCS.
+
 ## v0.41.327, the Standoff Counter-Air JSOWs use Open Fire too
 
 XO 2026-11-06 ("make that open fire too", "fox 3 low"). `_jsow_ramp_tasks` (the JSOW-A aim points on the parked jets) sets ROE Open Fire (designated targets only) instead of weapons free; the timed return fire after the window is unchanged. Same reasoning and same risk as v0.41.325: if DCS does not treat the Bombing points as designated, nothing is released; revert that one ROE line. Not seen in DCS.
