@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.317, guided-bomb strikers are left alone; the AWACS watch includes the all-AI flight
+
+XO 2026-11-06 (three runs, the AI F-16 JDAM and CBU strikers never released; "we are working on quiet runs, not stand-off", "let the AI do what it did before", "fox 3 low"). Public sources: JDAM is released by the aircraft inside its own launch acceptable region ("up to approximately 15 miles", launch "from very low to very high altitude", GlobalSecurity); the CBU-103 is a CBU-87 with an INS/GPS wind-correction kit, no wings, medium to high altitude delivery (Wikipedia WCMD, GlobalSecurity WCMD). Nothing published says where the DCS AI releases.
+- **Retired.** `strike_tasks._rel_kind` no longer returns "JDAM". That one label drove all of: the REL waypoint 5 nm short of the target with the bomb task aimed past it, the route's stand-off mode (no overflight, out along the approach), the side-break exit (v0.41.312) and the 30,000 ft, no-LOW-tier profile (v0.41.299). A quiet-run striker (F-16C, F/A-18C, F-14B on a strike or counter-air strike) flies a target waypoint on the target with the plain bomb task and its jet's own profile (20,000 ft; the F-14 25,000), as before v0.41.299. Only the Standoff Strike (SLAM) keeps a launch point. The constants (`JDAM_RELEASE_NM` and so on) stay in the file, unused.
+- **AWACS watch list.** `mission_builder`: the all-AI test flight is in the hook's watch list. Before, it was skipped as the "player" flight, so AWACS said "all packages complete, no further tasking, return to base" at TOT + 2 min with the strikers still inbound.
+- **Checked:** compile, built AI-test STRIKE missions (no REL waypoint, the strike flight in the watch list). Not run in DCS.
+
 ## v0.41.316, counter-air strikers carpet-bomb the ramp
 
 XO 2026-11-06 (CBU run: the AI F-16s crossed the target at 20,000 ft with their CBU-103s and released nothing, one was shot down by the airfield's scramble, the package scrubbed; "make them area bomb", "fox 3 low"). Cluster bombs are not aimed at single things, and the CBU-103 is a wind-corrected dispenser that the AI may treat like a JDAM (the release behaviour in DCS is unverified).

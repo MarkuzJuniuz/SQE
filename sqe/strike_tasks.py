@@ -220,7 +220,7 @@ class StrikeTasks:
         o = package.objective
         if getattr(f, "kit", "") or f.aircraft not in JDAM_JETS or o.aim == "RUNWAY":
             return ""
-        return "JDAM" if (o.type == ObjectiveType.STRIKE or (o.type == ObjectiveType.COUNTER_AIR and o.aim != "SWEEP")) else ""
+        return ""        # v0.41.317 (XO 2026-11-06, three runs, no guided-bomb release): "JDAM" is retired. A quiet-run striker flies a target waypoint on the target with the plain bomb task and its jet's own profile, as before v0.41.299; the AI works out its own release. Only the Standoff Strike (SLAM) is told where to launch.
 
     def _flight_profile(self, f, package):
         """The route profile a flight is planned with. A release-point striker (_rel_kind) gets its jet's profile with the strike altitude raised to JDAM_ALT_FT and the LOW tier closed
