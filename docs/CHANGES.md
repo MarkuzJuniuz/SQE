@@ -1,5 +1,11 @@
 # CHANGES.md
 
+## v0.41.319, the hook logs each AI striker's bombs
+
+XO 2026-11-06 (JDAM run, Viper 9 crossed the target and nothing dropped; "fox 3 low"). Suspect, not proven: the gate resume (`resetTask` then `SwitchWaypoint`) wipes the target waypoint's bomb task. The resume is NOT changed: `resetTask` is what clears the hold orbit (v0.39.21 run), so removing it blind could leave flights circling.
+- **Added.** The Lua hook samples the bombs (weapon category 3) of every gated AI strike group every 20 s and writes a row to the state file's `gates` list: `site` "ammo", `by` "bombs N to M", `t` the first look, `ran` the last change. N to N = never released.
+- **Next.** If the row shows no release, fix the resume (re-push the bomb task after the switch); if it shows a release, the bombs fell and the debrief is the question.
+
 ## v0.41.318, the debrief sees the parked jets die
 
 XO 2026-11-06 (Standoff Counter-Air run: "I saw the JSOWs fly but I can't tell what they hit"; "fox 3 medium"). From the run: Viper 5 fired 8 AGM-154As at t=1211 to 1222 and the logged positions match 7 different parked statics at Maykop to a few metres, but the debrief counted no loss: a destroyed static's death event carries a blank name, and the hook did not know the parked jets (they were left out of its enemy-air list on purpose).
