@@ -57,7 +57,7 @@ def task_label(f, obj) -> str:
     if getattr(f, "kit", "") == "SLAM":
         return "SO STRIKE"                  # v0.41.298: the Standoff Strike flight (SLAM-ER)
     if getattr(f, "kit", "") == "JSOW":
-        return "SO DEAD" if obj.aim == "STANDOFF" else "JSOW"
+        return ("SO STRIKE" if obj.type.value == "COUNTER_AIR" else "SO DEAD") if obj.aim == "STANDOFF" else "JSOW"
     if f.role.value == "STRIKE" and obj.type.value == "DEAD":
         return "DEAD"
     return f.role.value                 # one name per job (v0.41.50): TARCAP, ESCORT, SWEEP, CAP, STRIKE, SEAD, CAS
