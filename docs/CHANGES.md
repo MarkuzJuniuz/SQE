@@ -1,5 +1,18 @@
 # CHANGES.md
 
+## v0.41.319, the hook logs each AI striker's bombs
+
+XO 2026-11-06 (JDAM run, Viper 9 crossed the target and nothing dropped; "fox 3 low"). Suspect, not proven: the gate resume (`resetTask` then `SwitchWaypoint`) wipes the target waypoint's bomb task. The resume is NOT changed: `resetTask` is what clears the hold orbit (v0.39.21 run), so removing it blind could leave flights circling.
+- **Added.** The Lua hook samples the bombs (weapon category 3) of every gated AI strike group every 20 s and writes a row to the state file's `gates` list: `site` "ammo", `by` "bombs N to M", `t` the first look, `ran` the last change. N to N = never released.
+- **Fix (XO: they never dropped anything).** Each gated AI strike gate also carries the aim point (`bx`, `bz`: the target waypoint; not runway or stand-off strikes). After a gate resume, a striker that comes within 12 km of it (judgment call) with every bomb still on gets a `Bombing` task (weapon Auto, expend All, group attack) pushed by hand, once. Cause still unproven (the resume's `resetTask` may wipe the waypoint task); this makes the drop independent of it. The route is untouched, so the SAM avoidance still holds. NOT SEEN IN DCS: the ammo row `bombs N to M` shows the result.
+
+## v0.41.318, the debrief sees the parked jets die
+
+XO 2026-11-06 (Standoff Counter-Air run: "I saw the JSOWs fly but I can't tell what they hit"; "fox 3 medium"). From the run: Viper 5 fired 8 AGM-154As at t=1211 to 1222 and the logged positions match 7 different parked statics at Maykop to a few metres, but the debrief counted no loss: a destroyed static's death event carries a blank name, and the hook did not know the parked jets (they were left out of its enemy-air list on purpose).
+- **Fix.** `debrief.lua_hook` gets the parked jets' names (`parked`, from the manifest's parked enemy-air groups). Every 5 s from t=20 s the hook asks `StaticObject.getByName` for each: gone means dead, written to the `dead` table (and a `static_dead` entry in `deaths`) under its own name. `apply_debrief` already takes dead enemy-air names off the wing, so the loss now reaches the campaign. Blank names no longer enter the `dead` list.
+- **Checked:** compile; built counter-air missions list their parked jets in the hook; a faked state file with two parked jets dead takes two aircraft off the wing (8 to 6 at Gudauta) and reports them. Full smoke. **Not run in DCS:** it relies on `StaticObject.getByName` returning nothing once a static is destroyed, which I have not verified.
+- **Cost of a wrong guess:** if DCS keeps destroyed statics findable, nothing is counted (as before). If `getByName` misbehaves it runs inside `pcall`, so it cannot break the hook.
+
 ## v0.41.317, guided-bomb strikers are left alone; the AWACS watch includes the all-AI flight
 
 XO 2026-11-06 (three runs, the AI F-16 JDAM and CBU strikers never released; "we are working on quiet runs, not stand-off", "let the AI do what it did before", "fox 3 low"). Public sources: JDAM is released by the aircraft inside its own launch acceptable region ("up to approximately 15 miles", launch "from very low to very high altitude", GlobalSecurity); the CBU-103 is a CBU-87 with an INS/GPS wind-correction kit, no wings, medium to high altitude delivery (Wikipedia WCMD, GlobalSecurity WCMD). Nothing published says where the DCS AI releases.

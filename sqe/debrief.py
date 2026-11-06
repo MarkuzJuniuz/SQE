@@ -131,8 +131,13 @@ local function tracksJson()
   end
   return "{" .. table.concat(o, ",") .. "}"
 end
+local BOMBLOG = {}   -- v0.41.319: striker group -> { first = bombs at the first look, last = bombs now, t = when it last changed }; shown as an "ammo" row in the gate list
 local function gatesJson()
   local o = {}
+  for g, b in pairs(BOMBLOG) do
+    o[#o + 1] = string.format('{"site":"ammo","grp":"%s","t":%d,"ran":%d,"radars":%d,"abort":false,"cmd":false,"by":"bombs %d to %d","d0":null,"d1":null}',
+      esc(g), b.t0, b.t, b.first, b.first, b.last)
+  end
   for _, e in ipairs(gateLog) do
     o[#o + 1] = string.format('{"site":"%s","grp":"%s","t":%d,"ran":%d,"radars":%d,"abort":%s,"cmd":%s,"by":"%s","d0":%s,"d1":%s}',
       esc(e.site), esc(e.grp), e.t, e.ran, e.radars, tostring(e.abort), tostring(e.cmd), esc(e.by or ""), num(e.d0), num(e.d1))
@@ -500,7 +505,7 @@ function H:onEvent(e)
       end
     end
   elseif id == world.event.S_EVENT_DEAD or id == world.event.S_EVENT_CRASH or id == world.event.S_EVENT_PILOT_DEAD then
-    if n and not landed[n] then
+    if n and n ~= "" and not landed[n] then       -- v0.41.318: a destroyed static gives a blank name (the parked jets are watched by name below)
       if not dead[n] and #deaths < 200 then
         local lh, sm, now = LASTHIT[n], SAMPLE[n], timer.getTime()
         local evn = (id == world.event.S_EVENT_CRASH) and "crash" or ((id == world.event.S_EVENT_PILOT_DEAD) and "pilot_dead" or "dead")
@@ -896,6 +901,29 @@ if #RWYQ > 0 then
     return t + 5
   end, nil, timer.getTime() + 5)
 end
+-- v0.41.318 (XO 2026-11-06, the JSOW run hit the ramp and the debrief counted nothing): the jets parked on the target's ramp are static objects. Their death event carries a blank
+-- name, so they are watched by name instead: one that no longer exists is dead, and the debrief takes it off the wing like a shot-down flight.
+local PARKED = { __PARKED__ }
+if #PARKED > 0 then
+  timer.scheduleFunction(function(_, t)
+    for _, nm in ipairs(PARKED) do
+      if not dead[nm] then
+        local ok, o = pcall(function() return StaticObject.getByName(nm) end)
+        local gone = ok and (o == nil)
+        if ok and o ~= nil then
+          local ok2, ex = pcall(function() return o:isExist() end)
+          gone = ok2 and (ex == false)
+        end
+        if gone then
+          dead[nm] = true
+          if #deaths < 200 then deaths[#deaths + 1] = { n = nm, t = math.floor(timer.getTime()), ev = "static_dead", by = "", w = "" } end
+          dump()
+        end
+      end
+    end
+    return t + 5
+  end, nil, timer.getTime() + 20)
+end
 -- all packages complete: once the last TOT has passed and every AI package flight is landed, down or gone, AWACS says so, and repeats it
 -- every 5 minutes (you may have stepped away). It never ends the mission: an End Mission trigger would throw you out while still flying.
 local WATCH = { __WATCH__ }
@@ -1095,6 +1123,44 @@ local function breakOff(gs, why)
   end
   dump()
 end
+do   -- v0.41.319: XO's JDAM run (the strikers crossed the target and nothing dropped): log the bombs each AI striker carries, so a run says released or not
+  local seen = {}
+  timer.scheduleFunction(function(_, t)
+    for _, gt in ipairs(GATES) do
+      if gt.dead and not seen[gt.grp] then
+        seen[gt.grp] = gt
+      end
+    end
+    for gname, gt in pairs(seen) do
+      pcall(function()
+        local g = Group.getByName(gname)
+        if g then
+          local n = 0
+          for _, u in ipairs(g:getUnits() or {}) do
+            for _, a in ipairs(u:getAmmo() or {}) do
+              if (a.desc or {}).category == 3 then n = n + (a.count or 0) end
+            end
+          end
+          local b = BOMBLOG[gname]
+          local now = math.floor(timer.getTime())
+          if not b then if n > 0 then BOMBLOG[gname] = { first = n, last = n, t0 = now, t = now } end
+          elseif n ~= b.last then b.last = n; b.t = now end
+          -- v0.41.319 (XO's JDAM runs: the AI strikers crossed the target and never released): a gated AI striker that has come within 12 km of its aim point with
+          -- every bomb still on, and has been through a gate resume, gets the bombing task pushed once by hand (the resume's resetTask may have wiped the waypoint's)
+          b = BOMBLOG[gname]
+          if b and gt.ai and gt.bx and not b.pushed and n > 0 and n == b.first and gt.resumed then
+            local d = gdist(gname, { x = gt.bx, z = gt.bz })
+            if d and d <= 12000 then
+              b.pushed = now
+              g:getController():pushTask({ id = "Bombing", params = { point = { x = gt.bx, y = gt.bz }, weaponType = 9663676414, expend = "All", attackQtyLimit = false, groupAttack = true } })
+            end
+          end
+        end
+      end)
+    end
+    return t + 20
+  end, nil, timer.getTime() + 20)
+end
 local function resume(gs, how)
   gs.done = true
   gs.holding = false
@@ -1109,6 +1175,7 @@ local function resume(gs, how)
         e.cmd = pcall(function()
           local c = g:getController()
           c:resetTask()
+          gt.resumed = true
           c:setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = gt.from, goToWaypointIndex = gt.from } })
         end)
       end
@@ -1471,7 +1538,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
              watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
              rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True,
-             tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None) -> str:
+             tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None, parked: list | None = None) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
@@ -1483,7 +1550,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
                    f'units={lst(x["units"])}, trk={lst(x["trk"])}, srch={lst(x["srch"])}}}' for x in (sites or []))
     ru = ", ".join(f'{{x={r["x"]:.1f}, z={r["z"]:.1f}, n={int(r["n"])}, r={float(r["r"]):.0f}, p={int(r["p"])}, dn={float(r["dn"]):.2f}, pw={int(r["pw"])}, s={float(r["s"]):.2f}}}'
                    for r in (ruins or []))
-    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}, acap={int(x.get("acap") or 0)}{_umbrella_lua(x)}{(", tx=%.1f, tz=%.1f" % (float(x["tx"]), float(x["tz"]))) if x.get("tx") is not None else ""}}}'
+    gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}, acap={int(x.get("acap") or 0)}{_umbrella_lua(x)}{(", tx=%.1f, tz=%.1f" % (float(x["tx"]), float(x["tz"]))) if x.get("tx") is not None else ""}{(", bx=%.1f, bz=%.1f" % (float(x["bx"]), float(x["bz"]))) if x.get("bx") is not None else ""}}}'
                    for x in (gates or []))
     return (LUA_HOOK.replace("__RWYS__", ", ".join("{id=%s, x=%.1f, z=%.1f, h={%s}}" % (_lq(r["id"]), r["x"], r["z"], ", ".join(str(int(h_)) for h_ in r["h"])) for r in (cfg or {}).get("rwys", []))).replace("__RWYLEN__", f"{RUNWAY_HALF_LEN_M:.0f}").replace("__RWYWID__", f"{RUNWAY_HALF_WIDTH_M:.0f}").replace("__SCRUB__", sc).replace("__SCRUBFRAC__", repr(float(SCRUB_LOSS_FRAC))).replace("__SCRUBGRACE__", f"{float(SCRUB_STRIKE_GRACE_S):.0f}").replace("__SCRUBLEAD__", f"{float(SCRUB_COVER_LEAD_S):.0f}")
             .replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
@@ -1493,7 +1560,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__TUNEF__", ", ".join(str(int(f)) for f in (tune_flags or []))).replace("__TUNEMHZ__", f"{float(tune_mhz):.3f}").replace("__AWUNIT__", _lua_str(awacs_unit))
             .replace("__DMGL__", ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (dmg or {}).items())).replace("__DMGON__", "true" if dmg_on else "false").replace("__JAMS__", ", ".join(f"[{_lq(k)}]={int(v)}" for k, v in (jams or {}).items()))
             .replace("__JAMW__", ", ".join(f"[{_lq(k)}]={{{float(a):.0f}, {float(b):.0f}}}" for k, (a, b) in (jamw or {}).items()))
-            .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)).replace("__SPLASH__", "true" if splash else "false")
+            .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__PARKED__", ", ".join(_lq(n) for n in (parked or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)).replace("__SPLASH__", "true" if splash else "false")
             .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}' + (f', t={int(q["t"])}' if q.get("t") is not None else '') + '}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy))
             .replace("__COVER__", ", ".join(f'{{g={_lq(c["g"])}, n={int(c["n"])}, bf={int(c["bf"])}, rf={int(c["rf"])}, u={float(c["u"]):.0f}}}' for c in (cover or [])))
             .replace("__ALERTS__", ", ".join(f'{{g={_lq(a["g"])}, f={int(a["f"])}, b={_lq(a["b"])}, ty={_lq(a["ty"])}}}' for a in (alerts or [])))
@@ -1523,14 +1590,14 @@ def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despaw
                  enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
                  watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
                  rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True,
-                 tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None) -> None:
+                 tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None, parked: list | None = None) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover, ecm_player, ecm_msg, tune_flags, tune_mhz, awacs_unit, dmg, dmg_on, scrub))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover, ecm_player, ecm_msg, tune_flags, tune_mhz, awacs_unit, dmg, dmg_on, scrub, parked))))
     mission.triggerrules.triggers.append(t)
 
 
