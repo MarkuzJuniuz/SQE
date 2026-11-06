@@ -68,6 +68,7 @@ COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this c
 SLAM_AIMS = 2                # v0.41.309: aim points (buildings) of a SLAM-ER launch, a missile each per jet's two (the Standoff Strike kit carries two AGM-84H a jet)
 SLAM_ATTACK_S = 90            # v0.41.309: the SLAM-ER launch window after the launch point's ETA, then return fire (judgment call; XO's run fired its four in 20 s; the JSOW window is 120)
 LATE_ATTACK_S = 600           # v0.41.16: an AI strike flight drops only within this of its TOT
+RAMP_CLUSTER_M = 250          # v0.41.328: the parking slots this close to the ramp middle give the pass its heading (judgment call: the parked jets stood in about 300 m)
 RAMP_AXIS_MIN_M = 150          # v0.41.326: a ramp line shorter than this is bombed from any heading (judgment call)
 CV_PATTERN_NM = 6             # v0.41.72: an AI carrier flight within this of the boat...
 CV_PATTERN_S = 90             # ...for this long (about two laps of the pattern) is recovered
@@ -2389,8 +2390,18 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 cx_, cy_ = sum(q[0] for q in pts_) / len(pts_), sum(q[1] for q in pts_) / len(pts_)
                 span_ = max((dist(p[0], p[1], q[0], q[1]) for p in pts_ for q in pts_), default=0.0)
             else:
-                cx_, cy_ = w.aim or (w.x, w.y)
-                span_ = 0.0
+                # v0.41.328 (XO's run: the strike flights are built BEFORE the parked jets spawn, so this list is empty here and the aim fell back to the airfield point, 1.2 km short
+                # of the jets): the middle of the field's real parking slots, and the line of the slots within `RAMP_CLUSTER_M` of it for the heading
+                ra_ = self.state.assets.get(o_.target_id)
+                r_ = self._ramp_xy(ra_) if ra_ is not None else None
+                if r_ is not None:
+                    cx_, cy_ = r_
+                    ap2_ = self.t.airports.get(ra_.airport) if getattr(ra_, "airport", None) else None
+                    pts_ = [(q.position.x, q.position.y) for q in (ap2_.parking_slots if ap2_ else []) if q.airplanes and dist(q.position.x, q.position.y, cx_, cy_) <= RAMP_CLUSTER_M]
+                    span_ = max((dist(p[0], p[1], q[0], q[1]) for p in pts_ for q in pts_), default=0.0)
+                else:
+                    cx_, cy_ = w.aim or (w.x, w.y)
+                    span_ = 0.0
             # v0.41.323 (XO's L3 run: the carpet task's aim point was the ramp, but the CBU jets looped 6 to 20 km off it and dropped on the depot guards): the plain point
             # bomb task at the middle of the ramp, the same task that put the GBU-31s on their aim point. The cluster bombs' bomblets cover the ramp. `span_` is unused now.
             # v0.41.326 (XO 2026-11-06: cover more of the ramp): the pass runs ALONG the line of parked jets, so one run lays the bombs down its length. DCS takes one aim point and

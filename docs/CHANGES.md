@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.328, the ramp strike aims at the real ramp (the aim fell back to the airfield point)
+
+XO's v0.41.327 run: the F-16s released CBU-103s but "dropped on the runway". The .miz showed the Bombing task 1.2 km short of the parked jets. Cause: the strike flights are built before `_spawn_parked_jets`, so `_ramp_pts` is empty when `_bomb_task` runs; the aim fell back to the airfield point and the v0.41.326 attack heading was never computed (`directionEnabled=false`). Now, with no jets yet, the aim is the middle of the field's airplane parking slots (`_ramp_xy`, which exists at build time) and the heading comes from the slots within `RAMP_CLUSTER_M` 250 m of it (judgment call), longer than `RAMP_AXIS_MIN_M` 150 m. The slot middle is an estimate of where the jets stand, not their exact spots. The Standoff Counter-Air JSOWs already used `_ramp_xy` as their fallback and are unchanged. Open Fire did not stop the release (both jets dropped). Not seen in DCS.
+
 ## v0.41.327, the Standoff Counter-Air JSOWs use Open Fire too
 
 XO 2026-11-06 ("make that open fire too", "fox 3 low"). `_jsow_ramp_tasks` (the JSOW-A aim points on the parked jets) sets ROE Open Fire (designated targets only) instead of weapons free; the timed return fire after the window is unchanged. Same reasoning and same risk as v0.41.325: if DCS does not treat the Bombing points as designated, nothing is released; revert that one ROE line. Not seen in DCS.
