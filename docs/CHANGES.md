@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## Rules, 2026-11-06 (CLAUDE.md only, no version change)
+
+XO 2026-11-06: the smoke-test rules are replaced. Crew Chief edits but does not run the smoke test; XO runs it before a release. The smoke test is rewritten LIGHT after the reset (core functions only: loads / saves / campaigns / compatibility, UI basics, missions generate, required flights in a package, `.miz` structure loads in DCS), and an assert that forces a smoke-test change instead of an SQE fix is invalid and removed. Docs-only changes get no compile check. Added the counter-air and bombing learnings and the counter-air fallback.
+
 ## v0.41.332, the hook logs where every bomb ended
 
 XO 2026-11-06 ("log the impacts then", "fox 3 low"): the CBU strike on the ramp left no record of where the bombs landed, so a miss and a no-kill could not be told apart. The Lua hook now follows every bomb (category BOMB) to its last position plus a quarter second of its velocity and writes `imp` in `SQE_state.json`: `{t, w (type), by (shooter), x, y (height), z, g (ground height)}`, at most 80. A cluster bomb vanishes where its dispenser opens, so `y - g` is that opening height; the bomblets land beyond it and are not followed. Logging only, the debrief does not read it. Checked in the stub-DCS hook simulator. XO's note: if the ramp strike still does not work, the counter-air mission is dropped at release and the runway-crater mission is tested instead.
