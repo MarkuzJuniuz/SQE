@@ -131,9 +131,7 @@ class StrikeTasks:
             gate = {"t": tot_s - DEAD_GATE_BEFORE_TGT_S, "site": gsite_, "grp": g.name, "also": also_, "gm": gm_ * 1000,
                     "ux": um_.x if um_ else None, "uz": um_.y if um_ else None, "um": SA10_GATE_KM * 1000 if um_ else None,
                     "from": n0_ + max(0, ti_ - 1) + 1, "to": to_, "ai": ai_, "dead": f.role in (Role.STRIKE, Role.CAS), "you": bool(f.is_player), "pkg": package.id,
-                    "acap": AIR_HOLD_CAS_S if f.role == Role.CAS else AIR_HOLD_STRIKE_S, "tx": tga_.x if tga_ is not None else None, "tz": tga_.y if tga_ is not None else None,
-                    "bx": tw_.x if (f.role == Role.STRIKE and ai_ and tw_ is not None and obj_.aim not in ("RUNWAY", "STANDOFF")) else None,
-                    "bz": tw_.y if (f.role == Role.STRIKE and ai_ and tw_ is not None and obj_.aim not in ("RUNWAY", "STANDOFF")) else None}      # v0.41.319: the aim point for the hook's by-hand bomb push
+                    "acap": AIR_HOLD_CAS_S if f.role == Role.CAS else AIR_HOLD_STRIKE_S, "tx": tga_.x if tga_ is not None else None, "tz": tga_.y if tga_ is not None else None}
         return gate
 
     def _cas_tasks(self, wp, w, armor, tot_s):

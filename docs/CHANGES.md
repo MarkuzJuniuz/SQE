@@ -1,15 +1,8 @@
 # CHANGES.md
 
-## v0.41.320, the by-hand bomb push also frees the ROE
+## v0.41.321, the bomb-push and ammo-log attempts are taken out
 
-XO 2026-11-06 (v0.41.319 run, Viper 5: GBU-31 x8, over the target at 2 km and 6,100 m, "bombs 8 to 8", nothing dropped). Read: the hook had the aim point and the jet came within 12 km with every bomb on, so the push should have fired, and still nothing fell. Strikers start on ROE return fire and the route frees them (weapons free) at the attack point (`mission_builder` ~2124 / 2442); a gate-resumed flight may never get that, and a pushed bomb task does nothing under return fire. Not proven (the push time was not logged).
-- **Changed.** The by-hand push first sets ROE weapons free (`setOption(0, 0)`). The `ammo` row now reads `bombs N to M, pushed <time or never>`, so the next run says whether the push fired.
-
-## v0.41.319, the hook logs each AI striker's bombs
-
-XO 2026-11-06 (JDAM run, Viper 9 crossed the target and nothing dropped; "fox 3 low"). Suspect, not proven: the gate resume (`resetTask` then `SwitchWaypoint`) wipes the target waypoint's bomb task. The resume is NOT changed: `resetTask` is what clears the hold orbit (v0.39.21 run), so removing it blind could leave flights circling.
-- **Added.** The Lua hook samples the bombs (weapon category 3) of every gated AI strike group every 20 s and writes a row to the state file's `gates` list: `site` "ammo", `by` "bombs N to M", `t` the first look, `ran` the last change. N to N = never released.
-- **Fix (XO: they never dropped anything).** Each gated AI strike gate also carries the aim point (`bx`, `bz`: the target waypoint; not runway or stand-off strikes). After a gate resume, a striker that comes within 12 km of it (judgment call) with every bomb still on gets a `Bombing` task (weapon Auto, expend All, group attack) pushed by hand, once. Cause still unproven (the resume's `resetTask` may wipe the waypoint task); this makes the drop independent of it. The route is untouched, so the SAM avoidance still holds. NOT SEEN IN DCS: the ammo row `bombs N to M` shows the result.
+XO 2026-11-06 ("take off all the trash that you added that didn't work"). v0.41.319 (the hook pushing the Bombing task by hand near the target, the `ammo` row) and v0.41.320 (weapons free before the push) are reverted whole: Viper 5 passed 2 km from the target and dropped nothing with them in. The JDAM no-release is still OPEN, cause unknown (queue item 18). Kept: v0.41.318 (parked jets in the debrief), v0.41.317 (no JDAM release point), v0.41.316 (counter-air carpet bomb, not yet seen to work or fail).
 
 ## v0.41.318, the debrief sees the parked jets die
 
