@@ -1,5 +1,10 @@
 # CHANGES.md
 
+## v0.41.323, the counter-air strikers bomb the ramp centre with the plain bomb task
+
+XO 2026-11-06 (L3 run, v0.41.322: "they hit the ammo dump instead of the ramp"; "fox 3 low"). Read: the carpet task (v0.41.316) was on the IP with the right aim point (the ramp, 800 m long), but the CBU-103 jets never crossed the ramp: they looped 6 to 20 km west and north of the field for about 3 minutes and dropped on the Shilka guards of `depot_nalchik`, about 13 km from the aim point (last release 1619 s, hits 1623). The plain Bombing task on the IP released GBU-31s on their aim point in the run before, so the counter-air strike now uses that task at the ramp centre (the parked jets' centroid). Why the AI ignored the carpet task is not known; no public source was found on how the AI places it. NOT SEEN IN DCS.
+- **Changed.** `_bomb_task`: the counter-air branch returns `task.Bombing(ramp centroid, weapon Auto, expend All, group attack)` instead of `CarpetBombing`. The smoke bomb-task count stays 3.
+
 ## v0.41.322, the AI striker's bomb task moves from the target to the IP
 
 XO 2026-11-06 ("why are the JDAMers not dropping", "fox 3 low"). Read from his runs: the F-16s with GBU-31 / CBU-103 flew the whole route and crossed the target 2 km off at 6,100 m and about 530 kt, with the state's bomb count unchanged. A waypoint's task only starts when the jet reaches that waypoint, and the TGT waypoint IS the target, so the bomb task began with no run-in left; a JDAM needs to be released miles short. Sources (forum threads, not an ED manual): forum.dcs.world topic 241006 (working setup: bombing task on the IP, 25 to 30 nm out, then a point past the target) and 369730 (ED: AI that "turned around without dropping" fixed by moving the task and giving more room). The same read explains the 5 to 8 nm release point of v0.41.299 / .312 (too close).
