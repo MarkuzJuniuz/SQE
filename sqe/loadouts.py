@@ -81,6 +81,13 @@ class LoadoutLibrary:
         c = self.custom.get(key, {})
         if name in c:
             return {int(p): {"CLSID": v} for p, v in c[name].items()}
+        if name == "CBU" and "STRIKE" in c:                # v0.41.313 (XO 2026-11-06): the CBU kit starts from his own captured STRIKE loadout, only the bomb pylons change
+            out = {int(p): {"CLSID": v} for p, v in c["STRIKE"].items()}
+            tc, ts = _D.get(key, {}).get("CBU", {}), _D.get(key, {}).get("STRIKE", {})
+            for pylon, want in tc.items():
+                if ts.get(pylon) != want and want.startswith("="):
+                    out[pylon] = {"CLSID": want[1:]}
+            return out
         table = _D.get(key, {}).get(name) or _D.get(key, {}).get("CAP") or next(iter(_D.get(key, {}).values()), {})
         cls, out = AIRCRAFT[key].dcs_type, {}
         for pylon, want in table.items():
