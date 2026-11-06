@@ -1,5 +1,11 @@
 # CHANGES.md
 
+## v0.41.316, counter-air strikers carpet-bomb the ramp
+
+XO 2026-11-06 (CBU run: the AI F-16s crossed the target at 20,000 ft with their CBU-103s and released nothing, one was shot down by the airfield's scramble, the package scrubbed; "make them area bomb", "fox 3 low"). Cluster bombs are not aimed at single things, and the CBU-103 is a wind-corrected dispenser that the AI may treat like a JDAM (the release behaviour in DCS is unverified).
+- **Change.** `mission_builder._bomb_task`: a counter-air strike (not the sweep, not the stand-off one) gets DCS's CarpetBombing over the middle of the parked jets (the centroid of the ramp points), expend all, group attack, carpet length = the ramp's span + 200 m clamped to 800 to 2,500 m (judgment call). Before: a Bombing task on a single point.
+- **If it still does not drop:** the next step is the JDAM-style release point and side break (`routes.py`, v0.41.312) for the CBU kit, about 3 nm (judgment call). Cost of a wrong guess here: the Vipers fly the same route and still do not release.
+
 ## v0.41.315, cover stays while the strikers sit at a gate
 
 XO 2026-11-06 (F-16C Strike on a depot near Beslan: "they're so close already yet they went home"; "fox 3 medium"). From the run: the strikers (Viper 6) held at the fighters-clear gate from t=1778 until the air was clear at t=2260 and released near t=2600; the cover's station hold ended at a fixed 2079 (TOT 1853 plus about 4 min), so your cover flight went home with the strikers still 80 km out.
