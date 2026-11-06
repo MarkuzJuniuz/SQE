@@ -284,6 +284,11 @@ class MissionsPage(QWidget):
             self.bl.addStretch(1)
             return
         self.note.show()
+        keep = None                                         # v0.41.311: remember the pick, so FLY's refresh does not jump to row 0 behind the waiting window
+        cur = self.lst.currentItem() if getattr(self, "_sel_day", None) == st.day else None
+        if cur is not None:
+            keep = cur.data(Qt.UserRole)
+        self._sel_day = st.day
         self._loading = True
         self.flt.setCurrentIndex(0 if sess.settings.list_filter != "all" else 1)
         self._loading = False
@@ -308,7 +313,8 @@ class MissionsPage(QWidget):
         self.resume.setVisible(bool(st.pending))
         self.skip.setEnabled(st.status == "ACTIVE")
         if self.pkgs and any(sess.flyable(p) for p in self.pkgs):
-            self.lst.setCurrentRow(0)
+            row = next((i for i, p in enumerate(self.pkgs) if p.number == keep), 0) if keep is not None else 0
+            self.lst.setCurrentRow(row)
         else:
             self._clear_body()
             self._idle_note(sess)

@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.311, the Missions list keeps your pick when you press FLY
+
+XO 2026-11-05 ("fox 3 low"): pressing FLY rebuilt the list and jumped to the first package behind the waiting window. `MissionsPage.refresh` now remembers the selected package number and reselects it (same day only; a new day, or a package that is gone, starts on the first row as before). Not seen in the real UI; the smoke test cannot see layout, compile check only.
+
 ## Housekeeping, the 72 tracked `.pyc` files are untracked (no version bump)
 
 XO 2026-11-05 ("you can do that now and I'll approve"). `git rm --cached` on every tracked `.pyc` (first tracked in d55b790, v0.41.294, by a broad `git add`). The files stay on disk. No `.gitignore` is added (XO keeps his own); XO's local ignore will keep them out. No code change.
