@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.324, the parked jets are real, untasked aircraft (v0.41.318's static watch is removed)
+
+XO 2026-11-06 ("clean the code and put untasked real jets", "fox 3 medium"). The ramp strike's result showed 0 parked jets counted (the debrief had only the 4 scrambled jets), and a destroyed static gives the hook no name to count. Whether the retest with a wait would have worked was not known, so the parked jets are real aircraft now.
+- **Removed.** `debrief.py` goes back to its v0.41.317 text: no `PARKED` poll, no `parked` hook argument, no blank-name guard.
+- **Changed.** `_spawn_parked_jets`: each parked jet is a one-unit plane group (`flight_group_from_airport`, cold start, its own free parking slot, `uncontrolled = True`), named `PARK <field>|<n>`. A real jet is a full unit in the budget (was a quarter for a static), so `PARKED_MAX` 12 to 8 (judgment call, for the VR unit count). The manifest group is still marked `parked`; the hook's red-air list now includes them, so kills are attributed like any red jet and `apply_debrief` takes the dead ones off the wing by name. Smoke check_123 reads plane groups and the `uncontrolled` flag.
+- **Not checked in DCS.** That a cold uncontrolled jet stays put and that SAMs and fighters ignore it; that the bombs kill it and the hook reports the death (the whole point). The carpet or point bomb task is unchanged (v0.41.323).
+
 ## v0.41.323, the counter-air strikers bomb the ramp centre with the plain bomb task
 
 XO 2026-11-06 (L3 run, v0.41.322: "they hit the ammo dump instead of the ramp"; "fox 3 low"). Read: the carpet task (v0.41.316) was on the IP with the right aim point (the ramp, 800 m long), but the CBU-103 jets never crossed the ramp: they looped 6 to 20 km west and north of the field for about 3 minutes and dropped on the Shilka guards of `depot_nalchik`, about 13 km from the aim point (last release 1619 s, hits 1623). The plain Bombing task on the IP released GBU-31s on their aim point in the run before, so the counter-air strike now uses that task at the ramp centre (the parked jets' centroid). Why the AI ignored the carpet task is not known; no public source was found on how the AI places it. NOT SEEN IN DCS.

@@ -6194,7 +6194,7 @@ def check_121_sunk_carrier(c):
 
 
 def check_123_parked_jets(c):
-    """v0.41.297 (XO 2026-11-05): a counter-air strike finds the target field's jets parked on the ramp as static aircraft: as many as the wing has serviceable minus what the mission
+    """v0.41.297 (XO 2026-11-05): a counter-air strike finds the target field's jets parked on the ramp as real uncontrolled aircraft: as many as the wing has serviceable minus what the mission
     launches from that field (no jet both flies and stands there), on distinct free parking spots, at most PARKED_MAX, an `enemy_air` group of the wing marked `parked`; the strikers'
     target point is on the ramp (a parking spot), not the garrison at the field's reference point."""
     import zipfile as _zf
@@ -6225,10 +6225,11 @@ def check_123_parked_jets(c):
     pos = []
     for _, cc in m_.coalition.items():
         for _, cty in cc.country.items():
-            if "static" in cty:
-                for _, grp in cty.static.group.items():
+            if "plane" in cty:                                  # v0.41.324: real uncontrolled aircraft, not statics
+                for _, grp in cty.plane.group.items():
                     for _, u in grp.units.items():
                         if u.name.startswith("PARK "):
+                            assert grp.uncontrolled, "a parked jet is uncontrolled"
                             pos.append((round(u.x), round(u.y)))
     assert len(pos) == n_p and len(set(pos)) == n_p, "every parked jet has its own parking spot"
     ap_ = ses.builder_airports(a_) if hasattr(ses, "builder_airports") else None
