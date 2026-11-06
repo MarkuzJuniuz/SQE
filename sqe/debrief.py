@@ -135,8 +135,8 @@ local BOMBLOG = {}   -- v0.41.319: striker group -> { first = bombs at the first
 local function gatesJson()
   local o = {}
   for g, b in pairs(BOMBLOG) do
-    o[#o + 1] = string.format('{"site":"ammo","grp":"%s","t":%d,"ran":%d,"radars":%d,"abort":false,"cmd":false,"by":"bombs %d to %d","d0":null,"d1":null}',
-      esc(g), b.t0, b.t, b.first, b.first, b.last)
+    o[#o + 1] = string.format('{"site":"ammo","grp":"%s","t":%d,"ran":%d,"radars":%d,"abort":false,"cmd":false,"by":"bombs %d to %d, pushed %s","d0":null,"d1":null}',
+      esc(g), b.t0, b.t, b.first, b.first, b.last, tostring(b.pushed or "never"))
   end
   for _, e in ipairs(gateLog) do
     o[#o + 1] = string.format('{"site":"%s","grp":"%s","t":%d,"ran":%d,"radars":%d,"abort":%s,"cmd":%s,"by":"%s","d0":%s,"d1":%s}',
@@ -1152,6 +1152,7 @@ do   -- v0.41.319: XO's JDAM run (the strikers crossed the target and nothing dr
             local d = gdist(gname, { x = gt.bx, z = gt.bz })
             if d and d <= 12000 then
               b.pushed = now
+              g:getController():setOption(0, 0)                           -- ROE weapons free (the route starts a striker on return fire and frees it at the attack point; a resumed flight may have missed that)
               g:getController():pushTask({ id = "Bombing", params = { point = { x = gt.bx, y = gt.bz }, weaponType = 9663676414, expend = "All", attackQtyLimit = false, groupAttack = true } })
             end
           end

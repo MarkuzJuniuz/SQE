@@ -1,5 +1,10 @@
 # CHANGES.md
 
+## v0.41.320, the by-hand bomb push also frees the ROE
+
+XO 2026-11-06 (v0.41.319 run, Viper 5: GBU-31 x8, over the target at 2 km and 6,100 m, "bombs 8 to 8", nothing dropped). Read: the hook had the aim point and the jet came within 12 km with every bomb on, so the push should have fired, and still nothing fell. Strikers start on ROE return fire and the route frees them (weapons free) at the attack point (`mission_builder` ~2124 / 2442); a gate-resumed flight may never get that, and a pushed bomb task does nothing under return fire. Not proven (the push time was not logged).
+- **Changed.** The by-hand push first sets ROE weapons free (`setOption(0, 0)`). The `ammo` row now reads `bombs N to M, pushed <time or never>`, so the next run says whether the push fired.
+
 ## v0.41.319, the hook logs each AI striker's bombs
 
 XO 2026-11-06 (JDAM run, Viper 9 crossed the target and nothing dropped; "fox 3 low"). Suspect, not proven: the gate resume (`resetTask` then `SwitchWaypoint`) wipes the target waypoint's bomb task. The resume is NOT changed: `resetTask` is what clears the hold orbit (v0.39.21 run), so removing it blind could leave flights circling.
