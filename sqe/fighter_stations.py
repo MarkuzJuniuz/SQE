@@ -15,6 +15,7 @@ ESCORT_AFTER_EGR_S = 120      # v0.41.40: an escort stays until the last striker
 ESCORT_AFTER_TOT_S = 180      # an escort (ESCORT role) holds its station until this long after the TOT (the last ground-attack flight off target)
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
 HOLD_AREA_KM = 60             # v0.41.10: packages whose targets are this close share their TARCAP / escort holds (the sweep area)
+ENGAGE_LEAD_S = 240           # v0.41.314: a sweep / escort starts hunting this long before it reaches its station, not from takeoff (judgment call, ~35 nm at cruise; XO's run: engage live from the spawn point burned the fuel in afterburner)
 HOLD_EXTEND_MAX_S = 1800      # ...extended at most this much past their own package
 LRA_BACK_NM = 8               # v0.41.139 (XO 2026-10-27): in a package with a short-range and a long-range fighter flight (TARCAP + escort), the long-range one stands this far behind the short-range one (away from the target)...
 LRA_SIDE_NM = 6               # ...and this far to one side (judgment call: the sweep circles are 25 and 15 nm, so 10 nm between the two sets of jets; the lateral gap is for friendly-fire safety with active missiles in the air, DCS behaviour unverified)
