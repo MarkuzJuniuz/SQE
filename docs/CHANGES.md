@@ -1,10 +1,14 @@
 # CHANGES.md
 
-## v0.41.319, the hook logs each AI striker's bombs
+## v0.41.322, the AI striker's bomb task moves from the target to the IP
 
-XO 2026-11-06 (JDAM run, Viper 9 crossed the target and nothing dropped; "fox 3 low"). Suspect, not proven: the gate resume (`resetTask` then `SwitchWaypoint`) wipes the target waypoint's bomb task. The resume is NOT changed: `resetTask` is what clears the hold orbit (v0.39.21 run), so removing it blind could leave flights circling.
-- **Added.** The Lua hook samples the bombs (weapon category 3) of every gated AI strike group every 20 s and writes a row to the state file's `gates` list: `site` "ammo", `by` "bombs N to M", `t` the first look, `ran` the last change. N to N = never released.
-- **Fix (XO: they never dropped anything).** Each gated AI strike gate also carries the aim point (`bx`, `bz`: the target waypoint; not runway or stand-off strikes). After a gate resume, a striker that comes within 12 km of it (judgment call) with every bomb still on gets a `Bombing` task (weapon Auto, expend All, group attack) pushed by hand, once. Cause still unproven (the resume's `resetTask` may wipe the waypoint task); this makes the drop independent of it. The route is untouched, so the SAM avoidance still holds. NOT SEEN IN DCS: the ammo row `bombs N to M` shows the result.
+XO 2026-11-06 ("why are the JDAMers not dropping", "fox 3 low"). Read from his runs: the F-16s with GBU-31 / CBU-103 flew the whole route and crossed the target 2 km off at 6,100 m and about 530 kt, with the state's bomb count unchanged. A waypoint's task only starts when the jet reaches that waypoint, and the TGT waypoint IS the target, so the bomb task began with no run-in left; a JDAM needs to be released miles short. Sources (forum threads, not an ED manual): forum.dcs.world topic 241006 (working setup: bombing task on the IP, 25 to 30 nm out, then a point past the target) and 369730 (ED: AI that "turned around without dropping" fixed by moving the task and giving more room). The same read explains the 5 to 8 nm release point of v0.41.299 / .312 (too close).
+- **Changed.** `_attach_waypoints`: for an AI STRIKE flight (not runway, not stand-off, not JSOW kit) the bomb task (plain Bombing, or the counter-air ramp carpet task) and weapons free sit on the IP (or the LOW point's successor, i.e. the point just before TGT) with the same stop time (TOT + `LATE_ATTACK_S`); TGT keeps weapons free and the route, so the SAM avoidance is unchanged. Player flights, JSOW, SLAM, runway strikes unchanged.
+- **Judgment call / not checked.** The IP is about 25 nm from the target in the missions I read (matches the source). Whether DCS's AI now releases is NOT SEEN IN DCS. Probe: an AI F-14BU strike has the Bombing task on the IP and none on TGT; compile and the gate check pass.
+
+## v0.41.321, the bomb-push and ammo-log attempts are taken out
+
+XO 2026-11-06 ("take off all the trash that you added that didn't work"). v0.41.319 (the hook pushing the Bombing task by hand near the target, the `ammo` row) and v0.41.320 (weapons free before the push) are reverted whole: Viper 5 passed 2 km from the target and dropped nothing with them in. The JDAM no-release is still OPEN, cause unknown (queue item 18). Kept: v0.41.318 (parked jets in the debrief), v0.41.317 (no JDAM release point), v0.41.316 (counter-air carpet bomb, not yet seen to work or fail).
 
 ## v0.41.318, the debrief sees the parked jets die
 

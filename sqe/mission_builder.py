@@ -2418,6 +2418,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """Add each route point to the group with its tasks: ETAs, ROE, ECM, fuel, orbits, bombs, JSOW, CAS, SEAD attacks."""
         o = self.o
         pt = self._pt
+        # v0.41.322 (XO 2026-11-06: the AI F-16s with GBU-31 / CBU-103 crossed the target at 20,000 ft and never released): a waypoint's task only starts when the jet
+        # reaches that waypoint, and the TGT waypoint IS the target, so the bomb task started with no run-in left. DCS forum threads on AI bombing runs (forum.dcs.world
+        # topic 241006, 369730: "task on the IP, 25 to 30 nm out") put it on the approach point. So an AI striker's bomb task sits on the IP, aimed at the target.
+        ip_tgt_ = None
+        if ai_a2g and f.role == Role.STRIKE and not f.tag and package.objective.aim not in ("RUNWAY", "STANDOFF"):
+            ws_ = list(wps[first:])
+            tg_i = next((k for k, w_ in enumerate(ws_) if w_.name == "TGT" and w_.action == "BOMB"), None)
+            if tg_i is not None and tg_i >= 1 and ws_[tg_i - 1].name in ("IP", "LOW") and ws_[tg_i].eta_s is not None:
+                ip_tgt_ = ws_[tg_i]
         for w in wps[first:]:
             wp = g.add_waypoint(pt(w.x, w.y), w.alt_ft * FT, w.speed_kts * KPH, w.name)
             if w.rad:
@@ -2440,6 +2449,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     wp.tasks.append(task.OptRestrictAirToAirAttack(False))                       # self-defence only: return fire, at whoever shoots
             if ai_a2g and not ai_sead and w.action in ("BOMB", "CAS"):
                 wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))                      # the ground target; aircraft stay off limits (restricted)
+            if ip_tgt_ is not None and w.name == "IP":
+                wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))                      # v0.41.322: the attack starts here, on the way in
+                bip_ = task.ControlledTask(self._bomb_task(package, ip_tgt_))
+                bip_.stop_after_time(int(ip_tgt_.eta_s + LATE_ATTACK_S)); wp.tasks.append(bip_)
             if run_t0 is not None:
                 if w is wps[first]:
                     wp.tasks.append(task.OptECMUsing(task.OptECMUsing.Values.NeverUse))          # jammers off until the attack leg
@@ -2483,7 +2496,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 # v0.41.14 run: the lead, alone after its wingmen flamed out, bombed 30 min late and met a live SA-6)
                 if w.name == "SLAM":
                     wp.tasks += self._bomb_tasks(package, w)
-                else:
+                elif w is not ip_tgt_:                                                   # v0.41.322: that task is on the IP
                     bct_ = task.ControlledTask(self._bomb_task(package, w))
                     bct_.stop_after_time(int(w.eta_s + LATE_ATTACK_S)); wp.tasks.append(bct_)
             elif w.action == "JSOW":
