@@ -11,7 +11,7 @@ from .difficulty import Difficulty
 from .models import SEAD_AIMS, Objective, ObjectiveType, AssetKind, Role
 from .packages import Package
 from .state import CampaignState
-from .loadouts import ENEMY_FIGHTERS, SLAM_PER_JET
+from .loadouts import ENEMY_FIGHTERS, JSOW_PER_JET, SLAM_PER_JET
 from . import threat
 
 JET_CAS_FACTOR = 0.7       # v0.41.188: an AI-flown F-16C / F/A-18C CAS sortie counts 0.7 of an A-10C one (judgment call: Mavericks only, no gun or CBU, one pass; no public source). A player's own sortie is scored from the debrief.
@@ -224,8 +224,12 @@ class ObjectivePlanner:
                 w = state.enemy_air_at(a.id)
                 if w and w.available > 0:
                     pr = a.value * 1.2 * (w.available / max(1, w.authorized))
-                    cand.append((pr, Objective("", ObjectiveType.COUNTER_AIR, a.id, pr, f"Counter-air at {a.name}: strike the jets on the ramp ({w.available} aircraft at the field)"),
-                                 self._blockers(state, a) + covering_sams(state, a), locked))
+                    o_ca = Objective("", ObjectiveType.COUNTER_AIR, a.id, pr, f"Counter-air at {a.name}: strike the jets on the ramp ({w.available} aircraft at the field)")
+                    if (STANDOFF_MIN_DEF_FLIGHTS > 0 and any(q.aircraft in JSOW_PER_JET and q.available >= 2 for q in state.squadrons.values())
+                            and threat.defender_flights(threat.expected_defenders(state, a.x, a.y, self.d.iads if self.d else 0.5)) >= STANDOFF_MIN_DEF_FLIGHTS):
+                        o_ca.aim = "STANDOFF"                           # v0.41.313 (XO 2026-11-06): a field with air cover is hit from far out with JSOW-As (Viper or Hornet), not a run over the ramp
+                        o_ca.description = f"Standoff Counter-air at {a.name}: JSOW-As on the ramp ({w.available} aircraft at the field)"
+                    cand.append((pr, o_ca, self._blockers(state, a) + covering_sams(state, a), locked))
                 if not runways.is_closed(state, a.id):         # v0.41.254: crater the runway (a STRIKE with aim RUNWAY); 3 bomb hits close the field for 2-5 days
                     prr = a.value * 0.9 * (w.available / max(1, w.authorized))
                     o_ = Objective("", ObjectiveType.STRIKE, a.id, prr, f"Crater the runway at {a.name} ({w.available} aircraft)")
@@ -436,7 +440,7 @@ class WarSimulator:
             if has_sead:
                 sam *= 0.5
         air = _air_cover(state, self.d.iads)
-        if obj.type == ObjectiveType.STRIKE and obj.aim == "STANDOFF":
+        if obj.type in (ObjectiveType.STRIKE, ObjectiveType.COUNTER_AIR) and obj.aim == "STANDOFF":
             air *= STANDOFF_AIR_FACTOR                    # v0.41.298: released outside the fighters' reach
         defense = sam + air
         if obj.type == ObjectiveType.STRIKE and obj.aim == "SEAD":

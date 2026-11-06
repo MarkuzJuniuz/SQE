@@ -74,6 +74,13 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         if getattr(pf, "kit", "") == "SLAM":
             sit += ["", "You are the Standoff Strike flight. Your route ends at the target point and you set your own launch point: launch as far out as you "
                         "get a shot, stay clear of the fighters over the target, then turn home with the package. The AI SLAM-ER flights launch from about 120 nm out."]
+    elif obj.type.value == "COUNTER_AIR" and obj.aim == "STANDOFF":       # v0.41.313
+        sit += ["", "Standoff Counter-Air. The fighters at this field make a bombing run over the ramp a bad bet, so the strike goes out as JSOW-A Vipers and Hornets: "
+                    "they release their AGM-154As on the jets parked on the ramp from stand-off range, outside the reach of the fighters over the field, and turn straight "
+                    "home. The Fighter Sweep flight covers the approach. Judge the result at the debrief."]
+    elif obj.type.value == "COUNTER_AIR" and obj.aim != "SWEEP":
+        sit += ["", "Counter-Air strike on the ramp. Little air cover here, so the strikers overfly the field with CBU-103 cluster bombs on the jets parked there; "
+                    "the Fighter Sweep flight clears the air ahead of them."]
     elif obj.type.value == "DEAD" and obj.aim == "STANDOFF":
         from .difficulty import get as _gd3
         from .war import WarSimulator as _WS3

@@ -292,7 +292,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []
         self._ecm_player = ""                           # v0.41.210: how the hook learns the player's jammer: "live" (F-16C lamp via Export.lua), "f10" (FC3 jet), "" (old attack-leg window)
         self._raid_xy = []                              # v0.41.220: where each raid scramble's raiders are going (the supply circle runs round these too)
-        self._bld_xy = {}                               # v0.41.309: supply site id -> where its buildings stand (`_place_buildings`), the Standoff Strike aims at them
+        self._bld_xy = {}                   # v0.41.309: supply site id -> where its buildings stand (`_place_buildings`), the Standoff Strike aims at them
+        self._ramp_pts = []                 # v0.41.313: the parked static jets' positions of this mission (counter-air strike)
         self._supply_built = set()                      # v0.41.209: blue supply sites already put on the map this mission (a raid target is one)
         self._rwy_rel, self._hot = {}, None                            # v0.41.96: release times already given per runway; the hot-runway slot of the flight being built
         self._launch_pts = {}                                          # package id -> [(x, y)] where its HARM / JSOW / strike flights launch (the cover zone)             # alert groups waiting for a runway (the hook lines them up), trigger flags, your runway
@@ -1341,6 +1342,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             nm = f"PARK {a.id}|{made}"
             sg = self.m.static_group(self.red, nm, cls, mapping.Point(slot.position.x, slot.position.y, self.t), heading=rw_h)
             sg.units[0].name = nm
+            self._ramp_pts.append((slot.position.x, slot.position.y))        # v0.41.313: where the JSOW-As of a Standoff Counter-Air aim
             slot.unit_id = sg.units[0].id
             names_by.setdefault(t_, []).append(nm)
         for t_, names in names_by.items():

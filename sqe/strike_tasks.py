@@ -292,10 +292,35 @@ class StrikeTasks:
                 out.append((a, g))
         return sorted(out, key=lambda ag: dist(ag[0].x, ag[0].y, t.x, t.y))
 
+    def _jsow_ramp_tasks(self, wp, f, package, eta_s=None) -> None:
+        """v0.41.313 (XO 2026-11-06): the JSOW-As of a Standoff Counter-Air, one per aim point: the first parked jet and the one furthest from it (the JSOW's cluster
+        submunitions cover the spots between), else the middle of the ramp. Same attack window and timed return fire as the other JSOW releases."""
+        pts = list(getattr(self, "_ramp_pts", []) or [])
+        if not pts:
+            r_ = self._ramp_xy(self.state.assets[package.objective.target_id])
+            pts = [r_ if r_ is not None else self._jitter_primary(package, 0.0, 0.0)]
+        n_ = max(1, JSOW_PER_JET.get(f.aircraft, 2))
+        aims = [pts[0]]
+        if len(pts) > 1 and n_ > 1:
+            aims.append(max(pts, key=lambda q: math.hypot(q[0] - pts[0][0], q[1] - pts[0][1])))
+        each = max(1, n_ // len(aims))
+        exp = task.Expend.Four if each >= 4 else (task.Expend.Two if each >= 2 else task.Expend.One)
+        wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
+        if eta_s is not None:
+            rf_ = task.ControlledTask(task.OptROE(task.OptROE.Values.ReturnFire)); rf_.start_after_time(int(eta_s + JSOW_ATTACK_S)); wp.tasks.append(rf_)
+        for x, y in aims:
+            bt_ = task.ControlledTask(task.Bombing(mapping.Point(x, y, self.t), expend=exp, group_attack=True))
+            if eta_s is not None:
+                bt_.stop_after_time(int(eta_s + JSOW_ATTACK_S))
+            wp.tasks.append(bt_)
+
     def _jsow_tasks(self, wp, f, site, package, eta_s=None) -> None:
         """A JSOW slinger's attack from its launch point: one release per radar of the target site (search and track radars; the first two
         vehicles of a site whose radars ride on the launchers), aimed at the radar's last-known position give or take JSOW_AIM_ERR_M. The
         flight's JSOWs are shared out between the aim points. A radar that shuts down to dodge the HARMs is still where it was last seen."""
+        if package.objective.type == ObjectiveType.COUNTER_AIR and package.objective.aim != "SWEEP":
+            self._jsow_ramp_tasks(wp, f, package, eta_s)               # v0.41.313: a Standoff Counter-Air aims at the jets parked on the ramp, not at a SAM site
+            return
         if site is None or not site.units:
             return
         radars = [u for u in site.units if str(getattr(u, "type", "")) in TRACK_RADARS | SEARCH_RADARS]
