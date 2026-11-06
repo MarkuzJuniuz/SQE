@@ -305,7 +305,7 @@ class StrikeTasks:
             aims.append(max(pts, key=lambda q: math.hypot(q[0] - pts[0][0], q[1] - pts[0][1])))
         each = max(1, n_ // len(aims))
         exp = task.Expend.Four if each >= 4 else (task.Expend.Two if each >= 2 else task.Expend.One)
-        wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
+        wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))   # v0.41.327 (XO): designated points only, no hunting
         if eta_s is not None:
             rf_ = task.ControlledTask(task.OptROE(task.OptROE.Values.ReturnFire)); rf_.start_after_time(int(eta_s + JSOW_ATTACK_S)); wp.tasks.append(rf_)
         for x, y in aims:

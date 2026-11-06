@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.327, the Standoff Counter-Air JSOWs use Open Fire too
+
+XO 2026-11-06 ("make that open fire too", "fox 3 low"). `_jsow_ramp_tasks` (the JSOW-A aim points on the parked jets) sets ROE Open Fire (designated targets only) instead of weapons free; the timed return fire after the window is unchanged. Same reasoning and same risk as v0.41.325: if DCS does not treat the Bombing points as designated, nothing is released; revert that one ROE line. Not seen in DCS.
+
 ## v0.41.326, the ramp pass runs along the line of parked jets
 
 XO 2026-11-06 ("make their target area cover more ground", "fox 3 medium"). The counter-air bomb task keeps its aim point (the ramp centre) and now also carries an attack heading: the bearing between the two parked jets furthest apart, when that line is longer than `RAMP_AXIS_MIN_M` 150 m (judgment call). One pass then lays the bombs down the ramp's length. DCS limits: one aim point and one heading per task, no per-jet points and no release spacing from a script; the sense of the heading (either end first) is arbitrary, so the flight may turn to line up. Per-flight jitter NOT built. Not seen in DCS; if the jets loop or miss, drop the `direction` argument.
