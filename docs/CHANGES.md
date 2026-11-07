@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.333, no Counter-Air strike and no Standoff Counter-Air any more
+
+XO 2026-11-07 ("remove all counter-air / standoff versions of it", "fox 3 low", smallest token use). The day planner (`war.py`) no longer offers the Counter-Air strike (CBU-103 on the parked jets) or the Standoff Counter-Air (JSOW-A); the runway crater (a STRIKE with aim RUNWAY) is the airfield attack. The Fighter Sweep, also a COUNTER_AIR objective, is untouched. NOT removed (inert for new plans, a later cleanup PR): the parked jets, the ramp aim and retarget, the CBU / JSOW kits, the briefing text and the package slots for the strike versions. A saved campaign whose stored day plan already holds a counter-air strike still builds it. `tools/smoke_test.py` still has counter-air checks; XO runs the smoke before a release and it is being rewritten anyway (queue S0). Not run.
+
 ## Rules, 2026-11-06 (CLAUDE.md only, no version change)
 
 XO 2026-11-06: the smoke-test rules are replaced. Crew Chief edits but does not run the smoke test; XO runs it before a release. The smoke test is rewritten LIGHT after the reset (core functions only: loads / saves / campaigns / compatibility, UI basics, missions generate, required flights in a package, `.miz` structure loads in DCS), and an assert that forces a smoke-test change instead of an SQE fix is invalid and removed. Docs-only changes get no compile check. Added the counter-air and bombing learnings and the counter-air fallback.

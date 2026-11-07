@@ -222,14 +222,9 @@ class ObjectivePlanner:
                 cand.append((pr, o_, bl, locked))
             elif a.kind == AssetKind.AIRFIELD:
                 w = state.enemy_air_at(a.id)
-                if w and w.available > 0:
-                    pr = a.value * 1.2 * (w.available / max(1, w.authorized))
-                    o_ca = Objective("", ObjectiveType.COUNTER_AIR, a.id, pr, f"Counter-air at {a.name}: strike the jets on the ramp")
-                    if (STANDOFF_MIN_DEF_FLIGHTS > 0 and any(q.aircraft in JSOW_PER_JET and q.available >= 2 for q in state.squadrons.values())
-                            and threat.defender_flights(threat.expected_defenders(state, a.x, a.y, self.d.iads if self.d else 0.5)) >= STANDOFF_MIN_DEF_FLIGHTS):
-                        o_ca.aim = "STANDOFF"                           # v0.41.313 (XO 2026-11-06): a field with air cover is hit from far out with JSOW-As (Viper or Hornet), not a run over the ramp
-                        o_ca.description = f"Standoff Counter-air at {a.name}: JSOW-As on the ramp"
-                    cand.append((pr, o_ca, self._blockers(state, a) + covering_sams(state, a), locked))
+                # v0.41.333 (XO 2026-11-07, "remove all counter-air / standoff versions of it"): no Counter-Air strike (CBU on the ramp) and no Standoff Counter-Air (JSOW)
+                # is offered any more; the runway crater below is the airfield attack. The Fighter Sweep (also a COUNTER_AIR objective) is untouched. The builder, packages and
+                # briefing code for the strike versions stays in place, unreachable for new plans, for a later cleanup.
                 if not runways.is_closed(state, a.id):         # v0.41.254: crater the runway (a STRIKE with aim RUNWAY); 3 bomb hits close the field for 2-5 days
                     prr = a.value * 0.9 * (w.available / max(1, w.authorized))
                     o_ = Objective("", ObjectiveType.STRIKE, a.id, prr, f"Crater the runway at {a.name} ({w.available} aircraft)")
