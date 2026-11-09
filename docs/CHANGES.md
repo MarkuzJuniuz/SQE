@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## Tools, 2026-11-09 (no version change): smoke test Phase 1, the doomed checks are deleted
+
+XO 2026-11-09 ("fox 3 medium"), `smoke test plan.md` Phase 1 of queue S0. `tools/smoke_test.py` loses 156 checks (the 155 of the plan's delete list plus check 23, whose rule returns in Phase 2) and the helpers nothing else calls (`land_raid_pkg`, `boost_su24`, `_callin_triggers_wait`, `_check_94_body`, `_spots_ok`). Six checks remain: 00, 06, 39, 80, 104, 106. The file goes from 6659 to 861 lines. Whole functions only; the survivors are unchanged. Not run (CLAUDE.md section 4); compile check only. Phase 2 rewrites the survivors.
+
 ## Build, 2026-11-09 (no version change): the release builds on Python 3.14
 
 XO 2026-11-09 ("match them", "fox 3 low"). XO's local venv runs Python 3.14.8 with PySide6 6.11.2, PyInstaller 6.22.3 and the pinned pydcs fork, so the release workflow now builds on the same version (`.github/workflows/release.yml`, was 3.13). The `requirements-build.txt` comment and `docs/GUIDE.md` ("Python 3.13 or 3.14", was "3.12 or 3.13") follow. NOT TESTED: no release build has been run on 3.14; the first one is the test. Rollback: set `python-version` back to `'3.13'` in the workflow. Not run (no Python code changed).
