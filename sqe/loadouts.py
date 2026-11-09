@@ -9,6 +9,9 @@ from .models import Role
 
 # Taken from DCS's own stock presets (the lists you pick from in the Mission Editor). "=<CLSID>" is a raw weapon id; anything else is a
 # weapon-name stem looked up on the pylon. The comment above each line names the stock preset it was copied from.
+JDAM_JETS = {"F-16C", "FA-18C", "F-14BU"}       # v0.41.299: the jets whose STRIKE loadout is JDAMs (GBU-31 / GBU-38): their AI strikes release short of the target (routes.JDAM_RELEASE_NM)
+CBU_JETS = {"F-16C"}                          # v0.41.313 (XO 2026-11-06): the jets that carry CBU-103 on a plain counter-air strike (parked aircraft, little air cover); the others keep their JDAMs
+SLAM_PER_JET = {"FA-18C": 2}                  # v0.41.298: AGM-84H SLAM-ER per jet in the Standoff Strike kit (a Hornet job: no F-16 SLAM-ER in DCS)
 JSOW_PER_JET = {"FA-18C": 2, "F-16C": 2}      # AGM-154A JSOW CEB per jet in the JSOW kit; only these jets fly the JSOW slot of a SEAD package
 
 _D: dict = {
@@ -19,6 +22,8 @@ _D: dict = {
         "CAP": {1: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 2: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 3: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 4: "={F376DBEE-4CAE-41BA-ADD9-B2910AC95DEC}", 5: "=ALQ_184_Long", 6: "={F376DBEE-4CAE-41BA-ADD9-B2910AC95DEC}", 7: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 8: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 9: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}"},
         # stock DCS preset: AIM-120C*2, AIM-9X*2, GBU-31-1B*2, FUEL*2, ECM, TGP
         "STRIKE": {1: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 2: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 3: "={GBU-31}", 4: "={F376DBEE-4CAE-41BA-ADD9-B2910AC95DEC}", 5: "=ALQ_184_Long", 6: "={F376DBEE-4CAE-41BA-ADD9-B2910AC95DEC}", 7: "={GBU-31}", 8: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 9: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 11: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}"},
+        # CBU kit (counter-air strike on parked aircraft, v0.41.313): the STRIKE preset with a CBU-103 (202 CEM bomblets, WCMD wind-corrected tail kit) on 3 and 7 in place of the GBU-31s
+        "CBU": {1: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 2: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 3: "={CBU_103}", 4: "={F376DBEE-4CAE-41BA-ADD9-B2910AC95DEC}", 5: "=ALQ_184_Long", 6: "={F376DBEE-4CAE-41BA-ADD9-B2910AC95DEC}", 7: "={CBU_103}", 8: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 9: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 11: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}"},
         # stock DCS preset: AIM-120C*2, AIM-9X*2, AGM-88C*2, FUEL*2, ECM, TGP, HTS
         "SEAD": {1: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 2: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 3: "={B06DD79A-F21E-4EB9-BD9D-AB3844618C93}", 4: "={F376DBEE-4CAE-41BA-ADD9-B2910AC95DEC}", 5: "=ALQ_184_Long", 6: "={F376DBEE-4CAE-41BA-ADD9-B2910AC95DEC}", 7: "={B06DD79A-F21E-4EB9-BD9D-AB3844618C93}", 8: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 9: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 10: "={AN_ASQ_213}", 11: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}"},
         # stock DCS preset: AIM-120C*2, AIM-9X*2, AGM-65D*4, FUEL*2, ECM, TGP
@@ -27,6 +32,8 @@ _D: dict = {
     "FA-18C": {
         # JSOW slinger (SEAD package), XO's own Mission Editor loadout (2026-10-20): AIM-9X*2, AIM-120C-5*2, AGM-154A on 2 and 8 (2 per jet), FUEL*2 (on 3 and 7), Litening pod on 5
         "JSOW": {1: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 2: "={AGM-154A}", 3: "={FPU_8A_FUEL_TANK}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 6: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 7: "={FPU_8A_FUEL_TANK}", 8: "={AGM-154A}", 9: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}"},
+        # SLAM-ER kit (Standoff Strike), v0.41.298: the JSOW layout with an AGM-84H SLAM-ER on 2 and 8 (2 per jet); a starting point, not XO's Mission Editor capture
+        "SLAM": {1: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 2: "={AGM_84H}", 3: "={FPU_8A_FUEL_TANK}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 6: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 7: "={FPU_8A_FUEL_TANK}", 8: "={AGM_84H}", 9: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}"},
         # stock DCS preset: AIM-9X*2, AIM-120C-5*6, FUEL*3
         "CAP": {1: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}", 2: "=LAU-115_2*LAU-127_AIM-120C", 3: "={FPU_8A_FUEL_TANK}", 4: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 5: "={FPU_8A_FUEL_TANK}", 6: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 7: "={FPU_8A_FUEL_TANK}", 8: "=LAU-115_2*LAU-127_AIM-120C", 9: "={5CE2FF2A-645A-4197-B48D-8720AC69394F}"},
         # stock DCS preset: AIM-9X*2, AIM-120C-5*1, GBU-38*4, GBU-12*4, ATFLIR, FUEL
@@ -39,6 +46,8 @@ _D: dict = {
     "F-14BU": {
         # stock DCS preset AAW05: (4/2/2) HEAVY CAP, with the LANTIRN pod on station 9 swapped for the second Sparrow (the stock preset only carries one)
         "CAP": {1: "={LAU-138 wtip - AIM-9M}", 2: "={SHOULDER AIM-7P}", 3: "={F14-300gal}", 4: "={AIM_54C_Mk47}", 5: "={AIM_54C_Mk47}", 6: "={AIM_54C_Mk47}", 7: "={AIM_54C_Mk47}", 8: "={F14-300gal}", 9: "={SHOULDER AIM-7P}", 10: "={LAU-138 wtip - AIM-9M}"},
+        # v0.41.271 (XO 2026-11-04): the fleet-defence Tomcats carry 6 Phoenix + 2 Sidewinders (the 4 belly Phoenix of the heavy CAP preset and a Phoenix on each shoulder in place of the two Sparrows)
+        "FLEET": {1: "={LAU-138 wtip - AIM-9M}", 2: "={SHOULDER AIM_54C_Mk47 L}", 3: "={F14-300gal}", 4: "={AIM_54C_Mk47}", 5: "={AIM_54C_Mk47}", 6: "={AIM_54C_Mk47}", 7: "={AIM_54C_Mk47}", 8: "={F14-300gal}", 9: "={SHOULDER AIM_54C_Mk47 R}", 10: "={LAU-138 wtip - AIM-9M}"},
         # stock DCS preset: AG04: (1/0/2) 2*J84 MEDIUM STRIKE
         "STRIKE": {1: "={LAU-138 wtip - AIM-9M}", 2: "={SHOULDER AIM_54C_Mk47 L}", 3: "={F14-300gal}", 4: "={BRU-32 GBU_31_V_2B}", 7: "={BRU-32 GBU_31_V_2B}", 8: "={F14-300gal}", 9: "={F14-LANTIRN-TP}", 10: "={LAU-138 wtip - AIM-9M}"},
     },
@@ -72,6 +81,13 @@ class LoadoutLibrary:
         c = self.custom.get(key, {})
         if name in c:
             return {int(p): {"CLSID": v} for p, v in c[name].items()}
+        if name == "CBU" and "STRIKE" in c:                # v0.41.313 (XO 2026-11-06): the CBU kit starts from his own captured STRIKE loadout, only the bomb pylons change
+            out = {int(p): {"CLSID": v} for p, v in c["STRIKE"].items()}
+            tc, ts = _D.get(key, {}).get("CBU", {}), _D.get(key, {}).get("STRIKE", {})
+            for pylon, want in tc.items():
+                if ts.get(pylon) != want and want.startswith("="):
+                    out[pylon] = {"CLSID": want[1:]}
+            return out
         table = _D.get(key, {}).get(name) or _D.get(key, {}).get("CAP") or next(iter(_D.get(key, {}).values()), {})
         cls, out = AIRCRAFT[key].dcs_type, {}
         for pylon, want in table.items():

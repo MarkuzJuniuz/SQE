@@ -48,19 +48,15 @@ class Ctx:
     """Shared state between the check sections: a section reads what it borrows from here at the top and leaves what later sections need at the bottom."""
 
 
-def fresh_session(level=3, seed=7):
+def fresh_session(level=3, seed=7, ac="F-16C"):
     """A new campaign of its own for a section that needs a session (instead of borrowing setup's, which earlier sections have changed)."""
     ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
-    ses.new("Smoke fresh", "F-16C", level, seed=seed)
+    ses.new("Smoke fresh", ac, level, seed=seed)
     return ses
 
 
 def check_00_setup(c):
-    global _EMERG
-    from sqe import raids as _r0
-    _EMERG = _r0.emergency_happens
-    _r0.emergency_happens = lambda *a, **k: False
     print(f"SQE smoke test, version {sqe.__version__}  (isolated temp data: {TMP})")
     mk = lambda: Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
     s = mk()
@@ -940,74 +936,32 @@ def check_21_raids_emergencies(c):
     # ---- raids and emergencies ----
     from sqe import raids as _rd
     from sqe.packages import Package as _Pk
-    _ev_orig = _EMERG
-    _rd.emergency_happens = _EMERG                       # switched back on here (it is off above so the other tests are not at the mercy of the dice)
     s.new("Raids 2", "F-16C", 2, seed=4); _st = s.state
     _st.campaign_id = "5a0e1b2c3d"; s.plan_day()                  # the dice are seeded from the campaign id, which is random: pin it so the rate checks repeat
     # rates over a long run follow the difficulty table, and the same day plans the same raids
     _nw = _ns = 0
     for _ in range(60):
         _st.ground["flown_day"] = _st.day; s.plan_day(); _st.day += 1          # flown every day: the idle surge (v0.41.155) stays out of the rate check
-        _nw += sum(1 for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land")); _ns += _st.raids["surprise"]
+        _nw += sum(1 for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land")); _ns += _st.raids["surprise"] + sum(1 for p_ in s.packages() if p_.extra.get("unwarned"))
     assert 8 <= _nw <= 36 and _ns >= 1, (_nw, _ns)
     _st.day = 5; s.plan_day(); _a = [d_["objective"]["description"] for d_ in _st.plan]; s.plan_day(); assert _a == [d_["objective"]["description"] for d_ in _st.plan], "a day replans the same"
-    # per-sortie dice: roughly the table, never two in a row, and asking twice gives the same answer
-    _hits = _tot = 0
-    for _ in range(150):
-        s.plan_day(); _st.day += 1
-        for p_ in s.packages():
-            if s.flyable(p_):
-                _st.sortie_counter += 1; _tot += 1
-                e1 = s.emergency_for(p_.number, None); e2 = s.emergency_for(p_.number, None)
-                assert (e1 is None) == (e2 is None) and (e1 is None or e1["kind"] == e2["kind"]), "reopening never re-rolls"
-                if e1:
-                    _hits += 1
-                    _st.raids["last_emerg"] = _st.sortie_counter                         # as fly() leaves it: that sortie had one
-                    assert s.emergency_for(p_.number, "x") is None, "none in two sorties in a row"
-    assert 0.045 <= _hits / _tot <= 0.16, (_hits, _tot)
-    # an emergency forced: scramble (fighter) and decline (folds in or odds); both build a mission
-    _rd.emergency_happens = lambda st_, d_, rng_: True
-    try:
-        for _ac, _lv, _seed in (("F-16C", 2, 4), ("A-10C", 2, 9), ("FA-18C", 3, 3)):
-            for _scr in (True, False):
-                s.new(f"Emerg {_ac}{_scr}", _ac, _lv, seed=_seed); _st = s.state
-                _p = None
-                import sqe.engine as _eng
-                for _day in range(10):                         # v0.41.28: troops in contact, and raids while RAID_SCRAMBLES is on: find a day with one
-                    _p = next((p_ for p_ in s.packages() if s.flyable(p_) and s.emergency_for(p_.number, None)), None)
-                    if _p:
-                        break
-                    _st.day += 1; s.plan_day()
-                if _p is None:
-                    continue
-                _ev = s.emergency_for(_p.number, None); assert _ev["kind"] in (("CAS", "RAID") if _eng.RAID_SCRAMBLES else ("CAS",)) and _ev["title"] and _ev["text"], "a raid scramble only while RAID_SCRAMBLES is on"
-                _res = s.fly(_p.number, None, scramble=_scr)
-                assert _st.pending and _res.counts["units"] > 0
-                if _scr and _ev["eligible"]:
-                    assert "Intercept a raid" in _st.pending["objective"] or "EMERGENCY" in _st.pending["objective"]
-                assert all(p_.number != _st.pending["package"] or True for p_ in s.packages())
-                assert all(not x_.extra.get("past") for x_ in s.packages()), "emergency packages are not listed"
-        # postponement: the squadron cannot cover both
-        s.new("Emerg post", "A-10C", 2, seed=9); _st = s.state
-        _p = None
-        for _day in range(8):                                                       # any day that has a troops-in-contact emergency for an A-10 package
-            _p = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "CAS"), None)
-            if _p:
-                break
-            _st.day += 1; s.plan_day()
-        assert _p is not None
-        _ev = s.emergency_for(_p.number, None)
-        _st.squadrons[_st.player.squadron_id].available = _ev["package"].flights[0].count
-        s.fly(_p.number, None, scramble=True)
-        assert _st.raids["carry"], "the displaced package is postponed"
-        _n_before = len(_st.raids["carry"]); _tgt = _st.raids["carry"][0]["target_id"]
-        s.state.status = "ACTIVE"; _war.WarSimulator(_gd(2), _rnd.Random(3)).end_day(_st); s.plan_day()
-        assert any(p_.objective.target_id == _tgt for p_ in s.packages()) or _tgt in _st.assets and _st.assets[_tgt].destroyed, "postponed objective returns next day"
-    finally:
-        _rd.emergency_happens = _ev_orig
     # the land raid is built with Su-24M bombers, and the debrief applies what got through
     import zipfile as _zf
-    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_ev_orig', '_rd', '_st', '_zf',)})
+    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_rd', '_st', '_zf',)})
+
+
+def land_raid_pkg(s, st, days=10, boost=True, replan=False):
+    """A planned land raid (a raid on a field, a supply site or a garrison) the player has a flight for, looking over `days` days (v0.41.307: the planned raids replace the dice)."""
+    for _ in range(days):
+        if boost:
+            boost_su24(st)
+        if replan or boost:
+            s.plan_day()
+        rp = next((p_ for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land") and s.flyable(p_, squadron_only=False)), None)
+        if rp:
+            return rp
+        st.day += 1
+    return None
 
 
 def boost_su24(st, n=24):
@@ -1019,39 +973,19 @@ def boost_su24(st, n=24):
 
 
 def check_22_raid_intercepts_ai_only(c):
-    _ev_orig = c._ev_orig
+    _rd = c._rd
     s = fresh_session()
-    # v0.41.27: raid intercepts are AI-only for now; the build itself is still tested (it comes back), with the AI-only list lifted here
+    # v0.41.27: raid intercepts were AI-only for a while; the build itself is tested here with the AI-only list lifted (v0.41.307: through a planned raid package, the dice are gone)
     import sqe.engine as _eng27
     _aio27, _eng27.AI_ONLY = _eng27.AI_ONLY, ()
-    _rs27, _eng27.RAID_SCRAMBLES = _eng27.RAID_SCRAMBLES, True
     s.new("Raid build", "F-16C", 2, seed=4); _st = s.state
-    _rp = None
-    for _day in range(10):
-        _rp = None       # v0.41.88: always the scramble path (a planned raid package resolves overnight, not at the debrief)
-        if _rp:
-            break
-        _st.day += 1; s.plan_day()
-    if _rp is None:
-        _rd.emergency_happens = lambda st_, d_, rng_: True
-        try:
-            _rp0 = None
-            for _day in range(8):
-                boost_su24(_st); s.plan_day() if _day == 0 else None
-                _rp0 = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "RAID" and s.emergency_for(p_.number, None)["eligible"]), None)
-                if _rp0:
-                    break
-                _st.day += 1; boost_su24(_st); s.plan_day()
-            assert _rp0 is not None
-            s.fly(_rp0.number, None, scramble=True)
-        finally:
-            _rd.emergency_happens = _ev_orig
-    else:
-        s.fly(_rp.number, None)
+    _rp = land_raid_pkg(s, _st, 8)
+    assert _rp is not None, "a land raid was planned"
+    s.fly(_rp.number, s.flyable(_rp, squadron_only=False)[0].id)
     _mz = _zf.ZipFile(_st.pending["miz"]).read("mission").decode()
     assert ("Su-24M" in _mz or "Su-25" in _mz) and "RAID-B-1" in _mz, "the raiders are in the mission"
     _s22 = s
-    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_aio27', '_eng27', '_mz', '_rs27', '_s22', '_st',)})
+    c.__dict__.update({k_: v_ for k_, v_ in locals().items() if k_ in ('_aio27', '_eng27', '_mz', '_s22', '_st',)})
 
 
 def check_23_raid_scramble_you_fly(c):
@@ -1099,7 +1033,7 @@ def check_26_raid_flies_blue_s(c):
 
 
 def check_27_raid_s_route_bends(c):
-    _aio27, _rs27, _st, s = c._aio27, c._rs27, c._st, c._s22          # the session section 22 built the raid mission in
+    _aio27, _st, s = c._aio27, c._st, c._s22          # the session section 22 built the raid mission in
     from sqe import raids as _rd
 
     # v0.41.31: a raid's route bends round the carrier group (FLEET_RAID_AVOID_NM), and red's target pick shies from it like a Patriot field
@@ -1127,7 +1061,6 @@ def check_27_raid_s_route_bends(c):
     _rt = _CS.from_dict(_st.to_dict()); assert _rt.raids == _st.raids
     _o = _st.to_dict(); _o.pop("raids"); assert _CS.from_dict(_o).raids == {}
     _eng27.AI_ONLY = _aio27
-    _eng27.RAID_SCRAMBLES = _rs27
     from types import SimpleNamespace as _NS
     from dcs import task as _tk
     from sqe.mission_builder import MissionBuilder as _MBg
@@ -1385,6 +1318,8 @@ def check_31b_red_sam_orders(c):
     for x in sites:
         x.health = 1.0
     rcv.health = 0.0
+    assert not sm.red_asks(st, d, rnd.Random(1)) and not st.sams.get("red_asks"), "v0.41.269: red borrows no battery by default"
+    sm.RED_BORROW = True                                    # (the mechanism is still tested with the switch on)
     r1 = sm.red_asks(st, d, rnd.Random(1))
     assert any("ordered" in x for x in r1), r1
     assert snd.id in st.sams["red_vacated"] or any(o["from"] != snd.id for o in st.sams["red_asks"]), "a deeper site sends it"
@@ -1401,6 +1336,7 @@ def check_31b_red_sam_orders(c):
     assert not st.sams["red_asks"], "the order is done"
     rt = type(st).from_dict(st.to_dict())
     assert rt.sams == st.sams, "red orders save and load with the SAM record"
+    sm.RED_BORROW = False
 
 
 def check_31d_barcap_areas(c):
@@ -1621,7 +1557,6 @@ def check_31l_red_arm(c):
     from sqe.difficulty import LEVELS
     assert LEVELS[1].raid_arm == 0 and LEVELS[2].raid_arm > 0 and LEVELS[3].raid_arm > 0 and LEVELS[2].arm_cap == 2 and LEVELS[3].arm_cap == 8, "red SEAD by level (v0.41.125: no dice, L2 a pair)"
     aio, eng.AI_ONLY = eng.AI_ONLY, ()
-    rs, eng.RAID_SCRAMBLES = eng.RAID_SCRAMBLES, True
     from sqe import raids as _rd
     old, pick0 = (LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise), _rd.pick_aim
     LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise = 1.0, 3.0, 0.0       # every day brings announced raids
@@ -1683,22 +1618,23 @@ def check_31l_red_arm(c):
             assert "red DEAD gate open" in _mzr and "red DEAD gate abort" in _mzr and "c_unit_dead" in _mzr and "c_flag_is_false" in _mzr, "the gate: radars dead opens it, else the abort trigger"
             assert "SQE_GOTO('Raid DEAD 1'" in _mzr and "function SQE_GOTO" in _mzr and "SwitchWaypoint" in _mzr, "the abort sends the flights to their egress"
             assert "RAID-B-1" in mz, "the bombers still fly"
-            # v0.41.126: the bombers (and the sweep / escorts) hold at the same gate and turn home with the DEAD flights if the radars stay up
-            for _gn in ("Raid Bomber 1", "Raid DEAD 1"):
+            # v0.41.240: only the DEAD flights hold at the gate; the bombers, sweep and escorts fly the clock (no GATE waypoint, no abort)
+            for _gn in ("Raid DEAD 1",):
                 assert f"SQE_GOTO('{_gn}'" in _mzr, f"the abort covers {_gn}"
-            assert "SQE_GATE_OPEN" in _mzr and "Raid Bomber 1" in _mzr.split("SQE_GATE_OPEN(")[1].split(")")[0], "the open trigger tells the Lua which groups were held"
-            assert _mzr.count('"GATE"') >= 3, "bombers and DEAD flights have a GATE waypoint"
+            assert "SQE_GOTO('Raid Bomber 1'" not in _mzr, "the bombers are not held by the gate"
+            assert "SQE_GATE_OPEN" in _mzr and "Raid DEAD 1" in _mzr.split("SQE_GATE_OPEN(")[1].split(")")[0] and "Raid Bomber 1" not in _mzr.split("SQE_GATE_OPEN(")[1].split(")")[0], "the open trigger names the DEAD flights only"
+            assert _mzr.count('"GATE"') >= 2, "the DEAD flights have a GATE waypoint"
             import re as _re
             _gf = _re.findall(r"c_flag_is_false\((\d+)\)", mz)
             assert _gf, "the abort trigger reads the gate flag"
-            assert mz.count(f'["userFlag"]="{_gf[0]}"') >= 3, "the bomber group and the two DEAD flights all orbit at the gate until that flag is set"
-            assert _mzr.count("SQE_GOTO(") >= 3, "every held group has an abort"
+            assert mz.count(f'["userFlag"]="{_gf[0]}"') >= 2, "the two DEAD flights orbit at the gate until that flag is set"
+            assert _mzr.count("SQE_GOTO(") >= 2, "every held group has an abort"
             return
         raise AssertionError("no raid with a SEAD pair in four seeds")
     finally:
         LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise = old
         _rd.pick_aim = pick0
-        eng.AI_ONLY, eng.RAID_SCRAMBLES = aio, rs
+        eng.AI_ONLY = aio
 
 
 def check_31m_blue_barcap_plan(c):
@@ -1916,7 +1852,10 @@ def check_31v_hot_runway(c):
         ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, hot_runway_starts=on))
         (TMP / "saves").mkdir(parents=True, exist_ok=True)
         ses.new("Hot runway", "F-16C", 2, seed=7)
-        pk = next(p for p in ses.packages() if ses.flyable(p))
+        def _others(p_):         # v0.41.273: pick a package by what the check needs (AI flights from another land field), not "the first of the day" (the plan's order moves)
+            fl_ = ses.flyable(p_)
+            return bool(fl_) and any(f_.base_id != fl_[0].base_id and ses.state.bases[f_.base_id].kind.value == "AIRFIELD" for f_ in p_.flights)
+        pk = next((p for p in ses.packages() if _others(p)), None) or next(p for p in ses.packages() if ses.flyable(p))
         pfl = ses.flyable(pk)[0]
         pbase = ses.state.bases[pfl.base_id].name.split(" ")[0]
         r = ses.fly(pk.number, pfl.id)
@@ -1970,39 +1909,6 @@ def check_31v_hot_runway(c):
     assert ses3.options.hot_runway_own_field is False, "sub-setting is ignored while the main setting is off"
     assert "local PHOME = { x =" in txt2 and "playerInbound()" in txt2, "the hook knows your field and holds releases while you are inbound"
     print(f"[hot runway] {len(ents)} AI flights released from runways, a minute apart per runway; off: none; your field: {len(own)} released after your takeoff")
-
-
-def check_31w_raid_scramble_merge(c):
-    """v0.41.101: a raid scramble you do not take (and that is not planned on your own tasking) is folded into your mission as AI when the raided field lies inside
-    the merge circle: the scramblers and the raiders are both in the mission. The popup / note text is in-universe (who was dispatched), never the reason."""
-    import zipfile
-    from sqe import raids as rd
-    keep = rd.emergency_happens
-    rd.emergency_happens = lambda a, b, c_: True
-    try:
-        (TMP / "saves").mkdir(parents=True, exist_ok=True)
-        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=400))
-        ses.new("Raid merge", "F-16C", 2, seed=4)
-        st = ses.state
-        for _ in range(40):
-            for p in ses.packages():
-                if not ses.flyable(p):
-                    continue
-                ev = ses.emergency_for(p.number, None)
-                if ev and ev["kind"] == "RAID" and ses._inside_merge(p, ev["package"]):
-                    line = ses.dispatch_line(ev["package"])
-                    assert line.startswith("Our ") and "cannot" not in line.lower(), line
-                    ses.fly(p.number, None, scramble=False)
-                    assert any(m["type"] == "FLEET_DEFENSE" for m in st.pending["merged"]), "the raid scramble is folded in"
-                    txt = zipfile.ZipFile(st.pending["miz"]).read("mission").decode("utf8", "ignore")
-                    assert "RAID-B-1" in txt, "the raiders are in the mission"
-                    return
-            st.day += 1
-            boost_su24(st)
-            ses.plan_day()
-        raise AssertionError("no raid scramble inside the merge circle in 40 days")
-    finally:
-        rd.emergency_happens = keep
 
 
 def check_31we_red_gate_debrief(c):
@@ -2082,7 +1988,7 @@ def check_31wg_sead_every_covering_battery(c):
     old = (LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise)
     LEVELS[3].raid_arm, LEVELS[3].raid_rate, LEVELS[3].raid_surprise = 1.0, 3.0, 0.0
     try:
-        for seed in (12, 16, 5, 20):
+        for seed in (12, 16, 5, 20, 3, 7, 9, 14, 2, 8):
             s = fresh_session(); s.new("Red SEAD all", "F-15C", 3, seed=seed); st = s.state
             rp = None
             for _day in range(10):
@@ -2139,72 +2045,6 @@ def check_31wd_red_sead_first(c):
     print("[red SEAD first] covered target: L3 SEAD by batteries, L2 a pair (full with 8 spare), L1 and Su-25 none; no spare jets: no raid")
 
 
-def check_31wc_scramble_folds_outside_circle(c):
-    """v0.41.124: a raid scramble you do not take is folded into your mission wherever the raided field is: the merge circle is not tested."""
-    from sqe import raids as rd
-    keep = rd.emergency_happens
-    rd.emergency_happens = lambda a, b, c_: True
-    try:
-        (TMP / "saves").mkdir(parents=True, exist_ok=True)
-        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=5))
-        ses.new("Fold outside", "F-16C", 2, seed=4)
-        st = ses.state; boost_su24(st)
-        for _ in range(40):
-            for p in ses.packages():
-                if not ses.flyable(p):
-                    continue
-                ev = ses.emergency_for(p.number, None)
-                if ev and ev["kind"] == "RAID" and not ses._inside_merge(p, ev["package"]):
-                    ses.fly(p.number, None, scramble=False)
-                    assert any(m["type"] == "FLEET_DEFENSE" for m in st.pending["merged"]), "the raid scramble is folded in although its field is outside the circle"
-                    print("[fold outside circle] a raid scramble outside the 5 nm merge circle is folded into the mission")
-                    return
-            st.day += 1
-            boost_su24(st)
-            ses.plan_day()
-        raise AssertionError("no raid scramble outside the merge circle in 40 days")
-    finally:
-        rd.emergency_happens = keep
-
-
-def check_31wb_scramble_takes_hidden_packages(c):
-    """v0.41.121: when you take an emergency scramble, the packages that were listed inside the package you were tasked with come along (inside the
-    -merge_back_min / +30 min window round the scramble's start), together with the scramble's own finds, at most six."""
-    from sqe import raids as rd
-    keep = rd.emergency_happens
-    rd.emergency_happens = lambda a, b, c_: True
-    try:
-        (TMP / "saves").mkdir(parents=True, exist_ok=True)
-        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=400))
-        ses.new("Scramble members", "F-16C", 2, seed=4)
-        st = ses.state; boost_su24(st)
-        hm = lambda p_: int(p_.start[:2]) * 60 + int(p_.start[3:5])
-        for _ in range(40):
-            for p in ses.packages():
-                if not ses.flyable(p) or not ses.merge_candidates(p):
-                    continue
-                ev = ses.emergency_for(p.number, None)
-                if not (ev and ev["eligible"]):
-                    continue
-                hidden = list(ses.merge_candidates(p))
-                scr = ev["package"]
-                ses.fly(p.number, None, scramble=True)
-                merged = {m_["number"] for m_ in st.pending["merged"]} if st.pending["merged"] and "number" in st.pending["merged"][0] else None
-                if merged is None:
-                    return
-                inside = [x for x in hidden if -15 <= hm(x) - hm(scr) <= 30 and x.number != scr.number]
-                assert len(merged) <= 6, merged
-                # (v0.41.158: a day of six standoff packages can hit the mission's unit limit, which drops the furthest first, so not every package inside the window need come along)
-                assert any(x.number in merged for x in inside) or not inside, "a package hidden in the original comes along"
-                return
-            st.day += 1
-            boost_su24(st)
-            ses.plan_day()
-        raise AssertionError("no scramble with a package hidden in the original in 40 days")
-    finally:
-        rd.emergency_happens = keep
-
-
 def check_31x_forward_garrisons(c):
     """v0.41.102: every sector has a dug-in forward garrison for each side (red rfwd_N, blue bfwd_N), older saves get them, a lost garrison takes its
     share of the sector's force with it and weakens the defence there, red's are offered as CAS where the sector is fought over, blue's can be raided."""
@@ -2258,7 +2098,7 @@ def check_31z_bomber_trump_card(c):
     dec = bombers.decide(st, d)
     assert dec["mode"] in ("hold", "safe", "desperate"), dec
     if dec["mode"] != "hold":
-        assert dec["n"] >= 4 and dec["escorts"] >= 2 * dec["n"], dec
+        assert dec["n"] >= 4 and dec["escorts"] == bombers.escorts_for(dec["n"]), dec
     assert bombers.decide(st, _get(1))["mode"] == "hold"
     if dec["mode"] != "hold":
         bombers.note_launch(st)
@@ -2316,6 +2156,7 @@ def check_31zb_raid_setpiece(c):
             caps = [f for f in p.flights if f.role.value == "CAP"]
             assert len(caps) >= 2 and sum(f.count for f in caps) >= p.extra["bombers"], (len(caps), p.extra)
             assert not ses.merge_candidates(p)
+            assert any(ses.state.bases[f.base_id].kind.value != "CARRIER" for f in caps), "v0.41.256: a share of the fleet raid's CAP flights is land-based (USAF)"
             mine = ses.flyable(p, squadron_only=False)
             res[ac] = (ses, p, mine)
         ses, p, mine = res["F-14BU"]
@@ -2328,6 +2169,7 @@ def check_31zb_raid_setpiece(c):
         assert len(set(re.findall(r'"(RAID-B-\d+)"', mz))) == nb_ and len(set(re.findall(r'"(RAID-E-\d+)"', mz))) == ne_, "every bomber and escort is in the mission"
         assert (nb_ <= 4) or "Raid Bomber 2" in mz, "a raid of more than 4 bombers is several groups"
         assert (ne_ <= 8) or "Raid Sweep 1" in mz, "a big raid sends a sweep ahead of the bombers"
+        assert "raid SEAD: wait over" in mz or not any(f.role.value == "SEAD" for f in p.flights), "v0.41.256: the raid SEAD's dash flag is in the mission"
         ses_a, pa, mine_a = res["A-10C"]
         assert not mine_a, "an A-10 cannot"
         assert "Skip Turn" in " ".join(narrative.setpiece_text(ses_a.state, pa, False, "A-10C"))
@@ -2359,7 +2201,7 @@ def check_31zc_raid_quiet_and_hit(c):
         assert not bombers.is_quiet(st), "the day after is not quiet"
         sp = [p for p in ses.packages() if p.extra.get("setpiece")]
         assert sp, "the staged raid launches the next day"
-        assert sp[0].extra["bombers"] >= 4 and sp[0].extra["escorts"] >= 2 * sp[0].extra["bombers"]
+        assert sp[0].extra["bombers"] >= 4 and sp[0].extra["escorts"] == (sp[0].extra["bombers"] + 1) // 2
         assert any(f.tag == "CVCAP" for f in sp[0].flights) or not (st.barcap.get("blue_flights") or []), "the carrier CAP in its window flies with the setpiece"
         # the hit: Level 3 only, then the deck is out
         d3, d2 = ses.d, __import__("sqe.difficulty", fromlist=["get"]).get(2)
@@ -2483,36 +2325,27 @@ def check_31ze_blue_callin(c):
     import re as _re
     import zipfile as _zf
     import dcs.lua as dlua
-    from sqe import raids as rd
     found = None
-    keep = rd.emergency_happens
-    rd.emergency_happens = lambda a, b, c_: True
-    try:
-        for jet, lvl, seed in (("F-16C", 2, 4), ("F-16C", 3, 7), ("FA-18C", 2, 5), ("F-15C", 3, 11), ("F-16C", 2, 13), ("F-14BU", 3, 3), ("FA-18C", 3, 17), ("F-15C", 2, 19)):
-            random.seed(seed)
-            (TMP / "saves").mkdir(parents=True, exist_ok=True)
-            s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=400))
-            s.new("Blue call-in", jet, lvl, seed=seed)
-            for _day in range(25):
-                for pk in [p_ for p_ in s.packages() if s.flyable(p_)]:
-                    ev = s.emergency_for(pk.number, None)
-                    if not (ev and ev["kind"] == "RAID" and s._inside_merge(pk, ev["package"])):
-                        continue
-                    s.fly(pk.number, None, scramble=False)
-                    raw = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
-                    calls = set(_re.findall(r"SQE_CALLIN\('([^']+)',(\d+),(\d+),(\d+),(\d+)\)", raw))
-                    s.state.pending = None
-                    if calls:
-                        found = (raw, calls)
-                        break
-                if found:
+    for jet, lvl, seed in (("F-16C", 2, 4), ("F-16C", 3, 7), ("FA-18C", 2, 5), ("F-15C", 3, 11), ("F-16C", 2, 13), ("F-14BU", 3, 3), ("FA-18C", 3, 17), ("F-15C", 2, 19)):
+        random.seed(seed)
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=400))
+        s.new("Blue call-in", jet, lvl, seed=seed)
+        for _day in range(25):
+            for pk in [p_ for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land") and s.flyable(p_, squadron_only=False)]:
+                s.fly(pk.number, s.flyable(pk, squadron_only=False)[0].id)
+                raw = _zf.ZipFile(s.state.pending["miz"]).read("mission").decode("utf-8", "ignore")
+                calls = set(_re.findall(r"SQE_CALLIN\('([^']+)',(\d+),(\d+),(\d+),(\d+)\)", raw))
+                s.state.pending = None
+                if calls:
+                    found = (raw, calls)
                     break
-                s.state.day += 1
-                s.plan_day()
             if found:
                 break
-    finally:
-        rd.emergency_happens = keep
+            s.state.day += 1
+            s.plan_day()
+        if found:
+            break
     assert found, "some raid-defence mission has a blue patrol answering the hotspot"
     raw, calls = found
     m = dlua.loads(raw)["mission"]
@@ -2551,9 +2384,6 @@ def check_31y_unit_cap_merged(c):
     assert Session._drop_one([sw, a]) == [sw], "the sweep stays while a strike is left"
     assert Session._drop_one([sw]) == [], "a lone sweep can still go"
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
-    from sqe import raids as _rd
-    _keep_em = _rd.emergency_happens
-    _rd.emergency_happens = lambda a_, b_, c__: False
     def build(limit, fwd=30):
         ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, merge_mode="area", flight_filter="all", merge_radius_nm=60, merge_max_units=limit, merge_fwd_min=fwd))
         ses.new("Unit cap", "F-16C", 3, seed=4)
@@ -2569,7 +2399,6 @@ def check_31y_unit_cap_merged(c):
     assert m0 >= 1, "a package merged in"
     r1, m1, _n = build(60)                               # a tiny limit: the packages go, the base mission stays
     r2, m2, n0 = build(250, fwd=0)                       # later packages off: no more candidates than with 30 minutes
-    _rd.emergency_happens = _keep_em
     assert m1 <= m0 and (m1 == 0 or r1.counts["units"] <= 60), ("merged packages are dropped for the limit", m0, m1, r1.counts)
     assert n0 <= n30, ("the later-packages window narrows the candidates", n0, n30)
     assert AppSettings().merge_radius_nm == 15 and AppSettings().merge_fwd_min == 30
@@ -3084,7 +2913,7 @@ def check_39_dcs_refuses_mission_whose(c):
             _red = {g_["groupId"]: (g_["name"], [(u_["x"], u_["y"]) for u_ in g_["units"].values()]) for co_ in _M3["coalition"]["red"]["country"].values()
                     for g_ in ((co_.get("vehicle") or {}).get("group") or {}).values()}
             _torpos = [xy_ for n_, xys_ in _red.values() if n_ in _cov(_p3) for xy_ in xys_]
-            _harm, _jsow = [], 0
+            _agm88, _jsow = [], 0
             for co_ in _M3["coalition"]["blue"]["country"].values():
                 for g_ in ((co_.get("plane") or {}).get("group") or {}).values():
                     seq_ = []
@@ -3098,9 +2927,9 @@ def check_39_dcs_refuses_mission_whose(c):
                             elif tid_ == "Bombing" and any(_m3.hypot(prm_["x"] - a_, prm_["y"] - b_) < 150 for a_, b_ in _torpos):
                                 _jsow += 1
                     if seq_:
-                        _harm.append(seq_)
-            assert any(sq_[0] in _cov(_p3) and _p3.objective.target_id in sq_ for sq_ in _harm), "the second HARM flight opens on the Tors, then joins on the site"
-            assert any(_p3.objective.target_id in sq_ and sq_[-1] in _cov(_p3) and sq_.index(_p3.objective.target_id) < len(sq_) - 1 for sq_ in _harm), \
+                        _agm88.append(seq_)
+            assert any(sq_[0] in _cov(_p3) and _p3.objective.target_id in sq_ for sq_ in _agm88), "the second HARM flight opens on the Tors, then joins on the site"
+            assert any(_p3.objective.target_id in sq_ and sq_[-1] in _cov(_p3) and sq_.index(_p3.objective.target_id) < len(sq_) - 1 for sq_ in _agm88), \
                 "the HARM flights end with a second pass at the Tors that guard the site (v0.39.22)"
             assert _jsow >= 1, ("the JSOW flight aims at the Tors that guard the site", _sd3, len(_torpos))
         except AssertionError:
@@ -3131,7 +2960,7 @@ def check_39_dcs_refuses_mission_whose(c):
     _ss = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, flight_filter="all"))
     _ss.new("Sat", "F-16C", 3, seed=1); _ss.state.campaign_id = f"{0x70a0001:010x}"; _ss.plan_day()
     _A4 = _ss.state.assets; _sd4 = [p_ for p_ in _ss.packages() if p_.objective.aim in ("SEAD", "STANDOFF")]
-    _arr = [int(p_.start[:2]) * 60 + int(p_.start[3:5]) + _ss._harm_leg_s(p_) / 60 for p_ in _sd4]
+    _arr = [int(p_.start[:2]) * 60 + int(p_.start[3:5]) + _ss._agm88_leg_s(p_) / 60 for p_ in _sd4]
     assert len(_sd4) >= 2 and max(_arr) - min(_arr) <= 1.5, ("SEAD packages on one cluster reach their HARM points together", _arr)
     _pus = [p_ for p_ in _sd4 if _tm9.umbrella_site(_ss.state, _A4[p_.objective.target_id]) and _ss.flyable(p_) and any(f_.kit == "JSOW" for f_ in p_.flights)]
     _pu = next((p_ for p_ in _pus if any(_ss.state.bases[f_.base_id].kind.value == "CARRIER" for f_ in p_.flights)), _pus[0])       # v0.41.65: prefer a package with carrier flights, the [cv recover] check below needs one (it passed by luck of the layout before)
@@ -3620,7 +3449,7 @@ def check_47_support_cap_pull_back(c):
                 for _g in _cn.get("vehicle", {}).get("group", {}).values():
                     if _g["name"] == _se_.objective.target_id: _site = (_g["x"], _g["y"])
                 for _g in _cn.get("plane", {}).get("group", {}).values():
-                    if _g["task"] == "SEAD": _seads.append(_g)
+                    if _g["task"] == "SEAD" and not _g["name"].startswith("Raid"): _seads.append(_g)          # (a red raid scramble in the same mission has SEAD groups of its own)
         assert _site and len(_seads) == 2, "two SEAD flights and the site"
         for _g in _seads:
             _pts = {p_.get("name"): p_ for p_ in _g["route"]["points"].values()}
@@ -3682,6 +3511,11 @@ def check_47_support_cap_pull_back(c):
     assert all(math.isclose(g_.x - gx_, _site.x - _o[0], abs_tol=1) and math.isclose(g_.y - gy_, _site.y - _o[1], abs_tol=1) for g_, (gx_, gy_) in zip(_gar, [(a_[0], a_[1]) for a_ in _go])) or not _gar, "its garrison went with it"
     assert not _sm.retreat(_st, _gd(3), random.Random(5)) or _site.id in _st.sams["pulled"], "it does not pull back twice"
     _rt = _CS.from_dict(_st.to_dict()); assert _site.id in _rt.sams["pulled"], "saved with the campaign"
+    _d0 = _st.day
+    assert not _sm.travelling(_st, _site.id), "the night it pulls back is not yet a travel day"
+    _st.day = _d0 + 1; assert _sm.travelling(_st, _site.id), "the day after the pull-back it is on the road: no regen"
+    _st.day = _d0 + 2; assert not _sm.travelling(_st, _site.id), "two days later it regenerates again"
+    _st.day = _d0
     _site.health = 0.9; _st.day += 3; _back = []
     for _k in range(30):
         _back = _sm.retreat(_st, _gd(3), random.Random(100 + _k))
@@ -4036,18 +3870,18 @@ def check_55_tanker_track_keeps_clear(c):
 def check_56_barcap_intercepts_ai_only(c):
     s = fresh_session()
     # v0.41.27: BARCAP and the intercepts are AI-only: planned and listed, never offered to you; raid scrambles off, troops in contact stay
-    from sqe.packages import AI_ONLY as _AIO
+    from sqe.models import ObjectiveType as _OT56
     _n27 = 0
     for _ac in ("F-14BU", "F-16C"):
         for _sd in (3, 4, 5):
             s.new("AIOnly", _ac, 2, seed=_sd); s.plan_day()
             for p_ in s.packages():
-                if p_.objective.type in _AIO:
+                if p_.objective.type == _OT56.BARCAP:                    # v0.41.303: only BARCAP is AI-only now; raids on fields, supply sites and garrisons are flyable
                     _n27 += 1
                     assert not s.flyable(p_, squadron_only=False), ("an AI-only job is never offered to you", p_.objective.description)
                     assert not any(f_.is_player for f_ in p_.flights), "nobody is put in an AI-only job"
     assert _n27, "AI-only jobs are still planned"
-    print(f"[ai-only] {_n27} BARCAP / intercept jobs planned and played by the AI, none offered to you")
+    print(f"[ai-only] {_n27} BARCAP jobs planned and played by the AI, none offered to you (v0.41.303: raid intercepts are flyable)")
 
 
 def check_57_pydcs_s_scattered_formation(c):
@@ -4279,7 +4113,8 @@ def check_64_supply_loop(c):
     kinds = (_AK.FUEL, _AK.DEPOT)
     for lv, n_red in ((1, 4), (2, 12), (3, 12)):
         st = fresh_session(lv, 5).state
-        assert st.ground["sup_n"] == {"red": n_red, "blue": 6} and _gr.supply(st, "blue") == 1.0, (lv, st.ground["sup_n"])
+        rd = st.ground["road"]                                          # v0.41.241: the road sites (road_sites.py) are part of the figure
+        assert st.ground["sup_n"] == {"red": n_red + rd["red"], "blue": 6 + rd["blue"]} and _gr.supply(st, "blue") == 1.0, (lv, st.ground["sup_n"], rd)
         assert "bdepot_rear" in st.blue_assets and "bdepot_fwd" in st.blue_assets
     s = fresh_session(3, 5); st = s.state; g = st.ground
     red_ids = [a.id for a in st.assets.values() if a.kind in kinds]
@@ -4319,11 +4154,11 @@ def check_64_supply_loop(c):
     sam = next(x for x in st2.assets.values() if x.kind == _AK.SAM and x.id.startswith("sam_sochi"))
     sam.x, sam.y, sam.health, sam.variant = site.x + 5000, site.y, 1.0, "SA-6"
     st2.front = 2
-    objs = _war.ObjectivePlanner(_gd(2)).plan(st2, _rnd.Random(2), limit=40)
+    objs = _war.ObjectivePlanner(_gd(2)).plan(st2, _rnd.Random(2), limit=400)
     o = next((o for o in objs if getattr(o, "target_id", "") == "depot_sochi"), None)
     assert o is not None and o.aim == "SEAD" and "SEAD escort" in o.description, "an escortable cover sends the strike with a HARM escort"
     sam.variant = "SA-10"
-    objs = _war.ObjectivePlanner(_gd(2)).plan(st2, _rnd.Random(2), limit=40)
+    objs = _war.ObjectivePlanner(_gd(2)).plan(st2, _rnd.Random(2), limit=400)
     # v0.41.158: it is offered only behind the SEAD: the strike carries the site in `after` and the same list holds that site's DEAD job
     for o in objs:
         if getattr(o, "target_id", "") == "depot_sochi" and o.type.value == "STRIKE":
@@ -4459,7 +4294,7 @@ def check_62_red_roster(c):
             assert ("MiG_21Bis" in _cnt) == (_lv62 == 1), ("MiG-21Bis on Level 1 only", _lv62, _cnt)
             _fld_tot = sum(n_ for f_ in _field.values() for n_ in f_.values()); _fld_fig = sum(n_ for f_ in _field.values() for t_, n_ in f_.items() if t_ in _EF62)
             assert (_fld_tot, _fld_fig) == _want62[_lv62], ("field jets and fighters", _lv62, _fld_tot, _fld_fig)
-            _bw = {1: 0, 2: 11, 3: 30}[_lv62]
+            _bw = {1: 0, 2: 14, 3: 24}[_lv62]       # v0.41.249: L2 11 to 14 (a 12-ship raid); v0.41.260: L3 30 to 24
             assert _cnt.get("Tu_22M3", 0) == _bw, ("the bomber wing", _lv62, _cnt.get("Tu_22M3"))
             for _aid, _types in _field.items():
                 _ap = next(f_["airport"] for f_ in _th["red_fields"] if f_["id"] == _aid)
@@ -4532,45 +4367,6 @@ def check_68_overview(c):
     print("[overview] posture labels and endings, front, odds (battalions + word), warnings, supply %, air defence with SAM orders, no jet counts or carrier line")
 
 
-def check_69_scramble_undo(c):
-    """v0.41.149 (XO 2026-10-27): cancel a sortie that came with a scramble, press Fly again: the scramble is offered again, the plan is as it was."""
-    import sqe.raids as _rd2
-    keep = _rd2.emergency_happens
-    _rd2.emergency_happens = lambda st_, d_, rng_: True
-    try:
-        done = 0
-        for _ac, _lv, _seed in (("F-16C", 2, 4), ("A-10C", 2, 9), ("FA-18C", 3, 3)):
-            s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False)); s.new(f"Undo {_ac}", _ac, _lv, seed=_seed); st = s.state
-            p_ = ev = None
-            for _day in range(10):
-                p_ = next((x for x in s.packages() if s.flyable(x) and (s.emergency_for(x.number, None) or {}).get("eligible")), None)
-                if p_:
-                    break
-                st.day += 1; s.plan_day()
-            if p_ is None:
-                continue
-            ev = s.emergency_for(p_.number, None)
-            before = (json.dumps(st.plan, sort_keys=True), json.dumps(st.raids, sort_keys=True), len(st.log), st.sortie_counter)
-            s.fly(p_.number, None, scramble=True)
-            assert st.pending and "undo" in st.pending
-            assert json.dumps(st.plan, sort_keys=True) != before[0], "the scramble put its package in the plan"
-            s.abort()
-            assert (json.dumps(st.plan, sort_keys=True), json.dumps(st.raids, sort_keys=True), len(st.log), st.sortie_counter) == before, "cancelling gives everything back"
-            ev2 = s.emergency_for(p_.number, None)
-            assert ev2 and ev2["title"] == ev["title"] and ev2["eligible"], "the scramble is offered again after a cancel"
-            s.fly(p_.number, None, scramble=True)                  # and it can be taken again
-            assert st.pending and st.pending["objective"]
-            s.fly(p_.number, None, scramble=True)                  # a rebuild without a cancel (Discard) also gives it back
-            assert sum(1 for d_ in st.plan if d_["extra"].get("emergency") or d_["objective"]["description"] == ev["package"].objective.description) <= 1 or True
-            s.abort()
-            assert json.dumps(st.plan, sort_keys=True) == before[0]
-            done += 1
-        assert done, "no scramble found to test"
-    finally:
-        _rd2.emergency_happens = keep
-    print(f"[scramble undo] {done} campaigns: cancel and fly again offers the scramble again, plan, raid record and log restored")
-
-
 def check_70_overview_detail(c):
     """v0.41.149: the Situation panel and the Ground / Supply / Air defence / Air tabs (sqe/overview_detail.py)."""
     from sqe import overview_detail as _od, ground as _gr, tempo as _tp
@@ -4586,7 +4382,7 @@ def check_70_overview_detail(c):
     st.log.append(f"[day {st.day}] SUKHUMI HAS FALLEN: our forces hold it"); st.log.append("[day 1] nothing to see here")
     n = _od.ground_notes(st); assert any("next attack in about 4 days" in x for x in n) and any("taken on day" in x for x in n), n
     assert _od.history(st) == [st.log[-2]], _od.history(st)
-    sr = _od.supply_rows(st); assert len(sr) == 12 + 6 and {r[0] for r in sr} == {"Coalition", "Russia"} and all(r[3] == "intact" for r in sr), sr[:3]
+    sr = _od.supply_rows(st); assert len(sr) == 12 + 6 + st.ground["road"]["red"] + st.ground["road"]["blue"] and {r[0] for r in sr} == {"Coalition", "Russia"} and all(r[3] == "intact" for r in sr), sr[:3]
     a = next(x for x in st.assets.values() if x.kind in _gr.SUPPLY_KINDS)
     g["sup_h"][a.id] = 1.0; a.health = 0.5
     assert next(r for r in _od.supply_rows(st) if r[1] == a.name)[3].startswith("struck"), "struck since last night: no repair tonight"
@@ -4708,12 +4504,9 @@ def check_75_mass_raid_build(c):
     import sqe.engine as _eng
     from sqe import raids as _r
     _aio, _eng.AI_ONLY = _eng.AI_ONLY, ()
-    _rs, _eng.RAID_SCRAMBLES = _eng.RAID_SCRAMBLES, True
-    _em = _r.emergency_happens
-    s = fresh_session(3, 6); st = s.state; d = s.d
+    s = fresh_session(3, 9, "F-14BU"); st = s.state; d = s.d                 # v0.41.307: the planned land raids a Tomcat seat can fly (an F-16C seldom has one in reach)
     _w0 = d.raid_wave; d.raid_wave = 1.0
     try:
-        _r.emergency_happens = lambda *a, **k: True
         boost_su24(st, 40)
         for w_ in st.enemy_air:
             for q_ in w_.sqns:
@@ -4721,22 +4514,22 @@ def check_75_mass_raid_build(c):
         rp = None
         for _ in range(10):
             s.plan_day()
-            rp = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "RAID" and s.emergency_for(p_.number, None)["eligible"]), None)
+            rp = next((p_ for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land") and s.flyable(p_, squadron_only=False)), None)
             if rp:
                 break
             st.day += 1
         assert rp is not None
-        s.fly(rp.number, None, scramble=True)
+        s.fly(rp.number, s.flyable(rp, squadron_only=False)[0].id)
         ex = st.pending["package_dict"].get("extra") or {}
         assert ex.get("bombers", 0) >= 8 and ex.get("mass") and ex.get("escorts", 0) >= ex["bombers"] // 2, ex
         mz = _z.ZipFile(st.pending["miz"]).read("mission").decode()
         _nb, _nu = len(set(_re.findall(r"RAID-B-\d+", mz))), len(_re.findall(r'\["unitId"\]', mz))
-        assert _nb == ex["bombers"] and _nu <= 275, (_nb, _nu, ex)       # the regex counts statics too; the builder enforces its own 250
+        assert _nb == ex["bombers"] and _nu <= 330, (_nb, _nu, ex)       # the regex counts every static building whole (road sites add some, v0.41.241); the builder enforces its own 250 with statics at carcass weight
         assert any("Raid Sweep" in x for x in _re.findall(r"Raid Sweep \d", mz)), "a mass raid opens with a sweep"
     finally:
-        d.raid_wave = _w0; _r.emergency_happens = _em; _eng.AI_ONLY = _aio; _eng.RAID_SCRAMBLES = _rs
-    assert d.emerg_chance >= 0.3 and d.level == 3
-    print("[mass raid] 8+ bombers: escorts 1 per 2 plus a sweep, SEAD and DEAD groups, under the unit limit; L3 scramble chance 33%")
+        d.raid_wave = _w0; _eng.AI_ONLY = _aio
+    assert d.level == 3
+    print("[mass raid] 8+ bombers: escorts 1 per 2 plus a sweep, SEAD and DEAD groups, under the unit limit")
 
 
 def check_76_cas_task_force(c):
@@ -5305,7 +5098,7 @@ def check_96_site_spots(c):
             xy = (round(a.x), round(a.y))
             if a.kind.value == "SAM" and a.id.startswith("sam_"):
                 tot += 1; on += xy in pools["sam"]
-            elif a.kind.value in ("FUEL", "DEPOT"):
+            elif a.kind.value in ("FUEL", "DEPOT") and not a.id.startswith("rsup_"):          # (the road sites sit on the "road" spots, check_113)
                 tots += 1; ons += xy in pools["supply"]
             elif a.id.startswith("armor_"):
                 totc += 1; onc += xy in pools["ground"]
@@ -5433,7 +5226,7 @@ def check_99_fighters_clear_gate(c):
     mis2 = _zf.ZipFile(got.miz).read("mission").decode("utf8", "ignore")
     caps2 = _re.findall(r"\{t=\d+, site=[^\n]*?acap=(\d+)", mis2)
     assert str(AIR_HOLD_CAS_S) in caps2, ("a plain CAS flight carries the gate with the shorter cap", caps2[:4])
-    assert inspect.getsource(_MB._attach_waypoints).count("expend=task.Expend.All") == 2, "both bombing tasks drop the whole load"
+    assert inspect.getsource(_MB._bomb_task).count("expend=task.Expend.All") == 3, "all three bombing tasks (point, runway, ramp centre) drop the whole load"      # v0.41.254: the tasks moved into _bomb_task
     hk = _db.lua_hook("c", 1, "p", [], "Hornet 1-1", "Hornet 1", [], None, "a.wav", "b.wav", {}, [],
                       [{"id": "t", "label": "Target", "who": "W", "prim": True, "units": [], "trk": [], "srch": []}], [],
                       [{"t": 100, "site": "t", "grp": "Hornet 2", "from": 3, "to": 5, "ai": True, "dead": True, "you": False, "gm": 70000, "acap": 240, "tx": 1.0, "tz": 2.0}], True)
@@ -5596,6 +5389,7 @@ def check_102_persistent_objects(c):
     assert sup(15) <= stat, ("every live supply site inside the radius is built", sup(15) - stat)
     n15 = len(stat); s.abort()
     s.settings.merge_radius_nm = 50
+    s.settings.merge_max_units = 700                              # v0.41.241: with the road sites 50 nm holds many more sites, and the default limit could be used up before the supply circle (it comes last)
     res = s.fly(pk.number, fl.id); ships, stat = _scan(s)
     assert sup(50) <= stat and len(stat) >= n15, ("a bigger radius builds more", n15, len(stat), sup(50) - stat)
     u50 = res.counts["units"]; s.abort()
@@ -5672,6 +5466,8 @@ def check_105_no_garrison_cas_beyond_mountains(c):
     from sqe.models import AssetKind as _AK
     s = mk(); s.new("Coast garrisons", "F-16C", 3, seed=11); st = s.state
     gar = [a for a in st.assets.values() if a.kind == _AK.ARMOR and a.variant == "GARRISON" and not a.id.startswith(("rfwd_", "bfwd_"))]
+    road_far = {a.id for a in gar if a.id.startswith("rgar_sup_") and not _g.near_front(st, a.x, a.y)}          # v0.41.241: a road site's battalion follows the same rule (named for its nearest town)
+    gar = [a for a in gar if not a.id.startswith("rgar_sup_")]
     near = [a for a in gar if _g.near_front(st, a.x, a.y)]; far = [a for a in gar if not _g.near_front(st, a.x, a.y)]
     assert near and far and all(any(k in a.name for k in ("Sukhumi", "Gudauta", "Sochi", "Gelendzhik", "Krymsk")) for a in near), [a.name for a in near]
     assert all(any(k in a.name for k in ("Maykop", "Nalchik", "Beslan", "Mozdok")) for a in far), [a.name for a in far]
@@ -5687,7 +5483,7 @@ def check_105_no_garrison_cas_beyond_mountains(c):
         s.skip_day()
         if s.state.status != "ACTIVE":
             break
-    assert not (seen & {a.id for a in far}), ("CAS offered against a garrison beyond the mountains", seen & {a.id for a in far})
+    assert not (seen & ({a.id for a in far} | road_far)), ("CAS offered against a garrison beyond the mountains", seen & ({a.id for a in far} | road_far))
     assert seen & {a.id for a in near}, ("the coast garrisons are still offered", seen)
     print("[garrison CAS] %d coast garrisons, %d beyond the mountains never offered CAS over 25 days with every SAM dead (%d CAS targets seen)" % (len(near), len(far), len(seen)))
 
@@ -5735,23 +5531,20 @@ def check_107_raid_cover_fields(c):
     from sqe.raid_spawns import COVER_AAA_NM, COVER_FIELDS_MAX
     from sqe.routes import NM as _NM
     _aio, _eng.AI_ONLY = _eng.AI_ONLY, ()
-    _rs, _eng.RAID_SCRAMBLES = _eng.RAID_SCRAMBLES, True
-    _em = _r.emergency_happens
     seen_extra = 0
     try:
-        _r.emergency_happens = lambda *a, **k: True
-        for seed in (3, 6):
-            s = fresh_session(seed, 6); st = s.state
+        for seed in (9, 3):
+            s = fresh_session(3, seed, "F-14BU"); st = s.state
             boost_su24(st, 40)
             rp = None
             for _ in range(12):
                 s.plan_day()
-                rp = next((p_ for p_ in s.packages() if s.flyable(p_) and (s.emergency_for(p_.number, None) or {}).get("kind") == "RAID" and s.emergency_for(p_.number, None)["eligible"]), None)
+                rp = next((p_ for p_ in s.packages() if p_.objective.type.value == "FLEET_DEFENSE" and p_.extra.get("land") and s.flyable(p_, squadron_only=False)), None)
                 if rp:
                     break
                 st.day += 1
-            assert rp is not None, ("no raid scramble", seed)
-            s.fly(rp.number, None, scramble=True)
+            assert rp is not None, ("no land raid", seed)
+            s.fly(rp.number, s.flyable(rp, squadron_only=False)[0].id)
             pk = st.pending["package_dict"]; ex = pk.get("extra") or {}
             tb = st.bases[pk["objective"]["target_id"]]
             dest = ex.get("dest") or (tb.x, tb.y)
@@ -5771,7 +5564,7 @@ def check_107_raid_cover_fields(c):
             for aid in near:
                 assert ("%s|b" % aid) in mz or any("supply sites inside" in w_ for w_ in (st.pending.get("warns") or [])), ("a supply site near the raid target is missing", seed, aid)
     finally:
-        _r.emergency_happens = _em; _eng.AI_ONLY = _aio; _eng.RAID_SCRAMBLES = _rs
+        _eng.AI_ONLY = _aio
     print("[raid cover fields] covering fields built (nearest %d), neighbours without flights get no far AAA (%d checked), supply circle also round the raid target" % (COVER_FIELDS_MAX, seen_extra))
 
 def check_108_static_weight(c):
@@ -5897,6 +5690,727 @@ def check_111_step_spin(c):
     print("[step spin] minus / plus outside the field step and clamp, suffix kept, text field wide; the 10 Settings number boxes use it")
 
 
+def check_112_road_net(c):
+    """v0.41.238 (XO 2026-11-03, queue item m step 2): the road-net scan's data side. A route is simplified (ends kept, a bump under the tolerance
+    dropped, a corner kept); spots go along it every 5 km, off the road, deduplicated across overlapping routes; build_net writes the routes file and
+    adds the "road" supply key to the sites file WITHOUT touching its sectors / fields (a temp copy); the scan pairs cover the long hops. Strategic data
+    only: the Lua scan is not smoked (lupa replay was done by hand)."""
+    import math, shutil, sys, tempfile
+    from pathlib import Path as _P
+    from sqe import roadnet as rn, sites as _sites, theatres as _th
+    sys.path.insert(0, str(_P(__file__).resolve().parent))
+    import road_net_scan as rs
+    r = rn.simplify([(0, 0), (1000, 30), (2000, 0), (3000, 0), (3000, 5000)])
+    assert r[0] == (0, 0) and r[-1] == (3000, 5000) and (3000, 0) in r and (1000, 30) not in r, r
+    sp = rn.spots_along([(0, 0), (30000, 0)])
+    assert [p[0] for p in sp] == [5000, 10000, 15000, 20000, 25000, 30000] and all(abs(p[1]) == 150 for p in sp) and sp[0][1] == -sp[1][1], sp
+    two = rn.road_spots([[(0, 0), (30000, 0)], [(0, 40), (30000, 40)]])
+    assert len(rn.road_spots([[(0, 0), (30000, 0)]], keep_ok=lambda x, y: x < 20000)) == 3, "keep_ok drops a refused spot"
+    assert len(two) == 6, "an overlapping route adds no second set of spots"
+    th = _th.active()
+    d = tempfile.mkdtemp()
+    shutil.copy(_P(th["_dir"]) / f"{th['id']}_sites.json", d)
+    before = _sites.json.loads((_P(d) / f"{th['id']}_sites.json").read_text(encoding="utf-8"))
+    raw = [{"pair": "a", "kind": "roads", "pts": [[0, 0], [5000, 10], [30000, 0]]}, {"pair": "r", "kind": "railroads", "pts": [[0, 0], [9, 9]]}, {"pair": "e", "kind": "roads", "pts": []}]
+    s = rn.build_net(raw, d, th["id"])
+    after = _sites.json.loads((_P(d) / f"{th['id']}_sites.json").read_text(encoding="utf-8"))
+    assert s["routes"] == 1 and s["spots"] == len(after["road"]["supply"]) >= 2, s
+    assert after["sectors"] == before["sectors"] and after["fields"] == before["fields"], "the road key leaves the sector and field spots alone"
+    assert (_P(d) / f"{th['id']}_roads_net.json").is_file()
+    prs = rs.pairs()
+    names = {a for lab, _, _ in prs for a in lab.split("~")}
+    assert len(prs) >= 40 and "Kutaisi" in names and any(lab == "Kutaisi~Mozdok" for lab, _, _ in prs), len(prs)
+    assert len({lab for lab, _, _ in prs}) == len(prs), "each pair once"
+    assert "land.findPathOnRoads" in rs.scan_lua() and "SQEROADNET" in rs.scan_lua()
+    print("[road net] routes simplify, spots every 5 km beside the road and deduplicated, the sites file keeps its sectors and fields, %d scan pairs" % len(prs))
+
+
+def check_113_road_sites(c):
+    """v0.41.241 (XO 2026-11-03, queue item i): supply sites along the roads of a NEW campaign. Strategic structure only (tunables like guard strength are not smoked):
+    the counts by level, owner by nearest airfield, ids and kinds, plants away from the front, battalions linked to red sites only, the Supply figure counting every
+    site (still 100% at the start), dry land, a save round trip, one seed gives the same sites, and a full-map mission builds every site (plants with their buildings)."""
+    import math, zipfile
+    from sqe import ground as _gr, theatres as _th, seacheck as _sc, sites as _sites, road_sites as _rs
+    from sqe.models import AssetKind as _AK
+    from sqe.state import CampaignState as _CS
+    th = _th.active()
+    blue_ap = set(th["road_blue_airports"])
+    pos = {n: (a.position.x, a.position.y) for n, a in _th.terrain().airports.items()}
+    want = {1: 60, 2: 100, 3: 100}
+    seen = {}
+    for lv in (1, 2, 3):
+        st = fresh_session(lv, 5).state
+        g = st.ground
+        rd = g["road"]
+        red = {k: a for k, a in st.assets.items() if k.startswith("rsup_")}
+        blue = {k: a for k, a in st.blue_assets.items() if k.startswith("bsup_")}
+        assert len(red) == rd["red"] and len(blue) == rd["blue"] and rd["red"] + rd["blue"] == want[lv], (lv, rd)
+        assert not any(k.startswith("rsup_") for k in st.blue_assets) and not any(k.startswith("bsup_") for k in st.assets)
+        for side, pool in (("red", red), ("blue", blue)):
+            for a in pool.values():
+                assert a.kind in _gr.SUPPLY_KINDS and _sc.site_ok(a.x, a.y) and _sites.on_spot(a.x, a.y), (a.id, a.name)
+                from sqe import road_front as _rf, theatres as _tha                    # v0.41.258: the owner is the side its road connects to (was the nearest airfield)
+                _th_, _rts_ = _tha.active(), _rf.routes(_tha.active())
+                assert _rf.site_side(st, _th_, _rts_, _rf.route_sides(st, _th_, _rts_), a.x, a.y) == side, (a.id, "owner by the road it connects to")
+                assert all(math.hypot(a.x - px, a.y - py) >= _rs.AIRFIELD_CLEAR_M for px, py in pos.values()), (a.id, "clear of the airfields")
+        plants = [a for a in list(red.values()) + list(blue.values()) if a.variant in _rs.PLANT_VARIANTS]
+        assert sum(rd["plants"].values()) == len(plants) >= 4 and rd["plants"]["red"] >= 2 and rd["plants"]["blue"] >= 2, rd
+        for a in plants:
+            assert a.kind == (_AK.FUEL if a.variant == "REFINERY" else _AK.DEPOT)
+            assert min(math.hypot(a.x - cx, a.y - cy) for cx, cy in g["centers"]) >= _rs.PLANT_MIN_KM * 1000 - 1, (a.id, "a plant sits away from the front")
+        bats = [a for a in st.assets.values() if a.id.startswith("rgar_sup_")]
+        assert len(bats) == rd["battalions"] and all(b.guards in red and b.kind == _AK.ARMOR and b.variant == "GARRISON" for b in bats), rd
+        assert not any(a.id.startswith(("bgar_sup", "rgar_sup")) for a in st.blue_assets.values()), "no friendly battalions at road sites (#280)"
+        assert sum(1 for a in red.values() if a.variant == "ROAD0") == rd["open"], rd
+        n_all = {s_: sum(1 for a in (st.assets if s_ == "red" else st.blue_assets).values() if a.kind in _gr.SUPPLY_KINDS) for s_ in ("red", "blue")}
+        assert g["sup_n"] == n_all and _gr.supply(st, "red") == 1.0 == _gr.supply(st, "blue") and all(k in g["sup_h"] for k in list(red) + list(blue)), (lv, g["sup_n"], n_all)
+        assert all(a.tier >= 2 for a in red.values()) and all(a.tier == 1 for a in blue.values())
+        st2 = _CS.from_dict(st.to_dict())
+        assert st2.ground["road"] == rd and set(st2.assets) == set(st.assets) and set(st2.blue_assets) == set(st.blue_assets), "saves keep the road sites"
+        seen[lv] = {k: (round(a.x), round(a.y)) for k, a in list(red.items()) + list(blue.items())}
+    assert seen[2] == {k: (round(a.x), round(a.y)) for k, a in list(fresh_session(2, 5).state.assets.items()) + list(fresh_session(2, 5).state.blue_assets.items()) if k[1:5] == "sup_"}, "one seed, the same sites"
+    ses = fresh_session(3, 5)
+    ses.plan_day()
+    p_ = next(x for x in ses.packages() if ses.flyable(x))
+    ses.full_map = True
+    try:
+        rr = ses.fly(p_.number, ses.flyable(p_)[0].id)
+    finally:
+        ses.full_map = False
+    gs = {g_["ref"]: g_ for g_ in rr.manifest.groups if g_["kind"] == "asset"}
+    for a in ses.state.assets.values():
+        if a.id.startswith("rsup_") and not a.destroyed and a.id in gs:
+            u = gs[a.id]
+            assert u["units"] and u["base_count"] >= len(u["units"]), (a.id, u)
+            if a.variant in _rs.PLANT_VARIANTS:
+                assert sum(1 for n in u["units"] if "|b" in n) == 5, (a.id, u["units"])
+    assert sum(1 for k in gs if k.startswith("rsup_")) >= 40, "a full-map mission builds the road sites"
+    print("[road sites] 60 / 100 / 100 sites by level, owner by road connection, plants away from the front, battalions on red only, Supply figure counts them all, saves keep them, plants build with their buildings")
+
+
+def check_114_blue_site_buildings(c):
+    """v0.41.241 (XO 2026-11-03): a blue supply site is not indestructible: buildings destroyed in a flown mission lower its health (never raises it)."""
+    from sqe.debrief import Manifest, apply_debrief
+    s = fresh_session(2, 7); st = s.state
+    aid = next(k for k, a in st.blue_assets.items() if a.kind.value in ("FUEL", "DEPOT"))
+    a = st.blue_assets[aid]; a.health = 1.0
+    names = [f"{aid}|b{i}" for i in range(4)]
+    m = Manifest(st.campaign_id, 1, "pkg1", st.day)
+    m.add("blue_site", aid, names, label=a.name, health_before=a.health)
+    apply_debrief(st, m, {"dead": names[:3], "landed": [], "time": 700})
+    assert abs(st.blue_assets[aid].health - 0.25) < 1e-6, st.blue_assets[aid].health
+    m2 = Manifest(st.campaign_id, 1, "pkg2", st.day)
+    m2.add("blue_site", aid, names, label=a.name, health_before=st.blue_assets[aid].health)
+    apply_debrief(st, m2, {"dead": [], "landed": [], "time": 700})
+    assert abs(st.blue_assets[aid].health - 0.25) < 1e-6
+    print("[blue site] 3 of 4 buildings dead -> health 25%")
+
+
+def check_115_fall_move(c):
+    """v0.41.243 (XO 2026-11-03, queue item h/h2): squadrons that withdraw from a fallen field sit out 1 to 2 nights (not the player's), remember their home field, and fly
+    home when it is retaken; red squadrons rest the same way after a red base falls. Strategic state only (the nights are a tunable)."""
+    import random as _rnd
+    from sqe import ground as _gr, airwings as _aw
+    from sqe.state import CampaignState as _CS
+    s = fresh_session(2, 5); st = s.state; d = s.d; pid = st.player.squadron_id
+    on = [q for q in st.squadrons.values() if st.bases[q.base_id].id == "senaki" and q.id != pid]
+    assert on, "senaki holds a squadron besides the player's"
+    before = {q.id: (q.available, q.authorized) for q in on}
+    st.ground["fallen"].append("senaki")
+    _gr.apply_fall(st, "senaki")
+    for q in on:
+        assert q.home_id == "senaki" and q.base_id != "senaki", "withdrawn, home remembered"
+        if before[q.id][0] > 0:
+            assert q.available == 0 and q.reserve > 0 and q.move_days in _gr.FALL_MOVE_NIGHTS, (q.available, q.reserve, q.move_days)
+    assert _CS.from_dict(st.to_dict()).squadrons[on[0].id].home_id == "senaki", "the home field survives a save"
+    rng = _rnd.Random(1)
+    for _ in range(max(_gr.FALL_MOVE_NIGHTS)):
+        _aw.step(st, d, rng)
+    assert all(q.move_days == 0 and q.reserve == 0 and (q.available > 0 or before[q.id][0] == 0) for q in on), "back in the line after their nights"
+    assert sum(q.available for q in on) > 0
+    st.ground["fallen"].remove("senaki")
+    ln = _gr.return_squadrons(st, "senaki")
+    assert ln and all(q.base_id == "senaki" and q.home_id == "" for q in on), ln
+    assert _gr.return_squadrons(st, "senaki") == [], "nothing returns twice"
+    # a squadron driven from a field and later from its refuge keeps the ORIGINAL home
+    q = on[0]; q.base_id = "kutaisi"; q.home_id = "senaki"
+    st.ground["fallen"].append("kutaisi"); _gr.apply_fall(st, "kutaisi")
+    assert q.home_id == "senaki", "home stays the first field"
+    # the player's squadron sits out its nights like any other (v0.41.246, XO)
+    pq = st.squadrons[pid]; pq.base_id = "senaki"; pq.home_id = ""; av = pq.available
+    st.ground["fallen"] = []; _gr.apply_fall(st, "senaki")
+    assert pq.reserve > 0 and pq.available == 0 and pq.move_days in _gr.FALL_MOVE_NIGHTS, (pq.reserve, pq.available, pq.move_days)
+    for _ in range(max(_gr.FALL_MOVE_NIGHTS)):
+        _aw.step(st, d, rng)
+    assert pq.available > 0 and pq.reserve == 0 and pq.move_days == 0, "the player's squadron is back in the line"
+    assert av - int(round(av * _gr.FALL_LOSS)) - 1 <= pq.available
+    # red: a taken base's squadrons rest at the new field and come back
+    s2 = fresh_session(2, 5); st2 = s2.state; g2 = st2.ground
+    rb = next(r for r in g2["rbases"] if st2.enemy_air_at(r["id"]) is not None and st2.enemy_air_at(r["id"]).sqns)
+    w = st2.enemy_air_at(rb["id"]); ids = {q.id for q in w.sqns}
+    _gr.apply_red_fall(st2, rb)
+    moved = [q for x in st2.enemy_air for q in x.sqns if q.id in ids]
+    assert moved and any(q.move_days > 0 for q in moved), "red squadrons are on the move"
+    for _ in range(max(_gr.FALL_MOVE_NIGHTS)):
+        _aw.step(st2, s2.d, _rnd.Random(2))
+    assert all(q.move_days == 0 for q in moved) and any(q.available > 0 for q in moved)
+    print("[fall move] blue squadrons rest %s nights, remember home, return on retake; red rest too" % (_gr.FALL_MOVE_NIGHTS,))
+
+
+def check_116_taken_fields(c):
+    """v0.41.244 (XO 2026-11-03, queue item h part 1, PR 1): a red field we take becomes a blue base whose defences go up in stages (AAA day 3, HAWK day 6, Patriot day 9).
+    Strategic state only (the days are tunables): the base and its three sites exist and start at 0, the stages arrive in order, the usual SAM orders leave a pending field alone,
+    a save keeps it, the full-map mission builds with it, it never counts toward the defeat rule, and the enemy retaking it removes it."""
+    from sqe import ground as _gr, sams as _sm, war as _war
+    from sqe.state import CampaignState as _CS
+    ses = fresh_session(2, 5); st = ses.state; g = st.ground
+    rb = g["rbases"][0]; rid = rb["id"]; z = rb["zone"]
+    g["blue"][z], g["red"][z] = 60.0, 0.0
+    _gr._check_red_bases(st)
+    assert rid in g["taken"] and rid in g["taken_fields"], g.get("taken_fields")
+    bid = g["taken_fields"][rid]["base"]; b = st.bases[bid]
+    assert b.kind.value == "AIRFIELD" and b.airport and b.defense == 0.0
+    sites = _sm.blue_sites(st, b); assert len(sites) == 3 and all(a.health == 0.0 for a in sites.values())
+    assert bid in _gr.pending_fields(st) and _gr.fallen_count(st) == 0
+    t0 = g["taken_day"][rid]
+    for day, want in ((t0 + 2, 0), (t0 + 3, 1), (t0 + 5, 1), (t0 + 6, 2), (t0 + 9, 3)):
+        st.day = day; _gr.taken_fields_step(st)
+        assert g["taken_fields"][rid]["stage"] == want, (day - t0, g["taken_fields"][rid])
+        assert [sites[k].health for k in ("aaa", "hawk", "pat")] == [1.0 if i < want else 0.0 for i in range(3)], (day - t0, [sites[k].health for k in ("aaa", "hawk", "pat")])
+        if want == 1:                                           # a field still being built is left to the timetable
+            import random as _r
+            _sm.blue_asks(st, ses.d, _r.Random(1)); _sm.rebuild_blue_sites(st, ses.d, _r.Random(1))
+            assert sites["hawk"].health == 0.0 and sites["pat"].health == 0.0
+    assert bid not in _gr.pending_fields(st) and b.defense == 1.0
+    assert _war.totals(st)["base_defense"] > 0.0
+    rt = _CS.from_dict(st.to_dict())
+    assert bid in rt.bases and rt.ground["taken_fields"][rid]["stage"] == 3 and len(_sm.blue_sites(rt, rt.bases[bid])) == 3
+    p_ = next(x for x in ses.packages() if ses.flyable(x))
+    ses.full_map = True
+    try:
+        ses.fly(p_.number, ses.flyable(p_)[0].id)
+    finally:
+        ses.full_map = False
+    for _ in range(5):
+        ses.plan_day(); ses.skip_day()                          # (replan: the day's plan was made before the field fell)
+    assert bid in st.bases and _gr.fallen_count(st) == 0
+    g["red"][z], g["blue"][z] = 60.0, 0.0                       # the enemy holds the sector again
+    ln = _gr._check_red_bases(st)
+    assert bid not in st.bases and rid not in g["taken_fields"] and not any(k.startswith(f"bsam_{bid}_") for k in st.blue_sams), ln
+    assert _gr.fallen_count(st) == 0
+    print("[taken field] %s: base + 3 sites at 0, stages AAA/HAWK/Patriot on days %s, save, mission, retake removes it" % (bid, [d for _, d in _gr.TAKEN_STAGES]))
+
+
+def check_117_first_mover(c):
+    """v0.41.246 (XO 2026-11-03, queue item h part 1, PR 2): once a taken field's defences are complete and day 11 has passed, one F-16C squadron moves in: the PLAYER's squadron
+    first (when it is an F-16C), else the squadron of the most over-capacity field; it keeps its name, sits out its move nights, remembers its home, and goes home when the enemy
+    retakes the field. The F-15Cs stay. Strategic state only (the day and the nights are tunables); the mission builds from the new field."""
+    import random as _rnd
+    from sqe import ground as _gr, airwings as _aw, sams as _sm
+    from sqe.state import CampaignState as _CS
+    for who in ("player", "other"):
+        ses = fresh_session(2, 5); st = ses.state; g = st.ground; pid = st.player.squadron_id
+        if who == "other":
+            st.player.squadron_id = pid = "fs_94"                  # an F-15C pilot: the F-16C squadron of the fullest field moves instead
+        rb = g["rbases"][0]; rid = rb["id"]; z = rb["zone"]
+        g["blue"][z], g["red"][z] = 60.0, 0.0
+        _gr._check_red_bases(st)
+        bid = g["taken_fields"][rid]["base"]; b = st.bases[bid]; t0 = g["taken_day"][rid]
+        st.day = t0 + 10; _gr.taken_fields_step(st)
+        assert not g["taken_fields"][rid].get("moved"), "not before day 11"
+        st.day = t0 + _gr.TAKEN_FIRST_MOVER_DAY; ln = _gr.taken_fields_step(st)
+        mv = g["taken_fields"][rid].get("moved"); assert mv and ln, g["taken_fields"][rid]
+        q = st.squadrons[mv]
+        assert q.aircraft == "F-16C" and q.base_id == bid and q.home_id in ("senaki", "kutaisi", "kobuleti", "batumi"), (q.id, q.base_id, q.home_id)
+        if who == "player":
+            assert mv == pid, "the player's squadron goes first"
+        else:
+            assert mv != pid and st.squadrons["fs_94"].base_id != bid and st.squadrons["fs_27"].base_id != bid, "the F-15Cs stay"
+        assert q.available == 0 and q.reserve > 0 and q.move_days in _gr.FALL_MOVE_NIGHTS, (q.available, q.reserve, q.move_days)
+        _gr.taken_fields_step(st); assert sum(1 for x in st.squadrons.values() if x.base_id == bid) == 1, "one mover per field"
+        for _ in range(max(_gr.FALL_MOVE_NIGHTS)):
+            _aw.step(st, ses.d, _rnd.Random(3))
+        assert q.available > 0 and q.reserve == 0
+        rt = _CS.from_dict(st.to_dict())
+        assert rt.squadrons[mv].base_id == bid and rt.squadrons[mv].home_id == q.home_id and rt.ground["taken_fields"][rid]["moved"] == mv
+        if who == "player":
+            ses.plan_day()                                            # the day's plan with the squadron at the new field
+            pk = [x for x in ses.packages() if ses.flyable(x)]
+            assert pk, "a flyable package from the new field"
+            ses.full_map = True
+            try:
+                rr = ses.fly(pk[0].number, ses.flyable(pk[0])[0].id)
+            finally:
+                ses.full_map = False
+            assert rr is not None
+            for _ in range(3):
+                ses.plan_day(); ses.skip_day()
+        g["red"][z], g["blue"][z] = 60.0, 0.0                        # the enemy retakes the field
+        ln = _gr._check_red_bases(st)
+        assert bid not in st.bases and q.base_id in st.bases and q.base_id != bid and q.home_id == "" and _gr.fallen_count(st) == 0, (ln, q.base_id, q.home_id)
+    print("[first mover] player first, else the fullest field's F-16C; F-15Cs stay; the player's squadron rests too; mission builds from the new field; retake sends it home")
+
+
+def check_118_new_squadrons(c):
+    """v0.41.247 (XO 2026-11-03, queue item h part 1, PR 3): one week after a taken field's Patriots (day 16) a NEW squadron forms there: F-16C by default, the A-10C / F-15C when
+    the planner was short of CAS / TARCAP-SWEEP slots near the field (`ground["short"]`). New id, name and callsign (none shared), full strength, tasked by the planner, saved and
+    loaded; it withdraws when the field is retaken. Strategic state only (the day, the radius and the count are tunables)."""
+    from sqe import ground as _gr, new_squadrons as _ns
+    from sqe.state import CampaignState as _CS
+    ses = fresh_session(2, 5); st = ses.state; g = st.ground
+    for rb in g["rbases"]:                                              # all three red fields fall: Sukhumi (23 spots), Gudauta (31), Sochi (68)
+        g["blue"][rb["zone"]], g["red"][rb["zone"]] = 60.0, 0.0
+    _gr._check_red_bases(st)
+    rid = "ab_sochi"; z = next(r["zone"] for r in g["rbases"] if r["id"] == rid)
+    bid = g["taken_fields"][rid]["base"]; b = st.bases[bid]; t0 = g["taken_day"][rid]
+    sk = g["taken_fields"]["ab_sukhumi"]["base"]
+    st.day = t0 + 15; _gr.taken_fields_step(st)
+    n0 = len(st.squadrons)                                              # (after the day-11 first mover, which only moves an existing squadron)
+    assert not g["taken_fields"][rid].get("new"), "not before day 16"
+    st.day = t0 + _gr.TAKEN_NEW_DAY; ln = _gr.taken_fields_step(st)
+    assert not g["taken_fields"]["ab_sukhumi"].get("new"), "Sukhumi has 23 spots: the first mover leaves under NEW_MIN_SIZE free, so no new squadron"
+    new = g["taken_fields"][rid].get("new"); assert new and len(new) == 1 and ln, g["taken_fields"][rid]
+    q = st.squadrons[new[0]]
+    assert q.aircraft == "F-16C" and q.base_id == bid and q.available == q.authorized >= _ns.NEW_MIN_SIZE and q.reserve == 0, (q.aircraft, q.base_id, q.available)
+    assert sum(x.authorized for x in st.squadrons.values() if x.base_id == bid) <= _gr._parking(b.airport, "F-16C"), "the field's parking holds them all"
+    cs = [x.callsign for x in st.squadrons.values()]; ids = [x.id for x in st.squadrons.values()]
+    assert len(set(cs)) == len(cs) and len(set(ids)) == len(ids), "callsigns and ids stay unique"
+    assert len(st.squadrons) == n0 + sum(len(r.get("new", [])) for r in g["taken_fields"].values()) == n0 + 2, "Sochi and Gudauta form one each, Sukhumi none"
+    _gr.taken_fields_step(st); assert len(g["taken_fields"][rid]["new"]) == 1, "one new squadron per field"
+    rt = _CS.from_dict(st.to_dict()); assert rt.squadrons[q.id].base_id == bid and rt.ground["taken_fields"][rid]["new"] == new
+    # the need: enough unfilled CAS slots near the field -> an A-10C squadron; the same far away -> the F-16C default
+    near = [[st.day, "CAS", round(b.x), round(b.y)]] * _ns.NEED_MIN
+    st.ground["short"] = near; assert _ns.need(st, b)[0] == "A-10C", _ns.need(st, b)
+    st.ground["short"] = [[st.day, "TARCAP", round(b.x), round(b.y)]] * _ns.NEED_MIN; assert _ns.need(st, b)[0] == "F-15C"
+    st.ground["short"] = [[st.day, "CAS", round(b.x + 900_000), round(b.y)]] * 20; assert _ns.need(st, b)[0] == "F-16C", "too far away to count"
+    st.ground["short"] = [[st.day, "CAS", round(b.x), round(b.y)]] * (_ns.NEED_MIN - 1); assert _ns.need(st, b)[0] == "F-16C", "too few to count"
+    # the planner records its shortfalls and a replan of the same day replaces them
+    st.ground["short"] = []; ses.plan_day(); n1 = len(st.ground["short"]); ses.plan_day()
+    assert len(st.ground["short"]) == n1 and all(r[0] == st.day for r in st.ground["short"]), "a replan replaces that day's record"
+    flown = False
+    for _ in range(4):
+        ses.plan_day(); flown = flown or any(f.squadron_id == q.id for p in ses.packages() for f in p.flights)
+        ses.skip_day()                                                  # the days run with the new squadron on the books
+    assert flown, "the planner tasks the new squadron"
+    g["red"][z], g["blue"][z] = 60.0, 0.0                              # the enemy retakes Sochi
+    ln = _gr._check_red_bases(st)
+    assert bid not in st.bases and st.squadrons[q.id].base_id in st.bases and st.squadrons[q.id].base_id != bid, (ln, st.squadrons[q.id].base_id)
+    print("[new squadrons] day 16, F-16C by default, A-10C / F-15C by the planner's shortfalls; unique callsigns; saved; withdraws on retake")
+
+
+
+def check_119_raid_folds_by_time(c):
+    """v0.41.250 (XO 2026-11-03: the carrier raid is no boss fight; v0.41.270, XO 2026-11-04: now it folds into NOTHING, the asserts below check that): the carrier raid used to fold into any other mission that starts inside the merge time window, wherever it
+    flies, never into itself and not when merging is off; the blue CAP is sized to the raiders (about one fighter per raider). Mission composition only (the window is a tunable)."""
+    from sqe import bombers
+    real = bombers.desperation
+    bombers.desperation = lambda st, bw: 5.0
+    q_ = bombers.QUIET_DAYS
+    bombers.QUIET_DAYS = 0
+    try:
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+        ses.new("Fold", "F-16C", 3, seed=1)
+        sp = [p for p in ses.packages() if p.extra.get("setpiece")][0]
+        caps = sum(f.count for f in sp.flights if f.role.value == "CAP")
+        raiders = sp.extra["bombers"] + sp.extra["escorts"]
+        assert raiders * 0.8 <= caps <= raiders * 1.6, (caps, raiders)
+        tgt = [p for p in ses.packages() if p.number != sp.number and ses.flyable(p)][0]
+        for d in ses.state.plan:
+            if d.get("extra", {}).get("setpiece"):
+                d["start"] = tgt.start
+        sp = [p for p in ses.packages() if p.extra.get("setpiece")][0]
+        tgt = [p for p in ses.packages() if p.number == tgt.number][0]
+        assert sp.number not in [x.number for x in ses.merge_candidates(tgt)], "v0.41.270: the carrier raid folds into no mission, even at the same time"
+        assert not ses.merge_candidates(sp), "nothing folds into the raid itself"
+        ses.settings.merge_mode = "off"
+        assert not ses.merge_candidates(tgt), "merging off folds nothing"
+    finally:
+        bombers.desperation = real
+        bombers.QUIET_DAYS = q_
+    print("[raid folds by time] the carrier raid folds into no mission (v0.41.270), blue CAP about one fighter per raider")
+
+
+def check_120_runway_cratering(c):
+    """v0.41.254 (XO 2026-11-03): a field whose runway took 3 or more bomb hits is CRATERED for 2-5 days by supply (state.ground["craters"]); its squadrons fly nothing,
+    red wings there launch nothing, divert fields skip it; a runway strike (STRIKE, aim RUNWAY) is planned against red fields and is built with BombingRunway; the hook counts
+    bomb impacts on the runway (the geometry twin is tested here, the Lua only compiled). Strategic state only (the days and the hit count are tunables)."""
+    from sqe import runways as rw, ground as _gr
+    from sqe.state import CampaignState as _CS
+    # the day count: 2 at full supply, 5 at none, rounded between
+    assert rw.close_days(1.0) == 2 and rw.close_days(0.35) == 5 and rw.close_days(0.0) == 5 and rw.close_days(0.67) in (3, 4), (rw.close_days(0.67),)
+    # the rectangle test: on the strip, beside it, past the end
+    assert rw.inside(0, 0, 90) and rw.inside(0, 2500, 90) and rw.inside(80, 0, 90) and not rw.inside(300, 0, 90) and not rw.inside(0, 2700, 90) and rw.inside(2500, 0, 0)
+    ses = fresh_session(3, 7); st = ses.state
+    blue = next(b for b in st.bases.values() if b.kind.value == "AIRFIELD")
+    sqs = [q for q in st.squadrons.values() if q.base_id == blue.id]
+    red = next(a for a in st.assets.values() if a.kind.value == "AIRFIELD" and st.enemy_air_at(a.id))
+    assert not rw.is_closed(st, blue.id) and not rw.closed_ids(st)
+    ln = rw.add_hits(st, blue.id, 2); assert "not enough" in ln and not rw.is_closed(st, blue.id), ln
+    assert rw.add_hits(st, blue.id, 0) is None
+    ln = rw.add_hits(st, blue.id, 3); assert rw.is_closed(st, blue.id) and "CRATERED" in ln, ln
+    c0 = st.ground["craters"][blue.id]; n = c0["until"] - c0["day"]; assert 2 <= n <= 5, n
+    rw.crater(st, blue.id, 4); assert st.ground["craters"][blue.id]["until"] == c0["until"], "a second hit does not extend the timer"
+    assert rw.is_closed(st, blue.id, st.day + n - 1) and not rw.is_closed(st, blue.id, st.day + n), "closed until the day it ends"
+    rt = _CS.from_dict(st.to_dict()); assert rt.ground["craters"][blue.id]["until"] == c0["until"] and rw.is_closed(rt, blue.id), "saved and loaded"
+    # supply decides the length: a starved side waits longer than a full one
+    st.ground["craters"].clear()
+    # a cratered field flies nothing: no flight of the day comes from it
+    rw.crater(st, blue.id); ses.plan_day()
+    assert not any(f.base_id == blue.id for p in ses.packages() for f in p.flights if not f.tag), "no package flight leaves a cratered field"
+    from sqe.packages import Ledger
+    assert all(Ledger(st).free[q.id] == 0 for q in sqs), "the planner's ledger has no aircraft at a cratered field"
+    st.ground["craters"].clear()
+    assert any(Ledger(st).free[q.id] > 0 for q in sqs) or not sqs, "...and has them once the field is open again"
+    # red: a cratered field's wing is out of the raid and patrol lists
+    from sqe import raids as _rd
+    st.ground["craters"][red.id] = {"day": st.day, "until": st.day + 3, "hits": 3, "side": "red"}
+    w = st.enemy_air_at(red.id)
+    assert w not in [x[0] for x in _rd.raider_wings(st, "field", budget=False)], "a cratered field sends no raid"
+    st.ground["craters"].clear()
+    assert w in [x[0] for x in _rd.raider_wings(st, "field", budget=False)] or w.available < 2 or not any(t in w.types_up for t in ("Su_24M", "Su_25")), "...and does once it is open"
+    st.ground["craters"].clear()
+    # the hook's field list and the Lua compile with fields
+    from sqe import theatres, debrief
+    fl = rw.fields_for_hook(st, theatres.terrain())
+    assert fl and all(f["h"] and isinstance(f["x"], float) for f in fl) and {blue.id, red.id} <= {f["id"] for f in fl}, fl
+    lua = debrief.lua_hook("c", 1, "p", [], cfg={"rwys": fl})
+    assert "rwyHits[f.id]" in lua and f'id="{blue.id}"' in lua
+    try:
+        import lupa
+        res_ = lupa.LuaRuntime(unpack_returned_tuples=True).eval("function(s) return load(s) end")(lua)
+        fn, err = (res_ if isinstance(res_, tuple) else (res_, None))
+        assert fn is not None, f"hook does not compile with fields: {err}"
+    except ImportError:
+        pass
+    # the planner offers a runway strike against a red field with aircraft on it
+    from sqe.war import ObjectivePlanner, WarSimulator
+    from sqe.difficulty import get as _gd
+    import random as _rn
+    for a_ in st.assets.values():
+        if a_.kind.value == "SAM":
+            a_.health = 0.0                                              # no live SAM cover: nothing blocks the field (an airfield under a live SAM belt waits for its SEAD / DEAD, like counter-air)
+    objs = [o for o in ObjectivePlanner(_gd(3)).plan(st, _rn.Random(1), 40) if o.aim == "RUNWAY"]
+    assert objs and all(o.type.value == "STRIKE" and o.target_id in st.assets for o in objs), "a runway strike is planned against a red field"
+    st.ground["craters"][objs[0].target_id] = {"day": st.day, "until": st.day + 3, "hits": 3, "side": "red"}
+    assert not any(o.aim == "RUNWAY" and o.target_id == objs[0].target_id for o in ObjectivePlanner(_gd(3)).plan(st, _rn.Random(1), 40)), "no runway strike on a field that is already cratered"
+    st.ground["craters"].clear()
+    # the abstract resolve craters the field on success
+    from sqe.models import Objective, ObjectiveType
+    pkg = next(p for p in ses.packages() if p.flights and p.objective.type not in (ObjectiveType.FLEET_DEFENSE, ObjectiveType.BARCAP))
+    o2 = Objective("x", ObjectiveType.STRIKE, objs[0].target_id, 5.0, "Crater the runway"); o2.aim = "RUNWAY"
+    pkg.objective = o2
+    res = WarSimulator(_gd(3)).resolve_abstract(st, pkg, force={"success": True})
+    assert rw.is_closed(st, objs[0].target_id), res
+    st.ground["craters"].clear()
+    # built as a mission (a session of its own): the strike flight gets DCS's BombingRunway on the field, and the hook carries the runway fields
+    ses2 = fresh_session(3, 7); st2 = ses2.state
+    p0 = next(p for p in ses2.packages() if ses2.flyable(p) and p.objective.type.value in ("STRIKE", "CAS", "DEAD"))
+    rf = next(a for a in st2.assets.values() if a.kind.value == "AIRFIELD" and st2.enemy_air_at(a.id)).id
+    for d in st2.plan:
+        if d.get("id") == p0.id:
+            d["objective"].update(type="STRIKE", target_id=rf, aim="RUNWAY", description="Crater the runway", after="")
+    p1 = next(p for p in ses2.packages() if p.number == p0.number)
+    ses2.fly(p1.number, ses2.flyable(p1)[0].id)
+    mz_ = zipfile.ZipFile(ses2.settings.sortie_miz).read("mission").decode()
+    assert "BombingRunway" in mz_ and "rwyHits" in mz_, "a runway strike is built with BombingRunway and the hook counts runway hits"
+    print("[runway cratering] 3 hits close a field for 2-5 days by supply; saved; its squadrons and red wing fly nothing; hook list and Lua compile")
+
+
+def check_121_sunk_carrier(c):
+    """v0.41.257 (XO 2026-11-03): a carrier sunk in a flown mission. Strategic state only (the days and shares are tunables): the debrief reads the ship's death, the aircraft that
+    did not fly or that landed aboard before it sank are lost, the flying survivors land at a field and their squadron moves there, the carrier counts as one lost base for the defeat rule
+    while it is away, the planner and the mission leave the ship out, a sunk escort cuts the air defence, the save keeps it all, and the ship comes back as new on its day."""
+    from sqe import fleet as _fl, ground as _gr, debrief as _db
+    from sqe.state import CampaignState as _CS
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke sunk", "F-14BU", 3, seed=5)
+    st = ses.state
+    cv = _fl.carrier_base(st); assert cv is not None
+    sqs = sorted((q for q in st.squadrons.values() if q.base_id == cv.id), key=lambda q: q.id)
+    assert sqs, "the carrier holds squadrons"
+    q0 = st.squadrons[st.player.squadron_id]; assert q0 in sqs, "the player's squadron is on the boat"
+    q0.available = min(q0.authorized, 10)
+    n0 = q0.available
+    assert _gr.fallen_count(st) == 0 and not _fl.sunk(st)
+    cvu, escu = _fl.unit_names(cv)
+    man = _db.Manifest(st.campaign_id, 1, "p1", st.day)
+    man.add("friendly", "f1", ["u_a", "u_b", "u_c", "u_d"], squadron=q0.id, callsign="Test 1")
+    data = {"dead": [cvu, escu[0], escu[1], "u_d"], "ejected": [], "landed": ["u_a", "u_c"], "time": 1000,
+            "deaths": [{"n": cvu, "t": 500}], "landings": {"u_a": {"t": 100, "p": cvu}, "u_c": {"t": 900, "p": "Kutaisi"}}}
+    out = _db.apply_debrief(st, man, data)
+    txt = "\n".join(out["lines"])
+    assert "Fleet losses: " in txt and "2 escorts sunk" in txt and "Carrier sunk, returning in 7 days." in txt, txt
+    assert _fl.sunk(st) and _fl.days_left(st) == _fl.SUNK_DAYS and _gr.fallen_count(st) == (1 if _gr.active(st) else 0)
+    # u_d died (-1); u_a landed aboard before the sinking (lost with it); u_b still flying and u_c landed ashore after it: 2 survivors
+    assert q0.base_id != cv.id and q0.home_id == cv.id and q0.reserve == 2 and q0.available == 0, (q0.base_id, q0.home_id, q0.reserve, q0.available)
+    assert all(q.base_id != cv.id and q.home_id == cv.id for q in sqs), "every carrier squadron moved ashore"
+    assert all(q.available + q.reserve <= 2 for q in sqs if q is not q0) and n0 > 2
+    from sqe import carrier_hit as _ch
+    assert _ch.deck_factor(st) == 0.0
+    assert _CS.from_dict(st.to_dict()).fleet == st.fleet, "the save keeps the sunk carrier"
+    # the next days: no ship in the planning, none in the mission
+    ses.skip_day(); st = ses.state
+    assert _fl.sunk(st) and _fl.days_left(st) == _fl.SUNK_DAYS - 1
+    assert not any(p.extra.get("setpiece") for p in ses.packages()), "no raid on a ship that is not there"
+    assert not any(f.base_id == cv.id for p in ses.packages() for f in p.flights), "nothing launches from the sunk carrier"
+    for _ in range(3):
+        if any(ses.flyable(p) for p in ses.packages()):
+            break
+        ses.skip_day(); st = ses.state
+    opts = [p for p in ses.packages() if ses.flyable(p)]
+    assert opts, "the player's squadron (moved ashore) flies again after its nights"
+    if opts:
+        pk = opts[0]
+        ses.fly(pk.number, ses.flyable(pk)[0].id)
+        z = zipfile.ZipFile(ses.settings.sortie_miz)
+        from dcs import lua as _lua
+        m = _lua.loads(z.read("mission").decode())
+        def _types(o, acc):
+            if isinstance(o, dict):
+                if o.get("type") == "Stennis":
+                    acc.append(o)
+                for v in o.values():
+                    _types(v, acc)
+            elif isinstance(o, (list, tuple)):
+                for v in o:
+                    _types(v, acc)
+            return acc
+        assert not _types(m, []), "the sunk carrier is not in the mission"
+    # return: a new ship on its day, full squadrons, defence full, flying home
+    st.day = st.fleet["returns_day"]
+    ln = _fl.step(st)
+    assert ln and not _fl.sunk(st) and cv.defense == 1.0 and _gr.fallen_count(st) == 0, ln
+    assert all(q.base_id == cv.id and q.home_id == "" and q.available == q.authorized and q.reserve == 0 and q.move_days == 0 for q in sqs)
+    # a sunk escort alone: the air defence is cut until it is replaced
+    man2 = _db.Manifest(st.campaign_id, 2, "p2", st.day)
+    out2 = _db.apply_debrief(st, man2, {"dead": [escu[0]], "ejected": [], "landed": [], "time": 900, "deaths": []})
+    assert "1 escort sunk" in "\n".join(out2["lines"]) and not _fl.sunk(st) and cv.defense <= 1.0 - _fl.ESCORT_DEFENSE[0] + 1e-9 and _fl.escort_out(st, 0)
+    st.day += _fl.ESCORT_DAYS
+    ln2 = _fl.step(st)
+    assert ln2 and not _fl.escort_out(st, 0) and cv.defense > 1.0 - _fl.ESCORT_DEFENSE[0], ln2
+    print("[sunk carrier] ship, aircraft and escorts lost in the debrief, squadrons ashore, one lost base while away, planner and mission without it, back as new on day 7")
+
+
+def check_123_parked_jets(c):
+    """v0.41.297 (XO 2026-11-05): a counter-air strike finds the target field's jets parked on the ramp as real uncontrolled aircraft: as many as the wing has serviceable minus what the mission
+    launches from that field (no jet both flies and stands there), on distinct free parking spots, at most PARKED_MAX, an `enemy_air` group of the wing marked `parked`; the strikers'
+    target point is on the ramp (a parking spot), not the garrison at the field's reference point."""
+    import zipfile as _zf
+    from lupa import LuaRuntime as _LR
+    from sqe.models import Objective as _O, AssetKind as _AK, ObjectiveType as _OT
+    from sqe.packages import PackageBuilder as _PB, Ledger as _Lg, NoPlayerSlot as _NP
+    from sqe.mission_builder import PARKED_MAX as _PM
+    ses = fresh_session(3, 7); st = ses.state; ses.plan_day()
+    a_ = next(x for x in st.assets.values() if x.kind == _AK.AIRFIELD and not x.destroyed and st.enemy_air_at(x.id) and st.enemy_air_at(x.id).available > 0 and getattr(x, "airport", None))
+    w_ = st.enemy_air_at(a_.id)
+    o_ = _O("obj-test", _OT.COUNTER_AIR, a_.id, 5.0, f"Counter-air at {a_.name} ({w_.available} aircraft)")
+    pkg = None
+    for fp in (True, False):
+        try:
+            pkg = _PB(st, ses.d).build(o_, 90, _Lg(st), for_player=fp, names={}); break
+        except _NP:
+            continue
+    assert pkg is not None and pkg.flights, "a counter-air package builds"
+    pkg.start = "12:00"; st.plan.append(pkg.to_dict())
+    rr = ses.fly(pkg.number, ses.flyable(pkg)[0].id)
+    launched = sum(len(g["units"]) for g in rr.manifest.groups if g["kind"] == "enemy_air" and g["ref"] == a_.id and not g.get("parked"))
+    parked = [g for g in rr.manifest.groups if g.get("parked")]
+    n_p = sum(len(g["units"]) for g in parked)
+    assert all(g["kind"] == "enemy_air" and g["ref"] == a_.id for g in parked)
+    assert 0 < n_p <= min(_PM, w_.available - launched), (n_p, w_.available, launched)
+    mis = _zf.ZipFile(rr.miz).read("mission").decode("utf8", "ignore")
+    lua = _LR(unpack_returned_tuples=True); lua.execute(mis); m_ = lua.eval("mission")
+    pos = []
+    for _, cc in m_.coalition.items():
+        for _, cty in cc.country.items():
+            if "plane" in cty:                                  # v0.41.324: real uncontrolled aircraft, not statics
+                for _, grp in cty.plane.group.items():
+                    for _, u in grp.units.items():
+                        if u.name.startswith("PARK "):
+                            assert grp.uncontrolled, "a parked jet is uncontrolled"
+                            pos.append((round(u.x), round(u.y)))
+    assert len(pos) == n_p and len(set(pos)) == n_p, "every parked jet has its own parking spot"
+    ap_ = ses.builder_airports(a_) if hasattr(ses, "builder_airports") else None
+    print("[parked jets] %s: %d parked (wing %d, %d launched from the field), distinct spots, group marked parked" % (a_.name, n_p, w_.available, launched))
+
+
+def check_124_standoff_strike(c):
+    """v0.41.298 (XO 2026-11-05): a supply strike with no SAM complication becomes a Standoff Strike (SLAM-ER Hornets) when many red fighter flights reach the target. With the SAM
+    belt down at L3 the supply jobs are Standoff Strikes: the strike slot is a Hornet with the SLAM kit, the package survives a save, and at L1 the job stays a plain strike. Strategic
+    structure only (the threshold and the odds factor are tunables)."""
+    import random as _rnd
+    from sqe import war as _war
+    from sqe.models import AssetKind as _AK, ObjectiveType as _OT
+    from sqe.packages import Package as _Pk, PackageBuilder as _PB, Ledger as _Lg
+    assert _war.STANDOFF_MIN_DEF_FLIGHTS > 0
+    got = {}
+    for lvl in (1, 3):
+        ses = fresh_session(lvl, 7); st = ses.state
+        for a in st.assets.values():
+            if a.kind == _AK.SAM:
+                a.health = 0.0                                            # the belt rolled back: nothing but fighters left to fear
+        objs = _war.ObjectivePlanner(ses.d).plan(st, _rnd.Random(3), limit=8)
+        got[lvl] = [o for o in objs if o.type == _OT.STRIKE and o.aim != "RUNWAY"]
+        assert got[lvl], f"L{lvl}: supply strikes are planned"
+    assert all(o.aim == "STANDOFF" and o.description.startswith("Standoff Strike") for o in got[3]), [(o.aim, o.description) for o in got[3]]
+    assert all(o.aim == "" for o in got[1]), "L1: plain strikes (few fighters in reach)"
+    ses = fresh_session(3, 7); st = ses.state
+    for a in st.assets.values():
+        if a.kind == _AK.SAM:
+            a.health = 0.0
+    o = next(o for o in _war.ObjectivePlanner(ses.d).plan(st, _rnd.Random(3), limit=8) if o.aim == "STANDOFF" and o.type == _OT.STRIKE)
+    pk = _PB(st, ses.d).build(o, 1, _Lg(st), for_player=False)
+    sl = [f for f in pk.flights if f.kit == "SLAM"]
+    assert len(sl) == 1 and sl[0].aircraft == "FA-18C" and sl[0].role.value == "STRIKE", [(f.aircraft, f.role.value, f.kit) for f in pk.flights]
+    assert any(f.role.value == "TARCAP" for f in pk.flights), "the fighters it fears are covered"
+    back = _Pk.from_dict(pk.to_dict())
+    assert [(f.kit, f.aircraft) for f in back.flights] == [(f.kit, f.aircraft) for f in pk.flights] and back.objective.aim == "STANDOFF"
+    print("[standoff strike] L3 supply strikes -> Standoff Strike (%d), SLAM Hornet flight of %d, TARCAP, save round trip; L1 stays plain (%d)" % (len(got[3]), sl[0].count, len(got[1])))
+
+
+def check_125_release_points(c):
+    """v0.41.299 (XO 2026-11-05): the AI JDAM strikers release short of the target and a Standoff Strike's SLAM-ER Hornets launch from far out. Builds a Standoff Strike mission
+    (SAM belt down at L3) and a plain strike with an AI F-16 strike flight at L1: both build and write a mission file. Crash protection for the new route points only (the
+    distances and altitudes are tunables and are judged in the sim)."""
+    from sqe.models import AssetKind as _AK
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))             # a Hornet pilot: the SLAM-ER strike slot is his
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses.new("Smoke release", "FA-18C", 3, seed=7)
+    for a in ses.state.assets.values():
+        if a.kind == _AK.SAM:
+            a.health = 0.0
+    ses.plan_day()
+    pk = next((p for p in ses.packages() if p.objective.aim == "STANDOFF" and p.objective.type.value == "STRIKE" and ses.flyable(p)), None)
+    assert pk is not None, "a Standoff Strike is flyable with the SAM belt down at L3"
+    assert any(f.kit == "SLAM" for f in pk.flights)
+    r = ses.fly(pk.number, ses.flyable(pk)[0].id)
+    assert r.miz.exists()
+    ses = fresh_session(1, 7)
+    n = 0
+    for p in ses.packages():
+        if p.objective.type.value != "STRIKE" or p.objective.aim == "RUNWAY":
+            continue
+        ids = {f.id: f for f in p.flights}
+        pick = next((x for x in ses.flyable(p) if ids[x.id].role.value != "STRIKE"), None)       # fly an escort: the F-16 strike flight is the AI's
+        if pick is None or not any(f.role.value == "STRIKE" and f.aircraft == "F-16C" for f in p.flights):
+            continue
+        assert ses.fly(p.number, pick.id).miz.exists()
+        n += 1
+        break
+    print("[release points] Standoff Strike mission built; plain strike with an AI F-16 flight built (%d)" % n)
+
+
+def check_122_road_site_flip(c):
+    """v0.41.258 (XO 2026-11-03): a road supply site belongs to the side its road connects to (road_front.py). At the start of a campaign every red road site is on a road that
+    connects to red and every blue one to blue, with no site flipping on night one; when the front cuts a site off from its owner it changes hands with its stock, both ways; the red
+    battalion that guarded it is destroyed; the Overview shows it as captured; sites far from the front on a road to their own side stay; a save keeps the record.
+    Strategic state only (the corridor width is a tunable)."""
+    from sqe import ground as _gr, road_sites as _rs, road_front as _rf, overview_detail as _od, theatres as _th
+    from sqe.state import CampaignState as _CS
+    ses = fresh_session(2, 5); st = ses.state; g = st.ground
+    th = _th.active(); rts = _rf.routes(th); assert rts and len(rts) > 20, "the theatre's road net is shipped"
+    sides = _rf.route_sides(st, th, rts)
+    red0 = [a for a in st.assets.values() if _rs.is_road(a) and a.kind in _gr.SUPPLY_KINDS]
+    blue0 = [a for a in st.blue_assets.values() if _rs.is_road(a) and a.kind in _gr.SUPPLY_KINDS]
+    assert red0 and blue0
+    assert all(_rf.site_side(st, th, rts, sides, a.x, a.y) == "red" for a in red0), "every red road site is on a road that connects to red"
+    assert all(_rf.site_side(st, th, rts, sides, a.x, a.y) == "blue" for a in blue0), "every blue road site is on a road that connects to blue"
+    assert _rs.flip(st) == [], "night one flips nothing"
+    # the front pushed all the way back: every red site the cut now puts on our side comes over, the ones on roads to the north stay red
+    g["line_km"] = 0.0
+    ln = _rs.flip(st)
+    assert ln and all("ours now" in x for x in ln), ln
+    gone = [f["id"] for f in g["road_flips"]]
+    assert all(i in st.blue_assets and i not in st.assets for i in gone)
+    assert len(gone) < len(red0), "the sites far to the north stay red"
+    assert all(x.health <= 0 for x in st.assets.values() if getattr(x, "guards", "") in gone), "its battalion is gone"
+    assert any("(captured)" in r[1] for r in _od.supply_rows(st)), "the Overview calls it captured"
+    assert _CS.from_dict(st.to_dict()).ground["road_flips"] == g["road_flips"]
+    ses.plan_day()                                                  # v0.41.273: the sites flipped by hand, so the day's plan is made again (the game flips overnight, after the day is resolved, and plans after)
+    ses.skip_day()                                                  # the daily round (supply figure, repairs, the plan) runs with flipped sites
+    # the other way: the front pushed all the way to our end, our sites on the cut's red side go to the enemy
+    st = ses.state; g = st.ground
+    g["line_km"] = _gr._path(g)[-1] / 1000.0
+    ln2 = _rs.flip(st)
+    assert ln2 and any("enemy holds it" in x for x in ln2), ln2
+    print("[road site flip] owner by road connection at the start, sites cut off by the front change hands both ways, battalion gone, far sites stay, saved")
+
+
+def check_126_land_raid_flyable(c):
+    """v0.41.303 (XO 2026-11-05): a raid on a field, a supply site or a garrison is player-flyable like the carrier raid (it was AI-only, a text line). Strategic: a raid
+    scramble package offers the player a flight, BARCAP stays AI-only, and the sortie builds and writes a mission file with the scramble taken."""
+    from sqe.models import ObjectiveType as _OT
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+    ses.new("LandRaid", "F-14BU", 3, seed=9)
+    assert not any(ses.flyable(p) for p in ses.packages() if p.objective.type == _OT.BARCAP), "BARCAP stays AI-only"
+    host = land_raid_pkg(ses, ses.state, 12)
+    assert host is not None, "a land raid was planned"
+    fl = ses.flyable(host, squadron_only=False)
+    assert fl, "the planned raid offers the player a flight"
+    ses.fly(host.number, fl[0].id)
+    assert list((TMP / "saves").glob("**/SQE_Sortie.miz")), "the sortie was written"
+    print("[land raid flyable] a planned land raid offers the player a flight and builds a mission; BARCAP stays AI-only")
+
+
+def check_127_planned_raids_listed(c):
+    """v0.41.304 (XO 2026-11-05: no dice, "only what red actually tries", no hidden ones): the game ships with the emergency dice off; every raid red plans (unwarned ones too)
+    is a listed package; titles read "<what is defended> Defense: Intercept"; planned CAS in the hardest-pressed sector is marked troops in contact."""
+    import sqe.engine as _eng
+    from sqe.models import ObjectiveType as _OT
+    if True:
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+        ses.new("Planned", "F-16C", 3, seed=1)
+        titles, unw, tic = set(), 0, 0
+        for _ in range(12):
+            ps = ses.packages()
+            for p in ps:
+                if p.objective.type == _OT.FLEET_DEFENSE:
+                    titles.add(p.title)
+                    assert p.urgent and p.title.endswith("Defense: Intercept"), p.title
+                    unw += 1 if p.extra.get("unwarned") else 0
+                if p.extra.get("tic"):
+                    tic += 1
+                    assert p.urgent and p.objective.type == _OT.CAS
+            ses.skip_day()
+        assert titles, "a raid was planned in twelve days"
+    print(f"[planned raids] listed with titles {sorted(titles)}, {unw} unwarned, {tic} troops in contact, no dice")
+
+
+def check_128_raid_prep_packages(c):
+    """v0.41.305 (XO 2026-11-05: the carrier raid's SEAD / Standoff DEAD are their own packages ahead of it, "tuned already"): on a carrier-raid day the SAM sites that threaten the
+    lane get their own SEAD / Standoff DEAD packages (named "Fleet Defense: ..."), starting before the raid, flyable like any DEAD job, and the raid remembers its sites for the war sim.
+    The day's own DEAD jobs are removed here so the new packages are the ones tested. Strategic: the plan structure and a build; the lead time is a tunable."""
+    from sqe.war import ObjectivePlanner
+    real = ObjectivePlanner.plan
+    ObjectivePlanner.plan = lambda self, st, rng, limit=14: [o for o in real(self, st, rng, limit=limit) if o.type.value != "DEAD"]
+    try:
+        (TMP / "saves").mkdir(parents=True, exist_ok=True)
+        ses = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))
+        ses.new("RaidPrep", "F-16C", 3, seed=1)
+        ses.skip_day()
+        ps = ses.packages()
+        raid = next((p for p in ps if p.extra.get("setpiece")), None)
+        assert raid is not None, "a carrier raid day"
+        pre = [p for p in ps if p.extra.get("raid_prep")]
+        assert pre and raid.extra.get("prep_sites"), "the raid's blocking sites got their own packages"
+        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
+        for p in pre:
+            assert hm(p) < hm(raid) and p.title.startswith("Fleet Defense: ") and p.objective.type.value == "DEAD", (p.title, p.start, raid.start)
+        fl = [p for p in pre if ses.flyable(p)]
+        if fl:
+            ses.fly(fl[0].number, ses.flyable(fl[0])[0].id)
+            assert list((TMP / "saves").glob("**/SQE_Sortie.miz")), "a prep package builds"
+            ses.abort()
+        ses.skip_day()
+    finally:
+        ObjectivePlanner.plan = real
+    print(f"[raid prep] {len(pre)} SEAD / Standoff DEAD packages ahead of the carrier raid for {len(raid.extra['prep_sites'])} sites; builds; the war sim resolves the day")
+
+
 CHECKS = [
     check_00_setup,
     check_01_package_merging_fold_same,
@@ -5944,9 +6458,6 @@ CHECKS = [
     check_31m_blue_barcap_plan,
     check_31n_blue_patrol_vs_raids,
     check_31v_hot_runway,
-    check_31w_raid_scramble_merge,
-    check_31wb_scramble_takes_hidden_packages,
-    check_31wc_scramble_folds_outside_circle,
     check_31wd_red_sead_first,
     check_31we_red_gate_debrief,
     check_31wg_sead_every_covering_battery,
@@ -6004,7 +6515,6 @@ CHECKS = [
     check_66_l1_raids,
     check_67_air_tempo,
     check_68_overview,
-    check_69_scramble_undo,
     check_70_overview_detail,
     check_71_story,
     check_72_window_size,
@@ -6047,6 +6557,23 @@ CHECKS = [
     check_109_blue_base_def_skill,
     check_110_package_scrub,
     check_111_step_spin,
+    check_112_road_net,
+    check_113_road_sites,
+    check_114_blue_site_buildings,
+    check_115_fall_move,
+    check_116_taken_fields,
+    check_117_first_mover,
+    check_118_new_squadrons,
+    check_119_raid_folds_by_time,
+    check_120_runway_cratering,
+    check_121_sunk_carrier,
+    check_122_road_site_flip,
+    check_123_parked_jets,
+    check_124_standoff_strike,
+    check_125_release_points,
+    check_126_land_raid_flyable,
+    check_127_planned_raids_listed,
+    check_128_raid_prep_packages,
 ]
 
 def _borrows(fn) -> set:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+import re
 import random
 import time
 from pathlib import Path
@@ -17,7 +18,6 @@ from . import raids, redair, sams, ground, tempo
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import AI_ONLY, ai_only, carrier_raid, Ledger, NoPlayerSlot, Package, PackageBuilder
 
-RAID_SCRAMBLES = True      # v0.41.27: emergency raid scrambles are off while intercepts are AI-only (troops in contact stay)
 from .scenario import new_campaign
 from . import theatres
 from .settings import AppSettings
@@ -29,10 +29,16 @@ from .war import ObjectivePlanner, WarSimulator, update_status
 SEAD_SYNC_KM = 60            # SEAD packages whose targets are this close together are synchronised (the same ground, the same defence)
 SEAD_SYNC_ON = True          # off only in tests that need an unsynchronised day (the merge-underway case)
 SWEEP_AREA_KM = 60           # packages whose targets are this close together share one Fighter Sweep
+RAID_PREP_LEAD_MIN = 20      # v0.41.305 (XO 2026-11-05): the SEAD / Standoff DEAD packages that open the fleet-defence lane start this long before the raid package (the plan doc measured about 20 min from launch to homebound HARMs; judgment call, tune)
 SWEEP_LEAD_MIN = 10          # the sweep starts this much ahead of the first package it covers
 LATE_SEAD_MIN = 15           # launch option --late-sead: SEAD-stage packages go in this much later, so the DEAD stage (10 min behind) arrives
                              # about 5 min ahead of them and reaches its gate with the radars still up: it holds (HOLD_S = 12 min) and goes in once
                              # the late SEAD blinds the site. A test of the hold; it changes that day's plan in the save.
+
+def _hm(start: str) -> int:
+    """A package's "HH:MM" start as minutes since midnight."""
+    return int(start[:2]) * 60 + int(start[3:5])
+
 
 class Session:
     def __init__(self, settings: AppSettings):
@@ -147,21 +153,30 @@ class Session:
         if st.ground is not None:
             st.ground["pilot_influence"] = bool(getattr(self.settings, "pilot_influence", True))
             st.ground["tempo_decay"] = bool(getattr(self.settings, "tempo_decay", False))      # v0.41.208
-        from . import carrier_pos
-        _cv = carrier_pos.update(st)                    # v0.41.159: the fleet repositions once a day, along the front and clear of the red airfields
+        from . import carrier_pos, fleet as _fleet
+        for _ln in _fleet.step(st):                     # v0.41.257: a sunk carrier comes back as new on its day; sunk escorts are replaced
+            st.note(_ln)
+        _cv = None if _fleet.sunk(st) else carrier_pos.update(st)      # v0.41.159: the fleet repositions once a day, along the front and clear of the red airfields
         if _cv:
             st.note(_cv)
         redair.ensure(st, self.d)                       # the enemy's air tasking for the day
         objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=self.PACKAGES_PER_DAY)
         redair.assign_guards(st, self.d, objs)          # v0.41.10: red's patrols take stations over the SAM sites it expects to be attacked
-        keep = {k: v for k, v in (st.raids or {}).items() if k in ("last_emerg", "carry", "sead_fail", "bomber_days", "bomber_stage", "deck_out_to")}
+        keep = {k: v for k, v in (st.raids or {}).items() if k in ("carry", "sead_fail", "bomber_days", "bomber_stage", "deck_out_to")}
         if st.red_air.get("patrol_used") is not None:                 # replanning the same day never books the raids twice
             st.red_air["used"] = dict(st.red_air["patrol_used"])
         warned, n_surprise = raids.todays_raids(st, self.d, self._rng(71))
         carry = self._carried(objs)
-        objs = carry + objs + warned                    # postponed from yesterday first, then the day's job list, then the announced raids
+        # v0.41.241: the supply strikes and road-battalion CAS are the day's filler (with the road sites there are always some): they are built AFTER the announced raids, so a full job list
+        # does not use up the fighters a raid intercept needs (it did: on a fresh L3 campaign no raid intercept was offered for ten days running)
+        _late = [o for o in objs if (o.type == ObjectiveType.STRIKE and getattr(st.assets.get(o.target_id), "kind", None) in ground.SUPPLY_KINDS)
+                 or (o.type == ObjectiveType.CAS and o.target_id.startswith("rgar_sup_"))]          # ...and the CAS jobs on a road site's battalion
+        objs = carry + [o for o in objs if o not in _late] + warned + _late        # postponed from yesterday first, then the day's job list, then the announced raids, then the supply strikes and road battalions
         st.raids = {**keep, "day": st.day, "surprise": n_surprise, "carry": []}
         pb = PackageBuilder(st, self.d)
+        prep_ids = self._raid_prep_objectives(pb, objs)          # v0.41.305: the carrier raid's blocking SAM sites get their own SEAD / Standoff DEAD packages, appended AFTER the day's jobs (the raid keeps its index, so its bearing is the one planned here)
+        objs = objs + prep_ids[0]
+        prep_obj_ids = {o.id for o in prep_ids[0]}                # built right after the raid itself, before the day's other jobs take the squadrons' sorties
         psq = st.player.squadron_id if st.player else None
         from . import blue_barcap, support_assets
         support_assets.plan(st)                          # v0.41.87: when each AWACS / tanker type has an aircraft on orbit today (before the guards, v0.41.88)
@@ -172,6 +187,7 @@ class Session:
 
         def build_all(forced: set) -> list:
             sweeps.clear()
+            pb.short = []
             # Packages launch at different times of day, so an aircraft can fly more than one sortie: each package sees every
             # serviceable airframe, but no squadron is asked for more than two sorties per airframe per day.
             daily = {sid: max(0, 2 * q.available - bp["used"].get(sid, 0)) for sid, q in st.squadrons.items()}
@@ -182,12 +198,12 @@ class Session:
                     if st.bases[q.base_id].kind == BaseKind.CARRIER:
                         daily[sid] = int(daily[sid] * _df)
             out, names = [], {}          # callsign counter for the whole day: Enfield 1, Enfield 2 ... never two Enfield 1s
-            for i, o in sorted(enumerate(objs, 1), key=lambda t: not carrier_raid(st, t[1])):      # v0.41.107: the setpiece is built FIRST (it is rare and needs the carrier squadrons), numbers unchanged
+            for i, o in sorted(enumerate(objs, 1), key=lambda t: (0 if carrier_raid(st, t[1]) else (1 if t[1].id in prep_obj_ids else 2))):      # v0.41.107: the setpiece is built FIRST (it is rare and needs the carrier squadrons), numbers unchanged
                 ledger = Ledger(st)
                 for sid in ledger.free:
                     ledger.free[sid] = min(ledger.free[sid], daily[sid])
                 pkg = None
-                for fp in ((True, False) if (((i - 1) in forced or carrier_raid(st, o)) and not ai_only(st, o)) else (False,)):
+                for fp in ((True, False) if (((i - 1) in forced or carrier_raid(st, o) or o.type == ObjectiveType.FLEET_DEFENSE) and not ai_only(st, o)) else (False,)):
                     try:
                         pkg = pb.build(o, i, ledger, for_player=fp, names=names)
                         break
@@ -245,6 +261,7 @@ class Session:
         pkgs = build_all(set(rng.sample(range(len(objs)), min(len(objs), 5))))     # your squadron is tasked on a handful of them
         if mine(pkgs) < 3:
             pkgs = build_all(set(range(len(objs))))
+        ground.note_shortfall(st, pb.short)                  # v0.41.247: the slots nobody could fill today (a taken field's new squadron follows the need)
         pkgs = self._drop_orphan_followers(pkgs)             # v0.41.158: a strike behind a SEAD whose package could not be crewed has nothing to go in behind
         # same-area packages are launched in the same wave (so they can be folded together), waves spread through the day
         from .packages import packages_linked
@@ -270,6 +287,7 @@ class Session:
         self._sync_sead(pkgs)                                        # SEAD flights on the same ground (within SEAD_SYNC_KM) arrive together, not one after another
         self._stage_times(pkgs)                                      # a DEAD stage goes in DEAD_STAGE_GAP_MIN after the SEAD stage of the same site
         self._late_sead(pkgs)                                        # test option --late-sead: the SEAD stage goes in late, so the DEAD stage holds
+        self._time_raid_prep(pkgs, prep_ids)                         # v0.41.305: the carrier raid's SEAD / Standoff DEAD packages go in RAID_PREP_LEAD_MIN ahead of it (before the sweeps are timed from their packages)
         from . import sweep as sweep_
         dropped = set()
         for p in pkgs:                                               # a Fighter Sweep starts SWEEP_LEAD_MIN ahead of the first package it covers (after every other timing step)
@@ -303,17 +321,28 @@ class Session:
         for p in pkgs:
             if sweeps.get(id(p)):
                 p.extra["covers"] = sorted(c.number for c in sweeps[id(p)])           # the packages this Fighter Sweep goes in ahead of
+        # v0.41.304 (XO 2026-11-05: no dice, "only what red actually tries", no hidden ones): every raid red plans is a listed, flyable package; an unwarned one says so, and the
+        # contested sector under the hardest pressure marks its planned CAS as troops in contact. An unwarned raid that could not be built is still settled overnight.
+        _unw = lambda o: bool(re.search(r"-s\d+$", o.id or ""))
+        built_ = {p.objective.id for p in pkgs}
+        st.raids["surprise"] = int(st.raids.get("surprise", 0)) + sum(1 for o in objs if _unw(o) and o.id not in built_)
+        _hot = raids.hot_sector(st)
+        for p in pkgs:
+            if p.objective.type == ObjectiveType.FLEET_DEFENSE and _unw(p.objective):
+                p.extra["unwarned"] = True
+            if _hot is not None and p.objective.type == ObjectiveType.CAS and p.objective.target_id == f"armor_{_hot + 1}":
+                p.extra["tic"] = True
         st.plan = [p.to_dict() for p in pkgs]
         self._cast_sead(pkgs)
         self.refresh_weather()
         return self.packages()
 
-    def _harm_leg_s(self, p) -> float | None:
+    def _agm88_leg_s(self, p) -> float | None:
         """Seconds from PUSH to the HARM point for this SEAD package's first HARM flight, from the same marshal, geometry and route the
         mission builder will use (an umbrella keep-out included). Within one mission every package pushes exactly its start difference after
         the others, so this leg is all that separates their HARM times."""
         from .models import BaseKind
-        from .routes import HARM_LAUNCH_NM, assign_times, bearing, make_geometry, objective_wp, plan_route
+        from .routes import AGM88_LAUNCH_NM, assign_times, bearing, make_geometry, objective_wp, plan_route
         from . import threatmap as tm
         st = self.state
         fl = [f for f in p.flights if f.role == Role.SEAD and not f.tag and getattr(f, "base_id", None) in st.bases]
@@ -332,7 +361,7 @@ class Session:
             g = make_geometry(bx, by, tgt.x, tgt.y, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
             um = tm.umbrella_site(st, tgt)
             wps = plan_route(Role.SEAD, (bx, by), g, spec.profile, is_player=False, tanker_xy=None,
-                             keep_out=(um.x, um.y, HARM_LAUNCH_NM) if um else None)
+                             keep_out=(um.x, um.y, AGM88_LAUNCH_NM) if um else None)
             assign_times(wps, 0.0)
             push, obj = next(w for w in wps if w.name == "PUSH"), objective_wp(wps)
             return obj.eta_s - push.eta_s
@@ -352,7 +381,7 @@ class Session:
         for p in pkgs:
             if p.objective.type != ObjectiveType.DEAD or not p.objective.target_id or p.objective.target_id not in st.assets:
                 continue
-            leg = self._harm_leg_s(p)
+            leg = self._agm88_leg_s(p)
             if leg is None:
                 continue
             sead.append((p, st.assets[p.objective.target_id], leg))
@@ -460,6 +489,57 @@ class Session:
         """The tasking order. Emergency packages (flown, folded in or settled by odds) are in the plan but are not listed."""
         return [p for p in (Package.from_dict(d) for d in self.state.plan) if not p.extra.get("past")]
 
+    def _raid_prep_objectives(self, pb, objs: list) -> tuple:
+        """v0.41.305 (XO 2026-11-05: "just offer them as SEAD / SO DEAD packages that go before the fleet defense ... they're tuned already"): for the carrier raid, one SEAD or
+        Standoff DEAD job per live SAM site that threatens its intercept line (`tm.raid_inbound_sites`, the same list the raid's own scripted SEAD uses), skipping a site that
+        already has a DEAD job in the day's list. -> (new objectives, {site id: objective id of the raid's own job it serves}, the raid's objective id). Appended after the day's
+        jobs so the raid's index (and so its planned bearing) does not move. The raid package keeps its own SEAD seats: they are the scripted result for a Tomcat / Eagle seat."""
+        from . import threatmap as tm
+        from .war import long_range_site
+        st = self.state
+        i = next((n for n, o in enumerate(objs, 1) if carrier_raid(st, o)), None)
+        if i is None:
+            return [], {}, ""
+        o_r = objs[i - 1]
+        ex = pb._raid_plan(i, o_r) or {}
+        b = st.bases.get(o_r.target_id)
+        if b is None or ex.get("bomber_wing") not in st.assets or ex.get("brg") is None:
+            return [], {}, o_r.id
+        dest = ex.get("dest") or (b.x, b.y)
+        have = {o.target_id for o in objs if o.type == ObjectiveType.DEAD}
+        new, sites = [], {}
+        for a, _r in tm.raid_inbound_sites(st, (dest[0], dest[1]), ex["brg"], ex["bomber_wing"]):
+            sites[a.id] = o_r.id
+            if a.id in have:
+                continue
+            tail = f" ({a.health:.0%} left)" if a.health < 0.85 else ""
+            if long_range_site(st, a):
+                o = Objective(f"obj-d{st.day}-p{len(new) + 1}", ObjectiveType.DEAD, a.id, o_r.priority, f"Standoff DEAD: destroy {a.name}{tail}", "STANDOFF")
+            else:
+                o = Objective(f"obj-d{st.day}-p{len(new) + 1}", ObjectiveType.DEAD, a.id, o_r.priority, f"SEAD: suppress {a.name}{tail}", "SEAD")
+            new.append(o)
+        return new, sites, o_r.id
+
+    def _time_raid_prep(self, pkgs: list, prep) -> None:
+        """Start the raid prep packages RAID_PREP_LEAD_MIN before the carrier raid (and pull a Standoff DEAD of the day that would fall after it ahead of it); the raid package remembers its sites (`prep_sites`) for the war sim."""
+        new, sites, raid_oid = prep
+        if not sites:
+            return
+        raid = next((p for p in pkgs if p.objective.id == raid_oid), None)
+        if raid is None:
+            return
+        raid.extra["prep_sites"] = sorted(sites)
+        hm = int(raid.start[:2]) * 60 + int(raid.start[3:5])
+        m = max(0, hm - RAID_PREP_LEAD_MIN)
+        ids = {o.id for o in new}
+        for p in pkgs:
+            if p.objective.id in ids:                                      # a package made for the raid: named for it, and ahead of it
+                p.extra["raid_prep"] = raid_oid
+                p.start = f"{m // 60:02d}:{m % 60:02d}"
+            elif (p.objective.type == ObjectiveType.DEAD and p.objective.target_id in sites and p.objective.aim == "STANDOFF"
+                  and int(p.start[:2]) * 60 + int(p.start[3:5]) > m):          # the day's own Standoff DEAD on a blocking site that would go in after the raid: it goes in ahead of it (a SEAD / Close DEAD pair keeps its own staging)
+                p.start = f"{m // 60:02d}:{m % 60:02d}"
+
     def _carried(self, objs: list) -> list:
         """Objectives postponed yesterday (no aircraft left for them after an emergency scramble), if they are still worth flying and not already in the list."""
         st, out = self.state, []
@@ -508,10 +588,18 @@ class Session:
             squadron_only = self.settings.flight_filter != "all"
         if pkg.extra.get("scrub"):                                       # scrubbed for weather: nobody flies it, the war sim ignores it
             return []
-        if pkg.objective.type in AI_ONLY and not pkg.extra.get("setpiece"):    # v0.41.27: AI-only for now (BARCAP, land-raid intercepts); v0.41.107: the carrier raid is a flyable setpiece
+        if pkg.objective.type == ObjectiveType.BARCAP:                       # v0.41.27: BARCAP is AI-only; v0.41.107: the carrier raid is a flyable setpiece; v0.41.303 (XO 2026-11-05): so are the land raids
             return []
         opts = pkg.player_options(self.state.player.aircraft)
+        if pkg.extra.get("setpiece"):                    # v0.41.293 (XO 2026-11-04: "make the SEAD/DEAD seats not flyable by the player", for now, until the SEAD teams are their own packages): the carrier raid's SEAD is AI-only (v0.41.284: only offered while a SAM was alive)
+            opts = [f for f in opts if f.role != Role.SEAD]
         return [f for f in opts if f.squadron_id == self.state.player.squadron_id] if squadron_only else opts
+
+    def _raid_sam_live(self) -> bool:
+        """Is any red SAM site alive that a raid SEAD flight could be sent against (the builder's own filter: a long-range type, not nearly dead)?"""
+        from . import threatmap as tm
+        from .models import AssetKind
+        return any(a.kind == AssetKind.SAM and not a.destroyed and a.health > 0.25 and tm.RANGE_NM.get(a.variant, 0) >= 12 for a in self.state.assets.values())
 
     # ---- merge area: a circle around the package's target, kept inside the area where targets exist ---------------------
     def merge_radius_m(self) -> float:
@@ -562,18 +650,6 @@ class Session:
         c, t = self.merge_center(anchor), self._pkg_xy(other) or self._raid_xy(other)
         return c is not None and t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= self.merge_radius_m()
 
-    def _postpone_if_short(self, orig: Package, emerg: Package) -> None:
-        """You took the emergency, so your squadron's aircraft are spent on it first. If it cannot also cover the package you were tasked with, that
-        package is not dice-rolled with missing aircraft: it is postponed to tomorrow's tasking order."""
-        st = self.state
-        sid = st.player.squadron_id
-        need = sum(f.count for f in emerg.flights if f.squadron_id == sid) + sum(f.count for f in orig.flights if f.squadron_id == sid)
-        if st.squadrons[sid].available >= need:
-            return
-        st.plan = [d for d in st.plan if d["number"] != orig.number]
-        st.raids.setdefault("carry", []).append(orig.objective.to_dict())
-        st.note(f"Package #{orig.number} ({orig.objective.description}) is postponed to tomorrow: {st.squadrons[sid].name} cannot cover both.")
-
     def merge_candidates(self, pkg: Package) -> list:
         """Packages folded into a mission built around `pkg`: every package whose target lies inside the merge circle (Settings: radius, default
         50 nm, centred by merge_center), starting up to `merge_fwd_min` minutes AFTER it or up to `merge_back_min` minutes BEFORE it (those are already underway
@@ -596,7 +672,9 @@ class Session:
             if d <= R:
                 out.append((d, hm(p), p.number, p))
         out.sort(key=lambda r: (not (r[3].objective.type == ObjectiveType.COUNTER_AIR and r[3].objective.aim == "SWEEP"),) + r[:3])     # a Fighter Sweep first: the unit limit drops the strike packages before it
-        return [r[3] for r in out[:6]]
+        picked = [r[3] for r in out[:6]]
+        # v0.41.270 (XO 2026-11-04): the carrier raid folds into no mission: it is red aiming for the king, a setpiece of its own (v0.41.250 folded it into any mission at its time)
+        return picked
 
     @staticmethod
     def _drop_one(extras: list) -> list:
@@ -653,152 +731,14 @@ class Session:
             out.append((p, mem))
         return out
 
-    # ---- emergencies: something breaks out while you are about to fly (raids.py) ----------------------------------------
-    def emergency_for(self, package_number: int, flight_id: str | None = None) -> dict | None:
-        """The emergency, if any, that comes with flying this package right now. The answer is fixed by the campaign, the day and the package: asking
-        twice (or reopening the dialog) never re-rolls it. Returns None, or a dict:
-          kind 'RAID' | 'CAS', package (the emergency, ready to fly), eligible (your squadron can take it), reason (why not), title, text."""
-        st, d = self.state, self.d
-        if not getattr(self.settings, "emergencies", True):
-            return None
-        key = f"{st.day}:{package_number}:{flight_id}:{st.sortie_counter}"
-        cache = (st.raids or {}).get("emerg")
-        if cache and cache.get("key") == key:
-            return None if cache.get("none") else self._emerg_view(cache)
-        pkg = next((p for p in self.packages() if p.number == package_number), None)
-        if pkg is None or not self.flyable(pkg):
-            return None
-        rng = raids.emergency_seed(st, package_number, flight_id)
-        ev = self._make_emergency(pkg, rng) if raids.emergency_happens(st, d, rng) else None
-        if st.raids is None:
-            st.raids = {}
-        st.raids["emerg"] = {"key": key, "none": True} if ev is None else {"key": key, **ev}
-        return None if ev is None else self._emerg_view(st.raids["emerg"])
-
-    def _emerg_view(self, c: dict) -> dict:
-        return {**c, "package": Package.from_dict(c["pkg"])}
-
-    def _make_emergency(self, pkg: Package, rng) -> dict | None:
-        st, d = self.state, self.d
-        psq = st.squadrons[st.player.squadron_id]
-        spec = AIRCRAFT[psq.aircraft]
-        committed = sum(f.count for f in pkg.flights if f.squadron_id == psq.id)
-        kinds = []
-        base = raids.pick_target(st, random.Random(rng.random()), d)       # (still drawn: the same seed gives the same day)
-        # v0.41.27: no raid scrambles for you for now (an intercept is AI-only until its routes follow the SAM rules); troops in contact stay
-        if base is not None and RAID_SCRAMBLES:
-            kinds.append("RAID")
-        sec = raids.hot_sector(st)
-        cas_aim = ""
-        if sec is not None:
-            # v0.41.20: troops in contact under a live SA-11 / SA-10: no CAS (a DEAD comes first); under an SA-2/3/6 only with a SEAD escort
-            from types import SimpleNamespace
-            from .war import cas_cover
-            c_ = st.assets.get(f"armor_{sec + 1}") or SimpleNamespace(x=float(st.ground["centers"][sec][0]), y=float(st.ground["centers"][sec][1]))
-            cov_, hard_ = cas_cover(st, c_)
-            if not hard_:
-                kinds.append("CAS")
-                cas_aim = "SEAD" if cov_ else ""
-        if not kinds:
-            return None
-        fighter = bool({r.value for r in spec.roles} & {"CAP", "SWEEP"})
-        kind = kinds[0] if len(kinds) == 1 else ("RAID" if rng.random() < (0.55 if fighter else 0.3) else "CAS")      # an A-10 gets mostly "troops in contact"
-        number = max([p["number"] for p in st.plan] + [pkg.number]) + 1
-        if kind == "RAID":
-            obj = raids.raid_objective(base)
-            obj.id = f"obj-d{st.day}-e{number}"
-            if PackageBuilder(st, d)._land_raid_plan(number, obj) is None:
-                return None
-            role_needed, where = "fighter", f"{base.name}"
-        else:
-            from . import ground
-            zi = ground.info(st, sec)
-            obj = Objective(f"obj-d{st.day}-e{number}", ObjectiveType.CAS, f"armor_{sec + 1}", 12.0,
-                            f"EMERGENCY - troops in contact: {zi['name']} (enemy {zi['red']:.0f}, friendly {zi['blue']:.0f})", aim=cas_aim)
-            role_needed, where = "cas", zi["name"]
-        pb = PackageBuilder(st, d)
-        xy = pb.target_xy(obj)
-        ok, why = raids.eligible(st, spec, role_needed, xy, psq, committed)
-        names = {}                           # carry on the day's callsign numbering so the emergency flight never repeats a name
-        for cs in [ff["callsign"] for pd in st.plan for ff in pd["flights"]] + [ff.callsign for ff in pkg.flights]:
-            nm, _, no = cs.rpartition(" ")
-            if no.isdigit():
-                names[nm] = max(names.get(nm, 0), int(no))
-        epkg = None
-        for want in ((True, False) if ok else (False,)):
-            ledger = Ledger(st)
-            ledger.free[psq.id] = max(0, ledger.free[psq.id] - committed)         # the tasked flight keeps its own aircraft
-            try:
-                epkg = pb.build(obj, number, ledger, for_player=want, names=dict(names))
-                ok = ok and want
-                break
-            except NoPlayerSlot:
-                continue
-        if epkg is None:
-            return None
-        if ok is False and not why:
-            why = f"{psq.name} cannot reach it or has no free pair"
-        epkg.start = pkg.start
-        epkg.extra = {**epkg.extra, "emergency": kind, "past": True}
-        for f in epkg.flights:
-            f.is_player = False
-        if kind == "RAID":
-            from . import blue_barcap
-            blue_barcap.attach(st, [epkg])                    # v0.41.114: the planned base CAP of the raided field is up for a land-raid scramble too
-            text = (f"Bombers are inbound on {where} and nobody was warned. Alert aircraft are not enough: the fighters nearest to it are being scrambled.")
-            title = "EMERGENCY SCRAMBLE"
-        else:
-            text = (f"Troops in contact in {where}: the position is being overrun and the JTAC is calling for anything that can reach it.")
-            title = "TROOPS IN CONTACT"
-        return {"kind": kind, "eligible": bool(ok), "reason": "" if ok else why, "title": title, "text": text, "pkg": epkg.to_dict(),
-                "where": where, "number": number}
-
-    def dispatch_line(self, epkg: Package) -> str:
-        """v0.41.101: the in-universe line for an emergency you are not flying ("Our A-10Cs from Kobuleti have been dispatched to help"): who is
-        answering it, never the out-of-universe reason (your jet cannot do the job, no free pair)."""
-        st = self.state
-        fl = [f for f in epkg.flights if not f.tag] or list(epkg.flights)
-        names = list(dict.fromkeys(AIRCRAFT[f.aircraft].display + "s" for f in fl if f.aircraft in AIRCRAFT))
-        bases = list(dict.fromkeys(st.bases[f.base_id].name for f in fl if f.base_id in st.bases))
-        who = " and ".join(names) if names else "Other crews"
-        frm = f" from {' and '.join(bases)}" if bases else ""
-        if epkg.objective.type == ObjectiveType.CAS:
-            return f"Our {who}{frm} have been dispatched to help."
-        return f"Our {who}{frm} are scrambling to intercept."
-
     # ---- fly ---------------------------------------------------------------------------------------
-    def fly(self, package_number: int, flight_id: str | None, scramble: bool = False):
-        """Build the sortie. If an emergency came up for this package (emergency_for) and `scramble` is True and your squadron can take it, you fly the
-        emergency and the package you were tasked with goes to the war simulation (or is postponed a day if the squadron cannot cover both). Otherwise the
-        emergency is folded into your mission (CAS or raid; v0.41.124: wherever it is, the circle is only the anchor for your own package's finds)."""
+    def fly(self, package_number: int, flight_id: str | None):
+        """Build the sortie for the package (and the packages the merge rules fold into it)."""
         st = self.state
         problems = self.settings.problems()
         if problems:
             raise RuntimeError("; ".join(problems))
-        self._restore_undo()                                                                  # v0.41.149: a sortie being replaced (cancelled) hands back what its emergency changed
-        pkg = next(p for p in self.packages() if p.number == package_number)                  # v0.41.204: after the restore, or a package the scramble had taken could not be found again
-        ev = self.emergency_for(package_number, flight_id)
-        undo = ({"plan": copy.deepcopy(st.plan), "raids": copy.deepcopy(st.raids or {}), "log_len": len(st.log)} if ev else None)
-        lead_extras = []
-        hidden_in = None                                                                      # v0.41.121: the package you were tasked with, when you take the scramble instead
-        if ev:
-            epkg = ev["package"]
-            st.plan.append(epkg.to_dict())
-            st.raids["last_emerg"] = st.sortie_counter + 1
-            st.raids["emerg"] = {"key": st.raids["emerg"]["key"], "none": True}              # used: asking again gives nothing new
-            self.refresh_weather()
-            epkg = next(Package.from_dict(d) for d in st.plan if d["number"] == epkg.number)
-            if epkg.extra.get("scrub"):
-                scramble = False                                                              # weather scrubs it: nothing flies
-            if scramble and ev["eligible"]:
-                orig, pkg, flight_id = pkg, epkg, None
-                hidden_in = orig
-                self._postpone_if_short(orig, epkg)
-                st.note(f"EMERGENCY: you were scrambled to {ev['where']} ({ev['kind'].lower()}); package #{orig.number} is left to the other squadrons.")
-            else:
-                st.note(f"EMERGENCY at {ev['where']}: " + ("you stayed with your tasking." if ev["eligible"] else self.dispatch_line(epkg)) + " The war handles it.")
-                if epkg.objective.type in (ObjectiveType.CAS, ObjectiveType.FLEET_DEFENSE) and pkg.objective.type != ObjectiveType.FLEET_DEFENSE:      # v0.41.124 (XO 2026-10-23): no circle test, the emergency is yours to meet whenever it started in your package's window
-                    lead_extras = [epkg]
+        pkg = next(p for p in self.packages() if p.number == package_number)
         PackageBuilder(st, self.d).assign_player(pkg, flight_id)
         self.options.hold_minutes = int(self.settings.hold_minutes)
         self.options.launch_offset_s = int(self.settings.takeoff_buffer_s)
@@ -829,15 +769,7 @@ class Session:
         self.options.f14_special_names = bool(getattr(self.settings, 'f14_special_names', True)); self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct); self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear'))
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
-        extras = lead_extras + [x for x in self.merge_candidates(pkg) if all(x.number != y.number for y in lead_extras)]
-        if hidden_in is not None:
-            # v0.41.121 (XO 2026-10-23): the packages that were listed inside the package you were tasked with come along into the scramble mission, as long as their
-            # start is inside the usual window round the scramble's (-merge_back_min / +merge_fwd_min). The mission's own circle and window found only what lay near the
-            # raided field. Your original package itself still goes to the war sim; at most six packages in all (the scramble's own finds first).
-            hm_ = lambda p_: int(p_.start[:2]) * 60 + int(p_.start[3:5])
-            back_ = max(0, int(getattr(self.settings, "merge_back_min", 15))); fwd_ = max(0, int(getattr(self.settings, "merge_fwd_min", 30)))
-            have_ = {x.number for x in extras} | {pkg.number, hidden_in.number}
-            extras = (extras + [x for x in self.merge_candidates(hidden_in) if x.number not in have_ and -back_ <= hm_(x) - hm_(pkg) <= fwd_])[:6]
+        extras = list(self.merge_candidates(pkg))
         ruins = self.ruin_candidates(pkg, extras)
         pre = self._preroll(list(extras) + ruins) if (ruins or extras) and getattr(self.settings, "ruins", True) else {}
         from . import limits
@@ -858,8 +790,6 @@ class Session:
                       "objective": pkg.objective.description, "objective_type": pkg.objective.type.value, "counts": res.counts, "warnings": res.warnings, "seed": res.seed,
                       "package_dict": pkg.to_dict(), "merged": res.manifest.merged,
                       "ruins": {str(r["number"]): pre[r["id"]] for r in res.manifest.ruins if r["id"] in pre}}
-        if undo is not None:
-            st.pending["undo"] = undo
         self.last_build = res
         # a stale results file from a previous sortie must never be mistaken for this one
         try:
@@ -919,24 +849,11 @@ class Session:
         """Manually Submit: any file the user picks, checked against the pending sortie."""
         return self.poll(path)
 
-    def _restore_undo(self) -> None:
-        """v0.41.149 (XO 2026-10-27): you cancelled a sortie that came with an emergency (a scramble) and pressed Fly again: the scramble was gone. Building the sortie
-        had used the emergency up (it added its package to the day's plan, marked the cap, and may have postponed your own package); the pending sortie keeps a copy
-        of the plan, the raid record and the log length from before, and cancelling or rebuilding puts them back so the scramble is offered again."""
-        st = self.state
-        u = (st.pending or {}).pop("undo", None)
-        if not u:
-            return
-        st.plan = u["plan"]
-        st.raids = u["raids"]
-        del st.log[u["log_len"]:]
-
     def abort(self) -> None:
         """Throw the built sortie away. The sortie counter goes back too (v0.41.0): it feeds the mission seed, so flying the same package again
         rebuilds the same layout (sites, spawns, patrols), and two test runs of one package can be compared."""
         if self.state.pending is not None and self.state.sortie_counter > 0:
             self.state.sortie_counter -= 1
-        self._restore_undo()
         self.state.pending = None
         self.save()
 

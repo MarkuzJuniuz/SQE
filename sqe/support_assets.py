@@ -93,7 +93,8 @@ def windows(a: dict, start: int = 0, end: int = 1440) -> list:
 def plan(state) -> dict:
     """Today's windows per asset (blue ones; red's are data only) -> {key: [(start, end)]}, kept in state.barcap["support_flights"]."""
     sa = ensure(state)
-    out = {k: windows(a) for k, a in sa.items() if a["side"] == "blue"}
+    from . import fleet
+    out = {k: ([] if fleet.is_sunk_base(state, a.get("base_id", "")) else windows(a)) for k, a in sa.items() if a["side"] == "blue"}          # v0.41.257: the boat's E-2C and S-3 are gone with it
     state.barcap["support_flights"] = {k: [list(w) for w in v] for k, v in out.items()}
     return out
 

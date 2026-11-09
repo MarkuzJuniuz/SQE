@@ -182,6 +182,14 @@ class MapView(QWidget):
                 p.drawPolygon(QPolygonF([QPointF(q.x(), q.y() - 5), QPointF(q.x() + 5, q.y()), QPointF(q.x(), q.y() + 5), QPointF(q.x() - 5, q.y())]))
             if a.kind in (AssetKind.AIRFIELD, AssetKind.C2):
                 p.setPen(QColor("#9fb0c4")); p.drawText(QPointF(q.x() + 8, q.y() + 4), a.name.split(" (")[0][:18])
+        for a in (getattr(st, "blue_assets", None) or {}).values():          # v0.41.245: blue's own supply sites and garrisons (the map used to draw red assets only)
+            q = P(a.x, a.y)
+            col = QColor("#4a5566") if a.destroyed else QColor(theme.BLUE).darker(int(100 + 70 * (1 - a.health)))
+            p.setPen(Qt.NoPen); p.setBrush(QBrush(col))
+            if a.kind == AssetKind.ARMOR:
+                p.drawRect(QRectF(q.x() - 8, q.y() - 3, 16, 6))
+            else:
+                p.drawPolygon(QPolygonF([QPointF(q.x(), q.y() - 5), QPointF(q.x() + 5, q.y()), QPointF(q.x(), q.y() + 5), QPointF(q.x() - 5, q.y())]))
         for b in st.bases.values():
             q = P(b.x, b.y)
             p.setPen(Qt.NoPen); p.setBrush(QBrush(QColor(theme.BLUE)))

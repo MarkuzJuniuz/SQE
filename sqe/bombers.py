@@ -8,18 +8,21 @@ Sources and judgment calls (the numbers below are JUDGMENT CALLS unless a source
   A raid went in with ECM and decoy groups and with fighter cover: a Su-15TM regiment against the E-2s, "one or two fighter squadrons" as escort
   (Gordon and Rigmant, quoted on forum.dcs.world). That supports "in numbers, with escorts". It does NOT support "only when no losses are expected":
   that rule is XO's game design (a small wing, so the bombers are precious), mirrored by sending everything when desperate.
-- No source gives an escort ratio. XO's rule: 2 escorts per bomber (4 bombers + 4 escorts "didn't last long"). If red cannot field them, it holds.
+- Escort ratio (XO 2026-11-03, v0.41.249): ONE escort per TWO bombers, what XO reads public sources to suggest for red doctrine (not checked by Crew Chief; the
+  earlier rule was 2 per bomber, after a 4 + 4 raid "didn't last long"). A raid is the FULL size or none (16 bombers + 8 escorts at L3, 8 + 4 at L2), except
+  when desperate, which sends what it has. If red cannot field them, it holds.
 - Safe / desperate thresholds, cooldowns and the Mozdok weight are judgment calls, tuned on the 100-day background sims."""
 from __future__ import annotations
 
 import math
 
 from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM
+from . import runways
 
 NM = 1852.0
 MIN_RAID = 4                  # never fewer bombers than this ("no 2-ship raids, ever", XO)
-ESCORT_PER_BOMBER = 2         # escorts per bomber (XO's rule; no source)
-MAX_RAID = 12                 # the biggest all-in raid
+ESCORT_PER_BOMBER = 0.5       # escorts per bomber (XO 2026-11-03: 1 escort per 2 bombers; was 2 per bomber)
+MAX_RAID = {2: 8, 3: 16}      # v0.41.260 (XO 2026-11-03): the full raid by level, L3 16 of the 24 at Mozdok, L2 8 of 14 (judgment calls: public sources give no raid size; the IISS count of about 55 to 57 Tu-22M3 in all of Russia says 24 in one raid is too many); was 12 / 24 (v0.41.249); L1 has no bomber wing
 QUIET_DAYS = 1                # days red goes quiet before a staged raid launches (XO: "mysteriously quiet for a day or two"; 0 = no quiet day)
 COOLDOWN_SAFE = 8
 COOLDOWN_DESPERATE = 5
@@ -32,12 +35,22 @@ COVER_FLOOR = 0.3             # share of blue's fighters that is still ready whe
 BLUE_FIGHTERS_CAP = 8         # fighters a carrier can put against one raid, as far as red's estimate goes
 
 
+def escorts_for(n: int) -> int:
+    """Escorts that go with `n` bombers: one per two, rounded up."""
+    return int(math.ceil(n * ESCORT_PER_BOMBER))
+
+
+def max_raid(d) -> int:
+    return MAX_RAID.get(int(getattr(d, "level", 3)), MAX_RAID[3] if int(getattr(d, "level", 3)) >= 3 else 4)
+
+
 def _bomber_wing(state):
-    return next((w for w in state.enemy_air if "Tu_22M3" in w.types and not state.assets[w.base_asset_id].destroyed), None)
+    return next((w for w in state.enemy_air if "Tu_22M3" in w.types and not state.assets[w.base_asset_id].destroyed and not runways.is_closed(state, w.base_asset_id)), None)
 
 
 def _carrier(state):
-    return next((b for b in state.bases.values() if b.kind.value == "CARRIER"), None)
+    from . import fleet
+    return fleet.carrier(state)                                    # v0.41.257: None while the carrier is sunk: no raid on a ship that is not there
 
 
 def escort_options(state, bw, cv):
@@ -54,7 +67,7 @@ def escort_options(state, bw, cv):
         for t in dict.fromkeys(q.aircraft for q in sq):
             if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm:
                 out.append((sum(q.available for q in sq if q.aircraft == t), w, t))
-    own = [r for r in out if r[1] is bw and r[0] >= MIN_RAID * ESCORT_PER_BOMBER]
+    own = [r for r in out if r[1] is bw and r[0] >= escorts_for(MIN_RAID)]
     rest = sorted((r for r in out if r not in own), key=lambda r: (-r[0], r[1].base_asset_id, r[2]))
     return own + rest
 
@@ -91,7 +104,7 @@ def estimated_stop(state, d, n, cv) -> float:
             cover = min(1.0, ((getattr(state, "barcap", None) or {}).get("blue_cover") or {}).get(ar["id"], 0) / 1440.0)
     up = min(fighters, BLUE_FIGHTERS_CAP) * (COVER_FLOOR + (1.0 - COVER_FLOOR) * cover)
     s = up * ROLE_WEIGHT[Role.CAP]
-    return s / (s + 2.5 + 2.0 * d.iads + 0.4 * ESCORT_PER_BOMBER * n)
+    return s / (s + 2.5 + 2.0 * d.iads + 0.4 * escorts_for(n))
 
 
 def decide(state, d) -> dict:
@@ -105,10 +118,11 @@ def decide(state, d) -> dict:
     avail = bw.available_of({"Tu_22M3"})                         # the wing also holds the escort squadron (v0.41.106)
     opts = escort_options(state, bw, cv)
     jets, ew, et = opts[0] if opts else (0, None, "")
-    n_max = min(avail, jets // ESCORT_PER_BOMBER, MAX_RAID if getattr(d, "level", 3) >= 3 else 4)      # L2: the raid is 4 bombers and 8 escorts, always
+    full = max_raid(d)
+    n_max = min(avail, int(jets / ESCORT_PER_BOMBER), full)
     n_max -= n_max % 2
-    go = lambda mode, n, desp: {"mode": mode, "n": n, "escorts": ESCORT_PER_BOMBER * n, "wing": ew.base_asset_id, "type": et,
-                                "why": f"{mode}: {n} bombers, {ESCORT_PER_BOMBER * n} escorts (desperation {desp:.2f})"}
+    go = lambda mode, n, desp: {"mode": mode, "n": n, "escorts": escorts_for(n), "wing": ew.base_asset_id, "type": et,
+                                "why": f"{mode}: {n} bombers, {escorts_for(n)} escorts (desperation {desp:.2f})"}
     stage = (state.raids or {}).get("bomber_stage") or {}
     if QUIET_DAYS > 0 and stage.get("launch") == state.day:      # the staged day: the raid goes if it still has its escorts
         n = min(int(stage.get("n", 0)), n_max)
@@ -119,7 +133,7 @@ def decide(state, d) -> dict:
     if QUIET_DAYS > 0 and stage.get("launch", -1) > state.day:
         return {**hold("quiet day before the raid"), "quiet": True}
     if n_max < MIN_RAID:
-        return hold(f"only {avail} bombers and {jets} escorts: not enough for a {MIN_RAID}-ship raid with {ESCORT_PER_BOMBER} escorts each")
+        return hold(f"only {avail} bombers and {jets} escorts: not enough for a {MIN_RAID}-ship raid with {escorts_for(MIN_RAID)} escorts")
     days = [x for x in ((state.raids or {}).get("bomber_days") or [])]
     cd_safe = max([x for x in days if x != state.day] or [-99])
     desp = desperation(state, bw)
@@ -127,11 +141,11 @@ def decide(state, d) -> dict:
     if desp >= DESPERATE_AT:
         if state.day - cd_safe >= COOLDOWN_DESPERATE or state.day in days:
             mode, n = "desperate", n_max
-    elif getattr(d, "bomber_safe_p", 0.0) > 0 and n_max >= MIN_RAID:
+    elif getattr(d, "bomber_safe_p", 0.0) > 0 and n_max >= full:                    # v0.41.249: a safe raid is the full raid or nothing
         if state.day - cd_safe >= COOLDOWN_SAFE or state.day in days:
-            p = estimated_stop(state, d, MIN_RAID, cv)
+            p = estimated_stop(state, d, full, cv)
             if p <= d.bomber_safe_p:
-                mode, n = "safe", MIN_RAID
+                mode, n = "safe", full
     if mode == "hold":
         return hold(f"holding the wing (desperation {desp:.2f})")
     if QUIET_DAYS > 0 and state.day not in days:                 # decided today: red goes quiet, the raid launches QUIET_DAYS from now

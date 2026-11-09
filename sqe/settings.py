@@ -82,7 +82,6 @@ class AppSettings:
     merge_v131: bool = False
     merge_back_min: int = 15              # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
     merge_max_units: int = 250            # v0.41.131: the unit limit counts the WHOLE mission again, merged packages included (ruins go first, then the latest-starting package); the 500 ceiling in sqe/data/limits.json is dormant
-    emergencies: bool = True              # an emergency (raid or troops in contact) can come up when you click Fly; announced and surprise raids happen either way
     reactive: bool = True                 # enemy reinforcements and blue alert pairs can launch during a sortie
     ai_land_carrier: str = "always"       # v0.41.18: AI flights going home to a carrier: "always" recovered short of it | "home" only at your deck | "never" land
     ai_land_field: str = "never"          # v0.41.18: the same for airfields
@@ -150,7 +149,7 @@ class AppSettings:
                     if raw.get("merge_max_units") == 150:
                         s.merge_max_units = 250   # still on the old default: move to the new one (an explicit different value is kept)
                     s.unit_cap_v2 = True
-                s.reactive = s.emergencies = True     # v0.41.135 (XO 2026-10-24): reactive dispatch and emergencies are always on (the checkboxes are gone)
+                s.reactive = True     # v0.41.135 (XO 2026-10-24): reactive dispatch is always on (the checkbox is gone)
                 s.fighter_standoff = True         # v0.41.133 (XO 2026-10-23): TARCAPs, escorts and sweeps always stop short of live SAM cover (the checkbox is gone; off made the AI go banzai)
                 if not raw.get("merge_v131"):
                     if raw.get("merge_radius_nm") == 25:

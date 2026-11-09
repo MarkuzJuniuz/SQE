@@ -13,6 +13,7 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from .models import AssetKind
 from .state import CampaignState
+from .runways import RUNWAY_HALF_LEN_M, RUNWAY_HALF_WIDTH_M
 
 LUA_HOOK = r'''
 -- SQE debrief hook | campaign __CAMPAIGN__ | sortie __SORTIE__ | package __PKG__
@@ -44,6 +45,7 @@ local RUINS = { __RUINS__ }
 local GATES = { __GATES__ }
 local pl = { takeoff = nil, landed = nil, ka = 0, kg = 0, ks = 0 }
 local dead, ejected, landed, ended = {}, {}, {}, false
+local landAt = {}                -- unit name -> {t, p}: the time and the place (airbase or ship) of its landing
 local aborted = {}
 local gateLog = {}
 local kills = {}
@@ -154,12 +156,32 @@ local function scrubJson()
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
+local RWYS = { __RWYS__ }                -- v0.41.254: the fields whose runways count bomb impacts: id, reference point (x north, z east), runway headings
+local rwyHits = {}
+local function landJson()
+  local o = {}
+  for n, v in pairs(landAt) do o[#o + 1] = string.format('"%s":{"t":%d,"p":"%s"}', esc(n), math.floor(v.t or 0), esc(v.p or "")) end
+  return "{" .. table.concat(o, ",") .. "}"
+end
+local function rwyJson()
+  local o = {}
+  for id, n in pairs(rwyHits) do o[#o + 1] = string.format('"%s":%d', esc(id), n) end
+  return "{" .. table.concat(o, ",") .. "}"
+end
+local IMPACTS = {}                        -- v0.41.332 (XO 2026-11-06): where every bomb ended (a cluster bomb: where its dispenser opened), at most 80
+local function impJson()
+  local o = {}
+  for _, e in ipairs(IMPACTS) do
+    o[#o + 1] = string.format('{"t":%d,"w":"%s","by":"%s","x":%d,"y":%d,"z":%d,"g":%d}', e.t, esc(e.w), esc(e.by), e.x, e.y, e.z, e.g)
+  end
+  return "[" .. table.concat(o, ",") .. "]"
+end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"scrub":%s,"tracks":%s,"rgate":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"scrub":%s,"tracks":%s,"rgate":%s,"rwy":%s,"imp":%s,"landings":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), scrubJson(), tracksJson(), rgateJson(), CFG, splashN, splashK))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), scrubJson(), tracksJson(), rgateJson(), rwyJson(), impJson(), landJson(), CFG, splashN, splashK))
   f:close()
 end
 local function nameOf(obj)
@@ -473,6 +495,9 @@ function H:onEvent(e)
   if id == world.event.S_EVENT_LAND or id == world.event.S_EVENT_RUNWAY_TOUCH then
     if n and not dead[n] then
       landed[n] = true
+      local pn = nil
+      if e.place and e.place.getName then local okp, pv = pcall(function() return e.place:getName() end); if okp then pn = pv end end
+      landAt[n] = { t = timer.getTime(), p = pn }                    -- v0.41.257: when and where (a sunk carrier takes what landed on it before it went down)
       if n == PLAYER then pl.landed = timer.getTime() end
       dump()
       if DESPAWN[n] then
@@ -558,6 +583,89 @@ function H:onEvent(e)
   elseif id == world.event.S_EVENT_MISSION_END then
     ended = true; dump()
   end
+end
+-- v0.41.254: runway hits. Every bomb is followed to its last known position; one that ends inside a field's runway rectangle is a hit on that field
+-- (the hook cannot be told where a bomb landed, so this is the position it vanished at plus a quarter second of its velocity; judgment call, a few metres).
+if #RWYS > 0 then
+  local RWY_LEN, RWY_WID, RWY_DT = __RWYLEN__, __RWYWID__, 0.25
+  local RWYW = {}
+  local function rwyTest(p)
+    for _, f in ipairs(RWYS) do
+      local dx, dz = p.x - f.x, p.z - f.z
+      if math.abs(dx) < RWY_LEN + 500 and math.abs(dz) < RWY_LEN + 500 then
+        for _, h in ipairs(f.h) do
+          local r = math.rad(h)
+          local along = dx * math.cos(r) + dz * math.sin(r)
+          local across = -dx * math.sin(r) + dz * math.cos(r)
+          if math.abs(along) <= RWY_LEN and math.abs(across) <= RWY_WID then
+            rwyHits[f.id] = (rwyHits[f.id] or 0) + 1
+            dump()
+            return
+          end
+        end
+      end
+    end
+  end
+  local H4 = {}
+  function H4:onEvent(e)
+    if e.id == world.event.S_EVENT_SHOT and e.weapon then
+      local ok, cat = pcall(function() return e.weapon:getCategory() end)
+      if ok and cat == Weapon.Category.BOMB then RWYW[#RWYW + 1] = { w = e.weapon } end
+    end
+  end
+  world.addEventHandler(H4)
+  timer.scheduleFunction(function(_, t)
+    local keep = {}
+    for _, s in ipairs(RWYW) do
+      local ok, ex = pcall(function() return s.w:isExist() end)
+      if ok and ex then
+        pcall(function() s.p = s.w:getPoint(); s.v = s.w:getVelocity() end)
+        keep[#keep + 1] = s
+      elseif s.p then
+        local v = s.v or { x = 0, y = 0, z = 0 }
+        pcall(rwyTest, { x = s.p.x + v.x * RWY_DT, y = s.p.y + v.y * RWY_DT, z = s.p.z + v.z * RWY_DT })
+      end
+    end
+    RWYW = keep
+    return t + RWY_DT
+  end, nil, timer.getTime() + 1)
+end
+-- v0.41.332: bomb impact log. Every bomb is followed to its last known position (plus a quarter second of its velocity); the point goes into the state file with the
+-- ground height under it. A cluster bomb vanishes where its dispenser opens (above the ground), so `y` minus `g` is that opening height. The debrief does not use it yet.
+do
+  local IMPW = {}
+  local H5 = {}
+  function H5:onEvent(e)
+    if e.id == world.event.S_EVENT_SHOT and e.weapon then
+      local ok, cat = pcall(function() return e.weapon:getCategory() end)
+      if ok and cat == Weapon.Category.BOMB then
+        local tn, by = "?", "?"
+        pcall(function() tn = e.weapon:getTypeName() end)
+        pcall(function() by = e.initiator:getName() end)
+        IMPW[#IMPW + 1] = { w = e.weapon, tn = tn, by = by }
+      end
+    end
+  end
+  world.addEventHandler(H5)
+  timer.scheduleFunction(function(_, t)
+    local keep = {}
+    for _, s in ipairs(IMPW) do
+      local ok, ex = pcall(function() return s.w:isExist() end)
+      if ok and ex then
+        pcall(function() s.p = s.w:getPoint(); s.v = s.w:getVelocity() end)
+        keep[#keep + 1] = s
+      elseif s.p and #IMPACTS < 80 then
+        local v = s.v or { x = 0, y = 0, z = 0 }
+        local x, y, z = s.p.x + v.x * 0.25, s.p.y + v.y * 0.25, s.p.z + v.z * 0.25
+        local g = 0
+        pcall(function() g = land.getHeight({ x = x, y = z }) end)
+        IMPACTS[#IMPACTS + 1] = { t = math.floor(timer.getTime()), w = s.tn, by = s.by, x = x, y = y, z = z, g = g }
+        dump()
+      end
+    end
+    IMPW = keep
+    return t + 0.25
+  end, nil, timer.getTime() + 1)
 end
 world.addEventHandler(H)
 timer.scheduleFunction(function(_, t)
@@ -1422,7 +1530,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
                    for r in (ruins or []))
     gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}, acap={int(x.get("acap") or 0)}{_umbrella_lua(x)}{(", tx=%.1f, tz=%.1f" % (float(x["tx"]), float(x["tz"]))) if x.get("tx") is not None else ""}}}'
                    for x in (gates or []))
-    return (LUA_HOOK.replace("__SCRUB__", sc).replace("__SCRUBFRAC__", repr(float(SCRUB_LOSS_FRAC))).replace("__SCRUBGRACE__", f"{float(SCRUB_STRIKE_GRACE_S):.0f}").replace("__SCRUBLEAD__", f"{float(SCRUB_COVER_LEAD_S):.0f}")
+    return (LUA_HOOK.replace("__RWYS__", ", ".join("{id=%s, x=%.1f, z=%.1f, h={%s}}" % (_lq(r["id"]), r["x"], r["z"], ", ".join(str(int(h_)) for h_ in r["h"])) for r in (cfg or {}).get("rwys", []))).replace("__RWYLEN__", f"{RUNWAY_HALF_LEN_M:.0f}").replace("__RWYWID__", f"{RUNWAY_HALF_WIDTH_M:.0f}").replace("__SCRUB__", sc).replace("__SCRUBFRAC__", repr(float(SCRUB_LOSS_FRAC))).replace("__SCRUBGRACE__", f"{float(SCRUB_STRIKE_GRACE_S):.0f}").replace("__SCRUBLEAD__", f"{float(SCRUB_COVER_LEAD_S):.0f}")
             .replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
             .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
@@ -1437,7 +1545,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__PHOME__", ("{ x = %.1f, z = %.1f }" % tuple((cfg or {})["phome"])) if (cfg or {}).get("phome") else "nil")
             .replace("__CVREC__", _cvrec_lua((cfg or {}).get("cvrec")))
             .replace("__RECOV__", _recov_lua((cfg or {}).get("recov")))
-            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov")}).replace("'", "")))
+            .replace("__CFG__", json.dumps({k: v for k, v in (cfg or {}).items() if k not in ("cvrec", "recov", "rwys")}).replace("'", "")))
 
 
 def _recov_lua(rs) -> str:
@@ -1569,8 +1677,11 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     out = {"blue_losses": [], "red_assets": [], "red_air_lost": 0, "blue_air_lost": 0, "target_damage": 0.0,
            "lines": [], "ended": bool(data.get("mission_ended")), "objective": "", "objective_type": "",
            "player": "airborne", "package_id": manifest.package_id}
+    site_cap = {}                                           # v0.41.241: blue supply sites / garrisons: the health the destroyed buildings or vehicles leave (applied after the raid's own hit, so one raid is never counted twice)
     for g in manifest.groups:
         dead = [u for u in g["units"] if u in lost]
+        if g["kind"] == "blue_site" and dead and g["units"] and g.get("health_before") is not None:
+            site_cap[g["ref"]] = min(site_cap.get(g["ref"], 1.0), float(g["health_before"]) * (len(g["units"]) - len(dead)) / len(g["units"]))
         if g["kind"] == "friendly":
             sq = state.squadrons[g["squadron"]]
             sq.available = max(0, sq.available - len(dead))
@@ -1626,6 +1737,9 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 out["lines"].append(f"{len(dead)} enemy aircraft from {state.assets[g['ref']].name} destroyed")
     # a raid you were sent to stop: bombers still alive when they reached their base got through
     t_now = float(data.get("time", 0) or 0)
+    from . import fleet as _fleet
+    cv_sunk_ = _fleet.sunk_in(state, data)                      # v0.41.257: the carrier went down in this mission: the ship's loss replaces the old deck-hit model
+    cv_ = _fleet.carrier_base(state)
     for g in manifest.groups:
         if g["kind"] == "enemy_air" and g.get("raid_base") and g["raid_base"] in state.bases:
             alive = [u for u in g["units"] if u not in lost]
@@ -1633,6 +1747,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             wing = state.enemy_air_at(g["ref"])
             if len(alive) < len(g["units"]):
                 out["lines"].append(f"Raid: {len(g['units']) - len(alive)} of {len(g['units'])} attack aircraft shot down")
+            if cv_sunk_ and cv_ is not None and g["raid_base"] == cv_.id:
+                continue
             rg_ = (data.get("rgate") or {}).get(g.get("raid_group", ""), {}) if g.get("raid_gate_s") is not None else {}
             arrive_ = g.get("raid_arrive_s", 0.0)
             if rg_.get("open") is not None:                       # v0.41.126: held at the gate until the radars went down: it can arrive no sooner than that plus the leg in
@@ -1657,12 +1773,23 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                     out["lines"].append("Raid: you left before the raiders arrived; the defences stopped them")
             else:
                 out["lines"].append(f"Raid on {where}: stopped, no bombs fell")
+    for aid_, cap_ in site_cap.items():                     # ...the buildings that really burned count: the site is at most that healthy
+        a_ = (getattr(state, "blue_assets", None) or {}).get(aid_)
+        if a_ is not None and cap_ < a_.health - 1e-6:
+            out["lines"].append(f"{a_.name}: {a_.health:.0%} -> {cap_:.0%} (buildings destroyed)")
+            a_.health = max(0.0, cap_)
     follow_ = any((p_.get("objective") or {}).get("after") for p_ in (state.plan or []) if p_.get("id") == data.get("package"))      # v0.41.158: a strike / CAS behind a SEAD
     for ref in data.get("aborted", []) or []:
         a = state.assets.get(ref)
         if a is not None:
             out["lines"].append((f"Attack called off behind {a.name}" if follow_ else f"DEAD called off on {a.name}") +
                                 ": its radars were still up when the strike flight reached the gate, so it turned back without attacking.")
+    from . import runways as _rw                           # v0.41.254: bomb impacts on a runway (the hook counts them); 3 or more close the field
+    for fid_, n_ in sorted((data.get("rwy") or {}).items()):
+        if fid_ in state.assets or fid_ in state.bases:
+            ln_ = _rw.add_hits(state, fid_, int(n_))
+            if ln_:
+                out["lines"].append(ln_)
     # alert / scramble groups (v0.40.8): called, airborne, or stuck on the ground; and the build's settings, so test runs can be told apart
     ms_ = lambda t_: f"{int(t_) // 60:d}:{int(t_) % 60:02d}"                  # v0.41.208 (XO): scrambles are numbered in the order the build lists them (the briefing's QRA list uses the same numbers)
     for n_, al in enumerate(data.get("alerts", []) or [], 1):
@@ -1732,6 +1859,7 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         out["player"] = "lost"
     elif pu in landed:
         out["player"] = "recovered"
+    out["lines"] += _fleet.apply_debrief(state, manifest, data)             # v0.41.257: ships sunk in the mission (the carrier, its escorts)
     out["kill_log"] = kill_log(manifest, data)
     for ln in out["lines"]:
         state.note(ln)

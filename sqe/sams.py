@@ -34,6 +34,7 @@ RETREAT_HEALTH = 0.35         # a long-range site at or below this health may pu
 RETREAT_NM = (35.0, 55.0)
 RETURN_HEALTH = 0.65
 RETURN_MIN_DAYS = 2
+TRAVEL_DAYS = 1                # v0.41.236 (XO 2026-11-03): the day after a site pulls back (or returns) it is on the road and cannot regenerate. Judgment call, no public figure; scoots (3-6 nm) are local and stay instant
 BLUE_REPAIR = 0.10
 # v0.41.67: SAM orders by need (XO 2026-10-21: "SAMs can be ordered by both sides should the need arise"; "move first, build if nothing to spare").
 # A destroyed blue site is in need. The least-threatened field that has a standing site of the same kind (health at or above BLUE_FULL_DEF) sends it;
@@ -50,6 +51,7 @@ SAM_DEBT_CAP = 0.15                     # all open debt of a side together, so a
 _DEBT_LONG, _DEBT_MEDIUM = ("SA-10", "Patriot"), ("SA-11", "SA-6", "HAWK", "Hawk")
 ORDER_MIN_GAP_NM = 20.0       # the sender must sit this much further from the nearest enemy fighter field than the receiver
 ASKS_PER_NIGHT = 1
+RED_BORROW = False             # v0.41.269 (XO 2026-11-04): red does NOT order a battery from a deeper site. The 8-seed L3 skip-day sims: borrowing emptied the rear (no healthy SA-10 beyond the line in play by day 22, 2 left without it), so the line broke like wet paper. A destroyed site is rebuilt in place after ORDER_DAYS (blue keeps its orders). True = the old rule
 
 # v0.41.30: every blue airfield's air defence at doctrinal strength (XO 2026-10-16: "all bases are important", red-like firepower).
 # Sources: FM 44-85 App. B, a Patriot fire unit = 1 radar, 1 ECS, 1 power plant, 1 antenna mast group and 8 launching stations;
@@ -244,7 +246,7 @@ def _rec(state) -> dict:
     if not isinstance(getattr(state, "sams", None), dict):
         state.sams = {}
     r = state.sams
-    r.setdefault("down", {}); r.setdefault("moves", {}); r.setdefault("home", {})
+    r.setdefault("down", {}); r.setdefault("moves", {}); r.setdefault("home", {}); r.setdefault("travel", {})
     return r
 
 
@@ -354,7 +356,7 @@ def red_asks(state, d, rng: random.Random) -> list:
     sites = [x for x in state.assets.values() if x.kind == AssetKind.SAM and not x.id.startswith("fsam_")]
     needy = sorted((a for a in sites if a.destroyed and a.tier <= state.front + 2 and not _parent_down(state, a)
                     and a.id not in busy and a.id not in vacated), key=lambda a: (a.tier, -a.value, a.id))
-    for a in needy[:ASKS_PER_NIGHT if not orders else 0]:           # v0.41.196: one order in flight per side
+    for a in needy[:ASKS_PER_NIGHT if (not orders and RED_BORROW) else 0]:           # v0.41.196: one order in flight per side (v0.41.269: none while RED_BORROW is off)
         donors = sorted((x for x in sites if x.variant == a.variant and not x.destroyed and x.health >= BLUE_FULL_DEF and x.tier > a.tier
                          and x.id not in busy and not _parent_down(state, x)), key=lambda x: (-x.tier, x.id))
         if not donors:
@@ -397,6 +399,12 @@ def relocate(state, d, rng: random.Random) -> list:
     return lines
 
 
+def travelling(state, aid: str) -> bool:
+    """True while a pulled-back (or returning) site is on the road: it cannot regenerate overnight (war.py checks this before it adds health)."""
+    d0 = _rec(state)["travel"].get(aid)
+    return d0 is not None and 0 < state.day - d0 <= TRAVEL_DAYS
+
+
 def _long_range(state, a) -> bool:
     from . import threatmap as tm
     return (a.kind == AssetKind.SAM and not a.id.startswith("fsam_") and a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10)
@@ -424,6 +432,7 @@ def retreat(state, d, rng: random.Random) -> list:
             hx, hy = rec["home"]
             _shift(state, a, hx - a.x, hy - a.y)
             r["pulled"].pop(aid, None)
+            r["travel"][aid] = state.day                                # the trip home takes its day too
             lines.append(f"{a.name} is back in position")
     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
     if not fields:
@@ -447,6 +456,7 @@ def retreat(state, d, rng: random.Random) -> list:
         else:
             continue
         r["pulled"][a.id] = {"home": [a.x, a.y], "day": state.day}
+        r["travel"][a.id] = state.day                                    # tomorrow it is on the road: no regeneration
         moved = math.hypot(nx - a.x, ny - a.y) / NM
         _shift(state, a, nx - a.x, ny - a.y)
         lines.append(f"{a.name} ({a.health:.0%} left) pulled back about {moved:.0f} nm from the front to recover")
@@ -457,7 +467,7 @@ def blue_defence(state, d) -> list:
     """Airfield defences repair by supply; a fallen field does not. (v0.41.67: the old "lend a battery" is gone: see blue_asks.)"""
     from . import ground
     sup = ground.supply(state, "blue") if ground.active(state) else 1.0
-    fallen = set((state.ground or {}).get("fallen", []))
+    fallen = set((state.ground or {}).get("fallen", [])) | ground.pending_fields(state)          # v0.41.244: a taken field's defences go up on the stage timetable
     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD" and b.id not in fallen]
     for b in fields:
         shift_field(state, b, BLUE_REPAIR * sup)          # every standing site; a destroyed one waits for rebuild_blue_sites
@@ -499,7 +509,7 @@ def blue_asks(state, d, rng: random.Random) -> list:
             r["down"].pop(a.id, None)
             _sync(state, b)
             lines.append(f"A {BLUE_SITES[o['key']][0]} battery from {o['from_name']} arrived at {b.name}")
-    fallen = set((state.ground or {}).get("fallen", []))
+    fallen = set((state.ground or {}).get("fallen", [])) | ground.pending_fields(state)          # v0.41.244: ...and no orders to or from a field still being built
     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD" and b.id not in fallen and blue_sites(state, b)]
     busy = _blue_asked(state)
     sup = ground.supply(state, "blue") if ground.active(state) else 1.0
@@ -530,7 +540,7 @@ def rebuild_blue_sites(state, d, rng: random.Random) -> list:
     from . import ground
     track(state)
     r = _rec(state)
-    fallen = set((state.ground or {}).get("fallen", []))
+    fallen = set((state.ground or {}).get("fallen", [])) | ground.pending_fields(state)          # v0.41.244
     p = float(getattr(d, "blue_rebuild", 0.0)) * (ground.supply(state, "blue") if ground.active(state) else 1.0)
     busy = _blue_asked(state)                                                     # a battery is on its way there: no new build
     cands = sorted((a for aid, day0 in r["down"].items() for a in [state.blue_sams.get(aid)]

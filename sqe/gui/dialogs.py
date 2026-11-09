@@ -3,13 +3,15 @@ import html
 import json
 import time
 from pathlib import Path
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QSize, QTimer
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QCheckBox, QSpinBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
-                               QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
-                               QTextBrowser, QVBoxLayout, QHeaderView, QTabWidget, QWidget, QScrollArea)
+                               QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
+                               QTextBrowser, QVBoxLayout, QHeaderView, QTabWidget, QWidget, QScrollArea, QAbstractItemView)
 from .. import settings as S
 from ..aircraft import AIRCRAFT
 from ..difficulty import LEVELS
+from ..timeofday import is_night
 from . import theme
 from .widgets import StepSpin, card
 
@@ -446,6 +448,11 @@ class WaitingDialog(QDialog):
 
     def reject(self):          # closing the window keeps the sortie pending; Debrief via the Missions page
         self.timer.stop(); super().reject()
+
+
+def _hm(s: str) -> int:
+    h, m = str(s).split(":")[:2]
+    return int(h) * 60 + int(m)
 
 
 class DayResolvedDialog(QDialog):

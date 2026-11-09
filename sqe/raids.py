@@ -1,25 +1,21 @@
-"""Red raids on our airfields, and emergencies (ground war, phase 2).
+"""Red raids on our airfields (ground war, phase 2).
 
 Red plans a raid the way we plan a strike: it looks for one of OUR airfields that its bombers (Su-24M) can reach, preferring the ones nearest
 its own fields and the least defended. Each day a few raids happen (Difficulty.raid_rate); a share of them are surprises (raid_surprise):
 
-* Announced raids are ordinary "Intercept a raid on <airfield>" packages in the tasking order, flown like the fleet-defence mission.
-* Surprise raids are never announced. They are settled by odds overnight (the airfield's own alert aircraft against the bombers) unless an
-  emergency (below) puts one of them in front of you.
-* An emergency can break out while you are about to fly (Difficulty.emerg_chance per sortie, never in two sorties in a row, at most one per sortie):
-  a surprise raid on one of our airfields, or "troops in contact" in a sector Red is pressing. If your squadron can take it you are offered the
-  scramble. If you decline, or cannot, it is folded into your mission when it is a ground job inside the merge circle, and otherwise settled by odds.
+* Every raid red plans is an ordinary "<Base/Supply/Garrison/Troop> Defense: Intercept" package in the tasking order (v0.41.304: no dice, no
+  hidden emergencies); a surprise one is marked "(no warning)". If you do not take it, the war simulation settles it by odds.
+* Troops in contact are the planned CAS on the sector red presses hardest (`hot_sector`).
 
-Everything here is seeded from the campaign, the day and the package, so reopening a dialog never re-rolls anything.
+Everything here is seeded from the campaign and the day, so reopening a dialog never re-rolls anything.
 """
 from __future__ import annotations
 import math
 import random
 from .models import Objective, ObjectiveType, BaseKind, Role, AssetKind
-from . import redair
+from . import redair, runways
 
 NM = 1852.0
-RAID_RESERVE = 0.6            # an emergency is offered only if the event is within this share of the squadron's combat radius
 BASE_LOSS = 0.06              # airfield defence lost per bomber that gets through
 RAID_PRIORITY = 8.0
 RAIDERS = ("Su_24M", "Su_25")  # attack types a raid can fly (bombers for fields and supply sites; Su-25s lead against troops)
@@ -49,7 +45,7 @@ def raider_wings(state, kind: str = "field", budget: bool = True) -> list:
     out = []
     for w in state.enemy_air:
         a = state.assets.get(w.base_asset_id)
-        if w.available < 2 or a is None or a.destroyed or (budget and not redair.can(state, w.base_asset_id, 2)):
+        if w.available < 2 or a is None or a.destroyed or runways.is_closed(state, w.base_asset_id) or (budget and not redair.can(state, w.base_asset_id, 2)):
             continue
         t = next((t for t in pref if t in w.types_up), None)        # v0.41.53: a squadron of that type with a pair serviceable
         if t:
@@ -168,13 +164,6 @@ def _weighted(rng: random.Random, ws: list):
         if r <= 0:
             return item
     return ws[-1]
-
-
-def pick_target(state, rng: random.Random, d=None):
-    ws = target_weights(state)
-    if d is not None:                               # v0.41.125: only a field red can suppress (see `sead_plan`)
-        ws = [(b, w) for b, w in ws if (r_ := reach_for(state, "field", b.x, b.y, d=d)) is not None and sead_plan(state, d, b, "", r_[1], r_[2])[0]]
-    return _weighted(rng, ws)[0] if ws else None
 
 
 def pick_aim(state, d, rng: random.Random):
@@ -344,7 +333,7 @@ def _commit(state, d, base, aim: str) -> None:
 
 
 def todays_raids(state, d, rng: random.Random) -> tuple:
-    """-> (objectives of the announced raids, number of surprise raids). One draw per day; the same seed gives the same answer."""
+    """-> (objectives of every raid red plans today, the unwarned ones with an id like obj-d3-s2; number of unwarned raids that could not be built, settled overnight). One draw per day; the same seed gives the same answer."""
     from . import bombers
     if bombers.is_quiet(state):                             # v0.41.109: the quiet day before the carrier raid
         return [], 0
@@ -353,16 +342,17 @@ def todays_raids(state, d, rng: random.Random) -> tuple:
     n = int(rate) + (1 if rng.random() < rate - int(rate) else 0)
     warned, surprise = [], 0
     for _ in range(n):
-        if rng.random() < d.raid_surprise:
-            surprise += 1
-            continue
+        unwarned = rng.random() < d.raid_surprise
         pa = pick_aim(state, d, rng)
         if pa is not None and all((o.target_id, o.aim) != (pa[0].id, pa[1]) for o in warned):
             base, aim = pa
             o = raid_objective(base, aim, describe(state, base, aim))
-            o.id = f"obj-d{state.day}-r{len(warned) + 1}"
+            # v0.41.304 (XO 2026-11-05: "no more hidden ones"): an unwarned raid is listed like the others (id ...-s<n>, the package reads "no warning"); it used to be only a count settled overnight
+            o.id = f"obj-d{state.day}-{'s' if unwarned else 'r'}{len(warned) + 1}"
             _commit(state, d, base, aim)
             warned.append(o)
+        elif unwarned:
+            surprise += 1                                    # no target to build it on: it still happens, settled overnight as before
     return warned, surprise
 
 
@@ -459,21 +449,6 @@ def overnight(state, d, rng: random.Random) -> list:
     return lines
 
 
-# ---- emergencies ---------------------------------------------------------------------------------------------------------------
-def emergency_seed(state, package_number: int, flight_id) -> random.Random:
-    return random.Random(f"{state.campaign_id}:{state.day}:{package_number}:{flight_id}:emergency")
-
-
-def emergency_happens(state, d, rng: random.Random) -> bool:
-    """The per-sortie dice, with the cap: none right after a sortie that had one."""
-    if (state.raids or {}).get("last_emerg", -9) == state.sortie_counter:
-        return False
-    from . import bombers
-    if bombers.is_quiet(state):
-        return False
-    return rng.random() < d.emerg_chance
-
-
 def hot_sector(state):
     """The contested sector Red is pressing hardest (an index into ground.zones), or None."""
     from . import ground
@@ -487,18 +462,3 @@ def hot_sector(state):
     return bi
 
 
-def eligible(state, spec, role_needed: str, event_xy, squadron, committed: int) -> tuple:
-    """Can the player's squadron take the emergency? role matches, the base is within RAID_RESERVE of its combat radius, and 2+ aircraft are
-    free once the tasked flight has taken its own. -> (bool, reason)"""
-    roles = {r.value for r in spec.roles}
-    if role_needed == "fighter" and not ({"CAP", "SWEEP"} & roles):
-        return False, f"{spec.display} is not a fighter"
-    if role_needed == "cas" and "CAS" not in roles:
-        return False, f"{spec.display} does not fly close air support"
-    b = state.bases[squadron.base_id]
-    d_nm = math.hypot(event_xy[0] - b.x, event_xy[1] - b.y) / NM
-    if d_nm > RAID_RESERVE * spec.combat_radius_nm:
-        return False, f"{d_nm:.0f} nm from {b.name} is too far for your squadron"
-    if squadron.available - committed < 2:
-        return False, f"{squadron.name} has no free pair left"
-    return True, ""

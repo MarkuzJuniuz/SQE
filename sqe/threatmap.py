@@ -7,6 +7,7 @@ objectives instead, so the war advances belt by belt instead of jumping straight
 from __future__ import annotations
 import math
 from .models import AssetKind
+from .routes import AVOID_NM, RAID_SA11_NM, RAID_THREAT_OUT_NM, dist, offset
 
 NM = 1852.0
 UMBRELLA_VARIANTS = ("SA-10",)   # long-range sites whose reach covers their neighbours: in a cluster they are the first thing a SEAD wave has to beat
@@ -55,6 +56,34 @@ def poly_dist(px, py, pts) -> float:
 
 def cluster_ids(target_asset) -> set:
     return set() if target_asset is None else {target_asset.id, *target_asset.defended_by}
+
+
+def raid_avoid_nm(variant: str) -> float:
+    """How far a live SAM of this variant threatens a route for the carrier-raid setpiece: AVOID_NM's figure, bumped for the SA-11 (RAID_SA11_NM;
+    v0.41.276, it engaged the raid's Tomcats at 23 to 26 nm). 0 for a variant AVOID_NM doesn't cover."""
+    r = AVOID_NM.get(variant, 0.0)
+    return max(r, RAID_SA11_NM) if variant == "SA-11" else r
+
+
+def raid_inbound_sites(state, target_xy, brg, bomber_wing_id) -> list:
+    """v0.41.287 (XO 2026-11-04: "every SAM threatening the intercept line", not just the minimum needed to open a lane): the live, undestroyed,
+    unsuppressed red SAM sites whose reach (`raid_avoid_nm`) touches the carrier raid's straight way in -- the target out to RAID_THREAT_OUT_NM
+    on `brg` (v0.41.289: the intercept band round RAID_IP_NEAR_NM plus the bombers' launch point; it was the route's outer point w1, 220 nm),
+    never past 0.9 of the way to the bomber wing's field. Every one of these threatens the line, whether it sits on it or well back toward the
+    target (a long-ranged site can still reach the lane from there). -> [(asset, nm), ...], order is state.assets' own."""
+    ba = state.assets.get(bomber_wing_id)
+    if ba is None:
+        return []
+    dx, dy = target_xy
+    w1 = offset(dx, dy, brg, min(RAID_THREAT_OUT_NM * NM, 0.9 * dist(ba.x, ba.y, dx, dy)))
+    out = []
+    for a in state.assets.values():
+        if a.kind != AssetKind.SAM or a.destroyed or a.health <= 0.25 or getattr(a, "suppressed", False):
+            continue
+        r = raid_avoid_nm(a.variant)
+        if r > 0 and seg_dist(a.x, a.y, dx, dy, w1[0], w1[1]) < r * NM:
+            out.append((a, r))
+    return out
 
 
 def blockers(state, base_xy, target_xy, target_asset=None, margin_nm: float = 8, front_nm: float = 15) -> list:

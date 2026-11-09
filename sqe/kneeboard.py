@@ -115,7 +115,13 @@ def _tgt_note(r, has_target):
 NAV = {"Batumi": "BATUMI  ILS 110.30 RWY13  TACAN 16X BTM",
        "Kobuleti": "KOBULETI  ILS 111.50 RWY07  TACAN 67X KBL  NDB 870/490",
        "Kutaisi": "KUTAISI  ILS 109.75 RWY07  TACAN 44X KTS  VOR 113.60",
-       "Senaki-Kolkhi": "SENAKI  ILS 108.90 RWY09  TACAN 31X TSK  NDB 335/688"}
+       "Senaki-Kolkhi": "SENAKI  ILS 108.90 RWY09  TACAN 31X TSK  NDB 335/688",
+       # v0.41.252 (XO 2026-11-03, from the Mission Editor airfield panels): the five fields we can take. Only Sochi has an ILS; none has a TACAN.
+       "Sukhumi-Babushara": "SUKHUMI  NDB 489/995 RWY30  no ILS, no TACAN",
+       "Gudauta": "GUDAUTA  no ILS, TACAN or NDB",
+       "Sochi-Adler": "SOCHI  ILS 111.10 RWY06  no TACAN",
+       "Gelendzhik": "GELENDZHIK  VOR 114.30  no ILS, no TACAN",
+       "Krymsk": "KRYMSK  NDB 408/803  no ILS, no TACAN"}
 
 
 def nav_line(airport):

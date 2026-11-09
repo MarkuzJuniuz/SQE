@@ -4,6 +4,7 @@ A mixin: `MissionBuilder` inherits these methods (like a C# partial class). They
 and the other fields the builder sets up; nothing here is called from outside the builder.
 """
 from __future__ import annotations
+import dataclasses
 import math
 import random
 
@@ -11,16 +12,16 @@ from dcs import mapping, task
 
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
-from .loadouts import JSOW_PER_JET
+from .loadouts import JSOW_PER_JET, JDAM_JETS
 from .models import SEAD_AIMS, AssetKind, ObjectiveType, Role
-from .routes import AVOID_NM, FT, HARM_LAUNCH_NM, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, NM, assign_times, bearing, dist, objective_wp, offset, plan_route
+from .routes import AVOID_NM, FT, AGM88_LAUNCH_NM, JDAM_ALT_FT, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, NM, assign_times, bearing, dist, objective_wp, offset, plan_route
 
 JSOW_ATTACK_S = 120           # v0.41.46: a JSOW slinger's release tasks end this long after the launch point's ETA, and it turns for home (judgment call; XO's run: releases came 25-60 s before the point)
 JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
 DEAD_GATE_BEFORE_TGT_S = 75    # fallback: if the DEAD flight never gets close, the radars are checked this long before its planned target time
 AIR_GATE_KM = 100              # v0.41.214 (XO): was 70, the hold sits outside the MiG-31's P-33 reach (about 120 km) of the fight; judgment call. v0.41.203 text: 70               # v0.41.203: a strike / CAS flight with no radar site to wait on checks the air this far from its target (km); the hold, if any, is out here, short of the fight
-AIR_HOLD_STRIKE_S = 360        # ...and holds at most this long (judgment call: the Day-2 fight of XO's 2026-10-30 run lasted about that), then goes home (v0.41.205: it used to go in all the same and was shot down)
-AIR_HOLD_CAS_S = 240           # CAS holds less: the troops on the ground are waiting (judgment call)
+AIR_HOLD_STRIKE_S = 900        # v0.41.235 (XO 2026-11-03): was 360; 15 min, the air fight takes time on every level. ...and holds at most this long (old judgment call: the Day-2 fight of XO's 2026-10-30 run lasted about that), then goes home (v0.41.205: it used to go in all the same and was shot down)
+AIR_HOLD_CAS_S = 900           # v0.41.235 (XO 2026-11-03): was 240, the same 15 min as strikers now (XO overrides the old 'troops are waiting' shorter hold)
 DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
 SA10_GATE_KM = 60              # ...but never inside an SA-10's reach (55 km): against an SA-10 target, or under an SA-10 umbrella, the gate (and so the hold
                                # orbit) is this far from the SA-10. v0.39.21 run: Hornet 1 held 40 km from the Sukhumi SA-6, 26 km from the SA-10, and was shot down there
@@ -43,7 +44,7 @@ class StrikeTasks:
         # Viper 5-2 fired at another package's SA-6 from 89 km; the radar went quiet and the HARM homed on Squid 1-4's radar instead.
         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
         # v0.41.24: no clear HARM axis: the neighbouring sites still in reach of the launch point get these HARMs first
-        for nid_ in getattr(self, "_harm_threat", {}).get(package.id, []):
+        for nid_ in getattr(self, "_agm88_threat", {}).get(package.id, []):
             ng_ = self.groups_by_asset.get(nid_)
             if ng_ is not None:
                 cth = task.ControlledTask(task.AttackGroup(ng_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
@@ -104,7 +105,7 @@ class StrikeTasks:
             from .war import after_sites, site_blind_today
             live_ = [x for x in after_sites(obj_) if x in self.state.assets and not self.state.assets[x].destroyed]
             gsite_ = next((x for x in live_ if not site_blind_today(self.state, x)), live_[0] if live_ else "")
-        air_only_ = (not fol_) and obj_.type in (ObjectiveType.STRIKE, ObjectiveType.CAS) and f.role in (Role.STRIKE, Role.CAS)      # v0.41.203: the fighters-clear gate on its own
+        air_only_ = (not fol_) and obj_.type in (ObjectiveType.STRIKE, ObjectiveType.CAS) and f.role in (Role.STRIKE, Role.CAS) and obj_.aim != "STANDOFF"      # v0.41.203: the fighters-clear gate on its own
         if (not f.tag and ((obj_.type == ObjectiveType.DEAD and obj_.aim not in SEAD_AIMS) or fol_ or air_only_) and gsite_ and tot_s is not None
                 and f.role in (Role.STRIKE, Role.CAS, Role.TARCAP, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10
                 and (f.role in (Role.STRIKE, Role.CAS) or stw is None)):               # a TARCAP / escort on its own station is already outside the threat
@@ -122,7 +123,7 @@ class StrikeTasks:
                 bx, by = offset(base.x, base.y, bearing(base.x, base.y, lw.x, lw.y), 20 * NM)   # does not cut straight from cruise altitude to the runway
                 g.add_waypoint(pt(bx, by), min(lw.alt_ft, 9000) * FT, 320 * KPH, "ABORT")
                 to_ = len(g.points)
-            leg_ = [(w.x, w.y) for w in wps if w.name in ("IP", "TGT")]
+            leg_ = [(w.x, w.y) for w in wps if w.name in ("IP", "TGT", "REL")]
             also_ = [a_.id for a_, _ in self._cover_tors(package, leg_)]          # the route check: the Tors that cover the site or the run in
             tga_ = st.assets.get(gsite_)
             um_ = tm.umbrella_site(st, tga_)
@@ -145,20 +146,20 @@ class StrikeTasks:
         ct2.stop_after_time(t0 + 1080)
         wp.tasks.append(ct2)
 
-    def _harm_time(self, package, geom, base, P0):
+    def _agm88_time(self, package, geom, base, P0):
         """When this package's AI HARM flights reach their HARM point in this mission (push time + the push-to-HARM-point leg on its geometry)."""
         sf = next((f for f in package.flights if f.role == Role.SEAD and not f.tag), None)
         if sf is None:
             return None
         from .mission_builder import stagger                # the builder's module imports this one, so it is imported here, when called
         spec = AIRCRAFT[sf.aircraft]
-        wps = plan_route(Role.SEAD, (base.x, base.y), geom, spec.profile, is_player=False, tanker_xy=None, keep_out=self._umbrella_keep(package), harm_deg=self._harm_deg(package, geom))
+        wps = plan_route(Role.SEAD, (base.x, base.y), geom, spec.profile, is_player=False, tanker_xy=None, keep_out=self._umbrella_keep(package), agm88_deg=self._agm88_deg(package, geom))
         assign_times(wps, 0.0, P0 + stagger(package, Role.SEAD))
         tw = objective_wp(wps)
         return tw.eta_s if tw is not None and tw.action == "SEAD" else None
 
     def _umbrella_keep(self, package):
-        """plan_route's keep_out for a package's HARM point: the umbrella SA-10's reach (HARM_LAUNCH_NM) when the target sits under one and,
+        """plan_route's keep_out for a package's HARM point: the umbrella SA-10's reach (AGM88_LAUNCH_NM) when the target sits under one and,
         v0.41.24, every other live SA-2/3/6/11/10 the package is not sent against, by its reach (the v0.41.23 run: a Gudauta SEAD flight's HARM
         point sat 30 nm from the Sukhumi S-300 another package was attacking, and three Hornets died to it). None when there is nothing to keep out of."""
         if not package.objective.target_id or package.objective.target_id not in self.state.assets:
@@ -167,31 +168,31 @@ class StrikeTasks:
         if package.objective.type == ObjectiveType.DEAD:
             um = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
             if um:
-                out.append((um.x, um.y, HARM_LAUNCH_NM))
+                out.append((um.x, um.y, AGM88_LAUNCH_NM))
         out += self._zone_sams(package)
         return out or None
 
-    def _harm_deg(self, package, geom) -> float:
+    def _agm88_deg(self, package, geom) -> float:
         """v0.41.24: the HARM shooters' approach, in degrees off the package axis: the first of 0, 15, 30 either side whose launch point (pushed
         out as plan_route pushes it, up to 40 nm further) and IP clear the umbrella and every other SAM the package is not sent against. None
-        clear: the one with the most room, and the package's HARM flights also fire on the sites still in reach (self._harm_threat)."""
+        clear: the one with the most room, and the package's HARM flights also fire on the sites still in reach (self._agm88_threat)."""
         tid = package.objective.target_id
         if not tid or tid not in self.state.assets:
             return 0
-        c_ = getattr(self, "_harm_c", {})
+        c_ = getattr(self, "_agm88_c", {})
         if package.id in c_:
             return c_[package.id]
         kos = self._umbrella_keep(package) or []
-        h0 = max(8.0, min(HARM_LAUNCH_NM, geom.d / NM * 0.8 - 6))
+        h0 = max(8.0, min(AGM88_LAUNCH_NM, geom.d / NM * 0.8 - 6))
         def place(deg):
             ax = geom.hdg + 180 + deg
             hn = h0
-            while hn < HARM_LAUNCH_NM + 40 and any(dist(*offset(geom.tx, geom.ty, ax, hn * NM), kx, ky) < knm * NM for kx, ky, knm in kos):
+            while hn < AGM88_LAUNCH_NM + 40 and any(dist(*offset(geom.tx, geom.ty, ax, hn * NM), kx, ky) < knm * NM for kx, ky, knm in kos):
                 hn += 1.0
             pts = [offset(geom.tx, geom.ty, ax, (hn + k) * NM) for k in (0, 6)]
             return pts, min((dist(x, y, kx, ky) / NM - knm for x, y in pts for kx, ky, knm in kos), default=999.0)
         best = None
-        for deg in self.HARM_AXES:
+        for deg in self.AGM88_AXES:
             pts, sl = place(deg)
             if sl >= 0:
                 best = (deg, sl, pts)
@@ -202,11 +203,38 @@ class StrikeTasks:
             zs = self._zone_sams(package)
             ids = [a.id for a in self.state.assets.values() if (a.x, a.y, AVOID_NM.get(a.variant)) in zs
                    and any(dist(x, y, a.x, a.y) < AVOID_NM[a.variant] * NM for x, y in best[2])]
-            self._harm_threat = getattr(self, "_harm_threat", {})
-            self._harm_threat[package.id] = ids
+            self._agm88_threat = getattr(self, "_agm88_threat", {})
+            self._agm88_threat[package.id] = ids
         c_[package.id] = best[0]
-        self._harm_c = c_
+        self._agm88_c = c_
         return best[0]
+
+    def _rel_kind(self, package, f) -> str:
+        """v0.41.299 (XO 2026-11-05): "SLAM" for a Standoff Strike's SLAM-ER flight, "JDAM" for an AI striker that drops JDAMs (F-16C, F/A-18C, F-14B) on a strike or a counter-air
+        strike (not a runway strike: it lays its bombs along the strip), else "". These flights release short of the target (routes.plan_route `rel`) and fly the high profile. A person's
+        own flight is never one (he flies the run himself); in the all-AI test it is."""
+        if f.tag or f.role != Role.STRIKE or (f.is_player and not self.o.player_is_ai):
+            return ""
+        if getattr(f, "kit", "") == "SLAM":
+            return "SLAM"
+        o = package.objective
+        if getattr(f, "kit", "") or f.aircraft not in JDAM_JETS or o.aim == "RUNWAY":
+            return ""
+        return ""        # v0.41.317 (XO 2026-11-06, three runs, no guided-bomb release): "JDAM" is retired. A quiet-run striker flies a target waypoint on the target with the plain bomb task and its jet's own profile, as before v0.41.299; the AI works out its own release. Only the Standoff Strike (SLAM) is told where to launch.
+
+    def _flight_profile(self, f, package):
+        """The route profile a flight is planned with. A release-point striker (_rel_kind) gets its jet's profile with the strike altitude raised to JDAM_ALT_FT and the LOW tier closed
+        (a JDAM released at 500 ft has almost no reach); one copy per jet, so the (role, profile) keys of the tier table stay stable. Everyone else: the jet's own profile."""
+        p = AIRCRAFT[f.aircraft].profile
+        if not self._rel_kind(package, f):
+            return p
+        cache = self.__dict__.setdefault("_rel_profiles", {})
+        q = cache.get(f.aircraft)
+        if q is None:
+            base_ = p.alt_ft.get(Role.STRIKE, 20000)
+            q = cache[f.aircraft] = dataclasses.replace(p, alt_ft={**p.alt_ft, Role.STRIKE: max(base_, JDAM_ALT_FT)}, no_low=True,
+                                                        med_alt_ft=p.med_alt_ft or max(10000, int(round(base_ * 0.6 / 1000.0)) * 1000))
+        return q
 
     def _jsow_side(self, package, geom) -> float:
         """The JSOW flight's approach, as a multiple of JSOW_AXIS_DEG off the HARM shooters' axis. v0.41.22: the first axis (30, 50, 15 or
@@ -214,7 +242,7 @@ class StrikeTasks:
         launched 20 nm from a neighbouring SA-2 nobody was suppressing). None clear: the axis with the most room, and the package's second HARM
         flight is also tasked on the sites still in reach (self._jsow_threat)."""
         tid = package.objective.target_id
-        if package.objective.aim not in SEAD_AIMS or not tid:
+        if package.objective.aim not in SEAD_AIMS or package.objective.type != ObjectiveType.DEAD or not tid:        # v0.41.299: a Standoff Strike (STRIKE, aim STANDOFF) has no HARM shooters to come in beside
             return 0
         c_ = getattr(self, "_jsow_c", {})
         if package.id in c_:
@@ -264,10 +292,35 @@ class StrikeTasks:
                 out.append((a, g))
         return sorted(out, key=lambda ag: dist(ag[0].x, ag[0].y, t.x, t.y))
 
+    def _jsow_ramp_tasks(self, wp, f, package, eta_s=None) -> None:
+        """v0.41.313 (XO 2026-11-06): the JSOW-As of a Standoff Counter-Air, one per aim point: the first parked jet and the one furthest from it (the JSOW's cluster
+        submunitions cover the spots between), else the middle of the ramp. Same attack window and timed return fire as the other JSOW releases."""
+        pts = list(getattr(self, "_ramp_pts", []) or [])
+        if not pts:
+            r_ = self._ramp_xy(self.state.assets[package.objective.target_id])
+            pts = [r_ if r_ is not None else self._jitter_primary(package, 0.0, 0.0)]
+        n_ = max(1, JSOW_PER_JET.get(f.aircraft, 2))
+        aims = [pts[0]]
+        if len(pts) > 1 and n_ > 1:
+            aims.append(max(pts, key=lambda q: math.hypot(q[0] - pts[0][0], q[1] - pts[0][1])))
+        each = max(1, n_ // len(aims))
+        exp = task.Expend.Four if each >= 4 else (task.Expend.Two if each >= 2 else task.Expend.One)
+        wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))   # v0.41.327 (XO): designated points only, no hunting
+        if eta_s is not None:
+            rf_ = task.ControlledTask(task.OptROE(task.OptROE.Values.ReturnFire)); rf_.start_after_time(int(eta_s + JSOW_ATTACK_S)); wp.tasks.append(rf_)
+        for x, y in aims:
+            bt_ = task.ControlledTask(task.Bombing(mapping.Point(x, y, self.t), expend=exp, group_attack=True))
+            if eta_s is not None:
+                bt_.stop_after_time(int(eta_s + JSOW_ATTACK_S))
+            wp.tasks.append(bt_)
+
     def _jsow_tasks(self, wp, f, site, package, eta_s=None) -> None:
         """A JSOW slinger's attack from its launch point: one release per radar of the target site (search and track radars; the first two
         vehicles of a site whose radars ride on the launchers), aimed at the radar's last-known position give or take JSOW_AIM_ERR_M. The
         flight's JSOWs are shared out between the aim points. A radar that shuts down to dodge the HARMs is still where it was last seen."""
+        if package.objective.type == ObjectiveType.COUNTER_AIR and package.objective.aim != "SWEEP":
+            self._jsow_ramp_tasks(wp, f, package, eta_s)               # v0.41.313: a Standoff Counter-Air aims at the jets parked on the ramp, not at a SAM site
+            return
         if site is None or not site.units:
             return
         radars = [u for u in site.units if str(getattr(u, "type", "")) in TRACK_RADARS | SEARCH_RADARS]

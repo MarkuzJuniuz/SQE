@@ -118,7 +118,6 @@ def _build(session, st, pkg, ai: bool, flight_id=None):
 
 def run() -> dict:
     """{ "case/mode/package-key": {member: text-or-hash} } for every case."""
-    _raids.emergency_happens = lambda *a, **k: False          # no random emergency offers (same as the smoke test)
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
     # SQE_IDENT_NO_STANDOFF=1 builds everything with "AI TARCAPs, escorts and sweeps stop short of live SAM cover" OFF: their no-station routes (a second baseline)
     s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, fighter_standoff=not os.environ.get("SQE_IDENT_NO_STANDOFF")))

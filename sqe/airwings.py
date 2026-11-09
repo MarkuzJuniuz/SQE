@@ -39,12 +39,25 @@ def _units(state):
 def step(state, d, rng) -> list:
     """Overnight: wings fall back, rest and return. -> report lines."""
     out = []
+    pid = state.player.squadron_id if state.player else None
+    pq = state.squadrons.get(pid) if pid else None
+    if pq is not None and pq.move_days > 0 and resting(pq):        # v0.41.246 (XO): the player's squadron sits out a move like any other (it never stands down to recover: that stays off for it)
+        pq.move_days -= 1
+        if pq.move_days == 0:
+            pq.available, pq.reserve, pq.rest_days = pq.reserve, 0, 0
+            out.append(f"{pq.name} has settled in at its new field with {pq.available} aircraft.")
     for side, u, name, gone in _units(state):
         rep = d.friendly_replenish if side == "blue" else d.enemy_replenish
         what = f"{name}" if side == "blue" else f"the squadron at {name}"
         if resting(u):
             if gone:                                               # its rear field is no safer than a cratered one
                 u.reserve = int(u.reserve * 0.75)
+                continue
+            if getattr(u, "move_days", 0) > 0:                     # v0.41.243: a squadron that changed field (base fall or return) is on the move: no rest boost, back after its nights
+                u.move_days -= 1
+                if u.move_days == 0:
+                    u.available, u.reserve, u.rest_days = u.reserve, 0, 0
+                    out.append(f"{what[0].upper() + what[1:]} has settled in at its new field with {u.available} aircraft.")
                 continue
             u.rest_days += 1
             u.reserve = min(u.authorized, u.reserve + max(1, round(u.authorized * rep * REST_BOOST)))

@@ -29,6 +29,8 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     """x: date, whois, mode3, laser, bingo, joker, bullseye, divert, weather, link16(bool)."""
     pf = pkg.player_flight
     spec = AIRCRAFT[pf.aircraft]
+    _psq = state.squadrons.get(getattr(pf, "squadron_id", ""))
+    on_boat = (state.bases[_psq.base_id].kind.value == "CARRIER") if (_psq is not None and _psq.base_id in state.bases) else spec.home.value == "CARRIER"          # v0.41.257: a carrier squadron moved ashore (its ship sunk) lands at a field
     n, pname, ptext = narrative.phase(state)
     obj = pkg.objective
     threats = threat_lines(state, *tgt_xy)
@@ -44,7 +46,9 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         sit += ["", (f"Intelligence reports {e['bombers']} {rtype} with free-fall bombs inbound toward {what}, "
                      f"approaching from a bearing of about {e['brg']:.0f} degrees." if e.get("land") else
                      f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
-                     f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier.")
+                     f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier. They will launch from about 100 nm out and turn for home; stop them before they fire."
+                     + (" SEAD flights are working the long-range SAMs over their launch point. Hold on your station, outside the SAM rings, and engage what comes to you; "
+                        "you are free to cross toward the launch point when AWACS calls SEAD complete, or at the push time on the card." if e.get("setpiece") else ""))
                     + (f" They are escorted by {e['escorts']} fighters." if e.get("escorts") else
                        (" They have no escort." if e.get("land") else " They have no escort: the enemy cannot reach this far with fighters. It is a last throw of the dice."))]
     n_def = x.get("n_def", pkg.n_def)
@@ -58,6 +62,25 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                     "take, so you go in about 10 minutes ahead of them to clear the air. No marshal: depart, push, station, home. Your station is "
                     "short of the target and outside live SAM cover. Shoot what comes in range; do not chase into the SAMs. Hold 15 minutes, or go "
                     "home when your missiles are gone."]
+    elif obj.type.value == "STRIKE" and obj.aim == "RUNWAY":
+        sit += ["", "Runway strike. Put at least 3 bombs on the runway: that closes the whole field for 2 to 5 days (longer when their supply is low). "
+                    "Nothing launches from a cratered field and nothing lands there; its aircraft stay on the ramp. The target point is the middle of the strip; "
+                    "bombs that fall off the paved strip do not count."]
+    elif obj.type.value == "STRIKE" and obj.aim == "STANDOFF":
+        sit += ["", "Standoff Strike. Red fighters in reach make a plain bombing run a bad bet here, so the strike goes out as SLAM-ER Hornets: they launch "
+                    "their AGM-84Hs from a long way out (up to about 120 nm from the target, as far as the route allows), outside the reach of the fighters "
+                    "over the target, and turn straight home. Nobody crosses the target area. The TARCAP and the escort hold behind the launch point and "
+                    "cover the way home. The missiles fly on without you; judge the result at the debrief."]
+        if getattr(pf, "kit", "") == "SLAM":
+            sit += ["", "You are the Standoff Strike flight. Your route ends at the target point and you set your own launch point: launch as far out as you "
+                        "get a shot, stay clear of the fighters over the target, then turn home with the package. The AI SLAM-ER flights launch from about 120 nm out."]
+    elif obj.type.value == "COUNTER_AIR" and obj.aim == "STANDOFF":       # v0.41.313
+        sit += ["", "Standoff Counter-Air. The fighters at this field make a bombing run over the ramp a bad bet, so the strike goes out as JSOW-A Vipers and Hornets: "
+                    "they release their AGM-154As on the jets parked on the ramp from stand-off range, outside the reach of the fighters over the field, and turn straight "
+                    "home. The Fighter Sweep flight covers the approach. Judge the result at the debrief."]
+    elif obj.type.value == "COUNTER_AIR" and obj.aim != "SWEEP":
+        sit += ["", "Counter-Air strike on the ramp. Little air cover here, so the strikers overfly the field with CBU-103 cluster bombs on the jets parked there; "
+                    "the Fighter Sweep flight clears the air ahead of them."]
     elif obj.type.value == "DEAD" and obj.aim == "STANDOFF":
         from .difficulty import get as _gd3
         from .war import WarSimulator as _WS3
@@ -113,7 +136,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     else:
         tower, jtac_at = f"ATC {plan.where('ATC')}", (plan.where("JTAC") or None)
     adm = [f"BINGO {x['bingo']} lb   JOKER {x['joker']} lb",
-           "Recovery: " + (f"carrier Case I, TACAN 74X, ICLS 11, {tower}" if spec.home.value == "CARRIER" else f"home field, tower {tower.replace('ATC ', 'on ')}"),
+           "Recovery: " + (f"carrier Case I, TACAN 74X, ICLS 11, {tower}" if on_boat else f"home field, tower {tower.replace('ATC ', 'on ')}"),
            f"Divert: {x['divert']}", "Tanker track is steerpoint TKR. Bullseye is the last steerpoint."]
     if spec.fc3:
         com = ["Frequencies: " + " | ".join(f"{e.label} {e.mhz:.3f}" for e in list(plan.comm1.values()) + list(plan.comm2.values()))]
@@ -144,4 +167,4 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
 def _long_label(f, obj) -> str:
     """The flight's job in words, for 'tasked as ...'."""
     from .models import task_label
-    return {"SO DEAD": "Standoff DEAD", "DEAD": "Close DEAD"}.get(task_label(f, obj), task_label(f, obj))
+    return {"SO DEAD": "Standoff DEAD", "SO STRIKE": "Standoff Strike", "DEAD": "Close DEAD"}.get(task_label(f, obj), task_label(f, obj))

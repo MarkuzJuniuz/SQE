@@ -5,11 +5,11 @@ import traceback
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QSize, QUrl
-from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QPen
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
                                QHeaderView, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QProgressBar,
                                QPushButton, QCheckBox, QScrollArea, QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser,
-                               QSizePolicy, QVBoxLayout, QWidget)
+                               QSizePolicy, QStyledItemDelegate, QVBoxLayout, QWidget)
 
 from .. import APP_NAME, CAMPAIGN_EXT, __version__, narrative, overview_detail, posture, story
 from ..aircraft import AIRCRAFT
@@ -24,12 +24,22 @@ from .dialogs import DayResolvedDialog, DebriefDialog, NewCampaignDialog, Settin
 from .widgets import MapView, SideCard, StatCard, card
 from . import overview_view as V
 
+URGENT_ROLE = Qt.UserRole + 1
+
+
+class UrgentDelegate(QStyledItemDelegate):
+    """v0.41.304 (XO 2026-11-05: "show the scrambles with red borders on the main UI"): a job red is doing to you now (a raid on your fleet, field or supply site, troops in contact)
+    keeps the normal row and gets a red border."""
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+        if index.data(URGENT_ROLE):
+            painter.save()
+            painter.setPen(QPen(QColor("#d8453b"), 2))
+            painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
+            painter.restore()
+
+
 RELEASES_URL = "https://github.com/MarkuzJuniuz/SQE/releases/latest"
-
-
-def _game_note(text: str) -> str:
-    """v0.41.133 (XO 2026-10-24): game-mechanics text in an in-universe popup: a small grey "SQE NOTE" label, then the text in grey italics, in parentheses."""
-    return f'<span style="color:#8b97a8;"><small>SQE NOTE</small><br><i>({text})</i></span>'
 
 
 def _tbl(headers, stretch_last=True) -> QTableWidget:
@@ -233,7 +243,7 @@ class MissionsPage(QWidget):
         self.flt.setToolTip("My squadron: only packages with a flight from your squadron.  All: every package of the day, for looking only: you can fly only your own squadron's flights.")
         frow.addWidget(self.flt, 1); left.addLayout(frow)
         self.flt.currentIndexChanged.connect(self._filter_changed)
-        self.lst = QListWidget(); left.addWidget(self.lst, 1); self.lst.currentRowChanged.connect(self._show)
+        self.lst = QListWidget(); self.lst.setItemDelegate(UrgentDelegate(self.lst)); left.addWidget(self.lst, 1); self.lst.currentRowChanged.connect(self._show)
         right = QVBoxLayout(); root.addLayout(right, 6)
         self.c = card(); right.addWidget(self.c, 1)
         L = self.c.layout()
@@ -274,6 +284,11 @@ class MissionsPage(QWidget):
             self.bl.addStretch(1)
             return
         self.note.show()
+        keep = None                                         # v0.41.311: remember the pick, so FLY's refresh does not jump to row 0 behind the waiting window
+        cur = self.lst.currentItem() if getattr(self, "_sel_day", None) == st.day else None
+        if cur is not None:
+            keep = cur.data(Qt.UserRole)
+        self._sel_day = st.day
         self._loading = True
         self.flt.setCurrentIndex(0 if sess.settings.list_filter != "all" else 1)
         self._loading = False
@@ -287,10 +302,10 @@ class MissionsPage(QWidget):
             ok = bool(sess.flyable(p))
             night = is_night(st.campaign_date(), p.start)
             extra = sess.merge_candidates(p) if ok else []
-            it = QListWidgetItem(f"#{p.number}  {p.objective.type.value.replace('_', ' ')}   {p.start}{' (night)' if night else ''}"
+            it = QListWidgetItem(f"#{p.number}  {p.title}   {p.start}{' (night)' if night else ''}"
                                  f"{'   [JOINT]' if p.joint else ''}{f'   +{len(extra)} package' + ('s' if len(extra) > 1 else '') if extra else ''}"
-                                 f"\n{p.objective.description}" + ("" if ok else "\n(no flight for your aircraft)"))
-            it.setData(Qt.UserRole, p.number); it.setSizeHint(QSize(0, 66))
+                                 f"\n{p.objective.description}{' (no warning)' if (p.extra or {}).get('unwarned') else ''}" + ("" if ok else "\n(no flight for your aircraft)"))
+            it.setData(Qt.UserRole, p.number); it.setData(URGENT_ROLE, p.urgent); it.setSizeHint(QSize(0, 66))
             if not ok:
                 it.setForeground(QColor(theme.DIM))
             self.lst.addItem(it)
@@ -298,7 +313,8 @@ class MissionsPage(QWidget):
         self.resume.setVisible(bool(st.pending))
         self.skip.setEnabled(st.status == "ACTIVE")
         if self.pkgs and any(sess.flyable(p) for p in self.pkgs):
-            self.lst.setCurrentRow(0)
+            row = next((i for i, p in enumerate(self.pkgs) if p.number == keep), 0) if keep is not None else 0
+            self.lst.setCurrentRow(row)
         else:
             self._clear_body()
             self._idle_note(sess)
@@ -396,7 +412,7 @@ class MissionsPage(QWidget):
         for x in mem:                                       # the packages that fly with this one: each with its own flights and FLY button
             line = QFrame(); line.setFrameShape(QFrame.HLine); line.setStyleSheet(f"color:{theme.DIM};"); self.bl.addWidget(line)
             xnight = is_night(st.campaign_date(), x.start)
-            self.bl.addWidget(self._label(f"Also in this mission: #{x.number}  {x.objective.type.value.replace('_', ' ')}   {x.start}{' (night)' if xnight else ''}", "h2", theme.AMBER))
+            self.bl.addWidget(self._label(f"Also in this mission: #{x.number}  {x.title}   {x.start}{' (night)' if xnight else ''}", "h2", theme.AMBER))
             self.bl.addWidget(self._label(x.objective.description, "title"))
             xt, xyours = self._flight_table(x)
             if xyours:
@@ -448,14 +464,14 @@ class ForcesPage(QWidget):
         sqs = list(st.squadrons.values()); self.sq.setRowCount(len(sqs))
         for i, s in enumerate(sqs):
             sp = AIRCRAFT[s.aircraft]
-            for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.available} / {s.authorized}")):
+            for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.available} / {s.authorized}" + (f" (refitting, {s.reserve})" if s.reserve else ""))):
                 self.sq.setItem(i, j, _item(v))
             self.sq.setCellWidget(i, 5, self._bar(s.readiness, theme.BLUE))
         rows_ = [(w, q) for w in st.enemy_air for q in w.sqns]                     # v0.41.208 (XO): laid out like the Coalition squadrons (no squadron names): one row per airframe, its base, serviceable and strength
         self.ea.setRowCount(len(rows_))
         for i, (w, q) in enumerate(rows_):
             for j, v in enumerate((q.aircraft.replace("_", "-"), st.assets[w.base_asset_id].name,
-                                   f"{q.available} / {q.authorized}" + (f" (resting, {q.reserve})" if q.reserve else ""))):
+                                   f"{q.available} / {q.authorized}" + (f" (refitting, {q.reserve})" if q.reserve else ""))):
                 self.ea.setItem(i, j, _item(v))
             self.ea.setCellWidget(i, 3, self._bar(q.available / max(1, q.authorized), theme.RED))
         from .. import sams as _sams, support_assets as _sa
@@ -772,45 +788,17 @@ class MainWindow(QMainWindow):
                 "A sortie is already built and waiting for results. Discard it and build a new one?") != QMessageBox.Yes:
             return
         if sess.state.pending:
-            sess.abort()                                    # v0.41.149: discarding gives back what the sortie used, a scramble included (so it is offered again)
+            sess.abort()
         if sess.settings.problems():
             QMessageBox.warning(self, "Settings", "\n".join(sess.settings.problems())); self.settings(); return
-        scramble = False
-        try:
-            ev = sess.emergency_for(number, flight_id)
-        except Exception:
-            ev = None
-        if ev:
-            scramble = self._emergency_popup(ev, number)
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            res = sess.fly(number, flight_id, scramble=scramble)
+            res = sess.fly(number, flight_id)
         except Exception:
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "Could not build the mission", traceback.format_exc()); return
         QApplication.restoreOverrideCursor()
         self.refresh_all(); self.wait_for_results()
-
-    def _emergency_popup(self, ev, number) -> bool:
-        """An emergency came up as you clicked Fly. Returns True when you take it."""
-        epkg = ev["package"]
-        box = QMessageBox(self); box.setIcon(QMessageBox.Warning); box.setWindowTitle(ev["title"])
-        if ev["eligible"]:
-            box.setText(f"<b>{ev['title']}</b><br>{ev['text']}")
-            box.setTextFormat(Qt.RichText); box.setInformativeText(f"Your squadron can answer it: {epkg.objective.description}.<br><br>" + _game_note(
-                                   f"If you scramble, the package you were tasked with (#{number}) is left to the other squadrons and is settled by the war "
-                                   f"simulation (or postponed a day if there are not enough aircraft for both). If you stay with your tasking, the emergency "
-                                   f"is settled without you" + (" or flown by AI inside your mission." if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else ".")))
-            go = box.addButton("Scramble", QMessageBox.AcceptRole); box.addButton("Stay with my tasking", QMessageBox.RejectRole)
-            box.exec()
-            return box.clickedButton() is go
-        box.setText(f"<b>{ev['title']}</b><br>{ev['text']}")
-        box.setTextFormat(Qt.RichText); box.setInformativeText(f"{self.session.dispatch_line(epkg)}<br><br>" + _game_note(
-                               ("If it lies inside your mission area it is joined to your mission as AI; otherwise the war simulation settles it."
-                                if epkg.objective.type.value in ("CAS", "FLEET_DEFENSE") else "The war simulation settles it.")
-                               + " Your own tasking goes ahead as planned."))
-        box.addButton("Understood", QMessageBox.AcceptRole); box.exec()
-        return False
 
     def eventFilter(self, obj, ev):
         """Developer secret (XO 2026-10-27): Ctrl+Space skips the day, in AI-Test only (v0.41.154). Done here and not as a QShortcut because a list or text box that has the focus (the Missions

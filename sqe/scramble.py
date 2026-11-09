@@ -16,6 +16,7 @@ recognised shape. How far forward it sticks (DEFENDER_FWD_MAX_NM), the step and 
 from __future__ import annotations
 import math
 
+from . import runways
 from . import threatmap as tm
 from .models import AssetKind
 from .routes import NM, bearing, dist, offset
@@ -71,7 +72,7 @@ def raid_origin(state, pkg, tx, ty):
     a = state.assets.get((getattr(pkg, "extra", None) or {}).get("bomber_wing") or "")
     if a is not None:
         return (a.x, a.y)
-    wings = [state.assets[w.base_asset_id] for w in state.enemy_air if w.base_asset_id in state.assets and not state.assets[w.base_asset_id].destroyed]
+    wings = [state.assets[w.base_asset_id] for w in state.enemy_air if w.base_asset_id in state.assets and not state.assets[w.base_asset_id].destroyed and not runways.is_closed(state, w.base_asset_id)]
     if not wings:
         return None
     w = min(wings, key=lambda a_: dist(a_.x, a_.y, tx, ty))

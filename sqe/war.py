@@ -5,13 +5,14 @@ import math
 import random
 from . import threatmap as tm
 from . import ground, theatres, tempo, story
-from . import raids, sams, ecm, airwings
+from . import raids, runways, sams, ecm, airwings
 from .raids import hit as raids_hit
 from .difficulty import Difficulty
 from .models import SEAD_AIMS, Objective, ObjectiveType, AssetKind, Role
 from .packages import Package
 from .state import CampaignState
-from .loadouts import ENEMY_FIGHTERS
+from .loadouts import ENEMY_FIGHTERS, JSOW_PER_JET, SLAM_PER_JET
+from . import threat
 
 JET_CAS_FACTOR = 0.7       # v0.41.188: an AI-flown F-16C / F/A-18C CAS sortie counts 0.7 of an A-10C one (judgment call: Mavericks only, no gun or CBU, one pass; no public source). A player's own sortie is scored from the debrief.
 ROLE_WEIGHT = {Role.STRIKE: 1.0, Role.SEAD: 0.9, Role.TARCAP: 0.6, Role.ESCORT: 0.7, Role.SWEEP: 0.7, Role.CAP: 0.6, Role.CAS: 1.0}
@@ -70,6 +71,9 @@ def cas_cover(state, a) -> tuple:
     return cov, [x for x in cov if x.variant not in ESCORTABLE]
 
 
+STANDOFF_MIN_DEF_FLIGHTS = 4   # v0.41.298 (XO 2026-11-05, Standoff Strike): a supply strike (fuel / depot / plant) with no SAM complication becomes a Standoff Strike (SLAM-ER Hornets) when this many red 2-ship fighter flights can reach the target (threat.defender_flights, the planner's own count). 0 = never. Judgment call: probe of fresh campaigns, 4 flights = nearly every supply site at L3, none at L1 / L2; it falls away as red's fighters are shot down. 1 would make every supply strike a standoff one at every level
+STANDOFF_AIR_FACTOR = 0.5      # v0.41.298: a Standoff Strike's odds count red's fighter cover at this share (released far out, outside the fighters' reach). Judgment call, no source
+SUPPLY_FIRST_BONUS = 45.0   # v0.41.273 (XO 2026-11-04, fox 3 medium): added to the score of a supply strike (fuel / depot / plant, not a runway strike) so it outranks an ordinary DEAD job (SAM scores 25-42, 60-100 when it blocks something: the belt-clearing SEAD keeps its place; supply strikes score 1.5-7 on their own). Judgment call; 0 = the old order
 FOLLOW_MAX_SITES = 2    # v0.41.158: a strike / CAS target under at most this many SA-11 / SA-10 sites goes in behind their SEAD; under more it stays DEAD-first (judgment call: two is what one gate sequence and one day's package limit can carry)
 FOLLOW_GAP_MIN = 10     # a follow job starts this long after the SEAD / standoff package of its site (same gap as the Close DEAD stage)
 
@@ -158,6 +162,11 @@ class ObjectivePlanner:
                         o_.aim = "SEAD"                                  # and the SA-2/3/6 round it get the HARM escort, as above
                     o_.description += f" (after the SEAD on {' and '.join(x.name for x in fol)}" + (", with a SEAD escort)" if soft else ")")
                     cov = []
+                if (o_.aim == "" and not o_.after and not cov and a.kind in ground.SUPPLY_KINDS and STANDOFF_MIN_DEF_FLIGHTS > 0
+                        and any(q.aircraft in SLAM_PER_JET and q.available >= 2 for q in state.squadrons.values())
+                        and threat.defender_flights(threat.expected_defenders(state, a.x, a.y, self.d.iads if self.d else 0.5)) >= STANDOFF_MIN_DEF_FLIGHTS):
+                    o_.aim = "STANDOFF"                                  # v0.41.298: red fighters are the trouble here, not SAMs: SLAM-ER Hornets, released far out
+                    o_.description = f"Standoff Strike: {a.name}"
                 cand.append((pr, o_, self._blockers(state, a) + cov, locked))
             elif a.kind == AssetKind.SAM and a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10:      # short-range SAMs are CAS's problem, not a SEAD/DEAD package's
                 covered = sum(x.value for x in state.assets.values() if a.id in x.defended_by and not x.destroyed) / 3.0
@@ -213,10 +222,14 @@ class ObjectivePlanner:
                 cand.append((pr, o_, bl, locked))
             elif a.kind == AssetKind.AIRFIELD:
                 w = state.enemy_air_at(a.id)
-                if w and w.available > 0:
-                    pr = a.value * 1.2 * (w.available / max(1, w.authorized))
-                    cand.append((pr, Objective("", ObjectiveType.COUNTER_AIR, a.id, pr, f"Counter-air at {a.name} ({w.available} aircraft)"),
-                                 self._blockers(state, a) + covering_sams(state, a), locked))
+                # v0.41.333 (XO 2026-11-07, "remove all counter-air / standoff versions of it"): no Counter-Air strike (CBU on the ramp) and no Standoff Counter-Air (JSOW)
+                # is offered any more; the runway crater below is the airfield attack. The Fighter Sweep (also a COUNTER_AIR objective) is untouched. The builder, packages and
+                # briefing code for the strike versions stays in place, unreachable for new plans, for a later cleanup.
+                if not runways.is_closed(state, a.id):         # v0.41.254: crater the runway (a STRIKE with aim RUNWAY); 3 bomb hits close the field for 2-5 days
+                    prr = a.value * 0.9 * (w.available / max(1, w.authorized))
+                    o_ = Objective("", ObjectiveType.STRIKE, a.id, prr, f"Crater the runway at {a.name} ({w.available} aircraft)")
+                    o_.aim = "RUNWAY"
+                    cand.append((prr, o_, self._blockers(state, a) + covering_sams(state, a), locked))
         blocking = {x.id for c in cand for x in c[2]} | {sid for c in cand for sid in after_sites(c[1])}      # sites that stand in front of something else
         pool, follows = [], []
         fsites = {sid for c in cand if not c[2] and not c[3] for sid in after_sites(c[1])}
@@ -227,8 +240,11 @@ class ObjectivePlanner:
                 pr *= 1.8                                              # clear the belt first
                 if o.target_id in fsites:
                     pr *= 1.4                                          # v0.41.158: and a site with a strike or CAS job waiting behind its SEAD (judgment call)
+            if o.type == ObjectiveType.STRIKE and o.aim != "RUNWAY" and state.assets[o.target_id].kind in (AssetKind.FUEL, AssetKind.DEPOT):
+                pr += SUPPLY_FIRST_BONUS                           # v0.41.273: supplies before the ordinary DEAD jobs, behind the belt-clearing SEAD
             (follows if o.after else pool).append((pr, o))
-        fleet = next((b for b in state.bases.values() if b.kind.value == "CARRIER"), None)
+        from . import fleet as _fl
+        fleet = _fl.carrier(state)                                    # v0.41.257: None while the carrier is sunk
         if fleet and self.d is not None and self.d.bomber_policy != "none":
             from . import bombers                                    # v0.41.105: the bomber wing is a trump card: safe window or desperation, never fewer than 4, 2 escorts each
             dec = bombers.decide(state, self.d)
@@ -389,6 +405,10 @@ def flight_weight(f) -> float:
     return w
 
 
+RAID_SAM_PRESSURE = 0.12     # v0.41.305: blue's intercept strength lost per live SAM site that still threatens the carrier raid's lane (judgment call, no source: three live sites cost about a third)
+RAID_SAM_FLOOR = 0.4         # ...never below this share
+
+
 class WarSimulator:
     def __init__(self, d: Difficulty, rng: random.Random | None = None):
         self.d, self.rng = d, rng or random.Random()
@@ -405,6 +425,8 @@ class WarSimulator:
             if t.kind == AssetKind.SAM and not t.destroyed:
                 sam += 1.5 * t.health
                 sam += 0.8 * sum(g.health for g in state.assets.values() if g.guards == t.id)     # a dug-in garrison makes the site harder
+            elif t.kind in (AssetKind.FUEL, AssetKind.DEPOT) and not t.destroyed:
+                sam += 0.8 * sum(g.health for g in state.assets.values() if g.guards == t.id and not g.destroyed)     # v0.41.241: a road site's battalion makes the strike harder
             for sid in after_sites(obj):                  # v0.41.158: a follow job: the SA-11 / SA-10 sites it waits on are blinded (follow_ready), but still there
                 x_ = state.assets.get(sid)
                 if x_ is not None and not x_.destroyed and sid not in t.defended_by:
@@ -413,6 +435,8 @@ class WarSimulator:
             if has_sead:
                 sam *= 0.5
         air = _air_cover(state, self.d.iads)
+        if obj.type in (ObjectiveType.STRIKE, ObjectiveType.COUNTER_AIR) and obj.aim == "STANDOFF":
+            air *= STANDOFF_AIR_FACTOR                    # v0.41.298: released outside the fighters' reach
         defense = sam + air
         if obj.type == ObjectiveType.STRIKE and obj.aim == "SEAD":
             # v0.41.144: a supply strike under escortable SAM cover goes in at the SEAD flight's own chance (the salvo-size rule of sead_p: the HARMs
@@ -476,6 +500,10 @@ class WarSimulator:
                 up_, psq_ = blue_barcap.patrol_up(state, rng, fb_, (wa_.x, wa_.y))
                 if up_:
                     strength += blue_barcap.PATROL_RAID_WEIGHT * ROLE_WEIGHT[Role.CAP]
+        live_ = [state.assets[x] for x in (pkg.extra.get("prep_sites") or []) if x in state.assets
+                 and not state.assets[x].destroyed and state.assets[x].health > 0.25 and not getattr(state.assets[x], "suppressed", False)]
+        if live_:                                                          # v0.41.305 (XO 2026-11-05: "the war planner takes into account what happened on those packages"): each SAM site still threatening the lane (the SEAD / DEAD packages ahead of the raid did not take it down) costs blue's fighters reach
+            strength *= max(RAID_SAM_FLOOR, 1.0 - RAID_SAM_PRESSURE * len(live_))
         nb_ = int(pkg.extra.get("bombers", 4)) if pkg.extra else 4
         p = strength / (strength + 2.5 + 2.0 * d.iads + 0.4 * esc + 0.25 * max(0, nb_ - 4))     # v0.41.155 (red zerg): a mass raid is harder to stop (judgment call)
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
@@ -610,7 +638,9 @@ class WarSimulator:
                     state.note("   the friendly position was hard pressed")
                 else:
                     state.note("   the friendly position was overrun; the column advances")
-            if success:
+            if success and obj.aim == "RUNWAY":
+                lines.append("   " + runways.crater(state, t.id))             # v0.41.254: an AI-flown runway strike that succeeds craters the field
+            elif success:
                 t.health = max(0.0, t.health - d.base_damage * (0.5 + p) * (ground.AIR_EFFECT if z is not None else 1.0))
                 lines.append(f"   {t.name} now at {t.health:.0%}")
                 if obj.type == ObjectiveType.COUNTER_AIR:
@@ -619,7 +649,7 @@ class WarSimulator:
                         k = min(w.available, max(1, round(w.available * 0.3 * p)))
                         w.available -= k
                         lines.append(f"   {k} enemy aircraft destroyed at {t.name}")
-            else:
+            elif obj.aim != "RUNWAY":
                 t.health = max(0.0, t.health - 0.1 * d.base_damage)
         elif success:
             w = max(state.enemy_air, key=lambda w: w.available, default=None)
@@ -655,7 +685,7 @@ class WarSimulator:
         for ln in support_assets.step(state, self.rng):                  # v0.41.87: missing AWACS / tanker airframes come back
             state.note("Overnight: " + ln)
         for a in state.assets.values():
-            if 0 < a.health < 1.0 and ground.zone_of(state, a.id) is None and not (ground.active(state) and a.kind in ground.SUPPLY_KINDS):        # v0.41.143: a front column is a sector's strength: the ground war reinforces it, it does not repair itself
+            if 0 < a.health < 1.0 and ground.zone_of(state, a.id) is None and not (ground.active(state) and a.kind in ground.SUPPLY_KINDS) and not sams.travelling(state, a.id):        # v0.41.143: a front column is a sector's strength: the ground war reinforces it, it does not repair itself
                 a.health = min(1.0, a.health + (d.sam_repair if a.kind == AssetKind.SAM else d.asset_repair))
         if tempo.decay_on(state) and not (state.ground or {}).get("stand_down"):      # v0.41.164: not on a stand-down day (nothing to fly: the edge is kept); v0.41.208: only when the campaign has Tactical Edge Decay on
             tempo.decay(state)                                       # v0.41.147: the squadrons' edge fades a little each night
@@ -696,7 +726,8 @@ def totals(state: CampaignState) -> dict:
     arm = [a for a in state.assets.values() if a.kind == AssetKind.ARMOR and a.variant != "GARRISON"]
     armor = sum(a.health for a in arm) / len(arm) if arm else 0.0
     c2 = [a for a in state.assets.values() if a.kind == AssetKind.C2]
-    fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD"]
+    pend = ground.pending_fields(state)                         # v0.41.244: a taken field still being built does not drag blue's mean down
+    fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD" and b.id not in pend]
     return {"base_defense": (sum(b.defense for b in fields) / len(fields)) if fields else 1.0, "friendly_air": fa / fz, "enemy_air": ea / ez, "iads": iads, "armor": armor,
             "c2": sum(a.health for a in c2) / len(c2) if c2 else 0.0,
             "fa": fa, "fz": fz, "ea": ea, "ez": ez}
@@ -739,7 +770,7 @@ def update_status(state: CampaignState) -> str:
         elif t["friendly_air"] < 0.15:
             state.status = "DEFEAT"; state.note("DEFEAT: the coalition air component can no longer sustain operations.")
         elif ground.fallen_count(state) >= 2:
-            state.status = "DEFEAT"; state.note("DEFEAT: the front has collapsed; two of our airfields are lost.")
+            state.status = "DEFEAT"; state.note("DEFEAT: the front has collapsed; two of our bases are lost" + (" (the sunk carrier counts as one)." if ground.fleet_sunk(state) else "."))
             for ln in story.beat(state, "lose"):
                 state.note(ln)
     return state.status

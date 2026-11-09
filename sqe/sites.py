@@ -53,6 +53,8 @@ def on_spot(x: float, y: float) -> bool:
     if tid not in _SPOTS:
         d = load(th)
         _SPOTS[tid] = {(round(float(px)), round(float(py))) for kind in ("sam", "supply", "ground") for px, py in _pool(d, kind)} if d else set()
+        if d:                                                         # v0.41.241: the road net's supply spots (road_sites.py) are dry-land checked too
+            _SPOTS[tid] |= {(round(float(px)), round(float(py))) for px, py in (d.get("road") or {}).get("supply", [])}
     return (round(x), round(y)) in _SPOTS[tid]
 
 
