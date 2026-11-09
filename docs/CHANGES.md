@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## Tools, 2026-11-09 (no version change): smoke test Phase 2, rewritten to the fresh structure
+
+XO 2026-11-09 ("fox 3 medium"), `smoke test plan.md` Phase 2 of queue S0. `tools/smoke_test.py` is rewritten from 861 to 359 lines: nine stand-alone checks (`check_saves_round_trip`, `check_incompatible_saves`, `check_ecm_install`, `check_fly_debrief_advance`, `check_dialogs`, `check_missions_build`, `check_miz_parses`, `check_waypoint_locks`, `check_hook_lua`) replace old 00, 06, 39, 80, 104 and 106. `Ctx`, the `c` argument and the prerequisites code are gone; five jets are built once by a lazy `builds()` and read by the missions and `.miz` checks. Asserts check structure only (no constants, no `state.day` value, no waypoint, job or kit names, no game or hook text). `--timeout` defaults to 120 s. Without lupa the hook check prints SKIPPED. Not run (CLAUDE.md section 4); compile check only. Phase 3 adds the main-window and required-flights checks.
+
 ## Tools, 2026-11-09 (no version change): smoke test Phase 1, the doomed checks are deleted
 
 XO 2026-11-09 ("fox 3 medium"), `smoke test plan.md` Phase 1 of queue S0. `tools/smoke_test.py` loses 156 checks (the 155 of the plan's delete list plus check 23, whose rule returns in Phase 2) and the helpers nothing else calls (`land_raid_pkg`, `boost_su24`, `_callin_triggers_wait`, `_check_94_body`, `_spots_ok`). Six checks remain: 00, 06, 39, 80, 104, 106. The file goes from 6659 to 861 lines. Whole functions only; the survivors are unchanged. Not run (CLAUDE.md section 4); compile check only. Phase 2 rewrites the survivors.
