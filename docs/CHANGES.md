@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## Build, 2026-11-09 (no version change): the release builds on Python 3.14
+
+XO 2026-11-09 ("match them", "fox 3 low"). XO's local venv runs Python 3.14.8 with PySide6 6.11.2, PyInstaller 6.22.3 and the pinned pydcs fork, so the release workflow now builds on the same version (`.github/workflows/release.yml`, was 3.13). The `requirements-build.txt` comment and `docs/GUIDE.md` ("Python 3.13 or 3.14", was "3.12 or 3.13") follow. NOT TESTED: no release build has been run on 3.14; the first one is the test. Rollback: set `python-version` back to `'3.13'` in the workflow. Not run (no Python code changed).
+
 ## v0.41.333, no Counter-Air strike and no Standoff Counter-Air any more
 
 XO 2026-11-07 ("remove all counter-air / standoff versions of it", "fox 3 low", smallest token use). The day planner (`war.py`) no longer offers the Counter-Air strike (CBU-103 on the parked jets) or the Standoff Counter-Air (JSOW-A); the runway crater (a STRIKE with aim RUNWAY) is the airfield attack. The Fighter Sweep, also a COUNTER_AIR objective, is untouched. NOT removed (inert for new plans, a later cleanup PR): the parked jets, the ramp aim and retarget, the CBU / JSOW kits, the briefing text and the package slots for the strike versions. A saved campaign whose stored day plan already holds a counter-air strike still builds it. `tools/smoke_test.py` still has counter-air checks; XO runs the smoke before a release and it is being rewritten anyway (queue S0). Not run.
