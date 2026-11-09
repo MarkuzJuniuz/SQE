@@ -47,10 +47,10 @@ TAKEN_NEW_SQUADRONS = 1       # per taken field (judgment call: each is up to 18
 SHORT_DAYS = 7                # how long a day's unfilled-slot record is kept
 TAKEN_FIRST_MOVER_DAY = 11    # v0.41.246 (XO 2026-11-03): the first squadron moves in 2 days after the Patriots are up (judgment call)
 FORWARD_TYPES = ("F-16C",)    # short-legged jets move forward; the long-legged F-15C and the carrier's F-14s stay where they are (XO)
-SUPPLY_FLOOR, SUPPLY_NONE = 0.55, 0.85
-BLUE_SUPPLY_FLOOR = 0.35     # v0.41.174 (XO 2026-10-28): 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle). v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly (red 0.55, resupplied overland). Sim: a flying L3 did not lose at 0.30, an idle one lost 3 of 5; L2 unchanged (5 of 5 coalition wins in about a month). Judgment call, no public source
-SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (55% = about 11 days); no repair on a day it is struck
-L1_RED_SUPPLY_FLOOR = 0.70    # v0.41.141 (XO 2026-10-27, Campaign Revamp): on Level 1 the insurgents are resupplied across the border by night, so their supply never drops below this however many depots die (judgment call; a toy-model run showed it does not change who wins). Levels 2 and 3 keep the 55% floor.
+SUPPLY_FLOOR, SUPPLY_NONE = 0.35, 0.85
+# v0.41.334 (XO 2026-11-06 / 11-09, campaign rules plan decision 18): ONE shared Force Index floor, 0.35, for both sides (it was 0.55 for red and BLUE_SUPPLY_FLOOR 0.35 for the coalition). History of the 0.35: v0.41.174 (XO 2026-10-28) 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle); v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly. Judgment call, no public source. Level 1 red keeps L1_RED_SUPPLY_FLOOR.
+SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (35% = about 17 days); no repair on a day it is struck
+L1_RED_SUPPLY_FLOOR = 0.70    # v0.41.141 (XO 2026-10-27, Campaign Revamp): on Level 1 the insurgents are resupplied across the border by night, so their supply never drops below this however many depots die (judgment call; a toy-model run showed it does not change who wins). Levels 2 and 3 use the shared 0.35 floor (SUPPLY_FLOOR).
 
 
 GROUND_V = 3                  # state.ground["v"]: 2 = the Campaign Revamp ground war (red bases fall); a campaign with v 1 cannot be loaded
@@ -436,13 +436,13 @@ def facility_health(assets, kinds):
 
 
 def supply(state, side: str) -> float:
-    """0.55 (no stock left; the coalition's floor is BLUE_SUPPLY_FLOOR, 0.35) .. 1.0 (all of the side's sites at hand and intact). v0.41.144: the stock held (sum of the health of the supply sites a side holds)
-    over the number it started with, so a captured site raises the captor's figure (up to 100%) and lowers the old owner's (to 55% at worst); a site's
+    """0.35 (no stock left, SUPPLY_FLOOR, the same for both sides) .. 1.0 (all of the side's sites at hand and intact). v0.41.144: the stock held (sum of the health of the supply sites a side holds)
+    over the number it started with, so a captured site raises the captor's figure (up to 100%) and lowers the old owner's (to the floor at worst); a site's
     health is its stock and does not fade. A side that started with no sites runs at 0.85. Red on Level 1 never falls below L1_RED_SUPPLY_FLOOR (0.70)."""
     pool = state.assets.values() if side == "red" else getattr(state, "blue_assets", {}).values()
     sites = [a for a in pool if a.kind in SUPPLY_KINDS]
     n = int(((state.ground or {}).get("sup_n") or {}).get(side, len(sites)))
-    fl = BLUE_SUPPLY_FLOOR if side == "blue" else SUPPLY_FLOOR
+    fl = SUPPLY_FLOOR
     v = SUPPLY_NONE if n <= 0 else fl + (1.0 - fl) * min(1.0, sum(a.health for a in sites) / n)
     v = max(v, L1_RED_SUPPLY_FLOOR) if (side == "red" and getattr(state, "level", 2) == 1) else v
     from . import sams
@@ -451,7 +451,7 @@ def supply(state, side: str) -> float:
 
 def supply_repair(state) -> list:
     """Overnight: each side's supply sites mend at supply / SUPPLY_REPAIR_DAYS of a full site a day (a destroyed one is back in 6 days at 100% supply,
-    about 11 at 55%), except a site that was struck since last night. Skip days count. The owner at the moment pays: a captured site mends at the
+    about 17 at the 35% floor), except a site that was struck since last night. Skip days count. The owner at the moment pays: a captured site mends at the
     captor's rate."""
     g = state.ground
     prev = g.setdefault("sup_h", {})

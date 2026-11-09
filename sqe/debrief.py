@@ -46,6 +46,9 @@ local GATES = { __GATES__ }
 local pl = { takeoff = nil, landed = nil, ka = 0, kg = 0, ks = 0 }
 local dead, ejected, landed, ended = {}, {}, {}, false
 local landAt = {}                -- unit name -> {t, p}: the time and the place (airbase or ship) of its landing
+-- v0.41.334 (campaign rules plan, Phase 1): declared up here, before the event handler that writes them (the v0.41.217 "DMGL" rule: a local further down is invisible to it)
+local limped = {}                -- unit name -> hit points left, percent, of every aircraft that landed below LIMP_LIFE: it limps, its refit is doubled (refit.py)
+local LIMP_LIFE = 0.90           -- landed with less than this share of its hit points = limping (judgment call, plan section 7)
 local aborted = {}
 local gateLog = {}
 local kills = {}
@@ -163,6 +166,12 @@ local function landJson()
   for n, v in pairs(landAt) do o[#o + 1] = string.format('"%s":{"t":%d,"p":"%s"}', esc(n), math.floor(v.t or 0), esc(v.p or "")) end
   return "{" .. table.concat(o, ",") .. "}"
 end
+local function limpJson()
+  local o = {}
+  for n, pct in pairs(limped) do o[#o + 1] = string.format('"%s":%d', esc(n), math.floor(pct or 0)) end
+  table.sort(o)
+  return "{" .. table.concat(o, ",") .. "}"
+end
 local function rwyJson()
   local o = {}
   for id, n in pairs(rwyHits) do o[#o + 1] = string.format('"%s":%d', esc(id), n) end
@@ -179,9 +188,9 @@ end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"scrub":%s,"tracks":%s,"rgate":%s,"rwy":%s,"imp":%s,"landings":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"scrub":%s,"tracks":%s,"rgate":%s,"rwy":%s,"imp":%s,"landings":%s,"limped":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), scrubJson(), tracksJson(), rgateJson(), rwyJson(), impJson(), landJson(), CFG, splashN, splashK))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), scrubJson(), tracksJson(), rgateJson(), rwyJson(), impJson(), landJson(), limpJson(), CFG, splashN, splashK))
   f:close()
 end
 local function nameOf(obj)
@@ -498,6 +507,11 @@ function H:onEvent(e)
       local pn = nil
       if e.place and e.place.getName then local okp, pv = pcall(function() return e.place:getName() end); if okp then pn = pv end end
       landAt[n] = { t = timer.getTime(), p = pn }                    -- v0.41.257: when and where (a sunk carrier takes what landed on it before it went down)
+      pcall(function()                                               -- v0.41.334: it landed hurt? (tested here, before any despawn below; every call in a pcall)
+        local u = e.initiator
+        local l, l0 = u:getLife(), u:getLife0()
+        if l and l0 and l0 > 0 and (l / l0) < LIMP_LIFE then limped[n] = 100 * l / l0 end
+      end)
       if n == PLAYER then pl.landed = timer.getTime() end
       dump()
       if DESPAWN[n] then

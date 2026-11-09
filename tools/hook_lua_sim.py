@@ -11,9 +11,9 @@ local stub; stub = setmetatable({}, {__index = function(t,k) return stub end, __
 local ev, n = {}, 0
 setmetatable(ev, {__index = function(t,k) n = n + 1; rawset(t,k,n); return n end})
 local handler
-local unit = function(name) return setmetatable({getName = function() return name end, isExist = function() return true end, inAir = function() return true end,
+local unit = function(name, life) return setmetatable({getName = function() return name end, isExist = function() return true end, inAir = function() return true end,
    getCoalition = function() return 2 end, getPoint = function() return {x=0,y=0,z=0} end, getGroup = function() return {getName=function() return "g" end, getID=function() return 1 end} end,
-   getTypeName = function() return "FA-18C_hornet" end, hasAttribute = function() return false end, getLife = function() return 1 end, getDesc = function() return {} end}, {__index = function() return function() return nil end end}) end
+   getTypeName = function() return "FA-18C_hornet" end, hasAttribute = function() return false end, getLife = function() return life or 1 end, getLife0 = function() return 1 end, getDesc = function() return {} end}, {__index = function() return function() return nil end end}) end
 local env = {}
 local base = {env=true, world=true, timer=true, trigger=true, coalition=true, Group=true, Unit=true, Object=true, lfs=true, io=true, os=true, math=true, string=true, table=true,
   pcall=true, ipairs=true, pairs=true, tostring=true, tonumber=true, next=true, type=true, select=true, land=true, missionCommands=true, StaticObject=true, Airbase=true,
@@ -42,6 +42,8 @@ if not fn then return "COMPILE: " .. tostring(err) end
 local ok, e1 = pcall(fn)
 if not ok then return "RUN: " .. tostring(e1) end
 local errs = {}
+local lastdump                                      -- v0.41.334: the stub file keeps the last state-file text the hook wrote, so the limped list can be read back
+env.io = {open = function() return {write = function(_, s) lastdump = s end, close = function() end} end}
 local function fire(t) local ok2, e2 = pcall(function() handler:onEvent(t) end); if not ok2 then errs[#errs+1] = tostring(e2) end end
 local ids = {hit = ev.S_EVENT_HIT, dead = ev.S_EVENT_DEAD, ej = ev.S_EVENT_EJECTION, crash = ev.S_EVENT_CRASH, shot = ev.S_EVENT_SHOT, kill = ev.S_EVENT_KILL, land = ev.S_EVENT_LAND, take = ev.S_EVENT_TAKEOFF}
 for _, who in ipairs({"Viper 1-2", "Magic 1-1"}) do
@@ -50,10 +52,14 @@ for _, who in ipairs({"Viper 1-2", "Magic 1-1"}) do
   fire({id = ids.dead, initiator = unit(who)})
   fire({id = ids.crash, initiator = unit(who)})
 end
+-- v0.41.334: a hurt jet (half its hit points) and a healthy one land: only the hurt one may be in the state file's "limped" object
+fire({id = ids.land, initiator = unit("Viper 1-3", 0.5), place = {getName = function() return "Kutaisi" end}})
+fire({id = ids.land, initiator = unit("Viper 1-4"), place = {getName = function() return "Kutaisi" end}})
 local missing = {}
 for k in pairs(reads) do missing[#missing+1] = k end
 table.sort(missing)
 return (#errs > 0 and ("EVENT ERRORS: " .. table.concat(errs, " | ")) or "ok") .. " | undefined globals read: " .. table.concat(missing, ",") .. " | said: " .. table.concat(said_, " ## ")
+  .. " | limped: " .. tostring(lastdump and lastdump:match('"limped":(%b{})'))
 '''
 
 

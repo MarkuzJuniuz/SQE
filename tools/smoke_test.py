@@ -129,7 +129,8 @@ def check_incompatible_saves():
         return p
     cur = s.state
     cases = {"old_ground": ({**d, "ground": {**d["ground"], "v": 1}, "app_version": "0.41.150"}, "older"),
-             "format3": ({**d, "format": 3}, "older"), "newer_era": ({**d, "compat": COMPAT_ERA + 1, "app_version": "0.99.0"}, "newer"),
+             "format3": ({**d, "format": 3}, "older"), "format6": ({**d, "format": 6, "compat": 1}, "older"),       # v0.41.334: the refit clock (format 7) refuses older saves
+             "format6_unstamped": ({k: v for k, v in {**d, "format": 6}.items() if k != "compat"}, "older"), "newer_era": ({**d, "compat": COMPAT_ERA + 1, "app_version": "0.99.0"}, "newer"),
              "newer_fmt": ({**d, "format": 99}, "newer"), "broken": ({k: v for k, v in d.items() if k != "assets"}, "older"), "junk": ("not json {{", "damaged")}
     for nm, (dd, kind) in cases.items():
         try:
