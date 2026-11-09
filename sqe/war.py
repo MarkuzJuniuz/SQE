@@ -5,7 +5,7 @@ import math
 import random
 from . import threatmap as tm
 from . import ground, theatres, tempo, story
-from . import raids, runways, sams, ecm, airwings
+from . import raids, runways, sams, ecm, airwings, clock, refit
 from .raids import hit as raids_hit
 from .difficulty import Difficulty
 from .models import SEAD_AIMS, Objective, ObjectiveType, AssetKind, Role
@@ -671,14 +671,15 @@ class WarSimulator:
     def end_day(self, state: CampaignState) -> None:
         d = self.d
         sams.track(state)                                           # the day each SAM site went down (it can be rebuilt later)
-        for sq in state.squadrons.values():
-            if sq.available < sq.authorized and not sq.reserve:
-                sq.available = min(sq.authorized, sq.available + max(1, round(sq.authorized * d.friendly_replenish)))
+        state.turn = clock.first_turn(state.day + 1)                # v0.41.334: until Phase 3 the clock moves a whole day at a time, to the first turn of the next day (00:00)
+        now = clock.minute(state.turn)
+        for ln in refit.step(state, now):                           # jets whose refit is over are ready; replacements held on a closed runway join once it reopens
+            state.note("Overnight: " + ln)
+        for ln in refit.replacements(state, now):                   # v0.41.334: a pair per squadron (red: per wing) every 24 / Force Index hours; Tu-22M3 and E-3: one per 48 h
+            state.note("Overnight: " + ln)
         for w in state.enemy_air:
             if state.assets[w.base_asset_id].destroyed:             # a cratered field cannot operate or rearm: the survivors scatter or are lost
                 w.scatter(0.75)
-                continue
-            w.replenish(max(1, round(w.authorized * d.enemy_replenish)))       # new jets for the squadrons that are not resting (v0.41.53)
         for ln in airwings.step(state, d, self.rng):
             state.note("Overnight: " + ln)
         from . import support_assets

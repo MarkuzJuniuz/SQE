@@ -493,7 +493,7 @@ class ForcesPage(QWidget):
                     self.bs.setItem(i, j, _item("", theme.DIM))
         # tankers and AWACS (v0.41.100): the support assets, with the hours an aircraft of the type is on orbit today
         nice = {"bl_e3": "E-3A AWACS", "bl_e2": "E-2C AWACS (carrier)", "bl_kc135": "KC-135 tanker (boom)", "bl_kc135mprs": "KC-135 MPRS tanker (probe)",
-                "bl_s3": "S-3B tanker (carrier)", "rd_a50": "A-50 AWACS (enemy, not flying yet)"}
+                "bl_s3": "S-3B tanker (carrier)"}
         sa = _sa.ensure(st)
         fl = (getattr(st, "barcap", None) or {}).get("support_flights") or {}
         self.sup.setRowCount(len(sa))

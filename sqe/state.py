@@ -12,26 +12,6 @@ from . import FORMAT_VERSION, COMPAT_ERA, MIN_COMPAT_ERA, __version__
 from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, wing_from_dict, PlayerProfile)
 
 
-def _migrate_roles_v6(d: dict) -> None:
-    """v0.41.50 gave every fighter job its own role name. Before, Role.ESCORT was the TARCAP and Role.SWEEP was both the package escort (in a
-    strike / DEAD / CAS package) and the Fighter Sweep. A format-5 save is converted in place: ESCORT -> TARCAP; SWEEP -> ESCORT unless the
-    package is a COUNTER_AIR or FLEET_DEFENSE one (the same rule the old task label used)."""
-    def fix(pkg):
-        if not isinstance(pkg, dict):
-            return
-        otype = (pkg.get("objective") or {}).get("type", "")
-        for f in pkg.get("flights") or []:
-            r = f.get("role")
-            if r == "ESCORT":
-                f["role"] = "TARCAP"
-            elif r == "SWEEP" and otype not in ("COUNTER_AIR", "FLEET_DEFENSE"):
-                f["role"] = "ESCORT"
-    for p in d.get("plan") or []:
-        fix(p)
-    if d.get("pending"):
-        fix(d["pending"].get("package_dict"))
-
-
 class SaveIncompatible(Exception):
     """A campaign file this build cannot open. `kind`: "older" (saved by an earlier SQE), "newer" (a later one), "damaged" (not a readable save).
     The GUI turns it into the friendly dialog; `info()` is what the file says about itself."""
@@ -54,6 +34,7 @@ class CampaignState:
     level: int = 2
     campaign_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
     day: int = 1
+    turn: int = 0                                  # v0.41.334: the clock (clock.py): two-hour turns since 08:00 on Day 1; `day` stays equal to clock.day_of(turn). Until Phase 3 it moves a whole day at a time (end_day)
     sortie_counter: int = 0
     player: PlayerProfile | None = None
     bases: dict = field(default_factory=dict)
@@ -100,7 +81,7 @@ class CampaignState:
         return {
             "format": FORMAT_VERSION, "compat": COMPAT_ERA, "app_version": __version__, "saved": datetime.now().isoformat(timespec="seconds"),
             "name": self.name, "theatre": self.theatre, "level": self.level, "campaign_id": self.campaign_id,
-            "day": self.day, "sortie_counter": self.sortie_counter, "status": self.status,
+            "day": self.day, "turn": self.turn, "sortie_counter": self.sortie_counter, "status": self.status,
             "start_date": self.start_date, "night_ops": self.night_ops, "pilot": self.pilot,
             "front": self.front, "front_days": self.front_days, "ground": self.ground,
             "player": asdict(self.player) if self.player else None,
@@ -127,10 +108,11 @@ class CampaignState:
         if d.get("format", 1) < 4:
             raise ValueError("This campaign was saved by an older SQE (before depth tiers and SAM garrisons, v0.8). "
                              "The enemy order of battle changed, so it cannot be loaded; please start a new campaign.")
-        if d.get("format", 1) < 6:
-            _migrate_roles_v6(d)
+        if d.get("format", 1) < 7:
+            raise ValueError("This campaign was saved before the refit clock (v0.41.334): jets now need time on the ground between sorties, and replacements, "
+                             "runway repairs and tankers follow new rules, so it cannot be loaded; please start a new campaign.")
         s = cls(name=d["name"], theatre=d.get("theatre", "caucasus"), level=d.get("level", 2),
-                campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1),
+                campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1), turn=int(d.get("turn", 0)),
                 sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"),
                 start_date=d.get("start_date", "2004-06-12"), night_ops=d.get("night_ops", False), pilot=d.get("pilot", {}),
                 front=d.get("front", 0), front_days=d.get("front_days", 0))
