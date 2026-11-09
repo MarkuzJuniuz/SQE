@@ -21,19 +21,18 @@ RETURN_P = 0.34                # a missing airframe is back with this chance a d
 E3_REPLACEMENT_MIN = 2880      # a lost E-3 is replaced one airframe per 48 hours (XO 2026-11-08, game rule; the same slow rule as the Tu-22M3, refit.SLOW_REPL_MIN)
 
 # key -> (side, dcs class, label, home, authorized, minutes on orbit per sortie, turnaround (refit) minutes, source)
-# v0.41.334 (campaign rules plan, Phase 1; XO 2026-11-08 / 11-09): E-3 four airframes on 12 h shifts with a 6 h refit; the land tankers eight in all (the split below is Crew
-# Chief's reading, 4 boom + 4 drogue, plan open item 2), 3 h standard refit; the carrier's S-3B a separate squadron of eight; red's A-50 is gone (XO: none).
+# v0.41.334 (campaign rules plan, Phase 1; XO 2026-11-08 / 11-09): E-3 four airframes on 12 h shifts with a 6 h refit; 3 h standard refit; the carrier's S-3B a separate
+# squadron of eight; red's A-50 is gone (XO: none). v0.41.335 (decision 11): the land tankers are the USAF's, eight KC-135 with the boom and no drogue (v0.41.334 split them
+# 4 + 4 with an MPRS half on a misreading); the probe-equipped Navy jets (F-14, F/A-18C) are served by the S-3B only.
 TABLE = {
     "bl_e3": ("blue", "E_3A", "Overlord", "rear", 4, 720, 360,
               "XO 2026-11-08: four airframes in 12 hour shifts, a 6 hour refit (high maintenance). USAF has about 30 E-3s, 26 of them at Tinker over four squadrons (Wikipedia, "
               "Boeing E-3 Sentry); E-3s refuel about every 4 to 6 hours on long surveillance (list25.com, low firmness); the shift length is a judgment call"),
     "bl_e2": ("blue", "E_2C", "Magic", "carrier", 4, 240, 360,
               "a carrier airborne early warning squadron has four E-2Cs (globalsecurity.org, VAW-126); the 4 h cycle and 6 h turnaround are judgment calls"),
-    "bl_kc135": ("blue", "KC_135", "Arco", "rear", 4, 240, 180,
-                 "XO 2026-11-08: eight land tankers, normal 3 h refit; the split into 4 boom KC-135R here and 4 probe-and-drogue below is Crew Chief's reading "
-                 "(plan item 2). The 465th Air Refueling Squadron operates eight KC-135Rs (globalsecurity.org); the 4 h on station is a judgment call"),
-    "bl_kc135mprs": ("blue", "KC135MPRS", "Texaco", "rear", 4, 240, 180,
-                     "probe-and-drogue KC-135MPRS, the other half of the eight land tankers (judgment call, same refit as the boom tankers)"),
+    "bl_kc135": ("blue", "KC_135", "Arco", "rear", 8, 240, 180,
+                 "XO 2026-11-08 / 11-09: eight land tankers, boom only (USAF tankers; the Navy's tanker is the S-3B), normal 3 h refit. The 465th Air Refueling Squadron "
+                 "operates eight KC-135Rs (globalsecurity.org); the 4 h on station is a judgment call"),
     "bl_s3": ("blue", "S_3B_Tanker", "Shell", "carrier", 8, 120, 180,
               "the carrier's recovery tanker, its own squadron of eight S-3Bs (XO 2026-11-09; almost every carrier air wing had an eight-plane S-3 squadron, USNI Naval History, "
               "July 2012); same rules as the land tankers: 3 h refit; the 2 h on station is a judgment call"),
@@ -57,6 +56,12 @@ def ensure(state) -> dict:
     """The support assets of both sides, made once (an older save gets them here)."""
     sa = getattr(state, "support_assets", None)
     if sa:
+        if sa.pop("bl_kc135mprs", None) is not None or sa.get("bl_kc135", {}).get("authorized", 8) < TABLE["bl_kc135"][4]:      # v0.41.335: a v0.41.334 campaign had 4 boom + 4 MPRS: the drogue half goes, the boom fleet is 8 (no format change)
+            k = sa.get("bl_kc135")
+            if k is not None and k["authorized"] < TABLE["bl_kc135"][4]:
+                add = TABLE["bl_kc135"][4] - k["authorized"]
+                k["authorized"] += add
+                k["available"] = min(k["authorized"], k["available"] + add)
         return sa
     carrier = next((b for b in state.bases.values() if b.kind == BaseKind.CARRIER), None)
     rear = _rear_blue_airfield(state)

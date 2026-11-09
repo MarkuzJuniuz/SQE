@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## v0.41.335, campaign rules Phase 2: Supplies is now Force Index (display only), and the land tankers are 8 KC-135 boom
+
+XO 2026-11-09 ("fox 3 low"), `campaign rules plan.md` Phase 2 (decisions 19 and 11). No logic change, no save format change.
+- **Force Index.** Player-facing text where "Supply" meant a side's percentage now reads "Force Index": the Overview tab, its table header and note, the side cards (`FORCE INDEX | AIR DEFENSE`), and the briefing lines (`posture.supply_lines`). Physical supply sites, depots and "supply strikes" keep their words. Code names (`ground.supply`, `SUPPLY_FLOOR`, `supply_pct` ...), the `"supply"` view key and every save field are unchanged.
+- **Tankers (decision 11).** `support_assets.TABLE`: `bl_kc135` is 8 airframes, `bl_kc135mprs` is gone (v0.41.334 built 4 + 4 on a misreading). Probe-and-drogue jets (F-14, F/A-18C) now get the S-3B (`aircraft.TANKER_FOR[BASKET]`, 12000 ft / 300 kts, judgment calls); a Navy package no longer gets a second S-3B as TANKER2. With the carrier sunk the S-3B has no windows, so a probe jet on land gets no tanker. `blue_barcap.GUARDS` and the Support tab lose the MPRS entry.
+- **v0.41.334 campaigns.** `support_assets.ensure` drops a saved `bl_kc135mprs` and tops `bl_kc135` up to 8 on load. No format bump, no restart needed.
+- Commits: XO's commits since v0.41.334: none.
+
 ## v0.41.334, campaign rules Phase 1: the refit clock, replacements, the runway queue, a new save format
 
 XO 2026-11-09 ("fox 3 high"), `campaign rules plan.md` Phase 1 (queue S3 / S4). The first step toward 2-hour turns: the clock itself arrives in Phase 3, so planning, Skip and the UI do not change yet. **Saves from earlier versions are refused (a new campaign is needed): XO's test campaigns restart here.**

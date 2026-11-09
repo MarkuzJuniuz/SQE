@@ -574,7 +574,7 @@ class PackageBuilder:
             t2 = TANKER_FOR[methods[1]]
             out.append(SupportPlan("TANKER2", t2.dcs_class, "Arco" if t2.label == t1.label else t2.label,
                                    t2.altitude_ft, t2.speed_kts, methods[1].value))
-        elif lead_home == BaseKind.CARRIER:
+        elif lead_home == BaseKind.CARRIER and t1.dcs_class != RECOVERY_TANKER.dcs_class:      # v0.41.335: a probe jet's TANKER1 is already the S-3B
             r = RECOVERY_TANKER
             out.append(SupportPlan("TANKER2", r.dcs_class, r.label, r.altitude_ft, r.speed_kts,
                                    RefuelMethod.BASKET.value, from_carrier=True))

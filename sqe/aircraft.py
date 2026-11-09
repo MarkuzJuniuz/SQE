@@ -123,6 +123,8 @@ class SupportSpec:
 AWACS_FOR = {BaseKind.CARRIER: SupportSpec("E_2C", "Magic", 25000, 300),
              BaseKind.AIRFIELD: SupportSpec("E_3A", "Overlord", 30000, 400)}
 # Basket tanker speed matters: AI Tomcats fail to plug the drogue when the tanker is set slow (DCS forums).
-TANKER_FOR = {RefuelMethod.BASKET: SupportSpec("KC135MPRS", "Texaco", 20000, 350),
+# v0.41.335 (decision 11): the probe-and-drogue jets (F-14, F/A-18C) are refuelled by the Navy's S-3B, never a land tanker (no KC-135MPRS in the force); the S-3B's altitude and
+# speed are judgment calls (the recovery orbit's 6000 ft / 250 kts is too low and slow for a strike package; unchecked in DCS)
+TANKER_FOR = {RefuelMethod.BASKET: SupportSpec("S_3B_Tanker", "Shell", 12000, 300),
               RefuelMethod.BOOM: SupportSpec("KC_135", "Arco", 22000, 350)}
 RECOVERY_TANKER = SupportSpec("S_3B_Tanker", "Shell", 6000, 250)

@@ -55,7 +55,7 @@ class StatCard(QFrame):
 
 
 class SideCard(QFrame):
-    """v0.41.207 (XO's UI_Remarks.docx): one box per side, a small table SUPPLY | AIR DEFENSE with the figures colour-coded; the transit line only
+    """v0.41.207 (XO's UI_Remarks.docx): one box per side, a small table FORCE INDEX (was SUPPLY) | AIR DEFENSE with the figures colour-coded; the transit line only
     when a SAM battery is on its way."""
     def __init__(self, side: str):
         super().__init__(); self.setObjectName("card")
@@ -63,7 +63,7 @@ class SideCard(QFrame):
         self.h = QLabel(side.upper()); self.h.setObjectName("head"); lay.addWidget(self.h)
         row = QHBoxLayout(); row.setSpacing(28); lay.addLayout(row)
         self.cols = []
-        for name in ("SUPPLY", "AIR DEFENSE"):
+        for name in ("FORCE INDEX", "AIR DEFENSE"):
             c = QVBoxLayout(); c.setSpacing(0)
             l = QLabel(name); l.setObjectName("small")
             v = QLabel("-"); v.setObjectName("big")
