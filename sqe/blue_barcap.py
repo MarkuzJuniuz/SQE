@@ -87,7 +87,7 @@ def plan(state, d) -> dict:
 
 
 # the guard of each support asset: key -> (tag, whether the guard sortie is the tanker's long stay)
-GUARDS = {"bl_kc135": "TNKCAP", "bl_kc135mprs": "TNKCAP", "bl_e3": "HAVCAP", "bl_e2": "HAVCAP"}      # tankers first: their guard is not optional
+GUARDS = {"bl_kc135": "TNKCAP", "bl_e3": "HAVCAP", "bl_e2": "HAVCAP"}      # tankers first: their guard is not optional
 
 
 def _guard_squadrons(state, base) -> list:

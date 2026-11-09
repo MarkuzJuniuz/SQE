@@ -78,7 +78,7 @@ class OverviewPage(QWidget):
         gc = card(); left.addWidget(gc, 1)                                 # v0.41.149: the detail tabs (they replaced the one long sector list)
         self.dtabs = QTabWidget(); gc.layout().addWidget(self.dtabs)
         self.dviews = {}
-        for key, title in (("ground", "Ground"), ("supply", "Supply"), ("ad", "Air defence"), ("air", "Air Operations"), ("edge", "Tactical Edge")):
+        for key, title in (("ground", "Ground"), ("supply", "Force Index"), ("ad", "Air defence"), ("air", "Air Operations"), ("edge", "Tactical Edge")):
             v = QTextBrowser(); v.setFrameShape(QFrame.NoFrame); v.setStyleSheet("background:transparent;border:none;"); self.dviews[key] = v
             if key == "ground":                                              # v0.41.207: the base notes sit in an expandable section above the sector table
                 w = QWidget(); wl = QVBoxLayout(w); wl.setContentsMargins(0, 0, 0, 0); wl.setSpacing(4)
@@ -157,11 +157,11 @@ class OverviewPage(QWidget):
         body = V.table(("Sector", en, "Coalition", "Status"), trs) if trs else ""
         body += V.section("Front History", "<br>".join(e(x) for x in hist)) if hist else "<p style='margin-top:14px;color:#8fa3b8'>The front has not moved yet.</p>"
         im.apply(self.dviews["ground"], body)
-        # ---- Supply
-        top = V.table(("Side", "Supply"), [("Coalition", ("bg", f"{fb}%", V.supply_band(fb))), (en, ("bg", f"{fe}%", V.supply_band(fe)))])
+        # ---- Force Index (the old Supply tab; code names stay)
+        top = V.table(("Side", "Force Index"), [("Coalition", ("bg", f"{fb}%", V.supply_band(fb))), (en, ("bg", f"{fe}%", V.supply_band(fe)))])
         sites = V.table(("Side", "Site", "Health", "State"), [(a, b, ("bg", f"{c}%", V.pct_band(c)), V.first_cap(d)) for a, b, c, d in od.supply_rows(st)])
         self.dviews["supply"].setHtml(top + V.section("Sites", sites)
-                                      + "<p style='margin-top:14px;color:#8fa3b8'>A site mends in about 6 days at full supply (longer when supply is low), and not on a night after it was struck.</p>")
+                                      + "<p style='margin-top:14px;color:#8fa3b8'>A site mends in about 6 days at full Force Index (longer when it is low), and not on a night after it was struck.</p>")
         # ---- Air defence: the transit section only when a battery is on its way
         orders = od.asks_rows(st)
         top = V.table(("Side", "Air Defense"), [("Coalition", ("bg", f"{ab}%", V.pct_band(ab))), (en, ("bg", f"{ae}%", V.pct_band(ae)))])
@@ -492,7 +492,7 @@ class ForcesPage(QWidget):
                 for j in (3, 4):
                     self.bs.setItem(i, j, _item("", theme.DIM))
         # tankers and AWACS (v0.41.100): the support assets, with the hours an aircraft of the type is on orbit today
-        nice = {"bl_e3": "E-3A AWACS", "bl_e2": "E-2C AWACS (carrier)", "bl_kc135": "KC-135 tanker (boom)", "bl_kc135mprs": "KC-135 MPRS tanker (probe)",
+        nice = {"bl_e3": "E-3A AWACS", "bl_e2": "E-2C AWACS (carrier)", "bl_kc135": "KC-135 tanker (boom)",
                 "bl_s3": "S-3B tanker (carrier)"}
         sa = _sa.ensure(st)
         fl = (getattr(st, "barcap", None) or {}).get("support_flights") or {}
