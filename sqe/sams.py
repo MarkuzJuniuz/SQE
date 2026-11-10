@@ -335,6 +335,7 @@ def transfer_days(sup: float) -> int:
     1 day at full supply, 3 at the floor (ground.SUPPLY_FLOOR, 0.35 since v0.41.334), 2 between. v0.41.197 puts this back (v0.41.196 had made it two weeks, which is
     the ORDER_DAYS of a new battery from home). v0.41.199 (XO 2026-10-30): plus TRANSFER_SETUP_DAYS, a day to set the battery up, so nothing is working
     by the next morning: 2 days at full supply, 4 at the floor. Judgment call: no public figure."""
+    from . import ground
     f = max(0.0, min(1.0, (1.0 - sup) / (1.0 - ground.SUPPLY_FLOOR)))      # v0.41.334: was / 0.45, the span down to the old 0.55 floor
     return 1 + TRANSFER_SETUP_DAYS + int(round(2 * f))
 
