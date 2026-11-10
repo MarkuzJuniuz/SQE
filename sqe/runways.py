@@ -120,3 +120,74 @@ def fields_for_hook(state, terrain) -> list:
         heads = sorted({int(r.main.heading) % 180 for r in ap.runways})
         out.append({"id": fid, "x": float(ap.position.x), "z": float(ap.position.y), "h": heads or [0]})
     return out
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+# v0.41.336 (XO 2026-11-09, campaign rules plan Phase 2b): the ILS dummy aircraft and the crater visuals. NOT TESTED IN DCS. pydcs gives only each airfield's reference
+# point and the runway numbers, not the runway ends, so every position here is an estimate along the runway axis from the reference point (judgment calls).
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+MAG_VAR_DEG = 6.0             # runway numbers are magnetic; true heading = number x 10 + this. About 6 degrees east for the Caucasus, from memory (judgment call, not checked against DCS)
+RUNWAY_HALF_LENGTH_M = 1200.0 # the threshold is taken this far from the airfield reference point along the runway (Caucasus strips are about 2,400 to 2,900 m; the reference point may not be the exact middle: judgment call)
+DUMMY_BESIDE_SIDE_M = 70.0    # "beside" placement: this far to the right of the centreline at the threshold, i.e. clear of a 45 to 60 m wide strip (judgment call)
+DUMMY_ON_ALONG_M = 100.0      # "on" placement: on the centreline this far past the threshold (judgment call)
+CRATER_BLASTS_MIN = 3         # crater blasts along a closed runway: the hit count, but at least this many ...
+CRATER_BLASTS_MAX = 6         # ... and at most this many (judgment call: a few visible craters, not a field of them)
+CRATER_POWER = 450.0          # trigger.action.explosion power of one blast, about one Mk-84 (judgment call; whether DCS leaves a runway crater from a scripted blast is untested)
+CRATER_REACH = 0.75           # the blasts lie within this share of the runway half length either side of the reference point (judgment call: inside the strip even if the reference point is off centre)
+CRATER_MIN_GAP_M = 120.0      # blasts at least this far apart along the runway (judgment call)
+
+# Blue fields with an ILS: pydcs airport name -> the runway end the ILS belongs to. From the DCS airfield panels as XO copied them into kneeboard.NAV (v0.41.177, v0.41.252);
+# the other end of each runway has no ILS. Soganlug, Vaziani and Tbilisi are waiting for XO's data (campaign rules plan open item 7).
+ILS_RUNWAY = {"Batumi": 13, "Kobuleti": 7, "Kutaisi": 7, "Senaki-Kolkhi": 9, "Sochi-Adler": 6}
+
+
+def _end_number(name: str) -> int:
+    return int(str(name).rstrip("LCR"))
+
+
+def runway_end(ap, number: int):
+    """The approach (heading, name) of the runway end `number` of this pydcs airport, or None."""
+    for r in ap.runways:
+        for end in (r.main, r.opposite):
+            if _end_number(end.name) == number:
+                return end
+    return None
+
+
+def _along(x: float, y: float, hdg_deg: float, d: float):
+    h = math.radians(hdg_deg)
+    return x + d * math.cos(h), y + d * math.sin(h)           # DCS x north, y east
+
+
+def ils_dummy_point(ap, number: int, mode: str):
+    """Where the ILS dummy aircraft stands for the ILS runway end `number`: ("beside": next to the threshold, off the pavement) or ("on": on the pavement, just past the
+    threshold). (x, y, true heading of the runway end), or None for mode "off" / an airport without that runway."""
+    if mode not in ("beside", "on") or runway_end(ap, number) is None:
+        return None
+    hdg = number * 10.0 + MAG_VAR_DEG
+    tx, ty = _along(ap.position.x, ap.position.y, hdg, -RUNWAY_HALF_LENGTH_M)          # the threshold lies behind the reference point as the landing aircraft flies
+    if mode == "beside":
+        x, y = _along(tx, ty, hdg + 90.0, DUMMY_BESIDE_SIDE_M)
+    else:
+        x, y = _along(tx, ty, hdg, DUMMY_ON_ALONG_M)
+    return x, y, hdg
+
+
+def crater_points(state, field_id: str, ap, rng) -> list:
+    """Blast points (x, y) along the first runway of a closed field: as many as it took hits (CRATER_BLASTS_MIN to CRATER_BLASTS_MAX), spread along the strip with a seeded
+    jitter and kept CRATER_MIN_GAP_M apart, a few metres either side of the centreline. The hit positions are not kept in the state, so these are for show only."""
+    if not ap.runways:
+        return []
+    c = (state.ground or {}).get("craters", {}).get(field_id) or {}
+    n = min(CRATER_BLASTS_MAX, max(CRATER_BLASTS_MIN, int(c.get("hits", 0))))
+    hdg = ap.runways[0].main.heading + MAG_VAR_DEG
+    span = RUNWAY_HALF_LENGTH_M * CRATER_REACH
+    cell = 2.0 * span / n
+    jitter = max(0.0, (cell - CRATER_MIN_GAP_M) / 2.0)
+    out = []
+    for i in range(n):
+        d = -span + cell * (i + 0.5) + rng.uniform(-jitter, jitter)
+        x, y = _along(ap.position.x, ap.position.y, hdg, d)
+        x, y = _along(x, y, hdg + 90.0, rng.uniform(-8.0, 8.0))
+        out.append((x, y))
+    return out

@@ -155,20 +155,40 @@ def _state_on(campaign_id: str, start: date, k: int, clim: dict) -> int:
 # Judgment call (XO 2026-11-05); magnetic vs true offset (~6 deg) unchecked.
 ILS_WIND = (70.0, 120.0)
 
+# v0.41.336 (XO 2026-11-09, campaign rules plan decision 49): with the ILS dummy aircraft on (Settings > ils_dummy), the wind comes from the theatre's real regional
+# pattern (the pack's climate `wind_from_deg`, one wind-from direction per month, and `wind_scatter_deg`) instead of the ILS_WIND window above; the dummy is what keeps the
+# ILS runway active whatever the wind. Off, or a pack with no such table: the ILS_WIND window as before.
+WIND_SCATTER_DEFAULT = 30.0     # +/- degrees of seeded day-to-day scatter round the monthly direction (judgment call, used when a pack gives none)
 
-def _anchor(campaign_id: str, k: int, state: str, clim: dict, month: int) -> dict:
+
+def _wind_dir(clim: dict, month: int, regional: bool, r) -> float:
+    """Wind-from direction of a day's 06:00 anchor. `r` is the day's seeded generator (the draw is made even when it is not needed, so the other draws of the day never shift)."""
+    u = r.random()
+    table = clim.get("wind_from_deg") if regional else None
+    if not table:
+        return ILS_WIND[0] + (ILS_WIND[1] - ILS_WIND[0]) * u
+    sc = float(clim.get("wind_scatter_deg", WIND_SCATTER_DEFAULT))
+    return (float(table[month - 1]) + sc * (2.0 * u - 1.0)) % 360.0
+
+
+def _wind_dir_fixed(clim: dict, month: int, regional: bool) -> float:
+    table = clim.get("wind_from_deg") if regional else None
+    return float(table[month - 1]) if table else sum(ILS_WIND) / 2
+
+
+def _anchor(campaign_id: str, k: int, state: str, clim: dict, month: int, regional: bool = False) -> dict:
     """The 06:00 picture of a day in `state`, with seeded variation."""
     r = _rng(campaign_id, "wxp", k)
     (c0, c1), (b0, b1), (v0, v1), wf, turb, dq, dt = _P[state]
     u = lambda a, b: a + (b - a) * r.random()
     return {"cover": u(c0, c1), "base": u(b0, b1), "vis": u(v0, v1), "wind": clim["wind_ms"][month - 1] * wf * u(0.8, 1.25),
-            "dir": u(ILS_WIND[0], ILS_WIND[1]), "turb": turb, "qnh": 761 + dq + u(-2, 2), "dt": dt + u(-2.0, 2.0),
+            "dir": _wind_dir(clim, month, regional, r), "turb": turb, "qnh": 761 + dq + u(-2, 2), "dt": dt + u(-2.0, 2.0),
             "fog": r.random() < clim["fog"][month - 1] and state in ("OVERCAST", "RAIN", "SCATTERED", "BROKEN")}
 
 
-def _fixed(state: str, clim: dict, month: int) -> dict:
+def _fixed(state: str, clim: dict, month: int, regional: bool = False) -> dict:
     (c0, c1), (b0, b1), (v0, v1), wf, turb, dq, dt = _P[state]
-    return {"cover": (c0 + c1) / 2, "base": (b0 + b1) / 2, "vis": (v0 + v1) / 2, "wind": clim["wind_ms"][month - 1] * wf, "dir": sum(ILS_WIND) / 2,
+    return {"cover": (c0 + c1) / 2, "base": (b0 + b1) / 2, "vis": (v0 + v1) / 2, "wind": clim["wind_ms"][month - 1] * wf, "dir": _wind_dir_fixed(clim, month, regional),
             "turb": turb, "qnh": 761 + dq, "dt": dt, "fog": False}
 
 
@@ -202,7 +222,7 @@ def clear_day(temp_c: float = 20.0) -> Wx:
     return Wx(temp_c=temp_c)
 
 
-def forecast(mode: str, campaign_id: str, start: date, day: int, hour: float, pack: dict) -> Wx:
+def forecast(mode: str, campaign_id: str, start: date, day: int, hour: float, pack: dict, regional: bool = False) -> Wx:
     """The weather at local `hour` on campaign day `day` (1-based) for the active theatre pack."""
     k = max(0, int(day) - 1)
     d = start + timedelta(days=k)
@@ -213,20 +233,20 @@ def forecast(mode: str, campaign_id: str, start: date, day: int, hour: float, pa
     rng = _rng(campaign_id, "wxc", k, int(hour * 4))
     if mode != "procedural":
         state = {"scattered": "SCATTERED", "broken": "BROKEN", "overcast": "OVERCAST", "rain": "RAIN", "storm": "STORM"}.get(mode, "CLEAR")
-        return _finish(state, _fixed(state, clim, d.month), None, 0.0, hour, temp, mode, rng)
+        return _finish(state, _fixed(state, clim, d.month, regional), None, 0.0, hour, temp, mode, rng)
     s0 = _state_on(campaign_id, start, k, clim)
     s1 = _state_on(campaign_id, start, k + 1, clim)
     f = min(max((hour - 6.0) / 24.0, 0.0), 1.0)
-    a = _anchor(campaign_id, k, STATES[s0], clim, d.month)
-    b = _anchor(campaign_id, k + 1, STATES[s1], clim, (d + timedelta(days=1)).month)
+    a = _anchor(campaign_id, k, STATES[s0], clim, d.month, regional)
+    b = _anchor(campaign_id, k + 1, STATES[s1], clim, (d + timedelta(days=1)).month, regional)
     s = int(round(s0 + (s1 - s0) * f))
     return _finish(STATES[s], a, b, f, hour, temp, mode, rng)
 
 
-def for_package(state, mode: str, pack: dict, hhmm: str) -> Wx:
+def for_package(state, mode: str, pack: dict, hhmm: str, regional: bool = False) -> Wx:
     """Weather for a campaign state at a package start time ('HH:MM' local)."""
     hh, mm = int(hhmm[:2]), int(hhmm[3:5])
-    return forecast(mode, state.campaign_id, _start(state), state.day, hh + mm / 60.0, pack)
+    return forecast(mode, state.campaign_id, _start(state), state.day, hh + mm / 60.0, pack, regional)
 
 
 def _start(state) -> date:

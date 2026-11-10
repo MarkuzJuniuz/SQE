@@ -50,6 +50,8 @@ TARCAP_LEAD_S = 120           # v0.41.115 (was 0; XO 2026-10-22: fighters in fir
                               # v0.41.0's 5-minute head start, which let the SA-10 kill six waiting Eagles (judgment call). v0.41.1 had it arrive WITH the HARM shooters.
 FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
+ILS_DUMMY_MODES = ("beside", "on")   # v0.41.336: the placements of the ILS dummy aircraft (Settings > ils_dummy; "off" builds none and keeps the old ILS-friendly wind window)
+ILS_DUMMY_TYPE = planes.F_16C_50     # v0.41.336: any blue jet will do, the unit is invisible, immortal and never started (XO's note: an uncontrolled AI aircraft). Judgment call
 PARKED_MAX = 8               # v0.41.297 (XO 2026-11-05: a counter-air strike has nothing to hit, the ramp is empty): at most this many parked jets (v0.41.324: real units, was 12 statics) stand on the target field's ramp. Judgment call: a statics-count cap for VR; the wing's true strength stays in the state (a static costs `carcass_weight` of a unit)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
 SCRUB_POINT_NM = 20           # v0.41.223: a package flight's SCRUB point (where a scrubbed flight goes first) sits this far from its home field, on the bearing of its route's last point (the same shape as the stand-off ABORT point)
@@ -196,6 +198,7 @@ class MissionOptions:
     fighter_standoff: bool = True       # AI escorts and sweeps stop short of live SAM cover instead of flying into it
     f14_special_names: bool = True
     weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
+    ils_dummy: str = "beside"           # v0.41.336: "off" | "beside" | "on" (see settings.ils_dummy and ILS_DUMMY below); not "off" also means the real regional wind
     reactive: bool = True               # extra enemy fighters / blue alert pairs that launch during the sortie (reactive.py)
     ai_land_carrier: str = "always"     # v0.41.18: AI recovery short of a carrier: always | home (your deck only) | never
     ai_land_field: str = "never"        # v0.41.18: the same for airfields
@@ -343,7 +346,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         m.start_time = start
         clock = lambda s: (start + datetime.timedelta(seconds=s)).strftime("%H:%M:%S")
         date_str = start.strftime("%d %b %Y").upper()
-        self.wx = weather.for_package(st, o.weather_mode, theatres.active(), package.start)
+        self.wx = weather.for_package(st, o.weather_mode, theatres.active(), package.start, o.ils_dummy in ILS_DUMMY_MODES)
         self.wx_notes = []
         self._weather(m, date)
 
@@ -414,6 +417,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         for cvb_ in st.bases.values():                  # v0.41.209 (XO 2026-10-30): the carrier group is always in the mission (4 ships, about 100 nm out); it was built only when a flight used the boat
             if cvb_.kind == BaseKind.CARRIER and cvb_.id not in self.ship:
                 self._place_base(cvb_, tx, ty)
+        self._spawn_ils_dummies()                       # v0.41.336 (XO 2026-11-09): one dummy per blue ILS field keeps the ILS runway active whatever the wind
+        self._crater_blasts = self._crater_points()     # v0.41.336: closed fields get a few scripted blasts on the runway (the hook fires them)
         atc = (o.carrier_atc_mhz if pbase.kind == BaseKind.CARRIER else self.t.airports[pbase.airport].atc_radio.uhf_hz / 1e6)
 
         # ---- enemy ground: everything the route touches is live from the first second ----------------------------------
@@ -636,7 +641,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
                               "cvrec": self._wing_recovery(pbase, ptot), "recov": list(self._recov),
                               "phome": ([self._pt(pbase.x, pbase.y).x, self._pt(pbase.x, pbase.y).y] if pbase.kind == BaseKind.AIRFIELD else None),
-                              "rwys": runways.fields_for_hook(st, self.t)})
+                              "rwys": runways.fields_for_hook(st, self.t), "craters": self._crater_blasts})
             tdata = ""
             if pf.role in (Role.STRIKE, Role.SEAD, Role.CAS):
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
@@ -1301,6 +1306,54 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return ""
         n = sum(len(g["units"]) for g in manifest.groups if g["kind"] == "enemy_air" and g.get("parked") and g["ref"] == o.target_id)
         return f" {n} aircraft stand parked on the ramp." if n else " No aircraft are parked on the ramp today."
+
+    def _spawn_ils_dummies(self) -> None:
+        """v0.41.336 (XO 2026-11-09, campaign rules plan decisions 49 and 51; NOT TESTED IN DCS): DCS lights the ILS only on the runway it counts as active, and the wind picks that
+        runway; with the real regional wind the ILS end is often the tailwind end. XO's workaround: an invisible, immortal, uncontrolled aircraft at the ILS runway's threshold.
+        One dummy (one unit) for each blue field that has an ILS (`runways.ILS_RUNWAY`) and is not cratered. Settings > ils_dummy picks the placement: "beside" (next to the
+        threshold, off the pavement) or "on" (on the pavement); "off" builds none. Never in the manifest, the hook or the debrief."""
+        mode = self.o.ils_dummy
+        if mode not in ILS_DUMMY_MODES:
+            return
+        st = self.state
+        for b in st.bases.values():
+            num = runways.ILS_RUNWAY.get(getattr(b, "airport", None) or "")
+            if b.kind != BaseKind.AIRFIELD or num is None or runways.is_closed(st, b.id):
+                continue
+            ap = self.t.airports.get(b.airport)
+            spot = runways.ils_dummy_point(ap, num, mode) if ap is not None else None
+            if spot is None or self._units_room() < 1:
+                continue
+            x, y, hdg = spot
+            try:
+                g = self.m.flight_group_inflight(self.usa, f"ILS dummy {b.id}", ILS_DUMMY_TYPE, self._pt(x, y), 0, 0, None, 1)
+            except Exception as ex:
+                self.warns.append(f"ILS dummy for {b.name} could not be built ({ex})")
+                continue
+            p0 = g.points[0]
+            p0.type, p0.action = "TakeOffGround", PointAction.FromGroundArea          # a cold aircraft on the ground at this spot, not an air start
+            p0.alt = int(relief.ground_m(x, y) or 0)
+            p0.tasks = []
+            p0.ETA, p0.ETA_locked, p0.speed_locked = 0, True, True                    # DESIGN_NOTES section 8: the first point is time- and speed-locked, like every takeoff point
+            p0.add_task(task.SetInvisibleCommand(True))                               # XO's note: invisible to optics, sensors and radar ...
+            p0.add_task(task.SetImmortalCommand(True))                                # ... and immortal, so nothing can break it
+            g.uncontrolled = True                                                    # never starts, taxis or calls
+            g.hidden = True
+            g.units[0].heading = hdg % 360.0
+
+    def _crater_points(self) -> list:
+        """v0.41.336 (XO 2026-11-09): [[x, z, power], ...] scripted blasts along the runway of every cratered field (`runways.crater_points`, for show: the hook fires them a few
+        seconds into the mission). A closed runway stays closed in SQE's own state either way; this only makes it look hit. Seeded by the field and the turn it was hit."""
+        st, out = self.state, []
+        for fid in sorted(runways.closed_ids(st)):
+            o_ = st.bases.get(fid) or st.assets.get(fid)
+            ap = self.t.airports.get(getattr(o_, "airport", None) or "")
+            if ap is None:
+                continue
+            turn = (st.ground or {}).get("craters", {}).get(fid, {}).get("turn", 0)
+            for x, y in runways.crater_points(st, fid, ap, random.Random(f"{st.campaign_id}:crater:{fid}:{turn}")):
+                out.append([round(x, 1), round(y, 1), runways.CRATER_POWER])
+        return out
 
     def _spawn_parked_jets(self, package, manifest) -> None:
         """v0.41.297 (XO 2026-11-05, "if those jets are really available on that field then spawn them parked"): a counter-air strike (not the sweep) finds the target field's jets
