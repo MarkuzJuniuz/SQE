@@ -1,5 +1,10 @@
 # CHANGES.md
 
+## v0.41.349, campaign rules Phase 8: CAP1 and CAP2 on the TARCAP, escort and sweep station
+
+XO 2026-11-10 ("fox 3 high"), `campaign rules plan.md` Phase 8. The blue TARCAP / escort / sweep station is now CAP1 plus a CAP2 point, flown as a race-track (the Circle stays where no CAP2 is clear). Support CAPs and red's CAPs already had a CAP2 and are untouched.
+**NOT FLOWN: XO to fly one TARCAP and see the pair race-track and stay until its hold time. DESIGN_NOTES 8 bracket check passed by probe.** Smoke not run.
+
 ## v0.41.348, campaign rules Phase 7b: blue detection by AWACS and the AWACS loss
 
 XO 2026-11-10 ("fox 3 medium"), `campaign rules plan.md` Phase 7, blue side. No save format change (old saves read fine: `raids["unseen"]` is optional). **Not flown in DCS. Smoke not run.**
