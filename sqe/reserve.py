@@ -42,3 +42,32 @@ def apply(ledger, squadrons, level: int) -> dict:
             ledger.free[q.id] -= h
             out[q.id] = h
     return out
+
+
+# ---- Phase 6a (v0.41.343): red's scrambles draw from the hold ------------------------------------------------------------------------------------------------
+def _red_hold(state) -> dict:
+    return ((getattr(state, "red_air", None) or {}).get("react_hold") or {})
+
+
+def red_hold_left(state, wing, drawn: dict | None = None, types=None) -> int:
+    """Jets of `wing` (an EnemyAirWing) still held for reactions: per squadron the turn's hold (`red_air["react_hold"]`, written by `redair.plan_turn`), never more than the squadron has ready now, less
+    what this mission already drew (`drawn`: squadron id -> jets). `types`: count only squadrons of those aircraft types. An old save, or a turn not planned yet, has no hold: 0."""
+    drawn = drawn if drawn is not None else {}
+    h = _red_hold(state)
+    return sum(max(0, min(int(h.get(q.id, 0)), int(q.available)) - drawn.get(q.id, 0)) for q in wing.sqns if types is None or q.aircraft in types)
+
+
+def pick_red_hold(state, wing, drawn: dict, types=None, n: int = 2):
+    """The squadron of `wing` a reaction pair comes from: the one with the most hold left (ties: the wing's order), with `n` or more left. Books the draw in `drawn` and returns the squadron; None when the wing
+    has nothing held (then it sends nothing)."""
+    h = _red_hold(state)
+    best, left = None, n - 1
+    for q in wing.sqns:
+        if types is not None and q.aircraft not in types:
+            continue
+        k = max(0, min(int(h.get(q.id, 0)), int(q.available)) - drawn.get(q.id, 0))
+        if k > left:
+            best, left = q, k
+    if best is not None:
+        drawn[best.id] = drawn.get(best.id, 0) + n
+    return best

@@ -11,6 +11,7 @@ from dcs.translation import String
 from dcs.unit import Skill
 
 from . import reactive, redair, runways, scramble
+from . import reserve as _res
 from . import threatmap as tm
 from .difficulty import ai_skill
 from .loadouts import ENEMY_FIGHTERS, enemy_cap_loadout
@@ -112,16 +113,20 @@ class RedAirPicture:
         if t_arr <= 60 or t_arr > tot_s + RELIEF_HORIZON_S:
             return
         w, a = st.enemy_air_at(nxt["wing"]), st.assets.get(nxt["wing"])
-        if w is None or a is None or a.destroyed or w.available_of(ENEMY_FIGHTERS) < 4 or 2 > self._units_room():
+        if w is None or a is None or a.destroyed or 2 > self._units_room():
             return
         ap = self.t.airports.get(a.airport) if a.airport else None
         if ap is None:
             return
-        tname = nxt["type"] if nxt["type"] in w.types_up else self.vrng.choice(w.fighter_types())
+        sq = _res.pick_red_hold(st, w, self._hold_drawn, {nxt["type"]}) or _res.pick_red_hold(st, w, self._hold_drawn, ENEMY_FIGHTERS)      # v0.41.343 (Phase 6a): the relief pair comes out of the wing's reaction hold; none held, no relief
+        if sq is None:
+            return
+        tname = sq.aircraft
         load = enemy_cap_loadout(tname)
         pt = lambda x, y: mapping.Point(x, y, self.t)
         sx, sy = cp["x"], cp["y"]
         g, _how = self._alert_group(self.red, f"Relief {i + 1}", getattr(planes, tname), ap, task.CAP, None, 2, (sx, sy))
+        self._alerts[-1]["sq"] = sq.id
         t_go = int(max(30, t_arr - dist(a.x, a.y, sx, sy) / spd - 120 - 90))          # flight time + the taxi the runway start no longer does + a minute's slack
         trig = triggers.TriggerOnce(comment=f"relief {g.name}")
         trig.add_condition(condition.TimeAfter(t_go))
@@ -141,7 +146,7 @@ class RedAirPicture:
         g.set_skill(skill)
         if self.o.enemy_unlimited_fuel:
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
-        manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
+        manifest.add("enemy_air", w.base_asset_id, names, ac=tname, grp=g.name)
         self._red_intel.append(f"Relief for that patrol: a pair of {tname.replace('_', '-')} from {self._short(a.name)} on station {redair.hhmm(nxt['start'])}.")
 
     def _spawn_red_standby(self, pf, cp, i, gname, bf, wings, manifest, skill, tot_s, tx, ty, alt, spd) -> None:
@@ -153,17 +158,21 @@ class RedAirPicture:
         end_s = int(max(tot_s + 300, (pf["end"] - self._start_min) * 60))
         ent = {"g": gname, "n": 2, "bf": bf, "rf": 0, "u": float(end_s)}
         self._cover.append(ent)
-        cands = sorted(((dist(a_.x, a_.y, sx, sy), w_, a_) for w_, a_ in wings if w_.available_of(ENEMY_FIGHTERS) >= 4 and a_.airport), key=lambda c_: c_[0])
+        cands = sorted(((dist(a_.x, a_.y, sx, sy), w_, a_) for w_, a_ in wings if _res.red_hold_left(self.state, w_, self._hold_drawn, ENEMY_FIGHTERS) >= 2 and a_.airport), key=lambda c_: c_[0])
         if not cands or cands[0][0] > ALERT_REACH_NM * NM or 2 > self._units_room():
             return
         _d, w, a = cands[0]
         ap = self.t.airports.get(a.airport)
         if ap is None:
             return
-        tname = pf["type"] if pf["type"] in w.types_up else self.vrng.choice(w.fighter_types())
+        sq = _res.pick_red_hold(self.state, w, self._hold_drawn, {pf["type"]}) or _res.pick_red_hold(self.state, w, self._hold_drawn, ENEMY_FIGHTERS)      # v0.41.343 (Phase 6a)
+        if sq is None:
+            return
+        tname = sq.aircraft
         load = enemy_cap_loadout(tname)
         pt = lambda x, y: mapping.Point(x, y, self.t)
         g, _how = self._alert_group(self.red, f"Standby {i + 1}", getattr(planes, tname), ap, task.CAP, None, 2, (sx, sy))
+        self._alerts[-1]["sq"] = sq.id
         ent["rf"] = self._alerts[-1]["f"]
         self._call_by_flag(g, _how, ent["rf"])
         ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
@@ -178,7 +187,7 @@ class RedAirPicture:
         g.set_skill(skill)
         if self.o.enemy_unlimited_fuel:
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
-        manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
+        manifest.add("enemy_air", w.base_asset_id, names, ac=tname, grp=g.name)
 
     def _arm_callin(self, g, ap, st_xy, hot_xy, zone_nm, alt, spd, end_s, tot_s, bf_, cp, tx, ty, cap2=None, land=None) -> None:
         """v0.41.111: adds the hotspot leg AFTER the landing point of a patrol route: HOTSPOT (orbit, engages inside its own circle), BACK (orbit on the
@@ -297,6 +306,7 @@ class RedAirPicture:
         self._red_held, self._red_contest, self._alert_clock = [], [], []
         self._hot_calls, self._hot_flag = [], 0
         for i in range(n_fl):
+            sq_ = None
             if i < n_cap:
                 pf_ = self._red_sel[i]
                 w, a = st.enemy_air_at(pf_["wing"]), st.assets[pf_["wing"]]
@@ -308,8 +318,14 @@ class RedAirPicture:
                 near_ = [wa for wa in wings if dist(wa[1].x, wa[1].y, tx, ty) <= ALERT_REACH_NM * NM]   # v0.41.1: only fields that can reach the fight
                 if not near_:
                     continue
-                w, a = near_[i % len(near_)]
-                tname = r.choice(w.fighter_types())
+                for k_ in range(len(near_)):                # v0.41.343 (Phase 6a): an alert pair comes out of its wing's reaction hold; the next field is tried when a wing has none held, no hold anywhere, no pair
+                    w, a = near_[(i + k_) % len(near_)]
+                    sq_ = _res.pick_red_hold(st, w, self._hold_drawn, ENEMY_FIGHTERS)
+                    if sq_ is not None:
+                        break
+                if sq_ is None:
+                    continue
+                tname = sq_.aircraft
             cls = getattr(planes, tname)
             load = enemy_cap_loadout(tname)
             dd = dist(a.x, a.y, tx, ty)
@@ -374,6 +390,7 @@ class RedAirPicture:
                 if ap is None:
                     continue
                 g, how_ = self._alert_group(self.red, f"Alert {i + 1}", cls, ap, task.CAP, None, 2, (tx, ty))
+                self._alerts[-1]["sq"] = sq_.id
                 if how_ == "ramp":
                     g.add_trigger_action(task.StartCommand())
                     g.uncontrolled = True
@@ -430,7 +447,7 @@ class RedAirPicture:
                 g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
             if not load:
                 self.warns.append(f"{tname}: no air-to-air loadout found; spawned unarmed")
-            manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
+            manifest.add("enemy_air", w.base_asset_id, names, ac=tname, grp=g.name)
             if i < n_cap and pf_["kind"] == "CAP":
                 self._spawn_red_relief(pf_, self._cap_plan[i], i, manifest, skill, tot_s, tx, ty, alt, spd)
                 self._spawn_red_standby(pf_, self._cap_plan[i], i, g.name, bf_, wings, manifest, skill, tot_s, tx, ty, alt, spd)

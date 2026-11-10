@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from .models import AssetKind
+from . import refit as _refit
 from .state import CampaignState
 from .runways import RUNWAY_HALF_LEN_M, RUNWAY_HALF_WIDTH_M
 
@@ -60,7 +61,7 @@ local LASTHIT = {}                -- unit name -> {by, w, t} of the last hit on 
 local SAMPLE = {}                 -- unit name -> {fuel, alt, spd, t} sampled every 30 s for every aircraft
 local JAMW = { __JAMW__ }          -- unit name -> {from, to} mission seconds the jammer runs (AI: the attack leg); absent = always on
 local JAMS = { __JAMS__ }
-local ALERTS = { __ALERTS__ }       -- alert / scramble groups: g = group, f = the flag their trigger sets when called, b = field, ty = type
+local ALERTS = { __ALERTS__ }       -- alert / scramble groups: g = group, f = the flag their trigger sets when called, b = field, ty = type, sq = the red squadron id the pair was drawn from (Phase 6a; "" for blue)
 local ALOG = {}                     -- group -> {called = t, air = t}
 local COVER = { __COVER__ }          -- v0.41.79: CAP pairs with a standby: g = group, n = jets, bf = flag that sends the pair home (its orbit stops), rf = flag that calls the replacement, u = planned end (s)
 local COVERLOG = {}                 -- group -> {why, t, replaced}
@@ -113,7 +114,7 @@ local function alertsJson()
   for _, a in ipairs(ALERTS) do
     local l = ALOG[a.g] or {}
     local stuck = (l.called ~= nil and l.air == nil and now - l.called > 300)
-    o[#o + 1] = string.format('{"g":"%s","b":"%s","ty":"%s","called":%s,"air":%s,"stuck":%s}', esc(a.g), esc(a.b), esc(a.ty), num(l.called), num(l.air), tostring(stuck))
+    o[#o + 1] = string.format('{"g":"%s","b":"%s","ty":"%s","sq":"%s","called":%s,"air":%s,"stuck":%s}', esc(a.g), esc(a.b), esc(a.ty), esc(a.sq or ""), num(l.called), num(l.air), tostring(stuck))
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
@@ -1571,7 +1572,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
             .replace("__WATCH__", ", ".join(_lq(n) for n in (watch or []))).replace("__DONEAFTER__", f"{float(done_after):.0f}").replace("__AWACS__", _lua_str(awacs)).replace("__SPLASH__", "true" if splash else "false")
             .replace("__RWYQ__", ", ".join(f'{{g={_lq(q["g"])}, f={int(q["f"])}, b={_lq(q["b"])}' + (f', t={int(q["t"])}' if q.get("t") is not None else '') + '}' for q in (rwyq or []))).replace("__PRWY__", _lua_str(prwy))
             .replace("__COVER__", ", ".join(f'{{g={_lq(c["g"])}, n={int(c["n"])}, bf={int(c["bf"])}, rf={int(c["rf"])}, u={float(c["u"]):.0f}}}' for c in (cover or [])))
-            .replace("__ALERTS__", ", ".join(f'{{g={_lq(a["g"])}, f={int(a["f"])}, b={_lq(a["b"])}, ty={_lq(a["ty"])}}}' for a in (alerts or [])))
+            .replace("__ALERTS__", ", ".join(f'{{g={_lq(a["g"])}, f={int(a["f"])}, b={_lq(a["b"])}, ty={_lq(a["ty"])}, sq={_lq(a.get("sq", ""))}}}' for a in (alerts or [])))
             .replace("__PHOME__", ("{ x = %.1f, z = %.1f }" % tuple((cfg or {})["phome"])) if (cfg or {}).get("phome") else "nil")
             .replace("__CVREC__", _cvrec_lua((cfg or {}).get("cvrec")))
             .replace("__RECOV__", _recov_lua((cfg or {}).get("recov")))
@@ -1826,9 +1827,21 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 out["lines"].append(ln_)
     # alert / scramble groups (v0.40.8): called, airborne, or stuck on the ground; and the build's settings, so test runs can be told apart
     ms_ = lambda t_: f"{int(t_) // 60:d}:{int(t_) % 60:02d}"                  # v0.41.208 (XO): scrambles are numbered in the order the build lists them (the briefing's QRA list uses the same numbers)
+    owner_ = {q.id: q for w_ in state.enemy_air for q in w_.sqns}
+    pkg_ = next((p_ for p_ in (state.plan or []) if p_.get("id") == data.get("package")), None)
+    st_min_ = None                                                          # v0.41.343 (Phase 6a): the mission's start, absolute minute (the package's start time on today's clock)
+    if pkg_ and pkg_.get("start"):
+        from . import clock as _clk
+        st_min_ = _clk.day_start_minute(state.day) + int(str(pkg_["start"])[:2]) * 60 + int(str(pkg_["start"])[3:5])
+    flown_ = []
     for n_, al in enumerate(data.get("alerts", []) or [], 1):
         if al.get("called") is None:
             continue
+        if al.get("air") is not None and al.get("sq") in owner_:             # a scramble that got airborne is a flown sortie of the squadron it came from; called but stuck, or never called, costs nothing
+            gr_ = next((g_ for g_ in manifest.groups if g_.get("grp") == al.get("g") and g_["kind"] == "enemy_air"), None)
+            n_fl_ = len(gr_["units"]) if gr_ else 2
+            flown_.append({"unit": owner_[al["sq"]], "side": "red", "launch_min": (st_min_ if st_min_ is not None else _refit.now_min(state)) + int(al["called"]) // 60, "flew": n_fl_,
+                           "lost": sum(1 for u_ in (gr_["units"] if gr_ else []) if u_ in lost), "limped": None})       # the group's dead were taken off `available` above: not counted twice
         who_ = f"Scramble {n_} ({al.get('ty', '?')}, {al.get('b', '?')})"
         if al.get("air") is not None:
             out["lines"].append(f"{who_}: ordered {ms_(al['called'])}, airborne +{ms_(al['air'] - al['called'])}")
@@ -1847,6 +1860,12 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         cross_ = next((p_ for p_ in fl_ if p_[4] <= BINGO_PCT), None)
         out["lines"].append(f"Fuel: {gn_}{' (' + ty_[gn_] + ')' if ty_.get(gn_) else ''} airborne {int(fl_[0][0]) // 60}-{int(last_[0]) // 60} min, fuel {fl_[0][4]}% to {last_[4]}%"
                             + (f", at bingo ({BINGO_PCT}%) from {int(cross_[0]) // 60} min" if cross_ else ""))
+    if flown_:
+        import random as _rnd2
+        ra_ = state.red_air or {}
+        for unit_, n_srv_, _lp, _sh in _refit.commit_turn(state, flown_, _rnd2.Random(f"{state.campaign_id}:{state.day}:{state.turn}:scr")):
+            if ra_.get("turn") == state.turn and isinstance(ra_.get("avail0"), dict) and unit_.id in ra_["avail0"]:
+                ra_["avail0"][unit_.id] = max(0, int(ra_["avail0"][unit_.id]) - n_srv_)        # Session._red_sorties reads losses as avail0 less available: these jets went to refit, they were not lost
     cf_ = data.get("cfg") or {}
     if cf_:
         sp_ = data.get("splash") or {}
