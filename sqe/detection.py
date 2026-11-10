@@ -60,6 +60,36 @@ def cast(state, package) -> str | None:
     return "full" if rng.random() < p else "barcap"
 
 
+BLUE_COVER_KEYS = ("bl_e3", "bl_e2")      # Phase 7b: blue's early-warning aircraft (the E-3 and the carrier's E-2C)
+
+
+def blue_covered(state, turn: int) -> bool:
+    """v0.41.348 (Phase 7b): blue sees red's raids when an E-3 or E-2C is on orbit in this turn (the theatre is small, plan section 7). Reads the day's windows `support_assets.plan` stored; no plan at all
+    (an old save) says covered."""
+    from . import clock
+    fl = (getattr(state, "barcap", None) or {}).get("support_flights")
+    if not fl:
+        return True
+    lo = clock.minute(turn) - clock.day_start_minute(clock.day_of(turn))
+    hi = lo + clock.TURN_MIN
+    return any(e > lo and s < hi for k in BLUE_COVER_KEYS for s, e in fl.get(k, []))
+
+
+def is_raid(state, package) -> bool:
+    """A red raid built from `raids.turn_raids` (id obj-t<turn>-r<n> / -s<n>, booked); not the carrier raid setpiece."""
+    import re
+    oid = package.objective.id or ""
+    return bool(re.match(r"^obj-t\d+-[rs]\d+$", oid)) and oid in ((getattr(state, "raids", None) or {}).get("booked") or {})
+
+
+def blue_cast(state, package, turn: int) -> str:
+    """"seen" or "unseen" for a red raid. Covered: seen. Not covered: seen anyway with UNSEEN_GUESS (seeded per campaign, turn, raid)."""
+    if blue_covered(state, turn):
+        return "seen"
+    rng = random.Random(f"{state.campaign_id}:{turn}:{package.objective.id}:detect")
+    return "seen" if rng.random() < UNSEEN_GUESS else "unseen"
+
+
 def verdict(package) -> str:
     """The stored verdict; "full" when none is stored."""
     return (getattr(package, "extra", None) or {}).get("detect", "full")

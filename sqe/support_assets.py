@@ -221,6 +221,40 @@ def lose(state, label: str, n: int = 1) -> str:
     return ""
 
 
+AWACS_LOSS_ON = False          # v0.41.348 (Phase 7b, decision 50): OFF by default (Crew Chief recommendation 2026-11-10, XO to confirm): the HAVCAP is not yet reliable, so the unguarded case would fire more often than meant
+AWACS_LOSS_GUARDED = 0.002     # chance a turn an AWACS airframe is lost on orbit with a HAVCAP pair guarding it (judgment call)
+AWACS_LOSS_UNGUARDED = 0.02    # ...and with no guard that turn (judgment call). Red does not target the AWACS (XO 2026-11-10): this is a passive attrition roll
+AWACS_KEYS = ("bl_e3", "bl_e2")
+
+
+def attrition(state, turn: int) -> list:
+    """v0.41.348 (Phase 7b): the war sim's AWACS loss. Each turn an E-3 / E-2C asset is on orbit it loses one airframe with AWACS_LOSS_GUARDED if a HAVCAP pair guarded it this turn, else
+    AWACS_LOSS_UNGUARDED (seeded per asset and turn). Goes through `lose`, so the clocks stay consistent. A turn whose AWACS was in a flown mission is not rolled (the caller skips it).
+    Counts in `a["war_lost"]` (for the probe). -> log lines."""
+    import random as _r
+    from . import clock
+    if not AWACS_LOSS_ON:
+        return []
+    bc = getattr(state, "barcap", None) or {}
+    fl = bc.get("support_flights") or {}
+    lo = clock.minute(turn) - clock.day_start_minute(clock.day_of(turn))
+    hi = lo + clock.TURN_MIN
+    guarded = {f["asset"] for f in bc.get("blue_flights") or [] if f.get("turn") == turn and f.get("kind") == "HAVCAP"}
+    out = []
+    sa = ensure(state)
+    for key in AWACS_KEYS:
+        a = sa.get(key)
+        if a is None or a["available"] <= 0 or not any(e > lo and s < hi for s, e in fl.get(key, [])):
+            continue
+        p = AWACS_LOSS_GUARDED if key in guarded else AWACS_LOSS_UNGUARDED
+        if _r.Random(f"{state.campaign_id}:{turn}:{key}:awloss").random() < p:
+            ln = lose(state, a["label"])
+            if ln:
+                a["war_lost"] = int(a.get("war_lost", 0)) + 1
+                out.append(ln.replace("shot down", "lost to enemy action") + (" (guarded)" if key in guarded else " (no guard)"))
+    return out
+
+
 def replace_e3(state) -> list:
     """Every TURN (v0.41.337, Phase 3; it was inside the nightly `step`, so a 48 h replacement took 64 to 72 h): a missing E-3 is replaced one at a time every 48 hours
     (E3_REPLACEMENT_MIN, on the campaign clock, `state.turn`); the timer starts when the first airframe is seen missing. -> log lines."""

@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## v0.41.348, campaign rules Phase 7b: blue detection by AWACS and the AWACS loss
+
+XO 2026-11-10 ("fox 3 medium"), `campaign rules plan.md` Phase 7, blue side. No save format change (old saves read fine: `raids["unseen"]` is optional). **Not flown in DCS. Smoke not run.**
+- **`detection.blue_covered(state, turn)`:** an E-3 or E-2C window on orbit in this turn (read from the day's `support_flights`; no plan at all reads covered). `blue_cast`: covered gives "seen"; else seen with `UNSEEN_GUESS` 0.25 (seeded `campaign:turn:oid:detect`), otherwise "unseen". `is_raid`: a `turn_raids` raid (id `obj-t<turn>-r|s<n>`, booked).
+- **Unseen raids are not listed (XO: "that is the point of not seeing a red attack"):** `Session.plan_turn` marks the package `extra["unseen_raid"]`; `packages()` hides it, it is numbered after the listed ones (no gap), stays booked (red's jets fly it) and the war sim resolves it with `_resolve_raid` (blue's planned patrols only). It replaces the v0.41.304 "no hidden ones" rule for unseen raids only. Records: `raids["unseen"]` (turn, id, text) and `raids["unseen_n"]` (resolved so far today); the war log says "not detected: no AWACS was on orbit"; the Overview shows "Raids not detected so far".
+- **AWACS loss (decision 50):** `support_assets.attrition`, run in `Session._tick` for the turn just closed: each E-3 / E-2C asset on orbit loses an airframe with `AWACS_LOSS_GUARDED` 0.002 (a HAVCAP pair guarded it that turn) or `AWACS_LOSS_UNGUARDED` 0.02, seeded per asset and turn, through `lose` (the clocks stay consistent). A turn whose AWACS was in a flown mission is not rolled. **Off by default (`AWACS_LOSS_ON = False`, Crew Chief recommendation, XO to confirm).** Red does not target the AWACS. Losses show in the Overview and the log.
+- **Probe** (F-16C, 20 days, `.private/probes/p7b/probe.py`, fixed seeds): with AWACS up and the switch off, outcomes are identical to v0.41.347 (L2 s3 4 / 1, s7 4 / 4; L3 s3 19 / 19, s7 24 / 9 raids stopped / got through). AWACS removed: no-cover turns 68 / 74 of 192 / 198 (L2), 90 of 240 (L3; the E-3 is replaced every 48 h), 2 / 0 (L2) and 14 / 11 (L3) raids settled unseen. Loss switch on: 6 to 9 airframes lost in 20 days (E-3 3, E-2C 3 to 6), which is why it ships off. A v0.41.347 save loads, plans and skips 14 turns.
+
 ## v0.41.347, EWR Strike priority
 
 XO 2026-11-10 ("fox 3 low"). No save format change. **Not flown in DCS. Smoke not run.**
