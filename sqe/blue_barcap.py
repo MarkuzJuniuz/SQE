@@ -18,7 +18,7 @@ from .models import BaseKind, ObjectiveType, Role
 
 NM = 1852.0
 # the share of the areas that can be up in a turn that have a pair on station, (day turn, night turn) by level, seeded: judgment call, a starting point for the balance pass (campaign rules plan
-# section 6, Phase 13). Red's patrol share is higher (redair.DOCTRINE); blue's is lower at L1 / L2 because XO plays the sorties himself. It also sets how often an AWACS guard is up
+# section 6, Phase 13). Red's patrol share is higher (redair.RED_CAP_SHARE); blue's is lower at L1 / L2 because XO plays the sorties himself. It also sets how often an AWACS guard is up
 # (the tanker's guard is planned every turn the tanker is on orbit).
 CAP_SHARE = {1: (0.10, 0.05), 2: (0.20, 0.08), 3: (0.30, 0.10)}
 KEEP_BACK = 2                  # an area patrol never takes a squadron's last pair of ready jets (they stay for the packages; as the day plan's "one pair stays back"; judgment call)
