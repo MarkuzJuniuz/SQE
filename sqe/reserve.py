@@ -71,3 +71,51 @@ def pick_red_hold(state, wing, drawn: dict, types=None, n: int = 2):
     if best is not None:
         drawn[best.id] = drawn.get(best.id, 0) + n
     return best
+
+
+# ---- Phase 6b (v0.41.344): the war sim spends the hold ----------------------------------------------------------------------------------------------------
+REACTION_PAIRS = 1          # pairs of red fighters a package that meets a reaction draws from the hold (campaign rules plan, Phase 6 / section 6: judgment call, low firmness; one pair per package keeps the hold lasting a few packages)
+RED_LOSS_PER_BLUE = 0.7     # red fighters shot down per blue aircraft the package loses (campaign rules plan section 6 calibration: judgment call, low firmness; keeps the L3 war roughly 50:50)
+
+
+def red_drawn(state) -> dict:
+    """The turn's per-squadron draws of the red hold (`red_air["react_drawn"]`, reset when `redair.plan_turn` writes a new hold). Missing key (old save): nothing drawn yet."""
+    ra = getattr(state, "red_air", None)
+    if ra is None:
+        return {}
+    return ra.setdefault("react_drawn", {})
+
+
+def reaction_draw(state, side: str, package, rng=None) -> list:
+    """The jets a package's reaction takes from the hold. `side` "red": up to REACTION_PAIRS pairs from the red hold of the wings within `reactive.INTERCEPT_NM` of the package's target (nearest wing first,
+    `pick_red_hold`), booked in `red_air["react_drawn"]`. -> [(RedSquadron, jets)]; [] when no hold is left near the target (then nothing reacts). Blue's side is the FLEET_DEFENSE crewing in
+    `Session.plan_turn` (it needs the ledger), not this function."""
+    if side != "red":
+        return []
+    import math
+    from .reactive import INTERCEPT_NM
+    from .routes import NM
+    t = state.assets.get(package.objective.target_id)
+    if t is None:
+        return []
+    ra = getattr(state, "red_air", None)
+    if not ra or not ra.get("react_hold"):
+        return []
+    drawn = red_drawn(state)
+    wings = []
+    for w in state.enemy_air:
+        a = state.assets.get(w.base_asset_id)
+        if a is None or a.destroyed:
+            continue
+        nm = math.hypot(a.x - t.x, a.y - t.y) / NM
+        types = {x for x in w.general_types_up() if INTERCEPT_NM.get(x, 120) >= nm}
+        if types:
+            wings.append((nm, w.base_asset_id, w, types))
+    out = []
+    for _ in range(REACTION_PAIRS):
+        for nm, _b, w, types in sorted(wings, key=lambda x: (x[0], x[1])):
+            sq = pick_red_hold(state, w, drawn, types)
+            if sq is not None:
+                out.append((sq, 2))
+                break
+    return out

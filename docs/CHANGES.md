@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## v0.41.344, campaign rules Phase 6b: the war sim spends the reaction hold
+
+XO 2026-11-10 ("fox 3 medium"), `campaign rules plan.md` Phase 6, second half. A package the war sim resolves now draws a red pair from the hold and shoots some of it down; blue's raid intercepts are crewed from blue's hold. No save format change (new dict keys with defaults). **Not flown in DCS. Smoke not run.**
+- **`reserve.reaction_draw(state, "red", package)`:** up to `REACTION_PAIRS` (1) pair from the red hold of the wings within `reactive.INTERCEPT_NM` of the target (nearest wing first, `pick_red_hold`); the draws of a turn are kept in `red_air["react_drawn"]`, which `redair.plan_turn` resets with the new hold. No hold near the target: no draw, no losses.
+- **War sim** (`WarSimulator._red_reaction`, called by the ordinary branch and `_resolve_dead`): red loses round(`RED_LOSS_PER_BLUE` 0.7 x the package's blue losses) fighters off the drawn pair (judgment call: never more than the jets drawn); the survivors go to refit (`refit.commit_flight`, launch = the package's start) and, with the losses, come off `red_air["avail0"]`, so `Session._red_sorties` does not count them again. Own seeded Random per package: the war sim's rng stream is unchanged. Debrief line "N enemy fighters shot down". BARCAP, `_resolve_sweep` and `_resolve_raid` do not call it (the patrol, sweep and raid branches already kill red aircraft themselves).
+- **Blue intercepts** (`Session.plan_turn`, `build_all`): a FLEET_DEFENSE package is crewed from the unspent blue hold first, then the ordinary free jets; what it takes off the hold is not offered to the next intercept of that build (`barcap["react_used"]`). Other packages never see the hold.
+- **Probe** (read-only, F-16C campaigns, 10 days, seeds 3 and 7, v0.41.343 vs now): L3 red ready fighters at day 10 264 / 271 -> 260 / 264 (reaction kills 1 to 10 a day, most on day 1), blue 144 / 141 -> 139 / 146; L2 red 142 / 137 -> 128 / 138. `_air_cover` at day 10: L3 8.46 / 8.63 -> 7.94 / 8.37, L2 4.20 / 4.13 -> 3.77 / 4.20. `miz_identity` differs from a v0.41.343 baseline in 83 of 130 missions (the war sim now changes red's jets on every skipped turn; the L1 case is identical).
+
 ## v0.41.343, campaign rules Phase 6a: scrambles draw from the reaction hold
 
 XO 2026-11-10 ("fox 3 medium"), `campaign rules plan.md` Phase 6, first half. Red's alert, Relief, Standby and reactive pairs now come out of the reaction hold (`red_air["react_hold"]`, Phase 5a), and a scramble that got airborne goes to refit. No save format change. **Not flown in DCS. Smoke not run.**

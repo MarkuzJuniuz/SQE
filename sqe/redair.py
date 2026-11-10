@@ -199,6 +199,8 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
                             "x": float(c[0]), "y": float(c[1]), "turn": turn, "wave": wave, "squadron": sq.id})
     ra["flights"] = [f for f in ra.get("flights", []) if f.get("turn") is not None and f["turn"] < turn] + flights      # earlier turns of the day stay; this turn's earlier plan (and an old whole-day plan, no `turn`) goes
     ra["turn"] = turn
+    ra["react_drawn"] = {}                                                   # v0.41.344 (Phase 6b): what this turn's war-sim reactions drew from the new hold (reserve.reaction_draw)
+    ra["react_n"] = ra["react_nohold"] = 0                                   # probe counters: reactions that drew a pair / found no hold
     ra["react_hold"] = held                                                  # squadron id -> jets kept back this turn (Phase 6 reads it)
     ra["left"] = {w.base_asset_id: sum(led.free.get(q.id, 0) for q in w.sqns) for w in state.enemy_air}      # ready fighters each wing has left after the reserve and this turn's pairs (`can(fighters=True)`)
     free = {sid: int(n) for sid, n in led.free.items()}                      # fighters: after the reserve and the pairs above; attack squadrons (raiders, the Tu-22M3): every ready jet, the reserve is for fighters only
