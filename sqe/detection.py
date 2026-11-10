@@ -26,13 +26,25 @@ BARCAP_ONLY_AIR = 0.4       # war sim: red's air-cover term against a package it
 JUDGED = (ObjectiveType.STRIKE, ObjectiveType.DEAD, ObjectiveType.CAS, ObjectiveType.COUNTER_AIR)    # blue packages against red; BARCAP and FLEET_DEFENSE get no verdict
 
 
-def red_covered(state, x: float, y: float) -> bool:
-    """A live early-warning radar of red's within EWR_COVER_NM of the point."""
+def red_covered(state, x: float, y: float, exclude: str | None = None) -> bool:
+    """A live early-warning radar of red's within EWR_COVER_NM of the point. `exclude`: an EWR id to leave out, as if dead (nothing is mutated)."""
     lim = EWR_COVER_NM * NM
     for a in state.assets.values():
-        if a.kind == AssetKind.EWR and not a.destroyed and a.health > ground.DOWN_HEALTH and ((a.x - x) ** 2 + (a.y - y) ** 2) ** 0.5 <= lim:
+        if a.id != exclude and a.kind == AssetKind.EWR and not a.destroyed and a.health > ground.DOWN_HEALTH and ((a.x - x) ** 2 + (a.y - y) ** 2) ** 0.5 <= lim:
             return True
     return False
+
+
+TARGET_KINDS = (AssetKind.SAM, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.C2, AssetKind.ARMOR, AssetKind.AIRFIELD)
+
+
+def gap_share(state, ewr) -> float:
+    """v0.41.347: share (0 to 1) of red's live targets (SAM, fuel, depot, C2, armor, airfield) that are covered now but would be uncovered with this EWR dead."""
+    tg = [a for a in state.assets.values() if a.kind in TARGET_KINDS and not a.destroyed]
+    if not tg:
+        return 0.0
+    n = sum(1 for a in tg if red_covered(state, a.x, a.y) and not red_covered(state, a.x, a.y, exclude=ewr.id))
+    return n / len(tg)
 
 
 def cast(state, package) -> str | None:

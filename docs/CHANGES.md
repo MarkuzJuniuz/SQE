@@ -1,5 +1,12 @@
 # CHANGES.md
 
+## v0.41.347, EWR Strike priority
+
+XO 2026-11-10 ("fox 3 low"). No save format change. **Not flown in DCS. Smoke not run.**
+- **`detection.gap_share(state, ewr)`:** share of red's live targets (SAM, fuel, depot, C2, armor, airfield) covered now but uncovered with this EWR dead (`red_covered` takes an `exclude` id; nothing is mutated).
+- **Score (`war.py`):** an EWR Strike scores `(EWR_STRIKE_BASE 48 + EWR_GAP_WEIGHT 60 x gap_share) x health`, set where the supply bonus is applied (unblocked, unlocked candidates only); no `SUPPLY_FIRST_BONUS`. Judgment calls: above a supply strike, under belt-clearing SEAD. Start layout gap_share: Mozdok 0.24 (L3) / 0.26 (L2), Krymsk about 0.01, the other four 0.
+- **Probe** (F-16C, 10 days, v0.41.346 vs now): EWR Strike picked L2 s3 5 -> 8, s7 7 -> 6; L3 s3 7 -> 12, s7 1 -> 11 (built and flyable L3 s3 3 -> 5, s7 1 -> 4); EWRs alive at day 10 L2 4/4 and 5/4 of 6, L3 6 -> 5 and 6 -> 6.
+
 ## v0.41.346, campaign rules Phase 7a: red detection by EWR and the EWR Strike job
 
 XO 2026-11-10 ("fox 3 medium"), `campaign rules plan.md` Phase 7, red side only (7b, blue side and AWACS loss, is separate). No save format change (an old package with no verdict reads "full"). **Not flown in DCS. Smoke not run.**

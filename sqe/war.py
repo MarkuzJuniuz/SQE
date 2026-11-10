@@ -73,6 +73,8 @@ def cas_cover(state, a) -> tuple:
 
 STANDOFF_MIN_DEF_FLIGHTS = 4   # v0.41.298 (XO 2026-11-05, Standoff Strike): a supply strike (fuel / depot / plant) with no SAM complication becomes a Standoff Strike (SLAM-ER Hornets) when this many red 2-ship fighter flights can reach the target (threat.defender_flights, the planner's own count). 0 = never. Judgment call: probe of fresh campaigns, 4 flights = nearly every supply site at L3, none at L1 / L2; it falls away as red's fighters are shot down. 1 would make every supply strike a standoff one at every level
 STANDOFF_AIR_FACTOR = 0.5      # v0.41.298: a Standoff Strike's odds count red's fighter cover at this share (released far out, outside the fighters' reach). Judgment call, no source
+EWR_STRIKE_BASE = 48.0      # v0.41.347 (XO 2026-11-10): an EWR strike scores (base + weight x gap_share) x health: just above a supply strike, under the belt-clearing SEAD (judgment calls)
+EWR_GAP_WEIGHT = 60.0       # a radar whose loss uncovers a share of red's targets scores higher (Mozdok about 63, a redundant radar 48)
 SUPPLY_FIRST_BONUS = 45.0   # v0.41.273 (XO 2026-11-04, fox 3 medium): added to the score of a supply strike (fuel / depot / plant, not a runway strike) so it outranks an ordinary DEAD job (SAM scores 25-42, 60-100 when it blocks something: the belt-clearing SEAD keeps its place; supply strikes score 1.5-7 on their own). Judgment call; 0 = the old order
 FOLLOW_MAX_SITES = 2    # v0.41.158: a strike / CAS target under at most this many SA-11 / SA-10 sites goes in behind their SEAD; under more it stays DEAD-first (judgment call: two is what one gate sequence and one day's package limit can carry)
 SUPPRESS_TURNS = 3      # v0.41.338 (campaign rules plan Phase 4): blinded radars stay blind this many turns (6 hours) after the SEAD, then they come back; they used to come back overnight (judgment call: no public figure, the plan's value)
@@ -245,6 +247,9 @@ class ObjectivePlanner:
                     pr *= 1.4                                          # v0.41.158: and a site with a strike or CAS job waiting behind its SEAD (judgment call)
             if o.type == ObjectiveType.STRIKE and o.aim != "RUNWAY" and state.assets[o.target_id].kind in (AssetKind.FUEL, AssetKind.DEPOT):
                 pr += SUPPLY_FIRST_BONUS                           # v0.41.273: supplies before the ordinary DEAD jobs, behind the belt-clearing SEAD
+            if o.type == ObjectiveType.STRIKE and state.assets[o.target_id].kind == AssetKind.EWR:
+                e = state.assets[o.target_id]
+                pr = (EWR_STRIKE_BASE + EWR_GAP_WEIGHT * detection.gap_share(state, e)) * e.health      # v0.41.347: right after the SEAD, ahead of DEAD and supply strikes
             (follows if o.after else pool).append((pr, o))
         from . import fleet as _fl
         fleet = _fl.carrier(state)                                    # v0.41.257: None while the carrier is sunk
