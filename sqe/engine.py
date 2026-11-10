@@ -34,6 +34,14 @@ SWEEP_LEAD_MIN = 10          # the sweep starts this much ahead of the first pac
 PACKAGES_PER_TURN = {1: (1.0, 0.25), 2: (1.5, 0.5), 3: (1.5, 0.5)}      # v0.41.338 (campaign rules plan Phase 4; it replaces PACKAGES_PER_DAY 14): packages planned per TURN by level, (day turn, night turn). A fraction is a seeded
                              # chance of one more. Judgment calls: the plan's section 6 starting points (toy-model tempo, L3 about 50:50); L1 is demand-limited anyway; tune in Phase 13
 DAY1_EXTRA = 1               # every day turn of Day 1 plans this many more packages ("day 1 is brutal", XO's notes; the plan's value, judgment call)
+
+# v0.41.345 (scaled tasking, Phase B): the day turn's package count follows the free strike pairs (`Session._turn_rate`); PACKAGES_PER_TURN stays the fallback for a caller with no ledger. Source for all four: Phase A probe 2026-11-10, judgment calls
+PAIRS_PER_PACKAGE = 5.7      # pairs a strike / DEAD / CAS package uses, escorts, TARCAP and SEAD included (Phase A: STRIKE 4.5 to 6.0, DEAD 6.4 to 7.0, CAS 5.3 to 5.8)
+TASK_SHARE = {1: 0.3, 2: 0.3, 3: 0.45}      # the share of the free strike pairs a turn commits (the rest waits for refit); L3 stays at or under .5 (Phase A: above it short slots rise)
+N_MIN = 1                    # a day turn plans at least one package, so the player always has something to fly
+N_MAX = {1: 2, 2: 4, 3: 4}   # safety cap (Phase A: at 5 folded packages one mission reached 44 to 50 jets); L1 is pool-limited anyway
+NIGHT_FACTOR = {1: 0.25, 2: 0.33, 3: 0.33}      # a night turn (night ops on) plans this share of a day turn's count: the old night_r / day_r of PACKAGES_PER_TURN (not measured in Phase A, probed in B+C)
+STRIKE_ROLES = frozenset({Role.STRIKE, Role.SEAD, Role.CAS})      # squadrons whose pairs the package count is made from
 RETASK_TURNS = 2             # a target hit in the last this-many turns is not planned again unless its health has dropped since (the plan's value, judgment call)
 PLAYER_EXTRA_JOBS = 4        # a day turn with no job for your squadron (while it has a ready pair) may add up to this many of the planner's next-best jobs, one at a time, until one fits (judgment call)
 RETASK_KEEP_TURNS = 8        # ...and the hit record is kept this long (bookkeeping only)
@@ -204,13 +212,21 @@ class Session:
         bc = barcap_.ensure(st)                          # the day's BARCAP areas (made once a day); the standing patrols, guards and the AWACS / tanker windows are planned turn by turn (`plan_turn`, Phase 4b)
         bc["blue_flights"], bc["blue_cover"], bc["support_flights"], bc["blue_committed"] = [], {}, {}, []
 
-    def _turn_rate(self, turn: int) -> float:
-        """How many packages this turn plans (a fraction is a seeded chance of one more): PACKAGES_PER_TURN by level and day / night, DAY1_EXTRA more on every day turn of Day 1."""
+    def _turn_rate(self, turn: int, ledger=None) -> float:
+        """How many packages this turn plans (a fraction is a seeded chance of one more). With the turn's ledger (v0.41.345, scaled tasking Phase B): the free strike / SEAD / CAS pairs
+        (`room(sid, 2) // 2`, after the hold, the support windows and the standing patrols) x TASK_SHARE / PAIRS_PER_PACKAGE, kept between N_MIN and N_MAX, plus DAY1_EXTRA on Day 1; a night
+        turn (night ops on) plans NIGHT_FACTOR of that, no N_MIN. With no ledger (old callers, tools): PACKAGES_PER_TURN by level and day / night, as before."""
         st = self.state
-        day_r, night_r = PACKAGES_PER_TURN[max(1, min(3, int(st.level)))]
-        if clock.is_night_turn(turn):
-            return night_r
-        return day_r + (DAY1_EXTRA if st.day == 1 else 0)
+        lvl = max(1, min(3, int(st.level)))
+        night = clock.is_night_turn(turn)
+        if ledger is None:
+            day_r, night_r = PACKAGES_PER_TURN[lvl]
+            return night_r if night else day_r + (DAY1_EXTRA if st.day == 1 else 0)
+        pairs = sum(ledger.room(sid, 2) // 2 for sid, q in st.squadrons.items() if AIRCRAFT[q.aircraft].roles & STRIKE_ROLES)
+        r = pairs * TASK_SHARE[lvl] / PAIRS_PER_PACKAGE
+        if night:
+            return max(0.0, min(N_MAX[lvl], r) * NIGHT_FACTOR[lvl])
+        return max(float(N_MIN), min(float(N_MAX[lvl]), r)) + (DAY1_EXTRA if st.day == 1 else 0)
 
     def _retask_skip(self) -> set:
         """The re-tasking rule: a target hit within the last RETASK_TURNS turns is not planned again unless its health has dropped below what it was after that hit
@@ -291,22 +307,6 @@ class Session:
         _tm.set_ramp_lead(bool(getattr(self.settings, "hot_ramp_scrambles", False)))
         redair.plan_turn(st, self.d, turn, t0, self._rng(91))            # v0.41.340 (Phase 5a): red plans this turn's patrols and sweeps FIRST, from its own ready fighters (blue's sweeps and the mission read its flights)
         warned, n_unbuilt = raids.turn_raids(st, self.d, self._rng(71), turn)      # v0.41.341 (Phase 5b): then this turn's raids, booked from the jets the patrols and the reserve left (a raid is a package of the turn)
-        rate = self._turn_rate(turn)
-        rr = self._rng(2)
-        n = int(rate) + (1 if rr.random() < rate - int(rate) else 0)
-        is_bomber = st.raids.get("bomber_turn") == turn
-        objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=n + (1 if is_bomber else 0), bomber=is_bomber, skip=self._retask_skip()) if (n > 0 or is_bomber) else []
-        redair.assign_guards(st, self.d, objs)          # v0.41.10: red's patrols take stations over the SAM sites it expects to be attacked
-        carry = self._carried(objs)
-        # v0.41.241: the supply strikes and road-battalion CAS are the day's filler (with the road sites there are always some): they are built AFTER the announced raids, so a full job list
-        # does not use up the fighters a raid intercept needs (it did: on a fresh L3 campaign no raid intercept was offered for ten days running)
-        _late = [o for o in objs if (o.type == ObjectiveType.STRIKE and getattr(st.assets.get(o.target_id), "kind", None) in ground.SUPPLY_KINDS)
-                 or (o.type == ObjectiveType.CAS and o.target_id.startswith("rgar_sup_"))]          # ...and the CAS jobs on a road site's battalion
-        objs = carry + [o for o in objs if o not in _late] + warned + _late        # postponed from yesterday first, then the turn's job list, then the announced raids, then the supply strikes and road battalions
-        pb = PackageBuilder(st, self.d)
-        prep_ids = self._raid_prep_objectives(pb, objs)          # v0.41.305: the carrier raid's blocking SAM sites get their own SEAD / Standoff DEAD packages, appended AFTER the turn's jobs (the raid keeps its index, so its bearing is the one planned here)
-        objs = objs + prep_ids[0]
-        prep_obj_ids = {o.id for o in prep_ids[0]}                # built right after the raid itself, before the turn's other jobs take the squadrons' jets
         psq = st.player.squadron_id if st.player else None
         from . import blue_barcap
         t_abs = clock.minute(turn)
@@ -323,6 +323,23 @@ class Session:
         # (the packages are built from what is left, so nothing is booked twice and the 4a `hold` is gone)
         wins = support_assets.plan(st, turn)
         blue_barcap.plan_turn(st, self.d, turn, t0, base_L, self._rng(81), wins)
+        # v0.41.345 (scaled tasking, Phase B): the packages of the turn follow the free strike pairs the ledger has left AFTER the hold, the support windows and the standing patrols, so the job list is planned last
+        rate = self._turn_rate(turn, base_L)
+        rr = self._rng(2)
+        n = int(rate) + (1 if rr.random() < rate - int(rate) else 0)
+        is_bomber = st.raids.get("bomber_turn") == turn
+        objs = ObjectivePlanner(self.d).plan(st, self._rng(), limit=n + (1 if is_bomber else 0), bomber=is_bomber, skip=self._retask_skip()) if (n > 0 or is_bomber) else []
+        redair.assign_guards(st, self.d, objs)          # v0.41.10: red's patrols take stations over the SAM sites it expects to be attacked
+        carry = self._carried(objs)
+        # v0.41.241: the supply strikes and road-battalion CAS are the day's filler (with the road sites there are always some): they are built AFTER the announced raids, so a full job list
+        # does not use up the fighters a raid intercept needs (it did: on a fresh L3 campaign no raid intercept was offered for ten days running)
+        _late = [o for o in objs if (o.type == ObjectiveType.STRIKE and getattr(st.assets.get(o.target_id), "kind", None) in ground.SUPPLY_KINDS)
+                 or (o.type == ObjectiveType.CAS and o.target_id.startswith("rgar_sup_"))]          # ...and the CAS jobs on a road site's battalion
+        objs = carry + [o for o in objs if o not in _late] + warned + _late        # postponed from yesterday first, then the turn's job list, then the announced raids, then the supply strikes and road battalions
+        pb = PackageBuilder(st, self.d)
+        prep_ids = self._raid_prep_objectives(pb, objs)          # v0.41.305: the carrier raid's blocking SAM sites get their own SEAD / Standoff DEAD packages, appended AFTER the turn's jobs (the raid keeps its index, so its bearing is the one planned here)
+        objs = objs + prep_ids[0]
+        prep_obj_ids = {o.id for o in prep_ids[0]}                # built right after the raid itself, before the turn's other jobs take the squadrons' jets
 
         def make_ledger():
             return base_L.copy()

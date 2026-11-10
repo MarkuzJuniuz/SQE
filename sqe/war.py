@@ -263,19 +263,30 @@ class ObjectivePlanner:
             pr = 3.0 + 4.0 * tot / auth
             pool.append((pr, Objective("", ObjectiveType.BARCAP, fleet.id, pr, f"Combat air patrol over {fleet.name}")))
         scored = sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in pool), key=lambda t: t[0], reverse=True)
-        picked, seen = [], set()
-        for s, o in scored:                    # one of each objective type first, for variety
-            if o.type not in seen and len(picked) < limit:
-                picked.append((s, o)); seen.add(o.type)
+        picked, seen, taken = [], set(), set()
+        used = set()                                           # v0.41.345 (scaled tasking, Phase B): ground sectors that already have a job: a second job in one comes only when no unused sector has a candidate
+        sec = {id(o): job_sector(state, o) for _, o in scored}
+        def take(k: int) -> None:
+            taken.add(k); picked.append(scored[k])
+            if sec[id(scored[k][1])] is not None:
+                used.add(sec[id(scored[k][1])])
+        def best(ok):                                          # the best-scored candidate of an unused sector, else of any
+            c = [k for k in range(len(scored)) if k not in taken and ok(scored[k][1])]
+            return min(c, key=lambda k: (sec[id(scored[k][1])] in used, k), default=None)      # scored is sorted best first, so the index is the score rank
+        while len(picked) < limit:                             # one of each objective type first, for variety
+            k = best(lambda o: o.type not in seen)
+            if k is None:
+                break
+            take(k); seen.add(scored[k][1].type)
         cap = max(2, math.ceil(0.4 * limit))                   # no single job type may swamp the day (DEAD packages are big)
         per = {}
         for _, o in picked:
             per[o.type] = per.get(o.type, 0) + 1
-        for s, o in scored:
-            if len(picked) >= limit:
+        while len(picked) < limit:
+            k = best(lambda o: per.get(o.type, 0) < cap)
+            if k is None:
                 break
-            if (s, o) not in picked and per.get(o.type, 0) < cap:
-                picked.append((s, o)); per[o.type] = per.get(o.type, 0) + 1
+            take(k); per[scored[k][1].type] = per.get(scored[k][1].type, 0) + 1
         picked.sort(key=lambda t: t[0], reverse=True)
         picked = self._add_followers(state, picked, sorted(((s * rng.uniform(0.9, 1.1), o) for s, o in follows), key=lambda t: t[0], reverse=True), limit, cap)
         picked = self._stage_dead(state, picked, limit)
@@ -338,6 +349,18 @@ class ObjectivePlanner:
                 break
             extra -= 1
         return out
+
+
+def job_sector(state, o):
+    """v0.41.345 (scaled tasking, Phase B): the ground sector a job belongs to, the sector centre (`state.ground["centers"]`) nearest its target, or None: a fleet job (BARCAP, FLEET_DEFENSE) or a
+    campaign with no ground war has no sector and is never held back by the front-spread rule (`ObjectivePlanner.plan`). Judgment call: the nearest centre of the target, for every job type."""
+    if o.type in (ObjectiveType.FLEET_DEFENSE, ObjectiveType.BARCAP):
+        return None
+    cs = (getattr(state, "ground", None) or {}).get("centers")
+    a = state.assets.get(o.target_id)
+    if not cs or a is None:
+        return None
+    return min(range(len(cs)), key=lambda i: math.hypot(a.x - cs[i][0], a.y - cs[i][1]))
 
 
 def chance(rng: random.Random, p: float, variance: float) -> bool:
