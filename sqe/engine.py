@@ -358,13 +358,30 @@ class Session:
             sweeps.clear()
             pb.short = []
             ledger = make_ledger()
+            hold_left = {sid: int(n) for sid, n in ((st.barcap or {}).get("react_hold") or {}).items() if sid in st.squadrons}      # v0.41.344 (Phase 6b): blue's hold of this turn, as THIS build sees it (a rebuild starts over)
+            used_hold = {}
             pref = preferred_waves()
             out, names = [], self._day_names()          # callsign counter for the whole day: Enfield 1, Enfield 2 ... never two Enfield 1s
             for i, o in sorted(enumerate(objs, 1), key=lambda t: (0 if carrier_raid(st, t[1]) else (1 if t[1].id in prep_obj_ids else 2))):      # v0.41.107: the setpiece is built FIRST (it is rare and needs the carrier squadrons), numbers unchanged
                 fps = (True, False) if (((i - 1) in forced or carrier_raid(st, o) or o.type == ObjectiveType.FLEET_DEFENSE) and not ai_only(st, o)) else (False,)
-                pkg, _w = self._build_wave(pb, o, i, ledger, fps, names, waves=(1, 2) if pref[i - 1] == 1 else (2,))
+                if o.type == ObjectiveType.FLEET_DEFENSE and any(hold_left.values()):           # a raid intercept is crewed from the hold first, then the ordinary free jets; ordinary packages never see the hold
+                    before = {sid: ledger.free.get(sid, 0) for sid in hold_left}
+                    for sid, h in hold_left.items():
+                        ledger.free[sid] = before[sid] + h
+                    pkg, _w = self._build_wave(pb, o, i, ledger, fps, names, waves=(1, 2) if pref[i - 1] == 1 else (2,))
+                    for sid, h in list(hold_left.items()):
+                        used = before[sid] + h - ledger.free.get(sid, 0)
+                        from_hold = max(0, min(used, h))
+                        ledger.free[sid] = before[sid] - (max(0, used) - from_hold)           # what the hold did not cover comes off the ordinary jets; the hold is not handed back to the others
+                        hold_left[sid] -= from_hold
+                        if from_hold:
+                            used_hold[sid] = used_hold.get(sid, 0) + from_hold
+                else:
+                    pkg, _w = self._build_wave(pb, o, i, ledger, fps, names, waves=(1, 2) if pref[i - 1] == 1 else (2,))
                 if pkg is not None:
                     out.append(pkg)
+            if st.barcap is not None:
+                st.barcap["react_used"] = used_hold                                          # blue hold jets this turn's raid intercepts crewed from (probe / Overview)
             out.sort(key=lambda p: p.number)
             # Fighter Sweep (v0.40.2): where intel expects more enemy fighters there than the packages' own TARCAP and escort can take, a sweep
             # package of 4-ships goes in ahead of them. One per area (targets within SWEEP_AREA_KM), sized to the worst package there.

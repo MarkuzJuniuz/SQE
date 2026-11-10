@@ -612,10 +612,41 @@ class WarSimulator:
                 sq.available = max(0, sq.available - n_lost)
                 lost_by[f.id] = n_lost
                 lines.append(f"   {f.callsign} lost {n_lost} aircraft")
+        self._red_reaction(state, pkg, lines, sum(lost_by.values()))
         for ln in lines:
             state.note(ln.strip())
         return {"success": success, "odds": p_dead if dead else p_sead, "lines": lines, "objective": pkg.objective.description,
                 "roll": {"success": success, "blinded": blinded, "killed": killed, "dead": bool(dead)}, "lost_by": lost_by}
+
+    def _red_reaction(self, state: CampaignState, pkg: Package, lines: list, blue_lost: int) -> int:
+        """Phase 6b (v0.41.344): the red pair a package's reaction draws from the hold (reserve.reaction_draw) shoots down round(RED_LOSS_PER_BLUE x the package's blue losses) of its own jets at most
+        (judgment call: never more than the drawn jets). The losses come off the squadron; the survivors go to refit (commit_turn, launch = the package's start) and come off `red_air["avail0"]` with
+        the losses, so Session._red_sorties does not count them again. No hold near the target: no draw, no losses. Own seeded Random (campaign, day, turn, package), so the war sim's rng stream is
+        untouched and the pre-roll agrees with the real roll. -> red fighters shot down."""
+        import random as _random
+        from . import reserve as _res
+        _refit, _clock = refit, clock
+        draws = _res.reaction_draw(state, "red", pkg)
+        ra = state.red_air if state.red_air is not None else {}
+        if not draws:
+            ra["react_nohold"] = int(ra.get("react_nohold", 0)) + 1                      # kept for the probe
+            return 0
+        ra["react_n"] = int(ra.get("react_n", 0)) + 1
+        rng = _random.Random(f"{state.campaign_id}:{state.day}:{state.turn}:{pkg.number}:react")
+        target = round(_res.RED_LOSS_PER_BLUE * blue_lost)
+        down = 0
+        launch = _clock.day_start_minute(state.day) + (int(pkg.start[:2]) * 60 + int(pkg.start[3:5]) if pkg.start else 0)
+        for q, jets in draws:
+            k = min(jets, max(0, target - down), int(q.available))
+            q.available -= k
+            down += k
+            n_srv, _lp = _refit.commit_flight(q, launch, jets, k, _refit.fi_of(state, "red"), rng, None, _refit.SORTIE_MIN)
+            a0 = ra.get("avail0")
+            if ra.get("turn") == state.turn and isinstance(a0, dict) and q.id in a0:
+                a0[q.id] = max(0, int(a0[q.id]) - k - n_srv)
+        if down:
+            lines.append(f"   {down} enemy fighters shot down")
+        return down
 
     def resolve_abstract(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         d, rng = self.d, self.rng
@@ -674,6 +705,8 @@ class WarSimulator:
                 sq.available = max(0, sq.available - lost)
                 lost_by[f.id] = lost
                 lines.append(f"   {f.callsign} lost {lost} aircraft")
+        if obj.type != ObjectiveType.BARCAP:                       # v0.41.344 (Phase 6b): a patrol's own kills are rolled above; the sweep and raid branches fight the fighters / bombers themselves
+            self._red_reaction(state, pkg, lines, sum(lost_by.values()))
         for ln in lines:
             state.note(ln.strip())
         return {"success": success, "odds": p, "lines": lines, "objective": obj.description, "roll": {"success": success}, "lost_by": lost_by}
