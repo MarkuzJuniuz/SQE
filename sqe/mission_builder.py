@@ -24,7 +24,7 @@ from . import theatres, weather
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import barcap, briefing as brief, callsigns, carcass, ground, profiles, relief, runways, sams
+from . import barcap, briefing as brief, callsigns, carcass, detection, ground, profiles, relief, runways, sams
 from . import seacheck as seac
 from . import pydcs_patch
 from . import threatmap as tm
@@ -330,6 +330,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._extras = list(extras)
         ruins = [x for x in ruins if any(not f.tag for f in x.flights)]
         self._preroll, self._ruin_sites = dict(preroll or {}), []
+        self._detect_full = detection.any_full(package, extras)           # v0.41.346 (Phase 7a): red scrambles for this mission only if it saw ANY package in it (the stored verdict, `detection.cast`)
         package = self._gather_support(package, extras)
         air_pkg = copy.copy(package)
         air_pkg.n_def = folded_n_def(package, extras, o.merge_enemy_pct)       # enemy air: the biggest package's need plus a share of the others'

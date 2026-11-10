@@ -269,7 +269,7 @@ def track(state) -> None:
     """Remember the day each SAM site went down; forget the ones that are back up. (v0.41.63: blue's sites too.)"""
     r = _rec(state)
     for a in list(state.assets.values()) + list((getattr(state, "blue_sams", None) or {}).values()):
-        if a.kind != AssetKind.SAM:
+        if a.kind not in (AssetKind.SAM, AssetKind.EWR):         # v0.41.346 (Phase 7a, OPEN 9): a destroyed early-warning radar is rebuilt on the same order path as a SAM site
             continue
         if a.destroyed:
             r["down"].setdefault(a.id, state.day)
@@ -301,7 +301,7 @@ def rebuild(state, d, rng: random.Random) -> list:
             a.health = REBUILT_HEALTH
             r["down"].pop(a.id, None)
             add_debt(state, "red", a.variant)
-            lines.append(f"The enemy put up a replacement {a.variant} site: {a.name} (half strength)")
+            lines.append(f"The enemy put up a replacement {a.variant} site: {a.name} (half strength)" if a.kind == AssetKind.SAM else f"The enemy put up a replacement radar: {a.name} (half strength)")
     return lines
 
 

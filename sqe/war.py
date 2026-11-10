@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import random
 from . import threatmap as tm
-from . import ground, theatres, tempo, story
+from . import ground, theatres, tempo, story, detection
 from . import raids, runways, sams, ecm, airwings, clock, refit
 from .raids import hit as raids_hit
 from .difficulty import Difficulty
@@ -144,21 +144,21 @@ class ObjectivePlanner:
         for a in state.assets.values():
             if a.destroyed or a.id in skip:
                 continue
-            if a.health <= ground.DOWN_HEALTH and a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.SAM) and ground.active(state):
+            if a.health <= ground.DOWN_HEALTH and a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.SAM, AssetKind.EWR) and ground.active(state):
                 continue                                   # v0.41.145: down for planning (a threshold, not the last vehicle): not hunted, it mends on its own
             locked = not self._open(state, a)
             defenders = [x for x in a.defended_by if alive(x)]
-            if a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT):
+            if a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.EWR):
                 pr = a.value * a.health / (1 + 0.5 * len(defenders))
                 cov = covering_sams(state, a)
-                o_ = Objective("", ObjectiveType.STRIKE, a.id, pr, f"Strike {a.name}")
+                o_ = Objective("", ObjectiveType.STRIKE, a.id, pr, f"EWR Strike: {a.name}" if a.kind == AssetKind.EWR else f"Strike {a.name}")
                 fol, soft = follow_split(cov)
-                if a.kind in (AssetKind.FUEL, AssetKind.DEPOT) and cov and all(x.variant in ESCORTABLE for x in cov):
+                if a.kind in (AssetKind.FUEL, AssetKind.DEPOT, AssetKind.EWR) and cov and all(x.variant in ESCORTABLE for x in cov):
                     # v0.41.144: a supply site under live SA-2/3/6 goes out with a HARM escort (as CAS does, v0.41.20)
                     o_.aim = "SEAD"
                     o_.description += " (with a SEAD escort)"
                     cov = []
-                elif fol and (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or not soft):
+                elif fol and (a.kind in (AssetKind.FUEL, AssetKind.DEPOT, AssetKind.EWR) or not soft):
                     # v0.41.158: under one or two SA-11 / SA-10 sites it goes in behind their SEAD (offered only when the day's plan has that SEAD / standoff job, see _add_followers)
                     o_.after = ",".join(x.id for x in fol)
                     if soft:
@@ -461,6 +461,8 @@ class WarSimulator:
             if has_sead:
                 sam *= 0.5
         air = _air_cover(state, self.d.iads)
+        if detection.unseen(pkg):
+            air *= detection.BARCAP_ONLY_AIR              # v0.41.346 (Phase 7a): red did not see this package (the verdict cast at plan time): only its planned patrols answer
         if obj.type in (ObjectiveType.STRIKE, ObjectiveType.COUNTER_AIR) and obj.aim == "STANDOFF":
             air *= STANDOFF_AIR_FACTOR                    # v0.41.298: released outside the fighters' reach
         defense = sam + air
@@ -604,6 +606,8 @@ class WarSimulator:
             t.health = max(0.05, t.health - 0.2)            # the radars and a launcher or two; the battery survives
         s_dead = sum(f.count * ROLE_WEIGHT[Role.STRIKE] for f in dead)
         air = _air_cover(state, d.iads)
+        if detection.unseen(pkg):
+            air *= detection.BARCAP_ONLY_AIR              # v0.41.346 (Phase 7a): as in `odds`
         defense = (site * (0.35 if blinded else 1.4)) + garrison * 0.3 + air
         p_dead = s_dead / (s_dead + defense) if s_dead else 0.0
         killed = force["killed"] if force and "killed" in force else chance(rng, p_dead, d.variance)
@@ -649,8 +653,11 @@ class WarSimulator:
         import random as _random
         from . import reserve as _res
         _refit, _clock = refit, clock
-        draws = _res.reaction_draw(state, "red", pkg)
         ra = state.red_air if state.red_air is not None else {}
+        if detection.unseen(pkg):                                                        # v0.41.346 (Phase 7a): red did not see it: no reaction pair
+            ra["react_unseen"] = int(ra.get("react_unseen", 0)) + 1
+            return 0
+        draws = _res.reaction_draw(state, "red", pkg)
         if not draws:
             ra["react_nohold"] = int(ra.get("react_nohold", 0)) + 1                      # kept for the probe
             return 0

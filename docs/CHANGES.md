@@ -1,5 +1,15 @@
 # CHANGES.md
 
+## v0.41.346, campaign rules Phase 7a: red detection by EWR and the EWR Strike job
+
+XO 2026-11-10 ("fox 3 medium"), `campaign rules plan.md` Phase 7, red side only (7b, blue side and AWACS loss, is separate). No save format change (an old package with no verdict reads "full"). **Not flown in DCS. Smoke not run.**
+- **`sqe/detection.py`:** `red_covered` (a live EWR within `EWR_COVER_NM` 120 nm of the target) and `cast`: covered gives "full", else a seeded roll (`UNSEEN_GUESS` 0.25, `UNSEEN_GUESS_SUPPLY` 0.10 for fuel / depot) gives "full" or "barcap". Only STRIKE, DEAD, CAS and COUNTER_AIR packages get a verdict.
+- **Cast once:** `Session.plan_turn` stores `package.extra["detect"]` before the plan is saved, so the war sim and the mission read one answer; a replan of the turn casts the same.
+- **"barcap" effects:** mission: no alert, Standby, Relief or reactive pairs for that package (a merged mission keeps them if ANY package in it is "full"); the planned CAP picture still flies. War sim: red air cover x `BARCAP_ONLY_AIR` 0.4 in `odds` and the DEAD resolve, and `_red_reaction` draws nothing.
+- **EWR Strike:** `ObjectivePlanner.plan` offers a STRIKE on each live EWR ("EWR Strike: <name>", same blockers, SEAD escort and follow rules as a supply strike, no supply bonus); `Package.title` "EWR Strike". A radar at or under `DOWN_HEALTH` is not hunted.
+- **Rebuild (OPEN 9):** `sams.track` follows EWRs too, so a destroyed one comes back through `sams.rebuild` (half strength, after the order wait).
+- **Probe** (read-only, F-16C, 10 days, v0.41.345 vs now): every L2 / L3 package is "full" (120 nm covers the whole theatre while the radars stand), so the day-10 state is unchanged within seed noise; L1 (no EWRs) 42 "barcap" of 52. EWR Strike offered / picked per 10 days: L2 5 and 7, L3 6 and 1.
+
 ## v0.41.345, scaled tasking Phases B and C: packages from free pairs, front spread, raids from red's free attack pairs
 
 XO 2026-11-10 ("fox 3 high"), `scaled tasking plan.md` (S5b): Phases B and C in one build, so neither side gets stronger alone. No save format change. **Not flown in DCS. Smoke not run.** `miz_identity` differs (expected: the plan has more jobs).
