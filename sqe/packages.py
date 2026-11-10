@@ -397,6 +397,8 @@ class PackageBuilder:
         extra = {}
         if obj.type == ObjectiveType.FLEET_DEFENSE:
             extra = self._raid_plan(number, obj) or {}
+            if not extra:
+                raise NoPlayerSlot("no raid is planned for this job")        # v0.41.341: a raid with no booked plan is no package (it was one with empty extras: the KeyError in raid_spawns._raid_axis)
             n_fl = extra.get("escorts", 0) // 2
             if extra and carrier_raid(st, obj):
                 extra = {**extra, "setpiece": True}                          # v0.41.107: flown from the Missions page like any job, every flight listed (v0.41.270: it folds into no other mission)
@@ -488,46 +490,11 @@ class PackageBuilder:
         return pkg
 
     def _land_raid_plan(self, number: int, obj):
-        """Air raid on one of our airfields, a supply site, a garrison or friendly troops (raids.py): the raiders' field and type, how many, where they are going,
-        the bearing they arrive on, and escorts that can reach."""
-        from . import raids
-        st = self.state
-        tb = st.bases[obj.target_id]
-        aim = getattr(obj, "aim", "") or ""
-        ax, ay = raids.aim_xy(st, aim, tb)
-        rnd = random.Random(f"{st.campaign_id}:{st.day}:{number}:{obj.target_id}:{aim}:raid")
-        r = raids.reach_for(st, raids.aim_kind(aim), ax, ay, budget=False, d=self.d)
-        if r is None:
-            return None
-        bw, raider = r[1], r[2]
-        ba = st.assets[bw.base_asset_id]
-        lo, hi = (self.d.raid_size if self.d else (2, 2))
-        nb = max(2, min(int(round(rnd.randint(lo, hi) * raids.wave_mult(st, self.d))) if self.d else rnd.randint(lo, hi), bw.available))     # v0.41.155: a massed-wave day
-        nb -= nb % 2
-        esc, esc_avail = None, 0
-        for w in sorted(st.enemy_air, key=lambda w: math.hypot(st.assets[w.base_asset_id].x - ax, st.assets[w.base_asset_id].y - ay)):
-            a = st.assets[w.base_asset_id]
-            if w is bw or w.available < 2 or a.destroyed:
-                continue
-            d_nm = math.hypot(a.x - ax, a.y - ay) / NM
-            types = [t for t in w.general_types_up() if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm]
-            if types:
-                esc = (w.base_asset_id, rnd.choice(types)); esc_avail = w.available; break
-        brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360          # they come from where they took off
-        arm, arm_fields = 0, []
-        if self.d and getattr(self.d, "raid_arm", 0) > 0 and not aim and raider == "Su_24M" and bw.available >= nb + 2:    # v0.41.84: a SEAD group ahead of the bombers
-            sg_ = raids.sead_groups(st, self.d, ax, ay, bw.available, nb)     # v0.41.94: sized like blue's salvo; v0.41.125: no dice, L2 capped at a pair; v0.41.129: a group for every covering field
-            arm_fields = [[f_.id, n_] for f_, n_ in (sg_ or [])]
-            arm = sum(n_ for _, n_ in arm_fields)
-        free2_ = bw.available - nb - arm
-        dead = (8 if (arm >= 8 and free2_ >= 8) else (4 if (arm >= 4 and free2_ >= 4) else (2 if (arm >= 2 and free2_ >= 2 and getattr(self.d, "arm_cap", 8) <= 2) else 0)))     # v0.41.125: L2 gets a DEAD pair behind its SEAD pair     # v0.41.117: the DEAD package (KAB-500Kr), gated; only behind a SEAD group of four or more
-        dead_cover = 4 if (dead and esc) else 0
-        arm_cover = 4 if (arm >= 4 and esc) else 0       # v0.41.116: a SEAD group of four or more brings its own fighters: a pair of escorts and a pair on a TARCAP station
-        if raids.cover_field(st, ax, ay) is not None and not arm:       # v0.41.125: no SEAD to send under live cover: no raid
-            return None
-        return {"arm": arm, "arm_fields": arm_fields, "arm_cover": arm_cover, "dead": dead, "dead_cover": dead_cover, "land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id,
-                "escort_wing": esc[0] if esc else "", "escort_type": esc[1] if esc else "",
-                "escorts": (max(4 if nb >= 4 else 2, min(nb // 2 + (2 if nb >= 8 else 0), esc_avail - esc_avail % 2)) if esc else 0), "mass": nb >= 8, "aim": aim, "dest": [ax, ay]}
+        """Air raid on one of our airfields, a supply site, a garrison or friendly troops (raids.py): the raiders' field and type, how many, where they are going, the bearing they arrive on, and the escorts.
+        v0.41.341 (Phase 5b): the plan was made when the raid was drawn and booked (`raids.plan_raid`, kept in `state.raids["booked"]` under the objective's id); this only hands it over, so the package is built
+        from the very jets that were booked. No booking, no raid (None)."""
+        bk = ((self.state.raids or {}).get("booked") or {}).get(obj.id)
+        return None if bk is None else {k: v for k, v in bk.items() if k not in ("jets", "start", "turn")}
 
     def _raid_plan(self, number: int, obj=None):
         """Bomber raid on the fleet: bearing it arrives on, how many bombers, and escorts that can really reach (range-limited)."""

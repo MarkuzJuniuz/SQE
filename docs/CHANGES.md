@@ -1,5 +1,15 @@
 # CHANGES.md
 
+## v0.41.341, campaign rules Phase 5b: red's raids per turn
+
+XO 2026-11-10 ("fox 3 high"), `campaign rules plan.md` Phase 5, second half. Raids are drawn every turn and booked from the turn's free red jets; their jets go to refit. No save format change (new dict keys with defaults; a v0.41.340 save is planned again from its next turn). **Not flown in DCS. Smoke not run; it pins none of this. `PYTHONHASHSEED=0 python tools/miz_identity.py selfcheck` passes (130 missions, identical).** Detail: DESIGN_NOTES (`.claude`).
+- **Per turn:** `raids.turn_raids` draws with chance `raid_rate / 12` (x `RED_RAID_NIGHT` 0.5 at night, judgment call). Ids are `obj-t<turn>-r|s<n>`; `raids["day_raids"]` is gone. A night turn nobody plans (night ops off) still draws: those raids are surprises, settled overnight.
+- **Booked:** `raids.plan_raid` books raiders, SEAD / DEAD group and escorts off `red_air["free"]` (ready jets less the patrols; the reserve holds back fighters only). A wing that cannot field the raid does not raid.
+- **Committed:** the booked jets go to refit at the end of the turn (`Session._red_sorties`); losses are read off each squadron's drop in ready jets, so they are not counted twice (this also fixes the patrols' `lost` 0).
+- **Bug fixed:** a raid intercept built from nothing (`KeyError: 'bomber_wing'` in the mission build: 3 of 16 probe runs, and every Level 1 raid) came from the plan being made again at build time. The plan is now kept at booking and read by the package.
+- **Daily budget** stays only as a day cap that raids also count against (overnight raids, supply round).
+- **Probes** (AI only, 12 days, L1 to L3, two or three seeds): 0 `KeyError`s; 0 double-booked squadron-turns; red commit shortfall 0; attack jets in refit after a raid equal its survivors; the carrier raid at most once a day. Expect fewer raid packages at L3: 0.6 to 0.8 a day against 1.2 to 1.6 (night ops off: the day turns carry half the draws).
+
 ## v0.41.340, campaign rules Phase 5a: red plans per turn, the reaction reserve
 
 XO 2026-11-10 ("fox 3"), `campaign rules plan.md` Phase 5, first half. Red's patrols and sweeps are planned every turn from its ready fighters, both sides hold a reaction reserve back, and every red pair planned in a turn is committed to refit. Raids per turn are Phase 5b. No save format change (a v0.41.339 save loads: the turn is planned again, the old whole-day flights go). **Not flown in DCS. Smoke not run; `tools/smoke_test.py` pins none of this. `tools/miz_identity.py` baselines stay invalid; `PYTHONHASHSEED=0 python tools/miz_identity.py selfcheck` passes (130 missions, identical).** Details (probe numbers, rules): DESIGN_NOTES section 28 in `.claude`.

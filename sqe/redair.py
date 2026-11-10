@@ -9,9 +9,10 @@ Red plans each turn on its own, from its READY fighters, as blue's standing patr
   committed to refit at the end of the turn (Session._sorties), so a red jet that flew is not ready again until its refit is over.
 * The day's flights accumulate in `state.red_air["flights"]` (reset by `begin_day`); a replan of a turn replaces its own entries.
 
-Raids, the supply round's red strikes and overnight raids stay on a DAILY sortie budget per wing (`budget`, `can`, `spend`, DAILY_SORTIES per serviceable airframe, what the
-wing had at the start of the day) until Phase 5b moves them to per-turn planning. Patrols and sweeps no longer draw on it; a raid's escort fighters are checked against what the
-turn's patrols and the reserve left (`can(..., fighters=True)`), so a jet is not booked twice.
+Raids are planned per turn too (v0.41.341, Phase 5b, raids.py): the turn's ready jets are shared in ONE place, `state.red_air["free"]` (squadron id -> jets still free this turn), which `plan_turn` fills
+from the fighter ledger (after the reserve and the patrols) and from the attack squadrons' ready jets (the reserve is for fighters only). A raid books its raiders, SEAD / DEAD group and escorts off it
+(`take_ready`), so a jet is not in a patrol, the reserve and a raid at once. The DAILY sortie budget (`budget`, `can`, `spend`, DAILY_SORTIES per serviceable airframe at the start of the day) stays only as a
+day cap that the raids also count against, for the abstract strikes nobody plans turn by turn: the overnight raids (`raids.overnight`) and the supply round's / ground war's red strikes (ground.py).
 
 The mission builder uses the plan where it overlaps your mission (the window contains the time on target, the station is near the target or the route): those are the
 briefed, airborne-at-the-start enemy fighters. How many enemy fighters there are still follows the package's threat size (n_def); the plan decides which wings, where and when.
@@ -30,7 +31,7 @@ SWEEP_MIN = 90
 REL_NM = 110                                                   # a patrol station this close to the target counts as "in the area"
 BEHIND_NM = 20                                                 # v0.41.74: a patrol whose station lies further than this BEYOND the target (along the way in) is not in the fight: it guards its own rear field
 ROUTE_NM = 45                                                  # ...or this close to a point on the route
-DAILY_SORTIES = 2                                              # per serviceable airframe per day: the RAIDS' budget only since v0.41.340 (patrols and sweeps are per turn); Phase 5b retires it
+DAILY_SORTIES = 2                                              # per serviceable airframe per day: a day cap on the raids and the abstract strikes (patrols, sweeps and raids draw their jets per turn since v0.41.340 / 341)
 SWEEPS_PER_DAY = {1: 0, 2: 1, 3: 2}                            # sweeps a day by level (the v0.41.110 doctrine); each day turn plans one with chance SWEEPS_PER_DAY / DAY_TURNS (judgment call)
 DAY_TURNS = clock.DAY_MIN // clock.TURN_MIN - len(clock.NIGHT_START_HOURS)     # 6 turns of a day are not night turns
 # share of the BARCAP areas that can be up that get a pair in a turn, by level: (day turn, night turn). The v0.41.110 patrol shares were 0.20 / 0.40 / 0.55 of the wing's day budget; the
@@ -66,6 +67,38 @@ def _fighters_left(state, wing_id: str):
     """Ready fighters of a wing that this turn's patrols, sweeps and the reaction reserve left free; None when the turn is not planned (no limit known)."""
     left = (getattr(state, "red_air", None) or {}).get("left")
     return None if left is None else int(left.get(wing_id, 0))
+
+
+def ready_of(state, wing, types) -> int:
+    """Jets of these aircraft types the wing has free THIS turn (v0.41.341, Phase 5b): what `plan_turn` left in `state.red_air["free"]` (ready now, less the reaction reserve for fighters, less the turn's patrols
+    and what raids booked since). With no plan for the current turn (the overnight raids, a tool) it is simply the serviceable jets of those types."""
+    ra = getattr(state, "red_air", None) or {}
+    free = ra.get("free") if ra.get("turn") == state.turn else None
+    if free is None:
+        return wing.available_of(types)
+    return sum(int(free.get(q.id, 0)) for q in wing.sqns if q.aircraft in types)
+
+
+def take_ready(state, wing, types, n: int) -> list:
+    """Book n of the wing's free jets of these types for a raid this turn, the squadron with most free first. -> [[squadron id, jets]] (short of n when the wing has fewer free). They come off
+    `state.red_air["free"]` (and `["left"]` for fighters), so a second raid, a patrol or an escort does not take them again; the day's sortie cap is `spend`'s job."""
+    ra = getattr(state, "red_air", None) or {}
+    free = ra.get("free") if ra.get("turn") == state.turn else None
+    pool = sorted((q for q in wing.sqns if q.aircraft in types), key=lambda q: (-(int(free.get(q.id, 0)) if free is not None else q.available), q.id))
+    out, left_n = [], int(n)
+    for q in pool:
+        k = min(left_n, int(free.get(q.id, 0)) if free is not None else int(q.available))
+        if k <= 0:
+            continue
+        out.append([q.id, k])
+        left_n -= k
+        if free is not None:
+            free[q.id] = int(free.get(q.id, 0)) - k
+            if q.aircraft in ENEMY_FIGHTERS and ra.get("left") is not None and wing.base_asset_id in ra["left"]:
+                ra["left"][wing.base_asset_id] = max(0, int(ra["left"][wing.base_asset_id]) - k)
+        if left_n <= 0:
+            break
+    return out
 
 
 def can(state, wing_id: str, n: int, fighters: bool = False) -> bool:
@@ -168,6 +201,15 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
     ra["turn"] = turn
     ra["react_hold"] = held                                                  # squadron id -> jets kept back this turn (Phase 6 reads it)
     ra["left"] = {w.base_asset_id: sum(led.free.get(q.id, 0) for q in w.sqns) for w in state.enemy_air}      # ready fighters each wing has left after the reserve and this turn's pairs (`can(fighters=True)`)
+    free = {sid: int(n) for sid, n in led.free.items()}                      # fighters: after the reserve and the pairs above; attack squadrons (raiders, the Tu-22M3): every ready jet, the reserve is for fighters only
+    for w in state.enemy_air:
+        a = state.assets.get(w.base_asset_id)
+        if a is None or a.destroyed or runways.is_closed(state, w.base_asset_id):
+            continue
+        for q in w.sqns:
+            if q.aircraft not in ENEMY_FIGHTERS and q.reserve <= 0:
+                free[q.id] = int(q.available)
+    ra["free"] = free                                                        # the turn's one pool of free red jets: raids book from it (`take_ready`), see the module doc
     return flights
 
 
