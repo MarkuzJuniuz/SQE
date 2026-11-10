@@ -224,8 +224,48 @@ def sweep_4ships(n_def_flights: int) -> int:
 
 
 class Ledger:
-    def __init__(self, state: CampaignState):
+    """The jets each squadron can still be asked for. `free` is what the builder reads and spends (`ledger.free[sid] -= n`).
+
+    v0.41.338 (campaign rules plan Phase 4): one Ledger serves a whole TURN with two launch waves. `free` = the jets ready now (wave 1); `late` = the jets that finish
+    their refit by the second wave (`refit.ready_by(q, ready_min)` less `available`). `view(wave)` hands the builder a throw-away Ledger for one wave, and `settle` books what
+    the builder spent in it: wave 2 spends the late jets first, so the ready ones stay for wave 1. `ready_min=None` (the plain `Ledger(state)`) means no late jets."""
+    def __init__(self, state: CampaignState, ready_min: int | None = None):
         self.free = {sid: (0 if runways.is_closed(state, s.base_id) else s.available) for sid, s in state.squadrons.items()}      # v0.41.254: a cratered field flies nothing
+        self.late = {sid: 0 for sid in self.free}
+        if ready_min is not None:
+            from . import refit
+            for sid, s in state.squadrons.items():
+                if not runways.is_closed(state, s.base_id) and s.reserve <= 0:         # a resting squadron's jets go to its reserve, not to the line
+                    self.late[sid] = max(0, refit.ready_by(s, ready_min) - s.available)
+
+    def scale(self, sids, f: float) -> None:
+        """A damaged carrier deck launches fewer of its jets (carrier_hit.deck_factor): both pools shrink for these squadrons."""
+        for sid in sids:
+            self.free[sid] = int(self.free[sid] * f)
+            self.late[sid] = int(self.late[sid] * f)
+
+    def hold(self, sid: str, n: int) -> None:
+        """Take n jets of a squadron out of the turn's pool (standing patrols already planned): from the ready ones first."""
+        k = min(self.free.get(sid, 0), n)
+        self.free[sid] = self.free.get(sid, 0) - k
+        self.late[sid] = max(0, self.late.get(sid, 0) - (n - k))
+
+    def view(self, wave: int) -> "Ledger":
+        v = Ledger.__new__(Ledger)
+        v.free = dict(self.free) if wave == 1 else {sid: self.free[sid] + self.late[sid] for sid in self.free}
+        v.late = {sid: 0 for sid in self.free}
+        return v
+
+    def settle(self, view: "Ledger", wave: int) -> None:
+        """Book what the builder spent in `view`."""
+        for sid, left in view.free.items():
+            have = self.free[sid] if wave == 1 else self.free[sid] + self.late[sid]
+            used = have - left
+            if used <= 0:
+                continue
+            take = 0 if wave == 1 else min(used, self.late[sid])
+            self.late[sid] -= take
+            self.free[sid] -= used - take
 
 
 class PackageBuilder:
@@ -233,6 +273,7 @@ class PackageBuilder:
         self.state, self.d = state, d
         self._tk, self._ctx = {}, (None, None)
         self.short = []                                  # v0.41.247: (role, x, y) of every slot of the day that no squadron could fill (ground.note_shortfall)
+        self.missing = 0                                 # v0.41.338: the jets the REQUIRED slots of the last `build` are short of (the turn planner moves a package with some to the second wave)
 
     def target_xy(self, obj: Objective):
         if obj.type in _FLEET:
@@ -376,15 +417,20 @@ class PackageBuilder:
             lead_service = spec.service
 
         chosen = []                      # (slot, squadron, count, is_player)
+        self.missing = 0
         for i, slot in enumerate(slots):
             if slot.tag:
                 continue
             sq = psq if i == player_idx else self._pick_squadron(slot, tx, ty, ledger, lead_service)
+            want = min(slot.size, MAX_FLIGHT)
             if sq is None:
                 self.short.append((slot.role.value, tx, ty))
+                self.missing += want if slot.required else 0
                 continue
             count = min(slot.size, MAX_FLIGHT, ledger.free[sq.id])
             count -= count % 2
+            if slot.required:
+                self.missing += max(0, want - count)                          # jets a required slot is short of (before the carrier's own cap on the player's flight)
             if i == player_idx and st.bases[sq.base_id].kind == BaseKind.CARRIER:
                 count = min(count, CARRIER_PLAYER_FLIGHT_MAX)
             if count < 2:

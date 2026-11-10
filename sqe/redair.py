@@ -33,7 +33,7 @@ REL_NM = 110                                                   # a patrol statio
 BEHIND_NM = 20                                                 # v0.41.74: a patrol whose station lies further than this BEYOND the target (along the way in) is not in the fight: it guards its own rear field
 ROUTE_NM = 45                                                  # ...or this close to a point on the route
 # per level: share of a wing's aircraft flying patrols, most patrol pairs per wing, sweeps per day
-DAILY_SORTIES = 2                                              # per serviceable airframe per day: the same rule the friendly packages follow (engine.plan_day)
+DAILY_SORTIES = 2                                              # per serviceable airframe per day (red; blue's packages stopped following this rule in v0.41.338, Phase 5 replaces it for red)
 DOCTRINE = {1: {"frac": 0.20, "pairs": 1, "sweeps": 0}, 2: {"frac": 0.40, "pairs": 2, "sweeps": 1}, 3: {"frac": 0.55, "pairs": 3, "sweeps": 2}}   # v0.41.110: L2 0.30 -> 0.40, L3 0.40 -> 0.55 (judgment call, XO 2026-10-22)
 
 

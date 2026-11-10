@@ -52,24 +52,28 @@ def ato_times(n: int, d: date, night_ops: bool, rng: random.Random) -> list:
     return [hhmm(lo + i * step + rng.uniform(-0.2, 0.2) * (0 if i in (0, n - 1) else 1)) for i in range(n)]
 
 
-def wave_times(n: int, d: date, night_ops: bool, rng: random.Random, wave: int = 3, earliest: float | None = None, latest: float | None = None) -> list:
-    """n start times in 'waves' of up to `wave` packages 0-25 minutes apart, the waves spread through the day (like a real ATO).
-    Returned ascending; the caller gives consecutive packages (same area) consecutive times. `earliest` / `latest` (local decimal hours) clamp the window
-    (v0.41.337: Day 1 starts at 08:00, and with night ops off no package may start inside a night turn, see Session.EARLIEST_START_H)."""
-    rise, sets = sun_times(d)
-    lo, hi = (rise + 0.5, rise + 0.5 + 22.0) if night_ops else (rise + 1.0, sets - 2.5)
-    if earliest is not None:
-        lo = max(lo, earliest)
-    if latest is not None:
-        hi = min(hi, latest)
-    hi = max(hi, lo)
-    n_w = max(1, math.ceil(n / wave))
-    centers = [(lo + hi) / 2] if n_w == 1 else [lo + i * (hi - lo) / (n_w - 1) for i in range(n_w)]
-    out = []
-    for w in range(n_w):
-        k = min(wave, n - w * wave)
-        offs = sorted(rng.uniform(0, 0.42) for _ in range(k))
-        if k:
-            offs[0] = 0.0
-        out += [hhmm(centers[w] + o) for o in offs]
-    return sorted(out)
+WAVE2_OFFSET_MIN = 60        # v0.41.338 (campaign rules plan Phase 4): a turn has two launch waves; the second goes this long after the turn starts, half a turn (judgment call: XO 2026-11-09, "two waves", the plan's value)
+WAVE_SPREAD_MIN = 25         # ...and the packages of a wave start within this many minutes of its opening, as the old 0 to 25 minute "wave" of `wave_times` (judgment call, the value of the code it replaces)
+
+
+def split_waves(n: int) -> list:
+    """The default wave of each of n packages: up to half of them (the first ones) in wave 1, the rest in wave 2."""
+    k = (n + 1) // 2
+    return [1] * k + [2] * (n - k)
+
+
+def turn_times(n: int, t0: int, rng: random.Random, waves: list | None = None) -> list:
+    """Start times of the n packages of ONE turn (campaign rules plan Phase 4; it replaces the day-long `wave_times`). `t0` = the turn's first minute of the day (minutes since 00:00).
+    `waves[i]` is the wave of package i (1 or 2; default `split_waves(n)`): wave 1 starts 0 to WAVE_SPREAD_MIN minutes after the turn opens, wave 2 WAVE2_OFFSET_MIN plus the same spread.
+    Inside a wave the packages take the times in the order they come, ascending, so the caller can give packages of one area consecutive times (they fold into one mission).
+    -> [(minute of the day, wave)] in the order of the packages, minutes rounded to 5."""
+    waves = list(waves) if waves is not None else split_waves(n)
+    out = [None] * n
+    for w, base in ((1, 0), (2, WAVE2_OFFSET_MIN)):
+        idx = [i for i in range(n) if waves[i] == w]
+        offs = sorted(int(round(rng.uniform(0, WAVE_SPREAD_MIN) / 5.0)) * 5 for _ in idx)
+        if offs:
+            offs[0] = 0                                       # the wave opens with its first package
+        for i, o in zip(idx, offs):
+            out[i] = (int(t0) + base + o, w)
+    return out

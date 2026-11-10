@@ -45,6 +45,7 @@ TAKEN_STAGES = (("aaa", 3), ("hawk", 6), ("pat", 9))      # v0.41.244 (XO 2026-1
 TAKEN_NEW_DAY = 16            # v0.41.247 (XO 2026-11-03): one week after the Patriots, a NEW squadron is formed at the taken field (`new_squadrons.py`; judgment call)
 TAKEN_NEW_SQUADRONS = 1       # per taken field (judgment call: each is up to 18 more jets for blue; raise it if blue is thin at the front)
 SHORT_DAYS = 7                # how long a day's unfilled-slot record is kept
+SHORT_MAX = 600               # v0.41.338: at most this many entries are kept in all (12 turns a day each add their own; judgment call, about a week of the old one-list-a-day)
 TAKEN_FIRST_MOVER_DAY = 11    # v0.41.246 (XO 2026-11-03): the first squadron moves in 2 days after the Patriots are up (judgment call)
 FORWARD_TYPES = ("F-16C",)    # short-legged jets move forward; the long-legged F-15C and the carrier's F-14s stay where they are (XO)
 SUPPLY_FLOOR, SUPPLY_NONE = 0.35, 0.85
@@ -916,13 +917,14 @@ def _parking(airport: str, aircraft: str):
 
 
 def note_shortfall(state, short: list) -> None:
-    """v0.41.247: the day's unfilled package slots, [(role, x, y)], kept for SHORT_DAYS days in `ground["short"]` as [day, role, x, y] (a replan of the same day replaces that day's
-    entries). `new_squadrons.need` reads them to pick the airframe of a taken field's new squadron. Nothing is recorded without a ground war."""
+    """v0.41.247: the unfilled package slots of a plan, [(role, x, y)], kept for SHORT_DAYS days in `ground["short"]` as [day, role, x, y, turn]. Since v0.41.338 (Phase 4) every
+    turn of the day plans on its own and keeps its own list (a replan of the SAME turn replaces that turn's entries, and only those); the list is capped at SHORT_MAX entries.
+    `new_squadrons.need` reads them to pick the airframe of a taken field's new squadron. Nothing is recorded without a ground war."""
     g = state.ground
     if not g:
         return
-    keep = [r for r in g.get("short", []) if state.day - r[0] < SHORT_DAYS and r[0] != state.day]
-    g["short"] = keep + [[state.day, r, round(x), round(y)] for r, x, y in short][:300]
+    keep = [r for r in g.get("short", []) if state.day - r[0] < SHORT_DAYS and not (len(r) > 4 and r[4] == state.turn)]
+    g["short"] = (keep + [[state.day, r, round(x), round(y), state.turn] for r, x, y in short][:300])[-SHORT_MAX:]
 
 
 def first_mover(state, rid: str, rec: dict, b) -> list:

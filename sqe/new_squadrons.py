@@ -23,7 +23,8 @@ POOL = {"F-16C": [("fs_480", "480th FS 'Warhawks'"), ("fs_13", "13th FS 'Panther
 def need(state, b) -> tuple:
     """(aircraft, unfilled slots counted) for a new squadron at base `b`: the type with the most unfilled slots near it over the last week, F-16C below NEED_MIN."""
     counts = {}
-    for _day, role, x, y in (state.ground or {}).get("short", []):
+    for rec in (state.ground or {}).get("short", []):
+        role, x, y = rec[1], rec[2], rec[3]                    # [day, role, x, y] before v0.41.338, [day, role, x, y, turn] since
         t = ROLE_TYPE.get(role)
         if t and math.hypot(x - b.x, y - b.y) / NM <= NEED_RADIUS_NM:
             counts[t] = counts.get(t, 0) + 1

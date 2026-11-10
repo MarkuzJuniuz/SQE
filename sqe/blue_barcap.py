@@ -17,7 +17,7 @@ from .aircraft import AIRCRAFT
 from .models import BaseKind, ObjectiveType, Role
 
 NM = 1852.0
-DAILY_SORTIES = 2              # per serviceable airframe per day: the rule the packages follow (engine.plan_day)
+DAILY_SORTIES = 2              # per serviceable airframe per day: the budget of the standing patrols (the packages stopped following it in v0.41.338: they draw on the ready jets of the turn, packages.Ledger; Phase 4b replaces this too)
 SHARE = {1: 0.10, 2: 0.20, 3: 0.40}   # judgment call: red's patrol share is 0.20 / 0.30 / 0.40 (redair.DOCTRINE); blue's is lower at L1 / L2 (XO plays the sorties himself)
 DAY_START, DAY_END = 6 * 60, 22 * 60   # the patrols are spread through these hours (minutes of the day)
 PACKAGE_WINDOW_MIN = 100       # a package is out about this long after its start (judgment call)
@@ -162,19 +162,26 @@ def _support_keys(p) -> list:
     return out
 
 
-def attach(state, pkgs: list) -> None:
+def attach(state, pkgs: list, until: int | None = None, since: int | None = None) -> None:
     """Give each ground-attack / counter-air package the planned base CAP and carrier CAP sortie that faces its target and is up while it flies.
-    The same planned sortie keeps one callsign in every package that carries it (a merged mission builds it once, support_caps._gather_support)."""
+    The same planned sortie keeps one callsign in every package that carries it (a merged mission builds it once, support_caps._gather_support).
+    `until` / `since` (v0.41.338, Phase 4): only the planned sorties that START before `until` and END after `since` (minutes of the day: the turn's bounds) are attached: a sortie of the
+    next turn is crewed and committed in that turn, one that ended before this turn began has been committed already."""
     from . import raids
     from .packages import FlightPlan, _TAG_TASK, _next_callsign, is_sweep, target_point, _FLEET
     bc = (getattr(state, "barcap", None) or {})
-    planned = bc.get("blue_flights") or []
+    planned = [f for f in (bc.get("blue_flights") or []) if (until is None or f["start"] < until) and (since is None or f["end"] > since)]
     if not planned:
         return
     used = {}                                                             # the day's callsign counter, seeded from every flight already named
     for p in pkgs:
         for f in p.flights:
             nm, _, no = f.callsign.rpartition(" ")
+            if no.isdigit():
+                used[nm] = max(used.get(nm, 0), int(no))
+    for d_ in getattr(state, "plan_done", None) or []:                    # v0.41.338: the packages of the day's earlier turns (resolved, `plan_done`) have named flights too
+        for f in d_.get("flights", []):
+            nm, _, no = (f.get("callsign") or "").rpartition(" ")
             if no.isdigit():
                 used[nm] = max(used.get(nm, 0), int(no))
     tw = [(b, w) for b, w in raids.target_weights(state) if b.kind != BaseKind.CARRIER]
