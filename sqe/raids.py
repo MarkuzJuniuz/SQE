@@ -1,19 +1,22 @@
 """Red raids on our airfields (ground war, phase 2).
 
 Red plans a raid the way we plan a strike: it looks for one of OUR airfields that its bombers (Su-24M) can reach, preferring the ones nearest
-its own fields and the least defended. Each day a few raids happen (Difficulty.raid_rate); a share of them are surprises (raid_surprise):
+its own fields and the least defended. Raids are drawn TURN by turn (v0.41.341, campaign rules plan Phase 5b): each turn has the chance `raid_rate / 12` (half of it on a night turn, RED_RAID_NIGHT)
+of one; a share of them are surprises (raid_surprise):
 
 * Every raid red plans is an ordinary "<Base/Supply/Garrison/Troop> Defense: Intercept" package in the tasking order (v0.41.304: no dice, no
   hidden emergencies); a surprise one is marked "(no warning)". If you do not take it, the war simulation settles it by odds.
 * Troops in contact are the planned CAS on the sector red presses hardest (`hot_sector`).
 
-Everything here is seeded from the campaign and the day, so reopening a dialog never re-rolls anything.
+A raid is BOOKED the turn it is drawn: its raiders, SEAD / DEAD group and escorts come off the red jets still free that turn (`redair.take_ready`: ready now, less the patrols and, for fighters, the
+reaction reserve), the plan is kept in `state.raids["booked"]` (the intercept package reads it, `PackageBuilder._land_raid_plan`) and the jets go to refit at the end of the turn (`Session._red_sorties`).
+Everything here is seeded from the campaign and the turn, so reopening a dialog never re-rolls anything.
 """
 from __future__ import annotations
 import math
 import random
 from .models import Objective, ObjectiveType, BaseKind, Role, AssetKind
-from . import redair, runways
+from . import clock, redair, runways
 
 NM = 1852.0
 BASE_LOSS = 0.06              # airfield defence lost per bomber that gets through
@@ -23,6 +26,8 @@ TEMPO_STOP_SHARE = 0.5        # v0.41.171 (XO 2026-10-28): half of the AIR tempo
 ASSET_HIT = 0.20              # health a supply site or garrison loses per aircraft that gets through
 SECTOR_HIT = 4.0              # friendly sector strength lost per aircraft that gets through
 GARRISON_SHIELD = 0.25        # a field's garrison takes this share off the damage its defences would suffer
+RED_RAID_NIGHT = 0.5          # v0.41.341 (plan Phase 5b): a night turn draws half the raid chance of a day turn (judgment call: red's bombers and their escorts fly less at night; XO tunes it in Phase 13)
+TURNS_PER_DAY = clock.DAY_MIN // clock.TURN_MIN      # 12: the level's raid_rate (raids a day) is spread over the day's turns
 
 
 def wave_mult(state, d) -> float:
@@ -39,15 +44,15 @@ def eff(k: int) -> float:
 
 
 def raider_wings(state, kind: str = "field", budget: bool = True) -> list:
-    """[(wing, type)] of the enemy wings that can send a raid now: 2+ serviceable aircraft, field not cratered, sorties left in the day's budget.
-    Bombers (Su-24M) are preferred against fields and supply sites, Su-25s against troops and garrisons."""
+    """[(wing, type)] of the enemy wings that can send a raid now: a pair of that type free this turn (`redair.ready_of`: ready and not in a patrol; the serviceable jets when the turn has no plan), field not
+    cratered, sorties left in the day's cap (`budget`). Bombers (Su-24M) are preferred against fields and supply sites, Su-25s against troops and garrisons."""
     pref = ("Su_25", "Su_24M") if kind in ("garrison", "sector") else ("Su_24M", "Su_25")
     out = []
     for w in state.enemy_air:
         a = state.assets.get(w.base_asset_id)
-        if w.available < 2 or a is None or a.destroyed or runways.is_closed(state, w.base_asset_id) or (budget and not redair.can(state, w.base_asset_id, 2)):
+        if a is None or a.destroyed or runways.is_closed(state, w.base_asset_id) or (budget and not redair.can(state, w.base_asset_id, 2)):
             continue
-        t = next((t for t in pref if t in w.types_up), None)        # v0.41.53: a squadron of that type with a pair serviceable
+        t = next((t for t in pref if redair.ready_of(state, w, (t,)) >= 2), None)        # v0.41.53: a squadron of that type with a pair serviceable (v0.41.341: and free this turn)
         if t:
             out.append((w, t))
     return out
@@ -250,7 +255,7 @@ def reach_for(state, kind: str, x: float, y: float, budget: bool = True, d=None)
         return _reach(state, kind, x, y, budget)
     fits = None
     if d is not None and kind == "field":
-        fits = lambda w, t: bool(sead_groups(state, d, x, y, w.available_of({"Su_24M"}) if hasattr(w, "available_of") else w.available, int(d.raid_size[1])))
+        fits = lambda w, t: bool(sead_groups(state, d, x, y, redair.ready_of(state, w, ("Su_24M",)), int(d.raid_size[1])))
     return _reach(state, kind, x, y, budget, only="Su_24M", fits=fits)
 
 
@@ -291,7 +296,7 @@ def sead_plan(state, d, base, aim: str, wing, ac: str):
         return True, 0
     if aim_kind(aim) != "field" or ac != "Su_24M" or getattr(d, "raid_arm", 0) <= 0:
         return False, 0
-    avail = wing.available_of({"Su_24M"}) if hasattr(wing, "available_of") else wing.available
+    avail = redair.ready_of(state, wing, ("Su_24M",))
     g = sead_groups(state, d, x, y, avail, int(d.raid_size[1]))
     n = sum(j for _, j in g) if g else 0
     return n > 0, n
@@ -324,35 +329,102 @@ def raid_objective(base, aim: str = "", desc: str | None = None) -> Objective:
     return Objective("", ObjectiveType.FLEET_DEFENSE, base.id, RAID_PRIORITY, desc or f"Intercept a raid on {base.name}", aim)
 
 
-def _commit(state, d, base, aim: str) -> None:
-    """Book the raid's aircraft against the nearest capable wing's daily sortie budget."""
-    x, y = aim_xy(state, aim, base)
-    r = reach_for(state, aim_kind(aim), x, y, d=d)
-    if r is not None:
-        redair.spend(state, r[1].base_asset_id, int(d.raid_size[1]))
+def turn_rate(state, d, turn: int) -> float:
+    """The chance of a raid in this turn: the level's `raid_rate` a day spread over the day's 12 turns (v0.41.341, Phase 5b; it was one draw a day in `Session._begin_day`), times the idle surge
+    (v0.41.155: red raids more while your squadron stands down) and `RED_RAID_NIGHT` on a night turn."""
+    from . import ground as _gr
+    return float(d.raid_rate) * _gr.surge(state, d) / TURNS_PER_DAY * (RED_RAID_NIGHT if clock.is_night_turn(turn) else 1.0)
 
 
-def todays_raids(state, d, rng: random.Random) -> tuple:
-    """-> (objectives of every raid red plans today, the unwarned ones with an id like obj-d3-s2; number of unwarned raids that could not be built, settled overnight). One draw per day; the same seed gives the same answer."""
+def plan_raid(state, d, base, aim: str, oid: str, turn: int):
+    """Book one raid out of the turn's free red jets and plan it: the wing and type that fly it, the raiders (`bombers`), the SEAD / DEAD group, the escort wing and type with the escorts and the SEAD / DEAD
+    covers, the bearing it arrives on. v0.41.341 (Phase 5b): this was done at build time (`PackageBuilder._land_raid_plan`) from the wings' serviceable jets, and a wing that could not reach any more by then
+    left the package with no plan (the KeyError in `raid_spawns._raid_axis`); now the draw, the booking and the package agree. -> {extras of the package, "jets": [[squadron id, jets, "raid" | "esc"]]}, or None
+    when no wing can field it (then nothing is booked and there is no raid). A target under live cover needs its SEAD group (`sead_plan`); Level 1 goes in without."""
+    from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM
+    ax, ay = aim_xy(state, aim, base)
+    r = reach_for(state, aim_kind(aim), ax, ay, d=d)
+    if r is None:
+        return None
+    bw, raider = r[1], r[2]
+    if not sead_plan(state, d, base, aim, bw, raider)[0]:
+        return None
+    rnd = random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:raid")
+    ba = state.assets[bw.base_asset_id]
+    lo, hi = d.raid_size
+    rdy = redair.ready_of(state, bw, (raider,))
+    nb = max(2, min(int(round(rnd.randint(lo, hi) * wave_mult(state, d))), rdy))        # v0.41.155: a massed-wave day
+    nb -= nb % 2
+    if nb < 2 or rdy < nb:
+        return None
+    esc, esc_avail = None, 0
+    for w in sorted(state.enemy_air, key=lambda w: math.hypot(state.assets[w.base_asset_id].x - ax, state.assets[w.base_asset_id].y - ay)):
+        a = state.assets[w.base_asset_id]
+        if w is bw or a.destroyed:
+            continue
+        d_nm = math.hypot(a.x - ax, a.y - ay) / NM
+        types = [t for t in dict.fromkeys(q.aircraft for q in w.sqns if q.role != "escort")
+                 if t in ENEMY_FIGHTERS and redair.ready_of(state, w, (t,)) >= 2 and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm]
+        if types:
+            esc = (w, rnd.choice(types))
+            esc_avail = redair.ready_of(state, w, (esc[1],))
+            break
+    brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360                      # they come from where they took off
+    arm, arm_fields = 0, []
+    if getattr(d, "raid_arm", 0) > 0 and not aim and raider == "Su_24M" and rdy >= nb + 2:    # v0.41.84: a SEAD group ahead of the bombers
+        sg_ = sead_groups(state, d, ax, ay, rdy, nb)                                 # v0.41.94: sized like blue's salvo; v0.41.125: L2 capped at a pair; v0.41.129: a group for every covering field
+        arm_fields = [[f_.id, n_] for f_, n_ in (sg_ or [])]
+        arm = sum(n_ for _, n_ in arm_fields)
+    free2_ = rdy - nb - arm
+    dead = (8 if (arm >= 8 and free2_ >= 8) else (4 if (arm >= 4 and free2_ >= 4) else (2 if (arm >= 2 and free2_ >= 2 and getattr(d, "arm_cap", 8) <= 2) else 0)))     # v0.41.125: L2 gets a DEAD pair behind its SEAD pair; v0.41.117: the DEAD package (KAB-500Kr), gated; only behind a SEAD group of four or more
+    if cover_field(state, ax, ay) is not None and not arm and not getattr(d, "raid_banzai", False):      # v0.41.125: no SEAD to send under live cover: no raid (v0.41.341: Level 1's banzai raids go in, as `sead_plan` says)
+        return None
+    esc_even = esc_avail - esc_avail % 2
+    escorts = min(max(4 if nb >= 4 else 2, nb // 2 + (2 if nb >= 8 else 0)), esc_even) if esc else 0      # v0.41.341: never more than the wing has free (the floor of four used to ignore it)
+    spare = esc_even - escorts
+    arm_cover = 4 if (arm >= 4 and esc and spare >= 4) else 0                        # v0.41.116: a SEAD group of four or more brings its own fighters: a pair of escorts and a pair on a TARCAP station (v0.41.341: when the wing has them free)
+    spare -= arm_cover
+    dead_cover = 4 if (dead and esc and spare >= 4) else 0
+    jets = [[sid, n, "raid"] for sid, n in redair.take_ready(state, bw, (raider,), nb + arm + dead)]
+    if esc:
+        jets += [[sid, n, "esc"] for sid, n in redair.take_ready(state, esc[0], (esc[1],), escorts + arm_cover + dead_cover)]
+    redair.spend(state, bw.base_asset_id, nb + arm + dead)                           # the day's sortie cap: the overnight raids and the abstract strikes draw on it too
+    if esc:
+        redair.spend(state, esc[0].base_asset_id, escorts + arm_cover + dead_cover)
+    return {"arm": arm, "arm_fields": arm_fields, "arm_cover": arm_cover, "dead": dead, "dead_cover": dead_cover, "land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb,
+            "bomber_wing": bw.base_asset_id, "escort_wing": esc[0].base_asset_id if esc else "", "escort_type": esc[1] if esc else "", "escorts": escorts, "mass": nb >= 8, "aim": aim, "dest": [ax, ay], "jets": jets}
+
+
+def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) -> tuple:
+    """-> (objectives of the raids red plans THIS turn; number of unwarned raids that could not be built, settled overnight). One draw a turn (chance `turn_rate`; v0.41.341, Phase 5b: it was one draw a day in
+    `Session._begin_day`); the same seed gives the same answer. Each raid is booked (`plan_raid`) as it is drawn and its plan is kept in `state.raids["booked"]`. Ids are obj-t<turn>-r<n>, and obj-t<turn>-s<n> for an
+    unwarned one (`Session.plan_turn` reads "-s<n>" as "no warning"). `planned` False (a night turn with night ops off: nothing is planned in it and nothing is booked): every raid drawn is a surprise,
+    settled overnight."""
     from . import bombers
     if bombers.is_quiet(state):                             # v0.41.109: the quiet day before the carrier raid
         return [], 0
-    from . import ground as _gr
-    rate = float(d.raid_rate) * _gr.surge(state, d)                  # v0.41.155: red raids more while your squadron stands down
+    rate = turn_rate(state, d, turn)
     n = int(rate) + (1 if rng.random() < rate - int(rate) else 0)
     warned, surprise = [], 0
+    booked = state.raids.setdefault("booked", {}) if state.raids is not None else {}
     for _ in range(n):
         unwarned = rng.random() < d.raid_surprise
+        if not planned:
+            surprise += 1
+            continue
         pa = pick_aim(state, d, rng)
         if pa is not None and all((o.target_id, o.aim) != (pa[0].id, pa[1]) for o in warned):
             base, aim = pa
             o = raid_objective(base, aim, describe(state, base, aim))
             # v0.41.304 (XO 2026-11-05: "no more hidden ones"): an unwarned raid is listed like the others (id ...-s<n>, the package reads "no warning"); it used to be only a count settled overnight
-            o.id = f"obj-d{state.day}-{'s' if unwarned else 'r'}{len(warned) + 1}"
-            _commit(state, d, base, aim)
-            warned.append(o)
-        elif unwarned:
-            surprise += 1                                    # no target to build it on: it still happens, settled overnight as before
+            o.id = f"obj-t{turn}-{'s' if unwarned else 'r'}{len(warned) + 1}"
+            bk = plan_raid(state, d, base, aim, o.id, turn)
+            if bk is not None:
+                booked[o.id] = bk
+                warned.append(o)
+                continue
+        if unwarned:
+            surprise += 1                                    # no target to build it on, or no wing that can field it: it still happens, settled overnight as before
     return warned, surprise
 
 
@@ -446,6 +518,7 @@ def overnight(state, d, rng: random.Random) -> list:
                 lines += [x_.strip() for x_ in hit(state, b.id, None, rng, through_, aim, r[2])]
     if state.raids is not None:
         state.raids["surprise"] = 0
+        state.raids["surprise_by"] = {}
     return lines
 
 
