@@ -621,6 +621,22 @@
             4.0,
             4.0
         ],
+        "wind_from_deg": [
+            180,
+            180,
+            220,
+            260,
+            260,
+            260,
+            260,
+            260,
+            260,
+            260,
+            220,
+            180
+        ],
+        "wind_scatter_deg": 30,
+        "wind_from_source": "XO 2026-11-09 accepted this table. Basis: WeatherSpark's Batumi pages (search summary; wind section not read in full; model-based, low to medium firmness): wind most often from the WEST from 11 Mar to 11 Nov (peak 61% on 10 Jul), from the SOUTH from 11 Nov to 11 Mar (peak 54% on 1 Jan). meteoblue forecast pages (not climatology) show east at night and west by day at Kutaisi, south at night and southwest by day at Senaki; the day and night swing is NOT modelled. The monthly values (180 south in Dec to Feb, 220 in Mar and Nov as the turn-over, 260 west-southwest Apr to Oct) and the 30 degree scatter are judgment calls.",
         "fog": [
             0.1,
             0.1,

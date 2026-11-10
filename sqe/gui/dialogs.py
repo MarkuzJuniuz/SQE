@@ -187,6 +187,14 @@ class SettingsDialog(QDialog):
             if not on:
                 self.hotrwy_own.setChecked(False)
         self.hotrwy.toggled.connect(_own_gate)
+        self.ilsd = QComboBox()                                                  # v0.41.336 (XO 2026-11-09): not tested in DCS; the first run compares the two placements
+        for k_, val_ in (("beside", "Beside the threshold (off the pavement)"), ("on", "On the pavement"), ("off", "Off (wind kept inside the ILS runway window)")):
+            self.ilsd.addItem(val_, k_)
+        self.ilsd.setCurrentIndex(max(0, self.ilsd.findData(getattr(settings, "ils_dummy", "beside"))))
+        row(v, "ILS dummy aircraft", self.ilsd)
+        hint(v, "DCS only switches on the ILS of the runway it counts as active, and the wind picks that runway. An invisible, immortal aircraft that never starts, standing at the ILS runway's "
+                "threshold at every blue field with an ILS, is meant to keep that runway active whatever the wind, so the wind can follow the theatre's real pattern (west in summer, south in winter) "
+                "instead of staying inside the ILS runway window. Beside and On are two placements to compare; neither is tested in DCS yet. Off: no dummy, and the wind stays inside the window.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
@@ -352,6 +360,7 @@ class SettingsDialog(QDialog):
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
         self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
+        self.s.ils_dummy = str(self.ilsd.currentData() or "beside")
         self.s.pilot_influence = bool(self.pinf.isChecked()); self.s.tempo_decay = bool(self.pinf.isChecked() and self.pdec.isChecked())
         self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
         self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value())

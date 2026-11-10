@@ -557,6 +557,11 @@ class Session:
     def weather_mode(self) -> str:
         return str(getattr(self.settings, "weather_mode", "clear") or "clear")
 
+    def ils_dummy_mode(self) -> str:
+        """v0.41.336: the ILS dummy setting, "off", "beside" or "on" (anything else reads as "off")."""
+        m = str(getattr(self.settings, "ils_dummy", "beside") or "off")
+        return m if m in ("off", "beside", "on") else "off"
+
     def refresh_weather(self) -> None:
         """Work out the weather at every package's start time, which packages it scrubs and which loadouts it changes. Stored in the plan so
         the Missions page, the war simulation and the mission builder all see the same thing. Safe to call any time (mode changes, old saves)."""
@@ -569,7 +574,7 @@ class Session:
             if mode == "clear":
                 continue
             pkg = Package.from_dict(pd)
-            wx = W.for_package(st, mode, pack, pkg.start)
+            wx = W.for_package(st, mode, pack, pkg.start, self.ils_dummy_mode() != "off")
             res = W.assess(wx, pkg.objective.type.value, pkg.flights, self.loadouts, AIRCRAFT)
             ex["wx"] = wx.to_dict()
             if res["notes"]:
@@ -766,7 +771,7 @@ class Session:
         self.options.full_map = bool(self.full_map)
         if self.full_map:
             self.options.max_units = 10 ** 6
-        self.options.f14_special_names = bool(getattr(self.settings, 'f14_special_names', True)); self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct); self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear'))
+        self.options.f14_special_names = bool(getattr(self.settings, 'f14_special_names', True)); self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct); self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear')); self.options.ils_dummy = self.ils_dummy_mode()
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
         extras = list(self.merge_candidates(pkg))
