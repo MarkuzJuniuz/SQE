@@ -149,7 +149,7 @@ class Package:
         if ty == ObjectiveType.DEAD:
             return {"SEAD": "SEAD", "STANDOFF": "Standoff DEAD", "DEAD": "Close DEAD"}.get(aim, "DEAD")
         if ty == ObjectiveType.STRIKE:
-            return "Standoff Strike" if aim == "STANDOFF" else ("Runway Strike" if (o.description or "").startswith("Crater") else "Strike")
+            return "Standoff Strike" if aim == "STANDOFF" else ("Runway Strike" if (o.description or "").startswith("Crater") else ("EWR Strike" if (o.description or "").startswith("EWR Strike") else "Strike"))
         if ty == ObjectiveType.CAS:
             return "Close Air Support: Troops in Contact" if (self.extra or {}).get("tic") else "Close Air Support"
         if ty == ObjectiveType.COUNTER_AIR:

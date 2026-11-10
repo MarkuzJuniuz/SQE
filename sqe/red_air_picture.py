@@ -315,6 +315,8 @@ class RedAirPicture:
                     self._red_held.append({"id": pf_["id"], "why": "sweep"})      # outgunned: this sweep stays home today
                     continue
             else:
+                if not getattr(self, "_detect_full", True):
+                    continue                                  # v0.41.346 (Phase 7a): red did not see this package (detection.cast = "barcap"): no alert pair; the planned CAP picture still flies
                 near_ = [wa for wa in wings if dist(wa[1].x, wa[1].y, tx, ty) <= ALERT_REACH_NM * NM]   # v0.41.1: only fields that can reach the fight
                 if not near_:
                     continue
@@ -448,7 +450,7 @@ class RedAirPicture:
             if not load:
                 self.warns.append(f"{tname}: no air-to-air loadout found; spawned unarmed")
             manifest.add("enemy_air", w.base_asset_id, names, ac=tname, grp=g.name)
-            if i < n_cap and pf_["kind"] == "CAP":
+            if i < n_cap and pf_["kind"] == "CAP" and getattr(self, "_detect_full", True):     # v0.41.346: an unseen package draws no standby or relief pair either
                 self._spawn_red_relief(pf_, self._cap_plan[i], i, manifest, skill, tot_s, tx, ty, alt, spd)
                 self._spawn_red_standby(pf_, self._cap_plan[i], i, g.name, bf_, wings, manifest, skill, tot_s, tx, ty, alt, spd)
         if self._hot_calls:

@@ -516,7 +516,8 @@ class RaidSpawns:
                 used[g["ref"]] = used.get(g["ref"], 0) + len(g["units"])
         base_n = sum(used.values())
         fleet_obj = package.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
-        picks = reactive.plan_red(st, d, rr, tx, ty, base_n, blue_f, used, ENEMY_FIGHTERS, bearing, self._hold_drawn) if not fleet_obj else []
+        unseen_ = not getattr(self, "_detect_full", True)                               # v0.41.346 (Phase 7a): an unseen package (detection.cast = "barcap") draws no red reactive pair (blue's pairs below are unchanged)
+        picks = reactive.plan_red(st, d, rr, tx, ty, base_n, blue_f, used, ENEMY_FIGHTERS, bearing, self._hold_drawn) if not (fleet_obj or unseen_) else []
         skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
         pt = lambda x, y: mapping.Point(x, y, self.t)
         alt, spd = 22000 * FT, 400 * KPH

@@ -14,7 +14,7 @@ from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
 from .models import BaseKind, Objective, ObjectiveType, Role
-from . import airwings, barcap as barcap_, clock, raids, redair, refit, sams, ground, support_assets, tempo
+from . import airwings, barcap as barcap_, clock, detection, raids, redair, refit, sams, ground, support_assets, tempo
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import AI_ONLY, ai_only, carrier_raid, Ledger, NoPlayerSlot, Package, PackageBuilder
 
@@ -528,6 +528,12 @@ class Session:
                 p.extra["unwarned"] = True
             if _hot is not None and p.objective.type == ObjectiveType.CAS and p.objective.target_id == f"armor_{_hot + 1}":
                 p.extra["tic"] = True
+        for p in pkgs:
+            v_ = detection.cast(st, p)                                                                    # v0.41.346 (Phase 7a): red's detection verdict, cast once (seeded: a replan of the turn gives the same answer); the sim and the mission both read it
+            if v_ is None:
+                p.extra.pop("detect", None)
+            else:
+                p.extra["detect"] = v_
         st.plan = [p.to_dict() for p in pkgs]
         self._cast_sead(pkgs)
         refit.step(st, t_abs + _tod.WAVE2_OFFSET_MIN)       # the jets the second wave counted on are ready by its opening: they join `available` now, so the turn's losses and its commit come out of the same pool
