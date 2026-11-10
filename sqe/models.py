@@ -86,7 +86,8 @@ class Squadron:
     reserve: int = 0            # aircraft pulled back to a rear field to recover (airwings.py); available is 0 while they rest
     rest_days: int = 0
     home_id: str = ""           # v0.41.243: the field it was first driven from (ground.apply_fall); it flies back when that field is retaken. "" = not displaced
-    move_days: int = 0          # v0.41.243: nights left before a squadron that changed field is operational again (airwings.step); the jets wait in `reserve`
+    move_days: int = 0          # v0.41.243: LEGACY (nights left); v0.41.337: a save that still carries it is converted to `move_until` by airwings.step_moves
+    move_until: int = 0         # v0.41.337 (campaign rules plan Phase 3): the turn (clock.py) at which a squadron that changed field is operational again; 0 = not moving. The jets wait in `reserve`
     refit: list = field(default_factory=list)   # v0.41.334 (refit.py): the absolute minute (clock.py) each jet in refit is ready again; `available` stays "ready now"
     repl_due: int = 0           # absolute minute the next replacement pair arrives (0 = no timer: the squadron is at strength)
     held: int = 0               # replacements that arrived while the runway was closed: counted toward strength, flyable when the runway reopens
@@ -128,7 +129,8 @@ class RedSquadron:
     available: int = -1         # serviceable jets (-1 = all of them, set in __post_init__)
     reserve: int = 0            # jets pulled back to a rear field to recover; available is 0 while they rest
     rest_days: int = 0
-    move_days: int = 0          # v0.41.243: nights left before a squadron that changed field is operational again (airwings.step)
+    move_days: int = 0          # v0.41.243: LEGACY (nights left), see Squadron.move_days
+    move_until: int = 0         # v0.41.337: the turn at which a squadron that changed field is operational again; 0 = not moving
     role: str = ""              # v0.41.106: "escort" = the Mozdok escort squadron: escorts, Mozdok patrols and scrambles only, never sent afield as reinforcement
     refit: list = field(default_factory=list)   # v0.41.334 (refit.py): the absolute minute each jet in refit is ready again; `available` stays "ready now"
     repl_due: int = 0           # the Tu-22M3 squadron's own 48 h replacement timer (other types use the wing's, EnemyAirWing.repl_due)
@@ -259,7 +261,7 @@ def wing_from_dict(w: dict) -> "EnemyAirWing":
         av = _spread(int(w.get("available", sum(auth))), [a - r for a, r in zip(auth, res)])
         for q, a, r in zip(sq, av, res):
             q["available"], q["reserve"], q["rest_days"] = a, r, (int(w.get("rest_days", 0)) if r else 0)
-    keep = {"id", "name", "aircraft", "authorized", "available", "reserve", "rest_days", "move_days", "role", "refit", "repl_due", "held"}
+    keep = {"id", "name", "aircraft", "authorized", "available", "reserve", "rest_days", "move_days", "move_until", "role", "refit", "repl_due", "held"}
     sqns = [RedSquadron(**{k: v for k, v in q.items() if k in keep}) for q in sq]
     return EnemyAirWing(w["base_asset_id"], types, len(sqns), sqns, int(w.get("repl_due", 0)), int(w.get("held", 0)))
 

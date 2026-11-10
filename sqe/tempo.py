@@ -74,7 +74,8 @@ def record(state, objective_type, tone: str, extra: dict | None = None) -> list:
     the two, not the sum). -> the debrief lines ([] when nothing moved)."""
     pk = kind_of(objective_type)
     if getattr(state, "ground", None):
-        state.ground["flown_day"] = state.day                       # v0.41.155: the squadron flew today: red's idle surge starts over (ground.surge)
+        state.ground["idle_turns"] = 0                               # v0.41.155 / v0.41.337: the squadron flew: red's idle surge starts over (ground.surge counts skipped flyable turns now)
+        state.ground["flew_today"] = state.ground["flyable_today"] = True      # v0.41.337: the day's end block (Session._midnight) reads these: no supply round, no stand-down
     if not influence_on(state):
         return []                                                    # Pilot Influence off: nothing moves
     if not hasattr(state, "tempo") or state.tempo is None:

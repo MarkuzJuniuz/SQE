@@ -5,8 +5,9 @@ clock.py) at which each of those jets is ready. `available` keeps its old meanin
 keep working, a jet in refit is simply not in `available`. In Java terms: `available` is a counter, `refit` is a list of timestamps, and `step()` moves
 items from one to the other.
 
-Phase 1 builds the clock and the replacement rule but flies nothing through it: planning, Skip and the UI do not change until Phases 3 and 4, so `refit`
-stays empty for now and `commit_flight` / `commit_turn` are not wired yet. `end_day` (war.py) calls `step` and `replacements`.
+Since Phase 3 (v0.41.337) `Session._tick` (engine.py) calls `commit_turn` for the turn's sorties, then `step` and `replacements` EVERY turn (they used to run
+in `end_day`). Planning is still per day until Phase 4, so a day's packages can ask for more jets than are ready by their turn: `commit_flight` never moves
+more jets than `available` holds (it cannot create jets) and `commit_turn` reports the shortfall.
 
 Replacements (plan decisions 9, 16, 17, 18): a squadron below strength gets a pair every `24 / FI` hours (FI = Force Index, `ground.supply`, clamped at
 FI_MIN); red gets it per wing (field). The Tu-22M3 squadrons and the E-3 get one airframe per 48 hours instead, with no FI scaling. A pair that arrives
@@ -121,7 +122,7 @@ def _period(fi: float) -> int:
 
 
 def replacements(state, now_min: int) -> list:
-    """New airframes. Called from `end_day` with the clock at the day's end (Phase 3 calls it every turn). -> log lines (only the ones worth a note).
+    """New airframes. Called every turn by `Session._tick` (v0.41.337; it was `end_day`, once a day) (Phase 3: `Session._tick` calls it every turn). -> log lines (only the ones worth a note).
     Blue: each squadron that is not resting and is below authorized gets a pair when its timer is due, then the timer restarts at now + 24 / FI hours; the
     timer starts when a deficit first shows (a full squadron has no timer). Red: the same per WING with `replenish`. Tu-22M3 squadrons: one airframe per
     48 h. A closed runway turns the arrival into `held`."""
@@ -184,10 +185,11 @@ def replacements(state, now_min: int) -> list:
 def commit_flight(unit, launch_min: int, flew: int, lost: int, fi: float, rng=None, limped: int | None = None) -> tuple:
     """One flight's survivors go from `available` to `refit` (call AFTER the flight's losses were taken off `available`, so a loss is not counted twice).
     `limped`: how many survivors limp, when the debrief says (the hook's `limped` list); else each survivor limps with chance (lost / flew) x LIMP_PER_LOSS.
-    -> (survivors, limped). Not wired until Phase 3 (`Session.advance_turn`)."""
+    Never more than `available` goes into refit: a plan made before the refit clock existed can ask for jets that are already out (v0.41.337: Phase 4 plans against
+    what is ready), and a jet must not be created out of that. -> (survivors that went into refit, limped)."""
     flew = max(0, int(flew))
     lost = max(0, min(int(lost), flew))
-    surv = flew - lost
+    surv = min(flew - lost, max(0, int(unit.available)))
     if surv <= 0:
         return 0, 0
     if limped is None:
@@ -201,13 +203,14 @@ def commit_flight(unit, launch_min: int, flew: int, lost: int, fi: float, rng=No
 
 
 def commit_turn(state, sorties: list, rng=None) -> list:
-    """Commit a turn's flights. Each sortie is a dict {"unit": Squadron or RedSquadron, "side": "blue" | "red", "launch_min", "flew", "lost", "limped"?}; count
-    each planned sortie once (an attached CAP appears in several packages). -> [(unit, survivors, limped)]. Not wired until Phase 3."""
+    """Commit a turn's flights (Session._tick calls it once per turn, after the losses came off `available`). Each sortie is a dict {"unit": Squadron or RedSquadron,
+    "side": "blue" | "red", "launch_min", "flew", "lost", "limped"?}; the caller counts each planned sortie once (an attached CAP appears in several packages; the engine
+    dedupes by callsign). -> [(unit, survivors in refit, limped, short)]: `short` is how many survivors had no ready jet to move (an overbooked plan, see commit_flight)."""
     fi = {"blue": fi_of(state, "blue"), "red": fi_of(state, "red")}
     out = []
     for s in sorties:
         n, lp = commit_flight(s["unit"], s["launch_min"], s["flew"], s["lost"], fi[s["side"]], rng, s.get("limped"))
-        out.append((s["unit"], n, lp))
+        out.append((s["unit"], n, lp, max(0, int(s["flew"]) - int(s["lost"]) - n)))
     return out
 
 

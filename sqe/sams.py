@@ -1,7 +1,7 @@
 """Air defence that rebuilds and moves (ground war, phase 3).
 
 Red:
-* A SAM site you destroyed is not gone for good. After ORDER_DAYS a replacement can go up (SAM_REBUILD chance a day by level, scaled by Red's
+* A SAM site you destroyed is not gone for good. After order_days(Force Index), 5 to 7 days, a replacement can go up (SAM_REBUILD chance a day by level, scaled by Red's
   supply, at most REBUILD_PER_DAY a night), at REBUILT_HEALTH. It is never rebuilt at a field that is itself cratered, never behind the front,
   and the column air defence (fsam_) travels with its sector and is not rebuilt.
 * A mobile site that has been hurt (SA-6, SA-11, SA-8, SA-15, SA-19) can pack up and move (SAM_SCOOT chance a night by level): a few nm, never
@@ -22,7 +22,15 @@ import random
 from .models import AssetKind
 
 NM = 1852.0
-ORDER_DAYS = 14                          # v0.41.197 (XO 2026-10-30): an ORDER from home (the US for blue, the motherland for red) takes two weeks; was 3 days (REBUILD_MIN_DAYS). Judgment call.
+ORDER_DAYS_FAST, ORDER_DAYS_SLOW = 5, 7  # v0.41.337 (XO 2026-11-06, queue S3: "SAM orders 5 to 7 days"; v0.41.197 to v0.41.336 had 14): an ORDER from home (the US for blue, the motherland for red) takes 5 days at a Force Index of 1.0 and 7 at the floor. The 5 and 7 are XO's; scaling by Force Index is the plan's (judgment call)
+ORDER_DAYS = ORDER_DAYS_SLOW             # the debt's payback span (add_debt, debt) uses the slow end: it must not depend on the Force Index it lowers (judgment call; it was 14)
+
+
+def order_days(fi: float) -> float:
+    """Days an order from home takes at this Force Index: ORDER_DAYS_FAST at 1.0, ORDER_DAYS_SLOW at the floor (ground.SUPPLY_FLOOR), a straight line between."""
+    from . import ground
+    f = max(0.0, min(1.0, (1.0 - fi) / (1.0 - ground.SUPPLY_FLOOR)))
+    return ORDER_DAYS_FAST + (ORDER_DAYS_SLOW - ORDER_DAYS_FAST) * f
 REBUILT_HEALTH = 0.5
 REBUILD_PER_DAY = 1
 MOBILE = {"SA-6", "SA-11", "SA-8", "SA-15", "SA-19"}
@@ -273,11 +281,13 @@ def rebuild(state, d, rng: random.Random) -> list:
     from . import ground
     track(state)
     r = _rec(state)
-    p = float(getattr(d, "sam_rebuild", 0.0)) * (ground.supply(state, "red") if ground.active(state) else 0.85)
+    fi = ground.supply(state, "red") if ground.active(state) else 0.85
+    p = float(getattr(d, "sam_rebuild", 0.0)) * fi
+    wait = order_days(fi)                                            # v0.41.337: 5 to 7 days by Force Index
     cands = []
     for aid, day0 in r["down"].items():
         a = state.assets.get(aid)
-        if a is None or not a.destroyed or aid.startswith("fsam_") or state.day - day0 < ORDER_DAYS or aid in _red_asked(state):
+        if a is None or not a.destroyed or aid.startswith("fsam_") or state.day - day0 < wait or aid in _red_asked(state):
             continue
         if a.tier > state.front + 2 or _parent_down(state, a):
             continue
@@ -541,10 +551,12 @@ def rebuild_blue_sites(state, d, rng: random.Random) -> list:
     track(state)
     r = _rec(state)
     fallen = set((state.ground or {}).get("fallen", [])) | ground.pending_fields(state)          # v0.41.244
-    p = float(getattr(d, "blue_rebuild", 0.0)) * (ground.supply(state, "blue") if ground.active(state) else 1.0)
+    fi_b = ground.supply(state, "blue") if ground.active(state) else 1.0
+    p = float(getattr(d, "blue_rebuild", 0.0)) * fi_b
+    wait = order_days(fi_b)                                         # v0.41.337: 5 to 7 days by Force Index
     busy = _blue_asked(state)                                                     # a battery is on its way there: no new build
     cands = sorted((a for aid, day0 in r["down"].items() for a in [state.blue_sams.get(aid)]
-                    if a is not None and a.destroyed and state.day - day0 >= ORDER_DAYS and a.guards not in fallen and aid not in busy), key=lambda a: a.id)
+                    if a is not None and a.destroyed and state.day - day0 >= wait and a.guards not in fallen and aid not in busy), key=lambda a: a.id)
     rng.shuffle(cands)
     lines = []
     for a in cands:

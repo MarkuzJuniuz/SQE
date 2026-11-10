@@ -142,7 +142,7 @@ TYPE_WORDS = (("CAS", "CAS"), ("STRIKE", "strike"), ("DEAD", "SEAD / DEAD"), ("C
 
 
 def tasking(sess) -> tuple:
-    """Today's tasking for the Overview: (headline, detail). The packages on the order by kind, how many your squadron can fly, or why it has none."""
+    """This turn's tasking for the Overview: (headline, detail). The packages on the order by kind, how many your squadron can fly, or why it has none."""
     st = sess.state
     pk = sess.packages()
     if st.status != "ACTIVE":
@@ -154,7 +154,7 @@ def tasking(sess) -> tuple:
     parts = [f"{kinds[k]} {w}" for k, w in TYPE_WORDS if kinds.get(k)]
     head = f"{len(pk)} package{'s' if len(pk) != 1 else ''}"
     if not pk:
-        return "No jobs today", " ".join(sess.idle_reasons()) or "Nothing is open on today's tasking order."
+        return "No jobs this turn", " ".join(sess.idle_reasons()) or "Nothing is open on this turn's tasking order."
     if n_you:
         return head, ", ".join(parts) + f". You can fly {n_you}."
-    return head, ", ".join(parts) + ". Stand-down day for you: " + " ".join(sess.idle_reasons())
+    return head, ", ".join(parts) + ". Stand-down turn for you: " + " ".join(sess.idle_reasons())

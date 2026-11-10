@@ -36,16 +36,38 @@ def _units(state):
             yield "red", q, (a.name if a else w.base_asset_id) + f" ({q.aircraft.replace('_', '-')})", bool(a is None or a.destroyed)
 
 
-def step(state, d, rng) -> list:
-    """Overnight: wings fall back, rest and return. -> report lines."""
+MOVE_TURNS_PER_NIGHT = 6           # a save from before v0.41.337 counts a move in nights: one night is 12 hours, 6 turns (judgment call, only for that conversion)
+
+
+def _moving_units(state):
+    """Every squadron that can be on the move: (unit, display name), blue and red, the player's and the carrier's included."""
+    for sq in state.squadrons.values():
+        yield sq, sq.name
+    for w in state.enemy_air:
+        a = state.assets.get(w.base_asset_id)
+        for q in w.sqns:
+            yield q, f"the squadron at {a.name if a else w.base_asset_id} ({q.aircraft.replace('_', '-')})"
+
+
+def step_moves(state) -> list:
+    """v0.41.337 (Phase 3): every TURN, a squadron that changed field (ground._settle) comes back into the line when the clock reaches its `move_until` (12 or 24 hours, XO
+    2026-11-09). Its jets wait in `reserve` meanwhile. Used to be a nightly tick of `move_days`; a save that still carries `move_days` is converted here. -> report lines."""
     out = []
-    pid = state.player.squadron_id if state.player else None
-    pq = state.squadrons.get(pid) if pid else None
-    if pq is not None and pq.move_days > 0 and resting(pq):        # v0.41.246 (XO): the player's squadron sits out a move like any other (it never stands down to recover: that stays off for it)
-        pq.move_days -= 1
-        if pq.move_days == 0:
-            pq.available, pq.reserve, pq.rest_days = pq.reserve, 0, 0
-            out.append(f"{pq.name} has settled in at its new field with {pq.available} aircraft.")
+    for u, name in _moving_units(state):
+        if getattr(u, "move_days", 0) > 0 and not u.move_until:           # legacy save: nights left -> turns
+            u.move_until = state.turn + MOVE_TURNS_PER_NIGHT * u.move_days
+            u.move_days = 0
+        if u.move_until > 0 and state.turn >= u.move_until:
+            u.move_until = 0
+            if u.reserve > 0:
+                u.available, u.reserve, u.rest_days = u.reserve, 0, 0
+            out.append(f"{name[0].upper() + name[1:]} has settled in at its new field with {u.available} aircraft.")
+    return out
+
+
+def step(state, d, rng) -> list:
+    """Overnight: wings fall back, rest and return. -> report lines. (A squadron on the move is brought back by `step_moves`, every turn.)"""
+    out = []
     for side, u, name, gone in _units(state):
         rep = d.friendly_replenish if side == "blue" else d.enemy_replenish
         what = f"{name}" if side == "blue" else f"the squadron at {name}"
@@ -53,11 +75,7 @@ def step(state, d, rng) -> list:
             if gone:                                               # its rear field is no safer than a cratered one
                 u.reserve = int(u.reserve * 0.75)
                 continue
-            if getattr(u, "move_days", 0) > 0:                     # v0.41.243: a squadron that changed field (base fall or return) is on the move: no rest boost, back after its nights
-                u.move_days -= 1
-                if u.move_days == 0:
-                    u.available, u.reserve, u.rest_days = u.reserve, 0, 0
-                    out.append(f"{what[0].upper() + what[1:]} has settled in at its new field with {u.available} aircraft.")
+            if u.move_until > 0 or getattr(u, "move_days", 0) > 0:      # v0.41.243: a squadron that changed field (base fall or return) is on the move: no rest boost; step_moves brings it back
                 continue
             u.rest_days += 1
             u.reserve = min(u.authorized, u.reserve + max(1, round(u.authorized * rep * REST_BOOST)))

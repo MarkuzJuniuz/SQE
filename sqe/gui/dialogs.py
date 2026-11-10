@@ -465,21 +465,28 @@ def _hm(s: str) -> int:
 
 
 class DayResolvedDialog(QDialog):
-    """v0.41.208 (XO): what Skip Turn did, fully described: one block per package (the war simulation's own result lines), scrollable."""
-    def __init__(self, results: list, day: int, parent=None):
-        super().__init__(parent); self.setWindowTitle("Day resolved"); self.setMinimumSize(700, 480)
+    """v0.41.208 (XO): what Skip Turn did, fully described: one block per package (the war simulation's own result lines), scrollable.
+    v0.41.337 (Phase 3): it is labelled by turn and takes several turns, for the night that is resolved in one click: `turns` is [{"label": "Day 1, 20:00", "results": [...]}, ...]."""
+    def __init__(self, turns: list, parent=None):
+        super().__init__(parent); self.setWindowTitle("Turn resolved" if len(turns) == 1 else f"{len(turns)} turns resolved"); self.setMinimumSize(700, 480)
         lay = QVBoxLayout(self); lay.setSpacing(12)
-        t = QLabel(f"Day {day} resolved"); t.setObjectName("title"); lay.addWidget(t)
+        results = [r for t_ in turns for r in t_.get("results", [])]
+        t = QLabel(f"{turns[0]['label']} resolved" if len(turns) == 1 else f"{turns[0]['label']} to {turns[-1]['label']}: {len(turns)} turns resolved"); t.setObjectName("title"); lay.addWidget(t)
         ok = sum(1 for r in results if r.get("success")); scr = sum(1 for r in results if r.get("scrubbed")); held = sum(1 for r in results if r.get("held"))
         bits = [f"{ok} succeeded", f"{len(results) - ok - scr - held} failed"] + ([f"{held} turned back at the SAM gate"] if held else []) + ([f"{scr} scrubbed for weather"] if scr else [])
         sub = QLabel(f"The war simulation resolved {len(results)} package{'s' if len(results) != 1 else ''}: " + ", ".join(bits) + "."); sub.setWordWrap(True); sub.setObjectName("dim"); lay.addWidget(sub)
         body = QTextBrowser(); lay.addWidget(body, 1)
         h = []
-        for r in results:
-            ln = r.get("lines") or [r.get("objective", "?")]
-            col = theme.GREEN if r.get("success") else theme.AMBER if (r.get("scrubbed") or r.get("held")) else theme.RED
-            h.append(f"<p style='margin-bottom:2px'><b style='color:{col}'>{html.escape(ln[0])}</b><br>" + "<br>".join("&nbsp;&nbsp;&nbsp;" + html.escape(x.strip()) for x in ln[1:]) + "</p>")
-        body.setHtml("".join(h) or "<p>Nothing was tasked today.</p>")
+        for t_ in turns:
+            if len(turns) > 1:                                            # a night: one header per turn, so the long log reads turn by turn
+                h.append(f"<h3 style='margin-bottom:2px'>{html.escape(t_['label'])}</h3>")
+            if not t_.get("results"):
+                h.append(f"<p style='color:{theme.DIM}'>Nothing was tasked this turn.</p>")
+            for r in t_.get("results", []):
+                ln = r.get("lines") or [r.get("objective", "?")]
+                col = theme.GREEN if r.get("success") else theme.AMBER if (r.get("scrubbed") or r.get("held")) else theme.RED
+                h.append(f"<p style='margin-bottom:2px'><b style='color:{col}'>{html.escape(ln[0])}</b><br>" + "<br>".join("&nbsp;&nbsp;&nbsp;" + html.escape(x.strip()) for x in ln[1:]) + "</p>")
+        body.setHtml("".join(h) or "<p>Nothing was tasked.</p>")
         bb = QDialogButtonBox(QDialogButtonBox.Close); bb.rejected.connect(self.reject)
         btn = bb.button(QDialogButtonBox.Close); btn.setText("Continue"); btn.setObjectName("primary"); btn.clicked.connect(self.accept); lay.addWidget(bb)
 

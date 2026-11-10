@@ -96,7 +96,7 @@ class OverviewPage(QWidget):
         self.cards = {"fr": StatCard("The front", theme.AMBER), "od": StatCard("Ground odds", theme.BLUE)}
         self.side = {"blue": SideCard("Coalition"), "red": SideCard("Russia")}
         g.addWidget(self.cards["fr"], 0, 0); g.addWidget(self.cards["od"], 0, 1); g.addWidget(self.side["blue"], 1, 0); g.addWidget(self.side["red"], 1, 1)
-        self.today = StatCard("Today's tasking", theme.AMBER); right.addWidget(self.today)               # v0.41.152: what the day holds for you
+        self.today = StatCard("This turn's tasking", theme.AMBER); right.addWidget(self.today)               # v0.41.152: what the day holds for you
         self.warn_card = card(); right.addWidget(self.warn_card)                # v0.41.148: warnings (a base about to fall, the counter-force), hidden when there are none
         wh = QLabel("WARNINGS"); wh.setObjectName("head"); self.warn_card.layout().addWidget(wh)
         self.warn = QLabel(); self.warn.setWordWrap(True); self.warn.setStyleSheet(f"color:{theme.AMBER};"); self.warn_card.layout().addWidget(self.warn)
@@ -256,7 +256,7 @@ class MissionsPage(QWidget):
         self.note = QLabel("Press FLY on your flight. Push time, TOT and the briefing are built when you do."); self.note.setObjectName("small"); L.addWidget(self.note)
         self.resume = QPushButton("Resume sortie in progress"); self.resume.setObjectName("fly"); self.resume.hide(); L.addWidget(self.resume)
         self.resume.clicked.connect(win.wait_for_results)
-        self.skip = QPushButton("Skip Turn"); self.skip.setToolTip("Stand down for today: the whole tasking order is resolved by the war simulation and the date advances.")
+        self.skip = QPushButton("Skip Turn"); self.skip.setToolTip("Stand down for this turn (2 hours): this turn's packages are resolved by the war simulation and the clock moves on two hours. A night with no night flying is resolved for you.")
         self.skip.clicked.connect(win.skip_turn); L.addWidget(self.skip, 0, Qt.AlignRight)
 
     def _filter_changed(self):
@@ -285,10 +285,10 @@ class MissionsPage(QWidget):
             return
         self.note.show()
         keep = None                                         # v0.41.311: remember the pick, so FLY's refresh does not jump to row 0 behind the waiting window
-        cur = self.lst.currentItem() if getattr(self, "_sel_day", None) == st.day else None
+        cur = self.lst.currentItem() if getattr(self, "_sel_day", None) == st.turn else None             # v0.41.337: the pick is remembered per TURN
         if cur is not None:
             keep = cur.data(Qt.UserRole)
-        self._sel_day = st.day
+        self._sel_day = st.turn
         self._loading = True
         self.flt.setCurrentIndex(0 if sess.settings.list_filter != "all" else 1)
         self._loading = False
@@ -296,7 +296,7 @@ class MissionsPage(QWidget):
         visible = [p for p in sess.packages() if (bool(sess.flyable(p)) or not mine_only)]
         groups = sess.collapse(visible)                     # a package that another one folds in is shown inside it, not as its own row
         self.pkgs = [h for h, _ in groups]; self.members = {h.number: m for h, m in groups}
-        self.day.setText(f"{st.campaign_date().strftime('%d %b %Y').upper()}  -  Day {st.day} tasking order  ({len(self.pkgs)} shown)")
+        self.day.setText(f"{st.campaign_date().strftime('%d %b %Y').upper()}  -  {sess.turn_label()} tasking  ({len(self.pkgs)} shown)")
         self.lst.blockSignals(True); self.lst.clear()
         for p in self.pkgs:
             ok = bool(sess.flyable(p))
@@ -320,13 +320,13 @@ class MissionsPage(QWidget):
             self._idle_note(sess)
 
     def _idle_note(self, sess: Session):
-        """Nothing to fly today: say so on the same pane, with the reasons, and a quiet pointer to Skip Turn."""
+        """Nothing to fly this turn: say so on the same pane, with the reasons, and a quiet pointer to Skip Turn."""
         if not sess.state or sess.state.status != "ACTIVE":
             return
-        self.bl.addWidget(self._label(f"No flights for {sess.state.squadrons[sess.state.player.squadron_id].name} today.", "title"))
+        self.bl.addWidget(self._label(f"No flights for {sess.state.squadrons[sess.state.player.squadron_id].name} this turn.", "title"))
         for r in sess.idle_reasons():
             self.bl.addWidget(self._label(r, "dim"))
-        self.bl.addWidget(self._label("Stand-down day for you. Skip Turn takes the day.", "small"))
+        self.bl.addWidget(self._label("Stand-down turn for you. Skip Turn takes two hours.", "small"))
         self.bl.addStretch(1)
 
     # ---- the right-hand panel ------------------------------------------------------------------------------------------------
@@ -801,7 +801,7 @@ class MainWindow(QMainWindow):
         self.refresh_all(); self.wait_for_results()
 
     def eventFilter(self, obj, ev):
-        """Developer secret (XO 2026-10-27): Ctrl+Space skips the day, in AI-Test only (v0.41.154). Done here and not as a QShortcut because a list or text box that has the focus (the Missions
+        """Developer secret (XO 2026-10-27): Ctrl+Space skips a turn (v0.41.337; it skipped the day), in AI-Test only (v0.41.154). Done here and not as a QShortcut because a list or text box that has the focus (the Missions
         list) uses Ctrl+Space itself and swallowed the shortcut; the filter sees the key first."""
         from PySide6.QtCore import QEvent
         if ev.type() in (QEvent.ShortcutOverride, QEvent.KeyPress) and ev.key() == Qt.Key_Space and ev.modifiers() == Qt.ControlModifier and self.isActiveWindow() and getattr(self.session, "ai_test", False):
@@ -812,12 +812,12 @@ class MainWindow(QMainWindow):
         return super().eventFilter(obj, ev)
 
     def _dev_skip_day(self):
-        """Developer secret (XO 2026-10-27): Ctrl+Space skips the day at once, no questions and no result box, to watch the Overview and its map move.
+        """Developer secret (XO 2026-10-27): Ctrl+Space skips ONE TURN at once (v0.41.337; it skipped the day), no questions and no result box, to watch the Overview and its map move.
         Not while a sortie is built (it would be thrown away) and not once the war is over."""
         st = self.session.state
         if st is None or st.status != "ACTIVE" or st.pending:
             return
-        self.session.skip_day(); self.refresh_all()
+        self.session.skip_turn(); self.refresh_all()
         self._ending_popup("ACTIVE")
 
     def _ending_popup(self, before: str):
@@ -832,15 +832,15 @@ class MainWindow(QMainWindow):
     def skip_turn(self):
         sess = self.session
         stand_down = not sess.state.pending and not any(sess.flyable(p) for p in sess.packages())
-        if not stand_down:                                       # v0.41.93: a stand-down day has nothing to choose, so no "are you sure"
-            msg = "Skip today? Every package on the tasking order (including the ones you could fly) is resolved by the war simulation and the date advances."
+        if not stand_down:                                       # v0.41.93: a stand-down turn has nothing to choose, so no "are you sure"
+            msg = "Skip this turn? Every package of this turn (including the ones you could fly) is resolved by the war simulation and the clock moves on two hours."
             if sess.state.pending:
                 msg += "\n\nThe sortie you built and have not finished will be discarded."
             if QMessageBox.question(self, "Skip Turn", msg) != QMessageBox.Yes:
                 return
-        before, day0 = sess.state.status, sess.state.day
-        out = sess.skip_day(); self.refresh_all()
-        DayResolvedDialog(out["results"], day0, self).exec()
+        before = sess.state.status
+        out = sess.skip_turn(); self.refresh_all()
+        DayResolvedDialog(out["turns"], self).exec()
         self._ending_popup(before)                                # (the war's ending, if this day ended it, has its own box with the story)
 
     def wait_for_results(self):
@@ -848,6 +848,8 @@ class MainWindow(QMainWindow):
         if r == QDialog.Accepted and dlg.data is not None:
             before = self.session.state.status
             out = self.session.apply(dlg.data); self.refresh_all(); DebriefDialog(out, self.session.state, self).exec(); self.refresh_all()
+            if out.get("night"):                                  # v0.41.337: the flown turn was the last of the day: the night after it was resolved for you
+                DayResolvedDialog(out["night"], self).exec()
             self._ending_popup(before)
             self.stack.setCurrentIndex(1); self.nav_missions.setChecked(True)
         elif r == 2:
@@ -865,7 +867,7 @@ class MainWindow(QMainWindow):
         self.p_miss.refresh(self.session)
         n, name, _ = narrative.phase(st)
         self.h_title.setText(st.name)
-        for pill, txt in zip(self.pills, (st.campaign_date().strftime("%d %b %Y").upper(), f"Day {st.day}", LEVELS[st.level].name, name, st.player.aircraft)):
+        for pill, txt in zip(self.pills, (st.campaign_date().strftime("%d %b %Y").upper(), self.session.turn_label(), LEVELS[st.level].name, name, st.player.aircraft)):
             pill.setText(txt)
         self.banner.setText({"ACTIVE": "Sortie pending" if st.pending else "", "VICTORY": "VICTORY", "DEFEAT": "DEFEAT"}[st.status])
         self.banner.setVisible(bool(self.banner.text()))

@@ -472,15 +472,17 @@ class WarSimulator:
             if k:
                 lines.append(f"   {k} enemy fighters from {state.assets[w.base_asset_id].name} shot down")
         loss_p = d.loss_rate * (0.6 if ok else 1.4) * (red / (strength + red) if strength + red else 0.0)
+        lost_by = {}
         for f in pkg.flights:
             lost = count_roll(rng, f.count, loss_p, d.variance)
             if lost:
                 sq = state.squadrons[f.squadron_id]
                 sq.available = max(0, sq.available - lost)
+                lost_by[f.id] = lost
                 lines.append(f"   {f.callsign} lost {lost} aircraft")
         for ln in lines:
             state.note(ln.strip())
-        return {"success": ok, "odds": p, "lines": lines, "objective": pkg.objective.description, "roll": {"success": ok}}
+        return {"success": ok, "odds": p, "lines": lines, "objective": pkg.objective.description, "roll": {"success": ok}, "lost_by": lost_by}
 
     def _resolve_raid(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         d, rng = self.d, self.rng
@@ -588,6 +590,7 @@ class WarSimulator:
                 lines.append(f"   DEAD: attack failed (odds {p_dead:.0%})")
         success = (killed if dead else blinded)
         loss_base = d.loss_rate * 2
+        lost_by = {}                                            # v0.41.337: losses by flight id, for Session's refit commit (refit.commit_turn)
         for f in pkg.flights:
             if f.tag:
                 continue
@@ -603,11 +606,12 @@ class WarSimulator:
             if n_lost:
                 sq = state.squadrons[f.squadron_id]
                 sq.available = max(0, sq.available - n_lost)
+                lost_by[f.id] = n_lost
                 lines.append(f"   {f.callsign} lost {n_lost} aircraft")
         for ln in lines:
             state.note(ln.strip())
         return {"success": success, "odds": p_dead if dead else p_sead, "lines": lines, "objective": pkg.objective.description,
-                "roll": {"success": success, "blinded": blinded, "killed": killed, "dead": bool(dead)}}
+                "roll": {"success": success, "blinded": blinded, "killed": killed, "dead": bool(dead)}, "lost_by": lost_by}
 
     def resolve_abstract(self, state: CampaignState, pkg: Package, force: dict | None = None) -> dict:
         d, rng = self.d, self.rng
@@ -658,25 +662,23 @@ class WarSimulator:
                 w.available -= k
                 lines.append(f"   {k} enemy fighters shot down by the patrol")
         loss_p = d.loss_rate * 2 * (defense / (strength + defense) if strength + defense else 0.0)
+        lost_by = {}
         for f in pkg.flights:
             lost = count_roll(rng, f.count, loss_p, d.variance)
             if lost:
                 sq = state.squadrons[f.squadron_id]
                 sq.available = max(0, sq.available - lost)
+                lost_by[f.id] = lost
                 lines.append(f"   {f.callsign} lost {lost} aircraft")
         for ln in lines:
             state.note(ln.strip())
-        return {"success": success, "odds": p, "lines": lines, "objective": obj.description, "roll": {"success": success}}
+        return {"success": success, "odds": p, "lines": lines, "objective": obj.description, "roll": {"success": success}, "lost_by": lost_by}
 
     def end_day(self, state: CampaignState) -> None:
+        """The overnight block. Session._tick runs it when the clock crosses midnight (v0.41.337, Phase 3), with `state.turn` already at the new day's 00:00 turn; it no longer
+        moves the clock, and the refit step and the replacements run every turn there, not here."""
         d = self.d
         sams.track(state)                                           # the day each SAM site went down (it can be rebuilt later)
-        state.turn = clock.first_turn(state.day + 1)                # v0.41.334: until Phase 3 the clock moves a whole day at a time, to the first turn of the next day (00:00)
-        now = clock.minute(state.turn)
-        for ln in refit.step(state, now):                           # jets whose refit is over are ready; replacements held on a closed runway join once it reopens
-            state.note("Overnight: " + ln)
-        for ln in refit.replacements(state, now):                   # v0.41.334: a pair per squadron (red: per wing) every 24 / Force Index hours; Tu-22M3 and E-3: one per 48 h
-            state.note("Overnight: " + ln)
         for w in state.enemy_air:
             if state.assets[w.base_asset_id].destroyed:             # a cratered field cannot operate or rearm: the survivors scatter or are lost
                 w.scatter(0.75)
