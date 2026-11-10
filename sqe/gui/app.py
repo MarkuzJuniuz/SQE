@@ -491,9 +491,10 @@ class ForcesPage(QWidget):
                 self.bs.setItem(i, 2, _item("Cruiser + 2 escorts", theme.DIM))
                 for j in (3, 4):
                     self.bs.setItem(i, j, _item("", theme.DIM))
-        # tankers and AWACS (v0.41.100): the support assets, with the hours an aircraft of the type is on orbit today
+        # tankers and AWACS (v0.41.100): the support assets, with the hours an aircraft of the type has been on orbit so far today (the orbit is planned turn by turn, v0.41.339)
         nice = {"bl_e3": "E-3A AWACS", "bl_e2": "E-2C AWACS (carrier)", "bl_kc135": "KC-135 tanker (boom)",
                 "bl_s3": "S-3B tanker (carrier)"}
+        from .. import clock as _clock
         sa = _sa.ensure(st)
         fl = (getattr(st, "barcap", None) or {}).get("support_flights") or {}
         self.sup.setRowCount(len(sa))
@@ -501,9 +502,10 @@ class ForcesPage(QWidget):
             red = a["side"] != "blue"
             base = st.bases.get(a["base_id"]) or st.assets.get(a["base_id"])
             mins = 0; hi = 0
-            for s0, e0 in sorted(fl.get(k, [])):                       # union of today's windows
-                s0 = max(s0, hi); mins += max(0, e0 - s0); hi = max(hi, e0)
-            cover = "-" if red else f"{mins / 60:.1f} h of 24"
+            upto = _clock.minute(st.turn + 1) - _clock.day_start_minute(st.day)      # to the end of this turn (an airframe's window runs on to its own end)
+            for s0, e0 in sorted(fl.get(k, [])):                       # union of the day's windows so far (`upto`)
+                e0 = min(e0, upto); s0 = max(s0, hi); mins += max(0, e0 - s0); hi = max(hi, e0)
+            cover = "-" if red else f"{mins / 60:.1f} h so far"
             cyc = f"{a['sortie_min'] / 60:g} h on orbit, {a['turnaround_min'] / 60:g} h turnaround"
             dim = theme.DIM if red else None
             for j, v in enumerate((f"{a['label']}" + ("  (red)" if red else ""), nice.get(k, a["dcs_class"]), getattr(base, "name", a["base_id"]),

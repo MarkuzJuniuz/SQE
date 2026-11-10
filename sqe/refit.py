@@ -182,7 +182,7 @@ def replacements(state, now_min: int) -> list:
     return out
 
 
-def commit_flight(unit, launch_min: int, flew: int, lost: int, fi: float, rng=None, limped: int | None = None) -> tuple:
+def commit_flight(unit, launch_min: int, flew: int, lost: int, fi: float, rng=None, limped: int | None = None, sortie_min: int = SORTIE_MIN) -> tuple:
     """One flight's survivors go from `available` to `refit` (call AFTER the flight's losses were taken off `available`, so a loss is not counted twice).
     `limped`: how many survivors limp, when the debrief says (the hook's `limped` list); else each survivor limps with chance (lost / flew) x LIMP_PER_LOSS.
     Never more than `available` goes into refit: a plan made before the refit clock existed can ask for jets that are already out (v0.41.337: Phase 4 plans against
@@ -196,20 +196,20 @@ def commit_flight(unit, launch_min: int, flew: int, lost: int, fi: float, rng=No
         p = min(1.0, (lost / flew) * LIMP_PER_LOSS) if flew else 0.0
         limped = sum(1 for _ in range(surv) if rng is not None and rng.random() < p)
     limped = max(0, min(int(limped), surv))
-    unit.refit = sorted(unit.refit + [ready_minute(launch_min, unit.aircraft, True, fi)] * limped
-                        + [ready_minute(launch_min, unit.aircraft, False, fi)] * (surv - limped))
+    unit.refit = sorted(unit.refit + [ready_minute(launch_min, unit.aircraft, True, fi, sortie_min)] * limped
+                        + [ready_minute(launch_min, unit.aircraft, False, fi, sortie_min)] * (surv - limped))
     unit.available = max(0, unit.available - surv)
     return surv, limped
 
 
 def commit_turn(state, sorties: list, rng=None) -> list:
     """Commit a turn's flights (Session._tick calls it once per turn, after the losses came off `available`). Each sortie is a dict {"unit": Squadron or RedSquadron,
-    "side": "blue" | "red", "launch_min", "flew", "lost", "limped"?}; the caller counts each planned sortie once (an attached CAP appears in several packages; the engine
+    "side": "blue" | "red", "launch_min", "flew", "lost", "limped"?, "sortie_min"?}; the caller counts each planned sortie once (an attached CAP appears in several packages; the engine
     dedupes by callsign). -> [(unit, survivors in refit, limped, short)]: `short` is how many survivors had no ready jet to move (an overbooked plan, see commit_flight)."""
     fi = {"blue": fi_of(state, "blue"), "red": fi_of(state, "red")}
     out = []
     for s in sorties:
-        n, lp = commit_flight(s["unit"], s["launch_min"], s["flew"], s["lost"], fi[s["side"]], rng, s.get("limped"))
+        n, lp = commit_flight(s["unit"], s["launch_min"], s["flew"], s["lost"], fi[s["side"]], rng, s.get("limped"), int(s.get("sortie_min") or SORTIE_MIN))      # a standing patrol that stays on station longer than SORTIE_MIN adds that to its sortie (v0.41.339)
         out.append((s["unit"], n, lp, max(0, int(s["flew"]) - int(s["lost"]) - n)))
     return out
 

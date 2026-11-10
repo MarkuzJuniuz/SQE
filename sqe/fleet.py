@@ -155,6 +155,7 @@ def step(state) -> list:
         for a in sa_.ensure(state).values():
             if a.get("base_id") == cv.id:
                 a["available"] = a["authorized"]
+                a.pop("clk", None)                                  # the new ship's airframes are all ready (support_assets clock)
         for sq in state.squadrons.values():
             if sq.home_id == cv.id:
                 sq.base_id, sq.home_id = cv.id, ""
