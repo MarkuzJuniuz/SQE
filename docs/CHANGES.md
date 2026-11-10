@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.342, fix: sams.transfer_days NameError
+
+`transfer_days` used `ground.SUPPLY_FLOOR` without importing `ground` (local import added; a module-level one would be circular). It could crash `blue_asks` / `red_asks` at the end of a day (seen once in a 22-day L3 probe). No behaviour change otherwise. `pyflakes sqe` finds no other undefined name.
+
 ## v0.41.341, campaign rules Phase 5b: red's raids per turn
 
 XO 2026-11-10 ("fox 3 high"), `campaign rules plan.md` Phase 5, second half. Raids are drawn every turn and booked from the turn's free red jets; their jets go to refit. No save format change (new dict keys with defaults; a v0.41.340 save is planned again from its next turn). **Not flown in DCS. Smoke not run; it pins none of this. `PYTHONHASHSEED=0 python tools/miz_identity.py selfcheck` passes (130 missions, identical).** Detail: DESIGN_NOTES (`.claude`).
