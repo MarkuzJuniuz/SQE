@@ -27,6 +27,10 @@ ASSET_HIT = 0.20              # health a supply site or garrison loses per aircr
 SECTOR_HIT = 4.0              # friendly sector strength lost per aircraft that gets through
 GARRISON_SHIELD = 0.25        # a field's garrison takes this share off the damage its defences would suffer
 RED_RAID_NIGHT = 0.5          # v0.41.341 (plan Phase 5b): a night turn draws half the raid chance of a day turn (judgment call: red's bombers and their escorts fly less at night; XO tunes it in Phase 13)
+# v0.41.345 (scaled tasking, Phase C): the raid chance follows red's free attack pairs. Source: Phase A probe 2026-11-10 (free attack pairs per turn in red_air["free"]), judgment calls
+RAID_REF_PAIRS = {1: 6, 2: 39, 3: 82}      # the Phase A medians of free attack pairs a turn (L1 5 to 6.5, L2 38 to 40, L3 80 to 84): a full-strength red keeps today's tempo
+RAID_MULT_MAX = 1.5                        # a red above its reference never raids more than this times the plain rate
+RAID_TEMPO = {1: 1.0, 2: 1.4, 3: 1.4}      # red rises with blue's +40% (judgment call); at L3 about 2.0 a day goes to about 2.8 (the queue's "about 2.7")
 TURNS_PER_DAY = clock.DAY_MIN // clock.TURN_MIN      # 12: the level's raid_rate (raids a day) is spread over the day's turns
 
 
@@ -329,11 +333,29 @@ def raid_objective(base, aim: str = "", desc: str | None = None) -> Objective:
     return Objective("", ObjectiveType.FLEET_DEFENSE, base.id, RAID_PRIORITY, desc or f"Intercept a raid on {base.name}", aim)
 
 
+def red_attack_pairs(state, turn: int):
+    """v0.41.345 (scaled tasking, Phase C): red's free attack pairs this turn (Su-24M, Su-25, Tu-22M3: every squadron whose aircraft is not a fighter), read from `red_air["free"]` once `redair.plan_turn`
+    has filled it for THIS turn; None when it has not (an unplanned night turn, overnight, tools)."""
+    from .loadouts import ENEMY_FIGHTERS
+    ra = getattr(state, "red_air", None) or {}
+    free = ra.get("free")
+    if not free or ra.get("turn") != turn:
+        return None
+    typ = {q.id: q.aircraft for w in state.enemy_air for q in w.sqns}
+    return sum(int(n) // 2 for sid, n in free.items() if typ.get(sid) is not None and typ[sid] not in ENEMY_FIGHTERS)
+
+
 def turn_rate(state, d, turn: int) -> float:
     """The chance of a raid in this turn: the level's `raid_rate` a day spread over the day's 12 turns (v0.41.341, Phase 5b; it was one draw a day in `Session._begin_day`), times the idle surge
-    (v0.41.155: red raids more while your squadron stands down) and `RED_RAID_NIGHT` on a night turn."""
+    (v0.41.155: red raids more while your squadron stands down) and `RED_RAID_NIGHT` on a night turn. v0.41.345 (scaled tasking, Phase C): times `RAID_TEMPO` x red's free attack pairs / `RAID_REF_PAIRS`
+    (at most `RAID_MULT_MAX`), so a worn-down red raids less; a turn with no pool (unplanned night, tools) keeps the plain rate."""
     from . import ground as _gr
-    return float(d.raid_rate) * _gr.surge(state, d) / TURNS_PER_DAY * (RED_RAID_NIGHT if clock.is_night_turn(turn) else 1.0)
+    r = float(d.raid_rate) * _gr.surge(state, d) / TURNS_PER_DAY * (RED_RAID_NIGHT if clock.is_night_turn(turn) else 1.0)
+    pairs = red_attack_pairs(state, turn)
+    if pairs is None:
+        return r
+    lvl = max(1, min(3, int(getattr(d, "level", 1))))
+    return r * max(0.0, min(RAID_MULT_MAX, pairs / RAID_REF_PAIRS[lvl])) * RAID_TEMPO[lvl]
 
 
 def plan_raid(state, d, base, aim: str, oid: str, turn: int):

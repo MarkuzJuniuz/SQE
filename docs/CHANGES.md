@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## v0.41.345, scaled tasking Phases B and C: packages from free pairs, front spread, raids from red's free attack pairs
+
+XO 2026-11-10 ("fox 3 high"), `scaled tasking plan.md` (S5b): Phases B and C in one build, so neither side gets stronger alone. No save format change. **Not flown in DCS. Smoke not run.** `miz_identity` differs (expected: the plan has more jobs).
+- **Blue count from the ledger** (`engine.py`): `Session.plan_turn` now builds the turn's ledger (hold, support windows, standing patrols) FIRST and plans the job list after it (red's patrols and the raids still come first). `_turn_rate(turn, ledger=None)` = free strike / SEAD / CAS pairs (`room(sid, 2) // 2`) x `TASK_SHARE` / `PAIRS_PER_PACKAGE`, kept between `N_MIN` and `N_MAX`, plus `DAY1_EXTRA` on Day 1; a night turn with night ops on plans `NIGHT_FACTOR` of it (no minimum). No ledger: `PACKAGES_PER_TURN` as before. Start values (Phase A probe, judgment calls): `PAIRS_PER_PACKAGE` 5.7, `TASK_SHARE` 0.3 / 0.3 / 0.45, `N_MAX` 2 / 4 / 4, `NIGHT_FACTOR` 0.25 / 0.33 / 0.33.
+- **Front spread** (`war.py`, `job_sector`, `ObjectivePlanner.plan`): a job's sector is the sector centre nearest its target (fleet jobs and a campaign with no ground war have none). Both picking passes take the best job of a sector with no job yet; a second job in a sector comes only when no unused sector has a candidate. Scoring, followers and the staging of SEAD / DEAD are unchanged; the tasking list stays sorted by time.
+- **Red raids** (`raids.py`, `turn_rate`): the raid chance is multiplied by `RAID_TEMPO` x red's free attack pairs / `RAID_REF_PAIRS` (at most `RAID_MULT_MAX`), read from `red_air["free"]` of this turn. An unplanned night turn and the tools keep the plain rate. `RAID_REF_PAIRS` 6 / 39 / 82, `RAID_MULT_MAX` 1.5, `RAID_TEMPO` 1.0 / 1.4 / 1.4.
+- **Probe** (read-only, F-16C and A-10C, 10 days, night ops off unless noted, v0.41.344 vs now): L3 packages planned per day turn 1.6 -> 2.4, jobs built 1.4 / 1.5 -> 2.1, player flyable day turns 56 / 60 -> 57 / 56 (A-10C 49 -> 50), commit shortfall 0, largest mission 28 jets; L2 rate 1.6 -> 2.3, flyable 51 / 60 -> 45 / 55; L1 rate 1.1 -> 2.1, flyable 26 -> 18 / 20. L3 raid chance per day turn 0.17 -> 0.24. L3 day 10: SAMs 34 to 36 of 39, red jets 265 to 270 (275), red armor 0.84 (0.80 to 0.83).
+
 ## v0.41.344, campaign rules Phase 6b: the war sim spends the reaction hold
 
 XO 2026-11-10 ("fox 3 medium"), `campaign rules plan.md` Phase 6, second half. A package the war sim resolves now draws a red pair from the hold and shoots some of it down; blue's raid intercepts are crewed from blue's hold. No save format change (new dict keys with defaults). **Not flown in DCS. Smoke not run.**
