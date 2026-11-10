@@ -544,6 +544,10 @@ class WarSimulator:
         p = strength / (strength + 2.5 + 2.0 * d.iads + 0.4 * esc + 0.25 * max(0, nb_ - 4))     # v0.41.155 (red zerg): a mass raid is harder to stop (judgment call)
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
         lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'} (odds {p:.0%})"]
+        if pkg.extra.get("unseen_raid"):                                    # v0.41.348 (Phase 7b): no AWACS was up, blue's planned patrols alone met it
+            lines.append("   not detected: no AWACS was on orbit, only the planned patrols met it")
+            ra_ = state.raids if state.raids is not None else {}
+            ra_["unseen_n"] = int(ra_.get("unseen_n", 0)) + 1
         if bw is not None and ok:
             k = bw.lose(pkg.extra.get("raider"), (rng.randint(2, 4) if nb_ <= 4 else max(2, round(nb_ * rng.uniform(0.4, 0.7)))) if pkg.extra.get("land") else max(1, round(pkg.extra.get("bombers", 4) * rng.uniform(0.4, 0.8))))
             lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))

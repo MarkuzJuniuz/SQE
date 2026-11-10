@@ -295,6 +295,19 @@ def status_lines(state) -> list:
         out[0] = "BARCAP cover so far today: none planned"
     if g:
         out.append(f"Tanker / AWACS guards so far today: {sum(1 for f in g if f['kind'] == 'TNKCAP')} tanker, {sum(1 for f in g if f['kind'] == 'HAVCAP')} AWACS sorties")
+    return out + detection_lines(state)
+
+
+def detection_lines(state) -> list:
+    """v0.41.348 (Phase 7b): what blue did not see today (raids the war sim settled without an Intercept package) and the AWACS airframes the war sim lost."""
+    out = []
+    ra = getattr(state, "raids", None) or {}
+    n = int(ra.get("unseen_n", 0))
+    if n:
+        out.append(f"Raids not detected so far (no AWACS up): {n}")
+    for a in (getattr(state, "support_assets", None) or {}).values():
+        if a.get("side") == "blue" and a.get("war_lost"):
+            out.append(f"{a['label']} airframes lost in the war sim: {a['war_lost']} ({a['available']}/{a['authorized']} left)")
     return out
 
 

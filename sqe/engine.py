@@ -507,7 +507,15 @@ class Session:
         for p in pkgs:
             p.support = pb._support(p)                                   # v0.41.87: with the start times known, only the AWACS / tankers that are on orbit while it flies
         blue_barcap.attach(st, pkgs, until=t0 + clock.TURN_MIN, since=t0)      # v0.41.85: the planned base CAP / carrier CAP sortie that faces each package and is up while it flies (those that start in this turn)
-        pkgs.sort(key=lambda p: p.start)
+        # v0.41.348 (Phase 7b): blue's verdict on each raid red plans this turn. An unseen raid stays booked and is resolved by the war sim against blue's planned patrols only, but it is NOT listed as an
+        # Intercept package (XO 2026-11-10: "that is the point of not seeing a red attack"). It is numbered after the listed packages so the numbers show no gap.
+        un_ = st.raids.get("unseen") or []
+        st.raids["unseen"] = [r for r in un_ if r.get("turn") != turn]
+        for p in pkgs:
+            if detection.is_raid(st, p) and detection.blue_cast(st, p, turn) == "unseen":
+                p.extra["unseen_raid"] = True
+                st.raids["unseen"].append({"turn": turn, "id": p.objective.id, "text": p.objective.description})
+        pkgs.sort(key=lambda p: (bool(p.extra.get("unseen_raid")), p.start))
         base = 1 + max([d["number"] for d in st.plan_done] + [0])    # the day's packages are numbered on: turn 2 carries on after turn 1 (the resolved ones are in `plan_done`)
         for n_, p in enumerate(pkgs, base):                          # numbers follow the clock
             p.number, p.id = n_, f"pkg{n_}"
@@ -727,7 +735,7 @@ class Session:
 
     def packages(self) -> list:
         """The tasking order of THIS TURN (v0.41.338: `state.plan` holds this turn's packages only). Emergency packages (flown, folded in or settled by odds) are in the plan but are not listed."""
-        return [p for p in (Package.from_dict(d) for d in self.state.plan) if not p.extra.get("past")]
+        return [p for p in (Package.from_dict(d) for d in self.state.plan) if not p.extra.get("past") and not p.extra.get("unseen_raid")]      # v0.41.348: an unseen raid is not offered (the war sim resolves it)
 
     def day_packages(self) -> list:
         """Kept for tools and tests (v0.41.337 had the whole day here): the same as `packages()` now, since the plan is this turn's."""
@@ -1127,6 +1135,10 @@ class Session:
             elif not a.suppressed:
                 a.suppressed_turn = -1
         self.last_commit = refit.commit_turn(st, sorties, sim.rng) if sorties else []       # kept for tools: [(unit, survivors, limped, short)]
+        flown_aw, self._awacs_flown = getattr(self, "_awacs_flown", False), False
+        if not flown_aw:                                                     # v0.41.348 (Phase 7b): the war sim's AWACS loss roll (a flown mission keeps its own result)
+            for ln in support_assets.attrition(st, st.turn):
+                st.note(ln)
         st.turn += 1
         for a in st.assets.values():
             if a.suppressed and st.turn - a.suppressed_turn >= SUPPRESS_TURNS:
@@ -1346,6 +1358,7 @@ class Session:
                            "kills": out["pilot"]["ka"] + out["pilot"]["kg"] + out["pilot"]["ks"], "flight_min": out["pilot"]["flight_s"] // 60,
                            "blue_air_lost": out["blue_air_lost"], "red_air_lost": out["red_air_lost"],
                            "target_damage": out["target_damage"]})
+        self._awacs_flown = any(x.slot == "AWACS" for pd in st.plan if pd["number"] in flown for x in Package.from_dict(pd).support)      # v0.41.348: a flown AWACS keeps its own result (no war-sim loss roll this turn; `_tick` reads and clears it)
         self._retire([(pd, {"success": bool(out.get("target_damage", 0.0) >= 0.3) if pd["number"] == pend["package"] else True}) for pd in st.plan if pd["number"] in flown])
         st.pending = None
         out["turn_label"] = self.turn_label()
