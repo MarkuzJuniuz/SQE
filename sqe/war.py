@@ -75,6 +75,7 @@ STANDOFF_MIN_DEF_FLIGHTS = 4   # v0.41.298 (XO 2026-11-05, Standoff Strike): a s
 STANDOFF_AIR_FACTOR = 0.5      # v0.41.298: a Standoff Strike's odds count red's fighter cover at this share (released far out, outside the fighters' reach). Judgment call, no source
 SUPPLY_FIRST_BONUS = 45.0   # v0.41.273 (XO 2026-11-04, fox 3 medium): added to the score of a supply strike (fuel / depot / plant, not a runway strike) so it outranks an ordinary DEAD job (SAM scores 25-42, 60-100 when it blocks something: the belt-clearing SEAD keeps its place; supply strikes score 1.5-7 on their own). Judgment call; 0 = the old order
 FOLLOW_MAX_SITES = 2    # v0.41.158: a strike / CAS target under at most this many SA-11 / SA-10 sites goes in behind their SEAD; under more it stays DEAD-first (judgment call: two is what one gate sequence and one day's package limit can carry)
+SUPPRESS_TURNS = 3      # v0.41.338 (campaign rules plan Phase 4): blinded radars stay blind this many turns (6 hours) after the SEAD, then they come back; they used to come back overnight (judgment call: no public figure, the plan's value)
 FOLLOW_GAP_MIN = 10     # a follow job starts this long after the SEAD / standoff package of its site (same gap as the Close DEAD stage)
 
 
@@ -135,11 +136,13 @@ class ObjectivePlanner:
                 best = bl
         return best or []
 
-    def plan(self, state: CampaignState, rng: random.Random, limit: int = 6) -> list:
+    def plan(self, state: CampaignState, rng: random.Random, limit: int = 6, bomber: bool = True, skip: frozenset | set = frozenset()) -> list:
+        """The jobs of ONE turn (v0.41.338, Phase 4; `limit` = how many). `bomber`: look at the carrier raid this turn (the day's raid turn only: `Session._begin_day` picks it, so the
+        raid is offered once a day and not every turn). `skip`: target ids not to plan this turn (the re-tasking rule, `Session._retask_skip`)."""
         cand = []                                  # (priority, objective, blockers, locked)
         alive = lambda aid: not state.assets[aid].destroyed
         for a in state.assets.values():
-            if a.destroyed:
+            if a.destroyed or a.id in skip:
                 continue
             if a.health <= ground.DOWN_HEALTH and a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.SAM) and ground.active(state):
                 continue                                   # v0.41.145: down for planning (a threshold, not the last vehicle): not hunted, it mends on its own
@@ -245,7 +248,7 @@ class ObjectivePlanner:
             (follows if o.after else pool).append((pr, o))
         from . import fleet as _fl
         fleet = _fl.carrier(state)                                    # v0.41.257: None while the carrier is sunk
-        if fleet and self.d is not None and self.d.bomber_policy != "none":
+        if fleet and self.d is not None and self.d.bomber_policy != "none" and bomber:
             from . import bombers                                    # v0.41.105: the bomber wing is a trump card: safe window or desperation, never fewer than 4, 2 escorts each
             dec = bombers.decide(state, self.d)
             if dec["mode"] != "hold":
@@ -278,7 +281,7 @@ class ObjectivePlanner:
         picked = self._stage_dead(state, picked, limit)
         out = []
         for i, (_, o) in enumerate(picked, 1):
-            o.id = f"obj-d{state.day}-{i}"
+            o.id = f"obj-t{state.turn}-{i}"                              # v0.41.338: by the turn (a day has 12 plans now)
             out.append(o)
         return out
 
@@ -692,8 +695,7 @@ class WarSimulator:
                 a.health = min(1.0, a.health + (d.sam_repair if a.kind == AssetKind.SAM else d.asset_repair))
         if tempo.decay_on(state) and not (state.ground or {}).get("stand_down"):      # v0.41.164: not on a stand-down day (nothing to fly: the edge is kept); v0.41.208: only when the campaign has Tactical Edge Decay on
             tempo.decay(state)                                       # v0.41.147: the squadrons' edge fades a little each night
-        for a in state.assets.values():
-            a.suppressed = False                                    # blinded radars come back on overnight
+        # v0.41.338 (Phase 4): blinded radars no longer come back overnight: they come back SUPPRESS_TURNS turns after the SEAD (Session._tick)
         for ln in self.counterstrike(state):
             state.note("Overnight: " + ln)
         for ln in sams.red_asks(state, d, self.rng) + sams.rebuild(state, d, self.rng) + sams.relocate(state, d, self.rng) + sams.retreat(state, d, self.rng):
