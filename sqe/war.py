@@ -502,7 +502,8 @@ class WarSimulator:
             wa_ = state.assets.get(pkg.extra["bomber_wing"])
             fb_ = state.bases.get(pkg.objective.target_id)
             if wa_ is not None and fb_ is not None and fb_.kind.value != "CARRIER":
-                up_, psq_ = blue_barcap.patrol_up(state, rng, fb_, (wa_.x, wa_.y))
+                s0_ = int(pkg.start[:2]) * 60 + int(pkg.start[3:5]) if pkg.start else None        # v0.41.339: the planned pairs are known by turn: is one up while the raid package is out?
+                up_, psq_ = blue_barcap.patrol_up(state, rng, fb_, (wa_.x, wa_.y), window=(s0_ - blue_barcap.LEAD_MIN, s0_ + blue_barcap.PACKAGE_WINDOW_MIN) if s0_ is not None else None)
                 if up_:
                     strength += blue_barcap.PATROL_RAID_WEIGHT * ROLE_WEIGHT[Role.CAP]
         live_ = [state.assets[x] for x in (pkg.extra.get("prep_sites") or []) if x in state.assets

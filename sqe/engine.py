@@ -14,7 +14,7 @@ from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
 from .models import BaseKind, Objective, ObjectiveType, Role
-from . import airwings, clock, raids, redair, refit, sams, ground, support_assets, tempo
+from . import airwings, barcap as barcap_, clock, raids, redair, refit, sams, ground, support_assets, tempo
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import AI_ONLY, ai_only, carrier_raid, Ledger, NoPlayerSlot, Package, PackageBuilder
 
@@ -167,7 +167,7 @@ class Session:
 
     def _begin_day(self) -> None:
         """What is decided once a day (v0.41.338, Phase 4; it was the first half of `plan_day`): the garrisons and sites a day needs, the fleet and carrier, red's air tasking, the day's
-        announced raids and the carrier raid (each gets a turn of its own here: `plan_turn` offers it then), blue's standing patrols and the AWACS / tanker windows."""
+        announced raids and the carrier raid (each gets a turn of its own here: `plan_turn` offers it then). Blue's standing patrols, the guards and the AWACS / tanker windows start the day empty and are planned turn by turn (`plan_turn`, Phase 4b)."""
         st = self.state
         from . import threatmap as _tm
         _tm.set_ramp_lead(bool(getattr(self.settings, "hot_ramp_scrambles", False)))      # v0.41.92: planning keep-outs use the same scramble circles as the build
@@ -205,11 +205,8 @@ class Session:
         warned, n_surprise = raids.todays_raids(st, self.d, self._rng(71))      # still one draw a day (the plan: Phase 5 moves it); each raid is offered in a turn of its own
         st.raids = {**keep, "day": st.day, "surprise": n_surprise, "carry": [], "bomber_turn": bomber_turn,
                     "day_raids": [{"turn": pick.choice(turns) if turns else st.turn, "o": o.to_dict()} for o in warned]}
-        from . import blue_barcap, support_assets
-        support_assets.plan(st)                          # v0.41.87: when each AWACS / tanker type has an aircraft on orbit today (before the guards, v0.41.88)
-        bp = blue_barcap.plan(st, self.d)                # v0.41.85: blue's standing patrols and guards are planned (and paid for) before the packages
-        st.barcap["blue_flights"], st.barcap["blue_cover"] = bp["flights"], bp["cover"]
-        st.barcap["blue_committed"] = []                 # v0.41.337: the planned CAP sorties (by squadron and callsign) already sent to refit today: one sortie is committed once even when it covers packages in two turns
+        bc = barcap_.ensure(st)                          # the day's BARCAP areas (made once a day); the standing patrols, guards and the AWACS / tanker windows are planned turn by turn (`plan_turn`, Phase 4b)
+        bc["blue_flights"], bc["blue_cover"], bc["support_flights"], bc["blue_committed"] = [], {}, {}, []
 
     def _turn_rate(self, turn: int) -> float:
         """How many packages this turn plans (a fraction is a seeded chance of one more): PACKAGES_PER_TURN by level and day / night, DAY1_EXTRA more on every day turn of Day 1."""
@@ -287,6 +284,8 @@ class Session:
         st.raids["planned_turn"] = turn
         st.raids["sead"] = {}                                                # the SEAD dice are cast per turn (`_cast_sead`)
         st.plan = []
+        if st.barcap is not None:
+            st.barcap["blue_committed"] = []                                 # per turn (Phase 4b): the standing patrols already sent to refit this turn, by `squadron:callsign`
         if clock.is_night_turn(turn) and not st.night_ops:                   # a night turn with night ops off is resolved without you: nothing is planned in it
             self.refresh_weather()
             return []
@@ -314,18 +313,18 @@ class Session:
         from . import blue_barcap
         t_abs = clock.minute(turn)
 
+        from . import carrier_hit
+        base_L = Ledger(st, ready_min=t_abs + _tod.WAVE2_OFFSET_MIN)       # the turn's jets: wave 1 = ready now, wave 2 adds what finishes its refit by the second wave
+        _df = carrier_hit.deck_factor(st)                                   # v0.41.109: a carrier deck torn up by a raid launches less (0 the day after, half the day after that)
+        if _df < 1.0:
+            base_L.scale([sid for sid, q in st.squadrons.items() if st.bases[q.base_id].kind == BaseKind.CARRIER], _df)
+        # v0.41.339 (Phase 4b): the AWACS / tanker windows of this turn, then the standing patrols and guards, planned from the same ledger BEFORE the packages: their jets come off it
+        # (the packages are built from what is left, so nothing is booked twice and the 4a `hold` is gone)
+        wins = support_assets.plan(st, turn)
+        blue_barcap.plan_turn(st, self.d, turn, t0, base_L, self._rng(81), wins)
+
         def make_ledger():
-            """The turn's jets: wave 1 = ready now, wave 2 adds what finishes its refit by the second wave; a torn-up carrier deck and the standing patrols planned for this turn come off."""
-            from . import carrier_hit
-            L = Ledger(st, ready_min=t_abs + _tod.WAVE2_OFFSET_MIN)
-            _df = carrier_hit.deck_factor(st)                       # v0.41.109: a carrier deck torn up by a raid launches less (0 the day after, half the day after that)
-            if _df < 1.0:
-                L.scale([sid for sid, q in st.squadrons.items() if st.bases[q.base_id].kind == BaseKind.CARRIER], _df)
-            done = set((st.barcap or {}).get("blue_committed", []))
-            for f in (st.barcap or {}).get("blue_flights") or []:      # the planned CAP / guard sorties that start in this turn hold their jets (until Phase 4b plans them per turn); one already sent to refit does not
-                if f["start"] < t0 + clock.TURN_MIN and f["end"] > t0 and f["squadron"] in st.squadrons and f"{f['squadron']}:{f['callsign']}" not in done:
-                    L.hold(f["squadron"], int(f["size"]))
-            return L
+            return base_L.copy()
 
         sweeps = {}                                     # id(sweep package) -> the packages it goes in ahead of
 
@@ -1117,16 +1116,34 @@ class Session:
             e["launch_min"] = min(e["launch_min"], launch)
 
     def _sorties(self, book: dict) -> list:
-        """The book as `refit.commit_turn` wants it, minus planned CAP sorties already committed earlier today (one planned sortie covers packages in two turns)."""
+        """The book as `refit.commit_turn` wants it, plus the standing patrols (Phase 4b). A planned CAP sortie (`f.tag`) that rode in several packages is committed once (`barcap["blue_committed"]`, by
+        `squadron:callsign`, reset every turn); it is committed with the launch time and stay of its own plan, not the package's. Every pair the turn planned that no package booked (it covered none, or the
+        package that carried it was scrubbed or not flown) is committed here by its callsign or, with none, its flight id: a planned patrol takes its jets out of the ready pool whether or not a package met it."""
         st = self.state
-        done = set((st.barcap or {}).get("blue_committed", []))
+        bc = st.barcap if st.barcap is not None else {}
+        done = set(bc.get("blue_committed", []))
+        day0 = clock.day_start_minute(st.day)
+        planned = {}                                                                 # this turn's planned flights, by the key a package books them under
+        for f in bc.get("blue_flights") or []:
+            if f.get("turn") == st.turn and f["squadron"] in st.squadrons:
+                planned[f"{f['squadron']}:{f['callsign']}" if f.get("callsign") else f["id"]] = f
         out = []
         for key, e in book.items():
             if e["tag"]:
                 if key in done:
                     continue
                 done.add(key)
+                pf = planned.get(key)
+                if pf is not None:
+                    e["launch_min"], e["sortie_min"] = day0 + pf["start"], max(refit.SORTIE_MIN, pf["end"] - pf["start"])
+                    e["lost"] = max(e["lost"], int(pf.get("lost", 0)))
             out.append(e)
+        for key, f in planned.items():
+            if key in done:
+                continue
+            done.add(key)
+            out.append({"unit": st.squadrons[f["squadron"]], "side": "blue", "launch_min": day0 + f["start"], "flew": int(f["size"]), "lost": int(f.get("lost", 0)), "limped": None, "tag": True, "key": key,
+                        "sortie_min": max(refit.SORTIE_MIN, f["end"] - f["start"])})
         if st.barcap is not None:
             st.barcap["blue_committed"] = sorted(done)
         return out

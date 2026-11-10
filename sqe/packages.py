@@ -244,11 +244,25 @@ class Ledger:
             self.free[sid] = int(self.free[sid] * f)
             self.late[sid] = int(self.late[sid] * f)
 
-    def hold(self, sid: str, n: int) -> None:
-        """Take n jets of a squadron out of the turn's pool (standing patrols already planned): from the ready ones first."""
-        k = min(self.free.get(sid, 0), n)
-        self.free[sid] = self.free.get(sid, 0) - k
-        self.late[sid] = max(0, self.late.get(sid, 0) - (n - k))
+    def room(self, sid: str, wave: int) -> int:
+        """Jets of a squadron a sortie of this wave can still draw: the ready ones, and in wave 2 also the late ones."""
+        return self.free.get(sid, 0) + (self.late.get(sid, 0) if wave == 2 else 0)
+
+    def take(self, sid: str, n: int, wave: int) -> bool:
+        """Spend n jets of a squadron on a standing patrol or guard of this wave (v0.41.339, Phase 4b: they are planned from the turn's ledger, before the packages). Wave 2 spends the late
+        jets first, so the ready ones stay for wave 1, as `settle` does. False (and nothing spent) when the squadron has not got them."""
+        if self.room(sid, wave) < n:
+            return False
+        k = min(self.late.get(sid, 0), n) if wave == 2 else 0
+        if k:
+            self.late[sid] -= k
+        self.free[sid] = self.free.get(sid, 0) - (n - k)
+        return True
+
+    def copy(self) -> "Ledger":
+        c = Ledger.__new__(Ledger)
+        c.free, c.late = dict(self.free), dict(self.late)
+        return c
 
     def view(self, wave: int) -> "Ledger":
         v = Ledger.__new__(Ledger)
