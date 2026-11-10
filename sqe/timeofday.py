@@ -52,11 +52,17 @@ def ato_times(n: int, d: date, night_ops: bool, rng: random.Random) -> list:
     return [hhmm(lo + i * step + rng.uniform(-0.2, 0.2) * (0 if i in (0, n - 1) else 1)) for i in range(n)]
 
 
-def wave_times(n: int, d: date, night_ops: bool, rng: random.Random, wave: int = 3) -> list:
+def wave_times(n: int, d: date, night_ops: bool, rng: random.Random, wave: int = 3, earliest: float | None = None, latest: float | None = None) -> list:
     """n start times in 'waves' of up to `wave` packages 0-25 minutes apart, the waves spread through the day (like a real ATO).
-    Returned ascending; the caller gives consecutive packages (same area) consecutive times."""
+    Returned ascending; the caller gives consecutive packages (same area) consecutive times. `earliest` / `latest` (local decimal hours) clamp the window
+    (v0.41.337: Day 1 starts at 08:00, and with night ops off no package may start inside a night turn, see Session.EARLIEST_START_H)."""
     rise, sets = sun_times(d)
     lo, hi = (rise + 0.5, rise + 0.5 + 22.0) if night_ops else (rise + 1.0, sets - 2.5)
+    if earliest is not None:
+        lo = max(lo, earliest)
+    if latest is not None:
+        hi = min(hi, latest)
+    hi = max(hi, lo)
     n_w = max(1, math.ceil(n / wave))
     centers = [(lo + hi) / 2] if n_w == 1 else [lo + i * (hi - lo) / (n_w - 1) for i in range(n_w)]
     out = []

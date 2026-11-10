@@ -93,6 +93,7 @@ def _scrub(text: str, camp_ids: set) -> str:
 
 def _build(session, st, pkg, ai: bool, flight_id=None):
     session.ai_test = ai
+    session.state.turn = session._turn_of(pkg)          # v0.41.337: the tasking list is per turn; the tool builds from the whole day plan, so the clock stands at the package's own turn
     fl_id = flight_id or session.flyable(pkg)[0].id
     session.fly(pkg.number, fl_id)
     z = zipfile.ZipFile(session.settings.sortie_miz)
@@ -132,7 +133,7 @@ def run() -> dict:
                 if a.kind.value == "SAM":
                     a.health = 0.0
             s.plan_day()
-        opts = [p for p in s.packages() if s.flyable(p)]
+        opts = [p for p in s.day_packages() if s.flyable(p)]          # v0.41.337: the whole day plan (packages() is this turn's)
         seen, pick = set(), []
         for p in opts:                                         # one package per objective type first, then fill up
             if p.objective.type not in seen:
@@ -149,7 +150,7 @@ def run() -> dict:
         # AI-only packages (BARCAP, fleet defence = bomber / raid intercepts) and Fighter Sweeps nobody can fly: built as the all-AI test with
         # the package's first flight standing in for yours, so their route, station and task code is covered too.
         extra, kinds = [], set()
-        for p in s.packages():
+        for p in s.day_packages():
             kind = (p.objective.type, p.objective.aim if p.objective.aim == "SWEEP" else "")
             if kind in kinds or s.flyable(p) or not p.flights:
                 continue

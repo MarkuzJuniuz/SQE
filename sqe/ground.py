@@ -39,8 +39,8 @@ SKIRMISH, ATTACK = 0.04, 0.14
 DECISIVE, REPULSED = 1.8, 0.55
 RETREAT_SHARE = 0.6           # what a routed force saves by falling back
 FALL_LOSS = 0.3               # aircraft lost when a field falls and its squadrons leave
-FALL_MOVE_NEAR_KM = 100       # v0.41.243: a squadron that changes field is out of the line for the nights below (judgment call, XO: "1 to 2 days"): the ground crews move too
-FALL_MOVE_NIGHTS = (1, 2)     # (new field closer than FALL_MOVE_NEAR_KM, further)
+FALL_MOVE_NEAR_KM = 100       # v0.41.243: a squadron that changes field is out of the line for the time below (judgment call, XO: "1 to 2 days"; v0.41.337: 12 / 24 hours): the ground crews move too
+FALL_MOVE_TURNS = (6, 12)     # v0.41.337 (XO 2026-11-09, plan OPEN 10): turns out of the line for a squadron that changes field: 12 hours to a near field, 24 hours to a far one (was FALL_MOVE_NIGHTS (1, 2))
 TAKEN_STAGES = (("aaa", 3), ("hawk", 6), ("pat", 9))      # v0.41.244 (XO 2026-11-03): a field we take grows its air defence in this order, on these days after the fall, alongside the 9-day takeover clock (judgment calls)
 TAKEN_NEW_DAY = 16            # v0.41.247 (XO 2026-11-03): one week after the Patriots, a NEW squadron is formed at the taken field (`new_squadrons.py`; judgment call)
 TAKEN_NEW_SQUADRONS = 1       # per taken field (judgment call: each is up to 18 more jets for blue; raise it if blue is thin at the front)
@@ -59,7 +59,8 @@ REAR_FRAC = 0.7               # red strength in the sectors behind its first lin
 BLUE_ATTACK_MIN = 30.0        # our force in a sector must be at least this before we attack (toy model "THR"; judgment call)
 BLUE_ATTACK_RATIO = 0.9       # ...and not weaker than this share of the enemy's strength there (supply-weighted)
 BLUE_ATTACK_CHANCE = 0.7      # daily chance that a ready force attacks
-SURGE_GRACE_DAYS = 2          # v0.41.155: days your squadron can stand down before red's surge starts (judgment call)
+SURGE_GRACE_TURNS = 24        # v0.41.337 (XO 2026-11-09, plan OPEN 3; was SURGE_GRACE_DAYS 2): flyable turns your squadron can skip, with no sortie in between, before red's surge starts (judgment call). A stand-down turn (nothing flyable) does not count
+TURNS_PER_DAY = 12            # the surge step (`red_surge`) is still per day: idle turns past the grace count 1/12 of a day each
 SURGE_CAP = 2.0               # ...and the most it adds (x2 at the top)
 REAR_FLOOR = 15.0             # v0.41.155: a rear sector is not drained below this by the red feed (judgment call)
 RED_CLOCK_DAYS = 3            # after we take a base the enemy's own attacks wait this long (its force needs 3 days to arrive; XO 2026-10-24 item 5)
@@ -601,13 +602,14 @@ def _clamp(v, lo, hi):
 
 def surge(state, d) -> float:
     """v0.41.155 (XO 2026-10-27, "red needs a chance to win if I do not fly"): 1.0 while your squadron flies; then it grows by the level's `red_surge` for every day beyond
-    SURGE_GRACE_DAYS since the last flown sortie, up to 1 + SURGE_CAP. It multiplies red's reinforcements, attack chance and raid rate."""
+    SURGE_GRACE_TURNS skipped flyable turns since the last flown sortie (`g["idle_turns"]`: Session.skip_turn adds one per flyable turn skipped, a flown sortie resets it; a turn with
+    nothing for you to fly does not count), up to 1 + SURGE_CAP. It multiplies red's reinforcements, attack chance and raid rate."""
     step = float(getattr(d, "red_surge", 0.0))
     g = state.ground or {}
     if step <= 0 or not g or not g.get("pilot_influence", True):      # v0.41.160: Pilot Influence off: no surge, your flying makes no difference here
         return 1.0
-    idle = state.day - int(g.get("flown_day", g.get("start_day", 1))) - SURGE_GRACE_DAYS
-    return 1.0 + min(SURGE_CAP, max(0, idle) * step)
+    idle = (int(g.get("idle_turns", 0)) - SURGE_GRACE_TURNS) / TURNS_PER_DAY            # days' worth of idle past the grace
+    return 1.0 + min(SURGE_CAP, max(0.0, idle) * step)
 
 
 def _red_cas(state, d, rng, red, blue, n, sg) -> list:
@@ -1080,7 +1082,7 @@ def apply_red_fall(state, rb) -> list:
                 w.sqns.remove(q); dest.sqns.append(q)
                 if q.available > 0 and q.reserve == 0 and "Tu_22M3" not in w.types:        # v0.41.243: red squadrons are out of the line while they move too
                     q.reserve, q.available, q.rest_days = q.available, 0, 0
-                    q.move_days = FALL_MOVE_NIGHTS[0] if math.hypot(state.assets[dest.base_asset_id].x - fx, state.assets[dest.base_asset_id].y - fy) / 1000.0 < FALL_MOVE_NEAR_KM else FALL_MOVE_NIGHTS[1]
+                    q.move_until = state.turn + (FALL_MOVE_TURNS[0] if math.hypot(state.assets[dest.base_asset_id].x - fx, state.assets[dest.base_asset_id].y - fy) / 1000.0 < FALL_MOVE_NEAR_KM else FALL_MOVE_TURNS[1])
             w.squadrons = len(w.sqns); dest.squadrons = len(dest.sqns)
             lines.append(f"   its squadrons withdraw to {state.assets[dest.base_asset_id].name}, {lost} aircraft lost")
     return lines
@@ -1107,13 +1109,13 @@ def apply_fall(state, bid: str) -> list:
 
 
 def _settle(state, sq, dist_m: float) -> str:
-    """v0.41.243: a squadron that has just changed field sits out FALL_MOVE_NIGHTS (1 or 2 nights by distance); its jets wait in `reserve` and `airwings.step` brings them
-    back. Not one already resting. Returns the log suffix."""
+    """v0.41.243: a squadron that has just changed field sits out FALL_MOVE_TURNS (12 or 24 hours by distance; v0.41.337, was 1 or 2 nights); its jets wait in `reserve` and
+    `airwings.step_moves` brings them back at `move_until`. Not one already resting. Returns the log suffix."""
     if sq.available <= 0 or sq.reserve > 0:                              # (v0.41.246, XO: the player's squadron sits out its nights like any other)
         return ""
-    n = FALL_MOVE_NIGHTS[0] if dist_m / 1000.0 < FALL_MOVE_NEAR_KM else FALL_MOVE_NIGHTS[1]
-    sq.reserve, sq.available, sq.rest_days, sq.move_days = sq.available, 0, 0, n
-    return f"; back in the line in {n} day{'s' if n > 1 else ''}"
+    n = FALL_MOVE_TURNS[0] if dist_m / 1000.0 < FALL_MOVE_NEAR_KM else FALL_MOVE_TURNS[1]
+    sq.reserve, sq.available, sq.rest_days, sq.move_days, sq.move_until = sq.available, 0, 0, 0, state.turn + n
+    return f"; back in the line in {n * 2} hours"
 
 
 def return_squadrons(state, bid: str) -> list:

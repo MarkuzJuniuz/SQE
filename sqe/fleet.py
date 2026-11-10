@@ -126,7 +126,7 @@ def apply_debrief(state, manifest, data: dict) -> list:
         down = left_ + len(aboard)
         survivors = len(flying) - len(aboard)
         sq.available = max(0, survivors)
-        sq.reserve = sq.rest_days = sq.move_days = 0
+        sq.reserve = sq.rest_days = sq.move_days = sq.move_until = 0
         txt = f"   {sq.name}: {down} aircraft went down with the ship"
         if dest is not None:
             sq.home_id = sq.home_id or cv.id
@@ -160,7 +160,7 @@ def step(state) -> list:
                 sq.base_id, sq.home_id = cv.id, ""
                 lines.append(f"   {sq.name} flies home to {cv.name} at full strength ({sq.authorized})")
             if sq.base_id == cv.id:                                    # every carrier squadron is back at its authorized strength
-                sq.available, sq.reserve, sq.rest_days, sq.move_days = sq.authorized, 0, 0, 0
+                sq.available, sq.reserve, sq.rest_days, sq.move_days, sq.move_until = sq.authorized, 0, 0, 0, 0
         state.fleet = {}
         return lines
     back = [k for k, d in list((f.get("escorts") or {}).items()) if state.day >= int(d)]

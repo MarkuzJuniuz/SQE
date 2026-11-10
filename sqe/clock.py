@@ -3,7 +3,7 @@
 A turn is two hours. The campaign starts on Day 1 at 08:00, so Day 1 has 8 turns (08:00 to 22:00) and every later day has 12. The day rolls over at midnight
 (`WarSimulator.end_day` runs when the clock crosses 24:00), so `state.day` stays stored and equal to `day_of(turn)`.
 
-`state.turn` is the only stored clock. Until Phase 3 (Skip and Fly take one turn) `end_day` moves it a whole day at a time, to `first_turn(new day)`.
+`state.turn` is the only stored clock. Since Phase 3 (v0.41.337) `Session._tick` moves it one turn at a time: a Skip or a flown sortie is one turn, and `end_day` runs when the clock crosses midnight.
 Pure arithmetic, no state, no pydcs: like a static utility class in Java or C#.
 """
 from __future__ import annotations

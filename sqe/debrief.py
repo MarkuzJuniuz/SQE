@@ -1706,7 +1706,9 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     landed = set(data.get("landed", []))
     out = {"blue_losses": [], "red_assets": [], "red_air_lost": 0, "blue_air_lost": 0, "target_damage": 0.0,
            "lines": [], "ended": bool(data.get("mission_ended")), "objective": "", "objective_type": "",
-           "player": "airborne", "package_id": manifest.package_id}
+           "player": "airborne", "package_id": manifest.package_id,
+           "flights": {}}                                  # v0.41.337: friendly flight id -> {squadron, flew, lost, limped}: what Session._flown_sorties hands to refit.commit_turn
+    limped_ = set((data.get("limped") or {}).keys())         # the hook's `limped` object: units that landed or were recovered below LIMP_LIFE (unit name -> hit points left, percent)
     site_cap = {}                                           # v0.41.241: blue supply sites / garrisons: the health the destroyed buildings or vehicles leave (applied after the raid's own hit, so one raid is never counted twice)
     for g in manifest.groups:
         dead = [u for u in g["units"] if u in lost]
@@ -1715,6 +1717,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         if g["kind"] == "friendly":
             sq = state.squadrons[g["squadron"]]
             sq.available = max(0, sq.available - len(dead))
+            out["flights"][g["ref"]] = {"squadron": g["squadron"], "flew": len(g["units"]), "lost": len(dead),
+                                        "limped": sum(1 for u in g["units"] if u in limped_ and u not in lost)}      # v0.41.337: a limping jet that also died is just lost
             out["blue_air_lost"] += len(dead)
             if dead:
                 out["blue_losses"].append({"callsign": g.get("callsign", g["ref"]), "lost": len(dead), "total": len(g["units"])})

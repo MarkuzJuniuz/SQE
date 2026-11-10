@@ -34,14 +34,15 @@ class CampaignState:
     level: int = 2
     campaign_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
     day: int = 1
-    turn: int = 0                                  # v0.41.334: the clock (clock.py): two-hour turns since 08:00 on Day 1; `day` stays equal to clock.day_of(turn). Until Phase 3 it moves a whole day at a time (end_day)
+    turn: int = 0                                  # v0.41.334: the clock (clock.py): two-hour turns since 08:00 on Day 1; `day` stays equal to clock.day_of(turn). Session._tick moves it one turn at a time (v0.41.337, Phase 3)
     sortie_counter: int = 0
     player: PlayerProfile | None = None
     bases: dict = field(default_factory=dict)
     squadrons: dict = field(default_factory=dict)
     assets: dict = field(default_factory=dict)
     enemy_air: list = field(default_factory=list)
-    plan: list = field(default_factory=list)       # today's packages as dicts
+    plan: list = field(default_factory=list)       # today's packages as dicts, the ones not resolved yet (v0.41.337: a package leaves the plan when its turn is resolved)
+    plan_done: list = field(default_factory=list)  # v0.41.337 (Phase 3): today's packages that were resolved, with the verdict (`extra["done_roll"]`): earlier packages that may show as ruins (Session.ruin_candidates). Cleared at midnight
     pending: dict | None = None                    # the sortie that has been built but not yet debriefed
     history: list = field(default_factory=list)    # one dict per debriefed sortie
     log: list = field(default_factory=list)
@@ -68,7 +69,9 @@ class CampaignState:
         return date.fromisoformat(self.start_date) + timedelta(days=self.day - 1)
 
     def note(self, text: str) -> None:
-        self.log.append(f"[day {self.day}] {text}")
+        from . import clock
+        m = clock.minute(self.turn) % clock.DAY_MIN                    # v0.41.337: [day N HHMM] (the clock's day, so a note written as the clock crosses midnight belongs to the new day)
+        self.log.append(f"[day {clock.day_of(self.turn)} {m // 60:02d}{m % 60:02d}] {text}")
 
     def enemy_air_at(self, asset_id: str):
         return next((w for w in self.enemy_air if w.base_asset_id == asset_id), None)
@@ -98,7 +101,7 @@ class CampaignState:
             "fleet": self.fleet,
             "blue_assets": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.blue_assets.items()},
             "blue_sams": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.blue_sams.items()},
-            "plan": self.plan, "pending": self.pending, "history": self.history[-300:], "log": self.log[-400:],
+            "plan": self.plan, "plan_done": self.plan_done, "pending": self.pending, "history": self.history[-300:], "log": self.log[-400:],
         }
 
     @classmethod
@@ -134,6 +137,7 @@ class CampaignState:
         s.blue_assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_assets") or {}).items()}
         s.blue_sams = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_sams") or {}).items()}      # missing in an older save: sams.ensure_blue_sams builds them from each field's `defense`
         s.plan, s.pending = d.get("plan", []), d.get("pending")
+        s.plan_done = d.get("plan_done") or []                            # missing in a save from before v0.41.337: nothing resolved yet today
         s.history, s.log = d.get("history", []), d.get("log", [])
         if not s.ground:                           # a campaign from before the ground war (format 4): give it one for its level
             from . import ground

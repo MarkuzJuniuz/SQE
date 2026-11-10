@@ -136,23 +136,34 @@ def lose(state, label: str, n: int = 1) -> str:
     return ""
 
 
-def step(state, rng) -> list:
-    """Overnight: each missing blue airframe is back with RETURN_P; a missing E-3 is replaced one at a time every 48 hours (E3_REPLACEMENT_MIN, on the campaign
-    clock, `state.turn`). -> log lines."""
+def replace_e3(state) -> list:
+    """Every TURN (v0.41.337, Phase 3; it was inside the nightly `step`, so a 48 h replacement took 64 to 72 h): a missing E-3 is replaced one at a time every 48 hours
+    (E3_REPLACEMENT_MIN, on the campaign clock, `state.turn`); the timer starts when the first airframe is seen missing. -> log lines."""
     from . import clock
     out = []
     now = clock.minute(state.turn)
     for a in ensure(state).values():
-        if a["side"] != "blue" or a["available"] >= a["authorized"]:
+        if a["side"] != "blue" or a["dcs_class"] != "E_3A":
+            continue
+        if a["available"] >= a["authorized"]:
             a.pop("repl_due", None)
             continue
+        if "repl_due" not in a:
+            a["repl_due"] = now + E3_REPLACEMENT_MIN             # the timer starts when the first airframe is missing
+        if now >= a["repl_due"]:
+            a["available"] += 1
+            a["repl_due"] = now + E3_REPLACEMENT_MIN
+            out.append(f"{a['label']}: a replacement airframe arrived ({a['available']}/{a['authorized']})")
+    return out
+
+
+def step(state, rng) -> list:
+    """Overnight: each missing blue airframe is back with RETURN_P. (The E-3 is replaced on its own 48 h clock, every turn: `replace_e3`.) -> log lines."""
+    out = []
+    for a in ensure(state).values():
+        if a["side"] != "blue" or a["available"] >= a["authorized"]:
+            continue
         if a["dcs_class"] == "E_3A":
-            if "repl_due" not in a:
-                a["repl_due"] = now + E3_REPLACEMENT_MIN             # the timer starts when the first airframe is missing
-            if now >= a["repl_due"]:
-                a["available"] += 1
-                a["repl_due"] = now + E3_REPLACEMENT_MIN
-                out.append(f"{a['label']}: a replacement airframe arrived ({a['available']}/{a['authorized']})")
             continue
         back = sum(1 for _ in range(a["authorized"] - a["available"]) if rng.random() < RETURN_P)
         if back:
