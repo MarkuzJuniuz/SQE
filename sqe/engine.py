@@ -185,7 +185,7 @@ class Session:
         _cv = None if _fleet.sunk(st) else carrier_pos.update(st)      # v0.41.159: the fleet repositions once a day, along the front and clear of the red airfields
         if _cv:
             st.note(_cv)
-        redair.ensure(st, self.d)                       # the enemy's air tasking for the day
+        redair.begin_day(st)                            # the enemy's air tasking: the day's shell (v0.41.340, Phase 5a: its patrols and sweeps are planned per turn, `plan_turn`)
         turns = self._day_turns()
         pick = self._rng(72)                            # which turn each of the day's raids goes in (seeded: the same campaign gives the same day)
         # the carrier raid (bombers.decide is pure, so the planner and the raid plan agree): a staged raid is noted the day red decides it (and makes today the quiet day
@@ -200,8 +200,6 @@ class Session:
             else:
                 bomber_turn = pick.choice(turns) if turns else st.turn
         keep = {k: v for k, v in (st.raids or {}).items() if k in ("carry", "sead_fail", "bomber_days", "bomber_stage", "deck_out_to", "retask")}
-        if st.red_air.get("patrol_used") is not None:                 # replanning the same day never books the raids twice
-            st.red_air["used"] = dict(st.red_air["patrol_used"])
         warned, n_surprise = raids.todays_raids(st, self.d, self._rng(71))      # still one draw a day (the plan: Phase 5 moves it); each raid is offered in a turn of its own
         st.raids = {**keep, "day": st.day, "surprise": n_surprise, "carry": [], "bomber_turn": bomber_turn,
                     "day_raids": [{"turn": pick.choice(turns) if turns else st.turn, "o": o.to_dict()} for o in warned]}
@@ -291,6 +289,7 @@ class Session:
             return []
         from . import threatmap as _tm
         _tm.set_ramp_lead(bool(getattr(self.settings, "hot_ramp_scrambles", False)))
+        redair.plan_turn(st, self.d, turn, t0, self._rng(91))            # v0.41.340 (Phase 5a): red plans this turn's patrols and sweeps FIRST, from its own ready fighters (blue's sweeps and the mission read its flights)
         rate = self._turn_rate(turn)
         rr = self._rng(2)
         n = int(rate) + (1 if rr.random() < rate - int(rate) else 0)
@@ -315,6 +314,9 @@ class Session:
 
         from . import carrier_hit
         base_L = Ledger(st, ready_min=t_abs + _tod.WAVE2_OFFSET_MIN)       # the turn's jets: wave 1 = ready now, wave 2 adds what finishes its refit by the second wave
+        from . import reserve as _res                                       # v0.41.340 (Phase 5a): the reaction reserve comes off the fighter / multirole squadrons BEFORE the patrols and packages draw on the ledger
+        if st.barcap is not None:
+            st.barcap["react_hold"] = _res.apply(base_L, [q for q in st.squadrons.values() if Role.CAP in AIRCRAFT[q.aircraft].roles], int(st.level))
         _df = carrier_hit.deck_factor(st)                                   # v0.41.109: a carrier deck torn up by a raid launches less (0 the day after, half the day after that)
         if _df < 1.0:
             base_L.scale([sid for sid, q in st.squadrons.items() if st.bases[q.base_id].kind == BaseKind.CARRIER], _df)
@@ -1146,7 +1148,18 @@ class Session:
                         "sortie_min": max(refit.SORTIE_MIN, f["end"] - f["start"])})
         if st.barcap is not None:
             st.barcap["blue_committed"] = sorted(done)
-        return out
+        return out + self._red_sorties()
+
+    def _red_sorties(self) -> list:
+        """The red patrol and sweep pairs this turn planned (v0.41.340, Phase 5a), as `refit.commit_turn` wants them: one sortie per pair, unit = the RedSquadron it was crewed from, its own launch
+        time and stay (`sortie_min` = max(`refit.SORTIE_MIN`, end - start)). Red has no per-flight record of what the war sim or a flown mission took from a pair, so `lost` is 0 here: the jets
+        that were shot down are already off `available` (`commit_flight` never moves more than `available`, so a lost jet is not put into refit). One commit per pair, flown or not."""
+        st = self.state
+        day0 = clock.day_start_minute(st.day)
+        owner = {q.id: q for w in st.enemy_air for q in w.sqns}
+        return [{"unit": owner[f["squadron"]], "side": "red", "launch_min": day0 + f["start"], "flew": int(f["size"]), "lost": 0, "limped": None, "tag": True, "key": f["id"],
+                 "sortie_min": max(refit.SORTIE_MIN, f["end"] - f["start"])}
+                for f in (st.red_air or {}).get("flights", []) if f.get("turn") == st.turn and f.get("squadron") in owner]
 
     def _retire(self, done: list) -> None:
         """Packages that were resolved (flown or by the war simulation) leave the plan and join `state.plan_done` with their verdict, so a later turn's mission can show them as ruins."""

@@ -637,10 +637,10 @@ def _red_cas(state, d, rng, red, blue, n, sg) -> list:
         cover = [x for x in wings if dist(x) <= RED_CAS_COVER_KM * 1000.0 and x.available_of(ENEMY_FIGHTERS) >= 2]
         esc = None
         if not cover:
-            fw = [x for x in sorted(wings, key=dist) if x.available_of(ENEMY_FIGHTERS) >= 2 and redair.can(state, x.base_asset_id, 2)]
+            fw = [x for x in sorted(wings, key=dist) if x.available_of(ENEMY_FIGHTERS) >= 2 and redair.can(state, x.base_asset_id, 2, fighters=True)]      # v0.41.340: the escort must also be free of this turn's patrols and the reserve
             if fw:
                 esc = fw[0]
-                redair.spend(state, esc.base_asset_id, 2)
+                redair.spend(state, esc.base_asset_id, 2, fighters=True)
         p = RED_CAS_P * sg - RED_CAS_BLUE_SHARE * tempo.get(state, "AIR") - (RED_CAS_BARE if (not cover and esc is None) else 0.0)
         if rng.random() < min(0.95, max(0.05, p)):
             blue[i] = max(0.0, blue[i] * (1.0 - RED_CAS_CUT))
