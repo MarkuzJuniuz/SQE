@@ -516,7 +516,7 @@ class RaidSpawns:
                 used[g["ref"]] = used.get(g["ref"], 0) + len(g["units"])
         base_n = sum(used.values())
         fleet_obj = package.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
-        picks = reactive.plan_red(st, d, rr, tx, ty, base_n, blue_f, used, ENEMY_FIGHTERS, bearing) if not fleet_obj else []
+        picks = reactive.plan_red(st, d, rr, tx, ty, base_n, blue_f, used, ENEMY_FIGHTERS, bearing, self._hold_drawn) if not fleet_obj else []
         skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
         pt = lambda x, y: mapping.Point(x, y, self.t)
         alt, spd = 22000 * FT, 400 * KPH
@@ -532,6 +532,7 @@ class RaidSpawns:
             cls = getattr(planes, pk["type"])
             load = enemy_cap_loadout(pk["type"])
             g, how_ = self._alert_group(self.red, f"Reinforce {k}", cls, ap, task.CAP, None, pk["size"], (tx, ty))
+            self._alerts[-1]["sq"] = pk.get("sq", "")
             if how_ == "ramp":
                 g.add_trigger_action(task.StartCommand())
                 g.uncontrolled = True
@@ -560,7 +561,7 @@ class RaidSpawns:
             g.set_skill(skill)
             if o.enemy_unlimited_fuel:
                 g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
-            manifest.add("enemy_air", a.id, names, ac=pk["type"])
+            manifest.add("enemy_air", a.id, names, ac=pk["type"], grp=g.name)
             placed_red += pk["size"]
             if a.id not in seen_src:
                 seen_src.add(a.id)

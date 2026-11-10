@@ -1,5 +1,15 @@
 # CHANGES.md
 
+## v0.41.343, campaign rules Phase 6a: scrambles draw from the reaction hold
+
+XO 2026-11-10 ("fox 3 medium"), `campaign rules plan.md` Phase 6, first half. Red's alert, Relief, Standby and reactive pairs now come out of the reaction hold (`red_air["react_hold"]`, Phase 5a), and a scramble that got airborne goes to refit. No save format change. **Not flown in DCS. Smoke not run.**
+- **Hold draw** (`reserve.red_hold_left`, `reserve.pick_red_hold`): per squadron the hold, never more than its ready jets, less what this mission already drew (`MissionBuilder._hold_drawn`, one dict through the whole build). A pair comes from the squadron with the most hold left; a wing with nothing held sends nothing.
+- **Replaced:** the v0.41.110 block in `reactive.plan_red` (2 jets per BARCAP area) and the `available_of(...) >= 4` tests of the Relief and Standby pairs. The dice (`react_chance`, `react_ratio`) are unchanged. An alert pair that finds its field without hold tries the next field in reach; none anywhere, no pair.
+- **Hook:** each alert record carries `sq` (the red squadron id; "" for blue) next to `g`, `f`, `b`, `ty`; the manifest's red groups carry `grp` (the group name).
+- **Debrief** (`apply_debrief`): an alert with `called` and `air` set is a flown sortie of its squadron (launch = the package's start + `called`, losses = that group's dead, already off `available`); stuck or never-called pairs cost nothing. The jets it sends to refit are taken off `red_air["avail0"]` too, so `Session._red_sorties` does not read them as losses.
+- **Old saves:** a save without `react_hold` (older than v0.41.340) has no hold for the current turn, so missions built from it have no alert, Relief, Standby or reactive pairs until the next `plan_turn` writes the hold.
+- **Probe** (L3, seeds 3 and 7, 40 turns each, same missions before and after, PYTHONHASHSEED=0): alert pairs 273 -> 164, Standby 95 -> 90, reactive 4 -> 6; 37 of 74 missions changed; no mission drew more than its hold. Relief pairs are 0 before and after (no patrol's relief falls in a mission window). `miz_identity` differs from a v0.41.342 baseline by design.
+
 ## v0.41.342, fix: sams.transfer_days NameError
 
 `transfer_days` used `ground.SUPPLY_FLOOR` without importing `ground` (local import added; a module-level one would be circular). It could crash `blue_asks` / `red_asks` at the end of a day (seen once in a 22-day L3 probe). No behaviour change otherwise. `pyflakes sqe` finds no other undefined name.
