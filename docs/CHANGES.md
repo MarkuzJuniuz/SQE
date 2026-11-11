@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.362, attack fix Stage A: wider SLAM-ER and JSOW launch windows
+
+XO 2026-11-10 ("fox 3 medium"). **NOT FLOWN.** `SLAM_ATTACK_S` 90 -> 240 and `JSOW_ATTACK_S` 120 -> 240: a stand-off jet that leaves the marshal late (the Hornet in the 22-33-46 run reached its SLAM point about 95 s after the window closed) still launches. Only the stop time of the launch tasks and the start of the Return Fire ROE move.
+
 ## v0.41.361, campaign rules Phase 10d: Level 3 red flies the Su-34
 
 XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** New Level 3 campaigns give red 60 Su-34 where it had 60 Su-24M; its raids, Kh-31P SEAD groups (four missiles a jet) and KAB-500Kr DEAD groups fly the Su-34. Level 1 and 2 keep the Su-24M, and old saves load and raid with their Su-24M unchanged.

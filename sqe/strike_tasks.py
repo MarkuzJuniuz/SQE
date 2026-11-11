@@ -16,7 +16,7 @@ from .loadouts import JSOW_PER_JET, JDAM_JETS
 from .models import SEAD_AIMS, AssetKind, ObjectiveType, Role
 from .routes import AVOID_NM, FT, AGM88_LAUNCH_NM, JDAM_ALT_FT, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, NM, assign_times, bearing, dist, objective_wp, offset, plan_route
 
-JSOW_ATTACK_S = 120           # v0.41.46: a JSOW slinger's release tasks end this long after the launch point's ETA, and it turns for home (judgment call; XO's run: releases came 25-60 s before the point)
+JSOW_ATTACK_S = 240           # a JSOW slinger's release tasks end this long after the launch point's ETA, and it turns for home. Was 120 (v0.41.46; XO's run: releases came 25-60 s before the point). v0.41.362: 240 (judgment call): same marshal-exit lateness as the SLAM-ER (XO's run 2026-11-10 22-33-46, about 95 s late), plus margin
 JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
 DEAD_GATE_BEFORE_TGT_S = 75    # fallback: if the DEAD flight never gets close, the radars are checked this long before its planned target time
 AIR_GATE_KM = 100              # v0.41.214 (XO): was 70, the hold sits outside the MiG-31's P-33 reach (about 120 km) of the fight; judgment call. v0.41.203 text: 70               # v0.41.203: a strike / CAS flight with no radar site to wait on checks the air this far from its target (km); the hold, if any, is out here, short of the fight
