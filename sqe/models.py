@@ -95,6 +95,11 @@ class Squadron:
     role: str = ""              # v0.41.353 (Phase 9b): "havcap" = the AWACS / tanker guard squadron: it flies only those guards (Ledger gives it no room for anything else), AI only. "" = an ordinary squadron; an older save has none
 
     @property
+    def on_hand(self) -> int:
+        """S22: the jets the squadron HAS (ready + in refit + resting + held replacements). GUI tables only; the war and planners read `available`."""
+        return self.available + len(self.refit) + self.reserve + self.held
+
+    @property
     def readiness(self) -> float:
         return self.available / self.authorized if self.authorized else 0.0
 
@@ -138,6 +143,11 @@ class RedSquadron:
     refit: list = field(default_factory=list)   # v0.41.334 (refit.py): the absolute minute each jet in refit is ready again; `available` stays "ready now"
     repl_due: int = 0           # the Tu-22M3 squadron's own 48 h replacement timer (other types use the wing's, EnemyAirWing.repl_due)
     held: int = 0               # same, for the Tu-22M3 squadron: arrived while the runway was closed
+
+    @property
+    def on_hand(self) -> int:
+        """S22: the jets the squadron HAS (ready + in refit + resting + its own held replacements). GUI tables only."""
+        return self.available + len(self.refit) + self.reserve + self.held
 
     def __post_init__(self):
         if self.available < 0:

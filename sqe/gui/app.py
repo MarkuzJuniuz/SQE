@@ -483,8 +483,8 @@ class ForcesPage(QWidget):
         super().__init__(); lay = QVBoxLayout(self)
         self.air_line = QLabel(); self.air_line.setObjectName("small"); self.air_line.setWordWrap(True); lay.addWidget(self.air_line)         # v0.41.152: aircraft counts, a detail line (jets no longer decide the war)
         self.tabs = QTabWidget(); lay.addWidget(self.tabs)
-        self.sq = _tbl(["Squadron", "Aircraft", "Service", "Based at", "Serviceable", "Readiness"])
-        self.ea = _tbl(["Aircraft", "Based at", "Serviceable", "Strength"])
+        self.sq = _tbl(["Squadron", "Aircraft", "Service", "Based at", "Aircraft on hand", "Strength"])
+        self.ea = _tbl(["Aircraft", "Based at", "On hand", "Strength"])
         self.as_ = _tbl(["Enemy asset", "Type", "Depth", "Condition"])
         self.bs = _tbl(["Coalition base", "Type", "Patriot", "HAWK", "AAA"])
         self.gw = _tbl(["Sector", "Enemy force", "Friendly force", "Enemy forward garrison", "Friendly forward garrison"])
@@ -503,20 +503,20 @@ class ForcesPage(QWidget):
         self.air_line.setText(f"Aircraft serviceable: Coalition {t['fa']} of {t['fz']}, {en} {t['ea']} of {t['ez']}.")
         self.tabs.setTabText(4, f"{en} air wings"); self.tabs.setTabText(5, f"{en} assets")
         self.gw.setHorizontalHeaderLabels(["Sector", f"{en} force", "Coalition force", f"{en} forward garrison", "Coalition forward garrison"])
-        self.ea.setHorizontalHeaderLabels(["Aircraft", "Based at", "Serviceable", "Strength"]); self.as_.setHorizontalHeaderLabels([f"{en} asset", "Type", "Depth", "Condition"])
+        self.ea.setHorizontalHeaderLabels(["Aircraft", "Based at", "On hand", "Strength"]); self.as_.setHorizontalHeaderLabels([f"{en} asset", "Type", "Depth", "Condition"])
         sqs = list(st.squadrons.values()); self.sq.setRowCount(len(sqs))
         for i, s in enumerate(sqs):
             sp = AIRCRAFT[s.aircraft]
-            for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.available} / {s.authorized}" + (f" (refitting, {s.reserve})" if s.reserve else ""))):
+            for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.on_hand} / {s.authorized}" + (f" ({n} refitting)" if (n := len(s.refit) + s.reserve) else ""))):
                 self.sq.setItem(i, j, _item(v))
-            self.sq.setCellWidget(i, 5, self._bar(s.readiness, theme.BLUE))
+            self.sq.setCellWidget(i, 5, self._bar(s.on_hand / max(1, s.authorized), theme.BLUE))
         rows_ = [(w, q) for w in st.enemy_air for q in w.sqns]                     # v0.41.208 (XO): laid out like the Coalition squadrons (no squadron names): one row per airframe, its base, serviceable and strength
         self.ea.setRowCount(len(rows_))
         for i, (w, q) in enumerate(rows_):
             for j, v in enumerate((q.aircraft.replace("_", "-"), st.assets[w.base_asset_id].name,
-                                   f"{q.available} / {q.authorized}" + (f" (refitting, {q.reserve})" if q.reserve else ""))):
+                                   f"{q.on_hand} / {q.authorized}")):
                 self.ea.setItem(i, j, _item(v))
-            self.ea.setCellWidget(i, 3, self._bar(q.available / max(1, q.authorized), theme.RED))
+            self.ea.setCellWidget(i, 3, self._bar(q.on_hand / max(1, q.authorized), theme.RED))
         from .. import sams as _sams, support_assets as _sa
         bl = list(st.bases.values()); self.bs.setRowCount(len(bl))
         col = lambda h: theme.GREEN if h > 0.6 else theme.AMBER if h > 0.25 else theme.RED
