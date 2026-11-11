@@ -722,7 +722,7 @@ class MainWindow(QMainWindow):
                     self.session.settings.save()
                 except OSError:
                     pass
-                self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], night_ops=v['night_ops'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus')); self.refresh_all()
+                self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus')); self.refresh_all()
             except Exception:
                 QMessageBox.critical(self, "Could not create campaign", traceback.format_exc())
 

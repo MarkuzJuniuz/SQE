@@ -68,8 +68,6 @@ class NewCampaignDialog(QDialog):
         self.day = StepSpin(); self.day.setRange(1, 28); self.day.setValue(12)
         row = QHBoxLayout(); row.addWidget(self.month, 1); row.addWidget(self.day); row.addWidget(QLabel("2006"))
         form.addRow("Campaign starts", row)
-        self.night = QCheckBox("Allow night sorties (otherwise missions are spread through daylight)")
-        form.addRow("", self.night)
         self.pinf = QCheckBox("Tactical Edge: your sorties affect the war")
         self.pinf.setChecked(bool(pilot_influence)); self.pinf.setToolTip(PILOT_INFLUENCE_TEXT)
         form.addRow("", self.pinf)                      # the same setting as Settings > Campaign > Tactical Edge: it can be changed there later
@@ -108,7 +106,7 @@ class NewCampaignDialog(QDialog):
 
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
-                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(), "pilot_influence": self.pinf.isChecked(), "tempo_decay": self.pinf.isChecked() and self.pdec.isChecked(),
+                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "pilot_influence": self.pinf.isChecked(), "tempo_decay": self.pinf.isChecked() and self.pdec.isChecked(),
                 "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData()),
                 "ai_skill_red": str(self.skr.currentData() or "level"), "ai_skill_blue": str(self.skb.currentData() or "level")}
 
