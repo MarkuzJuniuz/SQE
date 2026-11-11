@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.356, campaign rules Phase 10b part 1: the carrier raid's SEAD prep goes in the turn before
+
+XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** The fleet defence SEAD / Standoff DEAD packages are planned in the turn BEFORE the carrier raid (you can fly both); the raid package remembers the sites (`raids["raid_prep"]`) and the war sim reads them. The raid's bearing and launch turn are fixed when it is staged. Old saves keep the same-turn prep.
+
 ## v0.41.355, campaign rules Phase 10a: the Mozdok wing gets work
 
 XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** The Mozdok Su-27s fly red's normal jobs (reactions, raid escorts) unless a carrier raid is staged; a new Tu-22M3 land strike (2 Tu-22M3 with OFAB-250 racks + 2 Su-27) hits blue supply sites, crewed before the carrier raid, which now goes only when a full raid is still left after it. Old saves load unchanged.

@@ -15,7 +15,9 @@ Sources and judgment calls (the numbers below are JUDGMENT CALLS unless a source
 from __future__ import annotations
 
 import math
+import random
 
+from . import clock
 from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM
 from . import runways
 
@@ -187,15 +189,27 @@ def decide(state, d) -> dict:
     return go(mode, n, desp)
 
 
+def stage_extras(state, launch: int) -> dict:
+    """v0.41.356 (Phase 10b part 1): what is fixed the day a raid is staged, so the turn BEFORE the raid can plan its SEAD / Standoff DEAD prep: the bearing the raid arrives on ("brg", 20 to 40 degrees, the old
+    range) and the turn it launches in ("turn", seeded, among the launch day's planned turns that have a planned turn right before them on the same day; absent when none has). Seeded by campaign and launch day only."""
+    rnd = random.Random(f"{state.campaign_id}:{launch}:stage")
+    out = {"brg": round(rnd.uniform(20, 40), 1)}
+    ok = lambda t: bool(getattr(state, "night_ops", False)) or not clock.is_night_turn(t)
+    cands = [t for t in range(clock.first_turn(launch) + 1, clock.first_turn(launch + 1)) if ok(t) and ok(t - 1)]
+    if cands:
+        out["turn"] = rnd.choice(cands)
+    return out
+
+
 def note_stage(state, dec) -> None:
-    """The planner records a staged raid once (a replan the same day finds it and keeps it)."""
+    """The planner records a staged raid once (a replan the same day finds it and keeps it). v0.41.356 (Phase 10b part 1): with its bearing and launch turn (`stage_extras`)."""
     if not dec.get("stage"):
         return
     if state.raids is None:
         state.raids = {}
     cur = state.raids.get("bomber_stage") or {}
     if cur.get("launch", -1) < state.day:
-        state.raids["bomber_stage"] = dict(dec["stage"])
+        state.raids["bomber_stage"] = {**dec["stage"], **stage_extras(state, int(dec["stage"]["launch"]))}
 
 
 def is_quiet(state) -> bool:

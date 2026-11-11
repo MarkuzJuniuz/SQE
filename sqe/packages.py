@@ -531,11 +531,13 @@ class PackageBuilder:
         if cv is None or dec["mode"] == "hold":
             return None
         rnd = random.Random(f"{st.campaign_id}:{st.day}:{number}:raid")
+        stg_ = (st.raids or {}).get("bomber_stage") or {}
+        brg_ = round(float(stg_["brg"]), 1) if (stg_.get("launch") == st.day and stg_.get("brg") is not None) else None      # v0.41.356 (Phase 10b part 1): the bearing is fixed when the raid is staged (the prep of the turn before needs it); an older stage keeps the seed by the raid's index
         bw_id = next(w.base_asset_id for w in st.enemy_air if "Tu_22M3" in w.types)
         # v0.41.279 (XO 2026-11-04): back to a random 8 to 40 degrees. v0.41.275 pointed it at the bombers' field, but Mozdok lies ~213 nm from the carrier, just outside the
         # X-22's 208 nm reach: on the straight line only 30 to 50 nm of way in is left outside the ring, the SAM circles cover it, and the interceptors find no intercept point.
         # The dogleg is what gives blue the room. Probed (seed 3, L3): bearing 20 gives a lane for every interceptor, bearing 60 none.
-        return {"brg": round(rnd.uniform(20, 40), 1), "bombers": dec["n"], "bomber_wing": bw_id,
+        return {"brg": brg_ if brg_ is not None else round(rnd.uniform(20, 40), 1), "bombers": dec["n"], "bomber_wing": bw_id,
                 "escort_wing": dec["wing"], "escort_type": dec["type"], "escorts": dec["escorts"], "mode": dec["mode"]}
 
     def _pick_squadron(self, slot: Slot, tx, ty, ledger: Ledger, lead_service):
