@@ -291,8 +291,15 @@ def reach_for(state, kind: str, x: float, y: float, budget: bool = True, d=None)
         return _reach(state, kind, x, y, budget)
     fits = None
     if d is not None and kind == "field":
-        fits = lambda w, t: bool(sead_groups(state, d, x, y, redair.ready_of(state, w, (t,)), int(d.raid_size[1])))
+        fits = lambda w, t: bool(sead_groups(state, d, x, y, redair.ready_of(state, w, (t,)), min_raid(d)))
     return _reach(state, kind, x, y, budget, only=BOMBER_TYPES, fits=fits)           # v0.41.361 (Phase 10d): any bomber type (the type the wing flies, `t`)
+
+
+def min_raid(d) -> int:
+    """v0.41.389 (S35): the smallest raid a level plans, a pair at least: what the gate (`reach_for`, `sead_plan`) tests a wing against, since `plan_raid` shrinks the raid to fit the wing's free jets
+    with its SEAD groups (the gate used to ask for `raid_size[1]` bombers, 8 at L3, plus the groups, and no wing had that many of one type free)."""
+    lo = int(d.raid_size[0])
+    return max(2, lo - lo % 2)
 
 
 ARM_MAX_TOTAL = 12       # v0.41.129: the most SEAD jets one raid sends in all (three flights of four; judgment call)
@@ -333,7 +340,7 @@ def sead_plan(state, d, base, aim: str, wing, ac: str):
     if aim_kind(aim) != "field" or ac not in BOMBER_TYPES or getattr(d, "raid_arm", 0) <= 0:
         return False, 0
     avail = redair.ready_of(state, wing, (ac,))
-    g = sead_groups(state, d, x, y, avail, int(d.raid_size[1]))
+    g = sead_groups(state, d, x, y, avail, min_raid(d))
     n = sum(j for _, j in g) if g else 0
     return n > 0, n
 
@@ -411,6 +418,10 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int):
     nb -= nb % 2
     if nb < 2 or rdy < nb:
         return None
+    if aim_kind(aim) == "field" and raider in BOMBER_TYPES and getattr(d, "raid_arm", 0) > 0 and not getattr(d, "raid_banzai", False) and cover_field(state, ax, ay) is not None:
+        floor_ = min_raid(d)                                                        # v0.41.389 (S35): the raid shrinks (by pairs, never under the level's minimum) until its SEAD groups fit the same wing's free jets
+        while nb > floor_ and sead_groups(state, d, ax, ay, rdy, nb) is None:
+            nb -= 2
     esc, esc_avail = None, 0
     from . import bombers, blue_barcap
     held_ = bombers.escorts_held(state)                                             # v0.41.355 (Phase 10a): the Mozdok escort squadron escorts land raids too, unless a carrier raid is staged

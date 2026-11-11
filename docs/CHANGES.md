@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.389, S35: red's bombers now raid your fields at Levels 2 and 3
+A red bomber wing is now sent against an airfield when it can field a smaller raid and its SEAD groups together, instead of only when it could field the largest raid. The raid shrinks by pairs to fit the wing's free jets (never under the level's minimum). At Level 3 red now builds about 0.7 to 1.0 field raids a day (before: 0.3 to 0.4), with 6 to 8 bombers instead of 8. Level 1, Tu-22M3 strikes and raids on covered supply sites are unchanged.
+
 ## v0.41.388, S31a2: AI A-10 CAS flights carry guided bombs under the high floor
 An AI A-10C CAS flight that now attacks from 24,000 or 12,000 ft (short-range air defence near the target) loads two GBU-31 JDAM, two GBU-54 laser JDAM and two CBU-103 wind-corrected cluster bombs instead of Mavericks and unguided cluster bombs. With no air defence near, the loadout is unchanged. Your own flight keeps its loadout.
 
