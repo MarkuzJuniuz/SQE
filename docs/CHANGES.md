@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.393, a Fighter Sweep you fly no longer fails to load in the Mission Editor
+A sweep route with no marshal point put the PUSH time-lock straight after the locked takeoff, which the Mission Editor refuses. The PUSH speed is now left free. Waypoints, altitudes, speeds and times are unchanged. The smoke test now checks the waypoint locks on one mission of every kind of package, as your own flight and as the all-AI test.
+
 ## v0.41.392, a CAP mission no longer fails to load in the Mission Editor
 A CAP or Fighter Sweep flight you fly could be refused by the Mission Editor ("All waypoints (2-2) have locked speed and surrounded by waypoints 1 and 2 with locked time"). The CAP station point is no longer time-locked, like the escort and sweep stations. Your waypoints, altitudes, speeds and times are unchanged.
 
