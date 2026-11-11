@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.364, attack fix Stage C: AI CAS attack tasks on the IP
+
+XO 2026-11-11 ("fox 3 medium"). **NOT FLOWN: XO flies one plain CAS, then the B1 forced-hold run (`SQE_GATE_TEST_HOLD_S=60`).** The 2026-11-11 00-06-03 run: Hawg 1 passed 3 nm from its column and fired nothing, because AttackGroup / EngageTargetsInZone / weapons free sat on the TGT point and so started only overhead. An AI CAS flight now carries them on the IP before TGT (stop times still counted from the TGT ETA), like the v0.41.322 AI strike fix. No IP / LOW point before TGT: unchanged. Player flights unchanged. Judgment, not an ED statement.
+
 ## v0.41.363, attack fix Stage B1: pop the hold, stretch the attack stops
 
 XO 2026-11-10 ("fox 3 medium"). **NOT FLOWN: needs XO's forced-hold run (below).** A held AI strike / CAS flight is released with `popTask` (removes the hook's pushed Orbit, the route and its attack tasks go on) instead of `resetTask` + `SwitchWaypoint`; the break-off after a hold pops the same way. Only a flight that really got the orbit is popped. The attack tasks (Bombing, CarpetBombing, AttackGroup, ground EngageTargetsInZone) of an AI gated STRIKE / CAS flight stop the gate's hold cap (900 s) later, so a long hold cannot expire them. Dev switch `SQE_GATE_TEST_HOLD_S=60` (read at build): every AI gated flight holds that long once, then resumes normally; nothing is emitted without it. Judgment, not an ED statement: forum reports on scripted task stacks (queue S15, `attack fix plan.md`). If a released flight goes home instead of attacking, Stage B2 is the fallback.

@@ -135,9 +135,9 @@ class StrikeTasks:
         return gate
 
     def _cas_tasks(self, wp, w, armor, tot_s):
-        """AI CAS: look at the fight, attack the column, then keep working the zone. Time-boxed so they eventually go home."""
+        """AI CAS: look at the fight, attack the column, then keep working the zone. Time-boxed so they eventually go home.
+        `w` is the TGT point (position and ETA); `wp` is the point the tasks go on (the IP before it since Stage C, else TGT). Weapons free is set by the caller."""
         t0 = int(w.eta_s)
-        wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
         if armor is not None:
             ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.Auto, group_attack=False))
             ct.stop_after_time(t0 + 420)
