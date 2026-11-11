@@ -356,7 +356,7 @@ def _red_asked(state) -> set:
 
 def red_asks(state, d, rng: random.Random) -> list:
     """v0.41.68: red's SAM orders, the same rule as blue's (blue_asks). First the batteries that arrive today; then, at most ASKS_PER_NIGHT, a new
-    order for the shallowest-tier destroyed site that is in play (tier up to front + 2, its field still standing, value first among equals): a standing
+    order for the shallowest-tier destroyed site (v0.41.371, S20 Phase 3: no front filter; the tier is depth DATA for the sort and the donor rule only; its field still standing, value first among equals): a standing
     site of the same kind in a DEEPER tier (health BLUE_FULL_DEF or more) sends its battery; it arrives in transfer_days(red's supply) days. The sender's site goes down
     (the usual rebuild takes it when its tier comes into play), the receiver is not rebuilt meanwhile. No spare, no order: sams.rebuild is the only
     way. Returns log lines."""
@@ -375,7 +375,7 @@ def red_asks(state, d, rng: random.Random) -> list:
     busy = _red_asked(state)
     sup = ground.supply(state, "red") if ground.active(state) else 0.85
     sites = [x for x in state.assets.values() if x.kind == AssetKind.SAM and not x.id.startswith("fsam_")]
-    needy = sorted((a for a in sites if a.destroyed and a.tier <= state.front + 2 and not _parent_down(state, a)
+    needy = sorted((a for a in sites if a.destroyed and not _parent_down(state, a)
                     and a.id not in busy and a.id not in vacated), key=lambda a: (a.tier, -a.value, a.id))
     for a in needy[:ASKS_PER_NIGHT if (not orders and RED_BORROW) else 0]:           # v0.41.196: one order in flight per side (v0.41.269: none while RED_BORROW is off)
         donors = sorted((x for x in sites if x.variant == a.variant and not x.destroyed and x.health >= BLUE_FULL_DEF and x.tier > a.tier

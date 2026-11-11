@@ -144,28 +144,13 @@ class ObjectivePlanner:
     def __init__(self, d=None):
         self.d = d
 
-    @staticmethod
-    def _tier_open(state, a) -> bool:
-        """Depth tiers: tiers up to (front + 2) are open for tasking, so the deep targets come late in a campaign."""
-        return a.tier <= state.front + 2
-
-    @staticmethod
-    def _open(state, a) -> bool:
-        """v0.41.367 (S20 Phase 2): the depth tier no longer gates a long-range SAM site, an EWR or an airfield's runway job (the belt rule `tm.blockers` and `covering_sams` still do); every other kind keeps `_tier_open` until Phase 3."""
-        if a.kind == AssetKind.SAM:
-            if a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10 and not a.id.startswith("fsam_"):
-                return True
-        elif a.kind in (AssetKind.EWR, AssetKind.AIRFIELD):
-            return True
-        return ObjectivePlanner._tier_open(state, a)
-
     def _garrison_cover(self, state, a) -> list:
         """The long-range SAM sites (the kind a SEAD / DEAD package is sent to) whose ring covers a dug-in garrison and that can be tasked now. While any is
         alive the garrison is not offered as a CAS job: the A-10s would fly into the whole cluster (and the site's Tors and Shilkas, which are never DEAD
         targets themselves, are why only the long-range sites count)."""
         out = []
         for x in state.assets.values():
-            if x.kind != AssetKind.SAM or x.destroyed or x.id.startswith("fsam_") or x.value < 5 or not self._tier_open(state, x):      # the OLD tier rule on purpose (S20 Phase 2): opening the SAMs must not hold back more CAS
+            if x.kind != AssetKind.SAM or x.destroyed or x.id.startswith("fsam_") or x.value < 5:      # v0.41.371 (S20 Phase 3): every covering long-range site counts, deep or not
                 continue
             r = tm.RANGE_NM.get(x.variant, 0)
             if r >= 10 and ((x.x - a.x) ** 2 + (x.y - a.y) ** 2) ** 0.5 <= r * 1852:
@@ -183,14 +168,13 @@ class ObjectivePlanner:
     def plan(self, state: CampaignState, rng: random.Random, limit: int = 6, bomber: bool = True, skip: frozenset | set = frozenset(), waves: bool = True) -> list:
         """The jobs of ONE turn (v0.41.338, Phase 4; `limit` = how many). `bomber`: look at the carrier raid this turn (the day's raid turn only: `Session._begin_day` picks it, so the
         raid is offered once a day and not every turn). `skip`: target ids not to plan this turn (the re-tasking rule, `Session._retask_skip`). `waves` (v0.41.367): take the SAM / EWR / runway wave of SAM_WAVE for the level (not for the player's extra-jobs call)."""
-        cand = []                                  # (priority, objective, blockers, locked)
+        cand = []                                  # (priority, objective, blockers); v0.41.371: no depth gate, the belt rule and covering_sams are the only blockers
         alive = lambda aid: not state.assets[aid].destroyed
         for a in state.assets.values():
             if a.destroyed or a.id in skip:
                 continue
             if a.health <= ground.DOWN_HEALTH and a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.SAM, AssetKind.EWR) and ground.active(state):
                 continue                                   # v0.41.145: down for planning (a threshold, not the last vehicle): not hunted, it mends on its own
-            locked = not self._open(state, a)
             defenders = [x for x in a.defended_by if alive(x)]
             if a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.EWR):
                 pr = a.value * a.health / (1 + 0.5 * len(defenders))
@@ -214,7 +198,7 @@ class ObjectivePlanner:
                         and threat.defender_flights(threat.expected_defenders(state, a.x, a.y, self.d.iads if self.d else 0.5)) >= STANDOFF_MIN_DEF_FLIGHTS):
                     o_.aim = "STANDOFF"                                  # v0.41.298: red fighters are the trouble here, not SAMs: SLAM-ER Hornets, released far out
                     o_.description = f"Standoff Strike: {a.name}"
-                cand.append((pr, o_, self._blockers(state, a) + cov, locked))
+                cand.append((pr, o_, self._blockers(state, a) + cov))
             elif a.kind == AssetKind.SAM and a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10:      # short-range SAMs are CAS's problem, not a SEAD/DEAD package's
                 covered = sum(x.value for x in state.assets.values() if a.id in x.defended_by and not x.destroyed) / 3.0
                 pr = a.value * a.health + covered
@@ -223,7 +207,7 @@ class ObjectivePlanner:
                     desc = f"Finish off {a.name} ({a.health:.0%} left)"
                 else:
                     desc = f"SEAD and DEAD: {a.name}"
-                cand.append((pr, Objective("", ObjectiveType.DEAD, a.id, pr, desc), self._blockers(state, a), locked))
+                cand.append((pr, Objective("", ObjectiveType.DEAD, a.id, pr, desc), self._blockers(state, a)))
             elif a.kind == AssetKind.ARMOR:
                 if a.variant == "GARRISON" and not a.id.startswith(("rfwd_", "bfwd_")) and not ground.near_front(state, a.x, a.y):
                     continue                                         # v0.41.218 (XO): no friendly ground troops, no JTAC beyond the mountains: a rear site's garrison is no CAS job
@@ -266,7 +250,7 @@ class ObjectivePlanner:
                 elif soft and not hard:
                     o_.aim = "SEAD"
                     o_.description += " (with a SEAD escort)"
-                cand.append((pr, o_, bl, locked))
+                cand.append((pr, o_, bl))
             elif a.kind == AssetKind.AIRFIELD:
                 w = state.enemy_air_at(a.id)
                 # v0.41.333 (XO 2026-11-07, "remove all counter-air / standoff versions of it"): no Counter-Air strike (CBU on the ramp) and no Standoff Counter-Air (JSOW)
@@ -276,12 +260,12 @@ class ObjectivePlanner:
                     prr = a.value * 0.9 * (w.available / max(1, w.authorized))
                     o_ = Objective("", ObjectiveType.STRIKE, a.id, prr, f"Crater the runway at {a.name} ({w.available} aircraft)")
                     o_.aim = "RUNWAY"
-                    cand.append((prr, o_, self._blockers(state, a) + covering_sams(state, a), locked))
+                    cand.append((prr, o_, self._blockers(state, a) + covering_sams(state, a)))
         blocking = {x.id for c in cand for x in c[2]} | {sid for c in cand for sid in after_sites(c[1])}      # sites that stand in front of something else
         pool, follows = [], []
-        fsites = {sid for c in cand if not c[2] and not c[3] for sid in after_sites(c[1])}
-        for pr, o, bl, locked in cand:
-            if bl or locked:
+        fsites = {sid for c in cand if not c[2] for sid in after_sites(c[1])}
+        for pr, o, bl in cand:
+            if bl:
                 continue
             if o.type == ObjectiveType.DEAD and o.target_id in blocking:
                 pr *= 1.8                                              # clear the belt first
@@ -870,7 +854,6 @@ class WarSimulator:
                 if bid in state.bases:
                     sams.set_field(state, state.bases[bid], 0.0)
         state.day += 1
-        update_front(state)
         update_status(state)
 
     def counterstrike(self, state: CampaignState) -> list:
@@ -892,32 +875,6 @@ def totals(state: CampaignState) -> dict:
     return {"base_defense": (sum(b.defense for b in fields) / len(fields)) if fields else 1.0, "friendly_air": fa / fz, "enemy_air": ea / ez, "iads": iads, "armor": armor,
             "c2": sum(a.health for a in c2) / len(c2) if c2 else 0.0,
             "fa": fa, "fz": fz, "ea": ea, "ez": ez}
-
-
-FRONT_STALL_DAYS = 14        # a stalled front breaks anyway: the enemy line buckles
-FRONT_MIN_DAYS = 4           # the front never jumps two stages in a week
-
-
-def tier_health(state: CampaignState, tier: int) -> float:
-    """Mean health of the combat assets (SAMs and ground forces) of one tier; 0 when there are none."""
-    xs = [a.health for a in state.assets.values() if a.tier <= tier and a.kind in (AssetKind.SAM, AssetKind.ARMOR) and ground.zone_of(state, a.id) is None]
-    return sum(xs) / len(xs) if xs else 0.0
-
-
-def update_front(state: CampaignState) -> bool:
-    """The front advances when the tier now in play is broken (its SAMs and ground forces average 30% or less), or after a long stall.
-    Destroyed assets stay destroyed, so progress always sticks. Returns True when the front moved."""
-    state.front_days += 1
-    if state.front >= 2 or state.status != "ACTIVE":
-        return False
-    broken = tier_health(state, state.front + 2) <= 0.30 and state.front_days >= FRONT_MIN_DAYS
-    if broken or state.front_days >= FRONT_STALL_DAYS:
-        state.front += 1
-        state.front_days = 0
-        state.note(f"THE FRONT ADVANCES: {'the enemy line is broken' if broken else 'the enemy line buckles'}. "
-                   f"New targets are open: {theatres.active()['front_names'][state.front]}.")
-        return True
-    return False
 
 
 def update_status(state: CampaignState) -> str:

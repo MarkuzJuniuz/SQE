@@ -111,7 +111,7 @@ class EnemyAsset:
     defended_by: list[str] = field(default_factory=list)  # ids of SAM/EWR assets covering it
     airport: str | None = None          # AIRFIELD assets: pydcs airport name
     variant: str = ""                   # SAM/EWR flavour: "SA-2", "SA-6", "SA-11", "EWR"; ARMOR: "ARMOR" (moving column) or "GARRISON" (dug in)
-    tier: int = 1                       # depth tier: 1 front, 2 Abkhazia, 3 coast / north Caucasus, 4 deep; gated by CampaignState.front
+    tier: int = 1                       # depth DATA (1 front, 2 Abkhazia, 3 coast / north Caucasus, 4 deep): the redroster MiG-31 share, road sites and the asset table label; never a tasking gate (S20 Phase 3)
     guards: str = ""                    # GARRISON: id of the SAM site it protects
     suppressed: bool = False            # SAM: radars blinded (SEAD worked, the launchers are still there); since v0.41.338 it clears SUPPRESS_TURNS turns after the turn it was seen set (Session._tick), not overnight
     suppressed_turn: int = -1           # v0.41.338 (Phase 4): the turn the flag was first seen set (Session._tick), -1 = not suppressed; the flag expires SUPPRESS_TURNS later
