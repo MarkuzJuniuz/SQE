@@ -262,12 +262,12 @@
             "role": "havcap"
         },
         {
-            "id": "fs_493",
-            "name": "493rd FS 'Grim Reapers'",
-            "aircraft": "F-15C",
+            "id": "fs_494",
+            "name": "494th FS 'Panthers'",
+            "aircraft": "F-15E",
             "base": "vaziani",
             "count": 18,
-            "callsign": "Ford"
+            "callsign": "Dude"
         },
         {
             "id": "fs_22",
@@ -294,12 +294,12 @@
             "callsign": "Chevy"
         },
         {
-            "id": "fs_123",
-            "name": "123rd FS 'Redhawks'",
-            "aircraft": "F-15C",
+            "id": "fs_336",
+            "name": "336th FS 'Rocketeers'",
+            "aircraft": "F-15E",
             "base": "tbilisi",
             "count": 18,
-            "callsign": "Pontiac"
+            "callsign": "Thud"
         },
         {
             "id": "fs_34",

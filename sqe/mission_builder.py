@@ -116,7 +116,7 @@ AAM_WEAPONS = 264241152       # DCS weapon flags: air-to-air missiles (a Fighter
 # Not guns and not air-to-air missiles, so a flight goes home once its air-to-ground load is gone.
 A2G_WEAPONS = 14 | 240 | 768 | 4161536 | 30720
 # Air-to-ground jets whose loadouts carry radar missiles (AIM-120, AIM-54; checked in loadouts.py): after the attack they may shoot back.
-SHOOTS_BACK = {"F-16C", "FA-18C", "F-14BU"}
+SHOOTS_BACK = {"F-16C", "FA-18C", "F-14BU", "F-15E"}
 RELIEF_BACK_NM = 12            # v0.41.78: a relief sortie appears this far behind its station (toward its base) and flies up to it (judgment call)
 SPAWN_SEP_M = 2000            # airborne flights never appear closer than this to each other (same height band, same minute)
 

@@ -5,6 +5,7 @@ EXTRA = {
                "Hawk": 17, "Devil": 18, "Check": 19, "Snake": 20},
     "F-16C": {"Viper": 9, "Venom": 10, "Lobo": 11, "Cowboy": 12, "Python": 13, "Rattler": 14, "Panther": 15,
               "Wolf": 16, "Weasel": 17, "Wild": 18, "Ninja": 19, "Jedi": 20},
+    "F-15E": {"Dude": 9, "Thud": 10, "Gunny": 11, "Mad": 12, "Trek": 13, "Sniper": 14, "Sled": 15, "Best": 16, "Jazz": 17, "Rage": 18, "Tahoe": 19},   # v0.41.358: pydcs F_15E.callnames, ids from 9 like the other types
     "A-10C": {"Hawg": 9, "Boar": 10, "Pig": 11, "Tusk": 12},
 }
 TANKER = {"Texaco": 1, "Arco": 2, "Shell": 3}

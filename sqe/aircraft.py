@@ -102,6 +102,17 @@ AIRCRAFT: dict[str, AircraftSpec] = {
                      alt_ft={_R.TARCAP: 27000, _R.ESCORT: 30000, _R.SWEEP: 30000, _R.STRIKE: 25000, _R.SEAD: 25000, _R.CAS: 12000},
                      push_kts=520, ip_kts=520, attack_kts=520, egress_kts=550, push_nm=80),
         first_wp_label="0", fc3=True, bingo_lbs=3500, joker_lbs=5000),
+    # v0.41.358 (F-15E phase, XO 2026-11-10): AI-only strike squadrons on the OLD AI model F_15E (not the RAZBAM F-15ESE module, so nobody needs to own it; pydcs gives it the callsigns Dude ... Tahoe).
+    # Roles: STRIKE only (judgment call: it adds strike jets, never takes a fighter or HARM seat). Combat radius 450 nm = judgment call (the F-15E carries more than the F-15C's 400 here; public
+    # figures for the F-15E vary widely with the load, "from memory" about 600 nm hi-lo-hi, so this stays in line with the table's game scale). Route values are the F-15C's strike values.
+    "F-15E": AircraftSpec(
+        "F-15E", "F-15E Strike Eagle", "F_15E", BaseKind.AIRFIELD,
+        frozenset({_R.STRIKE}), RefuelMethod.BOOM, 2, 450, 480, False,
+        RouteProfile(aar_alt_ft=22000, aar_kts=350, marshal_alt_ft=27000, cap_alt_ft=28000, cap_kts=400,
+                     alt_ft={_R.STRIKE: 25000, _R.SEAD: 25000, _R.CAS: 12000},
+                     push_kts=520, ip_kts=520, attack_kts=520, egress_kts=550, push_nm=80,
+                     tgt_note="JDAM target. Release"),
+        first_wp_label="0", bingo_lbs=3500, joker_lbs=5000),
     "A-10C": AircraftSpec(
         "A-10C", "A-10C Warthog", "A_10C_2", BaseKind.AIRFIELD,
         frozenset({_R.CAS}), RefuelMethod.BOOM, 1, 230, 300, True,
