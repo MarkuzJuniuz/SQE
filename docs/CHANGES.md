@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.373, S21 follow-up: the after-action report is a plain list
+
+XO 2026-11-11 ('fox 3 medium'). **NOT FLOWN.** GUI only (`DayResolvedDialog`). The report's animation is dropped (blank gaps, the top cut off by the scroll): every simulated event is listed at once in one `QTextBrowser`, starting at the top; Continue is a plain accept. A result with no detail lines no longer leaves a stray blank line. The reason line, title, summary line and `turns` input are unchanged.
+
 ## v0.41.372, S21: Skip Turn layout and the after-action report
 
 XO 2026-11-11 ("fox 3 medium"). **NOT FLOWN.** GUI only. The Missions page loses the ticker and its per-turn redraw: while an auto-skip runs it shows a wait cursor and the controls stay off, and the page is refreshed once at the end. Every skip, also a plain Skip Turn, now ends in ONE after-action report (`DayResolvedDialog`): the stop reason (e.g. "Flight available.") is its header line, each turn is its own block and the blocks appear one after the other (`REPORT_BLOCK_GAP_MS`) with a quick fade-in (`REPORT_FADE_MS`); a click, a key or Continue shows everything at once. The old "N turns skipped" box is gone. Layout: the three Automatically Skip rows have one height and Skip Turn sits in that column, left-aligned with the label. Probe `.private/probes/s21/report.py`: plain skip = 1 block, a 12 hrs run = 6 turns, controls and cursor restored after a forced error. The look was not seen on screen. No smoke test (no mission code).
