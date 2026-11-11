@@ -13,7 +13,7 @@ from . import threatmap as tm
 from .aircraft import AIRCRAFT
 from .models import BaseKind
 from .red_air_picture import ALERT_REACH_NM
-from .routes import FT, NM, Wpt, avoid_circles, bearing, dist, offset, terrain_clear
+from .routes import FT, NM, Wpt, avoid_circles, bearing, cap2_point, dist, offset, terrain_clear
 from .strike_tasks import KPH
 
 TANKER_COVER_NM = 30          # v0.41.26: a tanker track this close to a friendly field's Patriot (or the carrier group) counts as under friendly SAM cover
@@ -102,6 +102,7 @@ class SupportCaps:
                  [(b_.x, b_.y, TANKER_COVER_NM) for b_ in st.bases.values() if b_.kind == BaseKind.CARRIER]
         fwd = tm.tanker_spot(st, (hx_, hy_), g.egr, (g.tx, g.ty), caps_, lanes_, cover_, track_hdg=g.hdg - 90)
         self._tanker_c = None
+        self._tanker_race = 30 * NM
         for s in package.support:
             cls = getattr(planes, s.dcs_class)
             alt, spd, freq = s.altitude_ft * FT, s.speed_kts * KPH, plan.freq(s.slot)
@@ -123,12 +124,12 @@ class SupportCaps:
                     race = 30 * NM
                     x, y = offset(*c_, g.hdg - 90, race / 2)
                     if s.slot == "TANKER1":
-                        self._tanker_c = c_
+                        self._tanker_c = c_; self._tanker_race = race
                 else:                                                        # nothing forward is clear: behind the AWACS anchor, as before
                     back = 12 if s.slot == "TANKER1" else 24
                     x, y = offset(*offset(ax, ay, g.hdg + 180, back * NM), g.hdg - 90, 15 * NM); race = 30 * NM
                     if s.slot == "TANKER1":
-                        self._tanker_c = offset(x, y, g.hdg + 90, race / 2)
+                        self._tanker_c = offset(x, y, g.hdg + 90, race / 2); self._tanker_race = race
                 grp = self.m.refuel_flight(self.usa, f"{s.label} 1", cls, None, pt(x, y), race_distance=race, heading=int(g.hdg + 90) % 360,
                                            altitude=alt, speed=spd, frequency=freq, tacanchannel=plan.tacan[s.slot])
                 callsigns.apply(grp, s.label, 1, callsigns.TANKER); grp.units[0].name = f"{s.label} 1-1"
@@ -160,8 +161,10 @@ class SupportCaps:
         # v0.41.7: each guards one thing, from the side the threat comes from (the nearest enemy fighter field), and fights only inside
         # a circle round it. HAVCAP: the AWACS (well back). TNKCAP: the tanker (forward, on the way home). BASECAP: the home field. CVCAP: the boat.
         tc_ = getattr(self, "_tanker_c", None)
+        axis_ = None                                    # S9: the line CAP2 lies across (plus or minus 90); None = thr_
         if f.tag == "TNKCAP" and tc_ is not None:
             gx_, gy_ = tc_; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 5 * NM); zr_ = TNKCAP_ZONE_NM
+            axis_ = geom.hdg                            # S9: CAP2 along the tanker's own track (it runs on hdg + 90), not across the threat
         elif f.tag in ("HAVCAP", "TNKCAP"):
             gx_, gy_ = hav_xy; thr_ = geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
         elif f.tag == "CVCAP":
@@ -202,8 +205,22 @@ class SupportCaps:
             zr_ = max(10, min(zr_, room_))                      # the circle round the boat ends short of the nearest scramble circle
         cap_zone = (gx_, gy_, min(self.o.friendly_cap_engage_nm or 999, zr_))
         p = spec.profile
+        # S9 (v0.41.350): the leg wished for this job, across the axis, shortened until clear; None = today's point (the floor leg_ on thr_ + 90)
+        from .mission_builder import CAP_SPREAD_NM          # here, not at the top: mission_builder imports this module
+        wish_ = CAP_SPREAD_NM[f.tag]
+        if f.tag == "TNKCAP" and tc_ is not None:
+            wish_ = min(wish_, getattr(self, "_tanker_race", 30 * NM) / NM)
+        elif f.tag == "HAVCAP":
+            wish_ = min(wish_, 40)                      # the AWACS track is 40 nm
+        if f.tag == "CVCAP":
+            clear_ = lambda x_, y_: (-1.0 if not (out_(x_, y_) and self._sam_clear(x_, y_)) else 0.0)
+        else:
+            clear_ = lambda x_, y_: (0.0 if self._sam_clear(x_, y_) else -1.0)
+        c2_ = cap2_point(sx, sy, thr_ if axis_ is None else axis_, wish_, clear_, floor_nm=leg_ / NM)
+        if c2_ is None:
+            c2_ = offset(sx, sy, thr_ + 90, leg_)
         wps = [Wpt("SPAWN", sx, sy, p.cap_alt_ft, p.cap_kts), Wpt("CAP1", sx, sy, p.cap_alt_ft, p.cap_kts, "", "CAPORBIT"),
-               Wpt("CAP2", *offset(sx, sy, thr_ + 90, leg_), p.cap_alt_ft, p.cap_kts)]
+               Wpt("CAP2", *c2_, p.cap_alt_ft, p.cap_kts)]
         # v0.41.22: the way home bends round SAM sites too (the v0.41.21 scan: a tanker CAP flew home over an SA-2)
         home_ = Wpt("HOME", base.x, base.y, p.cap_alt_ft, p.cap_kts)
         wps = avoid_circles(wps + [home_], self._zone_sams(package, True), p.max_points, 3)[:-1]      # the CAP1-CAP2 orbit leg stays as it is
