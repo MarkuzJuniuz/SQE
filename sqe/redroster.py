@@ -16,10 +16,10 @@ The Mozdok bomber wing and its escort squadron are not part of this (scenario.py
 from __future__ import annotations
 import math
 
-HEAVY = {"MiG_31", "Su_27", "Su_24M"}
+HEAVY = {"MiG_31", "Su_27", "Su_24M", "Su_34"}
 LONG_RANGE = ("MiG_31", "Su_27")
 MIG31_SHARE = {2: 0.15, 3: 0.50, 4: 0.75}             # share of a field's long-range jets that are MiG-31, by the field's tier (v0.41.163, XO 2026-10-27: flipped, the interceptor sits deep under ground control, the Su-27 holds the fringe)
-ORDER = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis", "Su_24M", "Su_25")      # allocation order: the fighters first (every field gets some), then the strikers fill what parking is left
+ORDER = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis", "Su_24M", "Su_34", "Su_25")      # allocation order: the fighters first (every field gets some), then the strikers fill what parking is left
 FIGHTERS = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis")
 FIGHTER_FLOOR = 4                                       # every field keeps at least this many fighters (a pair of pairs): the old rule "every wing keeps a fighter squadron"
 
@@ -29,7 +29,7 @@ FIGHTER_FLOOR = 4                                       # every field keeps at l
 ROSTERS = {
     1: {"MiG_21Bis": 12, "MiG_23MLD": 12, "Su_25": 20, "Su_24M": 10},
     2: {"MiG_31": 4, "MiG_29S": 15, "MiG_29A": 22, "MiG_23MLD": 11, "Su_25": 60, "Su_24M": 24},
-    3: {"MiG_31": 8, "Su_27": 30, "MiG_29S": 28, "MiG_29A": 20, "Su_25": 130, "Su_24M": 60},
+    3: {"MiG_31": 8, "Su_27": 30, "MiG_29S": 28, "MiG_29A": 20, "Su_25": 130, "Su_34": 60},       # v0.41.361 (Phase 10d): L3 flies the Su-34 where it flew the Su-24M (same 60: judgment call, no public figure; L1 and L2 keep the Su-24M)
 }
 
 
@@ -89,7 +89,7 @@ def allocate(level: int, fields: list, weight: dict, tier: dict, cap_all: dict, 
             desire = {f: weight[f] * MIG31_SHARE.get(tier.get(f, 3), 0.5) for f in fields}
         elif t == "Su_27":
             desire = {f: weight[f] * (1.0 - MIG31_SHARE.get(tier.get(f, 3), 0.5)) for f in fields}
-        elif t == "Su_24M":                                             # the SEAD / DEAD / strike supply sits deeper, away from blue's reach: weight x (tier - 1)
+        elif t in ("Su_24M", "Su_34"):                                             # the SEAD / DEAD / strike supply sits deeper, away from blue's reach: weight x (tier - 1)
             desire = {f: weight[f] * max(1, tier.get(f, 3) - 1) for f in fields}
         else:
             desire = {f: float(weight[f]) for f in fields}

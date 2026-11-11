@@ -41,7 +41,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     if obj.type.value == "FLEET_DEFENSE" and pkg.extra:
         e = pkg.extra
         tb = state.bases.get(obj.target_id)
-        rtype = {"Su_24M": "Su-24M bombers", "Su_25": "Su-25 attack aircraft", "Tu_22M3": "Tu-22M3 bombers"}.get(e.get("raider", "Su_24M"), "attack aircraft")
+        rtype = {"Su_24M": "Su-24M bombers", "Su_34": "Su-34 bombers", "Su_25": "Su-25 attack aircraft", "Tu_22M3": "Tu-22M3 bombers"}.get(e.get("raider", "Su_24M"), "attack aircraft")
         what = obj.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", "") if e.get("aim") else (tb.name if tb else "our airfield")
         sit += ["", (f"Intelligence reports {e['bombers']} {rtype} with free-fall bombs inbound toward {what}, "
                      f"approaching from a bearing of about {e['brg']:.0f} degrees." if e.get("land") else

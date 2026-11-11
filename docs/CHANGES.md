@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.361, campaign rules Phase 10d: Level 3 red flies the Su-34
+
+XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** New Level 3 campaigns give red 60 Su-34 where it had 60 Su-24M; its raids, Kh-31P SEAD groups (four missiles a jet) and KAB-500Kr DEAD groups fly the Su-34. Level 1 and 2 keep the Su-24M, and old saves load and raid with their Su-24M unchanged.
+
 ## v0.41.360, campaign rules Phase 10c part 2: the A-10C flies clean supply strikes
 
 XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** The A-10C gets the STRIKE role, but only on a plain supply strike (fuel or depot) that no live SAM ring covers (site or run-in) and that no red fighter flight can reach (`defender_flights` 0): it carries a new STRIKE load (6 Mk-82 on two BRU-42, 4 CBU-87, TGP, ECM, AIM-9). That is rare at Level 2 and 3 (red's fighters reach almost every site) and common at Level 1 once red's fighters thin out, so an A-10C player at Level 1 has strike jobs to fly. F-16C and F/A-18C players see no change; old saves load unchanged.
