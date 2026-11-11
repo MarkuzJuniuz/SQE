@@ -911,10 +911,12 @@ class Session:
         c, t = self.merge_center(anchor), self._pkg_xy(other) or self._raid_xy(other)
         return c is not None and t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= self.merge_radius_m()
 
-    def merge_candidates(self, pkg: Package) -> list:
+    def merge_candidates(self, pkg: Package, unseen: bool = False) -> list:
         """Packages folded into a mission built around `pkg`: every package whose target lies inside the merge circle (Settings: radius, default
         50 nm, centred by merge_center), starting up to `merge_fwd_min` minutes AFTER it or up to `merge_back_min` minutes BEFORE it (those are already underway
-        when the mission starts). At most six, closest to the centre first, so the unit limit drops the furthest first. Empty when merging is off."""
+        when the mission starts). At most six, closest to the centre first, so the unit limit drops the furthest first. Empty when merging is off.
+        v0.41.351 (XO 2026-11-10, S8): a land raid (the intercept package; its point is the raided field, supply site or garrison, `_raid_xy`) folds in like any package.
+        `unseen=True` (`fly` only) also takes the raids blue did not detect (`extra["unseen_raid"]`, not listed): they are built but never named to the player; the list and the GUI never pass it."""
         if self.settings.merge_mode != "area":
             return []
         hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
@@ -925,8 +927,11 @@ class Session:
         if c is None:
             return []
         out = []
-        for p in self.packages():
-            t = self._pkg_xy(p)
+        pool = self.packages()
+        if unseen:
+            pool = pool + [u for u in (Package.from_dict(d) for d in self.state.plan) if u.extra.get("unseen_raid") and not u.extra.get("past")]
+        for p in pool:
+            t = self._pkg_xy(p) or self._raid_xy(p)
             if p.number == pkg.number or t is None or not (-back <= hm(p) - hm(pkg) <= fwd) or not any(not f.tag for f in p.flights) or p.extra.get("scrub"):
                 continue
             d = math.hypot(t[0] - c[0], t[1] - c[1])
@@ -1032,11 +1037,11 @@ class Session:
         self.options.f14_special_names = bool(getattr(self.settings, 'f14_special_names', True)); self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct); self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear')); self.options.ils_dummy = self.ils_dummy_mode()
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
-        extras = list(self.merge_candidates(pkg))
+        extras = list(self.merge_candidates(pkg, unseen=True))
         ruins = self.ruin_candidates(pkg, extras)
         pre = {}
         if (ruins or extras) and getattr(self.settings, "ruins", True):
-            pre = self._preroll([p for p in list(extras) + ruins if not p.extra.get("done_roll")])
+            pre = self._preroll([p for p in list(extras) + ruins if not p.extra.get("done_roll") and p.objective.type != ObjectiveType.FLEET_DEFENSE])      # a raid shows no ruins: nothing to roll
             pre.update({p.id: p.extra["done_roll"] for p in ruins if p.extra.get("done_roll")})          # v0.41.337: an earlier turn's package was resolved already: its verdict is what burns
         from . import limits
         cap = 10 ** 6 if self.full_map else min(int(self.settings.merge_max_units), limits.unit_ceiling())          # v0.41.131: the unit limit counts the whole mission, merged packages included
@@ -1347,7 +1352,8 @@ class Session:
         out.setdefault("lines", []).extend(out["tempo"])
         sim = self._sim(rng)
         t_end = float(data.get("time", 0) or 0)
-        real = {m["number"] for m in pend.get("merged", []) if t_end >= m["tot_s"] + 90}    # their strike was really flown; the rest are dice
+        # their strike was really flown; the rest are dice. A merged raid (v0.41.351) is always flown: `apply_debrief` already settled it from the mission (shot down, got through, left early), so the war sim must not roll it again
+        real = {m["number"] for m in pend.get("merged", []) if t_end >= m["tot_s"] + 90 or m.get("type") == "FLEET_DEFENSE"}
         out["merged_real"] = sorted(real)
         flown = {pend["package"]} | real
         book = {}

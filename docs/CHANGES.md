@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.351, raids fold into flown missions (queue S8)
+
+XO 2026-11-10 ("fox 3 high"). A land raid's intercept package (listed or not detected by blue) now merges into a mission whose area holds its target, under the usual circle, window and six-package rules; before, no raid ever merged. An unseen raid is built into the mission but named nowhere (briefing, kneeboard, debrief package line). A merged raid is settled by the mission, never again by the war sim. The carrier raid still folds into nothing. **NOT FLOWN. Smoke not run.**
+
 ## v0.41.350, support CAP legs (queue S9)
 
 XO 2026-11-10 ("fox 3 medium"). The support CAPs' race-track leg is longer where it is clear: BASECAP 25 nm, CVCAP up to 30, HAVCAP 20, TNKCAP 20 (was 15 / 10 / 15 / 15), shortened until SAM-clear (the carrier CAP also stays outside the scramble circles), else today's point. A forward tanker's TNKCAP now runs along the tanker's track, not across the threat. **NOT FLOWN. Smoke not run.**
