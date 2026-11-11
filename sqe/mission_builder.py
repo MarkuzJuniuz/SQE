@@ -2611,6 +2611,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             tg_i = next((k for k, w_ in enumerate(ws_) if w_.name == "TGT" and w_.action == "BOMB"), None)
             if tg_i is not None and tg_i >= 1 and ws_[tg_i - 1].name in ("IP", "LOW") and ws_[tg_i].eta_s is not None:
                 ip_tgt_ = ws_[tg_i]
+        # Stage C (2026-11-11, run 00-06-03): same fault for AI CAS: Hawg 1 passed 3 nm from its column and fired nothing, because AttackGroup / EngageTargetsInZone
+        # on TGT start only overhead, with no run-in. Judgment (same shape as the strike fault above, not an ED statement): they sit on the IP, stop times still from the TGT ETA.
+        ip_cas_ = None
+        if ai_a2g and f.role == Role.CAS and not f.tag:
+            ws_ = list(wps[first:])
+            tg_i = next((k for k, w_ in enumerate(ws_) if w_.name == "TGT" and w_.action == "CAS"), None)
+            if tg_i is not None and tg_i >= 1 and ws_[tg_i - 1].name in ("IP", "LOW") and ws_[tg_i].eta_s is not None:
+                ip_cas_ = ws_[tg_i]
+                ip_cas_ip_ = ws_[tg_i - 1]
         for w in wps[first:]:
             wp = g.add_waypoint(pt(w.x, w.y), w.alt_ft * FT, w.speed_kts * KPH, w.name)
             if w.rad:
@@ -2637,6 +2646,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire if ca_ramp_ else task.OptROE.Values.WeaponFree))   # v0.41.322: the attack starts here, on the way in; v0.41.325: ramp strike = designated target only (XO: no hunting)
                 bip_ = task.ControlledTask(self._bomb_task(package, ip_tgt_))
                 bip_.stop_after_time(int(ip_tgt_.eta_s + LATE_ATTACK_S)); wp.tasks.append(bip_)
+            if ip_cas_ is not None and w is ip_cas_ip_:
+                wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))           # Stage C: the attack starts here, on the way in
+                self._cas_tasks(wp, ip_cas_, armor, tot_s)
             if run_t0 is not None:
                 if w is wps[first]:
                     wp.tasks.append(task.OptECMUsing(task.OptECMUsing.Values.NeverUse))          # jammers off until the attack leg
@@ -2689,7 +2701,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     bct_.stop_after_time(int(w.eta_s + LATE_ATTACK_S)); wp.tasks.append(bct_)
             elif w.action == "JSOW":
                 self._jsow_tasks(wp, f, armor, package, w.eta_s)
-            elif w.action == "CAS":
+            elif w.action == "CAS" and w is not ip_cas_:                     # Stage C: with an IP before it, those tasks are on the IP
                 self._cas_tasks(wp, w, armor, tot_s)
             elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
                 self._sead_attack_tasks(package, f, wp, w, armor)
