@@ -2,7 +2,7 @@
 
 DCS closes a bombed runway for AI for about 60 minutes (probe 2026-11-03: pairs on the ramp stayed at speed 0 until 61 min after the last bomb, then took off;
 an inbound pair diverted on its own to Kutaisi), and nothing in the scripting API holds it shut. SQE ignores that and keeps its own rule: a field that took
-HITS_TO_CLOSE bomb impacts on its runway is CRATERED for CLOSE_TURNS (12 turns = 24 hours, v0.41.334; it was 2 to 5 days by supply). While cratered, its squadrons do not
+HITS_TO_CLOSE bomb impacts on its runway is CRATERED for CLOSE_TURNS (6 turns = 24 hours, S25; v0.41.334 had 12 two-hour turns; it was 2 to 5 days by supply). While cratered, its squadrons do not
 fly (no packages, no scrambles, no raids, no base CAP) and nobody plans to recover there. The whole field closes, not one runway (XO). Replacement jets that
 arrive meanwhile wait, `held` (refit.py), and join when the runway reopens.
 
@@ -23,7 +23,7 @@ import math
 from . import clock
 
 HITS_TO_CLOSE = 3             # bomb impacts inside the runway rectangle that close the field (XO 2026-11-03)
-CLOSE_TURNS = 12              # a cratered field stays shut 12 two-hour turns = 24 hours, whatever the supply (XO 2026-11-08, "24 hours flat for now"; game rule, not a sourced figure)
+CLOSE_TURNS = 6               # S25: was 12; a cratered field stays shut 6 four-hour turns = 24 hours, whatever the supply (XO 2026-11-08, "24 hours flat for now"; game rule, not a sourced figure)
 RUNWAY_HALF_LEN_M = 2600.0    # same corridor as mission_builder.RUNWAY_HALF_LEN_M (long enough for the longest Caucasus strip; judgment call)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and mission_builder.RUNWAY_HALF_WIDTH_M (runway 45-60 m wide plus a margin; judgment call)
 

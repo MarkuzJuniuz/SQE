@@ -26,6 +26,7 @@ from __future__ import annotations
 import math
 from .models import AssetKind, EnemyAsset
 from . import story
+from . import clock
 
 NM = 1852.0
 MIN_FORCE = 3.0               # below this a side has no organised force in the zone
@@ -40,12 +41,12 @@ DECISIVE, REPULSED = 1.8, 0.55
 RETREAT_SHARE = 0.6           # what a routed force saves by falling back
 FALL_LOSS = 0.3               # aircraft lost when a field falls and its squadrons leave
 FALL_MOVE_NEAR_KM = 100       # v0.41.243: a squadron that changes field is out of the line for the time below (judgment call, XO: "1 to 2 days"; v0.41.337: 12 / 24 hours): the ground crews move too
-FALL_MOVE_TURNS = (6, 12)     # v0.41.337 (XO 2026-11-09, plan OPEN 10): turns out of the line for a squadron that changes field: 12 hours to a near field, 24 hours to a far one (was FALL_MOVE_NIGHTS (1, 2))
+FALL_MOVE_TURNS = (3, 6)      # S25: was (6, 12), the same 12 and 24 hours at 4-hour turns; v0.41.337 (XO 2026-11-09, plan OPEN 10): turns out of the line for a squadron that changes field: 12 hours to a near field, 24 hours to a far one (was FALL_MOVE_NIGHTS (1, 2))
 TAKEN_STAGES = (("aaa", 3), ("hawk", 6), ("pat", 9))      # v0.41.244 (XO 2026-11-03): a field we take grows its air defence in this order, on these days after the fall, alongside the 9-day takeover clock (judgment calls)
 TAKEN_NEW_DAY = 16            # v0.41.247 (XO 2026-11-03): one week after the Patriots, a NEW squadron is formed at the taken field (`new_squadrons.py`; judgment call)
 TAKEN_NEW_SQUADRONS = 1       # per taken field (judgment call: each is up to 18 more jets for blue; raise it if blue is thin at the front)
 SHORT_DAYS = 7                # how long a day's unfilled-slot record is kept
-SHORT_MAX = 600               # v0.41.338: at most this many entries are kept in all (12 turns a day each add their own; judgment call, about a week of the old one-list-a-day)
+SHORT_MAX = 600               # v0.41.338: at most this many entries are kept in all (6 turns a day each add their own, S25; judgment call, about a week of the old one-list-a-day)
 DEFEAT_BASES = 3              # Phase 9a (XO 2026-11-10, campaign rules plan decision 25): the campaign is lost when this many of our airfields have fallen; a sunk carrier no longer counts
 SUPPLY_FLOOR, SUPPLY_NONE = 0.35, 0.85
 # v0.41.334 (XO 2026-11-06 / 11-09, campaign rules plan decision 18): ONE shared Force Index floor, 0.35, for both sides (it was 0.55 for red and BLUE_SUPPLY_FLOOR 0.35 for the coalition). History of the 0.35: v0.41.174 (XO 2026-10-28) 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle); v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly. Judgment call, no public source. Level 1 red keeps L1_RED_SUPPLY_FLOOR.
@@ -59,8 +60,8 @@ REAR_FRAC = 0.7               # red strength in the sectors behind its first lin
 BLUE_ATTACK_MIN = 30.0        # our force in a sector must be at least this before we attack (toy model "THR"; judgment call)
 BLUE_ATTACK_RATIO = 0.9       # ...and not weaker than this share of the enemy's strength there (supply-weighted)
 BLUE_ATTACK_CHANCE = 0.7      # daily chance that a ready force attacks
-SURGE_GRACE_TURNS = 24        # v0.41.337 (XO 2026-11-09, plan OPEN 3; was SURGE_GRACE_DAYS 2): flyable turns your squadron can skip, with no sortie in between, before red's surge starts (judgment call). A stand-down turn (nothing flyable) does not count
-TURNS_PER_DAY = 12            # the surge step (`red_surge`) is still per day: idle turns past the grace count 1/12 of a day each
+SURGE_GRACE_TURNS = 12        # S25: was 24 (the same 48 hours); v0.41.337 (XO 2026-11-09, plan OPEN 3; was SURGE_GRACE_DAYS 2): flyable turns your squadron can skip, with no sortie in between, before red's surge starts (judgment call). A stand-down turn (nothing flyable) does not count
+TURNS_PER_DAY = clock.DAY_MIN // clock.TURN_MIN            # S25: derived (was a literal 12); the surge step (`red_surge`) is still per day: idle turns past the grace count 1/TURNS_PER_DAY of a day each
 SURGE_CAP = 2.0               # ...and the most it adds (x2 at the top)
 REAR_FLOOR = 15.0             # v0.41.155: a rear sector is not drained below this by the red feed (judgment call)
 RED_CLOCK_DAYS = 3            # after we take a base the enemy's own attacks wait this long (its force needs 3 days to arrive; XO 2026-10-24 item 5)

@@ -32,21 +32,21 @@ SEAD_SYNC_ON = True          # off only in tests that need an unsynchronised day
 SWEEP_AREA_KM = 60           # packages whose targets are this close together share one Fighter Sweep
 RAID_PREP_LEAD_MIN = 20      # v0.41.305 (XO 2026-11-05): the SEAD / Standoff DEAD packages that open the fleet-defence lane start this long before the raid package (the plan doc measured about 20 min from launch to homebound HARMs; judgment call, tune)
 SWEEP_LEAD_MIN = 10          # the sweep starts this much ahead of the first package it covers
-PACKAGES_PER_TURN = {1: (1.0, 0.25), 2: (1.5, 0.5), 3: (1.5, 0.5)}      # v0.41.338 (campaign rules plan Phase 4; it replaces PACKAGES_PER_DAY 14): packages planned per TURN by level, (day turn, night turn). A fraction is a seeded
+PACKAGES_PER_TURN = {1: (2.0, 0.5), 2: (3.0, 1.0), 3: (3.0, 1.0)}      # S25: doubled for 4-hour turns (was {1: (1.0, 0.25), 2: (1.5, 0.5), 3: (1.5, 0.5)}) # v0.41.338 (campaign rules plan Phase 4; it replaces PACKAGES_PER_DAY 14): packages planned per TURN by level, (day turn, night turn). A fraction is a seeded
                              # chance of one more. Judgment calls: the plan's section 6 starting points (toy-model tempo, L3 about 50:50); L1 is demand-limited anyway; tune in Phase 13
-DAY1_EXTRA = 1               # every day turn of Day 1 plans this many more packages ("day 1 is brutal", XO's notes; the plan's value, judgment call)
+DAY1_EXTRA = 2               # S25: was 1 (Day 1 has half the turns now) # every day turn of Day 1 plans this many more packages ("day 1 is brutal", XO's notes; the plan's value, judgment call)
 
 # v0.41.345 (scaled tasking, Phase B): the day turn's package count follows the free strike pairs (`Session._turn_rate`); PACKAGES_PER_TURN stays the fallback for a caller with no ledger. Source for all four: Phase A probe 2026-11-10, judgment calls
 PAIRS_PER_PACKAGE = 5.7      # pairs a strike / DEAD / CAS package uses, escorts, TARCAP and SEAD included (Phase A: STRIKE 4.5 to 6.0, DEAD 6.4 to 7.0, CAS 5.3 to 5.8)
-TASK_SHARE = {1: 0.3, 2: 0.3, 3: 0.45}      # the share of the free strike pairs a turn commits (the rest waits for refit); L3 stays at or under .5 (Phase A: above it short slots rise)
+TASK_SHARE = {1: 0.6, 2: 0.6, 3: 0.9}      # S25: doubled for 4-hour turns (was {1: 0.3, 2: 0.3, 3: 0.45}); L3 0.9 is far above the old Phase A guard of .5, watch the short slots # the share of the free strike pairs a turn commits (the rest waits for refit); L3 stays at or under .5 (Phase A: above it short slots rise)
 N_MIN = 1                    # a day turn plans at least one package, so the player always has something to fly
-N_MAX = {1: 2, 2: 4, 3: 4}   # safety cap (Phase A: at 5 folded packages one mission reached 44 to 50 jets); L1 is pool-limited anyway
+N_MAX = {1: 4, 2: 8, 3: 8}   # S25: doubled for 4-hour turns (was {1: 2, 2: 4, 3: 4}) # safety cap (Phase A: at 5 folded packages one mission reached 44 to 50 jets); L1 is pool-limited anyway
 NIGHT_FACTOR = {1: 0.25, 2: 0.33, 3: 0.33}      # a night turn (night ops on) plans this share of a day turn's count: the old night_r / day_r of PACKAGES_PER_TURN (not measured in Phase A, probed in B+C)
 STRIKE_ROLES = frozenset({Role.STRIKE, Role.SEAD, Role.CAS})      # squadrons whose pairs the package count is made from
-RETASK_TURNS = 2             # a target hit in the last this-many turns is not planned again unless its health has dropped since (the plan's value, judgment call)
+RETASK_TURNS = 1             # S25: was 2 (same 4 hours) # a target hit in the last this-many turns is not planned again unless its health has dropped since (the plan's value, judgment call)
 PLAYER_EXTRA_JOBS = 4        # a day turn with no job for your squadron (while it has a ready pair) may add up to this many of the planner's next-best jobs, one at a time, until one fits (judgment call)
-RETASK_KEEP_TURNS = 8        # ...and the hit record is kept this long (bookkeeping only)
-MAX_NIGHT_TURNS = 12         # a loop bound for the night auto-resolution (a night is six turns), never a game rule
+RETASK_KEEP_TURNS = 4        # S25: was 8 (same 16 hours) # ...and the hit record is kept this long (bookkeeping only)
+MAX_NIGHT_TURNS = 6          # S25: was 12; a loop bound for the night auto-resolution (a night is three turns), never a game rule
 LATE_SEAD_MIN = 15           # launch option --late-sead: SEAD-stage packages go in this much later, so the DEAD stage (10 min behind) arrives
                              # about 5 min ahead of them and reaches its gate with the radars still up: it holds (HOLD_S = 12 min) and goes in once
                              # the late SEAD blinds the site. A test of the hold; it changes that day's plan in the save.
@@ -1160,7 +1160,7 @@ class Session:
 
     # ---- the clock: Skip and Fly take one turn (v0.41.337, campaign rules plan Phase 3) --------------------------------------
     def skip_turn(self) -> dict:
-        """Skip Turn: any pending sortie is discarded and every package of THIS TURN (even ones you could fly) is resolved by the war simulation; then the clock moves on two hours
+        """Skip Turn: any pending sortie is discarded and every package of THIS TURN (even ones you could fly) is resolved by the war simulation; then the clock moves on one turn (four hours, `clock.TURN_MIN`)
         (`advance_turn`), and with night ops off the night that follows is resolved too. -> {"results": this turn's results, "turns": [{"label", "turn", "results"}] for this turn and
         any night turns, "status", "text"}."""
         st = self.state
@@ -1184,7 +1184,7 @@ class Session:
         """A helper for tools and tests: skip turns until the day changes (Skip Turn is one turn now). Same keys as `skip_turn`, results and turns of every turn skipped."""
         st = self.state
         day0, res, turns = st.day, [], []
-        for _ in range(13):                                                  # a day is 12 turns; the bound is a safety net
+        for _ in range(7):                                                   # a day is 6 turns (S25; was 12 / range(13)); the bound is a safety net
             if st.status != "ACTIVE" or st.day != day0:
                 break
             r = self.skip_turn()

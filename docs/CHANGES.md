@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.379, S25: four-hour turns
+A turn is now four hours (six a day, a night is three turns; it was two hours and twelve). Each turn offers about twice the packages and patrols, so the flights per day stay about nine tenths of before; refit is 2 hours for the standard jets (8 for the Tu-22M3 and E-3). Crew Rest goes in steps of four hours. Campaigns saved with two-hour turns will NOT open (a new campaign is needed). NOT FLOWN.
+
 ## v0.41.378, S24: supply sites at 70%
 New campaigns lay about 30% fewer supply sites (road_sites 42 / 70 / 70, was 60 / 100 / 100), so each supply strike moves the Force Index more; the war sim's own strikes bite harder too. Old saves keep their stored count. NOT FLOWN.
 

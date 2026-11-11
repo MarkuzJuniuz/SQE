@@ -20,7 +20,7 @@ NM = 1852.0
 # the share of the areas that can be up in a turn that have a pair on station, (day turn, night turn) by level, seeded: judgment call, a starting point for the balance pass (campaign rules plan
 # section 6, Phase 13). Red's patrol share is higher (redair.RED_CAP_SHARE); blue's is lower at L1 / L2 because XO plays the sorties himself. It also sets how often an AWACS guard is up
 # (the tanker's guard is planned every turn the tanker is on orbit).
-CAP_SHARE = {1: (0.10, 0.05), 2: (0.20, 0.08), 3: (0.30, 0.10)}
+CAP_SHARE = {1: (0.20, 0.10), 2: (0.40, 0.16), 3: (0.60, 0.20)}      # S25: doubled for 4-hour turns (was {1: (0.10, 0.05), 2: (0.20, 0.08), 3: (0.30, 0.10)}), so the rate per hour is as it was
 KEEP_BACK = 2                  # an area patrol never takes a squadron's last pair of ready jets (they stay for the packages; as the day plan's "one pair stays back"; judgment call)
 PACKAGE_WINDOW_MIN = 100       # a package is out about this long after its start (judgment call)
 PATROL_STOP = 0.25             # an unflown raid that meets a pair on station is stopped this much more often (judgment call)

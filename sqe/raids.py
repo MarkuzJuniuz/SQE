@@ -378,7 +378,7 @@ def red_attack_pairs(state, turn: int):
 
 
 def turn_rate(state, d, turn: int) -> float:
-    """The chance of a raid in this turn: the level's `raid_rate` a day spread over the day's 12 turns (v0.41.341, Phase 5b; it was one draw a day in `Session._begin_day`), times the idle surge
+    """The chance of a raid in this turn: the level's `raid_rate` a day spread over the day's turns (6 since S25) (v0.41.341, Phase 5b; it was one draw a day in `Session._begin_day`), times the idle surge
     (v0.41.155: red raids more while your squadron stands down) and `RED_RAID_NIGHT` on a night turn. v0.41.345 (scaled tasking, Phase C): times `RAID_TEMPO` x red's free attack pairs / `RAID_REF_PAIRS`
     (at most `RAID_MULT_MAX`), so a worn-down red raids less; a turn with no pool (unplanned night, tools) keeps the plain rate."""
     from . import ground as _gr

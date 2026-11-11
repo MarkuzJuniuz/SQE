@@ -6,7 +6,7 @@ shot down in a flown mission leaves the count; missing airframes come back slowl
 The guards (HAVCAP, tanker CAP) are planned per turn (blue_barcap._plan_guards).
 
 Since v0.41.339 (campaign rules plan, Phase 4b) every airframe has its own clock and the orbit is planned PER TURN (`plan(state, turn)`, called by `Session.plan_turn`): an airframe flies its
-time on orbit (`sortie_min`: the E-3 720 = six turns), then spends the turnaround in refit (`turnaround_min`); a relief goes up HANDOVER_MIN before the airframe it replaces leaves, if one is
+time on orbit (`sortie_min`: the E-3 720 = three turns), then spends the turnaround in refit (`turnaround_min`); a relief goes up HANDOVER_MIN before the airframe it replaces leaves, if one is
 ready. The clock is two lists on the asset dict, absolute campaign minutes (like `Squadron.refit`): `orbit` (when each airframe on orbit leaves) and `refit` (when each airframe in refit
 is ready); an airframe in neither is ready on the ground. They live in `a["clk"]` with the start of the turn they belong to (and the start of the next, so planning the same turn twice does not
 advance the clocks twice). No format change: an asset with no `clk` starts with every airframe ready.
@@ -98,7 +98,7 @@ def ensure(state) -> dict:
     return sa
 
 
-CATCHUP_TURNS = 24             # a clock not planned for longer than this (turns with night ops off are not planned: the airframes fly on through them) starts again from a ready fleet; a rule of thumb: two days
+CATCHUP_TURNS = 12             # S25: was 24 (the same 48 hours); a clock not planned for longer than this (turns with night ops off are not planned: the airframes fly on through them) starts again from a ready fleet; a rule of thumb: two days
 
 
 def _trim(orbit: list, refit: list, n: int) -> None:
