@@ -1257,6 +1257,26 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self.site_pos[a.id] = pos
         return pos
 
+    GUARD_CLEAR_M = 70.0        # v0.41.376 (S10): the guard group's centre is at least this far beyond the nearest building (a Star group is about 60 m across; judgment call)
+
+    def _guard_spot(self, aim, cx, cy):
+        """v0.41.376 (S10): where a supply site's guard group stands: just outside the buildings (`_bld_xy`), on the side of the nearest blue airfield (red's threat
+        axis: the front is where blue's fighters come from). The next sides round if that spot is water or too close to a building; (cx, cy) if none works."""
+        bl = self._bld_xy.get(aim) or []
+        if not bl:
+            return cx, cy
+        mx, my = sum(p[0] for p in bl) / len(bl), sum(p[1] for p in bl) / len(bl)
+        fb = self._nearest_airfield(mx, my)
+        t0 = bearing(mx, my, fb.x, fb.y)
+        for da in (0, 45, -45, 90, -90, 135, -135, 180):
+            t = t0 + da
+            ux, uy = offset(0.0, 0.0, t, 1.0)               # unit step of that bearing
+            ext = max((p[0] - mx) * ux + (p[1] - my) * uy for p in bl)
+            gx, gy = offset(mx, my, t, max(0.0, ext) + self.GUARD_CLEAR_M)
+            if seac.site_ok(gx, gy) and min(dist(gx, gy, p[0], p[1]) for p in bl) >= self.GUARD_CLEAR_M * 0.9:
+                return gx, gy
+        return cx, cy
+
     def _on_runway(self, x, y, margin):
         """v0.41.48: True when a group centred here (its footprint about `margin` m) would sit on a runway and block the side that uses it.
         pydcs gives each runway only a heading, so the strip is modelled as a corridor through the airfield reference point:
@@ -1585,6 +1605,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if a.kind in SUPPLY_BUILDINGS:                  # v0.41.192: fuel farm / depot = real buildings, guarded by the Shilka group
             bld = self._place_buildings(self.red, a.id, a.kind, cx, cy, r.randint(0, 359), scale=a.health, variant=a.variant)
             base_count += len(supply_parts(a.kind, a.variant))
+            gx, gy = self._guard_spot(a.id, cx, cy)         # v0.41.376 (S10): the guard stands at the edge of the layout facing blue, not inside it
+            cx, cy = gx, gy
         if garrison:
             fb = self._nearest_airfield(cx, cy)
             heading, form = int(bearing(cx, cy, fb.x, fb.y)), r.choice([F.Rectangle, F.Scattered, F.Star])
