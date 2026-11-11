@@ -20,7 +20,7 @@ from . import seacheck as seac
 from . import threatmap as tm
 from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
-from .loadouts import ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_dead_loadout, enemy_strike_loadout
+from .loadouts import ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_dead_loadout, enemy_land_bomber_loadout, enemy_strike_loadout
 from .models import AssetKind, BaseKind, ObjectiveType, Role
 from .red_air_picture import A2A_ZONE_NM, CALLIN_LUA, CALLIN_LUA_DELAY_S, CALLIN_MIN_NM, CALLIN_REACH_NM, RED_LONG_RANGE
 from .support_caps import SUPPORT_CAP_ZONE_NM
@@ -1355,7 +1355,7 @@ class RaidSpawns:
 
         if land:
             cls_b, task_b = getattr(planes, ex.get("raider", "Su_24M")), (task.GroundAttack if aim else task.RunwayAttack)
-            load = enemy_strike_loadout(ex.get("raider", "Su_24M"))
+            load = enemy_land_bomber_loadout("Tu_22M3") if ex.get("raider") == "Tu_22M3" else enemy_strike_loadout(ex.get("raider", "Su_24M"))      # v0.41.355 (Phase 10a): the Tu-22M3 land strike carries OFAB-250 racks, no Kh-22, no anti-ship task
         else:
             cls_b, task_b = planes.Tu_22M3, task.AntishipStrike
             load = enemy_bomber_loadout("Tu_22M3")

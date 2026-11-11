@@ -548,7 +548,15 @@ class WarSimulator:
             lines.append("   not detected: no AWACS was on orbit, only the planned patrols met it")
             ra_ = state.raids if state.raids is not None else {}
             ra_["unseen_n"] = int(ra_.get("unseen_n", 0)) + 1
-        if bw is not None and ok:
+        tu_ = bool(pkg.extra.get("land")) and pkg.extra.get("raider") == raids.TU22              # v0.41.355 (Phase 10a): the Tu-22M3 land strike: a 2-ship, its own losses and hit size
+        if bw is not None and ok and tu_:
+            k = bw.lose(raids.TU22, rng.randint(1, max(1, nb_)))                            # stopped: 1 or both bombers shot down (the Su-24M raid rule would take 2 to 4)
+            lines.append(f"   {k} Tu-22M3 shot down before dropping their bombs")
+            if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
+                lines.append(ln_)
+        elif bw is not None and not ok and tu_:
+            lines += raids.tu_hit(state, pkg.objective.target_id, bw, rng, pkg.objective.aim, nb_)
+        elif bw is not None and ok:
             k = bw.lose(pkg.extra.get("raider"), (rng.randint(2, 4) if nb_ <= 4 else max(2, round(nb_ * rng.uniform(0.4, 0.7)))) if pkg.extra.get("land") else max(1, round(pkg.extra.get("bombers", 4) * rng.uniform(0.4, 0.8))))
             lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):

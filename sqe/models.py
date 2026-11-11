@@ -134,7 +134,7 @@ class RedSquadron:
     rest_days: int = 0
     move_days: int = 0          # v0.41.243: LEGACY (nights left), see Squadron.move_days
     move_until: int = 0         # v0.41.337: the turn at which a squadron that changed field is operational again; 0 = not moving
-    role: str = ""              # v0.41.106: "escort" = the Mozdok escort squadron: escorts, Mozdok patrols and scrambles only, never sent afield as reinforcement
+    role: str = ""              # v0.41.106: "escort" = the Mozdok escort squadron. While a carrier raid is staged or launching (`bombers.escorts_held`) it flies the raid's escorts and Mozdok patrols and scrambles only; v0.41.355 (Phase 10a): otherwise it flies red's normal jobs (reactions, reinforcements, land-raid escorts) and rides with the Tu-22M3 land strike
     refit: list = field(default_factory=list)   # v0.41.334 (refit.py): the absolute minute each jet in refit is ready again; `available` stays "ready now"
     repl_due: int = 0           # the Tu-22M3 squadron's own 48 h replacement timer (other types use the wing's, EnemyAirWing.repl_due)
     held: int = 0               # same, for the Tu-22M3 squadron: arrived while the runway was closed
@@ -218,9 +218,15 @@ class EnemyAirWing:
         from .loadouts import ENEMY_FIGHTERS
         return [t for t in self.types_up if t in ENEMY_FIGHTERS] or [t for t in self.types if t in ENEMY_FIGHTERS]
 
-    def general_types_up(self) -> list:
-        """Like `types_up` but without the escort-only squadron: the types red may send afield as reinforcements."""
-        return list(dict.fromkeys(q.aircraft for q in self.sqns if q.available >= 2 and q.role != "escort"))
+    def general_types_up(self, state=None) -> list:
+        """Like `types_up` but without the escort squadron while it is held: the types red may send afield as reinforcements. v0.41.355 (Phase 10a): the Mozdok escort squadron is held only while a carrier raid
+        is staged or launching (`bombers.escorts_held(state)`); the other days it flies red's normal jobs. With no `state` it stays held (the old rule)."""
+        if state is not None:
+            from .bombers import escorts_held
+            held = escorts_held(state)
+        else:
+            held = True
+        return list(dict.fromkeys(q.aircraft for q in self.sqns if q.available >= 2 and (q.role != "escort" or not held)))
 
     def replenish(self, n: int, skip=()) -> None:
         """New jets for the squadrons that are not resting, one at a time to the one furthest below strength (jets in refit count as present; `skip`: aircraft

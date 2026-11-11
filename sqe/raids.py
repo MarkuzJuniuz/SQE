@@ -32,6 +32,11 @@ RAID_REF_PAIRS = {1: 6, 2: 39, 3: 82}      # the Phase A medians of free attack 
 RAID_MULT_MAX = 1.5                        # a red above its reference never raids more than this times the plain rate
 RAID_TEMPO = {1: 1.0, 2: 1.4, 3: 1.4}      # red rises with blue's +40% (judgment call); at L3 about 2.0 a day goes to about 2.8 (the queue's "about 2.7")
 TURNS_PER_DAY = clock.DAY_MIN // clock.TURN_MIN      # 12: the level's raid_rate (raids a day) is spread over the day's turns
+# v0.41.355 (campaign rules plan Phase 10a): the Tu-22M3 LAND STRIKE (2 Tu-22M3 + 2 Mozdok Su-27 on a blue supply site). All judgment calls (no public figure), tuned on the 40-day cadence runs.
+TU22 = "Tu_22M3"
+TU_STRIKE_TEMPO = 1.5         # the per-turn chance is the level's land-strike cap a day x this / 12, so most days reach the cap (`bombers.LAND_STRIKES_PER_DAY`)
+TU_HIT_EQUIV = 2.0            # aircraft-equivalents one Tu-22M3 that gets through puts on a supply site: it drops four racks of nine OFAB-250 (about 9 t) against a Su-24M's two or three tonnes, but the bombs beyond the first
+                              # few fall on rubble (`eff` already halves them past four); two Tu-22M3 through = 4 = 80% of a site (a second strike finishes it)
 
 
 def wave_mult(state, d) -> float:
@@ -105,14 +110,27 @@ def _reach(state, kind: str, x: float, y: float, budget: bool = True, only: str 
     return best
 
 
+def _tu_reach(state, x: float, y: float):
+    """(distance nm, wing, type) when the bomber wing (Mozdok) can reach (x, y) with a Tu-22M3 land strike (radius x 0.85), else None. The wing and its field are checked by `bombers._bomber_wing`."""
+    from . import bombers
+    from .loadouts import ENEMY_RADIUS_NM
+    bw = bombers._bomber_wing(state)
+    if bw is None:
+        return None
+    a = state.assets[bw.base_asset_id]
+    nm = math.hypot(a.x - x, a.y - y) / NM
+    return (nm, bw, TU22) if nm <= ENEMY_RADIUS_NM[TU22] * 0.85 else None
+
+
 def _nearest_field(state, x: float, y: float):
     fallen = set((state.ground or {}).get("fallen", []))
     fs = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and b.id not in fallen and not b.divert] or [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD]          # Phase 9a: a divert field is nobody's home
     return min(fs, key=lambda b: math.hypot(b.x - x, b.y - y)) if fs else None
 
 
-def candidates(state, kind: str) -> list:
-    """[(base, aim, weight)] for one kind of raid ("field" | "supply" | "garrison" | "sector"). The base is the friendly field the package is flown for."""
+def candidates(state, kind: str, tu: bool = False) -> list:
+    """[(base, aim, weight)] for one kind of raid ("field" | "supply" | "garrison" | "sector"). The base is the friendly field the package is flown for. `tu` (v0.41.355, Phase 10a; "supply" only): the
+    Tu-22M3 land strike's targets: the supply sites the bomber wing reaches that no live Patriot / HAWK covers (no SEAD is built for it, as for every raid on a covered supply site)."""
     out = []
     fallen = set((state.ground or {}).get("fallen", []))
     if kind == "field":
@@ -140,8 +158,8 @@ def candidates(state, kind: str) -> list:
             home = state.bases.get(a.id.split("_", 1)[1]) if a.id.split("_", 1)[1] in state.bases else _nearest_field(state, a.x, a.y)
             if home is None or home.id in fallen:
                 continue
-            r = _reach(state, kind, a.x, a.y)
-            if r is None:
+            r = _tu_reach(state, a.x, a.y) if tu else _reach(state, kind, a.x, a.y)
+            if r is None or (tu and cover_field(state, a.x, a.y) is not None):
                 continue
             out.append((home, a.id, max(0.15, 1.0 - r[0] / 330.0) * (0.5 + 0.5 * a.health) * (a.value / 5.0) * wt_))
     elif kind == "sector":
@@ -380,12 +398,14 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int):
     if nb < 2 or rdy < nb:
         return None
     esc, esc_avail = None, 0
+    from . import bombers
+    held_ = bombers.escorts_held(state)                                             # v0.41.355 (Phase 10a): the Mozdok escort squadron escorts land raids too, unless a carrier raid is staged
     for w in sorted(state.enemy_air, key=lambda w: math.hypot(state.assets[w.base_asset_id].x - ax, state.assets[w.base_asset_id].y - ay)):
         a = state.assets[w.base_asset_id]
         if w is bw or a.destroyed:
             continue
         d_nm = math.hypot(a.x - ax, a.y - ay) / NM
-        types = [t for t in dict.fromkeys(q.aircraft for q in w.sqns if q.role != "escort")
+        types = [t for t in dict.fromkeys(q.aircraft for q in w.sqns if q.role != "escort" or not held_)
                  if t in ENEMY_FIGHTERS and redair.ready_of(state, w, (t,)) >= 2 and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm]
         if types:
             esc = (w, rnd.choice(types))
@@ -417,6 +437,57 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int):
             "bomber_wing": bw.base_asset_id, "escort_wing": esc[0].base_asset_id if esc else "", "escort_type": esc[1] if esc else "", "escorts": escorts, "mass": nb >= 8, "aim": aim, "dest": [ax, ay], "jets": jets}
 
 
+def plan_tu_strike(state, d, base, aim: str, oid: str, turn: int):
+    """v0.41.355 (Phase 10a): book a Tu-22M3 LAND STRIKE out of the turn's free red jets: `bombers.LAND_TU` Tu-22M3 and `bombers.LAND_ESCORTS` Su-27 of the Mozdok escort squadron, on the supply site `aim`. The same
+    plan dict as `plan_raid` (`land`, `raider` Tu_22M3, `jets` ...), so the package, the war sim and the builder treat it as one more land raid. The jets the carrier raid still needs today are left alone
+    (`bombers.carrier_claim`). None when the wing cannot field it."""
+    from . import bombers
+    from .loadouts import ENEMY_FIGHTERS
+    bw = bombers._bomber_wing(state)
+    if bw is None:
+        return None
+    ax, ay = aim_xy(state, aim, base)
+    et = next((q.aircraft for q in bw.sqns if q.role == "escort" and q.aircraft in ENEMY_FIGHTERS), None)
+    if et is None or not redair.can(state, bw.base_asset_id, bombers.LAND_TU + bombers.LAND_ESCORTS):
+        return None
+    c_tu, c_es = bombers.carrier_claim(state, d, turn)
+    if redair.ready_of(state, bw, (TU22,)) - c_tu < bombers.LAND_TU or redair.ready_of(state, bw, (et,)) - c_es < bombers.LAND_ESCORTS:
+        return None
+    rnd = random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:tu")
+    ba = state.assets[bw.base_asset_id]
+    brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360
+    jets = [[sid, n, "raid"] for sid, n in redair.take_ready(state, bw, (TU22,), bombers.LAND_TU)]
+    jets += [[sid, n, "esc"] for sid, n in redair.take_ready(state, bw, (et,), bombers.LAND_ESCORTS)]
+    redair.spend(state, bw.base_asset_id, bombers.LAND_TU + bombers.LAND_ESCORTS)
+    return {"arm": 0, "arm_fields": [], "arm_cover": 0, "dead": 0, "dead_cover": 0, "land": True, "raider": TU22, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": bombers.LAND_TU,
+            "bomber_wing": bw.base_asset_id, "escort_wing": bw.base_asset_id, "escort_type": et, "escorts": bombers.LAND_ESCORTS, "mass": False, "aim": aim, "dest": [ax, ay], "jets": jets, "tu_strike": True}
+
+
+def tu_strike(state, d, rng: random.Random, turn: int):
+    """v0.41.355 (Phase 10a, cadence (c)): this turn's Tu-22M3 land strike, drawn BEFORE the ordinary raids so it takes its jets first. -> (objective, booking) or None. Never when the wing never raids
+    (`bomber_policy` "none"), when today's cap (`bombers.land_cap`) is reached, or when no supply site that no live battery covers lies within reach. The chance per turn is `TU_STRIKE_TEMPO` x the cap / 12
+    (half of it at night, `RED_RAID_NIGHT`), drawn from `rng` so a replan of the turn gives the same answer. The strike is counted in `raids["tu_land"]` (turn -> 1)."""
+    from . import bombers
+    cap = bombers.land_cap(d)
+    p = cap * TU_STRIKE_TEMPO / TURNS_PER_DAY * (RED_RAID_NIGHT if clock.is_night_turn(turn) else 1.0)
+    hit_ = rng.random() < p                                  # always drawn: the sequence does not depend on the state
+    pick_ = random.Random(f"{state.campaign_id}:{turn}:tu-aim")
+    if cap <= 0 or not hit_ or bombers.land_done(state, turn) >= cap:
+        return None
+    ws = candidates(state, "supply", tu=True)
+    if not ws:
+        return None
+    base, aim, _ = _weighted(pick_, ws)
+    o = raid_objective(base, aim, describe(state, base, aim))
+    o.id = f"obj-t{turn}-t1"
+    bk = plan_tu_strike(state, d, base, aim, o.id, turn)
+    if bk is None:
+        return None
+    if state.raids is not None:
+        state.raids.setdefault("tu_land", {})[str(turn)] = 1
+    return o, bk
+
+
 def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) -> tuple:
     """-> (objectives of the raids red plans THIS turn; number of unwarned raids that could not be built, settled overnight). One draw a turn (chance `turn_rate`; v0.41.341, Phase 5b: it was one draw a day in
     `Session._begin_day`); the same seed gives the same answer. Each raid is booked (`plan_raid`) as it is drawn and its plan is kept in `state.raids["booked"]`. Ids are obj-t<turn>-r<n>, and obj-t<turn>-s<n> for an
@@ -429,6 +500,13 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
     n = int(rate) + (1 if rng.random() < rate - int(rate) else 0)
     warned, surprise = [], 0
     booked = state.raids.setdefault("booked", {}) if state.raids is not None else {}
+    if state.raids is not None:
+        state.raids.setdefault("tu_land", {}).pop(str(turn), None)      # v0.41.355: this turn's land strike is drawn again (a replan of the turn)
+    if planned:
+        tu_ = tu_strike(state, d, random.Random(f"{state.campaign_id}:{turn}:tu"), turn)       # v0.41.355 (Phase 10a): the Tu-22M3 land strike first, before the ordinary raids take the jets
+        if tu_ is not None:
+            booked[tu_[0].id] = tu_[1]
+            warned.append(tu_[0])
     for _ in range(n):
         unwarned = rng.random() < d.raid_surprise
         if not planned:
@@ -481,6 +559,19 @@ def hit(state, base_id: str, wing, rng: random.Random, through: int | None = Non
         lost = min(sq.available, rng.randint(1, 1 + int(ke)))
         sq.available -= lost
         lines.append(f"   {lost} parked aircraft lost ({sq.name}: {sq.available}/{sq.authorized} left)")
+    return lines
+
+
+def tu_hit(state, base_id: str, wing, rng: random.Random, aim: str, nb: int) -> list:
+    """v0.41.355 (Phase 10a): a Tu-22M3 land strike that got through. 1 to `nb` of the Tu-22M3 drop (random), each worth `TU_HIT_EQUIV` aircraft on the supply site (`hit`, judgment call); the wing loses a jet
+    only to the batteries round the target (`round(covering_ad)`: none for the uncovered sites the strike picks), where the Su-24M raids always lose one."""
+    from .sams import covering_ad
+    n_thr = rng.randint(1, max(1, int(nb)))
+    ad = covering_ad(state, *aim_xy(state, aim, state.bases[base_id]))
+    lost = wing.lose(TU22, round(ad)) if (wing is not None and round(ad) > 0) else 0
+    lines = hit(state, base_id, None, rng, int(round(TU_HIT_EQUIV * n_thr)), aim, TU22)
+    if lost:
+        lines.append(f"   {lost} Tu-22M3 lost to the defences")
     return lines
 
 

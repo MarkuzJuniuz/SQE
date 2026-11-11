@@ -108,7 +108,7 @@ def reaction_draw(state, side: str, package, rng=None) -> list:
         if a is None or a.destroyed:
             continue
         nm = math.hypot(a.x - t.x, a.y - t.y) / NM
-        types = {x for x in w.general_types_up() if INTERCEPT_NM.get(x, 120) >= nm}
+        types = {x for x in w.general_types_up(state) if INTERCEPT_NM.get(x, 120) >= nm}
         if types:
             wings.append((nm, w.base_asset_id, w, types))
     out = []

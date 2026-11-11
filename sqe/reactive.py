@@ -53,7 +53,7 @@ def plan_red(state, d, rng, tx, ty, base_aircraft: int, blue_fighters: int, used
         if a is None or a.destroyed:
             continue
         nm = math.hypot(a.x - tx, a.y - ty) / NM
-        types = [t for t in w.general_types_up() if t in fighters and INTERCEPT_NM.get(t, 120) >= nm]
+        types = [t for t in w.general_types_up(state) if t in fighters and INTERCEPT_NM.get(t, 120) >= nm]
         if types:
             cands.append((w, a, nm, types))
     # v0.41.343 (campaign rules Phase 6a): a wing sends a pair only from its reaction hold (reserve.py), squadron by squadron; no hold left, no pair. This replaces the v0.41.110 block (2 jets per BARCAP area).
