@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.369, S19: one fixed safe AWACS station and its guard every turn
+
+XO 2026-11-11 ("fox 3 medium"). **NOT FLOWN.** The AWACS no longer travels with the player: `threatmap.awacs_station(state)` gives one station per state (behind the support field, facing red's live fighter fields, clear of enemy fields and SAM rings), and `_place_support` takes the AWACS track and its HAVCAP spot from it, so every package of a turn and the guard flight see the same point. The HAVCAP route's threat bearing is the station's front heading. The tanker keeps its own package-based spot (its fallback is pushed 15 nm off the AWACS track). `blue_barcap._plan_guards` no longer draws for the AWACS guard: every AWACS that is up gets a pair, like the tanker (`share` kept for the callers). The dead `MissionBuilder._safe_station` is deleted. `AWACS_LOSS_ON` stays False.
+
 ## v0.41.368, S17: storms no longer scrub every package
 
 XO 2026-11-11 ("fox 3 medium"). **NOT FLOWN.** `weather.assess()` no longer scrubs every non-defensive package in STORM. Fog, ceiling < 600 ft with cover >= 0.5 and visibility < 1.5 km still scrub as airfield minimums (STORM visibility is 2 to 6 km, so those rarely fire). The per-flight rule decides the rest: in a storm `adapt()` swaps laser and EO weapons to GPS (rain 2 rules them out), GPS and ARM always fly, and a flight left with nothing it can use still scrubs the package (unguided-only flights when base < 1,500 ft or visibility < 5 km and no GPS bomb fits the pylon). BARCAP and FLEET_DEFENSE are never scrubbed, as before. Judgment call, no ED statement. The Missions-page hint now says "or meets fog".

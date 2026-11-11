@@ -82,9 +82,12 @@ class SupportCaps:
         with its own escort, so a flight short of fuel meets it before its own runway, not 50 nm behind it."""
         pt = lambda x, y: mapping.Point(x, y, self.t)
         st = self.state
-        ax, ay = tm.safe_marshal(st, (g.bx, g.by), g.hdg)                   # the old flat-distance marshal spot: the AWACS's anchor
+        aw_ = tm.awacs_station(st)                                          # S19: one fixed station per state, not from the player's base or target
+        ax, ay, fh = aw_ if aw_ is not None else (*tm.safe_marshal(st, (g.bx, g.by), g.hdg), g.hdg)
+        self._awacs_fh = fh                                                 # the HAVCAP's route reads it too (_support_cap_route)
         tanker_xy, awacs_unit = None, None
-        hav_xy = offset(ax, ay, g.hdg + 180, 8 * NM)
+        awacs_xy = offset(*offset(ax, ay, fh + 180, 6 * NM), fh - 90, 20 * NM) if any(s_.slot == "AWACS" for s_ in package.support) else None   # the AWACS track's start (set before the loop: the tanker fallback needs it)
+        hav_xy = offset(ax, ay, fh + 180, 8 * NM)
         # v0.41.11: for the whole mission, not only your flight: from the middle of the fields the mission's flights fly home to (weighted by
         # aircraft), toward your package's egress. The v0.41.10 run put it in front of Batumi for your sweep, 40-50 nm off the Senaki flights' way home.
         hf_ = [(st.bases[f_.base_id], f_.count) for p_ in [package] + list(extras) for f_ in p_.flights
@@ -108,8 +111,8 @@ class SupportCaps:
             alt, spd, freq = s.altitude_ft * FT, s.speed_kts * KPH, plan.freq(s.slot)
             if s.slot == "AWACS":
                 # racetrack runs sideways (parallel to the front), 40 nm long, centred behind its anchor
-                x, y = offset(*offset(ax, ay, g.hdg + 180, 6 * NM), g.hdg - 90, 20 * NM)
-                grp = self.m.awacs_flight(self.usa, f"{s.label} 1", cls, None, pt(x, y), race_distance=40 * NM, heading=int(g.hdg + 90) % 360,
+                x, y = offset(*offset(ax, ay, fh + 180, 6 * NM), fh - 90, 20 * NM)
+                grp = self.m.awacs_flight(self.usa, f"{s.label} 1", cls, None, pt(x, y), race_distance=40 * NM, heading=int(fh + 90) % 360,
                                           altitude=alt, speed=spd, frequency=freq)
                 callsigns.apply(grp, s.label, 1, callsigns.AWACS); grp.units[0].name = f"{s.label} 1-1"
                 self._support_lbl[grp.units[0].name] = s.label.upper()
@@ -128,6 +131,8 @@ class SupportCaps:
                 else:                                                        # nothing forward is clear: behind the AWACS anchor, as before
                     back = 12 if s.slot == "TANKER1" else 24
                     x, y = offset(*offset(ax, ay, g.hdg + 180, back * NM), g.hdg - 90, 15 * NM); race = 30 * NM
+                    if awacs_xy is not None and dist(x, y, *awacs_xy) < 15 * NM:         # S19: the fixed AWACS must not sit on the tanker
+                        x, y = offset(x, y, bearing(*awacs_xy, x, y) if dist(x, y, *awacs_xy) > 1 else g.hdg + 180, 15 * NM - dist(x, y, *awacs_xy))
                     if s.slot == "TANKER1":
                         self._tanker_c = offset(x, y, g.hdg + 90, race / 2); self._tanker_race = race
                 grp = self.m.refuel_flight(self.usa, f"{s.label} 1", cls, None, pt(x, y), race_distance=race, heading=int(g.hdg + 90) % 360,
@@ -166,7 +171,7 @@ class SupportCaps:
             gx_, gy_ = tc_; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 5 * NM); zr_ = TNKCAP_ZONE_NM
             axis_ = geom.hdg                            # S9: CAP2 along the tanker's own track (it runs on hdg + 90), not across the threat
         elif f.tag in ("HAVCAP", "TNKCAP"):
-            gx_, gy_ = hav_xy; thr_ = geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
+            gx_, gy_ = hav_xy; thr_ = getattr(self, "_awacs_fh", geom.hdg) if f.tag == "HAVCAP" else geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
         elif f.tag == "CVCAP":
             # v0.41.74: the BARCAP area of the boat that faces the target (barcap.py); the boat may have been slid back for this sortie, so the
             # area's direction is used from where the boat is now. No area today (no hostile base reaches it): the old rule, toward the nearest enemy field.

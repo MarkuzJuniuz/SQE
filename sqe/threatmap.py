@@ -106,6 +106,25 @@ def fighter_bases(state) -> list:
             if w.available > 0 and not state.assets[w.base_asset_id].destroyed]
 
 
+def awacs_station(state):
+    """S19 (v0.41.369, XO 2026-11-11): the AWACS's one fixed station -> (x, y, front_hdg), the same for every package of a turn and for its guard.
+    It starts from the support field (support_assets._support_airfield), faces red's live fighter fields (else red's assets, else north) and sits
+    BEHIND that field, clear of enemy fields and SAM rings (safe_marshal). It reads only the state: not the player, the package or its target.
+    (DCS detects by the radar's own range, so the distance to the fight does not matter.) None when no support field exists."""
+    from .support_assets import _support_airfield
+    b = _support_airfield(state)
+    if b is None:
+        return None
+    pts = fighter_bases(state) or [(a.x, a.y) for a in state.assets.values() if not a.destroyed]
+    if pts:
+        cx, cy = sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
+        fh = math.degrees(math.atan2(cy - b.y, cx - b.x)) % 360
+    else:
+        fh = 0.0
+    x, y = safe_marshal(state, (b.x, b.y), fh)
+    return x, y, fh
+
+
 def tanker_station(state, base_xy, toward_xy, min_enemy_nm: float = 150, ring_margin_nm: float = 20):
     """A tanker track behind the FLOT: far from enemy fighter bases and outside every SAM ring. None if no such spot."""
     bx, by = base_xy

@@ -1628,19 +1628,6 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                      primary_pkgs=[manifest.cur_pkg] if (primary and manifest.cur_pkg) else [])
 
     # ---- support: tanker + AWACS well back from the enemy, with a HAVCAP at the same spot ----------------------------
-    def _safe_station(self, g):
-        st = self.state
-        enemies = [(st.assets[w.base_asset_id].x, st.assets[w.base_asset_id].y) for w in st.enemy_air
-                   if w.available > 0 and not st.assets[w.base_asset_id].destroyed]
-        bx, by = g.bx, g.by
-        mx, my = g.mshl
-        x = y = 0
-        for f in (0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1):
-            x, y = bx + (mx - bx) * f, by + (my - by) * f
-            if not enemies or min(dist(x, y, ex, ey) for ex, ey in enemies) / NM >= 120:
-                break
-        return x, y
-
     def _pkg_target_xy(self, package):
         """(x, y) of a package's ground target, or None (fleet / base patrols)."""
         a = self.state.assets.get(package.objective.target_id) if package.objective.target_id else None
