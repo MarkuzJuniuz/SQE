@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.350, support CAP legs (queue S9)
+
+XO 2026-11-10 ("fox 3 medium"). The support CAPs' race-track leg is longer where it is clear: BASECAP 25 nm, CVCAP up to 30, HAVCAP 20, TNKCAP 20 (was 15 / 10 / 15 / 15), shortened until SAM-clear (the carrier CAP also stays outside the scramble circles), else today's point. A forward tanker's TNKCAP now runs along the tanker's track, not across the threat. **NOT FLOWN. Smoke not run.**
+
 ## v0.41.349, campaign rules Phase 8: CAP1 and CAP2 on the TARCAP, escort and sweep station
 
 XO 2026-11-10 ("fox 3 high"), `campaign rules plan.md` Phase 8. The blue TARCAP / escort / sweep station is now CAP1 plus a CAP2 point, flown as a race-track (the Circle stays where no CAP2 is clear). Support CAPs and red's CAPs already had a CAP2 and are untouched.
