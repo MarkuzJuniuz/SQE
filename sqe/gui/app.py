@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QDialog, Q
 from .. import APP_NAME, CAMPAIGN_EXT, __version__, narrative, overview_detail, posture, story
 from ..aircraft import AIRCRAFT
 from ..briefing import threat_lines
+from .. import clock
 from ..timeofday import is_night
 from ..difficulty import LEVELS
 from ..engine import Session
@@ -21,10 +22,12 @@ from ..packages import PackageBuilder, folded_n_def
 from ..settings import AppSettings
 from . import theme
 from .dialogs import DayResolvedDialog, DebriefDialog, NewCampaignDialog, SettingsDialog, WaitingDialog
-from .widgets import MapView, SideCard, StatCard, card
+from .widgets import MapView, SideCard, StatCard, StepSpin, card
 from . import overview_view as V
 
 URGENT_ROLE = Qt.UserRole + 1
+AUTOSKIP_MAX_TURNS = 84          # Duration unticked: at most a week of turns (12 a day), a judgment call (campaign rules plan Phase 11)
+AUTOSKIP_DELAY_MS = 250          # pause between two skipped turns (the ticker)
 
 
 class UrgentDelegate(QStyledItemDelegate):
@@ -258,6 +261,41 @@ class MissionsPage(QWidget):
         self.resume.clicked.connect(win.wait_for_results)
         self.skip = QPushButton("Skip Turn"); self.skip.setToolTip("Stand down for this turn (2 hours): this turn's packages are resolved by the war simulation and the clock moves on two hours. A night with no night flying is resolved for you.")
         self.skip.clicked.connect(win.skip_turn); L.addWidget(self.skip, 0, Qt.AlignRight)
+        # Phase 11 (XO): AUTOMATICALLY SKIP: Skip Turn keeps stepping until a flight is available (or the Duration is up)
+        self.auto_box = QWidget(); ab = QVBoxLayout(self.auto_box); ab.setContentsMargins(0, 0, 0, 0); ab.setSpacing(4)
+        ab.addWidget(self._label("AUTOMATICALLY SKIP", "head"))
+        self.auto_stand = QCheckBox("Stand Down Days"); self.auto_stand.setToolTip("Keep skipping through turns where you have no flight to fly. Unticked: stop at the first such turn.")
+        self.auto_night = QCheckBox("Nighttime Sorties"); self.auto_night.setToolTip("Also skip night turns, even when a flight is on offer.")
+        self.auto_dur_on = QCheckBox("Duration:"); self.auto_dur_on.setToolTip("Stop after this many hours of campaign time. Unticked: no time limit (a week at most).")
+        self.auto_dur = StepSpin(); self.auto_dur.setRange(2, 24); self.auto_dur.setSingleStep(2); self.auto_dur.setSuffix(" hrs"); self.auto_dur.setValue(12)
+        drow = QHBoxLayout(); drow.setContentsMargins(0, 0, 0, 0); drow.addWidget(self.auto_dur_on); drow.addWidget(self.auto_dur); drow.addStretch(1)
+        for w in (self.auto_stand, self.auto_night):
+            ab.addWidget(w)
+        ab.addLayout(drow)
+        self.ticker = QLabel(""); self.ticker.setObjectName("small"); self.ticker.setWordWrap(True); ab.addWidget(self.ticker)
+        L.addWidget(self.auto_box, 0, Qt.AlignRight)
+        for w in (self.auto_stand, self.auto_night, self.auto_dur_on):
+            w.toggled.connect(self._auto_changed)
+        self.auto_dur.valueChanged.connect(self._auto_changed)
+
+    def auto_options(self) -> tuple:
+        """(stand down, night, duration hours or None when Duration is unticked)."""
+        return self.auto_stand.isChecked(), self.auto_night.isChecked(), (self.auto_dur.value() if self.auto_dur_on.isChecked() else None)
+
+    def set_auto_enabled(self, on: bool):
+        for w in (self.skip, self.auto_stand, self.auto_night, self.auto_dur_on, self.auto_dur):
+            w.setEnabled(on)
+
+    def _auto_changed(self, *_):
+        if getattr(self, "sess", None) is None or getattr(self, "_loading", False):
+            return
+        s = self.sess.settings
+        s.autoskip_stand_down, s.autoskip_night, s.autoskip_duration_on = self.auto_stand.isChecked(), self.auto_night.isChecked(), self.auto_dur_on.isChecked()
+        s.autoskip_hours = self.auto_dur.value()
+        try:
+            s.save()
+        except OSError:
+            pass
 
     def _filter_changed(self):
         if getattr(self, "sess", None) is None or getattr(self, "_loading", False):
@@ -275,7 +313,7 @@ class MissionsPage(QWidget):
             self.lst.blockSignals(True); self.lst.clear(); self.lst.blockSignals(False)
             self.pkgs = []; self.members = {}
             self.day.setText(f"{st.campaign_date().strftime('%d %b %Y').upper()}  -  Day {st.day}  -  the war is over")
-            self.resume.setVisible(False); self.skip.setEnabled(False); self.note.hide()
+            self.resume.setVisible(False); self.skip.setEnabled(False); self.note.hide(); self.auto_box.hide()
             self._clear_body()
             lab, text = posture.posture(st)
             self.bl.addWidget(self._label(lab, "title"))
@@ -283,7 +321,7 @@ class MissionsPage(QWidget):
             self.bl.addWidget(self._label("There is nothing left to fly. Start a new campaign from the File menu.", "small"))
             self.bl.addStretch(1)
             return
-        self.note.show()
+        self.note.show(); self.auto_box.show()
         keep = None                                         # v0.41.311: remember the pick, so FLY's refresh does not jump to row 0 behind the waiting window
         cur = self.lst.currentItem() if getattr(self, "_sel_day", None) == st.turn else None             # v0.41.337: the pick is remembered per TURN
         if cur is not None:
@@ -291,6 +329,10 @@ class MissionsPage(QWidget):
         self._sel_day = st.turn
         self._loading = True
         self.flt.setCurrentIndex(0 if sess.settings.list_filter != "all" else 1)
+        if not getattr(self.win, "_auto_busy", False):               # Phase 11: the Autoskip boxes show the saved choice (not while it is running)
+            cs = sess.settings
+            self.auto_stand.setChecked(bool(cs.autoskip_stand_down)); self.auto_night.setChecked(bool(cs.autoskip_night))
+            self.auto_dur_on.setChecked(bool(cs.autoskip_duration_on)); self.auto_dur.setValue(int(cs.autoskip_hours))
         self._loading = False
         mine_only = sess.settings.list_filter != "all"
         visible = [p for p in sess.packages() if (bool(sess.flyable(p)) or not mine_only)]
@@ -311,7 +353,7 @@ class MissionsPage(QWidget):
             self.lst.addItem(it)
         self.lst.blockSignals(False)
         self.resume.setVisible(bool(st.pending))
-        self.skip.setEnabled(st.status == "ACTIVE")
+        self.skip.setEnabled(st.status == "ACTIVE" and not getattr(self.win, "_auto_busy", False))
         if self.pkgs and any(sess.flyable(p) for p in self.pkgs):
             row = next((i for i, p in enumerate(self.pkgs) if p.number == keep), 0) if keep is not None else 0
             self.lst.setCurrentRow(row)
@@ -831,6 +873,71 @@ class MainWindow(QMainWindow):
         lab, text = posture.posture(st)
         QMessageBox.information(self, ("VICTORY: " if st.status == "VICTORY" else "DEFEAT: ") + lab, text)
 
+    # ---- Autoskip (campaign rules plan Phase 11, XO's design in the notes) -------------------------------------------------
+    # Like a JS setTimeout chain: one `skip_turn` per tick, the next tick is armed only AFTER the step ran (skip_turn costs ~0.2 s, a fixed interval would stack up).
+    def _auto_step_wanted(self, sess, night_ok: bool, stand_ok: bool) -> str:
+        """Look at the turn the clock stands on: "" = step on, else the reason to stop."""
+        st = sess.state
+        if night_ok and clock.is_night_turn(st.turn):
+            return ""                                                          # decision 39: a night turn with flights steps too when Nighttime is ticked
+        if st.pending or any(sess.flyable(p) for p in sess.packages()):
+            return "Flight available."
+        return "" if stand_ok else "Stand-down turn (Stand Down Days is off)."
+
+    @staticmethod
+    def _skip_nosave(sess):
+        """One Skip Turn without its own save (Session.skip_turn saves and writes a backup every call; the ticker saves once at the end). The engine stays untouched: the instance's
+        `save` is shadowed for the call (like assigning a method on an object in JS), then removed."""
+        sess.save = lambda *a, **k: None
+        try:
+            return sess.skip_turn()
+        finally:
+            del sess.save
+
+    def _auto_stop(self, reason: str):
+        """Every stop path ends here: controls back on, ONE save (Session.save writes a backup each time), the war's ending box, one summary."""
+        n, before = self._auto_n, self._auto_before
+        self._auto_busy = False
+        try:
+            self.p_miss.ticker.setText(f"{reason} ({n} turn{'s' if n != 1 else ''} skipped)")
+            try:
+                self.session.save()
+            except OSError:
+                pass
+            self.refresh_all()
+            self._ending_popup(before)
+            if self.session.state.status == "ACTIVE" and not getattr(self, "_auto_quiet", False):
+                QMessageBox.information(self, "Automatically skip", f"{reason}\n\n{n} turn{'s' if n != 1 else ''} skipped. It is now {self.session.turn_label()}.")
+        finally:
+            self.p_miss.set_auto_enabled(True)
+
+    def _auto_tick(self):
+        sess = self.session; st = sess.state
+        try:
+            if not self._auto_busy or st is None:
+                return
+            if st.status != "ACTIVE":
+                return self._auto_stop("The war is over.")
+            if st.turn >= self._auto_target:
+                return self._auto_stop("Duration reached." if self._auto_hours else "Skip limit reached (a week).")
+            why = self._auto_step_wanted(sess, self._auto_night, self._auto_stand)
+            if why:
+                return self._auto_stop(why)
+            label = sess.turn_label()
+            self._skip_nosave(sess); self._auto_n += 1
+            self.p_miss.ticker.setText(f"Skipped {label}  ({self._auto_n} so far) ...")
+            self.refresh_all()
+            QTimer.singleShot(AUTOSKIP_DELAY_MS, self._auto_tick)
+        except Exception:
+            self._auto_busy = False
+            self.p_miss.set_auto_enabled(True)
+            traceback.print_exc()
+            self.p_miss.ticker.setText("Automatic skip stopped on an error (see the console).")
+            try:
+                sess.save(); self.refresh_all()
+            except Exception:
+                pass
+
     def skip_turn(self):
         sess = self.session
         stand_down = not sess.state.pending and not any(sess.flyable(p) for p in sess.packages())
@@ -841,9 +948,23 @@ class MainWindow(QMainWindow):
             if QMessageBox.question(self, "Skip Turn", msg) != QMessageBox.Yes:
                 return
         before = sess.state.status
-        out = sess.skip_turn(); self.refresh_all()
-        DayResolvedDialog(out["turns"], self).exec()
-        self._ending_popup(before)                                # (the war's ending, if this day ended it, has its own box with the story)
+        stand_ok, night_ok, hours = self.p_miss.auto_options()
+        if not (stand_ok or night_ok or hours is not None):
+            out = sess.skip_turn(); self.refresh_all()
+            DayResolvedDialog(out["turns"], self).exec()
+            self._ending_popup(before)                            # (the war's ending, if this day ended it, has its own box with the story)
+            return
+        # Phase 11: any box ticked: resolve this turn once, then the ticker steps on its own (no result box per turn)
+        t0 = sess.state.turn
+        self._auto_busy = True; self.p_miss.set_auto_enabled(False)
+        try:
+            self._skip_nosave(sess)
+        except Exception:
+            self._auto_busy = False; self.p_miss.set_auto_enabled(True); raise
+        self._auto_n, self._auto_before, self._auto_stand, self._auto_night, self._auto_hours = 1, before, stand_ok, night_ok, hours
+        self._auto_target = t0 + (hours // 2 if hours is not None else AUTOSKIP_MAX_TURNS)
+        self.refresh_all()
+        QTimer.singleShot(AUTOSKIP_DELAY_MS, self._auto_tick)
 
     def wait_for_results(self):
         dlg = WaitingDialog(self.session, self); r = dlg.exec()
