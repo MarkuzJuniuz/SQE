@@ -9,7 +9,7 @@ from .models import Role
 
 # Taken from DCS's own stock presets (the lists you pick from in the Mission Editor). "=<CLSID>" is a raw weapon id; anything else is a
 # weapon-name stem looked up on the pylon. The comment above each line names the stock preset it was copied from.
-JDAM_JETS = {"F-16C", "FA-18C", "F-14BU"}       # v0.41.299: the jets whose STRIKE loadout is JDAMs (GBU-31 / GBU-38): their AI strikes release short of the target (routes.JDAM_RELEASE_NM)
+JDAM_JETS = {"F-16C", "FA-18C", "F-14BU", "F-15E"}       # v0.41.299: the jets whose STRIKE loadout is JDAMs (GBU-31 / GBU-38): their AI strikes release short of the target (routes.JDAM_RELEASE_NM)
 CBU_JETS = {"F-16C"}                          # v0.41.313 (XO 2026-11-06): the jets that carry CBU-103 on a plain counter-air strike (parked aircraft, little air cover); the others keep their JDAMs
 SLAM_PER_JET = {"FA-18C": 2}                  # v0.41.298: AGM-84H SLAM-ER per jet in the Standoff Strike kit (a Hornet job: no F-16 SLAM-ER in DCS)
 JSOW_PER_JET = {"FA-18C": 2, "F-16C": 2}      # AGM-154A JSOW CEB per jet in the JSOW kit; only these jets fly the JSOW slot of a SEAD package
@@ -54,6 +54,10 @@ _D: dict = {
     "F-15C": {
         # stock DCS preset: AIM-9*4,AIM-120*4,Fuel*3
         "CAP": {1: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 2: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 3: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 4: "={C8E06185-7CD6-4C90-959F-044679E90751}", 5: "={C8E06185-7CD6-4C90-959F-044679E90751}", 6: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 7: "={C8E06185-7CD6-4C90-959F-044679E90751}", 8: "={C8E06185-7CD6-4C90-959F-044679E90751}", 9: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 10: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 11: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}"},
+    },
+    "F-15E": {
+        # NOT a stock preset (the old AI model has none to copy; judgment call): AIM-9M on 1 and 19, AIM-120C on 3 and 17, 610 gal tanks on 2 and 18, GBU-31(V)1 on the four conformal-tank stations 7, 9, 11, 13
+        "STRIKE": {1: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 2: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 3: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 7: "={GBU-31}", 9: "={GBU-31}", 11: "={GBU-31}", 13: "={GBU-31}", 17: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 18: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 19: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}"},
     },
     "A-10C": {
         # stock DCS preset: AGM-65D*4, CBU-97*2, CBU-87*2, TGP, ECM, AIM-9*2

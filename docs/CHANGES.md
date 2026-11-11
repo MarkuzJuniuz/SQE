@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.358, the F-15E phase: two AI-only strike squadrons
+
+XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** The 494th FS 'Panthers' (Vaziani, Dude) and 336th FS 'Rocketeers' (Tbilisi, Thud) replace the F-15C squadrons Ford and Pontiac in the new-campaign laydown: AI-only F-15E (the old AI model, not the RAZBAM module) flying STRIKE only with GBU-31s. The F-15C callsigns Ford and Pontiac come free; old saves are unchanged.
+
 ## v0.41.357, campaign rules Phase 10b part 2: the flown carrier raid reads the prep's result
 
 XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** A carrier raid planned with the prep record builds the SAM picture the prep left: destroyed sites are gone, suppressed ones are blind, the rest are live and shooting. The scripted blow-up and the raid's own SEAD seats are gone for it; saves with no record keep both.
