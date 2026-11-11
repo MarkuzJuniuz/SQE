@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.392, a CAP mission no longer fails to load in the Mission Editor
+A CAP or Fighter Sweep flight you fly could be refused by the Mission Editor ("All waypoints (2-2) have locked speed and surrounded by waypoints 1 and 2 with locked time"). The CAP station point is no longer time-locked, like the escort and sweep stations. Your waypoints, altitudes, speeds and times are unchanged.
+
 ## v0.41.391, S38: the SEAD stays on station while the strikers go in
 In a STRIKE or CAS package the AI SEAD flight now times its HARM point to 90 seconds before the strikers' time over target (it used to arrive about 5 minutes ahead, find every radar switched off, and leave before the SAMs came up). It holds at the HARM point until the last striker's time over target plus 2 minutes, then goes home. Your own flights and DEAD packages are unchanged.
 

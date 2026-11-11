@@ -2993,7 +2993,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # speed and surrounded by waypoints 4 and 5 with locked time"). PUSH stays locked: that is the time you have to hit.
         # v0.41.60: "a station" is a waypoint that orbits (TARCAP / ESCORT / SWEEP stations) or a TARCAP's own point; before the rename this was the action list
         # ("TARCAP", "ESCORT", "SWEEPSTN"). A flight with no station of its own (stand-off setting off, fleet-defence fighters) still flies its ESCORT / SWEEP point to a time.
-        locked = w.name == "PUSH" or (w.action in OBJECTIVE_ACTIONS and not (w.orbit or w.action == "TARCAP"))
+        # v0.41.392: a CAP / sweep station (CAP1, action CAPORBIT) is a station too: locked, it followed the locked takeoff or PUSH with nothing between
+        # ("Wolf 1: All waypoints (2-2) have locked speed and surrounded by waypoints 1 and 2 with locked time"). The raid's TGT CAPORBIT intercept point stays locked.
+        station = w.orbit or w.action == "TARCAP" or (w.action == "CAPORBIT" and w.name == "CAP1")
+        locked = w.name == "PUSH" or (w.action in OBJECTIVE_ACTIONS and not station)
         wp.ETA_locked = locked
         idx = {x.name: i for i, x in enumerate(wps)}
         lo = idx.get("PUSH"); hi = next((i for i, x in enumerate(wps) if x.action in OBJECTIVE_ACTIONS), None)
