@@ -33,6 +33,10 @@ MOZDOK_WEIGHT = 0.5           # weight of "the bomber base itself is under attac
 FRONT_WEIGHT = 0.25           # the front is in its last stage
 COVER_FLOOR = 0.3             # share of blue's fighters that is still ready when no patrol is up (alert launch), judgment call
 BLUE_FIGHTERS_CAP = 8         # fighters a carrier can put against one raid, as far as red's estimate goes
+# v0.41.355 (campaign rules plan Phase 10a, XO 2026-11-10: "spread the risk on something more productive for red"): the Tu-22M3 LAND STRIKE, 2 Tu-22M3 + 2 Mozdok Su-27 on a blue supply site, comes FIRST in the bomber pool.
+LAND_TU = 2                   # Tu-22M3 in one land strike (XO plan decision 34: a 2-ship escorted by a 2-ship)
+LAND_ESCORTS = 2              # Mozdok Su-27 that ride along
+LAND_STRIKES_PER_DAY = {2: 1, 3: 2}   # land strikes a day at most, by level (judgment call: a Tu-22M3 is lost outright and comes back one per 48 h, `refit.SLOW_REPL_MIN`, so the cap is what keeps the wing alive); L1 has no bomber wing
 
 
 def escorts_for(n: int) -> int:
@@ -42,6 +46,33 @@ def escorts_for(n: int) -> int:
 
 def max_raid(d) -> int:
     return MAX_RAID.get(int(getattr(d, "level", 3)), MAX_RAID[3] if int(getattr(d, "level", 3)) >= 3 else 4)
+
+
+def escorts_held(state) -> bool:
+    """v0.41.355 (Phase 10a): is the Mozdok escort squadron (role "escort") held for the carrier raid? True while a raid is staged or launching (`bomber_stage` launches today or later); the other days the
+    squadron flies red's normal jobs (reactions, reinforcements, land-raid escorts). THE one place that rule lives: `EnemyAirWing.general_types_up` and `raids.plan_raid` read it."""
+    stage = (state.raids or {}).get("bomber_stage") or {}
+    return QUIET_DAYS > 0 and stage.get("launch", -1) >= state.day
+
+
+def land_cap(d) -> int:
+    """Land strikes a day this level may fly (0 when the wing never raids)."""
+    return 0 if getattr(d, "bomber_policy", "none") == "none" else LAND_STRIKES_PER_DAY.get(int(getattr(d, "level", 3)), 0)
+
+
+def land_done(state, turn: int | None = None) -> int:
+    """Land strikes booked today in other turns than `turn` (`state.raids["tu_land"]`: turn -> count, rebuilt each day; a replan of one turn replaces its own entry)."""
+    return sum(int(v) for k, v in ((state.raids or {}).get("tu_land") or {}).items() if turn is None or str(k) != str(turn))
+
+
+def carrier_claim(state, d, turn: int) -> tuple:
+    """(Tu-22M3, escorts) the carrier raid still needs from the wing: the raid launches today in this turn or a later one (`raids["bomber_turn"]`). The land strikes leave these alone, so a staged raid
+    keeps the bombers it was staged with; (0, 0) when no raid is due."""
+    bt = (state.raids or {}).get("bomber_turn")
+    if bt is None or bt < turn:
+        return 0, 0
+    dec = decide(state, d)
+    return (int(dec["n"]), int(dec["escorts"])) if dec["mode"] != "hold" else (0, 0)
 
 
 def _bomber_wing(state):
@@ -121,6 +152,9 @@ def decide(state, d) -> dict:
     full = max_raid(d)
     n_max = min(avail, int(jets / ESCORT_PER_BOMBER), full)
     n_max -= n_max % 2
+    left_ = max(0, land_cap(d) - land_done(state))                # v0.41.355 (Phase 10a, cadence (c)): the land strikes of today are crewed FIRST; a "safe" raid needs a FULL raid of Tu-22M3 and escorts still left after them (a "desperate" one takes everything)
+    n_safe = min(avail - LAND_TU * left_, int((jets - (LAND_ESCORTS * left_ if ew is bw else 0)) / ESCORT_PER_BOMBER), full)
+    n_safe -= n_safe % 2
     go = lambda mode, n, desp: {"mode": mode, "n": n, "escorts": escorts_for(n), "wing": ew.base_asset_id, "type": et,
                                 "why": f"{mode}: {n} bombers, {escorts_for(n)} escorts (desperation {desp:.2f})"}
     stage = (state.raids or {}).get("bomber_stage") or {}
@@ -141,7 +175,7 @@ def decide(state, d) -> dict:
     if desp >= DESPERATE_AT:
         if state.day - cd_safe >= COOLDOWN_DESPERATE or state.day in days:
             mode, n = "desperate", n_max
-    elif getattr(d, "bomber_safe_p", 0.0) > 0 and n_max >= full:                    # v0.41.249: a safe raid is the full raid or nothing
+    elif getattr(d, "bomber_safe_p", 0.0) > 0 and n_safe >= full:                   # v0.41.249: a safe raid is the full raid or nothing; v0.41.355 (Phase 10a): after the day's land strikes are crewed
         if state.day - cd_safe >= COOLDOWN_SAFE or state.day in days:
             p = estimated_stop(state, d, full, cv)
             if p <= d.bomber_safe_p:

@@ -151,7 +151,10 @@ def capture_from_miz(miz_path: str, out_path: str = "loadouts.json") -> dict:
 
 # approximate combat radius (nm) of enemy types: used to decide who can escort a raid
 ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, "MiG_23MLD": 200, "MiG_21Bis": 170,
-                   "F_4E": 300, "F_5E_3": 200, "Su_24M": 300, "Su_25": 160}
+                   "F_4E": 300, "F_5E_3": 200, "Su_24M": 300, "Su_25": 160,
+                   # v0.41.355 (Phase 10a): the Tu-22M3 on a land strike. 1200 nm is the one public figure for an OFAB-250 load (cmo-db.com, Tu-22M3 loadout table: unverified method, low firmness); other
+                   # sources give 2,200 to 2,500 km (about 1,200 to 1,350 nm) unrefuelled (airrecognition.com, armyrecognition.com, medium firmness). Judgment call: the Caucasus targets lie 70 to 200 nm from Mozdok, so the figure never limits a strike.
+                   "Tu_22M3": 1200}
 
 
 def enemy_bomber_loadout(cls_name: str) -> dict:
@@ -162,6 +165,19 @@ def enemy_bomber_loadout(cls_name: str) -> dict:
     for i in sorted(cls.pylons):
         P = getattr(cls, f"Pylon{i}", None)
         w = _find(P, "Kh_22") if P is not None else None
+        if w is not None:
+            out[i] = {"CLSID": w[1]["clsid"]}
+    return out
+
+
+def enemy_land_bomber_loadout(cls_name: str) -> dict:
+    """v0.41.355 (Phase 10a): the Tu-22M3 on a land strike: an MBD3-U9M rack of nine OFAB-250-270 on every pylon that takes one (pydcs: pylons 1, 2, 4 and 5; pylon 3 only carries the Kh-22). No missile."""
+    from dcs import planes
+    cls = getattr(planes, cls_name)
+    out = {}
+    for i in sorted(cls.pylons):
+        P = getattr(cls, f"Pylon{i}", None)
+        w = _find(P, "MBD3_U9M") if P is not None else None
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
     return out
