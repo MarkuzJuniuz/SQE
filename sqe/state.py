@@ -48,7 +48,7 @@ class CampaignState:
     log: list = field(default_factory=list)
     status: str = "ACTIVE"                         # ACTIVE | VICTORY | DEFEAT
     start_date: str = "2006-06-12"                 # campaign day 1 (year 2006: the F-14B(U) and the A-10C both in service; the Tomcat is kept past its real retirement)
-    night_ops: bool = False                        # allow night sorties in the daily cycle
+    night_ops: bool = True                         # always True since v0.41.366 (S18): night turns always plan; kept so old saves load
     pilot: dict = field(default_factory=dict)      # your pilot log
     front: int = 0                                 # how far the war has advanced: tiers up to front+2 are open for tasking
     front_days: int = 0                            # days spent at this stage (the anti-stall clock)
@@ -117,7 +117,7 @@ class CampaignState:
         s = cls(name=d["name"], theatre=d.get("theatre", "caucasus"), level=d.get("level", 2),
                 campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1), turn=int(d.get("turn", 0)),
                 sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"),
-                start_date=d.get("start_date", "2004-06-12"), night_ops=d.get("night_ops", False), pilot=d.get("pilot", {}),
+                start_date=d.get("start_date", "2004-06-12"), night_ops=True, pilot=d.get("pilot", {}),
                 front=d.get("front", 0), front_days=d.get("front_days", 0))
         s.player = PlayerProfile(**d["player"]) if d.get("player") else None
         s.bases = {k: Base(**{**v, "kind": BaseKind(v["kind"])}) for k, v in d["bases"].items()}

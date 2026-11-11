@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.366, S18: drop the "Allow night sorties" field
+
+XO 2026-11-11 ("fox 3 medium"). **NOT FLOWN.** The New Campaign dialog no longer has the checkbox: night turns always plan, and the Autoskip box "Nighttime Sorties" (Phase 11) is the way past them. `new_campaign` / `Session.new` default `night_ops=True`. `night_ops` is still written to saves, but `CampaignState.from_dict` ignores the stored value, so an old save with night ops off now plans its night turns too. The `st.night_ops` branches in `engine.py` (turn list ~174, planner night skip ~304, bomber stage ~809, ~1172) and `bombers.py`, and the `night_ops` argument of `timeofday.ato_times`, are left in place and dormant (never taken with the flag True); tools passing `night_ops=False` still work. Planning numbers unchanged. Probe, 3 days, seed 5: L1 37 day / 10 night packages, L2 66 / 22, L3 69 / 23, no exception; Autoskip probe all combinations pass.
+
 ## v0.41.365, campaign rules Phase 11: Autoskip UI
 
 XO 2026-11-11 ("fox 3 medium"). **NOT FLOWN.** Under Skip Turn: AUTOMATICALLY SKIP with Stand Down Days, Nighttime Sorties and Duration (2 to 24 hrs, step 2, default 12), all saved in the app settings and unticked by default. With no box ticked Skip Turn is unchanged. With any box ticked it resolves the clicked turn, then steps one turn every 0.25 s with a ticker line, and stops on a flight available, a stand-down turn (Stand Down Days off), Duration reached (no Duration: a week at most) or the war's end; a night turn steps when Nighttime is ticked, flights or not. One save at the end, one summary box. GUI only: the engine is untouched.
