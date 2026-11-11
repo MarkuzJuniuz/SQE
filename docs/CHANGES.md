@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.377, S23: Auto-Skip in the sidebar, Crew Rest after a sortie
+The Auto-Skip options (Stand-Down Turns, Night Turns, Crew Rest) now sit in a box in the sidebar, seen on every page; Skip Turn stands alone again. Crew Rest replaces Duration: after a flown sortie the run skips until the hours are up, flights on offer or not, and the three options add up. One report per run, the night after a sortie included. Skip Turn itself never starts a crew rest. NOT FLOWN.
+
 ## v0.41.376, S10: supply sites laid out in rows, the guard outside
 A depot's warehouses now stand in a row with the ammunition bunkers dispersed 170 to 280 m out; a fuel farm is a row of tanks with the store at one end; refineries and factories are one row. The red guard group stands just outside the buildings, on the side of the nearest blue airfield. NOT FLOWN.
 
