@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.386, S30: stand-off strike missiles go only at their target
+The AI F/A-18C SLAM-ER flight of a Standoff Strike now fires with rules of engagement "Open Fire" (designated target only) instead of "Weapon Free", so its missiles stop picking radiating radars of opportunity on the way and go at the package's target.
+
 ## v0.41.385, S33: AI fighters fly home high over short-range air defence
 An AI TARCAP, escort, sweep or fleet-defence flight whose way home passes a live Tor, Osa, Tunguska, gun or MANPAD site now stays above that system's ceiling (plus 4,000 ft) until it has passed it, and only then descends to its recovery point. Your own flight's route is unchanged.
 
