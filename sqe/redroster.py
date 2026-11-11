@@ -24,11 +24,12 @@ FIGHTERS = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis")
 FIGHTER_FLOOR = 4                                       # every field keeps at least this many fighters (a pair of pairs): the old rule "every wing keeps a fighter squadron"
 
 # Jets per level, bombers excluded (judgment calls: the red numbers of the 2026-10-25 plan; fighters about 85% of the old count with the MiG-31s inside,
-# the extra jets are cheap strikers). L1: an old museum-piece air force that is quietly supplied (XO 2026-10-25): about 14 fighters, 20 Su-25, 10 Su-24M.
+# the extra jets are cheap strikers). L1: an old museum-piece air force that is quietly supplied (XO 2026-10-25): 20 Su-25, 10 Su-24M and, since v0.41.359 (campaign rules plan Phase 10c, the sponsor air arm,
+# judgment call: no public figure), 24 relic fighters (MiG-21Bis and MiG-23MLD only; it was 14 with 3 MiG-29A, which is no museum piece). v0.41.359: Su-25 L2 52 to 60, L3 110 to 130 (the cheap attack fleet raids supply sites, `raids.SU25_SUPPLY`).
 ROSTERS = {
-    1: {"MiG_21Bis": 6, "MiG_23MLD": 5, "MiG_29A": 3, "Su_25": 20, "Su_24M": 10},
-    2: {"MiG_31": 4, "MiG_29S": 15, "MiG_29A": 22, "MiG_23MLD": 11, "Su_25": 52, "Su_24M": 24},
-    3: {"MiG_31": 8, "Su_27": 30, "MiG_29S": 28, "MiG_29A": 20, "Su_25": 110, "Su_24M": 60},
+    1: {"MiG_21Bis": 12, "MiG_23MLD": 12, "Su_25": 20, "Su_24M": 10},
+    2: {"MiG_31": 4, "MiG_29S": 15, "MiG_29A": 22, "MiG_23MLD": 11, "Su_25": 60, "Su_24M": 24},
+    3: {"MiG_31": 8, "Su_27": 30, "MiG_29S": 28, "MiG_29A": 20, "Su_25": 130, "Su_24M": 60},
 }
 
 

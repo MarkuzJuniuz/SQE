@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.359, campaign rules Phase 10c part 1: more Su-25s, Su-25 supply raids, L1 sponsor fighters
+
+XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** New campaigns only: red has 60 Su-25 at L2 and 130 at L3 (was 52 and 110); a raid on an uncovered supply site picks a Su-25 pair first (the Su-24M keeps the fields and is the fallback), and it flies unescorted when no blue fighter squadron can reach the site's field; Level 1 red has 24 relic fighters (12 MiG-21Bis, 12 MiG-23MLD; was 14 with 3 MiG-29A) and one more story line about the sponsor state. Old saves load unchanged.
+
 ## v0.41.358, the F-15E phase: two AI-only strike squadrons
 
 XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** The 494th FS 'Panthers' (Vaziani, Dude) and 336th FS 'Rocketeers' (Tbilisi, Thud) replace the F-15C squadrons Ford and Pontiac in the new-campaign laydown: AI-only F-15E (the old AI model, not the RAZBAM module) flying STRIKE only with GBU-31s. The F-15C callsigns Ford and Pontiac come free; old saves are unchanged.

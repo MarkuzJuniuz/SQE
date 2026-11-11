@@ -21,7 +21,9 @@ from . import clock, redair, runways
 NM = 1852.0
 BASE_LOSS = 0.06              # airfield defence lost per bomber that gets through
 RAID_PRIORITY = 8.0
-RAIDERS = ("Su_24M", "Su_25")  # attack types a raid can fly (bombers for fields and supply sites; Su-25s lead against troops)
+RAIDERS = ("Su_24M", "Su_25")  # attack types a raid can fly (bombers for fields; Su-25s lead against troops and, since v0.41.359, supply sites)
+SU25_SUPPLY = True            # v0.41.359 (campaign rules plan Phase 10c): a Su-25 pair is the first pick for a raid on an uncovered supply site; the Su-24M keeps the fields (they need its SEAD group) and is the fallback
+                              # when no Su-25 wing reaches (Su-25 radius 160 nm against the Su-24M's 300). The Su-25 raid goes UNESCORTED when no blue fighter squadron can reach the site's field (`plan_raid`). Judgment call.
 TEMPO_STOP_SHARE = 0.5        # v0.41.171 (XO 2026-10-28): half of the AIR tempo is added to the chance a surprise raider is stopped (+20 points at the +40 cap; judgment call)
 ASSET_HIT = 0.20              # health a supply site or garrison loses per aircraft that gets through
 SECTOR_HIT = 4.0              # friendly sector strength lost per aircraft that gets through
@@ -52,10 +54,11 @@ def eff(k: int) -> float:
     return float(k) if k <= 4 else 4.0 + 0.5 * (k - 4)
 
 
-def raider_wings(state, kind: str = "field", budget: bool = True) -> list:
+def raider_wings(state, kind: str = "field", budget: bool = True, pref=None) -> list:
     """[(wing, type)] of the enemy wings that can send a raid now: a pair of that type free this turn (`redair.ready_of`: ready and not in a patrol; the serviceable jets when the turn has no plan), field not
-    cratered, sorties left in the day's cap (`budget`). Bombers (Su-24M) are preferred against fields and supply sites, Su-25s against troops and garrisons."""
-    pref = ("Su_25", "Su_24M") if kind in ("garrison", "sector") else ("Su_24M", "Su_25")
+    cratered, sorties left in the day's cap (`budget`). Bombers (Su-24M) are preferred against fields, Su-25s against troops and garrisons (and, `_reach`, supply sites: `pref`
+    overrides the order)."""
+    pref = pref or (("Su_25", "Su_24M") if kind in ("garrison", "sector") else ("Su_24M", "Su_25"))
     out = []
     for w in state.enemy_air:
         a = state.assets.get(w.base_asset_id)
@@ -95,10 +98,19 @@ def describe(state, base, aim: str = "") -> str:
 
 
 def _reach(state, kind: str, x: float, y: float, budget: bool = True, only: str | None = None, fits=None):
-    """(distance nm, wing, type) of the nearest wing that can reach (x, y) with a raid of this kind, or None. v0.41.125: `only` restricts the aircraft type."""
+    """(distance nm, wing, type) of the nearest wing that can reach (x, y) with a raid of this kind, or None. v0.41.125: `only` restricts the aircraft type. v0.41.359 (Phase 10c, `SU25_SUPPLY`):
+    a raid on a supply site is tried with the Su-25 wings first (`raider_wings` `pref`), then as before (Su-24M first)."""
+    if kind == "supply" and SU25_SUPPLY and only is None and fits is None:
+        r = _reach_by(state, kind, x, y, budget, ("Su_25",), only, fits)
+        if r is not None:
+            return r
+    return _reach_by(state, kind, x, y, budget, None, only, fits)
+
+
+def _reach_by(state, kind: str, x: float, y: float, budget: bool, pref, only: str | None, fits):
     from .loadouts import ENEMY_RADIUS_NM
     best = None
-    for w, t in raider_wings(state, kind, budget):
+    for w, t in raider_wings(state, kind, budget, pref):
         if only and t != only:
             continue
         if fits is not None and not fits(w, t):
@@ -398,9 +410,11 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int):
     if nb < 2 or rdy < nb:
         return None
     esc, esc_avail = None, 0
-    from . import bombers
+    from . import bombers, blue_barcap
     held_ = bombers.escorts_held(state)                                             # v0.41.355 (Phase 10a): the Mozdok escort squadron escorts land raids too, unless a carrier raid is staged
-    for w in sorted(state.enemy_air, key=lambda w: math.hypot(state.assets[w.base_asset_id].x - ax, state.assets[w.base_asset_id].y - ay)):
+    alone_ = (raider == "Su_25" and aim_kind(aim) == "supply" and SU25_SUPPLY                          # v0.41.359 (Phase 10c): no blue fighter squadron can reach the site's field (blue's own patrol rule, `blue_barcap._cap_squadrons`): the Su-25s go alone
+              and not blue_barcap._cap_squadrons(state, base))
+    for w in ([] if alone_ else sorted(state.enemy_air, key=lambda w: math.hypot(state.assets[w.base_asset_id].x - ax, state.assets[w.base_asset_id].y - ay))):
         a = state.assets[w.base_asset_id]
         if w is bw or a.destroyed:
             continue
