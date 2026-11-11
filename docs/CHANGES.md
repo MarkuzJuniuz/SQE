@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.382, S28: low-level strikers descend late
+AI low-level strikers whose approach point is close to the target used to drop to treetop height right after the push and fly the whole long leg at 150 m, burning most of their fuel before the target. They now cruise high and start the descent 30 nm before the approach point.
+
 ## v0.41.381, S27: runway strikers start their attack on the way in
 AI runway-cratering flights now begin the runway bombing task on the approach point before the field, as other AI strikes do, instead of on the field itself, where they used to turn away short of it without dropping.
 
