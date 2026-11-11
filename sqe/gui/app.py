@@ -26,7 +26,8 @@ from .widgets import MapView, SideCard, StatCard, StepSpin, card
 from . import overview_view as V
 
 URGENT_ROLE = Qt.UserRole + 1
-AUTOSKIP_MAX_TURNS = 84          # Duration unticked: at most a week of turns (12 a day), a judgment call (campaign rules plan Phase 11)
+AUTO_INDENT = 22                  # S23: the Crew Rest hours control sits under its check box, indented past the check box's tick (px)
+AUTOSKIP_MAX_TURNS = 84          # an auto-skip run stops after at most a week of turns from its start (12 a day), a judgment call (campaign rules plan Phase 11)
 
 
 class UrgentDelegate(QStyledItemDelegate):
@@ -260,27 +261,30 @@ class MissionsPage(QWidget):
         self.resume.clicked.connect(win.wait_for_results)
         self.skip = QPushButton("Skip Turn"); self.skip.setToolTip("Stand down for this turn (2 hours): this turn's packages are resolved by the war simulation and the clock moves on two hours. A night with no night flying is resolved for you.")
         self.skip.clicked.connect(win.skip_turn)
-        # Phase 11 (XO): AUTOMATICALLY SKIP: Skip Turn keeps stepping until a flight is available (or the Duration is up)
-        # S21 (XO 2026-11-11): the Skip Turn button sits in this column, above the label, so both share one left edge
-        self.auto_box = QWidget(); ab = QVBoxLayout(self.auto_box); ab.setContentsMargins(0, 0, 0, 0); ab.setSpacing(4)
-        ab.addWidget(self.skip, 0, Qt.AlignLeft)
-        ab.addWidget(self._label("AUTOMATICALLY SKIP", "head"))
-        self.auto_stand = QCheckBox("Stand Down Days"); self.auto_stand.setToolTip("Keep skipping through turns where you have no flight to fly. Unticked: stop at the first such turn.")
-        self.auto_night = QCheckBox("Nighttime Sorties"); self.auto_night.setToolTip("Also skip night turns, even when a flight is on offer.")
-        self.auto_dur_on = QCheckBox("Duration:"); self.auto_dur_on.setToolTip("Stop after this many hours of campaign time. Unticked: no time limit (a week at most).")
+        L.addWidget(self.skip, 0, Qt.AlignRight)                      # S23 (XO 2026-11-11): the Skip Turn button stands alone again (v0.41.364 look)
+        # Phase 11 / S23: the Auto-Skip options live in a card-look box that MainWindow places in the sidebar (this page keeps the widgets: refresh, save, enable)
+        self.auto_box = card(margins=(10, 8, 10, 8), spacing=4)
+        ab = self.auto_box.layout()
+        ab.addWidget(self._label("Auto-Skip", "head"))
+        self.auto_stand = QCheckBox("Stand-Down Turns"); self.auto_stand.setToolTip("Skip turns where you have no flight to fly.")
+        self.auto_night = QCheckBox("Night Turns"); self.auto_night.setToolTip("Skip night turns, even when a flight is on offer.")
+        self.auto_dur_on = QCheckBox("Crew Rest"); self.auto_dur_on.setToolTip("After a flown sortie, skip this many hours before your next flight.")
         self.auto_dur = StepSpin(); self.auto_dur.setRange(2, 24); self.auto_dur.setSingleStep(2); self.auto_dur.setSuffix(" hrs"); self.auto_dur.setValue(12)
-        self.auto_dur_row = QWidget(); drow = QHBoxLayout(self.auto_dur_row); drow.setContentsMargins(0, 0, 0, 0); drow.addWidget(self.auto_dur_on); drow.addWidget(self.auto_dur); drow.addStretch(1)
-        # S21: the three rows get one height: the Duration row (checkbox + the -/hrs/+ spin) is the tallest, so its height is the row height (like one CSS height for every row)
-        row_h = max(self.auto_dur_row.sizeHint().height(), self.auto_stand.sizeHint().height())
-        for w in (self.auto_stand, self.auto_night, self.auto_dur_row):
+        # S23 fit (measured with the real Segoe UI font): the box has 160 px inside, "Crew Rest" is 90 px and the -/12 hrs/+ spin 202 px, so they cannot share a row. The spin goes on its own
+        # line under Crew Rest, indented past the check box, at a fixed width (the two step buttons are 34 px each, the field gets the rest)
+        self.auto_dur_row = QWidget(); drow = QHBoxLayout(self.auto_dur_row); drow.setContentsMargins(AUTO_INDENT, 0, 0, 0); drow.setSpacing(0)
+        self.auto_dur.setFixedWidth(160 - AUTO_INDENT); drow.addWidget(self.auto_dur); drow.addStretch(1)
+        # S21: the three option rows get one height (the check boxes' own height, like one CSS height for every row); the spin line under Crew Rest is that row's second line
+        row_h = max(w.sizeHint().height() for w in (self.auto_stand, self.auto_night, self.auto_dur_on))
+        for w in (self.auto_stand, self.auto_night, self.auto_dur_on):
             w.setFixedHeight(row_h); ab.addWidget(w)
-        L.addWidget(self.auto_box, 0, Qt.AlignRight)
+        ab.addWidget(self.auto_dur_row)
         for w in (self.auto_stand, self.auto_night, self.auto_dur_on):
             w.toggled.connect(self._auto_changed)
         self.auto_dur.valueChanged.connect(self._auto_changed)
 
     def auto_options(self) -> tuple:
-        """(stand down, night, duration hours or None when Duration is unticked)."""
+        """(Stand-Down Turns, Night Turns, Crew Rest hours or None when Crew Rest is unticked)."""
         return self.auto_stand.isChecked(), self.auto_night.isChecked(), (self.auto_dur.value() if self.auto_dur_on.isChecked() else None)
 
     def set_auto_enabled(self, on: bool):
@@ -639,6 +643,7 @@ def default_window_rect(ax: int, ay: int, aw: int, ah: int) -> tuple:
 
 class MainWindow(QMainWindow):
     _auto_cursor = False                      # S21: True while the wait cursor of an auto-skip run is set
+    _auto_goto_missions = False               # S23: the run follows a flown sortie: show the Missions page when it stops
     def __init__(self, session: Session):
         super().__init__(); self.session = session
         self.setWindowTitle(f"{APP_NAME}"); self.setMinimumSize(*WIN_MIN); self._place_window()
@@ -658,7 +663,7 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(page); b.clicked.connect(lambda _=0, k=i: self.stack.setCurrentIndex(k))
             if i == 1:
                 self.nav_missions = b
-        grp.button(0).setChecked(True); sl.addStretch(1)
+        grp.button(0).setChecked(True); sl.addSpacing(18); sl.addWidget(self.p_miss.auto_box); sl.addStretch(1)      # S23: the Auto-Skip box right under the nav buttons, away from Settings
         st_btn = QPushButton("Settings"); st_btn.clicked.connect(self.settings); sl.addWidget(st_btn)
         vl = QLabel(f"v{__version__}"); vl.setObjectName("small"); sl.addWidget(vl)
         main = QVBoxLayout(); main.setContentsMargins(22, 18, 22, 18); main.setSpacing(14); lay.addLayout(main, 1)
@@ -877,14 +882,17 @@ class MainWindow(QMainWindow):
 
     # ---- Autoskip (campaign rules plan Phase 11, XO's design in the notes) -------------------------------------------------
     # Like a JS setTimeout chain: one `skip_turn` per tick, the next tick is armed only AFTER the step ran (skip_turn costs ~0.2 s, a fixed interval would stack up).
-    def _auto_step_wanted(self, sess, night_ok: bool, stand_ok: bool) -> str:
-        """Look at the turn the clock stands on: "" = step on, else the reason to stop."""
+    def _auto_step_wanted(self, sess, night_ok: bool, stand_ok: bool, rest_until=None) -> str:
+        """Look at the turn the clock stands on: "" = step on, else the reason to stop. S23 (XO 2026-11-11): the three options ADD UP: Crew Rest (turns before `rest_until`, set only
+        after a FLOWN sortie), Night Turns and Stand-Down Turns each step on their own."""
         st = sess.state
+        if rest_until is not None and st.turn < rest_until:
+            return ""                                                          # crew rest: skipped whatever is on offer
         if night_ok and clock.is_night_turn(st.turn):
-            return ""                                                          # decision 39: a night turn with flights steps too when Nighttime is ticked
+            return ""                                                          # decision 39: a night turn with flights steps too when Night Turns is ticked
         if st.pending or any(sess.flyable(p) for p in sess.packages()):
             return "Flight available."
-        return "" if stand_ok else "Stand-down turn (Stand Down Days is off)."
+        return "" if stand_ok else "Stand-down turn."
 
     @staticmethod
     def _skip_nosave(sess):
@@ -900,6 +908,7 @@ class MainWindow(QMainWindow):
         """Every stop path ends here: controls and cursor back, ONE save (Session.save writes a backup each time), ONE refresh, the war's ending box, then ONE after-action report
         for the whole run (S21, XO 2026-11-11: it carries the ticker and the fade-in; the Missions page itself shows neither; the stop reason is its header line)."""
         before, turns = self._auto_before, self._auto_turns
+        goto, self._auto_goto_missions = self._auto_goto_missions, False
         self._auto_busy = False
         if self._auto_cursor:
             QApplication.restoreOverrideCursor(); self._auto_cursor = False
@@ -912,6 +921,8 @@ class MainWindow(QMainWindow):
         self._ending_popup(before)
         if turns and not getattr(self, "_auto_quiet", False):             # _auto_quiet: a tool or test may set it to skip the box
             DayResolvedDialog(turns, self, reason=reason).exec()
+        if goto:                                                              # S23: a run that followed a flown sortie ends on the Missions page, as the plain path does
+            self.stack.setCurrentIndex(1); self.nav_missions.setChecked(True)
 
     def _auto_tick(self):
         sess = self.session; st = sess.state
@@ -921,14 +932,14 @@ class MainWindow(QMainWindow):
             if st.status != "ACTIVE":
                 return self._auto_stop("The war is over.")
             if st.turn >= self._auto_target:
-                return self._auto_stop("Duration reached." if self._auto_hours else "Skip limit reached (a week).")
-            why = self._auto_step_wanted(sess, self._auto_night, self._auto_stand)
+                return self._auto_stop("Skip limit reached (a week).")
+            why = self._auto_step_wanted(sess, self._auto_night, self._auto_stand, self._auto_rest)
             if why:
                 return self._auto_stop(why)
             self._auto_turns.extend(self._skip_nosave(sess).get("turns", []))
             QTimer.singleShot(0, self._auto_tick)                          # the next step on the next event-loop turn: the window stays responsive, no per-turn redraw
         except Exception:
-            self._auto_busy = False
+            self._auto_busy = False; self._auto_goto_missions = False
             if self._auto_cursor:
                 QApplication.restoreOverrideCursor(); self._auto_cursor = False
             self.p_miss.set_auto_enabled(True)
@@ -950,31 +961,37 @@ class MainWindow(QMainWindow):
                 return
         before = sess.state.status
         stand_ok, night_ok, hours = self.p_miss.auto_options()
-        if not (stand_ok or night_ok or hours is not None):
+        if not (stand_ok or night_ok):                           # S23: Crew Rest follows a FLOWN sortie only, so on its own the button is a plain one-turn skip
             out = sess.skip_turn(); self.refresh_all()
             DayResolvedDialog(out["turns"], self).exec()          # S21: a plain skip gets the same report (one turn)
             self._ending_popup(before)                            # (the war's ending, if this day ended it, has its own box with the story)
             return
-        # Phase 11: any box ticked: resolve this turn once, then the steps follow on their own; S21: no redraw per turn, one report at the end
+        # Phase 11: Stand-Down Turns / Night Turns ticked: resolve this turn once, then the steps follow on their own; S21: no redraw per turn, one report at the end
         t0 = sess.state.turn
+        first = self._skip_nosave(sess).get("turns", [])
+        self._auto_start(before, first, t0, None, stand_ok, night_ok)
+
+    def _auto_start(self, before: str, first_turns: list, t0: int, rest_until, stand_ok: bool, night_ok: bool, goto_missions: bool = False):
+        """S23: the one starter of an auto-skip run, used by the Skip Turn button (`rest_until` None) and by a flown sortie (`first_turns` = the night `Session.apply` resolved).
+        `t0` = the turn the run starts from (the clicked turn / the turn the sortie was flown in): the week limit counts from it. The run itself is `_auto_tick`, one step per event-loop turn."""
         self._auto_busy = True; self.p_miss.set_auto_enabled(False)
         QApplication.setOverrideCursor(Qt.WaitCursor); self._auto_cursor = True
-        self._auto_turns = []
-        try:
-            self._auto_turns.extend(self._skip_nosave(sess).get("turns", []))
-        except Exception:
-            self._auto_busy = False; self.p_miss.set_auto_enabled(True)
-            QApplication.restoreOverrideCursor(); self._auto_cursor = False
-            raise
-        self._auto_before, self._auto_stand, self._auto_night, self._auto_hours = before, stand_ok, night_ok, hours
-        self._auto_target = t0 + (hours // 2 if hours is not None else AUTOSKIP_MAX_TURNS)
+        self._auto_turns = list(first_turns)
+        self._auto_before, self._auto_stand, self._auto_night, self._auto_rest = before, stand_ok, night_ok, rest_until
+        self._auto_goto_missions = goto_missions
+        self._auto_target = t0 + AUTOSKIP_MAX_TURNS
         QTimer.singleShot(0, self._auto_tick)
 
     def wait_for_results(self):
         dlg = WaitingDialog(self.session, self); r = dlg.exec()
         if r == QDialog.Accepted and dlg.data is not None:
             before = self.session.state.status
+            t0 = self.session.state.turn                          # S23: the turn the sortie was flown in (Crew Rest counts from it)
+            stand_ok, night_ok, hours = self.p_miss.auto_options()
             out = self.session.apply(dlg.data); self.refresh_all(); DebriefDialog(out, self.session.state, self).exec(); self.refresh_all()
+            if stand_ok or night_ok or hours is not None:         # S23: an auto-skip run follows the sortie: ONE report (the night `apply` resolved + every skipped turn + the stop reason)
+                self._auto_start(before, out.get("night") or [], t0, t0 + hours // 2 if hours is not None else None, stand_ok, night_ok, goto_missions=True)
+                return
             if out.get("night"):                                  # v0.41.337: the flown turn was the last of the day: the night after it was resolved for you
                 DayResolvedDialog(out["night"], self).exec()
             self._ending_popup(before)
