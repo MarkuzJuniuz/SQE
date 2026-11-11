@@ -304,7 +304,7 @@ def check_waypoint_locks():
             seq = [pts[k] for k in sorted(pts)]
             L = [i for i, p in enumerate(seq) if p.get("ETA_locked")]
             for a, b in zip(L, L[1:]):
-                mid = seq[a + 1:b]
+                mid = seq[a + 1:b + 1]                               # the Mission Editor counts the second locked-time point itself ("(2-2) ... surrounded by 1 and 2")
                 assert not (mid and all(p.get("speed_locked") for p in mid)), (ac, g["name"], "A: locked speeds between locked times", a, b)
             for i in range(L[-1] + 1 if L else 1, len(seq)):
                 assert seq[i].get("ETA_locked") or seq[i].get("speed_locked"), (ac, g["name"], "B: free speed and time after the last locked time", i)
