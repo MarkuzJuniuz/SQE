@@ -89,7 +89,7 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
     flights = []
     _plan_guards(state, ledger, flights, turn, t0, t1, share, rng, wins)    # the AWACS and tanker guards first (the tanker's is not optional)
     cands = []
-    for b in sorted((b for b in state.bases.values() if b.kind in (BaseKind.AIRFIELD, BaseKind.CARRIER)), key=lambda b: b.id):
+    for b in sorted((b for b in state.bases.values() if b.kind in (BaseKind.AIRFIELD, BaseKind.CARRIER) and not b.divert), key=lambda b: b.id):          # Phase 9a: no patrol from a divert field
         sqs = _cap_squadrons(state, b)
         if sqs:
             cands += [(b, ar, sqs) for ar in bc["blue"] if ar["asset"] == b.id]

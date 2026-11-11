@@ -137,8 +137,9 @@ CRATER_REACH = 0.75           # the blasts lie within this share of the runway h
 CRATER_MIN_GAP_M = 120.0      # blasts at least this far apart along the runway (judgment call)
 
 # Blue fields with an ILS: pydcs airport name -> the runway end the ILS belongs to. From the DCS airfield panels as XO copied them into kneeboard.NAV (v0.41.177, v0.41.252);
-# the other end of each runway has no ILS. Soganlug, Vaziani and Tbilisi are waiting for XO's data (campaign rules plan open item 7).
-ILS_RUNWAY = {"Batumi": 13, "Kobuleti": 7, "Kutaisi": 7, "Senaki-Kolkhi": 9, "Sochi-Adler": 6}
+# the other end of each runway has no ILS. Phase 9a (XO data, 2026-11-10; not checked against DCS here): Vaziani and Tbilisi-Lochini have an ILS on both ends; one runway per field is kept, 13
+# (the dummy and the ILS runway follow it), the 31 end stays in the kneeboard text only. Soganlug has no ILS (no entry).
+ILS_RUNWAY = {"Batumi": 13, "Kobuleti": 7, "Kutaisi": 7, "Senaki-Kolkhi": 9, "Sochi-Adler": 6, "Vaziani": 13, "Tbilisi-Lochini": 13}
 
 
 def _end_number(name: str) -> int:

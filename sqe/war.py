@@ -847,8 +847,8 @@ def update_status(state: CampaignState) -> str:
             state.status = "VICTORY"; state.note("VICTORY: the enemy command structure and air arm are broken.")
         elif t["friendly_air"] < 0.15:
             state.status = "DEFEAT"; state.note("DEFEAT: the coalition air component can no longer sustain operations.")
-        elif ground.fallen_count(state) >= 2:
-            state.status = "DEFEAT"; state.note("DEFEAT: the front has collapsed; two of our bases are lost" + (" (the sunk carrier counts as one)." if ground.fleet_sunk(state) else "."))
+        elif ground.fallen_count(state) >= ground.DEFEAT_BASES:
+            state.status = "DEFEAT"; state.note(f"DEFEAT: the front has collapsed; {ground.DEFEAT_BASES} of our airfields are lost.")
             for ln in story.beat(state, "lose"):
                 state.note(ln)
     return state.status

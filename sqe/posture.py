@@ -123,11 +123,10 @@ def _warnings(state) -> list:
     elif c and c.get("arrived") and not c.get("resolved") and not c.get("used") and state.day <= c.get("until", -1):
         d = int(c["until"]) - state.day
         out.append(("counter_on", "The enemy counter-force is attacking" + (f" for {_days(d)} more" if d else " today")))
-    from . import fleet as _fleet
-    n_lost_ = len(g["fallen"]) + _fleet.counts_as_fallen(state)
-    if n_lost_ == 1:
-        out.append(("lost", "The carrier is sunk and counts as a lost base until it returns: if one more falls the campaign is lost" if _fleet.sunk(state)
-                    else "One of our airfields has fallen: if a second one is lost the campaign is lost"))
+    n_lost_ = len(g["fallen"])
+    if n_lost_:
+        left_ = ground.DEFEAT_BASES - n_lost_
+        out.append(("lost", f"{n_lost_} of our airfields {'has' if n_lost_ == 1 else 'have'} fallen: {left_} more and the campaign is lost" if left_ > 0 else "Our airfields have fallen: the campaign is lost"))
     clock = int(g.get("clock", 0))
     if g["taken"] and clock > state.day:
         out.append(("clock", f"Takeover under way: our next attack in about {_days(clock - state.day)}"))

@@ -59,8 +59,27 @@
             "id": "batumi",
             "name": "Batumi AB",
             "airport": "Batumi"
+        },
+        {
+            "id": "vaziani",
+            "name": "Vaziani AB",
+            "airport": "Vaziani",
+            "divert": true
+        },
+        {
+            "id": "tbilisi",
+            "name": "Tbilisi-Lochini AB",
+            "airport": "Tbilisi-Lochini",
+            "divert": true
+        },
+        {
+            "id": "soganlug",
+            "name": "Soganlug AB",
+            "airport": "Soganlug",
+            "divert": true
         }
     ],
+    "support_base": "kutaisi",
     "red_fields": [
         {
             "id": "ab_sukhumi",
@@ -414,6 +433,11 @@
                 "airport": "Kutaisi",
                 "blue": "kutaisi",
                 "name": "Kutaisi"
+            },
+            {
+                "airport": "Kobuleti",
+                "blue": "kobuleti",
+                "name": "Kobuleti"
             }
         ],
         "leg_zones": [
@@ -422,8 +446,10 @@
             2,
             1,
             4,
+            1,
             1
         ],
+        "rear_zones": 1,
         "stages": {
             "1": [
                 "ab_sukhumi",
@@ -493,7 +519,7 @@
                 "Holding": "The front is not moving. Our ground force at the contested sector is not yet strong enough to attack; close air support and supply strikes decide the next move.",
                 "Under pressure": "Russia is gaining ground on our side of the line. Hold the sector in front of our airfields.",
                 "Last stand": "The final objective is next. Take it and the war is decided.",
-                "Defeat": "Two of our airfields are gone and the front has collapsed. The campaign is lost.",
+                "Defeat": "Three of our airfields are gone and the front has collapsed. The campaign is lost.",
                 "Counter-force": "A fresh Russian force has arrived and is counter-attacking the airfield we just took. Beat it and the war is won.",
                 "Ceasefire": "Russia has asked for talks and the guns have gone quiet along the coast. The campaign is won."
             },
@@ -503,7 +529,7 @@
                 "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. One more airfield lost and the front collapses.",
                 "back_blue": "{base} is ours again, though its defences are gone.",
                 "win": "The counter-attack is broken. Russia asks for talks and the guns go quiet along the coast. The war is won.",
-                "lose": "The front has collapsed. With two of our airfields lost the coalition withdraws, and the campaign is lost.",
+                "lose": "The front has collapsed. With three of our airfields lost the coalition withdraws, and the campaign is lost.",
                 "fall_ab_sukhumi": "Sukhumi is ours. Georgian and coalition troops hold the airfield; the first step up the coast road is taken.",
                 "fall_ab_gudauta": "Gudauta falls. Abkhazia is behind us and the road to Sochi is open.",
                 "fall_ab_sochi": "Sochi is ours. Russia's main base on the Abkhaz border is lost, and its columns along the road to the north-west are cut from their rear.",
@@ -527,7 +553,7 @@
                 "Holding": "The front is not moving. Our ground force at the contested sector is not yet strong enough to attack; close air support and supply strikes decide the next move.",
                 "Under pressure": "Russia is gaining ground on our side of the line. Hold the sector in front of our airfields.",
                 "Last stand": "The final objective is next. Take it and the war is decided.",
-                "Defeat": "Two of our airfields are gone and the front has collapsed. The campaign is lost.",
+                "Defeat": "Three of our airfields are gone and the front has collapsed. The campaign is lost.",
                 "Counter-force": "A fresh Russian force has arrived and is counter-attacking Sochi. Beat it and the war is won.",
                 "Ceasefire": "Russia has asked for talks and the fighting has stopped. The coast road is ours. The campaign is won."
             },
@@ -537,7 +563,7 @@
                 "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. One more airfield lost and the front collapses.",
                 "back_blue": "{base} is ours again, though its defences are gone.",
                 "win": "The counter-attack is broken. Russia asks for talks and the fighting stops. The war is won.",
-                "lose": "The front has collapsed. With two of our airfields lost the coalition withdraws, and the campaign is lost.",
+                "lose": "The front has collapsed. With three of our airfields lost the coalition withdraws, and the campaign is lost.",
                 "fall_ab_sukhumi": "Sukhumi is ours. Georgian and coalition troops hold the airfield; the first step up the coast road is taken.",
                 "fall_ab_gudauta": "Gudauta falls. Abkhazia is behind us and the road to Sochi is open.",
                 "fall_ab_sochi": "Sochi is ours. Russia's main base on the Abkhaz border is in coalition hands.",
@@ -559,7 +585,7 @@
                 "Holding": "The front is not moving. Our ground force at the contested sector is not yet strong enough to attack; close air support and supply strikes decide the next move.",
                 "Under pressure": "The CRA is gaining ground on our side of the line. Hold the sector in front of our airfields.",
                 "Last stand": "The final objective is next. Take it and the war is decided.",
-                "Defeat": "Two of our airfields are gone and the front has collapsed. The campaign is lost.",
+                "Defeat": "Three of our airfields are gone and the front has collapsed. The campaign is lost.",
                 "Insurgency broken": "The coastal cities are back under government control and the Coastal Republic Army has lost the field. The campaign is won."
             },
             "beats": {
@@ -568,7 +594,7 @@
                 "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. One more airfield lost and the front collapses.",
                 "back_blue": "{base} is ours again, though its defences are gone.",
                 "win": "The Coastal Republic Army has lost the field. The insurgency is broken and the war is won.",
-                "lose": "The front has collapsed. With two of our airfields lost the coalition withdraws, and the campaign is lost.",
+                "lose": "The front has collapsed. With three of our airfields lost the coalition withdraws, and the campaign is lost.",
                 "fall_ab_sukhumi": "Sukhumi is back under government control. The first of the coastal cities is retaken.",
                 "fall_ab_gudauta": "Gudauta is retaken. Abkhazia is behind us and the road to Sochi is open.",
                 "fall_ab_sochi": "Sochi is retaken. The last of the coastal cities is back in government hands."

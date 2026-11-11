@@ -93,7 +93,7 @@ def _disperse_blue(st, terrain, player_squadron=None) -> None:
     """Squadrons at an airfield that cannot park them all: the overflow squadrons (never yours) move to the nearest friendly airfield with room
     for their type (v0.40.7: Batumi held 32 jets on 10 slots)."""
     used = {}
-    fields = {b.id: b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD and b.airport}
+    fields = {b.id: b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD and b.airport and not b.divert}          # Phase 9a: a divert field never takes a squadron
     order = sorted(st.squadrons.values(), key=lambda q: (q.id != player_squadron, q.id))       # yours first: it keeps its field
     for q in order:
         b = fields.get(q.base_id)
@@ -188,7 +188,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     st.bases[cv["id"]] = Base(cv["id"], cv["name"], BaseKind.CARRIER, x=cx, y=cy)
     for f in th["blue_fields"]:
         p = ap(f["airport"])
-        st.bases[f["id"]] = Base(f["id"], f["name"], BaseKind.AIRFIELD, x=p.x, y=p.y, airport=f["airport"])
+        st.bases[f["id"]] = Base(f["id"], f["name"], BaseKind.AIRFIELD, x=p.x, y=p.y, airport=f["airport"], divert=bool(f.get("divert")))
 
     sc = d.friendly_scale
     n = lambda base: max(4, int(round(base * sc / 2) * 2))

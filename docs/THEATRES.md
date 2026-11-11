@@ -18,7 +18,8 @@ You still need the map installed in DCS to fly it, and pydcs must know the terra
 | `geo` | coarse coastline / lakes / borders file for the map view (file in the same folder; `land`, `lakes`, `borders` as lists of [x, y] points, x north, y east, metres) |
 | `scan` | terrain scan: `file` (the name written to `Saved Games\SQE`), the area `x0 x1 y0 y1` in metres, `step`, and `probe_airport` (where the free Su-25T starts). Optional: `height_step` (ground-height grid in metres, default 1000) and `relief_file` (default: the `file` name with "terrain" replaced by "relief") |
 | `carrier` | `id`, `name`, and the station: `from_airport`, `heading` and `distance_m` out to sea |
-| `blue_fields` | friendly airfields: `id`, `name`, `airport` (the pydcs airport name) |
+| `blue_fields` | friendly airfields: `id`, `name`, `airport` (the pydcs airport name); optional `"divert": true` = a landing and recovery field with no squadron |
+| `support_base` | optional. Blue field id that hosts the AWACS and tankers |
 | `red_fields` | enemy airfields: `id` (must start with `ab_`), `name`, `airport`, `value` |
 | `red_keep` | for a campaign level, the only enemy airfields that exist (`{"1": ["ab_a", "ab_b"]}`) |
 | `wing_weight` | which enemy fields get an air wing, and how big a share |

@@ -4,9 +4,9 @@ A flown mission shows what really happened to the carrier group: the hook report
 "<base name> Unit #1", the three escorts "<base name> escort N Unit #1") and when. Until now the war log ignored it.
 
 * Carrier sunk: everything aboard goes down with it: the aircraft that did not fly in the mission, and any that landed back on the deck
-  before it sank. The aircraft still flying land at the nearest field and their squadron moves there (the same machinery as a fallen
+  before it sank. The aircraft still flying land at the nearest field with parking room for them (each squadron picks its own, Phase 9a; none with room: the jets are lost) and their squadron moves there (the same machinery as a fallen
   field: `Squadron.home_id`, the move nights). For SUNK_DAYS days the fleet is gone: no carrier launches, no fleet patrols, no support aircraft
-  from the boat, no bomber raid on it, and it counts as ONE fallen base towards the defeat rule (one more fallen field and the campaign is lost).
+  from the boat, no bomber raid on it. (From v0.41.257 to v0.41.351 it counted as one fallen base towards the defeat rule; Phase 9a, XO 2026-11-10: it no longer does.)
   On day `returns_day` a new ship arrives "as new": air defence full, the carrier squadrons back at full strength, and they fly home.
 * Escort ship sunk (the carrier afloat or not): the group's air defence is cut while it is out (ESCORT_DEFENSE per ship, the cruiser most),
   the ship is missing from the missions for ESCORT_DAYS days, then replaced.
@@ -55,11 +55,6 @@ def is_sunk_base(state, base_id: str) -> bool:
 def days_left(state) -> int:
     f = getattr(state, "fleet", None) or {}
     return max(0, int(f.get("returns_day", 0)) - state.day) if f.get("sunk_day") else 0
-
-
-def counts_as_fallen(state) -> int:
-    """The sunk carrier is one lost base for the defeat rule while it is away (XO)."""
-    return 1 if sunk(state) else 0
 
 
 def escort_out(state, k: int) -> bool:
@@ -115,8 +110,8 @@ def apply_debrief(state, manifest, data: dict) -> list:
     t_sink = _death_t(data, cv_name)
     lost_set = set(data.get("dead", [])) | set(data.get("ejected", []))
     landings = data.get("landings") or {}
-    from . import ground, raids
-    dest = raids._nearest_field(state, cv.x, cv.y)
+    from . import ground
+    standing = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and not b.divert and b.id not in set((state.ground or {}).get("fallen", []))]
     for sq in sorted((s for s in state.squadrons.values() if s.base_id == cv.id), key=lambda s: s.id):
         units = [u for g in manifest.groups if g["kind"] == "friendly" and g.get("squadron") == sq.id for u in g["units"]]
         flying = [u for u in units if u not in lost_set]
@@ -127,8 +122,18 @@ def apply_debrief(state, manifest, data: dict) -> list:
         survivors = len(flying) - len(aboard)
         sq.available = max(0, survivors)
         sq.reserve = sq.rest_days = sq.move_days = sq.move_until = 0
+        # Phase 9a: each squadron picks its own field: the nearest with parking for the jets that got away (the others already there count at their authorized strength). With none
+        # to land, none got away. A squadron with no survivors only changes its base on paper: the nearest field.
+        if sq.available <= 0:
+            dest = min(standing, key=lambda b: (math.hypot(b.x - cv.x, b.y - cv.y), b.id)) if standing else None
+        else:
+            dest = ground.field_with_room(state, cv.x, cv.y, sq, sq.available, standing)
+        homeless = sq.available if dest is None else 0                       # jets that got away but have no field with room: lost
+        sq.available -= homeless
         txt = f"   {sq.name}: {down} aircraft went down with the ship"
-        if dest is not None:
+        if dest is None:
+            txt += f"; {homeless} more could not land, no field has room" if homeless else "; none got away"
+        else:
             sq.home_id = sq.home_id or cv.id
             sq.base_id = dest.id
             txt += (f"; {sq.available} landed at {dest.name}" + ground._settle(state, sq, math.hypot(dest.x - cv.x, dest.y - cv.y))) if sq.available else "; none got away"
@@ -184,7 +189,7 @@ def status_line(state):
         return None
     if f.get("sunk_day"):
         n = days_left(state)
-        return f"{cv.name} is SUNK: it returns in {n} day{'s' if n != 1 else ''}; it counts as a lost base until then"
+        return f"{cv.name} is SUNK: it returns in {n} day{'s' if n != 1 else ''}"
     if f.get("escorts"):
         n = len(f["escorts"])
         return f"{n} escort ship{'s' if n > 1 else ''} of {cv.name} lost: the group's air defence is cut until they are replaced"
