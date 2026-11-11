@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.376, S10: supply sites laid out in rows, the guard outside
+A depot's warehouses now stand in a row with the ammunition bunkers dispersed 170 to 280 m out; a fuel farm is a row of tanks with the store at one end; refineries and factories are one row. The red guard group stands just outside the buildings, on the side of the nearest blue airfield. NOT FLOWN.
+
 ## Docs, 2026-11-11 (no version change): CHANGES.md slimmed (S11)
 This file now holds one short entry per version (what changed for the player or the war, flown or not). The full detail (constants, probes, file and line notes) moved to a file outside Git. Docs only.
 

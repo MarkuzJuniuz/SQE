@@ -144,6 +144,20 @@ ROAD_OFF_M = 100.0            # v0.41.259: the centre of a supply site's block o
 BUILDING_GAP_M = 55.0         # v0.41.295 (XO 2026-11-05: a depot's warehouses and ammo bunker overlapped, 30 to 38 m apart): the least distance between two buildings of one site, centre to centre. Judgment call: a DCS warehouse is about 30 to 40 m long; measured on XO's rsup_064
 
 
+# v0.41.376 (S10): the layout of a supply site's buildings, (u, v) in metres from the block centre, per part in SUPPLY_BUILDINGS / SUPPLY_PLANTS order (a damaged
+# site uses the first n). u along the road, v away from it. SOURCES (rules section 6): ammunition is stored in earth-covered magazines kept apart by the DoD
+# explosives safety standards (DoD Manual 6055.09, now DESR 6055.09; intermagazine distances are set by full-scale test and depend on the explosive weight and the
+# magazines' orientation; an older Army lesson gives 235 ft (72 m) for 10,000 lb net explosive weight; firmness: MEDIUM that magazines stand apart by 70 m and up,
+# LOW on any exact figure, the tables were not read). Fuel farms are rows of tanks with the pump house at one end (general practice, no figure). JUDGMENT CALLS:
+# warehouses and tanks 70 m apart in a row (DCS building 30 to 40 m long, `BUILDING_GAP_M` 55 m least gap); bunkers dispersed 170 and 280 m out from the row.
+SITE_LAYOUT = {
+    AssetKind.DEPOT: [(-40, 0), (-90, 170), (40, 0), (90, 280)],            # warehouse, bunker, warehouse, bunker
+    AssetKind.FUEL: [(-105, 0), (-35, 0), (35, 0), (110, 0)],               # three tanks in a row, the store at the end
+    "REFINERY": [(-140, 0), (-70, 0), (0, 0), (70, 0), (140, 0)],
+    "FACTORY": [(-140, 0), (-70, 0), (0, 0), (70, 0), (140, 0)],
+}
+
+
 def supply_parts(kind, variant: str = "") -> list:
     """The static buildings of a supply site: the plant's own set for a refinery / factory, else the kind's (fuel farm / depot)."""
     return SUPPLY_PLANTS.get(variant) or SUPPLY_BUILDINGS.get(kind) or []
@@ -764,22 +778,40 @@ class RaidSpawns:
         from . import road_front, theatres
         rh = road_front.heading_at(theatres.active(), cx, cy) if n else None     # v0.41.259 (XO 2026-11-03): the buildings stand in one block beside the road, not on it
         bx, by = cx, cy
+        side = 1
         if rh is not None:
             side = 1 if zlib.crc32(aim.encode()) % 2 == 0 else -1                # one side per site, the same every build
             bx, by = offset(cx, cy, rh + 90 * side, ROAD_OFF_M)
             if not seac.site_ok(bx, by):                                         # that side is sea or water: the other side
-                bx, by = offset(cx, cy, rh - 90 * side, ROAD_OFF_M)
+                side = -side
+                bx, by = offset(cx, cy, rh + 90 * side, ROAD_OFF_M)
             if not seac.site_ok(bx, by):
                 rh = None
-        ring = BUILDING_GAP_M / (2 * math.sin(math.pi / n)) if n > 1 else 0.0      # v0.41.295: one ring round the block's centre, big enough that neighbours keep BUILDING_GAP_M apart
-        spots = [offset(bx, by, k * (360 / n) + hdg, ring) for k in range(n)]
-        if not all(seac.site_ok(x, y) for x, y in spots):                          # part of the ring is in the water: move the whole block (never squeeze it, the buildings would overlap again); none fits: as it was, no water test
-            for ang in range(0, 360, 45):
-                bx2, by2 = offset(bx, by, ang, ring + 30.0)
-                cand = [offset(bx2, by2, k * (360 / n) + hdg, ring) for k in range(n)]
+        ring = BUILDING_GAP_M / (2 * math.sin(math.pi / n)) if n > 1 else 0.0      # v0.41.295: the old ring, kept as the last fallback
+        # v0.41.376 (XO musing 2, S10): rows, not a ring. u runs along the road (`rh`, else `hdg`), v away from it. See SITE_LAYOUT.
+        axis = rh if rh is not None else hdg
+        away = axis + 90 * side
+        lay = SITE_LAYOUT.get(variant) or SITE_LAYOUT.get(kind) or []
+        def at(ox, oy, u, v):
+            x, y = offset(ox, oy, axis if u >= 0 else axis + 180, abs(u))
+            return offset(x, y, away if v >= 0 else away + 180, abs(v))
+        spots = None
+        if len(lay) >= n:
+            cands = [(bx, by)] + [offset(bx, by, ang, rad) for rad in (60.0, 120.0, 200.0, 300.0) for ang in range(0, 360, 45)]      # not in the water: the whole layout moves, never squeezed
+            for ox, oy in cands:
+                cand = [at(ox, oy, u, v) for u, v in lay[:n]]
                 if all(seac.site_ok(x, y) for x, y in cand):
                     spots = cand
                     break
+        if spots is None:                                                          # nothing fits: the old ring, as before
+            spots = [offset(bx, by, k * (360 / n) + hdg, ring) for k in range(n)]
+            if not all(seac.site_ok(x, y) for x, y in spots):
+                for ang in range(0, 360, 45):
+                    bx2, by2 = offset(bx, by, ang, ring + 30.0)
+                    cand = [offset(bx2, by2, k * (360 / n) + hdg, ring) for k in range(n)]
+                    if all(seac.site_ok(x, y) for x, y in cand):
+                        spots = cand
+                        break
         for k, vt in enumerate(parts[:n]):
             x, y = spots[k]
             nm = f"{aim}|b{k + 1}"          # b: never clashes with a guard vehicle `<aim>|<n>` in the same site
