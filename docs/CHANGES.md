@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## Tools, 2026-11-11 (no version change): smoke test Phase 3, the two missing checks
+
+XO 2026-11-11 ('fox 3 medium'). `tools/smoke_test.py` only. New `check_main_window` (the main window builds on a fresh campaign, refreshes and shows every page of its stack; no labels or counts) and `check_required_flights` (each stored package of the five build campaigns carries a non-support flight for the role `PackageBuilder._slots` lists first for its objective). 11 checks now. Not run by Crew Chief (XO runs the smoke test).
+
 ## v0.41.375, S20 Phase 5: the belt that guards a northern runway ranks first in the mountain wave
 
 XO 2026-11-11 ('fox 3 medium'). **NOT FLOWN.** `ObjectivePlanner.plan` collects the SAM sites that block a northern runway crater (the blockers of the RUNWAY candidates) and hands them to `_wave_pass`, where a mountain SAM-DEAD job on such a site ranks x `RUNWAY_BELT_FACTOR` (1.5, judgment call). It only reorders the mountain quota; the quota numbers, the jets and the other axes are unchanged. Probe: see `.claude/tier removal plan.md`, Phase 5.
