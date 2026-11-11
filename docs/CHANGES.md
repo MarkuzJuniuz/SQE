@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.391, S38: the SEAD stays on station while the strikers go in
+In a STRIKE or CAS package the AI SEAD flight now times its HARM point to 90 seconds before the strikers' time over target (it used to arrive about 5 minutes ahead, find every radar switched off, and leave before the SAMs came up). It holds at the HARM point until the last striker's time over target plus 2 minutes, then goes home. Your own flights and DEAD packages are unchanged.
+
 ## v0.41.390, S37: red raids with a share of its free bombers each turn, not on a dice roll
 Red no longer rolls one chance of a raid a turn. Each turn it earns raid credit equal to a share of its free attack jets (Su-24M, Su-25, Tu-22M3; half as much at night, more while you stand down) and builds raids while the credit lasts, up to four a turn, carrying the rest to the next turn. A strong red now raids turn after turn and a worn-down one less. At Level 3 red builds about 3.9 raids a day (before: 2.2), most of them on supply sites and fields; Level 1 stays at about 0.1 a day and Level 2 goes to about 0.5 (before: 0.35).
 

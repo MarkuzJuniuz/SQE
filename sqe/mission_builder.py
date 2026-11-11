@@ -113,6 +113,9 @@ JSOW_TRAIL_S = -30             # v0.41.195 (XO 2026-10-29: SEAD and DEAD should 
                                # HARMs have landed (about 2 min of flight). Was 0 (together): the v0.41.10 run, the SA-10 fired at the JSOW jets while the HARMs were in the air
                                # (on two axes), the HARMs go first, the JSOWs land a few minutes later on a radar that is dead or has shut down.
                                # v0.39.19 had the JSOW flight 160 s ahead so the WEAPONS would land together: it went in alone and died (v0.39.19 run, Viper 2).
+SEAD_LEAD_S = 90               # S38 (XO run 2026-11-11 16-53: the SEAD came 5.4 min ahead of the strikers, no radar was up, it left, SA-11 + Tor killed the strikers): in a STRIKE / CAS package the SEAD's HARM point is timed to this long before the strikers' time over target, not to the push. Judgment call: the HARMs go as the strikers commit and the SAMs come up on their approach (JP 3-01 / JP 3-09: SEAD works the window the package is in; no public figure for the lead)
+SEAD_WINDOW_S = 120            # S38: ...and the SEAD stays on station (orbit at the HARM point) until the last striker's time over target plus this, its ARM tasks live for the whole window. Judgment call
+SEAD_HOLD_KTS = 350            # S38: the SEAD's orbit speed at the HARM point (the attack speed would make the circle huge). Judgment call
 A2G_ROLES = (Role.STRIKE, Role.SEAD, Role.CAS)
 NATIVE_ECM = {"F-15C"}         # jets with a jammer that switch DCS's ECM on over the attack leg (the ECM script counts the F-15C too since v0.40.9)
 AAM_WEAPONS = 264241152       # DCS weapon flags: air-to-air missiles (a Fighter Sweep's RTB when out of ammo)
@@ -508,7 +511,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         player_push = max(player_push, math.ceil((dep_s + 120) / 60.0) * 60.0)
         leave_s = hold_leave_s(pw, player_push)
         P0 = player_push - stagger(package, pf.role)                         # the strikers' push; everyone else is relative to it
-        push_of = lambda f: P0 + (0 if f.tag else stagger(package, f.role))
+        push_of = lambda f: self._push_adj.get(id(f), P0 + (0 if f.tag else stagger(package, f.role)))
         assign_times(pw, dep_s, player_push)
         tgt = objective_wp(pw) or pw[-1]
         ptot = tgt.eta_s + RAID_SEAD_LEAD_S if psite is not None else tgt.eta_s          # v0.41.284: the time the raid's other flights work to: the interceptors are due on station RAID_SEAD_LEAD_S after your HARMs
@@ -526,6 +529,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._relief_names = []                                              # relief flights built so far (their callsigns are taken)
         self._ct_flight = {}                                                 # id(orbit task) -> callsign of the support CAP it belongs to
         self._striker_egr = []                                               # v0.41.40: [((x, y), egress time)] of this mission's strikers
+        self._striker_tgt = {}                                               # S38: package id -> its STRIKE / CAS flights' time over target, for the SEAD's window
+        self._push_adj = {}                                                  # S38: id(flight) -> the push time an AI SEAD actually uses (timed to the strikers, not the push)
         self._holds = []                                                     # v0.41.10: TARCAP / escort holds, extended to the last package over their target area
         self._snipe_at = {}                                                  # v0.41.10: id(group) -> the station waypoint where max-range shots begin
         self._callins = []
@@ -1715,6 +1720,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if r_ is None:
                 return None, None                          # already back on the ground
             wps, act_s, past_push, stop = r_
+            push_s = self._push_adj.get(id(f), push_s)             # S38
 
         g, first, cs_names = self._make_group(f, spec, base, wps, act_s, csname, fno)
         names, run_t0 = self._dress_group(package, f, spec, g, wps, push_s, tot_s, cs_names)
@@ -1738,6 +1744,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 gate["to"] = len(g.points)                              # the landing point
             self._gates.append(gate)
         tw = None if f.tag else objective_wp(wps)
+        if tw is not None and f.role in (Role.STRIKE, Role.CAS) and getattr(f, "kit", "") != "JSOW":
+            self._striker_tgt.setdefault(package.id, []).append(float(tw.eta_s))            # S38
         if tw is not None and f.role in (Role.STRIKE, Role.SEAD, Role.CAS):
             egr_ = next((w.eta_s for w in wps if w.name == "EGR"), None)          # v0.41.40: when this striker is OUT, for the escorts to wait on
             self._striker_egr.append(((geom.tx, geom.ty), float(egr_ if egr_ is not None else tw.eta_s + 180)))
@@ -1896,6 +1904,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             act_s = 0
         else:
             assign_times(wps, 0.0)                      # natural pace from the spawn
+            push_s, sead_hold_ = self._sead_window(package, f, wps, push_s)          # S38
             hold_i = next((i for i, w in enumerate(wps) if w.action == "HOLD"), None)
             nat = wps[hold_i + 1].eta_s if hold_i is not None else next((w.eta_s for w in wps if w.action == "CAPORBIT"), next(w for w in reversed(wps) if w.name != "CAP2").eta_s)      # Phase 8: a sweep (no hold) is timed to its station, not to CAP2 behind it
             act_raw = int(push_s - nat - (120 if hold_i is not None else 60))      # arrive ~2 min early, hold, push on time
@@ -1903,6 +1912,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 act_raw = int(meet_ - nat) if meet_ is not None else -RAID_HEAD_S     # v0.41.280: timed to the raid; without a raid clock the v0.41.278 head start (already airborne)
             act_s = max(0, act_raw)
             assign_times(wps, float(act_raw), push_s)
+            if sead_hold_ is not None:
+                sw_ = next(w for w in wps if w.action == "SEAD")
+                dw_ = max(0.0, sead_hold_ - sw_.eta_s)
+                for w in wps[wps.index(sw_) + 1:]:
+                    w.eta_s += dw_                       # EGR and home come after the window
+                sw_.hold_to = sead_hold_
             if shaped_ and self._raid_edge_on(package):               # v0.41.282: when blue is on the intercept point; the setpiece's raiders are timed to the last of them
                 tw_ = next((w for w in wps if w.name == "TGT" and w.action == "CAPORBIT"), None)
                 if tw_ is not None:
@@ -1926,6 +1941,22 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 past_push = not any(w.name == "PUSH" for w in wps)
         stop = int(tot_s + o.cap_minutes * 60)
         return wps, act_s, past_push, stop
+
+    def _sead_window(self, package, f, wps, push_s):
+        """S38: an AI SEAD flight in a STRIKE / CAS package works the strikers' window (a radar that is off is not suppressed: SAMs come up when the strikers appear). Its HARM point
+        is timed SEAD_LEAD_S before the first striker's time over target (never earlier than the old push-relative time: only delays the push) and it holds there until the last
+        striker's time over target + SEAD_WINDOW_S. -> (push_s, hold_to or None). Strikers not built yet (no time recorded) or no PUSH / SEAD point: unchanged. Natural-pace etas expected in wps."""
+        tg = self._striker_tgt.get(package.id)
+        if (f.role != Role.SEAD or f.tag or getattr(f, "kit", "") == "JSOW" or package.objective.type not in (ObjectiveType.STRIKE, ObjectiveType.CAS) or not tg):
+            return push_s, None
+        sw = next((w for w in wps if w.action == "SEAD"), None)
+        pu = next((w for w in wps if w.name == "PUSH"), None)
+        if sw is None or pu is None:
+            return push_s, None
+        new = min(tg) - SEAD_LEAD_S - (sw.eta_s - pu.eta_s)
+        push_s = max(push_s, new)
+        self._push_adj[id(f)] = push_s
+        return push_s, max(tg) + SEAD_WINDOW_S
 
     HOT_ROLL_S = 45          # v0.41.96: runway start to wheels up (alert pairs measured about 45 s in v0.41.0 runs); judgment call for full packages
     HOT_CLIMB_KTS = 300      # average speed from the runway to the pretend-DEP point (climbing), judgment call
@@ -2754,6 +2785,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 self._cas_tasks(wp, w, armor, tot_s, self._cas_floors.get(package.id, 0))
             elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
                 self._sead_attack_tasks(package, f, wp, w, armor)
+                if w.hold_to is not None:                                   # S38: the HARM point is a hold until the strikers are through (the ARM tasks above stay live: their stops are 180 to 780 s after the point)
+                    oc_ = task.ControlledTask(task.OrbitAction(int(w.alt_ft * FT), int(SEAD_HOLD_KTS * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
+                    oc_.stop_after_time(int(w.hold_to)); wp.tasks.append(oc_)
 
     def _scrub_point(self, package, f, g, base, wps, tot_s):
         """v0.41.223 (XO 2026-10-31): the package scrub's part of the route. Every non-support package flight is recorded for the hook (`self._scrub`); an AI flight also gets a
