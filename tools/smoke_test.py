@@ -3,6 +3,7 @@ Isolated: a temporary folder for everything, APPDATA redirected, your real setti
 Scope (XO 2026-11-06, see .claude/smoke test plan.md): (1) loads, saves, campaigns, compatibility; (2) the dialogs and the main window build; (3) missions are generated;
 (4) every package carries its required flight; (5) the .miz structure loads in DCS without errors. Assert STRUCTURE, never values: no constant, no state.day value, no waypoint, job, role or kit name, no
 game or hook text. An assert that ends with us changing this file instead of fixing SQE is invalid: remove it, do not relax it.
+The soak (skip to the end of the war, three campaigns, no assert but "no exception") is opt-in: `--only soak`, `--seeds N`.
 Five jets are built once (`builds()`, lazy) and read by the missions and .miz checks. 'SMOKE TEST PASSED' + exit code 0 = everything worked."""
 import json
 import os
@@ -182,11 +183,9 @@ def check_ecm_install():
     print("[ecm install] install / twice / remove / CRLF / backup / old copy / hand line")
 
 
-def check_fly_debrief_advance():
-    """The core loop on the first built jet: fake state file -> poll ok -> apply (clock moves, the pilot log counts the sortie) -> reload -> skip (clock moves)."""
-    s = next((b[1] for b in builds() if b[3]), None)
-    assert s is not None, "no jet built a mission"
-    man, t0, sorties0 = s.manifest(), clock(s), (s.state.pilot or {}).get("sorties", 0)
+def fake_debrief(s):
+    """Write a fake state file for the pending sortie (a few dead, one kill) and poll it. -> (status, data) as `s.poll()` gives them; the caller applies."""
+    man = s.manifest()
     prim = next((g for g in man.groups if g["kind"] == "asset" and g.get("primary")), None)
     dead = prim["units"][: int(len(prim["units"]) * 0.6)] if prim else []
     data = {"campaign": man.campaign_id, "sortie": man.sortie, "package": man.package_id, "mission_ended": True, "time": 2400, "dead": dead, "ejected": [],
@@ -194,6 +193,15 @@ def check_fly_debrief_advance():
             "kills": [{"k": man.player_unit, "kt": "Test", "v": (dead or ["x"])[0], "vt": "TargetType", "w": "AIM-120C", "t": 725}]}
     s.settings.state_file.write_text(json.dumps(data))
     status, got, _tl = s.poll()
+    return status, got
+
+
+def check_fly_debrief_advance():
+    """The core loop on the first built jet: fake state file -> poll ok -> apply (clock moves, the pilot log counts the sortie) -> reload -> skip (clock moves)."""
+    s = next((b[1] for b in builds() if b[3]), None)
+    assert s is not None, "no jet built a mission"
+    t0, sorties0 = clock(s), (s.state.pilot or {}).get("sorties", 0)
+    status, got = fake_debrief(s)
     assert status == "ok", status
     s.apply(got)
     assert clock(s) != t0, "the campaign did not advance after the debrief"
@@ -343,6 +351,43 @@ def check_hook_lua():
     print(f"[hook] {n} real hooks compile and run under the stub DCS")
 
 
+# ---- 6. soak (opt-in: `--only soak`) ------------------------------------------------------------------------------------------------------------
+SOAK_CASES = [(1, 5), (2, 3), (3, 7)]                         # (level, seed)
+SOAK_MAX_SKIPS = 300                                          # a loop bound, not a game rule
+SOAK_FLY_EVERY = 20                                           # every N skips the player flies a fake sortie, if anything is flyable
+SOAK_RELOAD_EVERY = 25                                        # every N skips: save, reopen, carry on with the reopened session
+SOAK_SEEDS = 1                                                # `--seeds N`: each level runs N seeds (seed, seed+1, ...)
+
+
+def check_soak():
+    """Skip to the end of the war on three campaigns. The ONLY assert is "no exception": a failure prints level, seed and skip number, then re-raises."""
+    for level, seed0 in SOAK_CASES:
+        for seed in range(seed0, seed0 + SOAK_SEEDS):
+            s, n = fresh_session(level, seed), 0
+            try:
+                while n < SOAK_MAX_SKIPS and s.state.status == "ACTIVE":
+                    s.skip_turn()
+                    n += 1
+                    if n % SOAK_FLY_EVERY == 0:
+                        pk = first_flyable(s)
+                        if pk is not None:
+                            s.fly(pk.number, s.flyable(pk)[0].id)
+                            _status, got = fake_debrief(s)
+                            s.apply(got)
+                    if n % SOAK_RELOAD_EVERY == 0 and s.state.status == "ACTIVE":
+                        s.save()
+                        r = mk()
+                        r.open(s.path)
+                        s = r
+            except BaseException:
+                print(f"[soak] FAILED: level {level}, seed {seed}, skip {n + 1}  (replay: --only soak, level {level} seed {seed})")
+                raise
+            print(f"[soak] level {level} seed {seed}: {n} skips, final status {s.state.status}")
+
+
+OPT_IN = [check_soak]                                         # run only when `--only` names them
+
+
 CHECKS = [
     check_saves_round_trip,
     check_incompatible_saves,
@@ -360,26 +405,30 @@ CHECKS = [
 
 def main(argv=None):
     """Run the checks in order. Options: `--list` (names only), `--only a,b` (the checks whose name contains a or b), `--timeout SECONDS` (a check that
-    runs longer dumps every thread's traceback and stops the run; default 120, 0 = off)."""
+    runs longer dumps every thread's traceback and stops the run; default 120, 900 for the soak, 0 = off), `--seeds N` (soak: N seeds per level)."""
     import argparse
     import faulthandler
     import time
     ap = argparse.ArgumentParser()
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--only", default="")
-    ap.add_argument("--timeout", type=int, default=120)
+    ap.add_argument("--timeout", type=int, default=None)
+    ap.add_argument("--seeds", type=int, default=1)
     args = ap.parse_args(argv)
+    global SOAK_SEEDS
+    SOAK_SEEDS = max(1, args.seeds)
     if args.list:
-        print("\n".join(fn.__name__ for fn in CHECKS))
+        print("\n".join([fn.__name__ for fn in CHECKS] + [fn.__name__ + " (opt-in)" for fn in OPT_IN]))
         return
     sys.stdout.reconfigure(line_buffering=True)                  # output reaches a log file at once, so a stall shows where it is
     print(f"SQE smoke test, version {sqe.__version__}  (isolated temp data: {TMP})")
     want = [w for w in args.only.split(",") if w]
-    run = [fn for fn in CHECKS if not want or any(w in fn.__name__ for w in want)]
+    run = [fn for fn in CHECKS + OPT_IN if (want and any(w in fn.__name__ for w in want)) or (not want and fn in CHECKS)]
     times = []
     for fn in run:
-        if args.timeout:
-            faulthandler.dump_traceback_later(args.timeout, exit=True)
+        timeout = args.timeout if args.timeout is not None else (900 if fn in OPT_IN else 120)      # the soak needs its own, longer watchdog
+        if timeout:
+            faulthandler.dump_traceback_later(timeout, exit=True)
         t0 = time.time()
         _fixed_ids(fn.__name__)
         fn()
