@@ -72,6 +72,7 @@ class Base:
     y: float = 0.0
     airport: str | None = None  # pydcs airport name for AIRFIELD bases
     defense: float = 1.0        # air-defence strength (Patriot + AAA); the enemy can degrade it, it repairs daily
+    divert: bool = False        # Phase 9a: a landing and recovery field (theatre pack `"divert": true`): no squadron, no patrol area, no supply sites; an older save has none
 
 
 @dataclass

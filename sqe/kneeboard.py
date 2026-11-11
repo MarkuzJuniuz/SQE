@@ -121,7 +121,12 @@ NAV = {"Batumi": "BATUMI  ILS 110.30 RWY13  TACAN 16X BTM",
        "Gudauta": "GUDAUTA  no ILS, TACAN or NDB",
        "Sochi-Adler": "SOCHI  ILS 111.10 RWY06  no TACAN",
        "Gelendzhik": "GELENDZHIK  VOR 114.30  no ILS, no TACAN",
-       "Krymsk": "KRYMSK  NDB 408/803  no ILS, no TACAN"}
+       "Krymsk": "KRYMSK  NDB 408/803  no ILS, no TACAN",
+       # Phase 9a (XO data, 2026-11-10: Mission Editor airfield panels as screenshots for Vaziani and Tbilisi, the ILS courses and Soganlug's line as text): the three eastern divert fields.
+       # These entries also carry the tower frequency. The Tbilisi panel shows a TACAN, a VOR and NDBs (the first text said "no TACAN"); the panels win.
+       "Vaziani": "VAZIANI  TWR 140.00  ILS 108.75 RWY13 crs 129, RWY31 crs 309  TACAN 22X VAS",
+       "Tbilisi-Lochini": "TBILISI  TWR 138.00  ILS RWY13 110.30 crs 126, RWY31 108.90 crs 306  TACAN 25X GTB  VOR 113.70  NDB RWY13 342/923, RWY31 211/435",
+       "Soganlug": "SOGANLUG  TWR 139.00  no ILS, no TACAN"}
 
 
 def nav_line(airport):

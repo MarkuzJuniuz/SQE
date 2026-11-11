@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.352, campaign rules Phase 9a: Kobuleti zone, divert fields, three-base defeat
+
+XO 2026-11-10 ("fox 3 high"). Vaziani, Tbilisi-Lochini and Soganlug are blue landing-and-recovery fields (`divert`: no squadron, no patrol, no supply sites); Kobuleti is a third fall point (one more sector, the start front unchanged); the AWACS and tankers sit at Kutaisi (`support_base`). Defeat is 3 fallen airfields and a sunk carrier no longer counts; a fallen field's or a sunk carrier's squadrons each go to the nearest field with room; taken fields no longer get a moved-up squadron. Kneeboard / ILS data for the three fields. **NOT FLOWN. Smoke not run.**
+
 ## v0.41.351, raids fold into flown missions (queue S8)
 
 XO 2026-11-10 ("fox 3 high"). A land raid's intercept package (listed or not detected by blue) now merges into a mission whose area holds its target, under the usual circle, window and six-package rules; before, no raid ever merged. An unseen raid is built into the mission but named nowhere (briefing, kneeboard, debrief package line). A merged raid is settled by the mission, never again by the war sim. The carrier raid still folds into nothing. **NOT FLOWN. Smoke not run.**

@@ -122,7 +122,7 @@ def plan_areas(state, side: str) -> list:
     else:
         assets = []
         for b in state.bases.values():
-            if b.kind not in (BaseKind.AIRFIELD, BaseKind.CARRIER) or fleet.is_sunk_base(state, b.id):          # v0.41.257: a sunk carrier has no patrol area
+            if b.kind not in (BaseKind.AIRFIELD, BaseKind.CARRIER) or fleet.is_sunk_base(state, b.id) or b.divert:          # v0.41.257: a sunk carrier has no patrol area; Phase 9a: nor has a divert field
                 continue
             tps = [sq.aircraft for sq in state.squadrons.values() if sq.base_id == b.id and sq.available > 0]
             assets.append((b.id, b.name, b.x, b.y, STATION_FLEET_NM if b.kind == BaseKind.CARRIER else STATION_BASE_NM, tps))

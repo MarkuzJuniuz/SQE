@@ -107,7 +107,7 @@ def _reach(state, kind: str, x: float, y: float, budget: bool = True, only: str 
 
 def _nearest_field(state, x: float, y: float):
     fallen = set((state.ground or {}).get("fallen", []))
-    fs = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and b.id not in fallen] or [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD]
+    fs = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and b.id not in fallen and not b.divert] or [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD]          # Phase 9a: a divert field is nobody's home
     return min(fs, key=lambda b: math.hypot(b.x - x, b.y - y)) if fs else None
 
 

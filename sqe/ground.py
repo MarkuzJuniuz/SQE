@@ -11,8 +11,8 @@ One rule set for both sides (only the numbers differ with difficulty):
   * supply comes from the side's fuel and depot sites (Red: state.assets, Blue: state.blue_assets). A struck depot weakens every sector it feeds;
   * air power enters through the Red column of each zone, a real asset (armor_N): its health IS the zone's Red strength between days. A CAS flight
     that damages it takes strength off the zone; the daily fight then starts from the lower number;
-  * if Red holds the zone next to one of our fields, that field falls (its defences go, its squadrons move to the nearest field with losses). Two fields
-    lost at once is a defeat.
+  * if Red holds the zone next to one of our fields, that field falls (its defences go, its squadrons move to the nearest field with room, with losses). DEFEAT_BASES
+    (three) fields fallen is a defeat.
 
 v0.41.143 (Campaign Revamp Stage B1, "the push"): the line of sectors now runs from the red end of the campaign (Sochi on Levels 1 and 2, Krymsk on
 Level 3) through every red base on the coast road to Senaki and Kutaisi. Each red base has a doorstep sector on our side of it; it FALLS when we hold
@@ -46,8 +46,7 @@ TAKEN_NEW_DAY = 16            # v0.41.247 (XO 2026-11-03): one week after the Pa
 TAKEN_NEW_SQUADRONS = 1       # per taken field (judgment call: each is up to 18 more jets for blue; raise it if blue is thin at the front)
 SHORT_DAYS = 7                # how long a day's unfilled-slot record is kept
 SHORT_MAX = 600               # v0.41.338: at most this many entries are kept in all (12 turns a day each add their own; judgment call, about a week of the old one-list-a-day)
-TAKEN_FIRST_MOVER_DAY = 11    # v0.41.246 (XO 2026-11-03): the first squadron moves in 2 days after the Patriots are up (judgment call)
-FORWARD_TYPES = ("F-16C",)    # short-legged jets move forward; the long-legged F-15C and the carrier's F-14s stay where they are (XO)
+DEFEAT_BASES = 3              # Phase 9a (XO 2026-11-10, campaign rules plan decision 25): the campaign is lost when this many of our airfields have fallen; a sunk carrier no longer counts
 SUPPLY_FLOOR, SUPPLY_NONE = 0.35, 0.85
 # v0.41.334 (XO 2026-11-06 / 11-09, campaign rules plan decision 18): ONE shared Force Index floor, 0.35, for both sides (it was 0.55 for red and BLUE_SUPPLY_FLOOR 0.35 for the coalition). History of the 0.35: v0.41.174 (XO 2026-10-28) 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle); v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly. Judgment call, no public source. Level 1 red keeps L1_RED_SUPPLY_FLOOR.
 SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (35% = about 17 days); no repair on a day it is struck
@@ -130,7 +129,7 @@ def build(state, th, d, rng, ap) -> None:
     for k, cnt in enumerate(legs):
         a_, b_ = nodes[k]["name"], nodes[k + 1]["name"]
         names += [f"{a_} - {b_}" if cnt == 1 else f"{a_} - {b_} {j + 1}/{cnt}" for j in range(cnt)]
-    red0, blue0 = _initial(d, n)
+    red0, blue0 = _initial(d, n, int(th["front"].get("rear_zones", 0) or 0))
     off = lambda k: sum(legs[:k])
     rbases = [{"id": nd["red"], "name": nd["name"], "zone": off(k), "x": axis[k][0], "y": axis[k][1]} for k, nd in enumerate(nodes) if nd.get("red")]
     order = {sid: i for i, sid in enumerate(stages)}
@@ -155,15 +154,18 @@ def _col_letter(i: int) -> str:
     return chr(65 + i) if i < 26 else chr(65 + i // 26 - 1) + chr(65 + i % 26)
 
 
-def _initial(d, n) -> tuple:
+def _initial(d, n, tail: int = 0) -> tuple:
     """Strength per sector, red end first: the level's five start values sit at the blue end (the old front); the sectors behind them hold red's rear
-    strength, REAR_FRAC of the first start value, and none of ours."""
+    strength, REAR_FRAC of the first start value, and none of ours. `tail` (pack key `front.rear_zones`, Phase 9a: the Kutaisi - Kobuleti sector) is the number of
+    sectors behind the old front: they start quiet, no red and the last blue value, so adding a base at the back does not move the front."""
     red_t = [float(x) for x in getattr(d, "ground_red", (70, 55, 15, 0, 0))]
     blue_t = [float(x) for x in getattr(d, "ground_blue", (0, 15, 60, 70, 50))]
-    rear = max(0, n - len(red_t))
+    tail = max(0, min(tail, n - 1))
+    m = n - tail
+    rear = max(0, m - len(red_t))
     red = [REAR_FRAC * red_t[0]] * rear + red_t
     blue = [0.0] * rear + blue_t
-    return red[-n:], blue[-n:]
+    return red[-m:] + [0.0] * tail, blue[-m:] + [blue_t[-1]] * tail
 
 
 def build_blue_assets(state, rng, ap=None) -> None:
@@ -172,7 +174,7 @@ def build_blue_assets(state, rng, ap=None) -> None:
     import hashlib
     ba = {}
     for b in state.bases.values():
-        if b.kind.value != "AIRFIELD":
+        if b.kind.value != "AIRFIELD" or b.divert:                      # Phase 9a: a divert field has no supply sites or garrison
             continue
         ang = int(hashlib.md5(b.id.encode()).hexdigest()[:4], 16) % 360
         x, y = seacheck.snap_to_land(b.x + 2200 * math.cos(math.radians(ang)), b.y + 2200 * math.sin(math.radians(ang)))
@@ -285,7 +287,7 @@ def ensure_blue_garrisons(state) -> bool:
         return False
     added = False
     for b in state.bases.values():
-        if b.kind.value == "AIRFIELD" and f"bgar_{b.id}" not in state.blue_assets:
+        if b.kind.value == "AIRFIELD" and not b.divert and f"bgar_{b.id}" not in state.blue_assets:
             state.blue_assets[f"bgar_{b.id}"] = _blue_garrison(b)
             added = True
     return added
@@ -893,8 +895,6 @@ def taken_fields_step(state) -> list:
             sams._sync(state, b)
             lines.append(f"{b.name}: {sams.BLUE_SITES[key][0]} in place" + (" (the field's defences are complete)" if rec["stage"] == len(TAKEN_STAGES) - 1 else ""))
             rec["stage"] += 1
-        if rec["stage"] >= len(TAKEN_STAGES) and not rec.get("moved") and age >= TAKEN_FIRST_MOVER_DAY:
-            lines += first_mover(state, rid, rec, b)
         if rec["stage"] >= len(TAKEN_STAGES) and age >= TAKEN_NEW_DAY and len(rec.get("new", [])) < TAKEN_NEW_SQUADRONS:
             from . import new_squadrons
             ln, sq = new_squadrons.form(state, b, _parking)
@@ -927,41 +927,9 @@ def note_shortfall(state, short: list) -> None:
     g["short"] = (keep + [[state.day, r, round(x), round(y), state.turn] for r, x, y in short][:300])[-SHORT_MAX:]
 
 
-def first_mover(state, rid: str, rec: dict, b) -> list:
-    """v0.41.246 (XO 2026-11-03, queue item h part 1, PR 2): once a taken field's defences are complete and FIRST_MOVER_DAY has passed, ONE short-legged squadron
-    (FORWARD_TYPES) moves in. XO's rule: the squadron of the most over-capacity field (jets assigned against the field's parking spots; ties: the one nearest the new
-    field), and the PLAYER's squadron first when it is one of them. It keeps its name and counts as the field's squadron; it sits out its move nights like any squadron
-    (`_settle`); `home_id` keeps its original field. No candidate or no room: nothing moves yet (it is tried again every night)."""
-    fallen = set(state.ground.get("fallen", []))
-    pend = pending_fields(state)
-    pid = state.player.squadron_id if state.player else None
-    load = {}
-    for q in state.squadrons.values():
-        load[q.base_id] = load.get(q.base_id, 0) + q.authorized
-    def over(q):
-        cap = _parking(state.bases[q.base_id].airport, q.aircraft) if state.bases[q.base_id].airport else None
-        return (load.get(q.base_id, 0) / cap) if cap else 0.0
-    cand = [q for q in state.squadrons.values()
-            if q.aircraft in FORWARD_TYPES and q.base_id != b.id and q.base_id in state.bases and state.bases[q.base_id].kind.value == "AIRFIELD"
-            and q.base_id not in fallen and q.base_id not in pend and not q.home_id]
-    if not cand:
-        return []
-    cand.sort(key=lambda q: (q.id != pid, -over(q), math.hypot(state.bases[q.base_id].x - b.x, state.bases[q.base_id].y - b.y), q.id))
-    for q in cand:
-        room = _parking(b.airport, q.aircraft)
-        if room is not None and room < q.authorized:
-            continue
-        frm = state.bases[q.base_id]
-        q.home_id = q.base_id
-        q.base_id = b.id
-        rec["moved"] = q.id
-        return [f"   {q.name} moves up from {frm.name} to {b.name}" + _settle(state, q, math.hypot(frm.x - b.x, frm.y - b.y))]
-    return []
-
-
 def taken_field_lose(state, rid: str) -> list:
     """The enemy retakes a field we had taken: its squadrons (a later PR will put some there) withdraw like any fallen base, then the base and its three sites
-    are removed. It never entered `ground["fallen"]`, so it never counted toward the two-fallen-fields defeat rule (XO)."""
+    are removed. It never entered `ground["fallen"]`, so it never counted toward the fallen-fields defeat rule (XO)."""
     g = state.ground
     rec = g.get("taken_fields", {}).pop(rid, None)
     if rec is None:
@@ -1094,20 +1062,35 @@ def apply_fall(state, bid: str) -> list:
     b = state.bases[bid]
     from . import sams
     sams.set_field(state, b, 0.0)
-    others = [x for x in state.bases.values() if x.kind.value == "AIRFIELD" and x.id != bid and x.id not in state.ground["fallen"]]
+    others = [x for x in state.bases.values() if x.kind.value == "AIRFIELD" and not x.divert and x.id != bid and x.id not in state.ground["fallen"]]
     lines = [f"{b.name} HAS FALLEN: the front reached it. Its defences are gone"]
     if not others:
         return lines
     for sq in state.squadrons.values():
         if sq.base_id != bid:
             continue
-        dest = min(others, key=lambda x: (x.x - b.x) ** 2 + (x.y - b.y) ** 2)
         lost = int(round(sq.available * FALL_LOSS))
         sq.available = max(0, sq.available - lost)
+        dest = field_with_room(state, b.x, b.y, sq, sq.available + sq.reserve, others) or min(others, key=lambda x: (x.x - b.x) ** 2 + (x.y - b.y) ** 2)       # Phase 9a: the nearest field with room; none has: the nearest (as before)
         sq.home_id = sq.home_id or bid                                      # v0.41.243: remembered, so it flies back when this field is retaken
         sq.base_id = dest.id
         lines.append(f"   {sq.name} withdraws to {dest.name}, {lost} aircraft lost" + _settle(state, sq, math.hypot(dest.x - b.x, dest.y - b.y)))
     return lines
+
+
+def field_with_room(state, x: float, y: float, sq, jets: int, fields) -> object:
+    """Phase 9a: the nearest of `fields` (airfield Bases; the caller leaves out fallen and divert fields) to (x, y) with parking for `jets` more jets of the squadron's type,
+    counting every other squadron based there at its authorized strength (the rule `scenario._disperse_blue` uses), or None. A field whose parking cannot be told (no terrain)
+    counts as having room."""
+    held = {}
+    for q in state.squadrons.values():
+        if q is not sq:
+            held[q.base_id] = held.get(q.base_id, 0) + q.authorized
+    for f in sorted(fields, key=lambda f: (math.hypot(f.x - x, f.y - y), f.id)):
+        cap = _parking(f.airport, sq.aircraft) if f.airport else None
+        if cap is None or cap - held.get(f.id, 0) >= jets:
+            return f
+    return None
 
 
 def _settle(state, sq, dist_m: float) -> str:
@@ -1136,16 +1119,10 @@ def return_squadrons(state, bid: str) -> list:
     return lines
 
 
-def fleet_sunk(state) -> bool:
-    from . import fleet
-    return fleet.sunk(state)
-
-
 def fallen_count(state) -> int:
     if not active(state):
         return 0
-    from . import fleet
-    return len(state.ground.get("fallen", [])) + fleet.counts_as_fallen(state)          # v0.41.257 (XO): a sunk carrier is one lost base until it returns
+    return len(state.ground.get("fallen", []))          # Phase 9a (XO 2026-11-10): the sunk carrier no longer counts (it did from v0.41.257 to v0.41.351)
 
 
 def repair_blue(state, d) -> None:

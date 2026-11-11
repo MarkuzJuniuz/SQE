@@ -46,15 +46,32 @@ BY_CLASS = {v[1]: k for k, v in TABLE.items() if v[0] == "blue"}
 HANDOVER_MIN = barcap.HANDOVER_MIN
 
 
-def _rear_blue_airfield(state):
-    """The blue airfield furthest from every red air wing: where the AWACS and tankers are based."""
-    reds = [state.assets[w.base_asset_id] for w in state.enemy_air if w.base_asset_id in state.assets]
-    fields = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD]
-    if not fields:
-        return None
-    if not reds:
-        return sorted(fields, key=lambda b: b.id)[0]
-    return max(fields, key=lambda b: (min(math.hypot(b.x - r.x, b.y - r.y) for r in reds), b.id))
+def _large_spots(b) -> int:
+    """Parking spots of a field that take the AWACS and the tanker (the scarcer of the two types); 0 when it cannot be told."""
+    try:
+        import dcs.planes as planes
+        from . import theatres
+        a = theatres.terrain().airports[b.airport]
+        return min(len(a.free_parking_slots(getattr(planes, c))) for c in ("E_3A", "KC_135"))
+    except Exception:
+        return 0
+
+
+def _support_airfield(state):
+    """Phase 9a: where the AWACS and tankers are based: the pack's `support_base` (Kutaisi in the Caucasus). If that field has fallen (or the pack names none), the standing
+    starter field (a blue field of the pack that is not a divert field) with the most large spots."""
+    from . import theatres
+    fallen = set((getattr(state, "ground", None) or {}).get("fallen", []))
+    try:
+        th = theatres.load(state.theatre)
+    except Exception:
+        th = {}
+    b = state.bases.get(th.get("support_base") or "")
+    if b is not None and b.kind == BaseKind.AIRFIELD and not b.divert and b.id not in fallen:
+        return b
+    starters = {f["id"] for f in th.get("blue_fields", []) if not f.get("divert")}
+    fields = [x for x in state.bases.values() if x.kind == BaseKind.AIRFIELD and not x.divert and x.id not in fallen and (x.id in starters or not starters)]
+    return max(fields, key=lambda x: (_large_spots(x), x.id)) if fields else None
 
 
 def ensure(state) -> dict:
@@ -69,7 +86,7 @@ def ensure(state) -> dict:
                 k["available"] = min(k["authorized"], k["available"] + add)
         return sa
     carrier = next((b for b in state.bases.values() if b.kind == BaseKind.CARRIER), None)
-    rear = _rear_blue_airfield(state)
+    rear = _support_airfield(state)
     sa = {}
     for key, (side, cls, label, home, n, on, turn, src) in TABLE.items():
         base = carrier if home == "carrier" else rear
