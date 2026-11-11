@@ -3,11 +3,11 @@ import html
 import json
 import time
 from pathlib import Path
-from PySide6.QtCore import Qt, QSize, QTimer
+from PySide6.QtCore import Qt, QSize, QTimer, QPropertyAnimation
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QCheckBox, QSpinBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
                                QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
-                               QTextBrowser, QVBoxLayout, QHeaderView, QTabWidget, QWidget, QScrollArea, QAbstractItemView)
+                               QGraphicsOpacityEffect, QTextBrowser, QVBoxLayout, QHeaderView, QTabWidget, QWidget, QScrollArea, QAbstractItemView)
 from .. import settings as S
 from ..aircraft import AIRCRAFT
 from ..difficulty import LEVELS
@@ -462,21 +462,35 @@ def _hm(s: str) -> int:
     return int(h) * 60 + int(m)
 
 
+REPORT_BLOCK_GAP_MS = 250       # after-action report: pause before the next turn block appears (XO 2026-11-11: "very quick"; judgment call)
+REPORT_FADE_MS = 200            # after-action report: fade-in time of one turn block (XO's 150 to 250 ms; judgment call)
+
+
 class DayResolvedDialog(QDialog):
     """v0.41.208 (XO): what Skip Turn did, fully described: one block per package (the war simulation's own result lines), scrollable.
-    v0.41.337 (Phase 3): it is labelled by turn and takes several turns, for the night that is resolved in one click: `turns` is [{"label": "Day 1, 20:00", "results": [...]}, ...]."""
-    def __init__(self, turns: list, parent=None):
-        super().__init__(parent); self.setWindowTitle("Turn resolved" if len(turns) == 1 else f"{len(turns)} turns resolved"); self.setMinimumSize(700, 480)
+    v0.41.337 (Phase 3): it is labelled by turn and takes several turns: `turns` is [{"label": "Day 1, 20:00", "results": [...]}, ...].
+    S21 (XO 2026-11-11): the AFTER-ACTION REPORT of every skip, one dialog per run. `reason` (why an auto-skip stopped) is its header line. One block per turn, shown one after the other
+    (a timer, like a JS setInterval) and each fading in (an opacity effect animated, like a CSS opacity transition). No typewriter. Any click, key or Continue shows everything at once."""
+    def __init__(self, turns: list, parent=None, reason: str = ""):
+        super().__init__(parent); self.setWindowTitle("After-action report"); self.setMinimumSize(700, 480)
         lay = QVBoxLayout(self); lay.setSpacing(12)
         results = [r for t_ in turns for r in t_.get("results", [])]
         t = QLabel(f"{turns[0]['label']} resolved" if len(turns) == 1 else f"{turns[0]['label']} to {turns[-1]['label']}: {len(turns)} turns resolved"); t.setObjectName("title"); lay.addWidget(t)
+        if reason:
+            rl = QLabel(html.escape(reason)); rl.setObjectName("h2"); rl.setWordWrap(True); lay.addWidget(rl)
         ok = sum(1 for r in results if r.get("success")); scr = sum(1 for r in results if r.get("scrubbed")); held = sum(1 for r in results if r.get("held"))
         bits = [f"{ok} succeeded", f"{len(results) - ok - scr - held} failed"] + ([f"{held} turned back at the SAM gate"] if held else []) + ([f"{scr} scrubbed for weather"] if scr else [])
         sub = QLabel(f"The war simulation resolved {len(results)} package{'s' if len(results) != 1 else ''}: " + ", ".join(bits) + "."); sub.setWordWrap(True); sub.setObjectName("dim"); lay.addWidget(sub)
-        body = QTextBrowser(); lay.addWidget(body, 1)
-        h = []
+        self.scroll = QScrollArea(); self.scroll.setWidgetResizable(True); self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setStyleSheet("QScrollArea { background: transparent; } QScrollArea > QWidget > QWidget { background: transparent; }")
+        inner = QWidget(); self._col = QVBoxLayout(inner); self._col.setContentsMargins(0, 0, 6, 0); self._col.setSpacing(6)
+        self.scroll.setWidget(inner); lay.addWidget(self.scroll, 1)
+        self.blocks = []                                                   # one QLabel per turn (rich text), each with its own opacity effect
+        self._fx, self._anims, self._next = [], [], 0
         for t_ in turns:
-            if len(turns) > 1:                                            # a night: one header per turn, so the long log reads turn by turn
+            h = []
+            if len(turns) > 1:                                            # a run or a night: one header per turn, so the long log reads turn by turn
                 h.append(f"<h3 style='margin-bottom:2px'>{html.escape(t_['label'])}</h3>")
             if not t_.get("results"):
                 h.append(f"<p style='color:{theme.DIM}'>Nothing was tasked this turn.</p>")
@@ -484,9 +498,46 @@ class DayResolvedDialog(QDialog):
                 ln = r.get("lines") or [r.get("objective", "?")]
                 col = theme.GREEN if r.get("success") else theme.AMBER if (r.get("scrubbed") or r.get("held")) else theme.RED
                 h.append(f"<p style='margin-bottom:2px'><b style='color:{col}'>{html.escape(ln[0])}</b><br>" + "<br>".join("&nbsp;&nbsp;&nbsp;" + html.escape(x.strip()) for x in ln[1:]) + "</p>")
-        body.setHtml("".join(h) or "<p>Nothing was tasked.</p>")
+            b = QLabel("".join(h)); b.setTextFormat(Qt.RichText); b.setWordWrap(True); b.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+            fx = QGraphicsOpacityEffect(b); fx.setOpacity(0.0); b.setGraphicsEffect(fx)
+            self._col.addWidget(b); self.blocks.append(b); self._fx.append(fx)
+        self._col.addStretch(1)
         bb = QDialogButtonBox(QDialogButtonBox.Close); bb.rejected.connect(self.reject)
-        btn = bb.button(QDialogButtonBox.Close); btn.setText("Continue"); btn.setObjectName("primary"); btn.clicked.connect(self.accept); lay.addWidget(bb)
+        btn = bb.button(QDialogButtonBox.Close); btn.setText("Continue"); btn.setObjectName("primary"); btn.clicked.connect(self._finish_and_accept); lay.addWidget(bb)
+        self._timer = QTimer(self); self._timer.setInterval(REPORT_BLOCK_GAP_MS); self._timer.timeout.connect(self._reveal_next)
+        QTimer.singleShot(0, self._start)                                  # after the dialog is shown, so the first fade is seen
+
+    def _start(self):
+        if self._next < len(self.blocks):
+            self._reveal_next(); self._timer.start()
+
+    def _reveal_next(self):
+        if self._next >= len(self.blocks):
+            self._timer.stop(); return
+        fx = self._fx[self._next]; self._next += 1
+        a = QPropertyAnimation(fx, b"opacity", self); a.setDuration(REPORT_FADE_MS); a.setStartValue(0.0); a.setEndValue(1.0); a.start()
+        self._anims.append(a)
+        QTimer.singleShot(0, lambda: self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum()))    # keep the newest block in view
+        if self._next >= len(self.blocks):
+            self._timer.stop()
+
+    def reveal_all(self):
+        """Show everything at once and stop the timers (a click, a key, Continue)."""
+        self._timer.stop()
+        for a in self._anims:
+            a.stop()
+        for fx in self._fx:
+            fx.setOpacity(1.0)
+        self._next = len(self.blocks)
+
+    def _finish_and_accept(self):
+        self.reveal_all(); self.accept()
+
+    def mousePressEvent(self, ev):
+        self.reveal_all(); super().mousePressEvent(ev)
+
+    def keyPressEvent(self, ev):
+        self.reveal_all(); super().keyPressEvent(ev)
 
 
 class DebriefDialog(QDialog):
