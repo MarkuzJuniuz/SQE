@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.381, S27: runway strikers start their attack on the way in
+AI runway-cratering flights now begin the runway bombing task on the approach point before the field, as other AI strikes do, instead of on the field itself, where they used to turn away short of it without dropping.
+
 ## v0.41.380, S26: red raid groups no longer collide at spawn
 Red raid groups that waited together on one marshal point used to share one altitude and collided in the first seconds, taking out most of a raid before it flew. Each group now holds its own level, and the SEAD flights sit above the bombers.
 

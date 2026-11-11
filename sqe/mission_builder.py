@@ -2615,7 +2615,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # topic 241006, 369730: "task on the IP, 25 to 30 nm out") put it on the approach point. So an AI striker's bomb task sits on the IP, aimed at the target.
         ip_tgt_ = None
         ca_ramp_ = package.objective.type == ObjectiveType.COUNTER_AIR and package.objective.aim not in ("SWEEP", "STANDOFF")      # v0.41.325
-        if ai_a2g and f.role == Role.STRIKE and not f.tag and package.objective.aim not in ("RUNWAY", "STANDOFF"):
+        if ai_a2g and f.role == Role.STRIKE and not f.tag and package.objective.aim != "STANDOFF":       # S27 (runs 13-01-59 and 13-11-32: the runway strikers turned 8 to 12 km short of TGT and dropped nothing): runway strikes take the IP rule too, BombingRunway starts on the IP
             ws_ = list(wps[first:])
             tg_i = next((k for k, w_ in enumerate(ws_) if w_.name == "TGT" and w_.action == "BOMB"), None)
             if tg_i is not None and tg_i >= 1 and ws_[tg_i - 1].name in ("IP", "LOW") and ws_[tg_i].eta_s is not None:
