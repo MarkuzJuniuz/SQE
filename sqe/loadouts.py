@@ -64,6 +64,10 @@ _D: dict = {
         "CAS": {1: "=ALQ_184", 3: "={E6A6262A-CA08-4B3D-B030-E1A993B98452}", 4: "={5335D97A-35A5-4643-9D9B-026C75961E52}", 5: "={CBU-87}", 7: "={CBU-87}", 8: "={5335D97A-35A5-4643-9D9B-026C75961E52}", 9: "={E6A6262A-CA08-4B3D-B030-E1A993B98453}", 10: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 11: "={DB434044-F5D0-4F1F-9BA9-B73027E18DD3}"},
         # v0.41.360 (Phase 10c part 2): the supply strike. NOT a stock preset (judgment call): the stock CAS preset above with its two AGM-65D replaced by BRU-42 3 x Mk-82 (pylons 3 and 9) and its two CBU-97
         # by CBU-87 (pylons 4 and 8): 6 Mk-82 + 4 CBU-87 (area and blast weapons for fuel and depot sites), TGP, ECM, AIM-9 as before. Dumb bombs: not in JDAM_JETS.
+        # S31a part A2 (v0.41.388): the guided kit for an AI A-10C CAS flight that attacks from a high floor (24,000 ft near a radar short-range SAM, 12,000 ft near guns / MANPADS). NOT a stock DCS preset
+        # (judgment call; XO flew GBU-31 / GBU-54 from his own captured loadouts.json): the stock CAS preset above with the Mavericks (3, 9) -> GBU-31(V)1 JDAM 2,000 lb, the CBU-97 (4, 8) -> GBU-54(V)1/B laser JDAM 500 lb,
+        # the CBU-87 (5, 7) -> CBU-103 CEM with the WCMD wind-corrected tail kit. GPS / wind-corrected weapons only, no Maverick, rocket or gun reliance. ALQ-184, TGP, AIM-9 as before. About 3,230 kg of stores.
+        "GUIDED": {1: "=ALQ_184", 3: "={GBU-31}", 4: "={GBU_54_V_1B}", 5: "={CBU_103}", 7: "={CBU_103}", 8: "={GBU_54_V_1B}", 9: "={GBU-31}", 10: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 11: "={DB434044-F5D0-4F1F-9BA9-B73027E18DD3}"},
         "STRIKE": {1: "=ALQ_184", 3: "={60CC734F-0AFA-4E2E-82B8-93B941AB11CF}", 4: "={CBU-87}", 5: "={CBU-87}", 7: "={CBU-87}", 8: "={CBU-87}", 9: "={60CC734F-0AFA-4E2E-82B8-93B941AB11CF}", 10: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 11: "={DB434044-F5D0-4F1F-9BA9-B73027E18DD3}"},
     },
 }

@@ -2033,6 +2033,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """Loadout (weather-adapted), unit names, jammer windows, skill, bingo return, and where this package's shooters launch. -> (names, run_t0)."""
         o = self.o
         kit_ = getattr(f, "kit", "") or ("FLEET" if (f.aircraft == "F-14BU" and f.role in (Role.CAP, Role.SWEEP) and (package.extra or {}).get("setpiece")) else "")      # v0.41.271: 6 Phoenix for the fleet-defence Tomcats
+        if not kit_ and f.role == Role.CAS and f.aircraft == "A-10C" and not f.tag and (not f.is_player or o.player_is_ai) and self._cas_floors.get(package.id, 0) > 0:
+            kit_ = "GUIDED"                                                   # S31a part A2: an AI A-10 attacking from the high floor carries guided bombs, not Mavericks / unguided cluster (a person's flight keeps the stock CAS loadout)
         load = self.lo.for_role(f.aircraft, f.role, kit_)
         if self.wx.mode != "clear":
             load, wnotes, _k, _d = weather.adapt(spec.dcs_type, load, self.wx)

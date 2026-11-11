@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.388, S31a2: AI A-10 CAS flights carry guided bombs under the high floor
+An AI A-10C CAS flight that now attacks from 24,000 or 12,000 ft (short-range air defence near the target) loads two GBU-31 JDAM, two GBU-54 laser JDAM and two CBU-103 wind-corrected cluster bombs instead of Mavericks and unguided cluster bombs. With no air defence near, the loadout is unchanged. Your own flight keeps its loadout.
+
 ## v0.41.387, S31a: AI CAS flights fly above short-range air defence
 An AI CAS flight whose target or run-in lies within reach (plus 3 nm) of a live Tor, Osa or Tunguska now attacks from 24,000 ft, and from 12,000 ft when only guns or shoulder-fired missiles are near, instead of 9,000 ft or LOW. The attack order is given that height too. The kneeboard says why. Your own flight's route is unchanged.
 
