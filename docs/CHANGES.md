@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## Tools, 2026-11-11 (no version change): the soak is part of the smoke test
+The soak (three campaigns skipped to the end of the war, with fake sorties and save/reopen) now runs in the default smoke test instead of only on request. Tools only. XO runs the smoke test (about 70 s in all).
+
 ## v0.41.377, S23: Auto-Skip in the sidebar, Crew Rest after a sortie
 The Auto-Skip options (Stand-Down Turns, Night Turns, Crew Rest) now sit in a box in the sidebar, seen on every page; Skip Turn stands alone again. Crew Rest replaces Duration: after a flown sortie the run skips until the hours are up, flights on offer or not, and the three options add up. One report per run, the night after a sortie included. Skip Turn itself never starts a crew rest. NOT FLOWN.
 
