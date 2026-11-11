@@ -52,7 +52,7 @@ def ato_times(n: int, d: date, night_ops: bool, rng: random.Random) -> list:
     return [hhmm(lo + i * step + rng.uniform(-0.2, 0.2) * (0 if i in (0, n - 1) else 1)) for i in range(n)]
 
 
-WAVE2_OFFSET_MIN = 60        # v0.41.338 (campaign rules plan Phase 4): a turn has two launch waves; the second goes this long after the turn starts, half a turn (judgment call: XO 2026-11-09, "two waves", the plan's value)
+WAVE2_OFFSET_MIN = 120       # S25 (was 60: half of a 2-hour turn; a turn is now 4 hours)  v0.41.338 (campaign rules plan Phase 4): a turn has two launch waves; the second goes this long after the turn starts, half a turn (judgment call: XO 2026-11-09, "two waves", the plan's value)
 WAVE_SPREAD_MIN = 25         # ...and the packages of a wave start within this many minutes of its opening, as the old 0 to 25 minute "wave" of `wave_times` (judgment call, the value of the code it replaces)
 
 

@@ -105,7 +105,7 @@ class AppSettings:
     autoskip_stand_down: bool = False     # Phase 11 (XO): AUTOMATICALLY SKIP under Skip Turn: keep skipping turns with nothing to fly
     autoskip_night: bool = False          # ...also night turns, even when a flight is on offer
     autoskip_duration_on: bool = False    # ...stop after autoskip_hours of campaign time (unticked: no limit, a week at most)
-    autoskip_hours: int = 12              # 2 to 24, step 2
+    autoskip_hours: int = 12              # 4 to 24, step 4 (S25: a turn is four hours; `load` rounds an older value to a multiple of 4)
     persist: bool = True          # False in tests: never write %APPDATA%\\SQE\\settings.json
 
     # ---- derived paths ------------------------------------------------------------------
@@ -172,6 +172,10 @@ class AppSettings:
         s.dcs_install = native(s.dcs_install or _detect_install())
         s.dcs_saves = native(s.dcs_saves or _detect_saves())
         s.last_campaign = native(s.last_campaign)
+        try:
+            s.autoskip_hours = min(24, max(4, int(round(int(s.autoskip_hours) / 4.0)) * 4))      # S25: Crew Rest goes by four-hour turns; an old 2, 6, 10 ... is rounded to the nearest multiple of 4
+        except (TypeError, ValueError):
+            s.autoskip_hours = 12
         return s
 
     def save(self) -> None:

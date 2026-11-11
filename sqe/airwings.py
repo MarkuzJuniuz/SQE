@@ -8,6 +8,7 @@ RETURN_FRAC of strength and have rested RETURN_MIN_DAYS nights. While they rest 
 strategic bomber wing. Pure planning, no pydcs.
 """
 from __future__ import annotations
+from . import clock
 from .loadouts import ENEMY_FIGHTERS
 
 RETREAT_FRAC = 0.30
@@ -36,7 +37,7 @@ def _units(state):
             yield "red", q, (a.name if a else w.base_asset_id) + f" ({q.aircraft.replace('_', '-')})", bool(a is None or a.destroyed)
 
 
-MOVE_TURNS_PER_NIGHT = 6           # a save from before v0.41.337 counts a move in nights: one night is 12 hours, 6 turns (judgment call, only for that conversion)
+MOVE_TURNS_PER_NIGHT = 12 * 60 // clock.TURN_MIN          # a save from before v0.41.337 counts a move in nights: one night is 12 hours (S25: derived from the clock, was a literal 6; judgment call, only for that conversion)
 
 
 def _moving_units(state):

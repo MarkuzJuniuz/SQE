@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
-from . import FORMAT_VERSION, COMPAT_ERA, MIN_COMPAT_ERA, __version__
+from . import FORMAT_VERSION, COMPAT_ERA, MIN_COMPAT_ERA, __version__, clock
 from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, wing_from_dict, PlayerProfile)
 
 
@@ -34,7 +34,7 @@ class CampaignState:
     level: int = 2
     campaign_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
     day: int = 1
-    turn: int = 0                                  # v0.41.334: the clock (clock.py): two-hour turns since 08:00 on Day 1; `day` stays equal to clock.day_of(turn). Session._tick moves it one turn at a time (v0.41.337, Phase 3)
+    turn: int = 0                                  # v0.41.334: the clock (clock.py): four-hour turns since 08:00 (S25; two-hour before) on Day 1; `day` stays equal to clock.day_of(turn). Session._tick moves it one turn at a time (v0.41.337, Phase 3)
     sortie_counter: int = 0
     player: PlayerProfile | None = None
     bases: dict = field(default_factory=dict)
@@ -84,7 +84,7 @@ class CampaignState:
         return {
             "format": FORMAT_VERSION, "compat": COMPAT_ERA, "app_version": __version__, "saved": datetime.now().isoformat(timespec="seconds"),
             "name": self.name, "theatre": self.theatre, "level": self.level, "campaign_id": self.campaign_id,
-            "day": self.day, "turn": self.turn, "sortie_counter": self.sortie_counter, "status": self.status,
+            "day": self.day, "turn": self.turn, "turn_min": clock.TURN_MIN, "sortie_counter": self.sortie_counter, "status": self.status,
             "start_date": self.start_date, "night_ops": self.night_ops, "pilot": self.pilot,
             "front": self.front, "front_days": self.front_days, "ground": self.ground,
             "player": asdict(self.player) if self.player else None,
@@ -114,6 +114,8 @@ class CampaignState:
         if d.get("format", 1) < 7:
             raise ValueError("This campaign was saved before the refit clock (v0.41.334): jets now need time on the ground between sorties, and replacements, "
                              "runway repairs and tankers follow new rules, so it cannot be loaded; please start a new campaign.")
+        if int(d.get("turn_min", 120)) != clock.TURN_MIN:         # S25: every clock in a save (turn, idle counter, craters, move_until, raid and support clocks) counts turns of its own length; a missing field is the old 2-hour clock
+            raise ValueError(f"This campaign was saved with {int(d.get('turn_min', 120)) // 60}-hour turns; turns are now {clock.TURN_MIN // 60} hours, so its dates cannot be read. Please start a new campaign.")
         s = cls(name=d["name"], theatre=d.get("theatre", "caucasus"), level=d.get("level", 2),
                 campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1), turn=int(d.get("turn", 0)),
                 sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"),
