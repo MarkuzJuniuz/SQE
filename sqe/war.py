@@ -82,6 +82,7 @@ SUPPRESS_TURNS = 3      # v0.41.338 (campaign rules plan Phase 4): blinded radar
 # picked BEFORE the variety pass and on top of `limit`. Numbers: Phase 1 probe 2026-11-11 (`.claude/tier removal plan.md`): L2 (2, 2, 1) took 15 of 16 northern sites down by day 5, L3 (2, 1, 1) 9.5 of 16 (Q_mtn 2
 # buys no more there, the belts gate); a sea quota of 3 buys nothing over 2; without the runway quota the runway job is never planned. L1 (1, 0, 0) is a judgment call (not probed; XO: Insurgent is not the focus).
 SAM_WAVE = {1: (1, 0, 0), 2: (2, 2, 1), 3: (2, 1, 1)}
+RUNWAY_BELT_FACTOR = 1.5   # v0.41.375 (S20 Phase 5, XO 2026-11-11): a mountain SAM-DEAD job whose site blocks a northern runway crater ranks x1.5 in the mountain quota, so the single L3 slot goes to the belt guarding a runway first (judgment call; only reorders, the quota numbers stay)
 WAVE_NEAR_NM = 150.0       # a wave target scores up to x3 when it sits next to blue's airfields or an already dead / blind site (Phase 1 probe 2026-11-11, S20 probe 1's "B" formula; judgment call)
 # XO's list of the northern (MOUNTAIN front) fields, 2026-11-11: NOT `field_tier` (that puts Sochi, tier 3, with the north; Krymsk, Gelendzhik and Maykop are on the Kuban side, kept as XO listed them: judgment call).
 MOUNTAIN_FIELDS = ("mozdok", "beslan", "nalchik", "maykop", "minvody", "krymsk", "gelen")
@@ -305,7 +306,9 @@ class ObjectivePlanner:
             c = [k for k in range(len(scored)) if k not in taken and ok(scored[k][1])]
             return min(c, key=lambda k: (sec[id(scored[k][1])] in used, k), default=None)      # scored is sorted best first, so the index is the score rank
         if waves and self.d is not None:
-            limit += self._wave_pass(state, scored, take)
+            rwy_belt = {x.id for _, o_, bl_ in cand if o_.type == ObjectiveType.STRIKE and o_.aim == "RUNWAY"
+                        and axis_of(state.assets[o_.target_id]) == "MOUNTAIN" for x in bl_}      # v0.41.375: the sites that stand in front of a northern runway job
+            limit += self._wave_pass(state, scored, take, rwy_belt)
         while len(picked) < limit:                             # one of each objective type first, for variety
             k = best(lambda o: o.type not in seen)
             if k is None:
@@ -329,7 +332,7 @@ class ObjectivePlanner:
             out.append(o)
         return out
 
-    def _wave_pass(self, state, scored: list, take) -> int:
+    def _wave_pass(self, state, scored: list, take, rwy_belt: frozenset | set = frozenset()) -> int:
         """v0.41.367 (S20 Phase 2): take the turn's wave out of the pool BEFORE the variety pass, so the SAM work is not crowded out by it. Three quotas (SAM_WAVE): sea SAM-DEAD jobs, mountain SAM-DEAD and EWR
         strikes, northern runway craters (a cratered field flies nothing; without a quota the runway job is never planned). Ordered by score x wave_factor (mountain: x the field's ready / authorized jets).
         -> how many were taken (the caller raises `limit` by that, so the wave is on top of the turn's jobs)."""
@@ -349,6 +352,8 @@ class ObjectivePlanner:
                 continue
             key = s * wave_factor(state, a)
             if ax == "MOUNTAIN":
+                if o.type == ObjectiveType.DEAD and o.target_id in rwy_belt:
+                    key *= RUNWAY_BELT_FACTOR                         # v0.41.375: this site guards a northern runway
                 w = state.enemy_air_at("ab_" + field_of(a))
                 if w is not None:
                     key *= 1 + w.available / max(1, w.authorized)
