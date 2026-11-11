@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.378, S24: supply sites at 70%
+New campaigns lay about 30% fewer supply sites (road_sites 42 / 70 / 70, was 60 / 100 / 100), so each supply strike moves the Force Index more; the war sim's own strikes bite harder too. Old saves keep their stored count. NOT FLOWN.
+
 ## Tools, 2026-11-11 (no version change): the soak is part of the smoke test
 The soak (three campaigns skipped to the end of the war, with fake sorties and save/reopen) now runs in the default smoke test instead of only on request. Tools only. XO runs the smoke test (about 70 s in all).
 
