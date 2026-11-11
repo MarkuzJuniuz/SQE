@@ -1,4 +1,4 @@
-"""All the words: the conflict background, campaign phases, situation reports, briefings and debrief flavor.
+"""All the words: campaign phases, situation reports, briefings and debrief flavor.
 Hand-written templates (no runtime AI). Add variants to any list to widen the pool."""
 from __future__ import annotations
 import random
@@ -6,8 +6,8 @@ from .models import ObjectiveType
 from . import theatres
 
 def __getattr__(name):
-    """TITLE and BACKGROUND come from the active theatre pack (so `narrative.TITLE` keeps working)."""
-    if name in ("TITLE", "BACKGROUND"):
+    """TITLE comes from the active theatre pack (so `narrative.TITLE` keeps working)."""
+    if name == "TITLE":
         from . import theatres
         return theatres.active()[name.lower()]
     raise AttributeError(name)

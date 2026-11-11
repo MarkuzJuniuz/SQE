@@ -657,7 +657,6 @@
         }
     },
     "title": "Operation IRON TIDE",
-    "background": "After months of border incidents and a collapsed ceasefire, the Northern Federation's Southern Military District crossed the frontier in force. Its armored columns are pushing south along the Black Sea coast toward the Georgian airbase at Senaki, supported by air regiments at Sukhumi, Gudauta, Sochi and across the Kuban, and covered by a layered air-defence network.\n\nA coalition task force has answered the request for assistance. The USS Stennis carrier air wing operates from the eastern Black Sea; U.S. Air Force squadrons operate from Senaki, Kutaisi and Kobuleti. You fly with the Navy's Tomcat community or with the Air Force, as part of a joint air campaign.\n\nCoalition command's intent is plain: stop the armored advance, win control of the air, take the enemy air-defence network apart, and then strike the headquarters and logistics that keep the offensive moving. Every day the war is planned; every day the packages go out. Yours is the one you fly yourself.",
     "climate": {
         "source": "Sochi monthly normals: sunshine hours (NOAA 1961-1990) and days with precipitation (Pogoda.ru.net), as published in Wikipedia 'Climate of Sochi'. sun_frac = sunshine hours / possible daylight hours at 43.6N; rain_frac = precipitation days / days in month. wind_ms and fog are hand-tuned, not measured.",
         "sun_frac": [

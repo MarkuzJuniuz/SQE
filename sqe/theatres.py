@@ -14,7 +14,7 @@ DATA = Path(__file__).resolve().parent / "data" / "theatres"
 DEFAULT = "caucasus"
 
 REQUIRED = ("id", "name", "dcs_terrain", "lat", "lon", "tz", "temp_c", "geo", "scan", "carrier", "blue_fields", "red_fields",
-            "wing_weight", "field_tier", "squadrons", "front", "tier_labels", "front_names", "front_desc", "title", "background")
+            "wing_weight", "field_tier", "squadrons", "front", "tier_labels", "front_names", "front_desc", "title", "stories")
 
 _ACTIVE: dict | None = None
 _CACHE: dict = {}
