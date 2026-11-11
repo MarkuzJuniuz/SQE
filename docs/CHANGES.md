@@ -1,19 +1,19 @@
 # CHANGES.md
 
 ## v0.41.379, S25: four-hour turns
-A turn is now four hours (six a day, a night is three turns; it was two hours and twelve). Each turn offers about twice the packages and patrols, so the flights per day stay about nine tenths of before; refit is 2 hours for the standard jets (8 for the Tu-22M3 and E-3). Crew Rest goes in steps of four hours. Campaigns saved with two-hour turns will NOT open (a new campaign is needed). NOT FLOWN.
+A turn is now four hours (six a day, a night is three turns; it was two hours and twelve). Each turn offers about twice the packages and patrols, so the flights per day stay about nine tenths of before; refit is 2 hours for the standard jets (8 for the Tu-22M3 and E-3). Crew Rest goes in steps of four hours. Campaigns saved with two-hour turns will NOT open (a new campaign is needed).
 
 ## v0.41.378, S24: supply sites at 70%
-New campaigns lay about 30% fewer supply sites (road_sites 42 / 70 / 70, was 60 / 100 / 100), so each supply strike moves the Force Index more; the war sim's own strikes bite harder too. Old saves keep their stored count. NOT FLOWN.
+New campaigns lay about 30% fewer supply sites (road_sites 42 / 70 / 70, was 60 / 100 / 100), so each supply strike moves the Force Index more; the war sim's own strikes bite harder too. Old saves keep their stored count.
 
 ## Tools, 2026-11-11 (no version change): the soak is part of the smoke test
 The soak (three campaigns skipped to the end of the war, with fake sorties and save/reopen) now runs in the default smoke test instead of only on request. Tools only. XO runs the smoke test (about 70 s in all).
 
 ## v0.41.377, S23: Auto-Skip in the sidebar, Crew Rest after a sortie
-The Auto-Skip options (Stand-Down Turns, Night Turns, Crew Rest) now sit in a box in the sidebar, seen on every page; Skip Turn stands alone again. Crew Rest replaces Duration: after a flown sortie the run skips until the hours are up, flights on offer or not, and the three options add up. One report per run, the night after a sortie included. Skip Turn itself never starts a crew rest. NOT FLOWN.
+The Auto-Skip options (Stand-Down Turns, Night Turns, Crew Rest) now sit in a box in the sidebar, seen on every page; Skip Turn stands alone again. Crew Rest replaces Duration: after a flown sortie the run skips until the hours are up, flights on offer or not, and the three options add up. One report per run, the night after a sortie included. Skip Turn itself never starts a crew rest.
 
 ## v0.41.376, S10: supply sites laid out in rows, the guard outside
-A depot's warehouses now stand in a row with the ammunition bunkers dispersed 170 to 280 m out; a fuel farm is a row of tanks with the store at one end; refineries and factories are one row. The red guard group stands just outside the buildings, on the side of the nearest blue airfield. NOT FLOWN.
+A depot's warehouses now stand in a row with the ammunition bunkers dispersed 170 to 280 m out; a fuel farm is a row of tanks with the store at one end; refineries and factories are one row. The red guard group stands just outside the buildings, on the side of the nearest blue airfield.
 
 ## Docs, 2026-11-11 (no version change): CHANGES.md slimmed (S11)
 This file now holds one short entry per version (what changed for the player or the war, flown or not). The full detail (constants, probes, file and line notes) moved to a file outside Git. Docs only.
@@ -25,118 +25,118 @@ New opt-in smoke group `--only soak`: campaigns at all three levels are skipped 
 Two missing checks added to the smoke test: the main window builds and shows every page, and every stored package carries its required flight. Tools only. XO runs the smoke test.
 
 ## v0.41.375, S20 Phase 5: the belt that guards a northern runway ranks first in the mountain wave
-A SAM belt that guards a northern runway now ranks first in the mountain wave of SAM jobs. It only reorders the wave; quotas and jets are unchanged. NOT FLOWN.
+A SAM belt that guards a northern runway now ranks first in the mountain wave of SAM jobs. It only reorders the wave; quotas and jets are unchanged.
 
 ## v0.41.374, S22: the air wings tables show the number of jets
-The air wings tables show the jets on hand (including those refitting) against the authorized number, for your coalition and for red. Display only. NOT FLOWN.
+The air wings tables show the jets on hand (including those refitting) against the authorized number, for your coalition and for red. Display only.
 
 ## v0.41.373, S21 follow-up: the after-action report is a plain list
-The after-action report is a plain list shown all at once from the top: no animation, no blank gaps. NOT FLOWN.
+The after-action report is a plain list shown all at once from the top: no animation, no blank gaps.
 
 ## v0.41.372, S21: Skip Turn layout and the after-action report
-Skip Turn no longer shows a ticker; every skip ends in one after-action report that lists each turn in order. NOT FLOWN.
+Skip Turn no longer shows a ticker; every skip ends in one after-action report that lists each turn in order.
 
 ## v0.41.371, S20 Phase 3: the depth tiers are gone
-Depth tiers are gone: every job type is offered from day 1, gated only by the SAM belt rule, and the front no longer advances. NOT FLOWN.
+Depth tiers are gone: every job type is offered from day 1, gated only by the SAM belt rule, and the front no longer advances.
 
 ## v0.41.370, S13: the theatre-level background is gone
-The theatre-level background text is removed (it was never shown); each level keeps its own story. NOT FLOWN.
+The theatre-level background text is removed (it was never shown); each level keeps its own story.
 
 ## v0.41.369, S19: one fixed safe AWACS station and its guard every turn
-The AWACS sits at one fixed safe station behind the support field every turn, with its guard flight, instead of following the player. NOT FLOWN.
+The AWACS sits at one fixed safe station behind the support field every turn, with its guard flight, instead of following the player.
 
 ## v0.41.368, S17: storms no longer scrub every package
-Storms no longer scrub every package. Fog and low minimums still do; otherwise flights swap to GPS weapons and only a flight with nothing it can use scrubs. NOT FLOWN.
+Storms no longer scrub every package. Fog and low minimums still do; otherwise flights swap to GPS weapons and only a flight with nothing it can use scrubs.
 
 ## v0.41.367, S20 Phase 2: two-front SAM / EWR / runway waves
-The planner adds a wave of SAM, EWR and runway-crater jobs on top of each turn's jobs, split between the sea front and the mountain front by level, ranked by nearness to blue's fields. NOT FLOWN.
+The planner adds a wave of SAM, EWR and runway-crater jobs on top of each turn's jobs, split between the sea front and the mountain front by level, ranked by nearness to blue's fields.
 
 ## v0.41.366, S18: drop the "Allow night sorties" field
-The "Allow night sorties" checkbox is removed from New Campaign; night turns always plan and the Autoskip "Nighttime Sorties" box is the way past them. NOT FLOWN.
+The "Allow night sorties" checkbox is removed from New Campaign; night turns always plan and the Autoskip "Nighttime Sorties" box is the way past them.
 
 ## v0.41.365, campaign rules Phase 11: Autoskip UI
-Autoskip under Skip Turn: stand-down days, nighttime sorties and a duration (2 to 24 hours) can be set; the skip steps turn by turn and stops on an available flight or the war's end. NOT FLOWN.
+Autoskip under Skip Turn: stand-down days, nighttime sorties and a duration (2 to 24 hours) can be set; the skip steps turn by turn and stops on an available flight or the war's end.
 
 ## v0.41.364, attack fix Stage C: AI CAS attack tasks on the IP
-AI CAS flights carry their attack tasks on the IP before the target point, so they engage a column they pass instead of only when overhead. Player flights unchanged. NOT FLOWN; XO flies one plain CAS, then the forced-hold run.
+AI CAS flights carry their attack tasks on the IP before the target point, so they engage a column they pass instead of only when overhead. Player flights unchanged.
 
 ## v0.41.363, attack fix Stage B1: pop the hold, stretch the attack stops
-A held AI strike or CAS flight is released cleanly and its attack tasks run longer, so a long gate hold cannot expire them. A dev switch forces a 60 s hold for testing. NOT FLOWN; needs XO's forced-hold run.
+A held AI strike or CAS flight is released cleanly and its attack tasks run longer, so a long gate hold cannot expire them. A dev switch forces a 60 s hold for testing.
 
 ## v0.41.362, attack fix Stage A: wider SLAM-ER and JSOW launch windows
-Wider SLAM-ER and JSOW launch windows (90 and 120 s up to 240 s), so a stand-off jet that leaves the marshal late still launches. NOT FLOWN.
+Wider SLAM-ER and JSOW launch windows (90 and 120 s up to 240 s), so a stand-off jet that leaves the marshal late still launches.
 
 ## v0.41.361, campaign rules Phase 10d: Level 3 red flies the Su-34
-New Level 3 campaigns give red the Su-34 in place of the Su-24M for raids and SEAD / DEAD groups. Levels 1 and 2 and old saves unchanged. NOT FLOWN.
+New Level 3 campaigns give red the Su-34 in place of the Su-24M for raids and SEAD / DEAD groups. Levels 1 and 2 and old saves unchanged.
 
 ## v0.41.360, campaign rules Phase 10c part 2: the A-10C flies clean supply strikes
-The A-10C gets a clean STRIKE load, used only on plain supply strikes no live SAM ring or red fighter covers. Common at Level 1, rare at Levels 2 and 3. NOT FLOWN.
+The A-10C gets a clean STRIKE load, used only on plain supply strikes no live SAM ring or red fighter covers. Common at Level 1, rare at Levels 2 and 3.
 
 ## v0.41.359, campaign rules Phase 10c part 1: more Su-25s, Su-25 supply raids, L1 sponsor fighters
-More red Su-25s (60 at L2, 130 at L3), Su-25 supply raids, and a Level 1 red with 24 relic fighters. New campaigns only. NOT FLOWN.
+More red Su-25s (60 at L2, 130 at L3), Su-25 supply raids, and a Level 1 red with 24 relic fighters. New campaigns only.
 
 ## v0.41.358, the F-15E phase: two AI-only strike squadrons
-Two AI-only F-15E strike squadrons (Vaziani and Tbilisi) replace two F-15C squadrons in new campaigns. Old saves unchanged. NOT FLOWN.
+Two AI-only F-15E strike squadrons (Vaziani and Tbilisi) replace two F-15C squadrons in new campaigns. Old saves unchanged.
 
 ## v0.41.357, campaign rules Phase 10b part 2: the flown carrier raid reads the prep's result
-A flown carrier raid reads the prep's result: destroyed SAM sites are gone, suppressed ones blind, the rest live. Saves with no prep record keep the old behaviour. NOT FLOWN.
+A flown carrier raid reads the prep's result: destroyed SAM sites are gone, suppressed ones blind, the rest live. Saves with no prep record keep the old behaviour.
 
 ## v0.41.356, campaign rules Phase 10b part 1: the carrier raid's SEAD prep goes in the turn before
-The carrier raid's SEAD prep is planned in the turn before the raid, so you can fly both; the war sim reads the prep's sites. NOT FLOWN.
+The carrier raid's SEAD prep is planned in the turn before the raid, so you can fly both; the war sim reads the prep's sites.
 
 ## v0.41.355, campaign rules Phase 10a: the Mozdok wing gets work
-The Mozdok Su-27 wing flies red's normal jobs, and a new Tu-22M3 land strike hits blue supply sites. NOT FLOWN.
+The Mozdok Su-27 wing flies red's normal jobs, and a new Tu-22M3 land strike hits blue supply sites.
 
 ## v0.41.354, campaign rules Phase 9b part 2: Mineralnye Vody is a red field
-Mineralnye Vody becomes a red airfield with an air wing, SAMs and an EWR at L2 and L3. Old saves untouched. NOT FLOWN.
+Mineralnye Vody becomes a red airfield with an air wing, SAMs and an EWR at L2 and L3. Old saves untouched.
 
 ## v0.41.353, campaign rules Phase 9b part 1: the blue laydown
-New campaigns start with 272 blue jets in 17 squadrons at every level; Vaziani and Tbilisi base squadrons and Batumi holds a HAVCAP F-15C squadron. Old saves keep their squadrons. NOT FLOWN.
+New campaigns start with 272 blue jets in 17 squadrons at every level; Vaziani and Tbilisi base squadrons and Batumi holds a HAVCAP F-15C squadron. Old saves keep their squadrons.
 
 ## v0.41.352, campaign rules Phase 9a: Kobuleti zone, divert fields, three-base defeat
-Vaziani, Tbilisi and Soganlug become blue divert fields, Kobuleti a third fall point, and defeat is three fallen airfields (a sunk carrier no longer counts). NOT FLOWN.
+Vaziani, Tbilisi and Soganlug become blue divert fields, Kobuleti a third fall point, and defeat is three fallen airfields (a sunk carrier no longer counts).
 
 ## v0.41.351, raids fold into flown missions (queue S8)
-A land raid's intercept package now merges into a flown mission whose area holds its target; an unseen raid is built in but never named. The mission settles it. NOT FLOWN.
+A land raid's intercept package now merges into a flown mission whose area holds its target; an unseen raid is built in but never named. The mission settles it.
 
 ## v0.41.350, support CAP legs (queue S9)
-Longer race-track legs for the support CAPs where the ground is clear, and a forward tanker's CAP runs along the tanker's track. NOT FLOWN.
+Longer race-track legs for the support CAPs where the ground is clear, and a forward tanker's CAP runs along the tanker's track.
 
 ## v0.41.349, campaign rules Phase 8: CAP1 and CAP2 on the TARCAP, escort and sweep station
-The blue TARCAP, escort and sweep station is flown as a CAP1 / CAP2 race-track. NOT FLOWN; XO to fly one TARCAP.
+The blue TARCAP, escort and sweep station is flown as a CAP1 / CAP2 race-track.
 
 ## v0.41.348, campaign rules Phase 7b: blue detection by AWACS and the AWACS loss
-Blue detects red raids through its AWACS; a raid with no AWACS up may go unseen and is then not listed. An optional switch lets AWACS be lost (off by default). NOT FLOWN.
+Blue detects red raids through its AWACS; a raid with no AWACS up may go unseen and is then not listed. An optional switch lets AWACS be lost (off by default).
 
 ## v0.41.347, EWR Strike priority
-An EWR Strike now scores by how much of red's picture the radar covers, so key EWRs are hit sooner. NOT FLOWN.
+An EWR Strike now scores by how much of red's picture the radar covers, so key EWRs are hit sooner.
 
 ## v0.41.346, campaign rules Phase 7a: red detection by EWR and the EWR Strike job
-Red detection by EWR: a target outside EWR cover may be answered by barcap only (no alert or reactive pairs), and a new EWR Strike job hunts live radars. NOT FLOWN.
+Red detection by EWR: a target outside EWR cover may be answered by barcap only (no alert or reactive pairs), and a new EWR Strike job hunts live radars.
 
 ## v0.41.345, scaled tasking Phases B and C: packages from free pairs, front spread, raids from red's free attack pairs
-Blue's packages per turn come from its free pairs and spread across the front sectors; red's raid rate follows its free attack pairs. NOT FLOWN.
+Blue's packages per turn come from its free pairs and spread across the front sectors; red's raid rate follows its free attack pairs.
 
 ## v0.41.344, campaign rules Phase 6b: the war sim spends the reaction hold
-The war sim draws a red pair from the reaction hold against each package it resolves and may shoot down some of it; blue raid intercepts are crewed from blue's hold. NOT FLOWN.
+The war sim draws a red pair from the reaction hold against each package it resolves and may shoot down some of it; blue raid intercepts are crewed from blue's hold.
 
 ## v0.41.343, campaign rules Phase 6a: scrambles draw from the reaction hold
-Red's alert, relief, standby and reactive pairs come out of its reaction hold, and a scramble that got airborne goes to refit. NOT FLOWN.
+Red's alert, relief, standby and reactive pairs come out of its reaction hold, and a scramble that got airborne goes to refit.
 
 ## v0.41.342, fix: sams.transfer_days NameError
 Fix: `sams.transfer_days` could crash at the end of a day (a missing import). No other change.
 
 ## v0.41.341, campaign rules Phase 5b: red's raids per turn
-Red's raids are drawn every turn and booked from the turn's free red jets, which then go to refit. Fixes a raid-intercept crash. Expect fewer raids at L3. NOT FLOWN.
+Red's raids are drawn every turn and booked from the turn's free red jets, which then go to refit. Fixes a raid-intercept crash. Expect fewer raids at L3.
 
 ## v0.41.340, campaign rules Phase 5a: red plans per turn, the reaction reserve
-Red plans its patrols and sweeps every turn from its ready fighters, both sides hold a 25 percent reaction reserve, and every red pair planned goes to refit. NOT FLOWN.
+Red plans its patrols and sweeps every turn from its ready fighters, both sides hold a 25 percent reaction reserve, and every red pair planned goes to refit.
 
 ## v0.41.339, campaign rules Phase 4b: standing cover per turn
-Support assets, standing patrols and guards are planned per turn, AWACS and tankers have airframe clocks, and every planned patrol is committed to refit. NOT FLOWN.
+Support assets, standing patrols and guards are planned per turn, AWACS and tankers have airframe clocks, and every planned patrol is committed to refit.
 
 ## v0.41.338, campaign rules Phase 4a: blue plans per turn, two launch waves
-Blue plans every turn with two launch waves, package counts per turn, re-tasking holds and a three-turn SAM suppression. The daily planning is split into a day start and a turn plan. NOT FLOWN.
+Blue plans every turn with two launch waves, package counts per turn, re-tasking holds and a three-turn SAM suppression. The daily planning is split into a day start and a turn plan.
 
 ## v0.41.337, campaign rules Phase 3: the 2-hour clock (Skip and Fly take one turn)
 Every campaign flow goes through here.
@@ -265,7 +265,7 @@ No flight clicked (`flight_id` None): all you could fly, as before.
 One commit: the two parts share the release-point code.
 
 ## v0.41.298, Standoff Strike: a supply strike under heavy fighter cover goes out as SLAM-ER Hornets (PR 1 of 2, the planner)
-His point: "it's mostly jets that trouble our strikes" at L3. NOT FLOWN.
+His point: "it's mostly jets that trouble our strikes" at L3.
 
 ## v0.41.297, a counter-air strike finds the field's jets parked on the ramp (PR 1 of 2)
 His run: a counter-air strike on Sukhumi had nothing to hit (the target point was the garrison at the field's reference point; red jets exist in a mission only as flights that launch).
@@ -712,7 +712,7 @@ From his 15:38 run: the A-10s killed 11 of 19 red units in 3 minutes, but the fr
 The mission side already built big raids in several groups with SEAD and DEAD groups ahead of them (part 1 made L3 raids 6 to 8 bombers, 12 on a wave day); this makes them proper zergs.
 
 ## v0.41.155, Red zerg, part 1: red can win (ground and war model)
-This is the war-model half; the mass raids you fly come next (part 2). NOT FLOWN.
+This is the war-model half; the mass raids you fly come next (part 2).
 
 ## v0.41.154, L1 gets museum-piece SAMs; Ctrl+Space only in AI-Test
 Story premise: a shadow sponsor keeps the insurgents properly funded and armed, so their old SAMs work at full health.
@@ -865,7 +865,7 @@ PATROLS FIRST: `reactive.plan_red` now holds one pair per BARCAP area a wing fli
 Mission Editor "cockpit parameter" triggers try about 36 guessed parameter names in three units (MHz, kHz, Hz); each fires once as an on-screen message and a `SQEPROBE` line in dcs.log.
 
 ## v0.41.109, the quiet day, the carrier CAP on the setpiece, and the big hit (part 3 of 3)
-QUIET DAY: red now STAGES the carrier raid (`bombers.decide` -> `stage`, `QUIET_DAYS` = 1). NOT FLOWN.
+QUIET DAY: red now STAGES the carrier raid (`bombers.decide` -> `stage`, `QUIET_DAYS` = 1).
 
 ## v0.41.108, the carrier raid in the mission: big raids are several groups (part 2 of 3)
 A raid of more than 4 bombers (or escorts) is now several groups of nearly equal size (12 = 4+4+4, 6 = 3+3).
@@ -967,7 +967,7 @@ The hook watches every covered pair (`COVER` in `sqe/debrief.py`, checked every 
 Until now a base CAP, carrier CAP, HAVCAP or tanker CAP sat on station for the whole mission, however short its legs (a jet that could fly 3 hours on one load).
 
 ## v0.41.77, BARCAP as planned coverage, step 3 (first slice): red patrols get their relief in the mission
-The planned chain (v0.41.73) has the next sortie of an area start 10 minutes before the one on station leaves. NOT FLOWN.
+The planned chain (v0.41.73) has the next sortie of an area start 10 minutes before the one on station leaves.
 
 ## Smoke test step 2 (tools only, no version change): every section passes on its own
 Campaign ids are random, so seeded checks could pass or fail by luck (`check_47` "no flyable SEAD flight", the HARM point 33.8 vs 35 nm).
@@ -982,7 +982,7 @@ Cause: `_plan_cap_stations` then pushes every station away from our marshal poin
 Blue's carrier CAP and base CAP no longer face "the nearest enemy field": each takes the BARCAP area (v0.41.73) of its asset that faces the mission's target (the area whose direction is closest to the bearing from the asset to the target; with merged targets this is the main target's, a judgment ...
 
 ## v0.41.73, BARCAP as planned coverage, step 1: planning and state (red's patrols fly it)
-Every defended asset gets BARCAP areas: red's fighter fields and blue's fields and carriers. NOT FLOWN.
+Every defended asset gets BARCAP areas: red's fighter fields and blue's fields and carriers.
 
 ## v0.41.72, AI boat flights land for real; the hook removes them after the pattern
 Now it gets the real Land waypoint tied to the ship (as when AI landings is off), so DCS homes on the moving boat itself.
@@ -1414,7 +1414,7 @@ Our alert pairs now have a dispatch range, like the enemy's reinforcements alway
 Red raids and emergencies (phase 2 of the ground war).
 
 ## v0.23.0
-The front is no longer a few armor columns that only exist to be shot at: it is five sectors along the Sukhumi to Senaki axis (four plus one deep zone toward Kutaisi), and every sector holds a Red strength and a Blue strength (0 to 100). NOT FLOWN.
+The front is no longer a few armor columns that only exist to be shot at: it is five sectors along the Sukhumi to Senaki axis (four plus one deep zone toward Kutaisi), and every sector holds a Red strength and a Blue strength (0 to 100).
 
 ## v0.22.0
 The same scan mission, after the land and water pass, samples the ground on a 1 km grid (3 x 3 points per cell) and writes SQE_relief_<theatre>.json next to the old file: the highest and the average ground per cell, in units of 10 m (a few MB).
