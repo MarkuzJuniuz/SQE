@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.357, campaign rules Phase 10b part 2: the flown carrier raid reads the prep's result
+
+XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** A carrier raid planned with the prep record builds the SAM picture the prep left: destroyed sites are gone, suppressed ones are blind, the rest are live and shooting. The scripted blow-up and the raid's own SEAD seats are gone for it; saves with no record keep both.
+
 ## v0.41.356, campaign rules Phase 10b part 1: the carrier raid's SEAD prep goes in the turn before
 
 XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** The fleet defence SEAD / Standoff DEAD packages are planned in the turn BEFORE the carrier raid (you can fly both); the raid package remembers the sites (`raids["raid_prep"]`) and the war sim reads them. The raid's bearing and launch turn are fixed when it is staged. Old saves keep the same-turn prep.
