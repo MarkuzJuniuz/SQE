@@ -2955,6 +2955,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         mid = p[a + 1:b]
                         if mid and all(getattr(x, "speed_locked", False) for x in mid):
                             mid[0].speed_locked = False
+                        elif not mid and getattr(p[b], "speed_locked", False):
+                            p[b].speed_locked = False        # v0.41.393: two time-locked points side by side (takeoff, PUSH of a sweep with no marshal point): the Editor counts the second one, so its speed is freed
                     tail = p[(L[-1] + 1):] if L else p[1:]
                     for x in tail:
                         if not getattr(x, "ETA_locked", False) and not getattr(x, "speed_locked", False):

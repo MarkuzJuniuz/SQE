@@ -21,6 +21,7 @@ sys.path.insert(1, str(Path(__file__).resolve().parent))      # hook_lua_sim sit
 import sqe
 from dcs import lua
 from sqe.engine import Session
+from sqe.packages import NoPlayerSlot
 from sqe.settings import AppSettings
 
 mk = lambda: Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))     # a new session on the test's temp folder
@@ -291,29 +292,95 @@ def check_miz_parses():
     print("[miz] zip sound, members present, Lua parses, a player slot exists, any ILS dummy is an uncontrolled ground start")
 
 
+def _lock_problems(M, label):
+    """DESIGN_NOTES section 8: the Mission Editor refuses a route that breaks a lock rule. A: no run of speed-locked points between two time-locked ones, the
+    second time-locked point INCLUDED (the Editor counts it: "(2-2) ... surrounded by 1 and 2"). B: every point after the last time-locked one is time- or
+    speed-locked. C (player group only): a point with both free needs a time-locked point on each side. Returns [message] and the group count."""
+    bad, n = [], 0
+    for g, player in _air_groups(M):
+        pts = ((g.get("route") or {}).get("points")) or {}
+        seq = [pts[k] for k in sorted(pts)]
+        names = [str(p.get("name", "")) for p in seq]
+        L = [i for i, p in enumerate(seq) if p.get("ETA_locked")]
+        for a, b in zip(L, L[1:]):
+            mid = seq[a + 1:b + 1]                               # the second locked-time point is part of the run
+            if mid and all(p.get("speed_locked") for p in mid):
+                bad.append(f"{label} {g['name']}: A, locked speeds between locked times, points {a + 1}-{b + 1} of {names}")
+        for i in range(L[-1] + 1 if L else 1, len(seq)):
+            if not seq[i].get("ETA_locked") and not seq[i].get("speed_locked"):
+                bad.append(f"{label} {g['name']}: B, free speed and time after the last locked time, point {i + 1} of {names}")
+        if player:
+            for i, p in enumerate(seq):
+                if not p.get("ETA_locked") and not p.get("speed_locked"):
+                    if not (any(j < i for j in L) and any(j > i for j in L)):
+                        bad.append(f"{label} {g['name']}: C, free speed and time, not between locked times, point {i + 1} of {names}")
+        n += 1
+    return bad, n
+
+
+LOCK_CASES = [("F-16C", 3, 7, False), ("F-16C", 3, 7, True), ("F-15C", 3, 3, True), ("FA-18C", 2, 11, False), ("F-14BU", 3, 9, True)]   # (jet, level, seed, SAMs zeroed): open skies brings out strikes, counter-air, escorts and sweeps
+LOCK_TURNS = 6                                                # a plan is one turn's tasking: walk a few turns so every kind of package turns up
+
+
+def lock_builds():
+    """Lazy, runs once: [(label, miz_bytes)] for one package of every kind the plan offers (objective type and aim), built as the player's own flight and as the
+    all-AI test (your flight gets the full AI task set), plus the BARCAP / fleet-defence / sweep packages nobody can fly (the first flight stands in for yours)."""
+    global _lock_built
+    if _lock_built is None:
+        _fixed_ids("lock-sweep")
+        import random
+        _lock_built = []
+        for ac, lv, seed, opened in LOCK_CASES:
+            s = fresh_session(lv, seed, ac)
+            if opened:
+                for a in s.state.assets.values():
+                    if a.kind.value == "SAM":
+                        a.health = 0.0
+                s.plan_day()
+            seen = set()
+            for _t in range(LOCK_TURNS):
+                if s.state.status != "ACTIVE":
+                    break
+                for p in s.packages():
+                    kind = (p.objective.type, p.objective.aim)
+                    fly = bool(s.flyable(p))
+                    modes = (False, True) if fly else ((True,) if p.flights else ())
+                    for ai in modes:
+                        if (kind, ai, fly) in seen:
+                            continue
+                        seen.add((kind, ai, fly))
+                        s.ai_test = ai
+                        s.state.turn = s._turn_of(p)                  # the builder works from the package's own turn
+                        random.seed(f"{ac}:{p.number}:{ai}")
+                        try:
+                            s.fly(p.number, (s.flyable(p)[0] if fly else p.flights[0]).id)
+                            miz = Path(s.state.pending["miz"]).read_bytes()
+                        except NoPlayerSlot:                             # a package no flight of which your jet can stand in for: nothing to build
+                            continue
+                        except Exception as e:                           # any other build that raises is a failure of its own, reported by the check
+                            _lock_built.append((f"{ac} L{lv} {p.objective.type.value}/{p.objective.aim} {'all-AI' if ai else 'player'}", e))
+                            continue
+                        _lock_built.append((f"{ac} L{lv} {p.objective.type.value}/{p.objective.aim} {'all-AI' if ai else 'player'}", miz))
+                advance(s)
+    return _lock_built
+
+
+_lock_built = None
+
+
 def check_waypoint_locks():
-    """DESIGN_NOTES section 8: the Mission Editor refuses a route that breaks a lock rule. A: no run of speed-locked points between two time-locked
-    ones. B: every point after the last time-locked one is time- or speed-locked. C (player group only): a point with both free needs a time-locked
-    point on each side."""
-    n = 0
+    """The lock rules (see `_lock_problems`) on every plane and helicopter group of the five jets' missions and of one mission per kind of package, player and all-AI."""
+    bad, n, m = [], 0, 0
     for ac, _s, _p, miz in builds():
-        if not miz:
-            continue
-        for g, player in _air_groups(_mission(miz)[1]):
-            pts = ((g.get("route") or {}).get("points")) or {}
-            seq = [pts[k] for k in sorted(pts)]
-            L = [i for i, p in enumerate(seq) if p.get("ETA_locked")]
-            for a, b in zip(L, L[1:]):
-                mid = seq[a + 1:b + 1]                               # the Mission Editor counts the second locked-time point itself ("(2-2) ... surrounded by 1 and 2")
-                assert not (mid and all(p.get("speed_locked") for p in mid)), (ac, g["name"], "A: locked speeds between locked times", a, b)
-            for i in range(L[-1] + 1 if L else 1, len(seq)):
-                assert seq[i].get("ETA_locked") or seq[i].get("speed_locked"), (ac, g["name"], "B: free speed and time after the last locked time", i)
-            if player:
-                for i, p in enumerate(seq):
-                    if not p.get("ETA_locked") and not p.get("speed_locked"):
-                        assert any(j < i for j in L) and any(j > i for j in L), (ac, g["name"], "C: free speed and time, not between locked times", i)
-            n += 1
-    print(f"[locks] rules A and B on {n} plane and helicopter groups, rule C on the player's groups")
+        if miz:
+            b, k = _lock_problems(_mission(miz)[1], ac)
+            bad += b; n += k
+    for label, miz in lock_builds():
+        assert not isinstance(miz, Exception), (label, "the build raised", repr(miz))
+        b, k = _lock_problems(_mission(miz)[1], label)
+        bad += b; n += k; m += 1
+    assert not bad, "; ".join(bad[:12]) + (f"; ... {len(bad) - 12} more" if len(bad) > 12 else "")
+    print(f"[locks] rules A, B (and C on the player's groups) on {n} plane and helicopter groups, {m} package builds (one per kind of package, player and all-AI)")
 
 
 def check_hook_lua():
