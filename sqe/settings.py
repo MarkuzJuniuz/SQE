@@ -76,7 +76,7 @@ class AppSettings:
     tempo_decay: bool = False              # v0.41.208 (XO): Enable Tactical Edge Decay: the edge fades 3% a night. Off by default. (Both Tactical Edge switches become per-campaign on refactor day, XO 2026-10-30)
     pilot_influence: bool = True           # v0.41.160: your flying (or neglect) feeds back into the war: red surges while you stand down. Off: no surge and no tempo, so your flying or standing down changes nothing
     weather_mode: str = "clear"            # "clear" | "procedural" | a fixed weather: scattered, broken, overcast, rain, storm
-    ils_dummy: str = "beside"              # v0.41.336 (XO 2026-11-09): the invisible dummy aircraft that keeps each blue ILS runway active: "off" | "beside" (next to the threshold, off the pavement) | "on" (on the pavement). Not tested in DCS; XO's first run compares both. Anything but "off" also turns on the real regional wind (weather.py)
+    ils_dummy: str = "on"                  # v0.41.336 (XO 2026-11-09), S32: the dummy aircraft that keeps each blue ILS runway active: "off" | "on" (a small aircraft parked on the ramp; was "beside" / "on" at the threshold). Not tested in DCS. "on" also turns on the real regional wind (weather.py); an old saved "beside" reads as "on"
     ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
     merge_radius_nm: int = 15             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in (v0.41.131: 15, was 25)
     merge_fwd_min: int = 30               # v0.41.131: packages that start up to this many minutes AFTER yours fly with you (5 minute steps in Settings, 0 to 60)

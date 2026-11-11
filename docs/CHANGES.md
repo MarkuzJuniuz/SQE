@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.383, S32: the ILS dummy is a small aircraft on the ramp
+The aircraft that keeps each blue field's ILS runway active is now a small Christen Eagle parked on the ramp, far from the runway, instead of an F-16 beside the threshold. The ILS dummy setting is just On or Off (Beside and On are gone; an old Beside reads as On).
+
 ## v0.41.382, S28: low-level strikers descend late
 AI low-level strikers whose approach point is close to the target used to drop to treetop height right after the push and fly the whole long leg at 150 m, burning most of their fuel before the target. They now cruise high and start the descent 30 nm before the approach point.
 
