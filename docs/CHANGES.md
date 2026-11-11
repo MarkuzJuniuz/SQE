@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## Tools, 2026-11-11 (no version change): smoke test soak (S12), skip to the end of the war
+
+XO 2026-11-11 ('fox 3 medium'). `tools/smoke_test.py` only. New opt-in `check_soak` (not in the default run; `python tools/smoke_test.py --only soak`, `--seeds N` for N seeds per level): three campaigns (L1, L2, L3, F-16C) skipped until the war ends or 300 skips, every 20 skips a fake sortie is flown and debriefed (if anything is flyable), every 25 a save and reopen. The only assert is "no exception"; a failure prints level, seed and skip number and re-raises. The fake-debrief block of `check_fly_debrief_advance` is now the helper `fake_debrief`. The soak has its own 900 s watchdog unless `--timeout` is given. Not run by Crew Chief (XO runs it; about 3 to 5 minutes).
+
 ## Tools, 2026-11-11 (no version change): smoke test Phase 3, the two missing checks
 
 XO 2026-11-11 ('fox 3 medium'). `tools/smoke_test.py` only. New `check_main_window` (the main window builds on a fresh campaign, refreshes and shows every page of its stack; no labels or counts) and `check_required_flights` (each stored package of the five build campaigns carries a non-support flight for the role `PackageBuilder._slots` lists first for its objective). 11 checks now. Not run by Crew Chief (XO runs the smoke test).
