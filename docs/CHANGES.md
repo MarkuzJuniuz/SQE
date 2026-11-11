@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.365, campaign rules Phase 11: Autoskip UI
+
+XO 2026-11-11 ("fox 3 medium"). **NOT FLOWN.** Under Skip Turn: AUTOMATICALLY SKIP with Stand Down Days, Nighttime Sorties and Duration (2 to 24 hrs, step 2, default 12), all saved in the app settings and unticked by default. With no box ticked Skip Turn is unchanged. With any box ticked it resolves the clicked turn, then steps one turn every 0.25 s with a ticker line, and stops on a flight available, a stand-down turn (Stand Down Days off), Duration reached (no Duration: a week at most) or the war's end; a night turn steps when Nighttime is ticked, flights or not. One save at the end, one summary box. GUI only: the engine is untouched.
+
 ## v0.41.364, attack fix Stage C: AI CAS attack tasks on the IP
 
 XO 2026-11-11 ("fox 3 medium"). **NOT FLOWN: XO flies one plain CAS, then the B1 forced-hold run (`SQE_GATE_TEST_HOLD_S=60`).** The 2026-11-11 00-06-03 run: Hawg 1 passed 3 nm from its column and fired nothing, because AttackGroup / EngageTargetsInZone / weapons free sat on the TGT point and so started only overhead. An AI CAS flight now carries them on the IP before TGT (stop times still counted from the TGT ETA), like the v0.41.322 AI strike fix. No IP / LOW point before TGT: unchanged. Player flights unchanged. Judgment, not an ED statement.
