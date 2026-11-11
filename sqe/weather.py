@@ -386,12 +386,13 @@ _NEED = {"STRIKE": {"GPS", "LASER", "UNGUIDED", "EO"}, "CAS": {"GPS", "LASER", "
 
 def assess(wx: Wx, objective_type: str, flights: list, lib, aircraft_table) -> dict:
     """Can this package fly? flights = [Flight]. Returns {"scrub": reason or "", "notes": [str]}.
-    Defensive air patrols are never scrubbed. Everything else is scrubbed in a storm, in fog, or when an attacking flight is left
-    with nothing it can use."""
+    Defensive air patrols are never scrubbed. Everything else is scrubbed in fog or below airfield minimums, or when an attacking
+    flight is left with nothing it can use. A storm alone no longer scrubs (S17, judgment, no ED statement): laser / EO weapons are
+    swapped to GPS by adapt() and a GPS or ARM flight flies; an unguided-only flight scrubs when the weather rules it out."""
     if objective_type in ("BARCAP", "FLEET_DEFENSE"):
         return {"scrub": "", "notes": []}
-    if wx.state == "STORM" or (wx.base_ft < 600 and wx.cover >= 0.5) or wx.vis_km < 1.5:
-        why = "storms" if wx.state == "STORM" else "fog" if wx.fog_m else "ceiling and visibility below limits"
+    if (wx.base_ft < 600 and wx.cover >= 0.5) or wx.vis_km < 1.5:
+        why = "fog" if wx.fog_m else "ceiling and visibility below limits"
         return {"scrub": f"weather: {why} ({describe(wx, short=True)})", "notes": []}
     notes = []
     for f in flights:

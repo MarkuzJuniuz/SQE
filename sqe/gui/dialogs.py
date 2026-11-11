@@ -205,7 +205,7 @@ class SettingsDialog(QDialog):
         row(v, "Weather", self.wxm)
         hint(v, "Procedural follows the theatre's climate for the month and changes slowly from day to day (never clear to storm in an afternoon); each sortie "
                 "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
-                "that cannot attack at all is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
+                "that cannot attack at all (or meets fog) is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
         # v0.41.165: Pilot Influence goes AFTER the whole Weather block (combo + its description), never between them
         self.pinf = QCheckBox("Tactical Edge (your sorties affect the war)"); self.pinf.setChecked(bool(getattr(settings, "pilot_influence", True)))
         row(v, "Tactical Edge", self.pinf)
