@@ -3,7 +3,7 @@ Isolated: a temporary folder for everything, APPDATA redirected, your real setti
 Scope (XO 2026-11-06, see .claude/smoke test plan.md): (1) loads, saves, campaigns, compatibility; (2) the dialogs and the main window build; (3) missions are generated;
 (4) every package carries its required flight; (5) the .miz structure loads in DCS without errors. Assert STRUCTURE, never values: no constant, no state.day value, no waypoint, job, role or kit name, no
 game or hook text. An assert that ends with us changing this file instead of fixing SQE is invalid: remove it, do not relax it.
-The soak (skip to the end of the war, three campaigns, no assert but "no exception") is opt-in: `--only soak`, `--seeds N`.
+The soak (skip to the end of the war, three campaigns, no assert but "no exception") is part of the default run (XO 2026-11-11); `--only soak` runs it alone, `--seeds N` adds seeds.
 Five jets are built once (`builds()`, lazy) and read by the missions and .miz checks. 'SMOKE TEST PASSED' + exit code 0 = everything worked."""
 import json
 import os
@@ -351,7 +351,7 @@ def check_hook_lua():
     print(f"[hook] {n} real hooks compile and run under the stub DCS")
 
 
-# ---- 6. soak (opt-in: `--only soak`) ------------------------------------------------------------------------------------------------------------
+# ---- 6. soak (in the default run; `--only soak` alone) ------------------------------------------------------------------------------------------------------------
 SOAK_CASES = [(1, 5), (2, 3), (3, 7)]                         # (level, seed)
 SOAK_MAX_SKIPS = 300                                          # a loop bound, not a game rule
 SOAK_FLY_EVERY = 20                                           # every N skips the player flies a fake sortie, if anything is flyable
@@ -385,7 +385,7 @@ def check_soak():
             print(f"[soak] level {level} seed {seed}: {n} skips, final status {s.state.status}")
 
 
-OPT_IN = [check_soak]                                         # run only when `--only` names them
+OPT_IN = []                                                   # checks that run only when `--only` names them (none now)
 
 
 CHECKS = [
@@ -400,6 +400,7 @@ CHECKS = [
     check_miz_parses,
     check_waypoint_locks,
     check_hook_lua,
+    check_soak,
 ]
 
 
@@ -426,7 +427,7 @@ def main(argv=None):
     run = [fn for fn in CHECKS + OPT_IN if (want and any(w in fn.__name__ for w in want)) or (not want and fn in CHECKS)]
     times = []
     for fn in run:
-        timeout = args.timeout if args.timeout is not None else (900 if fn in OPT_IN else 120)      # the soak needs its own, longer watchdog
+        timeout = args.timeout if args.timeout is not None else (900 if fn is check_soak else 120)      # the soak needs its own, longer watchdog
         if timeout:
             faulthandler.dump_traceback_later(timeout, exit=True)
         t0 = time.time()
