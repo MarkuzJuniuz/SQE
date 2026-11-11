@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.384, S29: the blue CAS task force starts on land
+The friendly task force and its JTAC, and the red column a CAS package moves, no longer start or stop in the sea. Their start, stop and patrol points now move onto land (150 m from the coast), and a garrison's task force picks another approach bearing if its straight leg would cross water.
+
 ## v0.41.383, S32: the ILS dummy is a small aircraft on the ramp
 The aircraft that keeps each blue field's ILS runway active is now a small Christen Eagle parked on the ramp, far from the runway, instead of an F-16 beside the threshold. The ILS dummy setting is just On or Off (Beside and On are gone; an old Beside reads as On).
 

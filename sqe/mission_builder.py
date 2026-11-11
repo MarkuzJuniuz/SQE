@@ -3018,6 +3018,34 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     CAS_ENEMY_ADVANCE_M = 1200.0  # v0.41.137: the enemy column creeps this far toward us; it never starts far from the CAS point
 
+    CAS_COAST_M = 150.0           # v0.41.384 (S29): a CAS column's or the JTAC's start, stop and patrol points keep this far from the sea (judgment call; SITE_MARGIN 1500 m would push a coastal column far inland)
+    CAS_LAND_SEARCH_M = 6000.0    # v0.41.384: how far a point may be moved to reach land (a column is never thrown further, e.g. across a bay)
+
+    def _cas_land(self, p):
+        """v0.41.384 (S29): the point moved onto land (CAS_COAST_M from the sea) when it is in the water or on the beach (nearest 200 m ring with a good point, seacheck.site_ok); the point itself when it is fine or nothing is found."""
+        if seac.site_ok(p[0], p[1], self.CAS_COAST_M):
+            return (p[0], p[1])
+        r_ = 200.0                                                # finer rings than seacheck.snap_to_land's 1 km: a column should move metres, not kilometres off its line
+        while r_ <= self.CAS_LAND_SEARCH_M:
+            best = None
+            for k in range(24):
+                a_ = math.radians(k * 15)
+                x_, y_ = p[0] + r_ * math.cos(a_), p[1] + r_ * math.sin(a_)
+                if seac.site_ok(x_, y_, self.CAS_COAST_M):
+                    cd_ = seac.coast_distance(x_, y_)
+                    if best is None or cd_ > best[0]:
+                        best = (cd_, x_, y_)
+            if best is not None:
+                return (best[1], best[2])
+            r_ += 200.0
+        return (p[0], p[1])
+
+    def _leg_on_land(self, a, b, step_m=250.0):
+        """v0.41.384: True when the straight leg a -> b stays on land (sampled every step_m)."""
+        d = math.hypot(b[0] - a[0], b[1] - a[1])
+        n = max(1, int(d // step_m))
+        return all(seac.is_land(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n) for i in range(n + 1))
+
     def _spawn_cas_support(self, package, plan, geom, manifest):
         if not package.jtac:
             return
@@ -3038,12 +3066,22 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             # v0.41.137: the column stays where the CAS flight is sent. It used to start up to 10 km back and drive 13 km to be at the CAS point
             # at the TOT; any shortfall in DCS's real speed (slopes, a long mixed column, stopping to fight) left it kilometres from the point
             t_arr_ = max(0.0, t_contact - self.CAS_ARRIVE_LEAD_S)
-            self._drive_road(enemy, self._patrol_via((cx, cy), brg + 180, offset(cx, cy, brg, self.CAS_ENEMY_ADVANCE_M), min(v, 3.5), t_arr_), min(v, 3.5))   # v0.41.190: a patrol leg away from us first
-        fx, fy = offset(cx, cy, brg + r.uniform(-6, 6), dist_run)
+            self._drive_road(enemy, [self._cas_land(q_) for q_ in self._patrol_via((cx, cy), brg + 180, offset(cx, cy, brg, self.CAS_ENEMY_ADVANCE_M), min(v, 3.5), t_arr_)], min(v, 3.5))   # v0.41.190: a patrol leg away from us first; v0.41.384: every point on land
+        stop_ = [self._cas_land(offset(cx, cy, brg, 2000 if static else self.CAS_TF_STOP_M))]      # v0.41.384 (S29): on land
+        bj_ = r.uniform(-6, 6)
+        fx, fy = offset(cx, cy, brg + bj_, dist_run)
         if not static:
             rp_ = self._road_pt(fx, fy)                           # v0.41.180: the task force starts on a road too, and meets the column along it
             if rp_ is not None:
                 fx, fy = rp_
+        fx, fy = self._cas_land((fx, fy))                         # v0.41.384 (S29, XO 2026-11-11 run: a garrison near the coast put the column afloat)
+        if static and not self._leg_on_land((fx, fy), stop_[0]):
+            # v0.41.384: the straight off-road leg to the stop crosses water: try other start bearings, keep the first whose leg is dry (else the snapped start)
+            for da_ in (10, -10, 20, -20, 30, -30, 45, -45, 60, -60):
+                c_ = self._cas_land(offset(cx, cy, brg + bj_ + da_, dist_run))
+                if self._leg_on_land(c_, stop_[0]):
+                    fx, fy = c_
+                    break
         comp = [("M_1_Abrams", r.randint(1, 2)), ("M_2_Bradley", r.randint(2, 3)), ("M1043_HMMWV_Armament", r.randint(1, 2))]
         sc = ground.blue_scale(self.state, tid or "")          # the friendly force is as strong as Blue is in this sector
         comp = [(n_, max(1, int(round(c_ * sc)))) for n_, c_ in comp]
@@ -3055,22 +3093,21 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             # v0.41.157 (XO's 15:38 run: the task force reached the column 12 minutes after the A-10s, then drove 2.5 km past it): it stops CAS_TF_STOP_M (v0.41.179: 1.5 km, was 400 m) short of the
             # contact point (static garrison: 2 km short) and holds, weapons free, so the survivors come to it; and it drives CAS_TF_SPEED_MARGIN faster than the
             # plan, because DCS runs a mixed off-road column about 30% slower (measured in that run)
-            stop_ = [offset(cx, cy, brg, 2000 if static else self.CAS_TF_STOP_M)]
             v_tf_ = min(8.0, v * self.CAS_TF_SPEED_MARGIN)
-            via_ = self._patrol_via((fx, fy), brg, stop_[0], v_tf_, max(0.0, t_contact - self.CAS_ARRIVE_LEAD_S))   # v0.41.190: our column also drives a patrol leg (away from the enemy) first
+            via_ = [self._cas_land(q_) for q_ in self._patrol_via((fx, fy), brg, stop_[0], v_tf_, max(0.0, t_contact - self.CAS_ARRIVE_LEAD_S))]   # v0.41.190: our column also drives a patrol leg (away from the enemy) first; v0.41.384: on land
             if static:
                 self._drive(g, via_, v_tf_)
             else:
                 self._drive_road(g, via_, v_tf_)
             manifest.add("friendly_ground", tid or "", names)
-        jx, jy = offset(fx, fy, brg + 90, 120)
+        jx, jy = self._cas_land(offset(fx, fy, brg + 90, 120))
         jt = self.m.vehicle_group(self.usa, f"Axeman {package.number}-1", _UN.Hummer, mapping.Point(jx, jy, self.t), heading=(int(brg) + 180) % 360, group_size=1)
         jt.units[0].name = f"JTAC-{package.id}"
         p0 = jt.points[0]
         p0.tasks.append(task.FAC(callsign=1, frequency=int(plan.freq("JTAC") * 1e6), modulation=task.Modulation.AM, number=1))
         p0.tasks.append(task.SetInvisibleCommand(True))
         p0.tasks.append(task.SetImmortalCommand(True))
-        jt.add_waypoint(mapping.Point(*offset(cx, cy, brg, 3800), self.t), PointAction.OffRoad, v * 3.6)
+        jt.add_waypoint(mapping.Point(*self._cas_land(offset(cx, cy, brg, 3800)), self.t), PointAction.OffRoad, v * 3.6)
 
     AGM88_AXES = (0, 15, -15, 30, -30)                        # v0.41.24: degrees the HARM axis may turn off the package's own axis
 
