@@ -1027,13 +1027,13 @@ class RaidSpawns:
                 remaining = pa[seg_i:]
             for tgt_, n_jets in pairs:
                 k_ += 1
-                g = self.m.flight_group(self.red, f"Raid SEAD {k_}", getattr(planes, rt_), None, pt(sx, sy), altitude=alt + (k_ - 1) * 600, speed=450 * KPH, maintask=task.SEAD, group_size=n_jets)     # each flight 600 m above the last: they share a route
+                g = self.m.flight_group(self.red, f"Raid SEAD {k_}", getattr(planes, rt_), None, pt(sx, sy), altitude=alt + k_ * 600, speed=450 * KPH, maintask=task.SEAD, group_size=n_jets)     # each flight 600 m above the last: they share a route
                 if hold_until is not None:
-                    ct_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
+                    ct_ = task.ControlledTask(task.OrbitAction(int(alt + k_ * 600), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
                     ct_.stop_after_time(int(hold_until)); g.points[0].tasks.append(ct_)
                     g.points[0].name = "MSHL"
                 for k, q in enumerate(remaining):
-                    wp = g.add_waypoint(pt(*q), alt + (k_ - 1) * 600, 450 * KPH, "ARM" if k == len(remaining) - 1 else "ING")
+                    wp = g.add_waypoint(pt(*q), alt + k_ * 600, 450 * KPH, "ARM" if k == len(remaining) - 1 else "ING")
                     if k == len(remaining) - 1:
                         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
                         ca_ = task.ControlledTask(task.AttackGroup(tgt_.id, weapon_type=task.WeaponType.ARM, group_attack=True))
@@ -1283,6 +1283,8 @@ class RaidSpawns:
             else:
                 ct_.stop_after_time(int(hold_))
 
+        mshl_lvl = [0]                                         # S26: the next free marshal level for an unstaged group
+
         def build_group(name, cls, count, task_cls, bomber=False, shift=0.0, behind_nm=0.0, gated=False, fighter_nm=None, lateral_nm=0.0):
             pos, rem, hold, act = start_at(shift)
             gi_, at_gate = None, False
@@ -1305,7 +1307,10 @@ class RaidSpawns:
             nm_ = (["PUSH"] + ["ING"] * (len(rem) - 2) + [fin_]) if hold is not None else (["ING"] * (len(rem) - 1) + [fin_])
             sl = stg["plan"].get(name) if (stg and hold is not None) else None          # v0.41.261: a staged raid's group: on the marshal from the start, or off the runway
             m_alt = alt - (sl["mk"] * RAID_MSHL_STEP_M if sl else 0.0)
-            r_alt = m_alt if sl else alt                       # v0.41.263: a staged group keeps its own level the whole way (they used to climb to one common level and meet)
+            if sl is None and hold is not None:                # S26 (run 12-38-58: three groups on one marshal point at one level collided at t=0): an unstaged group on the marshal gets its own level too
+                m_alt = alt - mshl_lvl[0] * RAID_MSHL_STEP_M
+                mshl_lvl[0] += 1
+            r_alt = m_alt if (sl or m_alt != alt) else alt     # v0.41.263: a staged group keeps its own level the whole way (they used to climb to one common level and meet)
             g = None
             if sl is not None and sl["rwy"]:
                 ramp_ = False

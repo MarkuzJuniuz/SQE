@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.380, S26: red raid groups no longer collide at spawn
+Red raid groups that waited together on one marshal point used to share one altitude and collided in the first seconds, taking out most of a raid before it flew. Each group now holds its own level, and the SEAD flights sit above the bombers.
+
 ## v0.41.379, S25: four-hour turns
 A turn is now four hours (six a day, a night is three turns; it was two hours and twelve). Each turn offers about twice the packages and patrols, so the flights per day stay about nine tenths of before; refit is 2 hours for the standard jets (8 for the Tu-22M3 and E-3). Crew Rest goes in steps of four hours. Campaigns saved with two-hour turns will NOT open (a new campaign is needed).
 
