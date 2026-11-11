@@ -1,7 +1,7 @@
 """Headless core-function test (no DCS). Run:  python tools/smoke_test.py   (options: --list, --only a,b, --timeout SECONDS)
 Isolated: a temporary folder for everything, APPDATA redirected, your real settings and campaigns are never touched; the temp data is deleted at the end.
-Scope (XO 2026-11-06, see .claude/smoke test plan.md): (1) loads, saves, campaigns, compatibility; (2) the dialogs build; (3) missions are generated;
-(5) the .miz structure loads in DCS without errors. Assert STRUCTURE, never values: no constant, no state.day value, no waypoint, job, role or kit name, no
+Scope (XO 2026-11-06, see .claude/smoke test plan.md): (1) loads, saves, campaigns, compatibility; (2) the dialogs and the main window build; (3) missions are generated;
+(4) every package carries its required flight; (5) the .miz structure loads in DCS without errors. Assert STRUCTURE, never values: no constant, no state.day value, no waypoint, job, role or kit name, no
 game or hook text. An assert that ends with us changing this file instead of fixing SQE is invalid: remove it, do not relax it.
 Five jets are built once (`builds()`, lazy) and read by the missions and .miz checks. 'SMOKE TEST PASSED' + exit code 0 = everything worked."""
 import json
@@ -221,6 +221,26 @@ def check_dialogs():
     print("[gui] settings and new-campaign dialogs build; save and values run")
 
 
+def check_main_window():
+    """The main window builds on a fresh campaign, refreshes and shows every page of its stack without an exception. No labels, tabs or row counts."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QMessageBox
+    app = QApplication.instance() or QApplication([])
+    from sqe.gui import theme
+    from sqe.gui.app import MainWindow
+    QMessageBox.information = staticmethod(lambda *a, **k: None)         # a message box would wait for a click
+    QMessageBox.warning = staticmethod(lambda *a, **k: None)
+    app.setStyleSheet(theme.QSS)
+    w = MainWindow(fresh_session(2, 3))
+    w.refresh_all()
+    w.show()
+    for i in range(w.stack.count()):
+        w.stack.setCurrentIndex(i)
+        app.processEvents()
+    w.hide()                                                  # not close(): a save prompt would wait for a click
+    print(f"[gui] the main window refreshes and shows its {w.stack.count()} pages")
+
+
 # ---- 3. missions are generated ----------------------------------------------------------------------------------------------------------------
 def check_missions_build():
     got = [(ac, miz) for ac, _s, _p, miz in builds() if miz]
@@ -228,6 +248,18 @@ def check_missions_build():
     for ac, miz in got:
         assert miz[:2] == b"PK", (ac, "the .miz is not a zip")
     print(f"[missions] built a .miz for {len(got)} of {len(BUILD_CASES)} jets: " + ", ".join(ac for ac, _ in got))
+
+
+def check_required_flights():
+    """Every stored package carries a flight for the job the planner lists first for its objective (a package with only support flights is broken)."""
+    from sqe.packages import PackageBuilder
+    n = 0
+    for ac, s, pkgs, _miz in builds():
+        for p in pkgs:
+            job = PackageBuilder(s.state)._slots(p.objective, False, 0, p.extra)[0].role
+            assert any(f.role == job and not f.tag for f in p.flights), (ac, p.number, p.objective.description, job)
+            n += 1
+    print(f"[packages] {n} stored packages each carry their first job's flight")
 
 
 # ---- 5. the .miz structure loads in DCS without errors ------------------------------------------------------------------------------------------
@@ -317,7 +349,9 @@ CHECKS = [
     check_ecm_install,
     check_fly_debrief_advance,
     check_dialogs,
+    check_main_window,
     check_missions_build,
+    check_required_flights,
     check_miz_parses,
     check_waypoint_locks,
     check_hook_lua,
