@@ -113,14 +113,18 @@ AIRCRAFT: dict[str, AircraftSpec] = {
                      push_kts=520, ip_kts=520, attack_kts=520, egress_kts=550, push_nm=80,
                      tgt_note="JDAM target. Release"),
         first_wp_label="0", bingo_lbs=3500, joker_lbs=5000),
+    # v0.41.360 (campaign rules plan Phase 10c part 2, XO): roles CAS and STRIKE. The STRIKE role is conditional: the planner gives an A-10C squadron a STRIKE slot only on a plain supply strike
+    # (fuel / depot) with no live SAM over the site or its run-in and no red fighter flight that can reach it (`packages.PackageBuilder._a10_supply_strike`, `STRIKE_CONDITIONAL`). Its tgt_note was
+    # "CAS: check in with JTAC" and only the STRIKE route reads it (the CAS point has its own text), so it is the release note now.
     "A-10C": AircraftSpec(
         "A-10C", "A-10C Warthog", "A_10C_2", BaseKind.AIRFIELD,
-        frozenset({_R.CAS}), RefuelMethod.BOOM, 1, 230, 300, True,
+        frozenset({_R.CAS, _R.STRIKE}), RefuelMethod.BOOM, 1, 230, 300, True,
         RouteProfile(depart_alt_ft=4000, depart_kts=250, dep_nm=6, low_agl_ft=300, aar_alt_ft=15000, aar_kts=270, marshal_alt_ft=10000,
                      marshal_kts=250, alt_ft={_R.CAS: 9000, _R.STRIKE: 9000}, push_kts=300, ip_kts=300,
                      attack_kts=300, egress_kts=330, push_nm=35, ip_nm=12, egress_nm=15,
-                     tgt_note="CAS: check in with JTAC"), first_wp_label="0", bingo_lbs=1500, joker_lbs=2500),
+                     tgt_note="Release"), first_wp_label="0", bingo_lbs=1500, joker_lbs=2500),
 }
+STRIKE_CONDITIONAL = frozenset({"A-10C"})      # v0.41.360: airframes whose STRIKE role is offered only on a clean supply strike (see the A-10C entry above)
 
 
 @dataclass(frozen=True)

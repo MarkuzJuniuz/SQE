@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.360, campaign rules Phase 10c part 2: the A-10C flies clean supply strikes
+
+XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** The A-10C gets the STRIKE role, but only on a plain supply strike (fuel or depot) that no live SAM ring covers (site or run-in) and that no red fighter flight can reach (`defender_flights` 0): it carries a new STRIKE load (6 Mk-82 on two BRU-42, 4 CBU-87, TGP, ECM, AIM-9). That is rare at Level 2 and 3 (red's fighters reach almost every site) and common at Level 1 once red's fighters thin out, so an A-10C player at Level 1 has strike jobs to fly. F-16C and F/A-18C players see no change; old saves load unchanged.
+
 ## v0.41.359, campaign rules Phase 10c part 1: more Su-25s, Su-25 supply raids, L1 sponsor fighters
 
 XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** New campaigns only: red has 60 Su-25 at L2 and 130 at L3 (was 52 and 110); a raid on an uncovered supply site picks a Su-25 pair first (the Su-24M keeps the fields and is the fallback), and it flies unescorted when no blue fighter squadron can reach the site's field; Level 1 red has 24 relic fighters (12 MiG-21Bis, 12 MiG-23MLD; was 14 with 3 MiG-29A) and one more story line about the sponsor state. Old saves load unchanged.

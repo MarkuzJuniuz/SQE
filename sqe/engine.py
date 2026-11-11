@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from . import CAMPAIGN_EXT, narrative
-from .aircraft import AIRCRAFT
+from .aircraft import AIRCRAFT, STRIKE_CONDITIONAL
 from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
@@ -716,7 +716,7 @@ class Session:
             out.append(f"{sq.name} has {sq.available} of {sq.authorized} aircraft serviceable, not enough for a pair.")
         if not pk:
             out.append("No jobs are open on this turn's tasking order.")
-        elif not any(f.role in spec.roles for p in pk for f in p.flights if not f.tag):
+        elif not any(f.role in spec.roles and not (f.role == Role.STRIKE and sq.aircraft in STRIKE_CONDITIONAL and f.aircraft != sq.aircraft) for p in pk for f in p.flights if not f.tag):      # v0.41.360: a conditional-STRIKE airframe (A-10C) is not offered the jets' strikes
             out.append(f"Nothing on this turn's tasking order is a job for {spec.display} ({', '.join(sorted(r.value for r in spec.roles))}).")
         elif sq.available >= 2:
             out.append("This turn's jobs were given to other squadrons, or are out of reach of your base.")
