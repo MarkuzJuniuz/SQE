@@ -151,14 +151,12 @@ def _guard_squadrons(state, base) -> list:
 
 def _plan_guards(state, ledger, flights, turn, t0, t1, share, rng, wins) -> None:
     """One guard pair for each AWACS / tanker type that is on orbit in this turn (`wins`, from support_assets.plan). The tanker's guard is planned every turn it is up and takes any capable
-    squadron's last pair; an AWACS guard is up with the turn's CAP share (seeded). A guard stays 120 minutes whatever the airframe (a pair on a tanker / AWACS track can refuel, like red's)."""
+    squadron's last pair; the AWACS's guard is planned every turn it is up too (S19, XO 2026-11-11: it sits on one fixed station, so nobody else would guard it); `share` is kept for the callers. A guard stays 120 minutes whatever the airframe (a pair on a tanker / AWACS track can refuel, like red's)."""
     from .timeofday import WAVE2_OFFSET_MIN
     for key, tag in GUARDS.items():
         a = (getattr(state, "support_assets", None) or {}).get(key)
         spans = [(max(s, t0), min(e, t1)) for s, e in (wins.get(key) or []) if e > t0 and s < t1]
         if a is None or not spans or a["base_id"] not in state.bases:
-            continue
-        if tag != "TNKCAP" and rng.random() >= share:
             continue
         hv = _havcap_squadrons(state, state.bases[a["base_id"]])           # Phase 9b: the HAVCAP squadron guards first, within reach
         sqs = _guard_squadrons(state, state.bases[a["base_id"]])
