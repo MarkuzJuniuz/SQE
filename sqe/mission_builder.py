@@ -2686,7 +2686,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if f.aircraft in SHOOTS_BACK:
                     wp.tasks.append(task.OptRestrictAirToAirAttack(False))                       # self-defence only: return fire, at whoever shoots
             if ai_a2g and not ai_sead and w.action in ("BOMB", "CAS"):
-                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire if ca_ramp_ else task.OptROE.Values.WeaponFree))   # the ground target; aircraft stay off limits (restricted); v0.41.325: a ramp strike attacks its designated point only
+                # S30 (XO run 2026-11-11 14-07-37: two of four SLAM-ERs went at radiating EWRs under Weapon Free): the SLAM point is Open Fire, designated target only (not flown)
+                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire if (ca_ramp_ or w.name == "SLAM") else task.OptROE.Values.WeaponFree))   # the ground target; aircraft stay off limits (restricted); v0.41.325: a ramp strike attacks its designated point only
             if ip_tgt_ is not None and w.name == "IP":
                 wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire if ca_ramp_ else task.OptROE.Values.WeaponFree))   # v0.41.322: the attack starts here, on the way in; v0.41.325: ramp strike = designated target only (XO: no hunting)
                 bip_ = task.ControlledTask(self._bomb_task(package, ip_tgt_))
