@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.390, S37: red raids with a share of its free bombers each turn, not on a dice roll
+Red no longer rolls one chance of a raid a turn. Each turn it earns raid credit equal to a share of its free attack jets (Su-24M, Su-25, Tu-22M3; half as much at night, more while you stand down) and builds raids while the credit lasts, up to four a turn, carrying the rest to the next turn. A strong red now raids turn after turn and a worn-down one less. At Level 3 red builds about 3.9 raids a day (before: 2.2), most of them on supply sites and fields; Level 1 stays at about 0.1 a day and Level 2 goes to about 0.5 (before: 0.35).
+
 ## v0.41.389, S35: red's bombers now raid your fields at Levels 2 and 3
 A red bomber wing is now sent against an airfield when it can field a smaller raid and its SEAD groups together, instead of only when it could field the largest raid. The raid shrinks by pairs to fit the wing's free jets (never under the level's minimum). At Level 3 red now builds about 0.7 to 1.0 field raids a day (before: 0.3 to 0.4), with 6 to 8 bombers instead of 8. Level 1, Tu-22M3 strikes and raids on covered supply sites are unchanged.
 
