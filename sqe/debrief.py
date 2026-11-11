@@ -8,6 +8,7 @@ REQUIRES io/lfs un-sanitized in <DCS>\\Scripts\\MissionScripting.lua (Settings h
 """
 from __future__ import annotations
 import json
+import os
 import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -1161,7 +1162,9 @@ local function breakOff(gs, why)
       if g and g:getController() then
         e.cmd = pcall(function()
           local c = g:getController()
-          if held then c:resetTask() end        -- the hold pushed an orbit on top of the route: clear it, or the flight keeps circling (v0.39.21 run, Springfield 1)
+          -- the hold pushed an orbit on top of the route: pop it, or the flight keeps circling (v0.39.21 run, Springfield 1). v0.41.363: popTask, not resetTask
+          -- (see resume); only a flight that really got the orbit (gt.pushed), or the pop would take the route
+          if held and gt.pushed then c:popTask(); gt.pushed = false end
           c:setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = gt.from, goToWaypointIndex = gt.to } })
         end)
       end
@@ -1183,8 +1186,10 @@ local function resume(gs, how)
       if g and g:getController() then
         e.cmd = pcall(function()
           local c = g:getController()
-          c:resetTask()
-          c:setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = gt.from, goToWaypointIndex = gt.from } })
+          -- v0.41.363 (attack fix plan, Stage B1): pop the hold's Orbit and let the route mission go on at its current waypoint, with its waypoint tasks.
+          -- v0.41.357 runs: three held flights resumed and attacked nothing; resetTask + SwitchWaypoint probably dropped the attack tasks
+          -- (judgment from forum reports, no ED statement; ED FAQ: popTask removes the front task and activates the next). Only where the orbit was pushed.
+          if gt.pushed then c:popTask(); gt.pushed = false end
         end)
       end
     end
@@ -1215,7 +1220,9 @@ local function holdGroups(gs)
       if g and ok and c then
         local okp, p = pcall(function() return g:getUnit(1):getPoint() end)
         if okp and p then
-          pcall(function() c:pushTask({ id = "Orbit", params = { pattern = "Circle", point = { x = p.x, y = p.z }, radius = 6000, altitude = p.y, speed = 230 } }) end)
+          if not gt.pushed then
+            gt.pushed = pcall(function() c:pushTask({ id = "Orbit", params = { pattern = "Circle", point = { x = p.x, y = p.z }, radius = 6000, altitude = p.y, speed = 230 } }) end)
+          end
         end
       end
     end
@@ -1251,7 +1258,7 @@ end
 local function decide(gs, why)
   local s = siteOf(gs)
   local blind = gateBlind(gs)
-  if not blind then
+__GATETEST__  if not blind then
     local canHold = false
     for _, gt in ipairs(gs.gates) do if gt.dead then canHold = true end end
     if canHold and seadsGone(gs) then breakOff(gs, "seads-gone"); return end
@@ -1534,6 +1541,31 @@ def _lq(s) -> str:
     return '"' + _lua_str(s).replace("\n", " ") + '"'
 
 
+def _gate_test_lua() -> str:
+    """v0.41.363 (attack fix plan, Stage B1): DEV ONLY. Env var SQE_GATE_TEST_HOLD_S (seconds, read when the mission is built): the hook holds every AI
+    gated flight that many seconds once, at its gate decision, then releases it through the normal resume(). Nothing is emitted when the variable is unset or 0."""
+    try:
+        n = int(float(os.environ.get("SQE_GATE_TEST_HOLD_S", "0") or 0))
+    except ValueError:
+        n = 0
+    if n <= 0:
+        return ""
+    lines = [
+        "  if not gs.tested then",
+        "    local anyAi = false",
+        "    for _, gt in ipairs(gs.gates) do if gt.ai and gt.dead then anyAi = true end end",
+        "    if anyAi then",
+        "      gs.tested = true",
+        "      if not gs.tp then gs.tp = sitePoint(s) end",
+        "      holdGroups(gs)",
+        '      timer.scheduleFunction(function() if gs.holding then resume(gs, "test-hold") end; return nil end, nil, timer.getTime() + %d)' % n,
+        "      return",
+        "    end",
+        "  end",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _umbrella_lua(x: dict) -> str:
     """The gate's umbrella fields for the hook (the SA-10 covering its target), or nothing."""
     if x.get("ux") is None:
@@ -1562,7 +1594,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
                    for x in (gates or []))
     cr = ", ".join("{x=%.1f, z=%.1f, pw=%.0f}" % (c[0], c[1], c[2]) for c in (cfg or {}).get("craters", []))
     return (LUA_HOOK.replace("__CRATERS__", cr).replace("__RWYS__", ", ".join("{id=%s, x=%.1f, z=%.1f, h={%s}}" % (_lq(r["id"]), r["x"], r["z"], ", ".join(str(int(h_)) for h_ in r["h"])) for r in (cfg or {}).get("rwys", []))).replace("__RWYLEN__", f"{RUNWAY_HALF_LEN_M:.0f}").replace("__RWYWID__", f"{RUNWAY_HALF_WIDTH_M:.0f}").replace("__SCRUB__", sc).replace("__SCRUBFRAC__", repr(float(SCRUB_LOSS_FRAC))).replace("__SCRUBGRACE__", f"{float(SCRUB_STRIKE_GRACE_S):.0f}").replace("__SCRUBLEAD__", f"{float(SCRUB_COVER_LEAD_S):.0f}")
-            .replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
+            .replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATETEST__", _gate_test_lua()).replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
             .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
             .replace("__ENEMYAIR__", ea).replace("__SITES__", st).replace("__JAMCFG__", _jamcfg()).replace("__ECMP__", ecm_player if ecm_player in ("live", "f10") else "").replace("__ECMMSG__", "1" if ecm_msg else "0")
