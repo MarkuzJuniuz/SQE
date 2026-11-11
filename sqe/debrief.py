@@ -1884,7 +1884,9 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         fl = [g for g in manifest.groups if g["kind"] == "friendly" and g.get("pkg") == m["id"]]
         n_lost = sum(1 for g in fl for u in g["units"] if u in lost_all)
         tot = sum(len(g["units"]) for g in fl)
-        done = t_end >= m["tot_s"] + 90
+        done = t_end >= m["tot_s"] + 90 or m.get("type") == "FLEET_DEFENSE"      # v0.41.351: a merged raid is settled by the mission whatever the clock said (the group loop above applied it)
+        if m.get("unseen"):
+            continue                                         # a raid blue did not detect gets no package line (the raid's own events above stay)
         if str(m.get("objective", "")).startswith("Fighter Sweep"):
             dmg = None                                       # a sweep fights the air over the target area; the target itself is the strikers' job
         out["packages"].append({"number": m["number"], "objective": m["objective"], "damage": dmg, "lost": n_lost, "total": tot, "resolved": done})
