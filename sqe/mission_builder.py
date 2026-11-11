@@ -1685,6 +1685,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         gate = self._dead_gate(package, f, g, wps, first, stw, tot_s, base)
         self._scrub_point(package, f, g, base, wps, tot_s)
         self._home_leg(f, g, base, wps, idx, hold_end, stop, special)
+        if gate is not None and gate.get("ai") and gate.get("dead"):
+            self._gate_stop_slack(g, int(gate.get("acap") or 0))
         if gate is not None:
             if gate["to"] is None:
                 gate["to"] = len(g.points)                              # the landing point
@@ -1694,6 +1696,24 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             egr_ = next((w.eta_s for w in wps if w.name == "EGR"), None)          # v0.41.40: when this striker is OUT, for the escorts to wait on
             self._striker_egr.append(((geom.tx, geom.ty), float(egr_ if egr_ is not None else tw.eta_s + 180)))
         return g, (tw.eta_s if tw is not None else None)
+
+    def _gate_stop_slack(self, g, slack_s):
+        """v0.41.363 (attack fix plan, Stage B1): an AI gated STRIKE / CAS flight may hold up to the gate's cap (acap) outside the fight, but its attack
+        tasks stop at TOT + LATE_ATTACK_S (bombs) or TGT ETA + 420 / + 1080 (CAS): a long hold expired them even when the hold itself worked. So their
+        stop times grow by the cap. Only ground attack ControlledTasks that already have a stop time; never the Orbit / ROE / ECM tasks."""
+        if slack_s <= 0:
+            return
+        for pt_ in g.points:
+            for t_ in pt_.tasks:
+                if getattr(t_, "Id", "") != "ControlledTask":
+                    continue
+                st_ = t_.params.get("stopCondition", {})
+                inner_ = t_.params.get("task", {})
+                if "time" not in st_ or inner_.get("id") not in ("Bombing", "CarpetBombing", "AttackGroup", "EngageTargetsInZone"):
+                    continue
+                if inner_["id"] == "EngageTargetsInZone" and "Air" in (inner_.get("params", {}).get("targetTypes") or []):
+                    continue
+                st_["time"] = int(st_["time"]) + slack_s
 
     def _support_sortie(self, package, f, wps, full_stop, ctx):
         """v0.41.78: a support CAP sortie flies only its airframe's time on station (barcap.endurance_min); the rest of the mission is covered by relief

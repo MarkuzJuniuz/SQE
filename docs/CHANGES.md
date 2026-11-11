@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.363, attack fix Stage B1: pop the hold, stretch the attack stops
+
+XO 2026-11-10 ("fox 3 medium"). **NOT FLOWN: needs XO's forced-hold run (below).** A held AI strike / CAS flight is released with `popTask` (removes the hook's pushed Orbit, the route and its attack tasks go on) instead of `resetTask` + `SwitchWaypoint`; the break-off after a hold pops the same way. Only a flight that really got the orbit is popped. The attack tasks (Bombing, CarpetBombing, AttackGroup, ground EngageTargetsInZone) of an AI gated STRIKE / CAS flight stop the gate's hold cap (900 s) later, so a long hold cannot expire them. Dev switch `SQE_GATE_TEST_HOLD_S=60` (read at build): every AI gated flight holds that long once, then resumes normally; nothing is emitted without it. Judgment, not an ED statement: forum reports on scripted task stacks (queue S15, `attack fix plan.md`). If a released flight goes home instead of attacking, Stage B2 is the fallback.
+
 ## v0.41.362, attack fix Stage A: wider SLAM-ER and JSOW launch windows
 
 XO 2026-11-10 ("fox 3 medium"). **NOT FLOWN.** `SLAM_ATTACK_S` 90 -> 240 and `JSOW_ATTACK_S` 120 -> 240: a stand-off jet that leaves the marshal late (the Hornet in the 22-33-46 run reached its SLAM point about 95 s after the window closed) still launches. Only the stop time of the launch tasks and the start of the Return Fire ROE move.
