@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.354, campaign rules Phase 9b part 2: Mineralnye Vody is a red field
+
+XO 2026-11-10 ("fox 3 medium"). **NOT FLOWN.** Mineralnye Vody (`ab_minvody`, value 7, tier 4, wing weight 2) is a red airfield with an air wing, SAM sites and an EWR at L2 and L3 (not L1); red's total jets are unchanged, spread over one more field. A new campaign's red picture differs from before for the same seed; old saves are untouched (the field was already red in every mission).
+
 ## v0.41.353, campaign rules Phase 9b part 1: the blue laydown
 
 XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** A new campaign's blue force is 272 jets at every level (was 174 at L2; blue is flat), 17 squadrons: Vaziani and Tbilisi-Lochini now base squadrons, Batumi holds one HAVCAP F-15C squadron (8; guards only, AI only), the 75th FS is cut; every squadron, the player's too, sits on a field that can park it, and the New Campaign dialog shows that field. Divert fields are the last-resort landing for a fallen field or a sunk carrier, and have no Patriot. An older save keeps its squadrons, sizes and Patriots.
