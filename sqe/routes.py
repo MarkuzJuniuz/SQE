@@ -238,6 +238,15 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         lx, ly = offset(g.tx, g.ty, bearing(g.tx, g.ty, *ip_xy), LOW_LEG_NM * NM)
         wp.append(Wpt("LOW", lx, ly, ialt, p.ip_kts, "Descend: low-level run in", rad=True))
     else:
+        if irad and not human:
+            # S28 (XO run 2026-11-11 13-30-36: Hornet 5 reached the gate with 42% fuel): with the IP within LOW_LEG_NM + 3 of the target there is no LOW point, so PUSH
+            # (high) straight to the IP (152 m radar altitude) made DCS slope the descent over the whole long leg, 400 km at 150 m. A "DESC" point at cruise altitude
+            # LOW_LEG_NM before the IP starts the descent there. AI only (a player keeps the old waypoints). Skipped when the airframe has no room for one more point.
+            pu_ = next((w for w in wp if w.name == "PUSH"), None)
+            if (pu_ is not None and dist(pu_.x, pu_.y, *ip_xy) > (LOW_LEG_NM + 3) * NM
+                    and len(wp) + 1 + 2 + 2 <= p.max_points):          # + this point, TGT and EGR, the builder's two
+                dx_, dy_ = offset(*ip_xy, bearing(*ip_xy, pu_.x, pu_.y), LOW_LEG_NM * NM)
+                wp.append(Wpt("DESC", dx_, dy_, alt, p.ip_kts, "Start the descent: low-level run in"))
         wp.append(Wpt("IP", *ip_xy, ialt, p.ip_kts, "Weapons armed, master arm", rad=irad))
     # The player's TGT is on the ground target at 0 AGL so pods, weapons and the WSO / Jester can slave to it. The wingmen follow the player, and AI-only flights
     # never get a ground-level point (they would descend to it).
