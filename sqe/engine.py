@@ -206,7 +206,9 @@ class Session:
             if dec["mode"] == "hold":
                 bombers.note_stage(st, dec)
             else:
-                bomber_turn = pick.choice(turns) if turns else st.turn
+                stg_t = ((st.raids or {}).get("bomber_stage") or {})
+                stg_t = stg_t.get("turn") if stg_t.get("launch") == st.day else None      # v0.41.356 (Phase 10b part 1): the launch turn was drawn when the raid was staged (the turn before it plans the prep); an older stage has none: drawn now
+                bomber_turn = stg_t if stg_t in turns else (pick.choice(turns) if turns else st.turn)
         keep = {k: v for k, v in (st.raids or {}).items() if k in ("carry", "sead_fail", "bomber_days", "bomber_stage", "deck_out_to", "retask")}
         st.raids = {**keep, "day": st.day, "surprise": 0, "surprise_by": {}, "carry": [], "bomber_turn": bomber_turn, "booked": {}}      # v0.41.341 (Phase 5b): the day's raids are drawn turn by turn in `plan_turn` (`raids.turn_raids`); "surprise" adds up the unwarned ones nobody flew, settled overnight
         bc = barcap_.ensure(st)                          # the day's BARCAP areas (made once a day); the standing patrols, guards and the AWACS / tanker windows are planned turn by turn (`plan_turn`, Phase 4b)
@@ -749,28 +751,64 @@ class Session:
         from . import threatmap as tm
         from .war import long_range_site
         st = self.state
+        rec = (st.raids or {}).get("raid_prep") or {}
         i = next((n for n, o in enumerate(objs, 1) if carrier_raid(st, o)), None)
+        ahead = None                                                 # v0.41.356 (Phase 10b part 1): the turn BEFORE the raid plans the prep for the raid of the next turn (the raid itself is not in this list)
         if i is None:
-            return [], {}, ""
-        o_r = objs[i - 1]
+            ahead = self._raid_prep_ahead(st.turn)
+            from . import fleet as _fl
+            fl_ = _fl.carrier(st)
+            if ahead is None or fl_ is None:
+                return [], {}, ""
+            o_r = Objective("", ObjectiveType.FLEET_DEFENSE, fl_.id, 7.0, "")
+            i = 1
+        else:
+            o_r = objs[i - 1]
+            if rec.get("turn") == st.turn:                           # the raid's turn and its prep was planned the turn before: the packages exist, only the site list is handed on (`_time_raid_prep`)
+                return [], {s: o_r.id for s in rec.get("sites", [])}, o_r.id
         ex = pb._raid_plan(i, o_r) or {}
         b = st.bases.get(o_r.target_id)
         if b is None or ex.get("bomber_wing") not in st.assets or ex.get("brg") is None:
             return [], {}, o_r.id
+        if ahead is not None:                                        # the priority the planner gives the raid (`ObjectivePlanner.plan`), so the prep ranks with it
+            o_r.priority = (12.0 if ex.get("mode") == "desperate" else 7.0) + 0.3 * int(ex.get("bombers", 0))
         dest = ex.get("dest") or (b.x, b.y)
         have = {o.target_id for o in objs if o.type == ObjectiveType.DEAD}
         new, sites = [], {}
-        for a, _r in tm.raid_inbound_sites(st, (dest[0], dest[1]), ex["brg"], ex["bomber_wing"]):
+        pid = (lambda n: f"obj-t{st.turn}-p{n}") if ahead is not None else (lambda n: f"obj-d{st.day}-p{n}")
+        lapsing = [a for a in st.assets.values() if ahead is not None and a.suppressed and a.suppressed_turn >= 0 and ahead - a.suppressed_turn >= SUPPRESS_TURNS]
+        for a in lapsing:                                            # v0.41.356: a radar blinded now whose blindness runs out before the raid's turn is back up when the raid flies: it counts as a live site (probe: seed 7, two such sites were missing from the record)
+            a.suppressed = False
+        try:
+            inbound = tm.raid_inbound_sites(st, (dest[0], dest[1]), ex["brg"], ex["bomber_wing"])
+        finally:
+            for a in lapsing:
+                a.suppressed = True
+        for a, _r in inbound:
             sites[a.id] = o_r.id
             if a.id in have:
                 continue
             tail = f" ({a.health:.0%} left)" if a.health < 0.85 else ""
             if long_range_site(st, a):
-                o = Objective(f"obj-d{st.day}-p{len(new) + 1}", ObjectiveType.DEAD, a.id, o_r.priority, f"Standoff DEAD: destroy {a.name}{tail}", "STANDOFF")
+                o = Objective(pid(len(new) + 1), ObjectiveType.DEAD, a.id, o_r.priority, f"Standoff DEAD: destroy {a.name}{tail}", "STANDOFF")
             else:
-                o = Objective(f"obj-d{st.day}-p{len(new) + 1}", ObjectiveType.DEAD, a.id, o_r.priority, f"SEAD: suppress {a.name}{tail}", "SEAD")
+                o = Objective(pid(len(new) + 1), ObjectiveType.DEAD, a.id, o_r.priority, f"SEAD: suppress {a.name}{tail}", "SEAD")
             new.append(o)
-        return new, sites, o_r.id
+        if ahead is not None:                                        # the record the raid of turn `ahead` reads (a replan of this turn writes it again: it is one record, not a list that grows)
+            st.raids["raid_prep"] = {"turn": ahead, "sites": sorted(sites)}
+        return new, sites, o_r.id if ahead is None else ""
+
+    def _raid_prep_ahead(self, turn: int):
+        """v0.41.356 (Phase 10b part 1): the turn of the carrier raid when `turn` is the turn right before it and its prep is planned now, else None. Only a raid staged by this version qualifies (its stage holds the
+        launch turn and the bearing); an older save, or a raid with no planned turn before it, keeps the same-turn prep (`_time_raid_prep`, RAID_PREP_LEAD_MIN)."""
+        st = self.state
+        ra = st.raids or {}
+        bt, stg = ra.get("bomber_turn"), ra.get("bomber_stage") or {}
+        if bt is None or turn != bt - 1 or stg.get("turn") != bt or stg.get("brg") is None or stg.get("launch") != st.day:
+            return None
+        if bt - 1 < clock.first_turn(st.day) or (clock.is_night_turn(bt - 1) and not st.night_ops):
+            return None
+        return bt
 
     def _time_raid_prep(self, pkgs: list, prep, floor=None) -> None:
         """Start the raid prep packages RAID_PREP_LEAD_MIN before the carrier raid (and pull a Standoff DEAD of the day that would fall after it ahead of it); the raid package remembers its sites (`prep_sites`) for the war sim.
@@ -778,10 +816,19 @@ class Session:
         new, sites, raid_oid = prep
         if not sites:
             return
+        rec = (self.state.raids or {}).get("raid_prep") or {}
+        if rec.get("turn") is not None and rec["turn"] != self.state.turn:       # v0.41.356 (Phase 10b part 1): the turn before the raid: these packages are the raid's prep, named for it; they keep the turn's own start times (wave 1 is over before the raid's turn opens)
+            ids_ = {o.id for o in new}
+            for p in pkgs:
+                if p.objective.id in ids_:
+                    p.extra["raid_prep"] = f"t{rec['turn']}"
+            return
         raid = next((p for p in pkgs if p.objective.id == raid_oid), None)
         if raid is None:
             return
         raid.extra["prep_sites"] = sorted(sites)
+        if rec.get("turn") == self.state.turn:                                  # v0.41.356: the prep was flown (or resolved) in the turn before: no lead time, no day Standoff DEAD pulled ahead
+            return
         hm = int(raid.start[:2]) * 60 + int(raid.start[3:5])
         m = max(0, hm - RAID_PREP_LEAD_MIN)
         ids = {o.id for o in new}
