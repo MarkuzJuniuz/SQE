@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.374, S22: the air wings tables show the number of jets
+
+XO 2026-11-11 ('fox 3 medium'). **NOT FLOWN.** GUI only. New `on_hand` property on `Squadron` and `RedSquadron` (`models.py`): `available + len(refit) + reserve + held`, read by the two tables only (`available`, `authorized`, `readiness` are unchanged). Coalition squadrons table: "Aircraft on hand" shows `on_hand / authorized` plus "(N refitting)" (refit list + reserve) when N > 0; the bar (now "Strength") is `on_hand / authorized`. Red air wings table: same number and bar, and no refit text, so refits are not readable. No smoke test (no mission code).
+
 ## v0.41.373, S21 follow-up: the after-action report is a plain list
 
 XO 2026-11-11 ('fox 3 medium'). **NOT FLOWN.** GUI only (`DayResolvedDialog`). The report's animation is dropped (blank gaps, the top cut off by the scroll): every simulated event is listed at once in one `QTextBrowser`, starting at the top; Continue is a plain accept. A result with no detail lines no longer leaves a stray blank line. The reason line, title, summary line and `turns` input are unchanged.
