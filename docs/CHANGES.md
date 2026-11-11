@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.370, S13: the theatre-level background is gone
+
+XO 2026-11-11 ("fox 3 medium"). **NOT FLOWN.** The Caucasus pack's one theatre-level `background` text is deleted (it was never shown: every level has its own story). `theatres.REQUIRED` asks for `stories` instead, `narrative` no longer serves BACKGROUND, and a level with no story shows one plain line in the Situation panel. The per-level story texts and `title` stay. Probe: new campaigns at L1, L2, L3 show their stories; save and load fine.
+
 ## v0.41.369, S19: one fixed safe AWACS station and its guard every turn
 
 XO 2026-11-11 ("fox 3 medium"). **NOT FLOWN.** The AWACS no longer travels with the player: `threatmap.awacs_station(state)` gives one station per state (behind the support field, facing red's live fighter fields, clear of enemy fields and SAM rings), and `_place_support` takes the AWACS track and its HAVCAP spot from it, so every package of a turn and the guard flight see the same point. The HAVCAP route's threat bearing is the station's front heading. The tanker keeps its own package-based spot (its fallback is pushed 15 nm off the AWACS track). `blue_barcap._plan_guards` no longer draws for the AWACS guard: every AWACS that is up gets a pair, like the tanker (`share` kept for the callers). The dead `MissionBuilder._safe_station` is deleted. `AWACS_LOSS_ON` stays False.
