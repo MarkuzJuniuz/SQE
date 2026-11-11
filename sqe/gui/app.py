@@ -27,7 +27,6 @@ from . import overview_view as V
 
 URGENT_ROLE = Qt.UserRole + 1
 AUTOSKIP_MAX_TURNS = 84          # Duration unticked: at most a week of turns (12 a day), a judgment call (campaign rules plan Phase 11)
-AUTOSKIP_DELAY_MS = 250          # pause between two skipped turns (the ticker)
 
 
 class UrgentDelegate(QStyledItemDelegate):
@@ -260,19 +259,21 @@ class MissionsPage(QWidget):
         self.resume = QPushButton("Resume sortie in progress"); self.resume.setObjectName("fly"); self.resume.hide(); L.addWidget(self.resume)
         self.resume.clicked.connect(win.wait_for_results)
         self.skip = QPushButton("Skip Turn"); self.skip.setToolTip("Stand down for this turn (2 hours): this turn's packages are resolved by the war simulation and the clock moves on two hours. A night with no night flying is resolved for you.")
-        self.skip.clicked.connect(win.skip_turn); L.addWidget(self.skip, 0, Qt.AlignRight)
+        self.skip.clicked.connect(win.skip_turn)
         # Phase 11 (XO): AUTOMATICALLY SKIP: Skip Turn keeps stepping until a flight is available (or the Duration is up)
+        # S21 (XO 2026-11-11): the Skip Turn button sits in this column, above the label, so both share one left edge
         self.auto_box = QWidget(); ab = QVBoxLayout(self.auto_box); ab.setContentsMargins(0, 0, 0, 0); ab.setSpacing(4)
+        ab.addWidget(self.skip, 0, Qt.AlignLeft)
         ab.addWidget(self._label("AUTOMATICALLY SKIP", "head"))
         self.auto_stand = QCheckBox("Stand Down Days"); self.auto_stand.setToolTip("Keep skipping through turns where you have no flight to fly. Unticked: stop at the first such turn.")
         self.auto_night = QCheckBox("Nighttime Sorties"); self.auto_night.setToolTip("Also skip night turns, even when a flight is on offer.")
         self.auto_dur_on = QCheckBox("Duration:"); self.auto_dur_on.setToolTip("Stop after this many hours of campaign time. Unticked: no time limit (a week at most).")
         self.auto_dur = StepSpin(); self.auto_dur.setRange(2, 24); self.auto_dur.setSingleStep(2); self.auto_dur.setSuffix(" hrs"); self.auto_dur.setValue(12)
-        drow = QHBoxLayout(); drow.setContentsMargins(0, 0, 0, 0); drow.addWidget(self.auto_dur_on); drow.addWidget(self.auto_dur); drow.addStretch(1)
-        for w in (self.auto_stand, self.auto_night):
-            ab.addWidget(w)
-        ab.addLayout(drow)
-        self.ticker = QLabel(""); self.ticker.setObjectName("small"); self.ticker.setWordWrap(True); ab.addWidget(self.ticker)
+        self.auto_dur_row = QWidget(); drow = QHBoxLayout(self.auto_dur_row); drow.setContentsMargins(0, 0, 0, 0); drow.addWidget(self.auto_dur_on); drow.addWidget(self.auto_dur); drow.addStretch(1)
+        # S21: the three rows get one height: the Duration row (checkbox + the -/hrs/+ spin) is the tallest, so its height is the row height (like one CSS height for every row)
+        row_h = max(self.auto_dur_row.sizeHint().height(), self.auto_stand.sizeHint().height())
+        for w in (self.auto_stand, self.auto_night, self.auto_dur_row):
+            w.setFixedHeight(row_h); ab.addWidget(w)
         L.addWidget(self.auto_box, 0, Qt.AlignRight)
         for w in (self.auto_stand, self.auto_night, self.auto_dur_on):
             w.toggled.connect(self._auto_changed)
@@ -637,6 +638,7 @@ def default_window_rect(ax: int, ay: int, aw: int, ah: int) -> tuple:
 
 
 class MainWindow(QMainWindow):
+    _auto_cursor = False                      # S21: True while the wait cursor of an auto-skip run is set
     def __init__(self, session: Session):
         super().__init__(); self.session = session
         self.setWindowTitle(f"{APP_NAME}"); self.setMinimumSize(*WIN_MIN); self._place_window()
@@ -886,7 +888,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _skip_nosave(sess):
-        """One Skip Turn without its own save (Session.skip_turn saves and writes a backup every call; the ticker saves once at the end). The engine stays untouched: the instance's
+        """One Skip Turn without its own save (Session.skip_turn saves and writes a backup every call; the auto-skip run saves once at the end). The engine stays untouched: the instance's
         `save` is shadowed for the call (like assigning a method on an object in JS), then removed."""
         sess.save = lambda *a, **k: None
         try:
@@ -895,21 +897,21 @@ class MainWindow(QMainWindow):
             del sess.save
 
     def _auto_stop(self, reason: str):
-        """Every stop path ends here: controls back on, ONE save (Session.save writes a backup each time), the war's ending box, one summary."""
-        n, before = self._auto_n, self._auto_before
+        """Every stop path ends here: controls and cursor back, ONE save (Session.save writes a backup each time), ONE refresh, the war's ending box, then ONE after-action report
+        for the whole run (S21, XO 2026-11-11: it carries the ticker and the fade-in; the Missions page itself shows neither; the stop reason is its header line)."""
+        before, turns = self._auto_before, self._auto_turns
         self._auto_busy = False
+        if self._auto_cursor:
+            QApplication.restoreOverrideCursor(); self._auto_cursor = False
+        self.p_miss.set_auto_enabled(True)
         try:
-            self.p_miss.ticker.setText(f"{reason} ({n} turn{'s' if n != 1 else ''} skipped)")
-            try:
-                self.session.save()
-            except OSError:
-                pass
-            self.refresh_all()
-            self._ending_popup(before)
-            if self.session.state.status == "ACTIVE" and not getattr(self, "_auto_quiet", False):
-                QMessageBox.information(self, "Automatically skip", f"{reason}\n\n{n} turn{'s' if n != 1 else ''} skipped. It is now {self.session.turn_label()}.")
-        finally:
-            self.p_miss.set_auto_enabled(True)
+            self.session.save()
+        except OSError:
+            pass
+        self.refresh_all()
+        self._ending_popup(before)
+        if turns and not getattr(self, "_auto_quiet", False):             # _auto_quiet: a tool or test may set it to skip the box
+            DayResolvedDialog(turns, self, reason=reason).exec()
 
     def _auto_tick(self):
         sess = self.session; st = sess.state
@@ -923,20 +925,19 @@ class MainWindow(QMainWindow):
             why = self._auto_step_wanted(sess, self._auto_night, self._auto_stand)
             if why:
                 return self._auto_stop(why)
-            label = sess.turn_label()
-            self._skip_nosave(sess); self._auto_n += 1
-            self.p_miss.ticker.setText(f"Skipped {label}  ({self._auto_n} so far) ...")
-            self.refresh_all()
-            QTimer.singleShot(AUTOSKIP_DELAY_MS, self._auto_tick)
+            self._auto_turns.extend(self._skip_nosave(sess).get("turns", []))
+            QTimer.singleShot(0, self._auto_tick)                          # the next step on the next event-loop turn: the window stays responsive, no per-turn redraw
         except Exception:
             self._auto_busy = False
+            if self._auto_cursor:
+                QApplication.restoreOverrideCursor(); self._auto_cursor = False
             self.p_miss.set_auto_enabled(True)
             traceback.print_exc()
-            self.p_miss.ticker.setText("Automatic skip stopped on an error (see the console).")
             try:
                 sess.save(); self.refresh_all()
             except Exception:
                 pass
+            QMessageBox.warning(self, "Automatically skip", "The automatic skip stopped on an error (see the console). The turns skipped so far are kept.")
 
     def skip_turn(self):
         sess = self.session
@@ -951,20 +952,23 @@ class MainWindow(QMainWindow):
         stand_ok, night_ok, hours = self.p_miss.auto_options()
         if not (stand_ok or night_ok or hours is not None):
             out = sess.skip_turn(); self.refresh_all()
-            DayResolvedDialog(out["turns"], self).exec()
+            DayResolvedDialog(out["turns"], self).exec()          # S21: a plain skip gets the same report (one turn)
             self._ending_popup(before)                            # (the war's ending, if this day ended it, has its own box with the story)
             return
-        # Phase 11: any box ticked: resolve this turn once, then the ticker steps on its own (no result box per turn)
+        # Phase 11: any box ticked: resolve this turn once, then the steps follow on their own; S21: no redraw per turn, one report at the end
         t0 = sess.state.turn
         self._auto_busy = True; self.p_miss.set_auto_enabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor); self._auto_cursor = True
+        self._auto_turns = []
         try:
-            self._skip_nosave(sess)
+            self._auto_turns.extend(self._skip_nosave(sess).get("turns", []))
         except Exception:
-            self._auto_busy = False; self.p_miss.set_auto_enabled(True); raise
-        self._auto_n, self._auto_before, self._auto_stand, self._auto_night, self._auto_hours = 1, before, stand_ok, night_ok, hours
+            self._auto_busy = False; self.p_miss.set_auto_enabled(True)
+            QApplication.restoreOverrideCursor(); self._auto_cursor = False
+            raise
+        self._auto_before, self._auto_stand, self._auto_night, self._auto_hours = before, stand_ok, night_ok, hours
         self._auto_target = t0 + (hours // 2 if hours is not None else AUTOSKIP_MAX_TURNS)
-        self.refresh_all()
-        QTimer.singleShot(AUTOSKIP_DELAY_MS, self._auto_tick)
+        QTimer.singleShot(0, self._auto_tick)
 
     def wait_for_results(self):
         dlg = WaitingDialog(self.session, self); r = dlg.exec()
