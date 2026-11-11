@@ -45,7 +45,7 @@ class Difficulty:
     red_attack: float = 0.30             # daily chance that Red attacks a contested sector it is not clearly losing (x its strength ratio)
     red_reinf: float = 5.0               # strength points Red adds a day at the zone in contact (x supply)
     blue_reinf: float = 5.0              # the same for Blue
-    raid_rate: float = 0.40              # Red raids on our airfields per day (raids.py); some are announced, the rest are surprises
+    raid_rate: float = 0.40              # S37: no longer read by raids.py (red raids by jet budget, `raids.RAID_SHARE`); `ground.py` still reads it for the abstract supply strikes
     raid_arm: float = 0.0                # v0.41.84: chance a Su-24M raid on a field with a live Patriot / HAWK brings a Kh-31P SEAD pair (judgment call: L1 none, L2 rare, L3 normal)
     raid_banzai: bool = False            # v0.41.146 (Campaign Revamp B4): Level 1's insurgents raid targets under live Patriot / HAWK cover without any SEAD (judgment call: they have no SEAD doctrine, and with every one of our fields covered they could never raid at all); the cover shoots them
     arm_cap: int = 8                     # v0.41.125: most Su-24M in red's SEAD group (L2: a pair, judgment call) ...

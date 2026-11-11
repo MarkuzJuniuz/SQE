@@ -1,8 +1,8 @@
 """Red raids on our airfields (ground war, phase 2).
 
 Red plans a raid the way we plan a strike: it looks for one of OUR airfields that its bombers (Su-24M) can reach, preferring the ones nearest
-its own fields and the least defended. Raids are drawn TURN by turn (v0.41.341, campaign rules plan Phase 5b): each turn has the chance `raid_rate / 12` (half of it on a night turn, RED_RAID_NIGHT)
-of one; a share of them are surprises (raid_surprise):
+its own fields and the least defended. Raids are drawn TURN by turn (v0.41.341, campaign rules plan Phase 5b): S37: by JET BUDGET: each turn red earns raid credit, `RAID_SHARE` of its free attack jets (half of it on a night turn, RED_RAID_NIGHT),
+and builds raids while the credit lasts; a share of them are surprises (raid_surprise):
 
 * Every raid red plans is an ordinary "<Base/Supply/Garrison/Troop> Defense: Intercept" package in the tasking order (v0.41.304: no dice, no
   hidden emergencies); a surprise one is marked "(no warning)". If you do not take it, the war simulation settles it by odds.
@@ -31,9 +31,9 @@ SECTOR_HIT = 4.0              # friendly sector strength lost per aircraft that 
 GARRISON_SHIELD = 0.25        # a field's garrison takes this share off the damage its defences would suffer
 RED_RAID_NIGHT = 0.5          # v0.41.341 (plan Phase 5b): a night turn draws half the raid chance of a day turn (judgment call: red's bombers and their escorts fly less at night; XO tunes it in Phase 13)
 # v0.41.345 (scaled tasking, Phase C): the raid chance follows red's free attack pairs. Source: Phase A probe 2026-11-10 (free attack pairs per turn in red_air["free"]), judgment calls
-RAID_REF_PAIRS = {1: 6, 2: 39, 3: 82}      # the Phase A medians of free attack pairs a turn (L1 5 to 6.5, L2 38 to 40, L3 80 to 84): a full-strength red keeps today's tempo
-RAID_MULT_MAX = 1.5                        # a red above its reference never raids more than this times the plain rate
-RAID_TEMPO = {1: 1.0, 2: 1.4, 3: 1.4}      # red rises with blue's +40% (judgment call); at L3 about 2.0 a day goes to about 2.8 (the queue's "about 2.7")
+RAID_SHARE = {1: 0.0045, 2: 0.0045, 3: 0.06}   # S37: the share of red's free ATTACK jets (`free_attack_jets`) a turn adds to its raid credit (judgment calls, tuned with the probe `.private/probes/s37`: L1 0.1 raids a day as before, L2 about 0.5, L3 about 4: past 0.06 the L3 raids do not rise, no aim or no wing is left)
+RAID_CREDIT_TURNS = 2.0                        # S37: unspent credit is kept for the next turns but never beyond this many turns' income
+RAID_MAX_PER_TURN = 4                          # S37: the most raids red builds in one turn
 TURNS_PER_DAY = clock.DAY_MIN // clock.TURN_MIN      # 12: the level's raid_rate (raids a day) is spread over the day's turns
 # v0.41.355 (campaign rules plan Phase 10a): the Tu-22M3 LAND STRIKE (2 Tu-22M3 + 2 Mozdok Su-27 on a blue supply site). All judgment calls (no public figure), tuned on the 40-day cadence runs.
 TU22 = "Tu_22M3"
@@ -372,29 +372,46 @@ def raid_objective(base, aim: str = "", desc: str | None = None) -> Objective:
     return Objective("", ObjectiveType.FLEET_DEFENSE, base.id, RAID_PRIORITY, desc or f"Intercept a raid on {base.name}", aim)
 
 
-def red_attack_pairs(state, turn: int):
-    """v0.41.345 (scaled tasking, Phase C): red's free attack pairs this turn (Su-24M, Su-25, Tu-22M3: every squadron whose aircraft is not a fighter), read from `red_air["free"]` once `redair.plan_turn`
-    has filled it for THIS turn; None when it has not (an unplanned night turn, overnight, tools)."""
+def free_attack_jets(state, turn: int) -> int:
+    """S37: red's free ATTACK jets this turn (every squadron whose aircraft is not a fighter: Su-24M, Su-25, Tu-22M3). Once `redair.plan_turn` has filled `red_air["free"]` for THIS turn it is that pool; for an
+    unplanned turn (night with night ops off, tools) it is the ready jets of the attack squadrons of the wings that can still fly."""
     from .loadouts import ENEMY_FIGHTERS
     ra = getattr(state, "red_air", None) or {}
     free = ra.get("free")
-    if not free or ra.get("turn") != turn:
-        return None
-    typ = {q.id: q.aircraft for w in state.enemy_air for q in w.sqns}
-    return sum(int(n) // 2 for sid, n in free.items() if typ.get(sid) is not None and typ[sid] not in ENEMY_FIGHTERS)
+    if free and ra.get("turn") == turn:
+        typ = {q.id: q.aircraft for w in state.enemy_air for q in w.sqns}
+        return sum(int(n) for sid, n in free.items() if typ.get(sid) is not None and typ[sid] not in ENEMY_FIGHTERS)
+    n = 0
+    for w in state.enemy_air:
+        a = state.assets.get(w.base_asset_id)
+        if a is None or a.destroyed:
+            continue
+        n += sum(int(q.available) for q in w.sqns if q.aircraft not in ENEMY_FIGHTERS and q.reserve <= 0)
+    return n
 
 
-def turn_rate(state, d, turn: int) -> float:
-    """The chance of a raid in this turn: the level's `raid_rate` a day spread over the day's turns (6 since S25) (v0.41.341, Phase 5b; it was one draw a day in `Session._begin_day`), times the idle surge
-    (v0.41.155: red raids more while your squadron stands down) and `RED_RAID_NIGHT` on a night turn. v0.41.345 (scaled tasking, Phase C): times `RAID_TEMPO` x red's free attack pairs / `RAID_REF_PAIRS`
-    (at most `RAID_MULT_MAX`), so a worn-down red raids less; a turn with no pool (unplanned night, tools) keeps the plain rate."""
+def raid_income(state, d, turn: int) -> float:
+    """S37 (replaces the per-turn dice `turn_rate`): the jets of raid credit red earns this turn = `RAID_SHARE` of its free attack jets, times the idle surge (v0.41.155: red raids more while your
+    squadron stands down) and `RED_RAID_NIGHT` on a night turn. A worn-down red (fewer free attack jets) earns less by itself. (The massed-wave day, `wave_mult`, makes the raids themselves bigger, in `plan_raid`.)"""
     from . import ground as _gr
-    r = float(d.raid_rate) * _gr.surge(state, d) / TURNS_PER_DAY * (RED_RAID_NIGHT if clock.is_night_turn(turn) else 1.0)
-    pairs = red_attack_pairs(state, turn)
-    if pairs is None:
-        return r
     lvl = max(1, min(3, int(getattr(d, "level", 1))))
-    return r * max(0.0, min(RAID_MULT_MAX, pairs / RAID_REF_PAIRS[lvl])) * RAID_TEMPO[lvl]
+    return RAID_SHARE[lvl] * free_attack_jets(state, turn) * _gr.surge(state, d) * (RED_RAID_NIGHT if clock.is_night_turn(turn) else 1.0)
+
+
+def _credit_start(state, d, turn: int) -> tuple:
+    """S37: -> (the turn's raid credit before any raid, this turn's income). Credit is carried turn to turn (`raids["credit"]`); `raids["credit_in"]` keeps the value each turn started with, so a replan of
+    the turn gives the same answer."""
+    r = state.raids
+    inc = raid_income(state, d, turn)
+    if r is None:
+        return inc, inc
+    cin = r.setdefault("credit_in", {})
+    k = str(turn)
+    if k not in cin:
+        cin[k] = float(r.get("credit", 0.0))
+    for old in [t for t in cin if int(t) < turn - 1]:
+        del cin[old]
+    return min(cin[k] + inc, RAID_CREDIT_TURNS * inc), inc
 
 
 def plan_raid(state, d, base, aim: str, oid: str, turn: int):
@@ -516,15 +533,16 @@ def tu_strike(state, d, rng: random.Random, turn: int):
 
 
 def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) -> tuple:
-    """-> (objectives of the raids red plans THIS turn; number of unwarned raids that could not be built, settled overnight). One draw a turn (chance `turn_rate`; v0.41.341, Phase 5b: it was one draw a day in
-    `Session._begin_day`); the same seed gives the same answer. Each raid is booked (`plan_raid`) as it is drawn and its plan is kept in `state.raids["booked"]`. Ids are obj-t<turn>-r<n>, and obj-t<turn>-s<n> for an
-    unwarned one (`Session.plan_turn` reads "-s<n>" as "no warning"). `planned` False (a night turn with night ops off: nothing is planned in it and nothing is booked): every raid drawn is a surprise,
+    """-> (objectives of the raids red plans THIS turn; number of unwarned raids that could not be built, settled overnight). S37: by JET BUDGET, not by dice: the turn earns raid credit (`raid_income`,
+    `RAID_SHARE` of red's free attack jets) and red builds raids (`pick_aim`, `plan_raid`) while the credit is above zero, at most `RAID_MAX_PER_TURN`; each raid costs the jets it books (bombers, SEAD, DEAD)
+    and the rest is carried to the next turn (`raids["credit"]`). It stops at the first aim or wing that cannot be had. The same seed gives the same answer. Each raid is booked as it is planned and its plan
+    is kept in `state.raids["booked"]`. Ids are obj-t<turn>-r<n>, and obj-t<turn>-s<n> for an unwarned one (`Session.plan_turn` reads "-s<n>" as "no warning"). A raid no wing can field is a surprise with the
+    level's `raid_surprise` chance (settled overnight). `planned` False (a night turn with night ops off: nothing is planned in it and nothing is booked): the credit buys surprises at the level's mean raid size,
     settled overnight."""
     from . import bombers
     if bombers.is_quiet(state):                             # v0.41.109: the quiet day before the carrier raid
         return [], 0
-    rate = turn_rate(state, d, turn)
-    n = int(rate) + (1 if rng.random() < rate - int(rate) else 0)
+    credit, _inc = _credit_start(state, d, turn)
     warned, surprise = [], 0
     booked = state.raids.setdefault("booked", {}) if state.raids is not None else {}
     if state.raids is not None:
@@ -534,24 +552,36 @@ def turn_raids(state, d, rng: random.Random, turn: int, planned: bool = True) ->
         if tu_ is not None:
             booked[tu_[0].id] = tu_[1]
             warned.append(tu_[0])
-    for _ in range(n):
+    mean_jets = max(2.0, sum(d.raid_size) / 2.0)
+    n_made, misses = 0, 0
+    while credit > 0 and n_made < RAID_MAX_PER_TURN and misses < 3:
         unwarned = rng.random() < d.raid_surprise
         if not planned:
             surprise += 1
+            n_made += 1
+            credit -= mean_jets
             continue
         pa = pick_aim(state, d, rng)
-        if pa is not None and all((o.target_id, o.aim) != (pa[0].id, pa[1]) for o in warned):
-            base, aim = pa
-            o = raid_objective(base, aim, describe(state, base, aim))
-            # v0.41.304 (XO 2026-11-05: "no more hidden ones"): an unwarned raid is listed like the others (id ...-s<n>, the package reads "no warning"); it used to be only a count settled overnight
-            o.id = f"obj-t{turn}-{'s' if unwarned else 'r'}{len(warned) + 1}"
-            bk = plan_raid(state, d, base, aim, o.id, turn)
-            if bk is not None:
-                booked[o.id] = bk
-                warned.append(o)
-                continue
-        if unwarned:
-            surprise += 1                                    # no target to build it on, or no wing that can field it: it still happens, settled overnight as before
+        if pa is None:
+            break                                            # nothing red can raid: no raid, nothing to settle overnight
+        if any((o.target_id, o.aim) == (pa[0].id, pa[1]) for o in warned):
+            misses += 1                                      # the same aim again: try another
+            continue
+        base, aim = pa
+        o = raid_objective(base, aim, describe(state, base, aim))
+        # v0.41.304 (XO 2026-11-05: "no more hidden ones"): an unwarned raid is listed like the others (id ...-s<n>, the package reads "no warning"); it used to be only a count settled overnight
+        o.id = f"obj-t{turn}-{'s' if unwarned else 'r'}{len(warned) + 1}"
+        bk = plan_raid(state, d, base, aim, o.id, turn)
+        if bk is None:
+            if unwarned:
+                surprise += 1                                # no wing can field it: it still happens, settled overnight as before
+            break
+        booked[o.id] = bk
+        warned.append(o)
+        n_made += 1
+        credit -= bk["bombers"] + bk["arm"] + bk["dead"]
+    if state.raids is not None:
+        state.raids["credit"] = credit
     return warned, surprise
 
 
