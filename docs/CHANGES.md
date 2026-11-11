@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.385, S33: AI fighters fly home high over short-range air defence
+An AI TARCAP, escort, sweep or fleet-defence flight whose way home passes a live Tor, Osa, Tunguska, gun or MANPAD site now stays above that system's ceiling (plus 4,000 ft) until it has passed it, and only then descends to its recovery point. Your own flight's route is unchanged.
+
 ## v0.41.384, S29: the blue CAS task force starts on land
 The friendly task force and its JTAC, and the red column a CAS package moves, no longer start or stop in the sea. Their start, stop and patrol points now move onto land (150 m from the coast), and a garrison's task force picks another approach bearing if its straight leg would cross water.
 

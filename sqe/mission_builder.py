@@ -81,6 +81,10 @@ CV_RECOVER_NM = 10            # v0.41.17: AI carrier flights (and your wingmen) 
 CV_RCV_NM = 30            # v0.41.127 (XO 2026-10-23: F-14s flew 65 nm home at 2,000 ft): a flight going home to the boat keeps its height to a point this far out, then descends (judgment call)
 CV_RCV_FT = 10000         # ...and crosses that point at this height (the Marshal stack is lower; judgment call)
 RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
+HOME_SAM_VARIANTS = ("SA-15", "SA-8", "SA-19", "AAA", "MANPAD")     # S33 (XO 2026-11-11): the short-range air defence an AI fighter's way home stays high over
+HOME_RING_MARGIN_NM = 3.0     # ...its ring (threatmap.RANGE_NM) plus this counts as touching the leg (judgment call, the same size as the CAS DEAD rule)
+HOME_FLOOR_MARGIN_FT = 4000   # ...and the leg stays this far above the highest ceiling (profiles.ENVELOPE) among the rings it crosses (judgment call: Tor 20,000 -> 24,000 ft)
+HOME_FLOOR_NAME = "HFLR"      # ...at one point named so (no other code looks for it)
 RCV_SPREAD = (0, 30, -30, 60, -60)    # ...on its own bearing (degrees off the way it comes home), by stack slot
 SA10_REACH_NM = 31            # v0.41.14: the farthest an SA-10 fired at our jets in the runs (54-57 km)
 SWEEP_AFTER_TOT_S = 120       # v0.41.13: a sweep holds until 2 min after the first package it covers is over the target
@@ -287,6 +291,40 @@ class BuildResult:
     warnings: list = field(default_factory=list)
     seed: str = ""
     merged: list = field(default_factory=list)      # extra packages folded into this mission
+
+
+def home_floor_exit(path, rings):
+    """S33: where an AI fighter's way home leaves the last short-range air-defence ring. `path` = [(x, y), ...] (route end, SCRUB, RCV), `rings` = [(x, y, r_m), ...].
+    -> (distance along the path in m, the leg index it falls on, the point (x, y), the indexes of the rings the path touches) or None when no ring touches the path.
+    A ring that contains the path's end counts as exiting at the end."""
+    best, hit = None, []
+    cum = 0.0
+    segs = []
+    for i in range(len(path) - 1):
+        (ax, ay), (bx, by) = path[i], path[i + 1]
+        L = math.hypot(bx - ax, by - ay)
+        segs.append((cum, L, ax, ay, bx, by))
+        cum += L
+    for n, (cx, cy, r) in enumerate(rings):
+        last = None
+        for si, (c0, L, ax, ay, bx, by) in enumerate(segs):
+            if L <= 0:
+                continue
+            dx, dy = (bx - ax) / L, (by - ay) / L
+            fx, fy = ax - cx, ay - cy
+            b = fx * dx + fy * dy
+            disc = b * b - (fx * fx + fy * fy - r * r)
+            if disc < 0:
+                continue
+            u1, u2 = -b - math.sqrt(disc), -b + math.sqrt(disc)
+            if u2 < 0 or u1 > L:
+                continue
+            last = (c0 + min(u2, L), si, ax + dx * min(u2, L), ay + dy * min(u2, L))
+        if last is not None:
+            hit.append(n)
+            if best is None or last[0] > best[0]:
+                best = last
+    return None if best is None else (best[0], best[1], (best[2], best[3]), hit)
 
 
 class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, RaidSpawns):
@@ -2735,6 +2773,51 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._scrub.append({"pkg": package.id, "grp": g.name, "k": kind, "units": [u.name for u in g.units], "to": to, "ai": ai, "you": bool(f.is_player),
                             "tot": float(tot_s if tot_s is not None else 86400)})
 
+    def _home_floor(self, f, g, wps, rcv_xy, rcv_ft):
+        """S33 (XO 2026-11-11, run 14-35-51: Ford 8 flew home down to 295 m past a Tor site and both jets died). An AI fighter flight (TARCAP / escort / sweep / fleet defence;
+        never a player's own flight, whose route stays as it is) keeps its height over the live, unsuppressed short-range air defence (SA-15, SA-8, SA-19, AAA, MANPAD: their ring
+        from threatmap.RANGE_NM plus HOME_RING_MARGIN_NM) along its way home: route end -> SCRUB -> RCV. One point (HOME_FLOOR_NAME) goes where the way home leaves the last
+        ring, at the highest ceiling among the rings it touches (profiles.ENVELOPE) plus HOME_FLOOR_MARGIN_FT, so DCS starts the descent to the RCV only there. A flight already
+        above the floor and below that point keeps its height (no climb); one inside the ceiling climbs to the floor. Where a ring reaches past the SCRUB point or the RCV, those
+        points are raised to the floor instead (the point goes on the SCRUB -> RCV leg, or nowhere when the ring holds the RCV itself). -> the RCV altitude in ft to use."""
+        o = self.o
+        if f.tag or f.role not in (Role.TARCAP, Role.ESCORT, Role.SWEEP) or not wps or (f.is_player and not o.player_is_ai):
+            return rcv_ft
+        a_ = self._route_end.get(g.name)
+        if a_ is None:
+            return rcv_ft
+        pts_ = g.points
+        scr_ = pts_[-1] if getattr(pts_[-1], "name", "") == "SCRUB" else None
+        path = [(a_.x, a_.y)] + ([(scr_.position.x, scr_.position.y)] if scr_ is not None else []) + [rcv_xy]
+        sites = [a for a in self.state.assets.values() if a.kind == AssetKind.SAM and a.variant in HOME_SAM_VARIANTS and not a.destroyed and not a.suppressed]
+        rings = [(a.x, a.y, (tm.RANGE_NM.get(a.variant, 0) + HOME_RING_MARGIN_NM) * NM) for a in sites]
+        ex = home_floor_exit(path, rings)
+        if ex is None:
+            return rcv_ft
+        ceil_ = max(profiles.ENVELOPE[sites[n].variant][1] for n in ex[3])
+        floor_ = ceil_ + HOME_FLOOR_MARGIN_FT
+        end_ft = wps[-1].alt_ft
+        alt_ = end_ft if ceil_ + 1000 <= end_ft < floor_ else floor_          # a flight already clear of the ceiling does not climb; one under the floor never dives below it
+        total_ = sum(math.hypot(path[i + 1][0] - path[i][0], path[i + 1][1] - path[i][1]) for i in range(len(path) - 1))
+        seg_ = ex[1] if scr_ is not None else 0                               # 0 = route end -> SCRUB (-> RCV when there is no SCRUB), 1 = SCRUB -> RCV
+        if scr_ is not None and seg_ == 1:
+            scr_.alt = max(scr_.alt, alt_ * FT)                                # the ring reaches past the SCRUB point: that point stays high too
+        room_ = len(pts_) + 1 + 1 + 1 + 2 <= AIRCRAFT[f.aircraft].profile.max_points          # this point, RCV, the landing and the builder's spare
+        if ex[0] >= total_ - 100:
+            return max(rcv_ft, alt_)                                          # the ring holds the RCV itself: the floor runs up to it
+        if not room_:
+            return rcv_ft
+        spd_ = scr_.speed if scr_ is not None else 320 * KPH
+        g.add_waypoint(self._pt(*ex[2]), alt_ * FT, spd_, HOME_FLOOR_NAME)
+        if scr_ is not None and seg_ == 0:
+            pts_.insert(len(pts_) - 2, pts_.pop())                            # in front of the SCRUB point (it moved one place down: the hook's "to" follows)
+            for r_ in reversed(self._scrub):
+                if r_["grp"] == g.name:
+                    if r_["to"]:
+                        r_["to"] += 1
+                    break
+        return rcv_ft
+
     def _home_leg(self, f, g, base, wps, idx, hold_end, stop, special):
         """The way home: the recovery entry point, landing or deck recovery."""
         o = self.o
@@ -2747,6 +2830,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 rb_ = bearing(base.x, base.y, lp_.x, lp_.y) + RCV_SPREAD[idx % len(RCV_SPREAD)]
                 rx_, ry_ = offset(base.x, base.y, rb_, RCV_NM * NM)
                 rcv_alt_ = home_leg_ft((lp_.x, lp_.y), (rx_, ry_), 3000 + 1000 * (idx % 4))      # v0.41.49: the home leg clears the ridges (was a fixed 3,000-6,000 ft)
+                rcv_alt_ = self._home_floor(f, g, wps, (rx_, ry_), rcv_alt_)      # S33: an AI fighter stays high over short-range air defence on the way home
                 rcvp_ = g.add_waypoint(pt(rx_, ry_), rcv_alt_ * FT, 300 * KPH, "RCV")
                 if self._skip_landing(base):          # v0.41.18: recovered at its entry point instead of landing (setting "AI landings: airfields")
                     rcvp_.tasks.append(task.RunScript(f"SQE_RECOVER('{g.name}')"))
@@ -2759,7 +2843,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             lp_ = self._route_end.get(g.name) or g.points[-1].position
             if dist(base.x, base.y, lp_.x, lp_.y) > (CV_RCV_NM + 10) * NM:          # else it is already close: no extra point
                 cx_, cy_ = offset(base.x, base.y, bearing(base.x, base.y, lp_.x, lp_.y), CV_RCV_NM * NM)
-                g.add_waypoint(pt(cx_, cy_), CV_RCV_FT * FT, 300 * KPH, "RCV")
+                g.add_waypoint(pt(cx_, cy_), self._home_floor(f, g, wps, (cx_, cy_), CV_RCV_FT) * FT, 300 * KPH, "RCV")      # S33: the floor over short-range air defence
         if base.kind == BaseKind.AIRFIELD:
             pass
         elif (not f.is_player or o.player_is_ai) and self._skip_landing(base):
