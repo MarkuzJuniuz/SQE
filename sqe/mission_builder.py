@@ -50,8 +50,8 @@ TARCAP_LEAD_S = 120           # v0.41.115 (was 0; XO 2026-10-22: fighters in fir
                               # v0.41.0's 5-minute head start, which let the SA-10 kill six waiting Eagles (judgment call). v0.41.1 had it arrive WITH the HARM shooters.
 FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
-ILS_DUMMY_MODES = ("beside", "on")   # v0.41.336: the placements of the ILS dummy aircraft (Settings > ils_dummy; "off" builds none and keeps the old ILS-friendly wind window)
-ILS_DUMMY_TYPE = planes.F_16C_50     # v0.41.336: any blue jet will do, the unit is invisible, immortal and never started (XO's note: an uncontrolled AI aircraft). Judgment call
+ILS_DUMMY_MODES = ("on",)           # S32 (XO 2026-11-11): one mode, on or off (Settings > ils_dummy; "off" builds none and keeps the old ILS-friendly wind window)
+ILS_DUMMY_TYPE = planes.Christen_Eagle_II     # S32: a small aircraft (a 2 m high biplane) parked on the ramp, so it hardly shows; it is invisible to AI and sensors, immortal and never started (DCS cannot hide its model). v0.41.336 had an F-16C beside the threshold. Judgment call; DCS test pending
 PARKED_MAX = 8               # v0.41.297 (XO 2026-11-05: a counter-air strike has nothing to hit, the ramp is empty): at most this many parked jets (v0.41.324: real units, was 12 statics) stand on the target field's ramp. Judgment call: a statics-count cap for VR; the wing's true strength stays in the state (a static costs `carcass_weight` of a unit)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
 SCRUB_POINT_NM = 20           # v0.41.223: a package flight's SCRUB point (where a scrubbed flight goes first) sits this far from its home field, on the bearing of its route's last point (the same shape as the stand-off ABORT point)
@@ -201,7 +201,7 @@ class MissionOptions:
     fighter_standoff: bool = True       # AI escorts and sweeps stop short of live SAM cover instead of flying into it
     f14_special_names: bool = True
     weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
-    ils_dummy: str = "beside"           # v0.41.336: "off" | "beside" | "on" (see settings.ils_dummy and ILS_DUMMY below); not "off" also means the real regional wind
+    ils_dummy: str = "on"               # v0.41.336, S32: "off" | "on" (see settings.ils_dummy and ILS_DUMMY below); "on" also means the real regional wind
     reactive: bool = True               # extra enemy fighters / blue alert pairs that launch during the sortie (reactive.py)
     ai_land_carrier: str = "always"     # v0.41.18: AI recovery short of a carrier: always | home (your deck only) | never
     ai_land_field: str = "never"        # v0.41.18: the same for airfields
@@ -1338,7 +1338,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """v0.41.336 (XO 2026-11-09, campaign rules plan decisions 49 and 51; NOT TESTED IN DCS): DCS lights the ILS only on the runway it counts as active, and the wind picks that
         runway; with the real regional wind the ILS end is often the tailwind end. XO's workaround: an invisible, immortal, uncontrolled aircraft at the ILS runway's threshold.
         One dummy (one unit) for each blue field that has an ILS (`runways.ILS_RUNWAY`) and is not cratered. Settings > ils_dummy picks the placement: "beside" (next to the
-        threshold, off the pavement) or "on" (on the pavement); "off" builds none. Never in the manifest, the hook or the debrief."""
+        threshold, off the pavement) or "on" (on the pavement); "off" builds none. Never in the manifest, the hook or the debrief.
+        S32 (XO 2026-11-11): one mode, on or off. The dummy is a small aircraft (`ILS_DUMMY_TYPE`) cold on the ramp parking slot farthest from the ILS runway (`runways.ils_dummy_slot`).
+        Not tested in DCS: whether the ILS lights for an aircraft parked there is the open question."""
         mode = self.o.ils_dummy
         if mode not in ILS_DUMMY_MODES:
             return
@@ -1348,25 +1350,21 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if b.kind != BaseKind.AIRFIELD or num is None or runways.is_closed(st, b.id):
                 continue
             ap = self.t.airports.get(b.airport)
-            spot = runways.ils_dummy_point(ap, num, mode) if ap is not None else None
-            if spot is None or self._units_room() < 1:
+            slot = runways.ils_dummy_slot(ap, num) if ap is not None else None
+            if slot is None or self._units_room() < 1:
                 continue
-            x, y, hdg = spot
             try:
-                g = self.m.flight_group_inflight(self.usa, f"ILS dummy {b.id}", ILS_DUMMY_TYPE, self._pt(x, y), 0, 0, None, 1)
+                g = self.m.flight_group_from_airport(self.usa, f"ILS dummy {b.id}", ILS_DUMMY_TYPE, ap, start_type=StartType.Cold, group_size=1, parking_slots=[slot])
             except Exception as ex:
                 self.warns.append(f"ILS dummy for {b.name} could not be built ({ex})")
                 continue
             p0 = g.points[0]
-            p0.type, p0.action = "TakeOffGround", PointAction.FromGroundArea          # a cold aircraft on the ground at this spot, not an air start
-            p0.alt = int(relief.ground_m(x, y) or 0)
             p0.tasks = []
             p0.ETA, p0.ETA_locked, p0.speed_locked = 0, True, True                    # DESIGN_NOTES section 8: the first point is time- and speed-locked, like every takeoff point
             p0.add_task(task.SetInvisibleCommand(True))                               # XO's note: invisible to optics, sensors and radar ...
             p0.add_task(task.SetImmortalCommand(True))                                # ... and immortal, so nothing can break it
             g.uncontrolled = True                                                    # never starts, taxis or calls
             g.hidden = True
-            g.units[0].heading = hdg % 360.0
 
     def _crater_points(self) -> list:
         """v0.41.336 (XO 2026-11-09): [[x, z, power], ...] scripted blasts along the runway of every cratered field (`runways.crater_points`, for show: the hook fires them a few

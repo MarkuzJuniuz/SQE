@@ -893,9 +893,9 @@ class Session:
         return str(getattr(self.settings, "weather_mode", "clear") or "clear")
 
     def ils_dummy_mode(self) -> str:
-        """v0.41.336: the ILS dummy setting, "off", "beside" or "on" (anything else reads as "off")."""
-        m = str(getattr(self.settings, "ils_dummy", "beside") or "off")
-        return m if m in ("off", "beside", "on") else "off"
+        """v0.41.336, S32: the ILS dummy setting, "off" or "on" ("beside", the old threshold placement, reads as "on"; anything else as "off")."""
+        m = str(getattr(self.settings, "ils_dummy", "on") or "off")
+        return "on" if m in ("on", "beside") else "off"
 
     def refresh_weather(self) -> None:
         """Work out the weather at every package's start time, which packages it scrubs and which loadouts it changes. Stored in the plan so
