@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.375, S20 Phase 5: the belt that guards a northern runway ranks first in the mountain wave
+
+XO 2026-11-11 ('fox 3 medium'). **NOT FLOWN.** `ObjectivePlanner.plan` collects the SAM sites that block a northern runway crater (the blockers of the RUNWAY candidates) and hands them to `_wave_pass`, where a mountain SAM-DEAD job on such a site ranks x `RUNWAY_BELT_FACTOR` (1.5, judgment call). It only reorders the mountain quota; the quota numbers, the jets and the other axes are unchanged. Probe: see `.claude/tier removal plan.md`, Phase 5.
+
 ## v0.41.374, S22: the air wings tables show the number of jets
 
 XO 2026-11-11 ('fox 3 medium'). **NOT FLOWN.** GUI only. New `on_hand` property on `Squadron` and `RedSquadron` (`models.py`): `available + len(refit) + reserve + held`, read by the two tables only (`available`, `authorized`, `readiness` are unchanged). Coalition squadrons table: "Aircraft on hand" shows `on_hand / authorized` plus "(N refitting)" (refit list + reserve) when N > 0; the bar (now "Strength") is `on_hand / authorized`. Red air wings table: same number and bar, and no refit text, so refits are not readable. No smoke test (no mission code).
