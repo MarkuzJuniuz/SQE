@@ -78,6 +78,13 @@ EWR_GAP_WEIGHT = 60.0       # a radar whose loss uncovers a share of red's targe
 SUPPLY_FIRST_BONUS = 45.0   # v0.41.273 (XO 2026-11-04, fox 3 medium): added to the score of a supply strike (fuel / depot / plant, not a runway strike) so it outranks an ordinary DEAD job (SAM scores 25-42, 60-100 when it blocks something: the belt-clearing SEAD keeps its place; supply strikes score 1.5-7 on their own). Judgment call; 0 = the old order
 FOLLOW_MAX_SITES = 2    # v0.41.158: a strike / CAS target under at most this many SA-11 / SA-10 sites goes in behind their SEAD; under more it stays DEAD-first (judgment call: two is what one gate sequence and one day's package limit can carry)
 SUPPRESS_TURNS = 3      # v0.41.338 (campaign rules plan Phase 4): blinded radars stay blind this many turns (6 hours) after the SEAD, then they come back; they used to come back overnight (judgment call: no public figure, the plan's value)
+# v0.41.367 (S20 Phase 2, XO 2026-11-11): SAM / EWR / RUNWAY waves. Quotas per planned (day) turn as (sea SAM sites, mountain SAM sites + EWR strikes, northern runway craters),
+# picked BEFORE the variety pass and on top of `limit`. Numbers: Phase 1 probe 2026-11-11 (`.claude/tier removal plan.md`): L2 (2, 2, 1) took 15 of 16 northern sites down by day 5, L3 (2, 1, 1) 9.5 of 16 (Q_mtn 2
+# buys no more there, the belts gate); a sea quota of 3 buys nothing over 2; without the runway quota the runway job is never planned. L1 (1, 0, 0) is a judgment call (not probed; XO: Insurgent is not the focus).
+SAM_WAVE = {1: (1, 0, 0), 2: (2, 2, 1), 3: (2, 1, 1)}
+WAVE_NEAR_NM = 150.0       # a wave target scores up to x3 when it sits next to blue's airfields or an already dead / blind site (Phase 1 probe 2026-11-11, S20 probe 1's "B" formula; judgment call)
+# XO's list of the northern (MOUNTAIN front) fields, 2026-11-11: NOT `field_tier` (that puts Sochi, tier 3, with the north; Krymsk, Gelendzhik and Maykop are on the Kuban side, kept as XO listed them: judgment call).
+MOUNTAIN_FIELDS = ("mozdok", "beslan", "nalchik", "maykop", "minvody", "krymsk", "gelen")
 FOLLOW_GAP_MIN = 10     # a follow job starts this long after the SEAD / standoff package of its site (same gap as the Close DEAD stage)
 
 
@@ -97,6 +104,31 @@ def follow_split(cov: list) -> tuple:
 NM = 1852.0
 
 
+def field_of(a) -> str:
+    """The red field an asset id belongs to: `sam_<field>_N`, `ewr_<field>`, `ab_<field>`; "" for anything else (road sites, columns...)."""
+    i = a.id
+    if i.startswith("sam_") and "_" in i[4:]:
+        return i[4:i.rindex("_")]
+    if i.startswith(("ewr_", "ab_")):
+        return i.split("_", 1)[1]
+    return ""
+
+
+def axis_of(a) -> str:
+    """The two fronts (S20, XO 2026-11-11): "MOUNTAIN" = the air-superiority target in the north (the fields in MOUNTAIN_FIELDS, their belts, radars and runways); "SEA" = everything else (the ground war on the Black Sea side)."""
+    return "MOUNTAIN" if field_of(a) in MOUNTAIN_FIELDS else "SEA"
+
+
+def wave_factor(state, a) -> float:
+    """1 to 3: the nearer an asset is to a blue airfield or to a dead / blind SAM site (the belt is rolled back from our side), the higher a wave ranks it (Phase 1 probe 2026-11-11)."""
+    anchors = [(b.x, b.y) for b in state.bases.values() if b.kind.value == "AIRFIELD"]
+    anchors += [(x.x, x.y) for x in state.assets.values() if x.kind == AssetKind.SAM and (x.destroyed or x.suppressed)]
+    if not anchors:
+        return 1.0
+    d = min(math.hypot(a.x - ax, a.y - ay) for ax, ay in anchors) / NM
+    return 1 + 2 * max(0.0, 1 - d / WAVE_NEAR_NM)
+
+
 AIR_COVER_PER_FIGHTER = 0.0765      # v0.41.136: was 0.05 per aircraft of ANY kind; red's fighters are about 65% of its jets today, so this keeps today's defence term (judgment call)
 
 
@@ -113,9 +145,19 @@ class ObjectivePlanner:
         self.d = d
 
     @staticmethod
-    def _open(state, a) -> bool:
+    def _tier_open(state, a) -> bool:
         """Depth tiers: tiers up to (front + 2) are open for tasking, so the deep targets come late in a campaign."""
         return a.tier <= state.front + 2
+
+    @staticmethod
+    def _open(state, a) -> bool:
+        """v0.41.367 (S20 Phase 2): the depth tier no longer gates a long-range SAM site, an EWR or an airfield's runway job (the belt rule `tm.blockers` and `covering_sams` still do); every other kind keeps `_tier_open` until Phase 3."""
+        if a.kind == AssetKind.SAM:
+            if a.value >= 5 and tm.RANGE_NM.get(a.variant, 0) >= 10 and not a.id.startswith("fsam_"):
+                return True
+        elif a.kind in (AssetKind.EWR, AssetKind.AIRFIELD):
+            return True
+        return ObjectivePlanner._tier_open(state, a)
 
     def _garrison_cover(self, state, a) -> list:
         """The long-range SAM sites (the kind a SEAD / DEAD package is sent to) whose ring covers a dug-in garrison and that can be tasked now. While any is
@@ -123,7 +165,7 @@ class ObjectivePlanner:
         targets themselves, are why only the long-range sites count)."""
         out = []
         for x in state.assets.values():
-            if x.kind != AssetKind.SAM or x.destroyed or x.id.startswith("fsam_") or x.value < 5 or not self._open(state, x):
+            if x.kind != AssetKind.SAM or x.destroyed or x.id.startswith("fsam_") or x.value < 5 or not self._tier_open(state, x):      # the OLD tier rule on purpose (S20 Phase 2): opening the SAMs must not hold back more CAS
                 continue
             r = tm.RANGE_NM.get(x.variant, 0)
             if r >= 10 and ((x.x - a.x) ** 2 + (x.y - a.y) ** 2) ** 0.5 <= r * 1852:
@@ -138,9 +180,9 @@ class ObjectivePlanner:
                 best = bl
         return best or []
 
-    def plan(self, state: CampaignState, rng: random.Random, limit: int = 6, bomber: bool = True, skip: frozenset | set = frozenset()) -> list:
+    def plan(self, state: CampaignState, rng: random.Random, limit: int = 6, bomber: bool = True, skip: frozenset | set = frozenset(), waves: bool = True) -> list:
         """The jobs of ONE turn (v0.41.338, Phase 4; `limit` = how many). `bomber`: look at the carrier raid this turn (the day's raid turn only: `Session._begin_day` picks it, so the
-        raid is offered once a day and not every turn). `skip`: target ids not to plan this turn (the re-tasking rule, `Session._retask_skip`)."""
+        raid is offered once a day and not every turn). `skip`: target ids not to plan this turn (the re-tasking rule, `Session._retask_skip`). `waves` (v0.41.367): take the SAM / EWR / runway wave of SAM_WAVE for the level (not for the player's extra-jobs call)."""
         cand = []                                  # (priority, objective, blockers, locked)
         alive = lambda aid: not state.assets[aid].destroyed
         for a in state.assets.values():
@@ -278,6 +320,8 @@ class ObjectivePlanner:
         def best(ok):                                          # the best-scored candidate of an unused sector, else of any
             c = [k for k in range(len(scored)) if k not in taken and ok(scored[k][1])]
             return min(c, key=lambda k: (sec[id(scored[k][1])] in used, k), default=None)      # scored is sorted best first, so the index is the score rank
+        if waves and self.d is not None:
+            limit += self._wave_pass(state, scored, take)
         while len(picked) < limit:                             # one of each objective type first, for variety
             k = best(lambda o: o.type not in seen)
             if k is None:
@@ -300,6 +344,37 @@ class ObjectivePlanner:
             o.id = f"obj-t{state.turn}-{i}"                              # v0.41.338: by the turn (a day has 12 plans now)
             out.append(o)
         return out
+
+    def _wave_pass(self, state, scored: list, take) -> int:
+        """v0.41.367 (S20 Phase 2): take the turn's wave out of the pool BEFORE the variety pass, so the SAM work is not crowded out by it. Three quotas (SAM_WAVE): sea SAM-DEAD jobs, mountain SAM-DEAD and EWR
+        strikes, northern runway craters (a cratered field flies nothing; without a quota the runway job is never planned). Ordered by score x wave_factor (mountain: x the field's ready / authorized jets).
+        -> how many were taken (the caller raises `limit` by that, so the wave is on top of the turn's jobs)."""
+        q_sea, q_mtn, q_rwy = SAM_WAVE.get(int(getattr(self.d, "level", 2)), SAM_WAVE[2])
+        lists = {"SEA": [], "MOUNTAIN": [], "RUNWAY": []}
+        for k, (s, o) in enumerate(scored):
+            a = state.assets.get(o.target_id)
+            if a is None or field_of(a) == "":
+                continue
+            if o.type == ObjectiveType.DEAD and not o.aim and a.kind == AssetKind.SAM:
+                ax = axis_of(a)
+            elif o.type == ObjectiveType.STRIKE and a.kind == AssetKind.EWR and axis_of(a) == "MOUNTAIN":
+                ax = "MOUNTAIN"
+            elif o.type == ObjectiveType.STRIKE and o.aim == "RUNWAY" and axis_of(a) == "MOUNTAIN":
+                ax = "RUNWAY"
+            else:
+                continue
+            key = s * wave_factor(state, a)
+            if ax == "MOUNTAIN":
+                w = state.enemy_air_at("ab_" + field_of(a))
+                if w is not None:
+                    key *= 1 + w.available / max(1, w.authorized)
+            lists[ax].append((-key, k))
+        n = 0
+        for ax, q in (("SEA", q_sea), ("MOUNTAIN", q_mtn), ("RUNWAY", q_rwy)):
+            for _, k in sorted(lists[ax])[:q]:
+                take(k)
+                n += 1
+        return n
 
     def _add_followers(self, state, picked: list, follows: list, limit: int, cap: int) -> list:
         """v0.41.158: a STRIKE / CAS under one or two SA-11 / SA-10 sites goes in behind their SEAD: it is offered only when today's list already has

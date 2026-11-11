@@ -13,7 +13,7 @@ from .aircraft import AIRCRAFT, STRIKE_CONDITIONAL
 from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
-from .models import BaseKind, Objective, ObjectiveType, Role
+from .models import AssetKind, BaseKind, Objective, ObjectiveType, Role
 from . import airwings, barcap as barcap_, clock, detection, raids, redair, refit, sams, ground, support_assets, tempo
 from .mission_builder import MissionBuilder, MissionOptions
 from .packages import AI_ONLY, ai_only, carrier_raid, Ledger, NoPlayerSlot, Package, PackageBuilder
@@ -26,6 +26,7 @@ from .war import ObjectivePlanner, SUPPRESS_TURNS, WarSimulator, update_status
 
 
 
+SAM_WAVE_GAP_MIN = 5         # v0.41.367 (S20 Phase 2, XO 2026-11-11, Falcon BMS style): the SEAD-stage groups of a turn go in at least this many minutes apart, nearest first. Judgment call: no public figure (long enough that each group's HARM shots and SAM reactions are separate, short enough that the turn's waves stay one fight)
 SEAD_SYNC_KM = 60            # SEAD packages whose targets are this close together are synchronised (the same ground, the same defence)
 SEAD_SYNC_ON = True          # off only in tests that need an unsynchronised day (the merge-underway case)
 SWEEP_AREA_KM = 60           # packages whose targets are this close together share one Fighter Sweep
@@ -442,7 +443,7 @@ class Session:
             pkgs = build_all(set(range(len(objs))))
             if mine(pkgs) < 1:                                  # still none (a short list is often one AI-only job, a fleet patrol): the planner's next-best jobs are offered until one fits your squadron
                 have = {(o.type, o.target_id, o.aim) for o in objs}
-                more = ObjectivePlanner(self.d).plan(st, self._rng(), limit=n + PLAYER_EXTRA_JOBS, bomber=False, skip=self._retask_skip())
+                more = ObjectivePlanner(self.d).plan(st, self._rng(), limit=n + PLAYER_EXTRA_JOBS, bomber=False, skip=self._retask_skip(), waves=False)
                 tried = 0
                 for k, c in enumerate(more):
                     if (c.type, c.target_id, c.aim) in have or c.after or c.aim == "DEAD" or ai_only(st, c) or tried >= PLAYER_EXTRA_JOBS:
@@ -478,6 +479,7 @@ class Session:
         for i, (m, _w) in zip(order, _tod.turn_times(len(pkgs), t0, self._rng(5), [pkgs[i].extra.get("wave", 1) for i in order])):
             pkgs[i].start = _fmt_hm(m)
         self._sync_sead(pkgs)                                        # SEAD flights on the same ground (within SEAD_SYNC_KM) arrive together, not one after another
+        self._wave_times(pkgs)                                       # v0.41.367 (S20 Phase 2): and the groups go in one after another, nearest first, SAM_WAVE_GAP_MIN apart
         self._stage_times(pkgs)                                      # a DEAD stage goes in DEAD_STAGE_GAP_MIN after the SEAD stage of the same site
         self._late_sead(pkgs)                                        # test option --late-sead: the SEAD stage goes in late, so the DEAD stage holds
         floor = lambda p: t0 + (_tod.WAVE2_OFFSET_MIN if p.extra.get("wave", 1) == 2 else 0)      # no package starts before its wave opens (its jets are not ready earlier)
@@ -605,14 +607,9 @@ class Session:
         except Exception:
             return None
 
-    def _sync_sead(self, pkgs: list) -> None:
-        """SEAD packages whose targets sit within SEAD_SYNC_KM of each other go in together: each one's start is moved so that its HARM time
-        lands on the latest of the group (the earlier packages wait; none goes in ahead of the others). The HARM time is the package's start plus
-        its real push-to-HARM-point leg (marshal, geometry and route as the builder makes them). v0.39.13-v0.39.20 used a straight line from the
-        base at 400 kt, which ignored where each package marshals: the carrier's wave arrived about 3 minutes after the land-based one."""
+    def _sead_groups(self, pkgs: list) -> list:
+        """The turn's SEAD-stage packages in connected groups: (package, its target asset, its push-to-HARM leg in seconds) lists, a package joining a group when its target is within SEAD_SYNC_KM of ANY target in it."""
         import math
-        if not SEAD_SYNC_ON:
-            return
         st = self.state
         sead = []
         for p in pkgs:
@@ -632,6 +629,41 @@ class Session:
                 merged = g + merged
                 groups.remove(g)
             groups.append(merged)
+        return groups
+
+    def _wave_times(self, pkgs: list) -> None:
+        """v0.41.367 (S20 Phase 2): the turn's SEAD-stage groups (the same 60 km groups `_sync_sead` builds) get HARM times at least SAM_WAVE_GAP_MIN apart, the group nearest to blue's side first (`wave_factor`: the
+        belt is rolled back, Falcon BMS style). A group keeps its own simultaneous arrival. Groups are only ever moved LATER (a group already further apart than the gap stays), so no package goes in before its wave's floor;
+        the clock stays inside the day (the turn's safety net clamps the start into the turn)."""
+        if not SEAD_SYNC_ON:
+            return
+        from .war import wave_factor
+        st = self.state
+        groups = self._sead_groups(pkgs)
+        if len(groups) < 2:
+            return
+        groups.sort(key=lambda g: (-max(wave_factor(st, it[1]) for it in g), min(int(it[0].start[:2]) * 60 + int(it[0].start[3:5]) for it in g)))
+        arrive = lambda it: int(it[0].start[:2]) * 60 + int(it[0].start[3:5]) + it[2] / 60.0
+        last = None
+        for g in groups:
+            now = max(arrive(it) for it in g)
+            tgt = now if last is None else max(now, last + SAM_WAVE_GAP_MIN)
+            shift = round(tgt - now)
+            if shift:
+                for it in g:
+                    p = it[0]
+                    m = min(23 * 60 + 55, int(p.start[:2]) * 60 + int(p.start[3:5]) + shift)
+                    p.start = f"{m // 60:02d}:{m % 60:02d}"
+            last = tgt
+
+    def _sync_sead(self, pkgs: list) -> None:
+        """SEAD packages whose targets sit within SEAD_SYNC_KM of each other go in together: each one's start is moved so that its HARM time
+        lands on the latest of the group (the earlier packages wait; none goes in ahead of the others). The HARM time is the package's start plus
+        its real push-to-HARM-point leg (marshal, geometry and route as the builder makes them). v0.39.13-v0.39.20 used a straight line from the
+        base at 400 kt, which ignored where each package marshals: the carrier's wave arrived about 3 minutes after the land-based one."""
+        if not SEAD_SYNC_ON:
+            return
+        groups = self._sead_groups(pkgs)
         for g in groups:
             if len(g) < 2:
                 continue

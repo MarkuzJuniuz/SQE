@@ -299,7 +299,7 @@ def rebuild(state, d, rng: random.Random) -> list:
         a = state.assets.get(aid)
         if a is None or not a.destroyed or aid.startswith("fsam_") or state.day - day0 < wait or aid in _red_asked(state):
             continue
-        if a.tier > state.front + 2 or _parent_down(state, a):
+        if _parent_down(state, a):                                   # v0.41.367 (S20 Phase 2, D3): no tier test any more: a deep site killed on day 1 comes back after the wait like any other (it was a one-way ratchet: 18 of 24 long-range sites never rebuilt)
             continue
         cands.append(a)
     rng.shuffle(cands)
