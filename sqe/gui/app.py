@@ -482,7 +482,7 @@ class ForcesPage(QWidget):
             if b.kind.value == "AIRFIELD":
                 sites = _sams.blue_sites(st, b)                       # v0.41.100: one bar per site (an older save without sites shows its single defence figure on the Patriot)
                 for j, k in enumerate(("pat", "hawk", "aaa")):
-                    h = sites[k].health if sites else (b.defense if k == "pat" else None)
+                    h = (sites[k].health if k in sites else None) if sites else (b.defense if k == "pat" else None)       # a divert field has no Patriot site (Phase 9b): "-"
                     if h is None:
                         self.bs.setItem(i, 2 + j, _item("-", theme.DIM))
                     else:

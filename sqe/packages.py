@@ -229,6 +229,9 @@ class Ledger:
     v0.41.338 (campaign rules plan Phase 4): one Ledger serves a whole TURN with two launch waves. `free` = the jets ready now (wave 1); `late` = the jets that finish
     their refit by the second wave (`refit.ready_by(q, ready_min)` less `available`). `view(wave)` hands the builder a throw-away Ledger for one wave, and `settle` books what
     the builder spent in it: wave 2 spends the late jets first, so the ready ones stay for wave 1. `ready_min=None` (the plain `Ledger(state)`) means no late jets."""
+    hfree = None                 # v0.41.353 (Phase 9b): the jets of the HAVCAP squadrons (`Squadron.role`), kept apart: only the AWACS / tanker guards draw them (`hroom` / `htake`); every other reader sees 0 in `free` / `late`
+    hlate = None
+
     def __init__(self, state: CampaignState, ready_min: int | None = None):
         self.free = {sid: (0 if runways.is_closed(state, s.base_id) else s.available) for sid, s in state.squadrons.items()}      # v0.41.254: a cratered field flies nothing
         self.late = {sid: 0 for sid in self.free}
@@ -237,6 +240,11 @@ class Ledger:
             for sid, s in state.squadrons.items():
                 if not runways.is_closed(state, s.base_id) and s.reserve <= 0:         # a resting squadron's jets go to its reserve, not to the line
                     self.late[sid] = max(0, refit.ready_by(s, ready_min) - s.available)
+        self.hfree, self.hlate = {}, {}
+        for sid, s in state.squadrons.items():
+            if s.role == "havcap":                                                     # guards only: out of the pools the packages, patrols and scrambles read
+                self.hfree[sid], self.hlate[sid] = self.free[sid], self.late[sid]
+                self.free[sid], self.late[sid] = 0, 0
 
     def scale(self, sids, f: float) -> None:
         """A damaged carrier deck launches fewer of its jets (carrier_hit.deck_factor): both pools shrink for these squadrons."""
@@ -259,9 +267,24 @@ class Ledger:
         self.free[sid] = self.free.get(sid, 0) - (n - k)
         return True
 
+    def hroom(self, sid: str, wave: int) -> int:
+        """Jets of a HAVCAP squadron a guard of this wave can still draw (0 for any other squadron)."""
+        return (self.hfree or {}).get(sid, 0) + ((self.hlate or {}).get(sid, 0) if wave == 2 else 0)
+
+    def htake(self, sid: str, n: int, wave: int) -> bool:
+        """`take` for a HAVCAP squadron's guard pair: wave 2 spends the late jets first."""
+        if self.hroom(sid, wave) < n:
+            return False
+        k = min(self.hlate.get(sid, 0), n) if wave == 2 else 0
+        if k:
+            self.hlate[sid] -= k
+        self.hfree[sid] = self.hfree.get(sid, 0) - (n - k)
+        return True
+
     def copy(self) -> "Ledger":
         c = Ledger.__new__(Ledger)
         c.free, c.late = dict(self.free), dict(self.late)
+        c.hfree, c.hlate = dict(self.hfree or {}), dict(self.hlate or {})
         return c
 
     def view(self, wave: int) -> "Ledger":
@@ -576,7 +599,7 @@ class PackageBuilder:
         """The tanker CAP is mandatory: any fighter will do (it stays with the tanker, short of the scramble circles), range aside."""
         cands = [sq for sq in self.state.squadrons.values() if Role.CAP in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2]
         if not cands:
-            cands = [sq for sq in self.state.squadrons.values() if Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2]
+            cands = [sq for sq in self.state.squadrons.values() if Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2 and sq.role != "havcap"]
         if not cands:
             return None
         return max(cands, key=lambda sq: (AIRCRAFT[sq.aircraft].service == lead_service, ledger.free.get(sq.id, 0)))
