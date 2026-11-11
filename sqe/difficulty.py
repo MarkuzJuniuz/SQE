@@ -91,7 +91,7 @@ LEVELS: dict[int, Difficulty] = {
                   raid_mix=(0.20, 0.15, 0.25), blue_garrison_size=0.8, blue_rebuild=0.15, sam_retreat=0.8, sead_valve=3, air_retreat=0.8, road_sites=100, road_open=0.20, road_battalion=0.08),
     3: Difficulty(3, "Level 3 - Near-Peer", "Modern fighters, long-range SAMs and an integrated air-defence network. "
                   "Every sortie is contested and attrition bites.",
-                  enemy_air_total=256, red_squadron_max=14, enemy_types=["MiG_31", "MiG_29S", "Su_27", "Su_24M", "Su_25", "MiG_29A"],
+                  enemy_air_total=256, red_squadron_max=14, enemy_types=["MiG_31", "MiG_29S", "Su_27", "Su_34", "Su_25", "MiG_29A"],
                   sam_variants=["SA-10", "SA-11", "SA-6", "SA-15", "SA-19"], sam_sites_per_cluster=4, iads=0.9,
                   enemy_skill="High", loss_rate=0.085, base_damage=0.28, variance=0.7,
                   friendly_replenish=0.06, enemy_replenish=0.07, asset_repair=0.05, sam_repair=0.08,

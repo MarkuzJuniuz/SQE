@@ -17,11 +17,12 @@ import math
 import random
 from .models import Objective, ObjectiveType, BaseKind, Role, AssetKind
 from . import clock, redair, runways
+from .loadouts import BOMBER_TYPES
 
 NM = 1852.0
 BASE_LOSS = 0.06              # airfield defence lost per bomber that gets through
 RAID_PRIORITY = 8.0
-RAIDERS = ("Su_24M", "Su_25")  # attack types a raid can fly (bombers for fields; Su-25s lead against troops and, since v0.41.359, supply sites)
+RAIDERS = BOMBER_TYPES + ("Su_25",)  # (v0.41.361, Phase 10d: the Su-34 too) attack types a raid can fly (bombers for fields; Su-25s lead against troops and, since v0.41.359, supply sites)
 SU25_SUPPLY = True            # v0.41.359 (campaign rules plan Phase 10c): a Su-25 pair is the first pick for a raid on an uncovered supply site; the Su-24M keeps the fields (they need its SEAD group) and is the fallback
                               # when no Su-25 wing reaches (Su-25 radius 160 nm against the Su-24M's 300). The Su-25 raid goes UNESCORTED when no blue fighter squadron can reach the site's field (`plan_raid`). Judgment call.
 TEMPO_STOP_SHARE = 0.5        # v0.41.171 (XO 2026-10-28): half of the AIR tempo is added to the chance a surprise raider is stopped (+20 points at the +40 cap; judgment call)
@@ -58,7 +59,7 @@ def raider_wings(state, kind: str = "field", budget: bool = True, pref=None) -> 
     """[(wing, type)] of the enemy wings that can send a raid now: a pair of that type free this turn (`redair.ready_of`: ready and not in a patrol; the serviceable jets when the turn has no plan), field not
     cratered, sorties left in the day's cap (`budget`). Bombers (Su-24M) are preferred against fields, Su-25s against troops and garrisons (and, `_reach`, supply sites: `pref`
     overrides the order)."""
-    pref = pref or (("Su_25", "Su_24M") if kind in ("garrison", "sector") else ("Su_24M", "Su_25"))
+    pref = pref or (("Su_25",) + BOMBER_TYPES if kind in ("garrison", "sector") else BOMBER_TYPES + ("Su_25",))      # v0.41.361 (Phase 10d): the Su-34 is a bomber type like the Su-24M (a wing with both flies the Su-24M first)
     out = []
     for w in state.enemy_air:
         a = state.assets.get(w.base_asset_id)
@@ -97,7 +98,7 @@ def describe(state, base, aim: str = "") -> str:
     return f"Intercept an air attack on the {a.name}" if k == "garrison" else f"Intercept a raid on the {a.name}"
 
 
-def _reach(state, kind: str, x: float, y: float, budget: bool = True, only: str | None = None, fits=None):
+def _reach(state, kind: str, x: float, y: float, budget: bool = True, only=None, fits=None):
     """(distance nm, wing, type) of the nearest wing that can reach (x, y) with a raid of this kind, or None. v0.41.125: `only` restricts the aircraft type. v0.41.359 (Phase 10c, `SU25_SUPPLY`):
     a raid on a supply site is tried with the Su-25 wings first (`raider_wings` `pref`), then as before (Su-24M first)."""
     if kind == "supply" and SU25_SUPPLY and only is None and fits is None:
@@ -107,11 +108,12 @@ def _reach(state, kind: str, x: float, y: float, budget: bool = True, only: str 
     return _reach_by(state, kind, x, y, budget, None, only, fits)
 
 
-def _reach_by(state, kind: str, x: float, y: float, budget: bool, pref, only: str | None, fits):
+def _reach_by(state, kind: str, x: float, y: float, budget: bool, pref, only, fits):
     from .loadouts import ENEMY_RADIUS_NM
     best = None
+    only = (only,) if isinstance(only, str) else only                          # v0.41.361 (Phase 10d): a type or a tuple of types
     for w, t in raider_wings(state, kind, budget, pref):
-        if only and t != only:
+        if only and t not in only:
             continue
         if fits is not None and not fits(w, t):
             continue
@@ -289,8 +291,8 @@ def reach_for(state, kind: str, x: float, y: float, budget: bool = True, d=None)
         return _reach(state, kind, x, y, budget)
     fits = None
     if d is not None and kind == "field":
-        fits = lambda w, t: bool(sead_groups(state, d, x, y, redair.ready_of(state, w, ("Su_24M",)), int(d.raid_size[1])))
-    return _reach(state, kind, x, y, budget, only="Su_24M", fits=fits)
+        fits = lambda w, t: bool(sead_groups(state, d, x, y, redair.ready_of(state, w, (t,)), int(d.raid_size[1])))
+    return _reach(state, kind, x, y, budget, only=BOMBER_TYPES, fits=fits)           # v0.41.361 (Phase 10d): any bomber type (the type the wing flies, `t`)
 
 
 ARM_MAX_TOTAL = 12       # v0.41.129: the most SEAD jets one raid sends in all (three flights of four; judgment call)
@@ -328,9 +330,9 @@ def sead_plan(state, d, base, aim: str, wing, ac: str):
         return True, 0
     if getattr(d, "raid_banzai", False):                  # v0.41.146: Level 1's insurgents go in without suppression; the batteries shoot at them
         return True, 0
-    if aim_kind(aim) != "field" or ac != "Su_24M" or getattr(d, "raid_arm", 0) <= 0:
+    if aim_kind(aim) != "field" or ac not in BOMBER_TYPES or getattr(d, "raid_arm", 0) <= 0:
         return False, 0
-    avail = redair.ready_of(state, wing, ("Su_24M",))
+    avail = redair.ready_of(state, wing, (ac,))
     g = sead_groups(state, d, x, y, avail, int(d.raid_size[1]))
     n = sum(j for _, j in g) if g else 0
     return n > 0, n
@@ -427,7 +429,7 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int):
             break
     brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360                      # they come from where they took off
     arm, arm_fields = 0, []
-    if getattr(d, "raid_arm", 0) > 0 and not aim and raider == "Su_24M" and rdy >= nb + 2:    # v0.41.84: a SEAD group ahead of the bombers
+    if getattr(d, "raid_arm", 0) > 0 and not aim and raider in BOMBER_TYPES and rdy >= nb + 2:    # v0.41.84: a SEAD group ahead of the bombers
         sg_ = sead_groups(state, d, ax, ay, rdy, nb)                                 # v0.41.94: sized like blue's salvo; v0.41.125: L2 capped at a pair; v0.41.129: a group for every covering field
         arm_fields = [[f_.id, n_] for f_, n_ in (sg_ or [])]
         arm = sum(n_ for _, n_ in arm_fields)

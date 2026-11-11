@@ -20,7 +20,7 @@ from . import seacheck as seac
 from . import threatmap as tm
 from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
-from .loadouts import ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_dead_loadout, enemy_land_bomber_loadout, enemy_strike_loadout
+from .loadouts import BOMBER_TYPES, ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_dead_loadout, enemy_land_bomber_loadout, enemy_strike_loadout
 from .models import AssetKind, BaseKind, ObjectiveType, Role
 from .red_air_picture import A2A_ZONE_NM, CALLIN_LUA, CALLIN_LUA_DELAY_S, CALLIN_MIN_NM, CALLIN_REACH_NM, RED_LONG_RANGE
 from .support_caps import SUPPORT_CAP_ZONE_NM
@@ -964,6 +964,7 @@ class RaidSpawns:
         plan = [(self.state.bases.get(fid), int(n)) for fid, n in (ex.get("arm_fields") or [])]
         plan = [(f, n) for f, n in plan if f is not None and n > 0] or [(cvb, int(ex["arm"]))]
         pt = lambda x, y: mapping.Point(x, y, self.t)
+        rt_ = ex.get("raider") if ex.get("raider") in BOMBER_TYPES else "Su_24M"            # v0.41.361 (Phase 10d): the SEAD group flies the type the raid's wing flies (Su-24M, or Su-34 at L3)
         t_arm = t_tgt - ARM_LEAD_S
         alt = alt
         k_ = 0
@@ -994,7 +995,7 @@ class RaidSpawns:
                 remaining = pa[seg_i:]
             for tgt_, n_jets in pairs:
                 k_ += 1
-                g = self.m.flight_group(self.red, f"Raid SEAD {k_}", planes.Su_24M, None, pt(sx, sy), altitude=alt + (k_ - 1) * 600, speed=450 * KPH, maintask=task.SEAD, group_size=n_jets)     # each flight 600 m above the last: they share a route
+                g = self.m.flight_group(self.red, f"Raid SEAD {k_}", getattr(planes, rt_), None, pt(sx, sy), altitude=alt + (k_ - 1) * 600, speed=450 * KPH, maintask=task.SEAD, group_size=n_jets)     # each flight 600 m above the last: they share a route
                 if hold_until is not None:
                     ct_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
                     ct_.stop_after_time(int(hold_until)); g.points[0].tasks.append(ct_)
@@ -1013,13 +1014,13 @@ class RaidSpawns:
                 g.set_skill(skill)
                 if act_ >= 30:
                     self._late(g, act_)
-                load = enemy_arm_loadout("Su_24M")
+                load = enemy_arm_loadout(rt_)
                 names = []
                 for j, u in enumerate(g.units, 1):
                     u.name = f"RAID-S-{k_}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
                 if not load:
-                    self.warns.append("Su-24M: no Kh-31P found; the red SEAD pair is unarmed.")
-                manifest.add("enemy_air", ex["bomber_wing"], names, ac="Su_24M")
+                    self.warns.append(f"{rt_}: no Kh-31P found; the red SEAD pair is unarmed.")
+                manifest.add("enemy_air", ex["bomber_wing"], names, ac=rt_)
             if geo is None:                                      # the first (nearest) field's route and launch point: the DEAD flights and the cover use these
                 geo = {"pts": pts, "launch": launch, "t_arm": t_arm, "ad": ad_f}
         if geo is None:
@@ -1054,12 +1055,13 @@ class RaidSpawns:
             remaining, hold_until, act_ = pa[seg_i:], None, 0.0
         if not remaining:
             remaining = [pa[-1]]
-        load = enemy_dead_loadout("Su_24M")
+        rt_ = ex.get("raider") if ex.get("raider") in BOMBER_TYPES else "Su_24M"            # v0.41.361 (Phase 10d): the DEAD group flies the raid's own bomber type
+        load = enemy_dead_loadout(rt_)
         if not load:
-            self.warns.append("Su-24M: no KAB-500Kr found; the red DEAD flights are unarmed.")
+            self.warns.append(f"{rt_}: no KAB-500Kr found; the red DEAD flights are unarmed.")
         for gi, (tg_, nj) in enumerate(tgts):
             gname = f"Raid DEAD {gi + 1}"
-            g = self.m.flight_group(self.red, gname, planes.Su_24M, None, pt(sx, sy), altitude=alt - 900 - gi * 600, speed=450 * KPH, maintask=task.GroundAttack, group_size=nj)
+            g = self.m.flight_group(self.red, gname, getattr(planes, rt_), None, pt(sx, sy), altitude=alt - 900 - gi * 600, speed=450 * KPH, maintask=task.GroundAttack, group_size=nj)
             if hold_until is not None:
                 ct_ = task.ControlledTask(task.OrbitAction(int(alt), int(450 * KPH), pattern=task.OrbitAction.OrbitPattern.Circle))
                 ct_.stop_after_time(int(hold_until)); g.points[0].tasks.append(ct_)
@@ -1084,7 +1086,7 @@ class RaidSpawns:
             names = []
             for j, u in enumerate(g.units, 1):
                 u.name = f"RAID-D-{gi + 1}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
-            manifest.add("enemy_air", ex["bomber_wing"], names, ac="Su_24M")
+            manifest.add("enemy_air", ex["bomber_wing"], names, ac=rt_)
         if ex.get("dead_cover") and ex.get("escort_type"):
             tar_ = offset(dx, dy, bearing(dx, dy, *pts[-1]), (gate["nm"] + ARM_TARCAP_BEHIND_NM) * NM)          # the TARCAP: back along the way in from the hold
             self._spawn_arm_cover(ex, path, pts, hold, V, t_hold, alt, skill, home_, manifest, dx, dy, jobs=("Raid DEAD Escort", "Raid DEAD TARCAP"), pfx=("DE", "DT"),

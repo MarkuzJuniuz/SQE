@@ -11,7 +11,7 @@ The numbers are SQE's own judgement, not sourced figures. Pure data, no pydcs.
 from __future__ import annotations
 
 # internal self-protection by DCS type string (substring match, first hit wins)
-INTERNAL = (("F-15C", 1), ("F-15E", 1), ("F-14", 1), ("FA-18C", 1), ("F-16C", 0), ("A-10C", 0), ("Su-24M", 1), ("Tu-22M3", 1), ("MiG-29", 0), ("Su-27", 0))
+INTERNAL = (("F-15C", 1), ("F-15E", 1), ("F-14", 1), ("FA-18C", 1), ("F-16C", 0), ("A-10C", 0), ("Su-24M", 1), ("Su-34", 1), ("Tu-22M3", 1), ("MiG-29", 0), ("Su-27", 0))
 
 # loadout CLSIDs that are an ECM pod
 PODS = ("=ALQ_184_Long", "=ALQ_184", "ALQ_184", "ALQ-184")

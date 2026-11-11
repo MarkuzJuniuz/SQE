@@ -159,9 +159,31 @@ def capture_from_miz(miz_path: str, out_path: str = "loadouts.json") -> dict:
 # approximate combat radius (nm) of enemy types: used to decide who can escort a raid
 ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, "MiG_23MLD": 200, "MiG_21Bis": 170,
                    "F_4E": 300, "F_5E_3": 200, "Su_24M": 300, "Su_25": 160,
+                   # v0.41.361 (Phase 10d): the Su-34 flies the Su-24M's raids at L3. Judgment call: 330 nm, a little over the Su-24M's 300 (public figures: about 1,100 km combat radius for the Su-34, 1,050 km for the Su-24M,
+                   # both "from memory", medium firmness; the table is the game's scale, not the books': the Caucasus targets lie 70 to 250 nm from red's fields, so the figure rarely limits a raid).
+                   "Su_34": 330,
                    # v0.41.355 (Phase 10a): the Tu-22M3 on a land strike. 1200 nm is the one public figure for an OFAB-250 load (cmo-db.com, Tu-22M3 loadout table: unverified method, low firmness); other
                    # sources give 2,200 to 2,500 km (about 1,200 to 1,350 nm) unrefuelled (airrecognition.com, armyrecognition.com, medium firmness). Judgment call: the Caucasus targets lie 70 to 200 nm from Mozdok, so the figure never limits a strike.
                    "Tu_22M3": 1200}
+
+
+BOMBER_TYPES = ("Su_24M", "Su_34")       # v0.41.361 (Phase 10d): the red raid bombers: the types that fly field raids, the SEAD (Kh-31P) group and the DEAD (KAB-500Kr) group. Every test that used to say "Su_24M" reads this
+ARM_PER_JET = {"Su_24M": 2, "Su_34": 4}   # Kh-31P per jet in a SEAD group (Su-24M: pylons 2 and 7, all it takes; Su-34: four of the six pylons that take one, judgment call: group sizes stay the same in jets, so a Su-34 group fires twice the missiles)
+DEAD_PER_JET = {"Su_24M": 4, "Su_34": 4}  # KAB-500Kr per jet in a DEAD group (Su-24M: 2, 3, 6, 7, all it takes; Su-34: four, a normal load, of the eight pylons that take one)
+STRIKE_PER_JET = {"Su_34": 6}             # FAB-500 per jet on a plain raid (Su-24M: every pylon that takes one; Su-34: six of eight, about 3 t: judgment call)
+
+
+def _limit(out: dict, n) -> dict:
+    """At most n pylons of a loadout, outermost pairs first (the lowest and highest pylon numbers alternately), so the load stays symmetric. None or n >= len: unchanged."""
+    if not n or len(out) <= n:
+        return out
+    keys = sorted(out)
+    pick, lo, hi = [], 0, len(keys) - 1
+    while len(pick) < n and lo <= hi:
+        pick.append(keys[lo]); lo += 1
+        if len(pick) < n and lo <= hi:
+            pick.append(keys[hi]); hi -= 1
+    return {k: out[k] for k in sorted(pick)}
 
 
 def enemy_bomber_loadout(cls_name: str) -> dict:
@@ -191,7 +213,7 @@ def enemy_land_bomber_loadout(cls_name: str) -> dict:
 
 
 def enemy_arm_loadout(cls_name: str) -> dict:
-    """v0.41.84: Kh-31P anti-radiation missiles on every pylon that takes one (Su-24M: pylons 2 and 7)."""
+    """v0.41.84: Kh-31P anti-radiation missiles on every pylon that takes one (Su-24M: pylons 2 and 7); v0.41.361: at most ARM_PER_JET of them (Su-34: four)."""
     from dcs import planes
     cls = getattr(planes, cls_name)
     out = {}
@@ -200,7 +222,7 @@ def enemy_arm_loadout(cls_name: str) -> dict:
         w = _find(P, "Kh_31P") if P is not None else None
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
-    return out
+    return _limit(out, ARM_PER_JET.get(cls_name))
 
 
 def enemy_dead_loadout(cls_name: str) -> dict:
@@ -213,7 +235,7 @@ def enemy_dead_loadout(cls_name: str) -> dict:
         w = _find(P, "KAB_500Kr") if P is not None else None
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
-    return out
+    return _limit(out, DEAD_PER_JET.get(cls_name))
 
 
 def enemy_strike_loadout(cls_name: str) -> dict:
@@ -226,4 +248,4 @@ def enemy_strike_loadout(cls_name: str) -> dict:
         w = (_find(P, "FAB_500M") or _find(P, "FAB_250M")) if P is not None else None
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
-    return out
+    return _limit(out, STRIKE_PER_JET.get(cls_name))
