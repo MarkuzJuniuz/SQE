@@ -41,6 +41,7 @@ class Wpt:
     rad: bool = False       # alt_ft is height above the ground (the LOW tier): DCS "radio altitude", so the flight follows the terrain
     orbit: bool = False     # a fighter stand-off point: the flight holds here (an orbit) instead of flying on to the target
     aim: tuple | None = None  # v0.41.299: a release point short of the target (JDAM, SLAM-ER): the (x, y) the bombing task is aimed at; None = this point itself
+    hold_to: float | None = None  # S38: an AI SEAD's HARM point: the flight orbits here until this time (the strikers' time over target + a window), then goes on to EGR
 
 
 @dataclass
