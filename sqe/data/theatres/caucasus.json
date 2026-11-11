@@ -132,9 +132,15 @@
             "name": "Mozdok",
             "airport": "Mozdok",
             "value": 7
+        },
+        {
+            "id": "ab_minvody",
+            "name": "Mineralnye Vody",
+            "airport": "Mineralnye Vody",
+            "value": 7
         }
     ],
-    "red_extra_airports": ["Mineralnye Vody", "Krasnodar-Center", "Krasnodar-Pashkovsky", "Anapa-Vityazevo", "Novorossiysk"],
+    "red_extra_airports": ["Krasnodar-Center", "Krasnodar-Pashkovsky", "Anapa-Vityazevo", "Novorossiysk"],
     "red_keep": {
         "1": [
             "ab_sochi",
@@ -149,7 +155,8 @@
         "ab_maykop": 4,
         "ab_nalchik": 2,
         "ab_beslan": 2,
-        "ab_gelen": 1
+        "ab_gelen": 1,
+        "ab_minvody": 2
     },
     "field_tier": {
         "ab_sukhumi": 2,
@@ -160,7 +167,8 @@
         "ab_mozdok": 3,
         "ab_maykop": 4,
         "ab_gelen": 4,
-        "ab_krymsk": 4
+        "ab_krymsk": 4,
+        "ab_minvody": 4
     },
     "bomber_base": "ab_mozdok",
     "squadrons": [
