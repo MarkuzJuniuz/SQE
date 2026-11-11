@@ -1063,15 +1063,17 @@ def apply_fall(state, bid: str) -> list:
     from . import sams
     sams.set_field(state, b, 0.0)
     others = [x for x in state.bases.values() if x.kind.value == "AIRFIELD" and not x.divert and x.id != bid and x.id not in state.ground["fallen"]]
+    diverts = [x for x in state.bases.values() if x.kind.value == "AIRFIELD" and x.divert and x.id not in state.ground["fallen"]]
     lines = [f"{b.name} HAS FALLEN: the front reached it. Its defences are gone"]
-    if not others:
+    if not others and not diverts:
         return lines
     for sq in state.squadrons.values():
         if sq.base_id != bid:
             continue
         lost = int(round(sq.available * FALL_LOSS))
         sq.available = max(0, sq.available - lost)
-        dest = field_with_room(state, b.x, b.y, sq, sq.available + sq.reserve, others) or min(others, key=lambda x: (x.x - b.x) ** 2 + (x.y - b.y) ** 2)       # Phase 9a: the nearest field with room; none has: the nearest (as before)
+        dest = (landing_field(state, b.x, b.y, sq, sq.available + sq.reserve, others, diverts)
+                or min(others or diverts, key=lambda x: (x.x - b.x) ** 2 + (x.y - b.y) ** 2))       # the nearest standing field with room, a divert field only as the last resort (Phase 9b, XO 2026-11-10); none has room: the nearest (as before)
         sq.home_id = sq.home_id or bid                                      # v0.41.243: remembered, so it flies back when this field is retaken
         sq.base_id = dest.id
         lines.append(f"   {sq.name} withdraws to {dest.name}, {lost} aircraft lost" + _settle(state, sq, math.hypot(dest.x - b.x, dest.y - b.y)))
@@ -1091,6 +1093,12 @@ def field_with_room(state, x: float, y: float, sq, jets: int, fields) -> object:
         if cap is None or cap - held.get(f.id, 0) >= jets:
             return f
     return None
+
+
+def landing_field(state, x: float, y: float, sq, jets: int, fields, diverts=()) -> object:
+    """Phase 9b (XO 2026-11-10): where a displaced squadron lands: the nearest of `fields` (the standing non-divert fields) with room, and only when none has, the nearest standing DIVERT
+    field with room ("last resort: they are tiny"; `diverts`), else None. `field_with_room` does the counting for each list."""
+    return field_with_room(state, x, y, sq, jets, fields) or field_with_room(state, x, y, sq, jets, diverts)
 
 
 def _settle(state, sq, dist_m: float) -> str:

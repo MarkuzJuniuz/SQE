@@ -86,11 +86,17 @@ def blue_site_id(bid: str, key: str) -> str:
     return f"bsam_{bid}_{key}"
 
 
+def site_keys(b) -> tuple:
+    """The sites a blue airfield is given: all three, except a DIVERT field, which gets the HAWK and AAA only (Phase 9b, XO 2026-11-10: Soganlug is 1.3 nm from Tbilisi, whose Patriot covers it).
+    A save from before that keeps the Patriot it already has (`blue_sites` returns whatever stands)."""
+    return tuple(k for k in BLUE_SITES if not (k == "pat" and getattr(b, "divert", False)))
+
+
 def blue_sites(state, b) -> dict:
-    """{key: asset} for a blue airfield's sites, empty when it has none (a carrier)."""
+    """{key: asset} for a blue airfield's sites, empty when it has none (a carrier). A divert field may have no Patriot: readers must not assume `"pat"` is there."""
     sites = getattr(state, "blue_sams", None) or {}
     out = {k: sites[blue_site_id(b.id, k)] for k in BLUE_SITES if blue_site_id(b.id, k) in sites}
-    return out if len(out) == len(BLUE_SITES) else {}
+    return out if all(k in out for k in site_keys(b)) else {}
 
 
 def ensure_blue_sams(state) -> bool:
@@ -103,12 +109,14 @@ def ensure_blue_sams(state) -> bool:
         if b.kind.value != "AIRFIELD":
             continue
         for k, (var, label) in BLUE_SITES.items():
+            if k not in site_keys(b):
+                continue
             sid = blue_site_id(b.id, k)
             if sid not in state.blue_sams:
                 h = max(0.0, min(1.0, float(getattr(b, "defense", 1.0) or 0.0)))
                 state.blue_sams[sid] = _site(sid, f"{b.name} {label}", b, var, h, state, k)
                 added = True
-        for k in BLUE_SITES:                       # a site made before v0.41.64 sits on the field centre: give it its place
+        for k in blue_sites(state, b):             # a site made before v0.41.64 sits on the field centre: give it its place
             a = state.blue_sams[blue_site_id(b.id, k)]
             if a.x == b.x and a.y == b.y:
                 a.x, a.y = place_blue_site(state, b, k)
@@ -203,7 +211,9 @@ def hit_field(state, b, amount: float) -> list:
         return []
     pool, gone = amount * len(sites), []
     for k in HIT_ORDER:
-        a = sites[k]
+        a = sites.get(k)
+        if a is None:                                                  # a divert field has no Patriot
+            continue
         if pool <= 0:
             break
         was = a.destroyed
@@ -224,7 +234,7 @@ def blue_battery(b, state=None) -> dict:
     if not sites:
         dv = float(getattr(b, "defense", 0.0) or 0.0)
         return _battery(dv, dv, dv)
-    return _battery(sites["pat"].health, sites["hawk"].health, sites["aaa"].health)
+    return _battery(sites["pat"].health if "pat" in sites else 0.0, sites["hawk"].health, sites["aaa"].health)
 
 
 def _battery(pat: float, hawk: float, aaa: float) -> dict:
@@ -524,12 +534,12 @@ def blue_asks(state, d, rng: random.Random) -> list:
     fields = [b for b in state.bases.values() if b.kind.value == "AIRFIELD" and b.id not in fallen and blue_sites(state, b)]
     busy = _blue_asked(state)
     sup = ground.supply(state, "blue") if ground.active(state) else 1.0
-    needy = sorted(((_threat_nm(state, b), b.id, k, b) for b in fields for k in BLUE_SITES
+    needy = sorted(((_threat_nm(state, b), b.id, k, b) for b in fields for k in blue_sites(state, b)
                     if blue_sites(state, b)[k].destroyed and blue_site_id(b.id, k) not in busy and blue_site_id(b.id, k) not in vacated),
                    key=lambda t: t[:3])
     for thr, _bid, k, b in needy[:ASKS_PER_NIGHT if not orders else 0]:          # v0.41.196: one order in flight per side
         donors = sorted(((_threat_nm(state, f), f.id, f) for f in fields if f.id != b.id
-                         and blue_sites(state, f)[k].health >= BLUE_FULL_DEF and blue_site_id(f.id, k) not in busy
+                         and k in blue_sites(state, f) and blue_sites(state, f)[k].health >= BLUE_FULL_DEF and blue_site_id(f.id, k) not in busy
                          and _threat_nm(state, f) >= thr + ORDER_MIN_GAP_NM), key=lambda t: (-t[0], t[1]))
         if not donors:
             continue

@@ -63,14 +63,12 @@
         {
             "id": "vaziani",
             "name": "Vaziani AB",
-            "airport": "Vaziani",
-            "divert": true
+            "airport": "Vaziani"
         },
         {
             "id": "tbilisi",
             "name": "Tbilisi-Lochini AB",
-            "airport": "Tbilisi-Lochini",
-            "divert": true
+            "airport": "Tbilisi-Lochini"
         },
         {
             "id": "soganlug",
@@ -218,7 +216,7 @@
             "id": "fs_79",
             "name": "79th FS 'Tigers'",
             "aircraft": "F-16C",
-            "base": "batumi",
+            "base": "senaki",
             "count": 18,
             "callsign": "Venom"
         },
@@ -234,7 +232,7 @@
             "id": "fs_94",
             "name": "94th FS 'Hat in the Ring'",
             "aircraft": "F-15C",
-            "base": "senaki",
+            "base": "vaziani",
             "count": 18,
             "callsign": "Dodge"
         },
@@ -247,12 +245,61 @@
             "callsign": "Hawg"
         },
         {
-            "id": "as_75",
-            "name": "75th FS 'Flying Tigers'",
-            "aircraft": "A-10C",
+            "id": "fs_194",
+            "name": "194th FS 'Griffins'",
+            "aircraft": "F-15C",
             "base": "batumi",
+            "count": 8,
+            "callsign": "Colt",
+            "role": "havcap"
+        },
+        {
+            "id": "fs_493",
+            "name": "493rd FS 'Grim Reapers'",
+            "aircraft": "F-15C",
+            "base": "vaziani",
             "count": 18,
-            "callsign": "Boar"
+            "callsign": "Ford"
+        },
+        {
+            "id": "fs_22",
+            "name": "22nd FS 'Stingers'",
+            "aircraft": "F-16C",
+            "base": "vaziani",
+            "count": 18,
+            "callsign": "Python"
+        },
+        {
+            "id": "fs_421",
+            "name": "421st FS 'Black Widows'",
+            "aircraft": "F-16C",
+            "base": "vaziani",
+            "count": 18,
+            "callsign": "Rattler"
+        },
+        {
+            "id": "fs_19",
+            "name": "19th FS 'Gamecocks'",
+            "aircraft": "F-15C",
+            "base": "tbilisi",
+            "count": 18,
+            "callsign": "Chevy"
+        },
+        {
+            "id": "fs_123",
+            "name": "123rd FS 'Redhawks'",
+            "aircraft": "F-15C",
+            "base": "tbilisi",
+            "count": 18,
+            "callsign": "Pontiac"
+        },
+        {
+            "id": "fs_34",
+            "name": "34th FS 'Rams'",
+            "aircraft": "F-16C",
+            "base": "tbilisi",
+            "count": 18,
+            "callsign": "Lobo"
         }
     ],
     "support_targets": [

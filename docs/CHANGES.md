@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.353, campaign rules Phase 9b part 1: the blue laydown
+
+XO 2026-11-10 ("fox 3 high"). **NOT FLOWN.** A new campaign's blue force is 272 jets at every level (was 174 at L2; blue is flat), 17 squadrons: Vaziani and Tbilisi-Lochini now base squadrons, Batumi holds one HAVCAP F-15C squadron (8; guards only, AI only), the 75th FS is cut; every squadron, the player's too, sits on a field that can park it, and the New Campaign dialog shows that field. Divert fields are the last-resort landing for a fallen field or a sunk carrier, and have no Patriot. An older save keeps its squadrons, sizes and Patriots.
+
 ## v0.41.352, campaign rules Phase 9a: Kobuleti zone, divert fields, three-base defeat
 
 XO 2026-11-10 ("fox 3 high"). Vaziani, Tbilisi-Lochini and Soganlug are blue landing-and-recovery fields (`divert`: no squadron, no patrol, no supply sites); Kobuleti is a third fall point (one more sector, the start front unchanged); the AWACS and tankers sit at Kutaisi (`support_base`). Defeat is 3 fallen airfields and a sunk carrier no longer counts; a fallen field's or a sunk carrier's squadrons each go to the nearest field with room; taken fields no longer get a moved-up squadron. Kneeboard / ILS data for the three fields. **NOT FLOWN. Smoke not run.**

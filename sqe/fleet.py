@@ -111,7 +111,9 @@ def apply_debrief(state, manifest, data: dict) -> list:
     lost_set = set(data.get("dead", [])) | set(data.get("ejected", []))
     landings = data.get("landings") or {}
     from . import ground
-    standing = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and not b.divert and b.id not in set((state.ground or {}).get("fallen", []))]
+    fallen_ = set((state.ground or {}).get("fallen", []))
+    standing = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and not b.divert and b.id not in fallen_]
+    diverts = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD and b.divert and b.id not in fallen_]          # Phase 9b: the last resort
     for sq in sorted((s for s in state.squadrons.values() if s.base_id == cv.id), key=lambda s: s.id):
         units = [u for g in manifest.groups if g["kind"] == "friendly" and g.get("squadron") == sq.id for u in g["units"]]
         flying = [u for u in units if u not in lost_set]
@@ -123,11 +125,11 @@ def apply_debrief(state, manifest, data: dict) -> list:
         sq.available = max(0, survivors)
         sq.reserve = sq.rest_days = sq.move_days = sq.move_until = 0
         # Phase 9a: each squadron picks its own field: the nearest with parking for the jets that got away (the others already there count at their authorized strength). With none
-        # to land, none got away. A squadron with no survivors only changes its base on paper: the nearest field.
+        # to land, none got away (Phase 9b: the standing non-divert fields first, then the divert fields). A squadron with no survivors only changes its base on paper: the nearest field.
         if sq.available <= 0:
             dest = min(standing, key=lambda b: (math.hypot(b.x - cv.x, b.y - cv.y), b.id)) if standing else None
         else:
-            dest = ground.field_with_room(state, cv.x, cv.y, sq, sq.available, standing)
+            dest = ground.landing_field(state, cv.x, cv.y, sq, sq.available, standing, diverts)
         homeless = sq.available if dest is None else 0                       # jets that got away but have no field with room: lost
         sq.available -= homeless
         txt = f"   {sq.name}: {down} aircraft went down with the ship"

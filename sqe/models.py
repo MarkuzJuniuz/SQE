@@ -92,6 +92,7 @@ class Squadron:
     refit: list = field(default_factory=list)   # v0.41.334 (refit.py): the absolute minute (clock.py) each jet in refit is ready again; `available` stays "ready now"
     repl_due: int = 0           # absolute minute the next replacement pair arrives (0 = no timer: the squadron is at strength)
     held: int = 0               # replacements that arrived while the runway was closed: counted toward strength, flyable when the runway reopens
+    role: str = ""              # v0.41.353 (Phase 9b): "havcap" = the AWACS / tanker guard squadron: it flies only those guards (Ledger gives it no room for anything else), AI only. "" = an ordinary squadron; an older save has none
 
     @property
     def readiness(self) -> float:
