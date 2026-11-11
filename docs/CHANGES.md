@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.387, S31a: AI CAS flights fly above short-range air defence
+An AI CAS flight whose target or run-in lies within reach (plus 3 nm) of a live Tor, Osa or Tunguska now attacks from 24,000 ft, and from 12,000 ft when only guns or shoulder-fired missiles are near, instead of 9,000 ft or LOW. The attack order is given that height too. The kneeboard says why. Your own flight's route is unchanged.
+
 ## v0.41.386, S30: stand-off strike missiles go only at their target
 The AI F/A-18C SLAM-ER flight of a Standoff Strike now fires with rules of engagement "Open Fire" (designated target only) instead of "Weapon Free", so its missiles stop picking radiating radars of opportunity on the way and go at the package's target.
 

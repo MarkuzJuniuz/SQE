@@ -147,6 +147,35 @@ def choose(state, role, p, pts, tgt, cloud_base_ft: float | None = None, skip=()
     return Tier(lab, best[1], best[2], f"{lab} {frm}: {names} {verb} the {where} at {label_for(base[1], base[2])} altitude.", True)
 
 
+# ---- AI CAS flights fly above short-range air defence (S31 part A) ------------------------------------------------------------------
+CAS_HIGH_RADAR = ("SA-15", "SA-8", "SA-19")      # radar short-range SAMs: the CAS flight attacks from CAS_HIGH_FT
+CAS_HIGH_GUNS = ("AAA", "MANPAD")                # guns and shoulder-fired missiles only: CAS_GUN_FT
+CAS_HIGH_FT = 24000      # judgment call (XO 2026-11-11, "22K?"): ENVELOPE puts the SA-15 ceiling at 20,000 ft (public Tor-M1 data about 6 km / 19,700 ft, from memory), so 22,000 would leave 2,000 ft.
+                         # The A-10C's published service ceiling is 45,000 ft (USAF fact sheet); what DCS lets it hold with a CAS load is NOT measured here. Drop to 22,000 if a flight cannot hold it.
+CAS_GUN_FT = 12000       # judgment call: 2,000 ft over the AAA / MANPAD ceiling (ENVELOPE 10,000 ft)
+CAS_HIGH_MARGIN_NM = 3.0  # reach plus this margin (threatmap.RANGE_NM + 3: a Tor is 8 + 3 nm)
+
+
+def cas_floor(state, pts):
+    """pts: the CAS flight's working path [IP, target, egress]. The height (ft) an AI CAS flight attacks from because live, unsuppressed short-range air defence
+    reaches the target or the run-in, and the kneeboard line. -> (ft, reason) or None when nothing is near. Radar SAMs outrank guns."""
+    radar, guns = [], []
+    for a in state.assets.values():
+        if a.kind != AssetKind.SAM or a.destroyed or getattr(a, "suppressed", False) or a.variant not in CAS_HIGH_RADAR + CAS_HIGH_GUNS:
+            continue
+        r = tm.RANGE_NM.get(a.variant, 0)
+        if r <= 0 or tm.poly_dist(a.x, a.y, pts) > (r + CAS_HIGH_MARGIN_NM) * NM:
+            continue
+        near_tgt = ((a.x - pts[1][0]) ** 2 + (a.y - pts[1][1]) ** 2) ** 0.5 <= (r + CAS_HIGH_MARGIN_NM) * NM
+        (radar if a.variant in CAS_HIGH_RADAR else guns).append((a.variant, "target" if near_tgt else "run-in"))
+    for sites, ft in ((radar, CAS_HIGH_FT), (guns, CAS_GUN_FT)):
+        if sites:
+            names = ", ".join(dict.fromkeys(v for v, _w in sites))
+            where = "target" if any(w == "target" for _v, w in sites) else "run-in"
+            return ft, f"HIGH from the IP: {names} {'covers' if len(set(v for v, _ in sites)) == 1 else 'cover'} the {where}; attack from {ft:,} ft."
+    return None
+
+
 # ---- fighters stand off from live SAM cover ---------------------------------------------------------------------------------------
 STANDOFF_MARGIN_NM = 5.0       # stop this far outside the ring of the first live SAM that can reach the flight's altitude
                                 # v0.41.37: 5 nm outside medium/short-range SAM rings

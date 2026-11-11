@@ -53,6 +53,7 @@ class Geometry:
     tiers: dict = None      # {(role, id(profile)): Tier} one per kind of flight in the package (an escort never inherits a striker's LOW)
     ai_player: bool = False  # test mode: the player's slot is flown by the AI, so the player's flight gets the AI stand-off too
     stand: dict = None      # {(role, id(profile)): (x, y, [SAM types], nm short)} sweeps and escorts that stop at the edge of SAM cover
+    cas_floor: tuple = None  # S31a: (ft, reason) an AI CAS flight flies from the IP on because short-range air defence reaches the target or the run-in (profiles.cas_floor); None = no floor
     sweep: bool = False     # a Fighter Sweep package: no marshal, DEP - PUSH - station - home
     jsow_keep: list = None  # [(x, y, nm)]: live SAMs a JSOW launch point stays this far from (v0.41.3; v0.41.46: nm is each entry's own ring, the target cluster's SAMs included)
     carrier: bool = False   # v0.41.12: the flight's base is a carrier (only then a DEP point after take-off)
@@ -179,6 +180,8 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     so = None if (is_player and not g.ai_player) else (g.stand or {}).get(key)
     ialt, irad = (t.alt_ft, t.rad) if (t is not None and t.changed) else (alt, False)          # the tier applies from the IP on
     human = is_player and not g.ai_player                    # a person flies it; in the all-AI test the player's flight is routed and tasked like any AI flight
+    if role == Role.CAS and not human and g.cas_floor:        # S31a: AI CAS over short-range air defence: high from the IP, never the LOW tier (a person's route stays as it is)
+        ialt, irad = max(g.cas_floor[0], ialt if not irad else 0), False
     agm88_nm = max(8.0, min(AGM88_LAUNCH_NM, g.d / NM * 0.8 - 6))        # on short routes it still leaves the IP ahead of the base
     ip_xy = g.ip
     jsow_nm = jsow_launch_nm(g, jsow_side) if (jsow and role == Role.STRIKE and not human) else max(8.0, min(JSOW_LAUNCH_NM, g.d / NM * 0.8 - 6))

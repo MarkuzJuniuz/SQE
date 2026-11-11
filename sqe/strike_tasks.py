@@ -134,12 +134,13 @@ class StrikeTasks:
                     "acap": AIR_HOLD_CAS_S if f.role == Role.CAS else AIR_HOLD_STRIKE_S, "tx": tga_.x if tga_ is not None else None, "tz": tga_.y if tga_ is not None else None}
         return gate
 
-    def _cas_tasks(self, wp, w, armor, tot_s):
+    def _cas_tasks(self, wp, w, armor, tot_s, floor_ft=0):
         """AI CAS: look at the fight, attack the column, then keep working the zone. Time-boxed so they eventually go home.
         `w` is the TGT point (position and ETA); `wp` is the point the tasks go on (the IP before it since Stage C, else TGT). Weapons free is set by the caller."""
         t0 = int(w.eta_s)
         if armor is not None:
-            ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.Auto, group_attack=False))
+            # S31a: over short-range air defence the attack altitude is set to the floor (AttackGroup altitude, metres), or the AI dives to its own delivery height. EngageTargetsInZone has no altitude parameter.
+            ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.Auto, group_attack=False, altitude=int(floor_ft * 0.3048) if floor_ft else None))
             ct.stop_after_time(t0 + 420)
             wp.tasks.append(ct)
         ct2 = task.ControlledTask(task.EngageTargetsInZone(mapping.Point(w.x, w.y, self.t), 9000, [task.Targets.All.GroundUnits.GroundVehicles]))
