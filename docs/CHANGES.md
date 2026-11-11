@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.371, S20 Phase 3: the depth tiers are gone
+
+XO 2026-11-11 ("fox 3 medium"). **NOT FLOWN.** No job type is gated by depth any more: `ObjectivePlanner._open` / `_tier_open` and the `locked` flag are deleted, so deep CAS, strikes, supply hits, EWR strikes and runway craters are offered from day 1; the belt rule (`tm.blockers`) and `covering_sams` are the only gates left. `_garrison_cover` counts every covering long-range SAM site (a garrison under a deep ring goes DEAD-first). The front no longer advances: `update_front`, `tier_health`, `FRONT_MIN_DAYS`, `FRONT_STALL_DAYS` and the "THE FRONT ADVANCES" line are deleted. `sams.red_asks` lost its `tier <= front + 2` filter (the tier sort and the deeper-donor rule stay as depth data; `RED_BORROW` is still off). `bombers.desperation`: the +0.25 FRONT_WEIGHT now applies when red's air defence is broken (`war.totals` "iads", SAM and EWR mean health, 0.40 or less; judgment call), not at `front >= 2`. The Assets table keeps the depth label but no longer says "(locked)" or dims by tier. `EnemyAsset.tier` is depth data only (redroster MiG-31 share, road sites). `caucasus.json` `front_names` / `front_desc` stay unused. **Saves:** `front` and `front_days` are still read and written, nothing uses them; an old save loads and has everything open from its next plan. Probe (L2 / L3, seeds 3 and 7, 2 hash seeds, 5 days): inside the noise of Phase 2 on every number.
+
 ## v0.41.370, S13: the theatre-level background is gone
 
 XO 2026-11-11 ("fox 3 medium"). **NOT FLOWN.** The Caucasus pack's one theatre-level `background` text is deleted (it was never shown: every level has its own story). `theatres.REQUIRED` asks for `stories` instead, `narrative` no longer serves BACKGROUND, and a level with no story shows one plain line in the Situation panel. The per-level story texts and `title` stay. Probe: new campaigns at L1, L2, L3 show their stories; save and load fine.

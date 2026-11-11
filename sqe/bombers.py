@@ -32,7 +32,8 @@ DESPERATE_AT = 1.0            # desperation score that sends everything
 LOSING_HARD = 1.0             # air strength < 45 % or command < 50 % (the old "losing badly" test)
 LOSING_SOFT = 0.6             # air strength < 60 % or command < 65 %
 MOZDOK_WEIGHT = 0.5           # weight of "the bomber base itself is under attack" (a good weight, never enough alone)
-FRONT_WEIGHT = 0.25           # the front is in its last stage
+FRONT_WEIGHT = 0.25           # red's air defence is broken (S20 Phase 3, replaces "the front is in its last stage"): judgment call, one step like the old front stage 2
+FRONT_IADS_AT = 0.40          # ...when the mean health of red's SAM sites and EWRs (war.totals "iads") is this or less
 COVER_FLOOR = 0.3             # share of blue's fighters that is still ready when no patrol is up (alert launch), judgment call
 BLUE_FIGHTERS_CAP = 8         # fighters a carrier can put against one raid, as far as red's estimate goes
 # v0.41.355 (campaign rules plan Phase 10a, XO 2026-11-10: "spread the risk on something more productive for red"): the Tu-22M3 LAND STRIKE, 2 Tu-22M3 + 2 Mozdok Su-27 on a blue supply site, comes FIRST in the bomber pool.
@@ -118,7 +119,7 @@ def desperation(state, bw) -> float:
     from .war import totals
     t = totals(state)
     losing = LOSING_HARD if (t["enemy_air"] < 0.45 or t["c2"] < 0.5) else LOSING_SOFT if (t["enemy_air"] < 0.60 or t["c2"] < 0.65) else 0.0
-    return losing + MOZDOK_WEIGHT * mozdok_pressure(state, bw) + (FRONT_WEIGHT if state.front >= 2 else 0.0)
+    return losing + MOZDOK_WEIGHT * mozdok_pressure(state, bw) + (FRONT_WEIGHT if t["iads"] <= FRONT_IADS_AT else 0.0)
 
 
 def estimated_stop(state, d, n, cv) -> float:
