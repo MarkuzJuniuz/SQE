@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, asdict
 from . import runways, threat
 from . import threatmap as tm
 from .loadouts import CBU_JETS, ENEMY_FIGHTERS, ENEMY_RADIUS_NM, JSOW_PER_JET, SLAM_PER_JET
-from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER
+from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER, STRIKE_CONDITIONAL
 from .models import Objective, ObjectiveType, Role, BaseKind, RefuelMethod
 from .state import CampaignState
 
@@ -210,6 +210,7 @@ LONG_RANGE_A2A = {"F-15C", "F-14BU"}
 CAS_JET_MIN_DEF_FLIGHTS = 99     # v0.41.214 (XO 2026-10-30): was 3. 99 = never "hot": the A-10C is the CAS master on every job and the jets only fly it when no A-10C squadron is free and in range (the Vipers were engaged at their wait point; the cure is the gate hold, below, not the airframe). v0.41.189 (was 3): jets take CAS first only when this many red defender flights can reach the target (judgment call; 2026-10-29 sim: with 1 nearly every L1 / L2 job counted as hot and the A-10Cs flew none)
 CAS_JET_SWAY_NM = 400            # v0.41.188: the CAS squadron of the other kind is picked only when none of the preferred kind is free within this much of it (judgment call)
 A2A_SECONDARY_NM = 400          # an F-16 / F/A-18 squadron is picked for TARCAP or escort only when no long-range shooter is within this much of it
+A10_RUNIN_NM = 8                # v0.41.360 (Phase 10c part 2): an A-10C supply strike needs the site clear of every live SAM ring (>= 5 nm range) by this much, the run-in leg (the same margin `threatmap.blockers` keeps off the route). Judgment call
 
 
 def is_sweep(obj) -> bool:
@@ -359,6 +360,23 @@ class PackageBuilder:
         a = self.state.assets[obj.target_id]
         return any(not self.state.assets[d].destroyed for d in a.defended_by)
 
+    def _a10_supply_strike(self, obj, n_fl: int) -> bool:
+        """v0.41.360 (campaign rules plan Phase 10c part 2): may an A-10C squadron fly the STRIKE slot of this job? Only a plain supply strike (fuel / depot; no aim, no follow-after: not a runway
+        crater, EWR strike, Standoff Strike, strike under SEAD, Close DEAD or counter-air) where no red fighter flight can reach the target (`n_fl` = `threat.defender_flights`, the planner's own
+        count, 0) and no live SAM site covers the target or its run-in: any live site of 5 nm reach or more (`threatmap.rings`, a site SEAD only blinded still counts, it comes back) within
+        its ring + A10_RUNIN_NM of the target. The route to the target is checked by `_in_range` (`threatmap.blockers`) as for every strike."""
+        from . import ground
+        if obj.type != ObjectiveType.STRIKE or obj.aim or obj.after or n_fl != 0:
+            return False
+        a = self.state.assets.get(obj.target_id)
+        if a is None or a.destroyed or a.kind not in ground.SUPPLY_KINDS:
+            return False
+        return not any(math.hypot(s_.x - a.x, s_.y - a.y) <= r_ + A10_RUNIN_NM * NM for s_, r_ in tm.rings(self.state, min_range=5))
+
+    def _slot_ok(self, aircraft: str, slot) -> bool:
+        """v0.41.360: the airframes with a conditional STRIKE role (A-10C) fly a STRIKE slot only on a job `_a10_supply_strike` passed; every other slot is as before."""
+        return not (slot.role == Role.STRIKE and aircraft in STRIKE_CONDITIONAL and not getattr(self, "_a10_strike", False))
+
     def _raid_threat_count(self, obj, extra) -> int:
         """v0.41.287 (XO 2026-11-04: "every SAM threatening the intercept line"): how many live red SAM sites threaten the carrier raid's
         intercept line (`tm.raid_inbound_sites`) -- one SEAD/DEAD 4-ship goes to each, not a fixed two (the old RAID_BLOCK_MAX). At least 1,
@@ -433,6 +451,7 @@ class PackageBuilder:
         else:
             n_fl = threat.defender_flights(threat.expected_defenders(st, tx, ty, iads))
         self._hot = n_fl >= CAS_JET_MIN_DEF_FLIGHTS                                  # v0.41.188: red fighters can reach the target: CAS jets first
+        self._a10_strike = self._a10_supply_strike(obj, n_fl)                        # v0.41.360 (Phase 10c part 2): a clean supply strike may take A-10C squadrons
         pkg = Package(id=f"pkg{number}", number=number, objective=obj, n_def=2 * n_fl, extra=extra)
         slots = self._slots(obj, self._defended(obj), n_fl, extra)
         pp = st.player
@@ -441,7 +460,7 @@ class PackageBuilder:
         if for_player and pp:
             psq = st.squadrons[pp.squadron_id]
             spec = AIRCRAFT[psq.aircraft]
-            ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles and (not s.kit or psq.aircraft in KIT_JETS.get(s.kit, ()))
+            ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles and self._slot_ok(psq.aircraft, s) and (not s.kit or psq.aircraft in KIT_JETS.get(s.kit, ()))
                   and (not is_sweep(obj) or psq.aircraft in LONG_RANGE_A2A)                    # v0.41.15: no BVR sweep in an F-16 / F/A-18
                   and self._in_range(psq.id, tx, ty) and ledger.free[psq.id] >= 2]
             if obj.type == ObjectiveType.CAS and psq.aircraft != "A-10C" and not self._hot:
@@ -547,7 +566,7 @@ class PackageBuilder:
         obj0_ = self._ctx[0] if self._ctx else None
         sweep_ = obj0_ is not None and is_sweep(obj0_)            # v0.41.15: a Fighter Sweep flies long-range fighters only (F-15C, F-14)
         cands = [sq for sq in self.state.squadrons.values()
-                 if slot.role in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2 and self._in_range(sq.id, tx, ty)
+                 if slot.role in AIRCRAFT[sq.aircraft].roles and self._slot_ok(sq.aircraft, slot) and ledger.free[sq.id] >= 2 and self._in_range(sq.id, tx, ty)
                  and (not slot.kit or sq.aircraft in KIT_JETS.get(slot.kit, ())) and (not sweep_ or sq.aircraft in LONG_RANGE_A2A)]
         if not cands:
             return None
