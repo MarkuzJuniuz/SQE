@@ -94,7 +94,7 @@ RAID_F14_DASH_KTS = 500     # ...and dashes at this speed once the gate opens (j
 RAID_OTHER_DASH_KTS = 500   # v0.41.286: was 600 (see RAID_F14_DASH_KTS). v0.41.265: the Hornets and Eagles that dash with them (judgment call; the F-14 is the fastest of the three at altitude)
 RAID_SEAD_LEAD_S = 240      # v0.41.256: the raid SEAD's HARMs land this long before the interceptors are due on station (judgment call; v0.41.255 had 180)
 RAID_SEAD_DONE_S = 150      # v0.41.283 (XO 2026-11-04): when the player is not the raid SEAD flyer the SEAD is already done: its HARMs landed this long before the mission starts (judgment call)
-RAID_SCRIPT_KILL = 0.5      # ...and this share of the live site's launchers and vehicles is destroyed at second 2, with all its tracking radars (a scripted result; judgment call)
+RAID_SCRIPT_KILL = 0.5      # (OLD SAVES ONLY since v0.41.357: a carrier raid with a prep record, `extra["prep_rec"]`, has no scripted result, see `_raid_prep_standing`) ...and this share of the live site's launchers and vehicles is destroyed at second 2, with all its tracking radars (a scripted result; judgment call)
 RAID_PLAYER_WAIT_S = 300    # v0.41.284 (XO 2026-11-04: "it's unrealistic if red will wait forever"): when the player flies the raid SEAD, red's raiders spawn this long after his HARMs, the radars dead or not (judgment call; "5 minutes?")
 RAID_DASH_WAIT_S = 180      # v0.41.256: the interceptors cross this long after the HARMs if the tracking radars are not all dead by then (judgment call)
 RAID_HEAD_S = 300         # v0.41.278 (XO 2026-11-04: "intelligence is intelligence. Must've put two and two together"): the AI interceptors of the fleet-defence raid spawn this far along their route, as if they had launched this long before the mission began. A player's flight is not moved. Judgment call: ~50 nm at the dash speed; 0 = they start at the field
@@ -2384,8 +2384,40 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         pf = package.player_flight
         return pf is None or pf.role != Role.SEAD
 
+    @staticmethod
+    def _raid_prep_rec(package) -> bool:
+        """v0.41.357 (Phase 10b part 2): the carrier raid was planned with the SEAD prep of the turn before on record (`packages.build` sets `extra["prep_rec"]`). A save with no record: False, the old scripted result."""
+        return bool((package.extra or {}).get("prep_rec"))
+
+    def _raid_prep_standing(self, package, geom, manifest):
+        """v0.41.357 (Phase 10b part 2, XO decision 32: the intercept always takes the pre-mission's result): the SAM picture of the raid mission is what the prep left in the assets.
+        A site the prep destroyed is not built, one it suppressed is built blind (`_spawn_site`: `a.suppressed`, the radars are gone), one it did not touch is built live and shoots. No
+        scripted blow-up, no SEAD seats in the raid package. The live threatening sites (`_raid_blockers`: live, unsuppressed, reach on the bombers' lane) are built here, first, so the unit
+        limit never trims them (`_spawn_raid` builds the other SAM sites after the flights); the interceptors' lane is still worked out as if they were out (`_raid_blockers` `ignore`): they
+        fly it and take the fire. The raiders' flag is set at second 5, as the scripted result did (the SEAD was flown, or resolved, the turn before). -> the `_rsp` record (`flag`, `t_flag`, `ip`, `sites`)."""
+        from .models import Objective
+        ids, ip_ = self._raid_blockers(package, geom, self._raid_hold_xy(package, geom))
+        sites = [self.state.assets[i] for i in ids if i in self.state.assets]
+        for st_ in sites:
+            sp = copy.copy(package)
+            sp.objective = Objective(f"{package.objective.id}-live", ObjectiveType.DEAD, st_.id, package.objective.priority, "SAM site the prep left standing", "SEAD")
+            sp.flights = []
+            self._spawn_opfor_ground(sp, st_.x, st_.y, manifest, [(st_.x, st_.y), (st_.x, st_.y)])
+        if ip_ is None:
+            self.warns.append("Raid interceptors: no SAM-clear intercept point on the bombers' way in; they hold at their station.")
+            if not sites:
+                return None
+        self._flag_n += 1
+        flag = self._flag_n
+        t2 = triggers.TriggerOnce(comment="raid: the prep stands, interceptors cross")
+        t2.add_condition(condition.TimeAfter(5))
+        t2.add_action(action.SetFlag(flag))
+        t2.add_action(action.DoScript(String('trigger.action.outTextForCoalition(coalition.side.BLUE, "AWACS: Raid inbound. Interceptors, cleared to push toward the launch point.", 15)')))
+        self.m.triggerrules.triggers.append(t2)
+        return {"site": sites[0] if sites else None, "sites": sites, "agm88_s": 0.0, "flag": flag, "t_flag": 5.0, "ip": ip_}
+
     def _raid_script_kills(self, grp, radars, comment) -> None:
-        """At second 2 the site's tracking radars and RAID_SCRIPT_KILL of its other units blow up (the HARMs and the strike that already happened). At least one unit is left."""
+        """At second 2 the site's tracking radars and RAID_SCRIPT_KILL of its other units blow up (the HARMs and the strike that already happened). At least one unit is left. OLD SAVES ONLY (v0.41.357): a raid planned with the prep record never gets here (`_raid_prep_standing`)."""
         units = list(grp.units) if grp is not None else []
         rad_ = {id(u) for u in radars}
         rest = [u for u in units if id(u) not in rad_]
@@ -2409,6 +2441,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if package.id in c_:
             return c_[package.id]
         c_[package.id] = None
+        if self._raid_prep_rec(package):                                   # v0.41.357 (Phase 10b part 2): the prep of the turn before stands: no SEAD seats, no scripted result
+            c_[package.id] = self._raid_prep_standing(package, geom, manifest)
+            return c_[package.id]
         f0 = next((f for f in package.flights if self._raid_sead_any(package, f)), None)
         n_sead = sum(1 for f in package.flights if self._raid_sead_any(package, f))
         setp_ = bool((package.extra or {}).get("setpiece"))

@@ -1,7 +1,7 @@
 """Squadron Campaign Engine (SQE): abstracted war + one fully generated DCS package per sortie."""
 APP_NAME = "Squadron Campaign Engine"
 SHORT = "SQE"
-__version__ = "0.41.356"
+__version__ = "0.41.357"
 
 CAMPAIGN_EXT = ".sqe"
 FORMAT_VERSION = 7         # v0.41.334: 7 = the refit clock (state.turn, Squadron.refit / repl_due / held); older saves are refused (campaign rules plan, Phase 1)

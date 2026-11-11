@@ -396,7 +396,7 @@ class PackageBuilder:
             k = max(2, math.ceil(SETPIECE_RATIO * n_fl))              # n_fl = raiders / 3 (set in build) -> k flights of 4, about one blue fighter per raider
             n_land = SETPIECE_LAND_SHARE * (k - 2)                    # v0.41.256 (XO 2026-11-03: the USAF wing gave no help): a share of the optional flights is land-based (F-15C first)
             n_land = int(n_land)
-            n_sead = self._raid_threat_count(obj, extra)              # v0.41.287: one 4-ship per site that threatens the intercept line, not a fixed two
+            n_sead = 0 if extra.get("prep_rec") else self._raid_threat_count(obj, extra)              # v0.41.287: one 4-ship per site that threatens the intercept line, not a fixed two (v0.41.357: none when the prep of the turn before is on record, its own packages did that job; a save with no record keeps the seats)
             return [Slot(Role.CAP, 4), Slot(Role.CAP, 4)] + [Slot(Role.CAP, 4, False, land=i < n_land) for i in range(k - 2)] + [Slot(Role.SWEEP, 2, False)] + [Slot(Role.SEAD, 4, False) for _ in range(n_sead)]
         if is_sweep(obj):                                                    # Fighter Sweep: 4-ships only, one per 4 bandits beyond the packages' own cover
             n4 = max(1, sweep_4ships(n_fl))
@@ -425,6 +425,8 @@ class PackageBuilder:
             n_fl = extra.get("escorts", 0) // 2
             if extra and carrier_raid(st, obj):
                 extra = {**extra, "setpiece": True}                          # v0.41.107: flown from the Missions page like any job, every flight listed (v0.41.270: it folds into no other mission)
+                if ((st.raids or {}).get("raid_prep") or {}).get("turn") == st.turn:      # v0.41.357 (Phase 10b part 2): the SEAD prep of the turn before is on record: the raid carries no SEAD seats of its own and the mission builds the SAM picture the prep left (`MissionBuilder._raid_prep_standing`)
+                    extra["prep_rec"] = True
                 n_fl = math.ceil((extra["bombers"] + extra["escorts"]) / 3)  # v0.41.250: _slots sizes the blue CAP as raiders / 3 (the old 4 + 8 raid gave 4); with 1 escort per 2 bombers, bombers / 2 is no longer that
         elif obj.type == ObjectiveType.BARCAP:       # a fleet patrol meets a probing enemy flight if the enemy still has fighters
             n_fl = 1 if any(w.available > 0 for w in st.enemy_air) else 0
