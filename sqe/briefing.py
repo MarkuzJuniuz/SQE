@@ -43,8 +43,9 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         tb = state.bases.get(obj.target_id)
         rtype = {"Su_24M": "Su-24M bombers", "Su_34": "Su-34 bombers", "Su_25": "Su-25 attack aircraft", "Tu_22M3": "Tu-22M3 bombers"}.get(e.get("raider", "Su_24M"), "attack aircraft")
         what = obj.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", "") if e.get("aim") else (tb.name if tb else "our airfield")
-        sit += ["", (f"Intelligence reports {e['bombers']} {rtype} with free-fall bombs inbound toward {what}, "
-                     f"approaching from a bearing of about {e['brg']:.0f} degrees." if e.get("land") else
+        sit += ["", (f"Intelligence reports {e['bombers']} {rtype} with {'Kh-31P anti-radiation missiles' if e.get('sead') else 'free-fall bombs'} inbound toward {what}, "
+                     f"approaching from a bearing of about {e['brg']:.0f} degrees."
+                     + (" They will fire from about 40 nm out and turn for home; stop them before they launch." if e.get("sead") else "") if e.get("land") else
                      f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
                      f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier. They will launch from about 100 nm out and turn for home; stop them before they fire."
                      + ((" The SEAD packages went in the turn before: a SAM site they did not take down is still up and shooting. Hold on your station, outside the SAM rings, and engage what comes to you; "

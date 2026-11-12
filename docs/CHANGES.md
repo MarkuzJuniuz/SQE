@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.397, red sends SEAD packages at your SAM sites, no more SEAD and DEAD in front of its bombers
+At Levels 2 and 3 red no longer sends SEAD and DEAD groups with its bomber raids, and no longer raids a target that lies under a live Patriot or HAWK. Instead it sends escorted SEAD packages at the Patriot and HAWK sites themselves: four Su-24M or Su-34 with Kh-31P, fired from about 40 nm out, with a pair of fighters for every four (a full-strength Patriot gets two packages in one raid, a HAWK one). The missiles that get through cut the site's health, and once the cover over a field is down red's bombers raid it again; your repairs and rebuilds put the sites back. Level 1 is unchanged.
 ## v0.41.396, AI strike flights go for their assigned target
 Strike flights flown by the AI now attack only their designated target (Open Fire) instead of anything nearby (Weapon Free). Before, they dropped on depots and SAM sites near the approach point and turned for home without reaching the target. CAS is unchanged.
 
