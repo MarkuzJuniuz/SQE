@@ -35,7 +35,9 @@ POOL_MAX_RAIDERS = 16         # ...a raid never flies more raiders than this (th
 TEMPO_STOP_SHARE = 0.5        # v0.41.171 (XO 2026-10-28): half of the AIR tempo is added to the chance a surprise raider is stopped (+20 points at the +40 cap; judgment call)
 SEAD_JETS = {1: 4, 2: 4, 3: 6}   # S36b (XO 2026-11-11): the SEAD package red sends at a blue SAM site: this many Su-24M / Su-34 with Kh-31P (by level), escorted by SEAD_ESCORT_RATIO fighters a jet; the only way red opens a covered target. S43 (XO 2026-11-11, "red is almost always outnumbered"): Level 3 only, 4 to 6 jets, judgment call (measured: SEAD raids were 58 to 74% of all raids and 19% of them had red at least equal to blue's jets; with 6 jets and 1:1 escorts 58%)
 SEAD_ESCORT_RATIO = {1: 0.5, 2: 0.5, 3: 1.0}   # S43: escorts per SEAD jet (S36b: half as many, so a 4-jet HAWK package was 6 jets against blue's 10 to 12); Level 3 a fighter for every Kh-31P jet (judgment call)
-SEAD_PATRIOT_PACKAGES = 2     # ...a full-strength Patriot gets two such packages in one raid, anything else one (judgment call)
+SEAD_PATRIOT_PACKAGES = 3     # ...a full-strength Patriot gets three such packages in one raid, anything else one. S59b (XO 2026-11-12), judgment call: a Patriot site has 8 launchers x 4 missiles and fires about two at each ARM, so one coordinated salvo of three packages, 24 Kh-31P at L1 / L2 (12 Su-24M, 2 a jet) or 64 at L3 (16 Su-34 under POOL_MAX_RAIDERS, 4 a jet), is meant to exhaust it; the HAWK fell to two packages in run 14-45-46, the Patriot did not
+SEAD_PATRIOT_MIN_PACKAGES = 2  # S59b (XO 2026-11-12, "at least 2 but ideally 3 per patriot"): a full-strength Patriot raid that cannot field this many packages (after pooling a second wing) is not planned that turn, red keeps the jets (judgment call: one package, 8 Kh-31P at L2, is shot down and wastes a third of what red could send)
+SEAD_POOL = True              # S59b: a SEAD raid whose lead wing is short takes a partner wing too (`_pool_partners`, bomber types only: the types that carry the Kh-31P, Su-24M and Su-34); the escorts pool as other raids do (`POOL_ESCORTS`)
 SEAD_HAWK_PACKAGES = 2          # S44 (XO 2026-11-12): a HAWK gets two packages too (a Patriot below full strength, or whatever is left of one, still one)
 SEAD_SITE_HIT = 0.15          # ...and a blue SAM site loses this much health per SEAD jet that gets through (a launch of 3 jets takes 0.45 off a HAWK, 6 take 0.9 off a Patriot; judgment call, tuned with the probe `.private/probes/s36`: 0.08 never opened a field, 0.25 wiped the SAMs by day 10, 0.15 sags them and reopens fields)
 KH59_RAIDS = True             # S48 (XO musing 2026-11-12, probe flown 2026-11-12): red's Su-24M / Su-34 raids on an UNCOVERED supply site or garrison fire the Kh-59M from about 50 nm and turn for home (`plan_raid` draws it, `raid_spawns` builds it, `war._resolve_raid` resolves it). False = every raid as S46 left it. Both the plan and the spawner read this module attribute at call time
@@ -548,24 +550,53 @@ def _plan_sead(state, d, base, aim: str, oid: str, turn: int):
     bw, raider = r[1], r[2]
     rnd = random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:raid")
     rdy = redair.ready_of(state, bw, (raider,))
-    nb = min(sead_jets(state, aim, d), rdy)
+    want = min(sead_jets(state, aim, d), POOL_MAX_RAIDERS)
+    want -= want % 2                                                                 # S59b: never more raiders than the mass cap (L3: three packages of six are 18, they fly 16)
+    nb = min(want, rdy)
     nb -= nb % 2
-    if nb < sead_n(d):
-        return None
+    pool = []
+    if SEAD_POOL and POOL_RAIDS and nb < want:                                       # S59b: the lead wing is short: a nearby wing that carries the Kh-31P joins it
+        pool = _pool_partners(state, "sam", bw, ax, ay, want - nb, only=BOMBER_TYPES)
+    nb_lead = nb
+    nb += sum(p["n"] for p in pool)
+    from .sams import BLUE_FULL_DEF
+    sa_ = state.blue_sams.get(aim)
+    full_ = aim.rsplit("_", 1)[1] == "pat" and sa_.health >= BLUE_FULL_DEF          # a full-strength Patriot
+    if nb < (sead_n(d) * SEAD_PATRIOT_MIN_PACKAGES if full_ else sead_n(d)):
+        return None                                                                  # too few: nothing is booked, red keeps the jets
     want_e = int(round(nb * SEAD_ESCORT_RATIO[max(1, min(3, int(getattr(d, "level", 3))))]))
     esc, esc_avail = _escort_for(state, bw, ax, ay, rnd, want=want_e)
     esc_even = esc_avail - esc_avail % 2
     escorts = min(want_e - want_e % 2, esc_even) if esc else 0
-    if escorts < 2:
+    esc_pool = []
+    if POOL_ESCORTS and esc and escorts < want_e - want_e % 2:                       # S59b: the escort wing is short too: the next wing's fighters fly with it
+        esc_pool = _pool_escorts(state, {bw.base_asset_id, esc[0].base_asset_id, *(p["wing"] for p in pool)}, esc[0], ax, ay, want_e - want_e % 2 - escorts)
+    if escorts + sum(p["n"] for p in esc_pool) < 2:
         return None                                                                  # no SEAD without its escort
     ba = state.assets[bw.base_asset_id]
     brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360
-    jets = [[sid, n, "raid"] for sid, n in redair.take_ready(state, bw, (raider,), nb)]
-    jets += [[sid, n, "esc"] for sid, n in redair.take_ready(state, esc[0], (esc[1],), escorts)]
-    redair.spend(state, bw.base_asset_id, nb)
-    redair.spend(state, esc[0].base_asset_id, escorts)
-    return {"sead": True, "land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id, "escort_wing": esc[0].base_asset_id,
+    jets = [[sid, n, "raid"] for sid, n in redair.take_ready(state, bw, (raider,), nb_lead)]
+    for p in pool:
+        jets += [[sid, n, "raid"] for sid, n in redair.take_ready(state, state.enemy_air_at(p["wing"]), (p["raider"],), p["n"])]
+    if escorts:
+        jets += [[sid, n, "esc"] for sid, n in redair.take_ready(state, esc[0], (esc[1],), escorts)]
+    for p in esc_pool:
+        jets += [[sid, n, "esc"] for sid, n in redair.take_ready(state, state.enemy_air_at(p["wing"]), (p["type"],), p["n"])]
+    redair.spend(state, bw.base_asset_id, nb_lead)
+    for p in pool:
+        redair.spend(state, p["wing"], p["n"])
+    if escorts:
+        redair.spend(state, esc[0].base_asset_id, escorts)
+    for p in esc_pool:
+        redair.spend(state, p["wing"], p["n"])
+    escorts += sum(p["n"] for p in esc_pool)
+    plan = {"sead": True, "land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb, "bomber_wing": bw.base_asset_id, "escort_wing": esc[0].base_asset_id,
             "escort_type": esc[1], "escorts": escorts, "mass": False, "aim": aim, "dest": [ax, ay], "jets": jets}
+    if pool:
+        plan["pool"] = pool
+    if esc_pool:
+        plan["esc_pool"] = esc_pool
+    return plan
 
 
 def plan_raid(state, d, base, aim: str, oid: str, turn: int):
