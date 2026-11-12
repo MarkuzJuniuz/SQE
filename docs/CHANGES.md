@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.409, the F-14B(U) holds further out, the MiG-31 is a stand-off interceptor
+The Tomcat is no longer treated like the F-15C. Its TARCAP and escort stations sit 12 nm further from the fight than before (yours too: only the station and the end of the racetrack move, the rest of your route is the same), and a hunting Tomcat TARCAP engages inside a 35 nm circle, the Phoenix's reach, not the Eagle's 25. A Fighter Sweep goes to an F-15C squadron first and to the Tomcat only when no Eagle squadron can fly it. On the red side the MiG-31 now counts 0.5, not the Su-27's 0.67, when red decides whether to commit to a fight; it engages inside a 40 nm circle and works only from inside its own SAM cover.
 ## v0.41.408, blue has no road supply sites; Level 1 red's supply follows its inner depots
 New campaigns give blue no road supply sites on any level: it keeps only the fuel farms and depots it brought to each field, so every hit on them weighs more. Red keeps its road sites (15 / 30 / 30). On Level 1 red's supply is now 70% its depots near the fields and 30% its road sites, and it falls when you hit them, down to a 45% floor (insurgents supplied by night); it no longer sits on a fixed 70%. Old saves are unchanged.
 ## v0.41.407, red sends two SEAD packages against a HAWK site too

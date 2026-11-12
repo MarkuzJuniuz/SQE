@@ -207,6 +207,10 @@ def _next_callsign(st, sq, used: dict) -> str:
 
 
 LONG_RANGE_A2A = {"F-15C", "F-14BU"}
+# S45 (XO 2026-11-11): the F-14B(U) is not lumped with the F-15C. Its AIM-54C is a long, heavy missile (a bomber-killer, fleet defence): it earns its keep on range, not in a close
+# fighter fight like the Eagle's AIM-120 (public sources, firmness low: the Phoenix's published reach is about 100+ nm, the longest test shot 110 nm at a Mach 1.5 drone, 1973;
+# the AIM-120's quoted reach is about 60 to 70% of that; DCS's Mk47 does not loft inside about 21 nm). It stays on the sweep list but behind every F-15C squadron (`_pick_squadron`).
+SWEEP_LAST = {"F-14BU"}
 CAS_JET_MIN_DEF_FLIGHTS = 99     # v0.41.214 (XO 2026-10-30): was 3. 99 = never "hot": the A-10C is the CAS master on every job and the jets only fly it when no A-10C squadron is free and in range (the Vipers were engaged at their wait point; the cure is the gate hold, below, not the airframe). v0.41.189 (was 3): jets take CAS first only when this many red defender flights can reach the target (judgment call; 2026-10-29 sim: with 1 nearly every L1 / L2 job counted as hot and the A-10Cs flew none)
 CAS_JET_SWAY_NM = 400            # v0.41.188: the CAS squadron of the other kind is picked only when none of the preferred kind is free within this much of it (judgment call)
 A2A_SECONDARY_NM = 400          # an F-16 / F/A-18 squadron is picked for TARCAP or escort only when no long-range shooter is within this much of it
@@ -585,6 +589,8 @@ class PackageBuilder:
                 k += A2A_SECONDARY_NM
             if escort and sq.aircraft in LONG_RANGE_A2A:
                 k += A2A_SECONDARY_NM
+            if sweep_ and sq.aircraft in SWEEP_LAST:
+                k += A2A_SECONDARY_NM         # S45: a Fighter Sweep goes into red's fighters: an F-15C first, the Tomcat only when no Eagle squadron can fly it
             if slot.role == Role.CAS and (sq.aircraft != "A-10C") == (not getattr(self, "_hot", False)):
                 k += CAS_JET_SWAY_NM         # v0.41.188: A-10Cs where the air is clear, F-16C / F/A-18C when red fighters reach the target
             return k

@@ -68,7 +68,13 @@ TARCAP_NEAR_NM = 18          # v0.41.168 (XO 2026-10-27: 16, the TARCAP dived in
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
 TARCAP_PKG_ZONE_NM = 15       # v0.41.185 (XO 2026-10-28: the CAS / strike TARCAP goes maverick): the circle of a CAS or strike TARCAP is this big and does not reach out to the BARCAP circle (judgment call)
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
-TARCAP_BARCAP_OVERLAP_NM = 4   # v0.41.138: the TARCAP circle reaches this far (less 2 nm of margin) inside the nearest BARCAP circle, so there is no unguarded strip between them (judgment call: a few miles so a bandit crossing from one to the other is always inside one)
+# S45 (XO 2026-11-11: "make the F-14B(U) a special case ... just depend on the Phoenix's range"; he also asked for the player's Tomcat waypoints to sit further out). The Tomcat's TARCAP / escort
+# station sits this much further from the fight than the Eagle's and the engage circle of a hunting TARCAP is the Phoenix's reach, not the AIM-120's. Judgment calls, no public figure fixes them:
+# the longest test Phoenix shot was 110 nm at a Mach 1.5 drone (1973, secondary sources), the AIM-120's reach is about 60 to 70% of the Phoenix's (forum estimate), and DCS's Mk47 does not
+# loft inside about 21 nm, so a station 18 nm from the shooters (TARCAP_NEAR_NM) puts the first shots inside the Phoenix's weak zone; 12 nm more puts the bandits 30 nm and more out. Firmness: low.
+STAND_BACK_NM = {"F-14BU": 12}
+PHOENIX_ZONE_NM = 35         # the hunting TARCAP's engage circle for the Tomcat (the Eagle's is 25); = TARCAP_COVER_MAX_NM, the largest circle `_cover_circle` will build
+TARCAP_BARCAP_OVERLAP_NM = 4  # v0.41.138: the TARCAP circle reaches this far (less 2 nm of margin) inside the nearest BARCAP circle, so there is no unguarded strip between them (judgment call: a few miles so a bandit crossing from one to the other is always inside one)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
 SLAM_AIMS = 2                # v0.41.309: aim points (buildings) of a SLAM-ER launch, a missile each per jet's two (the Standoff Strike kit carries two AGM-84H a jet)
 SLAM_ATTACK_S = 240           # the SLAM-ER launch window after the launch point's ETA, then return fire. Was 90 (v0.41.309; XO's run fired its four in 20 s). v0.41.362: 240 (judgment call): XO's run 2026-11-10 22-33-46 reached the SLAM point about 95 s after the window closed, the marshal exit costing about 55 s; 240 is that plus margin. The JSOW window is 240 too
@@ -2166,7 +2172,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 # is wanted at the sweep size for its type (25 nm long-range shooters, 15 nm the rest); the launch points still make it bigger.
                 bpts_, want_ = [], COVER_ZONE_NM
                 if stw.action == "TARCAP":
-                    want_ = A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]
+                    want_ = PHOENIX_ZONE_NM if f.aircraft == "F-14BU" else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]      # S45: the Tomcat's circle is the Phoenix's reach
                     pkg_zone_ = package.objective.type in (ObjectiveType.CAS, ObjectiveType.STRIKE)      # v0.41.185: protects the package, does not hunt
                     if pkg_zone_:
                         want_ = min(want_, TARCAP_PKG_ZONE_NM)
@@ -3329,8 +3335,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 # with the escort 20 nm away). Not kept out of SAM cover: that is the shepherd's risk. It leaves from the station, not by the package egress.
                 jx_, jy_ = jsow_launch_xy(geom, self._jsow_side(package, geom))
                 ax_ = bearing(tx, ty, jx_, jy_)
+                back_extra_ = STAND_BACK_NM.get(f.aircraft, 0)         # S45: the Tomcat stands further out (see STAND_BACK_NM)
                 if f.role == Role.ESCORT:                  # the package escort (before v0.41.50 the SWEEP role)
-                    ex_, ey_ = offset(jx_, jy_, ax_, ESCORT_BEHIND_NM * NM)
+                    ex_, ey_ = offset(jx_, jy_, ax_, (ESCORT_BEHIND_NM + back_extra_) * NM)
                 else:
                     # v0.41.43 (XO 2026-10-20): the TARCAP overwatches from just behind the JSOW flight (where it used to turn round with the HARM shooters),
                     # TARCAP_BEHIND_NM back, and further back (1 nm steps, at most 14 more) until it is outside every live medium / long-range SAM ring plus
@@ -3346,7 +3353,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     # from there the TARCAP moves toward the middle of the shooters' launch points, 1 nm at a time, until it is TARCAP_NEAR_NM from it, never
                     # closer than TARCAP_BEHIND_NM to the JSOW point and never into a SAM ring (the step back's rings, but an SA-10 at SA10_AVOID_NM (35 nm, the reach measured in
                     # the runs) instead of its 48 nm table ring + 5, which held the TARCAP 53 nm from the SA-10 while the HARM point is 36 nm from it)
-                    near_nm_ = TARCAP_NEAR_STRIKE_NM if package.objective.type == ObjectiveType.STRIKE else TARCAP_NEAR_NM
+                    near_nm_ = (TARCAP_NEAR_STRIKE_NM if package.objective.type == ObjectiveType.STRIKE else TARCAP_NEAR_NM) + back_extra_
                     lps_ = self._launch_pts.get(package.id) or self._launch_points(package, geom)       # the stations are planned before _launch_pts is filled in
                     if lps_:
                         mx_, my_ = sum(q_[0] for q_ in lps_) / len(lps_), sum(q_[1] for q_ in lps_) / len(lps_)
@@ -3365,10 +3372,26 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                             if ax2_ is not None:
                                 ex_, ey_ = ax2_
                 geom.stand[key] = (ex_, ey_, [], dist(ex_, ey_, tx, ty) / NM, False)
+            elif f.aircraft in STAND_BACK_NM and f.role in (Role.TARCAP, Role.ESCORT):
+                geom.stand[key] = self._stand_back(geom.stand[key], tx, ty, alt_, geom.egr, STAND_BACK_NM[f.aircraft])      # S45: the station of a package with no JSOW / SLAM flight, moved out
         if not geom.sweep:
             self._stagger_stations(geom, package, tx, ty)        # v0.41.139 (XO 2026-10-27): a long-range TARCAP stands behind and to one side of a short-range escort
 
-    RECOV_STALE_S = 1500       # v0.41.71: a homebound AI flight still out this long after its work is done is recovered where it is (XO's 2026-10-21 run: nine Navy jets
+    def _stand_back(self, stn, tx, ty, alt_ft, egr, back_nm):
+        """S45: a TARCAP / escort station (x, y, names, nm short, egress clear) moved up to `back_nm` further from the target along the target-to-station line, the
+        furthest point (2 nm steps) that is outside every live medium / long-range SAM ring as the other stations are (an SA-10 at SA10_STATION_NM). None clear: unchanged."""
+        x, y, names, short, ok = stn
+        brg = bearing(tx, ty, x, y)
+        sites_ = profiles._cover_sites(self.state, alt_ft)
+        n_ = int(back_nm)
+        while n_ > 0:
+            nx, ny = offset(x, y, brg, n_ * NM)
+            if all(dist(nx, ny, a_.x, a_.y) > (SA10_STATION_NM * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_):
+                return (nx, ny, names, dist(nx, ny, tx, ty) / NM, egr is not None and profiles.leg_clear(self.state, (nx, ny), egr, alt_ft))
+            n_ -= 2
+        return stn
+
+    RECOV_STALE_S = 1500      # v0.41.71: a homebound AI flight still out this long after its work is done is recovered where it is (XO's 2026-10-21 run: nine Navy jets
                                # followed the tanker for 15 minutes and never landed). A judgment call: the flight home is 5-10 minutes.
     RECOV_NET_NM = 12          # v0.41.25: a homebound AI flight this close to its deck / field counts as recovered, waypoint reached or not
 

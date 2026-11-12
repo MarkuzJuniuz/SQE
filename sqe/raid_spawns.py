@@ -22,7 +22,7 @@ from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
 from .loadouts import BOMBER_TYPES, ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_land_bomber_loadout, enemy_standoff_loadout, enemy_strike_loadout
 from .models import AssetKind, BaseKind, ObjectiveType, Role
-from .red_air_picture import A2A_ZONE_NM, CALLIN_LUA, CALLIN_LUA_DELAY_S, CALLIN_MIN_NM, CALLIN_REACH_NM, RED_LONG_RANGE
+from .red_air_picture import CALLIN_LUA, CALLIN_LUA_DELAY_S, CALLIN_MIN_NM, CALLIN_REACH_NM, a2a_zone_nm
 from .support_caps import SUPPORT_CAP_ZONE_NM
 from .routes import AVOID_NM, FT, NM, RAID_IP_NEAR_NM, RAID_SA11_NM, Wpt, avoid_circles, bearing, dist, offset
 from .strike_tasks import KPH
@@ -1153,7 +1153,7 @@ class RaidSpawns:
             from .mission_builder import AAM_WEAPONS            # lazy: the builder's module imports this one
             for ei, (eaid_, et_, n_) in enumerate(eent_):
                 eload = enemy_cap_loadout(et_)
-                esc_nm_ = A2A_ZONE_NM[et_ in RED_LONG_RANGE]
+                esc_nm_ = a2a_zone_nm(et_)
                 ehome_ = home_of(eaid_) if pooled_ else None        # S46: a pooled raid's escorts go home to their own field; a one-wing raid keeps the old way (the raid's field)
                 if ei < n_sweep:
                     eg = build_group(f"Raid Sweep {rn_['sw'] + 1}", getattr(planes, et_), n_, task.FighterSweep, shift=-RAID_SWEEP_LEAD_S - 15 * ei, home=ehome_)
