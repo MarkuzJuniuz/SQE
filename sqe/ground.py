@@ -50,6 +50,7 @@ SHORT_MAX = 600               # v0.41.338: at most this many entries are kept in
 DEFEAT_BASES = 3              # Phase 9a (XO 2026-11-10, campaign rules plan decision 25): the campaign is lost when this many of our airfields have fallen; a sunk carrier no longer counts
 SUPPLY_FLOOR, SUPPLY_NONE = 0.35, 0.85
 # v0.41.334 (XO 2026-11-06 / 11-09, campaign rules plan decision 18): ONE shared Force Index floor, 0.35, for both sides (it was 0.55 for red and BLUE_SUPPLY_FLOOR 0.35 for the coalition). History of the 0.35: v0.41.174 (XO 2026-10-28) 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle); v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly. Judgment call, no public source. Level 1 red keeps L1_RED_SUPPLY_FLOOR.
+RED_L1_FLOOR = 0.15        # v0.41.408 (S49, XO 2026-11-12): the absolute floor of red's Force Index on Level 1 of a new campaign (half inner sites, half road sites; see supply). Judgment call. Blue is not resupplied across anything: its stock came by sea, and it has no road sites (road_sites_blue 0), only the fuel farms and depots it brought.
 SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (35% = about 17 days); no repair on a day it is struck
 L1_RED_SUPPLY_FLOOR = 0.70    # v0.41.141 (XO 2026-10-27, Campaign Revamp): on Level 1 the insurgents are resupplied across the border by night, so their supply never drops below this however many depots die (judgment call; a toy-model run showed it does not change who wins). Levels 2 and 3 use the shared 0.35 floor (SUPPLY_FLOOR).
 
@@ -193,7 +194,7 @@ def build_blue_assets(state, rng, ap=None) -> None:
         ba["bdepot_rear"] = EnemyAsset("bdepot_rear", "Rear supply depot", AssetKind.DEPOT, x, y, 1.0, 5, [], None, "", 1)
     state.blue_assets = ba
     if g is not None:
-        g["sup_n"] = {"red": sum(1 for a in state.assets.values() if a.kind in SUPPLY_KINDS), "blue": sum(1 for a in ba.values() if a.kind in SUPPLY_KINDS)}
+        set_supply_counts(state)
         g["sup_h"] = {a.id: 1.0 for a in list(state.assets.values()) + list(ba.values()) if a.kind in SUPPLY_KINDS}
 
 
@@ -440,16 +441,43 @@ def facility_health(assets, kinds):
     return sum(hs) / len(hs) if hs else None
 
 
+def set_supply_counts(state) -> None:
+    """The Force Index bookkeeping of a NEW campaign: the supply sites each side starts with (sup_n), and, for red on Level 1, the split into inner sites (the fixed
+    fuel / depot sites near the fields) and road sites (rsup_...) with the flag sup_grp. v0.41.408 (S49, XO 2026-11-12). Old saves have no flag: the old formula."""
+    from .road_sites import ROAD_PREFIX
+    g = state.ground
+    if g is None:
+        return
+    ba = getattr(state, "blue_assets", None) or {}
+    g["sup_n"] = {"red": sum(1 for a in state.assets.values() if a.kind in SUPPLY_KINDS), "blue": sum(1 for a in ba.values() if a.kind in SUPPLY_KINDS)}
+    if getattr(state, "level", 2) == 1:
+        rs = [a for a in state.assets.values() if a.kind in SUPPLY_KINDS]
+        g["sup_n_road"] = sum(1 for a in rs if a.id.startswith(ROAD_PREFIX))
+        g["sup_n_inner"] = len(rs) - g["sup_n_road"]
+        g["sup_grp"] = True
+
+
 def supply(state, side: str) -> float:
     """0.35 (no stock left, SUPPLY_FLOOR, the same for both sides) .. 1.0 (all of the side's sites at hand and intact). v0.41.144: the stock held (sum of the health of the supply sites a side holds)
     over the number it started with, so a captured site raises the captor's figure (up to 100%) and lowers the old owner's (to the floor at worst); a site's
-    health is its stock and does not fade. A side that started with no sites runs at 0.85. Red on Level 1 never falls below L1_RED_SUPPLY_FLOOR (0.70)."""
+    health is its stock and does not fade. A side that started with no sites runs at 0.85. Red on Level 1 of an old save never falls below L1_RED_SUPPLY_FLOOR (0.70).
+    v0.41.408 (S49, XO 2026-11-12): red on Level 1 of a NEW campaign (ground["sup_grp"]) is half its inner sites' stock and half its road sites' stock (stock over the start count
+    of each group; a captured site counts in the captor's group by its id), floor RED_L1_FLOOR (0.15), so hitting the inner depots really lowers it. Judgment call, XO."""
     pool = state.assets.values() if side == "red" else getattr(state, "blue_assets", {}).values()
     sites = [a for a in pool if a.kind in SUPPLY_KINDS]
     n = int(((state.ground or {}).get("sup_n") or {}).get(side, len(sites)))
     fl = SUPPLY_FLOOR
-    v = SUPPLY_NONE if n <= 0 else fl + (1.0 - fl) * min(1.0, sum(a.health for a in sites) / n)
-    v = max(v, L1_RED_SUPPLY_FLOOR) if (side == "red" and getattr(state, "level", 2) == 1) else v
+    g = state.ground or {}
+    if side == "red" and g.get("sup_grp") and getattr(state, "level", 2) == 1:
+        ni, nr = int(g.get("sup_n_inner") or 0), int(g.get("sup_n_road") or 0)
+        from .road_sites import ROAD_PREFIX
+        hi = sum(a.health for a in sites if not a.id.startswith(ROAD_PREFIX))
+        hr = sum(a.health for a in sites if a.id.startswith(ROAD_PREFIX))
+        parts = [min(1.0, h / k) for h, k in ((hi, ni), (hr, nr)) if k > 0]
+        v = max(RED_L1_FLOOR, sum(parts) / len(parts)) if parts else SUPPLY_NONE          # no road sites at all: the inner sites carry it whole
+    else:
+        v = SUPPLY_NONE if n <= 0 else fl + (1.0 - fl) * min(1.0, sum(a.health for a in sites) / n)
+        v = max(v, L1_RED_SUPPLY_FLOOR) if (side == "red" and getattr(state, "level", 2) == 1 and not g.get("sup_grp")) else v
     from . import sams
     return v - sams.debt(state, side)               # v0.41.196: the cost of replacement SAM batteries lowers supply even below the floor
 
