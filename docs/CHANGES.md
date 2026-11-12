@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.396, AI strike flights go for their assigned target
+Strike flights flown by the AI now attack only their designated target (Open Fire) instead of anything nearby (Weapon Free). Before, they dropped on depots and SAM sites near the approach point and turned for home without reaching the target. CAS is unchanged.
+
 ## v0.41.395, the ILS dummy aircraft stands on the grass beside the runway
 The small invisible aircraft that keeps each blue ILS runway active (Settings > ILS dummy) no longer sits on a far, covered parking slot. It stands on the grass beside the ILS end of the runway, 100 m off the centreline, past the hold-short line and turned across the runway like a parked aircraft, never on the pavement. Whether DCS lights the ILS for it is still to be checked in the game.
 
