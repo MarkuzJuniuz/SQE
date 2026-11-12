@@ -1055,7 +1055,7 @@ class RaidSpawns:
                     if sead_r:                                  # S36b: the SEAD flight fires its Kh-31P at the site's radars from the launch point (an ARM task on the site's group), then turns home
                         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
                         if sead_tgt is not None:
-                            ca_ = task.ControlledTask(task.AttackGroup(sead_tgt.id, weapon_type=task.WeaponType.ARM, group_attack=True))
+                            ca_ = task.ControlledTask(task.AttackGroup(sead_tgt.id, weapon_type=task.WeaponType.ARM, group_attack=True, expend=task.Expend.All))      # v0.41.399: all Kh-31P at the site in one go (the Auto default fired one a jet at any radar), then home
                             ca_.stop_after_time(int(hit_s + shift + ARM_WINDOW_S)); wp.tasks.append(ca_)
                     elif land and apt is not None:
                         wp.tasks.append(task.BombingRunway(airport_id=apt.id))

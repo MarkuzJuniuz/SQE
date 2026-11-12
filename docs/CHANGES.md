@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.399, red's SEAD packages fire all their missiles at the site's radars, then leave
+Red's Kh-31P SEAD flights now empty all their anti-radiation missiles at the Patriot or HAWK site they were sent against in one go (Open Fire), then turn for home. Before, each jet fired a single missile at whatever radar the AI picked, sometimes at another field's site.
 ## v0.41.398, raid intercepts fold into one mission, and the Missions list marks the ones that carry red's raids
 Raid intercepts that start inside the time windows now fly in one mission, wherever the raids are going (new setting Merge raids on the Mission Build page, on by default). A raid also counts along its way in, from its airfield to its target: a blue package under that line folds into the raid's mission, and you flying a blue package get the raids that cross your area. Over the unit limit, a raid far from the fight goes first. In the Missions list a mission with only red's packages has a red border and one that mixes yours with red's has an amber border; in the right panel red's packages sit in a red frame.
 ## v0.41.397, red sends SEAD packages at your SAM sites, no more SEAD and DEAD in front of its bombers
