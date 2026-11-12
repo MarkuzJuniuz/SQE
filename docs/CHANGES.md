@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.402, Level 3 red's SEAD packages are bigger, and raids come from a wing that can fill them
+At Level 3 red's SEAD package against a HAWK site is now 6 Su-24M / Su-34 with 6 fighters (was 4 with 2 to 4), and a full-strength Patriot gets twice that. Raids on fields, supply sites and garrisons are now drawn from the nearest wing that has the raid's size free, not just the nearest wing, and the escorts likewise. Red's raids are still outnumbered by blue's intercept package most of the time, but a good deal less often. Levels 1 and 2 are unchanged in size.
+
 ## v0.41.401, Level 3 red flies more Su-27 than MiG-29 and only a few Su-25
 At Level 3 red's fighters are now 46 Su-27, 20 MiG-29S and 12 MiG-29A beside 8 MiG-31 (was 30 / 28 / 20), and its Su-25 fleet is 18, like your A-10Cs (was 130). With fewer cheap attack jets red raids less (about 4.6 raids a day, was 6.9) and the Su-25 pairs no longer carry most of the supply-site raids. Levels 1 and 2 are unchanged.
 ## v0.41.400, red keeps a bigger supply net, blue a thin one

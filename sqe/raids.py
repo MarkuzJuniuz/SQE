@@ -26,7 +26,8 @@ RAIDERS = BOMBER_TYPES + ("Su_25",)  # (v0.41.361, Phase 10d: the Su-34 too) att
 SU25_SUPPLY = True            # v0.41.359 (campaign rules plan Phase 10c): a Su-25 pair is the first pick for a raid on an uncovered supply site; the Su-24M keeps the fields (they need its SEAD group) and is the fallback
                               # when no Su-25 wing reaches (Su-25 radius 160 nm against the Su-24M's 300). The Su-25 raid goes UNESCORTED when no blue fighter squadron can reach the site's field (`plan_raid`). Judgment call.
 TEMPO_STOP_SHARE = 0.5        # v0.41.171 (XO 2026-10-28): half of the AIR tempo is added to the chance a surprise raider is stopped (+20 points at the +40 cap; judgment call)
-SEAD_JETS = 4                 # S36b (XO 2026-11-11): the SEAD package red sends at a blue SAM site: this many Su-24M / Su-34 with Kh-31P, escorted by half as many fighters; the only way red opens a covered target
+SEAD_JETS = {1: 4, 2: 4, 3: 6}   # S36b (XO 2026-11-11): the SEAD package red sends at a blue SAM site: this many Su-24M / Su-34 with Kh-31P (by level), escorted by SEAD_ESCORT_RATIO fighters a jet; the only way red opens a covered target. S43 (XO 2026-11-11, "red is almost always outnumbered"): Level 3 only, 4 to 6 jets, judgment call (measured: SEAD raids were 58 to 74% of all raids and 19% of them had red at least equal to blue's jets; with 6 jets and 1:1 escorts 58%)
+SEAD_ESCORT_RATIO = {1: 0.5, 2: 0.5, 3: 1.0}   # S43: escorts per SEAD jet (S36b: half as many, so a 4-jet HAWK package was 6 jets against blue's 10 to 12); Level 3 a fighter for every Kh-31P jet (judgment call)
 SEAD_PATRIOT_PACKAGES = 2     # ...a full-strength Patriot gets two such packages in one raid, anything else one (judgment call)
 SEAD_SITE_HIT = 0.15          # ...and a blue SAM site loses this much health per SEAD jet that gets through (a launch of 3 jets takes 0.45 off a HAWK, 6 take 0.9 off a Patriot; judgment call, tuned with the probe `.private/probes/s36`: 0.08 never opened a field, 0.25 wiped the SAMs by day 10, 0.15 sags them and reopens fields)
 ASSET_HIT = 0.20              # health a supply site or garrison loses per aircraft that gets through
@@ -103,19 +104,22 @@ def describe(state, base, aim: str = "") -> str:
     return f"Intercept an air attack on the {a.name}" if k == "garrison" else f"Intercept a raid on the {a.name}"
 
 
-def _reach(state, kind: str, x: float, y: float, budget: bool = True, only=None, fits=None):
+def _reach(state, kind: str, x: float, y: float, budget: bool = True, only=None, fits=None, want: int = 0):
     """(distance nm, wing, type) of the nearest wing that can reach (x, y) with a raid of this kind, or None. v0.41.125: `only` restricts the aircraft type. v0.41.359 (Phase 10c, `SU25_SUPPLY`):
     a raid on a supply site is tried with the Su-25 wings first (`raider_wings` `pref`), then as before (Su-24M first)."""
     if kind == "supply" and SU25_SUPPLY and only is None and fits is None:
-        r = _reach_by(state, kind, x, y, budget, ("Su_25",), only, fits)
+        r = _reach_by(state, kind, x, y, budget, ("Su_25",), only, fits, want)
         if r is not None:
             return r
-    return _reach_by(state, kind, x, y, budget, None, only, fits)
+    return _reach_by(state, kind, x, y, budget, None, only, fits, want)
 
 
-def _reach_by(state, kind: str, x: float, y: float, budget: bool, pref, only, fits):
+def _reach_by(state, kind: str, x: float, y: float, budget: bool, pref, only, fits, want: int = 0):
+    """The nearest wing in reach. S43: with `want` (the raid size the draw asked for) the nearest wing that has that many jets free; when none has, the nearest as before (the nearest wing often had only a pair
+    left, so `raid_size` never bit: 11 of 12 raids on supply sites and garrisons were 2-ships)."""
     from .loadouts import ENEMY_RADIUS_NM
     best = None
+    full = None
     only = (only,) if isinstance(only, str) else only                          # v0.41.361 (Phase 10d): a type or a tuple of types
     for w, t in raider_wings(state, kind, budget, pref):
         if only and t not in only:
@@ -124,9 +128,12 @@ def _reach_by(state, kind: str, x: float, y: float, budget: bool, pref, only, fi
             continue
         a = state.assets[w.base_asset_id]
         nm = math.hypot(a.x - x, a.y - y) / NM
-        if nm <= ENEMY_RADIUS_NM[t] * 0.85 and (best is None or nm < best[0]):
-            best = (nm, w, t)
-    return best
+        if nm <= ENEMY_RADIUS_NM[t] * 0.85:
+            if best is None or nm < best[0]:
+                best = (nm, w, t)
+            if want > 2 and redair.ready_of(state, w, (t,)) >= want and (full is None or nm < full[0]):
+                full = (nm, w, t)
+    return full or best
 
 
 def _tu_reach(state, x: float, y: float):
@@ -280,21 +287,25 @@ def cover_field(state, x: float, y: float):
     return fs[0] if fs else None
 
 
+def sead_n(d) -> int:
+    return SEAD_JETS[max(1, min(3, int(getattr(d, "level", 3))))]
+
+
 def sam_reach(state, d, x: float, y: float, budget: bool = True):
-    """S36b (XO 2026-11-11): (distance nm, wing, type) of the nearest red wing that can send a SEAD package (`SEAD_JETS` Su-24M / Su-34 with Kh-31P, a pair of fighters per two jets) at the SAM site at (x, y), or None. Level 1
+    """S36b (XO 2026-11-11): (distance nm, wing, type) of the nearest red wing that can send a SEAD package (`SEAD_JETS` Su-24M / Su-34 with Kh-31P, `SEAD_ESCORT_RATIO` fighters a jet) at the SAM site at (x, y), or None. Level 1
     (`raid_arm` 0) has no SEAD doctrine. The wing must have the package's jets free (`redair.ready_of`)."""
     if getattr(d, "raid_arm", 0) <= 0:
         return None
-    return _reach(state, "sam", x, y, budget, only=BOMBER_TYPES, fits=lambda w, t: redair.ready_of(state, w, (t,)) >= SEAD_JETS)
+    return _reach(state, "sam", x, y, budget, only=BOMBER_TYPES, fits=lambda w, t: redair.ready_of(state, w, (t,)) >= sead_n(d))
 
 
-def reach_for(state, kind: str, x: float, y: float, budget: bool = True, d=None):
+def reach_for(state, kind: str, x: float, y: float, budget: bool = True, d=None, want: int = 0):
     """v0.41.125: like `_reach`, but a target under live Patriot / HAWK cover is not raided by bombers (S36b, XO 2026-11-11: no SEAD and DEAD groups in front of the bombers any more; red's SEAD package goes at the SAM
     site itself, `kind` "sam", and the bombers wait until the cover is down). Level 1's insurgents (`raid_banzai`) go in under the cover as before."""
     if kind == "sam":
         return sam_reach(state, d, x, y, budget)
     if cover_field(state, x, y) is None or getattr(d, "raid_banzai", False):
-        return _reach(state, kind, x, y, budget)
+        return _reach(state, kind, x, y, budget, want=want)
     return None
 
 
@@ -376,12 +387,13 @@ def _credit_start(state, d, turn: int) -> tuple:
     return min(cin[k] + inc, RAID_CREDIT_TURNS * inc), inc
 
 
-def _escort_for(state, bw, ax: float, ay: float, rnd: random.Random, alone: bool = False):
+def _escort_for(state, bw, ax: float, ay: float, rnd: random.Random, alone: bool = False, want: int = 0):
     """The escort wing and type for a raid on (ax, ay): the nearest other wing with a fighter type that has a pair free and the reach (radius x 0.85), the type drawn from `rnd` -> ((wing, type) | None, jets free of that type).
-    `alone`: no escort (the Su-25s on a supply site no blue patrol can reach)."""
+    `alone`: no escort (the Su-25s on a supply site no blue patrol can reach). S43: `want` = the escorts the raid asks for: the nearest wing that has that many of one type free, else the nearest wing with a pair as before."""
     from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM
     from . import bombers
     held_ = bombers.escorts_held(state)                                             # v0.41.355 (Phase 10a): the Mozdok escort squadron escorts land raids too, unless a carrier raid is staged
+    first = None
     for w in ([] if alone else sorted(state.enemy_air, key=lambda w: math.hypot(state.assets[w.base_asset_id].x - ax, state.assets[w.base_asset_id].y - ay))):
         a = state.assets[w.base_asset_id]
         if w is bw or a.destroyed:
@@ -390,22 +402,31 @@ def _escort_for(state, bw, ax: float, ay: float, rnd: random.Random, alone: bool
         types = [t for t in dict.fromkeys(q.aircraft for q in w.sqns if q.role != "escort" or not held_)
                  if t in ENEMY_FIGHTERS and redair.ready_of(state, w, (t,)) >= 2 and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm]
         if types:
-            esc = (w, rnd.choice(types))
-            return esc, redair.ready_of(state, w, (esc[1],))
+            if first is None:
+                first = (w, types)
+            big_ = [t for t in types if redair.ready_of(state, w, (t,)) >= want]
+            if want > 2 and big_:
+                esc = (w, rnd.choice(big_))
+                return esc, redair.ready_of(state, w, (esc[1],))
+            if want <= 2:
+                break
+    if first is not None:
+        esc = (first[0], rnd.choice(first[1]))
+        return esc, redair.ready_of(state, first[0], (esc[1],))
     return None, 0
 
 
-def sead_jets(state, aim: str) -> int:
+def sead_jets(state, aim: str, d=None) -> int:
     """S36b (XO 2026-11-11): the jets red sends at the blue SAM site `aim`: `SEAD_JETS` for a HAWK, a Patriot below full strength or whatever is left of one, `SEAD_PATRIOT_PACKAGES` x that for a full-strength Patriot."""
     from .sams import BLUE_FULL_DEF
     a = (getattr(state, "blue_sams", None) or {}).get(aim)
     full_pat = a is not None and aim.rsplit("_", 1)[1] == "pat" and a.health >= BLUE_FULL_DEF
-    return SEAD_JETS * (SEAD_PATRIOT_PACKAGES if full_pat else 1)
+    return sead_n(d) * (SEAD_PATRIOT_PACKAGES if full_pat else 1)
 
 
 def _plan_sead(state, d, base, aim: str, oid: str, turn: int):
     """S36b (XO 2026-11-11: red's SEAD, escorted, scaled to the SAM, no DEAD): book a SEAD raid on the blue SAM site `aim` out of the turn's free red jets. The raid's "bombers" ARE the SEAD jets (`sead_jets`: four
-    Su-24M / Su-34 with Kh-31P for a HAWK, eight for a full-strength Patriot; a wing short of that sends four) and they fire from standoff (the mission builder); the escorts are half as many fighters, and a raid with
+    Su-24M / Su-34 with Kh-31P (`SEAD_JETS` for a HAWK, twice that for a full-strength Patriot; a wing short of that sends `SEAD_JETS`) and they fire from standoff (the mission builder); the escorts are `SEAD_ESCORT_RATIO` fighters a jet, and a raid with
     none to send is not planned. Same plan dict as `plan_raid`, with `sead` True. None when no wing can field it."""
     ax, ay = aim_xy(state, aim, base)
     r = sam_reach(state, d, ax, ay)
@@ -414,13 +435,14 @@ def _plan_sead(state, d, base, aim: str, oid: str, turn: int):
     bw, raider = r[1], r[2]
     rnd = random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:raid")
     rdy = redair.ready_of(state, bw, (raider,))
-    nb = min(sead_jets(state, aim), rdy)
+    nb = min(sead_jets(state, aim, d), rdy)
     nb -= nb % 2
-    if nb < SEAD_JETS:
+    if nb < sead_n(d):
         return None
-    esc, esc_avail = _escort_for(state, bw, ax, ay, rnd)
+    want_e = int(round(nb * SEAD_ESCORT_RATIO[max(1, min(3, int(getattr(d, "level", 3))))]))
+    esc, esc_avail = _escort_for(state, bw, ax, ay, rnd, want=want_e)
     esc_even = esc_avail - esc_avail % 2
-    escorts = min(nb // 2, esc_even) if esc else 0
+    escorts = min(want_e - want_e % 2, esc_even) if esc else 0
     if escorts < 2:
         return None                                                                  # no SEAD without its escort
     ba = state.assets[bw.base_asset_id]
@@ -441,24 +463,26 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int):
     if aim_kind(aim) == "sam":
         return _plan_sead(state, d, base, aim, oid, turn)
     ax, ay = aim_xy(state, aim, base)
-    r = reach_for(state, aim_kind(aim), ax, ay, d=d)
+    rnd = random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:raid")
+    lo, hi = d.raid_size
+    want = int(round(rnd.randint(lo, hi) * wave_mult(state, d)))                           # v0.41.155: a massed-wave day
+    r = reach_for(state, aim_kind(aim), ax, ay, d=d, want=want)                             # S43: the wing that can field the size drawn, the nearest otherwise
     if r is None:
         return None
     bw, raider = r[1], r[2]
     if not sead_plan(state, d, base, aim, bw, raider)[0]:
         return None
-    rnd = random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:raid")
     ba = state.assets[bw.base_asset_id]
-    lo, hi = d.raid_size
     rdy = redair.ready_of(state, bw, (raider,))
-    nb = max(2, min(int(round(rnd.randint(lo, hi) * wave_mult(state, d))), rdy))        # v0.41.155: a massed-wave day
+    nb = max(2, min(want, rdy))
     nb -= nb % 2
     if nb < 2 or rdy < nb:
         return None
     from . import blue_barcap
     alone_ = (raider == "Su_25" and aim_kind(aim) == "supply" and SU25_SUPPLY                          # v0.41.359 (Phase 10c): no blue fighter squadron can reach the site's field (blue's own patrol rule, `blue_barcap._cap_squadrons`): the Su-25s go alone
               and not blue_barcap._cap_squadrons(state, base))
-    esc, esc_avail = _escort_for(state, bw, ax, ay, rnd, alone_)
+    want_e = 0 if alone_ else max(4 if nb >= 4 else 2, nb // 2 + (2 if nb >= 8 else 0))
+    esc, esc_avail = _escort_for(state, bw, ax, ay, rnd, alone_, want_e)
     brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360                      # they come from where they took off
     esc_even = esc_avail - esc_avail % 2
     escorts = min(max(4 if nb >= 4 else 2, nb // 2 + (2 if nb >= 8 else 0)), esc_even) if esc else 0      # v0.41.341: never more than the wing has free (the floor of four used to ignore it)
@@ -660,7 +684,7 @@ def overnight(state, d, rng: random.Random) -> list:
         from . import tempo as _tp
         p_stop = min(0.95, p_stop + TEMPO_STOP_SHARE * _tp.get(state, "AIR"))      # v0.41.171: the player's air work taught the alert pairs (Pilot Influence off: 0)
         lo_, hi_ = d.raid_size
-        n_ = sead_jets(state, aim) if aim_kind(aim) == "sam" else max(2, int(round(rng.randint(int(lo_), int(hi_)) * wave_mult(state, d))))
+        n_ = sead_jets(state, aim, d) if aim_kind(aim) == "sam" else max(2, int(round(rng.randint(int(lo_), int(hi_)) * wave_mult(state, d))))
         if n_ <= 4:                                              # a small raid is settled as one lump (all stopped or all through), as before v0.41.155
             if rng.random() < p_stop:
                 k = wing.lose(r[2], rng.randint(1, 3 + round(covering_ad(state, x, y))))
