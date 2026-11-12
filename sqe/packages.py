@@ -6,7 +6,7 @@ import random
 from dataclasses import dataclass, field, asdict
 from . import runways, threat
 from . import threatmap as tm
-from .loadouts import CBU_JETS, ENEMY_FIGHTERS, ENEMY_RADIUS_NM, JSOW_PER_JET, SLAM_PER_JET
+from .loadouts import CBU_JETS, ENEMY_FIGHTERS, ENEMY_RADIUS_NM, JSOW_PER_JET, PEN_PER_JET, PEN_REACH, SLAM_PER_JET
 from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER, STRIKE_CONDITIONAL
 from .models import Objective, ObjectiveType, Role, BaseKind, RefuelMethod
 from .state import CampaignState
@@ -30,7 +30,7 @@ class Slot:
     required: bool = True
     only_if_defended: bool = False
     tag: str = ""                      # "" | HAVCAP | BASECAP (support flights: AI only)
-    kit: str = ""                      # "" | JSOW | SLAM (a strike slot that only JSOW- / SLAM-ER-capable jets fill, see loadouts.JSOW_PER_JET, SLAM_PER_JET)
+    kit: str = ""                      # "" | JSOW | SLAM | PEN (a strike slot that only JSOW- / SLAM-ER- / JSOW-C-capable jets fill, see loadouts.JSOW_PER_JET, SLAM_PER_JET, PEN_PER_JET)
     land: bool = False                 # v0.41.256: a land-based squadron fills it when one reaches (the fleet raid's USAF share), long-range fighters first; any squadron when none does
 
 
@@ -72,8 +72,9 @@ _TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM",
          Role.TARCAP: "TARCAP: on station short of the target before the package, shoot what comes in range, do not chase; stay at least 15 minutes and until the last strike flight is off target plus 5 minutes, then home",
          Role.SWEEP: "Fighter sweep", Role.CAP: "Combat air patrol", Role.CAS: "Close air support"}
 _DEAD_TASK = {Role.SEAD: "SEAD: suppress the radars ahead of the DEAD flight", Role.STRIKE: "Close DEAD: destroy the SAM site with GBUs (the SEAD package goes in ahead of you; call it off if the radars are up)"}
-KIT_JETS = {"JSOW": JSOW_PER_JET, "SLAM": SLAM_PER_JET}      # v0.41.298: the airframes that can fill each kit slot
-_KIT_TASK = {"CBU": "Counter-air strike: CBU-103 on the jets parked on the ramp", "SLAM": "Standoff Strike: AGM-84H SLAM-ER on the target from far out, released outside the fighters' reach; then home", "JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers and covering Tors, on the HARM salvo's time; stand-off release, then home"}
+KIT_JETS = {"JSOW": JSOW_PER_JET, "SLAM": SLAM_PER_JET, "PEN": PEN_PER_JET}      # v0.41.298: the airframes that can fill each kit slot (S51: PEN = the F-15E's runway crater; the F-15E is in no other table, so no Standoff DEAD / counter-air slot can take it)
+_KIT_TASK = {"CBU": "Counter-air strike: CBU-103 on the jets parked on the ramp", "SLAM": "Standoff Strike: AGM-84H SLAM-ER on the target from far out, released outside the fighters' reach; then home", "JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers and covering Tors, on the HARM salvo's time; stand-off release, then home",
+             "PEN": "Standoff Runway Strike: AGM-154C JSOW on the middle of the runway from stand-off range, released outside the fighters' reach; then home"}
 _CA_JSOW_TASK = "Standoff Counter-Air: AGM-154A JSOW on the jets parked on the ramp, released from stand-off range; then home"
 _SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
 _ESC_TASK = "Escort: hold your station with the package, shoot what comes in range, do not chase; leave when the strikers are off target"
@@ -337,13 +338,13 @@ class PackageBuilder:
             self._tk[key] = tm.tanker_station(self.state, base_xy, target_xy) is not None
         return self._tk[key]
 
-    def _in_range(self, sq_id, tx, ty) -> bool:
+    def _in_range(self, sq_id, tx, ty, kit: str = "") -> bool:
         """Reach counts tanker support (x1.5) only when a safe tanker track exists, and the route must not cross a SAM belt
-        in front of the target (the FLOT rule)."""
+        in front of the target (the FLOT rule). S51: the PEN kit (no wing tanks) reaches `PEN_REACH` of the jet's combat radius."""
         sq = self.state.squadrons[sq_id]
         b = self.state.bases[sq.base_id]
         spec = AIRCRAFT[sq.aircraft]
-        reach = spec.combat_radius_nm * (1.5 if self._tanker_ok((b.x, b.y), (tx, ty)) else 1.0)
+        reach = spec.combat_radius_nm * (PEN_REACH if kit == "PEN" else 1.0) * (1.5 if self._tanker_ok((b.x, b.y), (tx, ty)) else 1.0)
         if math.hypot(tx - b.x, ty - b.y) / NM > reach:
             return False
         obj, asset = self._ctx
@@ -458,6 +459,13 @@ class PackageBuilder:
         self._a10_strike = self._a10_supply_strike(obj, n_fl)                        # v0.41.360 (Phase 10c part 2): a clean supply strike may take A-10C squadrons
         pkg = Package(id=f"pkg{number}", number=number, objective=obj, n_def=2 * n_fl, extra=extra)
         slots = self._slots(obj, self._defended(obj), n_fl, extra)
+        if obj.type == ObjectiveType.STRIKE and obj.aim == "RUNWAY" and not for_player:
+            # S51 (XO 2026-11-12): the runway crater goes out as F-15E standoff JSOW-Cs when an F-15E squadron reaches the field (with the PEN kit's shorter reach) and has jets free; none: the
+            # plain strike as before (unlike the Standoff DEAD the kit is NOT required, no waiting for another day). Not for the player's own build: no player airframe can fly the kit, so his job and
+            # route stay exactly as they were (a Viper / Hornet pilot is never moved to another slot).
+            if any(s_.role == Role.STRIKE and not s_.tag and not s_.kit for s_ in slots) and any(
+                    sq_.aircraft in PEN_PER_JET and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty, "PEN") for sq_ in st.squadrons.values()):
+                next(s_ for s_ in slots if s_.role == Role.STRIKE and not s_.tag and not s_.kit).kit = "PEN"
         pp = st.player
 
         player_idx, lead_service, psq = None, None, None
@@ -570,7 +578,7 @@ class PackageBuilder:
         obj0_ = self._ctx[0] if self._ctx else None
         sweep_ = obj0_ is not None and is_sweep(obj0_)            # v0.41.15: a Fighter Sweep flies long-range fighters only (F-15C, F-14)
         cands = [sq for sq in self.state.squadrons.values()
-                 if slot.role in AIRCRAFT[sq.aircraft].roles and self._slot_ok(sq.aircraft, slot) and ledger.free[sq.id] >= 2 and self._in_range(sq.id, tx, ty)
+                 if slot.role in AIRCRAFT[sq.aircraft].roles and self._slot_ok(sq.aircraft, slot) and ledger.free[sq.id] >= 2 and self._in_range(sq.id, tx, ty, slot.kit)
                  and (not slot.kit or sq.aircraft in KIT_JETS.get(slot.kit, ())) and (not sweep_ or sq.aircraft in LONG_RANGE_A2A)]
         if not cands:
             return None

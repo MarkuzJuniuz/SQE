@@ -42,7 +42,7 @@ from . import road_sites
 from .strike_tasks import StrikeTasks, DEAD_GATE_KM, SEAD_WAVE_KM, TRACK_RADARS, SEARCH_RADARS, KPH
 from . import kneeboard
 from .kneeboard import latlon, render_pages
-from .loadouts import LoadoutLibrary, enemy_cap_loadout, ENEMY_FIGHTERS
+from .loadouts import LoadoutLibrary, enemy_cap_loadout, ENEMY_FIGHTERS, JSOW_FLIGHT_KITS
 from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType, Role, task_label
 pydcs_patch.install()           # v0.41.66: pydcs's scattered formation could loop forever and freeze a build (sqe/pydcs_patch.py)
 
@@ -503,7 +503,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             psite = self._raid_player_site(package, geom, pf)
             if psite is not None:
                 pkg_p, geom_p = self._raid_sead_geom(package, pf, psite)
-        pw = plan_route(pf.role, (pbase.x, pbase.y), geom_p, pspec.profile, is_player=True, tanker_xy=None, jsow=getattr(pf, "kit", "") == "JSOW",
+        pw = plan_route(pf.role, (pbase.x, pbase.y), geom_p, pspec.profile, is_player=True, tanker_xy=None, jsow=getattr(pf, "kit", "") in JSOW_FLIGHT_KITS,
                         jsow_side=self._jsow_side(pkg_p, geom_p), keep_out=self._umbrella_keep(pkg_p), agm88_deg=self._agm88_deg(pkg_p, geom_p))
         if package.objective.type == ObjectiveType.FLEET_DEFENSE and pf.role == Role.CAP and (package.extra or {}).get("setpiece") and not pf.tag:
             self._raid_cap_station(package, geom, pw)               # v0.41.256: your racetrack is walked back clear of the SAMs like your wingmen's, and the card shows it
@@ -763,7 +763,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 f.callsign = f"{nm} {no}"; used.add(f.callsign)
             manifest.cur_pkg = xp.id
             # the flight the package's timeline is built on; a SEAD package's JSOW slingers never lead it (its event is the HARM salvo, which they are timed to)
-            lead = max(xp.flights, key=lambda f: ({Role.STRIKE: 3, Role.SEAD: 3, Role.CAS: 3}.get(f.role, 1) if getattr(f, "kit", "") != "JSOW" else 2) * 10 + f.count)
+            lead = max(xp.flights, key=lambda f: ({Role.STRIKE: 3, Role.SEAD: 3, Role.CAS: 3}.get(f.role, 1) if getattr(f, "kit", "") not in JSOW_FLIGHT_KITS else 2) * 10 + f.count)
             base2, spec2 = st.bases[lead.base_id], AIRCRAFT[lead.aircraft]
             tx2, ty2 = self._target_xy(xp)
             tx2, ty2 = self._jitter_primary(xp, tx2, ty2)
@@ -781,7 +781,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             P0x = P0 + (hm(xp) - hm(anchor)) * 60.0
             geom2.tier = self._pick_tier(geom2, lead.role, spec2.profile, tx2, ty2, {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else ())
             self._flight_plans(geom2, xp, tx2, ty2, {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else ())
-            pw2 = plan_route(lead.role, (base2.x, base2.y), geom2, spec2.profile, is_player=True, tanker_xy=None, jsow=getattr(lead, "kit", "") == "JSOW",
+            pw2 = plan_route(lead.role, (base2.x, base2.y), geom2, spec2.profile, is_player=True, tanker_xy=None, jsow=getattr(lead, "kit", "") in JSOW_FLIGHT_KITS,
                              keep_out=self._umbrella_keep(xp))
             self._add_cap2(xp, pw2, spec2, geom2)
             assign_times(pw2, 0.0, P0x + stagger(xp, lead.role))
@@ -1755,7 +1755,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 gate["to"] = len(g.points)                              # the landing point
             self._gates.append(gate)
         tw = None if f.tag else objective_wp(wps)
-        if tw is not None and f.role in (Role.STRIKE, Role.CAS) and getattr(f, "kit", "") != "JSOW":
+        if tw is not None and f.role in (Role.STRIKE, Role.CAS) and getattr(f, "kit", "") not in JSOW_FLIGHT_KITS:
             self._striker_tgt.setdefault(package.id, []).append(float(tw.eta_s))            # S38
         if tw is not None and f.role in (Role.STRIKE, Role.SEAD, Role.CAS):
             egr_ = next((w.eta_s for w in wps if w.name == "EGR"), None)          # v0.41.40: when this striker is OUT, for the escorts to wait on
@@ -1882,7 +1882,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             sp = self._spawn_point(f, base, geom)
         wps = plan_route(f.role, (base.x, base.y), geom, self._flight_profile(f, package), is_player=f.is_player, tanker_xy=None, stack_idx=idx,
                          spawn=sp[0] if sp else None, spawn_alt_ft=sp[1] if sp else 0, spawn_kts=sp[2] if sp else 0,
-                         jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), agm88_deg=self._agm88_deg(package, geom),
+                         jsow=getattr(f, "kit", "") in JSOW_FLIGHT_KITS, jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), agm88_deg=self._agm88_deg(package, geom),
                          rel=self._rel_kind(package, f))
         if getattr(f, "rush", False):
             self._rush_speeds(wps)                                    # v0.41.256: the raid SEAD
@@ -2336,7 +2336,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """Rules of engagement for ground-attack and SEAD jets (restricted, return fire, out-of-ammo return). -> (armor, ai_sead, ai_a2g)."""
         o = self.o
         armor = self.groups_by_asset.get(package.objective.target_id)
-        ai_sead = (f.role == Role.SEAD or getattr(f, "kit", "") == "JSOW") and not f.tag and (not f.is_player or o.player_is_ai)
+        ai_sead = (f.role == Role.SEAD or getattr(f, "kit", "") in JSOW_FLIGHT_KITS) and not f.tag and (not f.is_player or o.player_is_ai)
         if ai_sead:         # a SEAD (or JSOW) jet's job is the radar, not the fighters: v0.39.9 run, both Hornet SEAD flights chased MiGs into Tor and SA-11 range and died 150 s before their HARM point
             g.points[0].tasks.append(task.OptROE(task.OptROE.Values.ReturnFire))        # shoots back when shot at; weapons free again at the HARM point (below)
         # Every AI ground-attack flight (strike, DEAD, SEAD, JSOW, CAS) stays on its job: v0.39.23 run, strikers with nothing but guns left
@@ -3329,7 +3329,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 geom.stand[key] = profiles.cas_station(self.state, pts, alt_, geom.egr)       # v0.41.177: close enough to cover the A-10s
             if geom.sweep:
                 geom.stand[key] = self._sweep_station(geom.stand[key], tx, ty, pts[0], package)
-            elif f.role in (Role.ESCORT, Role.SWEEP, Role.TARCAP) and any(getattr(x_, "kit", "") in ("JSOW", "SLAM") for x_ in package.flights):      # v0.41.299: the SLAM-ER flight is shepherded the same way
+            elif f.role in (Role.ESCORT, Role.SWEEP, Role.TARCAP) and any(getattr(x_, "kit", "") in (*JSOW_FLIGHT_KITS, "SLAM") for x_ in package.flights):      # v0.41.299: the SLAM-ER flight is shepherded the same way
                 # v0.41.42 (XO 2026-10-20): the package escort shepherds the JSOW flight, not the HARM shooters' station: it holds ESCORT_BEHIND_NM
                 # behind the JSOW launch point (on its own axis), where the JSOW jets release and turn home (the 2026-10-20 run lost all five to MiG-29s
                 # with the escort 20 nm away). Not kept out of SAM cover: that is the shepherd's risk. It leaves from the station, not by the package egress.

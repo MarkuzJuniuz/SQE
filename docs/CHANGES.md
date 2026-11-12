@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.410, F-15Es crater runways from stand-off range; JSOW hits now count
+A runway strike is now flown by F-15Es when an F-15E squadron is in reach and has jets free: two AGM-154C JSOWs a jet (no wing tanks, so a shorter reach), released on the middle of the runway from about 30 nm out, then straight home; nobody crosses the airfield. With no F-15E free the strike is the plain bombing run it was. Standoff DEAD stays the Vipers' and Hornets'. The mission hook now also counts the AGM-154 JSOW as a runway hit (it saw none before): three JSOWs on the strip close the field like three bombs.
 ## v0.41.409, the F-14B(U) holds further out, the MiG-31 is a stand-off interceptor
 The Tomcat is no longer treated like the F-15C. Its TARCAP and escort stations sit 12 nm further from the fight than before (yours too: only the station and the end of the racetrack move, the rest of your route is the same), and a hunting Tomcat TARCAP engages inside a 35 nm circle, the Phoenix's reach, not the Eagle's 25. A Fighter Sweep goes to an F-15C squadron first and to the Tomcat only when no Eagle squadron can fly it. On the red side the MiG-31 now counts 0.5, not the Su-27's 0.67, when red decides whether to commit to a fight; it engages inside a 40 nm circle and works only from inside its own SAM cover.
 ## v0.41.408, blue has no road supply sites; Level 1 red's supply follows its inner depots

@@ -7,6 +7,7 @@ from dcs import mapping, task
 
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
+from .loadouts import JSOW_FLIGHT_KITS
 from .models import AssetKind, ObjectiveType, Role
 from .routes import AVOID_NM, NM, SA10_AVOID_NM, SA10_STATION_NM, bearing, dist, offset, plan_route
 
@@ -117,7 +118,7 @@ class FighterStations:
             base = self.state.bases[f.base_id]
             try:
                 wps = plan_route(f.role, (base.x, base.y), geom, self._flight_profile(f, package), is_player=False, tanker_xy=None,
-                                 jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package),
+                                 jsow=getattr(f, "kit", "") in JSOW_FLIGHT_KITS, jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package),
                                  agm88_deg=self._agm88_deg(package, geom), rel=self._rel_kind(package, f))
             except ValueError:
                 continue
