@@ -173,7 +173,6 @@ ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, 
 
 BOMBER_TYPES = ("Su_24M", "Su_34")       # v0.41.361 (Phase 10d): the red raid bombers: the types that fly field raids, the SEAD (Kh-31P) group and the DEAD (KAB-500Kr) group. Every test that used to say "Su_24M" reads this
 ARM_PER_JET = {"Su_24M": 2, "Su_34": 4}   # Kh-31P per jet in a SEAD group (Su-24M: pylons 2 and 7, all it takes; Su-34: four of the six pylons that take one, judgment call: group sizes stay the same in jets, so a Su-34 group fires twice the missiles)
-DEAD_PER_JET = {"Su_24M": 4, "Su_34": 4}  # KAB-500Kr per jet in a DEAD group (Su-24M: 2, 3, 6, 7, all it takes; Su-34: four, a normal load, of the eight pylons that take one)
 STRIKE_PER_JET = {"Su_34": 6}             # FAB-500 per jet on a plain raid (Su-24M: every pylon that takes one; Su-34: six of eight, about 3 t: judgment call)
 
 
@@ -227,19 +226,6 @@ def enemy_arm_loadout(cls_name: str) -> dict:
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
     return _limit(out, ARM_PER_JET.get(cls_name))
-
-
-def enemy_dead_loadout(cls_name: str) -> dict:
-    """v0.41.117: KAB-500Kr (TV-guided 500 kg bomb) on every pylon that takes one (Su-24M: 2, 3, 6, 7): red's DEAD flights against a battery."""
-    from dcs import planes
-    cls = getattr(planes, cls_name)
-    out = {}
-    for i in sorted(cls.pylons):
-        P = getattr(cls, f"Pylon{i}", None)
-        w = _find(P, "KAB_500Kr") if P is not None else None
-        if w is not None:
-            out[i] = {"CLSID": w[1]["clsid"]}
-    return _limit(out, DEAD_PER_JET.get(cls_name))
 
 
 def enemy_strike_loadout(cls_name: str) -> dict:

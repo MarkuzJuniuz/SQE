@@ -586,7 +586,7 @@ class WarSimulator:
         bw = state.enemy_air_at(pkg.extra.get("bomber_wing", "")) if pkg.extra else None
         strength = sum(f.count * flight_weight(f) for f in pkg.flights)
         esc = pkg.extra.get("escorts", 0)
-        if pkg.extra.get("land"):           # v0.41.30: the batteries round the raid's target fight it too (sams.covering_ad, AD_RAID_WEIGHT)
+        if pkg.extra.get("land") and not pkg.extra.get("sead"):           # v0.41.30: the batteries round the raid's target fight it too (sams.covering_ad, AD_RAID_WEIGHT); S36b: not a SEAD raid, which fires its Kh-31P from standoff, outside the site's reach
             from .sams import covering_ad, AD_RAID_WEIGHT
             from .raids import aim_xy
             strength += AD_RAID_WEIGHT * covering_ad(state, *aim_xy(state, pkg.objective.aim, state.bases[pkg.objective.target_id]))
@@ -625,6 +625,9 @@ class WarSimulator:
             lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
+        elif bw is not None and pkg.extra.get("sead"):                             # S36b: a SEAD package that was not stopped fires its Kh-31P from standoff: most of its jets launch (judgment call: 60 to 100 %), and the site takes SEAD_SITE_HIT for each
+            thr_ = max(2, round(nb_ * rng.uniform(0.6, 1.0)))
+            lines += raids_hit(state, pkg.objective.target_id, None, rng, thr_, pkg.objective.aim, pkg.extra.get("raider"))
         elif bw is not None and pkg.extra.get("land"):
             if nb_ <= 4:
                 lines += raids_hit(state, pkg.objective.target_id, bw, rng, None, pkg.objective.aim, pkg.extra.get("raider"))

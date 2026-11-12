@@ -46,10 +46,8 @@ class Difficulty:
     red_reinf: float = 5.0               # strength points Red adds a day at the zone in contact (x supply)
     blue_reinf: float = 5.0              # the same for Blue
     raid_rate: float = 0.40              # S37: no longer read by raids.py (red raids by jet budget, `raids.RAID_SHARE`); `ground.py` still reads it for the abstract supply strikes
-    raid_arm: float = 0.0                # v0.41.84: chance a Su-24M raid on a field with a live Patriot / HAWK brings a Kh-31P SEAD pair (judgment call: L1 none, L2 rare, L3 normal)
+    raid_arm: float = 0.0                # S36b (XO 2026-11-11; was v0.41.84's chance of a SEAD pair on a bomber raid): above 0, red sends SEAD packages (Su-24M / Su-34 with Kh-31P and escorts) at blue's Patriot and HAWK sites (L1 none: no SEAD doctrine)
     raid_banzai: bool = False            # v0.41.146 (Campaign Revamp B4): Level 1's insurgents raid targets under live Patriot / HAWK cover without any SEAD (judgment call: they have no SEAD doctrine, and with every one of our fields covered they could never raid at all); the cover shoots them
-    arm_cap: int = 8                     # v0.41.125: most Su-24M in red's SEAD group (L2: a pair, judgment call) ...
-    arm_cap_free: int = 8                # ... unless the wing has this many spare jets beyond the bombers (then the full sizing)
     raid_surprise: float = 0.35          # share of the raids that are surprises (nobody warned us)
     sam_rebuild: float = 0.04            # nightly chance (x Red supply) that a destroyed SAM site is replaced (sams.py)
     sam_scoot: float = 0.30              # nightly chance that a hurt mobile SAM site moves
@@ -87,7 +85,7 @@ LEVELS: dict[int, Difficulty] = {
                   friendly_replenish=0.08, enemy_replenish=0.05, asset_repair=0.04, sam_repair=0.06,
                   friendly_scale=1.0, enemy_cap_per_air=0.15, counterstrike=0.30, bomber_wing=14, bomber_escort_wing=8, bomber_policy="desperate", bomber_safe_p=0.06,
                   forward_sams=("SA-8", "SA-8"), garrison_chance=0.6, garrison_size=0.8, react_chance=0.35, react_ratio=(0.6, 1.1),
-                  ground_red=(70, 55, 15, 0, 0), ground_blue=(0, 15, 60, 70, 50), red_attack=0.45, red_reinf=5.6, blue_reinf=7.0, raid_rate=0.4, red_surge=0.03, raid_wave=0.10, raid_wave_mult=1.5, red_supply_strikes=2, red_rear_feed=0.02, raid_arm=1.0, arm_cap=2, arm_cap_free=8, raid_surprise=0.35, raid_size=(2, 4), sam_rebuild=0.04, sam_scoot=0.30,
+                  ground_red=(70, 55, 15, 0, 0), ground_blue=(0, 15, 60, 70, 50), red_attack=0.45, red_reinf=5.6, blue_reinf=7.0, raid_rate=0.4, red_surge=0.03, raid_wave=0.10, raid_wave_mult=1.5, red_supply_strikes=2, red_rear_feed=0.02, raid_arm=1.0, raid_surprise=0.35, raid_size=(2, 4), sam_rebuild=0.04, sam_scoot=0.30,
                   raid_mix=(0.20, 0.15, 0.25), blue_garrison_size=0.8, blue_rebuild=0.15, sam_retreat=0.8, sead_valve=3, air_retreat=0.8, road_sites=70, road_open=0.20, road_battalion=0.08),
     3: Difficulty(3, "Level 3 - Near-Peer", "Modern fighters, long-range SAMs and an integrated air-defence network. "
                   "Every sortie is contested and attrition bites.",
