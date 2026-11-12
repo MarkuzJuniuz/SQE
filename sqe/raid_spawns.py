@@ -203,8 +203,9 @@ class RaidSpawns:
         nbg = len(split(nb, RAID_BOMBER_BATCH)) if nb else 0
         esz = split(ne, RAID_FIGHTER_BATCH) if ne else []
         n_sweep = len(esz) // 2 if len(esz) >= 3 else (1 if (ex.get("mass") and len(esz) >= 2) else 0)
-        fighters = [f"Raid Sweep {i + 1}" for i in range(n_sweep)] + [f"Raid Escort {i + 1}" for i in range(len(esz) - n_sweep)]
-        bombers = [f"Raid Bomber {i + 1}" for i in range(nbg)]
+        rn_ = self._raid_n          # S47: group numbers continue across the raids of one mission (the same offsets `_spawn_raid` builds with)
+        fighters = [f"Raid Sweep {rn_['sw'] + i + 1}" for i in range(n_sweep)] + [f"Raid Escort {rn_['es'] + i + 1}" for i in range(len(esz) - n_sweep)]
+        bombers = [f"Raid Bomber {rn_['bg'] + i + 1}" for i in range(nbg)]
         guards = ([n for n in fighters if "Escort" in n] or fighters)[:RAID_GUARD_UP]          # the guard is an escort group, not a sweep
         up_b = bombers[:RAID_BOMBERS_UP]
         queue = [(n, RAID_BOMBER_GAP_S) for n in bombers if n not in up_b] + [(n, RAID_FIGHTER_GAP_S) for n in fighters if n not in guards]          # bombers first, the rest of the escorts last
@@ -1127,18 +1128,19 @@ class RaidSpawns:
         for t_, kit_ in kits_.items():
             if not kit_[2]:
                 self.warns.append(f"{t_.replace('_', '-')}: no bomb or missile found; the raid is unarmed.")
-        bomber_gs, nb_ = [], 0
+        bomber_gs, rn_ = [], self._raid_n          # S47: one counter set per mission (`self._raid_n`): a second raid folded into this mission continues the numbers, so no unit or group name repeats
         gap_ = RAID_STAGED_GAP_S if stg else RAID_GROUP_GAP_S
         bcap_ = RAID_BOMBER_BATCH if stg else 4
         bent_ = [(aid_, t_, k_) for aid_, t_, n_ in bmem for k_ in sizes(n_, bcap_)]         # S46: [(wing, type, jets)] one entry per group: each member's jets in groups of at most four (a raid with one wing is what it was)
         lat_ = [(i_ - (len(bent_) - 1) / 2.0) * RAID_ECHELON_NM if len(bent_) > 1 else 0.0 for i_ in range(len(bent_))]         # v0.41.296: echelon, centred on the route
         for gi, (aid_, t_, n_) in enumerate(bent_):         # v0.41.108: a big raid is several groups, a minute apart on the same route
             cls_b, task_b, load = kits_[t_]
-            g = build_group(f"Raid Bomber {gi + 1}", cls_b, n_, task_b, bomber=True, shift=gi * gap_, lateral_nm=lat_[gi], home=home_of(aid_))
+            g = build_group(f"Raid Bomber {rn_['bg'] + 1}", cls_b, n_, task_b, bomber=True, shift=gi * gap_, lateral_nm=lat_[gi], home=home_of(aid_))
+            rn_["bg"] += 1
             names = []
             for u in g.units:
-                nb_ += 1
-                u.name = f"RAID-B-{nb_}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
+                rn_["bu"] += 1
+                u.name = f"RAID-B-{rn_['bu']}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", aid_, names, ac=t_, raid_base=cvb.id, raid_aim=aim, raid_label=package.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", ""),
                          raid_arrive_s=float(hit_s + gi * gap_), raid_group=g.name)          # S46: each group is charged to its own wing and type (the debrief takes a loss off that squadron)
             bomber_gs.append(g)
@@ -1149,17 +1151,18 @@ class RaidSpawns:
             eent_ = [(aid_, t_, k_) for aid_, t_, n_ in escort_members(ex) for k_ in sizes(n_, RAID_FIGHTER_BATCH)]      # S46: [(wing, type, fighters)] one entry per group, each escort member's jets in groups of at most RAID_FIGHTER_BATCH
             n_sweep = len(eent_) // 2 if len(eent_) >= 3 else (1 if (ex.get("mass") and len(eent_) >= 2) else 0)        # v0.41.156: a mass raid (8 or more bombers) always opens with a sweep
             from .mission_builder import AAM_WEAPONS            # lazy: the builder's module imports this one
-            ne_ = 0
             for ei, (eaid_, et_, n_) in enumerate(eent_):
                 eload = enemy_cap_loadout(et_)
                 esc_nm_ = A2A_ZONE_NM[et_ in RED_LONG_RANGE]
                 ehome_ = home_of(eaid_) if pooled_ else None        # S46: a pooled raid's escorts go home to their own field; a one-wing raid keeps the old way (the raid's field)
                 if ei < n_sweep:
-                    eg = build_group(f"Raid Sweep {ei + 1}", getattr(planes, et_), n_, task.FighterSweep, shift=-RAID_SWEEP_LEAD_S - 15 * ei, home=ehome_)
+                    eg = build_group(f"Raid Sweep {rn_['sw'] + 1}", getattr(planes, et_), n_, task.FighterSweep, shift=-RAID_SWEEP_LEAD_S - 15 * ei, home=ehome_)
+                    rn_["sw"] += 1
                 else:
                     ci = ei - n_sweep
                     bg = bomber_gs[ci * len(bomber_gs) // max(1, len(eent_) - n_sweep)]
-                    eg = build_group(f"Raid Escort {ci + 1}", getattr(planes, et_), n_, task.Escort, shift=bomber_gs.index(bg) * gap_, behind_nm=(-RAID_ESCORT_AHEAD_NM if edge else 3), lateral_nm=lat_[bomber_gs.index(bg)], home=ehome_)
+                    eg = build_group(f"Raid Escort {rn_['es'] + 1}", getattr(planes, et_), n_, task.Escort, shift=bomber_gs.index(bg) * gap_, behind_nm=(-RAID_ESCORT_AHEAD_NM if edge else 3), lateral_nm=lat_[bomber_gs.index(bg)], home=ehome_)
+                    rn_["es"] += 1
                     # v0.41.29: the escorts stay with the bombers and fight only what comes within their class's reach of them (Su-27 25 nm, the rest
                     # 15 nm), up to the bombers' egress point; home once their air-to-air missiles are gone. No chasing.
                     eg.points[0].tasks = [t_ for t_ in eg.points[0].tasks if getattr(t_, "Id", "") != "Escort"]      # pydcs's default escort task has no group
@@ -1178,7 +1181,7 @@ class RaidSpawns:
                 eg.points[0].tasks.append(rtbe_)
                 en = []
                 for u in eg.units:
-                    ne_ += 1
-                    u.name = f"RAID-E-{ne_}"; u.pylons = copy.deepcopy(eload); en.append(u.name); self._note_jam(u)
+                    rn_["eu"] += 1
+                    u.name = f"RAID-E-{rn_['eu']}"; u.pylons = copy.deepcopy(eload); en.append(u.name); self._note_jam(u)
                 manifest.add("enemy_air", eaid_, en, ac=et_)                    # S46: charged to the escort member's own wing and type
         self._raid_asm_triggers(asm, path, pt)
