@@ -621,7 +621,7 @@ class WarSimulator:
         elif bw is not None and not ok and tu_:
             lines += raids.tu_hit(state, pkg.objective.target_id, bw, rng, pkg.objective.aim, nb_)
         elif bw is not None and ok:
-            k = bw.lose(pkg.extra.get("raider"), (rng.randint(2, 4) if nb_ <= 4 else max(2, round(nb_ * rng.uniform(0.4, 0.7)))) if pkg.extra.get("land") else max(1, round(pkg.extra.get("bombers", 4) * rng.uniform(0.4, 0.8))))
+            k = raids.lose_raiders(state, pkg.extra, (rng.randint(2, 4) if nb_ <= 4 else max(2, round(nb_ * rng.uniform(0.4, 0.7)))) if pkg.extra.get("land") else max(1, round(pkg.extra.get("bombers", 4) * rng.uniform(0.4, 0.8))), rng)          # S46: a pooled raid loses them over its wings
             lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
@@ -633,7 +633,7 @@ class WarSimulator:
                 lines += raids_hit(state, pkg.objective.target_id, bw, rng, None, pkg.objective.aim, pkg.extra.get("raider"))
             else:                                                                  # v0.41.155: a mass raid that got through puts most of its bombers on target
                 thr_ = max(2, round(nb_ * rng.uniform(0.4, 0.8)))
-                bw.lose(pkg.extra.get("raider"), max(1, thr_ // 3))
+                raids.lose_raiders(state, pkg.extra, max(1, thr_ // 3), rng)
                 lines += raids_hit(state, pkg.objective.target_id, None, rng, thr_, pkg.objective.aim, pkg.extra.get("raider"))
         elif bw is not None:
             bw.lose(pkg.extra.get("raider"), 1)
