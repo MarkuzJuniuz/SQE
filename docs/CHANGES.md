@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.415, a full-strength Patriot draws three SEAD packages, a HAWK two
+Red now sends three coordinated anti-radar packages at a Patriot site at full strength (two at a HAWK), and when one squadron cannot field them a second nearby squadron joins. Red will not send a single package at a full-strength Patriot: it waits and raids something softer.
 ## v0.41.414, debrief: no "you landed" line; a suppressed SAM is a win
 The debrief no longer says you brought your jet home. A SEAD or DEAD job that knocks out a site's radars is now reported as a win (the site is "suppressed") instead of 0% destroyed.
 ## v0.41.413, red's anti-radar raids fire one coordinated salvo
