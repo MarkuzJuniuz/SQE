@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.417, raids on a field's SAM site or fuel farm read Base Defense, on a depot Depot Defense
+The intercept job for a red raid on a blue SAM site or fuel farm is now "Base Defense: Intercept", and one on the forward or rear supply depot is "Depot Defense: Intercept". Nothing reads "Supply Defense" any more.
 ## v0.41.416, EWR strikes wait for the SAMs to go down, then go out as stand-off jobs
 An early-warning radar is no longer a target while a SAM site covers it: the covering sites get their SEAD and DEAD first. Once they are down the radar is struck from stand-off range by AI flights only, never with a GPS-bomb run: F-15Es with JSOW-C, F-16s with JSOW-A, or Hornets with SLAM-ER. A person who picks an EWR strike still flies it as before.
 ## v0.41.415, a full-strength Patriot draws three SEAD packages, a HAWK two
