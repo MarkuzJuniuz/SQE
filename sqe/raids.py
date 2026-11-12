@@ -36,6 +36,7 @@ TEMPO_STOP_SHARE = 0.5        # v0.41.171 (XO 2026-10-28): half of the AIR tempo
 SEAD_JETS = {1: 4, 2: 4, 3: 6}   # S36b (XO 2026-11-11): the SEAD package red sends at a blue SAM site: this many Su-24M / Su-34 with Kh-31P (by level), escorted by SEAD_ESCORT_RATIO fighters a jet; the only way red opens a covered target. S43 (XO 2026-11-11, "red is almost always outnumbered"): Level 3 only, 4 to 6 jets, judgment call (measured: SEAD raids were 58 to 74% of all raids and 19% of them had red at least equal to blue's jets; with 6 jets and 1:1 escorts 58%)
 SEAD_ESCORT_RATIO = {1: 0.5, 2: 0.5, 3: 1.0}   # S43: escorts per SEAD jet (S36b: half as many, so a 4-jet HAWK package was 6 jets against blue's 10 to 12); Level 3 a fighter for every Kh-31P jet (judgment call)
 SEAD_PATRIOT_PACKAGES = 2     # ...a full-strength Patriot gets two such packages in one raid, anything else one (judgment call)
+SEAD_HAWK_PACKAGES = 2          # S44 (XO 2026-11-12): a HAWK gets two packages too (a Patriot below full strength, or whatever is left of one, still one)
 SEAD_SITE_HIT = 0.15          # ...and a blue SAM site loses this much health per SEAD jet that gets through (a launch of 3 jets takes 0.45 off a HAWK, 6 take 0.9 off a Patriot; judgment call, tuned with the probe `.private/probes/s36`: 0.08 never opened a field, 0.25 wiped the SAMs by day 10, 0.15 sags them and reopens fields)
 KH59_RAIDS = True             # S48 (XO musing 2026-11-12, probe flown 2026-11-12): red's Su-24M / Su-34 raids on an UNCOVERED supply site or garrison fire the Kh-59M from about 50 nm and turn for home (`plan_raid` draws it, `raid_spawns` builds it, `war._resolve_raid` resolves it). False = every raid as S46 left it. Both the plan and the spawner read this module attribute at call time
 KH59_SHARE = {1: 0.0, 2: 0.3, 3: 0.5}   # ...the chance such a raid is a Kh-59M raid, by level (judgment call, XO may change; measured in S48 step 6). L1: none (insurgents have no standoff weapons, and `raid_banzai` raids never are). L2: the Su-24M (24 jets). L3: the Su-34 (60 jets) carries it. Public doctrine: the Kh-59 family is the Russian air force's standoff missile against fixed targets (sources in loadouts.KH59_PER_JET)
@@ -528,11 +529,12 @@ def lose_raiders(state, ex: dict, k: int, rng: random.Random) -> int:
 
 
 def sead_jets(state, aim: str, d=None) -> int:
-    """S36b (XO 2026-11-11): the jets red sends at the blue SAM site `aim`: `SEAD_JETS` for a HAWK, a Patriot below full strength or whatever is left of one, `SEAD_PATRIOT_PACKAGES` x that for a full-strength Patriot."""
+    """S36b (XO 2026-11-11): the jets red sends at the blue SAM site `aim`: `SEAD_HAWK_PACKAGES` x `SEAD_JETS` for a HAWK, `SEAD_JETS` for a Patriot below full strength or whatever is left of one, `SEAD_PATRIOT_PACKAGES` x that for a full-strength Patriot."""
     from .sams import BLUE_FULL_DEF
     a = (getattr(state, "blue_sams", None) or {}).get(aim)
-    full_pat = a is not None and aim.rsplit("_", 1)[1] == "pat" and a.health >= BLUE_FULL_DEF
-    return sead_n(d) * (SEAD_PATRIOT_PACKAGES if full_pat else 1)
+    kind = aim.rsplit("_", 1)[1]
+    full_pat = a is not None and kind == "pat" and a.health >= BLUE_FULL_DEF
+    return sead_n(d) * (SEAD_PATRIOT_PACKAGES if full_pat else SEAD_HAWK_PACKAGES if kind == "hawk" else 1)
 
 
 def _plan_sead(state, d, base, aim: str, oid: str, turn: int):
