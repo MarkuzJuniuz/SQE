@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.400, red keeps a bigger supply net, blue a thin one
+New campaigns start with 5 road supply sites for blue on every level, and 15 for red on Level 1 and 30 on Levels 2 and 3 (was 42 / 70 / 70 sites split 65 / 35). Blue's supply is thin, so every hit on it is felt; red plays at home. Airfield fuel farms and depots are unchanged. Old saves keep the sites they have.
 ## v0.41.399, red's SEAD packages fire all their missiles at the site's radars, then leave
 Red's Kh-31P SEAD flights now empty all their anti-radiation missiles at the Patriot or HAWK site they were sent against in one go (Open Fire), then turn for home. Before, each jet fired a single missile at whatever radar the AI picked, sometimes at another field's site.
 ## v0.41.398, raid intercepts fold into one mission, and the Missions list marks the ones that carry red's raids
