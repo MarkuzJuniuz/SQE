@@ -4,7 +4,7 @@ Red plans a raid the way we plan a strike: it looks for one of OUR airfields tha
 its own fields and the least defended. Raids are drawn TURN by turn (v0.41.341, campaign rules plan Phase 5b): S37: by JET BUDGET: each turn red earns raid credit, `RAID_SHARE` of its free attack jets (half of it on a night turn, RED_RAID_NIGHT),
 and builds raids while the credit lasts; a share of them are surprises (raid_surprise):
 
-* Every raid red plans is an ordinary "<Base/Supply/Garrison/Troop> Defense: Intercept" package in the tasking order (v0.41.304: no dice, no
+* Every raid red plans is an ordinary "<Base/Depot/Garrison/Troop> Defense: Intercept" package in the tasking order (v0.41.304: no dice, no
   hidden emergencies); a surprise one is marked "(no warning)". If you do not take it, the war simulation settles it by odds.
 * Troops in contact are the planned CAS on the sector red presses hardest (`hot_sector`).
 

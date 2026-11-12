@@ -145,7 +145,8 @@ class Package:
         if not ex.get("land"):
             return "Fleet Defense: Intercept"
         aim = self.objective.aim or ""
-        what = "Base" if not aim else ("Troop" if aim.startswith("sector:") else ("Garrison" if aim.startswith(("bgar_", "bfwd_")) else "Supply"))
+        # S58 (XO 2026-11-12): no "Supply Defense". The field, its SAM site and its fuel farm are Base; the two supply depots out on the line are Depot; anything else (an old save) is Base.
+        what = "Troop" if aim.startswith("sector:") else ("Garrison" if aim.startswith(("bgar_", "bfwd_")) else ("Depot" if aim.startswith("bdepot_") else "Base"))
         return f"{what} Defense: Intercept"
 
     def _job_name(self) -> str:
