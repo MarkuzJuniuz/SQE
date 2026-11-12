@@ -79,7 +79,7 @@ _CA_JSOW_TASK = "Standoff Counter-Air: AGM-154A JSOW on the jets parked on the r
 _SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
 _ESC_TASK = "Escort: hold your station with the package, shoot what comes in range, do not chase; leave when the strikers are off target"
 _TASK[Role.ESCORT] = _ESC_TASK
-_TAG_TASK = {"HAVCAP": "HAVCAP (guards the AWACS)", "TNKCAP": "HAVCAP (guards the tanker)", "BASE_BARCAP": "BARCAP", "CARRIER_BARCAP": "BARCAP (guards the carrier group)"}
+_TAG_TASK = {"HAVCAP": "HAVCAP (guards the AWACS)", "TKR_HAVCAP": "HAVCAP (guards the tanker)", "BASE_BARCAP": "BARCAP", "CARRIER_BARCAP": "BARCAP (guards the carrier group)"}
 BASE_BARCAP_ENEMY_NM = 130     # v0.41.7: a land base gets a base BARCAP when an enemy fighter field is within this (an alert pair reaches it)
 
 
@@ -529,8 +529,8 @@ class PackageBuilder:
                 ledger.free[sq_.id] += n_
             raise NoPlayerSlot("no SEAD flight free to escort the " + ("CAS" if obj.type == ObjectiveType.CAS else "strike") + " today")
 
-        # support CAP: all four kinds (TNKCAP, HAVCAP, BASE_BARCAP, CARRIER_BARCAP) are planned chains now (blue_barcap.py), attached after the start times are known
-        # v0.41.88: TNKCAP and HAVCAP are planned too (blue_barcap.py): chains per tanker / AWACS asset, attached once the start times are known.
+        # support CAP: all four kinds (TKR_HAVCAP, HAVCAP, BASE_BARCAP, CARRIER_BARCAP) are planned chains now (blue_barcap.py), attached after the start times are known
+        # v0.41.88: TKR_HAVCAP and HAVCAP are planned too (blue_barcap.py): chains per tanker / AWACS asset, attached once the start times are known.
 
         used, n = (names if names is not None else {}), 0     # names: the day's callsign counter, shared by every package that day
         for slot, sq, count, is_pl in chosen:

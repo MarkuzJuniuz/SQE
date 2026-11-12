@@ -50,13 +50,13 @@ class ObjectiveType(str, Enum):
 SEAD_AIMS = ("SEAD", "STANDOFF")        # packages with HARM shooters timed on the salvo
 
 
-# S52 (XO 2026-11-12): the internal flight tags BASE_BARCAP and CARRIER_BARCAP are never shown; players read BARCAP. ONE table, every printed tag goes through tag_label.
-TAG_LABEL = {"BASE_BARCAP": "BARCAP", "CARRIER_BARCAP": "BARCAP"}
-OLD_TAG_NAMES = {"BASECAP": "BASE_BARCAP", "CVCAP": "CARRIER_BARCAP"}      # the names a save from before S52 (v0.41.410) holds; state.from_dict maps them once on load
+# S52 / S53 (XO 2026-11-12): the internal flight tags BASE_BARCAP, CARRIER_BARCAP and TKR_HAVCAP are never shown; players read BARCAP, BARCAP and HAVCAP. ONE table, every printed tag goes through tag_label.
+TAG_LABEL = {"BASE_BARCAP": "BARCAP", "CARRIER_BARCAP": "BARCAP", "TKR_HAVCAP": "HAVCAP"}
+OLD_TAG_NAMES = {"BASECAP": "BASE_BARCAP", "CVCAP": "CARRIER_BARCAP", "TNKCAP": "TKR_HAVCAP"}      # the names a save from before S52 (v0.41.410) holds; state.from_dict maps them once on load
 
 
 def tag_label(tag: str) -> str:
-    """What a player reads for a flight tag (HAVCAP and TNKCAP as they are)."""
+    """What a player reads for a flight tag (HAVCAP as it is)."""
     return TAG_LABEL.get(tag, tag)
 
 

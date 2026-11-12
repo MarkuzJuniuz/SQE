@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.412, the tanker guard reads HAVCAP
+The flight that guards the tanker no longer reads TNKCAP in the package tables, radio, kneeboard or briefing; it says HAVCAP, like the AWACS guard. Old campaigns load as before.
 ## v0.41.411, BARCAP is the only name for base and carrier patrols
 The base and carrier patrol flights no longer read BASECAP or CVCAP in the package tables, radio, kneeboard, briefing or guide; they say BARCAP, like the other patrols. HAVCAP and TNKCAP are unchanged. Old campaigns load as before.
 ## v0.41.410, F-15Es crater runways from stand-off range; JSOW hits now count
