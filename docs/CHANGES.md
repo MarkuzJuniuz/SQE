@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.401, Level 3 red flies more Su-27 than MiG-29 and only a few Su-25
+At Level 3 red's fighters are now 46 Su-27, 20 MiG-29S and 12 MiG-29A beside 8 MiG-31 (was 30 / 28 / 20), and its Su-25 fleet is 18, like your A-10Cs (was 130). With fewer cheap attack jets red raids less (about 4.6 raids a day, was 6.9) and the Su-25 pairs no longer carry most of the supply-site raids. Levels 1 and 2 are unchanged.
 ## v0.41.400, red keeps a bigger supply net, blue a thin one
 New campaigns start with 5 road supply sites for blue on every level, and 15 for red on Level 1 and 30 on Levels 2 and 3 (was 42 / 70 / 70 sites split 65 / 35). Blue's supply is thin, so every hit on it is felt; red plays at home. Airfield fuel farms and depots are unchanged. Old saves keep the sites they have.
 ## v0.41.399, red's SEAD packages fire all their missiles at the site's radars, then leave
