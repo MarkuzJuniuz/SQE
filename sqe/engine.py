@@ -990,11 +990,30 @@ class Session:
         c, t = self.merge_center(anchor), self._pkg_xy(other) or self._raid_xy(other)
         return c is not None and t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= self.merge_radius_m()
 
+    def _raid_way(self, p: Package):
+        """S39: a land raid's way in, ((x0, y0), (x1, y1)): from the bomber wing's field to the point it is going for. None for any other package (the carrier raid stays out)."""
+        t = self._raid_xy(p)
+        if t is None:
+            return None
+        w = self.state.assets.get(p.extra.get("bomber_wing"))
+        return ((w.x, w.y), t) if w is not None else (t, t)
+
+    @staticmethod
+    def _seg_dist(pt, a, b) -> float:
+        """Distance (m) from the point `pt` to the segment a-b."""
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        L2 = dx * dx + dy * dy
+        u = 0.0 if L2 <= 0 else max(0.0, min(1.0, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / L2))
+        return math.hypot(pt[0] - (a[0] + u * dx), pt[1] - (a[1] + u * dy))
+
     def merge_candidates(self, pkg: Package, unseen: bool = False) -> list:
-        """Packages folded into a mission built around `pkg`: every package whose target lies inside the merge circle (Settings: radius, default
-        50 nm, centred by merge_center), starting up to `merge_fwd_min` minutes AFTER it or up to `merge_back_min` minutes BEFORE it (those are already underway
-        when the mission starts). At most six, closest to the centre first, so the unit limit drops the furthest first. Empty when merging is off.
+        """Packages folded into a mission built around `pkg`: every package whose target lies inside the merge circle (Settings: radius, centred by merge_center),
+        starting up to `merge_fwd_min` minutes AFTER it or up to `merge_back_min` minutes BEFORE it (those are already underway when the mission starts). At most six,
+        closest to the centre first, so the unit limit drops the furthest first. Empty when merging is off.
         v0.41.351 (XO 2026-11-10, S8): a land raid (the intercept package; its point is the raided field, supply site or garrison, `_raid_xy`) folds in like any package.
+        v0.41.398 (S39): a raid also counts along its way in (`_raid_way`, its wing's field to its target). When `pkg` is a land raid, a package folds in when its point is
+        inside the circle OR within the radius of the raid's way in; and with `merge_raids_all` (default) every other land raid in the time window folds in, at any distance.
+        When `pkg` is anything else, a land raid folds in when its target is inside the circle OR its way in passes within the radius of the merge centre.
         `unseen=True` (`fly` only) also takes the raids blue did not detect (`extra["unseen_raid"]`, not listed): they are built but never named to the player; the list and the GUI never pass it."""
         if self.settings.merge_mode != "area":
             return []
@@ -1005,6 +1024,8 @@ class Session:
         c = self.merge_center(pkg, R)
         if c is None:
             return []
+        anchor_way = self._raid_way(pkg)
+        raids_all = bool(getattr(self.settings, "merge_raids_all", True))
         out = []
         pool = self.packages()
         if unseen:
@@ -1014,17 +1035,36 @@ class Session:
             if p.number == pkg.number or t is None or not (-back <= hm(p) - hm(pkg) <= fwd) or not any(not f.tag for f in p.flights) or p.extra.get("scrub"):
                 continue
             d = math.hypot(t[0] - c[0], t[1] - c[1])
+            way = self._raid_way(p)
             if d <= R:
+                ok = True
+            elif anchor_way is not None:
+                ok = self._seg_dist(t, *anchor_way) <= R or (raids_all and way is not None)
+            else:
+                ok = way is not None and self._seg_dist(c, *way) <= R
+            if ok:
                 out.append((d, hm(p), p.number, p))
         out.sort(key=lambda r: (not (r[3].objective.type == ObjectiveType.COUNTER_AIR and r[3].objective.aim == "SWEEP"),) + r[:3])     # a Fighter Sweep first: the unit limit drops the strike packages before it
         picked = [r[3] for r in out[:6]]
         # v0.41.270 (XO 2026-11-04): the carrier raid folds into no mission: it is red aiming for the king, a setpiece of its own (v0.41.250 folded it into any mission at its time)
         return picked
 
-    @staticmethod
-    def _drop_one(extras: list) -> list:
+    def _drop_one(self, extras: list, anchor: Package | None = None) -> list:
         """v0.41.131 (XO 2026-10-23): the package to give up first when the mission is over the unit limit: the one that starts LATEST; of two with the same start the
-        one later in the list (further from the centre). A Fighter Sweep (the escorts' reason to be there) and an emergency raid scramble (the in-universe \"help has been dispatched\") go last."""
+        one later in the list (further from the centre). A Fighter Sweep (the escorts' reason to be there) and an emergency raid scramble (the in-universe \"help has been dispatched\") go last.
+        v0.41.398 (S39): with the `anchor` given, a land-raid intercept whose target is more than twice the merge radius from the anchor's merge centre goes before all of that
+        (the farthest first): the local fight stays whole."""
+        if anchor is not None:
+            c = self.merge_center(anchor)
+            R2 = 2 * self.merge_radius_m()
+            far = []
+            for i, x in enumerate(extras):
+                t = self._raid_xy(x) if c is not None else None
+                if t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) > R2:
+                    far.append((math.hypot(t[0] - c[0], t[1] - c[1]), i))
+            if far:
+                k = max(far)[1]
+                return extras[:k] + extras[k + 1:]
         hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
         sweep = lambda p: (p.objective.type == ObjectiveType.COUNTER_AIR and p.objective.aim == "SWEEP") or p.objective.type == ObjectiveType.FLEET_DEFENSE
         k = max(range(len(extras)), key=lambda i: (not sweep(extras[i]), hm(extras[i]), i))
@@ -1132,7 +1172,7 @@ class Session:
             if ruins:
                 ruins = ruins[:-1]                               # returning flights first
             else:
-                extras = self._drop_one(extras)                  # too heavy: drop the latest-starting package (a Fighter Sweep last) and rebuild
+                extras = self._drop_one(extras, pkg)               # too heavy: drop the latest-starting package (a Fighter Sweep last) and rebuild
             res.warnings.append(f"merged mission trimmed to fit the {cap}-unit limit")
         st.sortie_counter += 1
         st.pending = {"package": package_number, "flight": pkg.player_flight.id, "manifest": res.manifest.to_dict(),
