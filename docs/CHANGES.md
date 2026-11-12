@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.408, blue has no road supply sites; Level 1 red's supply follows its inner depots
+New campaigns give blue no road supply sites on any level: it keeps only the fuel farms and depots it brought to each field, so every hit on them weighs more. Red keeps its road sites (15 / 30 / 30). On Level 1 red's supply is now 70% its depots near the fields and 30% its road sites, and it falls when you hit them, down to a 45% floor (insurgents supplied by night); it no longer sits on a fixed 70%. Old saves are unchanged.
 ## v0.41.407, red sends two SEAD packages against a HAWK site too
 A HAWK site now draws the same SEAD raid as a full-strength Patriot: two packages in one raid (Level 3: 12 Su-24M / Su-34 with Kh-31P and 12 fighters, was 6 and 6; Levels 1 and 2: 8 and 4, was 4 and 2). A wing with fewer jets free sends what it has, never less than one package. A Patriot below full strength still draws one package.
 ## v0.41.406, raids folded into one mission no longer share unit and group names

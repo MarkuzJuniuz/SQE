@@ -229,7 +229,7 @@ def build(st, th: dict, d, ap: dict, rng: random.Random | None = None) -> dict:
                     gid = f"rgar_sup_{n:03d}"
                     pool[gid] = EnemyAsset(gid, f"Battalion at {nm}", AssetKind.ARMOR, float(p[0]), float(p[1]), 1.0, 5, [], None, "GARRISON", c["tier"], aid)
     # the Supply figure: every site either side holds, counted from the start
-    g["sup_n"] = {"red": sum(1 for a in st.assets.values() if a.kind in ground.SUPPLY_KINDS), "blue": sum(1 for a in st.blue_assets.values() if a.kind in ground.SUPPLY_KINDS)}
+    ground.set_supply_counts(st)                                      # v0.41.408 (S49): the counts, and on Level 1 the inner / road split of red's
     g.setdefault("sup_h", {}).update({a.id: 1.0 for pool in (st.assets, st.blue_assets) for a in pool.values() if a.kind in ground.SUPPLY_KINDS})
     rec = {"v": 1, "red": len(added["red"]), "blue": len(added["blue"]),
            "plants": {s: sum(1 for c in added[s] if c["variant"] in PLANT_VARIANTS) for s in ("red", "blue")},
