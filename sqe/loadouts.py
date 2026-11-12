@@ -13,6 +13,14 @@ JDAM_JETS = {"F-16C", "FA-18C", "F-14BU", "F-15E"}       # v0.41.299: the jets w
 CBU_JETS = {"F-16C"}                          # v0.41.313 (XO 2026-11-06): the jets that carry CBU-103 on a plain counter-air strike (parked aircraft, little air cover); the others keep their JDAMs
 SLAM_PER_JET = {"FA-18C": 2}                  # v0.41.298: AGM-84H SLAM-ER per jet in the Standoff Strike kit (a Hornet job: no F-16 SLAM-ER in DCS)
 JSOW_PER_JET = {"FA-18C": 2, "F-16C": 2}      # AGM-154A JSOW CEB per jet in the JSOW kit; only these jets fly the JSOW slot of a SEAD package
+# S51 (XO 2026-11-12: "F-15E does standoff runway cratering, while DEAD stays the domain of the F-16"): the "PEN" kit, AGM-154C (unitary BROACH) per F-15E on pylons 2 and 18. Its own table, NOT JSOW_PER_JET:
+# the F-15E must never fill a Standoff DEAD / standoff counter-air slot (`packages.KIT_JETS["JSOW"]` is JSOW_PER_JET). Only a runway crater (a STRIKE with aim RUNWAY) offers it.
+PEN_PER_JET = {"F-15E": 2}
+# S51: a PEN F-15E has no 610 gal wing tanks (they sit on the pylons the JSOW-Cs take). pydcs figures: `F_15E.fuel_max` 10,246 kg internal, each 610 gal tank 2,011 kg (tank and fuel): without the two
+# tanks the jet carries 10,246 / (10,246 + 2 x 2,011) = 0.72 of the fuel of the plain STRIKE load. Judgment call 0.75 of the combat radius (`_in_range` multiplies it in; the 30 nm stand-off release saves
+# flight but is not counted). At 450 nm: 337 nm, 506 with a safe tanker track (x1.5): the F-15E squadrons (Vaziani, Tbilisi) reach every red field but Gelen (353 to 357) and Krymsk (366 to 369) without one.
+PEN_REACH = 0.75
+JSOW_FLIGHT_KITS = ("JSOW", "PEN")            # S51: the kits whose AI flight takes the JSOW route (launch point on its own axis, release, home) and is tasked from it. DEAD-only code tests "JSOW" alone
 
 _D: dict = {
     "F-16C": {
@@ -58,6 +66,9 @@ _D: dict = {
     "F-15E": {
         # NOT a stock preset (the old AI model has none to copy; judgment call): AIM-9M on 1 and 19, AIM-120C on 3 and 17, 610 gal tanks on 2 and 18, GBU-31(V)1 on the four conformal-tank stations 7, 9, 11, 13
         "STRIKE": {1: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 2: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 3: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 7: "={GBU-31}", 9: "={GBU-31}", 11: "={GBU-31}", 13: "={GBU-31}", 17: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 18: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 19: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}"},
+        # S51 PEN kit (standoff runway crater): the STRIKE preset's pylons 2 and 18 (610 gal tanks) take an AGM-154C JSOW (unitary BROACH, CLSID {9BCC2A2B-...}: the S50 probe fired exactly this on 2 and 18); AIM-9M on 1 and 19, AIM-120C on 3 and 17
+        # as STRIKE; the four conformal stations 7, 9, 11, 13 stay EMPTY (judgment call: the kit is a stand-off shot, fewer stores is less drag and the JSOWs are the load).
+        "PEN": {1: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 2: "={9BCC2A2B-5708-4860-B1F1-053A18442067}", 3: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 17: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 18: "={9BCC2A2B-5708-4860-B1F1-053A18442067}", 19: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}"},
     },
     "A-10C": {
         # stock DCS preset: AGM-65D*4, CBU-97*2, CBU-87*2, TGP, ECM, AIM-9*2

@@ -615,8 +615,18 @@ function H:onEvent(e)
     ended = true; dump()
   end
 end
+-- S51: the weapons the two followers below track. A bomb (Weapon.Category.BOMB) and the AGM-154 JSOW: S50 (DCS, both the A and the C) showed the JSOW reports
+-- getCategory() = ROCKET (2), not BOMB, so a category test alone saw no JSOW at all. Matched by type name, never widened to every missile (a HARM, a SLAM-ER or an AIM is not a crater).
+local function isBombLike(w)
+  local ok, cat = pcall(function() return w:getCategory() end)
+  if ok and cat == Weapon.Category.BOMB then return true end
+  local okn, tn = pcall(function() return w:getTypeName() end)
+  return okn and tn ~= nil and string.find(tn, "AGM_154", 1, true) ~= nil
+end
 -- v0.41.254: runway hits. Every bomb is followed to its last known position; one that ends inside a field's runway rectangle is a hit on that field
 -- (the hook cannot be told where a bomb landed, so this is the position it vanished at plus a quarter second of its velocity; judgment call, a few metres).
+-- S51: the AGM-154 JSOW counts too (isBombLike). A JSOW-A's carrier opens 520 to 570 m above the ground (S50) and its last point is the dispenser: the rectangle test is flat (x, z), so one that opens
+-- over a runway still counts as a hit there; the same is true of a CBU. A JSOW-C is unitary and ends on the ground.
 if #RWYS > 0 then
   local RWY_LEN, RWY_WID, RWY_DT = __RWYLEN__, __RWYWID__, 0.25
   local RWYW = {}
@@ -640,8 +650,7 @@ if #RWYS > 0 then
   local H4 = {}
   function H4:onEvent(e)
     if e.id == world.event.S_EVENT_SHOT and e.weapon then
-      local ok, cat = pcall(function() return e.weapon:getCategory() end)
-      if ok and cat == Weapon.Category.BOMB then RWYW[#RWYW + 1] = { w = e.weapon } end
+      if isBombLike(e.weapon) then RWYW[#RWYW + 1] = { w = e.weapon } end
     end
   end
   world.addEventHandler(H4)
@@ -668,8 +677,7 @@ do
   local H5 = {}
   function H5:onEvent(e)
     if e.id == world.event.S_EVENT_SHOT and e.weapon then
-      local ok, cat = pcall(function() return e.weapon:getCategory() end)
-      if ok and cat == Weapon.Category.BOMB then
+      if isBombLike(e.weapon) then
         local tn, by = "?", "?"
         pcall(function() tn = e.weapon:getTypeName() end)
         pcall(function() by = e.initiator:getName() end)

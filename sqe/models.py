@@ -54,8 +54,8 @@ def task_label(f, obj) -> str:
     """Short role label for package tables and the radio: SEAD, SO DEAD (Standoff DEAD, JSOW), DEAD (Close DEAD, GBU) or the role."""
     if getattr(f, "tag", ""):
         return f.tag
-    if getattr(f, "kit", "") == "SLAM":
-        return "SO STRIKE"                  # v0.41.298: the Standoff Strike flight (SLAM-ER)
+    if getattr(f, "kit", "") in ("SLAM", "PEN"):
+        return "SO STRIKE"                  # v0.41.298: the Standoff Strike flight (SLAM-ER); S51: and the F-15E's standoff runway crater (PEN)
     if getattr(f, "kit", "") == "JSOW":
         return ("SO STRIKE" if obj.type.value == "COUNTER_AIR" else "SO DEAD") if obj.aim == "STANDOFF" else "JSOW"
     if f.role.value == "STRIKE" and obj.type.value == "DEAD":
