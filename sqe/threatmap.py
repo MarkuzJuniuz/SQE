@@ -206,7 +206,7 @@ _LEAD_NM = 0.0              # the lead in force for the mission being built (Mis
 def set_ramp_lead(on: bool) -> None:
     """v0.41.92: hot-ramp pairs take 5 to 9 minutes from the call to the air (XO's 2026-10-21 runs: 324 to 566 s at Gudauta, 283 and 290 s at Nalchik;
     the hidden runway start is about 2 minutes), so with the setting on the circles are larger by what blue covers in the 4 extra minutes
-    (about 500 kt = 8 nm a minute, 30 nm). Judgment call from those runs. Planning keep-outs (marshal, sweep, CVCAP) read the same radius."""
+    (about 500 kt = 8 nm a minute, 30 nm). Judgment call from those runs. Planning keep-outs (marshal, sweep, carrier BARCAP) read the same radius."""
     global _LEAD_NM
     _LEAD_NM = RAMP_LEAD_NM if on else 0.0
 

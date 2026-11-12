@@ -9,7 +9,24 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
 from . import FORMAT_VERSION, COMPAT_ERA, MIN_COMPAT_ERA, __version__, clock
-from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, wing_from_dict, PlayerProfile)
+from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, wing_from_dict, PlayerProfile, OLD_TAG_NAMES)
+
+
+def _upgrade_cap_tags(*parts) -> None:
+    """S52: walk the saved plan, the resolved plan and the patrol state and give every old "BASECAP" / "CVCAP" flight tag or patrol kind its new name (models.OLD_TAG_NAMES).
+    Done once, on load, so no other code compares against the old names. Only the `tag` and `kind` keys are touched."""
+    def walk(x):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if k in ("tag", "kind") and isinstance(v, str) and v in OLD_TAG_NAMES:
+                    x[k] = OLD_TAG_NAMES[v]
+                else:
+                    walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    for p in parts:
+        walk(p)
 
 
 class SaveIncompatible(Exception):
@@ -141,6 +158,7 @@ class CampaignState:
         s.plan, s.pending = d.get("plan", []), d.get("pending")
         s.plan_done = d.get("plan_done") or []                            # missing in a save from before v0.41.337: nothing resolved yet today
         s.history, s.log = d.get("history", []), d.get("log", [])
+        _upgrade_cap_tags(s.plan, s.plan_done, s.barcap, s.pending)                  # S52: a save from before the rename holds "BASECAP" / "CVCAP" in flight tags and patrol kinds
         if not s.ground:                           # a campaign from before the ground war (format 4): give it one for its level
             from . import ground
             if ground.ensure(s):

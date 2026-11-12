@@ -1,6 +1,6 @@
 """Blue's standing BARCAP as a per-turn plan (v0.41.85; per turn since v0.41.339, campaign rules plan Phase 4b), the mirror of red's patrol plan in redair.py.
 
-A base CAP or a carrier CAP is planned on its own from the BARCAP areas (barcap.py): each TURN `plan_turn` puts a pair up over a share of the areas that can be up (CAP_SHARE, by level, day or
+A base BARCAP or a carrier BARCAP is planned on its own from the BARCAP areas (barcap.py): each TURN `plan_turn` puts a pair up over a share of the areas that can be up (CAP_SHARE, by level, day or
 night) and one guard pair for each AWACS / tanker that is on orbit in the turn, drawing the jets from the turn's ledger (`packages.Ledger`) BEFORE the packages are built, so patrols compete with
 packages for jets and nothing is double-booked. A pair whose airframe stays 30 minutes (a short-legged type) costs two pairs: one in the first wave and a relief in the second. The plan of the
 day so far is kept in `state.barcap["blue_flights"]` (every flight has its `turn`); once the packages' start times are known, `attach` gives each package the planned sortie of the area that
@@ -86,7 +86,7 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
     """This turn's standing patrols and guards (v0.41.339, Phase 4b; it was a plan for the whole day, `plan`). `t0`: the turn's first minute of the day; `ledger`: the turn's jets (the pairs are taken
     off it, so the packages are built from what is left); `rng`: seeded by the turn; `wins`: this turn's AWACS / tanker windows (`support_assets.plan`). The turn's flights are added to
     `state.barcap["blue_flights"]` (those of earlier turns of the day stay; a plan of this turn made before is replaced) and `blue_cover` (minutes of the day each area has a pair up) is made
-    again from them. -> this turn's flights [{id, kind BASECAP|CVCAP|HAVCAP|TNKCAP, asset, area, squadron, aircraft, size, start, end (minutes of the day), callsign "", turn, wave}]."""
+    again from them. -> this turn's flights [{id, kind BASE_BARCAP|CARRIER_BARCAP|HAVCAP|TNKCAP, asset, area, squadron, aircraft, size, start, end (minutes of the day), callsign "", turn, wave}]."""
     bc = barcap.ensure(state)
     level = max(1, min(3, int(getattr(d, "level", 1))))
     t1 = t0 + clock.TURN_MIN
@@ -107,7 +107,7 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
         if up >= want:
             break
         b, ar, sqs = cands[i]
-        kind = "CVCAP" if b.kind == BaseKind.CARRIER else "BASECAP"
+        kind = "CARRIER_BARCAP" if b.kind == BaseKind.CARRIER else "BASE_BARCAP"
         got = _pairs(ledger, sqs, t0, t1, KEEP_BACK)
         for j, (sq, wave, lo, hi) in enumerate(got):
             flights.append({"id": f"bf{turn}-{b.id}-{ar['id'].rsplit('-', 1)[-1]}.{j}", "kind": kind, "asset": b.id, "area": ar["id"], "squadron": sq.id, "aircraft": sq.aircraft,
@@ -208,7 +208,7 @@ def _support_keys(p) -> list:
 
 
 def attach(state, pkgs: list, until: int | None = None, since: int | None = None) -> None:
-    """Give each ground-attack / counter-air package the planned base CAP and carrier CAP sortie that faces its target and is up while it flies.
+    """Give each ground-attack / counter-air package the planned base BARCAP and carrier BARCAP sortie that faces its target and is up while it flies.
     The same planned sortie keeps one callsign in every package that carries it (a merged mission builds it once, support_caps._gather_support).
     `until` / `since` (v0.41.338, Phase 4): only the planned sorties that START before `until` and END after `since` (minutes of the day: the turn's bounds) are attached: a sortie of the
     next turn is crewed and committed in that turn, one that ended before this turn began has been committed already."""
@@ -233,7 +233,7 @@ def attach(state, pkgs: list, until: int | None = None, since: int | None = None
     base_cap = max(tw, key=lambda bw: (bw[1], bw[0].id))[0] if tw else None
     for p in pkgs:
         obj = p.objective
-        setp = bool(p.extra.get("setpiece"))                              # v0.41.109: the carrier raid setpiece gets the carrier CAP and the guards too
+        setp = bool(p.extra.get("setpiece"))                              # v0.41.109: the carrier raid setpiece gets the carrier BARCAP and the guards too
         tb_ = state.bases.get(obj.target_id)
         land_raid = (obj.type == ObjectiveType.FLEET_DEFENSE and tb_ is not None and tb_.kind == BaseKind.AIRFIELD and not setp)    # v0.41.114: a land-raid intercept
         if land_raid:
@@ -243,7 +243,7 @@ def attach(state, pkgs: list, until: int | None = None, since: int | None = None
         s0 = _minute(p.start)
         lo, hi = s0 - LEAD_MIN, s0 + PACKAGE_WINDOW_MIN
         if land_raid:
-            txy = (tb_.x, tb_.y)                                           # the raided field is what the base CAP faces and guards
+            txy = (tb_.x, tb_.y)                                           # the raided field is what the base BARCAP faces and guards
         elif setp:
             ba_ = state.assets.get(p.extra.get("bomber_wing", ""))
             txy = (ba_.x, ba_.y) if ba_ is not None else (state.bases[obj.target_id].x, state.bases[obj.target_id].y)
@@ -258,12 +258,12 @@ def attach(state, pkgs: list, until: int | None = None, since: int | None = None
                    and state.bases[state.squadrons[f.squadron_id].base_id].kind == BaseKind.CARRIER), None)
         if cv is None and setp:
             cv = state.bases[obj.target_id]
-        if cv is None:                                                    # v0.41.209 (XO 2026-10-30): the carrier group is in every mission now, so its scheduled CVCAP comes along when its window overlaps the sortie
+        if cv is None:                                                    # v0.41.209 (XO 2026-10-30): the carrier group is in every mission now, so its scheduled carrier BARCAP comes along when its window overlaps the sortie
             from . import fleet as _fleet
             cv = _fleet.carrier(state)                                    # v0.41.257: none while the carrier is sunk
         if cv is not None:
             assets.append(cv)
-        have = {f.tag for f in p.flights if f.tag in ("BASECAP", "CVCAP")}
+        have = {f.tag for f in p.flights if f.tag in ("BASE_BARCAP", "CARRIER_BARCAP")}
         for key in _support_keys(p):                                      # v0.41.88: the guard of each AWACS / tanker the package has
             tag = GUARDS[key]
             if tag in have:
@@ -279,7 +279,7 @@ def attach(state, pkgs: list, until: int | None = None, since: int | None = None
                                         _TAG_TASK[tag], False, tag, "", ""))
             have.add(tag)
         for b in assets:
-            kind = "CVCAP" if b.kind == BaseKind.CARRIER else "BASECAP"
+            kind = "CARRIER_BARCAP" if b.kind == BaseKind.CARRIER else "BASE_BARCAP"
             ar = barcap.facing_area(state, "blue", b.id, txy)
             if ar is None or kind in have:
                 continue

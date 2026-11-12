@@ -28,8 +28,8 @@ from .routes import AVOID_NM, FT, NM, RAID_IP_NEAR_NM, RAID_SA11_NM, Wpt, avoid_
 from .strike_tasks import KPH
 
 F = VehicleGroup.Formation
-BLUE_CALLIN_TAGS = ("BASECAP", "CVCAP")    # v0.41.112: the blue patrols that are called in with the alert pairs (the tanker / AWACS guards stay with their asset)
-BLUE_CALLIN_CV_NM = 60        # the carrier CAP answers a hotspot at most this far from its station: the boat is not left bare (judgment call)
+BLUE_CALLIN_TAGS = ("BASE_BARCAP", "CARRIER_BARCAP")    # v0.41.112: the blue patrols that are called in with the alert pairs (the tanker / AWACS guards stay with their asset)
+BLUE_CALLIN_CV_NM = 60        # the carrier BARCAP answers a hotspot at most this far from its station: the boat is not left bare (judgment call)
 RAID_PUSH_NM = 10             # v0.41.29: a raid's PUSH, this far from its marshal toward the target (blue's is up to 10 nm)
 RAID_MSHL_MIN_NM = 60         # ...its marshal is at least this far from the target (judgment call: well outside blue's Patriot reach)
 RAID_MPS = 232.0              # a red raid's speed (450 kts), the same figure its placement always used
@@ -672,8 +672,8 @@ class RaidSpawns:
         a.x, a.y, b.x, b.y = x, y, x2, y2
 
     def _blue_callins(self, package, raid_x, fleet_obj, tx, ty, tot_s) -> None:
-        """v0.41.112 (XO 2026-10-22): the BASECAP call-in, blue side. In a defensive mission (a raid on blue, or the fleet under attack) the blue
-        base and carrier CAPs that can reach the hotspot (where the alert pairs would station themselves) are called to it when red comes within
+        """v0.41.112 (XO 2026-10-22): the base-BARCAP call-in, blue side. In a defensive mission (a raid on blue, or the fleet under attack) the blue
+        base and carrier BARCAPs that can reach the hotspot (where the alert pairs would station themselves) are called to it when red comes within
         120 nm of the target (the alert pairs' own trigger), stay a while, then fly back to their station until their shift ends. Same Lua call as
         red's (red_air_picture.py): the route has a hotspot leg AFTER the home leg, a SwitchWaypoint jumps the pair onto it."""
         if not (fleet_obj or raid_x is not None):
@@ -691,7 +691,7 @@ class RaidSpawns:
             if c2 is None or ct is None:
                 continue
             sx, sy = c1.position.x, c1.position.y
-            reach = BLUE_CALLIN_CV_NM if f.tag == "CVCAP" else CALLIN_REACH_NM
+            reach = BLUE_CALLIN_CV_NM if f.tag == "CARRIER_BARCAP" else CALLIN_REACH_NM
             if not (CALLIN_MIN_NM <= dist(sx, sy, hx, hy) / NM <= reach):
                 continue
             sc = ct.params.get("stopCondition", {})

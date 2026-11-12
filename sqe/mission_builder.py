@@ -43,7 +43,7 @@ from .strike_tasks import StrikeTasks, DEAD_GATE_KM, SEAD_WAVE_KM, TRACK_RADARS,
 from . import kneeboard
 from .kneeboard import latlon, render_pages
 from .loadouts import LoadoutLibrary, enemy_cap_loadout, ENEMY_FIGHTERS, JSOW_FLIGHT_KITS
-from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType, Role, task_label
+from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType, Role, tag_label, task_label
 pydcs_patch.install()           # v0.41.66: pydcs's scattered formation could loop forever and freeze a build (sqe/pydcs_patch.py)
 
 TARCAP_LEAD_S = 120           # v0.41.115 (was 0; XO 2026-10-22: fighters in first, BMS-style): a TARCAP arrives this long before the first flight it covers. 2 min, not
@@ -57,7 +57,7 @@ RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (r
 SCRUB_POINT_NM = 20           # v0.41.223: a package flight's SCRUB point (where a scrubbed flight goes first) sits this far from its home field, on the bearing of its route's last point (the same shape as the stand-off ABORT point)
 BLUE_BASE_DEF_SKILL = "Excellent"   # v0.41.222 (XO 2026-10-31): blue's base Patriot / HAWK / AAA are always the top DCS skill, whatever the Blue skill setting or the level says. Why: under "level" they were left at pydcs's Average while red's sites run at the level's skill (High on L3), and XO saw them barely fire. Judgment call (no public figure for operator quality).
 CAP_SPREAD_NM = {"TARCAP": 15, "ESCORT": 10, "SWEEP": 20,
-                 "BASECAP": 25, "CVCAP": 30, "HAVCAP": 20, "TNKCAP": 20}   # S9 (v0.41.350): the support CAPs, used by support_caps (judgment calls, no public figure); Phase 8 (v0.41.349): the race-track leg from CAP1 (the station) to CAP2, across the threat axis. Judgment calls: no public leg length found (FAA anchor tracks of about 50 nm are civil)
+                 "BASE_BARCAP": 25, "CARRIER_BARCAP": 30, "HAVCAP": 20, "TNKCAP": 20}   # S9 (v0.41.350): the support CAPs, used by support_caps (judgment calls, no public figure); Phase 8 (v0.41.349): the race-track leg from CAP1 (the station) to CAP2, across the threat axis. Judgment calls: no public leg length found (FAA anchor tracks of about 50 nm are civil)
 CAP2_ROOM_NM = 8             # Phase 8: CAP2 must have at least this much SAM room (nm to the nearest SAM ring), or as much as the station itself has when that is less (8 is the cover circle's own floor)
 TARCAP_BEHIND_NM = 8          # v0.41.43 (16; v0.41.115: 8, XO 2026-10-22: it sat 56 nm from red's patrols, too far to snipe): with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
 TARCAP_FWD_NM = 20           # v0.41.120: the TARCAP's engage circle tries to reach this far past its station toward red (judgment call: red's alert pairs held 24 nm from the station in XO's 2026-10-23 run)
@@ -207,7 +207,7 @@ class MissionOptions:
     base_defenses: bool = True
     carrier_escorts: bool = True
     enemy_cap_engage_nm: int = 50       # enemy patrol fighters chase no further than this (0 = unlimited); v0.41.61: fixed, no settings box
-    friendly_cap_engage_nm: int = 50    # HAVCAP / BASECAP likewise (0 = unlimited); v0.41.61: fixed, no settings box
+    friendly_cap_engage_nm: int = 50    # HAVCAP / base BARCAP likewise (0 = unlimited); v0.41.61: fixed, no settings box
     fighter_engage_nm: int = 40         # AI escorts and sweeps chase no further than this (0 = unlimited)
     fighter_engage_minutes: int = 5     # AI escorts, sweeps, SEAD stop engaging this many minutes after the TOT and fly on (alert pairs: +5). 0 = no time limit
     player_is_ai: bool = False          # test: your own flight is built as an AI flight (no player / client slot) and gets the AI behaviour too (stand-off, engage window)
@@ -530,7 +530,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
         # ---- friendly flights --------------------------------------------------------------------------------------------
         despawn, pkg_table = [], []
-        self._sup_cts = []                                                   # HAVCAP / base CAP orbit tasks: their stop time is extended once the merged packages are known
+        self._sup_cts = []                                                   # HAVCAP / base BARCAP orbit tasks: their stop time is extended once the merged packages are known
         self._cover = []                                                     # v0.41.79: [{g, n, bf, rf, u}] the CAP pairs the hook watches (debrief.py COVER)
         self._relief_src = {}                                                # v0.41.78: callsign -> what _spawn_flight needs to build that support CAP's relief sorties
         self._relief_names = []                                              # relief flights built so far (their callsigns are taken)
@@ -543,7 +543,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._callins = []
         self._callin_lua = False                                           # v0.41.112: SQE_CALLIN is defined in the mission (red's wiring or blue's)
         self._hold_drawn = {}                                                # v0.41.343 (Phase 6a): red squadron id -> hold jets this build's scrambles drew (reserve.pick_red_hold)
-        self._hot_calls, self._hot_flag = [], 0                              # v0.41.111: the BASECAP call-in (red_air_picture.py)
+        self._hot_calls, self._hot_flag = [], 0                              # v0.41.111: the base-BARCAP call-in (red_air_picture.py)
         self._recov = []                                                     # v0.41.25: the recovery net (see _recov_net)                                                   # v0.41.10: red patrols called in to the SAM site they guard
         self._launch_pts[package.id] = self._launch_points(package, geom)    # v0.41.42: known before any flight is built (an escort / TARCAP may be built first)
         self._barcap_zones = self._barcap_circles(package, geom)             # v0.41.138: the BARCAP circles a TARCAP's circle must meet (whatever order the flights are built in)
@@ -582,7 +582,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 t_ = st.assets[package.objective.target_id]
                 self._agm88_refs.append((t_.x, t_.y, hs_))
         merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock, ruins)
-        # HAVCAP and base CAP guard the tanker, AWACS and home field: they stay until the last flight of ANY package in this mission is home
+        # HAVCAP and base BARCAP guard the tanker, AWACS and home field: they stay until the last flight of ANY package in this mission is home
         # (they used to leave 40 min after your TOT, so later merged packages flew with the tanker and AWACS unguarded)
         last_home = max([m_["rtb_s"] for m_ in merged if not m_.get("struck")] + [rtb_s]) + 300
         for ct_ in self._sup_cts:
@@ -739,7 +739,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     def _add_merged(self, anchor, extras, P0, manifest, despawn, atc, div_mhz, div_name, clock, ruins=()) -> list:
         """Fold extra packages into this mission. Their flights are AI, airborne on their own schedule (late-activated so they push at
-        THEIR time), with their own geometry, route and TOT. Support (tanker, AWACS, HAVCAP, base CAP) is shared, so tag flights are skipped."""
+        THEIR time), with their own geometry, route and TOT. Support (tanker, AWACS, HAVCAP, base BARCAP) is shared, so tag flights are skipped."""
         from types import SimpleNamespace
         st = self.state
         hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
@@ -2117,7 +2117,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """How the flight fights: the engage circles, hold and homeward fight, ROE and range options. One branch for support CAPs, one for stations, one for other AI fighters, one for raid scrambles."""
         st, o = self.state, self.o
         if f.tag:
-            czone_ = self._clear_zone(cap_zone, package, hold=(wps[1].x, wps[1].y) if len(wps) > 1 and f.tag in ("BASECAP", "CVCAP") else None)
+            czone_ = self._clear_zone(cap_zone, package, hold=(wps[1].x, wps[1].y) if len(wps) > 1 and f.tag in ("BASE_BARCAP", "CARRIER_BARCAP") else None)
             self._limit_engage(g, self.o.friendly_cap_engage_nm, None, czone_)
             # v0.41.14: support CAP snipes (maximum range: the bandits turn defensive before they reach what it guards) and goes home when its
             # air-to-air missiles are gone (the SAMs and the boat's SM-2s cover what it guards)
@@ -3074,7 +3074,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if i == 1:
                     lead_stn = code
             pidx = package.flights.index(f)
-            whois.append({"cs": f"{f.callsign}-1..{f.count}", "ac": f.aircraft, "role": (f.tag or f.role.value)[:7],
+            whois.append({"cs": f"{f.callsign}-1..{f.count}", "ac": f.aircraft, "role": (tag_label(f.tag) if f.tag else f.role.value)[:7],
                           "m3": f"4{package.number % 8}{pidx % 8}{(pidx + package.number) % 8}", "stn": lead_stn, "you": f.is_player})
         # v0.41.41 (XO 2026-10-20): the AWACS is neither member nor donor. Members are your wing (above); donors are the Link 16 capable flights
         # of the SAME package (their leads), nothing from other packages and no support aircraft

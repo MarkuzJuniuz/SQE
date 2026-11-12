@@ -78,7 +78,7 @@ First launch:
 3. **File > New Campaign**: name it, pick your jet (**F-14B(U), F/A-18C, F-16C, F-15C or A-10C**), a difficulty, the start month/day (year is 2006) and whether to allow night sorties, OK.
 
 **Playing a day**
-1. **Missions** tab: pick a tasking, then press **FLY** on the row of the flight you want to fly (green rows). SQE writes `SQE_Sortie.miz` and opens the **waiting window**. Base, carrier, tanker and AWACS cover patrols (BASECAP, CVCAP, TNKCAP, HAVCAP) are planned each day and are AI-only.
+1. **Missions** tab: pick a tasking, then press **FLY** on the row of the flight you want to fly (green rows). SQE writes `SQE_Sortie.miz` and opens the **waiting window**. Base, carrier, tanker and AWACS cover patrols (BARCAP, TNKCAP, HAVCAP) are planned each day and are AI-only.
 2. Start DCS, **Mission > Open > Missions > SQE_Sortie.miz**, fly it. The kneeboard has two pages: (1) comms + waypoints numbered the way your jet's cockpit numbers them, (2) timeline, bingo/joker, IFF Mode 3, laser code, package who's-who with Link 16 STNs, threats, bullseye. Last steerpoints: RTB, DIVERT, TKR (tanker), BULLS (bullseye).
 3. The waiting window updates live (aircraft lost, ground units destroyed, landings). When DCS reports the mission ended it turns green.
    * **Accept results** applies exactly what you see.
