@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.405, red's Su-34 and Su-24M raids on supply sites and garrisons fire Kh-59M cruise missiles from standoff
+At Levels 2 and 3 about a third (Level 2) to a half (Level 3) of red's raids on an uncovered supply site or garrison are now flown by Su-24M or Su-34 carrying Kh-59M missiles, two a jet. They push, fire from about 50 nm out and turn for home instead of bombing over the target, and the site is hit a few minutes later. The briefing says so: "They will fire from about 50 nm out and turn for home; stop them before they launch." The Su-24M carries its APK-9 datalink pod on pylon 4, without which the AI does not fire. Level 1 and raids on fields are unchanged.
 ## v0.41.404, groundwork for red's Kh-59M standoff strikes (switched off)
 Red's Su-34 and Su-24M can now be given Kh-59M missiles and a launch point about 50 nm from the target instead of bombing over it. Nothing changes in play yet: the switch is off until the DCS behaviour has been tested in a test mission.
 ## v0.41.403, Level 3 red raids on supply sites and garrisons come from two airfields
