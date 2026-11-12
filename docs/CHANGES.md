@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.407, red sends two SEAD packages against a HAWK site too
+A HAWK site now draws the same SEAD raid as a full-strength Patriot: two packages in one raid (Level 3: 12 Su-24M / Su-34 with Kh-31P and 12 fighters, was 6 and 6; Levels 1 and 2: 8 and 4, was 4 and 2). A wing with fewer jets free sends what it has, never less than one package. A Patriot below full strength still draws one package.
 ## v0.41.406, raids folded into one mission no longer share unit and group names
 When two or more red raids fly in the same mission their aircraft were both named RAID-B-1, RAID-E-1 and so on, and their groups Raid Bomber 1 and so on. A kill or a "got through" on one raid could be charged to the other raid's squadron, and DCS could drop a group. Each raid now continues the numbering of the one before it, so every name in the mission is unique. A mission with a single raid is named as before.
 ## v0.41.405, red's Su-34 and Su-24M raids on supply sites and garrisons fire Kh-59M cruise missiles from standoff
