@@ -26,6 +26,21 @@ CAP_FLEET_KEEPOUT_NM = 78      # Red's known CAP stations stay at least this far
 RELIEF_HORIZON_S = 3600       # v0.41.77: a patrol's relief is flown in this mission when it is due within this long after the time on target (judgment call)
 ALERT_REACH_NM = 130          # alert pairs come only from fields this close to the target (the far ones could not arrive in time)
 A2A_ZONE_NM = {True: 25, False: 15}
+# S45 (XO 2026-11-11, the red counterpart of the F-14B(U) special case): the MiG-31 is a ground-controlled interceptor, not a dogfighter (R-33: a big, heavy missile built against bombers and cruise-missile carriers;
+# the aircraft is a heavy Mach 2.8 airframe with a limited g-limit, about 5 g from memory, public reference books, firmness low). It works from inside its own SAM cover and shoots at the R-33's range, so it keeps a larger
+# engage circle (judgment call: the R-33's published reach is about 120 km = 65 nm, the circle is a little over half of that) and gets no RED_EXTRA_NM past the SAM cover that the Su-27 gets (scramble.red_station_vs).
+RED_STANDOFF = {"MiG_31"}
+RED_STANDOFF_ZONE_NM = 40
+
+
+def a2a_zone_nm(tname) -> int:
+    """The engage circle (nm) of a red fighter type on patrol / alert: the stand-off interceptor's, else 25 for the long-range class and 15 for the rest."""
+    return RED_STANDOFF_ZONE_NM if tname in RED_STANDOFF else A2A_ZONE_NM[tname in RED_LONG_RANGE]
+
+
+def works_beyond_cover(tname) -> bool:
+    """May this type work beyond its SAM cover (scramble.RED_EXTRA_NM)? The Su-27 may, the stand-off MiG-31 may not."""
+    return tname in RED_LONG_RANGE and tname not in RED_STANDOFF
 # v0.41.111, the BASECAP call-in (XO 2026-10-22): when the scramblers are called, the patrols that can reach the hotspot are called to it too, stay a while, then
 # fly back to their station. The route has a hotspot leg AFTER the landing point and a Lua SwitchWaypoint jumps a CALLED pair onto it (probe runs of 2026-10-22:
 # a flag-released orbit works but sends every pair there at the end of its shift; a pushed engage task never came back; GoToWaypoint is not supported by DCS;
@@ -139,7 +154,7 @@ class RedAirPicture:
         g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
         self._land_home(g, ap)
         gx, gy = sx, sy
-        self._limit_engage(g, 0, None, (gx, gy, min(A2A_ZONE_NM[tname in RED_LONG_RANGE], self.o.enemy_cap_engage_nm or 999)))
+        self._limit_engage(g, 0, None, (gx, gy, min(a2a_zone_nm(tname), self.o.enemy_cap_engage_nm or 999)))
         names = []
         for j, u in enumerate(g.units, 1):
             u.name = f"ENM-{a.id}-R{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
@@ -180,7 +195,7 @@ class RedAirPicture:
         g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
         g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
         self._land_home(g, ap)
-        self._limit_engage(g, 0, None, (sx, sy, min(A2A_ZONE_NM[tname in RED_LONG_RANGE], self.o.enemy_cap_engage_nm or 999)))
+        self._limit_engage(g, 0, None, (sx, sy, min(a2a_zone_nm(tname), self.o.enemy_cap_engage_nm or 999)))
         names = []
         for j, u in enumerate(g.units, 1):
             u.name = f"ENM-{a.id}-S{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
@@ -350,7 +365,7 @@ class RedAirPicture:
                 g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
                 self._land_home(g, self.t.airports.get(a.airport) if a.airport else None)
                 # the same rule as ours: a patrol engages inside a circle round its station, it does not chase a target home
-                self._limit_engage(g, 0, None, (gx, gy, min(A2A_ZONE_NM[tname in RED_LONG_RANGE], self.o.enemy_cap_engage_nm or 999)))   # v0.41.29: by class (Su-27 25 nm, the rest 15)
+                self._limit_engage(g, 0, None, (gx, gy, min(a2a_zone_nm(tname), self.o.enemy_cap_engage_nm or 999)))   # v0.41.29: by class (Su-27 25 nm, the rest 15)
                 callin_ = pf_.get("gx") is not None and pf_["kind"] == "CAP"
                 if callin_ and pf_.get("guard") not in own_:
                     mates_ = [q_["type"] for q_ in self._red_sel[:n_cap] if q_.get("guard") == pf_.get("guard") and q_["kind"] == "CAP"]
@@ -363,10 +378,10 @@ class RedAirPicture:
                 end_s_ = int(max(tot_s + 300, (pf_["end"] - self._start_min) * 60))
                 # v0.41.111: called in with the scramblers, to the station an alert pair of its own field would take (a pair that is outgunned stays home:
                 # `callin_` is already false for one that guards a site which is not the target; a patrol with no site link is checked here)
-                hot_xy, zone_nm = None, max(A2A_ZONE_NM[tname in RED_LONG_RANGE], min(CALLIN_ZONE_NM, self.o.enemy_cap_engage_nm or 999))
+                hot_xy, zone_nm = None, max(a2a_zone_nm(tname), min(CALLIN_ZONE_NM, self.o.enemy_cap_engage_nm or 999))
                 if pf_["kind"] == "CAP" and (callin_ or (pf_.get("gx") is None and redair.commits(d, [tname] * 2, blue_aa))):
                     # v0.41.119: forward toward the shooters (the longer-range type works further beyond its SAM cover)
-                    (hx_, hy_), _why = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), tname in RED_LONG_RANGE)
+                    (hx_, hy_), _why = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), works_beyond_cover(tname))
                     if CALLIN_MIN_NM <= dist(sx, sy, hx_, hy_) / NM <= CALLIN_REACH_NM and not any(dist(hx_, hy_, kx, ky) < knm * NM for kx, ky, knm in self._fleet_keepout()):
                         hot_xy = (hx_, hy_)
                 if hot_xy is None and callin_:
@@ -406,7 +421,7 @@ class RedAirPicture:
                     zx_, zy_, zr_ = self._field_zone(a, tx, ty)
                     zone = self.m.triggers.add_triggerzone(pt(zx_, zy_), zr_ * NM, True, f"detect {a.id}")
                     trig.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
-                    (ix0_, iy0_), _w0 = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), tname in RED_LONG_RANGE)
+                    (ix0_, iy0_), _w0 = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), works_beyond_cover(tname))
                     far_nm_ = dist(a.x, a.y, ix0_, iy0_) / NM
                     t_clk = tot_s - ALERT_ON_STATION_S - (ALERT_RAMP_LAG_S if how_ == "ramp" else ALERT_RWY_LAG_S) - far_nm_ * NM / (ALERT_DASH_KT * 0.514444)
                     t_clk = max(t_clk, ALERT_CLOCK_MIN_S)        # v0.41.123 (XO 2026-10-23 runs): an early TOT made the call fall below the floor and the clock was dropped, so the pair waited for the detection circle (called at 850 s, on station after the strike): call it at the floor instead
@@ -434,12 +449,12 @@ class RedAirPicture:
                 self.m.triggerrules.triggers.append(trig)
                 ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
                 ct.stop_after_time(int(tot_s + ALERT_STAY_AFTER_TOT_S))                  # v0.41.111: was an hour (= never in the sortie)
-                (ix_, iy_), _why = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), tname in RED_LONG_RANGE)   # v0.41.91: a defensive station, not the target itself; v0.41.119: forward toward the shooters
+                (ix_, iy_), _why = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), works_beyond_cover(tname))   # v0.41.91: a defensive station, not the target itself; v0.41.119: forward toward the shooters
                 wi_ = g.add_waypoint(pt(ix_, iy_), alt, ALERT_DASH_KT * KPH, "INTERCEPT")
                 wi_.tasks.append(ct)
                 # v0.41.120 (XO 2026-10-23 run: two pairs orbited 24 nm from the F-14 TARCAP for 12 minutes and never fired): the station waypoint carried only the
                 # orbit, so the "engage air" order of the first point was gone. It now has its own engage circle round the station, like a patrol's.
-                wi_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(ix_, iy_), int(max(A2A_ZONE_NM[tname in RED_LONG_RANGE], min(ALERT_ZONE_NM, self.o.enemy_cap_engage_nm or 999)) * NM), [task.Targets.All.Air]))
+                wi_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(ix_, iy_), int(max(a2a_zone_nm(tname), min(ALERT_ZONE_NM, self.o.enemy_cap_engage_nm or 999)) * NM), [task.Targets.All.Air]))
                 self._land_home(g, ap)
             names = []
             for j, u in enumerate(g.units, 1):
