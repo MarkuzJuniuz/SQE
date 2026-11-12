@@ -186,11 +186,11 @@ class SettingsDialog(QDialog):
                 self.hotrwy_own.setChecked(False)
         self.hotrwy.toggled.connect(_own_gate)
         self.ilsd = QComboBox()                                                  # v0.41.336 (XO 2026-11-09), S32: on or off; not tested in DCS
-        for k_, val_ in (("on", "On (small aircraft parked on the ramp)"), ("off", "Off (wind kept inside the ILS runway window)")):
+        for k_, val_ in (("on", "On (small aircraft parked beside the runway)"), ("off", "Off (wind kept inside the ILS runway window)")):
             self.ilsd.addItem(val_, k_)
         self.ilsd.setCurrentIndex(max(0, self.ilsd.findData("off" if getattr(settings, "ils_dummy", "on") == "off" else "on")))
         row(v, "ILS dummy aircraft", self.ilsd)
-        hint(v, "DCS only switches on the ILS of the runway it counts as active, and the wind picks that runway. An immortal small aircraft that never starts, parked on the ramp "
+        hint(v, "DCS only switches on the ILS of the runway it counts as active, and the wind picks that runway. An immortal small aircraft that never starts, parked on the grass beside the ILS runway "
                 "of every blue field with an ILS, is meant to keep that runway active whatever the wind, so the wind can follow the theatre's real pattern (west in summer, south in winter) "
                 "instead of staying inside the ILS runway window. Not tested in DCS yet. Off: no dummy, and the wind stays inside the window.")
         v.addStretch(1)

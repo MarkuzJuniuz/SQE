@@ -128,8 +128,10 @@ def fields_for_hook(state, terrain) -> list:
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 MAG_VAR_DEG = 6.0             # runway numbers are magnetic; true heading = number x 10 + this. About 6 degrees east for the Caucasus, from memory (judgment call, not checked against DCS)
 RUNWAY_HALF_LENGTH_M = 1200.0 # the threshold is taken this far from the airfield reference point along the runway (Caucasus strips are about 2,400 to 2,900 m; the reference point may not be the exact middle: judgment call)
-# S32 (XO 2026-11-11): the ILS dummy no longer stands at the threshold ("beside" / "on" are gone): it is a small aircraft parked on the ramp, on the parking slot farthest from the runway
-# (way off the hold-short line, but still on the ramp). Whether DCS lights the ILS for it there is not tested.
+# v0.41.395 (XO 2026-11-11): the ILS dummy is a small aircraft (Christen Eagle) standing on the grass beside the threshold of the ILS runway, past the hold-short line, turned across the
+# runway heading like a parked aircraft (the S32 ramp slot was a covered slot far away and no longer did its job). Never touching the pavement. Whether DCS lights the ILS for it is not tested.
+DUMMY_SIDE_M = 100.0          # this far to the right of the runway centreline: clear of a 45 to 60 m wide strip and beyond a hold-short line (public standards put hold lines at about 60 to 90 m, from memory; judgment call)
+DUMMY_TURN_DEG = 90.0         # its heading is the runway heading plus this (nose away from the runway; judgment call, XO 2026-11-11)
 CRATER_BLASTS_MIN = 3         # crater blasts along a closed runway: the hit count, but at least this many ...
 CRATER_BLASTS_MAX = 6         # ... and at most this many (judgment call: a few visible craters, not a field of them)
 CRATER_POWER = 450.0          # trigger.action.explosion power of one blast, about one Mk-84 (judgment call; whether DCS leaves a runway crater from a scripted blast is untested)
@@ -160,23 +162,15 @@ def _along(x: float, y: float, hdg_deg: float, d: float):
     return x + d * math.cos(h), y + d * math.sin(h)           # DCS x north, y east
 
 
-def ils_dummy_slot(ap, number: int):
-    """S32: the parking slot for the ILS dummy aircraft at this airport: of the slots an airplane can use (open ramp ones first, not a shelter), the one farthest from the
-    runway strip of the ILS runway end `number` (the strip is taken as the runway axis through the reference point, RUNWAY_HALF_LENGTH_M each way). None: no such runway or no airplane slot."""
+def ils_dummy_point(ap, number: int):
+    """The ILS dummy aircraft's place for the ILS runway end `number`: on the grass beside the threshold, DUMMY_SIDE_M to the right of the centreline (past any hold-short line),
+    turned DUMMY_TURN_DEG off the runway heading so it looks parked, not lined up. (x, y, true heading), or None for an airport without that runway."""
     if runway_end(ap, number) is None:
         return None
-    slots = [q for q in ap.parking_slots if q.airplanes]
-    slots = [q for q in slots if not q.shelter] or slots
-    if not slots:
-        return None
     hdg = number * 10.0 + MAG_VAR_DEG
-    ax, ay = _along(ap.position.x, ap.position.y, hdg, -RUNWAY_HALF_LENGTH_M)
-    bx, by = _along(ap.position.x, ap.position.y, hdg, RUNWAY_HALF_LENGTH_M)
-    def off_strip(q):
-        px, py, dx, dy = q.position.x - ax, q.position.y - ay, bx - ax, by - ay
-        t = max(0.0, min(1.0, (px * dx + py * dy) / (dx * dx + dy * dy)))
-        return math.hypot(px - t * dx, py - t * dy)
-    return max(slots, key=off_strip)
+    tx, ty = _along(ap.position.x, ap.position.y, hdg, -RUNWAY_HALF_LENGTH_M)          # the threshold lies behind the reference point as the landing aircraft flies
+    x, y = _along(tx, ty, hdg + 90.0, DUMMY_SIDE_M)
+    return x, y, (hdg + DUMMY_TURN_DEG) % 360.0
 
 
 def crater_points(state, field_id: str, ap, rng) -> list:
