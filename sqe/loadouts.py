@@ -183,7 +183,10 @@ STRIKE_PER_JET = {"Su_34": 6}             # FAB-500 per jet on a plain raid (Su-
 #  - Launch envelope (redstar.gr, Kh-59M page): carrier at 600 to 1,100 km/h and 0.2 to 5 km (anti-ship page: up to 11 km): a launch from 20,000 ft at 450 km/h is inside it only at the speed's low end (the raid flies 450 KPH, the table below it: judgment call, the probe shows what the AI does).
 #  - Jets and count: pydcs gives the Su-24M the Kh-59M on pylons 2 and 7 and the Su-34 on pylons 4 and 9: two missiles a jet each, a symmetric pair. The "up to three on a Su-34" in the musing is not possible in the game (the only count found in public text, "up to 5", is for the Kh-59MK).
 #  - The DCS AI's use of it from a Bombing / AttackGroup task is NOT known: that is what the probe mission from `.private/probes/s48` is for.
+# PROBE (XO flew `.private/probes/s48`, 2026-11-12): the AI fires the Kh-59M (X_59M) from a Bombing or AttackMapObject task on a point, 2 a jet, both jets; AttackGroup and AttackUnit never fired. The Su-34 fires AT the launch waypoint, the Su-24M about 3 nm
+#  before it, and ONLY with the APK-9 datalink pod on pylon 4 (without it the Su-24M kept its ammo and flew home): KH59_POD. Missiles flew 55 to 58.6 nm and hit about 335 to 355 s later; the jets turned for home within about 25 s of the second missile.
 KH59_PER_JET = {"Su_24M": 2, "Su_34": 2}   # Kh-59M per jet: every pylon that takes one (pydcs: 2 and 7 / 4 and 9, a balanced pair); the rest stay empty (judgment call: 930 kg each, the pair is the load)
+KH59_POD = {"Su_24M": 4}   # the APK-9 pod (pydcs `APK_9_Datalink_Pod`, clsid {APK_9}) a type needs on this pylon before the AI fires its Kh-59M (the Su-34 needs none). It is not a weapon: `_limit` and the "unarmed" warning count only the missiles
 
 
 def _limit(out: dict, n) -> dict:
@@ -239,7 +242,7 @@ def enemy_arm_loadout(cls_name: str) -> dict:
 
 
 def enemy_standoff_loadout(cls_name: str) -> dict:
-    """S48: Kh-59M (AS-18 Kazoo) standoff missiles for a raid on a fixed target (Su-24M, Su-34): every pylon that takes one, at most KH59_PER_JET. Empty for a type that cannot carry one (the Su-25): the caller keeps the free-fall kit there."""
+    """S48: Kh-59M (AS-18 Kazoo) standoff missiles for a raid on a fixed target (Su-24M, Su-34): every pylon that takes one, at most KH59_PER_JET, plus the APK-9 datalink pod where the type needs it (`KH59_POD`). Empty for a type that cannot carry one (the Su-25): the caller keeps the free-fall kit there."""
     from dcs import planes
     cls = getattr(planes, cls_name, None)
     out = {}
@@ -248,7 +251,15 @@ def enemy_standoff_loadout(cls_name: str) -> dict:
         w = _find(P, "Kh_59M") if P is not None else None
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
-    return _limit(out, KH59_PER_JET.get(cls_name))
+    out = _limit(out, KH59_PER_JET.get(cls_name))
+    pod = KH59_POD.get(cls_name)
+    if out and pod:                                                              # the Su-24M fires only with its datalink pod (probe): no pod found = an EMPTY kit, so the raid is not flagged and the unarmed warning is not hidden
+        P = getattr(cls, f"Pylon{pod}", None)
+        w = _find(P, "APK_9") if P is not None else None
+        if w is None:
+            return {}
+        out[pod] = {"CLSID": w[1]["clsid"]}
+    return out
 
 
 def enemy_strike_loadout(cls_name: str) -> dict:

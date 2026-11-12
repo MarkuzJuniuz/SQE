@@ -97,10 +97,10 @@ RAID_IP_LANE_PTS = 12         # waypoint budget for the bends of the dash lane r
                               # v0.41.287 (XO 2026-11-04: "every SAM threatening the intercept line"): RAID_BLOCK_MAX (the old cap of 2 blocking sites, PR 2) is retired;
                               # every live site tm.raid_inbound_sites finds now gets its own SEAD/DEAD flight, not just the minimum needed to open a lane
 ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
-KH59_RAIDS = False            # S48 (XO musing 2026-11-12): red's Su-24M / Su-34 strike raids on a fixed aim fire the Kh-59M from standoff instead of dropping bombs over the target. OFF until XO's probe run (.private/probes/s48) shows which task makes the AI fire it, and from how far
-KH59_LAUNCH_NM = 50           # ...they fire from this far from the aim: inside the 115 km (62 nm) Wikipedia gives for the Kh-59M with margin for a low launch, outside HAWK_NM 25 and PATRIOT_NM 40 (judgment call; the probe measures the firing distance)
-KH59_WINDOW_S = 240           # ...and the missile task runs this long after the jets reach the launch point (judgment call, like ARM_WINDOW_S: the TV-guided missile flies about 50 nm at Mach 0.9 to 1: 3 to 4 minutes; NOT measured)
-KH59_TASK = "Bombing"         # ...which DCS task carries the launch: "Bombing" (a point: the supply sites and garrisons are statics, no group to attack), "AttackMapObject". Set from the probe's answer (variants A and B of build_probe.py)
+# S48: the switch KH59_RAIDS (and the share, the hit size) live in `raids.py`: the plan reads them too, and `raids` cannot import this module. The spawner reads `raids.KH59_RAIDS` at call time.
+KH59_LAUNCH_NM = 50           # the Kh-59M raid fires from this far from the aim: inside the 115 km (62 nm) Wikipedia gives for the Kh-59M with margin for a low launch, outside HAWK_NM 25 and PATRIOT_NM 40 (judgment call; the probe, 2026-11-12: the Su-34 fired at 54.9 nm, the Su-24M at 58.6 nm, the missiles hit: 50 is safe inside the range)
+KH59_WINDOW_S = 240           # ...and the missile task runs this long after the jets reach the launch point (judgment call, like ARM_WINDOW_S; the probe: the jets turn for home on their own within about 25 s of the second missile, so the window never bites)
+KH59_TASK = "Bombing"         # ...which DCS task carries the launch: "Bombing" on the aim point (probe 2026-11-12: Bombing and AttackMapObject fire the Kh-59M; AttackGroup and AttackUnit never did; the supply sites and garrisons are statics, no group to attack)
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
 
 
@@ -901,9 +901,9 @@ class RaidSpawns:
         cvb = st.bases[package.objective.target_id]
         aim = ex.get("aim", "") or ""
         sead_r = bool(ex.get("sead"))                            # S36b (XO 2026-11-11): a SEAD raid on a blue SAM site: its "bombers" are the SEAD flights, they fire from standoff and turn home
-        from .raids import raid_members as _rm48
-        kh59_r = bool(KH59_RAIDS and ex.get("kh59") and ex.get("land") and aim and not sead_r
-                      and all(enemy_standoff_loadout(t_) for _a, t_, _n in _rm48(ex)))       # S48: every member must carry a Kh-59M (a Su-25 cannot: a pool with one is a plain raid), on a supply site / garrison aim (not the runway)
+        from . import raids as _raids48
+        kh59_r = bool(_raids48.is_kh59(ex) and ex.get("land") and aim and not sead_r
+                      and all(enemy_standoff_loadout(t_) for _a, t_, _n in _raids48.raid_members(ex)))       # S48 (the switch is `raids.KH59_RAIDS`, read now): every member must carry a Kh-59M (a Su-25 cannot: a pool with one is a plain raid), on a supply site / garrison aim (not the runway)
         launch_ = None
         dx, dy = (ex.get("dest") or (cvb.x, cvb.y))              # where the raiders are going: the field, a supply site, a garrison or a sector
         cvg = self.ship.get(cvb.id)
