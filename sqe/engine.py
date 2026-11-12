@@ -1425,6 +1425,7 @@ class Session:
         pl["last_date"] = str(st.campaign_date())
         st.pilot = pl
         out["objective"], out["objective_type"] = pend["objective"], pend["objective_type"]
+        out["land_raid"] = bool((((pend.get("package_dict") or {}).get("extra")) or {}).get("land"))          # v0.41.394: the debrief of a raid on land does not talk about the fleet
         rng = self._rng(33 + 1000 * st.turn)
         out["story"] = narrative.debrief_story(out, st, rng)
         out["tempo"] = tempo.record(st, pend["objective_type"], tempo.tone_of(out), tempo.credits(out))      # v0.41.147: the flown result nudges the background jobs of its kind (and resets the idle clock)

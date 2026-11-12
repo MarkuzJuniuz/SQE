@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.394, raid intercepts on land no longer talk about the fleet
+The commander's intent for an intercept of a raid on a field, supply site, garrison or your troops now names what is attacked and talks about bombers and bomb release, not anti-ship missiles and the fleet (it read "Backfires are inbound with anti-ship missiles" for a raid on the Kutaisi refinery). The debrief says "the intercept" instead of "the patrol over the fleet". The carrier raid keeps its fleet text.
+
 ## v0.41.393, a Fighter Sweep you fly no longer fails to load in the Mission Editor
 A sweep route with no marshal point put the PUSH time-lock straight after the locked takeoff, which the Mission Editor refuses. The PUSH speed is now left free. Waypoints, altitudes, speeds and times are unchanged. The smoke test now checks the waypoint locks on one mission of every kind of package, as your own flight and as the all-AI test.
 
