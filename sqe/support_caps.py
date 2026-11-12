@@ -18,7 +18,7 @@ from .strike_tasks import KPH
 
 TANKER_COVER_NM = 30          # v0.41.26: a tanker track this close to a friendly field's Patriot (or the carrier group) counts as under friendly SAM cover
 SUPPORT_CAP_ZONE_NM = 25      # v0.41.7: HAVCAP / tanker CAP / base BARCAP engage inside this circle round what they guard
-TNKCAP_ZONE_NM = 40           # v0.41.26: the tanker CAP engages inside this circle round the tanker (an AMRAAM's reach), never further
+TKR_HAVCAP_ZONE_NM = 40           # v0.41.26: the tanker CAP engages inside this circle round the tanker (an AMRAAM's reach), never further
 CARRIER_BARCAP_ZONE_NM = 30            # v0.41.21: the carrier BARCAP engages within this of the boat (v0.41.14: 50; it reached out and set off red scrambles)
 CAP_REACH_BEYOND_NM = 25     # v0.41.113: a base / carrier BARCAP's engage circle reaches this far past its station (judgment call)
 CARRIER_BARCAP_NM = 12                 # v0.41.21: the carrier BARCAP orbits this far out from the boat toward the nearest enemy field (v0.41.7: 22)
@@ -164,13 +164,13 @@ class SupportCaps:
         spec = AIRCRAFT[f.aircraft]
         base = st.bases[f.base_id]
         # v0.41.7: each guards one thing, from the side the threat comes from (the nearest enemy fighter field), and fights only inside
-        # a circle round it. HAVCAP: the AWACS (well back). TNKCAP: the tanker (forward, on the way home). base BARCAP: the home field. Carrier BARCAP: the boat.
+        # a circle round it. HAVCAP: the AWACS (well back). TKR_HAVCAP: the tanker (forward, on the way home). base BARCAP: the home field. Carrier BARCAP: the boat.
         tc_ = getattr(self, "_tanker_c", None)
         axis_ = None                                    # S9: the line CAP2 lies across (plus or minus 90); None = thr_
-        if f.tag == "TNKCAP" and tc_ is not None:
-            gx_, gy_ = tc_; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 5 * NM); zr_ = TNKCAP_ZONE_NM
+        if f.tag == "TKR_HAVCAP" and tc_ is not None:
+            gx_, gy_ = tc_; thr_ = tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg); sx, sy = offset(gx_, gy_, thr_, 5 * NM); zr_ = TKR_HAVCAP_ZONE_NM
             axis_ = geom.hdg                            # S9: CAP2 along the tanker's own track (it runs on hdg + 90), not across the threat
-        elif f.tag in ("HAVCAP", "TNKCAP"):
+        elif f.tag in ("HAVCAP", "TKR_HAVCAP"):
             gx_, gy_ = hav_xy; thr_ = getattr(self, "_awacs_fh", geom.hdg) if f.tag == "HAVCAP" else geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
         elif f.tag == "CARRIER_BARCAP":
             # v0.41.74: the BARCAP area of the boat that faces the target (barcap.py); the boat may have been slid back for this sortie, so the
@@ -213,7 +213,7 @@ class SupportCaps:
         # S9 (v0.41.350): the leg wished for this job, across the axis, shortened until clear; None = today's point (the floor leg_ on thr_ + 90)
         from .mission_builder import CAP_SPREAD_NM          # here, not at the top: mission_builder imports this module
         wish_ = CAP_SPREAD_NM[f.tag]
-        if f.tag == "TNKCAP" and tc_ is not None:
+        if f.tag == "TKR_HAVCAP" and tc_ is not None:
             wish_ = min(wish_, getattr(self, "_tanker_race", 30 * NM) / NM)
         elif f.tag == "HAVCAP":
             wish_ = min(wish_, 40)                      # the AWACS track is 40 nm

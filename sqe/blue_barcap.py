@@ -86,7 +86,7 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
     """This turn's standing patrols and guards (v0.41.339, Phase 4b; it was a plan for the whole day, `plan`). `t0`: the turn's first minute of the day; `ledger`: the turn's jets (the pairs are taken
     off it, so the packages are built from what is left); `rng`: seeded by the turn; `wins`: this turn's AWACS / tanker windows (`support_assets.plan`). The turn's flights are added to
     `state.barcap["blue_flights"]` (those of earlier turns of the day stay; a plan of this turn made before is replaced) and `blue_cover` (minutes of the day each area has a pair up) is made
-    again from them. -> this turn's flights [{id, kind BASE_BARCAP|CARRIER_BARCAP|HAVCAP|TNKCAP, asset, area, squadron, aircraft, size, start, end (minutes of the day), callsign "", turn, wave}]."""
+    again from them. -> this turn's flights [{id, kind BASE_BARCAP|CARRIER_BARCAP|HAVCAP|TKR_HAVCAP, asset, area, squadron, aircraft, size, start, end (minutes of the day), callsign "", turn, wave}]."""
     bc = barcap.ensure(state)
     level = max(1, min(3, int(getattr(d, "level", 1))))
     t1 = t0 + clock.TURN_MIN
@@ -123,7 +123,7 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
 
 
 # the guard of each support asset: key -> (tag, whether the guard sortie is the tanker's long stay)
-GUARDS = {"bl_kc135": "TNKCAP", "bl_e3": "HAVCAP", "bl_e2": "HAVCAP"}      # tankers first: their guard is not optional
+GUARDS = {"bl_kc135": "TKR_HAVCAP", "bl_e3": "HAVCAP", "bl_e2": "HAVCAP"}      # tankers first: their guard is not optional
 
 
 def _havcap_squadrons(state, base) -> list:
@@ -311,12 +311,12 @@ def status_lines(state) -> list:
     by = {}
     for n, d, pc in parts:
         by.setdefault(n, []).append(f"{d} {pc}%")
-    g = [f for f in bc["blue_flights"] if f["kind"] in ("HAVCAP", "TNKCAP")]
+    g = [f for f in bc["blue_flights"] if f["kind"] in ("HAVCAP", "TKR_HAVCAP")]
     out = ["BARCAP cover so far today (share of 24 h with a pair up):"] + [f"   {n}: " + ", ".join(v) for n, v in by.items()]
     if not by:
         out[0] = "BARCAP cover so far today: none planned"
     if g:
-        out.append(f"Tanker / AWACS guards so far today: {sum(1 for f in g if f['kind'] == 'TNKCAP')} tanker, {sum(1 for f in g if f['kind'] == 'HAVCAP')} AWACS sorties")
+        out.append(f"Tanker / AWACS guards so far today: {sum(1 for f in g if f['kind'] == 'TKR_HAVCAP')} tanker, {sum(1 for f in g if f['kind'] == 'HAVCAP')} AWACS sorties")
     return out + detection_lines(state)
 
 
