@@ -165,7 +165,7 @@ _OPEN = {
 _LOSS = {0: ["Everyone came home.", "No losses to report.", "All aircraft recovered."],
          1: ["We lost one aircraft.", "One airframe did not make it back.", "A single loss, and it will be felt."],
          2: ["Two aircraft were lost.", "The wing is down two airframes tonight."]}
-_PLAYER = {"recovered": ["You brought your jet home.", "You recovered safely."],
+_PLAYER = {"recovered": [""],                         # v0.41.414 (XO): nothing is said when you landed
            "ejected": ["You ejected and are being recovered.", "You punched out. Search-and-rescue is on the way."],
            "lost": ["Your aircraft was lost. The squadron will write to your family if you are not found.",
                     "You did not return."],
@@ -191,13 +191,15 @@ def debrief_story(outcome: dict, state, rng: random.Random) -> str:
     if outcome.get("objective_type") in (ObjectiveType.BARCAP.value, ObjectiveType.FLEET_DEFENSE.value):
         k = outcome.get("red_air_lost", 0)
         parts.append(f"The {'intercept' if outcome.get('land_raid') else 'patrol over the fleet'} {'splashed ' + str(k) + ' hostile aircraft' if k else 'saw no engagement'}.")
+    elif any(a.get("primary") and a.get("suppressed") and not a.get("destroyed") for a in outcome.get("red_assets") or []):
+        parts.append(f"{obj}: the site's radars are out; it is suppressed.")
     else:
         parts.append(f"{obj}: damage assessment puts the target at {dmg:.0%} destroyed.")
     if outcome.get("red_air_lost") and outcome.get("objective_type") not in (ObjectiveType.BARCAP.value, ObjectiveType.FLEET_DEFENSE.value):
         parts.append(f"{outcome['red_air_lost']} enemy aircraft were also destroyed.")
     parts.append(rng.choice(_LOSS[min(lost, 2)]) if lost < 3 else f"The package lost {lost} aircraft.")
     pl = rng.choice(_PLAYER.get(outcome.get("player", "recovered"), _PLAYER["recovered"]))
-    if pl:                                              # nothing is said when you were still airborne at the end
+    if pl:                                              # nothing is said when you landed or were still airborne
         parts.append(pl)
     parts.append(rng.choice(_FOLLOW[tone]))
     return "  ".join(parts) + f"\n\n-- {intel_officer(rng)}"

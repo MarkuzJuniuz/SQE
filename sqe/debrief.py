@@ -1531,6 +1531,7 @@ dump()
 SCRUB_LOSS_FRAC = 0.5          # v0.41.223: a side of a package (strikers, or the covering fighters) that has lost this share of its jets scrubs the package (judgment call: XO's run, a 2-ship that lost one went home; the Gudauta CAS escort was down to two of four)
 SCRUB_STRIKE_GRACE_S = 180     # ...the strikers lost: scrub until this long after TOT (after that the strike is done or moot)
 SCRUB_COVER_LEAD_S = 90        # ...the cover lost: scrub only until this long before TOT (strikers that have committed finish the job)
+SUPPRESSED_CREDIT = 0.6        # v0.41.414 (S61, XO): a primary SAM left suppressed (radars gone) reads as a win in the debrief: target_damage is raised to this (judgment call: narrative's 'great' threshold). Asset health and the war sim are untouched
 BINGO_PCT = 20            # v0.41.92: the hook's bingo for pairs (BINGO_FUEL in the Lua below); the debrief fuel lines use it
 BINGO_REPORT_PCT = 35      # ...and report a flight that ended the mission at or under this much fuel
 
@@ -1798,6 +1799,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             if a.kind.value == "SAM" and rad and all(u in lost for u in rad) and not a.destroyed:
                 a.suppressed = True; ra_["suppressed"] = True               # SEAD worked: the radars are gone, but the launchers are still there
                 out["lines"].append(f"{a.name}: radars destroyed, launchers intact. SUPPRESSED, not dead: it needs a DEAD strike to finish it.")
+                if g.get("primary"):
+                    out["target_damage"] = max(out["target_damage"], SUPPRESSED_CREDIT)
         elif g["kind"] == "support":                              # v0.41.87: a tanker / AWACS shot down comes off its asset
             if dead:
                 from . import support_assets as _sa
