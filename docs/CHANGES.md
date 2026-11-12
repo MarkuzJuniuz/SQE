@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.414, debrief: no "you landed" line; a suppressed SAM is a win
+The debrief no longer says you brought your jet home. A SEAD or DEAD job that knocks out a site's radars is now reported as a win (the site is "suppressed") instead of 0% destroyed.
 ## v0.41.413, red's anti-radar raids fire one coordinated salvo
 Red's SEAD raids on a blue Patriot or HAWK site now launch their Kh-31P missiles all together, from several directions, instead of one group after another from a single line. The jets also no longer turn aside to attack other SAM sites on the way in: they fly to their launch point and fire at the site they were sent against.
 ## v0.41.412, the tanker guard reads HAVCAP
