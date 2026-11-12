@@ -52,7 +52,7 @@ class FighterStations:
         its cover up for the longest hold the gate allows: AIR_HOLD_STRIKE_S for the air gate, HOLD_S (12 min, in the Lua hook) for the radar gate.
         A stand-off job and the SEAD aims have no gate."""
         o = package.objective
-        if o.aim in ("STANDOFF", "SEAD"):
+        if o.aim in ("STANDOFF", "SEAD") and (not (o.type == ObjectiveType.STRIKE and o.aim == "STANDOFF") or any(getattr(f_, "kit", "") for f_ in package.flights)):      # S60: a stand-off EWR strike with no kit flight (a person's) keeps the air gate's slack
             return 0
         if o.type in (ObjectiveType.STRIKE, ObjectiveType.CAS):
             return GATE_AIR_HOLD_S

@@ -20,6 +20,10 @@ PEN_PER_JET = {"F-15E": 2}
 # tanks the jet carries 10,246 / (10,246 + 2 x 2,011) = 0.72 of the fuel of the plain STRIKE load. Judgment call 0.75 of the combat radius (`_in_range` multiplies it in; the 30 nm stand-off release saves
 # flight but is not counted). At 450 nm: 337 nm, 506 with a safe tanker track (x1.5): the F-15E squadrons (Vaziani, Tbilisi) reach every red field but Gelen (353 to 357) and Krymsk (366 to 369) without one.
 PEN_REACH = 0.75
+# S60 (XO 2026-11-12: "no more GPS guided EWR strikes"): an EWR strike is a stand-off job. Who flies it, in this order: the first airframe with a squadron that has 2+ free jets in range for its kit. The ORDER is
+# Opus's pick, XO has not chosen it (judgment call): JSOW-C's unitary warhead suits one radar truck best (the F-15E), then the F-16's JSOW-A, then the Hornet's SLAM-ER. XO may reorder it. The F-16 only fills the
+# JSOW slot of an EWR strike (KIT_JETS["JSOW"] also lists the Hornet, which flies its SLAM-ER here). The PEN kit stays off SAM sites and counter-air: only a runway crater and an EWR strike offer it.
+EWR_KIT_ORDER = (("F-15E", "PEN"), ("F-16C", "JSOW"), ("FA-18C", "SLAM"))
 JSOW_FLIGHT_KITS = ("JSOW", "PEN")            # S51: the kits whose AI flight takes the JSOW route (launch point on its own axis, release, home) and is tasked from it. DEAD-only code tests "JSOW" alone
 
 _D: dict = {

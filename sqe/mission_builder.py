@@ -2666,6 +2666,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """v0.41.309 (XO 2026-11-05: "how do we make the 18 just focus on their target? one hit the bunker, the rest targeted god knows what"): the aim points of a SLAM-ER
         launch: up to `SLAM_AIMS` of the target site's buildings (the first one, then the one furthest from it), a missile each. A single Bombing task on the site's centre
         sent one missile at the guard vehicles and left the rest to hunt radars under weapons free (XO's run). No buildings known: the waypoint's own aim point."""
+        a_ = self.state.assets.get(package.objective.target_id)
+        if a_ is not None and a_.kind == AssetKind.EWR:                  # S60: an EWR strike: both missiles of a jet on the radar vehicle itself (it is a vehicle: no buildings; the waypoint's aim is the site's centre)
+            us_ = self._ewr_units(package)
+            return [(us_[0].position.x, us_[0].position.y)] * SLAM_AIMS if us_ else [tuple(w.aim or (w.x, w.y))] * SLAM_AIMS
         spots = list(self._bld_xy.get(package.objective.target_id) or [])
         if len(spots) > SLAM_AIMS:
             far = max(spots[1:], key=lambda s_: dist(s_[0], s_[1], spots[0][0], spots[0][1]))
@@ -3284,7 +3288,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         (COUNTER_AIR) goes in as before."""
         geom.tiers, geom.stand = {}, {}
         geom.ai_player = bool(self.o.player_is_ai)
-        geom.launch_nm = SLAM_LAUNCH_NM if (package.objective.type == ObjectiveType.STRIKE and package.objective.aim == "STANDOFF") else 0.0      # v0.41.299: the Standoff Strike's launch distance
+        geom.launch_nm = SLAM_LAUNCH_NM if (package.objective.type == ObjectiveType.STRIKE and package.objective.aim == "STANDOFF"
+                                            and not any(getattr(f_, "kit", "") in JSOW_FLIGHT_KITS for f_ in package.flights)) else 0.0      # v0.41.299: the Standoff Strike's launch distance; S60: not for an EWR strike's JSOW / PEN flight, which takes the JSOW rule (30 to 45 nm)
         from .packages import is_sweep
         geom.sweep = is_sweep(package.objective)
         geom.cas_floor = profiles.cas_floor(self.state, [geom.ip, (tx, ty), geom.egr]) if package.objective.type == ObjectiveType.CAS else None      # S31a
