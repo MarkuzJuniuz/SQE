@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.398, raid intercepts fold into one mission, and the Missions list marks the ones that carry red's raids
+Raid intercepts that start inside the time windows now fly in one mission, wherever the raids are going (new setting Merge raids on the Mission Build page, on by default). A raid also counts along its way in, from its airfield to its target: a blue package under that line folds into the raid's mission, and you flying a blue package get the raids that cross your area. Over the unit limit, a raid far from the fight goes first. In the Missions list a mission with only red's packages has a red border and one that mixes yours with red's has an amber border; in the right panel red's packages sit in a red frame.
 ## v0.41.397, red sends SEAD packages at your SAM sites, no more SEAD and DEAD in front of its bombers
 At Levels 2 and 3 red no longer sends SEAD and DEAD groups with its bomber raids, and no longer raids a target that lies under a live Patriot or HAWK. Instead it sends escorted SEAD packages at the Patriot and HAWK sites themselves: four Su-24M or Su-34 with Kh-31P, fired from about 40 nm out, with a pair of fighters for every four (a full-strength Patriot gets two packages in one raid, a HAWK one). The missiles that get through cut the site's health, and once the cover over a field is down red's bombers raid it again; your repairs and rebuilds put the sites back. Level 1 is unchanged.
 ## v0.41.396, AI strike flights go for their assigned target

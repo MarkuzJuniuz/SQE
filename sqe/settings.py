@@ -81,6 +81,7 @@ class AppSettings:
     merge_radius_nm: int = 15             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in (v0.41.131: 15, was 25)
     merge_fwd_min: int = 30               # v0.41.131: packages that start up to this many minutes AFTER yours fly with you (5 minute steps in Settings, 0 to 60)
     merge_v131: bool = False
+    merge_raids_all: bool = True          # S39: raid intercepts that start inside the time windows fly in one mission, at any distance (off: a raid folds in only when its way in passes the target area)
     merge_back_min: int = 15              # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
     merge_max_units: int = 250            # v0.41.131: the unit limit counts the WHOLE mission again, merged packages included (ruins go first, then the latest-starting package); the 500 ceiling in sqe/data/limits.json is dormant
     reactive: bool = True                 # enemy reinforcements and blue alert pairs can launch during a sortie

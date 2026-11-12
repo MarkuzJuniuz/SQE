@@ -25,19 +25,23 @@ from .dialogs import DayResolvedDialog, DebriefDialog, NewCampaignDialog, Settin
 from .widgets import MapView, SideCard, StatCard, StepSpin, card
 from . import overview_view as V
 
-URGENT_ROLE = Qt.UserRole + 1
+URGENT_ROLE = Qt.UserRole + 1     # "" | "red" | "mixed": the row's mission carries no red package / only red's / red's and yours together (S39)
+URGENT_COLOR = "#d8453b"          # red border: only red's packages (raid intercepts, troops in contact, raid prep)
+MIXED_COLOR = theme.AMBER         # amber border: your packages and red's flying in one mission
 AUTO_INDENT = 22                  # S23: the Crew Rest hours control sits under its check box, indented past the check box's tick (px)
 AUTOSKIP_MAX_TURNS = 42          # an auto-skip run stops after at most a week of turns from its start (6 a day; S25, was 84 at 12 a day), a judgment call (campaign rules plan Phase 11)
 
 
 class UrgentDelegate(QStyledItemDelegate):
     """v0.41.304 (XO 2026-11-05: "show the scrambles with red borders on the main UI"): a job red is doing to you now (a raid on your fleet, field or supply site, troops in contact)
-    keeps the normal row and gets a red border."""
+    keeps the normal row and gets a red border. S39: the border comes from the whole mission (the row's package plus what flies with it): "red" = only red's packages,
+    "mixed" = red's and yours together, drawn amber; no border when none is red's."""
     def paint(self, painter, option, index):
         super().paint(painter, option, index)
-        if index.data(URGENT_ROLE):
+        role = index.data(URGENT_ROLE)
+        if role:
             painter.save()
-            painter.setPen(QPen(QColor("#d8453b"), 2))
+            painter.setPen(QPen(QColor(MIXED_COLOR if role == "mixed" else URGENT_COLOR), 2))
             painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
             painter.restore()
 
@@ -352,7 +356,7 @@ class MissionsPage(QWidget):
             it = QListWidgetItem(f"#{p.number}  {p.title}   {p.start}{' (night)' if night else ''}"
                                  f"{'   [JOINT]' if p.joint else ''}{f'   +{len(extra)} package' + ('s' if len(extra) > 1 else '') if extra else ''}"
                                  f"\n{p.objective.description}{' (no warning)' if (p.extra or {}).get('unwarned') else ''}" + ("" if ok else "\n(no flight for your aircraft)"))
-            it.setData(Qt.UserRole, p.number); it.setData(URGENT_ROLE, p.urgent); it.setSizeHint(QSize(0, 66))
+            it.setData(Qt.UserRole, p.number); it.setData(URGENT_ROLE, self._urgent_role(p, extra if ok else self.members.get(p.number, []))); it.setSizeHint(QSize(0, 66))
             if not ok:
                 it.setForeground(QColor(theme.DIM))
             self.lst.addItem(it)
@@ -432,39 +436,56 @@ class MissionsPage(QWidget):
                 t.setItem(i, 5, _item("AI Support" if f.tag else ("On alert (AI)" if sp else f"AI {spec.service}"), theme.DIM))
         return t, bool(opts)
 
+    @staticmethod
+    def _urgent_role(p, others) -> str:
+        """S39: the list border of a mission: "red" when every package in it is red's (`urgent`), "mixed" when red's and yours fly together, "" when none is red's."""
+        u = [bool(x.urgent) for x in [p] + list(others)]
+        return "" if not any(u) else "red" if all(u) else "mixed"
+
+    def _section(self, urgent: bool):
+        """S39: the layout one package's section of the right panel goes into. A red package's section sits in a red frame; the others go straight into the body."""
+        if not urgent:
+            return self.bl
+        fr = QFrame(); fr.setObjectName("urgentBox"); fr.setStyleSheet(f"QFrame#urgentBox {{ border: 2px solid {URGENT_COLOR}; }}")
+        lay = QVBoxLayout(fr); lay.setContentsMargins(8, 6, 8, 6)
+        self.bl.addWidget(fr)
+        return lay
+
     def _show(self, row):
         if row < 0 or row >= len(self.pkgs):
             return
         p = self.pkgs[row]; st = self.sess.state; mem = self.members.get(p.number, [])
         self._clear_body()
         night = is_night(st.campaign_date(), p.start)
-        self.bl.addWidget(self._label(p.objective.description, "title"))
+        L = self._section(bool(p.urgent) and bool(mem))
+        L.addWidget(self._label(p.objective.description, "title"))
         from .. import weather as _wx
         _w = self.sess.wx_of(p)
-        self.bl.addWidget(self._label(f"Mission start {p.start} local ({'night' if night else 'day'})   -   " + (_wx.describe(_w) if _w else "clear weather"), "h2", theme.AMBER))
+        L.addWidget(self._label(f"Mission start {p.start} local ({'night' if night else 'day'})   -   " + (_wx.describe(_w) if _w else "clear weather"), "h2", theme.AMBER))
         if p.extra.get("scrub"):
-            self.bl.addWidget(self._label("SCRUBBED: " + p.extra["scrub"] + ". Nobody flies this package and the war simulation leaves its target alone.", None, theme.RED))
+            L.addWidget(self._label("SCRUBBED: " + p.extra["scrub"] + ". Nobody flies this package and the war simulation leaves its target alone.", None, theme.RED))
         for _n in p.extra.get("wx_notes", []):
-            self.bl.addWidget(self._label("Weather loadout: " + _n, "small", theme.AMBER))
+            L.addWidget(self._label("Weather loadout: " + _n, "small", theme.AMBER))
         sp = bool(p.extra.get("setpiece"))
         tbl, yours = self._flight_table(p)
         if sp:
             for i_, para in enumerate(narrative.setpiece_text(st, p, yours, AIRCRAFT[st.player.aircraft].display)):
-                self.bl.addWidget(self._label(para, "dim" if i_ else None))
+                L.addWidget(self._label(para, "dim" if i_ else None))
         else:
-            self.bl.addWidget(self._label(narrative.intent_for(st, p), "dim"))
+            L.addWidget(self._label(narrative.intent_for(st, p), "dim"))
         if yours:
-            self.bl.addWidget(self._label(self._fly_note(p), "small"))
-        self.bl.addWidget(tbl)
+            L.addWidget(self._label(self._fly_note(p), "small"))
+        L.addWidget(tbl)
         for x in mem:                                       # the packages that fly with this one: each with its own flights and FLY button
             line = QFrame(); line.setFrameShape(QFrame.HLine); line.setStyleSheet(f"color:{theme.DIM};"); self.bl.addWidget(line)
             xnight = is_night(st.campaign_date(), x.start)
-            self.bl.addWidget(self._label(f"Also in this mission: #{x.number}  {x.title}   {x.start}{' (night)' if xnight else ''}", "h2", theme.AMBER))
-            self.bl.addWidget(self._label(x.objective.description, "title"))
+            XL = self._section(bool(x.urgent))
+            XL.addWidget(self._label(f"Also in this mission: #{x.number}  {x.title}   {x.start}{' (night)' if xnight else ''}", "h2", theme.AMBER))
+            XL.addWidget(self._label(x.objective.description, "title"))
             xt, xyours = self._flight_table(x)
             if xyours:
-                self.bl.addWidget(self._label(self._fly_note(x), "small"))
-            self.bl.addWidget(xt)
+                XL.addWidget(self._label(self._fly_note(x), "small"))
+            XL.addWidget(xt)
         sup = ("Support: " + ", ".join(f"{s.label} ({s.slot.title()})" for s in p.support) +
                ("  |  JTAC on the ground" if p.jtac else "") + ("  |  Joint Navy / Air Force package" if p.joint else ""))
         ex = self.sess.merge_candidates(p)
