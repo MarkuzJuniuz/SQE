@@ -50,10 +50,20 @@ class ObjectiveType(str, Enum):
 SEAD_AIMS = ("SEAD", "STANDOFF")        # packages with HARM shooters timed on the salvo
 
 
+# S52 (XO 2026-11-12): the internal flight tags BASE_BARCAP and CARRIER_BARCAP are never shown; players read BARCAP. ONE table, every printed tag goes through tag_label.
+TAG_LABEL = {"BASE_BARCAP": "BARCAP", "CARRIER_BARCAP": "BARCAP"}
+OLD_TAG_NAMES = {"BASECAP": "BASE_BARCAP", "CVCAP": "CARRIER_BARCAP"}      # the names a save from before S52 (v0.41.410) holds; state.from_dict maps them once on load
+
+
+def tag_label(tag: str) -> str:
+    """What a player reads for a flight tag (HAVCAP and TNKCAP as they are)."""
+    return TAG_LABEL.get(tag, tag)
+
+
 def task_label(f, obj) -> str:
     """Short role label for package tables and the radio: SEAD, SO DEAD (Standoff DEAD, JSOW), DEAD (Close DEAD, GBU) or the role."""
     if getattr(f, "tag", ""):
-        return f.tag
+        return tag_label(f.tag)
     if getattr(f, "kit", "") in ("SLAM", "PEN"):
         return "SO STRIKE"                  # v0.41.298: the Standoff Strike flight (SLAM-ER); S51: and the F-15E's standoff runway crater (PEN)
     if getattr(f, "kit", "") == "JSOW":

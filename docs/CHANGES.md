@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.411, BARCAP is the only name for base and carrier patrols
+The base and carrier patrol flights no longer read BASECAP or CVCAP in the package tables, radio, kneeboard, briefing or guide; they say BARCAP, like the other patrols. HAVCAP and TNKCAP are unchanged. Old campaigns load as before.
 ## v0.41.410, F-15Es crater runways from stand-off range; JSOW hits now count
 A runway strike is now flown by F-15Es when an F-15E squadron is in reach and has jets free: two AGM-154C JSOWs a jet (no wing tanks, so a shorter reach), released on the middle of the runway from about 30 nm out, then straight home; nobody crosses the airfield. With no F-15E free the strike is the plain bombing run it was. Standoff DEAD stays the Vipers' and Hornets'. The mission hook now also counts the AGM-154 JSOW as a runway hit (it saw none before): three JSOWs on the strip close the field like three bombs.
 ## v0.41.409, the F-14B(U) holds further out, the MiG-31 is a stand-off interceptor

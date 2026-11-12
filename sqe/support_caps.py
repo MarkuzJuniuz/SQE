@@ -1,4 +1,4 @@
-"""Support CAPs: the tanker CAP, HAVCAP, base CAP and carrier CAP of a mission (which ones, where they sit, their route), and moving the carrier group out of the fight.
+"""Support CAPs: the tanker CAP, HAVCAP, base BARCAP and carrier BARCAP of a mission (which ones, where they sit, their route), and moving the carrier group out of the fight.
 
 A mixin: `MissionBuilder` inherits these methods (like a C# partial class). They use `self.state`, `self.o` and the other fields the builder sets up.
 """
@@ -17,22 +17,22 @@ from .routes import FT, NM, Wpt, avoid_circles, bearing, cap2_point, dist, offse
 from .strike_tasks import KPH
 
 TANKER_COVER_NM = 30          # v0.41.26: a tanker track this close to a friendly field's Patriot (or the carrier group) counts as under friendly SAM cover
-SUPPORT_CAP_ZONE_NM = 25      # v0.41.7: HAVCAP / tanker CAP / base CAP engage inside this circle round what they guard
+SUPPORT_CAP_ZONE_NM = 25      # v0.41.7: HAVCAP / tanker CAP / base BARCAP engage inside this circle round what they guard
 TNKCAP_ZONE_NM = 40           # v0.41.26: the tanker CAP engages inside this circle round the tanker (an AMRAAM's reach), never further
-CVCAP_ZONE_NM = 30            # v0.41.21: the carrier CAP engages within this of the boat (v0.41.14: 50; it reached out and set off red scrambles)
-CAP_REACH_BEYOND_NM = 25     # v0.41.113: a base / carrier CAP's engage circle reaches this far past its station (judgment call)
-CVCAP_NM = 12                 # v0.41.21: the carrier CAP orbits this far out from the boat toward the nearest enemy field (v0.41.7: 22)
-CVCAP_DETECT_MARGIN_NM = 5    # v0.41.21: its orbit and engage circle stay this far outside every enemy field's scramble circle
+CARRIER_BARCAP_ZONE_NM = 30            # v0.41.21: the carrier BARCAP engages within this of the boat (v0.41.14: 50; it reached out and set off red scrambles)
+CAP_REACH_BEYOND_NM = 25     # v0.41.113: a base / carrier BARCAP's engage circle reaches this far past its station (judgment call)
+CARRIER_BARCAP_NM = 12                 # v0.41.21: the carrier BARCAP orbits this far out from the boat toward the nearest enemy field (v0.41.7: 22)
+CARRIER_BARCAP_DETECT_MARGIN_NM = 5    # v0.41.21: its orbit and engage circle stay this far outside every enemy field's scramble circle
 
 
 class SupportCaps:
     @staticmethod
     def _gather_support(package, extras):
-        """v0.41.9: the mission's support CAP comes from ALL its packages, one of each: a tanker CAP, a HAVCAP, a base CAP per home field and a carrier
+        """v0.41.9: the mission's support CAP comes from ALL its packages, one of each: a tanker CAP, a HAVCAP, a base BARCAP per home field and a carrier
         CAP per carrier. Yours first; what yours lacks comes from the first merged package that planned it. (A Fighter Sweep plans none, and merged
         packages' support flights were dropped, so with you on a sweep the tanker, AWACS and boat flew unguarded: the v0.41.8 Batumi run.)
         Returns a copy of the package with the extra flights added; the campaign plan is not changed."""
-        key = lambda f_: (f_.tag, (getattr(f_, "guard", "") or f_.base_id) if f_.tag in ("BASECAP", "CVCAP") else "")
+        key = lambda f_: (f_.tag, (getattr(f_, "guard", "") or f_.base_id) if f_.tag in ("BASE_BARCAP", "CARRIER_BARCAP") else "")
         have = {key(f_) for f_ in package.flights if f_.tag}
         add = []
         for x in extras:
@@ -145,12 +145,12 @@ class SupportCaps:
         return tanker_xy, awacs_unit, hav_xy
 
     def _barcap_circles(self, package, geom) -> list:
-        """v0.41.138: the engage circles (x, y, radius nm) of this mission's BARCAPs (base CAP and carrier CAP), worked out the same way the flights
+        """v0.41.138: the engage circles (x, y, radius nm) of this mission's BARCAPs (base BARCAP and carrier BARCAP), worked out the same way the flights
         get them (the route plan, then the SAM trim), so a TARCAP knows where the barrier circle is whatever order the flights are built in. Nothing is
         built or changed."""
         out = []
         for f in package.flights:
-            if f.tag not in ("BASECAP", "CVCAP"):
+            if f.tag not in ("BASE_BARCAP", "CARRIER_BARCAP"):
                 continue
             cz_, wps_, _ = self._support_cap_route(package, f, geom, None, 0, 0)
             z_ = self._clear_zone(cz_, package, hold=(wps_[1].x, wps_[1].y))
@@ -164,7 +164,7 @@ class SupportCaps:
         spec = AIRCRAFT[f.aircraft]
         base = st.bases[f.base_id]
         # v0.41.7: each guards one thing, from the side the threat comes from (the nearest enemy fighter field), and fights only inside
-        # a circle round it. HAVCAP: the AWACS (well back). TNKCAP: the tanker (forward, on the way home). BASECAP: the home field. CVCAP: the boat.
+        # a circle round it. HAVCAP: the AWACS (well back). TNKCAP: the tanker (forward, on the way home). base BARCAP: the home field. Carrier BARCAP: the boat.
         tc_ = getattr(self, "_tanker_c", None)
         axis_ = None                                    # S9: the line CAP2 lies across (plus or minus 90); None = thr_
         if f.tag == "TNKCAP" and tc_ is not None:
@@ -172,35 +172,35 @@ class SupportCaps:
             axis_ = geom.hdg                            # S9: CAP2 along the tanker's own track (it runs on hdg + 90), not across the threat
         elif f.tag in ("HAVCAP", "TNKCAP"):
             gx_, gy_ = hav_xy; thr_ = getattr(self, "_awacs_fh", geom.hdg) if f.tag == "HAVCAP" else geom.hdg; sx, sy = hav_xy; zr_ = SUPPORT_CAP_ZONE_NM
-        elif f.tag == "CVCAP":
+        elif f.tag == "CARRIER_BARCAP":
             # v0.41.74: the BARCAP area of the boat that faces the target (barcap.py); the boat may have been slid back for this sortie, so the
             # area's direction is used from where the boat is now. No area today (no hostile base reaches it): the old rule, toward the nearest enemy field.
             ar_ = barcap.facing_area(st, "blue", f.base_id, (geom.tx, geom.ty))
             gx_, gy_ = base.x, base.y
             thr_ = ar_["bearing"] if ar_ else tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg)
-            sx, sy = offset(gx_, gy_, thr_, (barcap.STATION_FLEET_NM if ar_ else CVCAP_NM) * NM); zr_ = CVCAP_ZONE_NM
-        else:           # BASECAP: over the field it guards (v0.41.10: the one red is likeliest to raid), else its own
+            sx, sy = offset(gx_, gy_, thr_, (barcap.STATION_FLEET_NM if ar_ else CARRIER_BARCAP_NM) * NM); zr_ = CARRIER_BARCAP_ZONE_NM
+        else:           # base BARCAP: over the field it guards (v0.41.10: the one red is likeliest to raid), else its own
             gb_ = st.bases.get(getattr(f, "guard", "") or f.base_id, base)
             ar_ = barcap.facing_area(st, "blue", gb_.id, (geom.tx, geom.ty))                   # v0.41.74: its BARCAP area facing the target
             gx_, gy_ = gb_.x, gb_.y
             thr_ = ar_["bearing"] if ar_ else tm.nearest_threat_bearing(st, gx_, gy_, geom.hdg)
             sx, sy = offset(gx_, gy_, thr_, (barcap.STATION_BASE_NM if ar_ else 8) * NM); zr_ = SUPPORT_CAP_ZONE_NM
         # v0.41.13: the orbit stays 15 nm outside every SAM ring: step it back toward what it guards (2 nm at a time) until it is clear
-        # (v0.41.12 run: the carrier CAP's F-14s were shot at on a station 22 nm toward Sukhumi)
+        # (v0.41.12 run: the carrier BARCAP's F-14s were shot at on a station 22 nm toward Sukhumi)
         for _ in range(20):
             if self._sam_clear(sx, sy) or dist(sx, sy, gx_, gy_) < 2 * NM:
                 break
             sx, sy = offset(sx, sy, bearing(sx, sy, gx_, gy_), 2 * NM)
-        if f.tag in ("BASECAP", "CVCAP") and ar_:
+        if f.tag in ("BASE_BARCAP", "CARRIER_BARCAP") and ar_:
             # v0.41.113: the engage circle is round the thing it guards, so a station pushed 25-35 nm out would sit at or past the circle's edge and the
             # pair could not shoot at the range that is the point of going forward: the circle reaches CAP_REACH_BEYOND_NM past the station (judgment call)
             zr_ = max(zr_, dist(sx, sy, gx_, gy_) / NM + CAP_REACH_BEYOND_NM)
         leg_ = 15 * NM
-        if f.tag == "CVCAP":
-            # v0.41.21: the carrier CAP is there to guard the boat, not to start fights: its orbit (both ends) and its engage circle stay outside
+        if f.tag == "CARRIER_BARCAP":
+            # v0.41.21: the carrier BARCAP is there to guard the boat, not to start fights: its orbit (both ends) and its engage circle stay outside
             # every enemy field's scramble circle, so it never sets off red's alert pairs ahead of the package (seen in the v0.41.19 runs)
             leg_ = 10 * NM
-            det_ = [(fx_, fy_, tm.field_detect_nm((fx_, fy_), (geom.tx, geom.ty), st) + CVCAP_DETECT_MARGIN_NM) for fx_, fy_ in tm.fighter_bases(st)]
+            det_ = [(fx_, fy_, tm.field_detect_nm((fx_, fy_), (geom.tx, geom.ty), st) + CARRIER_BARCAP_DETECT_MARGIN_NM) for fx_, fy_ in tm.fighter_bases(st)]
             out_ = lambda x_, y_: all(dist(x_, y_, fx_, fy_) >= r_ * NM for fx_, fy_, r_ in det_)
             for _ in range(20):
                 if (out_(sx, sy) and out_(*offset(sx, sy, thr_ + 90, leg_))) or dist(sx, sy, gx_, gy_) < 2 * NM:
@@ -217,7 +217,7 @@ class SupportCaps:
             wish_ = min(wish_, getattr(self, "_tanker_race", 30 * NM) / NM)
         elif f.tag == "HAVCAP":
             wish_ = min(wish_, 40)                      # the AWACS track is 40 nm
-        if f.tag == "CVCAP":
+        if f.tag == "CARRIER_BARCAP":
             clear_ = lambda x_, y_: (-1.0 if not (out_(x_, y_) and self._sam_clear(x_, y_)) else 0.0)
         else:
             clear_ = lambda x_, y_: (0.0 if self._sam_clear(x_, y_) else -1.0)

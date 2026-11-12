@@ -34,7 +34,7 @@ Package (push / TOT are staggered: sweep first, then SEAD, escorts, strikers):
   Springfield 1  2x F-14B(U) Tomcat  ESCORT   push 09:13:00   TOT 09:16:37   <- YOU
   Springfield 2  4x F-14B(U) Tomcat  SWEEP    push 09:12:00   TOT 09:15:33
   Springfield 3  2x F-14B(U) Tomcat  HAVCAP   push -   TOT -
-  Springfield 4  2x F-14B(U) Tomcat  BASECAP  push -   TOT -
+  Springfield 4  2x F-14B(U) Tomcat  BARCAP   push -   TOT -
 
 Your timeline (local):
   Launch    09:00:00

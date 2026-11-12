@@ -41,7 +41,7 @@ def a2a_zone_nm(tname) -> int:
 def works_beyond_cover(tname) -> bool:
     """May this type work beyond its SAM cover (scramble.RED_EXTRA_NM)? The Su-27 may, the stand-off MiG-31 may not."""
     return tname in RED_LONG_RANGE and tname not in RED_STANDOFF
-# v0.41.111, the BASECAP call-in (XO 2026-10-22): when the scramblers are called, the patrols that can reach the hotspot are called to it too, stay a while, then
+# v0.41.111, the base-BARCAP call-in (XO 2026-10-22): when the scramblers are called, the patrols that can reach the hotspot are called to it too, stay a while, then
 # fly back to their station. The route has a hotspot leg AFTER the landing point and a Lua SwitchWaypoint jumps a CALLED pair onto it (probe runs of 2026-10-22:
 # a flag-released orbit works but sends every pair there at the end of its shift; a pushed engage task never came back; GoToWaypoint is not supported by DCS;
 # SwitchWaypoint worked, immediately with from = 1, only after the leg with from = the current waypoint).

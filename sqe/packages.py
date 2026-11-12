@@ -29,7 +29,7 @@ class Slot:
     size: int
     required: bool = True
     only_if_defended: bool = False
-    tag: str = ""                      # "" | HAVCAP | BASECAP (support flights: AI only)
+    tag: str = ""                      # "" | HAVCAP | BASE_BARCAP (support flights: AI only)
     kit: str = ""                      # "" | JSOW | SLAM | PEN (a strike slot that only JSOW- / SLAM-ER- / JSOW-C-capable jets fill, see loadouts.JSOW_PER_JET, SLAM_PER_JET, PEN_PER_JET)
     land: bool = False                 # v0.41.256: a land-based squadron fills it when one reaches (the fleet raid's USAF share), long-range fighters first; any squadron when none does
 
@@ -79,8 +79,8 @@ _CA_JSOW_TASK = "Standoff Counter-Air: AGM-154A JSOW on the jets parked on the r
 _SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
 _ESC_TASK = "Escort: hold your station with the package, shoot what comes in range, do not chase; leave when the strikers are off target"
 _TASK[Role.ESCORT] = _ESC_TASK
-_TAG_TASK = {"HAVCAP": "HAVCAP (guards the AWACS)", "TNKCAP": "HAVCAP (guards the tanker)", "BASECAP": "BARCAP", "CVCAP": "BARCAP (guards the carrier group)"}
-BASECAP_ENEMY_NM = 130     # v0.41.7: a land base gets a base CAP when an enemy fighter field is within this (an alert pair reaches it)
+_TAG_TASK = {"HAVCAP": "HAVCAP (guards the AWACS)", "TNKCAP": "HAVCAP (guards the tanker)", "BASE_BARCAP": "BARCAP", "CARRIER_BARCAP": "BARCAP (guards the carrier group)"}
+BASE_BARCAP_ENEMY_NM = 130     # v0.41.7: a land base gets a base BARCAP when an enemy fighter field is within this (an alert pair reaches it)
 
 
 @dataclass
@@ -96,7 +96,7 @@ class FlightPlan:
     is_player: bool = False
     tag: str = ""
     kit: str = ""                      # "JSOW": a JSOW slinger in a SEAD package (its loadout, route and attack differ from a plain strike)
-    guard: str = ""                    # v0.41.10: a base CAP's guarded field (base id), when it is not the squadron's own base
+    guard: str = ""                    # v0.41.10: a base BARCAP's guarded field (base id), when it is not the squadron's own base
 
 
 @dataclass
@@ -529,7 +529,7 @@ class PackageBuilder:
                 ledger.free[sq_.id] += n_
             raise NoPlayerSlot("no SEAD flight free to escort the " + ("CAS" if obj.type == ObjectiveType.CAS else "strike") + " today")
 
-        # support CAP: all four kinds (TNKCAP, HAVCAP, BASECAP, CVCAP) are planned chains now (blue_barcap.py), attached after the start times are known
+        # support CAP: all four kinds (TNKCAP, HAVCAP, BASE_BARCAP, CARRIER_BARCAP) are planned chains now (blue_barcap.py), attached after the start times are known
         # v0.41.88: TNKCAP and HAVCAP are planned too (blue_barcap.py): chains per tanker / AWACS asset, attached once the start times are known.
 
         used, n = (names if names is not None else {}), 0     # names: the day's callsign counter, shared by every package that day
@@ -628,7 +628,7 @@ class PackageBuilder:
         return best
 
     def _pick_cap_at(self, base, ledger: Ledger, lead_service):
-        """v0.41.7: a fighter squadron AT this base (the carrier CAP flies off its own deck)."""
+        """v0.41.7: a fighter squadron AT this base (the carrier BARCAP flies off its own deck)."""
         cands = [sq for sq in self.state.squadrons.values() if sq.base_id == base.id and Role.CAP in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2]
         return max(cands, key=lambda sq: (AIRCRAFT[sq.aircraft].service == lead_service, ledger.free.get(sq.id, 0))) if cands else None
 
