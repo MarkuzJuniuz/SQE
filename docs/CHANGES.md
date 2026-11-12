@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.395, the ILS dummy aircraft stands on the grass beside the runway
+The small invisible aircraft that keeps each blue ILS runway active (Settings > ILS dummy) no longer sits on a far, covered parking slot. It stands on the grass beside the ILS end of the runway, 100 m off the centreline, past the hold-short line and turned across the runway like a parked aircraft, never on the pavement. Whether DCS lights the ILS for it is still to be checked in the game.
+
 ## v0.41.394, raid intercepts on land no longer talk about the fleet
 The commander's intent for an intercept of a raid on a field, supply site, garrison or your troops now names what is attacked and talks about bombers and bomb release, not anti-ship missiles and the fleet (it read "Backfires are inbound with anti-ship missiles" for a raid on the Kutaisi refinery). The debrief says "the intercept" instead of "the patrol over the fleet". The carrier raid keeps its fleet text.
 
