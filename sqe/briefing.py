@@ -88,6 +88,13 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         if any(getattr(f_, "kit", "") == "PEN" for f_ in pkg.flights):          # S51
             sit += ["", "The strike flight is F-15Es with AGM-154C JSOWs: they release on the middle of the runway from stand-off range (about 30 nm out) and turn straight home. "
                         "Nobody crosses the airfield."]
+    elif obj.type.value == "STRIKE" and obj.aim == "STANDOFF" and (obj.description or "").startswith("EWR Strike"):      # S60
+        sit += ["", "EWR strike. An early-warning radar is struck only once no SAM covers it, and always from stand-off range: no plain bombing run goes in on it."]
+        if any(getattr(f_, "kit", "") for f_ in pkg.flights):
+            sit += ["", "The strike flight is " + ("F-15Es with AGM-154C JSOWs" if any(getattr(f_, "kit", "") == "PEN" for f_ in pkg.flights) else (
+                        "F-16s with AGM-154A JSOWs" if any(getattr(f_, "kit", "") == "JSOW" for f_ in pkg.flights) else "SLAM-ER Hornets (AGM-84H)")) +
+                        ": they release on the radar from stand-off range, outside the reach of the fighters, and turn straight home. Nobody crosses the target. "
+                        "The missiles fly on without you; judge the result at the debrief."]
     elif obj.type.value == "STRIKE" and obj.aim == "STANDOFF":
         sit += ["", "Standoff Strike. Red fighters in reach make a plain bombing run a bad bet here, so the strike goes out as SLAM-ER Hornets: they launch "
                     "their AGM-84Hs from a long way out (up to about 120 nm from the target, as far as the route allows), outside the reach of the fighters "

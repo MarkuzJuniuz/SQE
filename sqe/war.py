@@ -11,7 +11,7 @@ from .difficulty import Difficulty
 from .models import SEAD_AIMS, Objective, ObjectiveType, AssetKind, Role
 from .packages import Package
 from .state import CampaignState
-from .loadouts import ENEMY_FIGHTERS, JSOW_PER_JET, SLAM_PER_JET
+from .loadouts import ENEMY_FIGHTERS, EWR_KIT_ORDER, JSOW_PER_JET, SLAM_PER_JET
 from . import threat
 
 JET_CAS_FACTOR = 0.7       # v0.41.188: an AI-flown F-16C / F/A-18C CAS sortie counts 0.7 of an A-10C one (judgment call: Mavericks only, no gun or CBU, one pass; no public source). A player's own sortie is scored from the debrief.
@@ -181,13 +181,23 @@ class ObjectivePlanner:
                 pr = a.value * a.health / (1 + 0.5 * len(defenders))
                 cov = covering_sams(state, a)
                 o_ = Objective("", ObjectiveType.STRIKE, a.id, pr, f"EWR Strike: {a.name}" if a.kind == AssetKind.EWR else f"Strike {a.name}")
+                if a.kind == AssetKind.EWR:
+                    # S60 (XO 2026-11-12: "no EWR strikes until SAMs suppressed ... always send standoff EWR strikes. No more GPS guided EWR strikes"): an EWR is struck only once no live SAM covers it
+                    # (a covered one is no job: its covering sites get their own SEAD / DEAD, and as blockers they rank higher for it), and then always from stand-off range (F-15E JSOW-C, F-16 JSOW-A, Hornet
+                    # SLAM-ER, `EWR_KIT_ORDER`), with no fighter-count test. No such squadron with 2 jets: not planned, it waits.
+                    if not cov:
+                        if not any(q.aircraft in {ac_ for ac_, _ in EWR_KIT_ORDER} and q.available >= 2 for q in state.squadrons.values()):
+                            continue
+                        o_.aim = "STANDOFF"
+                    cand.append((pr, o_, self._blockers(state, a) + cov))
+                    continue
                 fol, soft = follow_split(cov)
-                if a.kind in (AssetKind.FUEL, AssetKind.DEPOT, AssetKind.EWR) and cov and all(x.variant in ESCORTABLE for x in cov):
+                if cov and all(x.variant in ESCORTABLE for x in cov):
                     # v0.41.144: a supply site under live SA-2/3/6 goes out with a HARM escort (as CAS does, v0.41.20)
                     o_.aim = "SEAD"
                     o_.description += " (with a SEAD escort)"
                     cov = []
-                elif fol and (a.kind in (AssetKind.FUEL, AssetKind.DEPOT, AssetKind.EWR) or not soft):
+                elif fol and (a.kind in (AssetKind.FUEL, AssetKind.DEPOT) or not soft):
                     # v0.41.158: under one or two SA-11 / SA-10 sites it goes in behind their SEAD (offered only when the day's plan has that SEAD / standoff job, see _add_followers)
                     o_.after = ",".join(x.id for x in fol)
                     if soft:

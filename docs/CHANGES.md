@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.416, EWR strikes wait for the SAMs to go down, then go out as stand-off jobs
+An early-warning radar is no longer a target while a SAM site covers it: the covering sites get their SEAD and DEAD first. Once they are down the radar is struck from stand-off range by AI flights only, never with a GPS-bomb run: F-15Es with JSOW-C, F-16s with JSOW-A, or Hornets with SLAM-ER. A person who picks an EWR strike still flies it as before.
 ## v0.41.415, a full-strength Patriot draws three SEAD packages, a HAWK two
 Red now sends three coordinated anti-radar packages at a Patriot site at full strength (two at a HAWK), and when one squadron cannot field them a second nearby squadron joins. Red will not send a single package at a full-strength Patriot: it waits and raids something softer.
 ## v0.41.414, debrief: no "you landed" line; a suppressed SAM is a win

@@ -6,9 +6,9 @@ import random
 from dataclasses import dataclass, field, asdict
 from . import runways, threat
 from . import threatmap as tm
-from .loadouts import CBU_JETS, ENEMY_FIGHTERS, ENEMY_RADIUS_NM, JSOW_PER_JET, PEN_PER_JET, PEN_REACH, SLAM_PER_JET
+from .loadouts import CBU_JETS, ENEMY_FIGHTERS, ENEMY_RADIUS_NM, EWR_KIT_ORDER, JSOW_PER_JET, PEN_PER_JET, PEN_REACH, SLAM_PER_JET
 from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER, STRIKE_CONDITIONAL
-from .models import Objective, ObjectiveType, Role, BaseKind, RefuelMethod
+from .models import AssetKind, Objective, ObjectiveType, Role, BaseKind, RefuelMethod
 from .state import CampaignState
 
 NM = 1852.0
@@ -31,6 +31,7 @@ class Slot:
     only_if_defended: bool = False
     tag: str = ""                      # "" | HAVCAP | BASE_BARCAP (support flights: AI only)
     kit: str = ""                      # "" | JSOW | SLAM | PEN (a strike slot that only JSOW- / SLAM-ER- / JSOW-C-capable jets fill, see loadouts.JSOW_PER_JET, SLAM_PER_JET, PEN_PER_JET)
+    only: str = ""                     # S60: "" | an airframe name: only that airframe fills the slot (the F-16 in the JSOW slot of an EWR strike; the Hornet flies SLAM-ER there)
     land: bool = False                 # v0.41.256: a land-based squadron fills it when one reaches (the fleet raid's USAF share), long-range fighters first; any squadron when none does
 
 
@@ -75,6 +76,9 @@ _DEAD_TASK = {Role.SEAD: "SEAD: suppress the radars ahead of the DEAD flight", R
 KIT_JETS = {"JSOW": JSOW_PER_JET, "SLAM": SLAM_PER_JET, "PEN": PEN_PER_JET}      # v0.41.298: the airframes that can fill each kit slot (S51: PEN = the F-15E's runway crater; the F-15E is in no other table, so no Standoff DEAD / counter-air slot can take it)
 _KIT_TASK = {"CBU": "Counter-air strike: CBU-103 on the jets parked on the ramp", "SLAM": "Standoff Strike: AGM-84H SLAM-ER on the target from far out, released outside the fighters' reach; then home", "JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers and covering Tors, on the HARM salvo's time; stand-off release, then home",
              "PEN": "Standoff Runway Strike: AGM-154C JSOW on the middle of the runway from stand-off range, released outside the fighters' reach; then home"}
+_EWR_KIT_TASK = {"PEN": "EWR strike: AGM-154C JSOW on the radar from stand-off range, released outside the fighters' reach; then home",         # S60: the kit texts of an EWR strike (not a SAM site, not a runway)
+                 "JSOW": "EWR strike: AGM-154A JSOW on the radar from stand-off range, released outside the fighters' reach; then home",
+                 "SLAM": "EWR strike: AGM-84H SLAM-ER on the radar from far out, released outside the fighters' reach; then home"}
 _CA_JSOW_TASK = "Standoff Counter-Air: AGM-154A JSOW on the jets parked on the ramp, released from stand-off range; then home"
 _SO_SEAD_TASK = "SEAD: HARMs on the site's radars and its Tors, in the same salvo as the Standoff DEAD JSOWs"
 _ESC_TASK = "Escort: hold your station with the package, shoot what comes in range, do not chase; leave when the strikers are off target"
@@ -150,7 +154,9 @@ class Package:
         if ty == ObjectiveType.DEAD:
             return {"SEAD": "SEAD", "STANDOFF": "Standoff DEAD", "DEAD": "Close DEAD"}.get(aim, "DEAD")
         if ty == ObjectiveType.STRIKE:
-            return "Standoff Strike" if aim == "STANDOFF" else ("Runway Strike" if (o.description or "").startswith("Crater") else ("EWR Strike" if (o.description or "").startswith("EWR Strike") else "Strike"))
+            if (o.description or "").startswith("EWR Strike"):                    # S60: before the STANDOFF test, an EWR strike is a stand-off job that keeps its name
+                return "EWR Strike"
+            return "Standoff Strike" if aim == "STANDOFF" else ("Runway Strike" if (o.description or "").startswith("Crater") else "Strike")
         if ty == ObjectiveType.CAS:
             return "Close Air Support: Troops in Contact" if (self.extra or {}).get("tic") else "Close Air Support"
         if ty == ObjectiveType.COUNTER_AIR:
@@ -378,6 +384,11 @@ class PackageBuilder:
             return False
         return not any(math.hypot(s_.x - a.x, s_.y - a.y) <= r_ + A10_RUNIN_NM * NM for s_, r_ in tm.rings(self.state, min_range=5))
 
+    def _is_ewr(self, obj) -> bool:
+        """S60: the objective's target is an early-warning radar."""
+        a_ = self.state.assets.get(obj.target_id) if obj.type != ObjectiveType.FLEET_DEFENSE else None
+        return a_ is not None and a_.kind == AssetKind.EWR
+
     def _slot_ok(self, aircraft: str, slot) -> bool:
         """v0.41.360: the airframes with a conditional STRIKE role (A-10C) fly a STRIKE slot only on a job `_a10_supply_strike` passed; every other slot is as before."""
         return not (slot.role == Role.STRIKE and aircraft in STRIKE_CONDITIONAL and not getattr(self, "_a10_strike", False))
@@ -409,6 +420,8 @@ class PackageBuilder:
                     Slot(Role.SEAD, 4 if nb >= SALVO_8_NEIGHBOURS else 2)]     # the JSOW flight is picked before the second HARM flight: without it nothing is destroyed
         elif obj.type == ObjectiveType.COUNTER_AIR and obj.aim == "STANDOFF":   # v0.41.313: counter-air under air cover: the sweep flight as cover, JSOW-A Vipers or Hornets on the ramp from far out
             tmpl = [Slot(Role.SWEEP, 4), Slot(Role.STRIKE, 4, kit="JSOW")]
+        elif obj.type == ObjectiveType.STRIKE and obj.aim == "STANDOFF" and self._is_ewr(obj):      # S60: an EWR strike: the kit is chosen in `build` (EWR_KIT_ORDER; none for a player's build)
+            tmpl = [Slot(Role.STRIKE, 4), Slot(Role.TARCAP, 2)]
         elif obj.type == ObjectiveType.STRIKE and obj.aim == "STANDOFF":    # v0.41.298: a supply strike under heavy fighter cover: SLAM-ER Hornets, the TARCAP / escort added below
             tmpl = [Slot(Role.STRIKE, 4, kit="SLAM"), Slot(Role.TARCAP, 2)]
         elif obj.type == ObjectiveType.CAS and obj.aim == "SEAD":           # v0.41.20: CAS under a live SA-2/3/6: the HARM escort is not optional
@@ -466,13 +479,24 @@ class PackageBuilder:
             if any(s_.role == Role.STRIKE and not s_.tag and not s_.kit for s_ in slots) and any(
                     sq_.aircraft in PEN_PER_JET and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty, "PEN") for sq_ in st.squadrons.values()):
                 next(s_ for s_ in slots if s_.role == Role.STRIKE and not s_.tag and not s_.kit).kit = "PEN"
+        ewr_so_ = obj.type == ObjectiveType.STRIKE and obj.aim == "STANDOFF" and self._is_ewr(obj)
+        if ewr_so_ and not for_player:
+            # S60 (XO 2026-11-12: EWR strikes are stand-off only): the strike slot takes the kit of the first airframe in EWR_KIT_ORDER that has a squadron with 2+ free jets in range for it (the PEN kit's
+            # reach is shorter). None: the package cannot be built, the EWR waits (no GBU fallback). Not for the player's own build (as S51): a Viper / Hornet pilot keeps the plain strike slot, his route and loadout.
+            for ac_, kit_ in EWR_KIT_ORDER:
+                if any(sq_.aircraft == ac_ and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty, kit_) for sq_ in st.squadrons.values()):
+                    s_ = next(s_ for s_ in slots if s_.role == Role.STRIKE and not s_.tag)
+                    s_.kit, s_.only = kit_, ac_
+                    break
+            else:
+                raise NoPlayerSlot("no stand-off-capable squadron (F-15E, F-16C, F/A-18C) free for the EWR strike today")
         pp = st.player
 
         player_idx, lead_service, psq = None, None, None
         if for_player and pp:
             psq = st.squadrons[pp.squadron_id]
             spec = AIRCRAFT[psq.aircraft]
-            ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles and self._slot_ok(psq.aircraft, s) and (not s.kit or psq.aircraft in KIT_JETS.get(s.kit, ()))
+            ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles and self._slot_ok(psq.aircraft, s) and (not s.kit or psq.aircraft in KIT_JETS.get(s.kit, ())) and (not s.only or psq.aircraft == s.only)
                   and (not is_sweep(obj) or psq.aircraft in LONG_RANGE_A2A)                    # v0.41.15: no BVR sweep in an F-16 / F/A-18
                   and self._in_range(psq.id, tx, ty) and ledger.free[psq.id] >= 2]
             if obj.type == ObjectiveType.CAS and psq.aircraft != "A-10C" and not self._hot:
@@ -513,7 +537,12 @@ class PackageBuilder:
             chosen.append((slot, sq, count, i == player_idx))
         if not chosen:
             raise NoPlayerSlot("no squadron could fly this objective")
-        if obj.aim == "STANDOFF" and obj.type == ObjectiveType.STRIKE and not any(sl_.kit == "SLAM" for sl_, *_ in chosen):
+        if ewr_so_ and not for_player and not any(sl_.kit for sl_, *_ in chosen):
+            # S60: the slot's squadron was there when the kit was chosen; if its jets went to another slot, the EWR strike waits for another day (never a plain strike)
+            for sl_, sq_, n_, _ in chosen:
+                ledger.free[sq_.id] += n_
+            raise NoPlayerSlot("no stand-off-capable squadron free for the EWR strike today")
+        if obj.aim == "STANDOFF" and obj.type == ObjectiveType.STRIKE and not ewr_so_ and not any(sl_.kit == "SLAM" for sl_, *_ in chosen):
             # v0.41.298: no SLAM-ER Hornets free: the Standoff Strike waits for another day (a plain strike under that fighter cover is the loss it exists to avoid)
             for sl_, sq_, n_, _ in chosen:
                 ledger.free[sq_.id] += n_
@@ -539,7 +568,7 @@ class PackageBuilder:
             kit_ = slot.kit or ("CBU" if (obj.type == ObjectiveType.COUNTER_AIR and obj.aim not in ("SWEEP", "STANDOFF") and slot.role == Role.STRIKE and sq.aircraft in CBU_JETS) else "")
             pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", cs, slot.role, sq.id,
                                           sq.aircraft, count, sq.base_id,
-                                          (_CA_JSOW_TASK if (kit_ == "JSOW" and obj.type == ObjectiveType.COUNTER_AIR) else None) or _KIT_TASK.get(kit_) or _TAG_TASK.get(slot.tag) or (_SO_SEAD_TASK if (obj.aim == "STANDOFF" and slot.role == Role.SEAD) else None) or (_ESC_TASK if slot.role == Role.ESCORT else None) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or (_SETPIECE_TASK.get(slot.role) if pkg.extra.get("setpiece") else None) or _TASK[slot.role],
+                                          (_CA_JSOW_TASK if (kit_ == "JSOW" and obj.type == ObjectiveType.COUNTER_AIR) else None) or (_EWR_KIT_TASK.get(kit_) if ewr_so_ and slot.role == Role.STRIKE else None) or _KIT_TASK.get(kit_) or _TAG_TASK.get(slot.tag) or (_SO_SEAD_TASK if (obj.aim == "STANDOFF" and slot.role == Role.SEAD) else None) or (_ESC_TASK if slot.role == Role.ESCORT else None) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or (_SETPIECE_TASK.get(slot.role) if pkg.extra.get("setpiece") else None) or _TASK[slot.role],
                                           is_pl, slot.tag, kit_, ""))
         pkg.support = self._support(pkg)
         pkg.jtac = obj.type in JTAC_OBJECTIVES
@@ -579,7 +608,7 @@ class PackageBuilder:
         sweep_ = obj0_ is not None and is_sweep(obj0_)            # v0.41.15: a Fighter Sweep flies long-range fighters only (F-15C, F-14)
         cands = [sq for sq in self.state.squadrons.values()
                  if slot.role in AIRCRAFT[sq.aircraft].roles and self._slot_ok(sq.aircraft, slot) and ledger.free[sq.id] >= 2 and self._in_range(sq.id, tx, ty, slot.kit)
-                 and (not slot.kit or sq.aircraft in KIT_JETS.get(slot.kit, ())) and (not sweep_ or sq.aircraft in LONG_RANGE_A2A)]
+                 and (not slot.kit or sq.aircraft in KIT_JETS.get(slot.kit, ())) and (not slot.only or sq.aircraft == slot.only) and (not sweep_ or sq.aircraft in LONG_RANGE_A2A)]
         if not cands:
             return None
         if slot.land:                                            # v0.41.256: the fleet raid's USAF share: land-based squadrons only, the lead's service does not matter; none reach = the usual pick
