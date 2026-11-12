@@ -171,11 +171,14 @@ def run() -> dict:
                 if kind in kinds or s.flyable(p) or not p.flights:
                     continue
                 if p.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE) or kind[1] == "SWEEP":
+                    stand = p.player_options(st.player.aircraft)           # S57b: the stand-in must be a flight your aircraft can fly (assign_player raises NoPlayerSlot otherwise)
+                    if not stand:
+                        continue                                           # none in this package: skip it, and leave the kind open for a later package
                     kinds.add(kind)
                     key = f"{name}/{aircraft}/L{level}/s{seed}/aionly/{p.number}-{p.objective.type.value}{'-sweep' if p.objective.aim == 'SWEEP' else ''}"
                     random.seed(key)
                     try:
-                        r = _build(s, st, p, True, p.flights[0].id)
+                        r = _build(s, st, p, True, stand[0].id)
                         if r is not None:
                             res[key] = r
                     except Exception as e:
