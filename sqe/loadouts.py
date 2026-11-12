@@ -176,6 +176,16 @@ ARM_PER_JET = {"Su_24M": 2, "Su_34": 4}   # Kh-31P per jet in a SEAD group (Su-2
 STRIKE_PER_JET = {"Su_34": 6}             # FAB-500 per jet on a plain raid (Su-24M: every pylon that takes one; Su-34: six of eight, about 3 t: judgment call)
 
 
+# S48 (XO musing 2026-11-12): the Kh-59M (AS-18 Kazoo) standoff strike missile for red's raid bombers. SOURCES (open, checked 2026-11-12; the sources are thin and disagree on range, so every figure here is a lead, not a fact):
+#  - Wikipedia "Kh-59" and the aggregator sites (redstar.gr, globalmilitary.net, armyrecognition.com): Kh-59M about 930 kg launch weight, warhead about 320 kg (penetrator or cluster), turbojet, about Mach 0.9 to 1.1 (900 to 1,080 km/h),
+#    TV (day) / inertial + datalink guidance (the Kingbolt family), cruise 100 to 1,000 m above ground by radar altimeter. Medium firmness for the warhead (several sources agree on 320 kg; the 280 to 290 kg some recall is not the figure printed).
+#  - RANGE: Wikipedia gives 115 km for the Kh-59M (the figure the game and the job use: about 62 nm); the 285 km some sites print is for the later Kh-59MK / anti-ship case against large ships, not the land missile. Low-to-medium firmness.
+#  - Launch envelope (redstar.gr, Kh-59M page): carrier at 600 to 1,100 km/h and 0.2 to 5 km (anti-ship page: up to 11 km): a launch from 20,000 ft at 450 km/h is inside it only at the speed's low end (the raid flies 450 KPH, the table below it: judgment call, the probe shows what the AI does).
+#  - Jets and count: pydcs gives the Su-24M the Kh-59M on pylons 2 and 7 and the Su-34 on pylons 4 and 9: two missiles a jet each, a symmetric pair. The "up to three on a Su-34" in the musing is not possible in the game (the only count found in public text, "up to 5", is for the Kh-59MK).
+#  - The DCS AI's use of it from a Bombing / AttackGroup task is NOT known: that is what the probe mission from `.private/probes/s48` is for.
+KH59_PER_JET = {"Su_24M": 2, "Su_34": 2}   # Kh-59M per jet: every pylon that takes one (pydcs: 2 and 7 / 4 and 9, a balanced pair); the rest stay empty (judgment call: 930 kg each, the pair is the load)
+
+
 def _limit(out: dict, n) -> dict:
     """At most n pylons of a loadout, outermost pairs first (the lowest and highest pylon numbers alternately), so the load stays symmetric. None or n >= len: unchanged."""
     if not n or len(out) <= n:
@@ -226,6 +236,19 @@ def enemy_arm_loadout(cls_name: str) -> dict:
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
     return _limit(out, ARM_PER_JET.get(cls_name))
+
+
+def enemy_standoff_loadout(cls_name: str) -> dict:
+    """S48: Kh-59M (AS-18 Kazoo) standoff missiles for a raid on a fixed target (Su-24M, Su-34): every pylon that takes one, at most KH59_PER_JET. Empty for a type that cannot carry one (the Su-25): the caller keeps the free-fall kit there."""
+    from dcs import planes
+    cls = getattr(planes, cls_name, None)
+    out = {}
+    for i in sorted(getattr(cls, "pylons", ()) or ()):
+        P = getattr(cls, f"Pylon{i}", None)
+        w = _find(P, "Kh_59M") if P is not None else None
+        if w is not None:
+            out[i] = {"CLSID": w[1]["clsid"]}
+    return _limit(out, KH59_PER_JET.get(cls_name))
 
 
 def enemy_strike_loadout(cls_name: str) -> dict:

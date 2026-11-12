@@ -20,7 +20,7 @@ from . import seacheck as seac
 from . import threatmap as tm
 from .difficulty import ai_skill
 from .aircraft import AIRCRAFT
-from .loadouts import BOMBER_TYPES, ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_land_bomber_loadout, enemy_strike_loadout
+from .loadouts import BOMBER_TYPES, ENEMY_FIGHTERS, enemy_arm_loadout, enemy_bomber_loadout, enemy_cap_loadout, enemy_land_bomber_loadout, enemy_standoff_loadout, enemy_strike_loadout
 from .models import AssetKind, BaseKind, ObjectiveType, Role
 from .red_air_picture import A2A_ZONE_NM, CALLIN_LUA, CALLIN_LUA_DELAY_S, CALLIN_MIN_NM, CALLIN_REACH_NM, RED_LONG_RANGE
 from .support_caps import SUPPORT_CAP_ZONE_NM
@@ -97,6 +97,10 @@ RAID_IP_LANE_PTS = 12         # waypoint budget for the bends of the dash lane r
                               # v0.41.287 (XO 2026-11-04: "every SAM threatening the intercept line"): RAID_BLOCK_MAX (the old cap of 2 blocking sites, PR 2) is retired;
                               # every live site tm.raid_inbound_sites finds now gets its own SEAD/DEAD flight, not just the minimum needed to open a lane
 ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
+KH59_RAIDS = False            # S48 (XO musing 2026-11-12): red's Su-24M / Su-34 strike raids on a fixed aim fire the Kh-59M from standoff instead of dropping bombs over the target. OFF until XO's probe run (.private/probes/s48) shows which task makes the AI fire it, and from how far
+KH59_LAUNCH_NM = 50           # ...they fire from this far from the aim: inside the 115 km (62 nm) Wikipedia gives for the Kh-59M with margin for a low launch, outside HAWK_NM 25 and PATRIOT_NM 40 (judgment call; the probe measures the firing distance)
+KH59_WINDOW_S = 240           # ...and the missile task runs this long after the jets reach the launch point (judgment call, like ARM_WINDOW_S: the TV-guided missile flies about 50 nm at Mach 0.9 to 1: 3 to 4 minutes; NOT measured)
+KH59_TASK = "Bombing"         # ...which DCS task carries the launch: "Bombing" (a point: the supply sites and garrisons are statics, no group to attack), "AttackMapObject". Set from the probe's answer (variants A and B of build_probe.py)
 FLEET_RAID_AVOID_NM = 70      # v0.41.31: a red raid's route keeps this far from the carrier group (measured in XO's runs: the cruiser's SM-2s
 
 
@@ -829,11 +833,12 @@ class RaidSpawns:
         manifest.add("blue_site", aim, names, label=label, health_before=(st.blue_assets[aim].health if aim in st.blue_assets else None))
 
     @staticmethod
-    def _arm_pts(path, dx, dy, fx=None, fy=None):
-        """The raid's way in without the points near the field (inside ARM_LAUNCH_NM + 10): the SEAD / DEAD flights and the gate use these. With (fx, fy), the
+    def _arm_pts(path, dx, dy, fx=None, fy=None, ring_nm=None):
+        """The raid's way in without the points near the field (inside ARM_LAUNCH_NM + 10, or `ring_nm` + 10 for a Kh-59M raid, S48): the SEAD / DEAD flights and the gate use these. With (fx, fy), the
         points near that other field are dropped too (a SEAD group for a neighbouring battery)."""
         pts = list(path[:-1])
-        near = lambda q: dist(*q, dx, dy) <= (ARM_LAUNCH_NM + 10) * NM or (fx is not None and dist(*q, fx, fy) <= (ARM_LAUNCH_NM + 10) * NM)
+        ring_ = ARM_LAUNCH_NM if ring_nm is None else ring_nm
+        near = lambda q: dist(*q, dx, dy) <= (ring_ + 10) * NM or (fx is not None and dist(*q, fx, fy) <= (ring_ + 10) * NM)
         while len(pts) > 1 and near(pts[-1]):
             pts.pop()
         return pts
@@ -896,6 +901,9 @@ class RaidSpawns:
         cvb = st.bases[package.objective.target_id]
         aim = ex.get("aim", "") or ""
         sead_r = bool(ex.get("sead"))                            # S36b (XO 2026-11-11): a SEAD raid on a blue SAM site: its "bombers" are the SEAD flights, they fire from standoff and turn home
+        from .raids import raid_members as _rm48
+        kh59_r = bool(KH59_RAIDS and ex.get("kh59") and ex.get("land") and aim and not sead_r
+                      and all(enemy_standoff_loadout(t_) for _a, t_, _n in _rm48(ex)))       # S48: every member must carry a Kh-59M (a Su-25 cannot: a pool with one is a plain raid), on a supply site / garrison aim (not the runway)
         launch_ = None
         dx, dy = (ex.get("dest") or (cvb.x, cvb.y))              # where the raiders are going: the field, a supply site, a garrison or a sector
         cvg = self.ship.get(cvb.id)
@@ -928,9 +936,10 @@ class RaidSpawns:
         else:
             lane = self._raid_bend(lane, cvb) + [station]
             path = lane + [(dx, dy)]
-            if sead_r:                                          # the way in without the points inside the launch ring, ending on the Kh-31P launch point ARM_LAUNCH_NM from the site
-                pts_ = self._arm_pts(path, dx, dy)
-                launch_ = offset(dx, dy, bearing(dx, dy, *pts_[-1]), ARM_LAUNCH_NM * NM)
+            if sead_r or kh59_r:                                # the way in without the points inside the launch ring, ending on the Kh-31P launch point ARM_LAUNCH_NM from the site (S48: the Kh-59M launch point KH59_LAUNCH_NM from the aim)
+                ring_ = KH59_LAUNCH_NM if kh59_r else ARM_LAUNCH_NM
+                pts_ = self._arm_pts(path, dx, dy, ring_nm=ring_)
+                launch_ = offset(dx, dy, bearing(dx, dy, *pts_[-1]), ring_ * NM)
                 path = pts_ + [launch_]
                 t_tgt = arrive + dist(sx_, sy_, *launch_) / V
         if standoff:
@@ -970,7 +979,7 @@ class RaidSpawns:
         alt = ((12000 if any(t_ == "Su_25" for _a, t_, _n in bmem) else 20000) if land else 30000) * FT      # S46: the whole raid flies at its slowest, lowest member's altitude (a Su-25 in it: 12 000 ft)
         apt = self.t.airports.get(cvb.airport) if (land and cvb.airport and not aim) else None
 
-        fin_ = "ARM" if sead_r else ("BASE" if bool(ex.get("land")) else ("LAUNCH" if standoff else "FLEET"))
+        fin_ = "ARM" if (sead_r or kh59_r) else ("BASE" if bool(ex.get("land")) else ("LAUNCH" if standoff else "FLEET"))
         sead_tgt = (self.base_ad.get(cvb.id) or {}).get(aim.rsplit("_", 1)[1]) if sead_r else None          # the site's mission group (Patriot "pat", HAWK "hawk")
         back0 = 0.0 if hold_until is not None else back_
         def start_at(shift_s):
@@ -1065,6 +1074,12 @@ class RaidSpawns:
                         if sead_tgt is not None:
                             ca_ = task.ControlledTask(task.AttackGroup(sead_tgt.id, weapon_type=task.WeaponType.ARM, group_attack=True, expend=task.Expend.All))      # v0.41.399: all Kh-31P at the site in one go (the Auto default fired one a jet at any radar), then home
                             ca_.stop_after_time(int(hit_s + shift + ARM_WINDOW_S)); wp.tasks.append(ca_)
+                    elif kh59_r:                                # S48: the Kh-59M flight fires its missiles at the aim from the launch point (the point task chosen by KH59_TASK), then turns home
+                        wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
+                        tk_ = (task.AttackMapObject(mapping.Vector2(dx, dy), group_attack=True) if KH59_TASK == "AttackMapObject"
+                               else task.Bombing(mapping.Vector2(dx, dy), expend=task.Expend.All, group_attack=True))
+                        ca_ = task.ControlledTask(tk_)
+                        ca_.stop_after_time(int(hit_s + shift + KH59_WINDOW_S)); wp.tasks.append(ca_)
                     elif land and apt is not None:
                         wp.tasks.append(task.BombingRunway(airport_id=apt.id))
                     elif land and aim:
@@ -1106,7 +1121,7 @@ class RaidSpawns:
             """(class, task, loadout) of a raider type. S46: one per member, a pooled raid flies each type with its own loadout."""
             if land:
                 return (getattr(planes, t_), (task.SEAD if sead_r else (task.GroundAttack if aim else task.RunwayAttack)),
-                        enemy_arm_loadout(t_) if sead_r else (enemy_land_bomber_loadout("Tu_22M3") if t_ == "Tu_22M3" else enemy_strike_loadout(t_)))      # v0.41.355 (Phase 10a): the Tu-22M3 land strike carries OFAB-250 racks, no Kh-22, no anti-ship task
+                        enemy_arm_loadout(t_) if sead_r else enemy_standoff_loadout(t_) if kh59_r else (enemy_land_bomber_loadout("Tu_22M3") if t_ == "Tu_22M3" else enemy_strike_loadout(t_)))      # v0.41.355 (Phase 10a): the Tu-22M3 land strike carries OFAB-250 racks, no Kh-22, no anti-ship task
             return planes.Tu_22M3, task.AntishipStrike, enemy_bomber_loadout("Tu_22M3")
         kits_ = {t_: bomber_kit(t_) for _a, t_, _n in bmem}
         for t_, kit_ in kits_.items():

@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.404, groundwork for red's Kh-59M standoff strikes (switched off)
+Red's Su-34 and Su-24M can now be given Kh-59M missiles and a launch point about 50 nm from the target instead of bombing over it. Nothing changes in play yet: the switch is off until the DCS behaviour has been tested in a test mission.
 ## v0.41.403, Level 3 red raids on supply sites and garrisons come from two airfields
 A raid on a supply site, a garrison or a field whose first airfield cannot field the size red asked for now takes a second airfield's jets too (within 150 nm), and its escorts come from a second wing the same way. The formation can mix types: Su-34s with Su-25s, an Su-27 and a MiG-29 as escorts. Each group flies its own aircraft with its own loadout and goes home to its own field; a raid with Su-25s in it flies low. The briefing lists the types ("2 Su-25 attack aircraft and 4 Su-34 bombers"). These raids were 2 to 4 jets against your 10 to 12; red now has at least your numbers in about 45% of them (was 33%). Levels 1 and 2 are practically unchanged (their raids are small enough for one wing).
 ## v0.41.402, Level 3 red's SEAD packages are bigger, and raids come from a wing that can fill them
