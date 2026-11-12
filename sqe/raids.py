@@ -25,6 +25,13 @@ RAID_PRIORITY = 8.0
 RAIDERS = BOMBER_TYPES + ("Su_25",)  # (v0.41.361, Phase 10d: the Su-34 too) attack types a raid can fly (bombers for fields; Su-25s lead against troops and, since v0.41.359, supply sites)
 SU25_SUPPLY = True            # v0.41.359 (campaign rules plan Phase 10c): a Su-25 pair is the first pick for a raid on an uncovered supply site; the Su-24M keeps the fields (they need its SEAD group) and is the fallback
                               # when no Su-25 wing reaches (Su-25 radius 160 nm against the Su-24M's 300). The Su-25 raid goes UNESCORTED when no blue fighter squadron can reach the site's field (`plan_raid`). Judgment call.
+POOL_RAIDS = True             # S46 (XO 2026-11-12, "pool two nearby wings, even if they're not fully identical, as long as they come in bigger numbers"): a supply / garrison / field / troop raid whose lead wing cannot fill the size drawn takes a second wing's jets too (`_pool_partners`), and so do the escorts (`_pool_escorts`); False = single-wing raids as before
+POOL_NM = 150                 # ...the partner wing lies within this many nm of the lead wing (and in reach of the target); judgment call, measured (`.private/probes/s43`, L3 seeds 1 to 10, days 1 to 10, supply raids red >= blue: 60 nm 37%, 100 nm 39%, 150 nm 48%; the wings lie in a west cluster Gudauta / Sochi / Maykop / Krymsk and an east one Nalchik / Beslan / Minvody)
+POOL_KINDS = ("supply", "garrison", "field", "sector")   # ...for these kinds of aim (SEAD raids are not pooled)
+POOL_ESCORTS = True           # ...and the escorts are pooled the same way
+ESC_POOL_NM = 200             # ...the partner escort wing lies within this many nm of the lead escort wing (judgment call, measured: the escort pool is what lifts supply raids from 24% to 40 to 50% red >= blue; 100 nm leaves most raids short of escorts because the Mozdok escort squadron is a lone wing)
+POOL_PARTNERS = 1             # ...one partner wing for the raiders, one for the escorts (judgment call; the plan's `pool` / `esc_pool` lists leave room for more)
+POOL_MAX_RAIDERS = 16         # ...a raid never flies more raiders than this (the mission builder's mass cap; DCS AI count)
 TEMPO_STOP_SHARE = 0.5        # v0.41.171 (XO 2026-10-28): half of the AIR tempo is added to the chance a surprise raider is stopped (+20 points at the +40 cap; judgment call)
 SEAD_JETS = {1: 4, 2: 4, 3: 6}   # S36b (XO 2026-11-11): the SEAD package red sends at a blue SAM site: this many Su-24M / Su-34 with Kh-31P (by level), escorted by SEAD_ESCORT_RATIO fighters a jet; the only way red opens a covered target. S43 (XO 2026-11-11, "red is almost always outnumbered"): Level 3 only, 4 to 6 jets, judgment call (measured: SEAD raids were 58 to 74% of all raids and 19% of them had red at least equal to blue's jets; with 6 jets and 1:1 escorts 58%)
 SEAD_ESCORT_RATIO = {1: 0.5, 2: 0.5, 3: 1.0}   # S43: escorts per SEAD jet (S36b: half as many, so a 4-jet HAWK package was 6 jets against blue's 10 to 12); Level 3 a fighter for every Kh-31P jet (judgment call)
@@ -416,6 +423,99 @@ def _escort_for(state, bw, ax: float, ay: float, rnd: random.Random, alone: bool
     return None, 0
 
 
+def _pool_partners(state, kind: str, lead, ax: float, ay: float, need: int, taken=()) -> list:
+    """S46: partner raider wings for a raid whose lead wing is `need` jets short: wings within `POOL_NM` of the lead wing that reach (ax, ay) with a pair free (`raider_wings`), the one with most jets free first, up
+    to `POOL_PARTNERS`; each gives `need` or what it has free, in pairs (at least a pair, or it is left out). The partner's type may differ from the lead's (a Su-25 wing with a Su-34 wing). Nothing is booked here.
+    -> [{"wing": base asset id, "raider": type, "n": jets}]."""
+    from .loadouts import ENEMY_RADIUS_NM
+    out = []
+    la = state.assets[lead.base_asset_id]
+    skip = {lead.base_asset_id, *taken}
+    cands = []
+    for w, t in raider_wings(state, kind):
+        if w.base_asset_id in skip:
+            continue
+        a = state.assets[w.base_asset_id]
+        if math.hypot(a.x - la.x, a.y - la.y) / NM > POOL_NM or math.hypot(a.x - ax, a.y - ay) / NM > ENEMY_RADIUS_NM[t] * 0.85:
+            continue
+        cands.append((-redair.ready_of(state, w, (t,)), w.base_asset_id, w, t))
+    for _neg, _id, w, t in sorted(cands, key=lambda c: c[:2]):
+        if len(out) >= POOL_PARTNERS or need < 2:
+            break
+        n = min(need, -_neg)
+        n -= n % 2
+        if n >= 2:
+            out.append({"wing": w.base_asset_id, "raider": t, "n": n})
+            need -= n
+    return out
+
+
+def _pool_escorts(state, taken, lead_wing, ax: float, ay: float, need: int) -> list:
+    """S46: partner escort wings for a raid whose lead escort wing (`lead_wing`) is `need` fighters short: other wings within `ESC_POOL_NM` of it, not one of the `taken` (raider and lead escort) wings, with a fighter type that
+    has a pair free and the reach (radius x 0.85); the most jets free first, up to `POOL_PARTNERS`; any type (an Su-27 wing with a MiG-29 wing). -> [{"wing": base asset id, "type": type, "n": fighters}]."""
+    from .loadouts import ENEMY_FIGHTERS, ENEMY_RADIUS_NM
+    from . import bombers
+    held_ = bombers.escorts_held(state)
+    la = state.assets[lead_wing.base_asset_id]
+    cands = []
+    for w in state.enemy_air:
+        a = state.assets[w.base_asset_id]
+        if w.base_asset_id in taken or a.destroyed or math.hypot(a.x - la.x, a.y - la.y) / NM > ESC_POOL_NM:
+            continue
+        d_nm = math.hypot(a.x - ax, a.y - ay) / NM
+        for t in dict.fromkeys(q.aircraft for q in w.sqns if q.role != "escort" or not held_):
+            if t in ENEMY_FIGHTERS and ENEMY_RADIUS_NM.get(t, 0) * 0.85 >= d_nm and redair.ready_of(state, w, (t,)) >= 2:
+                cands.append((-redair.ready_of(state, w, (t,)), w.base_asset_id, t, w))
+    out, seen = [], set()
+    for _neg, _id, t, w in sorted(cands, key=lambda c: c[:3]):
+        if len(out) >= POOL_PARTNERS or need < 2:
+            break
+        if _id in seen:
+            continue
+        n = min(need, -_neg)
+        n -= n % 2
+        if n >= 2:
+            out.append({"wing": _id, "type": t, "n": n})
+            seen.add(_id)
+            need -= n
+    return out
+
+
+def raid_members(ex: dict) -> list:
+    """S46: [(base asset id of the wing, type, jets)] of a raid plan's raiders, the lead wing first then the `pool` partners (a plan without `pool` is its one wing). `bombers` is the total, the lead flies what the partners do not."""
+    pool = ex.get("pool") or []
+    out = [(ex.get("bomber_wing", ""), ex.get("raider"), int(ex.get("bombers", 0)) - sum(int(p["n"]) for p in pool))]
+    out += [(p["wing"], p["raider"], int(p["n"])) for p in pool]
+    return [m for m in out if m[2] > 0]
+
+
+def escort_members(ex: dict) -> list:
+    """S46: [(base asset id, type, fighters)] of a raid plan's escorts, the lead escort wing first then the `esc_pool` partners. `escorts` is the total."""
+    pool = ex.get("esc_pool") or []
+    out = [(ex.get("escort_wing", ""), ex.get("escort_type"), int(ex.get("escorts", 0)) - sum(int(p["n"]) for p in pool))]
+    out += [(p["wing"], p["type"], int(p["n"])) for p in pool]
+    return [m for m in out if m[2] > 0 and m[0]]
+
+
+def lose_raiders(state, ex: dict, k: int, rng: random.Random) -> int:
+    """S46: `k` raiders shot down, taken off the lead wing and the pool partners in proportion to the jets each flew (no member loses more than it flew) -> how many were removed. A plan without `pool` is
+    `wing.lose(raider, k)` as before and draws nothing from `rng`."""
+    if not ex.get("pool"):
+        bw = state.enemy_air_at(ex.get("bomber_wing", ""))
+        return bw.lose(ex.get("raider"), k) if bw is not None else 0
+    mem = [(state.enemy_air_at(a), t, n) for a, t, n in raid_members(ex)]
+    mem = [m for m in mem if m[0] is not None]
+    left = [m[2] for m in mem]
+    cnt = [0] * len(mem)
+    for _ in range(max(0, int(k))):
+        if sum(left) <= 0:
+            break
+        i = rng.choices(range(len(mem)), weights=left)[0]
+        left[i] -= 1
+        cnt[i] += 1
+    return sum(m[0].lose(m[1], c) for m, c in zip(mem, cnt) if c)
+
+
 def sead_jets(state, aim: str, d=None) -> int:
     """S36b (XO 2026-11-11): the jets red sends at the blue SAM site `aim`: `SEAD_JETS` for a HAWK, a Patriot below full strength or whatever is left of one, `SEAD_PATRIOT_PACKAGES` x that for a full-strength Patriot."""
     from .sams import BLUE_FULL_DEF
@@ -479,21 +579,43 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int):
     if nb < 2 or rdy < nb:
         return None
     from . import blue_barcap
-    alone_ = (raider == "Su_25" and aim_kind(aim) == "supply" and SU25_SUPPLY                          # v0.41.359 (Phase 10c): no blue fighter squadron can reach the site's field (blue's own patrol rule, `blue_barcap._cap_squadrons`): the Su-25s go alone
+    pool = []
+    if POOL_RAIDS and nb < want and aim_kind(aim) in POOL_KINDS:                                      # S46: the lead wing cannot fill the size drawn: a nearby wing joins it
+        pool = _pool_partners(state, aim_kind(aim), bw, ax, ay, min(want, POOL_MAX_RAIDERS) - nb)
+    nb_lead = nb
+    nb += sum(p["n"] for p in pool)
+    alone_ = (raider == "Su_25" and all(p["raider"] == "Su_25" for p in pool) and aim_kind(aim) == "supply" and SU25_SUPPLY                          # v0.41.359 (Phase 10c): no blue fighter squadron can reach the site's field (blue's own patrol rule, `blue_barcap._cap_squadrons`): the Su-25s go alone
               and not blue_barcap._cap_squadrons(state, base))
     want_e = 0 if alone_ else max(4 if nb >= 4 else 2, nb // 2 + (2 if nb >= 8 else 0))
     esc, esc_avail = _escort_for(state, bw, ax, ay, rnd, alone_, want_e)
     brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360                      # they come from where they took off
     esc_even = esc_avail - esc_avail % 2
-    escorts = min(max(4 if nb >= 4 else 2, nb // 2 + (2 if nb >= 8 else 0)), esc_even) if esc else 0      # v0.41.341: never more than the wing has free (the floor of four used to ignore it)
-    jets = [[sid, n, "raid"] for sid, n in redair.take_ready(state, bw, (raider,), nb)]
+    escorts = min(want_e if want_e else max(4 if nb >= 4 else 2, nb // 2 + (2 if nb >= 8 else 0)), esc_even) if esc else 0      # v0.41.341: never more than the wing has free (the floor of four used to ignore it)
+    esc_pool = []
+    if POOL_ESCORTS and esc and escorts < want_e:                                                    # S46: the escort wing is short too: the next wing's fighters fly with it
+        esc_pool = _pool_escorts(state, {bw.base_asset_id, esc[0].base_asset_id, *(p["wing"] for p in pool)}, esc[0], ax, ay, want_e - escorts)
+    jets = [[sid, n, "raid"] for sid, n in redair.take_ready(state, bw, (raider,), nb_lead)]
+    for p in pool:
+        jets += [[sid, n, "raid"] for sid, n in redair.take_ready(state, state.enemy_air_at(p["wing"]), (p["raider"],), p["n"])]
     if esc:
         jets += [[sid, n, "esc"] for sid, n in redair.take_ready(state, esc[0], (esc[1],), escorts)]
-    redair.spend(state, bw.base_asset_id, nb)                                        # the day's sortie cap: the overnight raids and the abstract strikes draw on it too
+    for p in esc_pool:
+        jets += [[sid, n, "esc"] for sid, n in redair.take_ready(state, state.enemy_air_at(p["wing"]), (p["type"],), p["n"])]
+    redair.spend(state, bw.base_asset_id, nb_lead)                                   # the day's sortie cap: the overnight raids and the abstract strikes draw on it too
+    for p in pool:
+        redair.spend(state, p["wing"], p["n"])
     if esc:
         redair.spend(state, esc[0].base_asset_id, escorts)
-    return {"land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb,
+    for p in esc_pool:
+        redair.spend(state, p["wing"], p["n"])
+    escorts += sum(p["n"] for p in esc_pool)
+    plan = {"land": True, "raider": raider, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": nb,
             "bomber_wing": bw.base_asset_id, "escort_wing": esc[0].base_asset_id if esc else "", "escort_type": esc[1] if esc else "", "escorts": escorts, "mass": nb >= 8, "aim": aim, "dest": [ax, ay], "jets": jets}
+    if pool:
+        plan["pool"] = pool                                                          # S46: `bombers` / `escorts` are the totals (lead + partners); the lead's own share is bombers - sum(pool n), see `raid_members`
+    if esc_pool:
+        plan["esc_pool"] = esc_pool
+    return plan
 
 
 def plan_tu_strike(state, d, base, aim: str, oid: str, turn: int):

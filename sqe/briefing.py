@@ -41,9 +41,23 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     if obj.type.value == "FLEET_DEFENSE" and pkg.extra:
         e = pkg.extra
         tb = state.bases.get(obj.target_id)
-        rtype = {"Su_24M": "Su-24M bombers", "Su_34": "Su-34 bombers", "Su_25": "Su-25 attack aircraft", "Tu_22M3": "Tu-22M3 bombers"}.get(e.get("raider", "Su_24M"), "attack aircraft")
+        rtype_of = {"Su_24M": "Su-24M bombers", "Su_34": "Su-34 bombers", "Su_25": "Su-25 attack aircraft", "Tu_22M3": "Tu-22M3 bombers"}
+        rtype = rtype_of.get(e.get("raider", "Su_24M"), "attack aircraft")
+        if e.get("pool"):                                    # S46: a pooled raid names every type that flies it ("4 Su-34 bombers and 2 Su-25 attack aircraft")
+            from .raids import raid_members
+            by_t_ = {}
+            for _a, t, n in raid_members(e):
+                by_t_[t] = by_t_.get(t, 0) + n                        # (two wings of one type read as one number)
+            rtype_n = " and ".join(f"{n} {rtype_of.get(t, 'attack aircraft')}" for t, n in by_t_.items())
         what = obj.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", "") if e.get("aim") else (tb.name if tb else "our airfield")
-        sit += ["", (f"Intelligence reports {e['bombers']} {rtype} with {'Kh-31P anti-radiation missiles' if e.get('sead') else 'free-fall bombs'} inbound toward {what}, "
+        esc_n = ""
+        if e.get("esc_pool"):                                # S46: ...and the escorts ("4 Su-27 and 2 MiG-29")
+            from .raids import escort_members
+            by_e_ = {}
+            for _a, t, n in escort_members(e):
+                by_e_[t] = by_e_.get(t, 0) + n
+            esc_n = " (" + " and ".join(f"{n} {t.replace('_', '-')}" for t, n in by_e_.items()) + ")" if len(by_e_) > 1 else ""      # one type: "6 fighters" as before
+        sit += ["", (f"Intelligence reports {rtype_n if e.get('pool') else str(e['bombers']) + ' ' + rtype} with {'Kh-31P anti-radiation missiles' if e.get('sead') else 'free-fall bombs'} inbound toward {what}, "
                      f"approaching from a bearing of about {e['brg']:.0f} degrees."
                      + (" They will fire from about 40 nm out and turn for home; stop them before they launch." if e.get("sead") else "") if e.get("land") else
                      f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
@@ -52,7 +66,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                          "you are free to cross toward the launch point at the push time on the card." if e.get("prep_rec") else
                          " SEAD flights are working the long-range SAMs over their launch point. Hold on your station, outside the SAM rings, and engage what comes to you; "
                          "you are free to cross toward the launch point when AWACS calls SEAD complete, or at the push time on the card.") if e.get("setpiece") else ""))
-                    + (f" They are escorted by {e['escorts']} fighters." if e.get("escorts") else
+                    + (f" They are escorted by {e['escorts']} fighters{esc_n}." if e.get("escorts") else
                        (" They have no escort." if e.get("land") else " They have no escort: the enemy cannot reach this far with fighters. It is a last throw of the dice."))]
     n_def = x.get("n_def", pkg.n_def)
     inc = (" (counting the packages flown with this one: " + ", ".join(f"#{n}" for n in x["merged_nums"]) + ")") if x.get("merged_nums") else ""
