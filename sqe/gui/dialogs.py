@@ -185,14 +185,10 @@ class SettingsDialog(QDialog):
             if not on:
                 self.hotrwy_own.setChecked(False)
         self.hotrwy.toggled.connect(_own_gate)
-        self.ilsd = QComboBox()                                                  # v0.41.336 (XO 2026-11-09), S32: on or off; not tested in DCS
-        for k_, val_ in (("on", "On (small aircraft parked beside the runway)"), ("off", "Off (wind kept inside the ILS runway window)")):
-            self.ilsd.addItem(val_, k_)
-        self.ilsd.setCurrentIndex(max(0, self.ilsd.findData("off" if getattr(settings, "ils_dummy", "on") == "off" else "on")))
-        row(v, "ILS dummy aircraft", self.ilsd)
-        hint(v, "DCS only switches on the ILS of the runway it counts as active, and the wind picks that runway. An immortal small aircraft that never starts, parked on the grass beside the ILS runway "
-                "of every blue field with an ILS, is meant to keep that runway active whatever the wind, so the wind can follow the theatre's real pattern (west in summer, south in winter) "
-                "instead of staying inside the ILS runway window. Not tested in DCS yet. Off: no dummy, and the wind stays inside the window.")
+        self.ilslv = QCheckBox("Keep ILS runways active in low visibility")
+        self.ilslv.setChecked(bool(getattr(settings, "ils_low_vis", True))); v.addWidget(self.ilslv)
+        hint(v, "DCS lights the ILS only on the runway it counts as active, and the low-level wind picks that runway. When ceiling or visibility is low, the ground wind is turned to favour each field's "
+                "ILS runway; the wind aloft keeps the season's real direction. In good weather the wind is left as it is.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
@@ -362,7 +358,7 @@ class SettingsDialog(QDialog):
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
         self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
-        self.s.ils_dummy = str(self.ilsd.currentData() or "on")
+        self.s.ils_low_vis = bool(self.ilslv.isChecked())
         self.s.pilot_influence = bool(self.pinf.isChecked()); self.s.tempo_decay = bool(self.pinf.isChecked() and self.pdec.isChecked())
         self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
         self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value())

@@ -286,10 +286,7 @@ def check_miz_parses():
             else:
                 lua.loads(z.read(n).decode("utf-8"))                     # DCS reads these as Lua
         assert any(player for _g, player in _air_groups(M)), (ac, "no player slot")
-        for g, _player in _air_groups(M):                                # the ILS dummy (if the setting builds one) is a never-started parked aircraft, not a flight
-            if str(g.get("name", "")).startswith("ILS dummy"):
-                assert g.get("uncontrolled"), (ac, g["name"], "dummy is not an uncontrolled aircraft")
-    print("[miz] zip sound, members present, Lua parses, a player slot exists, any ILS dummy is an uncontrolled aircraft")
+    print("[miz] zip sound, members present, Lua parses, a player slot exists")
 
 
 def _lock_problems(M, label):
