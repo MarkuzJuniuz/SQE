@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.425, a player's EWR strike is a stand-off job too
+A person flying an EWR strike now takes the stand-off kit of their own jet, as the AI does: the F-16C carries AGM-154A JSOWs and the Hornet SLAM-ERs, with the launch point outside the SAM rings. The plain GBU slot is gone; an airframe with no stand-off kit is not offered the EWR strike.
 ## v0.41.424, AI GBU strikes spread their bombs over a supply site's buildings
 An AI strike flight with guided bombs on a fuel farm or depot now gives each bomb its own building instead of dropping every bomb on one point, so more of the site dies per strike. Flights a person flies, and every other kind of strike, are unchanged.
 ## v0.41.423, the mission hook records where bombs land

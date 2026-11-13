@@ -421,7 +421,7 @@ class PackageBuilder:
                     Slot(Role.SEAD, 4 if nb >= SALVO_8_NEIGHBOURS else 2)]     # the JSOW flight is picked before the second HARM flight: without it nothing is destroyed
         elif obj.type == ObjectiveType.COUNTER_AIR and obj.aim == "STANDOFF":   # v0.41.313: counter-air under air cover: the sweep flight as cover, JSOW-A Vipers or Hornets on the ramp from far out
             tmpl = [Slot(Role.SWEEP, 4), Slot(Role.STRIKE, 4, kit="JSOW")]
-        elif obj.type == ObjectiveType.STRIKE and obj.aim == "STANDOFF" and self._is_ewr(obj):      # S60: an EWR strike: the kit is chosen in `build` (EWR_KIT_ORDER; none for a player's build)
+        elif obj.type == ObjectiveType.STRIKE and obj.aim == "STANDOFF" and self._is_ewr(obj):      # S60: an EWR strike: the kit is chosen in `build` (EWR_KIT_ORDER; a player's own airframe first, S68)
             tmpl = [Slot(Role.STRIKE, 4), Slot(Role.TARCAP, 2)]
         elif obj.type == ObjectiveType.STRIKE and obj.aim == "STANDOFF":    # v0.41.298: a supply strike under heavy fighter cover: SLAM-ER Hornets, the TARCAP / escort added below
             tmpl = [Slot(Role.STRIKE, 4, kit="SLAM"), Slot(Role.TARCAP, 2)]
@@ -481,10 +481,11 @@ class PackageBuilder:
                     sq_.aircraft in PEN_PER_JET and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty, "PEN") for sq_ in st.squadrons.values()):
                 next(s_ for s_ in slots if s_.role == Role.STRIKE and not s_.tag and not s_.kit).kit = "PEN"
         ewr_so_ = obj.type == ObjectiveType.STRIKE and obj.aim == "STANDOFF" and self._is_ewr(obj)
-        if ewr_so_ and not for_player:
+        if ewr_so_:
             # S60 (XO 2026-11-12: EWR strikes are stand-off only): the strike slot takes the kit of the first airframe in EWR_KIT_ORDER that has a squadron with 2+ free jets in range for it (the PEN kit's
-            # reach is shorter). None: the package cannot be built, the EWR waits (no GBU fallback). Not for the player's own build (as S51): a Viper / Hornet pilot keeps the plain strike slot, his route and loadout.
-            for ac_, kit_ in EWR_KIT_ORDER:
+            # reach is shorter). None: the package cannot be built, the EWR waits (no GBU fallback). S68: a player's build gets the kit of his own airframe (F-16C JSOW-A, Hornet SLAM-ER); an airframe with no kit gets no EWR strike (NoPlayerSlot below).
+            pac_ = st.squadrons[st.player.squadron_id].aircraft if (for_player and st.player) else None        # S68 (XO 2026-11-12: the mission is the same for a person): a player's own airframe is tried first, so he flies the kit slot too
+            for ac_, kit_ in sorted(EWR_KIT_ORDER, key=lambda e_: e_[0] != pac_):
                 if any(sq_.aircraft == ac_ and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty, kit_) for sq_ in st.squadrons.values()):
                     s_ = next(s_ for s_ in slots if s_.role == Role.STRIKE and not s_.tag)
                     s_.kit, s_.only = kit_, ac_
@@ -538,7 +539,7 @@ class PackageBuilder:
             chosen.append((slot, sq, count, i == player_idx))
         if not chosen:
             raise NoPlayerSlot("no squadron could fly this objective")
-        if ewr_so_ and not for_player and not any(sl_.kit for sl_, *_ in chosen):
+        if ewr_so_ and not any(sl_.kit for sl_, *_ in chosen):
             # S60: the slot's squadron was there when the kit was chosen; if its jets went to another slot, the EWR strike waits for another day (never a plain strike)
             for sl_, sq_, n_, _ in chosen:
                 ledger.free[sq_.id] += n_
