@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.429, the tanker and the AWACS always fly with their guard
+The pair of fighters that guards the tanker or the AWACS now stays on station for as long as that aircraft is up in the turn, so a package launching in the second half of a turn finds it there. Every package that carries the AWACS or the tanker gets the guard (sweeps and fleet-defence packages included), and the Navy's S-3B tanker, when it is a package's tanker, has a guard too. Before, only about four packages in ten had theirs.
 ## v0.41.428, AI runway strikers drop their bombs on the runway
 The AI flights that crater a runway used to run in to the field and turn for home without releasing. They now bomb with the same plain bomb task as every other AI strike, with their bombs spread along the runway, and a flight held at the gate keeps its full attack window.
 ## v0.41.427, red sends a fighter sweep ahead of its SEAD raids

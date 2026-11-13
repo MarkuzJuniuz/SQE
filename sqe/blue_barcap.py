@@ -18,8 +18,7 @@ from .models import BaseKind, ObjectiveType, Role
 
 NM = 1852.0
 # the share of the areas that can be up in a turn that have a pair on station, (day turn, night turn) by level, seeded: judgment call, a starting point for the balance pass (campaign rules plan
-# section 6, Phase 13). Red's patrol share is higher (redair.RED_CAP_SHARE); blue's is lower at L1 / L2 because XO plays the sorties himself. It also sets how often an AWACS guard is up
-# (the tanker's guard is planned every turn the tanker is on orbit).
+# section 6, Phase 13). Red's patrol share is higher (redair.RED_CAP_SHARE); blue's is lower at L1 / L2 because XO plays the sorties himself. (The AWACS and tanker guards do not use it: S19 / S71, they are planned every turn the asset is up.)
 CAP_SHARE = {1: (0.20, 0.10), 2: (0.40, 0.16), 3: (0.60, 0.20)}      # S25: doubled for 4-hour turns (was {1: (0.10, 0.05), 2: (0.20, 0.08), 3: (0.30, 0.10)}), so the rate per hour is as it was
 KEEP_BACK = 2                  # an area patrol never takes a squadron's last pair of ready jets (they stay for the packages; as the day plan's "one pair stays back"; judgment call)
 PACKAGE_WINDOW_MIN = 100       # a package is out about this long after its start (judgment call)
@@ -56,27 +55,27 @@ def _crew_havcap(ledger, sqs, wave: int):
     return max((q for q in sqs if ledger.hroom(q.id, wave) >= 2), key=lambda q: (ledger.hroom(q.id, wave), q.id), default=None)
 
 
-def _pairs(ledger, sqs, t0: int, t1: int, keep: int, tanker: bool = False) -> list:
+def _pairs(ledger, sqs, t0: int, t1: int, keep: int) -> list:
     """The pairs one station needs in a turn [t0, t1), minutes of the day, drawn from the ledger: [(squadron, wave, start, end)]. One pair in the first wave, from the turn's start, stays as long
-    as its airframe does (a long-legged pair, 120 minutes, holds the whole turn). A short-legged pair (30 minutes) is relieved by a second pair that goes up in the second wave. A pair that can only be
+    as its airframe does (a long-legged pair, 120 minutes, is relieved by a second pair in the second wave, since the turn is 240 minutes; S25). A short-legged pair (30 minutes) is relieved by a second pair that goes up in the second wave. A pair that can only be
     crewed from the jets that are ready by the second wave goes up then."""
     from .timeofday import WAVE2_OFFSET_MIN
     out = []
     sq = _crew(ledger, sqs, 1, keep)
     if sq is not None:
-        e = barcap.endurance_min(sq.aircraft, tanker)
+        e = barcap.endurance_min(sq.aircraft)
         ledger.take(sq.id, 2, 1)
         out.append((sq, 1, t0, min(t1, t0 + e)))
         if t0 + e < t1 - barcap.HANDOVER_MIN:                             # a short leg: the second wave relieves it
             sq2 = _crew(ledger, sqs, 2, keep)
             if sq2 is not None:
-                e2 = barcap.endurance_min(sq2.aircraft, tanker)
+                e2 = barcap.endurance_min(sq2.aircraft)
                 ledger.take(sq2.id, 2, 2)
                 out.append((sq2, 2, t0 + WAVE2_OFFSET_MIN, min(t1, t0 + WAVE2_OFFSET_MIN + e2)))
     else:
         sq = _crew(ledger, sqs, 2, keep)
         if sq is not None:
-            e = barcap.endurance_min(sq.aircraft, tanker)
+            e = barcap.endurance_min(sq.aircraft)
             ledger.take(sq.id, 2, 2)
             out.append((sq, 2, t0 + WAVE2_OFFSET_MIN, min(t1, t0 + WAVE2_OFFSET_MIN + e)))
     return out
@@ -92,7 +91,7 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
     t1 = t0 + clock.TURN_MIN
     share = CAP_SHARE[level][1 if clock.is_night_turn(turn) else 0]
     flights = []
-    _plan_guards(state, ledger, flights, turn, t0, t1, share, rng, wins)    # the AWACS and tanker guards first (the tanker's is not optional)
+    _plan_guards(state, ledger, flights, turn, t0, t1, wins)    # the AWACS and tanker guards first (the tanker's is not optional)
     cands = []
     for b in sorted((b for b in state.bases.values() if b.kind in (BaseKind.AIRFIELD, BaseKind.CARRIER) and not b.divert), key=lambda b: b.id):          # Phase 9a: no patrol from a divert field
         sqs = _cap_squadrons(state, b)
@@ -122,8 +121,9 @@ def plan_turn(state, d, turn: int, t0: int, ledger, rng, wins: dict) -> list:
     return flights
 
 
-# the guard of each support asset: key -> (tag, whether the guard sortie is the tanker's long stay)
-GUARDS = {"bl_kc135": "TKR_HAVCAP", "bl_e3": "HAVCAP", "bl_e2": "HAVCAP"}      # tankers first: their guard is not optional
+# the guard of each support asset: key -> flight tag. The assets and their guards are standing entities on their own schedule (S71, XO 2026-11-13): every package that carries the asset gets the guard.
+# A second tanker (another direction) is one more TABLE row in support_assets and one more entry here.
+GUARDS = {"bl_kc135": "TKR_HAVCAP", "bl_s3": "TKR_HAVCAP", "bl_e3": "HAVCAP", "bl_e2": "HAVCAP"}      # tankers first: their guard is not optional
 
 
 def _havcap_squadrons(state, base) -> list:
@@ -149,9 +149,10 @@ def _guard_squadrons(state, base) -> list:
     return sorted(cands, key=lambda q: (-q.available, q.id))[:1]
 
 
-def _plan_guards(state, ledger, flights, turn, t0, t1, share, rng, wins) -> None:
+def _plan_guards(state, ledger, flights, turn, t0, t1, wins) -> None:
     """One guard pair for each AWACS / tanker type that is on orbit in this turn (`wins`, from support_assets.plan). The tanker's guard is planned every turn it is up and takes any capable
-    squadron's last pair; the AWACS's guard is planned every turn it is up too (S19, XO 2026-11-11: it sits on one fixed station, so nobody else would guard it); `share` is kept for the callers. A guard stays 120 minutes whatever the airframe (a pair on a tanker / AWACS track can refuel, like red's)."""
+    squadron's last pair; the AWACS's guard is planned every turn it is up too (S19, XO 2026-11-11: it sits on one fixed station, so nobody else would guard it). S71 (XO 2026-11-13): the one pair stays for the asset's whole time on orbit in the turn
+    (it can refuel on its track, like red's; a judgment call, no relay pair), so a package of either wave finds it up; it was 120 minutes, which since the 4-hour turns left the second wave without a guard."""
     from .timeofday import WAVE2_OFFSET_MIN
     for key, tag in GUARDS.items():
         a = (getattr(state, "support_assets", None) or {}).get(key)
@@ -177,7 +178,7 @@ def _plan_guards(state, ledger, flights, turn, t0, t1, share, rng, wins) -> None
             continue
         (ledger.htake if hav else ledger.take)(sq.id, 2, w)
         flights.append({"id": f"bg{turn}-{key}", "kind": tag, "asset": key, "area": "", "squadron": sq.id, "aircraft": sq.aircraft, "size": 2, "start": lo,
-                        "end": min(hi, lo + barcap.endurance_min(sq.aircraft, True)), "callsign": "", "turn": turn, "wave": w})
+                        "end": hi, "callsign": "", "turn": turn, "wave": w})
 
 
 def _union_minutes(spans: list) -> int:
@@ -236,12 +237,26 @@ def attach(state, pkgs: list, until: int | None = None, since: int | None = None
         setp = bool(p.extra.get("setpiece"))                              # v0.41.109: the carrier raid setpiece gets the carrier BARCAP and the guards too
         tb_ = state.bases.get(obj.target_id)
         land_raid = (obj.type == ObjectiveType.FLEET_DEFENSE and tb_ is not None and tb_.kind == BaseKind.AIRFIELD and not setp)    # v0.41.114: a land-raid intercept
-        if land_raid:
-            pass
-        elif (obj.type in _FLEET and not setp) or is_sweep(obj) or (obj.target_id not in state.assets and not setp):
-            continue
+        no_barcap = (not land_raid) and ((obj.type in _FLEET and not setp) or is_sweep(obj) or (obj.target_id not in state.assets and not setp))     # S71: such a package gets no base / carrier BARCAP, but it still carries the AWACS / tanker, so it gets their guards
         s0 = _minute(p.start)
         lo, hi = s0 - LEAD_MIN, s0 + PACKAGE_WINDOW_MIN
+        have = {f.tag for f in p.flights if f.tag in ("BASE_BARCAP", "CARRIER_BARCAP")}
+        for key in _support_keys(p):                                      # v0.41.88: the guard of each AWACS / tanker the package has
+            tag = GUARDS[key]
+            if tag in have:
+                continue
+            hit = [f for f in planned if f["kind"] == tag and f["asset"] == key and f["start"] <= hi and f["end"] >= lo]
+            if not hit:
+                continue
+            pf = max(hit, key=lambda f: (min(f["end"], hi) - max(f["start"], lo), -f["start"]))
+            sq = state.squadrons[pf["squadron"]]
+            if not pf["callsign"]:
+                pf["callsign"] = _next_callsign(state, sq, used)
+            p.flights.append(FlightPlan(f"{p.id}-f{len(p.flights) + 1}", pf["callsign"], Role.CAP, sq.id, sq.aircraft, pf["size"], sq.base_id,
+                                        _TAG_TASK[tag], False, tag, "", ""))
+            have.add(tag)
+        if no_barcap:
+            continue
         if land_raid:
             txy = (tb_.x, tb_.y)                                           # the raided field is what the base BARCAP faces and guards
         elif setp:
@@ -263,21 +278,6 @@ def attach(state, pkgs: list, until: int | None = None, since: int | None = None
             cv = _fleet.carrier(state)                                    # v0.41.257: none while the carrier is sunk
         if cv is not None:
             assets.append(cv)
-        have = {f.tag for f in p.flights if f.tag in ("BASE_BARCAP", "CARRIER_BARCAP")}
-        for key in _support_keys(p):                                      # v0.41.88: the guard of each AWACS / tanker the package has
-            tag = GUARDS[key]
-            if tag in have:
-                continue
-            hit = [f for f in planned if f["kind"] == tag and f["asset"] == key and f["start"] <= hi and f["end"] >= lo]
-            if not hit:
-                continue
-            pf = max(hit, key=lambda f: (min(f["end"], hi) - max(f["start"], lo), -f["start"]))
-            sq = state.squadrons[pf["squadron"]]
-            if not pf["callsign"]:
-                pf["callsign"] = _next_callsign(state, sq, used)
-            p.flights.append(FlightPlan(f"{p.id}-f{len(p.flights) + 1}", pf["callsign"], Role.CAP, sq.id, sq.aircraft, pf["size"], sq.base_id,
-                                        _TAG_TASK[tag], False, tag, "", ""))
-            have.add(tag)
         for b in assets:
             kind = "CARRIER_BARCAP" if b.kind == BaseKind.CARRIER else "BASE_BARCAP"
             ar = barcap.facing_area(state, "blue", b.id, txy)
