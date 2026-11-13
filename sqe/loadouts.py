@@ -204,6 +204,21 @@ KH59_PER_JET = {"Su_24M": 2, "Su_34": 2}   # Kh-59M per jet: every pylon that ta
 KH59_POD = {"Su_24M": 4}   # the APK-9 pod (pydcs `APK_9_Datalink_Pod`, clsid {APK_9}) a type needs on this pylon before the AI fires its Kh-59M (the Su-34 needs none). It is not a weapon: `_limit` and the "unarmed" warning count only the missiles
 
 
+def gbu_count(load: dict) -> int:
+    """S67: how many GBU bombs a loadout carries ({pylon: {"CLSID": id}}). Reads each pylon's weapon name from pydcs's table: a name with "GBU" counts once, or N for a
+    rack named "... with N x GBU-..." (F/A-18C: BRU-55 with 2 x GBU-38, BRU-33 with 2 x GBU-12). F-16C 2, F-14B 2, F-15E 4, F/A-18C 8 (stock presets)."""
+    import re
+    from dcs.weapons_data import weapon_ids
+    n = 0
+    for v in (load or {}).values():
+        name = str((weapon_ids.get(v.get("CLSID")) or {}).get("name", ""))
+        if "GBU" not in name.upper():
+            continue
+        m = re.search(r"with\s+(\d+)\s*x", name, re.I)
+        n += int(m.group(1)) if m else 1
+    return n
+
+
 def _limit(out: dict, n) -> dict:
     """At most n pylons of a loadout, outermost pairs first (the lowest and highest pylon numbers alternately), so the load stays symmetric. None or n >= len: unchanged."""
     if not n or len(out) <= n:

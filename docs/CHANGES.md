@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.424, AI GBU strikes spread their bombs over a supply site's buildings
+An AI strike flight with guided bombs on a fuel farm or depot now gives each bomb its own building instead of dropping every bomb on one point, so more of the site dies per strike. Flights a person flies, and every other kind of strike, are unchanged.
 ## v0.41.423, the mission hook records where bombs land
 The in-mission hook now recognises a bomb in flight (GBU-31, GBU-38, Mk-82 and the rest), so the impact points reach the state file and bombs that land on a runway count toward cratering the field. Before, it only recognised the AGM-154.
 ## v0.41.422, red's SEAD raids go for a full-strength Patriot more often, and only when it can field the jets

@@ -42,7 +42,7 @@ from . import road_sites
 from .strike_tasks import StrikeTasks, DEAD_GATE_KM, SEAD_WAVE_KM, TRACK_RADARS, SEARCH_RADARS, KPH
 from . import kneeboard
 from .kneeboard import latlon, render_pages
-from .loadouts import LoadoutLibrary, enemy_cap_loadout, ENEMY_FIGHTERS, JSOW_FLIGHT_KITS
+from .loadouts import LoadoutLibrary, enemy_cap_loadout, gbu_count, ENEMY_FIGHTERS, JDAM_JETS, JSOW_FLIGHT_KITS
 from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType, Role, tag_label, task_label
 pydcs_patch.install()           # v0.41.66: pydcs's scattered formation could loop forever and freeze a build (sqe/pydcs_patch.py)
 
@@ -2652,6 +2652,45 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             out.append(rf_)
         return out
 
+    def _gbu_spread_tasks(self, package, f, w, stop_s):
+        """S67 (XO run 2026-11-12 22-47-24: eight GBU-31s of Viper 8 all landed within 2 to 49 m of the one aim point, one of three Tanks died): an AI JDAM striker on a supply
+        site spreads its bombs over the site's buildings. One Bombing task per aim point (up to the GBUs a jet carries, `loadouts.gbu_count`; the building spots by farthest-point
+        spread, the first the one nearest the site's centre), `Expend` the jet's bombs divided by the aim points, the last one `All` (the remainder). Each task stops at `stop_s`
+        like the single task. None = today's single task: not a plain-GBU strike on a supply site, or fewer than two building spots known."""
+        o_ = package.objective
+        if (f.role != Role.STRIKE or f.tag or getattr(f, "kit", "") or f.aircraft not in JDAM_JETS or o_.type != ObjectiveType.STRIKE
+                or o_.aim in ("RUNWAY", "STANDOFF", "SWEEP") or w.name == "SLAM"):
+            return None
+        spots = list(self._bld_xy.get(o_.target_id) or [])
+        if len(spots) < 2:
+            return None
+        n_ = gbu_count(self.lo.for_role(f.aircraft, f.role, ""))
+        k_ = min(n_, len(spots))
+        if k_ < 2:
+            return None
+        cen_ = (sum(s_[0] for s_ in spots) / len(spots), sum(s_[1] for s_ in spots) / len(spots))
+        chosen = [min(spots, key=lambda s_: dist(s_[0], s_[1], cen_[0], cen_[1]))]
+        while len(chosen) < k_:
+            rest = [s_ for s_ in spots if s_ not in chosen]
+            chosen.append(max(rest, key=lambda s_: min(dist(s_[0], s_[1], c_[0], c_[1]) for c_ in chosen)))
+        each = n_ // k_
+        exp = task.Expend.Four if each >= 4 else (task.Expend.Two if each >= 2 else task.Expend.One)
+        out = []
+        for i_, (x_, y_) in enumerate(chosen):
+            bt_ = task.ControlledTask(task.Bombing(self._pt(x_, y_), weapon_type=task.WeaponType.Auto, expend=(task.Expend.All if i_ == k_ - 1 else exp), group_attack=True))
+            bt_.stop_after_time(int(stop_s))
+            out.append(bt_)
+        return out
+
+    def _ai_bomb_tasks(self, package, f, w, stop_s) -> list:
+        """The AI flight's bomb tasks at a BOMB waypoint, each stopping at `stop_s`: the spread over a supply site's buildings (`_gbu_spread_tasks`), else the single task."""
+        sp_ = self._gbu_spread_tasks(package, f, w, stop_s)
+        if sp_ is not None:
+            return sp_
+        bt_ = task.ControlledTask(self._bomb_task(package, w))
+        bt_.stop_after_time(int(stop_s))
+        return [bt_]
+
     def _attach_waypoints(self, package, f, g, wps, first, ai_a2g, ai_sead, run_t0, push_s, tot_s, stop, hold_end, stw, armor, special):
         """Add each route point to the group with its tasks: ETAs, ROE, ECM, fuel, orbits, bombs, JSOW, CAS, SEAD attacks."""
         o = self.o
@@ -2700,8 +2739,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire if (w.action == "BOMB" or w.name == "SLAM") else task.OptROE.Values.WeaponFree))   # the ground target; aircraft stay off limits (restricted); v0.41.396: every AI strike attacks its designated point only (runs 17-09-47, 18-24-28: Weapon Free bombed depots and SAMs near the IP); CAS stays Weapon Free
             if ip_tgt_ is not None and w.name == "IP":
                 wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))   # v0.41.322: the attack starts here, on the way in; v0.41.396: designated target only for every strike (XO: no hunting)
-                bip_ = task.ControlledTask(self._bomb_task(package, ip_tgt_))
-                bip_.stop_after_time(int(ip_tgt_.eta_s + LATE_ATTACK_S)); wp.tasks.append(bip_)
+                wp.tasks += self._ai_bomb_tasks(package, f, ip_tgt_, ip_tgt_.eta_s + LATE_ATTACK_S)
             if ip_cas_ is not None and w is ip_cas_ip_:
                 wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))           # Stage C: the attack starts here, on the way in
                 self._cas_tasks(wp, ip_cas_, armor, tot_s, self._cas_floors.get(package.id, 0))
@@ -2753,8 +2791,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if w.name == "SLAM":
                     wp.tasks += self._bomb_tasks(package, w)
                 elif w is not ip_tgt_:                                                   # v0.41.322: that task is on the IP
-                    bct_ = task.ControlledTask(self._bomb_task(package, w))
-                    bct_.stop_after_time(int(w.eta_s + LATE_ATTACK_S)); wp.tasks.append(bct_)
+                    wp.tasks += self._ai_bomb_tasks(package, f, w, w.eta_s + LATE_ATTACK_S)
             elif w.action == "JSOW":
                 self._jsow_tasks(wp, f, armor, package, w.eta_s)
             elif w.action == "CAS" and w is not ip_cas_:                     # Stage C: with an IP before it, those tasks are on the IP
