@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.426, red raid escorts stay with their bombers through the attack
+The Su-27 escorts of a red raid used to turn for home as the bombers began their attack run, leaving them to be shot down. They now stay until the bombers reach their egress point.
 ## v0.41.425, a player's EWR strike is a stand-off job too
 A person flying an EWR strike now takes the stand-off kit of their own jet, as the AI does: the F-16C carries AGM-154A JSOWs and the Hornet SLAM-ERs, with the launch point outside the SAM rings. The plain GBU slot is gone; an airframe with no stand-off kit is not offered the EWR strike.
 ## v0.41.424, AI GBU strikes spread their bombs over a supply site's buildings
