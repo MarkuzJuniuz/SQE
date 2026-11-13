@@ -41,10 +41,12 @@ This lets me play DCS the way I like it. I hope others get to enjoy it too. Down
 | | |
 |---|---|
 | ![Overview](docs/images/overview.png) | ![Squadrons](docs/images/squadrons.png) |
-| ![Enemy assets](docs/images/enemy-assets.png) | ![Bases](docs/images/bases.png) |
-| ![Enemy air wings](docs/images/enemy-air-wings.png) | ![New campaign](docs/images/new-campaign.png) |
-| ![Settings: general](docs/images/settings-general.png) | ![Settings: campaign](docs/images/settings-campaign.png) |
-| ![Settings: mission build](docs/images/settings-mission-build.png) | ![Settings: terrain scan](docs/images/settings-terrain-scan.png) |
+| ![Tankers and AWACS](docs/images/tankers-and-awacs.png) | ![Bases](docs/images/bases.png) |
+| ![Ground war](docs/images/ground-war.png) | ![Enemy assets](docs/images/enemy-assets.png) |
+| ![War log](docs/images/war-log.png) | ![Pilot log](docs/images/pilot-log.png) |
+| ![New campaign](docs/images/new-campaign.png) | ![Settings: general](docs/images/settings-general.png) |
+| ![Settings: campaign](docs/images/settings-campaign.png) | ![Settings: mission build](docs/images/settings-mission-build.png) |
+| ![Settings: DCS integration](docs/images/settings-dcs-integration.png) | ![Settings: experimental](docs/images/settings-experimental.png) |
 
 ## Get started
 
