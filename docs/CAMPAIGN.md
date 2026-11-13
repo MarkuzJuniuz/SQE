@@ -182,9 +182,10 @@ the carrier is sunk, its aircraft are moved to land fields (any that cannot be p
 * **Defeat** is either of: the coalition's air component falls below 15% of its authorised strength, or **3 of your airfields
   have fallen**. A sunk carrier does not count as a fallen field (its aircraft land elsewhere; the carrier group sails back in after 7
   days).
-* **Idle surge.** If your squadron flies nothing for 12 flyable turns in a row (two days) red's reinforcements, attacks and raid
-  rate grow every day after that (`red_surge`: 3% a day at Level 2, 8% at Level 3, none at Level 1). A stand-down turn with
-  nothing flyable does not count. The Pilot Influence setting turns this off.
+* **Idle surge.** If you keep skipping turns that had a flight you could have flown, red presses harder. Each such skipped
+  turn counts one; a flown sortie resets the count to zero, and a turn with nothing for you to fly (a stand-down turn) is not
+  counted. The first 12 counted turns (two days' worth) are free. Past that, red's reinforcements, attack chance and raid rate
+  grow for each further day's worth of skipped turns (`red_surge`: 3% at Level 2, 8% at Level 3, none at Level 1). The Pilot Influence setting turns this off.
 
 ---------------------------------------------------------------------------------------------------
 
