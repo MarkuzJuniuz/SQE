@@ -1,60 +1,81 @@
 1. SITUATION
-12 JUN 2004. Operation IRON TIDE, day 1. Phase 1 - Stop the Advance and Contest the Air.
+12 JUN 2006. Operation IRON TIDE, day 1. Holding.
 
-The first priority is to halt the armored columns and keep the Federation's fighters off our airfields and the fleet. Close air support, counter-air strikes and a standing combat air patrol over the carrier.
+The front is not moving. Our ground force at the contested sector is not yet strong enough to attack; close air support and supply strikes decide the next move.
 
-Enemy air arm: 43 of 43 aircraft serviceable (100%).
-Air-defence network: 100% of sites operational.
-Armored advance: columns at 100% strength.
-Enemy command posts: 100% intact.
-Coalition air component: 78 of 78 aircraft serviceable (100%).
+The front: stage 1 of 3, next objective Sukhumi
+Bases: Sukhumi (next), Gudauta (enemy), Sochi (enemy)
+Sukhumi - Senaki 2/4: Coalition 2 battalions against Russia's 6 battalions (losing)
+Coalition Force Index: 100% (good)
+Russia Force Index: 100% (good)
+Coalition air defence: 100% of sites operational
+Russia air defence: 100% of sites operational
 
-Commander's intent: Until this battery is silenced, our strikers pay a toll. Remove it.  -- Col. Hale (Air Component)
+Commander's intent: The air-defence network leans on Beslan SA-11 site. Kill it and the corridor opens for every package behind you.  -- Cdr. Ito (CAG)
 
 Threats near the target:
   - SA-11 Gadfly (~18 nm), 0 nm from target
-  - SA-6 Gainful (~13 nm), 9 nm from target
-  - Early-warning radar, 13 nm from target
-  - SA-3 Goa (~13 nm), 29 nm from target
-  - SA-2 Guideline (~25 nm), 32 nm from target
-  - AAA (~3 nm), 33 nm from target
-  - SA-2 Guideline (~25 nm), 33 nm from target
-  - Early-warning radar, 34 nm from target
+  - SA-3 Goa (~13 nm), 6 nm from target
+  - SA-6 Gainful (~13 nm), 12 nm from target
+  - SA-2 Guideline (~25 nm), 35 nm from target
+  - SA-3 Goa (~13 nm), 36 nm from target
+  - AAA (~3 nm), 39 nm from target
+  - Early-warning radar, 40 nm from target
+  - SA-11 Gadfly (~18 nm), 55 nm from target
 
 Expect about 4 hostile fighters to contest the target; command is committing enough fighters to answer them.
 Weather: clear skies, unrestricted visibility.
 
+Standoff DEAD. This site is, or sits under, a long-range SAM, so it is one package: two HARM flights and a JSOW flight go in together. The first HARM flight takes the long-range radars, the second takes the Tors that cover the site, in the same salvo, so the Tors are busy with HARMs when the JSOWs arrive. The JSOW flight comes in on its own axis, about 30 degrees off the HARM shooters', and releases its AGM-154As on the radars, the launchers and the Tors from stand-off range. Nobody flies into the long-range SAM's reach: release, then back out the way you came. Out of HARMs or JSOWs, go home.
+Intelligence puts the chance of suppressing the radars at about 80%.
+
+You are the Standoff DEAD flight. A radar that keeps tracking is the HARMs' kill; one that shuts down to dodge them is still where it was last seen, and that is where your JSOWs land, with the rest on the launchers and the Tors.
+
+Intelligence: Reported enemy patrol: a pair of Su-27 from Mozdok, 34 nm NW of the target, 1000-1200.
+
+QRA (quick reaction alert): Scramble 1 (Su-27, Mozdok). Each is ordered up by the mission's triggers when a raid or a threat comes inside its reach; the debrief reports when each was ordered and how long it took to get airborne.
+
 2. MISSION
-Destroy Gudauta SA-11 site.
-You are Springfield 1-1, lead of 2x F-14B(U) Tomcat, tasked as ESCORT.
+Standoff DEAD: destroy Beslan SA-11 site.
+Target position N43°10.244' E044°45.916', bearing 058 degrees, 134 nm from Senaki-Kolkhi AB. Beslan SA-11 site stands at 100% strength.
+You are Viper 2-1, lead of 4x F-16C Viper, tasked as Standoff DEAD.
+Your task: Standoff DEAD: AGM-154A on the site's radars, launchers and covering Tors, on the HARM salvo's time; stand-off release, then home.
 
 3. EXECUTION
-Package (push / TOT are staggered: sweep first, then SEAD, escorts, strikers):
-  Hornet 1       4x F/A-18C Hornet   SEAD     push 09:12:30   TOT 09:15:48
-  Springfield 1  2x F-14B(U) Tomcat  ESCORT   push 09:13:00   TOT 09:16:37   <- YOU
-  Springfield 2  4x F-14B(U) Tomcat  SWEEP    push 09:12:00   TOT 09:15:33
-  Springfield 3  2x F-14B(U) Tomcat  HAVCAP   push -   TOT -
-  Springfield 4  2x F-14B(U) Tomcat  BARCAP   push -   TOT -
+Package (push / TOT are staggered: TARCAP first, then SEAD and escorts, then strikers):
+  Python 1       4x F-16C Viper      SEAD     push 10:14:30   TOT 10:25:06
+  Viper 2        4x F-16C Viper      SO DEAD  push 10:14:00   TOT 10:29:00   <- YOU
+  Rattler 1      2x F-16C Viper      SEAD     push 10:14:30   TOT 10:25:05
+  Dodge 1        4x F-15C Eagle      TARCAP   push 10:12:30   TOT 10:23:52
+  Lobo 1         2x F-16C Viper      ESCORT   push 10:14:00   TOT 10:26:23
+  Colt 1         2x F-15C Eagle      HAVCAP   push -   TOT -
+  Colt 2         2x F-15C Eagle      HAVCAP   push -   TOT -
+  Uzi 4          2x F-14B(U) Tomcat  BARCAP   push -   TOT -
 
 Your timeline (local):
-  Launch    09:00:00
-  Marshal   09:01:53   hold at MSHL, flights stacked 1,000 ft apart
-  PUSH      09:13:00   +/- 30 s
-  TOT       09:16:37   +/- 1 min
-  Egress    09:20:22
-  RTB       09:26:18
+  Launch    10:06:00
+  Marshal   10:09:39   hold at MSHL, flights stacked 1,000 ft apart
+  PUSH      10:14:00   +/- 30 s
+  TOT       10:29:00   +/- 1 min
+  Egress    10:33:02
+  RTB       10:55:50
 
 The rest of the package is airborne and holding at MSHL. Each flight pushes on its own time; be there.
 
+Joint package. Navy flights recover aboard the carrier; Air Force flights recover at their own fields.
+
 4. ADMINISTRATION AND LOGISTICS
-BINGO 3,000 lb   JOKER 4,500 lb
-Recovery: carrier Case I, TACAN 74X, ICLS 11, ATC COMM1 CH1
-Divert: Batumi AB
+BINGO 2,000 lb   JOKER 3,000 lb
+Recovery: home field, tower on COMM2 CH2
+Divert: Kutaisi AB
 Tanker track is steerpoint TKR. Bullseye is the last steerpoint.
 
 5. COMMAND AND SIGNAL
-COMM1 (UHF): CH1 ATC 305.000 | CH2 AWACS 234.000 | CH3 TANKER1 312.500 | CH5 TANKER2 269.500
-COMM2 (VHF): CH1 FLIGHT 127.500
-IFF Mode 3: 4213    Laser code: 1687
-Bullseye: N42°34.660' E040°34.271'
-Package aircraft share a datalink; the AWACS feeds it. Station numbers (STN) are on your kneeboard.
+COMM1 (UHF): CH1 AWACS 259.500 | CH2 TANKER1 258.500
+COMM2 (VHF): CH1 FLIGHT 128.000 | CH2 ATC 132.000 | CH3 DIVERT 134.000
+IFF Mode 3: 4516    Laser code: 1687
+Bullseye: N42°08.443' E042°27.280'
+AWACS: its calls reach you only while a radio is tuned to 259.500 MHz.
+Link 16: your wing are members, the other Link 16 flights of your package are donors (the AWACS is not on the net). Station numbers (STN) are on your kneeboard.
+
+Generated by Squadron Campaign Engine (SQE) v0.41.421. Created by MarkuzJuniuz. THIS MATERIAL IS NOT MADE OR SUPPORTED BY EAGLE DYNAMICS SA.
