@@ -1533,7 +1533,8 @@ dump()
 SCRUB_LOSS_FRAC = 0.5          # v0.41.223: a side of a package (strikers, or the covering fighters) that has lost this share of its jets scrubs the package (judgment call: XO's run, a 2-ship that lost one went home; the Gudauta CAS escort was down to two of four)
 SCRUB_STRIKE_GRACE_S = 180     # ...the strikers lost: scrub until this long after TOT (after that the strike is done or moot)
 SCRUB_COVER_LEAD_S = 90        # ...the cover lost: scrub only until this long before TOT (strikers that have committed finish the job)
-SUPPRESSED_CREDIT = 0.6        # v0.41.414 (S61, XO): a primary SAM left suppressed (radars gone) reads as a win in the debrief: target_damage is raised to this (judgment call: narrative's 'great' threshold). Asset health and the war sim are untouched
+RUNWAY_CREDIT = 0.6          # S75 (XO 2026-11-13): a runway job that closed the field reads as a win in the debrief (target_damage raised to this; same value as SUPPRESSED_CREDIT, narrative's 'great' threshold; judgment call). A runway has no health, so its damage was always 0%
+SUPPRESSED_CREDIT = 0.6       # v0.41.414 (S61, XO): a primary SAM left suppressed (radars gone) reads as a win in the debrief: target_damage is raised to this (judgment call: narrative's 'great' threshold). Asset health and the war sim are untouched
 BINGO_PCT = 20            # v0.41.92: the hook's bingo for pairs (BINGO_FUEL in the Lua below); the debrief fuel lines use it
 BINGO_REPORT_PCT = 35      # ...and report a flight that ended the mission at or under this much fuel
 
@@ -1870,6 +1871,14 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             ln_ = _rw.add_hits(state, fid_, int(n_))
             if ln_:
                 out["lines"].append(ln_)
+    obj_rw = next(((p_.get("objective") or {}) for p_ in (state.plan or []) if p_.get("id") == data.get("package")), {})
+    if obj_rw.get("aim") == "RUNWAY" and obj_rw.get("type") == "STRIKE":        # S75: a runway has no health, so the job is graded by the crater, not by `target_damage` (it read "0% destroyed" next to "CRATERED")
+        tid_rw = obj_rw.get("target_id", "")
+        n_rw = int((data.get("rwy") or {}).get(tid_rw, 0) or 0)
+        closed_rw = _rw.is_closed(state, tid_rw) and n_rw > 0
+        out["runway"] = {"hits": n_rw, "closed": closed_rw, "hours": _rw.hours_left(state, tid_rw) if closed_rw else 0}
+        if closed_rw:
+            out["target_damage"] = max(out["target_damage"], RUNWAY_CREDIT)
     # alert / scramble groups (v0.40.8): called, airborne, or stuck on the ground; and the build's settings, so test runs can be told apart
     ms_ = lambda t_: f"{int(t_) // 60:d}:{int(t_) % 60:02d}"                  # v0.41.208 (XO): scrambles are numbered in the order the build lists them (the briefing's QRA list uses the same numbers)
     owner_ = {q.id: q for w_ in state.enemy_air for q in w_.sqns}
