@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.421, the sample briefing is a real one from the current build
+Docs/SAMPLE_BRIEFING.txt is replaced by a briefing the program wrote itself: a Level 2 F-16C flying the day-1 Standoff DEAD, with the situation, the package table, the timeline, the radio plan and the footer as they read today. The old text still described a counter-air strike and an older package layout. The README link to it is unchanged.
 ## v0.41.420, the theatre pack guide matches the real pack format
 Docs/THEATRES.md now lists the keys a pack really has: `stories` instead of `background`, the `front` chain keys, `red_extra_airports`, `road_blue_airports`, the carrier stand-off, the squadron `role` and the wind keys. The old terrain-scan section is replaced by a note on the data files a pack folder can ship.
 ## v0.41.419, the setup guide is trimmed to what is current
