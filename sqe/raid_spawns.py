@@ -40,6 +40,8 @@ RAID_ECHELON_NM = 1.5         # ...and the bomber groups of the fleet raid fly i
 RAID_GROUP_GAP_S = 60         # v0.41.108: the bomber groups of a big raid follow each other, this far apart (judgment call)
 RAID_ROUTE_SAMS = 99            # v0.41.256: red SAM sites along a fleet raid's way in that are built in the mission (judgment call: the default is 2; the unit limit still binds)
 RAID_SWEEP_LEAD_S = 90        # ...and the raid's sweep escorts fly this far ahead of the first bomber group (judgment call)
+SEAD_SWEEP_LEAD_S = 60        # S66 (XO 2026-11-13): the fighter sweep ahead of a SEAD raid flies this far ahead of the SEAD flights on the same route and clock, so blue's intercepts commit to it before the Kh-31P salvo (judgment call). It stops SEAD_SWEEP_STOP_NM from the site, 20 nm short of the launch point (about 160 s at the raid's speed), so it passes its last point about 3 minutes before the salvo
+SEAD_SWEEP_STOP_NM = 60       # ...and its last point is this far from the site: outside a Patriot's 40 nm ring (raids.PATRIOT_NM) by the 20 nm margin the blue sweep uses (sweep.SWEEP_RING_MARGIN_NM); the SEAD flights go on to ARM_LAUNCH_NM (judgment call)
 RAID_HOLD_MAX_S = 600         # ...and one with plenty of time appears at most 10 min before it must push
 RAID_EGRESS_NM = 30           # ...off target it turns 40 degrees off its way in and leaves this far before heading home     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
 ARM_LAUNCH_NM = 40            # v0.41.84: a red SEAD flight fires its Kh-31P this far from the SAM site (S36b: the standoff launch of the SEAD raid) (judgment call: inside the 60 nm the Kh-31 page gives, with margin for a low launch)
@@ -222,6 +224,9 @@ class RaidSpawns:
         nbg = len(split(nb, RAID_BOMBER_BATCH)) if nb else 0
         esz = split(ne, RAID_FIGHTER_BATCH) if ne else []
         n_sweep = len(esz) // 2 if len(esz) >= 3 else (1 if (ex.get("mass") and len(esz) >= 2) else 0)
+        if ex.get("sead"):                                  # S66: a SEAD raid's sweep is its own groups (`sweeps`) and every escort group escorts (the same rule as `_spawn_raid`)
+            n_sweep = len(split(int(ex.get("sweeps", 0) or 0), RAID_FIGHTER_BATCH)) if ex.get("sweeps") else 0
+            esz = [0] * n_sweep + esz
         rn_ = self._raid_n          # S47: group numbers continue across the raids of one mission (the same offsets `_spawn_raid` builds with)
         fighters = [f"Raid Sweep {rn_['sw'] + i + 1}" for i in range(n_sweep)] + [f"Raid Escort {rn_['es'] + i + 1}" for i in range(len(esz) - n_sweep)]
         bombers = [f"Raid Bomber {rn_['bg'] + i + 1}" for i in range(nbg)]
@@ -1004,6 +1009,7 @@ class RaidSpawns:
         home_ = home_of(ex["bomber_wing"])                       # turn points round blue's Patriot fields, then its own field
         home_n = {}                                              # group name -> how many of its last points are the way home
         pooled_ = bool(ex.get("pool") or ex.get("esc_pool"))
+        from .raids import sweep_members
         skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
         land = bool(ex.get("land"))
         alt = ((12000 if any(t_ == "Su_25" for _a, t_, _n in bmem) else 20000) if land else 30000) * FT      # S46: the whole raid flies at its slowest, lowest member's altitude (a Su-25 in it: 12 000 ft)
@@ -1046,8 +1052,14 @@ class RaidSpawns:
 
         mshl_lvl = [0]                                         # S26: the next free marshal level for an unstaged group
 
-        def build_group(name, cls, count, task_cls, bomber=False, shift=0.0, behind_nm=0.0, lateral_nm=0.0, home=None, path_=None, L_=None):
+        def build_group(name, cls, count, task_cls, bomber=False, shift=0.0, behind_nm=0.0, lateral_nm=0.0, home=None, path_=None, L_=None, stop_short=False):
             pos, rem, hold, act = start_at(shift, path_, L_)
+            fin = fin_
+            if stop_short and launch_ is not None and len(path) > 2 and rem and rem[-1] == launch_:          # S66: a SEAD raid's sweep never flies the last leg (same route and clock as the SEAD flights, `shift` s ahead): the launch point is ARM_LAUNCH_NM from the site, on the edge of a Patriot's ring (raids.PATRIOT_NM 40); its last point is SEAD_SWEEP_STOP_NM out, on the line site - last way-in point (the launch point lies on it), and it turns home from there
+                stop_ = offset(dx, dy, bearing(dx, dy, *path[-2]), SEAD_SWEEP_STOP_NM * NM) if dist(*path[-2], dx, dy) > (SEAD_SWEEP_STOP_NM + 1) * NM else None
+                rem, fin = rem[:-1] + ([stop_] if stop_ is not None else []), "ING"
+                if hold is None and dist(*pos, dx, dy) < SEAD_SWEEP_STOP_NM * NM:          # (it would have spawned inside that ring: it starts on its last point and only turns for home)
+                    pos, rem = (stop_ if stop_ is not None else path[-2]), []
             home = home_ if home is None else home
             if behind_nm and rem:
                 pos = offset(pos[0], pos[1], bearing(rem[0][0], rem[0][1], pos[0], pos[1]), behind_nm * NM)      # (negative: ahead of its start)
@@ -1057,7 +1069,7 @@ class RaidSpawns:
                     _rem2.append(offset(q[0], q[1], bearing(_prev[0], _prev[1], q[0], q[1]) + 90, lateral_nm * NM)); _prev = q
                 pos = offset(pos[0], pos[1], bearing(pos[0], pos[1], rem[0][0], rem[0][1]) + 90, lateral_nm * NM)
                 rem = _rem2
-            nm_ = (["PUSH"] + ["ING"] * (len(rem) - 2) + [fin_]) if hold is not None else (["ING"] * (len(rem) - 1) + [fin_])
+            nm_ = (["PUSH"] + ["ING"] * (len(rem) - 2) + [fin]) if hold is not None else (["ING"] * (len(rem) - 1) + [fin])
             sl = stg["plan"].get(name) if (stg and hold is not None) else None          # v0.41.261: a staged raid's group: on the marshal from the start, or off the runway
             m_alt = alt - (sl["mk"] * RAID_MSHL_STEP_M if sl else 0.0)
             if sl is None and hold is not None:                # S26 (run 12-38-58: three groups on one marshal point at one level collided at t=0): an unstaged group on the marshal gets its own level too
@@ -1200,18 +1212,21 @@ class RaidSpawns:
                          raid_arrive_s=float(hit_s + bsh_[gi]), raid_group=g.name, **({"raid_pkg": int(bpk_[gi])} if sead_r else {}))          # S46: each group is charged to its own wing and type (the debrief takes a loss off that squadron)
             bomber_gs.append(g)
         self._spawn_raid_target(package, cvb, aim, dx, dy, manifest)
-        if ex.get("escorts"):
+        if ex.get("escorts") or (sead_r and ex.get("sweeps")):
             # v0.41.108: the escorts of a big raid split in two jobs. Half (at least 3 groups) fly a sweep RAID_SWEEP_LEAD_S ahead of the bombers on the same
             # route and fight what they meet; the rest escort the bomber groups (spread over them). A small raid keeps its single escort group.
             eent_ = [(aid_, t_, k_) for aid_, t_, n_ in escort_members(ex) for k_ in sizes(n_, RAID_FIGHTER_BATCH)]      # S46: [(wing, type, fighters)] one entry per group, each escort member's jets in groups of at most RAID_FIGHTER_BATCH
             n_sweep = len(eent_) // 2 if len(eent_) >= 3 else (1 if (ex.get("mass") and len(eent_) >= 2) else 0)        # v0.41.156: a mass raid (8 or more bombers) always opens with a sweep
+            if sead_r:                                          # S66 (XO 2026-11-13): a SEAD raid's sweep is its own booking (`sweeps`, groups of RAID_FIGHTER_BATCH) and EVERY escort group escorts (no half-split); other raids keep the rule above
+                swe_ = [(aid_, t_, k_) for aid_, t_, n_ in sweep_members(ex) for k_ in sizes(n_, RAID_FIGHTER_BATCH)]
+                eent_, n_sweep = swe_ + eent_, len(swe_)
             from .mission_builder import AAM_WEAPONS            # lazy: the builder's module imports this one
             for ei, (eaid_, et_, n_) in enumerate(eent_):
                 eload = enemy_cap_loadout(et_)
                 esc_nm_ = a2a_zone_nm(et_)
-                ehome_ = home_of(eaid_) if pooled_ else None        # S46: a pooled raid's escorts go home to their own field; a one-wing raid keeps the old way (the raid's field)
+                ehome_ = home_of(eaid_) if (pooled_ or (sead_r and ei < n_sweep)) else None        # S46: a pooled raid's escorts go home to their own field; a one-wing raid keeps the old way (the raid's field)
                 if ei < n_sweep:
-                    eg = build_group(f"Raid Sweep {rn_['sw'] + 1}", getattr(planes, et_), n_, task.FighterSweep, shift=-RAID_SWEEP_LEAD_S - 15 * ei, home=ehome_)
+                    eg = build_group(f"Raid Sweep {rn_['sw'] + 1}", getattr(planes, et_), n_, task.FighterSweep, shift=-(SEAD_SWEEP_LEAD_S if sead_r else RAID_SWEEP_LEAD_S) - 15 * ei, home=ehome_, stop_short=sead_r)
                     rn_["sw"] += 1
                 else:
                     ci = ei - n_sweep
