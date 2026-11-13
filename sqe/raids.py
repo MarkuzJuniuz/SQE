@@ -38,6 +38,7 @@ SEAD_ESCORT_RATIO = {1: 0.5, 2: 0.5, 3: 1.0}   # S43: escorts per SEAD jet (S36b
 SEAD_PATRIOT_PACKAGES = 3     # ...a full-strength Patriot gets three such packages in one raid, anything else one. S59b (XO 2026-11-12), judgment call: a Patriot site has 8 launchers x 4 missiles and fires about two at each ARM, so one coordinated salvo of three packages, 24 Kh-31P at L1 / L2 (12 Su-24M, 2 a jet) or 64 at L3 (16 Su-34 under POOL_MAX_RAIDERS, 4 a jet), is meant to exhaust it; the HAWK fell to two packages in run 14-45-46, the Patriot did not
 SEAD_PATRIOT_MIN_PACKAGES = 2  # S59b (XO 2026-11-12, "at least 2 but ideally 3 per patriot"): a full-strength Patriot raid that cannot field this many packages (after pooling a second wing) is not planned that turn, red keeps the jets (judgment call: one package, 8 Kh-31P at L2, is shot down and wastes a third of what red could send)
 SEAD_POOL = True              # S59b: a SEAD raid whose lead wing is short takes a partner wing too (`_pool_partners`, bomber types only: the types that carry the Kh-31P, Su-24M and Su-34); the escorts pool as other raids do (`POOL_ESCORTS`)
+SEAD_PATRIOT_WEIGHT = 2.0     # S64 (XO 2026-11-12, run 21-39-54: a raid went at a HAWK while its full-strength Patriot stood beside it): a full-strength Patriot weighs this much more than a HAWK in red's draw of a SEAD target (judgment call; a Patriot below full strength keeps weight 1). The draw only offers a full Patriot red can field (`_sead_fieldable`)
 SEAD_HAWK_PACKAGES = 2          # S44 (XO 2026-11-12): a HAWK gets two packages too (a Patriot below full strength, or whatever is left of one, still one)
 SEAD_SITE_HIT = 0.15          # ...and a blue SAM site loses this much health per SEAD jet that gets through (a launch of 3 jets takes 0.45 off a HAWK, 6 take 0.9 off a Patriot; judgment call, tuned with the probe `.private/probes/s36`: 0.08 never opened a field, 0.25 wiped the SAMs by day 10, 0.15 sags them and reopens fields)
 KH59_RAIDS = True             # S48 (XO musing 2026-11-12, probe flown 2026-11-12): red's Su-24M / Su-34 raids on an UNCOVERED supply site or garrison fire the Kh-59M from about 50 nm and turn for home (`plan_raid` draws it, `raid_spawns` builds it, `war._resolve_raid` resolves it). False = every raid as S46 left it. Both the plan and the spawner read this module attribute at call time
@@ -215,7 +216,7 @@ def candidates(state, kind: str, tu: bool = False, d_=None) -> list:
             r = sam_reach(state, d_, a.x, a.y)
             if r is None:
                 continue
-            out.append((home, a.id, max(0.15, 1.0 - r[0] / 330.0) * (0.5 + a.health)))
+            out.append((home, a.id, max(0.15, 1.0 - r[0] / 330.0) * (0.5 + a.health) * (SEAD_PATRIOT_WEIGHT if _full_patriot(a) else 1.0)))
     elif kind == "sector":
         from . import ground
         if ground.active(state):
@@ -263,7 +264,7 @@ def pick_aim(state, d, rng: random.Random):
         for b_, aim_, w_ in ws_:
             x_, y_ = aim_xy(state, aim_, b_)
             r_ = reach_for(state, aim_kind(aim_), x_, y_, d=d)
-            if r_ is not None and sead_plan(state, d, b_, aim_, r_[1], r_[2])[0]:
+            if r_ is not None and sead_plan(state, d, b_, aim_, r_[1], r_[2])[0] and _sead_fieldable(state, d, b_, aim_, r_[1], r_[2]):
                 out_.append((b_, aim_, w_))
         return out_
     ws = can_(candidates(state, kind)) or (can_(candidates(state, "field")) if kind != "field" else [])
@@ -323,6 +324,28 @@ def reach_for(state, kind: str, x: float, y: float, budget: bool = True, d=None,
     if cover_field(state, x, y) is None or getattr(d, "raid_banzai", False):
         return _reach(state, kind, x, y, budget, only=only, want=want)           # S48: `only` = the raider types a Kh-59M raid allows (BOMBER_TYPES)
     return None
+
+
+def _full_patriot(sa) -> bool:
+    """S64: True for a blue Patriot site at full strength (the one that wants `SEAD_PATRIOT_MIN_PACKAGES` packages)."""
+    from .sams import BLUE_FULL_DEF
+    return sa is not None and sa.id.rsplit("_", 1)[-1] == "pat" and sa.health >= BLUE_FULL_DEF
+
+
+def _sead_fieldable(state, d, base, aim: str, wing, ac: str) -> bool:
+    """S64: can red field the SEAD raid on `aim` at all? Always True except for a full-strength Patriot, which `_plan_sead` books only with `SEAD_PATRIOT_MIN_PACKAGES` packages of jets (the lead wing's free jets plus
+    what a pooled partner wing adds, the same sum `_plan_sead` forms). Otherwise the draw would pick it, `_plan_sead` would book nothing and red would raid nothing that turn. Nothing is booked here."""
+    if aim_kind(aim) != "sam" or not _full_patriot(state.blue_sams.get(aim)):
+        return True
+    need = sead_n(d) * SEAD_PATRIOT_MIN_PACKAGES
+    have = redair.ready_of(state, wing, (ac,))
+    have -= have % 2
+    if have >= need:
+        return True
+    if not (SEAD_POOL and POOL_RAIDS):
+        return False
+    ax, ay = aim_xy(state, aim, base)
+    return have + sum(p["n"] for p in _pool_partners(state, "sam", wing, ax, ay, need - have, only=BOMBER_TYPES)) >= need
 
 
 def sead_plan(state, d, base, aim: str, wing, ac: str):
