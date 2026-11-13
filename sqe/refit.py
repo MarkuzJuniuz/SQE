@@ -20,8 +20,8 @@ from __future__ import annotations
 from . import clock
 
 SORTIE_MIN = 100                 # launch to landing; the same value as blue_barcap.PACKAGE_WINDOW_MIN (judgment call)
-REFIT_MIN = {"A-10C": 120, "Su_25": 120, "Tu_22M3": 480, "E_3A": 480}   # rugged 2 h (A-10C, Su-25; at 4-hour turns their edge is gone, 90 restores it), high maintenance 8 h (Tu-22M3, E-3; S25, was 360): XO 2026-11-08 / 11-11, game rules ("anecdotes")
-STANDARD_REFIT_MIN = 120         # everything else: 2 h (S25, was 180: a wave-1 jet lands about 100 min later, so it is back before the next 4-hour turn; XO 2026-11-08)
+REFIT_MIN = {"A-10C": 120, "Su_25": 120, "Tu_22M3": 480, "E_3A": 480}   # rugged 2 h (A-10C, Su-25: an hour quicker than standard again since S73), high maintenance 8 h (Tu-22M3, E-3; S25, was 360): XO 2026-11-08 / 11-11, game rules ("anecdotes")
+STANDARD_REFIT_MIN = 180         # everything else: 3 h (S73, XO 2026-11-13: back to 3 hours; S25 had cut it to 120 so a wave-1 jet was back before the next 4-hour turn, XO 2026-11-08). With a 100-min sortie a wave-1 jet is ready about 4 h 40 min after launch: for the next turn's second wave, not its first
 LIMP_MULT = 2.0                  # a limping jet's refit is doubled and scaled by Force Index: hours = base x 2 / FI (XO 2026-11-08; the shape of ground.supply_repair)
 FI_MIN = 0.2                     # clamp only: Force Index can dip under the floor through sams.debt (judgment call)
 LIMP_PER_LOSS = 1.0              # war sim: each surviving jet of a flight limps with chance (losses / sortie size) x this (judgment call, plan section 7)

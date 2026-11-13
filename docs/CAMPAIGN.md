@@ -192,8 +192,9 @@ the carrier is sunk, its aircraft are moved to land fields (any that cannot be p
 
 Each blue squadron has jets *authorised*, *available* (ready now) and some in **refit** or **reserve**.
 
-* A jet that flies a package or patrol lands and goes to **refit**: 2 hours as standard (A-10C and Su-25 are rugged, 2 hours
-  too; Tu-22M3 and E-3 take 8). A jet that comes back damaged ("limping", under 90% health) takes twice as long to refit.
+* A jet that flies a package or patrol lands and goes to **refit**: 3 hours as standard (the rugged A-10C and Su-25 take 2;
+  the Tu-22M3 and E-3 take 8). A sortie lasts about 100 minutes, so a jet from the first wave is ready for the next turn's
+  second wave, not its first. A jet that comes back damaged ("limping", under 90% health) takes twice as long to refit.
   A jet that was shot down is gone.
 * **Replacements** arrive as a pair every 24 hours at full supply. The Tu-22M3 and the E-3 are replaced one airframe every
   48 hours, regardless of supply.
