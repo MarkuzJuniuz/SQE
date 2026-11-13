@@ -1219,7 +1219,7 @@ class RaidSpawns:
                     eg = build_group(f"Raid Escort {rn_['es'] + 1}", getattr(planes, et_), n_, task.Escort, shift=bsh_[bomber_gs.index(bg)], behind_nm=(-RAID_ESCORT_AHEAD_NM if edge else 3), lateral_nm=lat_[bomber_gs.index(bg)], home=ehome_, path_=bpa_[bomber_gs.index(bg)], L_=bLk_[bomber_gs.index(bg)])
                     rn_["es"] += 1
                     # v0.41.29: the escorts stay with the bombers and fight only what comes within their class's reach of them (Su-27 25 nm, the rest
-                    # 15 nm), up to the bombers' egress point; home once their air-to-air missiles are gone. No chasing.
+                    # 15 nm), up to the bombers' egress point; home once their air-to-air missiles are gone. No chasing.      # S69: lastWptIndex counts waypoints from 1, so len - home_n is the EGR point; it was len - 1 - home_n, the target / ARM point, and the escorts left as the bombers began their attack (run 2026-11-12_23-29-27)
                     eg.points[0].tasks = [t_ for t_ in eg.points[0].tasks if getattr(t_, "Id", "") != "Escort"]      # pydcs's default escort task has no group
                     if standoff:
                         # v0.41.255 (XO 2026-11-03, the carrier-raid run: the Su-27 escorts split from the bombers): the fleet raid's escorts fly the bombers' own
@@ -1230,7 +1230,7 @@ class RaidSpawns:
                                 continue
                             pt_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(pt_.position.x, pt_.position.y), int(esc_nm_ * NM), [task.Targets.All.Air]))
                     else:
-                        eg.points[0].tasks.insert(0, task.EscortTaskAction(group_id=bg.id, engagement_max_dist=int(esc_nm_ * NM), lastwpt=len(bg.points) - 1 - home_n[bg.name],
+                        eg.points[0].tasks.insert(0, task.EscortTaskAction(group_id=bg.id, engagement_max_dist=int(esc_nm_ * NM), lastwpt=len(bg.points) - home_n[bg.name],
                                                                             targets=[task.Targets.All.Air.id], position={"x": -1000, "y": 300, "z": 500}))
                 rtbe_ = task.OptRTBOnOutOfAmmo(); rtbe_.params["action"]["params"]["value"] = AAM_WEAPONS
                 eg.points[0].tasks.append(rtbe_)
