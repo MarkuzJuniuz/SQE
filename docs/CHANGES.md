@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.430, a new page explains how the campaign works
+Docs/CAMPAIGN.md describes the war and its rules in plain words: the three levels, the 4-hour turn, how packages are planned and crewed, how the ground war, supply and red's air and raids work, the standing cover (BARCAP, AWACS, tankers and their guards), and how the campaign is won or lost. It ends with a list of what is newest and not yet flown. Docs/GUIDE.md links to it.
 ## v0.41.429, the tanker and the AWACS always fly with their guard
 The pair of fighters that guards the tanker or the AWACS now stays on station for as long as that aircraft is up in the turn, so a package launching in the second half of a turn finds it there. Every package that carries the AWACS or the tanker gets the guard (sweeps and fleet-defence packages included), and the Navy's S-3B tanker, when it is a package's tanker, has a guard too. Before, only about four packages in ten had theirs.
 ## v0.41.428, AI runway strikers drop their bombs on the runway
