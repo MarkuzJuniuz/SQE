@@ -47,6 +47,14 @@ class UrgentDelegate(QStyledItemDelegate):
 
 
 RELEASES_URL = "https://github.com/MarkuzJuniuz/SQE/releases/latest"
+CAMPAIGN_URL = "https://github.com/MarkuzJuniuz/SQE/blob/main/docs/CAMPAIGN.md"     # the online copy (the newest code, may run ahead of the build you have)
+
+
+def campaign_doc_path() -> Path | None:
+    """S74: the copy of docs/CAMPAIGN.md that goes with this build: beside SQE.exe in a release zip (build_exe.bat copies `docs`), the repo's own `docs` when run from source. None when it is not there."""
+    base = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]
+    p = base / "docs" / "CAMPAIGN.md"
+    return p if p.is_file() else None
 
 
 def _tbl(headers, stretch_last=True) -> QTableWidget:
@@ -712,7 +720,13 @@ class MainWindow(QMainWindow):
         f.addSeparator(); act("S&ettings...", self.settings, "Ctrl+,"); act("Reset &window size and position", self.reset_window); f.addSeparator(); act("E&xit", self.close, "Alt+F4")
         h = mb.addMenu("&Help")
         a = QAction("&About SQE...", self); a.triggered.connect(self.about); h.addAction(a)
+        a = QAction("&Campaign rules", self); a.triggered.connect(self.campaign_rules); h.addAction(a)
         a = QAction("&Latest release (GitHub)", self); a.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(RELEASES_URL))); h.addAction(a)
+
+    def campaign_rules(self):
+        """Help > Campaign rules: the page that came with this build; the online page (newest code) when it is missing."""
+        p = campaign_doc_path()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(p)) if p is not None else QUrl(CAMPAIGN_URL))
 
     def about(self):
         from .. import EULA_LINE

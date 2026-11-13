@@ -7,6 +7,7 @@ python -m PyInstaller --noconfirm --clean --windowed --name SQE --icon "sqe\data
 if exist LICENSE copy /y LICENSE dist\SQE\LICENSE.txt >nul
 if exist THIRD_PARTY_NOTICES.md copy /y THIRD_PARTY_NOTICES.md dist\SQE\ >nul
 copy /y README.md dist\SQE\ >nul
+if exist docs xcopy /e /i /y docs dist\SQE\docs >nul
 echo.
 echo Built: dist\SQE\SQE.exe   (copy the whole dist\SQE folder, not just the .exe)
 exit /b 0

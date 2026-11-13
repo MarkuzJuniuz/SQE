@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.432, Help > Campaign rules, and the docs ship with the release
+The Help menu has a new "Campaign rules" item that opens the campaign page that came with your build; if it is not there (a trimmed install) it opens the online page. The release zip now carries a `docs` folder beside SQE.exe (the campaign page, the guide, the change log, the sample briefing and the images), so the README's screenshots and its links to the docs work from the extracted folder too.
 ## v0.41.431, jets need 3 hours to refit again
 A jet that flew a sortie is ready to fly again 3 hours after it lands (it was 2 hours since the 4-hour turns). A jet from the first wave of a turn is now back for the next turn's second wave, not its first. Fewer jets are ready each turn, so the planner builds about 11% fewer packages a turn and a few more flights are left short; red's jets refit the same way. The A-10C and Su-25 keep their 2 hours.
 ## v0.41.430, a new page explains how the campaign works
