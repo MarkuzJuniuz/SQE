@@ -3,9 +3,8 @@
 What the war is, what happens each turn, and the rules behind it. For installing and running SQE see `docs/GUIDE.md`
 (section 4 there is the short "how a turn works"); for adding a map see `docs/THEATRES.md`.
 
-Written from the code as of v0.41.430. **Nothing here has been checked in a flown mission unless a line says so**; the
-last section lists what is newest and still unproven. Numbers are tuning values in the code and change between versions:
-where one matters it is named, so you can find it. Several are the author's judgment calls with no public source, and
+Written from the code as of v0.41.430. The mod is still evolving, so things may change (see the last section). Numbers are
+tuning values in the code and change between versions: where one matters it is named, so you can find it. Several are the author's judgment calls with no public source, and
 where that is the case the code says so next to the number.
 
 ---------------------------------------------------------------------------------------------------
@@ -242,16 +241,8 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
 
 ---------------------------------------------------------------------------------------------------
 
-## 10. Newest and not yet flown
+## 10. Still evolving
 
-Built, compiled and probed, but not yet seen in a flown mission as of this version; treat the behaviour as unproven.
-
-* The **HAVCAP guard for every package that carries an AWACS or tanker** and the S-3B tanker's guard (v0.41.429).
-* Red's **fighter sweep ahead of red SEAD raids** and Level 2 SEAD escorts at 1:1 (v0.41.427).
-* **Stand-off EWR strikes** (JSOW, SLAM-ER) and **runway strikes with plain Bombing tasks along the runway** (v0.41.428).
-* The **SAM waves** and the removal of the old depth tiers (v0.41.367 to v0.41.371).
-* Red's **Patriot raids as three packages**, and Kh-59M stand-off raids.
-* The Level 3 **Su-34**, the **F-15E** and the new squadron laydown.
-
-If something behaves differently from this page in a flown mission, it is a bug in the page or in the code. The
-change log (`docs/CHANGES.md`) says what each version did.
+SQE is still being developed, and the rules on this page may change from one version to the next. The change log
+(`docs/CHANGES.md`) says what each version did. If something in a mission behaves differently from this page, or you
+find a bug, please report it at https://github.com/MarkuzJuniuz/SQE/issues/new.
