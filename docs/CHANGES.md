@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.420, the theatre pack guide matches the real pack format
+Docs/THEATRES.md now lists the keys a pack really has: `stories` instead of `background`, the `front` chain keys, `red_extra_airports`, `road_blue_airports`, the carrier stand-off, the squadron `role` and the wind keys. The old terrain-scan section is replaced by a note on the data files a pack folder can ship.
 ## v0.41.419, the setup guide is trimmed to what is current
 Docs/GUIDE.md keeps the install, first run, build and troubleshooting steps and adds a short "how a turn works" (4-hour turns, Skip Turn, Auto-Skip). The old sections on tiers, raid popups, dice and the long list of version-by-version features are gone; CHANGES.md has the history.
 ## v0.41.418, in low cloud or visibility the ground wind keeps each field's ILS runway active
