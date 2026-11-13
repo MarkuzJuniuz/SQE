@@ -78,6 +78,7 @@ SLAM_AIMS = 2                # v0.41.309: aim points (buildings) of a SLAM-ER la
 SLAM_ATTACK_S = 240           # the SLAM-ER launch window after the launch point's ETA, then return fire. Was 90 (v0.41.309; XO's run fired its four in 20 s). v0.41.362: 240 (judgment call): XO's run 2026-11-10 22-33-46 reached the SLAM point about 95 s after the window closed, the marshal exit costing about 55 s; 240 is that plus margin. The JSOW window is 240 too
 LATE_ATTACK_S = 600           # v0.41.16: an AI strike flight drops only within this of its TOT
 RAMP_CLUSTER_M = 250          # v0.41.328: the parking slots this close to the ramp middle give the pass its heading (judgment call: the parked jets stood in about 300 m)
+RUNWAY_AIM_STEP_M = 500        # S70: an AI runway strike's plain Bombing aim points lie this far apart along the runway axis, about the airfield reference point (judgment call: inside the hook's 2,600 m half-length rectangle, a few hundred metres apart so the bombs make separate craters)
 RAMP_AXIS_MIN_M = 150          # v0.41.326: a ramp line shorter than this is bombed from any heading (judgment call)
 CV_PATTERN_NM = 6             # v0.41.72: an AI carrier flight within this of the boat...
 CV_PATTERN_S = 90             # ...for this long (about two laps of the pattern) is recovered
@@ -2682,8 +2683,39 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             out.append(bt_)
         return out
 
+    def _runway_bomb_tasks(self, package, f, stop_s):
+        """S70 (XO run 2026-11-13_00-15-28, the third run in a row: the AI runway strikers ran in to 7 nm of the field at 20,000 ft and turned for home without releasing; the GBU-31s all came back, the
+        BombingRunway task gave up at the release point): an AI runway strike drops with plain Bombing tasks, the task every other AI strike uses, one per aim point (up to three, `RUNWAY_AIM_STEP_M`
+        apart along the runway axis about the airfield reference point, which is what the hook's runway rectangle is centred on), the jet's GBUs divided between them (as `_gbu_spread_tasks`), the last
+        one `All`. Each stops at `stop_s`. Heading: the airport's first runway. None = not an AI runway strike on a field with a pydcs airport (the caller falls back). Scripting only: a person's flight keeps `_bomb_task`'s BombingRunway."""
+        o_ = package.objective
+        a_ = self.state.assets.get(o_.target_id)
+        ap_ = self.t.airports.get(a_.airport) if (o_.aim == "RUNWAY" and o_.type == ObjectiveType.STRIKE and a_ is not None and getattr(a_, "airport", None)) else None
+        if ap_ is None or f.role != Role.STRIKE or f.tag or getattr(f, "kit", ""):
+            return None
+        try:
+            hdg_ = math.radians(float(ap_.runways[0].main.heading))
+        except (IndexError, AttributeError, TypeError, ValueError):
+            return None
+        cx_, cy_ = ap_.position.x, ap_.position.y
+        n_ = gbu_count(self.lo.for_role(f.aircraft, f.role, "")) if f.aircraft in JDAM_JETS else 0
+        k_ = max(1, min(n_, 3))
+        offs_ = [(i_ - (k_ - 1) / 2.0) * RUNWAY_AIM_STEP_M for i_ in range(k_)]
+        each_ = n_ // k_ if n_ else 0
+        exp_ = task.Expend.Four if each_ >= 4 else (task.Expend.Two if each_ >= 2 else task.Expend.One)
+        out = []
+        for i_, d_ in enumerate(offs_):          # (x north, y east; the heading is compass degrees: along = dx cos h + dy sin h, the hook's own convention)
+            bt_ = task.ControlledTask(task.Bombing(self._pt(cx_ + d_ * math.cos(hdg_), cy_ + d_ * math.sin(hdg_)), weapon_type=task.WeaponType.Auto,
+                                                   expend=(task.Expend.All if (i_ == k_ - 1 or not n_) else exp_), group_attack=True))
+            bt_.stop_after_time(int(stop_s))
+            out.append(bt_)
+        return out
+
     def _ai_bomb_tasks(self, package, f, w, stop_s) -> list:
-        """The AI flight's bomb tasks at a BOMB waypoint, each stopping at `stop_s`: the spread over a supply site's buildings (`_gbu_spread_tasks`), else the single task."""
+        """The AI flight's bomb tasks at a BOMB waypoint, each stopping at `stop_s`: the plain tasks along a runway (`_runway_bomb_tasks`), the spread over a supply site's buildings (`_gbu_spread_tasks`), else the single task."""
+        rw_ = self._runway_bomb_tasks(package, f, stop_s)
+        if rw_ is not None:
+            return rw_
         sp_ = self._gbu_spread_tasks(package, f, w, stop_s)
         if sp_ is not None:
             return sp_

@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.428, AI runway strikers drop their bombs on the runway
+The AI flights that crater a runway used to run in to the field and turn for home without releasing. They now bomb with the same plain bomb task as every other AI strike, with their bombs spread along the runway, and a flight held at the gate keeps its full attack window.
 ## v0.41.427, red sends a fighter sweep ahead of its SEAD raids
 At Levels 2 and 3 a red SEAD raid now has a sweep of four fighters (eight when red has the jets) flying about a minute ahead of the SEAD jets and turning back 60 nm short of the SAM site, to draw blue's interceptors before the missile salvo. Level 1 has none, and red sends no sweep if it has fewer than four spare fighters. Level 2's SEAD escorts rise to one fighter for every SEAD jet, as at Level 3, and all of a SEAD raid's escort groups now stay with the bombers.
 ## v0.41.426, red raid escorts stay with their bombers through the attack
