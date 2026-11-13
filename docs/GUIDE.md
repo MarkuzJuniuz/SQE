@@ -1,7 +1,7 @@
 # Squadron Campaign Engine (SQE): setup and first run
 
 Windows + Visual Studio Code. Everything below is copy-paste. Budget about 20 minutes for first-time setup.
-For what changed in each version see `docs/CHANGES.md`; for adding a map see `docs/THEATRES.md`.
+For what changed in each version see `docs/CHANGES.md`; for how the campaign works and its rules see `docs/CAMPAIGN.md`; for adding a map see `docs/THEATRES.md`.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -106,6 +106,8 @@ keeps skipping for you: *Stand-Down Turns* (turns with nothing you can fly), *Ni
 sortie, skip until the chosen number of hours has passed). The options add up, and one after-action report lists everything
 that was skipped.
 
+The war behind the turns (what is planned, how red fights, how the campaign is won or lost) is in `docs/CAMPAIGN.md`.
+
 Two features worth knowing: **package merging** (Settings > Mission build) folds packages whose targets are close into one
 mission, and the **unit limit** there lets you trade detail for performance. `--full-map` (alone or with the AI test) builds
 every sortie with everything on the map, as a stress test, not for play.
@@ -159,6 +161,7 @@ after a DCS terrain update (for developers).
 
 ## 8. Where to look next
 
+* `docs/CAMPAIGN.md`: how the campaign works and what its rules are.
 * `docs/CHANGES.md`: what changed in every version, newest first.
 * `docs/THEATRES.md`: how a map pack is built.
 * `tools/`: `smoke_test.py` and the other test and probe scripts.
