@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.427, red sends a fighter sweep ahead of its SEAD raids
+At Levels 2 and 3 a red SEAD raid now has a sweep of four fighters (eight when red has the jets) flying about a minute ahead of the SEAD jets and turning back 60 nm short of the SAM site, to draw blue's interceptors before the missile salvo. Level 1 has none, and red sends no sweep if it has fewer than four spare fighters. Level 2's SEAD escorts rise to one fighter for every SEAD jet, as at Level 3, and all of a SEAD raid's escort groups now stay with the bombers.
 ## v0.41.426, red raid escorts stay with their bombers through the attack
 The Su-27 escorts of a red raid used to turn for home as the bombers began their attack run, leaving them to be shot down. They now stay until the bombers reach their egress point.
 ## v0.41.425, a player's EWR strike is a stand-off job too

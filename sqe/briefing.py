@@ -68,6 +68,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                          "you are free to cross toward the launch point at the push time on the card." if e.get("prep_rec") else
                          " SEAD flights are working the long-range SAMs over their launch point. Hold on your station, outside the SAM rings, and engage what comes to you; "
                          "you are free to cross toward the launch point when AWACS calls SEAD complete, or at the push time on the card.") if e.get("setpiece") else ""))
+                    + (f" A fighter sweep of {e['sweeps']} goes in ahead of them." if e.get("sweeps") and e.get("sead") else "")
                     + (f" They are escorted by {e['escorts']} fighters{esc_n}." if e.get("escorts") else
                        (" They have no escort." if e.get("land") else " They have no escort: the enemy cannot reach this far with fighters. It is a last throw of the dice."))]
     n_def = x.get("n_def", pkg.n_def)
