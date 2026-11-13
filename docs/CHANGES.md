@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.422, red's SEAD raids go for a full-strength Patriot more often, and only when it can field the jets
+When red picks a blue SAM site to hit, a Patriot at full strength now counts twice as much as a HAWK, so red no longer leaves it for the HAWK beside it. A Patriot is only in the draw while red has the jets for it (two packages, after pooling a second wing); otherwise red goes for the HAWK or another target instead of planning nothing.
 ## v0.41.421, the sample briefing is a real one from the current build
 Docs/SAMPLE_BRIEFING.txt is replaced by a briefing the program wrote itself: a Level 2 F-16C flying the day-1 Standoff DEAD, with the situation, the package table, the timeline, the radio plan and the footer as they read today. The old text still described a counter-air strike and an older package layout. The README link to it is unchanged.
 ## v0.41.420, the theatre pack guide matches the real pack format
