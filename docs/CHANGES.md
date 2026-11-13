@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.431, jets need 3 hours to refit again
+A jet that flew a sortie is ready to fly again 3 hours after it lands (it was 2 hours since the 4-hour turns). A jet from the first wave of a turn is now back for the next turn's second wave, not its first. Fewer jets are ready each turn, so the planner builds about 11% fewer packages a turn and a few more flights are left short; red's jets refit the same way. The A-10C and Su-25 keep their 2 hours.
 ## v0.41.430, a new page explains how the campaign works
 Docs/CAMPAIGN.md describes the war and its rules in plain words: the three levels, the 4-hour turn, how packages are planned and crewed, how the ground war, supply and red's air and raids work, the standing cover (BARCAP, AWACS, tankers and their guards), and how the campaign is won or lost. It ends with a list of what is newest and not yet flown. Docs/GUIDE.md links to it.
 ## v0.41.429, the tanker and the AWACS always fly with their guard
