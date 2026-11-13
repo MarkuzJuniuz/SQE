@@ -1,6 +1,7 @@
-# Squadron Campaign Engine (SQE): setup, testing and building guide
+# Squadron Campaign Engine (SQE): setup and first run
 
 Windows + Visual Studio Code. Everything below is copy-paste. Budget about 20 minutes for first-time setup.
+For what changed in each version see `docs/CHANGES.md`; for adding a map see `docs/THEATRES.md`.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -11,7 +12,7 @@ Windows + Visual Studio Code. Everything below is copy-paste. Budget about 20 mi
 | **Python 3.13 or 3.14, 64-bit** | runs SQE | python.org/downloads. **Tick "Add python.exe to PATH"** in the installer. |
 | **Git** | the F-14B(U) lives in a pydcs *fork* that pip downloads from GitHub | git-scm.com/download/win (defaults are fine) |
 | **VS Code** + the **Python** extension (Microsoft) | editor/debugger | code.visualstudio.com, then Extensions (Ctrl+Shift+X) -> "Python" |
-| DCS World with the **F-14B(U)** (and F-16C if you want to fly Air Force) | to fly the missions | you have these |
+| DCS World with the module of the jet you want to fly | to fly the missions | F-14B(U), F/A-18C, F-16C, F-15C or A-10C |
 
 Close and reopen VS Code after installing Python/Git so they are on PATH.
 
@@ -26,7 +27,7 @@ Both must print a version.
 
 ## 2. Open the project and install the packages
 
-1. Unzip `SQE.zip` somewhere simple, e.g. `C:\Dev\SQE` (avoid OneDrive and Program Files).
+1. Put the `SQE` folder somewhere simple, e.g. `C:\Dev\SQE` (avoid OneDrive and Program Files).
 2. VS Code -> **File > Open Folder...** -> pick the `SQE` folder (the one containing `sqe`, `tools`, `docs`).
 3. Open a terminal (**Terminal > New Terminal**, PowerShell) and run:
 
@@ -57,86 +58,57 @@ It must print `F-14BU`. If it errors, see Troubleshooting.
 ```
 python tools/smoke_test.py
 ```
-It creates a campaign for the F-14BU and the F-16C, builds a real `SQE_Sortie.miz`, fakes a set of sortie results, applies
-them, and advances the day. It must end with `SMOKE TEST PASSED`. (Messages like *"Couldn't detect DCS install"* are harmless.)
+It checks the core functions (campaigns load and save, missions are generated, the required flights are in a package, the
+`.miz` structure is sound) and must end with `SMOKE TEST PASSED`. `--list` shows the checks and `--only <name>` runs one.
+(Messages like *"Couldn't detect DCS install"* are harmless.)
 
 **B. The app**
 ```
 python -m sqe
 ```
-or press **F5** in VS Code and pick **"SQE: run app"** (debugger attached, breakpoints work), or double-click `run.bat`.
+or press **F5** in VS Code and pick **"SQE: run app"**, or double-click `run.bat`.
 
 First launch:
 1. It tells you to open **Settings**. Two fields:
    * **DCS Saves**: `C:\Users\<you>\Saved Games\DCS` (or `...\DCS_Server`). Everything hangs off this folder:
      missions go to `Missions\SQE_Sortie.miz`, results are read from `SQE\SQE_state.json`, campaigns are saved as `SQE\*.sqe`.
-   * **DCS**: your DCS World install folder. Only used by the patch button below.
-2. Tick **Enable DCS scripting access while SQE is open** (SQE asks on first run; it is off until you agree). SQE patches MissionScripting.lua when it starts and restores it when it closes, like Liberation/Retribution (a backup is saved next to the file). This is required for results to come back from DCS. Keep SQE open until the mission is over.
-   It makes a backup (`MissionScripting.lua.sqe.bak`) and comments out the `io` and `lfs` sanitize lines.
+   * **DCS**: your DCS World install folder. Only used by the patch button.
+2. Tick **Enable DCS scripting access while SQE is open** (SQE asks on first run; it is off until you agree). SQE patches
+   `MissionScripting.lua` when it starts and restores it when it closes (a backup, `MissionScripting.lua.sqe.bak`, is saved next
+   to the file). This is required for results to come back from DCS. Keep SQE open until the mission is over.
    If your install is under *Program Files* and it says it cannot write, run VS Code (or SQE.exe) **as administrator** once,
    or edit the file by hand. **DCS updates revert it**: patch again after an update.
-3. **File > New Campaign**: name it, pick your jet (**F-14B(U), F/A-18C, F-16C, F-15C or A-10C**), a difficulty, the start month/day (year is 2006) and whether to allow night sorties, OK.
+3. **File > New Campaign**: name it, pick your jet, your squadron, a difficulty level (1 Insurgent, 2 Regional power,
+   3 Near-peer) and the start month/day (the year is 2006), then OK.
 
-**Playing a day**
-1. **Missions** tab: pick a tasking, then press **FLY** on the row of the flight you want to fly (green rows). SQE writes `SQE_Sortie.miz` and opens the **waiting window**. Base, carrier, tanker and AWACS cover patrols (BARCAP, HAVCAP) are planned each day and are AI-only.
-2. Start DCS, **Mission > Open > Missions > SQE_Sortie.miz**, fly it. The kneeboard has two pages: (1) comms + waypoints numbered the way your jet's cockpit numbers them, (2) timeline, bingo/joker, IFF Mode 3, laser code, package who's-who with Link 16 STNs, threats, bullseye. Last steerpoints: RTB, DIVERT, TKR (tanker), BULLS (bullseye).
-3. The waiting window updates live (aircraft lost, ground units destroyed, landings). When DCS reports the mission ended it turns green.
+---------------------------------------------------------------------------------------------------
+
+## 4. How a turn works
+
+The campaign runs in **4-hour turns**, six a day, starting at 08:00 on Day 1. Each turn the planner lays out that turn's
+packages for both sides; whatever you do not fly is settled by the war simulation.
+
+1. **Missions** tab: pick a tasking, then press **FLY** on the row of the flight you want to fly (green rows). SQE writes
+   `SQE_Sortie.miz` and opens the **waiting window**. Base, carrier, tanker and AWACS cover patrols are planned each turn and
+   are AI-only. Red raids on your fields, supply sites and troops are listed as "Intercept" jobs with a red border.
+2. Start DCS, **Mission > Open > Missions > SQE_Sortie.miz**, fly it. The kneeboard carries comms and waypoints numbered the
+   way your jet's cockpit numbers them, the timeline, bingo/joker, IFF, laser code, the package who's-who, threats and bullseye.
+3. The waiting window updates live (aircraft lost, ground units destroyed, landings). When DCS reports the mission ended it
+   turns green.
    * **Accept results** applies exactly what you see.
    * **Manually Submit...** lets you point at an `SQE_state.json` yourself.
    * **Abort mission** discards the sortie.
    * Closing the window keeps the sortie pending; press **Resume pending sortie** on the Missions tab.
-4. After Accept you get the **Debrief** (with the story of how it went and what happened elsewhere), then the next day's tasking order.
+4. After Accept you get the **Debrief**, then the clock moves on and the next turn is planned.
 
----------------------------------------------------------------------------------------------------
+**Skip Turn** stands down for the turn: its packages are resolved by the war simulation. The **Auto-Skip** box in the sidebar
+keeps skipping for you: *Stand-Down Turns* (turns with nothing you can fly), *Night Turns*, and *Crew Rest* (after a flown
+sortie, skip until the chosen number of hours has passed). The options add up, and one after-action report lists everything
+that was skipped.
 
-## Raids and emergencies (v0.24)
-Red raids our airfields. Announced raids are in the tasking order as "Intercept a raid on <airfield>". Surprise raids are settled overnight unless an emergency puts one in front of you: now and then, when you click Fly, a popup tells you a raid has broken out or troops are in contact. If your squadron can take it you can scramble; if not, the war handles it and the popup says why. Details and numbers: docs/CHANGES.md v0.24.0.
-
-## The ground war (v0.23)
-The front is five sectors along the Sukhumi to Senaki axis, each with a Red and a Blue strength. Every night contested sectors fight; the line moves; Red takes a field if it holds the sector beside it, and two fallen fields lose the war. Your CAS sorties (and anything that hurts Red supply, such as its fuel farms and depots) are what keeps the line where it is. Blue has the same kind of facilities and supply as Red. The Campaign page shows the sectors and the map draws the front line. See docs/CHANGES.md v0.23.0 for the rules.
-
-## Air defence that rebuilds and moves (v0.26)
-A destroyed Red SAM site can be replaced from its fourth day down (half strength, slower when Red's depots and fuel farms are hit); a hurt SA-6 / SA-11 / SA-8 / SA-15 / SA-19 can move a few nm overnight with its garrison. Fixed sites (SA-2, SA-3, SA-10) and the column air defence never move. Blue's airfield defences repair by supply and a strong field lends a battery to the weakest. See CHANGES v0.26.0 for the numbers; the rates are Difficulty.sam_rebuild and sam_scoot.
-
-## Settings (v0.18)
-Six tabs. General: takeoff buffer, marshal slack, AI fuel, hot starts at the ramp (scramble pairs), F-14 names. Campaign: weather, reactive dispatch, ruins, carcasses. Mission build: merging, radius, unit limit, CAP ranges. DCS integration: folders and the scripting patch. Terrain scan: the green / amber status, margins, the scan mission and Re-check. Experimental: features still being tried, each can be switched off (SQE's own ECM script, hot starts on the runway for AI flights, red / blue SAM borrowing).
-
-## Reactive dispatch (v0.17)
-Random enemy reinforcements (other wings, only within the type's intercept radius, only aircraft the wing really has) and blue alert pairs (carrier or nearby bases, only aircraft the mission is not using). Scaled by difficulty, capped at 2:1 against your fighters, and skipped first when a mission is near the unit limit. The briefing's Intelligence line hints at them. Settings: Reactive dispatch on/off.
-
-## Carcasses (v0.16)
-Damaged and destroyed ground sites within 40 nm of your route show wrecks. They are fixed per site (the same wreck in the same spot every sortie) and a worse site only adds wrecks. Each counts 25% of a unit toward the unit limit and the furthest are dropped first when a mission is too heavy. Settings: Carcasses on/off and Wreck weight.
-
-## 4. Test checklist inside DCS (please report what fails)
-
-I cannot run DCS where I build this. Always run `python tools/smoke_test.py` first (it is isolated and cleans up after itself).
-
-**Newest (v0.5). Confirm these**
-- [ ] The target area and your route are *live from the first second*: every SAM site on the route exists and is active; no enemy appears out of nowhere.
-- [ ] Enemy CAPs are airborne at mission start on the stations the briefing/kneeboard intelligence line implies; alert fighters sit on a real enemy runway and take off only when your package enters their airfield's detection zone.
-- [ ] Day-1 targets are the front belt (Sukhumi / Gudauta / Sochi area) and CAS; deep targets only appear after the belts in front of them are broken.
-- [ ] Tanker and AWACS orbit well back from enemy bases, with a HAVCAP flight (Springfield 3 / Viper 3 etc.).
-- [ ] After a few nights: a site you destroyed shows up again at half strength in the tasking order (Overnight log: "put up a replacement"); a hurt SA-6 / SA-11 has a new position (log: "has moved about N nm") and its garrison is next to it.
-- [ ] Flights push staggered (sweep first, then SEAD, then escorts, then strikers). Your kneeboard times are for YOUR flight only: MSHL arrival, "hold to" time, PUSH (+/-30 s), your TOT (+/-1 min).
-- [ ] Heavy SAM cover near the target: AI escorts and sweeps stop and orbit outside the SAM rings (waypoint note "hold here, N nm short of the target") and chase no further than the engage range (Settings > Mission build). Your own flight is not cut short.
-- [ ] Text call-outs with a beep: tanker on station, AWACS push and five minutes to TOT, each other flight "pushing" / "off target" / "on station", weapon calls (Magnum, Fox 1/2/3, Rifle, Bombs away), "direct hit", "splash one", "track radar destroyed", "SA-11 site blinded", "target destroyed". (If the beep is silent but text appears, tell me; the sound path is the part I could not verify.)
-- [ ] CAS: friendly tanks and a JTAC are in contact with the enemy column; the A-10s attack it. Debrief reports friendly losses.
-- [ ] Level 3 only: a bomber raid on the fleet (4x Tu-22M3 with escorts) already en route from their base at mission start.
-- [ ] Kneeboard (3 pages, form layout, all times hh:mm:ss): page 1 = comms + waypoints + notes; page 2 = bingo/joker, IFF Mode 3, laser code, weather, target LAT/LONG (strike/SEAD/CAS roles), bullseye, package who's-who with STNs; page 3 = other packages in the mission, threats near the target, intelligence.
-- [ ] Wingmen follow you on your route. Nobody has unlimited fuel (AI included). Marshal slack is in Settings (negative values allowed).
-
-**Fixed earlier, still worth a look**
-- [ ] No `DictKey_Translation` Lua error; `Saved Games\DCS\SQE\SQE_state.json` appears while you fly.
-- [ ] SAM sites fire and show threat rings; callsigns read like `Springfield 1-2`.
-- [ ] Link 16: F-16C and F/A-18C list package flights as team members/donors. A-10C II uses SADL. F-14B(U) and F-15C have no datalink in DCS data. **On a dedicated server re-save the mission in the Mission Editor first.**
-- [ ] Waypoint numbers match your cockpit (F-15C: `B`, then 1, 2...). Tanker and bullseye are the last steerpoints.
-
-**Still unverified**
-- [ ] Other flights spawn airborne, orbit at MSHL and cross PUSH on time (timed orbit stop).
-- [ ] Your flight is hot on the cat/runway (INS aligned on the F-14B(U)); F-15C presets must be set by hand (SQE tells you).
-- [ ] AI flights disappear after landing; no Supercarrier deck crew.
-
-Build size: the waiting window shows how many groups/units each mission has, and the mission seed.
+Two features worth knowing: **package merging** (Settings > Mission build) folds packages whose targets are close into one
+mission, and the **unit limit** there lets you trade detail for performance. `--full-map` (alone or with the AI test) builds
+every sortie with everything on the map, as a stress test, not for play.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -151,60 +123,23 @@ Result: `dist\SQE\SQE.exe`. Copy the **whole `dist\SQE` folder** wherever you li
 * The build takes a few minutes and the folder is a few hundred MB (PySide6 is large).
 * First launch of an unsigned exe may trigger Windows SmartScreen or antivirus: choose *More info > Run anyway*.
 * The exe keeps its settings in `%APPDATA%\SQE\settings.json` (same as running from source).
-* If the exe starts and closes instantly, run it from a terminal (`dist\SQE\SQE.exe`) to see the error, or rebuild without `--windowed`.
-* I could not build the exe myself (PyInstaller builds for the OS it runs on), so this step is untested. If it fails, send me the last lines of output.
+* If the exe starts and closes instantly, run it from a terminal (`dist\SQE\SQE.exe`) to see the error.
 
 Manual command, if you prefer it to the .bat:
 ```
 pip install pyinstaller
 python -m PyInstaller --noconfirm --clean --windowed --name SQE --collect-all dcs --collect-submodules sqe run_sqe.py
 ```
-(The map data is embedded in the code now, so no extra `--add-data` is needed.)
-```
-```
+Releases are built by `.github/workflows/release.yml` (Python 3.14).
 
 ---------------------------------------------------------------------------------------------------
 
-## 6. Where things live (and what to tweak)
+## 6. Terrain data
 
-| File | What it controls |
-|---|---|
-| `sqe/difficulty.py` | the three difficulty presets: enemy aircraft count/types, SAM mix, air-defence integration, AI skill, loss rate, damage, replenishment, variance (0 = no dice, 1 = full dice) |
-| `sqe/scenario.py` | the Caucasus scenario: bases, carrier position, squadrons, enemy airfields, SAM clusters, armor columns, HQs |
-| `sqe/narrative.py` | the conflict background, phases, intel lines, debrief story templates (add variants to any list) |
-| `sqe/aircraft.py` | every jet: service (derived from carrier/runway), roles, refuel type, speeds/altitudes, radio band |
-| `sqe/loadouts.py` | default loadouts per role; enemy air-to-air loads |
-| `sqe/mission_builder.py` -> `MissionOptions` | hold minutes, launch offset, AI unlimited fuel, AI despawn on landing, carrier TACAN/ICLS/Link-4, client slot |
-| `sqe/packages.py` | how packages are built and when Navy and USAF mix |
-| `sqe/war.py` | objective planning, AI-resolved packages (percentile roll with shown odds), victory/defeat |
-| `sqe/briefing.py`, `sqe/kneeboard.py` | briefing text and kneeboard pages |
-| `sqe/settings.py` | the two settings and the MissionScripting patch helper |
-| `sqe/threat.py` | how many enemy fighters defend a target and how many friendly fighters answer them |
-| `sqe/callsigns.py` | DCS-native callsign names/ids per aircraft type |
-| `sqe/timeofday.py` | sunrise/sunset and the daily tasking timeline (day only, or night too) |
-| `sqe/threatmap.py` | SAM rings, the FLOT/gatekeeper rule, tanker stations, egress steering, corridor sites |
-| `sqe/data/theatres/<theatre>_geo.json` | the map's coastline and borders (Natural Earth, public domain) in DCS coordinates, one file per theatre pack |
-
-**Custom loadouts**: in the Mission Editor name an aircraft group like `F-14BU:STRIKE`, `F-14BU:CAP`, `FA-18C:SEAD`, `A-10C:CAS`,
-build the loadout, save, then `python tools/capture_loadouts.py that.miz`. They override the defaults.
-
-**Campaign files**: `*.sqe` are readable JSON (versioned). Backups rotate in `SQE\backups`. Copy a `.sqe` to move a campaign between
-`DCS` and `DCS_Server`.
+SQE ships relief data and site lists for the Caucasus, so no terrain scan is needed to play. `tools/sqe_scan.py` rebuilds them
+after a DCS terrain update (for developers).
 
 ---------------------------------------------------------------------------------------------------
-
-### Squadrons, the Missions filter and package merging (v0.7)
-- New Campaign lets you pick your squadron. Missions shows "My squadron" packages by default; "All packages" only widens the list for display (you can still only fly your own squadron's flights, and a stand-down day for your squadron stays a stand-down day).
-- Settings > Package merging > "Same area" folds packages whose target is inside the Merge radius (default 25 nm, centred on your target and slid inward at the edge of the target area) into one mission: ones that start up to 30 minutes after yours, and ones that started up to "Earlier packages" minutes (default 15) before yours. An earlier package is already airborne and underway when the mission starts (it spawns along its route, or holding at its marshal point); one that has already struck and gone home by then is not flown, but its target is shown as smoking ruins (Settings > Ruins). One that has struck but is still airborne spawns on its way home, with the ruins already in place; the outcome is rolled when the mission is built and applied at the debrief. Compare the unit counts on the waiting window with merging Off to see the performance cost. Lower the unit limit if your VR system struggles.
-- On the Missions screen, a package that another one folds in is shown inside that package's panel, each with its own flights and FLY button. The line above each table says what FLY gives you: the start time, and which other packages fly with it. Pressing FLY on a later package starts the mission at its time instead.
-
-### Depth tiers, SEAD vs DEAD, garrisons (v0.8)
-- The war opens over Abkhazia (tiers 1 and 2: the armour columns and the Sukhumi/Gudauta belts). The coast and north Caucasus (Sochi, Nalchik, Beslan, Mozdok) open when the front advances, and the deep rear after that. Overview shows "front: stage N of 3"; Forces > Enemy assets shows each asset's depth and whether it is still locked.
-- A DEAD objective is a SEAD flight (HARM, pushes 5 minutes ahead; the sweep and escorts keep their spacing around it) plus a DEAD flight (the strikers). HARMs go for the radars. Radars dead and launchers alive = the site is SUPPRESSED, not destroyed; it is offered again as a mop-up ("Finish off ..."). Fly either flight; the kneeboard labels them SEAD and DEAD.
-- Long-range SAM sites may have a dug-in garrison (CAS target: your troops with a JTAC advance on it). Level 2 and 3 also put short-range SAMs (SA-8/15/19) with the front-line columns.
-- AI SEAD flights hold fire (return fire) from the start until the HARM point, so they do not chase fighters into SAM cover (v0.39.10).
-- AI SEAD flights launch their HARMs from 30 nm (the edge of what an SA-10 reaches) and go home from there; the HARM task asks for anti-radiation missiles on the whole site (v0.39.9; aimed at one track radar the AI never fired, because a track radar only radiates while tracking).
-- Things to check in DCS: do the AI HARMs actually target the radars (AttackGroup on the site; look for AGM_88 in `shots`)? Does the SEAD flight arrive about 5 minutes ahead of the DEAD flight? With a radar still alive 75 s before the target time, does the AI DEAD flight turn to its egress point (the SwitchWaypoint gate) and do you get the "abort" call with the double beep? Do the numbers feel right (tier boundaries, 30% advance threshold, 14 stall days: `war.py`, `FRONT_*`; garrison odds and SAM counts: `difficulty.py`; spawn caps: `threatmap.MAX_ROUTE_SITES` and the "two nearest defenders" line in `mission_builder._spawn_opfor_ground`)?
 
 ## 7. Troubleshooting
 
@@ -214,82 +149,16 @@ build the loadout, save, then `python tools/capture_loadouts.py that.miz`. They 
 | `AttributeError: ... F_14BU` | the wrong pydcs is installed. `pip uninstall pydcs`, then `pip install -r requirements.txt` again. |
 | `ModuleNotFoundError: sqe` | run from the project root (the folder that contains `sqe`). In VS Code open that folder, not its parent. |
 | Settings says folders are invalid | DCS Saves must already exist (start DCS once). The `Missions` and `SQE` subfolders are created for you. |
-| Waiting window stays on "Waiting for DCS results" | MissionScripting not patched; or you flew a different mission than `SQE_Sortie.miz`; or you rebuilt with FLY after starting (stale results are ignored). |
+| Waiting window stays on "Waiting for DCS results" | MissionScripting not patched (DCS updates revert it); or you flew a different mission than `SQE_Sortie.miz`; or you rebuilt with FLY after starting (stale results are ignored). |
 | "Found a results file, but it belongs to a different sortie" | an old file or another campaign. Press FLY again for a fresh one, or use Manually Submit. |
-| A flight is missing from a package | not enough serviceable aircraft or out of range today; replenishment runs each day. |
+| A flight is missing from a package | not enough serviceable aircraft or out of range this turn; jets that flew are in refit for a few hours. |
 | Everything flies but the debrief says nothing changed | results were from the first 30 s checkpoint only; fly longer, or check the mission end event fired (exit via the DCS "Mission > Quit" menu). |
+| "Saved campaign is from an older version" | campaign formats change between versions; SQE offers to back it up and start a new campaign. |
 
 ---------------------------------------------------------------------------------------------------
 
-## 8. Known gaps (honest list)
+## 8. Where to look next
 
-* Not yet flown in DCS by me. Items in section 4 are the unknowns.
-* Caucasus only. Syria would be a new scenario function in `scenario.py` plus a theatre switch in `mission_builder.py`.
-* Allied bombers (B-52H / B-1B) and strategic missions on bomber bases are not tasked yet.
-* Not built yet: the war *tempo* model (day-1 surge, reinforcement waves, per-difficulty pacing), runway-cratering/base-repair windows, and what happens if the carrier is sunk.
-* Radio call-outs are text plus a beep, not spoken voice.
-* JDAM target data (DTC) and LANTIRN waypoint designation are not generated by pydcs; enter TGT coordinates from the kneeboard.
-* Weather is always clear for now (seasonal temperature only). Procedural/static weather options come later.
-* Special points (IP, ST) are added for the F-14BU as per the F-14 manual; confirm in-game that the BU shows them.
-* The campaign has one story (Operation IRON TIDE). New stories mean new text in `narrative.py` and a new scenario.
-
-
-### Weather (v0.15)
-
-Settings > Weather. **Clear** (default) builds what SQE always built. **Procedural** uses the theatre's climate and changes slowly day to day; the fixed options hold one weather for the whole campaign.
-
-* What you see: the Missions page shows each package's weather at its start time; the briefing and the kneeboard carry it; DCS gets a real cloud preset, base, visibility, rain, dawn fog, wind and turbulence.
-* Weapons: laser-guided weapons are unusable under a broken or overcast sky below 10,000 ft or in rain or low visibility; imaging Mavericks need a ceiling above about 3,000 ft and 6 km; unguided weapons need 1,500 ft and 5 km. Whatever the weather rules out is swapped for a JDAM on the same pylon, and the change is shown. JDAMs, HARMs and air-to-air weapons don't care.
-* Scrubs: storms, fog or a very low ceiling stop every attacking package; so does a flight with nothing it can use (for example an A-10 with only Mavericks and cluster bombs under a 1,000 ft ceiling). Defensive air patrols still fly. A scrubbed package is not flown and its target is left alone by the war simulation.
-* The thresholds are in `sqe/weather.py` (`LASER_BASE_FT`, `EO_BASE_FT`, `VISUAL_BASE_FT` and so on) if you want to change them.
-
-### Theatres (v0.14)
-
-SQE builds the Caucasus out of the box. Maps are data: each theatre is a JSON "pack" (airfields, squadrons, tiers, carrier station, sun position, temperatures, scan area, operation text). To add one, see docs/THEATRES.md and put the file in `%APPDATA%\SQE\theatres\`. The New Campaign window shows a Theatre picker once more than one pack is installed.
-
-### Terrain scan (v0.12)
-Ground sites are placed with a coastline that is only roughly right, and it knows nothing about rivers. For exact placement run the scan once:
-1. Open SQE, then Settings. Set the Saved Games folder, press "Create terrain scan mission".
-2. Keep SQE open (it enables DCS scripting while open; the scan needs the same access as debriefs).
-3. In DCS: Fly > Missions > My Missions > SQE_TerrainScan, then Fly (you start in a parked Su-25T, which is free with DCS World, so no paid aircraft is needed). Messages show the percentage; wait for "SQE terrain scan COMPLETE" (about two minutes, DCS may stutter), then leave the mission.
-4. Open or start a campaign in SQE. Settings > Terrain scan reads "loaded" and, from v0.22, a second line "Ground height: loaded ...". An older scan has no ground height: run the scan mission once more (it measures both).
-Sites then keep the Shore margin from the sea and lakes (default 1500 m) and the river margin from rivers and shallow water (default 100 m); both are in Settings. Re-running is only needed after a DCS terrain update.
-
-## The enemy's air plan
-* Each day every enemy fighter wing with at least two aircraft gets patrol pairs (one pair always stays on alert) in 6-hour waves, and at Level 2 and 3 a 90-minute sweep over a contested sector is added. The plan is in the save (`red_air`) and is the same however often you replan the day.
-* A mission picks the patrols that are up at your time over the target and near the target or route; they are briefed ("Reported enemy patrol: ...") and airborne at the start. The rest of the threat-sized defenders are alert aircraft.
-* Things to check in DCS: do the patrol pairs sit where the briefing says, and do they stay until the end of their window? Is the number of briefed patrols about right (some missions will have none)? Does a mission in the same area at a different time of day meet different patrols? Tune: `redair.DOCTRINE` (pairs and share of aircraft per level), `WAVES`, `REL_NM` / `ROUTE_NM` (how close counts as "in the area").
-
-## Raids on friendly sites and the sortie budget
-* A raid can go for an airfield, a friendly supply site (fuel farm, forward depot), a field's garrison, or friendly troops in a contested sector. The tasking order lists them as "Intercept a raid on ..." / "Intercept an air attack on ...". What is under attack is on the map; the raiders fly there from their base.
-* If the raiders get through: fields lose defence (less with a garrison), supply sites and garrisons lose health, troops lose sector strength. Friendly supply falls when fuel farms or the depot are hit, as the enemy's does when you hit its depots. Destroyed friendly sites are replaced overnight with a chance.
-* Each enemy wing can fly 2 sorties per serviceable airframe a day, shared by patrols, sweeps and raids.
-* Things to check in DCS: do the raiders fly to the thing the briefing names, and do they bomb it? Is the garrison / fuel farm / column visible and in the right place? After a raid got through, does the debrief line match? In `SQE_state.json`, read `shots` (who fired what at what), `gates` after a DEAD, and `deaths` (the last hit, fuel, altitude and speed for every unit lost).
-* Tune: `Difficulty.raid_mix`, `blue_garrison_size`, `blue_rebuild`; `raids.ASSET_HIT`, `SECTOR_HIT`, `GARRISON_SHIELD`; `redair.DAILY_SORTIES`.
-
-## SEAD first
-* Each SEAD / DEAD job appears as two packages: SEAD (blind the radars), then DEAD 25 minutes behind it. If the SEAD package was a success the DEAD stage starts with the radars gone; if not, the radars are up and the DEAD flight and its escorts turn back at the gate. In the war simulation a DEAD stage with no blind site is held.
-* Fly the SEAD package and the result is real (the debrief says whether the radars are out). Fly the DEAD stage and the SEAD package has been settled for you.
-* After 3 failed SEAD days on a site, the combined package comes back for it.
-* Things to check in DCS: does the DEAD stage start with no radars at the site when the SEAD stage "succeeded"? Does a failed one start with radars and turn back? Are the escorts with the strikers (not minutes ahead)? Tuning: `war.SEAD_FAIL_VALVE`, `war.DEAD_STAGE_GAP_MIN`.
-
-## Retreat of hurt SAM sites
-* A long-range site at 35% or less may pull back 35-55 nm overnight (with its garrison) and comes back once repaired to 65%. You see it in the overnight log. Tasking can still go against it where it sits.
-* Things to check: does the "pulled back" line appear after a site was beaten down, and does the site show at its new position the next day (map and briefing)? Tuning: `sams.RETREAT_HEALTH`, `RETURN_HEALTH`, `RETREAT_NM`, `RETURN_MIN_DAYS`, `Difficulty.sam_retreat`.
-
-## Jamming
-Aircraft with jamming gear defeat some radar-guided missiles. Internal sets (F-14, F/A-18C, Red Su-24M; not the FC3 F-15C) protect only their own jet; an ECM pod on the loadout (F-16C, A-10C CAS) is stronger and also covers aircraft within 2 nm. Chance by launch range: nothing inside 12 km, full from 40 km. AI flights jam from PUSH to EGR only; your jet jams throughout. Anti-radiation missiles are not affected. The rolls are written to `SQE_state.json` under `jams` (test guideline: fly a SEAD or strike package and check them). The tier values are SQE's own judgement.
-
-
-## Air wings that fall back
-A wing or squadron that is badly beaten up (30% of its aircraft or less) may stand down overnight to a rear field and sit out the war for a few days: no patrols, raids or escorts from it. It recovers at twice the normal rate and returns at 65% strength after at least 2 nights. The same rule covers both sides; your own squadron, carrier squadrons and the strategic bomber wing are exempt. The Campaign log shows when a unit stands down and when it comes back. If the whole enemy air arm seems to vanish, this is the reason, and it comes back.
-
-## Ground guns and the LOW decision
-When the planner weighs going LOW to get under radar SAMs, it now also counts the guns and short-range SAMs that travel with columns and garrisons and sit at support sites and airfields. Enough of them near the route or the target keep a strike package at its normal altitude, so you no longer get a LOW profile that flies straight into a column's ZSU-23-4s.
-
-## Roads
-Run the terrain scan mission again after updating: it now also records roads. A road lookup is slow in DCS (about 90 ms when no road is near), so the scan does not cover the whole map: it covers 25 km around every airfield of the theatre and along the front line, skips water, and runs in three passes (8 km, 4 km, then 2 km spacing). The roads file is written after every pass, so you can leave the mission after the first or second pass if you are in a hurry; the messages say when. Expect DCS to stutter during this part and keep the DCS window in the foreground. With the roads file, columns, fuel farms and depots are placed on roads. The Settings > Terrain scan page shows "Roads: loaded" when it worked. If it says the scan did not find roads, the mission message at the end says "roads not available" and nothing else changes.
-
-## Full-map run (stress test)
-Start SQE with `--full-map` (the VS Code debug dropdown has it, alone and combined with the AI test) and every sortie is built with everything on the map: all enemy sites and columns, all friendly garrisons, supply sites and sector columns, all planned enemy patrols, no unit limit. Use it to see what DCS and VR can carry; it is not meant for a campaign.
-
+* `docs/CHANGES.md`: what changed in every version, newest first.
+* `docs/THEATRES.md`: how a map pack is built.
+* `tools/`: `smoke_test.py` and the other test and probe scripts.

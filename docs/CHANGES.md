@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.419, the setup guide is trimmed to what is current
+Docs/GUIDE.md keeps the install, first run, build and troubleshooting steps and adds a short "how a turn works" (4-hour turns, Skip Turn, Auto-Skip). The old sections on tiers, raid popups, dice and the long list of version-by-version features are gone; CHANGES.md has the history.
 ## v0.41.418, in low cloud or visibility the ground wind keeps each field's ILS runway active
 In low cloud, poor visibility or fog, the ground wind is turned to favour each blue field's ILS runway, so the ILS stays lit; the wind aloft follows the season's real direction. In good weather the wind is left as it is. The parked dummy aircraft is gone, and the briefing no longer quotes the wind. Settings > Experimental has a checkbox for it.
 ## v0.41.417, raids on a field's SAM site or fuel farm read Base Defense, on a depot Depot Defense
