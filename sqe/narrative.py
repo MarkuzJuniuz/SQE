@@ -191,6 +191,14 @@ def debrief_story(outcome: dict, state, rng: random.Random) -> str:
     if outcome.get("objective_type") in (ObjectiveType.BARCAP.value, ObjectiveType.FLEET_DEFENSE.value):
         k = outcome.get("red_air_lost", 0)
         parts.append(f"The {'intercept' if outcome.get('land_raid') else 'patrol over the fleet'} {'splashed ' + str(k) + ' hostile aircraft' if k else 'saw no engagement'}.")
+    elif outcome.get("runway"):                          # S75: a runway job is told by the crater, not by a damage percent
+        rw = outcome["runway"]
+        if rw.get("closed"):
+            parts.append(f"{obj}: the runway is cratered and the field is shut for {rw.get('hours', 0)} hours.")
+        elif rw.get("hits"):
+            parts.append(f"{obj}: {rw['hits']} bomb{'s' if rw['hits'] != 1 else ''} hit the runway, not enough to close it; the crews will have it repaired overnight.")
+        else:
+            parts.append(f"{obj}: no bombs fell on the runway.")
     elif any(a.get("primary") and a.get("suppressed") and not a.get("destroyed") for a in outcome.get("red_assets") or []):
         parts.append(f"{obj}: the site's radars are out; it is suppressed.")
     else:

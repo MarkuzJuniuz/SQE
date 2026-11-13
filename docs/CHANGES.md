@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.433, the debrief of a runway strike tells the crater, not a damage percent
+A runway strike that closed the field used to read "damage assessment puts the target at 0% destroyed" and a mixed day, right above the line saying the runway was cratered. The debrief now says the runway is cratered and the field is shut for 24 hours, grades the day as a win, and counts the job as done. A strike that hit the runway too few times, or missed it, says so.
 ## v0.41.432, Help > Campaign rules, and the docs ship with the release
 The Help menu has a new "Campaign rules" item that opens the campaign page that came with your build; if it is not there (a trimmed install) it opens the online page. The release zip now carries a `docs` folder beside SQE.exe (the campaign page, the guide, the change log, the sample briefing and the images), so the README's screenshots and its links to the docs work from the extracted folder too.
 ## v0.41.431, jets need 3 hours to refit again
