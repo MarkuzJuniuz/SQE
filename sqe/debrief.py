@@ -618,6 +618,8 @@ end
 -- S51: the weapons the two followers below track. A bomb (Weapon.Category.BOMB) and the AGM-154 JSOW: S50 (DCS, both the A and the C) showed the JSOW reports
 -- getCategory() = ROCKET (2), not BOMB, so a category test alone saw no JSOW at all. Matched by type name, never widened to every missile (a HARM, a SLAM-ER or an AIM is not a crater).
 local function isBombLike(w)
+  local okd, d = pcall(function() return w:getDesc() end)
+  if okd and d and d.category == 3 then return true end          -- v0.41.423: Weapon.Category.BOMB, from the descriptor (like the rest of this hook); w:getCategory() is the OBJECT category (2, WEAPON) for every weapon, so the old test never matched a bomb and `imp` / `rwy` stayed empty
   local ok, cat = pcall(function() return w:getCategory() end)
   if ok and cat == Weapon.Category.BOMB then return true end
   local okn, tn = pcall(function() return w:getTypeName() end)

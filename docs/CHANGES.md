@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.423, the mission hook records where bombs land
+The in-mission hook now recognises a bomb in flight (GBU-31, GBU-38, Mk-82 and the rest), so the impact points reach the state file and bombs that land on a runway count toward cratering the field. Before, it only recognised the AGM-154.
 ## v0.41.422, red's SEAD raids go for a full-strength Patriot more often, and only when it can field the jets
 When red picks a blue SAM site to hit, a Patriot at full strength now counts twice as much as a HAWK, so red no longer leaves it for the HAWK beside it. A Patriot is only in the draw while red has the jets for it (two packages, after pooling a second wing); otherwise red goes for the HAWK or another target instead of planning nothing.
 ## v0.41.421, the sample briefing is a real one from the current build
