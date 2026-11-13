@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.418, in low cloud or visibility the ground wind keeps each field's ILS runway active
+In low cloud, poor visibility or fog, the ground wind is turned to favour each blue field's ILS runway, so the ILS stays lit; the wind aloft follows the season's real direction. In good weather the wind is left as it is. The parked dummy aircraft is gone, and the briefing no longer quotes the wind. Settings > Experimental has a checkbox for it.
 ## v0.41.417, raids on a field's SAM site or fuel farm read Base Defense, on a depot Depot Defense
 The intercept job for a red raid on a blue SAM site or fuel farm is now "Base Defense: Intercept", and one on the forward or rear supply depot is "Depot Defense: Intercept". Nothing reads "Supply Defense" any more.
 ## v0.41.416, EWR strikes wait for the SAMs to go down, then go out as stand-off jobs

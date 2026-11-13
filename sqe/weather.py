@@ -65,6 +65,7 @@ class Wx:
     fog_m: float = 0.0                # fog visibility in metres when there is fog (0 = none)
     wind_from: float = 270.0          # degrees, the direction the wind blows FROM
     wind_kt: float = 5.0
+    ground_from: float = -1.0         # S63: the ground layer's wind-from direction when it differs from `wind_from` (low visibility, ILS runway kept active); -1 = same as wind_from
     turb: float = 0.0
     qnh_mmhg: float = 760.0
     temp_c: float = 20.0
@@ -150,45 +151,64 @@ def _state_on(campaign_id: str, start: date, k: int, clim: dict) -> int:
     return seq[k]
 
 
-# Wind-from window (degrees) that keeps the ILS runway the active one at every blue field (runways 060-130; a 70-120 wind gives
-# at least a 50% headwind on each). DCS picks the runway by wind, and in low cloud/visibility the ILS is the only way in.
-# Judgment call (XO 2026-11-05); magnetic vs true offset (~6 deg) unchecked.
+# Wind-from window (degrees) for the GROUND layer in low visibility (and for every layer in a pack with no regional wind table). DCS picks the active runway,
+# and with it the runway whose ILS is lit, from the low-level wind. S63 (XO's DCS probe at Kutaisi, 2026-11-12, `.private/probes/ils/README.md`): a 6 m/s ground wind
+# decides the runway whatever the 2000 m / 8000 m winds do (ground 07 + aloft 25 gave 07; ground 25 + aloft 07 gave 25); a calm or light ground wind (0 to 2.5 m/s)
+# under a 10 m/s wind aloft gave the aloft runway; no wind at all gave Kutaisi's default 07. The dummy aircraft (S32) did nothing and is gone.
+# Judgment calls: 70-120 kept (the true runway ends of the blue ILS fields are 066-136, so it is within 66 deg of all of them; only 076 at Kutaisi was flown);
+# no ground-speed floor (SQE's aloft/ground ratio is 1.8, the probe's winning case had 1.67, a ratio of 6.7 lost); the other fields' ILS ends were not flown.
 ILS_WIND = (70.0, 120.0)
-
-# v0.41.336 (XO 2026-11-09, campaign rules plan decision 49): with the ILS dummy aircraft on (Settings > ils_dummy), the wind comes from the theatre's real regional
-# pattern (the pack's climate `wind_from_deg`, one wind-from direction per month, and `wind_scatter_deg`) instead of the ILS_WIND window above; the dummy is what keeps the
-# ILS runway active whatever the wind. Off, or a pack with no such table: the ILS_WIND window as before.
 WIND_SCATTER_DEFAULT = 30.0     # +/- degrees of seeded day-to-day scatter round the monthly direction (judgment call, used when a pack gives none)
+# Low visibility (S63): the FAA marginal-VFR boundary, ceiling below 3,000 ft or visibility below 5 statute miles (AIM 7-1-7 flight categories; from memory, firm),
+# so the ILS runway is kept whenever an approach may need the ILS. Cover 0.5 = broken or overcast (a ceiling); 8.0 km is 5 statute miles.
+LOW_VIS_CEILING_FT = 3000
+LOW_VIS_COVER = 0.5
+LOW_VIS_KM = 8.0
 
 
-def _wind_dir(clim: dict, month: int, regional: bool, r) -> float:
-    """Wind-from direction of a day's 06:00 anchor. `r` is the day's seeded generator (the draw is made even when it is not needed, so the other draws of the day never shift)."""
+def low_visibility(wx: "Wx") -> bool:
+    """True when the final weather is below the marginal-VFR boundary: a ceiling under LOW_VIS_CEILING_FT, visibility under LOW_VIS_KM, or fog."""
+    if wx.mode == "clear":
+        return False
+    return bool(wx.fog_m) or wx.vis_km < LOW_VIS_KM or (wx.cover >= LOW_VIS_COVER and wx.base_ft < LOW_VIS_CEILING_FT)
+
+
+def _wind_dir(clim: dict, month: int, r) -> float:
+    """Wind-from direction of a day's 06:00 anchor: the pack's regional pattern (`wind_from_deg` and `wind_scatter_deg`), or the ILS_WIND window when the pack has no table.
+    `r` is the day's seeded generator (the draw is made either way, so the other draws of the day never shift)."""
     u = r.random()
-    table = clim.get("wind_from_deg") if regional else None
+    table = clim.get("wind_from_deg")
     if not table:
         return ILS_WIND[0] + (ILS_WIND[1] - ILS_WIND[0]) * u
     sc = float(clim.get("wind_scatter_deg", WIND_SCATTER_DEFAULT))
     return (float(table[month - 1]) + sc * (2.0 * u - 1.0)) % 360.0
 
 
-def _wind_dir_fixed(clim: dict, month: int, regional: bool) -> float:
-    table = clim.get("wind_from_deg") if regional else None
+def _wind_dir_fixed(clim: dict, month: int) -> float:
+    table = clim.get("wind_from_deg")
     return float(table[month - 1]) if table else sum(ILS_WIND) / 2
 
 
-def _anchor(campaign_id: str, k: int, state: str, clim: dict, month: int, regional: bool = False) -> dict:
+def _ground_dir(wx: "Wx", campaign_id: str, k: int, clim: dict) -> None:
+    """S63: in low visibility the ground layer's direction is a seeded one inside ILS_WIND (its own generator, so no other draw shifts); the layers aloft keep wind_from.
+    A pack with no regional table already has every layer inside ILS_WIND."""
+    if clim.get("wind_from_deg") and low_visibility(wx):
+        wx.ground_from = round(ILS_WIND[0] + (ILS_WIND[1] - ILS_WIND[0]) * _rng(campaign_id, "ilsw", k).random()) % 360
+
+
+def _anchor(campaign_id: str, k: int, state: str, clim: dict, month: int) -> dict:
     """The 06:00 picture of a day in `state`, with seeded variation."""
     r = _rng(campaign_id, "wxp", k)
     (c0, c1), (b0, b1), (v0, v1), wf, turb, dq, dt = _P[state]
     u = lambda a, b: a + (b - a) * r.random()
     return {"cover": u(c0, c1), "base": u(b0, b1), "vis": u(v0, v1), "wind": clim["wind_ms"][month - 1] * wf * u(0.8, 1.25),
-            "dir": _wind_dir(clim, month, regional, r), "turb": turb, "qnh": 761 + dq + u(-2, 2), "dt": dt + u(-2.0, 2.0),
+            "dir": _wind_dir(clim, month, r), "turb": turb, "qnh": 761 + dq + u(-2, 2), "dt": dt + u(-2.0, 2.0),
             "fog": r.random() < clim["fog"][month - 1] and state in ("OVERCAST", "RAIN", "SCATTERED", "BROKEN")}
 
 
-def _fixed(state: str, clim: dict, month: int, regional: bool = False) -> dict:
+def _fixed(state: str, clim: dict, month: int) -> dict:
     (c0, c1), (b0, b1), (v0, v1), wf, turb, dq, dt = _P[state]
-    return {"cover": (c0 + c1) / 2, "base": (b0 + b1) / 2, "vis": (v0 + v1) / 2, "wind": clim["wind_ms"][month - 1] * wf, "dir": _wind_dir_fixed(clim, month, regional),
+    return {"cover": (c0 + c1) / 2, "base": (b0 + b1) / 2, "vis": (v0 + v1) / 2, "wind": clim["wind_ms"][month - 1] * wf, "dir": _wind_dir_fixed(clim, month),
             "turb": turb, "qnh": 761 + dq, "dt": dt, "fog": False}
 
 
@@ -222,7 +242,7 @@ def clear_day(temp_c: float = 20.0) -> Wx:
     return Wx(temp_c=temp_c)
 
 
-def forecast(mode: str, campaign_id: str, start: date, day: int, hour: float, pack: dict, regional: bool = False) -> Wx:
+def forecast(mode: str, campaign_id: str, start: date, day: int, hour: float, pack: dict, ils_low_vis: bool = False) -> Wx:
     """The weather at local `hour` on campaign day `day` (1-based) for the active theatre pack."""
     k = max(0, int(day) - 1)
     d = start + timedelta(days=k)
@@ -233,20 +253,26 @@ def forecast(mode: str, campaign_id: str, start: date, day: int, hour: float, pa
     rng = _rng(campaign_id, "wxc", k, int(hour * 4))
     if mode != "procedural":
         state = {"scattered": "SCATTERED", "broken": "BROKEN", "overcast": "OVERCAST", "rain": "RAIN", "storm": "STORM"}.get(mode, "CLEAR")
-        return _finish(state, _fixed(state, clim, d.month, regional), None, 0.0, hour, temp, mode, rng)
+        wx = _finish(state, _fixed(state, clim, d.month), None, 0.0, hour, temp, mode, rng)
+        if ils_low_vis:
+            _ground_dir(wx, campaign_id, k, clim)
+        return wx
     s0 = _state_on(campaign_id, start, k, clim)
     s1 = _state_on(campaign_id, start, k + 1, clim)
     f = min(max((hour - 6.0) / 24.0, 0.0), 1.0)
-    a = _anchor(campaign_id, k, STATES[s0], clim, d.month, regional)
-    b = _anchor(campaign_id, k + 1, STATES[s1], clim, (d + timedelta(days=1)).month, regional)
+    a = _anchor(campaign_id, k, STATES[s0], clim, d.month)
+    b = _anchor(campaign_id, k + 1, STATES[s1], clim, (d + timedelta(days=1)).month)
     s = int(round(s0 + (s1 - s0) * f))
-    return _finish(STATES[s], a, b, f, hour, temp, mode, rng)
+    wx = _finish(STATES[s], a, b, f, hour, temp, mode, rng)
+    if ils_low_vis:
+        _ground_dir(wx, campaign_id, k, clim)
+    return wx
 
 
-def for_package(state, mode: str, pack: dict, hhmm: str, regional: bool = False) -> Wx:
+def for_package(state, mode: str, pack: dict, hhmm: str, ils_low_vis: bool = False) -> Wx:
     """Weather for a campaign state at a package start time ('HH:MM' local)."""
     hh, mm = int(hhmm[:2]), int(hhmm[3:5])
-    return forecast(mode, state.campaign_id, _start(state), state.day, hh + mm / 60.0, pack, regional)
+    return forecast(mode, state.campaign_id, _start(state), state.day, hh + mm / 60.0, pack, ils_low_vis)
 
 
 def _start(state) -> date:
@@ -278,8 +304,6 @@ def describe(wx: Wx, short: bool = False) -> str:
         bits.append("heavy rain" if wx.rain == 2 else "rain")
     if wx.fog_m:
         bits.append("fog")
-    if not short and wx.wind_kt >= 1:
-        bits.append(f"wind {int(wx.wind_from):03d} at {int(round(wx.wind_kt))} kt")
     return ", ".join(bits)
 
 
@@ -435,7 +459,7 @@ def apply(m, wx: Wx) -> None:
     if wx.wind_kt > 0:
         ms = wx.wind_kt / KT
         to = lambda deg: int(round((deg + 180) % 360))                # DCS stores the direction the wind blows TO
-        w.wind_at_ground = Wind(to(wx.wind_from), round(ms, 1))
+        w.wind_at_ground = Wind(to(wx.ground_from if wx.ground_from >= 0 else wx.wind_from), round(ms, 1))
         w.wind_at_2000 = Wind(to(wx.wind_from + 25), round(ms * 1.8, 1))
         w.wind_at_8000 = Wind(to(wx.wind_from + 55), round(ms * 3.2, 1))
         w.turbulence_at_ground = float(wx.turb)
