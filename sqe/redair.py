@@ -178,7 +178,7 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
         if up >= want:
             break
         w, ar, sqs = cands[i]
-        got = blue_barcap._pairs(led, sqs, t0, t1, 0)                        # the same crewing as blue's: a long-legged pair holds the turn, a short-legged one is relieved in wave 2 (no `keep`: the reserve is red's pair kept back)
+        got = blue_barcap._pairs(led, sqs, t0, t1, 0)                        # the same crewing as blue's: a short-legged or 120-minute pair is relieved in wave 2 (the turn is 240 minutes) (no `keep`: the reserve is red's pair kept back)
         for j, (sq, wave, lo, hi) in enumerate(got):
             flights.append({"id": f"rf{turn}-{ar['id']}.{j}", "kind": "CAP", "wing": w.base_asset_id, "type": sq.aircraft, "size": 2, "start": lo, "end": hi, "x": ar["x"], "y": ar["y"],
                             "area": ar["id"], "bearing": ar["bearing"], "ax": ar["ax"], "ay": ar["ay"], "turn": turn, "wave": wave, "squadron": sq.id})

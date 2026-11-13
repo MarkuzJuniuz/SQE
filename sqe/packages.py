@@ -29,7 +29,6 @@ class Slot:
     size: int
     required: bool = True
     only_if_defended: bool = False
-    tag: str = ""                      # "" | HAVCAP | BASE_BARCAP (support flights: AI only)
     kit: str = ""                      # "" | JSOW | SLAM | PEN (a strike slot that only JSOW- / SLAM-ER- / JSOW-C-capable jets fill, see loadouts.JSOW_PER_JET, SLAM_PER_JET, PEN_PER_JET)
     only: str = ""                     # S60: "" | an airframe name: only that airframe fills the slot (the F-16 in the JSOW slot of an EWR strike; the Hornet flies SLAM-ER there)
     land: bool = False                 # v0.41.256: a land-based squadron fills it when one reaches (the fleet raid's USAF share), long-range fighters first; any squadron when none does
@@ -445,8 +444,6 @@ class PackageBuilder:
             if req:
                 slots.append(Slot(Role.TARCAP, min(4, req), True))            # the TARCAP. More bandits than it can take: a Fighter Sweep package (v0.40.2)
                 slots.append(Slot(Role.ESCORT, 2, False))                      # v0.41.1: the escort, back (v0.40.2 dropped it with the old sweep slot)
-        if obj.type not in _FLEET:
-            slots.append(Slot(Role.CAP, 2, False, tag="HAVCAP"))
         return slots
 
     def build(self, obj: Objective, number: int, ledger: Ledger, *, for_player: bool, names: dict | None = None) -> Package:
@@ -477,9 +474,9 @@ class PackageBuilder:
             # S51 (XO 2026-11-12): the runway crater goes out as F-15E standoff JSOW-Cs when an F-15E squadron reaches the field (with the PEN kit's shorter reach) and has jets free; none: the
             # plain strike as before (unlike the Standoff DEAD the kit is NOT required, no waiting for another day). Not for the player's own build: no player airframe can fly the kit, so his job and
             # route stay exactly as they were (a Viper / Hornet pilot is never moved to another slot).
-            if any(s_.role == Role.STRIKE and not s_.tag and not s_.kit for s_ in slots) and any(
+            if any(s_.role == Role.STRIKE and not s_.kit for s_ in slots) and any(
                     sq_.aircraft in PEN_PER_JET and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty, "PEN") for sq_ in st.squadrons.values()):
-                next(s_ for s_ in slots if s_.role == Role.STRIKE and not s_.tag and not s_.kit).kit = "PEN"
+                next(s_ for s_ in slots if s_.role == Role.STRIKE and not s_.kit).kit = "PEN"
         ewr_so_ = obj.type == ObjectiveType.STRIKE and obj.aim == "STANDOFF" and self._is_ewr(obj)
         if ewr_so_:
             # S60 (XO 2026-11-12: EWR strikes are stand-off only): the strike slot takes the kit of the first airframe in EWR_KIT_ORDER that has a squadron with 2+ free jets in range for it (the PEN kit's
@@ -487,7 +484,7 @@ class PackageBuilder:
             pac_ = st.squadrons[st.player.squadron_id].aircraft if (for_player and st.player) else None        # S68 (XO 2026-11-12: the mission is the same for a person): a player's own airframe is tried first, so he flies the kit slot too
             for ac_, kit_ in sorted(EWR_KIT_ORDER, key=lambda e_: e_[0] != pac_):
                 if any(sq_.aircraft == ac_ and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty, kit_) for sq_ in st.squadrons.values()):
-                    s_ = next(s_ for s_ in slots if s_.role == Role.STRIKE and not s_.tag)
+                    s_ = next(s_ for s_ in slots if s_.role == Role.STRIKE)
                     s_.kit, s_.only = kit_, ac_
                     break
             else:
@@ -498,7 +495,7 @@ class PackageBuilder:
         if for_player and pp:
             psq = st.squadrons[pp.squadron_id]
             spec = AIRCRAFT[psq.aircraft]
-            ok = [i for i, s in enumerate(slots) if not s.tag and s.role in spec.roles and self._slot_ok(psq.aircraft, s) and (not s.kit or psq.aircraft in KIT_JETS.get(s.kit, ())) and (not s.only or psq.aircraft == s.only)
+            ok = [i for i, s in enumerate(slots) if s.role in spec.roles and self._slot_ok(psq.aircraft, s) and (not s.kit or psq.aircraft in KIT_JETS.get(s.kit, ())) and (not s.only or psq.aircraft == s.only)
                   and (not is_sweep(obj) or psq.aircraft in LONG_RANGE_A2A)                    # v0.41.15: no BVR sweep in an F-16 / F/A-18
                   and self._in_range(psq.id, tx, ty) and ledger.free[psq.id] >= 2]
             if obj.type == ObjectiveType.CAS and psq.aircraft != "A-10C" and not self._hot:
@@ -517,8 +514,6 @@ class PackageBuilder:
         chosen = []                      # (slot, squadron, count, is_player)
         self.missing = 0
         for i, slot in enumerate(slots):
-            if slot.tag:
-                continue
             sq = psq if i == player_idx else self._pick_squadron(slot, tx, ty, ledger, lead_service)
             want = min(slot.size, MAX_FLIGHT)
             if sq is None:
@@ -560,8 +555,7 @@ class PackageBuilder:
                 ledger.free[sq_.id] += n_
             raise NoPlayerSlot("no SEAD flight free to escort the " + ("CAS" if obj.type == ObjectiveType.CAS else "strike") + " today")
 
-        # support CAP: all four kinds (TKR_HAVCAP, HAVCAP, BASE_BARCAP, CARRIER_BARCAP) are planned chains now (blue_barcap.py), attached after the start times are known
-        # v0.41.88: TKR_HAVCAP and HAVCAP are planned too (blue_barcap.py): chains per tanker / AWACS asset, attached once the start times are known.
+        # support CAP: all four kinds (TKR_HAVCAP, HAVCAP, BASE_BARCAP, CARRIER_BARCAP) are planned in blue_barcap.py (per turn, per asset / area) and attached once the start times are known
 
         used, n = (names if names is not None else {}), 0     # names: the day's callsign counter, shared by every package that day
         for slot, sq, count, is_pl in chosen:
@@ -570,8 +564,8 @@ class PackageBuilder:
             kit_ = slot.kit or ("CBU" if (obj.type == ObjectiveType.COUNTER_AIR and obj.aim not in ("SWEEP", "STANDOFF") and slot.role == Role.STRIKE and sq.aircraft in CBU_JETS) else "")
             pkg.flights.append(FlightPlan(f"{pkg.id}-f{n}", cs, slot.role, sq.id,
                                           sq.aircraft, count, sq.base_id,
-                                          (_CA_JSOW_TASK if (kit_ == "JSOW" and obj.type == ObjectiveType.COUNTER_AIR) else None) or (_EWR_KIT_TASK.get(kit_) if ewr_so_ and slot.role == Role.STRIKE else None) or _KIT_TASK.get(kit_) or _TAG_TASK.get(slot.tag) or (_SO_SEAD_TASK if (obj.aim == "STANDOFF" and slot.role == Role.SEAD) else None) or (_ESC_TASK if slot.role == Role.ESCORT else None) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or (_SETPIECE_TASK.get(slot.role) if pkg.extra.get("setpiece") else None) or _TASK[slot.role],
-                                          is_pl, slot.tag, kit_, ""))
+                                          (_CA_JSOW_TASK if (kit_ == "JSOW" and obj.type == ObjectiveType.COUNTER_AIR) else None) or (_EWR_KIT_TASK.get(kit_) if ewr_so_ and slot.role == Role.STRIKE else None) or _KIT_TASK.get(kit_) or (_SO_SEAD_TASK if (obj.aim == "STANDOFF" and slot.role == Role.SEAD) else None) or (_ESC_TASK if slot.role == Role.ESCORT else None) or (_DEAD_TASK.get(slot.role) if obj.type == ObjectiveType.DEAD else None) or (_SETPIECE_TASK.get(slot.role) if pkg.extra.get("setpiece") else None) or _TASK[slot.role],
+                                          is_pl, "", kit_, ""))
         pkg.support = self._support(pkg)
         pkg.jtac = obj.type in JTAC_OBJECTIVES
         return pkg
@@ -642,35 +636,6 @@ class PackageBuilder:
         if bs and (not bc or self._dist_nm(bc.id, tx, ty) > 0.7 * self._dist_nm(bs.id, tx, ty)):
             return bs
         return bc or bs
-
-    def _pick_cap_near(self, base, ledger: Ledger, lead_service):
-        best, best_s = None, 1e9
-        for sq in self.state.squadrons.values():
-            spec = AIRCRAFT[sq.aircraft]
-            if Role.CAP not in spec.roles or ledger.free[sq.id] < 2:
-                continue
-            b = self.state.bases[sq.base_id]
-            d = math.hypot(b.x - base.x, b.y - base.y) / NM
-            if d > spec.combat_radius_nm:
-                continue
-            s = d + (0 if spec.service == lead_service else 40)
-            if s < best_s:
-                best, best_s = sq, s
-        return best
-
-    def _pick_cap_at(self, base, ledger: Ledger, lead_service):
-        """v0.41.7: a fighter squadron AT this base (the carrier BARCAP flies off its own deck)."""
-        cands = [sq for sq in self.state.squadrons.values() if sq.base_id == base.id and Role.CAP in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2]
-        return max(cands, key=lambda sq: (AIRCRAFT[sq.aircraft].service == lead_service, ledger.free.get(sq.id, 0))) if cands else None
-
-    def _pick_cap_any(self, ledger: Ledger, lead_service):
-        """The tanker CAP is mandatory: any fighter will do (it stays with the tanker, short of the scramble circles), range aside."""
-        cands = [sq for sq in self.state.squadrons.values() if Role.CAP in AIRCRAFT[sq.aircraft].roles and ledger.free[sq.id] >= 2]
-        if not cands:
-            cands = [sq for sq in self.state.squadrons.values() if Role.CAP in AIRCRAFT[sq.aircraft].roles and sq.available >= 2 and sq.role != "havcap"]
-        if not cands:
-            return None
-        return max(cands, key=lambda sq: (AIRCRAFT[sq.aircraft].service == lead_service, ledger.free.get(sq.id, 0)))
 
     def _support(self, pkg: Package) -> list:
         lead = pkg.player_flight or next((f for f in pkg.flights if not f.tag), pkg.flights[0])
