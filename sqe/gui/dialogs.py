@@ -386,7 +386,6 @@ class WaitingDialog(QDialog):
         self.overall = QLabel(""); self.overall.setObjectName("h2"); lay.addWidget(self.overall)         # S77: IN FLIGHT / ALL RECOVERED (set by _poll)
         info = card(); lay.addWidget(info)
         il = info.layout()
-        self.objs = QLabel(f"<b>{html.escape(p['objective'])}</b>"); self.objs.setWordWrap(True); il.addWidget(self.objs)       # S77: the flown job and the merged packages, each with its live status
         il.addWidget(QLabel(f"Mission file: <b>SQE_Sortie.miz</b> in your DCS Missions folder. Start DCS, open it from the Missions list, and fly."))
         pd = p.get("package_dict", {}); cn = p.get("counts") or {}
         il.addWidget(QLabel(f"Mission start <b>{pd.get('start', '')}</b> local   |   {cn.get('groups', '?')} groups, {cn.get('units', '?')} units"))
@@ -394,6 +393,10 @@ class WaitingDialog(QDialog):
         for wmsg in (p.get("warnings") or []):                  # v0.41.133: the notes come last (the "Built with notes" popup is gone)
             wl = QLabel("Note: " + wmsg); wl.setWordWrap(True); wl.setStyleSheet(f"color:{theme.AMBER};"); il.addWidget(wl)
         self.status = QLabel("Waiting for DCS results..."); self.status.setObjectName("h2"); lay.addWidget(self.status)
+        self.ptbl = QTableWidget(1, 2); self.ptbl.setHorizontalHeaderLabels(["Package", "Status"])         # S87: one row per package, its phase and result (set by _status_lines)
+        self.ptbl.verticalHeader().setVisible(False); self.ptbl.setEditTriggers(QTableWidget.NoEditTriggers); self.ptbl.setSelectionMode(QTableWidget.NoSelection)
+        self.ptbl.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch); self.ptbl.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.ptbl.setWordWrap(True); self._fill_packages([{"name": p["objective"], "text": ""}]); lay.addWidget(self.ptbl)
         self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["This sortie", "Friendly", "Enemy"])
         self.tbl.verticalHeader().setVisible(False); self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch); self.tbl.setMinimumHeight(190)
@@ -416,20 +419,20 @@ class WaitingDialog(QDialog):
                 it = QTableWidgetItem(v); it.setTextAlignment(Qt.AlignCenter if j else Qt.AlignLeft | Qt.AlignVCenter)
                 self.tbl.setItem(i, j, it)
 
+    def _fill_packages(self, rows):
+        self.ptbl.setRowCount(len(rows))
+        for i, r in enumerate(rows):
+            for j, v in enumerate((r["name"], r["text"])):
+                self.ptbl.setItem(i, j, QTableWidgetItem(v))
+        self.ptbl.resizeRowsToContents()
+        self.ptbl.setFixedHeight(self.ptbl.horizontalHeader().height() + sum(self.ptbl.rowHeight(i) for i in range(len(rows))) + 4)
+
     def _status_lines(self, data):
         """S77: the objective lines and the overall line, read-only from the hook's state file (nothing in the campaign changes; Accept stays the authority).
         The hook rewrites the file every 30 s and on every kill / loss / landing, so these change at most that often."""
         st = self.sess.state; man = self.sess.manifest(); pend = st.pending or {}
-        start = (pend.get("package_dict") or {}).get("start", "00:00"); now = float(data.get("time", 0) or 0)
-        h = []
-        for i, r in enumerate(DB.objective_status(st, man, data, pend)):
-            line = f"<b>{html.escape(r['objective'])}</b>" if i == 0 else f"#{html.escape(str(pend['merged'][i - 1]['number']))} {html.escape(r['objective'])}"
-            if r["tot_s"] is not None and now < r["tot_s"]:
-                line += f": TOT {DB._clock_hm(start, r['tot_s'])}"                 # a merged package before its TOT
-            elif r["text"]:
-                line += ": " + (html.escape(r["text"]) if (r["has_result"] or r["tot_s"] is None) else "on target")
-            h.append(line)
-        self.objs.setText("<br>".join(h))
+        start = (pend.get("package_dict") or {}).get("start", "00:00")
+        self._fill_packages(DB.package_rows(st, man, data, pend))
         fs = DB.flight_status(st, man, data, pend)
         if fs["total"] and fs["airborne"] == 0:
             self.overall.setText("ALL RECOVERED, safe to exit"); self.overall.setStyleSheet(f"color:{theme.GREEN}; font-weight:bold;")

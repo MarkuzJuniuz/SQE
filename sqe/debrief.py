@@ -1813,6 +1813,47 @@ def objective_status(state, manifest: Manifest, data: dict, pending: dict | None
     return out
 
 
+ON_TARGET_S = 300     # S87: a package reads "On target" this long after its TOT (no result yet), then "Returning". Judgment call: the attack run and the pull-off take a few minutes
+
+
+def package_rows(state, manifest: Manifest, data: dict, pending: dict | None = None) -> list:
+    """S87 (XO 2026-11-14): one row per package for the waiting window's top table, the status never blank: the package's phase (En route, TOT hh:mm / On target / Returning / Complete /
+    Scrubbed / Aborted), with the job's result in front once there is one ('Runway cut, returning'). READ-ONLY. -> [{name, text}], the flown package first (name = its objective,
+    merged ones '#N objective'). Phase from the mission clock against the TOT and from the package's own combat flights (landed / dead / ejected = no longer airborne)."""
+    start = ((pending or {}).get("package_dict") or {}).get("start", "00:00")
+    now = float(data.get("time", 0) or 0)
+    gone = set(data.get("dead", [])) | set(data.get("ejected", [])) | set(data.get("landed", []))
+    scrubbed = {e.get("pkg") for e in (data.get("scrub") or [])}
+    groups = combat_flight_groups(state, manifest, pending)
+    tl = (pending or {}).get("timeline") or {}
+    rows = []
+    for i, r in enumerate(objective_status(state, manifest, data, pending)):
+        if i == 0:
+            pid, name, tot = manifest.package_id, r["objective"], (float(tl["tot_s"]) if tl.get("tot_s") is not None else None)
+        else:
+            m = [x for x in manifest.merged if not x.get("unseen")][i - 1]
+            pid, name, tot = m["id"], f"#{m.get('number', '')} {r['objective']}", float(m.get("tot_s", 0))
+        mine = [g for g in groups if g.get("pkg") == pid]
+        air = sum(1 for g in mine for u in g["units"] if u not in gone)
+        res = r["text"] if (r["has_result"] and r["text"]) else ""
+        if pid in scrubbed:
+            phase = "Scrubbed"
+            res = ""
+        elif "turned back" in r["text"]:
+            phase = "Aborted, turned back at the radar gate"
+            res = ""
+        elif mine and air == 0:
+            phase = "Complete"
+        elif tot is None or now < tot:
+            phase = "En route" + (f", TOT {_clock_hm(start, tot)}" if tot is not None else "")
+        elif now < tot + ON_TARGET_S and not res:
+            phase = "On target"
+        else:
+            phase = "Returning"
+        rows.append({"name": name, "text": f"{res}, {phase[0].lower()}{phase[1:]}" if res else phase})
+    return rows
+
+
 def flight_status(state, manifest: Manifest, data: dict, pending: dict | None = None) -> dict:
     """S77: the overall line's numbers. Combat flights only (see combat_flight_groups); aircraft of a scrubbed package are left out (they never launched or
     are on their way home). -> {total, airborne, next_tot_s (None when no TOT is left)}. airborne counts aircraft neither landed, dead nor ejected."""
