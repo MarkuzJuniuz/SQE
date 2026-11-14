@@ -2746,6 +2746,16 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if tg_i is not None and tg_i >= 1 and ws_[tg_i - 1].name in ("IP", "LOW") and ws_[tg_i].eta_s is not None:
                 ip_cas_ = ws_[tg_i]
                 ip_cas_ip_ = ws_[tg_i - 1]
+        # S76 (XO 2026-11-13): a person's flight with a specific ground target (a STRIKE package: runway, depot / supply site, EWR) also gets the AI's attack task on its IP, for the AI wingmen
+        # (whether DCS runs a waypoint task for the wingmen of a human lead is untested; the one-hit runway crater is the fallback). Not CAS, not DEAD / SEAD (their tasks hang on a launch point a
+        # person's route does not have), not the SLAM stand-off strike. The route itself is unchanged; the player's own TGT task below stays as it was.
+        ip_hum_ = None
+        if (f.is_player and not o.player_is_ai and f.role == Role.STRIKE and not f.tag and package.objective.type == ObjectiveType.STRIKE
+                and getattr(f, "kit", "") != "SLAM"):
+            ws_ = list(wps[first:])
+            tg_i = next((k for k, w_ in enumerate(ws_) if w_.name == "TGT" and w_.action == "BOMB"), None)
+            if tg_i is not None and tg_i >= 1 and ws_[tg_i - 1].name in ("IP", "LOW") and ws_[tg_i].eta_s is not None:
+                ip_hum_ = ws_[tg_i]
         for w in wps[first:]:
             wp = g.add_waypoint(pt(w.x, w.y), w.alt_ft * FT, w.speed_kts * KPH, w.name)
             if w.rad:
@@ -2759,6 +2769,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     if nm:
                         wp.name = nm
                 if not o.player_is_ai:                                       # all-AI test: the player's flight now gets the AI tasks below, like any AI flight
+                    if ip_hum_ is not None and w.name == "IP":               # S76: the AI wingmen's attack task on the IP, stop times from the TGT ETA
+                        kit_ = getattr(f, "kit", "")
+                        wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
+                        if kit_ in JSOW_FLIGHT_KITS:                         # the stand-off kits: the EWR strike's / the runway crater's JSOW / PEN tasks (a launch point is not needed for a Bombing task on a point)
+                            self._jsow_tasks(wp, f, armor, package, ip_hum_.eta_s)
+                        else:
+                            wp.tasks += self._ai_bomb_tasks(package, f, ip_hum_, ip_hum_.eta_s + LATE_ATTACK_S)
                     if w.action == "BOMB":
                         wp.tasks += self._bomb_tasks(package, w)
                     continue

@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.434, one bomb on the runway closes the field, and your wingmen get an attack task
+A runway strike now closes the field with a single bomb on the runway (it was three), so your own hit is enough even if your wingmen drop nothing. Your flight's AI wingmen on a strike (runway, depot, EWR) now also carry the same attack task on the IP that the AI-only flights use. Your own route is unchanged.
 ## v0.41.433, the debrief of a runway strike tells the crater, not a damage percent
 A runway strike that closed the field used to read "damage assessment puts the target at 0% destroyed" and a mixed day, right above the line saying the runway was cratered. The debrief now says the runway is cratered and the field is shut for 24 hours, grades the day as a win, and counts the job as done. A strike that hit the runway too few times, or missed it, says so.
 ## v0.41.432, Help > Campaign rules, and the docs ship with the release
