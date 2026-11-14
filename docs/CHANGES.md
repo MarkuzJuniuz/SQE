@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.438, Level 1 gets Gudauta and a bigger sponsored air force
+Level 1 red now holds three airfields (Sukhumi-Babushara, Gudauta, Sochi-Adler), with Gudauta's own SAM cluster, and flies 76 jets instead of 54: 18 MiG-21, 18 MiG-23, 28 Su-25 and 12 Su-24M. The strikers now also sit in fewer, fuller squadrons at all levels. New campaigns only.
 ## v0.41.437, red squadrons are fewer and fuller
 A new campaign no longer gives every red field two or three jets of every fighter type. Each field keeps the same number of fighters, but they sit in fewer, bigger squadrons (a MiG-29A squadron of 5 to 8 instead of three of 2). The jets red has in total, and each field's fighter count, are unchanged. Saved campaigns keep their layout.
 ## v0.41.436, the enemy air wings list their squadrons by name
