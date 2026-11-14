@@ -1011,7 +1011,7 @@ timer.scheduleFunction(function(_, t)
   if pl.landed then
     sayAw(AWACS_LBL .. " to " .. you .. ": all flights accounted for. Good work today. " .. AWACS_LBL .. " out.", true)
   else
-    sayAw(AWACS_LBL .. " to " .. you .. ": all packages complete, no further tasking today. Return to base.", true)
+    sayAw(AWACS_LBL .. " to " .. you .. ": all packages complete, no further tasking this mission. Return to base.", true)
   end
   return t + 300
 end, nil, timer.getTime() + 60)
@@ -1741,12 +1741,8 @@ def _clock_hm(start: str, add_s: float) -> str:
 
 
 def _wording_runway(hits: int, need: int) -> str:
-    """The S75 runway wording (runways.add_hits / the debrief's CRATERED line), without the field name."""
-    if hits >= need:
-        return f"runway CRATERED ({hits} bomb{'s' if hits != 1 else ''} on it)"
-    if hits <= 0:
-        return f"no bomb on the runway yet ({need} needed to close it)"
-    return f"{hits} bomb{'s' if hits != 1 else ''} hit the runway, not enough to close it ({need} needed)"
+    """The waiting-screen runway status (XO 2026-11-14): no hit counts, nothing until the field is closed."""
+    return "RUNWAY CUT, field closed" if hits >= need else ""
 
 
 def _status_of(obj: dict, manifest: Manifest, data: dict) -> tuple:
@@ -1759,8 +1755,7 @@ def _status_of(obj: dict, manifest: Manifest, data: dict) -> tuple:
     if typ == "STRIKE" and aim == "RUNWAY":
         from . import runways as _rw
         n = int((data.get("rwy") or {}).get(tid, 0) or 0)
-        gt = (", radar gate clear" if gates and not gates[-1].get("abort") and gates[-1].get("radars", 1) == 0 else "")
-        return _wording_runway(n, _rw.HITS_TO_CLOSE) + gt, n > 0
+        return _wording_runway(n, _rw.HITS_TO_CLOSE), n > 0
     if typ == "DEAD" and site is not None:
         units = site["units"]; rad = list(site.get("trk") or []) + list(site.get("srch") or [])
         n_dead = sum(1 for u in units if u in lost); r_dead = sum(1 for u in rad if u in lost)
