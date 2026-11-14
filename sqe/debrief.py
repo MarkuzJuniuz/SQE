@@ -1011,7 +1011,7 @@ timer.scheduleFunction(function(_, t)
   if pl.landed then
     sayAw(AWACS_LBL .. " to " .. you .. ": all flights accounted for. Good work today. " .. AWACS_LBL .. " out.", true)
   else
-    sayAw(AWACS_LBL .. " to " .. you .. ": all packages complete, no further tasking today. Return to base.", true)
+    sayAw(AWACS_LBL .. " to " .. you .. ": all packages complete, no further tasking this mission. Return to base.", true)
   end
   return t + 300
 end, nil, timer.getTime() + 60)
@@ -1723,6 +1723,113 @@ def tally(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         elif g["kind"] == "asset":
             t["red_ground_total"] += len(g["units"]); t["red_ground_lost"] += n_dead
     return t
+
+
+def _plan_entry(state, pkg_id: str, pending: dict | None = None) -> dict:
+    """The package dict for an id. The flown package's own `package_dict` first (it holds the support flights attached at build time, the plan's copy does not), else the campaign plan."""
+    pd = (pending or {}).get("package_dict") or {}
+    if pd.get("id") == pkg_id:
+        return pd
+    return next((p for p in (state.plan or []) if p.get("id") == pkg_id), {})
+
+
+def _clock_hm(start: str, add_s: float) -> str:
+    """'HH:MM' of the mission start ('HH:MM...') plus add_s seconds (the builder's own `clock`, minus the seconds)."""
+    s = str(start or "00:00")
+    t = (int(s[:2]) * 3600 + int(s[3:5]) * 60 + int(add_s)) % 86400
+    return f"{t // 3600:02d}:{t % 3600 // 60:02d}"
+
+
+def _wording_runway(hits: int, need: int) -> str:
+    """The waiting-screen runway status (XO 2026-11-14): no hit counts, nothing until the field is closed."""
+    return "RUNWAY CUT, field closed" if hits >= need else ""
+
+
+def _status_of(obj: dict, manifest: Manifest, data: dict) -> tuple:
+    """READ-ONLY (never touches the state): the live status of one job -> (text, has_result). text '' = no status for this kind.
+    Reads the same hook fields apply_debrief reads: `dead` / `ejected` against the manifest groups, `rwy`, `gates`, `aborted`."""
+    lost = set(data.get("dead", [])) | set(data.get("ejected", []))
+    typ, aim, tid = obj.get("type", ""), obj.get("aim", ""), obj.get("target_id", "")
+    site = next((g for g in manifest.groups if g["kind"] == "asset" and g["ref"] == tid), None)
+    gates = [e for e in (data.get("gates") or []) if e.get("site") == tid]
+    if typ == "STRIKE" and aim == "RUNWAY":
+        from . import runways as _rw
+        n = int((data.get("rwy") or {}).get(tid, 0) or 0)
+        return _wording_runway(n, _rw.HITS_TO_CLOSE), n > 0
+    if typ == "DEAD" and site is not None:
+        units = site["units"]; rad = list(site.get("trk") or []) + list(site.get("srch") or [])
+        n_dead = sum(1 for u in units if u in lost); r_dead = sum(1 for u in rad if u in lost)
+        if units and n_dead == len(units):
+            txt = "site destroyed"
+        elif rad and r_dead == len(rad):
+            txt = "radars out, SUPPRESSED" + (f", {n_dead} of {len(units)} units lost" if n_dead > r_dead else " (launchers intact)")
+        elif rad:
+            txt = f"radars {r_dead} of {len(rad)} out" + (f", {n_dead} of {len(units)} units lost" if n_dead else "")
+        else:
+            txt = f"{n_dead} of {len(units)} units lost"
+        if tid in (data.get("aborted") or []) or (gates and gates[-1].get("abort")):
+            txt += "; strikers turned back at the radar gate"
+        elif gates and gates[-1].get("radars", 1) == 0 and r_dead:
+            txt += "; radar gate clear"
+        return txt, n_dead > 0 or r_dead > 0
+    if typ in ("STRIKE", "CAS") and site is not None:
+        n_dead = sum(1 for u in site["units"] if u in lost)
+        what = "vehicles" if typ == "CAS" else "target units"
+        return f"{n_dead} of {len(site['units'])} {what} destroyed", n_dead > 0
+    if typ in ("BARCAP", "FLEET_DEFENSE", "COUNTER_AIR"):
+        red = [u for g in manifest.groups if g["kind"] == "enemy_air" for u in g["units"]]
+        n_dead = sum(1 for u in red if u in lost)
+        return (f"{n_dead} of {len(red)} enemy aircraft downed" if red else ""), n_dead > 0
+    return "", False
+
+
+def combat_flight_groups(state, manifest: Manifest, pending: dict | None = None) -> list:
+    """Friendly manifest groups that belong to a combat package (the flown one and the merged ones): the plan's flight with NO tag.
+    Tagged flights (BASE_BARCAP, CARRIER_BARCAP, HAVCAP, TKR_HAVCAP) are supports; reliefs are copies of them (same id), and alert / standby pairs are
+    not plan flights at all, so neither counts. Tankers / AWACS are `support` groups, not `friendly`."""
+    ids = [manifest.package_id] + [m["id"] for m in manifest.merged]
+    tag = {}
+    for pid in ids:
+        for f in (_plan_entry(state, pid, pending).get("flights") or []):
+            tag[f.get("id")] = f.get("tag", "") or ""
+    return [g for g in manifest.groups if g["kind"] == "friendly" and g["ref"] in tag and not tag[g["ref"]]]
+
+
+def objective_status(state, manifest: Manifest, data: dict, pending: dict | None = None) -> list:
+    """S77: the live status of the flown job and of every merged package, for the waiting window. READ-ONLY: nothing in `state` changes
+    (apply_debrief at Accept stays the authority). -> [{objective, kind, text, tot_s, has_result}], the flown package first (tot_s None)."""
+    out = []
+    pk = _plan_entry(state, manifest.package_id, pending)
+    o = (pk.get("objective") or {}) if pk else {}
+    txt, res = _status_of(o, manifest, data)
+    out.append({"objective": (pending or {}).get("objective") or o.get("description", ""), "kind": o.get("type", ""), "text": txt, "tot_s": None, "has_result": res})
+    for m in manifest.merged:
+        if m.get("unseen"):
+            continue
+        mo = (_plan_entry(state, m["id"], pending).get("objective") or {})
+        mo = {**mo, "type": mo.get("type") or m.get("type", "")}
+        txt, res = _status_of(mo, manifest, data)
+        out.append({"objective": m.get("objective", ""), "kind": mo.get("type", ""), "text": txt, "tot_s": float(m.get("tot_s", 0)), "has_result": res})
+    return out
+
+
+def flight_status(state, manifest: Manifest, data: dict, pending: dict | None = None) -> dict:
+    """S77: the overall line's numbers. Combat flights only (see combat_flight_groups); aircraft of a scrubbed package are left out (they never launched or
+    are on their way home). -> {total, airborne, next_tot_s (None when no TOT is left)}. airborne counts aircraft neither landed, dead nor ejected."""
+    gone = set(data.get("dead", [])) | set(data.get("ejected", [])) | set(data.get("landed", []))
+    scrubbed = {e.get("pkg") for e in (data.get("scrub") or [])}
+    total = air = 0
+    for g in combat_flight_groups(state, manifest, pending):
+        if g.get("pkg") in scrubbed:
+            continue
+        total += len(g["units"]); air += sum(1 for u in g["units"] if u not in gone)
+    now = float(data.get("time", 0) or 0)
+    tots = [float(m["tot_s"]) for m in manifest.merged if not m.get("unseen")]
+    tl = (pending or {}).get("timeline") or {}
+    if tl.get("tot_s") is not None:
+        tots.append(float(tl["tot_s"]))
+    nxt = min((t for t in tots if t > now), default=None)
+    return {"total": total, "airborne": air, "next_tot_s": nxt}
 
 
 def kill_log(manifest: Manifest, data: dict) -> list[str]:

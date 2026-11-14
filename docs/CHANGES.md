@@ -1,5 +1,9 @@
 # CHANGES.md
 
+## v0.41.441, a closed runway reads "cut", and the AWACS says "this mission"
+The runway job is now described as cutting the runway: the briefing says "Cut the runway", the debrief says "RUNWAY CUT, field closed", and "cratered" is gone from the text you read. The waiting screen shows no hit counts for a runway job, only "RUNWAY CUT, field closed" once it is done. The AWACS' last call now says "no further tasking this mission" (it said "today", which no longer fits a four-hour turn).
+## v0.41.440, the waiting screen shows how the mission is going
+While DCS runs, the waiting window now shows your objective with its live status (runway hits against the crater limit, SAM radars out, target units destroyed, enemy aircraft downed), one line per merged package (its TOT first, then its status), and one bold line: how many friendly combat aircraft are still airborne and the next TOT, or "ALL RECOVERED, safe to exit". The Landed row is gone from the table. Display only: the debrief you get on Accept is unchanged.
 ## v0.41.439, red bases are filled to their parking, Level 1 adds Gelendzhik
 Red's fields now hold a set number of jets per level, sized to each field's parking: at Level 3 about 70% of the parking (the rest is room for squadrons that fall back), Level 2 has 75% of that, and Level 1 fills Sukhumi, Gudauta and Sochi to about 70% and Gelendzhik to about 60%. That is about 94 jets at Level 1 (four fields), 164 at Level 2 and 214 at Level 3, besides the Mozdok bombers. Squadrons are bigger, and no field has a two-jet fighter squadron. New campaigns only.
 ## v0.41.438, Level 1 gets Gudauta and a bigger sponsored air force
