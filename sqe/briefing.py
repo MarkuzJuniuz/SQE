@@ -83,9 +83,8 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                     "short of the target and outside live SAM cover. Shoot what comes in range; do not chase into the SAMs. Hold 15 minutes, or go "
                     "home when your missiles are gone."]
     elif obj.type.value == "STRIKE" and obj.aim == "RUNWAY":
-        sit += ["", "Runway strike. Crater the runway to close the field for 24 hours. "
-                    "Nothing launches from a cratered field and nothing lands there; its aircraft stay on the ramp. The target point is the middle of the strip; "
-                    "bombs that fall off the paved strip do not count toward it."]
+        sit += ["", "Runway strike. Crater the runway to close the field for some time. "
+                    "Nothing launches from a cratered field and nothing lands there; its aircraft stay on the ramp. The target point is the middle of the strip."]
         if any(getattr(f_, "kit", "") == "PEN" for f_ in pkg.flights):          # S51
             sit += ["", "The strike flight is F-15Es with AGM-154C JSOWs: they release on the middle of the runway from stand-off range (about 30 nm out) and turn straight home. "
                         "Nobody crosses the airfield."]
