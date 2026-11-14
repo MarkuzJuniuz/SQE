@@ -54,7 +54,7 @@ F/A-18C, F-16C, F-15C and A-10C; the F-15E is AI only. You can change the AI ski
   night turn and the war resolves it by itself.
 * One thing moves the clock: **Skip Turn** or a flown sortie. Either one is exactly one turn forward (a flown mission
   does not skip ahead to the end of the day).
-* The war resolves a turn's unflown packages when the clock moves. At midnight the daily steps run: supply and repair,
+* The war resolves a turn's unflown packages when the clock moves. At midnight the daily steps run: supply-site repair and the Force Index,
   the ground war's night, squadrons moving after a fallen field, red's rebuilding.
 
 **Auto-Skip** (sidebar) only repeats Skip Turn for you: Stand-Down Turns (nothing you can fly), Night Turns, and Crew Rest
@@ -114,25 +114,37 @@ still keeping its own time on target. The unit limit trades detail for performan
 The front is a chain of sectors, one per airfield from Krymsk to Kutaisi, each with a red and a blue **force strength**.
 Each night the sectors in contact exchange losses (the defender fights at ×1.25, `DEFENDER`); a side under 30% of the
 other's force in a sector withdraws from it (`BREAK_RATIO`) and nobody is hunted to the last unit. Both sides get
-reinforcements, scaled by their **supply**, and a dug-in **garrison** in each sector gives its side a bonus and a CAS target.
+reinforcements, scaled by their **Force Index** (see below), and a dug-in **garrison** in each sector gives its side a bonus and a CAS target.
 
-Blue's CAS and strike work lowers red's force in a sector and weakens its supply; red's raids do the same to blue. When
+Blue's CAS and strike work lowers red's force in a sector and lowers its Force Index; red's raids do the same to blue. When
 blue holds a sector in front of a red airfield and red has nothing organised there, **the airfield falls**: it and its
 ground units go down for good, its jets withdraw to the nearest standing red field with 30% lost, and its depots and fuel
 farms change sides with their stock. The next push then waits for the takeover (9 days) and red's own attacks wait 3.
 
-### Supply and the Force Index
+### The Force Index
 
-**Supply** is the stock each side holds in fuel farms, depots and road supply sites compared with what it started with, from
-0.35 (nothing left) to 1.0. It sets how fast the side reinforces and replaces jets: a squadron gets a replacement pair every
-24 hours divided by the supply figure. Sites repair a little each night unless they were hit that night. Capturing a site moves
-it and its stock to the captor. Red's road sites are extra supply sites scattered along the roads (15 at Level 1, 30 at Levels 2 and 3), some guarded,
-some a parked truck only.
+The **Force Index** is how well supplied each side is, shown as a percentage on the Overview (Force Index tab) with a band: bad at 65% or
+less, alright from 66 to 90, good above 90. It is the stock each side holds in fuel farms, depots and road **supply sites**, compared with what
+it started with: from 35% (nothing left, the floor for both sides) to 100%. Replacement SAM batteries on their way cost a side some of it, even below the floor.
+Red on Level 1 is counted differently in a new campaign: 70% of the figure is its inner sites' stock and 30% its road sites', and it never drops below 45%
+(the insurgents are resupplied across the border by night). Capturing a site moves it and its stock to the captor.
+
+The Force Index sets the pace of nearly everything that rebuilds:
+
+* **Reinforcements** of the ground forces in each sector scale with it.
+* **Jet replacements:** a squadron below strength gets a replacement pair every 24 hours divided by the Force Index (every 24 hours at 100%, about 69 hours
+  at the 35% floor). The Tu-22M3 and the E-3 are the exception (section 7).
+* **Site repair:** a damaged or destroyed supply site mends by the Force Index divided by 6 of a full site each night, so a destroyed one is back in 6 days
+  at 100% and about 17 days at the 35% floor. A site that was struck that night does not mend.
+* **Limping jets** take twice as long to refit, scaled by the Force Index.
+
+Red's road sites are extra supply sites scattered along the roads (15 at Level 1, 30 at Levels 2 and 3), some guarded,
+some a parked truck only. Hitting them, and the depots and fuel farms, is how blue lowers red's Force Index.
 
 ### Air defence
 
 Red's SAM sites are **suppressed** (their radars blinded by SEAD) for two turns, then recover, or **destroyed** by DEAD. A
-destroyed site is rebuilt later by red's supply, and mobile sites move after being hurt. A **belt** of overlapping long-range
+destroyed site is rebuilt later, at the pace of red's Force Index, and mobile sites move after being hurt. A **belt** of overlapping long-range
 sites protects what is behind it: a site inside an intact belt cannot be offered as a target until the belt site covering
 it falls.
 
@@ -203,8 +215,8 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
   the Tu-22M3 and E-3 take 8). A sortie lasts about 100 minutes, so a jet from the first wave is ready for the next turn's
   second wave, not its first. A jet that comes back damaged ("limping", under 90% health) takes twice as long to refit.
   A jet that was shot down is gone.
-* **Replacements** arrive as a pair every 24 hours at full supply. The Tu-22M3 and the E-3 are replaced one airframe every
-  48 hours, regardless of supply.
+* **Replacements** arrive as a pair every 24 hours at a Force Index of 100% (slower below that, see the Force Index). The Tu-22M3 and the E-3 are replaced one airframe every
+  48 hours, regardless of the Force Index.
 * A planned turn draws its jets from the **ledger**: the jets ready now plus those that will be ready by the second wave.
   Standing patrols and guards are taken off first, packages after, so patrols and strikes compete for the same jets. A job
   that cannot be crewed from what is left waits.
