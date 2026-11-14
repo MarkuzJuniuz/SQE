@@ -144,19 +144,26 @@
     "red_keep": {
         "1": [
             "ab_sochi",
+            "ab_gudauta",
+            "ab_gelen",
             "ab_sukhumi"
         ]
     },
+    "red_fill": {
+        "1": {"ab_sukhumi": 16, "ab_gudauta": 22, "ab_sochi": 48, "ab_gelen": 8},
+        "2": {"ab_sukhumi": 12, "ab_gudauta": 16, "ab_sochi": 36, "ab_krymsk": 30, "ab_maykop": 30, "ab_nalchik": 10, "ab_beslan": 8, "ab_gelen": 7, "ab_minvody": 15},
+        "3": {"ab_sukhumi": 16, "ab_gudauta": 22, "ab_sochi": 48, "ab_krymsk": 40, "ab_maykop": 40, "ab_nalchik": 13, "ab_beslan": 11, "ab_gelen": 9, "ab_minvody": 20}
+    },
     "wing_weight": {
-        "ab_sukhumi": 1,
-        "ab_gudauta": 2,
-        "ab_sochi": 3,
-        "ab_krymsk": 3,
-        "ab_maykop": 4,
-        "ab_nalchik": 2,
-        "ab_beslan": 2,
-        "ab_gelen": 1,
-        "ab_minvody": 2
+        "ab_sukhumi": 16,
+        "ab_gudauta": 22,
+        "ab_sochi": 48,
+        "ab_krymsk": 40,
+        "ab_maykop": 40,
+        "ab_nalchik": 13,
+        "ab_beslan": 11,
+        "ab_gelen": 9,
+        "ab_minvody": 20
     },
     "field_tier": {
         "ab_sukhumi": 2,

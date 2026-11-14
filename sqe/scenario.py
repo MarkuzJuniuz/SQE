@@ -259,6 +259,9 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         rng.sample(d.enemy_types, k=min(len(d.enemy_types), 1 + min(2, max(1, round(max(2, round(d.enemy_air_total * ww[aid] / sum(ww.values()))) / 14)))))
     apt_of = {f[0]: f[2] for f in fields}
     cap_all = {aid: _slots(t, apt_of[aid], ["MiG_29A"]) for aid in ww}
+    for aid, n_ in (th.get("red_fill") or {}).get(str(d.level), {}).items():                      # v0.41.439 (S85): the level's jets per field (about 70% of its parking at L3, the rest is room for squadrons that fall back)
+        if aid in cap_all:
+            cap_all[aid] = n_ if not cap_all[aid] else min(cap_all[aid], n_)
     cap_hv = {aid: _slots(t, apt_of[aid], ["Su_24M", "Su_34", "Su_27", "MiG_31"]) for aid in ww}
     plan_r = redroster.allocate(d.level, list(ww), ww, FIELD_TIER, cap_all, cap_hv)
     for aid, types in plan_r.items():

@@ -1,5 +1,13 @@
 # CHANGES.md
 
+## v0.41.439, red bases are filled to their parking, Level 1 adds Gelendzhik
+Red's fields now hold a set number of jets per level, sized to each field's parking: at Level 3 about 70% of the parking (the rest is room for squadrons that fall back), Level 2 has 75% of that, and Level 1 fills Sukhumi, Gudauta and Sochi to about 70% and Gelendzhik to about 60%. That is about 94 jets at Level 1 (four fields), 164 at Level 2 and 214 at Level 3, besides the Mozdok bombers. Squadrons are bigger, and no field has a two-jet fighter squadron. New campaigns only.
+## v0.41.438, Level 1 gets Gudauta and a bigger sponsored air force
+Level 1 red now holds three airfields (Sukhumi-Babushara, Gudauta, Sochi-Adler), with Gudauta's own SAM cluster, and flies 76 jets instead of 54: 18 MiG-21, 18 MiG-23, 28 Su-25 and 12 Su-24M. The strikers now also sit in fewer, fuller squadrons at all levels. New campaigns only.
+## v0.41.437, red squadrons are fewer and fuller
+A new campaign no longer gives every red field two or three jets of every fighter type. Each field keeps the same number of fighters, but they sit in fewer, bigger squadrons (a MiG-29A squadron of 5 to 8 instead of three of 2). The jets red has in total, and each field's fighter count, are unchanged. Saved campaigns keep their layout.
+## v0.41.436, the enemy air wings list their squadrons by name
+The Forces > enemy air wings tab now has a Squadron column with names like "Sochi-Adler MiG-21 Sqn #2". A squadron keeps its name when it withdraws to another field; the Based at column shows where it is now.
 ## v0.41.435, the runway job is called "OCA: Runway Strike"
 The runway job now reads "OCA: Runway Strike" (Offensive Counter-Air) in the Missions list, the mission description, the briefing and the debrief. The F-15E stand-off version is "OCA: Standoff Runway Strike".
 ## v0.41.434, one bomb on the runway closes the field, and your wingmen get an attack task

@@ -21,15 +21,18 @@ LONG_RANGE = ("MiG_31", "Su_27")
 MIG31_SHARE = {2: 0.15, 3: 0.50, 4: 0.75}             # share of a field's long-range jets that are MiG-31, by the field's tier (v0.41.163, XO 2026-10-27: flipped, the interceptor sits deep under ground control, the Su-27 holds the fringe)
 ORDER = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis", "Su_24M", "Su_34", "Su_25")      # allocation order: the fighters first (every field gets some), then the strikers fill what parking is left
 FIGHTERS = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis")
+LIGHT_FIGHTERS = ("MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis")                # the fighter types `consolidate` may swap (not heavy: parking caps; not MiG-31: depth gradient)
+STRIKERS = ("Su_25", "Su_24M", "Su_34")                                           # `consolidate` swaps these among themselves too (v0.41.438)
 FIGHTER_FLOOR = 4                                       # every field keeps at least this many fighters (a pair of pairs): the old rule "every wing keeps a fighter squadron"
 
 # Jets per level, bombers excluded (judgment calls: the red numbers of the 2026-10-25 plan; fighters about 85% of the old count with the MiG-31s inside,
 # the extra jets are cheap strikers). L1: an old museum-piece air force that is quietly supplied (XO 2026-10-25): 20 Su-25, 10 Su-24M and, since v0.41.359 (campaign rules plan Phase 10c, the sponsor air arm,
 # judgment call: no public figure), 24 relic fighters (MiG-21Bis and MiG-23MLD only; it was 14 with 3 MiG-29A, which is no museum piece). v0.41.359: Su-25 L2 52 to 60, L3 110 to 130 (the cheap attack fleet raids supply sites, `raids.SU25_SUPPLY`). v0.41.401 (S42, XO): L3 Su-25 130 to 18 (a few, like blue's 18 A-10C; judgment call, no public figure), fighters keep about the same total (86): Su-27 30 to 46, MiG-29S 28 to 20, MiG-29A 20 to 12 (Su-27 the main air-superiority fighter, MiG-29 the older short-legged one: public order-of-battle knowledge; the counts are judgment calls). All 46 Su-27 fit the heavy parking (checked, seeds 1-3).
+# v0.41.439 (S85, XO 2026-11-14): the rosters are sized to the parking, not the other way round. L3 fills each field to about 70% of its DCS parking (the rest is room for squadrons that fall back, ~30%), 219 jets; L2 is 75% of that (163), L1 about 43% (94: four fields). Same type mix as before, scaled (L3 x1.33, L2 x1.2, L1 x1.24 over v0.41.438); judgment call, no public figure.
 ROSTERS = {
-    1: {"MiG_21Bis": 12, "MiG_23MLD": 12, "Su_25": 20, "Su_24M": 10},
-    2: {"MiG_31": 4, "MiG_29S": 15, "MiG_29A": 22, "MiG_23MLD": 11, "Su_25": 60, "Su_24M": 24},
-    3: {"MiG_31": 8, "Su_27": 46, "MiG_29S": 20, "MiG_29A": 12, "Su_25": 18, "Su_34": 60},       # v0.41.361 (Phase 10d): L3 flies the Su-34 where it flew the Su-24M (same 60: judgment call, no public figure; L1 and L2 keep the Su-24M)
+    1: {"MiG_21Bis": 22, "MiG_23MLD": 22, "Su_25": 34, "Su_24M": 16},                       # v0.41.438 (S84, XO 2026-11-14): 54 to 76, the sponsor keeps the insurgents supplied (judgment call, no public figure); still no MiG-29A
+    2: {"MiG_31": 5, "MiG_29S": 18, "MiG_29A": 26, "MiG_23MLD": 13, "Su_25": 73, "Su_24M": 29},
+    3: {"MiG_31": 11, "Su_27": 61, "MiG_29S": 27, "MiG_29A": 16, "Su_25": 24, "Su_34": 80},       # v0.41.361 (Phase 10d): L3 flies the Su-34 where it flew the Su-24M (same 60: judgment call, no public figure; L1 and L2 keep the Su-24M)
 }
 
 
@@ -55,6 +58,69 @@ def _share(total: int, desire: dict, cap: dict) -> dict:
                     out[k] += 1; left -= 1
         live = {k: v for k, v in live.items() if out[k] < cap[k]}
     return out
+
+
+def consolidate(plan: dict, fields: list, cap_heavy: dict | None = None) -> None:
+    """v0.41.437 (S83, XO 2026-11-14): fewer, fuller squadrons. The allocator above hands every field a little of every light fighter type (2 MiG-29S, 3 MiG-29A,
+    2 MiG-23 ...), a shape no air force flies: a Soviet / Russian squadron is about 10 to 12 jets and a regiment keeps one or two types (from memory, medium
+    firmness; the 12 cap itself is a judgment call). This swaps jets between two fields so one type grows into the bigger block and the other type
+    follows the opposite way: each field keeps its jet count in the group (so the fighter floor and the parking caps hold) and the roster totals do not change. A swap needs
+    the sum of squares of the blocks to rise (it always terminates), and never leaves a lone jet. v0.41.438 (S84): the strikers (Su-25 / Su-24M / Su-34) are swapped the
+    same way, and a swap that would put a field over its heavy-parking cap is skipped. Groups: the light fighters, the strikers; the long-range fighters
+    (Su-27, MiG-31 depth gradient) are left as they are."""
+    big = 10 ** 6
+    hv = lambda f: sum(n for k, n in plan[f].items() if k in HEAVY)
+    for group in (LIGHT_FIGHTERS, STRIKERS):
+        for _ in range(400):
+            best = None
+            for f in fields:
+                for a, n in list(plan[f].items()):
+                    if a not in group or n <= 0:
+                        continue
+                    for g in fields:
+                        if g == f or plan[g].get(a, 0) < n:
+                            continue
+                        for b in group:
+                            if b == a or plan[g].get(b, 0) < n or plan[f].get(b, 0) <= 0 or plan[g][b] - n == 1:
+                                continue
+                            d_hv = n * ((a in HEAVY) - (b in HEAVY))                       # heavy jets g gains (f loses the same)
+                            if cap_heavy and ((d_hv > 0 and hv(g) + d_hv > (cap_heavy.get(g) or big)) or (d_hv < 0 and hv(f) - d_hv > (cap_heavy.get(f) or big))):
+                                continue
+                            gain = 2 * n * plan[g][a] + 2 * n * (plan[f][b] - plan[g][b] + n)
+                            key = (gain, -fields.index(f), -fields.index(g), a, b)
+                            if gain > 0 and (best is None or key > best[0]):
+                                best = (key, f, g, a, b, n)
+            if best is None:
+                break
+            _, f, g, a, b, n = best
+            del plan[f][a]; plan[f][b] += n
+            plan[g][a] += n; plan[g][b] -= n
+            if plan[g][b] == 0:
+                del plan[g][b]
+
+
+def tidy_small(plan: dict, fields: list, cap_heavy: dict | None = None, least: int = 3) -> None:
+    """v0.41.439 (S85): a block of fewer than `least` jets of one type at a field joins the biggest other block of its group (light fighters, strikers) at the same
+    field, so no squadron is two or three jets. The field keeps its jets; the roster's mix drifts by those few jets. A join that would put a field over its
+    heavy-parking cap is skipped."""
+    big = 10 ** 6
+    for f in fields:
+        for group in (LIGHT_FIGHTERS + ("Su_27",), STRIKERS):                      # the MiG-31 depth "spice" blocks stay as they are
+            for _ in range(8):
+                small = sorted((plan[f][k], k) for k in group if 0 < plan[f].get(k, 0) < least)
+                moved = False
+                for n, a in small:
+                    others = sorted(((plan[f][k], k) for k in group if k != a and plan[f].get(k, 0) > 0), reverse=True)
+                    for _, b in others:
+                        d_hv = n * ((b in HEAVY) - (a in HEAVY))
+                        if d_hv > 0 and sum(v for k, v in plan[f].items() if k in HEAVY) + d_hv > ((cap_heavy or {}).get(f) or big):
+                            continue
+                        plan[f][b] += n; del plan[f][a]; moved = True
+                        break
+                    if moved:
+                        break
+                if not moved:
+                    break
 
 
 def allocate(level: int, fields: list, weight: dict, tier: dict, cap_all: dict, cap_heavy: dict, roster: dict | None = None) -> dict:
@@ -105,22 +171,34 @@ def allocate(level: int, fields: list, weight: dict, tier: dict, cap_all: dict, 
                 plan[f][t] = n
         if t in LONG_RANGE:
             no_lone_jets(t)                                           # before the strikers crowd the heavy parking spots out
-    for f in fields:                                                  # fighter floor: a field with fewer than FIGHTER_FLOOR fighters takes pairs from the biggest light block elsewhere
-        while sum(plan[f].get(t, 0) for t in FIGHTERS) < FIGHTER_FLOOR:
-            donors = [(plan[g].get(t, 0), g, t) for g in fields for t in FIGHTERS if g != f and t not in HEAVY and plan[g].get(t, 0) >= 4]
-            if not donors or not (room(f, "MiG_29A") and sum(plan[f].values()) + 2 <= (cap_all.get(f) or big)):
-                break
-            n, g, t = max(donors, key=lambda x: (x[0], x[1], x[2]))
-            plan[g][t] -= 2; plan[f][t] = plan[f].get(t, 0) + 2
+    def fighter_floor():                                              # a field with fewer than FIGHTER_FLOOR fighters takes pairs from the biggest light block elsewhere; a field with no room swaps a pair of its strikers for the pair (v0.41.439: the fill caps leave no room)
+        for f in fields:
+            while sum(plan[f].get(t, 0) for t in FIGHTERS) < FIGHTER_FLOOR:
+                donors = [(plan[g].get(t, 0), g, t) for g in fields for t in FIGHTERS if g != f and t not in HEAVY and plan[g].get(t, 0) >= 4]
+                if not donors:
+                    break
+                n, g, t = max(donors, key=lambda x: (x[0], x[1], x[2]))
+                if room(f, "MiG_29A") and sum(plan[f].values()) + 2 <= (cap_all.get(f) or big):
+                    plan[g][t] -= 2; plan[f][t] = plan[f].get(t, 0) + 2
+                    continue
+                give = [(plan[f][k], k) for k in STRIKERS if plan[f].get(k, 0) >= 2 and plan[f][k] - 2 != 1
+                        and (k not in HEAVY or used_hv(g) + 2 <= (cap_heavy.get(g) or big))]
+                if not give:
+                    break
+                _, k = max(give)
+                plan[f][k] -= 2
+                if plan[f][k] == 0:
+                    del plan[f][k]
+                plan[g][k] = plan[g].get(k, 0) + 2; plan[g][t] -= 2
+                plan[f][t] = plan[f].get(t, 0) + 2
+                if plan[g][t] == 0:
+                    del plan[g][t]
+    fighter_floor()
     for t in ORDER:
         no_lone_jets(t)
-    for f in fields:                                                  # fighter floor, once more after the lone jets moved: a field with fewer than FIGHTER_FLOOR fighters takes pairs from the biggest light block elsewhere
-        while sum(plan[f].get(t, 0) for t in FIGHTERS) < FIGHTER_FLOOR:
-            donors = [(plan[g].get(t, 0), g, t) for g in fields for t in FIGHTERS if g != f and t not in HEAVY and plan[g].get(t, 0) >= 4]
-            if not donors or not (room(f, "MiG_29A") and sum(plan[f].values()) + 2 <= (cap_all.get(f) or big)):
-                break
-            n, g, t = max(donors, key=lambda x: (x[0], x[1], x[2]))
-            plan[g][t] -= 2; plan[f][t] = plan[f].get(t, 0) + 2
+    fighter_floor()                                                   # once more after the lone jets moved
+    consolidate(plan, fields, cap_heavy)
+    tidy_small(plan, fields, cap_heavy)
     return {f: p for f, p in plan.items() if p}
 
 
