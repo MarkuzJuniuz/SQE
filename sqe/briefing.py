@@ -83,7 +83,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                     "short of the target and outside live SAM cover. Shoot what comes in range; do not chase into the SAMs. Hold 15 minutes, or go "
                     "home when your missiles are gone."]
     elif obj.type.value == "STRIKE" and obj.aim == "RUNWAY":
-        sit += ["", "Runway strike. Put at least 3 bombs on the runway: that closes the whole field for 24 hours. "
+        sit += ["", "Runway strike. Put a bomb on the runway: one hit closes the whole field for 24 hours. "
                     "Nothing launches from a cratered field and nothing lands there; its aircraft stay on the ramp. The target point is the middle of the strip; "
                     "bombs that fall off the paved strip do not count."]
         if any(getattr(f_, "kit", "") == "PEN" for f_ in pkg.flights):          # S51

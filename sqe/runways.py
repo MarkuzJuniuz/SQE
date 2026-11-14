@@ -12,7 +12,7 @@ Field ids are the Base ids of blue fields and the EnemyAsset ids of red ones (on
 Sources and judgment calls:
   * Repair: a USAF crater team fills craters in about 2 hours (af.mil, "Airmen ready to rapidly repair runways"). A real strip is usable again in hours; the 24 hours
     here are a GAME rule (XO 2026-11-08, flat for now), not a sourced figure. Until Phase 3 of the campaign rules plan the clock moves a whole day at a time.
-  * HITS_TO_CLOSE = 3: XO's call. One BMS player reports 2 to 3 hit zones per runway (forum.falcon-bms.com/post/121547, one person's observation, low firmness).
+  * HITS_TO_CLOSE = 1 (was 3, XO 2026-11-13): XO's call. One BMS player reports 2 to 3 hit zones per runway (forum.falcon-bms.com/post/121547, one person's observation, low firmness).
   * The runway is a rectangle, RUNWAY_HALF_LEN_M x RUNWAY_HALF_WIDTH_M about the field reference point along each runway heading (pydcs has the heading only):
     the same judgment-call corridor mission_builder uses to keep ground groups off the strip.
 """
@@ -22,7 +22,7 @@ import math
 
 from . import clock
 
-HITS_TO_CLOSE = 3             # bomb impacts inside the runway rectangle that close the field (XO 2026-11-03)
+HITS_TO_CLOSE = 1             # bomb impacts inside the runway rectangle that close the field (XO 2026-11-03: 3; XO 2026-11-13: 1, so a human pilot's own bomb alone closes it even if the wingmen drop nothing; judgment call, to be revisited after the next probes)
 CLOSE_TURNS = 6               # S25: was 12; a cratered field stays shut 6 four-hour turns = 24 hours, whatever the supply (XO 2026-11-08, "24 hours flat for now"; game rule, not a sourced figure)
 RUNWAY_HALF_LEN_M = 2600.0    # same corridor as mission_builder.RUNWAY_HALF_LEN_M (long enough for the longest Caucasus strip; judgment call)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and mission_builder.RUNWAY_HALF_WIDTH_M (runway 45-60 m wide plus a margin; judgment call)
