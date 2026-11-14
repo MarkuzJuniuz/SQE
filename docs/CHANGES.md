@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.442, the SEAD is on the SAM site before the strikers reach its range
+In a strike or CAS package, the escort SEAD flight now times its HARMs to land on the covering SAM site shortly before the strikers first come within that site's reach, not shortly before their time over target. Before, the strikers (a runway strike on Nalchik) could be engaged a few minutes before the HARMs arrived. The SEAD only ever goes earlier than it did; stand-off and DEAD packages are unchanged.
 ## v0.41.441, a closed runway reads "cut", and the AWACS says "this mission"
 The runway job is now described as cutting the runway: the briefing says "Cut the runway", the debrief says "RUNWAY CUT, field closed", and "cratered" is gone from the text you read. The waiting screen shows no hit counts for a runway job, only "RUNWAY CUT, field closed" once it is done. The AWACS' last call now says "no further tasking this mission" (it said "today", which no longer fits a four-hour turn).
 ## v0.41.440, the waiting screen shows how the mission is going
