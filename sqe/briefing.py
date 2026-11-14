@@ -41,15 +41,35 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     if obj.type.value == "FLEET_DEFENSE" and pkg.extra:
         e = pkg.extra
         tb = state.bases.get(obj.target_id)
-        rtype = {"Su_24M": "Su-24M bombers", "Su_25": "Su-25 attack aircraft"}.get(e.get("raider", "Su_24M"), "attack aircraft")
+        rtype_of = {"Su_24M": "Su-24M bombers", "Su_34": "Su-34 bombers", "Su_25": "Su-25 attack aircraft", "Tu_22M3": "Tu-22M3 bombers"}
+        rtype = rtype_of.get(e.get("raider", "Su_24M"), "attack aircraft")
+        if e.get("pool"):                                    # S46: a pooled raid names every type that flies it ("4 Su-34 bombers and 2 Su-25 attack aircraft")
+            from .raids import raid_members
+            by_t_ = {}
+            for _a, t, n in raid_members(e):
+                by_t_[t] = by_t_.get(t, 0) + n                        # (two wings of one type read as one number)
+            rtype_n = " and ".join(f"{n} {rtype_of.get(t, 'attack aircraft')}" for t, n in by_t_.items())
         what = obj.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", "") if e.get("aim") else (tb.name if tb else "our airfield")
-        sit += ["", (f"Intelligence reports {e['bombers']} {rtype} with free-fall bombs inbound toward {what}, "
-                     f"approaching from a bearing of about {e['brg']:.0f} degrees." if e.get("land") else
+        esc_n = ""
+        if e.get("esc_pool"):                                # S46: ...and the escorts ("4 Su-27 and 2 MiG-29")
+            from .raids import escort_members
+            by_e_ = {}
+            for _a, t, n in escort_members(e):
+                by_e_[t] = by_e_.get(t, 0) + n
+            esc_n = " (" + " and ".join(f"{n} {t.replace('_', '-')}" for t, n in by_e_.items()) + ")" if len(by_e_) > 1 else ""      # one type: "6 fighters" as before
+        from .raids import is_kh59
+        kh59_ = is_kh59(e)                                   # S48: a Kh-59M raid reads like the SEAD line (it says nothing about how accurate the missiles are)
+        sit += ["", (f"Intelligence reports {rtype_n if e.get('pool') else str(e['bombers']) + ' ' + rtype} with {'Kh-31P anti-radiation missiles' if e.get('sead') else 'Kh-59M cruise missiles' if kh59_ else 'free-fall bombs'} inbound toward {what}, "
+                     f"approaching from a bearing of about {e['brg']:.0f} degrees."
+                     + (" They will fire from about 40 nm out and turn for home; stop them before they launch." if e.get("sead") else " They will fire from about 50 nm out and turn for home; stop them before they launch." if kh59_ else "") if e.get("land") else
                      f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
                      f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier. They will launch from about 100 nm out and turn for home; stop them before they fire."
-                     + (" SEAD flights are working the long-range SAMs over their launch point. Hold on your station, outside the SAM rings, and engage what comes to you; "
-                        "you are free to cross toward the launch point when AWACS calls SEAD complete, or at the push time on the card." if e.get("setpiece") else ""))
-                    + (f" They are escorted by {e['escorts']} fighters." if e.get("escorts") else
+                     + ((" The SEAD packages went in the turn before: a SAM site they did not take down is still up and shooting. Hold on your station, outside the SAM rings, and engage what comes to you; "
+                         "you are free to cross toward the launch point at the push time on the card." if e.get("prep_rec") else
+                         " SEAD flights are working the long-range SAMs over their launch point. Hold on your station, outside the SAM rings, and engage what comes to you; "
+                         "you are free to cross toward the launch point when AWACS calls SEAD complete, or at the push time on the card.") if e.get("setpiece") else ""))
+                    + (f" A fighter sweep of {e['sweeps']} goes in ahead of them." if e.get("sweeps") and e.get("sead") else "")
+                    + (f" They are escorted by {e['escorts']} fighters{esc_n}." if e.get("escorts") else
                        (" They have no escort." if e.get("land") else " They have no escort: the enemy cannot reach this far with fighters. It is a last throw of the dice."))]
     n_def = x.get("n_def", pkg.n_def)
     inc = (" (counting the packages flown with this one: " + ", ".join(f"#{n}" for n in x["merged_nums"]) + ")") if x.get("merged_nums") else ""
@@ -63,9 +83,18 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                     "short of the target and outside live SAM cover. Shoot what comes in range; do not chase into the SAMs. Hold 15 minutes, or go "
                     "home when your missiles are gone."]
     elif obj.type.value == "STRIKE" and obj.aim == "RUNWAY":
-        sit += ["", "Runway strike. Put at least 3 bombs on the runway: that closes the whole field for 2 to 5 days (longer when their supply is low). "
-                    "Nothing launches from a cratered field and nothing lands there; its aircraft stay on the ramp. The target point is the middle of the strip; "
-                    "bombs that fall off the paved strip do not count."]
+        sit += ["", "OCA: Runway Strike. Crater the runway to close the field for some time. "
+                    "Nothing launches from a cratered field and nothing lands there. The target point is the middle of the strip."]
+        if any(getattr(f_, "kit", "") == "PEN" for f_ in pkg.flights):          # S51
+            sit += ["", "The strike flight is F-15Es with AGM-154C JSOWs: they release on the middle of the runway from stand-off range (about 30 nm out) and turn straight home. "
+                        "Nobody crosses the airfield."]
+    elif obj.type.value == "STRIKE" and obj.aim == "STANDOFF" and (obj.description or "").startswith("EWR Strike"):      # S60
+        sit += ["", "EWR strike. An early-warning radar is struck only once no SAM covers it, and always from stand-off range: no plain bombing run goes in on it."]
+        if any(getattr(f_, "kit", "") for f_ in pkg.flights):
+            sit += ["", "The strike flight is " + ("F-15Es with AGM-154C JSOWs" if any(getattr(f_, "kit", "") == "PEN" for f_ in pkg.flights) else (
+                        "F-16s with AGM-154A JSOWs" if any(getattr(f_, "kit", "") == "JSOW" for f_ in pkg.flights) else "SLAM-ER Hornets (AGM-84H)")) +
+                        ": they release on the radar from stand-off range, outside the reach of the fighters, and turn straight home. Nobody crosses the target. "
+                        "The missiles fly on without you; judge the result at the debrief."]
     elif obj.type.value == "STRIKE" and obj.aim == "STANDOFF":
         sit += ["", "Standoff Strike. Red fighters in reach make a plain bombing run a bad bet here, so the strike goes out as SLAM-ER Hornets: they launch "
                     "their AGM-84Hs from a long way out (up to about 120 nm from the target, as far as the route allows), outside the reach of the fighters "
@@ -167,4 +196,4 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
 def _long_label(f, obj) -> str:
     """The flight's job in words, for 'tasked as ...'."""
     from .models import task_label
-    return {"SO DEAD": "Standoff DEAD", "SO STRIKE": "Standoff Strike", "DEAD": "Close DEAD"}.get(task_label(f, obj), task_label(f, obj))
+    return {"SO DEAD": "Standoff DEAD", "SO STRIKE": "Standoff Strike", "SO RWY STRIKE": "OCA: Standoff Runway Strike", "DEAD": "Close DEAD"}.get(task_label(f, obj), task_label(f, obj))

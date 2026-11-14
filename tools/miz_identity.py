@@ -49,6 +49,7 @@ from sqe.settings import AppSettings
 CASES = [("IdA", "F-16C", 3, 7, False), ("IdB", "FA-18C", 2, 11, False), ("IdC", "F-15C", 3, 3, False), ("IdD", "A-10C", 1, 5, False), ("IdE", "F-14BU", 2, 9, False),
          ("IdF", "F-16C", 3, 7, True), ("IdG", "F-15C", 3, 3, True), ("IdH", "FA-18C", 2, 11, True), ("IdI", "F-14BU", 3, 9, True)]
 MAX_PER_CASE = 7                       # packages built per case and mode (distinct objective types first)
+CASE_TURNS = 6                         # v0.41.338: turns walked per case (a plan is one turn: the case skips on and builds from each turn's tasking order)
 
 
 # Two things are random per run and would make every comparison noisy; both are pinned HERE, in the tool only (production code is untouched):
@@ -93,7 +94,13 @@ def _scrub(text: str, camp_ids: set) -> str:
 
 def _build(session, st, pkg, ai: bool, flight_id=None):
     session.ai_test = ai
-    fl_id = flight_id or session.flyable(pkg)[0].id
+    session.state.turn = session._turn_of(pkg)          # v0.41.337: the tasking list is per turn; the tool builds from the whole day plan, so the clock stands at the package's own turn
+    if flight_id is None:
+        fl = session.flyable(pkg)
+        if not fl:                                             # S57: nothing flyable at the package's own turn: a skip, not an ERROR entry
+            return None
+        flight_id = fl[0].id
+    fl_id = flight_id
     session.fly(pkg.number, fl_id)
     z = zipfile.ZipFile(session.settings.sortie_miz)
     from dcs import lua
@@ -132,36 +139,51 @@ def run() -> dict:
                 if a.kind.value == "SAM":
                     a.health = 0.0
             s.plan_day()
-        opts = [p for p in s.packages() if s.flyable(p)]
-        seen, pick = set(), []
-        for p in opts:                                         # one package per objective type first, then fill up
-            if p.objective.type not in seen:
-                seen.add(p.objective.type); pick.append(p)
-        pick += [p for p in opts if p not in pick]
-        for p in pick[:MAX_PER_CASE]:
-            for ai in (False, True):
-                key = f"{name}/{aircraft}/L{level}/s{seed}/{'ai' if ai else 'player'}/{p.number}-{p.objective.type.value}"
-                random.seed(key)
-                try:
-                    res[key] = _build(s, st, p, ai)
-                except Exception as e:                         # a build that raises is part of the result, not a crash
-                    res[key] = {"ERROR": f"{type(e).__name__}: {e}"}
-        # AI-only packages (BARCAP, fleet defence = bomber / raid intercepts) and Fighter Sweeps nobody can fly: built as the all-AI test with
-        # the package's first flight standing in for yours, so their route, station and task code is covered too.
-        extra, kinds = [], set()
-        for p in s.packages():
-            kind = (p.objective.type, p.objective.aim if p.objective.aim == "SWEEP" else "")
-            if kind in kinds or s.flyable(p) or not p.flights:
-                continue
-            if p.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE) or kind[1] == "SWEEP":
-                kinds.add(kind); extra.append(p)
-        for p in extra:
-            key = f"{name}/{aircraft}/L{level}/s{seed}/aionly/{p.number}-{p.objective.type.value}{'-sweep' if p.objective.aim == 'SWEEP' else ''}"
-            random.seed(key)
-            try:
-                res[key] = _build(s, st, p, True, p.flights[0].id)
-            except Exception as e:
-                res[key] = {"ERROR": f"{type(e).__name__}: {e}"}
+        seen, built, kinds = set(), 0, set()
+        for _turn in range(CASE_TURNS):                        # v0.41.338: a plan is one turn's now, so each case walks a few turns (skipping) and builds from each turn's tasking order
+            opts = [p for p in s.packages() if s.flyable(p)]
+            pick = [p for p in opts if p.objective.type not in seen]          # one package per objective type first, then fill up
+            seen |= {p.objective.type for p in pick}
+            pick += [p for p in opts if p not in pick]
+            for p in pick:
+                if built >= MAX_PER_CASE:
+                    break
+                built += 1
+                got = False
+                for ai in (False, True):
+                    key = f"{name}/{aircraft}/L{level}/s{seed}/{'ai' if ai else 'player'}/{p.number}-{p.objective.type.value}"
+                    random.seed(key)
+                    try:
+                        r = _build(s, st, p, ai)
+                        if r is None:
+                            continue                               # S57: skipped, no key
+                        res[key] = r
+                        got = True
+                    except Exception as e:                         # a build that raises is part of the result, not a crash
+                        res[key] = {"ERROR": f"{type(e).__name__}: {e}"}
+                        got = True
+                if not got:
+                    built -= 1                                     # a skipped package does not use up MAX_PER_CASE
+            # AI-only packages (BARCAP, fleet defence = bomber / raid intercepts) and Fighter Sweeps nobody can fly: built as the all-AI test with
+            # the package's first flight standing in for yours, so their route, station and task code is covered too.
+            for p in s.packages():
+                kind = (p.objective.type, p.objective.aim if p.objective.aim == "SWEEP" else "")
+                if kind in kinds or s.flyable(p) or not p.flights:
+                    continue
+                if p.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE) or kind[1] == "SWEEP":
+                    stand = p.player_options(st.player.aircraft)           # S57b: the stand-in must be a flight your aircraft can fly (assign_player raises NoPlayerSlot otherwise)
+                    if not stand:
+                        continue                                           # none in this package: skip it, and leave the kind open for a later package
+                    kinds.add(kind)
+                    key = f"{name}/{aircraft}/L{level}/s{seed}/aionly/{p.number}-{p.objective.type.value}{'-sweep' if p.objective.aim == 'SWEEP' else ''}"
+                    random.seed(key)
+                    try:
+                        r = _build(s, st, p, True, stand[0].id)
+                        if r is not None:
+                            res[key] = r
+                    except Exception as e:
+                        res[key] = {"ERROR": f"{type(e).__name__}: {e}"}
+            s.skip_turn()
     return res
 
 

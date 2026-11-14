@@ -1,12 +1,12 @@
 """Supply sites along the roads of a new campaign (queue item i, v0.41.241; XO 2026-11-03).
 
-The road-net step (roadnet.py) left a few hundred supply spots in the sites file under "road". A new campaign draws about `d.road_sites` of them (one
-number per level) and turns each into a fuel point or a supply dump: red's on its own side of the front, ours on ours. They are what makes both sides' supply
+The road-net step (roadnet.py) left a few hundred supply spots in the sites file under "road". A new campaign draws `d.road_sites_red` and `d.road_sites_blue` of them (two
+numbers per level) and turns each into a fuel point or a supply dump: red's on its own side of the front, ours on ours. They are what makes both sides' supply
 worth striking and worth guarding: together with the fuel farms and depots at the airfields they ARE the Supply figure (ground.supply counts every site
 either side holds, so there is no separate production link). A handful per side are big plants (oil refineries = FUEL sites, factories = DEPOT sites)
 well away from the front.
 
-Judgment calls (no public figure; tune on XO's runs): the 65/35 red/blue split, the 9 km spacing between sites, 90 km from a sector centre for a
+Judgment calls (no public figure; tune on XO's runs): the red/blue counts per level (Difficulty.road_sites_red / _blue: hometown advantage for red, a thin blue; XO 2026-11-11), the 9 km spacing between sites, 90 km from a sector centre for a
 plant, the plant counts, the guard strengths, the shares of unguarded sites and battalions (Difficulty.road_*).
 
 Rules from XO:
@@ -29,13 +29,12 @@ import random
 from . import road_front
 from .models import AssetKind, EnemyAsset
 
-RED_SHARE = 0.65              # share of the campaign's road sites that are red's (judgment call: red has the whole north, we have the Georgian side)
 SEP_M = 9000.0                # no two road sites closer than this (relaxed in two steps if a side cannot fill its quota)
 AIRFIELD_CLEAR_M = 5000.0     # no road site this close to any airfield (the fuel farm and garrison sit there)
 ASSET_CLEAR_M = 2500.0        # ...or to any existing asset
 PLANT_MIN_KM = 90.0           # a refinery / factory is at least this far from every sector centre ("away from the front")
 PLANT_SEP_M = 40000.0         # ...and at least this far from another plant
-PLANTS_PER_100 = {"red": (3, 3), "blue": (2, 2)}      # (refineries, factories) for a 100-site campaign; scaled by road_sites / 100, at least 1 each
+PLANTS_PER_100 = {"red": (3, 3), "blue": (2, 2)}      # (refineries, factories) for a 100-site campaign; scaled by (red + blue road sites) / 100, at least 1 each
 VALUE_ROAD, VALUE_PLANT = 3, 7                        # planner weight (the airfield fuel farms are 5, depots 5 to 6)
 BATTALION_OFFSET_M = (1600.0, 3000.0)
 ROAD_PREFIX = ("rsup_", "bsup_")
@@ -143,7 +142,8 @@ def build(st, th: dict, d, ap: dict, rng: random.Random | None = None) -> dict:
     sites = sites_mod.load(th)
     spots = [tuple(p) for p in ((sites or {}).get("road") or {}).get("supply", [])]
     blue_ap = set(th.get("road_blue_airports") or [])
-    total = int(getattr(d, "road_sites", 0))
+    want = {"red": int(getattr(d, "road_sites_red", 0)), "blue": int(getattr(d, "road_sites_blue", 0))}
+    total = want["red"] + want["blue"]
     if not g or not spots or not blue_ap or total <= 0 or not ap:
         return {}
     r = _rng(st, rng)
@@ -169,8 +169,8 @@ def build(st, th: dict, d, ap: dict, rng: random.Random | None = None) -> dict:
             tier = int(tiers.get(fid, 3))
         dfront = min((math.hypot(x - cx, y - cy) for cx, cy in centres), default=1e9) / 1000.0
         cands[side].append({"x": x, "y": y, "place": _place(near), "tier": tier, "dfront": dfront})
-    n_red = min(len(cands["red"]), round(total * RED_SHARE))
-    n_blue = min(len(cands["blue"]), total - round(total * RED_SHARE))
+    n_red = min(len(cands["red"]), want["red"])
+    n_blue = min(len(cands["blue"]), want["blue"])
     added = {"red": [], "blue": []}
     for side, n in (("red", n_red), ("blue", n_blue)):
         if n <= 0:
@@ -229,7 +229,7 @@ def build(st, th: dict, d, ap: dict, rng: random.Random | None = None) -> dict:
                     gid = f"rgar_sup_{n:03d}"
                     pool[gid] = EnemyAsset(gid, f"Battalion at {nm}", AssetKind.ARMOR, float(p[0]), float(p[1]), 1.0, 5, [], None, "GARRISON", c["tier"], aid)
     # the Supply figure: every site either side holds, counted from the start
-    g["sup_n"] = {"red": sum(1 for a in st.assets.values() if a.kind in ground.SUPPLY_KINDS), "blue": sum(1 for a in st.blue_assets.values() if a.kind in ground.SUPPLY_KINDS)}
+    ground.set_supply_counts(st)                                      # v0.41.408 (S49): the counts, and on Level 1 the inner / road split of red's
     g.setdefault("sup_h", {}).update({a.id: 1.0 for pool in (st.assets, st.blue_assets) for a in pool.values() if a.kind in ground.SUPPLY_KINDS})
     rec = {"v": 1, "red": len(added["red"]), "blue": len(added["blue"]),
            "plants": {s: sum(1 for c in added[s] if c["variant"] in PLANT_VARIANTS) for s in ("red", "blue")},

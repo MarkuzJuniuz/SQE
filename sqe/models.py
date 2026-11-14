@@ -50,14 +50,26 @@ class ObjectiveType(str, Enum):
 SEAD_AIMS = ("SEAD", "STANDOFF")        # packages with HARM shooters timed on the salvo
 
 
+# S52 / S53 (XO 2026-11-12): the internal flight tags BASE_BARCAP, CARRIER_BARCAP and TKR_HAVCAP are never shown; players read BARCAP, BARCAP and HAVCAP. ONE table, every printed tag goes through tag_label.
+TAG_LABEL = {"BASE_BARCAP": "BARCAP", "CARRIER_BARCAP": "BARCAP", "TKR_HAVCAP": "HAVCAP"}
+OLD_TAG_NAMES = {"BASECAP": "BASE_BARCAP", "CVCAP": "CARRIER_BARCAP", "TNKCAP": "TKR_HAVCAP"}      # the names a save from before S52 (v0.41.410) holds; state.from_dict maps them once on load
+
+
+def tag_label(tag: str) -> str:
+    """What a player reads for a flight tag (HAVCAP as it is)."""
+    return TAG_LABEL.get(tag, tag)
+
+
 def task_label(f, obj) -> str:
     """Short role label for package tables and the radio: SEAD, SO DEAD (Standoff DEAD, JSOW), DEAD (Close DEAD, GBU) or the role."""
     if getattr(f, "tag", ""):
-        return f.tag
-    if getattr(f, "kit", "") == "SLAM":
-        return "SO STRIKE"                  # v0.41.298: the Standoff Strike flight (SLAM-ER)
+        return tag_label(f.tag)
+    if getattr(f, "kit", "") == "PEN" and obj.aim == "RUNWAY":
+        return "SO RWY STRIKE"              # S79: the F-15E's standoff runway job (OCA: Standoff Runway Strike); the PEN flight of an EWR strike stays "SO STRIKE"
+    if getattr(f, "kit", "") in ("SLAM", "PEN"):
+        return "SO STRIKE"                  # v0.41.298: the Standoff Strike flight (SLAM-ER); S51: and the F-15E's standoff runway crater (PEN)
     if getattr(f, "kit", "") == "JSOW":
-        return ("SO STRIKE" if obj.type.value == "COUNTER_AIR" else "SO DEAD") if obj.aim == "STANDOFF" else "JSOW"
+        return ("SO STRIKE" if obj.type.value in ("COUNTER_AIR", "STRIKE") else "SO DEAD") if obj.aim == "STANDOFF" else "JSOW"      # S60: and an EWR strike's JSOW flight
     if f.role.value == "STRIKE" and obj.type.value == "DEAD":
         return "DEAD"
     return f.role.value                 # one name per job (v0.41.50): TARCAP, ESCORT, SWEEP, CAP, STRIKE, SEAD, CAS
@@ -72,6 +84,7 @@ class Base:
     y: float = 0.0
     airport: str | None = None  # pydcs airport name for AIRFIELD bases
     defense: float = 1.0        # air-defence strength (Patriot + AAA); the enemy can degrade it, it repairs daily
+    divert: bool = False        # Phase 9a: a landing and recovery field (theatre pack `"divert": true`): no squadron, no patrol area, no supply sites; an older save has none
 
 
 @dataclass
@@ -86,7 +99,17 @@ class Squadron:
     reserve: int = 0            # aircraft pulled back to a rear field to recover (airwings.py); available is 0 while they rest
     rest_days: int = 0
     home_id: str = ""           # v0.41.243: the field it was first driven from (ground.apply_fall); it flies back when that field is retaken. "" = not displaced
-    move_days: int = 0          # v0.41.243: nights left before a squadron that changed field is operational again (airwings.step); the jets wait in `reserve`
+    move_days: int = 0          # v0.41.243: LEGACY (nights left); v0.41.337: a save that still carries it is converted to `move_until` by airwings.step_moves
+    move_until: int = 0         # v0.41.337 (campaign rules plan Phase 3): the turn (clock.py) at which a squadron that changed field is operational again; 0 = not moving. The jets wait in `reserve`
+    refit: list = field(default_factory=list)   # v0.41.334 (refit.py): the absolute minute (clock.py) each jet in refit is ready again; `available` stays "ready now"
+    repl_due: int = 0           # absolute minute the next replacement pair arrives (0 = no timer: the squadron is at strength)
+    held: int = 0               # replacements that arrived while the runway was closed: counted toward strength, flyable when the runway reopens
+    role: str = ""              # v0.41.353 (Phase 9b): "havcap" = the AWACS / tanker guard squadron: it flies only those guards (Ledger gives it no room for anything else), AI only. "" = an ordinary squadron; an older save has none
+
+    @property
+    def on_hand(self) -> int:
+        """S22: the jets the squadron HAS (ready + in refit + resting + held replacements). GUI tables only; the war and planners read `available`."""
+        return self.available + len(self.refit) + self.reserve + self.held
 
     @property
     def readiness(self) -> float:
@@ -105,9 +128,10 @@ class EnemyAsset:
     defended_by: list[str] = field(default_factory=list)  # ids of SAM/EWR assets covering it
     airport: str | None = None          # AIRFIELD assets: pydcs airport name
     variant: str = ""                   # SAM/EWR flavour: "SA-2", "SA-6", "SA-11", "EWR"; ARMOR: "ARMOR" (moving column) or "GARRISON" (dug in)
-    tier: int = 1                       # depth tier: 1 front, 2 Abkhazia, 3 coast / north Caucasus, 4 deep; gated by CampaignState.front
+    tier: int = 1                       # depth DATA (1 front, 2 Abkhazia, 3 coast / north Caucasus, 4 deep): the redroster MiG-31 share, road sites and the asset table label; never a tasking gate (S20 Phase 3)
     guards: str = ""                    # GARRISON: id of the SAM site it protects
-    suppressed: bool = False            # SAM: radars blinded today (SEAD worked, the launchers are still there); clears at end of day
+    suppressed: bool = False            # SAM: radars blinded (SEAD worked, the launchers are still there); since v0.41.338 it clears SUPPRESS_TURNS turns after the turn it was seen set (Session._tick), not overnight
+    suppressed_turn: int = -1           # v0.41.338 (Phase 4): the turn the flag was first seen set (Session._tick), -1 = not suppressed; the flag expires SUPPRESS_TURNS later
 
     @property
     def destroyed(self) -> bool:
@@ -125,8 +149,17 @@ class RedSquadron:
     available: int = -1         # serviceable jets (-1 = all of them, set in __post_init__)
     reserve: int = 0            # jets pulled back to a rear field to recover; available is 0 while they rest
     rest_days: int = 0
-    move_days: int = 0          # v0.41.243: nights left before a squadron that changed field is operational again (airwings.step)
-    role: str = ""              # v0.41.106: "escort" = the Mozdok escort squadron: escorts, Mozdok patrols and scrambles only, never sent afield as reinforcement
+    move_days: int = 0          # v0.41.243: LEGACY (nights left), see Squadron.move_days
+    move_until: int = 0         # v0.41.337: the turn at which a squadron that changed field is operational again; 0 = not moving
+    role: str = ""              # v0.41.106: "escort" = the Mozdok escort squadron. While a carrier raid is staged or launching (`bombers.escorts_held`) it flies the raid's escorts and Mozdok patrols and scrambles only; v0.41.355 (Phase 10a): otherwise it flies red's normal jobs (reactions, reinforcements, land-raid escorts) and rides with the Tu-22M3 land strike
+    refit: list = field(default_factory=list)   # v0.41.334 (refit.py): the absolute minute each jet in refit is ready again; `available` stays "ready now"
+    repl_due: int = 0           # the Tu-22M3 squadron's own 48 h replacement timer (other types use the wing's, EnemyAirWing.repl_due)
+    held: int = 0               # same, for the Tu-22M3 squadron: arrived while the runway was closed
+
+    @property
+    def on_hand(self) -> int:
+        """S22: the jets the squadron HAS (ready + in refit + resting + its own held replacements). GUI tables only."""
+        return self.available + len(self.refit) + self.reserve + self.held
 
     def __post_init__(self):
         if self.available < 0:
@@ -142,6 +175,8 @@ class EnemyAirWing:
     types: list[str]            # pydcs plane class names the wing's squadrons fly, e.g. ["MiG_29A", "F_4E"]
     squadrons: int = 1          # how many squadrons the wing is made of (equals len(sqns))
     sqns: list = field(default_factory=list)   # [RedSquadron], one type each
+    repl_due: int = 0           # v0.41.334 (refit.py): absolute minute the wing's next replacement pair arrives (plan decision 17: a pair per WING; 0 = no timer)
+    held: int = 0               # replacements that arrived while the wing's runway was closed, released by refit.step when it reopens
 
     @property
     def authorized(self) -> int:
@@ -205,17 +240,24 @@ class EnemyAirWing:
         from .loadouts import ENEMY_FIGHTERS
         return [t for t in self.types_up if t in ENEMY_FIGHTERS] or [t for t in self.types if t in ENEMY_FIGHTERS]
 
-    def general_types_up(self) -> list:
-        """Like `types_up` but without the escort-only squadron: the types red may send afield as reinforcements."""
-        return list(dict.fromkeys(q.aircraft for q in self.sqns if q.available >= 2 and q.role != "escort"))
+    def general_types_up(self, state=None) -> list:
+        """Like `types_up` but without the escort squadron while it is held: the types red may send afield as reinforcements. v0.41.355 (Phase 10a): the Mozdok escort squadron is held only while a carrier raid
+        is staged or launching (`bombers.escorts_held(state)`); the other days it flies red's normal jobs. With no `state` it stays held (the old rule)."""
+        if state is not None:
+            from .bombers import escorts_held
+            held = escorts_held(state)
+        else:
+            held = True
+        return list(dict.fromkeys(q.aircraft for q in self.sqns if q.available >= 2 and (q.role != "escort" or not held)))
 
-    def replenish(self, n: int) -> None:
-        """New jets for the squadrons that are not resting, one at a time to the one furthest below strength."""
+    def replenish(self, n: int, skip=()) -> None:
+        """New jets for the squadrons that are not resting, one at a time to the one furthest below strength (jets in refit count as present; `skip`: aircraft
+        types that get none, the Tu-22M3's own slow replacement is in refit.py)."""
         for _ in range(max(0, n)):
-            room = [q for q in self.sqns if not q.reserve and q.available < q.authorized]
+            room = [q for q in self.sqns if not q.reserve and q.aircraft not in skip and q.available + len(q.refit) < q.authorized]
             if not room:
                 break
-            max(room, key=lambda q: q.authorized - q.available).available += 1
+            max(room, key=lambda q: q.authorized - q.available - len(q.refit)).available += 1
 
     def scatter(self, frac: float) -> None:
         """A cratered field: each squadron keeps int(available * frac) jets."""
@@ -250,9 +292,9 @@ def wing_from_dict(w: dict) -> "EnemyAirWing":
         av = _spread(int(w.get("available", sum(auth))), [a - r for a, r in zip(auth, res)])
         for q, a, r in zip(sq, av, res):
             q["available"], q["reserve"], q["rest_days"] = a, r, (int(w.get("rest_days", 0)) if r else 0)
-    keep = {"id", "name", "aircraft", "authorized", "available", "reserve", "rest_days", "move_days", "role"}
+    keep = {"id", "name", "aircraft", "authorized", "available", "reserve", "rest_days", "move_days", "move_until", "role", "refit", "repl_due", "held"}
     sqns = [RedSquadron(**{k: v for k, v in q.items() if k in keep}) for q in sq]
-    return EnemyAirWing(w["base_asset_id"], types, len(sqns), sqns)
+    return EnemyAirWing(w["base_asset_id"], types, len(sqns), sqns, int(w.get("repl_due", 0)), int(w.get("held", 0)))
 
 
 @dataclass

@@ -7,6 +7,7 @@ from dcs import mapping, task
 
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
+from .loadouts import JSOW_FLIGHT_KITS
 from .models import AssetKind, ObjectiveType, Role
 from .routes import AVOID_NM, NM, SA10_AVOID_NM, SA10_STATION_NM, bearing, dist, offset, plan_route
 
@@ -51,7 +52,7 @@ class FighterStations:
         its cover up for the longest hold the gate allows: AIR_HOLD_STRIKE_S for the air gate, HOLD_S (12 min, in the Lua hook) for the radar gate.
         A stand-off job and the SEAD aims have no gate."""
         o = package.objective
-        if o.aim in ("STANDOFF", "SEAD"):
+        if o.aim in ("STANDOFF", "SEAD") and (not (o.type == ObjectiveType.STRIKE and o.aim == "STANDOFF") or any(getattr(f_, "kit", "") for f_ in package.flights)):      # S60: a stand-off EWR strike with no kit flight (a person's) keeps the air gate's slack
             return 0
         if o.type in (ObjectiveType.STRIKE, ObjectiveType.CAS):
             return GATE_AIR_HOLD_S
@@ -117,7 +118,7 @@ class FighterStations:
             base = self.state.bases[f.base_id]
             try:
                 wps = plan_route(f.role, (base.x, base.y), geom, self._flight_profile(f, package), is_player=False, tanker_xy=None,
-                                 jsow=getattr(f, "kit", "") == "JSOW", jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package),
+                                 jsow=getattr(f, "kit", "") in JSOW_FLIGHT_KITS, jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package),
                                  agm88_deg=self._agm88_deg(package, geom), rel=self._rel_kind(package, f))
             except ValueError:
                 continue

@@ -68,8 +68,6 @@ class NewCampaignDialog(QDialog):
         self.day = StepSpin(); self.day.setRange(1, 28); self.day.setValue(12)
         row = QHBoxLayout(); row.addWidget(self.month, 1); row.addWidget(self.day); row.addWidget(QLabel("2006"))
         form.addRow("Campaign starts", row)
-        self.night = QCheckBox("Allow night sorties (otherwise missions are spread through daylight)")
-        form.addRow("", self.night)
         self.pinf = QCheckBox("Tactical Edge: your sorties affect the war")
         self.pinf.setChecked(bool(pilot_influence)); self.pinf.setToolTip(PILOT_INFLUENCE_TEXT)
         form.addRow("", self.pinf)                      # the same setting as Settings > Campaign > Tactical Edge: it can be changed there later
@@ -108,7 +106,7 @@ class NewCampaignDialog(QDialog):
 
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
-                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "night_ops": self.night.isChecked(), "pilot_influence": self.pinf.isChecked(), "tempo_decay": self.pinf.isChecked() and self.pdec.isChecked(),
+                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "pilot_influence": self.pinf.isChecked(), "tempo_decay": self.pinf.isChecked() and self.pdec.isChecked(),
                 "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData()),
                 "ai_skill_red": str(self.skr.currentData() or "level"), "ai_skill_blue": str(self.skb.currentData() or "level")}
 
@@ -187,6 +185,10 @@ class SettingsDialog(QDialog):
             if not on:
                 self.hotrwy_own.setChecked(False)
         self.hotrwy.toggled.connect(_own_gate)
+        self.ilslv = QCheckBox("Keep ILS runways active in low visibility")
+        self.ilslv.setChecked(bool(getattr(settings, "ils_low_vis", True))); v.addWidget(self.ilslv)
+        hint(v, "DCS lights the ILS only on the runway it counts as active, and the low-level wind picks that runway. When ceiling or visibility is low, the ground wind is turned to favour each field's "
+                "ILS runway; the wind aloft keeps the season's real direction. In good weather the wind is left as it is.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
@@ -199,7 +201,7 @@ class SettingsDialog(QDialog):
         row(v, "Weather", self.wxm)
         hint(v, "Procedural follows the theatre's climate for the month and changes slowly from day to day (never clear to storm in an afternoon); each sortie "
                 "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
-                "that cannot attack at all is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
+                "that cannot attack at all (or meets fog) is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
         # v0.41.165: Pilot Influence goes AFTER the whole Weather block (combo + its description), never between them
         self.pinf = QCheckBox("Tactical Edge (your sorties affect the war)"); self.pinf.setChecked(bool(getattr(settings, "pilot_influence", True)))
         row(v, "Tactical Edge", self.pinf)
@@ -257,8 +259,12 @@ class SettingsDialog(QDialog):
         self.mrad = StepSpin(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "merge_radius_nm", 15)))
         row(v, "Merge radius", self.mrad)
         hint(v, "Packages whose target is inside this circle fly in the same mission (within the time windows below). The circle is centred on your target, "
-                "slid inward so it never hangs over the edge of the target area; your own target stays inside it. If the unit limit is exceeded, the package "
-                "that starts latest drops first.")
+                "slid inward so it never hangs over the edge of the target area; your own target stays inside it. A raid also counts along its way in, "
+                "from its airfield to its target. If the unit limit is exceeded, the package that starts latest drops first.")
+        self.mraids = QCheckBox("Merge raids")
+        self.mraids.setChecked(bool(getattr(settings, "merge_raids_all", True))); v.addWidget(self.mraids)
+        hint(v, "Raid intercepts that start inside the time windows fly in one mission, wherever the raids are going. Off: a raid folds in only when its way in passes "
+                "your target area. Missions that carry red's raids are marked in the list: red border = only red's raids, amber = your packages and red's raids together.")
         self.mback = StepSpin(); self.mback.setRange(0, 30); self.mback.setSingleStep(5); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_back_min", 15)))
         row(v, "Earlier packages", self.mback)
         hint(v, "Packages that started up to this long before yours also fly, already airborne and underway when the mission starts. "
@@ -341,7 +347,7 @@ class SettingsDialog(QDialog):
         self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())
         self.s.merge_enemy_pct = int(self.mpct.value())
         self.s.merge_back_min = int(self.mback.value()); self.s.merge_fwd_min = int(self.mfwd.value())
-        self.s.merge_radius_nm = int(self.mrad.value())
+        self.s.merge_radius_nm = int(self.mrad.value()); self.s.merge_raids_all = bool(self.mraids.isChecked())
         self.s.ruins = bool(self.ruins.isChecked())
         self.s.ecm_script = bool(self.ecm.isChecked())
         self.s.ecm_status = bool(self.ecm_msg.isChecked())
@@ -352,6 +358,7 @@ class SettingsDialog(QDialog):
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
         self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
         self.s.weather_mode = str(self.wxm.currentData())
+        self.s.ils_low_vis = bool(self.ilslv.isChecked())
         self.s.pilot_influence = bool(self.pinf.isChecked()); self.s.tempo_decay = bool(self.pinf.isChecked() and self.pdec.isChecked())
         self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
         self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value())
@@ -456,21 +463,33 @@ def _hm(s: str) -> int:
 
 
 class DayResolvedDialog(QDialog):
-    """v0.41.208 (XO): what Skip Turn did, fully described: one block per package (the war simulation's own result lines), scrollable."""
-    def __init__(self, results: list, day: int, parent=None):
-        super().__init__(parent); self.setWindowTitle("Day resolved"); self.setMinimumSize(700, 480)
+    """v0.41.208 (XO): what Skip Turn did, fully described: one block per package (the war simulation's own result lines), scrollable.
+    v0.41.337 (Phase 3): it is labelled by turn and takes several turns: `turns` is [{"label": "Day 1, 20:00", "results": [...]}, ...].
+    S21 (XO 2026-11-11): the AFTER-ACTION REPORT of every skip, one dialog per run. `reason` (why an auto-skip stopped) is its header line.
+    The report is a plain list of every simulated event, all shown at once in one QTextBrowser (it scrolls by itself, starts at the top; the animation was dropped)."""
+    def __init__(self, turns: list, parent=None, reason: str = ""):
+        super().__init__(parent); self.setWindowTitle("After-action report"); self.setMinimumSize(700, 480)
         lay = QVBoxLayout(self); lay.setSpacing(12)
-        t = QLabel(f"Day {day} resolved"); t.setObjectName("title"); lay.addWidget(t)
+        results = [r for t_ in turns for r in t_.get("results", [])]
+        t = QLabel(f"{turns[0]['label']} resolved" if len(turns) == 1 else f"{turns[0]['label']} to {turns[-1]['label']}: {len(turns)} turns resolved"); t.setObjectName("title"); lay.addWidget(t)
+        if reason:
+            rl = QLabel(html.escape(reason)); rl.setObjectName("h2"); rl.setWordWrap(True); lay.addWidget(rl)
         ok = sum(1 for r in results if r.get("success")); scr = sum(1 for r in results if r.get("scrubbed")); held = sum(1 for r in results if r.get("held"))
         bits = [f"{ok} succeeded", f"{len(results) - ok - scr - held} failed"] + ([f"{held} turned back at the SAM gate"] if held else []) + ([f"{scr} scrubbed for weather"] if scr else [])
         sub = QLabel(f"The war simulation resolved {len(results)} package{'s' if len(results) != 1 else ''}: " + ", ".join(bits) + "."); sub.setWordWrap(True); sub.setObjectName("dim"); lay.addWidget(sub)
-        body = QTextBrowser(); lay.addWidget(body, 1)
+        self.body = QTextBrowser(); lay.addWidget(self.body, 1)
         h = []
-        for r in results:
-            ln = r.get("lines") or [r.get("objective", "?")]
-            col = theme.GREEN if r.get("success") else theme.AMBER if (r.get("scrubbed") or r.get("held")) else theme.RED
-            h.append(f"<p style='margin-bottom:2px'><b style='color:{col}'>{html.escape(ln[0])}</b><br>" + "<br>".join("&nbsp;&nbsp;&nbsp;" + html.escape(x.strip()) for x in ln[1:]) + "</p>")
-        body.setHtml("".join(h) or "<p>Nothing was tasked today.</p>")
+        for t_ in turns:
+            if len(turns) > 1:                                            # a run or a night: one header per turn, so the long log reads turn by turn
+                h.append(f"<h3 style='margin-bottom:2px'>{html.escape(t_['label'])}</h3>")
+            if not t_.get("results"):
+                h.append(f"<p style='color:{theme.DIM}'>Nothing was tasked this turn.</p>")
+            for r in t_.get("results", []):
+                ln = r.get("lines") or [r.get("objective", "?")]
+                col = theme.GREEN if r.get("success") else theme.AMBER if (r.get("scrubbed") or r.get("held")) else theme.RED
+                detail = ("<br>" + "<br>".join("&nbsp;&nbsp;&nbsp;" + html.escape(x.strip()) for x in ln[1:])) if ln[1:] else ""     # no <br> when a result has no detail lines
+                h.append(f"<p style='margin-bottom:2px'><b style='color:{col}'>{html.escape(ln[0])}</b>{detail}</p>")
+        self.body.setHtml("".join(h) or "<p>Nothing was tasked.</p>")
         bb = QDialogButtonBox(QDialogButtonBox.Close); bb.rejected.connect(self.reject)
         btn = bb.button(QDialogButtonBox.Close); btn.setText("Continue"); btn.setObjectName("primary"); btn.clicked.connect(self.accept); lay.addWidget(bb)
 

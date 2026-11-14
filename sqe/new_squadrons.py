@@ -23,7 +23,8 @@ POOL = {"F-16C": [("fs_480", "480th FS 'Warhawks'"), ("fs_13", "13th FS 'Panther
 def need(state, b) -> tuple:
     """(aircraft, unfilled slots counted) for a new squadron at base `b`: the type with the most unfilled slots near it over the last week, F-16C below NEED_MIN."""
     counts = {}
-    for _day, role, x, y in (state.ground or {}).get("short", []):
+    for rec in (state.ground or {}).get("short", []):
+        role, x, y = rec[1], rec[2], rec[3]                    # [day, role, x, y] before v0.41.338, [day, role, x, y, turn] since
         t = ROLE_TYPE.get(role)
         if t and math.hypot(x - b.x, y - b.y) / NM <= NEED_RADIUS_NM:
             counts[t] = counts.get(t, 0) + 1
@@ -45,10 +46,15 @@ def callsign_for(state, aircraft: str) -> str | None:
 
 
 def form(state, b, parking) -> tuple:
-    """Form ONE new squadron at taken base `b` if there is room for it (`parking(airport, aircraft)` = free spots or None). Returns (log lines, squadron or None)."""
+    """Form ONE new squadron at taken base `b` if there is room for it (`parking(airport, aircraft)` = free spots or None). Returns (log lines, squadron or None).
+    v0.41.353 (Phase 9b): the F-15C has only the eight generic callsigns and the 9b laydown owns them all; a field that needs an F-15C squadron then forms an F-16C one (callsign table of its own)."""
     from .models import Squadron
     aircraft, short = need(state, b)
-    size = max([q.authorized for q in state.squadrons.values() if q.aircraft == aircraft] or [12])
+    cs = callsign_for(state, aircraft)
+    if cs is None and aircraft != "F-16C":
+        aircraft, short = "F-16C", 0
+        cs = callsign_for(state, aircraft)
+    size = max([q.authorized for q in state.squadrons.values() if q.aircraft == aircraft and q.role != "havcap"] or [12])
     here = sum(q.authorized for q in state.squadrons.values() if q.base_id == b.id)
     cap = parking(b.airport, aircraft) if b.airport else None
     if cap is not None:
@@ -56,7 +62,6 @@ def form(state, b, parking) -> tuple:
         size -= size % 2
         if size < NEW_MIN_SIZE:
             return [], None
-    cs = callsign_for(state, aircraft)
     free = [p for p in POOL[aircraft] if p[0] not in state.squadrons]
     if cs is None or not free:
         return [], None

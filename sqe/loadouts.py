@@ -9,10 +9,22 @@ from .models import Role
 
 # Taken from DCS's own stock presets (the lists you pick from in the Mission Editor). "=<CLSID>" is a raw weapon id; anything else is a
 # weapon-name stem looked up on the pylon. The comment above each line names the stock preset it was copied from.
-JDAM_JETS = {"F-16C", "FA-18C", "F-14BU"}       # v0.41.299: the jets whose STRIKE loadout is JDAMs (GBU-31 / GBU-38): their AI strikes release short of the target (routes.JDAM_RELEASE_NM)
+JDAM_JETS = {"F-16C", "FA-18C", "F-14BU", "F-15E"}       # v0.41.299: the jets whose STRIKE loadout is JDAMs (GBU-31 / GBU-38): their AI strikes release short of the target (routes.JDAM_RELEASE_NM)
 CBU_JETS = {"F-16C"}                          # v0.41.313 (XO 2026-11-06): the jets that carry CBU-103 on a plain counter-air strike (parked aircraft, little air cover); the others keep their JDAMs
 SLAM_PER_JET = {"FA-18C": 2}                  # v0.41.298: AGM-84H SLAM-ER per jet in the Standoff Strike kit (a Hornet job: no F-16 SLAM-ER in DCS)
 JSOW_PER_JET = {"FA-18C": 2, "F-16C": 2}      # AGM-154A JSOW CEB per jet in the JSOW kit; only these jets fly the JSOW slot of a SEAD package
+# S51 (XO 2026-11-12: "F-15E does standoff runway cratering, while DEAD stays the domain of the F-16"): the "PEN" kit, AGM-154C (unitary BROACH) per F-15E on pylons 2 and 18. Its own table, NOT JSOW_PER_JET:
+# the F-15E must never fill a Standoff DEAD / standoff counter-air slot (`packages.KIT_JETS["JSOW"]` is JSOW_PER_JET). Only a runway crater (a STRIKE with aim RUNWAY) offers it.
+PEN_PER_JET = {"F-15E": 2}
+# S51: a PEN F-15E has no 610 gal wing tanks (they sit on the pylons the JSOW-Cs take). pydcs figures: `F_15E.fuel_max` 10,246 kg internal, each 610 gal tank 2,011 kg (tank and fuel): without the two
+# tanks the jet carries 10,246 / (10,246 + 2 x 2,011) = 0.72 of the fuel of the plain STRIKE load. Judgment call 0.75 of the combat radius (`_in_range` multiplies it in; the 30 nm stand-off release saves
+# flight but is not counted). At 450 nm: 337 nm, 506 with a safe tanker track (x1.5): the F-15E squadrons (Vaziani, Tbilisi) reach every red field but Gelen (353 to 357) and Krymsk (366 to 369) without one.
+PEN_REACH = 0.75
+# S60 (XO 2026-11-12: "no more GPS guided EWR strikes"): an EWR strike is a stand-off job. Who flies it, in this order: the first airframe with a squadron that has 2+ free jets in range for its kit. The ORDER is
+# Opus's pick, XO has not chosen it (judgment call): JSOW-C's unitary warhead suits one radar truck best (the F-15E), then the F-16's JSOW-A, then the Hornet's SLAM-ER. XO may reorder it. The F-16 only fills the
+# JSOW slot of an EWR strike (KIT_JETS["JSOW"] also lists the Hornet, which flies its SLAM-ER here). The PEN kit stays off SAM sites and counter-air: only a runway crater and an EWR strike offer it.
+EWR_KIT_ORDER = (("F-15E", "PEN"), ("F-16C", "JSOW"), ("FA-18C", "SLAM"))
+JSOW_FLIGHT_KITS = ("JSOW", "PEN")            # S51: the kits whose AI flight takes the JSOW route (launch point on its own axis, release, home) and is tasked from it. DEAD-only code tests "JSOW" alone
 
 _D: dict = {
     "F-16C": {
@@ -55,9 +67,23 @@ _D: dict = {
         # stock DCS preset: AIM-9*4,AIM-120*4,Fuel*3
         "CAP": {1: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 2: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 3: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 4: "={C8E06185-7CD6-4C90-959F-044679E90751}", 5: "={C8E06185-7CD6-4C90-959F-044679E90751}", 6: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 7: "={C8E06185-7CD6-4C90-959F-044679E90751}", 8: "={C8E06185-7CD6-4C90-959F-044679E90751}", 9: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 10: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 11: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}"},
     },
+    "F-15E": {
+        # NOT a stock preset (the old AI model has none to copy; judgment call): AIM-9M on 1 and 19, AIM-120C on 3 and 17, 610 gal tanks on 2 and 18, GBU-31(V)1 on the four conformal-tank stations 7, 9, 11, 13
+        "STRIKE": {1: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 2: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 3: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 7: "={GBU-31}", 9: "={GBU-31}", 11: "={GBU-31}", 13: "={GBU-31}", 17: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 18: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 19: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}"},
+        # S51 PEN kit (standoff runway crater): the STRIKE preset's pylons 2 and 18 (610 gal tanks) take an AGM-154C JSOW (unitary BROACH, CLSID {9BCC2A2B-...}: the S50 probe fired exactly this on 2 and 18); AIM-9M on 1 and 19, AIM-120C on 3 and 17
+        # as STRIKE; the four conformal stations 7, 9, 11, 13 stay EMPTY (judgment call: the kit is a stand-off shot, fewer stores is less drag and the JSOWs are the load).
+        "PEN": {1: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 2: "={9BCC2A2B-5708-4860-B1F1-053A18442067}", 3: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 17: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 18: "={9BCC2A2B-5708-4860-B1F1-053A18442067}", 19: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}"},
+    },
     "A-10C": {
         # stock DCS preset: AGM-65D*4, CBU-97*2, CBU-87*2, TGP, ECM, AIM-9*2
         "CAS": {1: "=ALQ_184", 3: "={E6A6262A-CA08-4B3D-B030-E1A993B98452}", 4: "={5335D97A-35A5-4643-9D9B-026C75961E52}", 5: "={CBU-87}", 7: "={CBU-87}", 8: "={5335D97A-35A5-4643-9D9B-026C75961E52}", 9: "={E6A6262A-CA08-4B3D-B030-E1A993B98453}", 10: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 11: "={DB434044-F5D0-4F1F-9BA9-B73027E18DD3}"},
+        # v0.41.360 (Phase 10c part 2): the supply strike. NOT a stock preset (judgment call): the stock CAS preset above with its two AGM-65D replaced by BRU-42 3 x Mk-82 (pylons 3 and 9) and its two CBU-97
+        # by CBU-87 (pylons 4 and 8): 6 Mk-82 + 4 CBU-87 (area and blast weapons for fuel and depot sites), TGP, ECM, AIM-9 as before. Dumb bombs: not in JDAM_JETS.
+        # S31a part A2 (v0.41.388): the guided kit for an AI A-10C CAS flight that attacks from a high floor (24,000 ft near a radar short-range SAM, 12,000 ft near guns / MANPADS). NOT a stock DCS preset
+        # (judgment call; XO flew GBU-31 / GBU-54 from his own captured loadouts.json): the stock CAS preset above with the Mavericks (3, 9) -> GBU-31(V)1 JDAM 2,000 lb, the CBU-97 (4, 8) -> GBU-54(V)1/B laser JDAM 500 lb,
+        # the CBU-87 (5, 7) -> CBU-103 CEM with the WCMD wind-corrected tail kit. GPS / wind-corrected weapons only, no Maverick, rocket or gun reliance. ALQ-184, TGP, AIM-9 as before. About 3,230 kg of stores.
+        "GUIDED": {1: "=ALQ_184", 3: "={GBU-31}", 4: "={GBU_54_V_1B}", 5: "={CBU_103}", 7: "={CBU_103}", 8: "={GBU_54_V_1B}", 9: "={GBU-31}", 10: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 11: "={DB434044-F5D0-4F1F-9BA9-B73027E18DD3}"},
+        "STRIKE": {1: "=ALQ_184", 3: "={60CC734F-0AFA-4E2E-82B8-93B941AB11CF}", 4: "={CBU-87}", 5: "={CBU-87}", 7: "={CBU-87}", 8: "={CBU-87}", 9: "={60CC734F-0AFA-4E2E-82B8-93B941AB11CF}", 10: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 11: "={DB434044-F5D0-4F1F-9BA9-B73027E18DD3}"},
     },
 }
 _ALIAS = {Role.TARCAP: "CAP", Role.ESCORT: "CAP", Role.SWEEP: "CAP", Role.CAP: "CAP"}
@@ -151,7 +177,59 @@ def capture_from_miz(miz_path: str, out_path: str = "loadouts.json") -> dict:
 
 # approximate combat radius (nm) of enemy types: used to decide who can escort a raid
 ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, "MiG_23MLD": 200, "MiG_21Bis": 170,
-                   "F_4E": 300, "F_5E_3": 200, "Su_24M": 300, "Su_25": 160}
+                   "F_4E": 300, "F_5E_3": 200, "Su_24M": 300, "Su_25": 160,
+                   # v0.41.361 (Phase 10d): the Su-34 flies the Su-24M's raids at L3. Judgment call: 330 nm, a little over the Su-24M's 300 (public figures: about 1,100 km combat radius for the Su-34, 1,050 km for the Su-24M,
+                   # both "from memory", medium firmness; the table is the game's scale, not the books': the Caucasus targets lie 70 to 250 nm from red's fields, so the figure rarely limits a raid).
+                   "Su_34": 330,
+                   # v0.41.355 (Phase 10a): the Tu-22M3 on a land strike. 1200 nm is the one public figure for an OFAB-250 load (cmo-db.com, Tu-22M3 loadout table: unverified method, low firmness); other
+                   # sources give 2,200 to 2,500 km (about 1,200 to 1,350 nm) unrefuelled (airrecognition.com, armyrecognition.com, medium firmness). Judgment call: the Caucasus targets lie 70 to 200 nm from Mozdok, so the figure never limits a strike.
+                   "Tu_22M3": 1200}
+
+
+BOMBER_TYPES = ("Su_24M", "Su_34")       # v0.41.361 (Phase 10d): the red raid bombers: the types that fly field raids, the SEAD (Kh-31P) group and the DEAD (KAB-500Kr) group. Every test that used to say "Su_24M" reads this
+ARM_PER_JET = {"Su_24M": 2, "Su_34": 4}   # Kh-31P per jet in a SEAD group (Su-24M: pylons 2 and 7, all it takes; Su-34: four of the six pylons that take one, judgment call: group sizes stay the same in jets, so a Su-34 group fires twice the missiles)
+STRIKE_PER_JET = {"Su_34": 6}             # FAB-500 per jet on a plain raid (Su-24M: every pylon that takes one; Su-34: six of eight, about 3 t: judgment call)
+
+
+# S48 (XO musing 2026-11-12): the Kh-59M (AS-18 Kazoo) standoff strike missile for red's raid bombers. SOURCES (open, checked 2026-11-12; the sources are thin and disagree on range, so every figure here is a lead, not a fact):
+#  - Wikipedia "Kh-59" and the aggregator sites (redstar.gr, globalmilitary.net, armyrecognition.com): Kh-59M about 930 kg launch weight, warhead about 320 kg (penetrator or cluster), turbojet, about Mach 0.9 to 1.1 (900 to 1,080 km/h),
+#    TV (day) / inertial + datalink guidance (the Kingbolt family), cruise 100 to 1,000 m above ground by radar altimeter. Medium firmness for the warhead (several sources agree on 320 kg; the 280 to 290 kg some recall is not the figure printed).
+#  - RANGE: Wikipedia gives 115 km for the Kh-59M (the figure the game and the job use: about 62 nm); the 285 km some sites print is for the later Kh-59MK / anti-ship case against large ships, not the land missile. Low-to-medium firmness.
+#  - Launch envelope (redstar.gr, Kh-59M page): carrier at 600 to 1,100 km/h and 0.2 to 5 km (anti-ship page: up to 11 km): a launch from 20,000 ft at 450 km/h is inside it only at the speed's low end (the raid flies 450 KPH, the table below it: judgment call, the probe shows what the AI does).
+#  - Jets and count: pydcs gives the Su-24M the Kh-59M on pylons 2 and 7 and the Su-34 on pylons 4 and 9: two missiles a jet each, a symmetric pair. The "up to three on a Su-34" in the musing is not possible in the game (the only count found in public text, "up to 5", is for the Kh-59MK).
+#  - The DCS AI's use of it from a Bombing / AttackGroup task is NOT known: that is what the probe mission from `.private/probes/s48` is for.
+# PROBE (XO flew `.private/probes/s48`, 2026-11-12): the AI fires the Kh-59M (X_59M) from a Bombing or AttackMapObject task on a point, 2 a jet, both jets; AttackGroup and AttackUnit never fired. The Su-34 fires AT the launch waypoint, the Su-24M about 3 nm
+#  before it, and ONLY with the APK-9 datalink pod on pylon 4 (without it the Su-24M kept its ammo and flew home): KH59_POD. Missiles flew 55 to 58.6 nm and hit about 335 to 355 s later; the jets turned for home within about 25 s of the second missile.
+KH59_PER_JET = {"Su_24M": 2, "Su_34": 2}   # Kh-59M per jet: every pylon that takes one (pydcs: 2 and 7 / 4 and 9, a balanced pair); the rest stay empty (judgment call: 930 kg each, the pair is the load)
+KH59_POD = {"Su_24M": 4}   # the APK-9 pod (pydcs `APK_9_Datalink_Pod`, clsid {APK_9}) a type needs on this pylon before the AI fires its Kh-59M (the Su-34 needs none). It is not a weapon: `_limit` and the "unarmed" warning count only the missiles
+
+
+def gbu_count(load: dict) -> int:
+    """S67: how many GBU bombs a loadout carries ({pylon: {"CLSID": id}}). Reads each pylon's weapon name from pydcs's table: a name with "GBU" counts once, or N for a
+    rack named "... with N x GBU-..." (F/A-18C: BRU-55 with 2 x GBU-38, BRU-33 with 2 x GBU-12). F-16C 2, F-14B 2, F-15E 4, F/A-18C 8 (stock presets)."""
+    import re
+    from dcs.weapons_data import weapon_ids
+    n = 0
+    for v in (load or {}).values():
+        name = str((weapon_ids.get(v.get("CLSID")) or {}).get("name", ""))
+        if "GBU" not in name.upper():
+            continue
+        m = re.search(r"with\s+(\d+)\s*x", name, re.I)
+        n += int(m.group(1)) if m else 1
+    return n
+
+
+def _limit(out: dict, n) -> dict:
+    """At most n pylons of a loadout, outermost pairs first (the lowest and highest pylon numbers alternately), so the load stays symmetric. None or n >= len: unchanged."""
+    if not n or len(out) <= n:
+        return out
+    keys = sorted(out)
+    pick, lo, hi = [], 0, len(keys) - 1
+    while len(pick) < n and lo <= hi:
+        pick.append(keys[lo]); lo += 1
+        if len(pick) < n and lo <= hi:
+            pick.append(keys[hi]); hi -= 1
+    return {k: out[k] for k in sorted(pick)}
 
 
 def enemy_bomber_loadout(cls_name: str) -> dict:
@@ -167,8 +245,21 @@ def enemy_bomber_loadout(cls_name: str) -> dict:
     return out
 
 
+def enemy_land_bomber_loadout(cls_name: str) -> dict:
+    """v0.41.355 (Phase 10a): the Tu-22M3 on a land strike: an MBD3-U9M rack of nine OFAB-250-270 on every pylon that takes one (pydcs: pylons 1, 2, 4 and 5; pylon 3 only carries the Kh-22). No missile."""
+    from dcs import planes
+    cls = getattr(planes, cls_name)
+    out = {}
+    for i in sorted(cls.pylons):
+        P = getattr(cls, f"Pylon{i}", None)
+        w = _find(P, "MBD3_U9M") if P is not None else None
+        if w is not None:
+            out[i] = {"CLSID": w[1]["clsid"]}
+    return out
+
+
 def enemy_arm_loadout(cls_name: str) -> dict:
-    """v0.41.84: Kh-31P anti-radiation missiles on every pylon that takes one (Su-24M: pylons 2 and 7)."""
+    """v0.41.84: Kh-31P anti-radiation missiles on every pylon that takes one (Su-24M: pylons 2 and 7); v0.41.361: at most ARM_PER_JET of them (Su-34: four)."""
     from dcs import planes
     cls = getattr(planes, cls_name)
     out = {}
@@ -177,19 +268,27 @@ def enemy_arm_loadout(cls_name: str) -> dict:
         w = _find(P, "Kh_31P") if P is not None else None
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
-    return out
+    return _limit(out, ARM_PER_JET.get(cls_name))
 
 
-def enemy_dead_loadout(cls_name: str) -> dict:
-    """v0.41.117: KAB-500Kr (TV-guided 500 kg bomb) on every pylon that takes one (Su-24M: 2, 3, 6, 7): red's DEAD flights against a battery."""
+def enemy_standoff_loadout(cls_name: str) -> dict:
+    """S48: Kh-59M (AS-18 Kazoo) standoff missiles for a raid on a fixed target (Su-24M, Su-34): every pylon that takes one, at most KH59_PER_JET, plus the APK-9 datalink pod where the type needs it (`KH59_POD`). Empty for a type that cannot carry one (the Su-25): the caller keeps the free-fall kit there."""
     from dcs import planes
-    cls = getattr(planes, cls_name)
+    cls = getattr(planes, cls_name, None)
     out = {}
-    for i in sorted(cls.pylons):
+    for i in sorted(getattr(cls, "pylons", ()) or ()):
         P = getattr(cls, f"Pylon{i}", None)
-        w = _find(P, "KAB_500Kr") if P is not None else None
+        w = _find(P, "Kh_59M") if P is not None else None
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
+    out = _limit(out, KH59_PER_JET.get(cls_name))
+    pod = KH59_POD.get(cls_name)
+    if out and pod:                                                              # the Su-24M fires only with its datalink pod (probe): no pod found = an EMPTY kit, so the raid is not flagged and the unarmed warning is not hidden
+        P = getattr(cls, f"Pylon{pod}", None)
+        w = _find(P, "APK_9") if P is not None else None
+        if w is None:
+            return {}
+        out[pod] = {"CLSID": w[1]["clsid"]}
     return out
 
 
@@ -203,4 +302,4 @@ def enemy_strike_loadout(cls_name: str) -> dict:
         w = (_find(P, "FAB_500M") or _find(P, "FAB_250M")) if P is not None else None
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
-    return out
+    return _limit(out, STRIKE_PER_JET.get(cls_name))

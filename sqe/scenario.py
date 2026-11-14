@@ -27,15 +27,74 @@ LONG_RANGE = {"SA-2", "SA-3", "SA-6", "SA-10", "SA-11"}
 SAM_VALUE = {"SA-8": 4, "AAA": 2, "MANPAD": 2, "SA-2": 5, "SA-3": 5, "SA-6": 6, "SA-11": 7, "SA-10": 9, "SA-15": 6, "SA-19": 5}
 
 
-def squadron_options(aircraft: str, theatre: str = "caucasus") -> list:
-    """(id, label) for the New Campaign squadron picker."""
+def _size(count: int, scale: float) -> int:
+    """A squadron's authorized strength at a level's friendly_scale (blue is flat since v0.41.353: 1.0 at every level, so the pack's count stands)."""
+    return max(4, int(round(count * scale / 2) * 2))
+
+
+_TERRAIN: dict = {}
+
+
+def _pack_terrain(th: dict):
+    """A pydcs terrain object for a theatre pack, kept (building one is slow) and independent of the ACTIVE theatre (the New Campaign dialog runs before one is chosen)."""
+    key = th["dcs_terrain"]
+    if key not in _TERRAIN:
+        from dcs import terrain as T
+        _TERRAIN[key] = getattr(T, key)()
+    return _TERRAIN[key]
+
+
+def placement(th: dict, level: int = 2, player_squadron: str | None = None, terrain=None) -> dict:
+    """{squadron id: field id} for a new campaign on theatre pack `th` at `level`: where every squadron of the pack really sits (v0.41.353, queue S6, XO 2026-11-09 option (b)).
+    Each squadron, the player's included, is placed on a field that can park it: its pack field when it fits, else the nearest non-divert field with room (the type's DCS parking count, shared
+    by every squadron there at authorized strength). The player's squadron goes first so it keeps its field when it fits, then the rest by id. A carrier squadron stays on the boat.
+    `new_campaign` and the New Campaign dialog (`squadron_options`) both read it, so the dialog shows the field the campaign will use."""
+    from .models import BaseKind as _BK
+    terrain = terrain if terrain is not None else _pack_terrain(th)
+    sc = get_difficulty(level).friendly_scale
+    fields = {f["id"]: f for f in th["blue_fields"] if not f.get("divert")}
+    pos = {}
+    for f in th["blue_fields"]:
+        try:
+            pp = terrain.airports[f["airport"]].position
+            pos[f["id"]] = (pp.x, pp.y)
+        except Exception:
+            pos[f["id"]] = (0.0, 0.0)
+    out, used = {}, {}
+    order = sorted(th["squadrons"], key=lambda q: (q["id"] != player_squadron, q["id"]))
+    for q in order:
+        cnt = _size(q["count"], sc)
+        if q["base"] not in fields:                                   # the carrier (or a field the pack did not list): where the pack puts it
+            out[q["id"]] = q["base"]
+            continue
+        cls = AIRCRAFT[q["aircraft"]].dcs_class
+        def room(fid):
+            cap = _slots(terrain, fields[fid]["airport"], [cls])
+            return None if cap is None else cap - used.get(fid, 0)
+        r = room(q["base"])
+        if r is None or r >= cnt:
+            out[q["id"]] = q["base"]
+            used[q["base"]] = used.get(q["base"], 0) + cnt
+            continue
+        bx, by = pos[q["base"]]
+        alt = sorted((fid for fid in fields if fid != q["base"] and (room(fid) or 0) >= cnt), key=lambda fid: math.hypot(pos[fid][0] - bx, pos[fid][1] - by))
+        dest = alt[0] if alt else q["base"]                           # nowhere with room: it stays (and the caller reports it)
+        out[q["id"]] = dest
+        used[dest] = used.get(dest, 0) + cnt
+    return out
+
+
+def squadron_options(aircraft: str, theatre: str = "caucasus", level: int = 2) -> list:
+    """(id, label) for the New Campaign squadron picker: the REAL field of each squadron (`placement`). A HAVCAP squadron is AI only and is not offered (XO: a guard is not a job type)."""
     th = theatres.load(theatre)
+    names = {th["carrier"]["id"]: th["carrier"].get("short", th["carrier"]["name"]), **{f["id"]: f["name"].replace(" AB", "") for f in th["blue_fields"]}}
+    sc = get_difficulty(level).friendly_scale
     out = []
     for q in th["squadrons"]:
-        if q["aircraft"] == aircraft:
-            nm = {th["carrier"]["id"]: th["carrier"].get("short", th["carrier"]["name"]),
-                  **{f["id"]: f["name"].replace(" AB", "") for f in th["blue_fields"]}}.get(q["base"], q["base"])
-            out.append((q["id"], f"{q['name']}  -  {q['count']} aircraft at {nm}"))
+        if q["aircraft"] != aircraft or q.get("role") == "havcap":
+            continue
+        where = placement(th, level, q["id"])[q["id"]]                  # this squadron as the player's: it is placed first
+        out.append((q["id"], f"{q['name']}  -  {_size(q['count'], sc)} aircraft at {names.get(where, where)}"))
     return out
 
 
@@ -89,32 +148,14 @@ def _slots(terrain, airport: str, types: list) -> int | None:
         return None
 
 
-def _disperse_blue(st, terrain, player_squadron=None) -> None:
-    """Squadrons at an airfield that cannot park them all: the overflow squadrons (never yours) move to the nearest friendly airfield with room
-    for their type (v0.40.7: Batumi held 32 jets on 10 slots)."""
-    used = {}
-    fields = {b.id: b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD and b.airport}
-    order = sorted(st.squadrons.values(), key=lambda q: (q.id != player_squadron, q.id))       # yours first: it keeps its field
-    for q in order:
-        b = fields.get(q.base_id)
-        if b is None:
-            continue
-        cls = AIRCRAFT[q.aircraft].dcs_class
-        def room(fb):
-            cap = _slots(terrain, fb.airport, [cls])
-            return None if cap is None else cap - used.get(fb.id, 0)
-        r = room(b)
-        if r is None or r >= q.authorized or q.id == player_squadron:
-            used[b.id] = used.get(b.id, 0) + q.authorized
-            continue
-        alt = sorted((fb for fb in fields.values() if fb.id != b.id and (room(fb) or 0) >= q.authorized),
-                     key=lambda fb: math.hypot(fb.x - b.x, fb.y - b.y))
-        if alt:
-            st.note(f"{q.name} is based at {alt[0].name}: {b.name} cannot park it.")
-            q.base_id = alt[0].id
-            used[alt[0].id] = used.get(alt[0].id, 0) + q.authorized
-        else:
-            used[b.id] = used.get(b.id, 0) + q.authorized
+def _disperse_blue(st, th: dict, terrain, player_squadron=None) -> None:
+    """Move the squadrons whose pack field cannot park them to the field `placement` gives them (v0.40.7: Batumi held 32 jets on 10 slots; v0.41.353: the player's squadron too)."""
+    where = placement(th, st.level, player_squadron, terrain)
+    for q in sorted(st.squadrons.values(), key=lambda q: q.id):
+        dest = where.get(q.id, q.base_id)
+        if dest != q.base_id:
+            st.note(f"{q.name} is based at {st.bases[dest].name}: {st.bases[q.base_id].name} cannot park it.")
+            q.base_id = dest
 
 
 def red_squadrons(aid: str, wing_name: str, types: list, jets: int, max_size: int, pool: list | None = None, rng=None) -> list:
@@ -172,7 +213,7 @@ def _disperse_red(st, terrain, plan_w: list) -> None:
 
 
 def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str = "caucasus",
-                 seed: int | None = None, start_date: str = "2006-06-12", night_ops: bool = False,
+                 seed: int | None = None, start_date: str = "2006-06-12", night_ops: bool = True,
                  player_squadron: str | None = None) -> CampaignState:
     d: Difficulty = get_difficulty(level)
     rng = random.Random(seed)
@@ -188,18 +229,17 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     st.bases[cv["id"]] = Base(cv["id"], cv["name"], BaseKind.CARRIER, x=cx, y=cy)
     for f in th["blue_fields"]:
         p = ap(f["airport"])
-        st.bases[f["id"]] = Base(f["id"], f["name"], BaseKind.AIRFIELD, x=p.x, y=p.y, airport=f["airport"])
+        st.bases[f["id"]] = Base(f["id"], f["name"], BaseKind.AIRFIELD, x=p.x, y=p.y, airport=f["airport"], divert=bool(f.get("divert")))
 
     sc = d.friendly_scale
-    n = lambda base: max(4, int(round(base * sc / 2) * 2))
-    # Realistic squadron structure (about 175 jets at Level 2): two Tomcat and two Hornet squadrons on the carrier, three Viper,
-    # two Eagle and two Hog squadrons ashore. Callsigns are unique across the whole coalition (group names must never collide).
-    st.squadrons = {q["id"]: Squadron(q["id"], q["name"], q["aircraft"], q["base"], n(q["count"]), n(q["count"]), q["callsign"]) for q in th["squadrons"]}
+    n = lambda base: _size(base, sc)
+    # The squadron structure is in the theatre pack (`squadrons`; 272 jets in the Caucasus, the same at every level since v0.41.353). Callsigns are unique across the whole coalition (group names must never collide).
+    st.squadrons = {q["id"]: Squadron(q["id"], q["name"], q["aircraft"], q["base"], n(q["count"]), n(q["count"]), q["callsign"], role=q.get("role", "")) for q in th["squadrons"]}
     for s in st.squadrons.values():                       # sanity: land jets on land, carrier jets on the boat
         spec, base = AIRCRAFT[s.aircraft], st.bases[s.base_id]
         if spec.home != base.kind:
             raise ValueError(f"{s.name}: {spec.display} cannot be based at {base.name}")
-    _disperse_blue(st, t, player_squadron)               # a field that cannot park its squadrons sends the overflow to the nearest one that can
+    _disperse_blue(st, th, t, player_squadron)            # a field that cannot park its squadron (the player's too) sends it to the nearest one that can: `placement`
 
     # ---- enemy airfields + air wings -----------------------------------------------------------
     def add(id_, name_, kind, x, y, value, apt=None, variant="", tier=1, guards=""):
@@ -219,7 +259,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         rng.sample(d.enemy_types, k=min(len(d.enemy_types), 1 + min(2, max(1, round(max(2, round(d.enemy_air_total * ww[aid] / sum(ww.values()))) / 14)))))
     apt_of = {f[0]: f[2] for f in fields}
     cap_all = {aid: _slots(t, apt_of[aid], ["MiG_29A"]) for aid in ww}
-    cap_hv = {aid: _slots(t, apt_of[aid], ["Su_24M", "Su_27", "MiG_31"]) for aid in ww}
+    cap_hv = {aid: _slots(t, apt_of[aid], ["Su_24M", "Su_34", "Su_27", "MiG_31"]) for aid in ww}
     plan_r = redroster.allocate(d.level, list(ww), ww, FIELD_TIER, cap_all, cap_hv)
     for aid, types in plan_r.items():
         sqns = [RedSquadron(i_, n_, t_, c_) for i_, n_, t_, c_ in redroster.cut(aid, st.assets[aid].name, types, d.red_squadron_max)]
@@ -283,7 +323,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         x.defended_by = [s.id for s in sams if math.hypot(x.x - s.x, x.y - s.y) < 40_000]
 
     # ---- the player ---------------------------------------------------------------------------------------------------
-    mine = st.squadrons_for(player_aircraft)
+    mine = [q for q in st.squadrons_for(player_aircraft) if q.role != "havcap"]          # a HAVCAP squadron is AI only
     if not mine or not AIRCRAFT[player_aircraft].player_flyable:
         raise ValueError(f"{player_aircraft} is not a player-flyable type with a squadron")
     me = next((q for q in mine if q.id == player_squadron), mine[0])

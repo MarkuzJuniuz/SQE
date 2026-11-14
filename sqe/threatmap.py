@@ -106,6 +106,25 @@ def fighter_bases(state) -> list:
             if w.available > 0 and not state.assets[w.base_asset_id].destroyed]
 
 
+def awacs_station(state):
+    """S19 (v0.41.369, XO 2026-11-11): the AWACS's one fixed station -> (x, y, front_hdg), the same for every package of a turn and for its guard.
+    It starts from the support field (support_assets._support_airfield), faces red's live fighter fields (else red's assets, else north) and sits
+    BEHIND that field, clear of enemy fields and SAM rings (safe_marshal). It reads only the state: not the player, the package or its target.
+    (DCS detects by the radar's own range, so the distance to the fight does not matter.) None when no support field exists."""
+    from .support_assets import _support_airfield
+    b = _support_airfield(state)
+    if b is None:
+        return None
+    pts = fighter_bases(state) or [(a.x, a.y) for a in state.assets.values() if not a.destroyed]
+    if pts:
+        cx, cy = sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
+        fh = math.degrees(math.atan2(cy - b.y, cx - b.x)) % 360
+    else:
+        fh = 0.0
+    x, y = safe_marshal(state, (b.x, b.y), fh)
+    return x, y, fh
+
+
 def tanker_station(state, base_xy, toward_xy, min_enemy_nm: float = 150, ring_margin_nm: float = 20):
     """A tanker track behind the FLOT: far from enemy fighter bases and outside every SAM ring. None if no such spot."""
     bx, by = base_xy
@@ -187,7 +206,7 @@ _LEAD_NM = 0.0              # the lead in force for the mission being built (Mis
 def set_ramp_lead(on: bool) -> None:
     """v0.41.92: hot-ramp pairs take 5 to 9 minutes from the call to the air (XO's 2026-10-21 runs: 324 to 566 s at Gudauta, 283 and 290 s at Nalchik;
     the hidden runway start is about 2 minutes), so with the setting on the circles are larger by what blue covers in the 4 extra minutes
-    (about 500 kt = 8 nm a minute, 30 nm). Judgment call from those runs. Planning keep-outs (marshal, sweep, CVCAP) read the same radius."""
+    (about 500 kt = 8 nm a minute, 30 nm). Judgment call from those runs. Planning keep-outs (marshal, sweep, carrier BARCAP) read the same radius."""
     global _LEAD_NM
     _LEAD_NM = RAMP_LEAD_NM if on else 0.0
 

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QDialog, Q
 from .. import APP_NAME, CAMPAIGN_EXT, __version__, narrative, overview_detail, posture, story
 from ..aircraft import AIRCRAFT
 from ..briefing import threat_lines
+from .. import clock
 from ..timeofday import is_night
 from ..difficulty import LEVELS
 from ..engine import Session
@@ -21,25 +22,39 @@ from ..packages import PackageBuilder, folded_n_def
 from ..settings import AppSettings
 from . import theme
 from .dialogs import DayResolvedDialog, DebriefDialog, NewCampaignDialog, SettingsDialog, WaitingDialog
-from .widgets import MapView, SideCard, StatCard, card
+from .widgets import MapView, SideCard, StatCard, StepSpin, card
 from . import overview_view as V
 
-URGENT_ROLE = Qt.UserRole + 1
+URGENT_ROLE = Qt.UserRole + 1     # "" | "red" | "mixed": the row's mission carries no red package / only red's / red's and yours together (S39)
+URGENT_COLOR = "#d8453b"          # red border: only red's packages (raid intercepts, troops in contact, raid prep)
+MIXED_COLOR = theme.AMBER         # amber border: your packages and red's flying in one mission
+AUTO_INDENT = 22                  # S23: the Crew Rest hours control sits under its check box, indented past the check box's tick (px)
+AUTOSKIP_MAX_TURNS = 42          # an auto-skip run stops after at most a week of turns from its start (6 a day; S25, was 84 at 12 a day), a judgment call (campaign rules plan Phase 11)
 
 
 class UrgentDelegate(QStyledItemDelegate):
     """v0.41.304 (XO 2026-11-05: "show the scrambles with red borders on the main UI"): a job red is doing to you now (a raid on your fleet, field or supply site, troops in contact)
-    keeps the normal row and gets a red border."""
+    keeps the normal row and gets a red border. S39: the border comes from the whole mission (the row's package plus what flies with it): "red" = only red's packages,
+    "mixed" = red's and yours together, drawn amber; no border when none is red's."""
     def paint(self, painter, option, index):
         super().paint(painter, option, index)
-        if index.data(URGENT_ROLE):
+        role = index.data(URGENT_ROLE)
+        if role:
             painter.save()
-            painter.setPen(QPen(QColor("#d8453b"), 2))
+            painter.setPen(QPen(QColor(MIXED_COLOR if role == "mixed" else URGENT_COLOR), 2))
             painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
             painter.restore()
 
 
 RELEASES_URL = "https://github.com/MarkuzJuniuz/SQE/releases/latest"
+CAMPAIGN_URL = "https://github.com/MarkuzJuniuz/SQE/blob/main/docs/CAMPAIGN.md"     # the online copy (the newest code, may run ahead of the build you have)
+
+
+def campaign_doc_path() -> Path | None:
+    """S74: the copy of docs/CAMPAIGN.md that goes with this build: beside SQE.exe in a release zip (build_exe.bat copies `docs`), the repo's own `docs` when run from source. None when it is not there."""
+    base = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]
+    p = base / "docs" / "CAMPAIGN.md"
+    return p if p.is_file() else None
 
 
 def _tbl(headers, stretch_last=True) -> QTableWidget:
@@ -78,7 +93,7 @@ class OverviewPage(QWidget):
         gc = card(); left.addWidget(gc, 1)                                 # v0.41.149: the detail tabs (they replaced the one long sector list)
         self.dtabs = QTabWidget(); gc.layout().addWidget(self.dtabs)
         self.dviews = {}
-        for key, title in (("ground", "Ground"), ("supply", "Supply"), ("ad", "Air defence"), ("air", "Air Operations"), ("edge", "Tactical Edge")):
+        for key, title in (("ground", "Ground"), ("supply", "Force Index"), ("ad", "Air defence"), ("air", "Air Operations"), ("edge", "Tactical Edge")):
             v = QTextBrowser(); v.setFrameShape(QFrame.NoFrame); v.setStyleSheet("background:transparent;border:none;"); self.dviews[key] = v
             if key == "ground":                                              # v0.41.207: the base notes sit in an expandable section above the sector table
                 w = QWidget(); wl = QVBoxLayout(w); wl.setContentsMargins(0, 0, 0, 0); wl.setSpacing(4)
@@ -96,7 +111,7 @@ class OverviewPage(QWidget):
         self.cards = {"fr": StatCard("The front", theme.AMBER), "od": StatCard("Ground odds", theme.BLUE)}
         self.side = {"blue": SideCard("Coalition"), "red": SideCard("Russia")}
         g.addWidget(self.cards["fr"], 0, 0); g.addWidget(self.cards["od"], 0, 1); g.addWidget(self.side["blue"], 1, 0); g.addWidget(self.side["red"], 1, 1)
-        self.today = StatCard("Today's tasking", theme.AMBER); right.addWidget(self.today)               # v0.41.152: what the day holds for you
+        self.today = StatCard("This turn's tasking", theme.AMBER); right.addWidget(self.today)               # v0.41.152: what the day holds for you
         self.warn_card = card(); right.addWidget(self.warn_card)                # v0.41.148: warnings (a base about to fall, the counter-force), hidden when there are none
         wh = QLabel("WARNINGS"); wh.setObjectName("head"); self.warn_card.layout().addWidget(wh)
         self.warn = QLabel(); self.warn.setWordWrap(True); self.warn.setStyleSheet(f"color:{theme.AMBER};"); self.warn_card.layout().addWidget(self.warn)
@@ -157,11 +172,11 @@ class OverviewPage(QWidget):
         body = V.table(("Sector", en, "Coalition", "Status"), trs) if trs else ""
         body += V.section("Front History", "<br>".join(e(x) for x in hist)) if hist else "<p style='margin-top:14px;color:#8fa3b8'>The front has not moved yet.</p>"
         im.apply(self.dviews["ground"], body)
-        # ---- Supply
-        top = V.table(("Side", "Supply"), [("Coalition", ("bg", f"{fb}%", V.supply_band(fb))), (en, ("bg", f"{fe}%", V.supply_band(fe)))])
+        # ---- Force Index (the old Supply tab; code names stay)
+        top = V.table(("Side", "Force Index"), [("Coalition", ("bg", f"{fb}%", V.supply_band(fb))), (en, ("bg", f"{fe}%", V.supply_band(fe)))])
         sites = V.table(("Side", "Site", "Health", "State"), [(a, b, ("bg", f"{c}%", V.pct_band(c)), V.first_cap(d)) for a, b, c, d in od.supply_rows(st)])
         self.dviews["supply"].setHtml(top + V.section("Sites", sites)
-                                      + "<p style='margin-top:14px;color:#8fa3b8'>A site mends in about 6 days at full supply (longer when supply is low), and not on a night after it was struck.</p>")
+                                      + "<p style='margin-top:14px;color:#8fa3b8'>A site mends in about 6 days at full Force Index (longer when it is low), and not on a night after it was struck.</p>")
         # ---- Air defence: the transit section only when a battery is on its way
         orders = od.asks_rows(st)
         top = V.table(("Side", "Air Defense"), [("Coalition", ("bg", f"{ab}%", V.pct_band(ab))), (en, ("bg", f"{ae}%", V.pct_band(ae)))])
@@ -256,8 +271,48 @@ class MissionsPage(QWidget):
         self.note = QLabel("Press FLY on your flight. Push time, TOT and the briefing are built when you do."); self.note.setObjectName("small"); L.addWidget(self.note)
         self.resume = QPushButton("Resume sortie in progress"); self.resume.setObjectName("fly"); self.resume.hide(); L.addWidget(self.resume)
         self.resume.clicked.connect(win.wait_for_results)
-        self.skip = QPushButton("Skip Turn"); self.skip.setToolTip("Stand down for today: the whole tasking order is resolved by the war simulation and the date advances.")
-        self.skip.clicked.connect(win.skip_turn); L.addWidget(self.skip, 0, Qt.AlignRight)
+        self.skip = QPushButton("Skip Turn"); self.skip.setToolTip(f"Stand down for this turn ({clock.TURN_MIN // 60} hours): this turn's packages are resolved by the war simulation and the clock moves on {clock.TURN_MIN // 60} hours. A night with no night flying is resolved for you.")
+        self.skip.clicked.connect(win.skip_turn)
+        L.addWidget(self.skip, 0, Qt.AlignRight)                      # S23 (XO 2026-11-11): the Skip Turn button stands alone again (v0.41.364 look)
+        # Phase 11 / S23: the Auto-Skip options live in a card-look box that MainWindow places in the sidebar (this page keeps the widgets: refresh, save, enable)
+        self.auto_box = card(margins=(10, 8, 10, 8), spacing=4)
+        ab = self.auto_box.layout()
+        ab.addWidget(self._label("Auto-Skip", "head"))
+        self.auto_stand = QCheckBox("Stand-Down Turns"); self.auto_stand.setToolTip("Skip turns where you have no flight to fly.")
+        self.auto_night = QCheckBox("Night Turns"); self.auto_night.setToolTip("Skip night turns, even when a flight is on offer.")
+        self.auto_dur_on = QCheckBox("Crew Rest"); self.auto_dur_on.setToolTip("After a flown sortie, skip this many hours before your next flight.")
+        self.auto_dur = StepSpin(); self.auto_dur.setRange(4, 24); self.auto_dur.setSingleStep(4); self.auto_dur.setSuffix(" hrs"); self.auto_dur.setValue(12)
+        # S23 fit (measured with the real Segoe UI font): the box has 160 px inside, "Crew Rest" is 90 px and the -/12 hrs/+ spin 202 px, so they cannot share a row. The spin goes on its own
+        # line under Crew Rest, indented past the check box, at a fixed width (the two step buttons are 34 px each, the field gets the rest)
+        self.auto_dur_row = QWidget(); drow = QHBoxLayout(self.auto_dur_row); drow.setContentsMargins(AUTO_INDENT, 0, 0, 0); drow.setSpacing(0)
+        self.auto_dur.setFixedWidth(160 - AUTO_INDENT); drow.addWidget(self.auto_dur); drow.addStretch(1)
+        # S21: the three option rows get one height (the check boxes' own height, like one CSS height for every row); the spin line under Crew Rest is that row's second line
+        row_h = max(w.sizeHint().height() for w in (self.auto_stand, self.auto_night, self.auto_dur_on))
+        for w in (self.auto_stand, self.auto_night, self.auto_dur_on):
+            w.setFixedHeight(row_h); ab.addWidget(w)
+        ab.addWidget(self.auto_dur_row)
+        for w in (self.auto_stand, self.auto_night, self.auto_dur_on):
+            w.toggled.connect(self._auto_changed)
+        self.auto_dur.valueChanged.connect(self._auto_changed)
+
+    def auto_options(self) -> tuple:
+        """(Stand-Down Turns, Night Turns, Crew Rest hours or None when Crew Rest is unticked)."""
+        return self.auto_stand.isChecked(), self.auto_night.isChecked(), (self.auto_dur.value() if self.auto_dur_on.isChecked() else None)
+
+    def set_auto_enabled(self, on: bool):
+        for w in (self.skip, self.auto_stand, self.auto_night, self.auto_dur_on, self.auto_dur):
+            w.setEnabled(on)
+
+    def _auto_changed(self, *_):
+        if getattr(self, "sess", None) is None or getattr(self, "_loading", False):
+            return
+        s = self.sess.settings
+        s.autoskip_stand_down, s.autoskip_night, s.autoskip_duration_on = self.auto_stand.isChecked(), self.auto_night.isChecked(), self.auto_dur_on.isChecked()
+        s.autoskip_hours = self.auto_dur.value()
+        try:
+            s.save()
+        except OSError:
+            pass
 
     def _filter_changed(self):
         if getattr(self, "sess", None) is None or getattr(self, "_loading", False):
@@ -275,7 +330,7 @@ class MissionsPage(QWidget):
             self.lst.blockSignals(True); self.lst.clear(); self.lst.blockSignals(False)
             self.pkgs = []; self.members = {}
             self.day.setText(f"{st.campaign_date().strftime('%d %b %Y').upper()}  -  Day {st.day}  -  the war is over")
-            self.resume.setVisible(False); self.skip.setEnabled(False); self.note.hide()
+            self.resume.setVisible(False); self.skip.setEnabled(False); self.note.hide(); self.auto_box.hide()
             self._clear_body()
             lab, text = posture.posture(st)
             self.bl.addWidget(self._label(lab, "title"))
@@ -283,20 +338,24 @@ class MissionsPage(QWidget):
             self.bl.addWidget(self._label("There is nothing left to fly. Start a new campaign from the File menu.", "small"))
             self.bl.addStretch(1)
             return
-        self.note.show()
+        self.note.show(); self.auto_box.show()
         keep = None                                         # v0.41.311: remember the pick, so FLY's refresh does not jump to row 0 behind the waiting window
-        cur = self.lst.currentItem() if getattr(self, "_sel_day", None) == st.day else None
+        cur = self.lst.currentItem() if getattr(self, "_sel_day", None) == st.turn else None             # v0.41.337: the pick is remembered per TURN
         if cur is not None:
             keep = cur.data(Qt.UserRole)
-        self._sel_day = st.day
+        self._sel_day = st.turn
         self._loading = True
         self.flt.setCurrentIndex(0 if sess.settings.list_filter != "all" else 1)
+        if not getattr(self.win, "_auto_busy", False):               # Phase 11: the Autoskip boxes show the saved choice (not while it is running)
+            cs = sess.settings
+            self.auto_stand.setChecked(bool(cs.autoskip_stand_down)); self.auto_night.setChecked(bool(cs.autoskip_night))
+            self.auto_dur_on.setChecked(bool(cs.autoskip_duration_on)); self.auto_dur.setValue(int(cs.autoskip_hours))
         self._loading = False
         mine_only = sess.settings.list_filter != "all"
         visible = [p for p in sess.packages() if (bool(sess.flyable(p)) or not mine_only)]
         groups = sess.collapse(visible)                     # a package that another one folds in is shown inside it, not as its own row
         self.pkgs = [h for h, _ in groups]; self.members = {h.number: m for h, m in groups}
-        self.day.setText(f"{st.campaign_date().strftime('%d %b %Y').upper()}  -  Day {st.day} tasking order  ({len(self.pkgs)} shown)")
+        self.day.setText(f"{st.campaign_date().strftime('%d %b %Y').upper()}  -  {sess.turn_label()} tasking  ({len(self.pkgs)} shown)")
         self.lst.blockSignals(True); self.lst.clear()
         for p in self.pkgs:
             ok = bool(sess.flyable(p))
@@ -305,13 +364,13 @@ class MissionsPage(QWidget):
             it = QListWidgetItem(f"#{p.number}  {p.title}   {p.start}{' (night)' if night else ''}"
                                  f"{'   [JOINT]' if p.joint else ''}{f'   +{len(extra)} package' + ('s' if len(extra) > 1 else '') if extra else ''}"
                                  f"\n{p.objective.description}{' (no warning)' if (p.extra or {}).get('unwarned') else ''}" + ("" if ok else "\n(no flight for your aircraft)"))
-            it.setData(Qt.UserRole, p.number); it.setData(URGENT_ROLE, p.urgent); it.setSizeHint(QSize(0, 66))
+            it.setData(Qt.UserRole, p.number); it.setData(URGENT_ROLE, self._urgent_role(p, extra if ok else self.members.get(p.number, []))); it.setSizeHint(QSize(0, 66))
             if not ok:
                 it.setForeground(QColor(theme.DIM))
             self.lst.addItem(it)
         self.lst.blockSignals(False)
         self.resume.setVisible(bool(st.pending))
-        self.skip.setEnabled(st.status == "ACTIVE")
+        self.skip.setEnabled(st.status == "ACTIVE" and not getattr(self.win, "_auto_busy", False))
         if self.pkgs and any(sess.flyable(p) for p in self.pkgs):
             row = next((i for i, p in enumerate(self.pkgs) if p.number == keep), 0) if keep is not None else 0
             self.lst.setCurrentRow(row)
@@ -320,13 +379,13 @@ class MissionsPage(QWidget):
             self._idle_note(sess)
 
     def _idle_note(self, sess: Session):
-        """Nothing to fly today: say so on the same pane, with the reasons, and a quiet pointer to Skip Turn."""
+        """Nothing to fly this turn: say so on the same pane, with the reasons, and a quiet pointer to Skip Turn."""
         if not sess.state or sess.state.status != "ACTIVE":
             return
-        self.bl.addWidget(self._label(f"No flights for {sess.state.squadrons[sess.state.player.squadron_id].name} today.", "title"))
+        self.bl.addWidget(self._label(f"No flights for {sess.state.squadrons[sess.state.player.squadron_id].name} this turn.", "title"))
         for r in sess.idle_reasons():
             self.bl.addWidget(self._label(r, "dim"))
-        self.bl.addWidget(self._label("Stand-down day for you. Skip Turn takes the day.", "small"))
+        self.bl.addWidget(self._label(f"Stand-down turn for you. Skip Turn takes {clock.TURN_MIN // 60} hours.", "small"))
         self.bl.addStretch(1)
 
     # ---- the right-hand panel ------------------------------------------------------------------------------------------------
@@ -385,39 +444,56 @@ class MissionsPage(QWidget):
                 t.setItem(i, 5, _item("AI Support" if f.tag else ("On alert (AI)" if sp else f"AI {spec.service}"), theme.DIM))
         return t, bool(opts)
 
+    @staticmethod
+    def _urgent_role(p, others) -> str:
+        """S39: the list border of a mission: "red" when every package in it is red's (`urgent`), "mixed" when red's and yours fly together, "" when none is red's."""
+        u = [bool(x.urgent) for x in [p] + list(others)]
+        return "" if not any(u) else "red" if all(u) else "mixed"
+
+    def _section(self, urgent: bool):
+        """S39: the layout one package's section of the right panel goes into. A red package's section sits in a red frame; the others go straight into the body."""
+        if not urgent:
+            return self.bl
+        fr = QFrame(); fr.setObjectName("urgentBox"); fr.setStyleSheet(f"QFrame#urgentBox {{ border: 2px solid {URGENT_COLOR}; }}")
+        lay = QVBoxLayout(fr); lay.setContentsMargins(8, 6, 8, 6)
+        self.bl.addWidget(fr)
+        return lay
+
     def _show(self, row):
         if row < 0 or row >= len(self.pkgs):
             return
         p = self.pkgs[row]; st = self.sess.state; mem = self.members.get(p.number, [])
         self._clear_body()
         night = is_night(st.campaign_date(), p.start)
-        self.bl.addWidget(self._label(p.objective.description, "title"))
+        L = self._section(bool(p.urgent) and bool(mem))
+        L.addWidget(self._label(p.objective.description, "title"))
         from .. import weather as _wx
         _w = self.sess.wx_of(p)
-        self.bl.addWidget(self._label(f"Mission start {p.start} local ({'night' if night else 'day'})   -   " + (_wx.describe(_w) if _w else "clear weather"), "h2", theme.AMBER))
+        L.addWidget(self._label(f"Mission start {p.start} local ({'night' if night else 'day'})   -   " + (_wx.describe(_w) if _w else "clear weather"), "h2", theme.AMBER))
         if p.extra.get("scrub"):
-            self.bl.addWidget(self._label("SCRUBBED: " + p.extra["scrub"] + ". Nobody flies this package and the war simulation leaves its target alone.", None, theme.RED))
+            L.addWidget(self._label("SCRUBBED: " + p.extra["scrub"] + ". Nobody flies this package and the war simulation leaves its target alone.", None, theme.RED))
         for _n in p.extra.get("wx_notes", []):
-            self.bl.addWidget(self._label("Weather loadout: " + _n, "small", theme.AMBER))
+            L.addWidget(self._label("Weather loadout: " + _n, "small", theme.AMBER))
         sp = bool(p.extra.get("setpiece"))
         tbl, yours = self._flight_table(p)
         if sp:
             for i_, para in enumerate(narrative.setpiece_text(st, p, yours, AIRCRAFT[st.player.aircraft].display)):
-                self.bl.addWidget(self._label(para, "dim" if i_ else None))
+                L.addWidget(self._label(para, "dim" if i_ else None))
         else:
-            self.bl.addWidget(self._label(narrative.intent_for(st, p), "dim"))
+            L.addWidget(self._label(narrative.intent_for(st, p), "dim"))
         if yours:
-            self.bl.addWidget(self._label(self._fly_note(p), "small"))
-        self.bl.addWidget(tbl)
+            L.addWidget(self._label(self._fly_note(p), "small"))
+        L.addWidget(tbl)
         for x in mem:                                       # the packages that fly with this one: each with its own flights and FLY button
             line = QFrame(); line.setFrameShape(QFrame.HLine); line.setStyleSheet(f"color:{theme.DIM};"); self.bl.addWidget(line)
             xnight = is_night(st.campaign_date(), x.start)
-            self.bl.addWidget(self._label(f"Also in this mission: #{x.number}  {x.title}   {x.start}{' (night)' if xnight else ''}", "h2", theme.AMBER))
-            self.bl.addWidget(self._label(x.objective.description, "title"))
+            XL = self._section(bool(x.urgent))
+            XL.addWidget(self._label(f"Also in this mission: #{x.number}  {x.title}   {x.start}{' (night)' if xnight else ''}", "h2", theme.AMBER))
+            XL.addWidget(self._label(x.objective.description, "title"))
             xt, xyours = self._flight_table(x)
             if xyours:
-                self.bl.addWidget(self._label(self._fly_note(x), "small"))
-            self.bl.addWidget(xt)
+                XL.addWidget(self._label(self._fly_note(x), "small"))
+            XL.addWidget(xt)
         sup = ("Support: " + ", ".join(f"{s.label} ({s.slot.title()})" for s in p.support) +
                ("  |  JTAC on the ground" if p.jtac else "") + ("  |  Joint Navy / Air Force package" if p.joint else ""))
         ex = self.sess.merge_candidates(p)
@@ -440,8 +516,8 @@ class ForcesPage(QWidget):
         super().__init__(); lay = QVBoxLayout(self)
         self.air_line = QLabel(); self.air_line.setObjectName("small"); self.air_line.setWordWrap(True); lay.addWidget(self.air_line)         # v0.41.152: aircraft counts, a detail line (jets no longer decide the war)
         self.tabs = QTabWidget(); lay.addWidget(self.tabs)
-        self.sq = _tbl(["Squadron", "Aircraft", "Service", "Based at", "Serviceable", "Readiness"])
-        self.ea = _tbl(["Aircraft", "Based at", "Serviceable", "Strength"])
+        self.sq = _tbl(["Squadron", "Aircraft", "Service", "Based at", "Aircraft on hand", "Strength"])
+        self.ea = _tbl(["Aircraft", "Based at", "On hand", "Strength"])
         self.as_ = _tbl(["Enemy asset", "Type", "Depth", "Condition"])
         self.bs = _tbl(["Coalition base", "Type", "Patriot", "HAWK", "AAA"])
         self.gw = _tbl(["Sector", "Enemy force", "Friendly force", "Enemy forward garrison", "Friendly forward garrison"])
@@ -460,20 +536,20 @@ class ForcesPage(QWidget):
         self.air_line.setText(f"Aircraft serviceable: Coalition {t['fa']} of {t['fz']}, {en} {t['ea']} of {t['ez']}.")
         self.tabs.setTabText(4, f"{en} air wings"); self.tabs.setTabText(5, f"{en} assets")
         self.gw.setHorizontalHeaderLabels(["Sector", f"{en} force", "Coalition force", f"{en} forward garrison", "Coalition forward garrison"])
-        self.ea.setHorizontalHeaderLabels(["Aircraft", "Based at", "Serviceable", "Strength"]); self.as_.setHorizontalHeaderLabels([f"{en} asset", "Type", "Depth", "Condition"])
+        self.ea.setHorizontalHeaderLabels(["Aircraft", "Based at", "On hand", "Strength"]); self.as_.setHorizontalHeaderLabels([f"{en} asset", "Type", "Depth", "Condition"])
         sqs = list(st.squadrons.values()); self.sq.setRowCount(len(sqs))
         for i, s in enumerate(sqs):
             sp = AIRCRAFT[s.aircraft]
-            for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.available} / {s.authorized}" + (f" (refitting, {s.reserve})" if s.reserve else ""))):
+            for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.on_hand} / {s.authorized}" + (f" ({n} refitting)" if (n := len(s.refit) + s.reserve) else ""))):
                 self.sq.setItem(i, j, _item(v))
-            self.sq.setCellWidget(i, 5, self._bar(s.readiness, theme.BLUE))
+            self.sq.setCellWidget(i, 5, self._bar(s.on_hand / max(1, s.authorized), theme.BLUE))
         rows_ = [(w, q) for w in st.enemy_air for q in w.sqns]                     # v0.41.208 (XO): laid out like the Coalition squadrons (no squadron names): one row per airframe, its base, serviceable and strength
         self.ea.setRowCount(len(rows_))
         for i, (w, q) in enumerate(rows_):
             for j, v in enumerate((q.aircraft.replace("_", "-"), st.assets[w.base_asset_id].name,
-                                   f"{q.available} / {q.authorized}" + (f" (refitting, {q.reserve})" if q.reserve else ""))):
+                                   f"{q.on_hand} / {q.authorized}")):
                 self.ea.setItem(i, j, _item(v))
-            self.ea.setCellWidget(i, 3, self._bar(q.available / max(1, q.authorized), theme.RED))
+            self.ea.setCellWidget(i, 3, self._bar(q.on_hand / max(1, q.authorized), theme.RED))
         from .. import sams as _sams, support_assets as _sa
         bl = list(st.bases.values()); self.bs.setRowCount(len(bl))
         col = lambda h: theme.GREEN if h > 0.6 else theme.AMBER if h > 0.25 else theme.RED
@@ -482,7 +558,7 @@ class ForcesPage(QWidget):
             if b.kind.value == "AIRFIELD":
                 sites = _sams.blue_sites(st, b)                       # v0.41.100: one bar per site (an older save without sites shows its single defence figure on the Patriot)
                 for j, k in enumerate(("pat", "hawk", "aaa")):
-                    h = sites[k].health if sites else (b.defense if k == "pat" else None)
+                    h = (sites[k].health if k in sites else None) if sites else (b.defense if k == "pat" else None)       # a divert field has no Patriot site (Phase 9b): "-"
                     if h is None:
                         self.bs.setItem(i, 2 + j, _item("-", theme.DIM))
                     else:
@@ -491,9 +567,10 @@ class ForcesPage(QWidget):
                 self.bs.setItem(i, 2, _item("Cruiser + 2 escorts", theme.DIM))
                 for j in (3, 4):
                     self.bs.setItem(i, j, _item("", theme.DIM))
-        # tankers and AWACS (v0.41.100): the support assets, with the hours an aircraft of the type is on orbit today
-        nice = {"bl_e3": "E-3A AWACS", "bl_e2": "E-2C AWACS (carrier)", "bl_kc135": "KC-135 tanker (boom)", "bl_kc135mprs": "KC-135 MPRS tanker (probe)",
-                "bl_s3": "S-3B tanker (carrier)", "rd_a50": "A-50 AWACS (enemy, not flying yet)"}
+        # tankers and AWACS (v0.41.100): the support assets, with the hours an aircraft of the type has been on orbit so far today (the orbit is planned turn by turn, v0.41.339)
+        nice = {"bl_e3": "E-3A AWACS", "bl_e2": "E-2C AWACS (carrier)", "bl_kc135": "KC-135 tanker (boom)",
+                "bl_s3": "S-3B tanker (carrier)"}
+        from .. import clock as _clock
         sa = _sa.ensure(st)
         fl = (getattr(st, "barcap", None) or {}).get("support_flights") or {}
         self.sup.setRowCount(len(sa))
@@ -501,9 +578,10 @@ class ForcesPage(QWidget):
             red = a["side"] != "blue"
             base = st.bases.get(a["base_id"]) or st.assets.get(a["base_id"])
             mins = 0; hi = 0
-            for s0, e0 in sorted(fl.get(k, [])):                       # union of today's windows
-                s0 = max(s0, hi); mins += max(0, e0 - s0); hi = max(hi, e0)
-            cover = "-" if red else f"{mins / 60:.1f} h of 24"
+            upto = _clock.minute(st.turn + 1) - _clock.day_start_minute(st.day)      # to the end of this turn (an airframe's window runs on to its own end)
+            for s0, e0 in sorted(fl.get(k, [])):                       # union of the day's windows so far (`upto`)
+                e0 = min(e0, upto); s0 = max(s0, hi); mins += max(0, e0 - s0); hi = max(hi, e0)
+            cover = "-" if red else f"{mins / 60:.1f} h so far"
             cyc = f"{a['sortie_min'] / 60:g} h on orbit, {a['turnaround_min'] / 60:g} h turnaround"
             dim = theme.DIM if red else None
             for j, v in enumerate((f"{a['label']}" + ("  (red)" if red else ""), nice.get(k, a["dcs_class"]), getattr(base, "name", a["base_id"]),
@@ -536,7 +614,7 @@ class ForcesPage(QWidget):
                 kind += "  (radars suppressed)"
             from .. import theatres as _th; _tl = _th.active()["tier_labels"]; tier = _tl[min(len(_tl) - 1, max(1, a.tier))]
             self.as_.setItem(i, 0, _item(a.name, theme.DIM if a.destroyed else None)); self.as_.setItem(i, 1, _item(kind))
-            self.as_.setItem(i, 2, _item(tier + ("" if a.tier <= st.front + 2 else "  (locked)"), theme.DIM if a.tier > st.front + 2 else None))
+            self.as_.setItem(i, 2, _item(tier))
             self.as_.setCellWidget(i, 3, self._bar(a.health, theme.GREEN if a.health > 0.6 else theme.AMBER if a.health > 0.25 else theme.RED))
 
 
@@ -593,6 +671,8 @@ def default_window_rect(ax: int, ay: int, aw: int, ah: int) -> tuple:
 
 
 class MainWindow(QMainWindow):
+    _auto_cursor = False                      # S21: True while the wait cursor of an auto-skip run is set
+    _auto_goto_missions = False               # S23: the run follows a flown sortie: show the Missions page when it stops
     def __init__(self, session: Session):
         super().__init__(); self.session = session
         self.setWindowTitle(f"{APP_NAME}"); self.setMinimumSize(*WIN_MIN); self._place_window()
@@ -612,7 +692,7 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(page); b.clicked.connect(lambda _=0, k=i: self.stack.setCurrentIndex(k))
             if i == 1:
                 self.nav_missions = b
-        grp.button(0).setChecked(True); sl.addStretch(1)
+        grp.button(0).setChecked(True); sl.addSpacing(18); sl.addWidget(self.p_miss.auto_box); sl.addStretch(1)      # S23: the Auto-Skip box right under the nav buttons, away from Settings
         st_btn = QPushButton("Settings"); st_btn.clicked.connect(self.settings); sl.addWidget(st_btn)
         vl = QLabel(f"v{__version__}"); vl.setObjectName("small"); sl.addWidget(vl)
         main = QVBoxLayout(); main.setContentsMargins(22, 18, 22, 18); main.setSpacing(14); lay.addLayout(main, 1)
@@ -640,7 +720,13 @@ class MainWindow(QMainWindow):
         f.addSeparator(); act("S&ettings...", self.settings, "Ctrl+,"); act("Reset &window size and position", self.reset_window); f.addSeparator(); act("E&xit", self.close, "Alt+F4")
         h = mb.addMenu("&Help")
         a = QAction("&About SQE...", self); a.triggered.connect(self.about); h.addAction(a)
+        a = QAction("&Campaign rules", self); a.triggered.connect(self.campaign_rules); h.addAction(a)
         a = QAction("&Latest release (GitHub)", self); a.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(RELEASES_URL))); h.addAction(a)
+
+    def campaign_rules(self):
+        """Help > Campaign rules: the page that came with this build; the online page (newest code) when it is missing."""
+        p = campaign_doc_path()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(p)) if p is not None else QUrl(CAMPAIGN_URL))
 
     def about(self):
         from .. import EULA_LINE
@@ -678,7 +764,7 @@ class MainWindow(QMainWindow):
                     self.session.settings.save()
                 except OSError:
                     pass
-                self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], night_ops=v['night_ops'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus')); self.refresh_all()
+                self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus')); self.refresh_all()
             except Exception:
                 QMessageBox.critical(self, "Could not create campaign", traceback.format_exc())
 
@@ -801,7 +887,7 @@ class MainWindow(QMainWindow):
         self.refresh_all(); self.wait_for_results()
 
     def eventFilter(self, obj, ev):
-        """Developer secret (XO 2026-10-27): Ctrl+Space skips the day, in AI-Test only (v0.41.154). Done here and not as a QShortcut because a list or text box that has the focus (the Missions
+        """Developer secret (XO 2026-10-27): Ctrl+Space skips a turn (v0.41.337; it skipped the day), in AI-Test only (v0.41.154). Done here and not as a QShortcut because a list or text box that has the focus (the Missions
         list) uses Ctrl+Space itself and swallowed the shortcut; the filter sees the key first."""
         from PySide6.QtCore import QEvent
         if ev.type() in (QEvent.ShortcutOverride, QEvent.KeyPress) and ev.key() == Qt.Key_Space and ev.modifiers() == Qt.ControlModifier and self.isActiveWindow() and getattr(self.session, "ai_test", False):
@@ -812,12 +898,12 @@ class MainWindow(QMainWindow):
         return super().eventFilter(obj, ev)
 
     def _dev_skip_day(self):
-        """Developer secret (XO 2026-10-27): Ctrl+Space skips the day at once, no questions and no result box, to watch the Overview and its map move.
+        """Developer secret (XO 2026-10-27): Ctrl+Space skips ONE TURN at once (v0.41.337; it skipped the day), no questions and no result box, to watch the Overview and its map move.
         Not while a sortie is built (it would be thrown away) and not once the war is over."""
         st = self.session.state
         if st is None or st.status != "ACTIVE" or st.pending:
             return
-        self.session.skip_day(); self.refresh_all()
+        self.session.skip_turn(); self.refresh_all()
         self._ending_popup("ACTIVE")
 
     def _ending_popup(self, before: str):
@@ -829,25 +915,120 @@ class MainWindow(QMainWindow):
         lab, text = posture.posture(st)
         QMessageBox.information(self, ("VICTORY: " if st.status == "VICTORY" else "DEFEAT: ") + lab, text)
 
+    # ---- Autoskip (campaign rules plan Phase 11, XO's design in the notes) -------------------------------------------------
+    # Like a JS setTimeout chain: one `skip_turn` per tick, the next tick is armed only AFTER the step ran (skip_turn costs ~0.2 s, a fixed interval would stack up).
+    def _auto_step_wanted(self, sess, night_ok: bool, stand_ok: bool, rest_until=None) -> str:
+        """Look at the turn the clock stands on: "" = step on, else the reason to stop. S23 (XO 2026-11-11): the three options ADD UP: Crew Rest (turns before `rest_until`, set only
+        after a FLOWN sortie), Night Turns and Stand-Down Turns each step on their own."""
+        st = sess.state
+        if rest_until is not None and st.turn < rest_until:
+            return ""                                                          # crew rest: skipped whatever is on offer
+        if night_ok and clock.is_night_turn(st.turn):
+            return ""                                                          # decision 39: a night turn with flights steps too when Night Turns is ticked
+        if st.pending or any(sess.flyable(p) for p in sess.packages()):
+            return "Flight available."
+        return "" if stand_ok else "Stand-down turn."
+
+    @staticmethod
+    def _skip_nosave(sess):
+        """One Skip Turn without its own save (Session.skip_turn saves and writes a backup every call; the auto-skip run saves once at the end). The engine stays untouched: the instance's
+        `save` is shadowed for the call (like assigning a method on an object in JS), then removed."""
+        sess.save = lambda *a, **k: None
+        try:
+            return sess.skip_turn()
+        finally:
+            del sess.save
+
+    def _auto_stop(self, reason: str):
+        """Every stop path ends here: controls and cursor back, ONE save (Session.save writes a backup each time), ONE refresh, the war's ending box, then ONE after-action report
+        for the whole run (S21, XO 2026-11-11: it carries the ticker and the fade-in; the Missions page itself shows neither; the stop reason is its header line)."""
+        before, turns = self._auto_before, self._auto_turns
+        goto, self._auto_goto_missions = self._auto_goto_missions, False
+        self._auto_busy = False
+        if self._auto_cursor:
+            QApplication.restoreOverrideCursor(); self._auto_cursor = False
+        self.p_miss.set_auto_enabled(True)
+        try:
+            self.session.save()
+        except OSError:
+            pass
+        self.refresh_all()
+        self._ending_popup(before)
+        if turns and not getattr(self, "_auto_quiet", False):             # _auto_quiet: a tool or test may set it to skip the box
+            DayResolvedDialog(turns, self, reason=reason).exec()
+        if goto:                                                              # S23: a run that followed a flown sortie ends on the Missions page, as the plain path does
+            self.stack.setCurrentIndex(1); self.nav_missions.setChecked(True)
+
+    def _auto_tick(self):
+        sess = self.session; st = sess.state
+        try:
+            if not self._auto_busy or st is None:
+                return
+            if st.status != "ACTIVE":
+                return self._auto_stop("The war is over.")
+            if st.turn >= self._auto_target:
+                return self._auto_stop("Skip limit reached (a week).")
+            why = self._auto_step_wanted(sess, self._auto_night, self._auto_stand, self._auto_rest)
+            if why:
+                return self._auto_stop(why)
+            self._auto_turns.extend(self._skip_nosave(sess).get("turns", []))
+            QTimer.singleShot(0, self._auto_tick)                          # the next step on the next event-loop turn: the window stays responsive, no per-turn redraw
+        except Exception:
+            self._auto_busy = False; self._auto_goto_missions = False
+            if self._auto_cursor:
+                QApplication.restoreOverrideCursor(); self._auto_cursor = False
+            self.p_miss.set_auto_enabled(True)
+            traceback.print_exc()
+            try:
+                sess.save(); self.refresh_all()
+            except Exception:
+                pass
+            QMessageBox.warning(self, "Automatically skip", "The automatic skip stopped on an error (see the console). The turns skipped so far are kept.")
+
     def skip_turn(self):
         sess = self.session
         stand_down = not sess.state.pending and not any(sess.flyable(p) for p in sess.packages())
-        if not stand_down:                                       # v0.41.93: a stand-down day has nothing to choose, so no "are you sure"
-            msg = "Skip today? Every package on the tasking order (including the ones you could fly) is resolved by the war simulation and the date advances."
+        if not stand_down:                                       # v0.41.93: a stand-down turn has nothing to choose, so no "are you sure"
+            msg = f"Skip this turn? Every package of this turn (including the ones you could fly) is resolved by the war simulation and the clock moves on {clock.TURN_MIN // 60} hours."
             if sess.state.pending:
                 msg += "\n\nThe sortie you built and have not finished will be discarded."
             if QMessageBox.question(self, "Skip Turn", msg) != QMessageBox.Yes:
                 return
-        before, day0 = sess.state.status, sess.state.day
-        out = sess.skip_day(); self.refresh_all()
-        DayResolvedDialog(out["results"], day0, self).exec()
-        self._ending_popup(before)                                # (the war's ending, if this day ended it, has its own box with the story)
+        before = sess.state.status
+        stand_ok, night_ok, hours = self.p_miss.auto_options()
+        if not (stand_ok or night_ok):                           # S23: Crew Rest follows a FLOWN sortie only, so on its own the button is a plain one-turn skip
+            out = sess.skip_turn(); self.refresh_all()
+            DayResolvedDialog(out["turns"], self).exec()          # S21: a plain skip gets the same report (one turn)
+            self._ending_popup(before)                            # (the war's ending, if this day ended it, has its own box with the story)
+            return
+        # Phase 11: Stand-Down Turns / Night Turns ticked: resolve this turn once, then the steps follow on their own; S21: no redraw per turn, one report at the end
+        t0 = sess.state.turn
+        first = self._skip_nosave(sess).get("turns", [])
+        self._auto_start(before, first, t0, None, stand_ok, night_ok)
+
+    def _auto_start(self, before: str, first_turns: list, t0: int, rest_until, stand_ok: bool, night_ok: bool, goto_missions: bool = False):
+        """S23: the one starter of an auto-skip run, used by the Skip Turn button (`rest_until` None) and by a flown sortie (`first_turns` = the night `Session.apply` resolved).
+        `t0` = the turn the run starts from (the clicked turn / the turn the sortie was flown in): the week limit counts from it. The run itself is `_auto_tick`, one step per event-loop turn."""
+        self._auto_busy = True; self.p_miss.set_auto_enabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor); self._auto_cursor = True
+        self._auto_turns = list(first_turns)
+        self._auto_before, self._auto_stand, self._auto_night, self._auto_rest = before, stand_ok, night_ok, rest_until
+        self._auto_goto_missions = goto_missions
+        self._auto_target = t0 + AUTOSKIP_MAX_TURNS
+        QTimer.singleShot(0, self._auto_tick)
 
     def wait_for_results(self):
         dlg = WaitingDialog(self.session, self); r = dlg.exec()
         if r == QDialog.Accepted and dlg.data is not None:
             before = self.session.state.status
+            t0 = self.session.state.turn                          # S23: the turn the sortie was flown in (Crew Rest counts from it)
+            stand_ok, night_ok, hours = self.p_miss.auto_options()
             out = self.session.apply(dlg.data); self.refresh_all(); DebriefDialog(out, self.session.state, self).exec(); self.refresh_all()
+            if stand_ok or night_ok or hours is not None:         # S23: an auto-skip run follows the sortie: ONE report (the night `apply` resolved + every skipped turn + the stop reason)
+                self._auto_start(before, out.get("night") or [], t0, t0 + hours * 60 // clock.TURN_MIN if hours is not None else None, stand_ok, night_ok, goto_missions=True)
+                return
+            if out.get("night"):                                  # v0.41.337: the flown turn was the last of the day: the night after it was resolved for you
+                DayResolvedDialog(out["night"], self).exec()
             self._ending_popup(before)
             self.stack.setCurrentIndex(1); self.nav_missions.setChecked(True)
         elif r == 2:
@@ -865,7 +1046,7 @@ class MainWindow(QMainWindow):
         self.p_miss.refresh(self.session)
         n, name, _ = narrative.phase(st)
         self.h_title.setText(st.name)
-        for pill, txt in zip(self.pills, (st.campaign_date().strftime("%d %b %Y").upper(), f"Day {st.day}", LEVELS[st.level].name, name, st.player.aircraft)):
+        for pill, txt in zip(self.pills, (st.campaign_date().strftime("%d %b %Y").upper(), self.session.turn_label(), LEVELS[st.level].name, name, st.player.aircraft)):
             pill.setText(txt)
         self.banner.setText({"ACTIVE": "Sortie pending" if st.pending else "", "VICTORY": "VICTORY", "DEFEAT": "DEFEAT"}[st.status])
         self.banner.setVisible(bool(self.banner.text()))

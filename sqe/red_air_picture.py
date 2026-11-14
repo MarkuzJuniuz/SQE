@@ -11,6 +11,7 @@ from dcs.translation import String
 from dcs.unit import Skill
 
 from . import reactive, redair, runways, scramble
+from . import reserve as _res
 from . import threatmap as tm
 from .difficulty import ai_skill
 from .loadouts import ENEMY_FIGHTERS, enemy_cap_loadout
@@ -25,7 +26,22 @@ CAP_FLEET_KEEPOUT_NM = 78      # Red's known CAP stations stay at least this far
 RELIEF_HORIZON_S = 3600       # v0.41.77: a patrol's relief is flown in this mission when it is due within this long after the time on target (judgment call)
 ALERT_REACH_NM = 130          # alert pairs come only from fields this close to the target (the far ones could not arrive in time)
 A2A_ZONE_NM = {True: 25, False: 15}
-# v0.41.111, the BASECAP call-in (XO 2026-10-22): when the scramblers are called, the patrols that can reach the hotspot are called to it too, stay a while, then
+# S45 (XO 2026-11-11, the red counterpart of the F-14B(U) special case): the MiG-31 is a ground-controlled interceptor, not a dogfighter (R-33: a big, heavy missile built against bombers and cruise-missile carriers;
+# the aircraft is a heavy Mach 2.8 airframe with a limited g-limit, about 5 g from memory, public reference books, firmness low). It works from inside its own SAM cover and shoots at the R-33's range, so it keeps a larger
+# engage circle (judgment call: the R-33's published reach is about 120 km = 65 nm, the circle is a little over half of that) and gets no RED_EXTRA_NM past the SAM cover that the Su-27 gets (scramble.red_station_vs).
+RED_STANDOFF = {"MiG_31"}
+RED_STANDOFF_ZONE_NM = 40
+
+
+def a2a_zone_nm(tname) -> int:
+    """The engage circle (nm) of a red fighter type on patrol / alert: the stand-off interceptor's, else 25 for the long-range class and 15 for the rest."""
+    return RED_STANDOFF_ZONE_NM if tname in RED_STANDOFF else A2A_ZONE_NM[tname in RED_LONG_RANGE]
+
+
+def works_beyond_cover(tname) -> bool:
+    """May this type work beyond its SAM cover (scramble.RED_EXTRA_NM)? The Su-27 may, the stand-off MiG-31 may not."""
+    return tname in RED_LONG_RANGE and tname not in RED_STANDOFF
+# v0.41.111, the base-BARCAP call-in (XO 2026-10-22): when the scramblers are called, the patrols that can reach the hotspot are called to it too, stay a while, then
 # fly back to their station. The route has a hotspot leg AFTER the landing point and a Lua SwitchWaypoint jumps a CALLED pair onto it (probe runs of 2026-10-22:
 # a flag-released orbit works but sends every pair there at the end of its shift; a pushed engage task never came back; GoToWaypoint is not supported by DCS;
 # SwitchWaypoint worked, immediately with from = 1, only after the leg with from = the current waypoint).
@@ -112,16 +128,20 @@ class RedAirPicture:
         if t_arr <= 60 or t_arr > tot_s + RELIEF_HORIZON_S:
             return
         w, a = st.enemy_air_at(nxt["wing"]), st.assets.get(nxt["wing"])
-        if w is None or a is None or a.destroyed or w.available_of(ENEMY_FIGHTERS) < 4 or 2 > self._units_room():
+        if w is None or a is None or a.destroyed or 2 > self._units_room():
             return
         ap = self.t.airports.get(a.airport) if a.airport else None
         if ap is None:
             return
-        tname = nxt["type"] if nxt["type"] in w.types_up else self.vrng.choice(w.fighter_types())
+        sq = _res.pick_red_hold(st, w, self._hold_drawn, {nxt["type"]}) or _res.pick_red_hold(st, w, self._hold_drawn, ENEMY_FIGHTERS)      # v0.41.343 (Phase 6a): the relief pair comes out of the wing's reaction hold; none held, no relief
+        if sq is None:
+            return
+        tname = sq.aircraft
         load = enemy_cap_loadout(tname)
         pt = lambda x, y: mapping.Point(x, y, self.t)
         sx, sy = cp["x"], cp["y"]
         g, _how = self._alert_group(self.red, f"Relief {i + 1}", getattr(planes, tname), ap, task.CAP, None, 2, (sx, sy))
+        self._alerts[-1]["sq"] = sq.id
         t_go = int(max(30, t_arr - dist(a.x, a.y, sx, sy) / spd - 120 - 90))          # flight time + the taxi the runway start no longer does + a minute's slack
         trig = triggers.TriggerOnce(comment=f"relief {g.name}")
         trig.add_condition(condition.TimeAfter(t_go))
@@ -134,14 +154,14 @@ class RedAirPicture:
         g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
         self._land_home(g, ap)
         gx, gy = sx, sy
-        self._limit_engage(g, 0, None, (gx, gy, min(A2A_ZONE_NM[tname in RED_LONG_RANGE], self.o.enemy_cap_engage_nm or 999)))
+        self._limit_engage(g, 0, None, (gx, gy, min(a2a_zone_nm(tname), self.o.enemy_cap_engage_nm or 999)))
         names = []
         for j, u in enumerate(g.units, 1):
             u.name = f"ENM-{a.id}-R{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
         g.set_skill(skill)
         if self.o.enemy_unlimited_fuel:
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
-        manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
+        manifest.add("enemy_air", w.base_asset_id, names, ac=tname, grp=g.name)
         self._red_intel.append(f"Relief for that patrol: a pair of {tname.replace('_', '-')} from {self._short(a.name)} on station {redair.hhmm(nxt['start'])}.")
 
     def _spawn_red_standby(self, pf, cp, i, gname, bf, wings, manifest, skill, tot_s, tx, ty, alt, spd) -> None:
@@ -153,17 +173,21 @@ class RedAirPicture:
         end_s = int(max(tot_s + 300, (pf["end"] - self._start_min) * 60))
         ent = {"g": gname, "n": 2, "bf": bf, "rf": 0, "u": float(end_s)}
         self._cover.append(ent)
-        cands = sorted(((dist(a_.x, a_.y, sx, sy), w_, a_) for w_, a_ in wings if w_.available_of(ENEMY_FIGHTERS) >= 4 and a_.airport), key=lambda c_: c_[0])
+        cands = sorted(((dist(a_.x, a_.y, sx, sy), w_, a_) for w_, a_ in wings if _res.red_hold_left(self.state, w_, self._hold_drawn, ENEMY_FIGHTERS) >= 2 and a_.airport), key=lambda c_: c_[0])
         if not cands or cands[0][0] > ALERT_REACH_NM * NM or 2 > self._units_room():
             return
         _d, w, a = cands[0]
         ap = self.t.airports.get(a.airport)
         if ap is None:
             return
-        tname = pf["type"] if pf["type"] in w.types_up else self.vrng.choice(w.fighter_types())
+        sq = _res.pick_red_hold(self.state, w, self._hold_drawn, {pf["type"]}) or _res.pick_red_hold(self.state, w, self._hold_drawn, ENEMY_FIGHTERS)      # v0.41.343 (Phase 6a)
+        if sq is None:
+            return
+        tname = sq.aircraft
         load = enemy_cap_loadout(tname)
         pt = lambda x, y: mapping.Point(x, y, self.t)
         g, _how = self._alert_group(self.red, f"Standby {i + 1}", getattr(planes, tname), ap, task.CAP, None, 2, (sx, sy))
+        self._alerts[-1]["sq"] = sq.id
         ent["rf"] = self._alerts[-1]["f"]
         self._call_by_flag(g, _how, ent["rf"])
         ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
@@ -171,14 +195,14 @@ class RedAirPicture:
         g.add_waypoint(pt(sx, sy), alt, spd, "CAP").tasks.append(ct)
         g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
         self._land_home(g, ap)
-        self._limit_engage(g, 0, None, (sx, sy, min(A2A_ZONE_NM[tname in RED_LONG_RANGE], self.o.enemy_cap_engage_nm or 999)))
+        self._limit_engage(g, 0, None, (sx, sy, min(a2a_zone_nm(tname), self.o.enemy_cap_engage_nm or 999)))
         names = []
         for j, u in enumerate(g.units, 1):
             u.name = f"ENM-{a.id}-S{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
         g.set_skill(skill)
         if self.o.enemy_unlimited_fuel:
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
-        manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
+        manifest.add("enemy_air", w.base_asset_id, names, ac=tname, grp=g.name)
 
     def _arm_callin(self, g, ap, st_xy, hot_xy, zone_nm, alt, spd, end_s, tot_s, bf_, cp, tx, ty, cap2=None, land=None) -> None:
         """v0.41.111: adds the hotspot leg AFTER the landing point of a patrol route: HOTSPOT (orbit, engages inside its own circle), BACK (orbit on the
@@ -297,6 +321,7 @@ class RedAirPicture:
         self._red_held, self._red_contest, self._alert_clock = [], [], []
         self._hot_calls, self._hot_flag = [], 0
         for i in range(n_fl):
+            sq_ = None
             if i < n_cap:
                 pf_ = self._red_sel[i]
                 w, a = st.enemy_air_at(pf_["wing"]), st.assets[pf_["wing"]]
@@ -305,11 +330,19 @@ class RedAirPicture:
                     self._red_held.append({"id": pf_["id"], "why": "sweep"})      # outgunned: this sweep stays home today
                     continue
             else:
+                if not getattr(self, "_detect_full", True):
+                    continue                                  # v0.41.346 (Phase 7a): red did not see this package (detection.cast = "barcap"): no alert pair; the planned CAP picture still flies
                 near_ = [wa for wa in wings if dist(wa[1].x, wa[1].y, tx, ty) <= ALERT_REACH_NM * NM]   # v0.41.1: only fields that can reach the fight
                 if not near_:
                     continue
-                w, a = near_[i % len(near_)]
-                tname = r.choice(w.fighter_types())
+                for k_ in range(len(near_)):                # v0.41.343 (Phase 6a): an alert pair comes out of its wing's reaction hold; the next field is tried when a wing has none held, no hold anywhere, no pair
+                    w, a = near_[(i + k_) % len(near_)]
+                    sq_ = _res.pick_red_hold(st, w, self._hold_drawn, ENEMY_FIGHTERS)
+                    if sq_ is not None:
+                        break
+                if sq_ is None:
+                    continue
+                tname = sq_.aircraft
             cls = getattr(planes, tname)
             load = enemy_cap_loadout(tname)
             dd = dist(a.x, a.y, tx, ty)
@@ -332,7 +365,7 @@ class RedAirPicture:
                 g.add_waypoint(pt(*offset(sx, sy, bearing(sx, sy, tx, ty) + cp.get("side", 90), 20 * NM)), alt, spd, "CAP2")
                 self._land_home(g, self.t.airports.get(a.airport) if a.airport else None)
                 # the same rule as ours: a patrol engages inside a circle round its station, it does not chase a target home
-                self._limit_engage(g, 0, None, (gx, gy, min(A2A_ZONE_NM[tname in RED_LONG_RANGE], self.o.enemy_cap_engage_nm or 999)))   # v0.41.29: by class (Su-27 25 nm, the rest 15)
+                self._limit_engage(g, 0, None, (gx, gy, min(a2a_zone_nm(tname), self.o.enemy_cap_engage_nm or 999)))   # v0.41.29: by class (Su-27 25 nm, the rest 15)
                 callin_ = pf_.get("gx") is not None and pf_["kind"] == "CAP"
                 if callin_ and pf_.get("guard") not in own_:
                     mates_ = [q_["type"] for q_ in self._red_sel[:n_cap] if q_.get("guard") == pf_.get("guard") and q_["kind"] == "CAP"]
@@ -345,10 +378,10 @@ class RedAirPicture:
                 end_s_ = int(max(tot_s + 300, (pf_["end"] - self._start_min) * 60))
                 # v0.41.111: called in with the scramblers, to the station an alert pair of its own field would take (a pair that is outgunned stays home:
                 # `callin_` is already false for one that guards a site which is not the target; a patrol with no site link is checked here)
-                hot_xy, zone_nm = None, max(A2A_ZONE_NM[tname in RED_LONG_RANGE], min(CALLIN_ZONE_NM, self.o.enemy_cap_engage_nm or 999))
+                hot_xy, zone_nm = None, max(a2a_zone_nm(tname), min(CALLIN_ZONE_NM, self.o.enemy_cap_engage_nm or 999))
                 if pf_["kind"] == "CAP" and (callin_ or (pf_.get("gx") is None and redair.commits(d, [tname] * 2, blue_aa))):
                     # v0.41.119: forward toward the shooters (the longer-range type works further beyond its SAM cover)
-                    (hx_, hy_), _why = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), tname in RED_LONG_RANGE)
+                    (hx_, hy_), _why = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), works_beyond_cover(tname))
                     if CALLIN_MIN_NM <= dist(sx, sy, hx_, hy_) / NM <= CALLIN_REACH_NM and not any(dist(hx_, hy_, kx, ky) < knm * NM for kx, ky, knm in self._fleet_keepout()):
                         hot_xy = (hx_, hy_)
                 if hot_xy is None and callin_:
@@ -374,6 +407,7 @@ class RedAirPicture:
                 if ap is None:
                     continue
                 g, how_ = self._alert_group(self.red, f"Alert {i + 1}", cls, ap, task.CAP, None, 2, (tx, ty))
+                self._alerts[-1]["sq"] = sq_.id
                 if how_ == "ramp":
                     g.add_trigger_action(task.StartCommand())
                     g.uncontrolled = True
@@ -387,7 +421,7 @@ class RedAirPicture:
                     zx_, zy_, zr_ = self._field_zone(a, tx, ty)
                     zone = self.m.triggers.add_triggerzone(pt(zx_, zy_), zr_ * NM, True, f"detect {a.id}")
                     trig.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
-                    (ix0_, iy0_), _w0 = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), tname in RED_LONG_RANGE)
+                    (ix0_, iy0_), _w0 = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), works_beyond_cover(tname))
                     far_nm_ = dist(a.x, a.y, ix0_, iy0_) / NM
                     t_clk = tot_s - ALERT_ON_STATION_S - (ALERT_RAMP_LAG_S if how_ == "ramp" else ALERT_RWY_LAG_S) - far_nm_ * NM / (ALERT_DASH_KT * 0.514444)
                     t_clk = max(t_clk, ALERT_CLOCK_MIN_S)        # v0.41.123 (XO 2026-10-23 runs): an early TOT made the call fall below the floor and the clock was dropped, so the pair waited for the detection circle (called at 850 s, on station after the strike): call it at the floor instead
@@ -415,12 +449,12 @@ class RedAirPicture:
                 self.m.triggerrules.triggers.append(trig)
                 ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
                 ct.stop_after_time(int(tot_s + ALERT_STAY_AFTER_TOT_S))                  # v0.41.111: was an hour (= never in the sortie)
-                (ix_, iy_), _why = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), tname in RED_LONG_RANGE)   # v0.41.91: a defensive station, not the target itself; v0.41.119: forward toward the shooters
+                (ix_, iy_), _why = scramble.red_station_vs(st, (a.x, a.y), tx, ty, self._red_threat(package, geom, a.x, a.y), works_beyond_cover(tname))   # v0.41.91: a defensive station, not the target itself; v0.41.119: forward toward the shooters
                 wi_ = g.add_waypoint(pt(ix_, iy_), alt, ALERT_DASH_KT * KPH, "INTERCEPT")
                 wi_.tasks.append(ct)
                 # v0.41.120 (XO 2026-10-23 run: two pairs orbited 24 nm from the F-14 TARCAP for 12 minutes and never fired): the station waypoint carried only the
                 # orbit, so the "engage air" order of the first point was gone. It now has its own engage circle round the station, like a patrol's.
-                wi_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(ix_, iy_), int(max(A2A_ZONE_NM[tname in RED_LONG_RANGE], min(ALERT_ZONE_NM, self.o.enemy_cap_engage_nm or 999)) * NM), [task.Targets.All.Air]))
+                wi_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(ix_, iy_), int(max(a2a_zone_nm(tname), min(ALERT_ZONE_NM, self.o.enemy_cap_engage_nm or 999)) * NM), [task.Targets.All.Air]))
                 self._land_home(g, ap)
             names = []
             for j, u in enumerate(g.units, 1):
@@ -430,8 +464,8 @@ class RedAirPicture:
                 g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
             if not load:
                 self.warns.append(f"{tname}: no air-to-air loadout found; spawned unarmed")
-            manifest.add("enemy_air", w.base_asset_id, names, ac=tname)
-            if i < n_cap and pf_["kind"] == "CAP":
+            manifest.add("enemy_air", w.base_asset_id, names, ac=tname, grp=g.name)
+            if i < n_cap and pf_["kind"] == "CAP" and getattr(self, "_detect_full", True):     # v0.41.346: an unseen package draws no standby or relief pair either
                 self._spawn_red_relief(pf_, self._cap_plan[i], i, manifest, skill, tot_s, tx, ty, alt, spd)
                 self._spawn_red_standby(pf_, self._cap_plan[i], i, g.name, bf_, wings, manifest, skill, tot_s, tx, ty, alt, spd)
         if self._hot_calls:

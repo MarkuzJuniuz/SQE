@@ -16,19 +16,20 @@ The Mozdok bomber wing and its escort squadron are not part of this (scenario.py
 from __future__ import annotations
 import math
 
-HEAVY = {"MiG_31", "Su_27", "Su_24M"}
+HEAVY = {"MiG_31", "Su_27", "Su_24M", "Su_34"}
 LONG_RANGE = ("MiG_31", "Su_27")
 MIG31_SHARE = {2: 0.15, 3: 0.50, 4: 0.75}             # share of a field's long-range jets that are MiG-31, by the field's tier (v0.41.163, XO 2026-10-27: flipped, the interceptor sits deep under ground control, the Su-27 holds the fringe)
-ORDER = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis", "Su_24M", "Su_25")      # allocation order: the fighters first (every field gets some), then the strikers fill what parking is left
+ORDER = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis", "Su_24M", "Su_34", "Su_25")      # allocation order: the fighters first (every field gets some), then the strikers fill what parking is left
 FIGHTERS = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis")
 FIGHTER_FLOOR = 4                                       # every field keeps at least this many fighters (a pair of pairs): the old rule "every wing keeps a fighter squadron"
 
 # Jets per level, bombers excluded (judgment calls: the red numbers of the 2026-10-25 plan; fighters about 85% of the old count with the MiG-31s inside,
-# the extra jets are cheap strikers). L1: an old museum-piece air force that is quietly supplied (XO 2026-10-25): about 14 fighters, 20 Su-25, 10 Su-24M.
+# the extra jets are cheap strikers). L1: an old museum-piece air force that is quietly supplied (XO 2026-10-25): 20 Su-25, 10 Su-24M and, since v0.41.359 (campaign rules plan Phase 10c, the sponsor air arm,
+# judgment call: no public figure), 24 relic fighters (MiG-21Bis and MiG-23MLD only; it was 14 with 3 MiG-29A, which is no museum piece). v0.41.359: Su-25 L2 52 to 60, L3 110 to 130 (the cheap attack fleet raids supply sites, `raids.SU25_SUPPLY`). v0.41.401 (S42, XO): L3 Su-25 130 to 18 (a few, like blue's 18 A-10C; judgment call, no public figure), fighters keep about the same total (86): Su-27 30 to 46, MiG-29S 28 to 20, MiG-29A 20 to 12 (Su-27 the main air-superiority fighter, MiG-29 the older short-legged one: public order-of-battle knowledge; the counts are judgment calls). All 46 Su-27 fit the heavy parking (checked, seeds 1-3).
 ROSTERS = {
-    1: {"MiG_21Bis": 6, "MiG_23MLD": 5, "MiG_29A": 3, "Su_25": 20, "Su_24M": 10},
-    2: {"MiG_31": 4, "MiG_29S": 15, "MiG_29A": 22, "MiG_23MLD": 11, "Su_25": 52, "Su_24M": 24},
-    3: {"MiG_31": 8, "Su_27": 30, "MiG_29S": 28, "MiG_29A": 20, "Su_25": 110, "Su_24M": 60},
+    1: {"MiG_21Bis": 12, "MiG_23MLD": 12, "Su_25": 20, "Su_24M": 10},
+    2: {"MiG_31": 4, "MiG_29S": 15, "MiG_29A": 22, "MiG_23MLD": 11, "Su_25": 60, "Su_24M": 24},
+    3: {"MiG_31": 8, "Su_27": 46, "MiG_29S": 20, "MiG_29A": 12, "Su_25": 18, "Su_34": 60},       # v0.41.361 (Phase 10d): L3 flies the Su-34 where it flew the Su-24M (same 60: judgment call, no public figure; L1 and L2 keep the Su-24M)
 }
 
 
@@ -88,7 +89,7 @@ def allocate(level: int, fields: list, weight: dict, tier: dict, cap_all: dict, 
             desire = {f: weight[f] * MIG31_SHARE.get(tier.get(f, 3), 0.5) for f in fields}
         elif t == "Su_27":
             desire = {f: weight[f] * (1.0 - MIG31_SHARE.get(tier.get(f, 3), 0.5)) for f in fields}
-        elif t == "Su_24M":                                             # the SEAD / DEAD / strike supply sits deeper, away from blue's reach: weight x (tier - 1)
+        elif t in ("Su_24M", "Su_34"):                                             # the SEAD / DEAD / strike supply sits deeper, away from blue's reach: weight x (tier - 1)
             desire = {f: weight[f] * max(1, tier.get(f, 3) - 1) for f in fields}
         else:
             desire = {f: float(weight[f]) for f in fields}

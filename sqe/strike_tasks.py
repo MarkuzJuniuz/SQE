@@ -12,11 +12,11 @@ from dcs import mapping, task
 
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
-from .loadouts import JSOW_PER_JET, JDAM_JETS
+from .loadouts import JSOW_PER_JET, JDAM_JETS, PEN_PER_JET
 from .models import SEAD_AIMS, AssetKind, ObjectiveType, Role
 from .routes import AVOID_NM, FT, AGM88_LAUNCH_NM, JDAM_ALT_FT, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, NM, assign_times, bearing, dist, objective_wp, offset, plan_route
 
-JSOW_ATTACK_S = 120           # v0.41.46: a JSOW slinger's release tasks end this long after the launch point's ETA, and it turns for home (judgment call; XO's run: releases came 25-60 s before the point)
+JSOW_ATTACK_S = 240           # a JSOW slinger's release tasks end this long after the launch point's ETA, and it turns for home. Was 120 (v0.41.46; XO's run: releases came 25-60 s before the point). v0.41.362: 240 (judgment call): same marshal-exit lateness as the SLAM-ER (XO's run 2026-11-10 22-33-46, about 95 s late), plus margin
 JSOW_AIM_ERR_M = 100           # a JSOW's aim point is the radar's last-known position give or take this much (the targeting is not perfect)
 DEAD_GATE_BEFORE_TGT_S = 75    # fallback: if the DEAD flight never gets close, the radars are checked this long before its planned target time
 AIR_GATE_KM = 100              # v0.41.214 (XO): was 70, the hold sits outside the MiG-31's P-33 reach (about 120 km) of the fight; judgment call. v0.41.203 text: 70               # v0.41.203: a strike / CAS flight with no radar site to wait on checks the air this far from its target (km); the hold, if any, is out here, short of the fight
@@ -105,7 +105,7 @@ class StrikeTasks:
             from .war import after_sites, site_blind_today
             live_ = [x for x in after_sites(obj_) if x in self.state.assets and not self.state.assets[x].destroyed]
             gsite_ = next((x for x in live_ if not site_blind_today(self.state, x)), live_[0] if live_ else "")
-        air_only_ = (not fol_) and obj_.type in (ObjectiveType.STRIKE, ObjectiveType.CAS) and f.role in (Role.STRIKE, Role.CAS) and obj_.aim != "STANDOFF"      # v0.41.203: the fighters-clear gate on its own
+        air_only_ = (not fol_) and obj_.type in (ObjectiveType.STRIKE, ObjectiveType.CAS) and f.role in (Role.STRIKE, Role.CAS) and (obj_.aim != "STANDOFF" or not any(getattr(x_, "kit", "") for x_ in package.flights))      # v0.41.203: the fighters-clear gate on its own; S60: a stand-off EWR strike a person flies (no kit flight, plain GBUs) keeps it
         if (not f.tag and ((obj_.type == ObjectiveType.DEAD and obj_.aim not in SEAD_AIMS) or fol_ or air_only_) and gsite_ and tot_s is not None
                 and f.role in (Role.STRIKE, Role.CAS, Role.TARCAP, Role.ESCORT, Role.SWEEP) and tot_s - DEAD_GATE_BEFORE_TGT_S > 10
                 and (f.role in (Role.STRIKE, Role.CAS) or stw is None)):               # a TARCAP / escort on its own station is already outside the threat
@@ -134,12 +134,13 @@ class StrikeTasks:
                     "acap": AIR_HOLD_CAS_S if f.role == Role.CAS else AIR_HOLD_STRIKE_S, "tx": tga_.x if tga_ is not None else None, "tz": tga_.y if tga_ is not None else None}
         return gate
 
-    def _cas_tasks(self, wp, w, armor, tot_s):
-        """AI CAS: look at the fight, attack the column, then keep working the zone. Time-boxed so they eventually go home."""
+    def _cas_tasks(self, wp, w, armor, tot_s, floor_ft=0):
+        """AI CAS: look at the fight, attack the column, then keep working the zone. Time-boxed so they eventually go home.
+        `w` is the TGT point (position and ETA); `wp` is the point the tasks go on (the IP before it since Stage C, else TGT). Weapons free is set by the caller."""
         t0 = int(w.eta_s)
-        wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))
         if armor is not None:
-            ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.Auto, group_attack=False))
+            # S31a: over short-range air defence the attack altitude is set to the floor (AttackGroup altitude, metres), or the AI dives to its own delivery height. EngageTargetsInZone has no altitude parameter.
+            ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.Auto, group_attack=False, altitude=int(floor_ft * 0.3048) if floor_ft else None))
             ct.stop_after_time(t0 + 420)
             wp.tasks.append(ct)
         ct2 = task.ControlledTask(task.EngageTargetsInZone(mapping.Point(w.x, w.y, self.t), 9000, [task.Targets.All.GroundUnits.GroundVehicles]))
@@ -314,12 +315,71 @@ class StrikeTasks:
                 bt_.stop_after_time(int(eta_s + JSOW_ATTACK_S))
             wp.tasks.append(bt_)
 
+    def _pen_runway_tasks(self, wp, f, package, eta_s=None) -> None:
+        """S51 (S50 probe): the AGM-154C of the F-15E's PEN kit on the runway, one Bombing task per weapon of the flight (Expend One, group attack, the stop time ETA + JSOW_ATTACK_S), each at
+        the field's reference point (the airport's position, the point the hook's runway rectangle is centred on) plus its own random error up to JSOW_AIM_ERR_M: the probe's own tasks, 8 of 8
+        JSOW-Cs landed in the rectangle. One aim point, so the AI's habit of putting several weapons on the first aim points of a flight does not matter. ROE Open Fire (designated points only, as
+        the other AI strikes since v0.41.396 and the ramp JSOWs; the probe itself ran Weapon Free), Return Fire once the window ends."""
+        a_ = self.state.assets.get(package.objective.target_id)
+        ap_ = self.t.airports.get(a_.airport) if (a_ is not None and getattr(a_, "airport", None)) else None
+        if ap_ is not None:
+            cx, cy = ap_.position.x, ap_.position.y
+        elif a_ is not None:
+            cx, cy = a_.x, a_.y
+        else:
+            return
+        rng = random.Random(f"{self.state.campaign_id}:{package.id}:{f.id}:pen")
+        wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
+        if eta_s is not None:
+            rf_ = task.ControlledTask(task.OptROE(task.OptROE.Values.ReturnFire)); rf_.start_after_time(int(eta_s + JSOW_ATTACK_S)); wp.tasks.append(rf_)
+        for _ in range(max(1, f.count * PEN_PER_JET.get(f.aircraft, 2))):
+            ang, d = rng.uniform(0, 2 * math.pi), JSOW_AIM_ERR_M * math.sqrt(rng.random())
+            bt_ = task.ControlledTask(task.Bombing(mapping.Point(cx + math.cos(ang) * d, cy + math.sin(ang) * d, self.t), expend=task.Expend.One, group_attack=True))
+            if eta_s is not None:
+                bt_.stop_after_time(int(eta_s + JSOW_ATTACK_S))
+            wp.tasks.append(bt_)
+
+    def _ewr_units(self, package, site=None) -> list:
+        """S60: the early-warning radar vehicles of an EWR strike's target (the group's units of an EWR type), else the group's first unit. [] when the group is not built."""
+        site = site if site is not None else self.groups_by_asset.get(package.objective.target_id)
+        us_ = list(getattr(site, "units", None) or [])
+        radars_ = [u for u in us_ if str(getattr(u, "type", "")) in SEARCH_RADARS]
+        return radars_[:1] or us_[:1]
+
+    def _ewr_standoff_tasks(self, wp, f, site, package, eta_s=None) -> None:
+        """S60 (XO 2026-11-12: EWR strikes are stand-off only): the stand-off weapons of an EWR strike (the F-15E's JSOW-C or the F-16's JSOW-A) on the EWR vehicle: one Bombing task per weapon of the
+        flight (Expend One, group attack, the stop time ETA + JSOW_ATTACK_S, as the runway JSOW-Cs of S51), each aimed at the radar's position plus its own random error up to JSOW_AIM_ERR_M. Not at the
+        covering Tors or the site's other vehicles (an EWR has none that matter). ROE Open Fire, designated points only (as every AI strike since v0.41.396), Return Fire once the window ends."""
+        us_ = self._ewr_units(package, site)
+        a_ = self.state.assets.get(package.objective.target_id)
+        pts_ = [(u.position.x, u.position.y) for u in us_] or ([(a_.x, a_.y)] if a_ is not None else [])
+        if not pts_:
+            return
+        per_ = (PEN_PER_JET if getattr(f, "kit", "") == "PEN" else JSOW_PER_JET).get(f.aircraft, 2)
+        rng = random.Random(f"{self.state.campaign_id}:{package.id}:{f.id}:ewr")
+        wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
+        if eta_s is not None:
+            rf_ = task.ControlledTask(task.OptROE(task.OptROE.Values.ReturnFire)); rf_.start_after_time(int(eta_s + JSOW_ATTACK_S)); wp.tasks.append(rf_)
+        for _ in range(max(1, f.count * per_)):
+            cx, cy = pts_[0]
+            ang, d = rng.uniform(0, 2 * math.pi), JSOW_AIM_ERR_M * math.sqrt(rng.random())
+            bt_ = task.ControlledTask(task.Bombing(mapping.Point(cx + math.cos(ang) * d, cy + math.sin(ang) * d, self.t), expend=task.Expend.One, group_attack=True))
+            if eta_s is not None:
+                bt_.stop_after_time(int(eta_s + JSOW_ATTACK_S))
+            wp.tasks.append(bt_)
+
     def _jsow_tasks(self, wp, f, site, package, eta_s=None) -> None:
         """A JSOW slinger's attack from its launch point: one release per radar of the target site (search and track radars; the first two
         vehicles of a site whose radars ride on the launchers), aimed at the radar's last-known position give or take JSOW_AIM_ERR_M. The
         flight's JSOWs are shared out between the aim points. A radar that shuts down to dodge the HARMs is still where it was last seen."""
         if package.objective.type == ObjectiveType.COUNTER_AIR and package.objective.aim != "SWEEP":
             self._jsow_ramp_tasks(wp, f, package, eta_s)               # v0.41.313: a Standoff Counter-Air aims at the jets parked on the ramp, not at a SAM site
+            return
+        if package.objective.type == ObjectiveType.STRIKE and package.objective.aim == "STANDOFF" and getattr(f, "kit", "") in ("JSOW", "PEN"):
+            self._ewr_standoff_tasks(wp, f, site, package, eta_s)      # S60: the EWR strike (the only STRIKE + STANDOFF job with a JSOW / PEN flight): every weapon on the EWR vehicle
+            return
+        if package.objective.type == ObjectiveType.STRIKE and package.objective.aim == "RUNWAY":
+            self._pen_runway_tasks(wp, f, package, eta_s)              # S51: the F-15E's standoff runway crater: every JSOW-C at the middle of the runway
             return
         if site is None or not site.units:
             return

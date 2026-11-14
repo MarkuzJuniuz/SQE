@@ -8,28 +8,25 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
-from . import FORMAT_VERSION, COMPAT_ERA, MIN_COMPAT_ERA, __version__
-from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, wing_from_dict, PlayerProfile)
+from . import FORMAT_VERSION, COMPAT_ERA, MIN_COMPAT_ERA, __version__, clock
+from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, wing_from_dict, PlayerProfile, OLD_TAG_NAMES)
 
 
-def _migrate_roles_v6(d: dict) -> None:
-    """v0.41.50 gave every fighter job its own role name. Before, Role.ESCORT was the TARCAP and Role.SWEEP was both the package escort (in a
-    strike / DEAD / CAS package) and the Fighter Sweep. A format-5 save is converted in place: ESCORT -> TARCAP; SWEEP -> ESCORT unless the
-    package is a COUNTER_AIR or FLEET_DEFENSE one (the same rule the old task label used)."""
-    def fix(pkg):
-        if not isinstance(pkg, dict):
-            return
-        otype = (pkg.get("objective") or {}).get("type", "")
-        for f in pkg.get("flights") or []:
-            r = f.get("role")
-            if r == "ESCORT":
-                f["role"] = "TARCAP"
-            elif r == "SWEEP" and otype not in ("COUNTER_AIR", "FLEET_DEFENSE"):
-                f["role"] = "ESCORT"
-    for p in d.get("plan") or []:
-        fix(p)
-    if d.get("pending"):
-        fix(d["pending"].get("package_dict"))
+def _upgrade_cap_tags(*parts) -> None:
+    """S52: walk the saved plan, the resolved plan and the patrol state and give every old "BASECAP" / "CVCAP" flight tag or patrol kind its new name (models.OLD_TAG_NAMES).
+    Done once, on load, so no other code compares against the old names. Only the `tag` and `kind` keys are touched."""
+    def walk(x):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if k in ("tag", "kind") and isinstance(v, str) and v in OLD_TAG_NAMES:
+                    x[k] = OLD_TAG_NAMES[v]
+                else:
+                    walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    for p in parts:
+        walk(p)
 
 
 class SaveIncompatible(Exception):
@@ -54,19 +51,21 @@ class CampaignState:
     level: int = 2
     campaign_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
     day: int = 1
+    turn: int = 0                                  # v0.41.334: the clock (clock.py): four-hour turns since 08:00 (S25; two-hour before) on Day 1; `day` stays equal to clock.day_of(turn). Session._tick moves it one turn at a time (v0.41.337, Phase 3)
     sortie_counter: int = 0
     player: PlayerProfile | None = None
     bases: dict = field(default_factory=dict)
     squadrons: dict = field(default_factory=dict)
     assets: dict = field(default_factory=dict)
     enemy_air: list = field(default_factory=list)
-    plan: list = field(default_factory=list)       # today's packages as dicts
+    plan: list = field(default_factory=list)       # today's packages as dicts, the ones not resolved yet (v0.41.337: a package leaves the plan when its turn is resolved)
+    plan_done: list = field(default_factory=list)  # v0.41.337 (Phase 3): today's packages that were resolved, with the verdict (`extra["done_roll"]`): earlier packages that may show as ruins (Session.ruin_candidates). Cleared at midnight
     pending: dict | None = None                    # the sortie that has been built but not yet debriefed
     history: list = field(default_factory=list)    # one dict per debriefed sortie
     log: list = field(default_factory=list)
     status: str = "ACTIVE"                         # ACTIVE | VICTORY | DEFEAT
     start_date: str = "2006-06-12"                 # campaign day 1 (year 2006: the F-14B(U) and the A-10C both in service; the Tomcat is kept past its real retirement)
-    night_ops: bool = False                        # allow night sorties in the daily cycle
+    night_ops: bool = True                         # always True since v0.41.366 (S18): night turns always plan; kept so old saves load
     pilot: dict = field(default_factory=dict)      # your pilot log
     front: int = 0                                 # how far the war has advanced: tiers up to front+2 are open for tasking
     front_days: int = 0                            # days spent at this stage (the anti-stall clock)
@@ -87,7 +86,9 @@ class CampaignState:
         return date.fromisoformat(self.start_date) + timedelta(days=self.day - 1)
 
     def note(self, text: str) -> None:
-        self.log.append(f"[day {self.day}] {text}")
+        from . import clock
+        m = clock.minute(self.turn) % clock.DAY_MIN                    # v0.41.337: [day N HHMM] (the clock's day, so a note written as the clock crosses midnight belongs to the new day)
+        self.log.append(f"[day {clock.day_of(self.turn)} {m // 60:02d}{m % 60:02d}] {text}")
 
     def enemy_air_at(self, asset_id: str):
         return next((w for w in self.enemy_air if w.base_asset_id == asset_id), None)
@@ -100,7 +101,7 @@ class CampaignState:
         return {
             "format": FORMAT_VERSION, "compat": COMPAT_ERA, "app_version": __version__, "saved": datetime.now().isoformat(timespec="seconds"),
             "name": self.name, "theatre": self.theatre, "level": self.level, "campaign_id": self.campaign_id,
-            "day": self.day, "sortie_counter": self.sortie_counter, "status": self.status,
+            "day": self.day, "turn": self.turn, "turn_min": clock.TURN_MIN, "sortie_counter": self.sortie_counter, "status": self.status,
             "start_date": self.start_date, "night_ops": self.night_ops, "pilot": self.pilot,
             "front": self.front, "front_days": self.front_days, "ground": self.ground,
             "player": asdict(self.player) if self.player else None,
@@ -117,7 +118,7 @@ class CampaignState:
             "fleet": self.fleet,
             "blue_assets": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.blue_assets.items()},
             "blue_sams": {k: {**asdict(v), "kind": v.kind.value} for k, v in self.blue_sams.items()},
-            "plan": self.plan, "pending": self.pending, "history": self.history[-300:], "log": self.log[-400:],
+            "plan": self.plan, "plan_done": self.plan_done, "pending": self.pending, "history": self.history[-300:], "log": self.log[-400:],
         }
 
     @classmethod
@@ -127,12 +128,15 @@ class CampaignState:
         if d.get("format", 1) < 4:
             raise ValueError("This campaign was saved by an older SQE (before depth tiers and SAM garrisons, v0.8). "
                              "The enemy order of battle changed, so it cannot be loaded; please start a new campaign.")
-        if d.get("format", 1) < 6:
-            _migrate_roles_v6(d)
+        if d.get("format", 1) < 7:
+            raise ValueError("This campaign was saved before the refit clock (v0.41.334): jets now need time on the ground between sorties, and replacements, "
+                             "runway repairs and tankers follow new rules, so it cannot be loaded; please start a new campaign.")
+        if int(d.get("turn_min", 120)) != clock.TURN_MIN:         # S25: every clock in a save (turn, idle counter, craters, move_until, raid and support clocks) counts turns of its own length; a missing field is the old 2-hour clock
+            raise ValueError(f"This campaign was saved with {int(d.get('turn_min', 120)) // 60}-hour turns; turns are now {clock.TURN_MIN // 60} hours, so its dates cannot be read. Please start a new campaign.")
         s = cls(name=d["name"], theatre=d.get("theatre", "caucasus"), level=d.get("level", 2),
-                campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1),
+                campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1), turn=int(d.get("turn", 0)),
                 sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"),
-                start_date=d.get("start_date", "2004-06-12"), night_ops=d.get("night_ops", False), pilot=d.get("pilot", {}),
+                start_date=d.get("start_date", "2004-06-12"), night_ops=True, pilot=d.get("pilot", {}),
                 front=d.get("front", 0), front_days=d.get("front_days", 0))
         s.player = PlayerProfile(**d["player"]) if d.get("player") else None
         s.bases = {k: Base(**{**v, "kind": BaseKind(v["kind"])}) for k, v in d["bases"].items()}
@@ -152,7 +156,9 @@ class CampaignState:
         s.blue_assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_assets") or {}).items()}
         s.blue_sams = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_sams") or {}).items()}      # missing in an older save: sams.ensure_blue_sams builds them from each field's `defense`
         s.plan, s.pending = d.get("plan", []), d.get("pending")
+        s.plan_done = d.get("plan_done") or []                            # missing in a save from before v0.41.337: nothing resolved yet today
         s.history, s.log = d.get("history", []), d.get("log", [])
+        _upgrade_cap_tags(s.plan, s.plan_done, s.barcap, s.pending)                  # S52: a save from before the rename holds "BASECAP" / "CVCAP" in flight tags and patrol kinds
         if not s.ground:                           # a campaign from before the ground war (format 4): give it one for its level
             from . import ground
             if ground.ensure(s):

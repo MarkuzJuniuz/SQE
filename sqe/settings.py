@@ -76,10 +76,12 @@ class AppSettings:
     tempo_decay: bool = False              # v0.41.208 (XO): Enable Tactical Edge Decay: the edge fades 3% a night. Off by default. (Both Tactical Edge switches become per-campaign on refactor day, XO 2026-10-30)
     pilot_influence: bool = True           # v0.41.160: your flying (or neglect) feeds back into the war: red surges while you stand down. Off: no surge and no tempo, so your flying or standing down changes nothing
     weather_mode: str = "clear"            # "clear" | "procedural" | a fixed weather: scattered, broken, overcast, rain, storm
+    ils_low_vis: bool = True               # S63 (XO 2026-11-12): in low ceiling or visibility the ground wind is turned to favour each blue field's ILS runway (DCS lights the ILS only on the active runway, picked by the low-level wind); good weather keeps the real wind
     ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
     merge_radius_nm: int = 15             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in (v0.41.131: 15, was 25)
     merge_fwd_min: int = 30               # v0.41.131: packages that start up to this many minutes AFTER yours fly with you (5 minute steps in Settings, 0 to 60)
     merge_v131: bool = False
+    merge_raids_all: bool = True          # S39: raid intercepts that start inside the time windows fly in one mission, at any distance (off: a raid folds in only when its way in passes the target area)
     merge_back_min: int = 15              # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
     merge_max_units: int = 250            # v0.41.131: the unit limit counts the WHOLE mission again, merged packages included (ruins go first, then the latest-starting package); the 500 ceiling in sqe/data/limits.json is dormant
     reactive: bool = True                 # enemy reinforcements and blue alert pairs can launch during a sortie
@@ -101,6 +103,10 @@ class AppSettings:
     patch_asked: bool = False
     terrain_asked: bool = False           # the one-time 'scan the map?' offer has been shown
     f14_special_names: bool = True             # F-14B(U): special-point waypoint names (untested in the cockpit)
+    autoskip_stand_down: bool = False     # Phase 11 (XO): AUTOMATICALLY SKIP under Skip Turn: keep skipping turns with nothing to fly
+    autoskip_night: bool = False          # ...also night turns, even when a flight is on offer
+    autoskip_duration_on: bool = False    # ...stop after autoskip_hours of campaign time (unticked: no limit, a week at most)
+    autoskip_hours: int = 12              # 4 to 24, step 4 (S25: a turn is four hours; `load` rounds an older value to a multiple of 4)
     persist: bool = True          # False in tests: never write %APPDATA%\\SQE\\settings.json
 
     # ---- derived paths ------------------------------------------------------------------
@@ -167,6 +173,10 @@ class AppSettings:
         s.dcs_install = native(s.dcs_install or _detect_install())
         s.dcs_saves = native(s.dcs_saves or _detect_saves())
         s.last_campaign = native(s.last_campaign)
+        try:
+            s.autoskip_hours = min(24, max(4, int(round(int(s.autoskip_hours) / 4.0)) * 4))      # S25: Crew Rest goes by four-hour turns; an old 2, 6, 10 ... is rounded to the nearest multiple of 4
+        except (TypeError, ValueError):
+            s.autoskip_hours = 12
         return s
 
     def save(self) -> None:

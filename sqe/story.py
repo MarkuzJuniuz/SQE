@@ -1,7 +1,7 @@
 """The campaign story (Campaign Revamp, Stage C3, v0.41.150): the text of each level, read from the theatre pack (`stories`, one entry per level).
 Each entry has: enemy (the short label the Overview uses), enemy_long, background (paragraphs), intent, now (a line for each posture label and each ending),
 beats (lines the war log gets as the war moves: open, fall_<red base id>, retake, counter, fallen_blue, back_blue, win, lose).
-A theatre pack without `stories` falls back to the plain texts in posture.py and its one `background`."""
+A theatre pack without `stories` falls back to the plain texts in posture.py and a one-line situation."""
 from __future__ import annotations
 from . import theatres
 

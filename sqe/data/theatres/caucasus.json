@@ -59,8 +59,25 @@
             "id": "batumi",
             "name": "Batumi AB",
             "airport": "Batumi"
+        },
+        {
+            "id": "vaziani",
+            "name": "Vaziani AB",
+            "airport": "Vaziani"
+        },
+        {
+            "id": "tbilisi",
+            "name": "Tbilisi-Lochini AB",
+            "airport": "Tbilisi-Lochini"
+        },
+        {
+            "id": "soganlug",
+            "name": "Soganlug AB",
+            "airport": "Soganlug",
+            "divert": true
         }
     ],
+    "support_base": "kutaisi",
     "red_fields": [
         {
             "id": "ab_sukhumi",
@@ -115,9 +132,15 @@
             "name": "Mozdok",
             "airport": "Mozdok",
             "value": 7
+        },
+        {
+            "id": "ab_minvody",
+            "name": "Mineralnye Vody",
+            "airport": "Mineralnye Vody",
+            "value": 7
         }
     ],
-    "red_extra_airports": ["Mineralnye Vody", "Krasnodar-Center", "Krasnodar-Pashkovsky", "Anapa-Vityazevo", "Novorossiysk"],
+    "red_extra_airports": ["Krasnodar-Center", "Krasnodar-Pashkovsky", "Anapa-Vityazevo", "Novorossiysk"],
     "red_keep": {
         "1": [
             "ab_sochi",
@@ -132,7 +155,8 @@
         "ab_maykop": 4,
         "ab_nalchik": 2,
         "ab_beslan": 2,
-        "ab_gelen": 1
+        "ab_gelen": 1,
+        "ab_minvody": 2
     },
     "field_tier": {
         "ab_sukhumi": 2,
@@ -143,7 +167,8 @@
         "ab_mozdok": 3,
         "ab_maykop": 4,
         "ab_gelen": 4,
-        "ab_krymsk": 4
+        "ab_krymsk": 4,
+        "ab_minvody": 4
     },
     "bomber_base": "ab_mozdok",
     "squadrons": [
@@ -199,7 +224,7 @@
             "id": "fs_79",
             "name": "79th FS 'Tigers'",
             "aircraft": "F-16C",
-            "base": "batumi",
+            "base": "senaki",
             "count": 18,
             "callsign": "Venom"
         },
@@ -215,7 +240,7 @@
             "id": "fs_94",
             "name": "94th FS 'Hat in the Ring'",
             "aircraft": "F-15C",
-            "base": "senaki",
+            "base": "vaziani",
             "count": 18,
             "callsign": "Dodge"
         },
@@ -228,12 +253,61 @@
             "callsign": "Hawg"
         },
         {
-            "id": "as_75",
-            "name": "75th FS 'Flying Tigers'",
-            "aircraft": "A-10C",
+            "id": "fs_194",
+            "name": "194th FS 'Griffins'",
+            "aircraft": "F-15C",
             "base": "batumi",
+            "count": 8,
+            "callsign": "Colt",
+            "role": "havcap"
+        },
+        {
+            "id": "fs_494",
+            "name": "494th FS 'Panthers'",
+            "aircraft": "F-15E",
+            "base": "vaziani",
             "count": 18,
-            "callsign": "Boar"
+            "callsign": "Dude"
+        },
+        {
+            "id": "fs_22",
+            "name": "22nd FS 'Stingers'",
+            "aircraft": "F-16C",
+            "base": "vaziani",
+            "count": 18,
+            "callsign": "Python"
+        },
+        {
+            "id": "fs_421",
+            "name": "421st FS 'Black Widows'",
+            "aircraft": "F-16C",
+            "base": "vaziani",
+            "count": 18,
+            "callsign": "Rattler"
+        },
+        {
+            "id": "fs_19",
+            "name": "19th FS 'Gamecocks'",
+            "aircraft": "F-15C",
+            "base": "tbilisi",
+            "count": 18,
+            "callsign": "Chevy"
+        },
+        {
+            "id": "fs_336",
+            "name": "336th FS 'Rocketeers'",
+            "aircraft": "F-15E",
+            "base": "tbilisi",
+            "count": 18,
+            "callsign": "Thud"
+        },
+        {
+            "id": "fs_34",
+            "name": "34th FS 'Rams'",
+            "aircraft": "F-16C",
+            "base": "tbilisi",
+            "count": 18,
+            "callsign": "Lobo"
         }
     ],
     "support_targets": [
@@ -414,6 +488,11 @@
                 "airport": "Kutaisi",
                 "blue": "kutaisi",
                 "name": "Kutaisi"
+            },
+            {
+                "airport": "Kobuleti",
+                "blue": "kobuleti",
+                "name": "Kobuleti"
             }
         ],
         "leg_zones": [
@@ -422,8 +501,10 @@
             2,
             1,
             4,
+            1,
             1
         ],
+        "rear_zones": 1,
         "stages": {
             "1": [
                 "ab_sukhumi",
@@ -493,7 +574,7 @@
                 "Holding": "The front is not moving. Our ground force at the contested sector is not yet strong enough to attack; close air support and supply strikes decide the next move.",
                 "Under pressure": "Russia is gaining ground on our side of the line. Hold the sector in front of our airfields.",
                 "Last stand": "The final objective is next. Take it and the war is decided.",
-                "Defeat": "Two of our airfields are gone and the front has collapsed. The campaign is lost.",
+                "Defeat": "Three of our airfields are gone and the front has collapsed. The campaign is lost.",
                 "Counter-force": "A fresh Russian force has arrived and is counter-attacking the airfield we just took. Beat it and the war is won.",
                 "Ceasefire": "Russia has asked for talks and the guns have gone quiet along the coast. The campaign is won."
             },
@@ -503,7 +584,7 @@
                 "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. One more airfield lost and the front collapses.",
                 "back_blue": "{base} is ours again, though its defences are gone.",
                 "win": "The counter-attack is broken. Russia asks for talks and the guns go quiet along the coast. The war is won.",
-                "lose": "The front has collapsed. With two of our airfields lost the coalition withdraws, and the campaign is lost.",
+                "lose": "The front has collapsed. With three of our airfields lost the coalition withdraws, and the campaign is lost.",
                 "fall_ab_sukhumi": "Sukhumi is ours. Georgian and coalition troops hold the airfield; the first step up the coast road is taken.",
                 "fall_ab_gudauta": "Gudauta falls. Abkhazia is behind us and the road to Sochi is open.",
                 "fall_ab_sochi": "Sochi is ours. Russia's main base on the Abkhaz border is lost, and its columns along the road to the north-west are cut from their rear.",
@@ -527,7 +608,7 @@
                 "Holding": "The front is not moving. Our ground force at the contested sector is not yet strong enough to attack; close air support and supply strikes decide the next move.",
                 "Under pressure": "Russia is gaining ground on our side of the line. Hold the sector in front of our airfields.",
                 "Last stand": "The final objective is next. Take it and the war is decided.",
-                "Defeat": "Two of our airfields are gone and the front has collapsed. The campaign is lost.",
+                "Defeat": "Three of our airfields are gone and the front has collapsed. The campaign is lost.",
                 "Counter-force": "A fresh Russian force has arrived and is counter-attacking Sochi. Beat it and the war is won.",
                 "Ceasefire": "Russia has asked for talks and the fighting has stopped. The coast road is ours. The campaign is won."
             },
@@ -537,7 +618,7 @@
                 "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. One more airfield lost and the front collapses.",
                 "back_blue": "{base} is ours again, though its defences are gone.",
                 "win": "The counter-attack is broken. Russia asks for talks and the fighting stops. The war is won.",
-                "lose": "The front has collapsed. With two of our airfields lost the coalition withdraws, and the campaign is lost.",
+                "lose": "The front has collapsed. With three of our airfields lost the coalition withdraws, and the campaign is lost.",
                 "fall_ab_sukhumi": "Sukhumi is ours. Georgian and coalition troops hold the airfield; the first step up the coast road is taken.",
                 "fall_ab_gudauta": "Gudauta falls. Abkhazia is behind us and the road to Sochi is open.",
                 "fall_ab_sochi": "Sochi is ours. Russia's main base on the Abkhaz border is in coalition hands.",
@@ -548,7 +629,7 @@
             "enemy": "CRA",
             "enemy_long": "the Coastal Republic Army",
             "background": [
-                "A militia calling itself the Coastal Republic Army (CRA) has seized the coastal cities from Sukhumi to Sochi and is pushing toward the Georgian airbase at Senaki. It fights with old Soviet armor and a few obsolete jets under old but working SAM batteries, museum pieces that somebody across the border has kept in repair. It is resupplied by night across the border, so it never quite runs dry.",
+                "A militia calling itself the Coastal Republic Army (CRA) has seized the coastal cities from Sukhumi to Sochi and is pushing toward the Georgian airbase at Senaki. It fights with old Soviet armor and obsolete jets under old but working SAM batteries, museum pieces that a sponsor state across the border keeps in repair and supplies with working fighters. It is resupplied by night across the border, so it never quite runs dry.",
                 "A US-led coalition has answered Georgia's request for help. The carrier USS Stennis and her air wing operate from the eastern Black Sea; U.S. Air Force squadrons fly from Senaki, Kutaisi and Kobuleti. You fly with the Navy's carrier air wing or with the Air Force, as part of a joint air campaign.",
                 "The mountains close the interior, so the coast road is the only way through. The campaign is a push along that road, city by city, against an enemy that is outgunned but does not give up ground easily."
             ],
@@ -559,7 +640,7 @@
                 "Holding": "The front is not moving. Our ground force at the contested sector is not yet strong enough to attack; close air support and supply strikes decide the next move.",
                 "Under pressure": "The CRA is gaining ground on our side of the line. Hold the sector in front of our airfields.",
                 "Last stand": "The final objective is next. Take it and the war is decided.",
-                "Defeat": "Two of our airfields are gone and the front has collapsed. The campaign is lost.",
+                "Defeat": "Three of our airfields are gone and the front has collapsed. The campaign is lost.",
                 "Insurgency broken": "The coastal cities are back under government control and the Coastal Republic Army has lost the field. The campaign is won."
             },
             "beats": {
@@ -568,7 +649,7 @@
                 "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. One more airfield lost and the front collapses.",
                 "back_blue": "{base} is ours again, though its defences are gone.",
                 "win": "The Coastal Republic Army has lost the field. The insurgency is broken and the war is won.",
-                "lose": "The front has collapsed. With two of our airfields lost the coalition withdraws, and the campaign is lost.",
+                "lose": "The front has collapsed. With three of our airfields lost the coalition withdraws, and the campaign is lost.",
                 "fall_ab_sukhumi": "Sukhumi is back under government control. The first of the coastal cities is retaken.",
                 "fall_ab_gudauta": "Gudauta is retaken. Abkhazia is behind us and the road to Sochi is open.",
                 "fall_ab_sochi": "Sochi is retaken. The last of the coastal cities is back in government hands."
@@ -576,7 +657,6 @@
         }
     },
     "title": "Operation IRON TIDE",
-    "background": "After months of border incidents and a collapsed ceasefire, the Northern Federation's Southern Military District crossed the frontier in force. Its armored columns are pushing south along the Black Sea coast toward the Georgian airbase at Senaki, supported by air regiments at Sukhumi, Gudauta, Sochi and across the Kuban, and covered by a layered air-defence network.\n\nA coalition task force has answered the request for assistance. The USS Stennis carrier air wing operates from the eastern Black Sea; U.S. Air Force squadrons operate from Senaki, Kutaisi and Kobuleti. You fly with the Navy's Tomcat community or with the Air Force, as part of a joint air campaign.\n\nCoalition command's intent is plain: stop the armored advance, win control of the air, take the enemy air-defence network apart, and then strike the headquarters and logistics that keep the offensive moving. Every day the war is planned; every day the packages go out. Yours is the one you fly yourself.",
     "climate": {
         "source": "Sochi monthly normals: sunshine hours (NOAA 1961-1990) and days with precipitation (Pogoda.ru.net), as published in Wikipedia 'Climate of Sochi'. sun_frac = sunshine hours / possible daylight hours at 43.6N; rain_frac = precipitation days / days in month. wind_ms and fog are hand-tuned, not measured.",
         "sun_frac": [
@@ -621,6 +701,22 @@
             4.0,
             4.0
         ],
+        "wind_from_deg": [
+            180,
+            180,
+            220,
+            260,
+            260,
+            260,
+            260,
+            260,
+            260,
+            260,
+            220,
+            180
+        ],
+        "wind_scatter_deg": 30,
+        "wind_from_source": "XO 2026-11-09 accepted this table. Basis: WeatherSpark's Batumi pages (search summary; wind section not read in full; model-based, low to medium firmness): wind most often from the WEST from 11 Mar to 11 Nov (peak 61% on 10 Jul), from the SOUTH from 11 Nov to 11 Mar (peak 54% on 1 Jan). meteoblue forecast pages (not climatology) show east at night and west by day at Kutaisi, south at night and southwest by day at Senaki; the day and night swing is NOT modelled. The monthly values (180 south in Dec to Feb, 220 in Mar and Nov as the turn-over, 260 west-southwest Apr to Oct) and the 30 degree scatter are judgment calls.",
         "fog": [
             0.1,
             0.1,

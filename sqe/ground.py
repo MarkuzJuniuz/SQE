@@ -11,8 +11,8 @@ One rule set for both sides (only the numbers differ with difficulty):
   * supply comes from the side's fuel and depot sites (Red: state.assets, Blue: state.blue_assets). A struck depot weakens every sector it feeds;
   * air power enters through the Red column of each zone, a real asset (armor_N): its health IS the zone's Red strength between days. A CAS flight
     that damages it takes strength off the zone; the daily fight then starts from the lower number;
-  * if Red holds the zone next to one of our fields, that field falls (its defences go, its squadrons move to the nearest field with losses). Two fields
-    lost at once is a defeat.
+  * if Red holds the zone next to one of our fields, that field falls (its defences go, its squadrons move to the nearest field with room, with losses). DEFEAT_BASES
+    (three) fields fallen is a defeat.
 
 v0.41.143 (Campaign Revamp Stage B1, "the push"): the line of sectors now runs from the red end of the campaign (Sochi on Levels 1 and 2, Krymsk on
 Level 3) through every red base on the coast road to Senaki and Kutaisi. Each red base has a doorstep sector on our side of it; it FALLS when we hold
@@ -26,6 +26,7 @@ from __future__ import annotations
 import math
 from .models import AssetKind, EnemyAsset
 from . import story
+from . import clock
 
 NM = 1852.0
 MIN_FORCE = 3.0               # below this a side has no organised force in the zone
@@ -39,18 +40,20 @@ SKIRMISH, ATTACK = 0.04, 0.14
 DECISIVE, REPULSED = 1.8, 0.55
 RETREAT_SHARE = 0.6           # what a routed force saves by falling back
 FALL_LOSS = 0.3               # aircraft lost when a field falls and its squadrons leave
-FALL_MOVE_NEAR_KM = 100       # v0.41.243: a squadron that changes field is out of the line for the nights below (judgment call, XO: "1 to 2 days"): the ground crews move too
-FALL_MOVE_NIGHTS = (1, 2)     # (new field closer than FALL_MOVE_NEAR_KM, further)
+FALL_MOVE_NEAR_KM = 100       # v0.41.243: a squadron that changes field is out of the line for the time below (judgment call, XO: "1 to 2 days"; v0.41.337: 12 / 24 hours): the ground crews move too
+FALL_MOVE_TURNS = (3, 6)      # S25: was (6, 12), the same 12 and 24 hours at 4-hour turns; v0.41.337 (XO 2026-11-09, plan OPEN 10): turns out of the line for a squadron that changes field: 12 hours to a near field, 24 hours to a far one (was FALL_MOVE_NIGHTS (1, 2))
 TAKEN_STAGES = (("aaa", 3), ("hawk", 6), ("pat", 9))      # v0.41.244 (XO 2026-11-03): a field we take grows its air defence in this order, on these days after the fall, alongside the 9-day takeover clock (judgment calls)
 TAKEN_NEW_DAY = 16            # v0.41.247 (XO 2026-11-03): one week after the Patriots, a NEW squadron is formed at the taken field (`new_squadrons.py`; judgment call)
 TAKEN_NEW_SQUADRONS = 1       # per taken field (judgment call: each is up to 18 more jets for blue; raise it if blue is thin at the front)
 SHORT_DAYS = 7                # how long a day's unfilled-slot record is kept
-TAKEN_FIRST_MOVER_DAY = 11    # v0.41.246 (XO 2026-11-03): the first squadron moves in 2 days after the Patriots are up (judgment call)
-FORWARD_TYPES = ("F-16C",)    # short-legged jets move forward; the long-legged F-15C and the carrier's F-14s stay where they are (XO)
-SUPPLY_FLOOR, SUPPLY_NONE = 0.55, 0.85
-BLUE_SUPPLY_FLOOR = 0.35     # v0.41.174 (XO 2026-10-28): 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle). v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly (red 0.55, resupplied overland). Sim: a flying L3 did not lose at 0.30, an idle one lost 3 of 5; L2 unchanged (5 of 5 coalition wins in about a month). Judgment call, no public source
-SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (55% = about 11 days); no repair on a day it is struck
-L1_RED_SUPPLY_FLOOR = 0.70    # v0.41.141 (XO 2026-10-27, Campaign Revamp): on Level 1 the insurgents are resupplied across the border by night, so their supply never drops below this however many depots die (judgment call; a toy-model run showed it does not change who wins). Levels 2 and 3 keep the 55% floor.
+SHORT_MAX = 600               # v0.41.338: at most this many entries are kept in all (6 turns a day each add their own, S25; judgment call, about a week of the old one-list-a-day)
+DEFEAT_BASES = 3              # Phase 9a (XO 2026-11-10, campaign rules plan decision 25): the campaign is lost when this many of our airfields have fallen; a sunk carrier no longer counts
+SUPPLY_FLOOR, SUPPLY_NONE = 0.35, 0.85
+# v0.41.334 (XO 2026-11-06 / 11-09, campaign rules plan decision 18): ONE shared Force Index floor, 0.35, for both sides (it was 0.55 for red and BLUE_SUPPLY_FLOOR 0.35 for the coalition). History of the 0.35: v0.41.174 (XO 2026-10-28) 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle); v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly. Judgment call, no public source. Level 1 red keeps L1_RED_SUPPLY_FLOOR.
+RED_L1_FLOOR = 0.45        # v0.41.408 (S49, XO 2026-11-12): the absolute floor of red's Force Index on Level 1 of a new campaign (70% inner sites, 30% road sites; see supply; was 0.15 with 50 / 50 in the first S49 build, XO 2026-11-12: the insurgents are supplied by night, so red L1 is not trapped at the bottom). Judgment call. Blue is not resupplied across anything: its stock came by sea, and it has no road sites (road_sites_blue 0), only the fuel farms and depots it brought.
+RED_L1_INNER_W = 0.70      # v0.41.408 (S49, XO 2026-11-12): weight of red L1's inner sites in its Force Index (judgment call)
+SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (35% = about 17 days); no repair on a day it is struck
+L1_RED_SUPPLY_FLOOR = 0.70    # v0.41.141 (XO 2026-10-27, Campaign Revamp): on Level 1 the insurgents are resupplied across the border by night, so their supply never drops below this however many depots die (judgment call; a toy-model run showed it does not change who wins). Levels 2 and 3 use the shared 0.35 floor (SUPPLY_FLOOR).
 
 
 GROUND_V = 3                  # state.ground["v"]: 2 = the Campaign Revamp ground war (red bases fall); a campaign with v 1 cannot be loaded
@@ -59,7 +62,8 @@ REAR_FRAC = 0.7               # red strength in the sectors behind its first lin
 BLUE_ATTACK_MIN = 30.0        # our force in a sector must be at least this before we attack (toy model "THR"; judgment call)
 BLUE_ATTACK_RATIO = 0.9       # ...and not weaker than this share of the enemy's strength there (supply-weighted)
 BLUE_ATTACK_CHANCE = 0.7      # daily chance that a ready force attacks
-SURGE_GRACE_DAYS = 2          # v0.41.155: days your squadron can stand down before red's surge starts (judgment call)
+SURGE_GRACE_TURNS = 12        # S25: was 24 (the same 48 hours); v0.41.337 (XO 2026-11-09, plan OPEN 3; was SURGE_GRACE_DAYS 2): flyable turns your squadron can skip, with no sortie in between, before red's surge starts (judgment call). A stand-down turn (nothing flyable) does not count
+TURNS_PER_DAY = clock.DAY_MIN // clock.TURN_MIN            # S25: derived (was a literal 12); the surge step (`red_surge`) is still per day: idle turns past the grace count 1/TURNS_PER_DAY of a day each
 SURGE_CAP = 2.0               # ...and the most it adds (x2 at the top)
 REAR_FLOOR = 15.0             # v0.41.155: a rear sector is not drained below this by the red feed (judgment call)
 RED_CLOCK_DAYS = 3            # after we take a base the enemy's own attacks wait this long (its force needs 3 days to arrive; XO 2026-10-24 item 5)
@@ -78,7 +82,7 @@ RED_CAS_BLUE_SHARE = 0.5                 # half of blue's AIR tempo (up to +0.40
 RED_CAS_COVER_KM = 150.0
 RED_CAS_LOSS = 0.25                      # chance a strike costs red one attack jet
 RED_CAS_ESCORT_LOSS = 0.15               # ...and an escorted strike one fighter (a fight with blue's patrols)
-RED_ATTACK_TYPES = ("Su_25", "Su_24M")
+RED_ATTACK_TYPES = ("Su_25", "Su_24M", "Su_34")      # v0.41.361 (Phase 10d): + the L3 Su-34
 COUNTER_DELAY_DAYS = 3        # the enemy's last counter-force arrives this many days after the final base falls
 COUNTER_FORCED_DAYS = 6       # ...and attacks every day for this long
 COUNTER_FRAC = {1: 0.0, 2: 0.35, 3: 0.60}      # counter-force strength as a share of a full 100-point sector (toy model; judgment call)
@@ -128,7 +132,7 @@ def build(state, th, d, rng, ap) -> None:
     for k, cnt in enumerate(legs):
         a_, b_ = nodes[k]["name"], nodes[k + 1]["name"]
         names += [f"{a_} - {b_}" if cnt == 1 else f"{a_} - {b_} {j + 1}/{cnt}" for j in range(cnt)]
-    red0, blue0 = _initial(d, n)
+    red0, blue0 = _initial(d, n, int(th["front"].get("rear_zones", 0) or 0))
     off = lambda k: sum(legs[:k])
     rbases = [{"id": nd["red"], "name": nd["name"], "zone": off(k), "x": axis[k][0], "y": axis[k][1]} for k, nd in enumerate(nodes) if nd.get("red")]
     order = {sid: i for i, sid in enumerate(stages)}
@@ -153,15 +157,18 @@ def _col_letter(i: int) -> str:
     return chr(65 + i) if i < 26 else chr(65 + i // 26 - 1) + chr(65 + i % 26)
 
 
-def _initial(d, n) -> tuple:
+def _initial(d, n, tail: int = 0) -> tuple:
     """Strength per sector, red end first: the level's five start values sit at the blue end (the old front); the sectors behind them hold red's rear
-    strength, REAR_FRAC of the first start value, and none of ours."""
+    strength, REAR_FRAC of the first start value, and none of ours. `tail` (pack key `front.rear_zones`, Phase 9a: the Kutaisi - Kobuleti sector) is the number of
+    sectors behind the old front: they start quiet, no red and the last blue value, so adding a base at the back does not move the front."""
     red_t = [float(x) for x in getattr(d, "ground_red", (70, 55, 15, 0, 0))]
     blue_t = [float(x) for x in getattr(d, "ground_blue", (0, 15, 60, 70, 50))]
-    rear = max(0, n - len(red_t))
+    tail = max(0, min(tail, n - 1))
+    m = n - tail
+    rear = max(0, m - len(red_t))
     red = [REAR_FRAC * red_t[0]] * rear + red_t
     blue = [0.0] * rear + blue_t
-    return red[-n:], blue[-n:]
+    return red[-m:] + [0.0] * tail, blue[-m:] + [blue_t[-1]] * tail
 
 
 def build_blue_assets(state, rng, ap=None) -> None:
@@ -170,7 +177,7 @@ def build_blue_assets(state, rng, ap=None) -> None:
     import hashlib
     ba = {}
     for b in state.bases.values():
-        if b.kind.value != "AIRFIELD":
+        if b.kind.value != "AIRFIELD" or b.divert:                      # Phase 9a: a divert field has no supply sites or garrison
             continue
         ang = int(hashlib.md5(b.id.encode()).hexdigest()[:4], 16) % 360
         x, y = seacheck.snap_to_land(b.x + 2200 * math.cos(math.radians(ang)), b.y + 2200 * math.sin(math.radians(ang)))
@@ -188,7 +195,7 @@ def build_blue_assets(state, rng, ap=None) -> None:
         ba["bdepot_rear"] = EnemyAsset("bdepot_rear", "Rear supply depot", AssetKind.DEPOT, x, y, 1.0, 5, [], None, "", 1)
     state.blue_assets = ba
     if g is not None:
-        g["sup_n"] = {"red": sum(1 for a in state.assets.values() if a.kind in SUPPLY_KINDS), "blue": sum(1 for a in ba.values() if a.kind in SUPPLY_KINDS)}
+        set_supply_counts(state)
         g["sup_h"] = {a.id: 1.0 for a in list(state.assets.values()) + list(ba.values()) if a.kind in SUPPLY_KINDS}
 
 
@@ -283,7 +290,7 @@ def ensure_blue_garrisons(state) -> bool:
         return False
     added = False
     for b in state.bases.values():
-        if b.kind.value == "AIRFIELD" and f"bgar_{b.id}" not in state.blue_assets:
+        if b.kind.value == "AIRFIELD" and not b.divert and f"bgar_{b.id}" not in state.blue_assets:
             state.blue_assets[f"bgar_{b.id}"] = _blue_garrison(b)
             added = True
     return added
@@ -435,23 +442,50 @@ def facility_health(assets, kinds):
     return sum(hs) / len(hs) if hs else None
 
 
+def set_supply_counts(state) -> None:
+    """The Force Index bookkeeping of a NEW campaign: the supply sites each side starts with (sup_n), and, for red on Level 1, the split into inner sites (the fixed
+    fuel / depot sites near the fields) and road sites (rsup_...) with the flag sup_grp. v0.41.408 (S49, XO 2026-11-12). Old saves have no flag: the old formula."""
+    from .road_sites import ROAD_PREFIX
+    g = state.ground
+    if g is None:
+        return
+    ba = getattr(state, "blue_assets", None) or {}
+    g["sup_n"] = {"red": sum(1 for a in state.assets.values() if a.kind in SUPPLY_KINDS), "blue": sum(1 for a in ba.values() if a.kind in SUPPLY_KINDS)}
+    if getattr(state, "level", 2) == 1:
+        rs = [a for a in state.assets.values() if a.kind in SUPPLY_KINDS]
+        g["sup_n_road"] = sum(1 for a in rs if a.id.startswith(ROAD_PREFIX))
+        g["sup_n_inner"] = len(rs) - g["sup_n_road"]
+        g["sup_grp"] = True
+
+
 def supply(state, side: str) -> float:
-    """0.55 (no stock left; the coalition's floor is BLUE_SUPPLY_FLOOR, 0.35) .. 1.0 (all of the side's sites at hand and intact). v0.41.144: the stock held (sum of the health of the supply sites a side holds)
-    over the number it started with, so a captured site raises the captor's figure (up to 100%) and lowers the old owner's (to 55% at worst); a site's
-    health is its stock and does not fade. A side that started with no sites runs at 0.85. Red on Level 1 never falls below L1_RED_SUPPLY_FLOOR (0.70)."""
+    """0.35 (no stock left, SUPPLY_FLOOR, the same for both sides) .. 1.0 (all of the side's sites at hand and intact). v0.41.144: the stock held (sum of the health of the supply sites a side holds)
+    over the number it started with, so a captured site raises the captor's figure (up to 100%) and lowers the old owner's (to the floor at worst); a site's
+    health is its stock and does not fade. A side that started with no sites runs at 0.85. Red on Level 1 of an old save never falls below L1_RED_SUPPLY_FLOOR (0.70).
+    v0.41.408 (S49, XO 2026-11-12): red on Level 1 of a NEW campaign (ground["sup_grp"]) is RED_L1_INNER_W (70%) its inner sites' stock and the rest its road sites' stock (stock over the start count
+    of each group; a captured site counts in the captor's group by its id), floor RED_L1_FLOOR (0.45), so hitting the inner depots really lowers it. Judgment call, XO."""
     pool = state.assets.values() if side == "red" else getattr(state, "blue_assets", {}).values()
     sites = [a for a in pool if a.kind in SUPPLY_KINDS]
     n = int(((state.ground or {}).get("sup_n") or {}).get(side, len(sites)))
-    fl = BLUE_SUPPLY_FLOOR if side == "blue" else SUPPLY_FLOOR
-    v = SUPPLY_NONE if n <= 0 else fl + (1.0 - fl) * min(1.0, sum(a.health for a in sites) / n)
-    v = max(v, L1_RED_SUPPLY_FLOOR) if (side == "red" and getattr(state, "level", 2) == 1) else v
+    fl = SUPPLY_FLOOR
+    g = state.ground or {}
+    if side == "red" and g.get("sup_grp") and getattr(state, "level", 2) == 1:
+        ni, nr = int(g.get("sup_n_inner") or 0), int(g.get("sup_n_road") or 0)
+        from .road_sites import ROAD_PREFIX
+        hi = sum(a.health for a in sites if not a.id.startswith(ROAD_PREFIX))
+        hr = sum(a.health for a in sites if a.id.startswith(ROAD_PREFIX))
+        parts = [(w, min(1.0, h / k)) for w, h, k in ((RED_L1_INNER_W, hi, ni), (1.0 - RED_L1_INNER_W, hr, nr)) if k > 0]
+        v = max(RED_L1_FLOOR, sum(w * x for w, x in parts) / sum(w for w, _ in parts)) if parts else SUPPLY_NONE          # no road sites at all: the inner sites carry it whole
+    else:
+        v = SUPPLY_NONE if n <= 0 else fl + (1.0 - fl) * min(1.0, sum(a.health for a in sites) / n)
+        v = max(v, L1_RED_SUPPLY_FLOOR) if (side == "red" and getattr(state, "level", 2) == 1 and not g.get("sup_grp")) else v
     from . import sams
     return v - sams.debt(state, side)               # v0.41.196: the cost of replacement SAM batteries lowers supply even below the floor
 
 
 def supply_repair(state) -> list:
     """Overnight: each side's supply sites mend at supply / SUPPLY_REPAIR_DAYS of a full site a day (a destroyed one is back in 6 days at 100% supply,
-    about 11 at 55%), except a site that was struck since last night. Skip days count. The owner at the moment pays: a captured site mends at the
+    about 17 at the 35% floor), except a site that was struck since last night. Skip days count. The owner at the moment pays: a captured site mends at the
     captor's rate."""
     g = state.ground
     prev = g.setdefault("sup_h", {})
@@ -601,13 +635,14 @@ def _clamp(v, lo, hi):
 
 def surge(state, d) -> float:
     """v0.41.155 (XO 2026-10-27, "red needs a chance to win if I do not fly"): 1.0 while your squadron flies; then it grows by the level's `red_surge` for every day beyond
-    SURGE_GRACE_DAYS since the last flown sortie, up to 1 + SURGE_CAP. It multiplies red's reinforcements, attack chance and raid rate."""
+    SURGE_GRACE_TURNS skipped flyable turns since the last flown sortie (`g["idle_turns"]`: Session.skip_turn adds one per flyable turn skipped, a flown sortie resets it; a turn with
+    nothing for you to fly does not count), up to 1 + SURGE_CAP. It multiplies red's reinforcements, attack chance and raid rate."""
     step = float(getattr(d, "red_surge", 0.0))
     g = state.ground or {}
     if step <= 0 or not g or not g.get("pilot_influence", True):      # v0.41.160: Pilot Influence off: no surge, your flying makes no difference here
         return 1.0
-    idle = state.day - int(g.get("flown_day", g.get("start_day", 1))) - SURGE_GRACE_DAYS
-    return 1.0 + min(SURGE_CAP, max(0, idle) * step)
+    idle = (int(g.get("idle_turns", 0)) - SURGE_GRACE_TURNS) / TURNS_PER_DAY            # days' worth of idle past the grace
+    return 1.0 + min(SURGE_CAP, max(0.0, idle) * step)
 
 
 def _red_cas(state, d, rng, red, blue, n, sg) -> list:
@@ -634,10 +669,10 @@ def _red_cas(state, d, rng, red, blue, n, sg) -> list:
         cover = [x for x in wings if dist(x) <= RED_CAS_COVER_KM * 1000.0 and x.available_of(ENEMY_FIGHTERS) >= 2]
         esc = None
         if not cover:
-            fw = [x for x in sorted(wings, key=dist) if x.available_of(ENEMY_FIGHTERS) >= 2 and redair.can(state, x.base_asset_id, 2)]
+            fw = [x for x in sorted(wings, key=dist) if x.available_of(ENEMY_FIGHTERS) >= 2 and redair.can(state, x.base_asset_id, 2, fighters=True)]      # v0.41.340: the escort must also be free of this turn's patrols and the reserve
             if fw:
                 esc = fw[0]
-                redair.spend(state, esc.base_asset_id, 2)
+                redair.spend(state, esc.base_asset_id, 2, fighters=True)
         p = RED_CAS_P * sg - RED_CAS_BLUE_SHARE * tempo.get(state, "AIR") - (RED_CAS_BARE if (not cover and esc is None) else 0.0)
         if rng.random() < min(0.95, max(0.05, p)):
             blue[i] = max(0.0, blue[i] * (1.0 - RED_CAS_CUT))
@@ -890,8 +925,6 @@ def taken_fields_step(state) -> list:
             sams._sync(state, b)
             lines.append(f"{b.name}: {sams.BLUE_SITES[key][0]} in place" + (" (the field's defences are complete)" if rec["stage"] == len(TAKEN_STAGES) - 1 else ""))
             rec["stage"] += 1
-        if rec["stage"] >= len(TAKEN_STAGES) and not rec.get("moved") and age >= TAKEN_FIRST_MOVER_DAY:
-            lines += first_mover(state, rid, rec, b)
         if rec["stage"] >= len(TAKEN_STAGES) and age >= TAKEN_NEW_DAY and len(rec.get("new", [])) < TAKEN_NEW_SQUADRONS:
             from . import new_squadrons
             ln, sq = new_squadrons.form(state, b, _parking)
@@ -914,50 +947,19 @@ def _parking(airport: str, aircraft: str):
 
 
 def note_shortfall(state, short: list) -> None:
-    """v0.41.247: the day's unfilled package slots, [(role, x, y)], kept for SHORT_DAYS days in `ground["short"]` as [day, role, x, y] (a replan of the same day replaces that day's
-    entries). `new_squadrons.need` reads them to pick the airframe of a taken field's new squadron. Nothing is recorded without a ground war."""
+    """v0.41.247: the unfilled package slots of a plan, [(role, x, y)], kept for SHORT_DAYS days in `ground["short"]` as [day, role, x, y, turn]. Since v0.41.338 (Phase 4) every
+    turn of the day plans on its own and keeps its own list (a replan of the SAME turn replaces that turn's entries, and only those); the list is capped at SHORT_MAX entries.
+    `new_squadrons.need` reads them to pick the airframe of a taken field's new squadron. Nothing is recorded without a ground war."""
     g = state.ground
     if not g:
         return
-    keep = [r for r in g.get("short", []) if state.day - r[0] < SHORT_DAYS and r[0] != state.day]
-    g["short"] = keep + [[state.day, r, round(x), round(y)] for r, x, y in short][:300]
-
-
-def first_mover(state, rid: str, rec: dict, b) -> list:
-    """v0.41.246 (XO 2026-11-03, queue item h part 1, PR 2): once a taken field's defences are complete and FIRST_MOVER_DAY has passed, ONE short-legged squadron
-    (FORWARD_TYPES) moves in. XO's rule: the squadron of the most over-capacity field (jets assigned against the field's parking spots; ties: the one nearest the new
-    field), and the PLAYER's squadron first when it is one of them. It keeps its name and counts as the field's squadron; it sits out its move nights like any squadron
-    (`_settle`); `home_id` keeps its original field. No candidate or no room: nothing moves yet (it is tried again every night)."""
-    fallen = set(state.ground.get("fallen", []))
-    pend = pending_fields(state)
-    pid = state.player.squadron_id if state.player else None
-    load = {}
-    for q in state.squadrons.values():
-        load[q.base_id] = load.get(q.base_id, 0) + q.authorized
-    def over(q):
-        cap = _parking(state.bases[q.base_id].airport, q.aircraft) if state.bases[q.base_id].airport else None
-        return (load.get(q.base_id, 0) / cap) if cap else 0.0
-    cand = [q for q in state.squadrons.values()
-            if q.aircraft in FORWARD_TYPES and q.base_id != b.id and q.base_id in state.bases and state.bases[q.base_id].kind.value == "AIRFIELD"
-            and q.base_id not in fallen and q.base_id not in pend and not q.home_id]
-    if not cand:
-        return []
-    cand.sort(key=lambda q: (q.id != pid, -over(q), math.hypot(state.bases[q.base_id].x - b.x, state.bases[q.base_id].y - b.y), q.id))
-    for q in cand:
-        room = _parking(b.airport, q.aircraft)
-        if room is not None and room < q.authorized:
-            continue
-        frm = state.bases[q.base_id]
-        q.home_id = q.base_id
-        q.base_id = b.id
-        rec["moved"] = q.id
-        return [f"   {q.name} moves up from {frm.name} to {b.name}" + _settle(state, q, math.hypot(frm.x - b.x, frm.y - b.y))]
-    return []
+    keep = [r for r in g.get("short", []) if state.day - r[0] < SHORT_DAYS and not (len(r) > 4 and r[4] == state.turn)]
+    g["short"] = (keep + [[state.day, r, round(x), round(y), state.turn] for r, x, y in short][:300])[-SHORT_MAX:]
 
 
 def taken_field_lose(state, rid: str) -> list:
     """The enemy retakes a field we had taken: its squadrons (a later PR will put some there) withdraw like any fallen base, then the base and its three sites
-    are removed. It never entered `ground["fallen"]`, so it never counted toward the two-fallen-fields defeat rule (XO)."""
+    are removed. It never entered `ground["fallen"]`, so it never counted toward the fallen-fields defeat rule (XO)."""
     g = state.ground
     rec = g.get("taken_fields", {}).pop(rid, None)
     if rec is None:
@@ -1080,7 +1082,7 @@ def apply_red_fall(state, rb) -> list:
                 w.sqns.remove(q); dest.sqns.append(q)
                 if q.available > 0 and q.reserve == 0 and "Tu_22M3" not in w.types:        # v0.41.243: red squadrons are out of the line while they move too
                     q.reserve, q.available, q.rest_days = q.available, 0, 0
-                    q.move_days = FALL_MOVE_NIGHTS[0] if math.hypot(state.assets[dest.base_asset_id].x - fx, state.assets[dest.base_asset_id].y - fy) / 1000.0 < FALL_MOVE_NEAR_KM else FALL_MOVE_NIGHTS[1]
+                    q.move_until = state.turn + (FALL_MOVE_TURNS[0] if math.hypot(state.assets[dest.base_asset_id].x - fx, state.assets[dest.base_asset_id].y - fy) / 1000.0 < FALL_MOVE_NEAR_KM else FALL_MOVE_TURNS[1])
             w.squadrons = len(w.sqns); dest.squadrons = len(dest.sqns)
             lines.append(f"   its squadrons withdraw to {state.assets[dest.base_asset_id].name}, {lost} aircraft lost")
     return lines
@@ -1090,30 +1092,53 @@ def apply_fall(state, bid: str) -> list:
     b = state.bases[bid]
     from . import sams
     sams.set_field(state, b, 0.0)
-    others = [x for x in state.bases.values() if x.kind.value == "AIRFIELD" and x.id != bid and x.id not in state.ground["fallen"]]
+    others = [x for x in state.bases.values() if x.kind.value == "AIRFIELD" and not x.divert and x.id != bid and x.id not in state.ground["fallen"]]
+    diverts = [x for x in state.bases.values() if x.kind.value == "AIRFIELD" and x.divert and x.id not in state.ground["fallen"]]
     lines = [f"{b.name} HAS FALLEN: the front reached it. Its defences are gone"]
-    if not others:
+    if not others and not diverts:
         return lines
     for sq in state.squadrons.values():
         if sq.base_id != bid:
             continue
-        dest = min(others, key=lambda x: (x.x - b.x) ** 2 + (x.y - b.y) ** 2)
         lost = int(round(sq.available * FALL_LOSS))
         sq.available = max(0, sq.available - lost)
+        dest = (landing_field(state, b.x, b.y, sq, sq.available + sq.reserve, others, diverts)
+                or min(others or diverts, key=lambda x: (x.x - b.x) ** 2 + (x.y - b.y) ** 2))       # the nearest standing field with room, a divert field only as the last resort (Phase 9b, XO 2026-11-10); none has room: the nearest (as before)
         sq.home_id = sq.home_id or bid                                      # v0.41.243: remembered, so it flies back when this field is retaken
         sq.base_id = dest.id
         lines.append(f"   {sq.name} withdraws to {dest.name}, {lost} aircraft lost" + _settle(state, sq, math.hypot(dest.x - b.x, dest.y - b.y)))
     return lines
 
 
+def field_with_room(state, x: float, y: float, sq, jets: int, fields) -> object:
+    """Phase 9a: the nearest of `fields` (airfield Bases; the caller leaves out fallen and divert fields) to (x, y) with parking for `jets` more jets of the squadron's type,
+    counting every other squadron based there at its authorized strength (the rule `scenario._disperse_blue` uses), or None. A field whose parking cannot be told (no terrain)
+    counts as having room."""
+    held = {}
+    for q in state.squadrons.values():
+        if q is not sq:
+            held[q.base_id] = held.get(q.base_id, 0) + q.authorized
+    for f in sorted(fields, key=lambda f: (math.hypot(f.x - x, f.y - y), f.id)):
+        cap = _parking(f.airport, sq.aircraft) if f.airport else None
+        if cap is None or cap - held.get(f.id, 0) >= jets:
+            return f
+    return None
+
+
+def landing_field(state, x: float, y: float, sq, jets: int, fields, diverts=()) -> object:
+    """Phase 9b (XO 2026-11-10): where a displaced squadron lands: the nearest of `fields` (the standing non-divert fields) with room, and only when none has, the nearest standing DIVERT
+    field with room ("last resort: they are tiny"; `diverts`), else None. `field_with_room` does the counting for each list."""
+    return field_with_room(state, x, y, sq, jets, fields) or field_with_room(state, x, y, sq, jets, diverts)
+
+
 def _settle(state, sq, dist_m: float) -> str:
-    """v0.41.243: a squadron that has just changed field sits out FALL_MOVE_NIGHTS (1 or 2 nights by distance); its jets wait in `reserve` and `airwings.step` brings them
-    back. Not one already resting. Returns the log suffix."""
+    """v0.41.243: a squadron that has just changed field sits out FALL_MOVE_TURNS (12 or 24 hours by distance; v0.41.337, was 1 or 2 nights); its jets wait in `reserve` and
+    `airwings.step_moves` brings them back at `move_until`. Not one already resting. Returns the log suffix."""
     if sq.available <= 0 or sq.reserve > 0:                              # (v0.41.246, XO: the player's squadron sits out its nights like any other)
         return ""
-    n = FALL_MOVE_NIGHTS[0] if dist_m / 1000.0 < FALL_MOVE_NEAR_KM else FALL_MOVE_NIGHTS[1]
-    sq.reserve, sq.available, sq.rest_days, sq.move_days = sq.available, 0, 0, n
-    return f"; back in the line in {n} day{'s' if n > 1 else ''}"
+    n = FALL_MOVE_TURNS[0] if dist_m / 1000.0 < FALL_MOVE_NEAR_KM else FALL_MOVE_TURNS[1]
+    sq.reserve, sq.available, sq.rest_days, sq.move_days, sq.move_until = sq.available, 0, 0, 0, state.turn + n
+    return f"; back in the line in {n * 2} hours"
 
 
 def return_squadrons(state, bid: str) -> list:
@@ -1132,16 +1157,10 @@ def return_squadrons(state, bid: str) -> list:
     return lines
 
 
-def fleet_sunk(state) -> bool:
-    from . import fleet
-    return fleet.sunk(state)
-
-
 def fallen_count(state) -> int:
     if not active(state):
         return 0
-    from . import fleet
-    return len(state.ground.get("fallen", [])) + fleet.counts_as_fallen(state)          # v0.41.257 (XO): a sunk carrier is one lost base until it returns
+    return len(state.ground.get("fallen", []))          # Phase 9a (XO 2026-11-10): the sunk carrier no longer counts (it did from v0.41.257 to v0.41.351)
 
 
 def repair_blue(state, d) -> None:

@@ -1,4 +1,4 @@
-"""All the words: the conflict background, campaign phases, situation reports, briefings and debrief flavor.
+"""All the words: campaign phases, situation reports, briefings and debrief flavor.
 Hand-written templates (no runtime AI). Add variants to any list to widen the pool."""
 from __future__ import annotations
 import random
@@ -6,8 +6,8 @@ from .models import ObjectiveType
 from . import theatres
 
 def __getattr__(name):
-    """TITLE and BACKGROUND come from the active theatre pack (so `narrative.TITLE` keeps working)."""
-    if name in ("TITLE", "BACKGROUND"):
+    """TITLE comes from the active theatre pack (so `narrative.TITLE` keeps working)."""
+    if name == "TITLE":
         from . import theatres
         return theatres.active()[name.lower()]
     raise AttributeError(name)
@@ -72,6 +72,14 @@ _INTENT = {
         "Kill the shooters, not the missiles. Hit the raid before it turns on {site}.",
         "The low threats are the fleet's blind spot, so the intercept is on you. Hold the raid away from {site}.",
     ],
+    "RAID_DEFENSE": [                   # v0.41.394: a red bomber raid on a field, supply site, garrison or our troops (`extra["land"]`): free-fall bombs, no ships in it
+        "Red bombers are inbound for {site}. Stop them before they reach their bomb release.",
+        "Intelligence has a raid in the air against {site}. Intercept early: every bomber that gets through drops on us.",
+        "Radar has bombers tracking toward {site}. Kill them on the way in, before they roll in on the target.",
+        "A raid is heading for {site}. Hold it away from the target: the bombers first, any escort second.",
+        "They want {site} hit today. Meet the raid short of the target and do not let it through.",
+        "The bombers are committed against {site}. Every one you stop is a bomb that does not fall.",
+    ],
     ObjectiveType.CAS: [
         "Ground forces are under pressure from {site}. Break it before it breaks us.",
         "Friendly troops are in contact. Your JTAC is waiting. Find {site} and destroy it.",
@@ -129,6 +137,9 @@ def intent_for(state, pkg) -> str:
         line = _SWEEP_INTENT[(state.day * 3 + n) % len(_SWEEP_INTENT)]
         return line.format(site=site_name(state, pkg.objective) or "the target") + f"  -- {_COMMANDERS[(state.day * 5 + pkg.number) % len(_COMMANDERS)]}"
     n = sum(1 for d in state.plan if d["number"] < pkg.number and d["objective"]["type"] == typ.value)
+    if typ == ObjectiveType.FLEET_DEFENSE and (pkg.extra or {}).get("land"):         # v0.41.394: a land raid has its own lines, naming what is attacked (the title's text), not the fleet
+        what = pkg.objective.description.replace("Intercept a raid on ", "").replace("Intercept an air attack on ", "").replace("friendly troops: ", "our troops at ")
+        return commander_intent("RAID_DEFENSE", None, n, what or site_name(state, pkg.objective), pkg.number, state.day)
     return commander_intent(typ, None, n, site_name(state, pkg.objective), pkg.number, state.day)
 
 
@@ -154,7 +165,7 @@ _OPEN = {
 _LOSS = {0: ["Everyone came home.", "No losses to report.", "All aircraft recovered."],
          1: ["We lost one aircraft.", "One airframe did not make it back.", "A single loss, and it will be felt."],
          2: ["Two aircraft were lost.", "The wing is down two airframes tonight."]}
-_PLAYER = {"recovered": ["You brought your jet home.", "You recovered safely."],
+_PLAYER = {"recovered": [""],                         # v0.41.414 (XO): nothing is said when you landed
            "ejected": ["You ejected and are being recovered.", "You punched out. Search-and-rescue is on the way."],
            "lost": ["Your aircraft was lost. The squadron will write to your family if you are not found.",
                     "You did not return."],
@@ -179,14 +190,24 @@ def debrief_story(outcome: dict, state, rng: random.Random) -> str:
     obj = outcome.get("objective", "the objective")
     if outcome.get("objective_type") in (ObjectiveType.BARCAP.value, ObjectiveType.FLEET_DEFENSE.value):
         k = outcome.get("red_air_lost", 0)
-        parts.append(f"The patrol over the fleet {'splashed ' + str(k) + ' hostile aircraft' if k else 'saw no engagement'}.")
+        parts.append(f"The {'intercept' if outcome.get('land_raid') else 'patrol over the fleet'} {'splashed ' + str(k) + ' hostile aircraft' if k else 'saw no engagement'}.")
+    elif outcome.get("runway"):                          # S75: a runway job is told by the crater, not by a damage percent
+        rw = outcome["runway"]
+        if rw.get("closed"):
+            parts.append(f"{obj}: the runway is cratered and the field is shut for some time.")
+        elif rw.get("hits"):
+            parts.append(f"{obj}: the runway was hit, but not enough to close the field; the crews will have it repaired overnight.")
+        else:
+            parts.append(f"{obj}: the runway was not hit.")
+    elif any(a.get("primary") and a.get("suppressed") and not a.get("destroyed") for a in outcome.get("red_assets") or []):
+        parts.append(f"{obj}: the site's radars are out; it is suppressed.")
     else:
         parts.append(f"{obj}: damage assessment puts the target at {dmg:.0%} destroyed.")
     if outcome.get("red_air_lost") and outcome.get("objective_type") not in (ObjectiveType.BARCAP.value, ObjectiveType.FLEET_DEFENSE.value):
         parts.append(f"{outcome['red_air_lost']} enemy aircraft were also destroyed.")
     parts.append(rng.choice(_LOSS[min(lost, 2)]) if lost < 3 else f"The package lost {lost} aircraft.")
     pl = rng.choice(_PLAYER.get(outcome.get("player", "recovered"), _PLAYER["recovered"]))
-    if pl:                                              # nothing is said when you were still airborne at the end
+    if pl:                                              # nothing is said when you landed or were still airborne
         parts.append(pl)
     parts.append(rng.choice(_FOLLOW[tone]))
     return "  ".join(parts) + f"\n\n-- {intel_officer(rng)}"

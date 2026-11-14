@@ -102,14 +102,29 @@ AIRCRAFT: dict[str, AircraftSpec] = {
                      alt_ft={_R.TARCAP: 27000, _R.ESCORT: 30000, _R.SWEEP: 30000, _R.STRIKE: 25000, _R.SEAD: 25000, _R.CAS: 12000},
                      push_kts=520, ip_kts=520, attack_kts=520, egress_kts=550, push_nm=80),
         first_wp_label="0", fc3=True, bingo_lbs=3500, joker_lbs=5000),
+    # v0.41.358 (F-15E phase, XO 2026-11-10): AI-only strike squadrons on the OLD AI model F_15E (not the RAZBAM F-15ESE module, so nobody needs to own it; pydcs gives it the callsigns Dude ... Tahoe).
+    # Roles: STRIKE only (judgment call: it adds strike jets, never takes a fighter or HARM seat). Combat radius 450 nm = judgment call (the F-15E carries more than the F-15C's 400 here; public
+    # figures for the F-15E vary widely with the load, "from memory" about 600 nm hi-lo-hi, so this stays in line with the table's game scale). Route values are the F-15C's strike values.
+    "F-15E": AircraftSpec(
+        "F-15E", "F-15E Strike Eagle", "F_15E", BaseKind.AIRFIELD,
+        frozenset({_R.STRIKE}), RefuelMethod.BOOM, 2, 450, 480, False,
+        RouteProfile(aar_alt_ft=22000, aar_kts=350, marshal_alt_ft=27000, cap_alt_ft=28000, cap_kts=400,
+                     alt_ft={_R.STRIKE: 25000, _R.SEAD: 25000, _R.CAS: 12000},
+                     push_kts=520, ip_kts=520, attack_kts=520, egress_kts=550, push_nm=80,
+                     tgt_note="JDAM target. Release"),
+        first_wp_label="0", bingo_lbs=3500, joker_lbs=5000),
+    # v0.41.360 (campaign rules plan Phase 10c part 2, XO): roles CAS and STRIKE. The STRIKE role is conditional: the planner gives an A-10C squadron a STRIKE slot only on a plain supply strike
+    # (fuel / depot) with no live SAM over the site or its run-in and no red fighter flight that can reach it (`packages.PackageBuilder._a10_supply_strike`, `STRIKE_CONDITIONAL`). Its tgt_note was
+    # "CAS: check in with JTAC" and only the STRIKE route reads it (the CAS point has its own text), so it is the release note now.
     "A-10C": AircraftSpec(
         "A-10C", "A-10C Warthog", "A_10C_2", BaseKind.AIRFIELD,
-        frozenset({_R.CAS}), RefuelMethod.BOOM, 1, 230, 300, True,
+        frozenset({_R.CAS, _R.STRIKE}), RefuelMethod.BOOM, 1, 230, 300, True,
         RouteProfile(depart_alt_ft=4000, depart_kts=250, dep_nm=6, low_agl_ft=300, aar_alt_ft=15000, aar_kts=270, marshal_alt_ft=10000,
                      marshal_kts=250, alt_ft={_R.CAS: 9000, _R.STRIKE: 9000}, push_kts=300, ip_kts=300,
                      attack_kts=300, egress_kts=330, push_nm=35, ip_nm=12, egress_nm=15,
-                     tgt_note="CAS: check in with JTAC"), first_wp_label="0", bingo_lbs=1500, joker_lbs=2500),
+                     tgt_note="Release"), first_wp_label="0", bingo_lbs=1500, joker_lbs=2500),
 }
+STRIKE_CONDITIONAL = frozenset({"A-10C"})      # v0.41.360: airframes whose STRIKE role is offered only on a clean supply strike (see the A-10C entry above)
 
 
 @dataclass(frozen=True)
@@ -123,6 +138,8 @@ class SupportSpec:
 AWACS_FOR = {BaseKind.CARRIER: SupportSpec("E_2C", "Magic", 25000, 300),
              BaseKind.AIRFIELD: SupportSpec("E_3A", "Overlord", 30000, 400)}
 # Basket tanker speed matters: AI Tomcats fail to plug the drogue when the tanker is set slow (DCS forums).
-TANKER_FOR = {RefuelMethod.BASKET: SupportSpec("KC135MPRS", "Texaco", 20000, 350),
+# v0.41.335 (decision 11): the probe-and-drogue jets (F-14, F/A-18C) are refuelled by the Navy's S-3B, never a land tanker (no KC-135MPRS in the force); the S-3B's altitude and
+# speed are judgment calls (the recovery orbit's 6000 ft / 250 kts is too low and slow for a strike package; unchecked in DCS)
+TANKER_FOR = {RefuelMethod.BASKET: SupportSpec("S_3B_Tanker", "Shell", 12000, 300),
               RefuelMethod.BOOM: SupportSpec("KC_135", "Arco", 22000, 350)}
 RECOVERY_TANKER = SupportSpec("S_3B_Tanker", "Shell", 6000, 250)

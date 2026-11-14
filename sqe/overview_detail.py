@@ -10,15 +10,12 @@ EVENT_RE = re.compile(r"HAS FALLEN|has been retaken|back in our hands|counter-fo
 
 def situation(state) -> dict:
     """The Situation panel: the Background (full text), the Intent, and the Now line pinned under them. They come from the level's story (`story.py`);
-    a theatre without stories shows its one background, whose last paragraph (when it is the commander's intent) becomes the Intent."""
+    a level with no story shows one plain line and no Intent."""
     st_ = story.get(state)
     if st_.get("background"):
         paras, intent = list(st_["background"]), st_.get("intent", "")
     else:
-        paras = [p.strip() for p in narrative.BACKGROUND.split("\n\n") if p.strip()]
-        intent = ""
-        if len(paras) > 1 and "intent" in paras[-1].lower():
-            intent = paras.pop()
+        paras, intent = ["The war goes on; the packages go out every day."], ""
     label, now = posture.posture(state)
     return {"background": paras, "intent": intent, "label": label, "now": now}
 
@@ -142,7 +139,7 @@ TYPE_WORDS = (("CAS", "CAS"), ("STRIKE", "strike"), ("DEAD", "SEAD / DEAD"), ("C
 
 
 def tasking(sess) -> tuple:
-    """Today's tasking for the Overview: (headline, detail). The packages on the order by kind, how many your squadron can fly, or why it has none."""
+    """This turn's tasking for the Overview: (headline, detail). The packages on the order by kind, how many your squadron can fly, or why it has none."""
     st = sess.state
     pk = sess.packages()
     if st.status != "ACTIVE":
@@ -154,7 +151,7 @@ def tasking(sess) -> tuple:
     parts = [f"{kinds[k]} {w}" for k, w in TYPE_WORDS if kinds.get(k)]
     head = f"{len(pk)} package{'s' if len(pk) != 1 else ''}"
     if not pk:
-        return "No jobs today", " ".join(sess.idle_reasons()) or "Nothing is open on today's tasking order."
+        return "No jobs this turn", " ".join(sess.idle_reasons()) or "Nothing is open on this turn's tasking order."
     if n_you:
         return head, ", ".join(parts) + f". You can fly {n_you}."
-    return head, ", ".join(parts) + ". Stand-down day for you: " + " ".join(sess.idle_reasons())
+    return head, ", ".join(parts) + ". Stand-down turn for you: " + " ".join(sess.idle_reasons())

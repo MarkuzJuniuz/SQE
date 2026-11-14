@@ -1,7 +1,7 @@
 """The campaign posture and the Overview figures (Campaign Revamp, Stage C1, v0.41.148).
 
 One place for what the Overview and the briefing say about the war: the posture label (it replaced the three old phases), the front, the odds at the
-base we are fighting for, warnings, supply and air defence. It only READS the state; nothing here changes the war.
+base we are fighting for, warnings, Force Index (the old "supply" percentage) and air defence. It only READS the state; nothing here changes the war.
 
 Every word threshold and unit below is a judgment call (no public figure exists for a game's abstract force points); the numbers are named constants so
 they can be tuned from XO's flown tests.
@@ -123,11 +123,10 @@ def _warnings(state) -> list:
     elif c and c.get("arrived") and not c.get("resolved") and not c.get("used") and state.day <= c.get("until", -1):
         d = int(c["until"]) - state.day
         out.append(("counter_on", "The enemy counter-force is attacking" + (f" for {_days(d)} more" if d else " today")))
-    from . import fleet as _fleet
-    n_lost_ = len(g["fallen"]) + _fleet.counts_as_fallen(state)
-    if n_lost_ == 1:
-        out.append(("lost", "The carrier is sunk and counts as a lost base until it returns: if one more falls the campaign is lost" if _fleet.sunk(state)
-                    else "One of our airfields has fallen: if a second one is lost the campaign is lost"))
+    n_lost_ = len(g["fallen"])
+    if n_lost_:
+        left_ = ground.DEFEAT_BASES - n_lost_
+        out.append(("lost", f"{n_lost_} of our airfields {'has' if n_lost_ == 1 else 'have'} fallen: {left_} more and the campaign is lost" if left_ > 0 else "Our airfields have fallen: the campaign is lost"))
     clock = int(g.get("clock", 0))
     if g["taken"] and clock > state.day:
         out.append(("clock", f"Takeover under way: our next attack in about {_days(clock - state.day)}"))
@@ -167,7 +166,7 @@ def posture(state) -> tuple:
 
 def supply_lines(state) -> list:
     e, f = ground.supply(state, "red"), ground.supply(state, "blue")
-    return [f"Coalition supply: {round(100 * f)}% ({supply_word(f)})", f"{story.enemy(state)} supply: {round(100 * e)}% ({supply_word(e)})"]
+    return [f"Coalition Force Index: {round(100 * f)}% ({supply_word(f)})", f"{story.enemy(state)} Force Index: {round(100 * e)}% ({supply_word(e)})"]
 
 
 def _orders(state, key: str) -> list:

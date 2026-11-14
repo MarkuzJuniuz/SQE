@@ -1,12 +1,17 @@
 """Tankers and AWACS as assets (v0.41.87): a small number of airframes at a base, an orbit that needs one up and a relief behind it.
 
 Until now a package always got an AWACS and a tanker out of thin air. Now blue has a few airframes of each type (a table below, sources and
-judgment calls named), each day plans when each type has an aircraft on orbit (sorties that fly their time on station, then spend a turnaround
-on the ground before they can fly again), and a package gets the AWACS / tanker only if it is up while the package flies. A support aircraft
-shot down in a flown mission leaves the count; missing airframes come back slowly. Red's A-50 is kept as data only (decoration, XO 2026-10-20).
-The guards (HAVCAP, tanker CAP) are planned chains from v0.41.88 (blue_barcap._plan_guards).
+judgment calls named), and a package gets the AWACS / tanker only if one is on orbit while the package flies. A support aircraft
+shot down in a flown mission leaves the count; missing airframes come back slowly. Red has no AWACS asset any more (the A-50 was deleted, XO 2026-11-08).
+The guards (HAVCAP, tanker CAP) are planned per turn (blue_barcap._plan_guards).
 
-Saved in `state.support_assets` (older saves get the table on first use) and today's windows in `state.barcap["support_flights"]`.
+Since v0.41.339 (campaign rules plan, Phase 4b) every airframe has its own clock and the orbit is planned PER TURN (`plan(state, turn)`, called by `Session.plan_turn`): an airframe flies its
+time on orbit (`sortie_min`: the E-3 720 = three turns), then spends the turnaround in refit (`turnaround_min`); a relief goes up HANDOVER_MIN before the airframe it replaces leaves, if one is
+ready. The clock is two lists on the asset dict, absolute campaign minutes (like `Squadron.refit`): `orbit` (when each airframe on orbit leaves) and `refit` (when each airframe in refit
+is ready); an airframe in neither is ready on the ground. They live in `a["clk"]` with the start of the turn they belong to (and the start of the next, so planning the same turn twice does not
+advance the clocks twice). No format change: an asset with no `clk` starts with every airframe ready.
+
+Saved in `state.support_assets` (older saves get the table on first use) and the day's windows so far in `state.barcap["support_flights"]` (minutes of the day, reset by `Session._begin_day`).
 """
 from __future__ import annotations
 import math
@@ -17,52 +22,74 @@ from .models import BaseKind
 NM = 1852.0
 UP_LEAD_MIN = 0                # a package needs its AWACS / tanker from its start...
 UP_WINDOW_MIN = 70             # ...to this long after (the push, the target and the way home; judgment call)
-RETURN_P = 0.34                # a missing airframe is back with this chance a day (about three days of repair or replacement; judgment call)
+RETURN_P = 0.34                # a missing airframe is back with this chance a day (about three days of repair or replacement; judgment call). The E-3 is the exception: E3_REPLACEMENT_MIN
+E3_REPLACEMENT_MIN = 2880      # a lost E-3 is replaced one airframe per 48 hours (XO 2026-11-08, game rule; the same slow rule as the Tu-22M3, refit.SLOW_REPL_MIN)
 
-# key -> (side, dcs class, label, home, authorized, minutes on orbit per sortie, turnaround minutes, source)
+# key -> (side, dcs class, label, home, authorized, minutes on orbit per sortie, turnaround (refit) minutes, source)
+# v0.41.334 (campaign rules plan, Phase 1; XO 2026-11-08 / 11-09): E-3 four airframes on 12 h shifts with a 6 h refit; 3 h standard refit; the carrier's S-3B a separate
+# squadron of eight; red's A-50 is gone (XO: none). v0.41.335 (decision 11): the land tankers are the USAF's, eight KC-135 with the boom and no drogue (v0.41.334 split them
+# 4 + 4 with an MPRS half on a misreading); the probe-equipped Navy jets (F-14, F/A-18C) are served by the S-3B only.
 TABLE = {
-    "bl_e3": ("blue", "E_3A", "Overlord", "rear", 6, 480, 720,
-              "USAF has about 30 E-3s, 26 of them at Tinker over four squadrons, so six or seven a squadron (Wikipedia, Boeing E-3 Sentry); "
-              "more than 8 h aloft without refuelling (same page); the 12 h turnaround is a judgment call"),
+    "bl_e3": ("blue", "E_3A", "Overlord", "rear", 4, 720, 360,
+              "XO 2026-11-08: four airframes in 12 hour shifts, a 6 hour refit (high maintenance). USAF has about 30 E-3s, 26 of them at Tinker over four squadrons (Wikipedia, "
+              "Boeing E-3 Sentry); E-3s refuel about every 4 to 6 hours on long surveillance (list25.com, low firmness); the shift length is a judgment call"),
     "bl_e2": ("blue", "E_2C", "Magic", "carrier", 4, 240, 360,
               "a carrier airborne early warning squadron has four E-2Cs (globalsecurity.org, VAW-126); the 4 h cycle and 6 h turnaround are judgment calls"),
-    "bl_kc135": ("blue", "KC_135", "Arco", "rear", 8, 240, 480,
-                 "the 465th Air Refueling Squadron operates eight KC-135Rs (globalsecurity.org); the 4 h on station and 8 h turnaround are judgment calls"),
-    "bl_kc135mprs": ("blue", "KC135MPRS", "Texaco", "rear", 8, 240, 480,
-                     "probe-and-drogue KC-135MPRS: a squadron of eight is a judgment call (same size as the boom squadron)"),
-    "bl_s3": ("blue", "S_3B_Tanker", "Shell", "carrier", 4, 120, 240,
-              "the carrier's recovery tanker: four S-3Bs, a 2 h cycle and 4 h turnaround are judgment calls"),
-    "rd_a50": ("red", "A_50", "Mainstay", "rear", 16, 480, 720,
-               "Russian A-50: 16 aircraft at Ivanovo Severny (Wikipedia, Beriev A-50; the figure is from about 2011, 2006 is not given); data only, "
-               "the red AWACS never flies in a mission yet"),
+    "bl_kc135": ("blue", "KC_135", "Arco", "rear", 8, 240, 180,
+                 "XO 2026-11-08 / 11-09: eight land tankers, boom only (USAF tankers; the Navy's tanker is the S-3B), normal 3 h refit. The 465th Air Refueling Squadron "
+                 "operates eight KC-135Rs (globalsecurity.org); the 4 h on station is a judgment call"),
+    "bl_s3": ("blue", "S_3B_Tanker", "Shell", "carrier", 8, 120, 180,
+              "the carrier's recovery tanker, its own squadron of eight S-3Bs (XO 2026-11-09; almost every carrier air wing had an eight-plane S-3 squadron, USNI Naval History, "
+              "July 2012); same rules as the land tankers: 3 h refit; the 2 h on station is a judgment call"),
 }
 BY_CLASS = {v[1]: k for k, v in TABLE.items() if v[0] == "blue"}
 HANDOVER_MIN = barcap.HANDOVER_MIN
 
 
-def _rear_blue_airfield(state):
-    """The blue airfield furthest from every red air wing: where the AWACS and tankers are based."""
-    reds = [state.assets[w.base_asset_id] for w in state.enemy_air if w.base_asset_id in state.assets]
-    fields = [b for b in state.bases.values() if b.kind == BaseKind.AIRFIELD]
-    if not fields:
-        return None
-    if not reds:
-        return sorted(fields, key=lambda b: b.id)[0]
-    return max(fields, key=lambda b: (min(math.hypot(b.x - r.x, b.y - r.y) for r in reds), b.id))
+def _large_spots(b) -> int:
+    """Parking spots of a field that take the AWACS and the tanker (the scarcer of the two types); 0 when it cannot be told."""
+    try:
+        import dcs.planes as planes
+        from . import theatres
+        a = theatres.terrain().airports[b.airport]
+        return min(len(a.free_parking_slots(getattr(planes, c))) for c in ("E_3A", "KC_135"))
+    except Exception:
+        return 0
+
+
+def _support_airfield(state):
+    """Phase 9a: where the AWACS and tankers are based: the pack's `support_base` (Kutaisi in the Caucasus). If that field has fallen (or the pack names none), the standing
+    starter field (a blue field of the pack that is not a divert field) with the most large spots."""
+    from . import theatres
+    fallen = set((getattr(state, "ground", None) or {}).get("fallen", []))
+    try:
+        th = theatres.load(state.theatre)
+    except Exception:
+        th = {}
+    b = state.bases.get(th.get("support_base") or "")
+    if b is not None and b.kind == BaseKind.AIRFIELD and not b.divert and b.id not in fallen:
+        return b
+    starters = {f["id"] for f in th.get("blue_fields", []) if not f.get("divert")}
+    fields = [x for x in state.bases.values() if x.kind == BaseKind.AIRFIELD and not x.divert and x.id not in fallen and (x.id in starters or not starters)]
+    return max(fields, key=lambda x: (_large_spots(x), x.id)) if fields else None
 
 
 def ensure(state) -> dict:
     """The support assets of both sides, made once (an older save gets them here)."""
     sa = getattr(state, "support_assets", None)
     if sa:
+        if sa.pop("bl_kc135mprs", None) is not None or sa.get("bl_kc135", {}).get("authorized", 8) < TABLE["bl_kc135"][4]:      # v0.41.335: a v0.41.334 campaign had 4 boom + 4 MPRS: the drogue half goes, the boom fleet is 8 (no format change)
+            k = sa.get("bl_kc135")
+            if k is not None and k["authorized"] < TABLE["bl_kc135"][4]:
+                add = TABLE["bl_kc135"][4] - k["authorized"]
+                k["authorized"] += add
+                k["available"] = min(k["authorized"], k["available"] + add)
         return sa
     carrier = next((b for b in state.bases.values() if b.kind == BaseKind.CARRIER), None)
-    rear = _rear_blue_airfield(state)
-    red_rear = max((state.assets[w.base_asset_id] for w in state.enemy_air if w.base_asset_id in state.assets),
-                   key=lambda a: min((math.hypot(a.x - b.x, a.y - b.y) for b in state.bases.values()), default=0), default=None)
+    rear = _support_airfield(state)
     sa = {}
     for key, (side, cls, label, home, n, on, turn, src) in TABLE.items():
-        base = (carrier if home == "carrier" else rear) if side == "blue" else red_rear
+        base = carrier if home == "carrier" else rear
         if base is None:
             continue
         sa[key] = {"id": key, "side": side, "dcs_class": cls, "label": label, "base_id": base.id, "authorized": n, "available": n,
@@ -71,36 +98,111 @@ def ensure(state) -> dict:
     return sa
 
 
-def windows(a: dict, start: int = 0, end: int = 1440) -> list:
-    """When this asset has an aircraft on orbit today: back-to-back sorties by the airframes that are ready, [(start, end)] in minutes of the day.
-    Each sortie hands over HANDOVER_MIN before the last one leaves; an airframe that flew is ready again after its turnaround."""
-    n = int(a["available"])
-    e, turn = int(a["sortie_min"]), int(a["turnaround_min"])
-    ready = [0] * n
-    out, t = [], int(start)
-    while n and t < end:
-        k = min(range(n), key=lambda i: ready[i])
-        if ready[k] > t:                                                  # nobody is ready: the orbit is empty until one is
-            t = ready[k]
-            if t >= end:
+CATCHUP_TURNS = 12             # S25: was 24 (the same 48 hours); a clock not planned for longer than this (turns with night ops off are not planned: the airframes fly on through them) starts again from a ready fleet; a rule of thumb: two days
+
+
+def _trim(orbit: list, refit: list, n: int) -> None:
+    """A lost airframe leaves the lists: never more airframes in them than there are in service (`available`)."""
+    while len(orbit) + len(refit) > max(0, n):
+        if refit:
+            refit.remove(max(refit))
+        else:
+            orbit.remove(min(orbit))
+
+
+def _run(a: dict, orbit: list, refit: list, t0: int, t1: int) -> tuple:
+    """One turn [t0, t1) (absolute minutes) of an asset's airframes. `orbit` / `refit`: the clock at t0. Each airframe flies `sortie_min` on orbit, then `turnaround_min` in refit; when the
+    one on orbit has HANDOVER_MIN left a ready airframe goes up (it covers from then on, so a change of aircraft has no gap); with nobody on orbit the first ready airframe goes up now.
+    -> ([(start, end)] windows of the airframes on orbit in this turn (the end is the airframe's own, it may be past t1), the orbit list at t1, the refit list at t1)."""
+    e, rest = int(a["sortie_min"]), int(a["turnaround_min"])
+    n = max(0, int(a["available"]))
+    orbit, refit = sorted(orbit), sorted(refit)
+    win = [(t0, o) for o in orbit if o > t0]
+    t = t0
+    while True:
+        for o in [o for o in orbit if o <= t]:                           # time on orbit is over: the airframe goes to refit
+            orbit.remove(o)
+            refit.append(o + rest)
+        launch = t if not orbit else max(t, max(orbit) - HANDOVER_MIN)
+        if launch >= t1:
+            break
+        ready = n - len(orbit) - len(refit) + sum(1 for r in refit if r <= launch)
+        if ready <= 0:                                                    # nobody is ready: wait for the first airframe out of refit, if it is in this turn
+            nxt = min((r for r in refit if r > launch), default=None)
+            if nxt is None or nxt >= t1:
                 break
-        out.append((t, min(end, t + e)))
-        ready[k] = t + e + turn
-        t = t + e - HANDOVER_MIN
+            t = nxt
+            continue
+        due = [r for r in refit if r <= launch]
+        if due:
+            refit.remove(min(due))
+        orbit.append(launch + e)
+        win.append((launch, launch + e))
+        t = launch
+    for o in [o for o in orbit if o <= t1]:
+        orbit.remove(o)
+        refit.append(o + rest)
+    return win, sorted(orbit), sorted(r for r in refit if r > t1)
+
+
+def _start(a: dict, turn: int) -> tuple:
+    """The (orbit, refit) lists of an asset at the start of `turn`: from its saved clock (this turn's, or the next turn's from the turn before, carried over any turns that were not planned),
+    else a fleet that is all ready. Trimmed to the airframes in service."""
+    from . import clock
+    clk = a.get("clk")
+    orbit, refit = [], []
+    if clk and 0 <= turn - int(clk["turn"]) <= CATCHUP_TURNS:
+        if turn == clk["turn"]:
+            orbit, refit = list(clk["orbit"]), list(clk["refit"])
+        else:
+            orbit, refit = list(clk["next"][0]), list(clk["next"][1])
+            for t in range(int(clk["turn"]) + 1, turn):                     # turns nobody planned (a night with night ops off): the airframes fly on
+                _trim(orbit, refit, int(a["available"]))
+                _, orbit, refit = _run(a, orbit, refit, clock.minute(t), clock.minute(t) + clock.TURN_MIN)
+    _trim(orbit, refit, int(a["available"]))
+    return orbit, refit
+
+
+def _merge(spans: list) -> list:
+    out = []
+    for s0, e0 in sorted(spans):
+        if out and s0 <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], e0))
+        else:
+            out.append((s0, e0))
     return out
 
 
-def plan(state) -> dict:
-    """Today's windows per asset (blue ones; red's are data only) -> {key: [(start, end)]}, kept in state.barcap["support_flights"]."""
+def plan(state, turn: int | None = None) -> dict:
+    """This turn's windows per asset (blue ones; red's are data only) -> {key: [(start, end)]}, minutes of the day (an end may be past the turn's, or past midnight: it is the airframe's own).
+    They are added to the day's windows in state.barcap["support_flights"] (planning a turn again replaces that turn's windows). Advances each asset's airframe clock one turn (module docstring)."""
+    from . import clock, fleet
+    turn = state.turn if turn is None else int(turn)
     sa = ensure(state)
-    from . import fleet
-    out = {k: ([] if fleet.is_sunk_base(state, a.get("base_id", "")) else windows(a)) for k, a in sa.items() if a["side"] == "blue"}          # v0.41.257: the boat's E-2C and S-3 are gone with it
-    state.barcap["support_flights"] = {k: [list(w) for w in v] for k, v in out.items()}
+    bc = barcap.ensure(state)
+    t0, t1 = clock.minute(turn), clock.minute(turn) + clock.TURN_MIN
+    base = clock.day_start_minute(clock.day_of(turn))
+    out = {}
+    for k, a in sa.items():
+        if a["side"] != "blue":
+            continue
+        if fleet.is_sunk_base(state, a.get("base_id", "")):                # v0.41.257: the boat's E-2C and S-3 are gone with it
+            a.pop("clk", None)
+            out[k] = []
+            continue
+        orbit, refit = _start(a, turn)
+        win, o2, r2 = _run(a, orbit, refit, t0, t1)
+        a["clk"] = {"turn": turn, "orbit": orbit, "refit": refit, "next": [o2, r2]}
+        out[k] = [(s - base, e - base) for s, e in _merge(win)]
+    fl = bc.setdefault("support_flights", {})
+    for k, w in out.items():
+        fl[k] = [list(x) for x in fl.get(k, []) if x[0] < t0 - base] + [list(x) for x in w]      # this turn's windows replace an earlier plan of the same turn
     return out
 
 
 def covers(state, key: str, lo: int, hi: int) -> bool:
-    """Is there an aircraft of this asset on orbit for the whole of [lo, hi] (minutes of the day)? A day with no plan yet (an old save) says yes."""
+    """Is there an aircraft of this asset on orbit for the whole of [lo, hi] (minutes of the day)? Reads the day's windows planned so far: a package asks about [its start, 70 minutes after], and an
+    airframe's window runs to its own end, so the relief of the next turn is not needed. A day with no plan yet (an old save) says yes."""
     fl = (getattr(state, "barcap", None) or {}).get("support_flights")
     if not fl or key not in fl:
         return True
@@ -127,15 +229,77 @@ def lose(state, label: str, n: int = 1) -> str:
     for a in ensure(state).values():
         if a["side"] == "blue" and a["label"] == label and a["available"] > 0 and n > 0:
             a["available"] = max(0, a["available"] - n)
+            clk = a.get("clk")
+            for _ in range(n if clk else 0):                              # the airframe that was shot down was on orbit: it leaves the clock too (this turn's start and the next turn's)
+                for lst in (clk["orbit"], clk["next"][0]):
+                    if lst:
+                        lst.pop(0)
             return f"{a['label']} (support aircraft) shot down: {a['available']}/{a['authorized']} airframes left"
     return ""
 
 
+AWACS_LOSS_ON = False          # v0.41.348 (Phase 7b, decision 50): OFF by default (Crew Chief recommendation 2026-11-10, XO to confirm): the HAVCAP is not yet reliable, so the unguarded case would fire more often than meant
+AWACS_LOSS_GUARDED = 0.002     # chance a turn an AWACS airframe is lost on orbit with a HAVCAP pair guarding it (judgment call)
+AWACS_LOSS_UNGUARDED = 0.02    # ...and with no guard that turn (judgment call). Red does not target the AWACS (XO 2026-11-10): this is a passive attrition roll
+AWACS_KEYS = ("bl_e3", "bl_e2")
+
+
+def attrition(state, turn: int) -> list:
+    """v0.41.348 (Phase 7b): the war sim's AWACS loss. Each turn an E-3 / E-2C asset is on orbit it loses one airframe with AWACS_LOSS_GUARDED if a HAVCAP pair guarded it this turn, else
+    AWACS_LOSS_UNGUARDED (seeded per asset and turn). Goes through `lose`, so the clocks stay consistent. A turn whose AWACS was in a flown mission is not rolled (the caller skips it).
+    Counts in `a["war_lost"]` (for the probe). -> log lines."""
+    import random as _r
+    from . import clock
+    if not AWACS_LOSS_ON:
+        return []
+    bc = getattr(state, "barcap", None) or {}
+    fl = bc.get("support_flights") or {}
+    lo = clock.minute(turn) - clock.day_start_minute(clock.day_of(turn))
+    hi = lo + clock.TURN_MIN
+    guarded = {f["asset"] for f in bc.get("blue_flights") or [] if f.get("turn") == turn and f.get("kind") == "HAVCAP"}
+    out = []
+    sa = ensure(state)
+    for key in AWACS_KEYS:
+        a = sa.get(key)
+        if a is None or a["available"] <= 0 or not any(e > lo and s < hi for s, e in fl.get(key, [])):
+            continue
+        p = AWACS_LOSS_GUARDED if key in guarded else AWACS_LOSS_UNGUARDED
+        if _r.Random(f"{state.campaign_id}:{turn}:{key}:awloss").random() < p:
+            ln = lose(state, a["label"])
+            if ln:
+                a["war_lost"] = int(a.get("war_lost", 0)) + 1
+                out.append(ln.replace("shot down", "lost to enemy action") + (" (guarded)" if key in guarded else " (no guard)"))
+    return out
+
+
+def replace_e3(state) -> list:
+    """Every TURN (v0.41.337, Phase 3; it was inside the nightly `step`, so a 48 h replacement took 64 to 72 h): a missing E-3 is replaced one at a time every 48 hours
+    (E3_REPLACEMENT_MIN, on the campaign clock, `state.turn`); the timer starts when the first airframe is seen missing. -> log lines."""
+    from . import clock
+    out = []
+    now = clock.minute(state.turn)
+    for a in ensure(state).values():
+        if a["side"] != "blue" or a["dcs_class"] != "E_3A":
+            continue
+        if a["available"] >= a["authorized"]:
+            a.pop("repl_due", None)
+            continue
+        if "repl_due" not in a:
+            a["repl_due"] = now + E3_REPLACEMENT_MIN             # the timer starts when the first airframe is missing
+        if now >= a["repl_due"]:
+            a["available"] += 1
+            a["repl_due"] = now + E3_REPLACEMENT_MIN
+            out.append(f"{a['label']}: a replacement airframe arrived ({a['available']}/{a['authorized']})")
+    return out
+
+
 def step(state, rng) -> list:
-    """Overnight: each missing blue airframe is back with RETURN_P. -> log lines."""
+    """Overnight: each missing blue airframe is back with RETURN_P. (The E-3 is replaced on its own 48 h clock, every turn: `replace_e3`.) -> log lines."""
     out = []
     for a in ensure(state).values():
         if a["side"] != "blue" or a["available"] >= a["authorized"]:
+            continue
+        if a["dcs_class"] == "E_3A":
             continue
         back = sum(1 for _ in range(a["authorized"] - a["available"]) if rng.random() < RETURN_P)
         if back:

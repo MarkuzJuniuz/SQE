@@ -12,6 +12,7 @@ Pure planning (no pydcs); the mission builder spawns what these functions return
 """
 from __future__ import annotations
 import math
+from . import reserve as _reserve
 from .routes import NM
 
 # How far from its field a type will be sent to intercept (nm). Hand-set and deliberately shorter than the published combat radius: a
@@ -31,8 +32,9 @@ def compass(brg: float) -> str:
     return COMPASS[int(((brg % 360) + 22.5) // 45) % 8]
 
 
-def plan_red(state, d, rng, tx, ty, base_aircraft: int, blue_fighters: int, used: dict, fighters: set, bearing) -> list:
-    """-> [{base, type, size, nm, brg}] extra enemy pairs. `used` = aircraft per wing base already in this mission (it is updated)."""
+def plan_red(state, d, rng, tx, ty, base_aircraft: int, blue_fighters: int, used: dict, fighters: set, bearing, drawn: dict | None = None) -> list:
+    """-> [{base, type, size, nm, brg, sq}] extra enemy pairs. `used` = aircraft per wing base already in this mission (it is updated); `drawn` = hold jets drawn per squadron id this mission (reserve.pick_red_hold), shared with the alert pairs."""
+    drawn = drawn if drawn is not None else {}
     chance = getattr(d, "react_chance", 0.0)
     if chance <= 0 or rng.random() >= chance:
         return []
@@ -51,24 +53,19 @@ def plan_red(state, d, rng, tx, ty, base_aircraft: int, blue_fighters: int, used
         if a is None or a.destroyed:
             continue
         nm = math.hypot(a.x - tx, a.y - ty) / NM
-        types = [t for t in w.general_types_up() if t in fighters and INTERCEPT_NM.get(t, 120) >= nm]
+        types = [t for t in w.general_types_up(state) if t in fighters and INTERCEPT_NM.get(t, 120) >= nm]
         if types:
             cands.append((w, a, nm, types))
-    # v0.41.110: the day's patrols come first. Each BARCAP area a wing flies today keeps one pair out of the reinforcement draw (XO 2026-10-22: scrambles
-    # outnumbered the basecaps and the rest of the wing sat on the ramp). Judgment call: counted for the whole day, even if that patrol is not in this mission.
-    hold = {}
-    for f in ((getattr(state, "red_air", None) or {}).get("flights") or []):
-        if f.get("kind") == "CAP" and f.get("area"):
-            hold.setdefault(f["wing"], set()).add(f["area"])
-    hold = {k: 2 * len(v) for k, v in hold.items()}
+    # v0.41.343 (campaign rules Phase 6a): a wing sends a pair only from its reaction hold (reserve.py), squadron by squadron; no hold left, no pair. This replaces the v0.41.110 block (2 jets per BARCAP area).
     out = []
     for _ in range(pairs):
-        free = [c for c in cands if c[0].available_of(c[3]) - used.get(c[0].base_asset_id, 0) - hold.get(c[0].base_asset_id, 0) >= 2]
+        free = [c for c in cands if _reserve.red_hold_left(state, c[0], drawn, c[3]) >= 2]
         if not free:
             break
         w, a, nm, types = rng.choices(free, weights=[1.0 / max(30.0, c[2]) for c in free])[0]      # nearer fields are likelier
+        sq = _reserve.pick_red_hold(state, w, drawn, types)
         used[w.base_asset_id] = used.get(w.base_asset_id, 0) + 2
-        out.append({"base": w.base_asset_id, "type": rng.choice(types), "size": 2, "nm": nm, "brg": bearing(tx, ty, a.x, a.y)})
+        out.append({"base": w.base_asset_id, "type": sq.aircraft, "size": 2, "nm": nm, "brg": bearing(tx, ty, a.x, a.y), "sq": sq.id})
     return out
 
 
@@ -90,7 +87,7 @@ def blue_sources(state, aircraft_table, fighter_roles, committed: dict, px, py) 
     out = []
     for sq in state.squadrons.values():
         spec = aircraft_table.get(sq.aircraft)
-        if spec is None or not (set(spec.roles) & fighter_roles):
+        if spec is None or not (set(spec.roles) & fighter_roles) or sq.role == "havcap":          # Phase 9b: a HAVCAP squadron flies guards only
             continue
         b = state.bases[sq.base_id]
         nm = math.hypot(b.x - px, b.y - py) / NM

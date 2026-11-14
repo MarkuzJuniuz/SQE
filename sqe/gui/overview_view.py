@@ -1,6 +1,6 @@
 """v0.41.207 (XO's UI_Remarks.docx, 2026-10-29): how the Overview draws its figures. HTML and small images only; the numbers come from
 overview_detail.py / posture.py (the data layer keeps its plain lowercase strings, the smoke test reads them). Colour rules (XO 2026-10-29):
-supply bad at 65% or less, alright 66 to 90, good above 90; every other 0 to 100 figure (air defence, health, strength) red below 40, amber 40 to 70,
+Force Index (the old "supply" percentage) bad at 65% or less, alright 66 to 90, good above 90; every other 0 to 100 figure (air defence, health, strength) red below 40, amber 40 to 70,
 green above 70 (judgment call for the cut-offs). The middle band is amber (#E0A800), not pure yellow."""
 from __future__ import annotations
 import html
