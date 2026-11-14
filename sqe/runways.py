@@ -67,9 +67,9 @@ def crater(state, field_id: str, hits: int | None = None) -> str:
     if is_closed(state, field_id):
         c = _craters(state)[field_id]
         c["hits"] = int(c.get("hits", 0)) + int(hits or 0)
-        return f"{name}: runway hit again, still cratered"
+        return f"{name}: runway hit again, still closed"
     _craters(state)[field_id] = {"turn": state.turn, "until": state.turn + CLOSE_TURNS, "hits": int(hits if hits is not None else HITS_TO_CLOSE), "side": side}
-    return f"{name}: runway CRATERED. Closed for some time; its squadrons cannot fly and new jets wait until then"
+    return f"{name}: runway CUT, field closed. Closed for some time; its squadrons cannot fly and new jets wait until then"
 
 
 def add_hits(state, field_id: str, hits: int) -> str | None:

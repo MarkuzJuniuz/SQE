@@ -13,6 +13,7 @@ from ..aircraft import AIRCRAFT
 from ..difficulty import LEVELS
 from ..timeofday import is_night
 from . import theme
+from .. import debrief as DB
 from .widgets import StepSpin, card
 
 
@@ -382,9 +383,9 @@ class WaitingDialog(QDialog):
         p = session.state.pending; tl = p["timeline"]
         lay = QVBoxLayout(self); lay.setSpacing(12)
         t = QLabel("Sortie in progress"); t.setObjectName("title"); lay.addWidget(t)
+        self.overall = QLabel(""); self.overall.setObjectName("h2"); lay.addWidget(self.overall)         # S77: IN FLIGHT / ALL RECOVERED (set by _poll)
         info = card(); lay.addWidget(info)
         il = info.layout()
-        il.addWidget(QLabel(f"<b>{p['objective']}</b>"))
         il.addWidget(QLabel(f"Mission file: <b>SQE_Sortie.miz</b> in your DCS Missions folder. Start DCS, open it from the Missions list, and fly."))
         pd = p.get("package_dict", {}); cn = p.get("counts") or {}
         il.addWidget(QLabel(f"Mission start <b>{pd.get('start', '')}</b> local   |   {cn.get('groups', '?')} groups, {cn.get('units', '?')} units"))
@@ -392,6 +393,10 @@ class WaitingDialog(QDialog):
         for wmsg in (p.get("warnings") or []):                  # v0.41.133: the notes come last (the "Built with notes" popup is gone)
             wl = QLabel("Note: " + wmsg); wl.setWordWrap(True); wl.setStyleSheet(f"color:{theme.AMBER};"); il.addWidget(wl)
         self.status = QLabel("Waiting for DCS results..."); self.status.setObjectName("h2"); lay.addWidget(self.status)
+        self.ptbl = QTableWidget(1, 2); self.ptbl.setHorizontalHeaderLabels(["Package", "Status"])         # S87: one row per package, its phase and result (set by _status_lines)
+        self.ptbl.verticalHeader().setVisible(False); self.ptbl.setEditTriggers(QTableWidget.NoEditTriggers); self.ptbl.setSelectionMode(QTableWidget.NoSelection)
+        self.ptbl.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch); self.ptbl.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.ptbl.setWordWrap(True); self._fill_packages([{"name": p["objective"], "text": ""}]); lay.addWidget(self.ptbl)
         self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["This sortie", "Friendly", "Enemy"])
         self.tbl.verticalHeader().setVisible(False); self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch); self.tbl.setMinimumHeight(190)
@@ -407,19 +412,45 @@ class WaitingDialog(QDialog):
 
     def _fill(self, t):
         rows = [("Aircraft lost / total", f"{t['blue_air_lost']} / {t['blue_air_total']}", f"{t['red_air_lost']} / {t['red_air_total']}"),
-                ("Ground units lost / total", f"{t['blue_ground_lost']} / {t['blue_ground_total']}", f"{t['red_ground_lost']} / {t['red_ground_total']}"),
-                ("Landed / recovered", str(t["landed"]), str(t.get("red_landed", 0)))]
+                ("Ground units lost / total", f"{t['blue_ground_lost']} / {t['blue_ground_total']}", f"{t['red_ground_lost']} / {t['red_ground_total']}")]
         self.tbl.setRowCount(len(rows))
         for i, r in enumerate(rows):
             for j, v in enumerate(r):
                 it = QTableWidgetItem(v); it.setTextAlignment(Qt.AlignCenter if j else Qt.AlignLeft | Qt.AlignVCenter)
                 self.tbl.setItem(i, j, it)
 
+    def _fill_packages(self, rows):
+        self.ptbl.setRowCount(len(rows))
+        for i, r in enumerate(rows):
+            for j, v in enumerate((r["name"], r["text"])):
+                self.ptbl.setItem(i, j, QTableWidgetItem(v))
+        self.ptbl.resizeRowsToContents()
+        self.ptbl.setFixedHeight(self.ptbl.horizontalHeader().height() + sum(self.ptbl.rowHeight(i) for i in range(len(rows))) + 4)
+
+    def _status_lines(self, data):
+        """S77: the objective lines and the overall line, read-only from the hook's state file (nothing in the campaign changes; Accept stays the authority).
+        The hook rewrites the file every 30 s and on every kill / loss / landing, so these change at most that often."""
+        st = self.sess.state; man = self.sess.manifest(); pend = st.pending or {}
+        start = (pend.get("package_dict") or {}).get("start", "00:00")
+        self._fill_packages(DB.package_rows(st, man, data, pend))
+        fs = DB.flight_status(st, man, data, pend)
+        if fs["total"] and fs["airborne"] == 0:
+            self.overall.setText("ALL RECOVERED, safe to exit"); self.overall.setStyleSheet(f"color:{theme.GREEN}; font-weight:bold;")
+        elif fs["total"] and not data.get("mission_ended"):
+            nxt = f", next event TOT {DB._clock_hm(start, fs['next_tot_s'])}" if fs["next_tot_s"] is not None else ""
+            self.overall.setText(f"IN FLIGHT: {fs['airborne']} of {fs['total']} friendly aircraft airborne{nxt}"); self.overall.setStyleSheet("font-weight:bold;")
+        else:
+            self.overall.setText("")
+
     def _poll(self):
         status, data, t = self.sess.poll(self.manual)
         self._dots = (self._dots + 1) % 4
         if status == "ok":
             self.data = data; self._fill(t); self.b_ok.setEnabled(True)
+            try:
+                self._status_lines(data)
+            except Exception:                                   # a status line must never break the waiting window
+                pass
             if data.get("mission_ended"):
                 self.status.setText("Mission ended. Review the numbers, then Accept."); self.status.setStyleSheet(f"color:{theme.GREEN};")
             else:
