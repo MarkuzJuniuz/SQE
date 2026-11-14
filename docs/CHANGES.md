@@ -1,7 +1,7 @@
 # CHANGES.md
 
 ## v0.41.443, the waiting screen has a package status table
-The top of the waiting window now has a table with one row per package: its job on the left, its status on the right. The status is never blank: "En route, TOT 14:20", "On target", "Returning" or "Complete", with the job's result in front once there is one ("RUNWAY CUT, field closed, returning"). Scrubbed and turned-back packages say so. Display only.
+The top of the waiting window now has a table with one row per package: its job on the left, its status on the right. The status is never blank: "En Route, TOT 14:20", "On Target", "Returning" or "Complete", with the job's result in front once there is one ("Runway Cut, Field Closed, Returning"). Scrubbed and turned-back packages say so. Display only.
 ## v0.41.442, the SEAD is on the SAM site before the strikers reach its range
 In a strike or CAS package, the escort SEAD flight now times its HARMs to land on the covering SAM site shortly before the strikers first come within that site's reach, not shortly before their time over target. Before, the strikers (a runway strike on Nalchik) could be engaged a few minutes before the HARMs arrived. The SEAD only ever goes earlier than it did; stand-off and DEAD packages are unchanged.
 ## v0.41.441, a closed runway reads "cut", and the AWACS says "this mission"

@@ -1816,6 +1816,25 @@ def objective_status(state, manifest: Manifest, data: dict, pending: dict | None
 ON_TARGET_S = 300     # S87: a package reads "On target" this long after its TOT (no result yet), then "Returning". Judgment call: the attack run and the pull-off take a few minutes
 
 
+_SMALL = {"a", "an", "and", "at", "in", "of", "on", "or", "the", "to"}
+_ACRONYMS = {"TOT", "SAM", "SEAD", "DEAD", "CAS", "EWR", "AWACS"}
+
+
+def _title(text: str) -> str:
+    """S87: Title Case for the status column (XO 2026-11-14): small words stay lower case (not the first of a phrase), the acronyms (TOT, SAM, ...) and any word with a digit (SA-6, 14:20, 3) stay as written."""
+    out = []
+    for i, w in enumerate(text.split(" ")):
+        core = w.rstrip(",.;:")
+        if any(c.isdigit() for c in core) or core in _ACRONYMS:
+            out.append(w)
+        elif core.lower() in _SMALL and i and not out[-1].endswith((",", ";", ":")):
+            out.append(w.lower())
+        else:
+            k = len(w) - len(w.lstrip("("))
+            out.append(w[:k] + w[k:k + 1].upper() + w[k + 1:].lower())
+    return " ".join(out)
+
+
 def package_rows(state, manifest: Manifest, data: dict, pending: dict | None = None) -> list:
     """S87 (XO 2026-11-14): one row per package for the waiting window's top table, the status never blank: the package's phase (En route, TOT hh:mm / On target / Returning / Complete /
     Scrubbed / Aborted), with the job's result in front once there is one ('Runway cut, returning'). READ-ONLY. -> [{name, text}], the flown package first (name = its objective,
@@ -1850,7 +1869,7 @@ def package_rows(state, manifest: Manifest, data: dict, pending: dict | None = N
             phase = "On target"
         else:
             phase = "Returning"
-        rows.append({"name": name, "text": f"{res}, {phase[0].lower()}{phase[1:]}" if res else phase})
+        rows.append({"name": name, "text": _title(f"{res}, {phase}" if res else phase)})
     return rows
 
 
