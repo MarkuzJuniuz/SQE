@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.436, the enemy air wings list their squadrons by name
+The Forces > enemy air wings tab now has a Squadron column with names like "Sochi-Adler MiG-21 Sqn #2". A squadron keeps its name when it withdraws to another field; the Based at column shows where it is now.
 ## v0.41.435, the runway job is called "OCA: Runway Strike"
 The runway job now reads "OCA: Runway Strike" (Offensive Counter-Air) in the Missions list, the mission description, the briefing and the debrief. The F-15E stand-off version is "OCA: Standoff Runway Strike".
 ## v0.41.434, one bomb on the runway closes the field, and your wingmen get an attack task

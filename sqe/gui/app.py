@@ -517,7 +517,7 @@ class ForcesPage(QWidget):
         self.air_line = QLabel(); self.air_line.setObjectName("small"); self.air_line.setWordWrap(True); lay.addWidget(self.air_line)         # v0.41.152: aircraft counts, a detail line (jets no longer decide the war)
         self.tabs = QTabWidget(); lay.addWidget(self.tabs)
         self.sq = _tbl(["Squadron", "Aircraft", "Service", "Based at", "Aircraft on hand", "Strength"])
-        self.ea = _tbl(["Aircraft", "Based at", "On hand", "Strength"])
+        self.ea = _tbl(["Squadron", "Aircraft", "Based at", "On hand", "Strength"])
         self.as_ = _tbl(["Enemy asset", "Type", "Depth", "Condition"])
         self.bs = _tbl(["Coalition base", "Type", "Patriot", "HAWK", "AAA"])
         self.gw = _tbl(["Sector", "Enemy force", "Friendly force", "Enemy forward garrison", "Friendly forward garrison"])
@@ -530,26 +530,42 @@ class ForcesPage(QWidget):
         b = QProgressBar(); b.setRange(0, 100); b.setValue(int(round(frac * 100))); b.setFormat("%p%")
         b.setStyleSheet(f"QProgressBar::chunk {{ background: {color}; border-radius:5px; }}"); return b
 
+    @staticmethod
+    def _red_sqn_names(st) -> dict:
+        """v0.41.436 (XO): in-universe red squadron names, "<home field> <type> Sqn #<n>", worked out for display only. The home field is the id's prefix, so a
+        squadron that withdraws keeps its designation; n counts the same type at that field in id order."""
+        by = {}
+        for w in st.enemy_air:
+            for q in w.sqns:
+                home, _, num = q.id.rpartition("_")
+                by.setdefault((home, q.aircraft), []).append((int(num) if num.isdigit() else 0, q.id))
+        out = {}
+        for (home, typ), lst in by.items():
+            a = st.assets.get(home)
+            for n, (_, qid) in enumerate(sorted(lst), 1):
+                out[qid] = f"{a.name if a else home} {typ.replace('_', '-')} Sqn #{n}"
+        return out
+
     def refresh(self, st):
         from .. import war as _war
         t = _war.totals(st); en = story.enemy(st)
         self.air_line.setText(f"Aircraft serviceable: Coalition {t['fa']} of {t['fz']}, {en} {t['ea']} of {t['ez']}.")
         self.tabs.setTabText(4, f"{en} air wings"); self.tabs.setTabText(5, f"{en} assets")
         self.gw.setHorizontalHeaderLabels(["Sector", f"{en} force", "Coalition force", f"{en} forward garrison", "Coalition forward garrison"])
-        self.ea.setHorizontalHeaderLabels(["Aircraft", "Based at", "On hand", "Strength"]); self.as_.setHorizontalHeaderLabels([f"{en} asset", "Type", "Depth", "Condition"])
+        self.ea.setHorizontalHeaderLabels(["Squadron", "Aircraft", "Based at", "On hand", "Strength"]); self.as_.setHorizontalHeaderLabels([f"{en} asset", "Type", "Depth", "Condition"])
         sqs = list(st.squadrons.values()); self.sq.setRowCount(len(sqs))
         for i, s in enumerate(sqs):
             sp = AIRCRAFT[s.aircraft]
             for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.on_hand} / {s.authorized}" + (f" ({n} refitting)" if (n := len(s.refit) + s.reserve) else ""))):
                 self.sq.setItem(i, j, _item(v))
             self.sq.setCellWidget(i, 5, self._bar(s.on_hand / max(1, s.authorized), theme.BLUE))
-        rows_ = [(w, q) for w in st.enemy_air for q in w.sqns]                     # v0.41.208 (XO): laid out like the Coalition squadrons (no squadron names): one row per airframe, its base, serviceable and strength
-        self.ea.setRowCount(len(rows_))
+        rows_ = [(w, q) for w in st.enemy_air for q in w.sqns]                     # v0.41.208 (XO): laid out like the Coalition squadrons: one row per squadron, its in-universe name (v0.41.436), airframe, base, serviceable and strength
+        self.ea.setRowCount(len(rows_)); names = self._red_sqn_names(st)
         for i, (w, q) in enumerate(rows_):
-            for j, v in enumerate((q.aircraft.replace("_", "-"), st.assets[w.base_asset_id].name,
+            for j, v in enumerate((names.get(q.id, q.name), q.aircraft.replace("_", "-"), st.assets[w.base_asset_id].name,
                                    f"{q.on_hand} / {q.authorized}")):
                 self.ea.setItem(i, j, _item(v))
-            self.ea.setCellWidget(i, 3, self._bar(q.on_hand / max(1, q.authorized), theme.RED))
+            self.ea.setCellWidget(i, 4, self._bar(q.on_hand / max(1, q.authorized), theme.RED))
         from .. import sams as _sams, support_assets as _sa
         bl = list(st.bases.values()); self.bs.setRowCount(len(bl))
         col = lambda h: theme.GREEN if h > 0.6 else theme.AMBER if h > 0.25 else theme.RED
