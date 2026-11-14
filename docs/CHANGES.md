@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## v0.41.435, the runway job is called "OCA: Runway Strike"
+The runway job now reads "OCA: Runway Strike" (Offensive Counter-Air) in the Missions list, the mission description, the briefing and the debrief. The F-15E stand-off version is "OCA: Standoff Runway Strike".
 ## v0.41.434, one bomb on the runway closes the field, and your wingmen get an attack task
 A runway strike now closes the field with a single bomb on the runway (it was three), so your own hit is enough even if your wingmen drop nothing. Your flight's AI wingmen on a strike (runway, depot, EWR) now also carry the same attack task on the IP that the AI-only flights use. Your own route is unchanged.
 ## v0.41.433, the debrief of a runway strike tells the crater, not a damage percent

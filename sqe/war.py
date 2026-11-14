@@ -269,7 +269,7 @@ class ObjectivePlanner:
                 # briefing code for the strike versions stays in place, unreachable for new plans, for a later cleanup.
                 if not runways.is_closed(state, a.id):         # v0.41.254: crater the runway (a STRIKE with aim RUNWAY); 3 bomb hits close the field for 2-5 days
                     prr = a.value * 0.9 * (w.available / max(1, w.authorized))
-                    o_ = Objective("", ObjectiveType.STRIKE, a.id, prr, f"Crater the runway at {a.name} ({w.available} aircraft)")
+                    o_ = Objective("", ObjectiveType.STRIKE, a.id, prr, f"OCA: Runway Strike, {a.name} ({w.available} aircraft)")
                     o_.aim = "RUNWAY"
                     cand.append((prr, o_, self._blockers(state, a) + covering_sams(state, a)))
         blocking = {x.id for c in cand for x in c[2]} | {sid for c in cand for sid in after_sites(c[1])}      # sites that stand in front of something else
