@@ -194,7 +194,7 @@ def debrief_story(outcome: dict, state, rng: random.Random) -> str:
     elif outcome.get("runway"):                          # S75: a runway job is told by the crater, not by a damage percent
         rw = outcome["runway"]
         if rw.get("closed"):
-            parts.append(f"{obj}: the runway is cratered and the field is shut for {rw.get('hours', 0)} hours.")
+            parts.append(f"{obj}: the runway is cratered and the field is shut for some time.")
         elif rw.get("hits"):
             parts.append(f"{obj}: {rw['hits']} bomb{'s' if rw['hits'] != 1 else ''} hit the runway, not enough to close it; the crews will have it repaired overnight.")
         else:
