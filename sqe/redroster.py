@@ -21,6 +21,7 @@ LONG_RANGE = ("MiG_31", "Su_27")
 MIG31_SHARE = {2: 0.15, 3: 0.50, 4: 0.75}             # share of a field's long-range jets that are MiG-31, by the field's tier (v0.41.163, XO 2026-10-27: flipped, the interceptor sits deep under ground control, the Su-27 holds the fringe)
 ORDER = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis", "Su_24M", "Su_34", "Su_25")      # allocation order: the fighters first (every field gets some), then the strikers fill what parking is left
 FIGHTERS = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis")
+LIGHT_FIGHTERS = ("MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis")                # the fighter types `consolidate` may swap (not heavy: parking caps; not MiG-31: depth gradient)
 FIGHTER_FLOOR = 4                                       # every field keeps at least this many fighters (a pair of pairs): the old rule "every wing keeps a fighter squadron"
 
 # Jets per level, bombers excluded (judgment calls: the red numbers of the 2026-10-25 plan; fighters about 85% of the old count with the MiG-31s inside,
@@ -55,6 +56,38 @@ def _share(total: int, desire: dict, cap: dict) -> dict:
                     out[k] += 1; left -= 1
         live = {k: v for k, v in live.items() if out[k] < cap[k]}
     return out
+
+
+def consolidate(plan: dict, fields: list) -> None:
+    """v0.41.437 (S83, XO 2026-11-14): fewer, fuller squadrons. The allocator above hands every field a little of every light fighter type (2 MiG-29S, 3 MiG-29A,
+    2 MiG-23 ...), a shape no air force flies: a Soviet / Russian squadron is about 10 to 12 jets and a regiment keeps one or two types (from memory, medium
+    firmness; the 12 cap itself is a judgment call). This swaps jets between two fields so one type grows into the bigger block and the other type
+    follows the opposite way: each field keeps its fighter count (so the fighter floor and the parking caps hold) and the roster totals do not change. A swap needs
+    the sum of squares of the blocks to rise (it always terminates), and never leaves a lone jet. Light fighters only; the heavy types and the MiG-31 depth
+    gradient are left as they are."""
+    for _ in range(400):
+        best = None
+        for f in fields:
+            for a, n in list(plan[f].items()):
+                if a not in LIGHT_FIGHTERS or n <= 0:
+                    continue
+                for g in fields:
+                    if g == f or plan[g].get(a, 0) < n:
+                        continue
+                    for b in LIGHT_FIGHTERS:
+                        if b == a or plan[g].get(b, 0) < n or plan[f].get(b, 0) <= 0 or plan[g][b] - n == 1:
+                            continue
+                        gain = 2 * n * (plan[g][a] - n + n) + 2 * n * (plan[f][b] - plan[g][b] + n)
+                        key = (gain, -fields.index(f), -fields.index(g), a, b)
+                        if gain > 0 and (best is None or key > best[0]):
+                            best = (key, f, g, a, b, n)
+        if best is None:
+            return
+        _, f, g, a, b, n = best
+        del plan[f][a]; plan[f][b] += n
+        plan[g][a] += n; plan[g][b] -= n
+        if plan[g][b] == 0:
+            del plan[g][b]
 
 
 def allocate(level: int, fields: list, weight: dict, tier: dict, cap_all: dict, cap_heavy: dict, roster: dict | None = None) -> dict:
@@ -121,6 +154,7 @@ def allocate(level: int, fields: list, weight: dict, tier: dict, cap_all: dict, 
                 break
             n, g, t = max(donors, key=lambda x: (x[0], x[1], x[2]))
             plan[g][t] -= 2; plan[f][t] = plan[f].get(t, 0) + 2
+    consolidate(plan, fields)
     return {f: p for f, p in plan.items() if p}
 
 
