@@ -83,7 +83,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                     "short of the target and outside live SAM cover. Shoot what comes in range; do not chase into the SAMs. Hold 15 minutes, or go "
                     "home when your missiles are gone."]
     elif obj.type.value == "STRIKE" and obj.aim == "RUNWAY":
-        sit += ["", "Runway strike. Crater the runway to close the field for some time. "
+        sit += ["", "OCA: Runway Strike. Crater the runway to close the field for some time. "
                     "Nothing launches from a cratered field and nothing lands there. The target point is the middle of the strip."]
         if any(getattr(f_, "kit", "") == "PEN" for f_ in pkg.flights):          # S51
             sit += ["", "The strike flight is F-15Es with AGM-154C JSOWs: they release on the middle of the runway from stand-off range (about 30 nm out) and turn straight home. "
@@ -196,4 +196,4 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
 def _long_label(f, obj) -> str:
     """The flight's job in words, for 'tasked as ...'."""
     from .models import task_label
-    return {"SO DEAD": "Standoff DEAD", "SO STRIKE": "Standoff Strike", "DEAD": "Close DEAD"}.get(task_label(f, obj), task_label(f, obj))
+    return {"SO DEAD": "Standoff DEAD", "SO STRIKE": "Standoff Strike", "SO RWY STRIKE": "OCA: Standoff Runway Strike", "DEAD": "Close DEAD"}.get(task_label(f, obj), task_label(f, obj))

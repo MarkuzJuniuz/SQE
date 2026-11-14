@@ -74,7 +74,7 @@ _TASK = {Role.STRIKE: "Strike target", Role.SEAD: "Suppress/destroy SAM",
 _DEAD_TASK = {Role.SEAD: "SEAD: suppress the radars ahead of the DEAD flight", Role.STRIKE: "Close DEAD: destroy the SAM site with GBUs (the SEAD package goes in ahead of you; call it off if the radars are up)"}
 KIT_JETS = {"JSOW": JSOW_PER_JET, "SLAM": SLAM_PER_JET, "PEN": PEN_PER_JET}      # v0.41.298: the airframes that can fill each kit slot (S51: PEN = the F-15E's runway crater; the F-15E is in no other table, so no Standoff DEAD / counter-air slot can take it)
 _KIT_TASK = {"CBU": "Counter-air strike: CBU-103 on the jets parked on the ramp", "SLAM": "Standoff Strike: AGM-84H SLAM-ER on the target from far out, released outside the fighters' reach; then home", "JSOW": "Standoff DEAD: AGM-154A on the site's radars, launchers and covering Tors, on the HARM salvo's time; stand-off release, then home",
-             "PEN": "Standoff Runway Strike: AGM-154C JSOW on the middle of the runway from stand-off range, released outside the fighters' reach; then home"}
+             "PEN": "OCA: Standoff Runway Strike: AGM-154C JSOW on the middle of the runway from stand-off range, released outside the fighters' reach; then home"}
 _EWR_KIT_TASK = {"PEN": "EWR strike: AGM-154C JSOW on the radar from stand-off range, released outside the fighters' reach; then home",         # S60: the kit texts of an EWR strike (not a SAM site, not a runway)
                  "JSOW": "EWR strike: AGM-154A JSOW on the radar from stand-off range, released outside the fighters' reach; then home",
                  "SLAM": "EWR strike: AGM-84H SLAM-ER on the radar from far out, released outside the fighters' reach; then home"}
@@ -156,7 +156,7 @@ class Package:
         if ty == ObjectiveType.STRIKE:
             if (o.description or "").startswith("EWR Strike"):                    # S60: before the STANDOFF test, an EWR strike is a stand-off job that keeps its name
                 return "EWR Strike"
-            return "Standoff Strike" if aim == "STANDOFF" else ("Runway Strike" if (o.description or "").startswith("Crater") else "Strike")
+            return "Standoff Strike" if aim == "STANDOFF" else ("OCA: Runway Strike" if aim == "RUNWAY" else "Strike")
         if ty == ObjectiveType.CAS:
             return "Close Air Support: Troops in Contact" if (self.extra or {}).get("tic") else "Close Air Support"
         if ty == ObjectiveType.COUNTER_AIR:
