@@ -379,10 +379,10 @@ class WaitingDialog(QDialog):
     """FLY opens this. It polls SQE_state.json and shows live casualties for both sides."""
     def __init__(self, session, parent=None):
         super().__init__(parent); self.sess = session; self.data = None; self.manual = None
-        self.setWindowTitle("Sortie in progress"); self.setMinimumSize(760, 560)
+        self.setWindowTitle("Sortie In Progress"); self.setMinimumSize(760, 560); self.resize(780, 760)
         p = session.state.pending; tl = p["timeline"]
         lay = QVBoxLayout(self); lay.setSpacing(12)
-        t = QLabel("Sortie in progress"); t.setObjectName("title"); lay.addWidget(t)
+        t = QLabel("Sortie In Progress"); t.setObjectName("title"); lay.addWidget(t)
         self.overall = QLabel(""); self.overall.setObjectName("h2"); lay.addWidget(self.overall)         # S77: IN FLIGHT / ALL RECOVERED (set by _poll)
         info = card(); lay.addWidget(info)
         il = info.layout()
@@ -390,16 +390,18 @@ class WaitingDialog(QDialog):
         pd = p.get("package_dict", {}); cn = p.get("counts") or {}
         il.addWidget(QLabel(f"Mission start <b>{pd.get('start', '')}</b> local   |   {cn.get('groups', '?')} groups, {cn.get('units', '?')} units"))
         il.addWidget(QLabel(f"Launch {tl['launch']}   |   Marshal {tl['marshal']}   |   <b>PUSH {tl['push']}</b>   |   <b>TOT {tl['tot']}</b>   |   Egress {tl['egress']}"))
-        for wmsg in (p.get("warnings") or []):                  # v0.41.133: the notes come last (the "Built with notes" popup is gone)
-            wl = QLabel("Note: " + wmsg); wl.setWordWrap(True); wl.setStyleSheet(f"color:{theme.AMBER};"); il.addWidget(wl)
+        self._notes = list(p.get("warnings") or [])             # XO 2026-11-15: the build notes sit behind a Notes button (a popup), not in the card
+        if self._notes:
+            self.b_notes = QPushButton(f"Notes ({len(self._notes)})"); self.b_notes.setStyleSheet(f"color:{theme.AMBER};")
+            self.b_notes.clicked.connect(self._show_notes); il.addWidget(self.b_notes, 0, Qt.AlignLeft)
         self.status = QLabel("Waiting for DCS results..."); self.status.setObjectName("h2"); lay.addWidget(self.status)
         self.ptbl = QTableWidget(1, 2); self.ptbl.setHorizontalHeaderLabels(["Package", "Status"])         # S87: one row per package, its phase and result (set by _status_lines)
         self.ptbl.verticalHeader().setVisible(False); self.ptbl.setEditTriggers(QTableWidget.NoEditTriggers); self.ptbl.setSelectionMode(QTableWidget.NoSelection)
         self.ptbl.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch); self.ptbl.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.ptbl.setWordWrap(True); self.ptbl.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded); self.ptbl.setVerticalScrollMode(QTableWidget.ScrollPerPixel); self._fill_packages([{"name": p["objective"], "text": ""}]); lay.addWidget(self.ptbl)
+        self.ptbl.setWordWrap(True); self.ptbl.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded); self.ptbl.setVerticalScrollMode(QTableWidget.ScrollPerPixel); self._fill_packages([{"name": DB.short_objective(p["objective"]), "text": ""}]); lay.addWidget(self.ptbl, 1)       # stretch 1: a short window squeezes this table (it scrolls), nothing else
         self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["This Sortie", "Friendly", "Enemy"])
         self.tbl.verticalHeader().setVisible(False); self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch); self.tbl.setMinimumHeight(190)
+        self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch); self.tbl.setMinimumHeight(130)
         lay.addWidget(self.tbl)
         self.last = QLabel(""); self.last.setObjectName("small"); lay.addWidget(self.last)
         row = QHBoxLayout()
@@ -419,7 +421,15 @@ class WaitingDialog(QDialog):
                 it = QTableWidgetItem(v); it.setTextAlignment(Qt.AlignCenter if j else Qt.AlignLeft | Qt.AlignVCenter)
                 self.tbl.setItem(i, j, it)
 
-    PKG_MAX_H = 240                 # px, about five package rows; judgment call
+    PKG_MIN_H = 130                 # px: header and about two rows; the least the package table is squeezed to before it scrolls
+
+    def _show_notes(self):
+        """The build notes in a popup under the Notes button; a click outside closes it. No layout change."""
+        pop = QFrame(self, Qt.Popup); pop.setObjectName("card"); pl = QVBoxLayout(pop)
+        for n in self._notes:
+            lb = QLabel(n); lb.setWordWrap(True); lb.setStyleSheet(f"color:{theme.AMBER};"); lb.setMaximumWidth(self.width() - 80); pl.addWidget(lb)
+        pop.adjustSize(); pop.move(self.b_notes.mapToGlobal(self.b_notes.rect().bottomLeft())); pop.show()
+        self._pop = pop
 
     def _fill_packages(self, rows):
         self.ptbl.setRowCount(len(rows))
@@ -428,7 +438,7 @@ class WaitingDialog(QDialog):
                 it = QTableWidgetItem(v); it.setTextAlignment(Qt.AlignLeft | Qt.AlignTop); self.ptbl.setItem(i, j, it)       # XO 2026-11-15: text at the top of its cell when a row wraps
         self.ptbl.resizeRowsToContents()
         need = self.ptbl.horizontalHeader().height() + sum(self.ptbl.rowHeight(i) for i in range(len(rows))) + 20
-        self.ptbl.setFixedHeight(min(need, self.PKG_MAX_H))           # XO 2026-11-15: taller than the cap -> the table scrolls (bar only when needed) instead of hiding the later packages       # +20: the theme's 6 px padding and 1 px border on every side
+        self.ptbl.setMaximumHeight(need); self.ptbl.setMinimumHeight(min(need, self.PKG_MIN_H))           # as tall as its rows when the window has room; a short window squeezes it to PKG_MIN_H and it scrolls (bar only when needed)
 
     def _status_lines(self, data):
         """S77: the objective lines and the overall line, read-only from the hook's state file (nothing in the campaign changes; Accept stays the authority).

@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## After v0.41.443, the waiting screen fits: Notes button, scrolling package table
+The build notes (units left out to stay under the limit, and so on) now sit behind a Notes button on the waiting screen and open in a small popup, so they no longer crowd the window. The package table gives way when the window is short and scrolls, so the later packages can always be reached, and the first row already reads "Mission Type: Target Name". The window opens taller, and its title is in Title Case.
+
 ## After v0.41.443, the waiting screen's package table scrolls and reads "Mission Type: Target Name"
 The package table on the waiting screen now scrolls when there are more packages than fit (before, the later ones were cut off). Each package reads "Standoff DEAD: Sukhumi-Babushara SA-6 Site": no package number, no percentages or counts. Both tables use Title Case, and a long name wraps from the top of its cell.
 
