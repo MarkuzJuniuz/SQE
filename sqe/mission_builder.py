@@ -3261,6 +3261,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return [final]
         return [offset(start[0], start[1], away_brg, min(leg, self.CAS_PATROL_MAX_M)), start, final]
 
+    # S80 (XO 2026-11-14): the battle is decided by air power, not by DCS's ground AI dice. CAS_DECIDE_S after the contact time the red column is counted: below
+    # CAS_BREAK_FRAC of its vehicles the attack is broken (it halts); above it, a script destroys CAS_OVERRUN_MIN..CAS_OVERRUN_MAX of our company, one vehicle every CAS_OVERRUN_GAP_S.
+    # Judgment calls, to tune after a flown test.
+    CAS_DECIDE_S = 600.0
+    CAS_BREAK_FRAC = 0.40
+    CAS_OVERRUN_MIN, CAS_OVERRUN_MAX, CAS_OVERRUN_GAP_S = 0.30, 0.80, 20
     CAS_ENEMY_ADVANCE_M = 1200.0  # v0.41.137: the enemy column creeps this far toward us; it never starts far from the CAS point
 
     CAS_COAST_M = 150.0           # v0.41.384 (S29): a CAS column's or the JTAC's start, stop and patrol points keep this far from the sea (judgment call; SITE_MARGIN 1500 m would push a coastal column far inland)
@@ -3331,8 +3337,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         sc = ground.blue_scale(self.state, tid or "")          # the friendly force is as strong as Blue is in this sector
         comp = [(n_, max(1, int(round(c_ * sc)))) for n_, c_ in comp]
         g = self._platoon(self.usa, f"Friendly Task Force {package.number}", comp, fx, fy, (int(brg) + 180) % 360, F.Rectangle)
+        names = []
         if g is not None:
-            names = []
             for k, u in enumerate(g.units, 1):
                 u.name = f"TF{package.number}|{k}"; names.append(u.name)
             # v0.41.157 (XO's 15:38 run: the task force reached the column 12 minutes after the A-10s, then drove 2.5 km past it): it stops CAS_TF_STOP_M (v0.41.179: 1.5 km, was 400 m) short of the
@@ -3344,15 +3350,51 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 self._drive(g, via_, v_tf_)
             else:
                 self._drive_road(g, via_, v_tf_)
-            manifest.add("friendly_ground", tid or "", names)
         jx, jy = self._cas_land(offset(fx, fy, brg + 90, 120))
         jt = self.m.vehicle_group(self.usa, f"Axeman {package.number}-1", _UN.Hummer, mapping.Point(jx, jy, self.t), heading=(int(brg) + 180) % 360, group_size=1)
         jt.units[0].name = f"JTAC-{package.id}"
         p0 = jt.points[0]
         p0.tasks.append(task.FAC(callsign=1, frequency=int(plan.freq("JTAC") * 1e6), modulation=task.Modulation.AM, number=1))
-        p0.tasks.append(task.SetInvisibleCommand(True))
-        p0.tasks.append(task.SetImmortalCommand(True))
+        # S80 (XO 2026-11-14): the JTAC is a real vehicle of the company, not magic: visible and mortal. If it dies, the flight loses its controller.
         jt.add_waypoint(mapping.Point(*self._cas_land(offset(cx, cy, brg, 3800)), self.t), PointAction.OffRoad, v * 3.6)
+        names.append(jt.units[0].name)
+        if names:
+            manifest.add("friendly_ground", tid or "", names)
+        if g is not None and enemy is not None:
+            self._cas_battle_rule(package, enemy, [n_ for n_ in names if n_.startswith("TF")], t_contact)
+
+    def _cas_battle_rule(self, package, enemy, blue_names, t_contact):
+        """S80: the CAS battle is decided by what the air power did to the red column, with no dice. CAS_DECIDE_S after the contact time a trigger counts the red
+        column's living vehicles. Below CAS_BREAK_FRAC of them: the advance is broken, the column halts. Above it: the line is overrun, and a script blows up
+        CAS_OVERRUN_MIN..CAS_OVERRUN_MAX of our task force (more when the red column is stronger), one vehicle every CAS_OVERRUN_GAP_S seconds. The debrief reads those deaths
+        like any others, so the ground war loses the Blue strength (ground.blue_losses)."""
+        if not blue_names or not getattr(enemy, "units", None):
+            return
+        rn, bn = len(enemy.units), len(blue_names)
+        names = ", ".join('"%s"' % n_ for n_ in blue_names)
+        lua = (
+            'local RED, RN, BN = "%s", %d, %d\n'
+            'local names = {%s}\n'
+            'local g = Group.getByName(RED)\n'
+            'local alive = 0\n'
+            'if g then for _, u in ipairs(g:getUnits() or {}) do if u:isExist() and u:getLife() > 1 then alive = alive + 1 end end end\n'
+            'local f = alive / RN\n'
+            'if f < %.2f then\n'
+            '  if g then pcall(trigger.action.groupStopMoving, RED) end\n'
+            '  trigger.action.outTextForCoalition(coalition.side.BLUE, "JTAC: the enemy attack is broken. Their column has stopped.", 20)\n'
+            'else\n'
+            '  local n = math.ceil(#names * (%.2f + (%.2f - %.2f) * math.min(1, (f - %.2f) / (1 - %.2f))))\n'
+            '  trigger.action.outTextForCoalition(coalition.side.BLUE, "JTAC: the line is giving way. We need that column stopped NOW.", 20)\n'
+            '  for k = 1, math.min(n, #names) do\n'
+            '    timer.scheduleFunction(function(nm) local u = Unit.getByName(nm); if u and u:isExist() then trigger.action.explosion(u:getPoint(), 200) end end, names[k], timer.getTime() + %d * k)\n'
+            '  end\n'
+            'end\n'
+        ) % (enemy.name, rn, bn, names, self.CAS_BREAK_FRAC, self.CAS_OVERRUN_MIN, self.CAS_OVERRUN_MAX, self.CAS_OVERRUN_MIN, self.CAS_BREAK_FRAC,
+             self.CAS_BREAK_FRAC, self.CAS_OVERRUN_GAP_S)
+        tr = triggers.TriggerOnce(comment=f"CAS battle {package.number}")
+        tr.add_condition(condition.TimeAfter(int(t_contact + self.CAS_DECIDE_S)))
+        tr.add_action(action.DoScript(String(lua)))
+        self.m.triggerrules.triggers.append(tr)
 
     AGM88_AXES = (0, 15, -15, 30, -30)                        # v0.41.24: degrees the HARM axis may turn off the package's own axis
 
