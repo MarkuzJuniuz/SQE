@@ -752,13 +752,11 @@ class MainWindow(QMainWindow):
             f"<p><b>{html.escape(EULA_LINE)}</b><br>"
             "Creator: MarkuzJuniuz, markuzjuniuz@protonmail.com</p>"
             "<p><b>Credits</b></p>"
-            "<ul>"
-            "<li><b>Mission files:</b> pydcs (the Retribution fork)</li>"
-            "<li><b>Interface:</b> PySide6 / Qt</li>"
-            "<li><b>Kneeboard images:</b> Pillow</li>"
-            "<li><b>Ground height:</b> SRTM (NASA / USGS Shuttle Radar Topography Mission), via the AWS open terrain tiles, public domain</li>"
-            "<li><b>Map data:</b> Natural Earth (coastlines, lakes, borders), public domain</li>"
-            "</ul>"))
+            "<p style='margin:0 0 0 14px; text-indent:-14px;'>&bull;&nbsp;<b>Mission files:</b> pydcs (the Retribution fork)</p>"
+            "<p style='margin:0 0 0 14px; text-indent:-14px;'>&bull;&nbsp;<b>Interface:</b> PySide6 / Qt</p>"
+            "<p style='margin:0 0 0 14px; text-indent:-14px;'>&bull;&nbsp;<b>Kneeboard images:</b> Pillow</p>"
+            "<p style='margin:0 0 0 14px; text-indent:-14px;'>&bull;&nbsp;<b>Ground height:</b> SRTM (NASA / USGS Shuttle Radar Topography Mission), via the AWS open terrain tiles, public domain</p>"
+            "<p style='margin:0 0 0 14px; text-indent:-14px;'>&bull;&nbsp;<b>Map data:</b> Natural Earth (coastlines, lakes, borders), public domain</p>"))
 
 
     def _recent(self):

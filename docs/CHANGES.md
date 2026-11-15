@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.446, the About box credits line up under their heading
+The bullets in Help > About now start directly under "Credits" instead of being indented. A credit that wraps still indents under its own bullet.
+
 ## v0.41.445, the About box shows the creator and lists credits one per line
 Help > About now shows the creator and contact line under the DCS notice. The credits are a bulleted list, one item each, so a long credit that wraps is clearly still one item. Natural Earth (coastlines and borders) is credited there too.
 
