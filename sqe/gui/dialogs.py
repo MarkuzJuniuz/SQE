@@ -396,8 +396,8 @@ class WaitingDialog(QDialog):
         self.ptbl = QTableWidget(1, 2); self.ptbl.setHorizontalHeaderLabels(["Package", "Status"])         # S87: one row per package, its phase and result (set by _status_lines)
         self.ptbl.verticalHeader().setVisible(False); self.ptbl.setEditTriggers(QTableWidget.NoEditTriggers); self.ptbl.setSelectionMode(QTableWidget.NoSelection)
         self.ptbl.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch); self.ptbl.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.ptbl.setWordWrap(True); self._fill_packages([{"name": p["objective"], "text": ""}]); lay.addWidget(self.ptbl)
-        self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["This sortie", "Friendly", "Enemy"])
+        self.ptbl.setWordWrap(True); self.ptbl.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded); self.ptbl.setVerticalScrollMode(QTableWidget.ScrollPerPixel); self._fill_packages([{"name": p["objective"], "text": ""}]); lay.addWidget(self.ptbl)
+        self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["This Sortie", "Friendly", "Enemy"])
         self.tbl.verticalHeader().setVisible(False); self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch); self.tbl.setMinimumHeight(190)
         lay.addWidget(self.tbl)
@@ -411,21 +411,24 @@ class WaitingDialog(QDialog):
         self._poll()
 
     def _fill(self, t):
-        rows = [("Aircraft lost / total", f"{t['blue_air_lost']} / {t['blue_air_total']}", f"{t['red_air_lost']} / {t['red_air_total']}"),
-                ("Ground units lost / total", f"{t['blue_ground_lost']} / {t['blue_ground_total']}", f"{t['red_ground_lost']} / {t['red_ground_total']}")]
+        rows = [(DB._title("Aircraft lost / total"), f"{t['blue_air_lost']} / {t['blue_air_total']}", f"{t['red_air_lost']} / {t['red_air_total']}"),
+                (DB._title("Ground units lost / total"), f"{t['blue_ground_lost']} / {t['blue_ground_total']}", f"{t['red_ground_lost']} / {t['red_ground_total']}")]
         self.tbl.setRowCount(len(rows))
         for i, r in enumerate(rows):
             for j, v in enumerate(r):
                 it = QTableWidgetItem(v); it.setTextAlignment(Qt.AlignCenter if j else Qt.AlignLeft | Qt.AlignVCenter)
                 self.tbl.setItem(i, j, it)
 
+    PKG_MAX_H = 240                 # px, about five package rows; judgment call
+
     def _fill_packages(self, rows):
         self.ptbl.setRowCount(len(rows))
         for i, r in enumerate(rows):
             for j, v in enumerate((r["name"], r["text"])):
-                self.ptbl.setItem(i, j, QTableWidgetItem(v))
+                it = QTableWidgetItem(v); it.setTextAlignment(Qt.AlignLeft | Qt.AlignTop); self.ptbl.setItem(i, j, it)       # XO 2026-11-15: text at the top of its cell when a row wraps
         self.ptbl.resizeRowsToContents()
-        self.ptbl.setFixedHeight(self.ptbl.horizontalHeader().height() + sum(self.ptbl.rowHeight(i) for i in range(len(rows))) + 20)       # +20: the theme's 6 px padding and 1 px border on every side
+        need = self.ptbl.horizontalHeader().height() + sum(self.ptbl.rowHeight(i) for i in range(len(rows))) + 20
+        self.ptbl.setFixedHeight(min(need, self.PKG_MAX_H))           # XO 2026-11-15: taller than the cap -> the table scrolls (bar only when needed) instead of hiding the later packages       # +20: the theme's 6 px padding and 1 px border on every side
 
     def _status_lines(self, data):
         """S77: the objective lines and the overall line, read-only from the hook's state file (nothing in the campaign changes; Accept stays the authority).

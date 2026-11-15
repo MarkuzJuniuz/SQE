@@ -9,6 +9,7 @@ REQUIRES io/lfs un-sanitized in <DCS>\\Scripts\\MissionScripting.lua (Settings h
 from __future__ import annotations
 import json
 import os
+import re
 import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -1817,28 +1818,66 @@ ON_TARGET_S = 300     # S87: a package reads "On target" this long after its TOT
 
 
 _SMALL = {"a", "an", "and", "at", "in", "of", "on", "or", "the", "to"}
-_ACRONYMS = {"TOT", "SAM", "SEAD", "DEAD", "CAS", "EWR", "AWACS"}
+_ACRONYMS = {"TOT", "SAM", "SEAD", "DEAD", "CAS", "EWR", "AWACS", "OCA"}
 
 
-def _title(text: str) -> str:
-    """S87: Title Case for the status column (XO 2026-11-14): small words stay lower case (not the first of a phrase), the acronyms (TOT, SAM, ...) and any word with a digit (SA-6, 14:20, 3) stay as written."""
+def _title(text: str, keep_caps: bool = False) -> str:
+    """S87: Title Case for the status column (XO 2026-11-14): small words stay lower case (not the first of a phrase), the acronyms (TOT, SAM, ...) and any word with a digit (SA-6, 14:20, 3) stay as written.
+    Each part of a hyphenated word is capitalised (Sukhumi-Babushara). keep_caps (the package names): a word already in capitals stays as written (FARP)."""
     out = []
     for i, w in enumerate(text.split(" ")):
         core = w.rstrip(",.;:")
-        if any(c.isdigit() for c in core) or core in _ACRONYMS:
+        if any(c.isdigit() for c in core) or core in _ACRONYMS or (keep_caps and len(core) > 1 and core.isupper()):
             out.append(w)
         elif core.lower() in _SMALL and i and not out[-1].endswith((",", ";", ":")):
             out.append(w.lower())
         else:
             k = len(w) - len(w.lstrip("("))
-            out.append(w[:k] + w[k:k + 1].upper() + w[k + 1:].lower())
+            out.append(w[:k] + "-".join(p[:1].upper() + p[1:].lower() for p in w[k:].split("-")))
     return " ".join(out)
+
+
+_NAME_NOISE = re.compile(r"\s*\((?:\d+% left|\d+ aircraft|enemy [^)]*)\)")                                     # health, aircraft count, force counts: no numbers in the package name
+_NAME_VERBS = ("destroy ", "suppress ", "dislodge the enemy forward position, ", "dislodge the ", "clear the air over ")
+_NAME_TAILS = (", once its radars are down", " ahead of the strikes")
+_NAME_OPENINGS = (("finish off ", "Finish Off"), ("strike ", "Strike"), ("close air support against ", "Close Air Support"),
+                  ("intercept a bomber raid on ", "Intercept Raid"), ("intercept a raid on ", "Intercept Raid"), ("combat air patrol over ", "Combat Air Patrol"))
+
+
+def short_objective(desc: str) -> str:
+    """XO 2026-11-15: the waiting window's package name, 'Mission Type: Target Name' in Title Case, from the objective's description. Display only: no package number,
+    no percentages or counts, the verb ('destroy', 'suppress') and the trailing clause dropped. A description in no known shape is shown as written, in Title Case."""
+    d = _NAME_NOISE.sub("", desc or "").strip()
+    typ, tgt = "", d
+    if ":" in d:
+        typ, tgt = (x.strip() for x in d.split(":", 1))
+    else:
+        for op, label in _NAME_OPENINGS:
+            if d.lower().startswith(op):
+                typ, tgt = label, d[len(op):].strip()
+                if tgt.lower().startswith("the "):
+                    tgt = tgt[4:]
+                break
+    low = tgt.lower()
+    for v in _NAME_VERBS:
+        if low.startswith(v):
+            tgt = tgt[len(v):]
+            if v.startswith("dislodge the enemy"):
+                tgt = "enemy forward position, " + tgt
+            break
+    for t in _NAME_TAILS:
+        if tgt.lower().endswith(t):
+            tgt = tgt[:-len(t)]
+    if typ.lower() == "oca" and tgt.lower().startswith("runway strike, "):
+        typ, tgt = "OCA Runway Strike", tgt[len("runway strike, "):]
+    typ = "Close Air Support" if typ.lower() == "close air support" else typ
+    return _title(f"{typ}: {tgt}" if typ else tgt, keep_caps=True)
 
 
 def package_rows(state, manifest: Manifest, data: dict, pending: dict | None = None) -> list:
     """S87 (XO 2026-11-14): one row per package for the waiting window's top table, the status never blank: the package's phase (En route, TOT hh:mm / On target / Returning / Complete /
-    Scrubbed / Aborted), with the job's result in front once there is one ('Runway cut, returning'). READ-ONLY. -> [{name, text}], the flown package first (name = its objective,
-    merged ones '#N objective'). Phase from the mission clock against the TOT and from the package's own combat flights (landed / dead / ejected = no longer airborne)."""
+    Scrubbed / Aborted), with the job's result in front once there is one ('Runway cut, returning'). READ-ONLY. -> [{name, text}], the flown package first (name = its objective as 'Mission Type: Target Name',
+    merged ones the same, no number). Phase from the mission clock against the TOT and from the package's own combat flights (landed / dead / ejected = no longer airborne)."""
     start = ((pending or {}).get("package_dict") or {}).get("start", "00:00")
     now = float(data.get("time", 0) or 0)
     gone = set(data.get("dead", [])) | set(data.get("ejected", [])) | set(data.get("landed", []))
@@ -1848,10 +1887,10 @@ def package_rows(state, manifest: Manifest, data: dict, pending: dict | None = N
     rows = []
     for i, r in enumerate(objective_status(state, manifest, data, pending)):
         if i == 0:
-            pid, name, tot = manifest.package_id, r["objective"], (float(tl["tot_s"]) if tl.get("tot_s") is not None else None)
+            pid, name, tot = manifest.package_id, short_objective(r["objective"]), (float(tl["tot_s"]) if tl.get("tot_s") is not None else None)
         else:
             m = [x for x in manifest.merged if not x.get("unseen")][i - 1]
-            pid, name, tot = m["id"], f"#{m.get('number', '')} {r['objective']}", float(m.get("tot_s", 0))
+            pid, name, tot = m["id"], short_objective(r["objective"]), float(m.get("tot_s", 0))
         mine = [g for g in groups if g.get("pkg") == pid]
         air = sum(1 for g in mine for u in g["units"] if u not in gone)
         res = r["text"] if (r["has_result"] and r["text"]) else ""

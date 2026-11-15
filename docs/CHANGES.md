@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## After v0.41.443, the waiting screen's package table scrolls and reads "Mission Type: Target Name"
+The package table on the waiting screen now scrolls when there are more packages than fit (before, the later ones were cut off). Each package reads "Standoff DEAD: Sukhumi-Babushara SA-6 Site": no package number, no percentages or counts. Both tables use Title Case, and a long name wraps from the top of its cell.
+
 ## After v0.41.443, the campaign map hides garrisons in sectors a side does not hold
 The campaign map no longer draws a side's forward garrison bar in a sector where that side has no organised force. Blue bars used to show among the red units in the first sectors, although the war counted them as nothing there. A garrison destroyed inside a held sector still shows grey.
 
