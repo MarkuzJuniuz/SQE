@@ -1876,7 +1876,7 @@ def short_objective(desc: str) -> str:
 
 def package_rows(state, manifest: Manifest, data: dict, pending: dict | None = None) -> list:
     """S87 (XO 2026-11-14): one row per package for the waiting window's top table, the status never blank: the package's phase (En route, TOT hh:mm / On target / Returning / Complete /
-    Scrubbed / Aborted), with the job's result in front once there is one ('Runway cut, returning'). READ-ONLY. -> [{name, text}], the flown package first (name = its objective as 'Mission Type: Target Name',
+    Scrubbed / Aborted), with the job's result in front once there is one ('Runway cut, returning'). READ-ONLY. -> [{name, text}] sorted by TOT (name = its objective as 'Mission Type: Target Name',
     merged ones the same, no number). Phase from the mission clock against the TOT and from the package's own combat flights (landed / dead / ejected = no longer airborne)."""
     start = ((pending or {}).get("package_dict") or {}).get("start", "00:00")
     now = float(data.get("time", 0) or 0)
@@ -1908,8 +1908,9 @@ def package_rows(state, manifest: Manifest, data: dict, pending: dict | None = N
             phase = "On target"
         else:
             phase = "Returning"
-        rows.append({"name": name, "text": _title(f"{res}, {phase}" if res else phase)})
-    return rows
+        rows.append((tot is None, tot or 0.0, {"name": name, "text": _title(f"{res}, {phase}" if res else phase)}))
+    rows.sort(key=lambda r: r[:2])              # XO 2026-11-15: by TOT, earliest first, no TOT last; the flown package is not special (a stable sort keeps the order among equal TOTs)
+    return [r[2] for r in rows]
 
 
 def flight_status(state, manifest: Manifest, data: dict, pending: dict | None = None) -> dict:
