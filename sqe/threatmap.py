@@ -6,7 +6,7 @@ objectives instead, so the war advances belt by belt instead of jumping straight
 """
 from __future__ import annotations
 import math
-from .models import AssetKind
+from .models import AssetKind, BaseKind
 from .routes import AVOID_NM, RAID_SA11_NM, RAID_THREAT_OUT_NM, dist, offset
 
 NM = 1852.0
@@ -191,6 +191,7 @@ def point_back_along(poly, d_back: float):
 
 
 FIELD_DETECT_NM = 60.0      # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
+MARSHAL_STANDOFF_NM = (85, 95, 105, 120, 140, 165, 195, 230)   # S77: the mission marshal's distances from the target, nearest first (judgment call: BMS-style push 10 nm out, a long ingress, still over friendly ground)
 MARSHAL_FIELD_MARGIN_NM = 10.0   # v0.41.6: a marshal point stays this far outside every enemy field's detection circle
 
 
@@ -224,7 +225,12 @@ def field_detect_nm(field_xy, target_xy, state=None) -> float:
     return r
 
 
-def safe_marshal(state, base_xy, hdg_to_target, target_xy=None, min_enemy_nm: float = 90, ring_margin_nm: float = 20):
+def package_refs(state, flights) -> list:
+    """S77: where a package's flights come from: the (x, y) of the base of every flight that is not a support patrol (HAVCAP, BARCAP), one entry per flight. safe_marshal takes it as `refs`."""
+    return [(state.bases[f.base_id].x, state.bases[f.base_id].y) for f in flights if not getattr(f, 'tag', '') and getattr(f, 'base_id', None) in state.bases]
+
+
+def safe_marshal(state, base_xy, hdg_to_target, target_xy=None, min_enemy_nm: float = 90, ring_margin_nm: float = 20, refs=None):
     """Marshal point BEHIND the base: clear of enemy fighter fields and at least ring_margin_nm outside every SAM ring.
     v0.41.6: with the target known, a field only needs the marshal outside its own scramble circle (field_detect_nm) plus a margin, not a flat
     90 nm (which sent the Senaki Vipers 54 nm south to hold, then back north past their own base). Without it, the old flat distance.
@@ -233,6 +239,36 @@ def safe_marshal(state, base_xy, hdg_to_target, target_xy=None, min_enemy_nm: fl
     enemies = [(ex, ey, (field_detect_nm((ex, ey), target_xy, state) + MARSHAL_FIELD_MARGIN_NM) if target_xy is not None else min_enemy_nm)
                for ex, ey in fighter_bases(state)]
     rs = rings(state, min_range=3)
+    if target_xy is not None:
+        # S77 (XO 2026-11-14): the marshal serves the MISSION, not whoever flies it: a spot a fixed stand-off from the target on the axis toward the
+        # nearest friendly airfield, the same for every flight and every base (it used to sit 15-62 nm behind the player's own base).
+        tx, ty = target_xy
+        # The axis: toward where the package's flights come from (`refs`: the mean direction from the target to each flight's base, so a package
+        # from two sides gets the middle), else toward the nearest friendly airfield, else straight behind `base_xy`. Bearings as in `back` below.
+        axis = None
+        ux = uy = 0.0
+        for rx, ry in (refs or []):
+            dd = math.hypot(rx - tx, ry - ty)
+            if dd > 1.0:
+                ux += (rx - tx) / dd; uy += (ry - ty) / dd
+        if math.hypot(ux, uy) > 0.2 * max(len(refs or []), 1):
+            axis = math.degrees(math.atan2(uy, ux)) % 360
+        if axis is None:
+            fx = [(math.hypot(b.x - tx, b.y - ty), b.x, b.y) for b in state.bases.values()
+                  if b.kind == BaseKind.AIRFIELD and not getattr(b, "divert", False)]
+            axis = math.degrees(math.atan2(min(fx)[2] - ty, min(fx)[1] - tx)) % 360 if fx else (hdg_to_target + 180) % 360
+        best, best_slack = None, -1e18
+        for nm in MARSHAL_STANDOFF_NM:
+            for ang in (0, 35, -35, 70, -70, 105, -105):
+                h = math.radians(axis + ang)
+                x, y = tx + nm * NM * math.cos(h), ty + nm * NM * math.sin(h)
+                slack = min([(math.hypot(x - ex, y - ey) / NM) - need for ex, ey, need in enemies] +
+                            [(math.hypot(x - a.x, y - a.y) - r) / NM - ring_margin_nm for a, r in rs] + [1e9])
+                if slack >= 0:
+                    return x, y
+                if slack > best_slack:
+                    best, best_slack = (x, y), slack
+        return best
     back = hdg_to_target + 180
     best, best_slack = None, -1e18
     for nm in (15, 20, 25, 32, 40, 50, 62):

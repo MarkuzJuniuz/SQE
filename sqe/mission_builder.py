@@ -195,7 +195,7 @@ LASER = ["1688", "1687", "1686", "1685", "1684", "1683", "1682", "1681"]
 @dataclass
 class MissionOptions:
     launch_offset_s: int = 60           # takeoff buffer: you are on the cat/runway at start; the briefed takeoff is this many SECONDS in (negative = hurry)
-    hold_minutes: int = 2               # slack at MARSHAL before PUSH, minutes. Negative = you must be quicker than the natural pace
+    hold_minutes: int = 1               # (S77: was 2) slack at MARSHAL before PUSH, minutes. Negative = you must be quicker than the natural pace
     cap_minutes: int = 40               # time on station for CAP flights
     hot_ramp_scrambles: bool = False    # v0.41.80: alert / scramble pairs at land fields start hot on the ramp (see _alert_group)
     hot_runway_starts: bool = False     # v0.41.96: AI package flights from land fields other than yours start on the runway (see _hot_slot)
@@ -435,7 +435,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         pspec = AIRCRAFT[pf.aircraft]
         fleet_obj = package.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
         tgt_asset = None if fleet_obj else st.assets[package.objective.target_id]
-        mshl_xy = tm.safe_marshal(st, (pbase.x, pbase.y), bearing(pbase.x, pbase.y, tx, ty), (tx, ty))
+        mshl_xy = tm.safe_marshal(st, (pbase.x, pbase.y), bearing(pbase.x, pbase.y, tx, ty), (tx, ty), refs=tm.package_refs(st, package.flights))     # S77: the package's marshal, not the player's base's
         geom = make_geometry(pbase.x, pbase.y, tx, ty, pspec.profile, mshl_xy, carrier=pbase.kind == BaseKind.CARRIER)
         # enemy CAP stations are planned first so the egress can stay clear of them too (they sit 20-25 nm in front of their own base)
         # v0.41.76: no fixed keep-outs round our marshal point, fields or carrier any more (v0.41.10: 45 / 130 nm): red's patrol stations are BARCAP
@@ -531,7 +531,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         mshl = next((w for w in pw if w.action in ("HOLD", "CAPORBIT")), pw[-1])
         k = pw.index(mshl)
         leg_m = leg_seconds(mshl, pw[k + 1]) if (mshl.action == "HOLD" and k + 1 < len(pw)) else 0.0
-        player_push = math.ceil((mshl.eta_s + (0 if pf.role == Role.CAP else o.hold_minutes * 60) + leg_m) / 60.0) * 60.0
+        player_push = math.floor((mshl.eta_s + (0 if pf.role == Role.CAP else o.hold_minutes * 60) + leg_m) / 60.0 + 0.5) * 60.0     # S77 (XO 2026-11-14): nearest minute, not up, so a 1-minute hold stays about a minute (was ceil: 1 to 2)
         player_push = max(player_push, math.ceil((dep_s + 120) / 60.0) * 60.0)
         leave_s = hold_leave_s(pw, player_push)
         P0 = player_push - stagger(package, pf.role)                         # the strikers' push; everyone else is relative to it
@@ -790,7 +790,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             tgt2 = st.assets.get(xp.objective.target_id) if raid2 else st.assets[xp.objective.target_id]
             if tgt2 is None:
                 tgt2 = SimpleNamespace(id=xp.objective.target_id, x=tx2, y=ty2)
-            mshl2 = tm.safe_marshal(st, (base2.x, base2.y), bearing(base2.x, base2.y, tx2, ty2), (tx2, ty2))
+            mshl2 = tm.safe_marshal(st, (base2.x, base2.y), bearing(base2.x, base2.y, tx2, ty2), (tx2, ty2), refs=tm.package_refs(st, xp.flights))
             geom2 = make_geometry(base2.x, base2.y, tx2, ty2, spec2.profile, mshl2, carrier=base2.kind == BaseKind.CARRIER)
             skip = {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else set()
             if not raid2:
@@ -2401,7 +2401,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         sp.flights = [f]
         base, spec = st.bases[f.base_id], AIRCRAFT[f.aircraft]
         tx, ty = site.x, site.y
-        mshl = tm.safe_marshal(st, (base.x, base.y), bearing(base.x, base.y, tx, ty), (tx, ty))
+        mshl = tm.safe_marshal(st, (base.x, base.y), bearing(base.x, base.y, tx, ty), (tx, ty), refs=[(base.x, base.y)])
         g2 = make_geometry(base.x, base.y, tx, ty, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
         g2.egr = (tm.first_safe_egress(st, tx, ty, g2.hdg, {site.id}) or tm.safe_egress(st, tx, ty, g2.hdg, spec.profile.egress_nm, tm.cluster_ids(site)) or g2.egr)
         g2.tier = self._pick_tier(g2, Role.SEAD, spec.profile, tx, ty, {site.id})

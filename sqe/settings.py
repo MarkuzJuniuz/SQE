@@ -63,7 +63,7 @@ class AppSettings:
     hot_runway_starts: bool = False       # v0.41.96: AI package flights from LAND fields other than yours start on the runway (queued by the hook) instead of airborne, when the schedule allows (v0.41.97: your own field too, after your takeoff)
     hot_runway_own_field: bool = False    # v0.41.99: sub-setting of hot_runway_starts: also AI flights at YOUR field (after your takeoff); only counts while hot_runway_starts is on
     takeoff_buffer_s: int = 60            # seconds between mission start and the briefed takeoff (negative = you must be quicker than the plan)
-    hold_minutes: int = 2                 # slack at the marshal point before PUSH (minutes; negative = hurry)
+    hold_minutes: int = 1                 # (S77: was 2) slack at the marshal point before PUSH (minutes; negative = hurry)
     flight_filter: str = "squadron"      # who you may fly: "squadron" (only flights of YOUR squadron). "all" is for tests and tools only: a saved file never turns it on (v0.41.93)
     window_geometry: str = ""            # v0.41.151: the main window's size and position (Qt saveGeometry, base64); empty = open at the default size, centered (File > Reset window)
     situation_open: bool = True          # v0.41.149: the Overview's Situation panel is open (day 1 starts open; it remembers the last state)
