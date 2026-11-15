@@ -185,6 +185,10 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         if jtac_at is None:
             jtac_at = f"{plan.freq('JTAC'):.3f}" if any(e.label == "JTAC" for e in plan.comm1.values()) else "its briefed frequency"
         com.append(f"JTAC (Axeman) is with our troops in contact, on {jtac_at}. Laser code {pkg.jtac_laser_code}.")
+        exe.append("")
+        exe.append("The battle (S80): about 10 minutes after your time over target the enemy column is counted. If it is still above 40 percent of its vehicles, "
+                   "it overruns our company (30 to 80 percent of it is lost) and the sector loses ground. Below that, the attack is broken. Keep enemy fighters off the "
+                   "CAS flight and the JTAC alive: it is a real vehicle, and without it you lose your controller.")
     text = {"situation": "\n".join(sit), "mission": "\n".join(mis), "execution": "\n".join(exe),
             "admin": "\n".join(adm), "comms": "\n".join(com), "threats": threats}
     text["full"] = (f"1. SITUATION\n{text['situation']}\n\n2. MISSION\n{text['mission']}\n\n3. EXECUTION\n{text['execution']}"

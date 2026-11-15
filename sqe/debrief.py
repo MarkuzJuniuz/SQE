@@ -1939,6 +1939,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             out["ground_total"] = out.get("ground_total", 0) + len(g["units"]); out["ground_lost"] = out.get("ground_lost", 0) + len(dead)
             if g["units"]:
                 out["lines"].append(f"Friendly troops: lost {len(dead)} of {len(g['units'])} vehicles")
+                out["lines"].append("Front: the line was OVERRUN, the air support did not break the attack in time" if len(dead) * 10 >= len(g["units"]) * 3
+                                    else "Front: the line HELD")                # S80: the battle's verdict, in the player's terms (a scripted overrun costs 30 to 80 percent of the company)
                 from . import ground as _gr
                 gl = _gr.blue_losses(state, g.get("ref", ""), len(dead), len(g["units"])) if dead else None
                 if gl:                                                  # the ground war takes the loss from that sector's Blue strength
