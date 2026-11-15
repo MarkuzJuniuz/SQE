@@ -1547,11 +1547,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             for aim, ba in sorted(st.blue_assets.items()):
                 if ba.destroyed:
                     continue
+                if (ground.sector_of(st, aim) is not None) and ground.blue_strength(st, ground.sector_of(st, aim)) < ground.MIN_FORCE:
+                    continue                                # full map: no blue forward position in a sector Blue no longer holds
                 base = st.bases.get(ba.guards) or home
                 self._spawn_raid_target(package, base, aim, ba.x, ba.y, manifest)
             g = st.ground or {}
             for i, v in enumerate(g.get("blue", [])):
-                if v > 0 and i < len(g.get("centers", [])):
+                if v >= ground.MIN_FORCE and i < len(g.get("centers", [])):
                     c = g["centers"][i]
                     self._spawn_raid_target(package, home, f"sector:{i}", float(c[0]), float(c[1]), manifest)
         skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)

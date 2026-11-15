@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## After v0.41.443, full-map missions and the waiting screen
+The full-map test mission no longer builds blue forward positions or columns in sectors Blue no longer holds. The package table on the waiting screen is tall enough to show its whole row.
+
 ## After v0.41.443, the ground war is decided in the air and shows on the map
 The marshal point now serves the package: with a target it sits 85 nm out toward the flight bases and the hold is 1 minute. A CAS battle is now decided by air support: a red column that is not at least 40% destroyed 10 minutes after contact overruns part of the blue company, a broken one halts, and the JTAC is a real vehicle that can die. Front battles show on the map under any flight, as "Blue Company N" against a real red column, and the stronger side creeps forward. The day's air strikes are real jets for both sides and fly over the battles, and a strike pair lands at its own field. Blue's and red's battle losses are scored by the same rule, and the debrief says who was pushing.
 ## v0.41.443, the waiting screen has a package status table
