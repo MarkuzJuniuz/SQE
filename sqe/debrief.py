@@ -1935,6 +1935,9 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             if dead:
                 out["blue_losses"].append({"callsign": g.get("callsign", g["ref"]), "lost": len(dead), "total": len(g["units"])})
                 out["lines"].append(f"{g.get('callsign', g['ref'])}: lost {len(dead)}/{len(g['units'])} ({sq.name}: {sq.available}/{sq.authorized} left)")
+        elif g["kind"] == "friendly_ground" and str(g.get("ref", "")).startswith("sector:"):
+            if g["units"]:                                         # S81: a front battle staged under a flight that is not its CAS: scenery, the Blue strength is not touched
+                out["lines"].append(f"Front, {g.get('label') or g['ref']}: our company lost {len(dead)} of {len(g['units'])} vehicles (the daily fight decides the sector)")
         elif g["kind"] == "friendly_ground":
             out["ground_total"] = out.get("ground_total", 0) + len(g["units"]); out["ground_lost"] = out.get("ground_lost", 0) + len(dead)
             if g["units"]:
