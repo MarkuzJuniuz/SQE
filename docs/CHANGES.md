@@ -1,24 +1,24 @@
 # CHANGES.md
 
-## After v0.41.443, the waiting screen lists packages by TOT
+## v0.41.444, the waiting screen lists packages by TOT
 The package table on the waiting screen is now in time-over-target order, earliest first. The package you fly is no longer pinned to the top.
 
-## After v0.41.443, the waiting screen fits: Notes button, scrolling package table
+## v0.41.444, the waiting screen fits: Notes button, scrolling package table
 The build notes (units left out to stay under the limit, and so on) now sit behind a Notes button on the waiting screen and open in a small popup, so they no longer crowd the window. The package table gives way when the window is short and scrolls, so the later packages can always be reached, and the first row already reads "Mission Type: Target Name". The window opens taller, and its title is in Title Case.
 
-## After v0.41.443, the waiting screen's package table scrolls and reads "Mission Type: Target Name"
+## v0.41.444, the waiting screen's package table scrolls and reads "Mission Type: Target Name"
 The package table on the waiting screen now scrolls when there are more packages than fit (before, the later ones were cut off). Each package reads "Standoff DEAD: Sukhumi-Babushara SA-6 Site": no package number, no percentages or counts. Both tables use Title Case, and a long name wraps from the top of its cell.
 
-## After v0.41.443, the campaign map hides garrisons in sectors a side does not hold
+## v0.41.444, the campaign map hides garrisons in sectors a side does not hold
 The campaign map no longer draws a side's forward garrison bar in a sector where that side has no organised force. Blue bars used to show among the red units in the first sectors, although the war counted them as nothing there. A garrison destroyed inside a held sector still shows grey.
 
-## After v0.41.443, the marshal no longer sits behind mountains
+## v0.41.444, the marshal no longer sits behind mountains
 The marshal point now skips spots where the straight climb from the flight's base crosses ground above 8,000 ft, and takes the next one. In a test run four A-10Cs flew into the Lesser Caucasus on the way to a marshal point 138 km out.
 
-## After v0.41.443, full-map missions and the waiting screen
+## v0.41.444, full-map missions and the waiting screen
 The full-map test mission no longer builds blue forward positions or columns in sectors Blue no longer holds. The package table on the waiting screen is tall enough to show its whole row.
 
-## After v0.41.443, the ground war is decided in the air and shows on the map
+## v0.41.444, the ground war is decided in the air and shows on the map
 The marshal point now serves the package: with a target it sits 85 nm out toward the flight bases and the hold is 1 minute. A CAS battle is now decided by air support: a red column that is not at least 40% destroyed 10 minutes after contact overruns part of the blue company, a broken one halts, and the JTAC is a real vehicle that can die. Front battles show on the map under any flight, as "Blue Company N" against a real red column, and the stronger side creeps forward. The day's air strikes are real jets for both sides and fly over the battles, and a strike pair lands at its own field. Blue's and red's battle losses are scored by the same rule, and the debrief says who was pushing.
 ## v0.41.443, the waiting screen has a package status table
 The top of the waiting window now has a table with one row per package: its job on the left, its status on the right. The status is never blank: "En Route, TOT 14:20", "On Target", "Returning" or "Complete", with the job's result in front once there is one ("Runway Cut, Field Closed, Returning"). Scrubbed and turned-back packages say so. Display only.
