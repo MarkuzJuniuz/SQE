@@ -429,6 +429,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self.vrng = random.Random(seed)
         self.seed_code = hashlib.md5(seed.encode()).hexdigest()[:5].upper()
         self.site_pos, self.armor_id, self.armor_center = {}, None, None
+        self._cas_zones = set()
         self._svc_k, self.cas_tot = {}, None
         tx, ty = self._jitter_primary(package, tx, ty)
         pbase = st.bases[pf.base_id]
@@ -601,6 +602,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 t_ = st.assets[package.objective.target_id]
                 self._agm88_refs.append((t_.x, t_.y, hs_))
         merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock, ruins)
+        self._stage_front_battles(package, manifest, tx, ty, [(w_.x, w_.y) for w_ in pw])             # S81: the ground war on the map, under any flight
         # HAVCAP and base BARCAP guard the tanker, AWACS and home field: they stay until the last flight of ANY package in this mission is home
         # (they used to leave 40 min after your TOT, so later merged packages flew with the tanker and AWACS unguarded)
         last_home = max([m_["rtb_s"] for m_ in merged if not m_.get("struck")] + [rtb_s]) + 300
@@ -3301,6 +3303,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if not package.jtac:
             return
         r = self.vrng
+        z_ = ground.zone_of(self.state, package.objective.target_id or "")
+        if z_ is not None:
+            self._cas_zones.add(z_)                               # S81: this sector's battle is the CAS package's own
         # v0.41.137: the CAS TARGET's own group and centre (not "the last armour group spawned": a CAS package also builds the target's defenders,
         # and a garrison or a neighbouring column built after it used to take the place of the target here)
         tid = package.objective.target_id
@@ -3362,6 +3367,70 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             manifest.add("friendly_ground", tid or "", names)
         if g is not None and enemy is not None:
             self._cas_battle_rule(package, enemy, [n_ for n_ in names if n_.startswith("TF")], t_contact)
+
+    FRONT_BATTLES_MAX = 2          # S81: battles staged per mission (judgment call: the unit limit and the VR frame rate)
+    FRONT_ADVANCE_M = 1200.0       # the attacking side creeps this far toward the other
+    FRONT_RATIO = 1.2              # a side attacks when it is this much stronger than the other (else both hold)
+
+    def _stage_front_battles(self, package, manifest, tx, ty, route=None):
+        """S81 (XO 2026-11-14): the ground war is on the map under any flight. Each sector within the merge radius of the target where both sides still have a force
+        (and that is no CAS package's own battle) gets the red column, the sector's real armour asset, so a strike on it counts as always, and a blue company
+        sized by the sector's Blue strength, facing each other across the line; the stronger side creeps forward, weapons free. At most FRONT_BATTLES_MAX, nearest
+        first, only while the unit limit has room. The blue company is scenery for the ground war: its losses are named in the debrief but do not change the
+        Blue strength (the daily fight already decides that; only a CAS battle is decided by the air power)."""
+        st, o = self.state, self.o
+        g = getattr(st, "ground", None)
+        if not g or not g.get("centers") or not ground.active(st):
+            return
+        R = max(5.0, float(o.merge_radius_nm)) * NM
+        cands = []
+        for i in range(ground.n_zones(g)):
+            if i in self._cas_zones or ground.red_strength(st, i) < ground.MIN_FORCE or ground.blue_strength(st, i) < ground.MIN_FORCE:
+                continue
+            a = st.assets.get(f"armor_{i + 1}")
+            if a is None or a.destroyed or a.health <= ground.DOWN_HEALTH:
+                continue
+            cx, cy = g["centers"][i]
+            d_ = min(dist(cx, cy, tx, ty), tm.poly_dist(cx, cy, route) if route and len(route) > 1 else 1e18)          # near the target or along your route
+            if d_ <= R:
+                cands.append((d_, i, a))
+        built = 0
+        for d_, i, a in sorted(cands, key=lambda c_: c_[0]):
+            if built >= self.FRONT_BATTLES_MAX:
+                break
+            r = self.vrng
+            rs, bs = ground.red_strength(st, i), ground.blue_strength(st, i)
+            sc = ground.blue_scale(st, a.id)
+            comp = [("M_1_Abrams", r.randint(1, 2)), ("M_2_Bradley", r.randint(2, 3)), ("M1043_HMMWV_Armament", r.randint(1, 2))]
+            need = sum(max(1, int(round(n_ * sc))) for _, n_ in comp) + (0 if a.id in self.groups_by_asset else sum(n_ for _, n_ in SOFT.get(a.kind, [])) + 2)
+            if self._units_room() < need:
+                self.warns.append(f"Front battle at {g['names'][i]} left out to stay under the unit limit")
+                continue
+            fresh = a.id not in self.groups_by_asset
+            if fresh:
+                self._spawn_site(a, SOFT.get(a.kind), manifest, primary=False)
+            red = self.groups_by_asset.get(a.id)
+            if red is None or not red.units:
+                continue
+            rx, ry = red.units[0].position.x, red.units[0].position.y
+            bx, by = ground.fwd_pos(g, i, "blue", st)
+            brg_rb = bearing(rx, ry, bx, by)                         # from the red column toward our company
+            comp = [(n_, max(1, int(round(c_ * sc)))) for n_, c_ in comp]
+            bg = self._platoon(self.usa, f"Blue Company {i + 1}", comp, bx, by, (int(brg_rb) + 180) % 360, F.Rectangle)
+            if bg is None:
+                continue
+            names = []
+            for k, u in enumerate(bg.units, 1):
+                u.name = f"BC{i + 1}|{k}"; names.append(u.name)
+            hold_ = True
+            if rs > bs * self.FRONT_RATIO and fresh:
+                self._drive_road(red, [offset(rx, ry, brg_rb, self.FRONT_ADVANCE_M)], 3.5); hold_ = False
+            elif bs > rs * self.FRONT_RATIO:
+                self._drive_road(bg, [offset(bx, by, brg_rb + 180, self.FRONT_ADVANCE_M)], 3.5); hold_ = False
+            if hold_:
+                self._ground_orders(bg)
+            manifest.add("friendly_ground", f"sector:{i}", names, label=g["names"][i])
+            built += 1
 
     def _cas_battle_rule(self, package, enemy, blue_names, t_contact):
         """S80: the CAS battle is decided by what the air power did to the red column, with no dice. CAS_DECIDE_S after the contact time a trigger counts the red
