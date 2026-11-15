@@ -1,5 +1,7 @@
 # CHANGES.md
 
+## After v0.41.443, the ground war is decided in the air and shows on the map
+The marshal point now serves the package: with a target it sits 85 nm out toward the flight bases and the hold is 1 minute. A CAS battle is now decided by air support: a red column that is not at least 40% destroyed 10 minutes after contact overruns part of the blue company, a broken one halts, and the JTAC is a real vehicle that can die. Front battles show on the map under any flight, as "Blue Company N" against a real red column, and the stronger side creeps forward. The day's air strikes are real jets for both sides and fly over the battles, and a strike pair lands at its own field. Blue's and red's battle losses are scored by the same rule, and the debrief says who was pushing.
 ## v0.41.443, the waiting screen has a package status table
 The top of the waiting window now has a table with one row per package: its job on the left, its status on the right. The status is never blank: "En Route, TOT 14:20", "On Target", "Returning" or "Complete", with the job's result in front once there is one ("Runway Cut, Field Closed, Returning"). Scrubbed and turned-back packages say so. Display only.
 ## v0.41.442, the SEAD is on the SAM site before the strikers reach its range
