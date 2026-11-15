@@ -430,6 +430,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self.seed_code = hashlib.md5(seed.encode()).hexdigest()[:5].upper()
         self.site_pos, self.armor_id, self.armor_center = {}, None, None
         self._cas_zones = set()
+        self._tf_names = {}                                       # S84: package number -> the name of its friendly company group (the JTAC follows it when the land check shifts it)
         self._svc_k, self.cas_tot = {}, None
         tx, ty = self._jitter_primary(package, tx, ty)
         pbase = st.bases[pf.base_id]
@@ -981,7 +982,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 continue
             dx = dy = 0.0
             if g.name.startswith("Axeman "):
-                tf = shifts.get("Friendly Task Force " + g.name.split()[1].split("-")[0])
+                num_ = g.name.split()[1].split("-")[0]
+                tf = shifts.get(self._tf_names.get(num_, "Friendly Task Force " + num_))
                 if tf:
                     dx, dy = tf
                     self._translate(g, dx, dy)
@@ -3304,6 +3306,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return
         r = self.vrng
         z_ = ground.zone_of(self.state, package.objective.target_id or "")
+        first_ = z_ is not None and z_ not in self._cas_zones     # S84: the sector's own company, the same "Blue Company N" a front battle shows; a second CAS package on one sector keeps its own name
         if z_ is not None:
             self._cas_zones.add(z_)                               # S81: this sector's battle is the CAS package's own
         # v0.41.137: the CAS TARGET's own group and centre (not "the last armour group spawned": a CAS package also builds the target's defenders,
@@ -3341,11 +3344,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         comp = [("M_1_Abrams", r.randint(1, 2)), ("M_2_Bradley", r.randint(2, 3)), ("M1043_HMMWV_Armament", r.randint(1, 2))]
         sc = ground.blue_scale(self.state, tid or "")          # the friendly force is as strong as Blue is in this sector
         comp = [(n_, max(1, int(round(c_ * sc)))) for n_, c_ in comp]
-        g = self._platoon(self.usa, f"Friendly Task Force {package.number}", comp, fx, fy, (int(brg) + 180) % 360, F.Rectangle)
+        gname_, utag_ = (f"Blue Company {z_ + 1}", f"BC{z_ + 1}") if first_ else (f"Friendly Task Force {package.number}", f"TF{package.number}")
+        g = self._platoon(self.usa, gname_, comp, fx, fy, (int(brg) + 180) % 360, F.Rectangle)
         names = []
         if g is not None:
+            self._tf_names[str(package.number)] = gname_
             for k, u in enumerate(g.units, 1):
-                u.name = f"TF{package.number}|{k}"; names.append(u.name)
+                u.name = f"{utag_}|{k}"; names.append(u.name)
             # v0.41.157 (XO's 15:38 run: the task force reached the column 12 minutes after the A-10s, then drove 2.5 km past it): it stops CAS_TF_STOP_M (v0.41.179: 1.5 km, was 400 m) short of the
             # contact point (static garrison: 2 km short) and holds, weapons free, so the survivors come to it; and it drives CAS_TF_SPEED_MARGIN faster than the
             # plan, because DCS runs a mixed off-road column about 30% slower (measured in that run)
@@ -3364,9 +3369,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         jt.add_waypoint(mapping.Point(*self._cas_land(offset(cx, cy, brg, 3800)), self.t), PointAction.OffRoad, v * 3.6)
         names.append(jt.units[0].name)
         if names:
-            manifest.add("friendly_ground", tid or "", names)
+            bs_ = ground.blue_strength(self.state, z_) if z_ is not None else 0.0
+            manifest.add("friendly_ground", tid or "", names, sector=z_,
+                         base_count=max(len(names), round(len(names) / max(0.05, bs_ / ground.MAX_FORCE))) if z_ is not None else len(names))      # S84: its size at full strength, so the CAS battle's losses read back as strength by the same rule as a front battle's
         if g is not None and enemy is not None:
-            self._cas_battle_rule(package, enemy, [n_ for n_ in names if n_.startswith("TF")], t_contact)
+            self._cas_battle_rule(package, enemy, [n_ for n_ in names if n_.startswith(("TF", "BC"))], t_contact)
             zc_ = ground.zone_of(self.state, tid or "")
             if zc_ is not None:
                 self._spawn_front_air(zc_, enemy, g, t_contact, manifest)
@@ -3425,14 +3432,14 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             names = []
             for k, u in enumerate(bg.units, 1):
                 u.name = f"BC{i + 1}|{k}"; names.append(u.name)
-            hold_ = True
+            hold_, stance_ = True, "hold"
             if rs > bs * self.FRONT_RATIO and fresh:
-                self._drive_road(red, [offset(rx, ry, brg_rb, self.FRONT_ADVANCE_M)], 3.5); hold_ = False
+                self._drive_road(red, [offset(rx, ry, brg_rb, self.FRONT_ADVANCE_M)], 3.5); hold_, stance_ = False, "red"
             elif bs > rs * self.FRONT_RATIO:
-                self._drive_road(bg, [offset(bx, by, brg_rb + 180, self.FRONT_ADVANCE_M)], 3.5); hold_ = False
+                self._drive_road(bg, [offset(bx, by, brg_rb + 180, self.FRONT_ADVANCE_M)], 3.5); hold_, stance_ = False, "blue"
             if hold_:
                 self._ground_orders(bg)
-            manifest.add("friendly_ground", f"sector:{i}", names, label=g["names"][i], sector=i,
+            manifest.add("friendly_ground", f"sector:{i}", names, label=g["names"][i], sector=i, stance=stance_,
                          base_count=max(len(names), round(len(names) / max(0.05, ground.blue_strength(st, i) / ground.MAX_FORCE))))      # S83: its size at full strength, so losses read back as strength
             self._spawn_front_air(i, red, bg, t_s, manifest)
             built += 1
@@ -3472,7 +3479,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     u.name = f"ENM-FS-{s_['wing']}-{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
                 tw = g.add_waypoint(pt(bx, by), 9000 * FT, 450 * KPH)
                 tw.tasks.append(task.AttackGroup(blue_g.id, group_attack=True))
-                g.add_waypoint(pt(sx, sy), 12000 * FT, 450 * KPH)
+                apt_r = self.t.airports.get(getattr(st.assets.get(s_["wing"]), "airport", None) or "")
+                if apt_r is not None:
+                    g.land_at(apt_r)                                              # S84: home to its own field after the pass
+                else:
+                    g.add_waypoint(pt(sx, sy), 12000 * FT, 450 * KPH)
                 self._late(g, t0, "front strike")
                 manifest.add("enemy_air", s_["wing"], names, ac=at_)
                 if s_.get("esc") and s_.get("esc_type") and hasattr(planes, s_["esc_type"]) and self._units_room() >= 4:
@@ -3504,7 +3515,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     u.name = f"FS{i + 1}|{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
                 tw = g.add_waypoint(pt(rx, ry), 9000 * FT, 450 * KPH)
                 tw.tasks.append(task.AttackGroup(red_g.id, group_attack=True))
-                g.add_waypoint(pt(sx, sy), 12000 * FT, 450 * KPH)
+                qb_ = st.bases[q.base_id]
+                apt_b = self.apt.get(q.base_id) or (self.t.airports.get(qb_.airport) if qb_.airport else None)
+                if qb_.kind == BaseKind.AIRFIELD and apt_b is not None:
+                    g.land_at(apt_b)                                              # S84: home to its own field after the pass (a carrier squadron holds, as before)
+                else:
+                    g.add_waypoint(pt(sx, sy), 12000 * FT, 450 * KPH)
                 self._late(g, t0, "front strike")
                 manifest.add("friendly", f"front-{i}-{q.id}", names, squadron=q.id, callsign=f"Front Strike {i + 1}", player=False)
 

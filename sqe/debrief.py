@@ -1938,7 +1938,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         elif g["kind"] == "friendly_ground" and str(g.get("ref", "")).startswith("sector:"):
             if g["units"]:                                         # S81/S83: a front battle staged under a flight that is not its CAS: its losses cost the sector's Blue strength like red's column's cost its Red
                 from . import ground as _gr3
-                out["lines"].append(f"Front, {g.get('label') or g['ref']}: our company lost {len(dead)} of {len(g['units'])} vehicles")
+                st_ = {"blue": "we were pushing", "red": "the enemy was pushing", "hold": "both sides held"}.get(g.get("stance"), "")
+                out["lines"].append(f"Front, {g.get('label') or g['ref']}{' (' + st_ + ')' if st_ else ''}: our company lost {len(dead)} of {len(g['units'])} vehicles")
                 gl3 = _gr3.front_loss(state, g.get("sector"), len(dead), int(g.get("base_count") or len(g["units"])))
                 if gl3:
                     out["lines"].append(gl3)
@@ -1949,7 +1950,7 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 out["lines"].append("Front: the line was OVERRUN, the air support did not break the attack in time" if len(dead) * 10 >= len(g["units"]) * 3
                                     else "Front: the line HELD")                # S80: the battle's verdict, in the player's terms (a scripted overrun costs 30 to 80 percent of the company)
                 from . import ground as _gr
-                gl = _gr.blue_losses(state, g.get("ref", ""), len(dead), len(g["units"])) if dead else None
+                gl = _gr.blue_losses(state, g.get("ref", ""), len(dead), len(g["units"]), g.get("base_count")) if dead else None
                 if gl:                                                  # the ground war takes the loss from that sector's Blue strength
                     out["lines"].append(gl)
                 elif len(dead) * 2 >= len(g["units"]) and g.get("ref") in state.assets and not _gr.active(state):      # the position is overrun
