@@ -72,7 +72,7 @@ Start here: **docs/GUIDE.md**   |   Sample briefing: docs/SAMPLE_BRIEFING.txt
 
 ## Legal
 
-**THIS MATERIAL IS NOT MADE OR SUPPORTED BY EAGLE DYNAMICS SA.**
+**THIS MATERIAL IS NOT MADE OR SUPPORTED BY EAGLE DYNAMICS SA.**<br>
 Creator: MarkuzJuniuz, markuzjuniuz@protonmail.com
 
 * SQE is released under the **MIT licence** (`LICENSE`, copyright MarkuzJuniuz). It is **free of charge and non-commercial**, as DCS World's EULA requires of anything built on it. Debrief results need DCS's `MissionScripting.lua` opened up; SQE asks you on first run and does this **only if you agree** (default off, change it in Settings).
