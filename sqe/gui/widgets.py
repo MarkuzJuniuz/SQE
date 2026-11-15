@@ -166,7 +166,15 @@ class MapView(QWidget):
                     p.setPen(QPen(QColor(90, 160, 255, int(60 + 110 * h)), 1)); p.setBrush(QBrush(QColor(90, 160, 255, int(8 + 18 * h))))
                     p.drawEllipse(c, r, r)
         f = QFont(); f.setPointSize(8); p.setFont(f)
+        from .. import ground
+        def _unheld(a, red):     # S91: a forward garrison in a sector its side does not hold is not drawn (the war sim counts it as 0 there too)
+            i = ground.sector_of(st, a.id)
+            if i is None:
+                return False
+            return (ground.red_strength(st, i) if red else ground.blue_strength(st, i)) < ground.MIN_FORCE
         for a in st.assets.values():
+            if a.id.startswith("rfwd_") and _unheld(a, True):
+                continue
             q = P(a.x, a.y); dead = a.destroyed
             col = QColor("#4a5566") if dead else QColor(theme.RED).darker(int(100 + 70 * (1 - a.health)))
             p.setPen(Qt.NoPen); p.setBrush(QBrush(col))
@@ -183,6 +191,8 @@ class MapView(QWidget):
             if a.kind in (AssetKind.AIRFIELD, AssetKind.C2):
                 p.setPen(QColor("#9fb0c4")); p.drawText(QPointF(q.x() + 8, q.y() + 4), a.name.split(" (")[0][:18])
         for a in (getattr(st, "blue_assets", None) or {}).values():          # v0.41.245: blue's own supply sites and garrisons (the map used to draw red assets only)
+            if a.id.startswith("bfwd_") and _unheld(a, False):
+                continue
             q = P(a.x, a.y)
             col = QColor("#4a5566") if a.destroyed else QColor(theme.BLUE).darker(int(100 + 70 * (1 - a.health)))
             p.setPen(Qt.NoPen); p.setBrush(QBrush(col))
