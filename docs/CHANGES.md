@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.445, the About box shows the creator and lists credits one per line
+Help > About now shows the creator and contact line under the DCS notice. The credits are a bulleted list, one item each, so a long credit that wraps is clearly still one item. Natural Earth (coastlines and borders) is credited there too.
+
 ## v0.41.444, the waiting screen lists packages by TOT
 The package table on the waiting screen is now in time-over-target order, earliest first. The package you fly is no longer pinned to the top.
 
