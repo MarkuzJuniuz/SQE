@@ -195,7 +195,7 @@ LASER = ["1688", "1687", "1686", "1685", "1684", "1683", "1682", "1681"]
 @dataclass
 class MissionOptions:
     launch_offset_s: int = 60           # takeoff buffer: you are on the cat/runway at start; the briefed takeoff is this many SECONDS in (negative = hurry)
-    hold_minutes: int = 2               # slack at MARSHAL before PUSH, minutes. Negative = you must be quicker than the natural pace
+    hold_minutes: int = 1               # (S77: was 2) slack at MARSHAL before PUSH, minutes. Negative = you must be quicker than the natural pace
     cap_minutes: int = 40               # time on station for CAP flights
     hot_ramp_scrambles: bool = False    # v0.41.80: alert / scramble pairs at land fields start hot on the ramp (see _alert_group)
     hot_runway_starts: bool = False     # v0.41.96: AI package flights from land fields other than yours start on the runway (see _hot_slot)
@@ -531,7 +531,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         mshl = next((w for w in pw if w.action in ("HOLD", "CAPORBIT")), pw[-1])
         k = pw.index(mshl)
         leg_m = leg_seconds(mshl, pw[k + 1]) if (mshl.action == "HOLD" and k + 1 < len(pw)) else 0.0
-        player_push = math.ceil((mshl.eta_s + (0 if pf.role == Role.CAP else o.hold_minutes * 60) + leg_m) / 60.0) * 60.0
+        player_push = math.floor((mshl.eta_s + (0 if pf.role == Role.CAP else o.hold_minutes * 60) + leg_m) / 60.0 + 0.5) * 60.0     # S77 (XO 2026-11-14): nearest minute, not up, so a 1-minute hold stays about a minute (was ceil: 1 to 2)
         player_push = max(player_push, math.ceil((dep_s + 120) / 60.0) * 60.0)
         leave_s = hold_leave_s(pw, player_push)
         P0 = player_push - stagger(package, pf.role)                         # the strikers' push; everyone else is relative to it
