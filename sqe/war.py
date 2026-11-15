@@ -231,6 +231,10 @@ class ObjectivePlanner:
                         continue
                     pr *= 0.7 + 0.6 * zi["pressure"]                 # the harder Red is pressing, the more urgent
                     what = f"Close air support: {zi['name']} (enemy {zi['red']:.0f}, friendly {zi['blue']:.0f})"
+                    n_air = sum(1 for s_ in ((getattr(state, "ground", None) or {}).get("air_today") or []) if s_.get("sector") == z and s_.get("side") == "red")
+                    if n_air:                                        # S84: red's jets are over this front today (ground._record_strike): the job matters more, and the briefing says so
+                        pr *= 1.0 + 0.15 * min(2, n_air)
+                        what += "; enemy air strikes expected"
                 sz = ground.sector_of(state, a.id)
                 if sz is not None:                                   # v0.41.102: a red forward garrison: the harder Red presses in its sector, the more it matters
                     zi = ground.info(state, sz)

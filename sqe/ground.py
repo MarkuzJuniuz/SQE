@@ -1229,13 +1229,19 @@ def front_loss(state, i: int, dead: int, base_count: int):
     return f"{g['names'][i]}: friendly strength down {pts:.0f} to {g['blue'][i]:.0f}"
 
 
-def blue_losses(state, asset_id: str, dead: int, total: int):
-    """The friendly task force at a column's JTAC took losses: the zone's Blue strength drops. Returns a log line or None (no ground war)."""
+def blue_losses(state, asset_id: str, dead: int, total: int, base_count=None):
+    """The friendly company at a column's JTAC took losses: the zone's Blue strength drops. Returns a log line or None (no ground war).
+    S84: with `base_count` (the company's size at full strength) the loss is the same rule as a front battle's (front_loss: 100 * AIR_EFFECT of the share lost,
+    never more than the sector has), with no FRONT_CAP because a CAS battle is the sector's decisive fight; without it (an older manifest) the flat BLUE_LOSS."""
     i = zone_of(state, asset_id)
     if i is None or total <= 0:
         return None
     g = state.ground
-    g["blue"][i] = max(0.0, g["blue"][i] - BLUE_LOSS * dead / total)
+    if base_count:
+        pts = min(MAX_FORCE * AIR_EFFECT * dead / max(1, int(base_count)), g["blue"][i])
+    else:
+        pts = BLUE_LOSS * dead / total
+    g["blue"][i] = max(0.0, g["blue"][i] - pts)
     return f"{g['names'][i]}: friendly strength now {g['blue'][i]:.0f}"
 
 
