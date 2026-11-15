@@ -3432,7 +3432,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 self._drive_road(bg, [offset(bx, by, brg_rb + 180, self.FRONT_ADVANCE_M)], 3.5); hold_ = False
             if hold_:
                 self._ground_orders(bg)
-            manifest.add("friendly_ground", f"sector:{i}", names, label=g["names"][i])
+            manifest.add("friendly_ground", f"sector:{i}", names, label=g["names"][i], sector=i,
+                         base_count=max(len(names), round(len(names) / max(0.05, ground.blue_strength(st, i) / ground.MAX_FORCE))))      # S83: its size at full strength, so losses read back as strength
             self._spawn_front_air(i, red, bg, t_s, manifest)
             built += 1
 

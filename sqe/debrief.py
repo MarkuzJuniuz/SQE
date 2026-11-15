@@ -1936,8 +1936,12 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
                 out["blue_losses"].append({"callsign": g.get("callsign", g["ref"]), "lost": len(dead), "total": len(g["units"])})
                 out["lines"].append(f"{g.get('callsign', g['ref'])}: lost {len(dead)}/{len(g['units'])} ({sq.name}: {sq.available}/{sq.authorized} left)")
         elif g["kind"] == "friendly_ground" and str(g.get("ref", "")).startswith("sector:"):
-            if g["units"]:                                         # S81: a front battle staged under a flight that is not its CAS: scenery, the Blue strength is not touched
-                out["lines"].append(f"Front, {g.get('label') or g['ref']}: our company lost {len(dead)} of {len(g['units'])} vehicles (the daily fight decides the sector)")
+            if g["units"]:                                         # S81/S83: a front battle staged under a flight that is not its CAS: its losses cost the sector's Blue strength like red's column's cost its Red
+                from . import ground as _gr3
+                out["lines"].append(f"Front, {g.get('label') or g['ref']}: our company lost {len(dead)} of {len(g['units'])} vehicles")
+                gl3 = _gr3.front_loss(state, g.get("sector"), len(dead), int(g.get("base_count") or len(g["units"])))
+                if gl3:
+                    out["lines"].append(gl3)
         elif g["kind"] == "friendly_ground":
             out["ground_total"] = out.get("ground_total", 0) + len(g["units"]); out["ground_lost"] = out.get("ground_lost", 0) + len(dead)
             if g["units"]:
@@ -1962,6 +1966,8 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             before = a.health
             from . import ground as _gr2
             a.health = _gr2.column_health(state, a, before, frac)
+            if not g.get("primary") and _gr2.zone_of(state, a.id) is not None:      # S83: a red column hit only in passing loses no more than FRONT_CAP points (as blue's company), a CAS target is not capped
+                a.health = max(a.health, before - _gr2.FRONT_CAP / _gr2.MAX_FORCE)
             dmg = before - a.health
             ra_ = {"name": a.name, "before": before, "after": a.health, "kind": a.kind.value, "primary": bool(g.get("primary")),
                    "destroyed": bool(a.destroyed or a.health <= _gr2.DOWN_HEALTH)}          # v0.41.171: tempo credits (tempo.credits)
