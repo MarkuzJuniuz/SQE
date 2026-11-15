@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## After v0.41.443, the marshal no longer sits behind mountains
+The marshal point now skips spots where the straight climb from the flight's base crosses ground above 8,000 ft, and takes the next one. In a test run four A-10Cs flew into the Lesser Caucasus on the way to a marshal point 138 km out.
+
 ## After v0.41.443, full-map missions and the waiting screen
 The full-map test mission no longer builds blue forward positions or columns in sectors Blue no longer holds. The package table on the waiting screen is tall enough to show its whole row.
 

@@ -192,6 +192,7 @@ def point_back_along(poly, d_back: float):
 
 FIELD_DETECT_NM = 60.0      # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 MARSHAL_STANDOFF_NM = (85, 95, 105, 120, 140, 165, 195, 230)   # S77: the mission marshal's distances from the target, nearest first (judgment call: BMS-style push 10 nm out, a long ingress, still over friendly ground)
+MARSHAL_LEG_MAX_FT = 8000.0   # S88: the highest ground within 5 nm of the straight leg from a flight's base to the marshal (judgment call: an A-10C climbs about 5 m/s, so it cannot clear 2,000 m ridges 25 km out)
 MARSHAL_FIELD_MARGIN_NM = 10.0   # v0.41.6: a marshal point stays this far outside every enemy field's detection circle
 
 
@@ -257,17 +258,22 @@ def safe_marshal(state, base_xy, hdg_to_target, target_xy=None, min_enemy_nm: fl
             fx = [(math.hypot(b.x - tx, b.y - ty), b.x, b.y) for b in state.bases.values()
                   if b.kind == BaseKind.AIRFIELD and not getattr(b, "divert", False)]
             axis = math.degrees(math.atan2(min(fx)[2] - ty, min(fx)[1] - tx)) % 360 if fx else (hdg_to_target + 180) % 360
-        best, best_slack = None, -1e18
+        from . import relief
+        legs = list(refs or []) or [base_xy]
+        best, best_slack = None, (False, -1e18)
         for nm in MARSHAL_STANDOFF_NM:
             for ang in (0, 35, -35, 70, -70, 105, -105):
                 h = math.radians(axis + ang)
                 x, y = tx + nm * NM * math.cos(h), ty + nm * NM * math.sin(h)
                 slack = min([(math.hypot(x - ex, y - ey) / NM) - need for ex, ey, need in enemies] +
                             [(math.hypot(x - a.x, y - a.y) - r) / NM - ring_margin_nm for a, r in rs] + [1e9])
-                if slack >= 0:
+                # S88: the flight climbs straight from its base to the marshal: no spot behind high ground (2026-11-15 run: four A-10Cs hit the Lesser Caucasus)
+                hi = max([relief.leg_max_ft(r_, (x, y)) or 0.0 for r_ in legs])
+                ok_ = hi <= MARSHAL_LEG_MAX_FT
+                if ok_ and slack >= 0:
                     return x, y
-                if slack > best_slack:
-                    best, best_slack = (x, y), slack
+                if (ok_, slack) > best_slack:
+                    best, best_slack = (x, y), (ok_, slack)
         return best
     back = hdg_to_target + 180
     best, best_slack = None, -1e18
