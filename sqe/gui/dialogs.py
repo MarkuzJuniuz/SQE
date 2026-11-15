@@ -425,7 +425,7 @@ class WaitingDialog(QDialog):
             for j, v in enumerate((r["name"], r["text"])):
                 self.ptbl.setItem(i, j, QTableWidgetItem(v))
         self.ptbl.resizeRowsToContents()
-        self.ptbl.setFixedHeight(self.ptbl.horizontalHeader().height() + sum(self.ptbl.rowHeight(i) for i in range(len(rows))) + 4)
+        self.ptbl.setFixedHeight(self.ptbl.horizontalHeader().height() + sum(self.ptbl.rowHeight(i) for i in range(len(rows))) + 20)       # +20: the theme's 6 px padding and 1 px border on every side
 
     def _status_lines(self, data):
         """S77: the objective lines and the overall line, read-only from the hook's state file (nothing in the campaign changes; Accept stays the authority).
