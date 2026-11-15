@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## After v0.41.443, the campaign map hides garrisons in sectors a side does not hold
+The campaign map no longer draws a side's forward garrison bar in a sector where that side has no organised force. Blue bars used to show among the red units in the first sectors, although the war counted them as nothing there. A garrison destroyed inside a held sector still shows grey.
+
 ## After v0.41.443, the marshal no longer sits behind mountains
 The marshal point now skips spots where the straight climb from the flight's base crosses ground above 8,000 ft, and takes the next one. In a test run four A-10Cs flew into the Lesser Caucasus on the way to a marshal point 138 km out.
 
