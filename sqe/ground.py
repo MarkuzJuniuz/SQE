@@ -82,6 +82,7 @@ RED_CAS_BLUE_SHARE = 0.5                 # half of blue's AIR tempo (up to +0.40
 RED_CAS_COVER_KM = 150.0
 RED_CAS_LOSS = 0.25                      # chance a strike costs red one attack jet
 RED_CAS_ESCORT_LOSS = 0.15               # ...and an escorted strike one fighter (a fight with blue's patrols)
+BLUE_CAS_LOSS = 0.10                     # S82: chance a blue air strike costs one jet of the squadron that flew it (judgment call: red's is 0.25, blue's cover is better)
 RED_ATTACK_TYPES = ("Su_25", "Su_24M", "Su_34")      # v0.41.361 (Phase 10d): + the L3 Su-34
 COUNTER_DELAY_DAYS = 3        # the enemy's last counter-force arrives this many days after the final base falls
 COUNTER_FORCED_DAYS = 6       # ...and attacks every day for this long
@@ -645,6 +646,30 @@ def surge(state, d) -> float:
     return 1.0 + min(SURGE_CAP, max(0.0, idle) * step)
 
 
+def _record_strike(state, rec: dict) -> None:
+    """S82: remember a strike the day's fight sent, so the next mission over that sector shows the same jets (see MissionBuilder._spawn_front_air)."""
+    state.ground.setdefault("air_today", []).append(rec)
+
+
+def _blue_strike_squadron(state, i: int):
+    """S82: the blue squadron that would fly a close-air-support pair on sector i: CAS-capable type, two or more serviceable jets, a field we still hold, not a
+    guard squadron; the nearest to the sector. None when there is none (then blue has no strike that day)."""
+    from .aircraft import AIRCRAFT
+    from .models import Role
+    cx, cy = state.ground["centers"][i]
+    fallen = set(state.ground.get("fallen", []))
+    best = None
+    for q in state.squadrons.values():
+        spec = AIRCRAFT.get(q.aircraft)
+        if spec is None or Role.CAS not in spec.roles or getattr(q, "role", "") or q.available < 2 or q.base_id not in state.bases or q.base_id in fallen:
+            continue
+        b = state.bases[q.base_id]
+        d_ = (b.x - cx) ** 2 + (b.y - cy) ** 2
+        if best is None or d_ < best[0]:
+            best = (d_, q)
+    return best[1] if best else None
+
+
 def _red_cas(state, d, rng, red, blue, n, sg) -> list:
     """v0.41.172: red's abstract close air support on the blue sector facing it (see RED_AI_CAS). Escort or cover as described there. -> log lines."""
     from . import redair, tempo
@@ -677,8 +702,13 @@ def _red_cas(state, d, rng, red, blue, n, sg) -> list:
         if rng.random() < min(0.95, max(0.05, p)):
             blue[i] = max(0.0, blue[i] * (1.0 - RED_CAS_CUT))
             out.append(f"   Red air strike on the friendly troops in {state.ground['names'][i]}" + (" (escorted)" if esc is not None else "") + f": friendly strength down to {blue[i]:.0f}")
+        atype_ = next((q.aircraft for q in w.sqns if q.aircraft in RED_ATTACK_TYPES and q.available > 0), None)
+        efw_ = esc if esc is not None else (min(cover, key=dist) if cover else None)
+        _record_strike(state, {"side": "red", "sector": i, "wing": w.base_asset_id, "type": atype_, "n": 2,
+                               "esc": efw_.base_asset_id if efw_ is not None else None,
+                               "esc_type": next((q.aircraft for q in efw_.sqns if q.aircraft in ENEMY_FIGHTERS and q.available > 0), None) if efw_ is not None else None})
         if rng.random() < RED_CAS_LOSS:
-            w.lose(next((q.aircraft for q in w.sqns if q.aircraft in RED_ATTACK_TYPES and q.available > 0), None), 1)
+            w.lose(atype_, 1)
         if esc is not None and rng.random() < RED_CAS_ESCORT_LOSS:
             esc.lose(next((q.aircraft for q in esc.sqns if q.aircraft in ENEMY_FIGHTERS and q.available > 0), None), 1)
     return out
@@ -691,6 +721,7 @@ def resolve_day(state, d, rng) -> list:
     red, blue, n = g["red"], g["blue"], n_zones(g)
     sr, sb = supply(state, "red"), supply(state, "blue")
     sg = surge(state, d)
+    g["air_today"] = []                                               # S82: the strikes of this day's fight, for the mission builder to show (see _record_strike)
     lines = _counter_arrives(state)
     forced = _forced_zone(state)
     fw = g.setdefault("fwd", {"r": [1.0] * n, "b": [1.0] * n})
@@ -706,7 +737,13 @@ def resolve_day(state, d, rng) -> list:
         from . import tempo
         if facing and rng.random() < min(0.95, max(0.05, AI_CAS_P + TEMPO_GROUND_GAIN * tempo.get(state, "CAS"))) * sb:         # v0.41.147: air tempo: the player's flown CAS results
             i = max(facing)
+            sq_ = _blue_strike_squadron(state, i)                  # S82 (XO 2026-11-14): real numbers: a pair of serviceable CAS jets from a real squadron, or no strike
+            if sq_ is None:
+                continue
             red[i] = max(0.0, red[i] * (1.0 - AI_CAS_CUT))
+            _record_strike(state, {"side": "blue", "sector": i, "sq": sq_.id, "type": sq_.aircraft, "n": 2})
+            if rng.random() < BLUE_CAS_LOSS:
+                sq_.available = max(0, sq_.available - 1)
     lines += _red_cas(state, d, rng, red, blue, n, sg)
     # who is in contact: a sector both sides hold, or (v0.41.143) two neighbouring sectors, red's on the enemy side, when neither is shared: an assault across the line
     pairs = [(i, i) for i in range(n) if red[i] >= MIN_FORCE and blue[i] >= MIN_FORCE]

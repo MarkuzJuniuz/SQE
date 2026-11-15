@@ -42,7 +42,7 @@ from . import road_sites
 from .strike_tasks import StrikeTasks, DEAD_GATE_KM, SEAD_WAVE_KM, TRACK_RADARS, SEARCH_RADARS, KPH
 from . import kneeboard
 from .kneeboard import latlon, render_pages
-from .loadouts import LoadoutLibrary, enemy_cap_loadout, gbu_count, ENEMY_FIGHTERS, JDAM_JETS, JSOW_FLIGHT_KITS
+from .loadouts import LoadoutLibrary, enemy_cap_loadout, enemy_strike_loadout, gbu_count, ENEMY_FIGHTERS, JDAM_JETS, JSOW_FLIGHT_KITS
 from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType, Role, tag_label, task_label
 pydcs_patch.install()           # v0.41.66: pydcs's scattered formation could loop forever and freeze a build (sqe/pydcs_patch.py)
 
@@ -602,7 +602,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 t_ = st.assets[package.objective.target_id]
                 self._agm88_refs.append((t_.x, t_.y, hs_))
         merged = self._add_merged(package, extras, P0, manifest, despawn, atc, div_mhz, div.name, clock, ruins)
-        self._stage_front_battles(package, manifest, tx, ty, [(w_.x, w_.y) for w_ in pw])             # S81: the ground war on the map, under any flight
+        self._stage_front_battles(package, manifest, tx, ty, [(w_.x, w_.y) for w_ in pw], tgt.eta_s)             # S81: the ground war on the map, under any flight
         # HAVCAP and base BARCAP guard the tanker, AWACS and home field: they stay until the last flight of ANY package in this mission is home
         # (they used to leave 40 min after your TOT, so later merged packages flew with the tanker and AWACS unguarded)
         last_home = max([m_["rtb_s"] for m_ in merged if not m_.get("struck")] + [rtb_s]) + 300
@@ -3367,12 +3367,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             manifest.add("friendly_ground", tid or "", names)
         if g is not None and enemy is not None:
             self._cas_battle_rule(package, enemy, [n_ for n_ in names if n_.startswith("TF")], t_contact)
+            zc_ = ground.zone_of(self.state, tid or "")
+            if zc_ is not None:
+                self._spawn_front_air(zc_, enemy, g, t_contact, manifest)
 
     FRONT_BATTLES_MAX = 2          # S81: battles staged per mission (judgment call: the unit limit and the VR frame rate)
     FRONT_ADVANCE_M = 1200.0       # the attacking side creeps this far toward the other
     FRONT_RATIO = 1.2              # a side attacks when it is this much stronger than the other (else both hold)
 
-    def _stage_front_battles(self, package, manifest, tx, ty, route=None):
+    def _stage_front_battles(self, package, manifest, tx, ty, route=None, t_s=900.0):
         """S81 (XO 2026-11-14): the ground war is on the map under any flight. Each sector within the merge radius of the target where both sides still have a force
         (and that is no CAS package's own battle) gets the red column, the sector's real armour asset, so a strike on it counts as always, and a blue company
         sized by the sector's Blue strength, facing each other across the line; the stronger side creeps forward, weapons free. At most FRONT_BATTLES_MAX, nearest
@@ -3430,7 +3433,79 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if hold_:
                 self._ground_orders(bg)
             manifest.add("friendly_ground", f"sector:{i}", names, label=g["names"][i])
+            self._spawn_front_air(i, red, bg, t_s, manifest)
             built += 1
+
+    def _spawn_front_air(self, i, red_g, blue_g, t_s, manifest):
+        """S82 (XO 2026-11-14): the day's air strikes over a battle, from real jets. The daily ground fight records each strike it sent on sector i
+        (ground._record_strike): red's from a real wing (type and escort as it chose them), blue's from a real squadron with a pair serviceable. Here each one is
+        spawned over the battle t_s - 240 s in, attacks the other side's company, and its losses come off that wing or squadron like any other. No strike
+        recorded, none serviceable, or no room under the unit limit: nothing is spawned."""
+        st = self.state
+        strikes = [s_ for s_ in (st.ground or {}).get("air_today", []) if s_.get("sector") == i][:2]
+        if not strikes or not red_g.units or not blue_g.units:
+            return
+        pt = self._pt
+        rx, ry = red_g.units[0].position.x, red_g.units[0].position.y
+        bx, by = blue_g.units[0].position.x, blue_g.units[0].position.y
+        t0 = max(0.0, float(t_s) - 240.0)
+        used = self.__dict__.setdefault("_front_air_used", {})            # jets already committed to a strike in this mission: a pair is never flown twice
+        skill_r = getattr(Skill, ai_skill(self.o, "red", self.d), Skill.High)
+        for s_ in strikes:
+            if self._units_room() < 6:
+                self.warns.append("Front air strike left out to stay under the unit limit")
+                return
+            if s_["side"] == "red":
+                wing = st.enemy_air_at(s_["wing"])
+                at_ = s_.get("type")
+                if wing is None or not at_ or wing.available_of((at_,)) - used.get(("w", s_["wing"], at_), 0) < 2 or not hasattr(planes, at_):
+                    continue
+                sx, sy = offset(rx, ry, bearing(bx, by, rx, ry), 40 * NM)         # behind their own column, 40 nm out
+                g = self.m.flight_group(self.red, f"Red Strike {i + 1}", getattr(planes, at_), None, pt(sx, sy), altitude=12000 * FT, speed=400 * KPH,
+                                        maintask=task.CAS, group_size=2)
+                g.set_skill(skill_r)
+                used[("w", s_["wing"], at_)] = used.get(("w", s_["wing"], at_), 0) + 2
+                load = enemy_strike_loadout(at_)
+                names = []
+                for j, u in enumerate(g.units, 1):
+                    u.name = f"ENM-FS-{s_['wing']}-{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
+                tw = g.add_waypoint(pt(bx, by), 9000 * FT, 450 * KPH)
+                tw.tasks.append(task.AttackGroup(blue_g.id, group_attack=True))
+                g.add_waypoint(pt(sx, sy), 12000 * FT, 450 * KPH)
+                self._late(g, t0, "front strike")
+                manifest.add("enemy_air", s_["wing"], names, ac=at_)
+                if s_.get("esc") and s_.get("esc_type") and hasattr(planes, s_["esc_type"]) and self._units_room() >= 4:
+                    ew = st.enemy_air_at(s_["esc"])
+                    if ew is not None and ew.available_of((s_["esc_type"],)) - used.get(("w", s_["esc"], s_["esc_type"]), 0) >= 2:
+                        used[("w", s_["esc"], s_["esc_type"])] = used.get(("w", s_["esc"], s_["esc_type"]), 0) + 2
+                        eg = self.m.flight_group(self.red, f"Red Cover {i + 1}", getattr(planes, s_["esc_type"]), None, pt(*offset(rx, ry, bearing(bx, by, rx, ry), 15 * NM)),
+                                                 altitude=20000 * FT, speed=420 * KPH, maintask=task.CAP, group_size=2)
+                        eg.set_skill(skill_r)
+                        eload, en_ = enemy_cap_loadout(s_["esc_type"]), []
+                        for j, u in enumerate(eg.units, 1):
+                            u.name = f"ENM-FC-{s_['esc']}-{i}-{j}"; u.pylons = copy.deepcopy(eload); en_.append(u.name)
+                        ew_ = eg.add_waypoint(pt(*offset(bx, by, bearing(rx, ry, bx, by) + 180, 5 * NM)), 20000 * FT, 450 * KPH)
+                        ew_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(bx, by), int(25 * NM), [task.Targets.All.Air]))
+                        self._late(eg, t0, "front cover")
+                        manifest.add("enemy_air", s_["esc"], en_, ac=s_["esc_type"])
+            else:
+                q = st.squadrons.get(s_.get("sq"))
+                spec = AIRCRAFT.get(q.aircraft) if q is not None else None
+                if q is None or spec is None or q.available - used.get(("q", q.id), 0) < 2 or q.base_id not in st.bases:
+                    continue
+                used[("q", q.id)] = used.get(("q", q.id), 0) + 2
+                sx, sy = offset(bx, by, bearing(rx, ry, bx, by), 40 * NM)         # behind our own company
+                g = self.m.flight_group(self.usa, f"Front Strike {i + 1}", spec.dcs_type, None, pt(sx, sy), altitude=12000 * FT, speed=400 * KPH,
+                                        maintask=task.CAS, group_size=2)
+                load = self.lo.for_role(q.aircraft, Role.CAS, "")
+                names = []
+                for j, u in enumerate(g.units, 1):
+                    u.name = f"FS{i + 1}|{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
+                tw = g.add_waypoint(pt(rx, ry), 9000 * FT, 450 * KPH)
+                tw.tasks.append(task.AttackGroup(red_g.id, group_attack=True))
+                g.add_waypoint(pt(sx, sy), 12000 * FT, 450 * KPH)
+                self._late(g, t0, "front strike")
+                manifest.add("friendly", f"front-{i}-{q.id}", names, squadron=q.id, callsign=f"Front Strike {i + 1}", player=False)
 
     def _cas_battle_rule(self, package, enemy, blue_names, t_contact):
         """S80: the CAS battle is decided by what the air power did to the red column, with no dice. CAS_DECIDE_S after the contact time a trigger counts the red
