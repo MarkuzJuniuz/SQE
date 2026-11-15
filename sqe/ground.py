@@ -35,6 +35,7 @@ SUPPLY_KINDS = (AssetKind.FUEL, AssetKind.DEPOT)
 BREAK_RATIO = 0.30            # v0.41.145 (XO 2026-10-27, never hunt the last unit): a side whose force in a sector is under this share of the other's has lost the sector tonight (it withdraws); nobody has to be destroyed
 DOWN_HEALTH = 0.30            # v0.41.145: a depot, fuel farm, SAM site or garrison at or under this health counts as down (not offered as a target, no longer gates)
 AIR_EFFECT = 0.6              # share of a visible column's losses that its zone's strength takes (the column is only the lead element)
+FRONT_CAP = 20.0               # S83: the most strength (points) a side loses in one sector from a scenery front battle in one mission, both sides alike (judgment call: tune after a flown test)
 BLUE_LOSS = 40.0              # blue strength lost when the whole friendly task force at the JTAC is destroyed
 SKIRMISH, ATTACK = 0.04, 0.14
 DECISIVE, REPULSED = 1.8, 0.55
@@ -1214,6 +1215,18 @@ def column_health(state, a, before: float, frac: float) -> float:
     if zone_of(state, a.id) is None:
         return max(0.0, min(before, frac))
     return max(0.0, before - (before - min(before, frac)) * AIR_EFFECT)
+
+
+def front_loss(state, i: int, dead: int, base_count: int):
+    """S83 (XO 2026-11-14: it has to be fair): a blue company's losses in a front battle cost the sector's Blue strength the way a red column's cost its Red strength:
+    AIR_EFFECT of the share lost, where base_count is the company's size at full strength (so each vehicle is worth 100 * AIR_EFFECT / base_count points), at most FRONT_CAP.
+    Returns a log line, or None."""
+    g = getattr(state, "ground", None)
+    if not g or dead <= 0 or i is None or not 0 <= i < len(g.get("blue", [])):
+        return None
+    pts = min(FRONT_CAP, MAX_FORCE * AIR_EFFECT * dead / max(1, base_count), g["blue"][i])        # never more than the sector has
+    g["blue"][i] = max(0.0, g["blue"][i] - pts)
+    return f"{g['names'][i]}: friendly strength down {pts:.0f} to {g['blue'][i]:.0f}"
 
 
 def blue_losses(state, asset_id: str, dead: int, total: int):
