@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.452, the marshal point sits near the closest base
+Packages hold close to the nearest friendly field instead of a fixed 85 nm from the target, so the hold and the ingress are shorter and the jets burn less fuel before the fight.
+
 ## v0.41.451, the tanker flies at the Hogs' refuelling height and speed
 When an A-10C is in the package, the boom tanker orbits at 15,000 ft and 270 kt instead of 22,000 ft and 350 kt, the numbers the A-10C's own route already uses for refuelling.
 

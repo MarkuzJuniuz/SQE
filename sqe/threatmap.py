@@ -192,6 +192,8 @@ def point_back_along(poly, d_back: float):
 
 FIELD_DETECT_NM = 60.0      # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 MARSHAL_STANDOFF_NM = (85, 95, 105, 120, 140, 165, 195, 230)   # S77: the mission marshal's distances from the target, nearest first (judgment call: BMS-style push 10 nm out, a long ingress, still over friendly ground)
+MARSHAL_MIN_NM = 40          # S97: the nearest the marshal goes to the target (judgment call: PUSH is 10 nm out and the IP 12 nm, so 40 nm leaves a real ingress)
+MARSHAL_STEP_NM = 10         # S97: the stand-off steps outward by this when a spot fails the field / SAM / ridge tests
 MARSHAL_LEG_MAX_FT = 8000.0   # S88: the highest ground within 5 nm of the straight leg from a flight's base to the marshal (judgment call: an A-10C climbs about 5 m/s, so it cannot clear 2,000 m ridges 25 km out)
 MARSHAL_FIELD_MARGIN_NM = 10.0   # v0.41.6: a marshal point stays this far outside every enemy field's detection circle
 
@@ -272,8 +274,17 @@ def safe_marshal(state, base_xy, hdg_to_target, target_xy=None, min_enemy_nm: fl
             axis = math.degrees(math.atan2(min(fx)[2] - ty, min(fx)[1] - tx)) % 360 if fx else (hdg_to_target + 180) % 360
         from . import relief
         legs = list(ridge_refs if ridge_refs is not None else (refs or [base_xy]))      # S95: only the slow climbers' legs are tested; None = every flight's (the old way)
+        # S97 (XO 2026-11-16): the search starts near the base that is closest to the target (+10 nm), not at a fixed 85 nm that put the marshal 50 nm past a
+        # nearby base; never nearer than MARSHAL_MIN_NM nor farther than the old first ring to start from. The field / SAM / ridge tests are what keep it safe.
+        near_nm = min([math.hypot(rx - tx, ry - ty) / NM for rx, ry in (refs or [base_xy])] or [MARSHAL_STANDOFF_NM[0]])
+        first_nm = min(MARSHAL_STANDOFF_NM[0], max(MARSHAL_MIN_NM, near_nm + 10))
+        rings_nm = []
+        k = first_nm
+        while k <= MARSHAL_STANDOFF_NM[-1]:
+            rings_nm.append(k)
+            k += MARSHAL_STEP_NM
         best, best_key = None, None
-        for nm in MARSHAL_STANDOFF_NM:
+        for nm in rings_nm:
             if max_nm is not None and nm > max_nm and best is not None:
                 break                                                                          # S95: never beyond the range cap (the first ring is always tried)
             for ang in (0, 35, -35, 70, -70, 105, -105):
