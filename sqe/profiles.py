@@ -162,6 +162,30 @@ CAS_HIGH_MARGIN_NM = 3.0  # reach plus this margin (threatmap.RANGE_NM + 3: a To
 COLUMN_AD = {"ZSU-23-4 Shilka": ("gun", CAS_GUN_FT, "Shilka"), "Ural-375 ZU-23": ("gun", CAS_GUN_FT, "ZU-23"), "SA-18 Igla manpad": ("gun", CAS_GUN_FT, "Igla"),
              "Strela-10M3": ("sam", 14000, "Strela-10"), "Osa 9A33 ln": ("sam", 18000, "Osa"), "2S6 Tunguska": ("sam", 13000, "Tunguska"), "Tor 9A331": ("sam", CAS_HIGH_FT, "Tor")}
 # (keys are the DCS type strings a unit carries as `unit.type`, not the pydcs class names)
+AD_REACH_NM = {"Shilka": 3.0, "ZU-23": 3.0, "Igla": 3.0, "Strela-10": 3.0, "Osa": 7.0, "Tunguska": 5.0, "Tor": 8.0}   # judgment call, from memory (public data: ZSU-23-4 about 2.5 km, Strela-10 5 km, Osa 10 km, Tunguska 8 km, Tor 12 km): the nm around a unit inside which the CAS flight counts it (plus CAS_HIGH_MARGIN_NM)
+AREA_GUN_KINDS = (AssetKind.ARMOR, AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.AIRFIELD)      # S92b: assets whose group carries a Shilka (every one of them builds one, or can); not yet spawned when the flight is planned -> counted as guns
+
+
+def area_ad(state, groups, target_id, pts, comp_types=None):
+    """S92b: the air defence of every OTHER red ground group near the CAS flight's path (IP -> target -> egress): neighbouring columns, depot / fuel / C2 / field guards. A group already
+    built counts by its own air-defence units; an asset not built yet (the supply and front-battle groups come after the flights) counts by `comp_types(asset)` (the DCS type strings its group WILL carry, pre-rolled by the builder), or as guns when that is None.
+    -> [(None, class, floor_ft, label)], the same shape as column_ad_units."""
+    out = []
+    for a in state.assets.values():
+        if a.destroyed or a.id == target_id or a.kind == AssetKind.SAM or a.kind not in AREA_GUN_KINDS:
+            continue
+        g = (groups or {}).get(a.id)
+        if g is not None:
+            for u, cls, ft, lab in column_ad_units(g):
+                if tm.poly_dist(u.position.x, u.position.y, pts) <= (AD_REACH_NM.get(lab, 3.0) + CAS_HIGH_MARGIN_NM) * NM:
+                    out.append((None, cls, ft, lab))
+        else:
+            types = comp_types(a) if comp_types is not None else None
+            for t in (types if types is not None else ["ZSU-23-4 Shilka"]):
+                e = COLUMN_AD.get(t)
+                if e and tm.poly_dist(a.x, a.y, pts) <= (AD_REACH_NM.get(e[2], 3.0) + CAS_HIGH_MARGIN_NM) * NM:
+                    out.append((None, e[0], e[1], e[2]))
+    return out
 
 
 def column_ad_units(group):
@@ -198,7 +222,7 @@ def cas_floor(state, pts, column=None):
         cft = max(e[2] for e in column)
         if res is None or cft > res[0]:
             names = ", ".join(dict.fromkeys(e[3] for e in column))
-            res = (cft, f"HIGH from the IP: {names} travel{'s' if len(set(e[3] for e in column)) == 1 else ''} with the column; attack from {cft:,} ft, Maverick on the missile vehicles, cluster on the guns.")
+            res = (cft, f"HIGH from the IP: {names} in the target area; attack from {cft:,} ft, Maverick on the missile vehicles, cluster on the guns.")
     return res
 
 
