@@ -392,6 +392,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._support_lbl = {}                                          # v0.41.215: tanker / AWACS unit name -> its label, for the damage calls
         self._gates = []                                                # DEAD flights that turn back when the site's radars are still up
         self._route_end = {}                                            # v0.41.223: group name -> where its route ended before the SCRUB point was added (the home leg is built from there)
+        self._armor_comps = {}                                          # S92b: asset id -> its rolled armor composition (see _armor_site_comp)
         self._cas_stock = {}                                            # S92: package id -> True when the AI CAS flight keeps the stock Maverick + cluster kit and attacks the column's air defence unit by unit
         self._cas_floors = {}                                           # S31a: package id -> the AI CAS attack floor in ft (0 = none)
         self._scrub = []                                                # v0.41.223: every package flight for the hook's package scrub (group, unit names, kind, SCRUB point)
@@ -453,7 +454,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         tm.safe_egress(st, tx, ty, geom.hdg, pspec.profile.egress_nm, tm.cluster_ids(tgt_asset)) or geom.egr)
         manifest = Manifest(st.campaign_id, st.sortie_counter + 1, package.id, st.day)
         manifest.cur_pkg = package.id
-        self.groups_by_asset, self.flight_groups = {}, []
+        self.groups_by_asset, self.flight_groups = {}, []; self._armor_comps = {}
         self._support_units = {}                       # v0.41.87: support asset key -> its aircraft's unit name in this mission
         self.base_ad = {}                              # v0.41.84: base id -> {"pat": group, "hawk": group} (blue field air defence, the targets of a red SEAD pair)
 
@@ -1522,6 +1523,18 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             comp.append(("Strela_10M3", 1))
         return comp
 
+    def _armor_site_comp(self, a):
+        """S92b: an armor column's / garrison's composition, rolled once per mission and cached, so the CAS planner (which runs before the group is built) sees the air defence it will really carry."""
+        if a.id not in self._armor_comps:
+            self._armor_comps[a.id] = self._garrison_comp() if a.variant == "GARRISON" else self._armor_comp()
+        return self._armor_comps[a.id]
+
+    def _site_types(self, a):
+        """S92b: the DCS type strings an asset's group will carry (profiles.area_ad's `comp_types`); None = unknown (counted as a Shilka)."""
+        if a.kind != AssetKind.ARMOR:
+            return None
+        return [getattr(_vt(n), "id", "") for n, c in self._armor_site_comp(a) if c > 0]
+
     def _armor_comp(self):
         r = self.vrng
         comp = [(r.choice(["T_72B", "T_72B", "T_80B", "T_80UD"]), r.randint(3, 6)), (r.choice(["BMP_2", "BMP_1", "BMP_3"]), r.randint(2, 5)),
@@ -1641,7 +1654,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         r = self.vrng
         skill = getattr(Skill, ai_skill(self.o, "red", self.d), Skill.High)
         garrison = a.kind == AssetKind.ARMOR and a.variant == "GARRISON"
-        comp = (self._garrison_comp() if garrison else self._armor_comp()) if a.kind == AssetKind.ARMOR else (
+        comp = self._armor_site_comp(a) if a.kind == AssetKind.ARMOR else (
             road_sites.guard_comp(a, self.d.level) if road_sites.is_road(a) else self._vary_comp(a, comp))        # v0.41.241: a road site's guard follows its level and variant
         cx, cy = self._site_center(a)
         base_count = sum(n for vname, n in comp if _vt(vname) is not None)
@@ -3603,7 +3616,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         tid_ = package.objective.target_id
         tt_ = self.state.assets.get(tid_ or "")
         pts_ = [geom.ip, (tx, ty), geom.egr]
-        col_ = profiles.column_ad_units(self.groups_by_asset.get(tid_))
+        col_ = profiles.column_ad_units(self.groups_by_asset.get(tid_)) + profiles.area_ad(self.state, self.groups_by_asset, tid_, pts_, self._site_types)       # S92b: and the neighbours' air defence
         site_ = profiles.cas_floor(self.state, pts_)
         geom.cas_floor = profiles.cas_floor(self.state, pts_, col_) if col_ else site_
         self._cas_floors[package.id] = geom.cas_floor[0] if geom.cas_floor else 0

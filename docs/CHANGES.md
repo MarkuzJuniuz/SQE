@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.454, AI close air support counts all the air defence around its target
+The attack height now takes in the short-range air defence of neighbouring columns and of depot, fuel, command and field guards near the target and the run-in, not just the target column and the SAM sites.
+
 ## v0.41.453, the sortie window keeps its parts in place
 The Sortie In Progress window now packs the title, mission card and package list at the top, with the loss totals, mission status and buttons anchored to the bottom. The package list starts empty until DCS answers, and the loss table no longer shows a scrollbar.
 
