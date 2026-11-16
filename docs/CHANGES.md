@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.449, the sortie window gives the package list more room
+The Friendly / Enemy loss table on the Sortie In Progress window is only as tall as its two rows now, so the package list gets the space.
+
 ## v0.41.448, AI close air support handles escorting air defence
 AI close air support flights hold Open Fire instead of Weapon Free. When the target column carries its own air defence (Shilka, Strela, Osa and the like), they attack from above its reach, Maverick first on the missile vehicles and cluster bombs on the guns, then the rest of the column.
 
