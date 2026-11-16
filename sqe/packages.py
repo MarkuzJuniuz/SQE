@@ -17,6 +17,7 @@ CLUSTER_NM, SALVO_4_NEIGHBOURS, SALVO_8_NEIGHBOURS = 25, 2, 4     # judgment cal
 CARRIER_PLAYER_FLIGHT_MAX = 2        # catapult spots are limited; keep the player's cat-start flight small
 PLAYER_ROLE_PREFERENCE = {Role.STRIKE: 5, Role.SEAD: 4, Role.TARCAP: 3, Role.ESCORT: 2, Role.SWEEP: 2, Role.CAP: 1, Role.CAS: 0}
 JTAC_OBJECTIVES = {ObjectiveType.CAS}
+TANKER_CAP_JETS = frozenset({"A-10C"})      # S96: the jets whose refuelling profile (aar_alt_ft / aar_kts) caps the tanker's orbit height and speed (judgment call: the A-10C's own 15,000 ft / 270 kt)
 
 
 class NoPlayerSlot(Exception):
@@ -651,12 +652,20 @@ class PackageBuilder:
             m = AIRCRAFT[f.aircraft].refuel
             if m not in methods:
                 methods.append(m)
-        t1 = TANKER_FOR[methods[0]]
-        out.append(SupportPlan("TANKER1", t1.dcs_class, t1.label, t1.altitude_ft, t1.speed_kts, methods[0].value))
+        def _orbit(m):                       # S96: a tanker serving a Hog flies the Hog's own refuelling height and speed (it sat at 22,000 ft / 350 kt while the A-10C's profile says 15,000 / 270: the S93 run)
+            sp = TANKER_FOR[m]
+            alt, kts = sp.altitude_ft, sp.speed_kts
+            for f in pkg.flights:
+                if not f.tag and f.aircraft in TANKER_CAP_JETS and AIRCRAFT[f.aircraft].refuel == m:
+                    pr = AIRCRAFT[f.aircraft].profile
+                    alt, kts = min(alt, pr.aar_alt_ft), min(kts, pr.aar_kts)
+            return sp, alt, kts
+        t1, alt1, kts1 = _orbit(methods[0])
+        out.append(SupportPlan("TANKER1", t1.dcs_class, t1.label, alt1, kts1, methods[0].value))
         if len(methods) > 1:
-            t2 = TANKER_FOR[methods[1]]
+            t2, alt2, kts2 = _orbit(methods[1])
             out.append(SupportPlan("TANKER2", t2.dcs_class, "Arco" if t2.label == t1.label else t2.label,
-                                   t2.altitude_ft, t2.speed_kts, methods[1].value))
+                                   alt2, kts2, methods[1].value))
         elif lead_home == BaseKind.CARRIER and t1.dcs_class != RECOVERY_TANKER.dcs_class:      # v0.41.335: a probe jet's TANKER1 is already the S-3B
             r = RECOVERY_TANKER
             out.append(SupportPlan("TANKER2", r.dcs_class, r.label, r.altitude_ft, r.speed_kts,

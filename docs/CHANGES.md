@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.451, the tanker flies at the Hogs' refuelling height and speed
+When an A-10C is in the package, the boom tanker orbits at 15,000 ft and 270 kt instead of 22,000 ft and 350 kt, the numbers the A-10C's own route already uses for refuelling.
+
 ## v0.41.450, the marshal point stays near the fight
 Packages no longer hold 200 nm away over the sea or off the map. The marshal is close to the target again, and an A-10C package gets no more than 120 nm, so the Hogs keep their fuel for the job.
 
