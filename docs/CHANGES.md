@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.447, the About box credits use XO's list markup
+Help > About shows the creator line with the email under it, and the credits as a real bulleted list again.
+
 ## v0.41.446, the About box credits line up under their heading
 The bullets in Help > About now start directly under "Credits" instead of being indented. A credit that wraps still indents under its own bullet.
 
