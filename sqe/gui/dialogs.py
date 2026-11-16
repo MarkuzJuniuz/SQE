@@ -401,7 +401,7 @@ class WaitingDialog(QDialog):
         self.ptbl.setWordWrap(True); self.ptbl.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded); self.ptbl.setVerticalScrollMode(QTableWidget.ScrollPerPixel); self._fill_packages([{"name": DB.short_objective(p["objective"]), "text": ""}]); lay.addWidget(self.ptbl, 1)       # stretch 1: a short window squeezes this table (it scrolls), nothing else
         self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["This Sortie", "Friendly", "Enemy"])
         self.tbl.verticalHeader().setVisible(False); self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch); self.tbl.setMinimumHeight(130)
+        self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         lay.addWidget(self.tbl)
         self.last = QLabel(""); self.last.setObjectName("small"); lay.addWidget(self.last)
         row = QHBoxLayout()
@@ -420,6 +420,8 @@ class WaitingDialog(QDialog):
             for j, v in enumerate(r):
                 it = QTableWidgetItem(v); it.setTextAlignment(Qt.AlignCenter if j else Qt.AlignLeft | Qt.AlignVCenter)
                 self.tbl.setItem(i, j, it)
+        self.tbl.resizeRowsToContents()
+        self.tbl.setFixedHeight(self.tbl.horizontalHeader().height() + sum(self.tbl.rowHeight(i) for i in range(len(rows))) + 6)       # just its rows: the spare height goes to the package table
 
     PKG_MIN_H = 130                 # px: header and about two rows; the least the package table is squeezed to before it scrolls
 
