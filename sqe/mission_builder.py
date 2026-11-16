@@ -438,7 +438,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         pspec = AIRCRAFT[pf.aircraft]
         fleet_obj = package.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
         tgt_asset = None if fleet_obj else st.assets[package.objective.target_id]
-        mshl_xy = tm.safe_marshal(st, (pbase.x, pbase.y), bearing(pbase.x, pbase.y, tx, ty), (tx, ty), refs=tm.package_refs(st, package.flights))     # S77: the package's marshal, not the player's base's
+        mshl_xy = tm.package_marshal(st, (pbase.x, pbase.y), bearing(pbase.x, pbase.y, tx, ty), (tx, ty), package.flights)     # S77: the package's marshal, not the player's base's
         geom = make_geometry(pbase.x, pbase.y, tx, ty, pspec.profile, mshl_xy, carrier=pbase.kind == BaseKind.CARRIER)
         # enemy CAP stations are planned first so the egress can stay clear of them too (they sit 20-25 nm in front of their own base)
         # v0.41.76: no fixed keep-outs round our marshal point, fields or carrier any more (v0.41.10: 45 / 130 nm): red's patrol stations are BARCAP
@@ -794,7 +794,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             tgt2 = st.assets.get(xp.objective.target_id) if raid2 else st.assets[xp.objective.target_id]
             if tgt2 is None:
                 tgt2 = SimpleNamespace(id=xp.objective.target_id, x=tx2, y=ty2)
-            mshl2 = tm.safe_marshal(st, (base2.x, base2.y), bearing(base2.x, base2.y, tx2, ty2), (tx2, ty2), refs=tm.package_refs(st, xp.flights))
+            mshl2 = tm.package_marshal(st, (base2.x, base2.y), bearing(base2.x, base2.y, tx2, ty2), (tx2, ty2), xp.flights)
             geom2 = make_geometry(base2.x, base2.y, tx2, ty2, spec2.profile, mshl2, carrier=base2.kind == BaseKind.CARRIER)
             skip = {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else set()
             if not raid2:

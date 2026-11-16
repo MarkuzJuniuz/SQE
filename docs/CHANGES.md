@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.450, the marshal point stays near the fight
+Packages no longer hold 200 nm away over the sea or off the map. The marshal is close to the target again, and an A-10C package gets no more than 120 nm, so the Hogs keep their fuel for the job.
+
 ## v0.41.449, the sortie window gives the package list more room
 The Friendly / Enemy loss table on the Sortie In Progress window is only as tall as its two rows now, so the package list gets the space.
 
