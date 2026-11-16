@@ -753,11 +753,11 @@ class MainWindow(QMainWindow):
             "<p>Creator: MarkuzJuniuz<br />markuzjuniuz@protonmail.com</p>"
             "<p><b>Credits</b></p>"
             "<ul>"
-            "<li style='margin:0 0 0 -40px;'><b>Mission files:</b> pydcs (the Retribution fork)</li>"
-            "<li style='margin:0 0 0 -40px;'><b>Interface:</b> PySide6 / Qt</li>"
-            "<li style='margin:0 0 0 -40px;'><b>Kneeboard images:</b> Pillow</li>"
-            "<li style='margin:0 0 0 -40px;'><b>Ground height:</b> SRTM (NASA / USGS Shuttle Radar Topography Mission), via the AWS open terrain tiles, public domain</li>"
-            "<li style='margin:0 0 0 -40px;'><b>Map data:</b> Natural Earth (coastlines, lakes, borders), public domain</li>"
+            "<li style='margin:0 0 0 -30px;'><b>Mission files:</b> pydcs (the Retribution fork)</li>"
+            "<li style='margin:0 0 0 -30px;'><b>Interface:</b> PySide6 / Qt</li>"
+            "<li style='margin:0 0 0 -30px;'><b>Kneeboard images:</b> Pillow</li>"
+            "<li style='margin:0 0 0 -30px;'><b>Ground height:</b> SRTM (NASA / USGS Shuttle Radar Topography Mission), via the AWS open terrain tiles, public domain</li>"
+            "<li style='margin:0 0 0 -30px;'><b>Map data:</b> Natural Earth (coastlines, lakes, borders), public domain</li>"
             "</ul>"))
 
 
