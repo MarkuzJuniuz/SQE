@@ -31,6 +31,7 @@ TRACK_RADARS = {"SNR_75V", "snr s-125 tr", "Kub 1S91 str", "S-300PS 40B6M tr", "
 TOR_VARIANTS = {"SA-15"}       # point defences that cover a long-range site and shoot down HARMs, GBUs and JSOWs aimed at it
 TOR_COVER_KM = 12.0           # a Tor this close to a SEAD/DEAD target, or to the strike leg into it, is part of the job: HARMs and JSOWs go at it, the DEAD gate waits for it
 SEARCH_RADARS = {"p-19 s-125 sr", "SA-11 Buk SR 9S18M1", "S-300PS 64H6E sr", "1L13 EWR", "55G6 EWR"}
+CAS_ZONE_M = 18000             # S92 (judgment call): the AI CAS engage circle around TGT (m), was 9000. CAS is Open Fire now, so a larger circle finds the column instead of Weapon Free
 KPH = 1.852
 
 
@@ -136,14 +137,14 @@ class StrikeTasks:
 
     def _cas_tasks(self, wp, w, armor, tot_s, floor_ft=0):
         """AI CAS: look at the fight, attack the column, then keep working the zone. Time-boxed so they eventually go home.
-        `w` is the TGT point (position and ETA); `wp` is the point the tasks go on (the IP before it since Stage C, else TGT). Weapons free is set by the caller."""
+        `w` is the TGT point (position and ETA); `wp` is the point the tasks go on (the IP before it since Stage C, else TGT). Open Fire is set by the caller (S92)."""
         t0 = int(w.eta_s)
         if armor is not None:
             # S31a: over short-range air defence the attack altitude is set to the floor (AttackGroup altitude, metres), or the AI dives to its own delivery height. EngageTargetsInZone has no altitude parameter.
             ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.Auto, group_attack=False, altitude=int(floor_ft * 0.3048) if floor_ft else None))
             ct.stop_after_time(t0 + 420)
             wp.tasks.append(ct)
-        ct2 = task.ControlledTask(task.EngageTargetsInZone(mapping.Point(w.x, w.y, self.t), 9000, [task.Targets.All.GroundUnits.GroundVehicles]))
+        ct2 = task.ControlledTask(task.EngageTargetsInZone(mapping.Point(w.x, w.y, self.t), CAS_ZONE_M, [task.Targets.All.GroundUnits.GroundVehicles]))
         ct2.stop_after_time(t0 + 1080)
         wp.tasks.append(ct2)
 

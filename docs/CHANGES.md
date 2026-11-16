@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.448, AI CAS fires on open-fire orders with a wider search
+AI close air support flights no longer fly Weapon Free. They hold Open Fire and look for the column in a larger circle around the target.
+
 ## v0.41.447, the About box credits use XO's list markup
 Help > About shows the creator line with the email under it, and the credits as a real bulleted list again.
 

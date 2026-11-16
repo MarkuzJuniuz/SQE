@@ -2847,12 +2847,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     wp.tasks.append(task.OptRestrictAirToAirAttack(False))                       # self-defence only: return fire, at whoever shoots
             if ai_a2g and not ai_sead and w.action in ("BOMB", "CAS"):
                 # S30 (XO run 2026-11-11 14-07-37: two of four SLAM-ERs went at radiating EWRs under Weapon Free): the SLAM point is Open Fire, designated target only (not flown)
-                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire if (w.action == "BOMB" or w.name == "SLAM") else task.OptROE.Values.WeaponFree))   # the ground target; aircraft stay off limits (restricted); v0.41.396: every AI strike attacks its designated point only (runs 17-09-47, 18-24-28: Weapon Free bombed depots and SAMs near the IP); CAS stays Weapon Free
+                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))   # the ground target; aircraft stay off limits (restricted); v0.41.396: every AI strike attacks its designated point only (runs 17-09-47, 18-24-28: Weapon Free bombed depots and SAMs near the IP); S92: CAS too is Open Fire now (run 13-51-15), the larger CAS_ZONE_M circle does the finding
             if ip_tgt_ is not None and w.name == "IP":
                 wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))   # v0.41.322: the attack starts here, on the way in; v0.41.396: designated target only for every strike (XO: no hunting)
                 wp.tasks += self._ai_bomb_tasks(package, f, ip_tgt_, ip_tgt_.eta_s + LATE_ATTACK_S)
             if ip_cas_ is not None and w is ip_cas_ip_:
-                wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))           # Stage C: the attack starts here, on the way in
+                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))           # Stage C: the attack starts here, on the way in; S92: Open Fire, not Weapon Free
                 self._cas_tasks(wp, ip_cas_, armor, tot_s, self._cas_floors.get(package.id, 0))
             if run_t0 is not None:
                 if w is wps[first]:
