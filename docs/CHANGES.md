@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.453, the sortie window keeps its parts in place
+The Sortie In Progress window now packs the title, mission card and package list at the top, with the loss totals, mission status and buttons anchored to the bottom. The package list starts empty until DCS answers, and the loss table no longer shows a scrollbar.
+
 ## v0.41.452, the marshal point sits near the closest base
 Packages hold close to the nearest friendly field instead of a fixed 85 nm from the target, so the hold and the ingress are shorter and the jets burn less fuel before the fight.
 
