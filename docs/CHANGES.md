@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.455, the mission's unit count can weigh sleeping groups
+The mission builder can now count a group tagged as dormant at a tenth of its units toward the unit limit (and whole toward the 500 ceiling). Nothing is tagged yet, so missions are unchanged.
+
 ## v0.41.454, AI close air support counts all the air defence around its target
 The attack height now takes in the short-range air defence of neighbouring columns and of depot, fuel, command and field guards near the target and the run-in, not just the target column and the SAM sites.
 
