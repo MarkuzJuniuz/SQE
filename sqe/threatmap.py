@@ -231,7 +231,19 @@ def package_refs(state, flights) -> list:
     return [(state.bases[f.base_id].x, state.bases[f.base_id].y) for f in flights if not getattr(f, 'tag', '') and getattr(f, 'base_id', None) in state.bases]
 
 
-def safe_marshal(state, base_xy, hdg_to_target, target_xy=None, min_enemy_nm: float = 90, ring_margin_nm: float = 20, refs=None):
+MARSHAL_SLOW_CLIMBERS = frozenset({"A-10C"})   # S95: the jets the ridge test (MARSHAL_LEG_MAX_FT) is for: they climb too slowly to clear a ridge on the way to the marshal
+MARSHAL_MAX_NM = {"A-10C": 120}                # S95 (judgment call): the farthest stand-off a package with this jet gets (a Hog's fuel is the limit: S93, a 230 nm marshal cost it the sortie)
+
+
+def package_marshal(state, base_xy, hdg_to_target, target_xy, flights):
+    """S95: the package's marshal. `refs` is every flight's base (the axis); the ridge test uses only the slow climbers' bases, the stand-off is capped by the shortest-legged jet."""
+    fl = [f for f in flights if not getattr(f, 'tag', '')]
+    slow = [(state.bases[f.base_id].x, state.bases[f.base_id].y) for f in fl if getattr(f, 'aircraft', '') in MARSHAL_SLOW_CLIMBERS and getattr(f, 'base_id', None) in state.bases]
+    caps = [MARSHAL_MAX_NM[f.aircraft] for f in fl if getattr(f, 'aircraft', '') in MARSHAL_MAX_NM]
+    return safe_marshal(state, base_xy, hdg_to_target, target_xy, refs=package_refs(state, flights), ridge_refs=slow, max_nm=min(caps) if caps else None)
+
+
+def safe_marshal(state, base_xy, hdg_to_target, target_xy=None, min_enemy_nm: float = 90, ring_margin_nm: float = 20, refs=None, ridge_refs=None, max_nm=None):
     """Marshal point BEHIND the base: clear of enemy fighter fields and at least ring_margin_nm outside every SAM ring.
     v0.41.6: with the target known, a field only needs the marshal outside its own scramble circle (field_detect_nm) plus a margin, not a flat
     90 nm (which sent the Senaki Vipers 54 nm south to hold, then back north past their own base). Without it, the old flat distance.
@@ -259,21 +271,25 @@ def safe_marshal(state, base_xy, hdg_to_target, target_xy=None, min_enemy_nm: fl
                   if b.kind == BaseKind.AIRFIELD and not getattr(b, "divert", False)]
             axis = math.degrees(math.atan2(min(fx)[2] - ty, min(fx)[1] - tx)) % 360 if fx else (hdg_to_target + 180) % 360
         from . import relief
-        legs = list(refs or []) or [base_xy]
-        best, best_slack = None, (False, -1e18)
+        legs = list(ridge_refs if ridge_refs is not None else (refs or [base_xy]))      # S95: only the slow climbers' legs are tested; None = every flight's (the old way)
+        best, best_key = None, None
         for nm in MARSHAL_STANDOFF_NM:
+            if max_nm is not None and nm > max_nm and best is not None:
+                break                                                                          # S95: never beyond the range cap (the first ring is always tried)
             for ang in (0, 35, -35, 70, -70, 105, -105):
                 h = math.radians(axis + ang)
                 x, y = tx + nm * NM * math.cos(h), ty + nm * NM * math.sin(h)
                 slack = min([(math.hypot(x - ex, y - ey) / NM) - need for ex, ey, need in enemies] +
                             [(math.hypot(x - a.x, y - a.y) - r) / NM - ring_margin_nm for a, r in rs] + [1e9])
                 # S88: the flight climbs straight from its base to the marshal: no spot behind high ground (2026-11-15 run: four A-10Cs hit the Lesser Caucasus)
-                hi = max([relief.leg_max_ft(r_, (x, y)) or 0.0 for r_ in legs])
+                hi = max([relief.leg_max_ft(r_, (x, y)) or 0.0 for r_ in legs], default=0.0)
                 ok_ = hi <= MARSHAL_LEG_MAX_FT
                 if ok_ and slack >= 0:
                     return x, y
-                if (ok_, slack) > best_slack:
-                    best, best_slack = (x, y), (ok_, slack)
+                # nothing passes both tests: out of every ring first (slack >= 0), then the lowest ridge, then the nearest (the first seen); S95: it used to keep the highest slack = the farthest spot
+                key = (slack >= 0, -hi if slack >= 0 else slack)
+                if best_key is None or key > best_key:
+                    best, best_key = (x, y), key
         return best
     back = hdg_to_target + 180
     best, best_slack = None, -1e18
