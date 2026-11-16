@@ -383,7 +383,7 @@ class WaitingDialog(QDialog):
         p = session.state.pending; tl = p["timeline"]
         lay = QVBoxLayout(self); lay.setSpacing(12)
         t = QLabel("Sortie In Progress"); t.setObjectName("title"); lay.addWidget(t)
-        self.overall = QLabel(""); self.overall.setObjectName("h2"); lay.addWidget(self.overall)         # S77: IN FLIGHT / ALL RECOVERED (set by _poll)
+        self.overall = QLabel(""); self.overall.setObjectName("h2"); self.overall.setVisible(False)         # S77: IN FLIGHT / ALL RECOVERED (set by _poll); S98b: sits above "Last update", hidden while empty
         info = card(); lay.addWidget(info)
         il = info.layout()
         il.addWidget(QLabel(f"Mission file: <b>SQE_Sortie.miz</b> in your DCS Missions folder. Start DCS, open it from the Missions list, and fly."))
@@ -394,15 +394,18 @@ class WaitingDialog(QDialog):
         if self._notes:
             self.b_notes = QPushButton(f"Notes ({len(self._notes)})"); self.b_notes.setStyleSheet(f"color:{theme.AMBER};")
             self.b_notes.clicked.connect(self._show_notes); il.addWidget(self.b_notes, 0, Qt.AlignLeft)
-        self.status = QLabel("Waiting for DCS results..."); self.status.setObjectName("h2"); lay.addWidget(self.status)
-        self.ptbl = QTableWidget(1, 2); self.ptbl.setHorizontalHeaderLabels(["Package", "Status"])         # S87: one row per package, its phase and result (set by _status_lines)
+        self.status = QLabel("Waiting for DCS results..."); self.status.setObjectName("h2")        # S98b: placed above "Last update" below
+        self.ptbl = QTableWidget(0, 2); self.ptbl.setHorizontalHeaderLabels(["Package", "Status"])         # S87: one row per package, its phase and result (set by _status_lines)
         self.ptbl.verticalHeader().setVisible(False); self.ptbl.setEditTriggers(QTableWidget.NoEditTriggers); self.ptbl.setSelectionMode(QTableWidget.NoSelection)
         self.ptbl.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch); self.ptbl.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.ptbl.setWordWrap(True); self.ptbl.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded); self.ptbl.setVerticalScrollMode(QTableWidget.ScrollPerPixel); self._fill_packages([{"name": DB.short_objective(p["objective"]), "text": ""}]); lay.addWidget(self.ptbl, 1)       # stretch 1: a short window squeezes this table (it scrolls), nothing else
+        self.ptbl.setWordWrap(True); self.ptbl.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded); self.ptbl.setVerticalScrollMode(QTableWidget.ScrollPerPixel); self._fill_packages([]); lay.addWidget(self.ptbl, 100); lay.addStretch(1)       # S98b: blank until DCS answers; the package table sits right after the info card and takes its rows, a spacer takes the spare height so everything below stays anchored to the bottom (a short window squeezes the table to PKG_MIN_H and it scrolls)
         self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["This Sortie", "Friendly", "Enemy"])
         self.tbl.verticalHeader().setVisible(False); self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl.setFixedHeight(100)                                         # blank until the first state file; _fill sets the exact height
+        self.tbl.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff); self.tbl.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         lay.addWidget(self.tbl)
+        lay.addWidget(self.status); lay.addWidget(self.overall)          # S98b: mission status stacked just above "Last update"
         self.last = QLabel(""); self.last.setObjectName("small"); lay.addWidget(self.last)
         row = QHBoxLayout()
         self.b_man = QPushButton("Manually Submit..."); self.b_abort = QPushButton("Abort mission"); self.b_abort.setObjectName("danger")
@@ -421,7 +424,7 @@ class WaitingDialog(QDialog):
                 it = QTableWidgetItem(v); it.setTextAlignment(Qt.AlignCenter if j else Qt.AlignLeft | Qt.AlignVCenter)
                 self.tbl.setItem(i, j, it)
         self.tbl.resizeRowsToContents()
-        self.tbl.setFixedHeight(self.tbl.horizontalHeader().height() + sum(self.tbl.rowHeight(i) for i in range(len(rows))) + 6)       # just its rows: the spare height goes to the package table
+        self.tbl.setFixedHeight(self.tbl.horizontalHeader().height() + sum(self.tbl.rowHeight(i) for i in range(len(rows))) + 10)       # just its rows: the spare height goes to the package table
 
     PKG_MIN_H = 130                 # px: header and about two rows; the least the package table is squeezed to before it scrolls
 
@@ -456,6 +459,7 @@ class WaitingDialog(QDialog):
             self.overall.setText(f"IN FLIGHT: {fs['airborne']} of {fs['total']} friendly aircraft airborne{nxt}"); self.overall.setStyleSheet("font-weight:bold;")
         else:
             self.overall.setText("")
+        self.overall.setVisible(bool(self.overall.text()))
 
     def _poll(self):
         status, data, t = self.sess.poll(self.manual)
