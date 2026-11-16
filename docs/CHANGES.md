@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.448, AI close air support handles escorting air defence
+AI close air support flights hold Open Fire instead of Weapon Free. When the target column carries its own air defence (Shilka, Strela, Osa and the like), they attack from above its reach, Maverick first on the missile vehicles and cluster bombs on the guns, then the rest of the column.
+
 ## v0.41.447, the About box credits use XO's list markup
 Help > About shows the creator line with the email under it, and the credits as a real bulleted list again.
 

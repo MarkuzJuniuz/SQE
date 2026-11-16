@@ -392,6 +392,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._support_lbl = {}                                          # v0.41.215: tanker / AWACS unit name -> its label, for the damage calls
         self._gates = []                                                # DEAD flights that turn back when the site's radars are still up
         self._route_end = {}                                            # v0.41.223: group name -> where its route ended before the SCRUB point was added (the home leg is built from there)
+        self._cas_stock = {}                                            # S92: package id -> True when the AI CAS flight keeps the stock Maverick + cluster kit and attacks the column's air defence unit by unit
         self._cas_floors = {}                                           # S31a: package id -> the AI CAS attack floor in ft (0 = none)
         self._scrub = []                                                # v0.41.223: every package flight for the hook's package scrub (group, unit names, kind, SCRUB point)
         self._sead_grps = {}                                            # site id -> the SEAD flights' group names (all merged packages); the gate aborts when they are all down
@@ -843,6 +844,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 continue
             if not ruined and not raid2:
                 self._spawn_opfor_ground(xp, tx2, ty2, manifest, [(base2.x, base2.y), geom2.mshl, geom2.push, geom2.ip, (tx2, ty2), geom2.egr])
+                self._cas_floor_for(geom2, xp, tx2, ty2)                 # S92: the target column is live now, so its own air defence counts in the floor
             freqs = [SimpleNamespace(callsign=f.callsign, mhz=round(128.0 + 0.5 * ((k * 7 + i * 3) % 18), 1)) for i, f in enumerate(xp.flights)]
             plan2 = SimpleNamespace(package_flights=freqs, freq=lambda slot, _k=k: 252.0 + 3.5 * (_k + 1))
             tots = []
@@ -2099,8 +2101,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """Loadout (weather-adapted), unit names, jammer windows, skill, bingo return, and where this package's shooters launch. -> (names, run_t0)."""
         o = self.o
         kit_ = getattr(f, "kit", "") or ("FLEET" if (f.aircraft == "F-14BU" and f.role in (Role.CAP, Role.SWEEP) and (package.extra or {}).get("setpiece")) else "")      # v0.41.271: 6 Phoenix for the fleet-defence Tomcats
-        if not kit_ and f.role == Role.CAS and f.aircraft == "A-10C" and not f.tag and (not f.is_player or o.player_is_ai) and self._cas_floors.get(package.id, 0) > 0:
-            kit_ = "GUIDED"                                                   # S31a part A2: an AI A-10 attacking from the high floor carries guided bombs, not Mavericks / unguided cluster (a person's flight keeps the stock CAS loadout)
+        if not kit_ and f.role == Role.CAS and f.aircraft == "A-10C" and not f.tag and (not f.is_player or o.player_is_ai) and self._cas_floors.get(package.id, 0) > 0 and not self._cas_stock.get(package.id, True):
+            kit_ = "GUIDED"                                                   # S31a part A2: an AI A-10 attacking a dug-in garrison from the high floor carries guided bombs; S92: a moving column, or a garrison with only its own air defence, keeps the stock Maverick + cluster kit; a person's flight keeps the stock CAS loadout
         load = self.lo.for_role(f.aircraft, f.role, kit_)
         if self.wx.mode != "clear":
             load, wnotes, _k, _d = weather.adapt(spec.dcs_type, load, self.wx)
@@ -2847,13 +2849,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     wp.tasks.append(task.OptRestrictAirToAirAttack(False))                       # self-defence only: return fire, at whoever shoots
             if ai_a2g and not ai_sead and w.action in ("BOMB", "CAS"):
                 # S30 (XO run 2026-11-11 14-07-37: two of four SLAM-ERs went at radiating EWRs under Weapon Free): the SLAM point is Open Fire, designated target only (not flown)
-                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire if (w.action == "BOMB" or w.name == "SLAM") else task.OptROE.Values.WeaponFree))   # the ground target; aircraft stay off limits (restricted); v0.41.396: every AI strike attacks its designated point only (runs 17-09-47, 18-24-28: Weapon Free bombed depots and SAMs near the IP); CAS stays Weapon Free
+                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))   # the ground target; aircraft stay off limits (restricted); v0.41.396: every AI strike attacks its designated point only (runs 17-09-47, 18-24-28: Weapon Free bombed depots and SAMs near the IP); S92: CAS too is Open Fire now (run 13-51-15), the larger CAS_ZONE_M circle does the finding
             if ip_tgt_ is not None and w.name == "IP":
                 wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))   # v0.41.322: the attack starts here, on the way in; v0.41.396: designated target only for every strike (XO: no hunting)
                 wp.tasks += self._ai_bomb_tasks(package, f, ip_tgt_, ip_tgt_.eta_s + LATE_ATTACK_S)
             if ip_cas_ is not None and w is ip_cas_ip_:
-                wp.tasks.append(task.OptROE(task.OptROE.Values.WeaponFree))           # Stage C: the attack starts here, on the way in
-                self._cas_tasks(wp, ip_cas_, armor, tot_s, self._cas_floors.get(package.id, 0))
+                wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))           # Stage C: the attack starts here, on the way in; S92: Open Fire, not Weapon Free
+                self._cas_tasks(wp, ip_cas_, armor, tot_s, self._cas_floors.get(package.id, 0), self._cas_stock.get(package.id, True))
             if run_t0 is not None:
                 if w is wps[first]:
                     wp.tasks.append(task.OptECMUsing(task.OptECMUsing.Values.NeverUse))          # jammers off until the attack leg
@@ -2906,7 +2908,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             elif w.action == "JSOW":
                 self._jsow_tasks(wp, f, armor, package, w.eta_s)
             elif w.action == "CAS" and w is not ip_cas_:                     # Stage C: with an IP before it, those tasks are on the IP
-                self._cas_tasks(wp, w, armor, tot_s, self._cas_floors.get(package.id, 0))
+                self._cas_tasks(wp, w, armor, tot_s, self._cas_floors.get(package.id, 0), self._cas_stock.get(package.id, True))
             elif w.action == "SEAD" and armor is not None:                 # 'armor' is simply the target asset's group here
                 self._sead_attack_tasks(package, f, wp, w, armor)
                 if w.hold_to is not None:                                   # S38: the HARM point is a hold until the strikers are through (the ARM tasks above stay live: their stops are 180 to 780 s after the point)
@@ -3590,6 +3592,23 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         pts = [geom.push, geom.ip, (tx, ty), geom.egr]
         return profiles.choose(self.state, role, profile, pts, (tx, ty), getattr(self.wx, "ceiling_ft", None), skip, relief.msa_ft(pts[1:]))
 
+    def _cas_floor_for(self, geom, package, tx, ty):
+        """S31a / S92: an AI CAS package's attack floor from the short-range air defence near the target and the run-in AND the air defence travelling in the target's own
+        group (so the target must be spawned first: it is, for the main package and, after the refresh below, for a merged one). The stock Maverick + cluster kit and the
+        unit-by-unit attack orders (`_cas_tasks`) are kept unless a dug-in garrison sits under air defence NEAR it (a site's floor: the guided kit, S31a part A2); a moving
+        column always keeps them (GPS bombs miss it)."""
+        if package.objective.type != ObjectiveType.CAS:
+            geom.cas_floor = None
+            return
+        tid_ = package.objective.target_id
+        tt_ = self.state.assets.get(tid_ or "")
+        pts_ = [geom.ip, (tx, ty), geom.egr]
+        col_ = profiles.column_ad_units(self.groups_by_asset.get(tid_))
+        site_ = profiles.cas_floor(self.state, pts_)
+        geom.cas_floor = profiles.cas_floor(self.state, pts_, col_) if col_ else site_
+        self._cas_floors[package.id] = geom.cas_floor[0] if geom.cas_floor else 0
+        self._cas_stock[package.id] = site_ is None or bool(tt_ is not None and tt_.kind == AssetKind.ARMOR and tt_.variant != "GARRISON")
+
     def _flight_plans(self, geom, package, tx, ty, skip=()):
         """Per kind of flight: its own altitude tier, and for AI escorts and sweeps the point short of live SAM cover where they stop.
         Keyed (role, profile) like routes.plan_route looks them up. The player's own route is never cut short; a package whose job IS the sweep
@@ -3600,8 +3619,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                                             and not any(getattr(f_, "kit", "") in JSOW_FLIGHT_KITS for f_ in package.flights)) else 0.0      # v0.41.299: the Standoff Strike's launch distance; S60: not for an EWR strike's JSOW / PEN flight, which takes the JSOW rule (30 to 45 nm)
         from .packages import is_sweep
         geom.sweep = is_sweep(package.objective)
-        geom.cas_floor = profiles.cas_floor(self.state, [geom.ip, (tx, ty), geom.egr]) if package.objective.type == ObjectiveType.CAS else None      # S31a
-        self._cas_floors[package.id] = geom.cas_floor[0] if geom.cas_floor else 0
+        self._cas_floor_for(geom, package, tx, ty)                                                                                  # S31a, S92
         tid_ = package.objective.target_id
         tt_ = self.state.assets.get(tid_) if tid_ else None
         geom.jsow_keep = [(a.x, a.y, max(AGM88_LAUNCH_NM, JSOW_KEEP_HIGH_NM)) for a in self.state.assets.values()            # every live SA-10 near the target, itself included (v0.41.46: 40 nm, as the loop used to force)

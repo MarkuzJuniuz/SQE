@@ -156,9 +156,28 @@ CAS_GUN_FT = 12000       # judgment call: 2,000 ft over the AAA / MANPAD ceiling
 CAS_HIGH_MARGIN_NM = 3.0  # reach plus this margin (threatmap.RANGE_NM + 3: a Tor is 8 + 3 nm)
 
 
-def cas_floor(state, pts):
+# S92: the short-range air defence that travels IN the target column (the unit types _armor_comp / _garrison_comp build). Per type: (class, attack floor ft, label).
+# "sam" = a missile vehicle (the AI shoots it with a Maverick first), "gun" = guns and shoulder-fired (cluster bombs). Judgment call: each floor is 2,000 ft over the
+# system's ceiling (ENVELOPE: SA-8 16,000, SA-19 11,000, guns 10,000); the Tor-M1 sits at the radar-SAM floor; the SA-13 ceiling (about 3.5 km, from memory) gets 14,000.
+COLUMN_AD = {"ZSU-23-4 Shilka": ("gun", CAS_GUN_FT, "Shilka"), "Ural-375 ZU-23": ("gun", CAS_GUN_FT, "ZU-23"), "SA-18 Igla manpad": ("gun", CAS_GUN_FT, "Igla"),
+             "Strela-10M3": ("sam", 14000, "Strela-10"), "Osa 9A33 ln": ("sam", 18000, "Osa"), "2S6 Tunguska": ("sam", 13000, "Tunguska"), "Tor 9A331": ("sam", CAS_HIGH_FT, "Tor")}
+# (keys are the DCS type strings a unit carries as `unit.type`, not the pydcs class names)
+
+
+def column_ad_units(group):
+    """The air-defence units in a target column's group -> [(unit, class, floor_ft, label)], missile vehicles first (the order the CAS flight attacks them)."""
+    out = []
+    for u in getattr(group, "units", None) or []:
+        e = COLUMN_AD.get(str(getattr(u, "type", "")))
+        if e:
+            out.append((u, e[0], e[1], e[2]))
+    return sorted(out, key=lambda x: 0 if x[1] == "sam" else 1)
+
+
+def cas_floor(state, pts, column=None):
     """pts: the CAS flight's working path [IP, target, egress]. The height (ft) an AI CAS flight attacks from because live, unsuppressed short-range air defence
-    reaches the target or the run-in, and the kneeboard line. -> (ft, reason) or None when nothing is near. Radar SAMs outrank guns."""
+    reaches the target or the run-in, and the kneeboard line. -> (ft, reason) or None when nothing is near. Radar SAMs outrank guns.
+    S92: `column` = column_ad_units of the target's own group; the air defence travelling with it counts too (the higher floor wins)."""
     radar, guns = [], []
     for a in state.assets.values():
         if a.kind != AssetKind.SAM or a.destroyed or getattr(a, "suppressed", False) or a.variant not in CAS_HIGH_RADAR + CAS_HIGH_GUNS:
@@ -168,12 +187,19 @@ def cas_floor(state, pts):
             continue
         near_tgt = ((a.x - pts[1][0]) ** 2 + (a.y - pts[1][1]) ** 2) ** 0.5 <= (r + CAS_HIGH_MARGIN_NM) * NM
         (radar if a.variant in CAS_HIGH_RADAR else guns).append((a.variant, "target" if near_tgt else "run-in"))
+    res = None
     for sites, ft in ((radar, CAS_HIGH_FT), (guns, CAS_GUN_FT)):
         if sites:
             names = ", ".join(dict.fromkeys(v for v, _w in sites))
             where = "target" if any(w == "target" for _v, w in sites) else "run-in"
-            return ft, f"HIGH from the IP: {names} {'covers' if len(set(v for v, _ in sites)) == 1 else 'cover'} the {where}; attack from {ft:,} ft."
-    return None
+            res = (ft, f"HIGH from the IP: {names} {'covers' if len(set(v for v, _ in sites)) == 1 else 'cover'} the {where}; attack from {ft:,} ft.")
+            break
+    if column:
+        cft = max(e[2] for e in column)
+        if res is None or cft > res[0]:
+            names = ", ".join(dict.fromkeys(e[3] for e in column))
+            res = (cft, f"HIGH from the IP: {names} travel{'s' if len(set(e[3] for e in column)) == 1 else ''} with the column; attack from {cft:,} ft, Maverick on the missile vehicles, cluster on the guns.")
+    return res
 
 
 # ---- fighters stand off from live SAM cover ---------------------------------------------------------------------------------------
