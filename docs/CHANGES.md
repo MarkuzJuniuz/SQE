@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.461, dormant-sites setting moved to the Experimental tab
+The checkbox was at the bottom of the Campaign tab; it now sits on the Experimental tab with the other features still being tried out, and its text describes what it does now.
+
 ## v0.41.460, Experimental: dormant sites go back to sleep
 With the dormant-sites setting on, a site that woke up goes back to sleep once no enemy aircraft has been near it for 30 seconds, and wakes again when one returns.
 
