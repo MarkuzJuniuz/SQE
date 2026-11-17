@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.462, clearer text for the dormant-sites setting
+The Experimental tab's hint now says what the setting is off: the same sites near your route and target, all live, and no defences on blue fields without flights.
+
 ## v0.41.461, dormant-sites setting moved to the Experimental tab
 The checkbox was at the bottom of the Campaign tab; it now sits on the Experimental tab with the other features still being tried out, and its text describes what it does now.
 
