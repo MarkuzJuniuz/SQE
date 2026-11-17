@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.463, Experimental: the rest of red's air defence, asleep
+With the dormant-sites setting on, every red early-warning radar still alive in the war is added to the mission (they never sleep), and every red SAM site that was not in it starts asleep and wakes when a radar or an enemy aircraft comes near. The mission itself is built exactly as before; these added sites are not counted against the unit limit or the ceiling in limits.json.
+
 ## v0.41.462, clearer text for the dormant-sites setting
 The Experimental tab's hint now says what the setting is off: the same sites near your route and target, all live, and no defences on blue fields without flights.
 

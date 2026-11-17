@@ -193,7 +193,7 @@ class SettingsDialog(QDialog):
         self.dorm = QCheckBox("Dormant ground sites (wake when you come near)")
         self.dorm.setChecked(bool(getattr(settings, "dormant_sites", False))); v.addWidget(self.dorm)
         hint(v, "On: red SAM sites on your route, red supply guards and the defences of blue airfields without flights start asleep. A detector (an early-warning radar, a red patrol or the longest-range SAM site) or an enemy aircraft coming near wakes them; "
-                "30 seconds after no enemy is near they go back to sleep and wake again when one returns. Sleeping groups count about 10% toward the unit limit, so more of the war fits. Off: as before, only the sites near your route and target are built, all live from the start, and blue fields without flights have no defences.")
+                "30 seconds after no enemy is near they go back to sleep and wake again when one returns. On top of the usual mission, every other red radar (live) and SAM site (asleep) in the war is added, and they do not count toward the unit limits, so the mission can be much heavier. Off: as before, only the sites near your route and target are built, all live from the start, and blue fields without flights have no defences.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
