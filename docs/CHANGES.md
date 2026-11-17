@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.459, Experimental: dormant airfield defences
+With the dormant-sites setting on, the Patriot, HAWK and gun sites of every blue airfield that has no flight in the mission start asleep and wake when an enemy aircraft comes near; they count a tenth against the unit limit. Fields with your flights, the raided field and its covering neighbours stay awake.
+
 ## v0.41.458, Experimental: dormant soft sites
 With the dormant-sites setting on, the Shilka guards of enemy fuel farms and depots near your route also start asleep and wake like the SAM sites do; they count a tenth against the unit limit.
 

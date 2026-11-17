@@ -53,6 +53,7 @@ RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor t
 PARKED_MAX = 8               # v0.41.297 (XO 2026-11-05: a counter-air strike has nothing to hit, the ramp is empty): at most this many parked jets (v0.41.324: real units, was 12 statics) stand on the target field's ramp. Judgment call: a statics-count cap for VR; the wing's true strength stays in the state (a static costs `carcass_weight` of a unit)
 DORMANT_WEIGHT = 0.1             # S89 (XO 2026-11-16, plan section 6): a late-activated belt costs about 10% of a live one (+0.39 of +3.83 ms for 400 units), so a tagged dormant group counts this share of its units toward `max_units`. The 500 ceiling counts it whole (a woken group stays live). Judgment call: the measured share, rounded
 WAKE_MARGIN_NM = 8              # S89 B1 (XO 2026-11-16): a dormant SAM site's wake ring is its engagement ring plus this, so the woken radars reach the player's RWR before engagement range
+BLUE_AAA_NM = 3                 # S89 C (plan 7.2): a blue airfield AAA group's wake ring (the guns reach about 3 nm); judgment call, plus WAKE_MARGIN_NM
 SOFT_WAKE_NM = 10               # S89 B2 judgment call: a dormant soft site / garrison has no `RANGE_NM` (a Shilka reaches 3 nm, the rest is armour with MANPADS); its wake ring is this plus WAKE_MARGIN_NM
 BARCAP_DETECT_NM = 50           # S89 B1 judgment call: a fighter radar on a fighter-size target sees 40 to 60 nm (from memory); the same figure as tm.FIELD_SAM_DETECT_NM
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
@@ -369,6 +370,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._runway_busy = set()                                      # bases whose runway / catapult already holds a group at mission start
         self._dormant_sites = []                                       # S89 B1: (asset, group, ring nm) of every route SAM site built dormant (`_spawn_opfor_ground`); `_wire_dormant` wakes them
         self._bandit_stations = []                                     # S89 B1: (x, y) of every known red CAP station ("Bandit N", live from second 0): the BARCAP detectors
+        self._dormant_fields = []                                      # S89 C: ids of the blue fields built dormant (probes)
+        self._dormant_blue = []                                        # S89 C: (x, y, ring nm, group) of every blue airfield defence group built dormant (`_dormant_blue_fields`); `_wire_dormant` wakes them on red aircraft
         self._dormant = set()                                          # S89: ids of the groups tagged dormant (`_tag_dormant`); `_counts` weighs them DORMANT_WEIGHT
         self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []
         self._raid_n = {"bu": 0, "eu": 0, "bg": 0, "sw": 0, "es": 0}            # S47: raid unit numbers (bomber, escort) and group numbers (bomber, sweep, escort), one count per mission so folded raids never repeat a name
@@ -643,6 +646,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._spawn_parked_jets(package, manifest)
         self._dry_pass()
         self._spawn_supply_in_radius(package, tx, ty, manifest)
+        self._dormant_blue_fields(tx, ty)                # S89 C: after everything else, so the sleeping defences never push a flight out
         self._place_carcasses()
         manifest.merged = [{k: v for k, v in m_.items() if k in ("id", "number", "objective", "type", "tot_s", "rtb_s", "unseen")} for m_ in merged if not m_.get("struck")]
         bx, by = geom.push
@@ -1300,13 +1304,59 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g.set_skill(getattr(Skill, bs, Skill.High))
         return g
 
-    def _place_base(self, base, tx, ty, near=None):
+    def _base_def_units(self, base) -> int:
+        """S89 C: how many units `_place_base` builds for a full field (no `near` trim): Patriot 4 + launchers, HAWK 4 + radars + launchers, AAA 4 (or 3), AAA 2 = 3."""
+        if not self.o.base_defenses:
+            return 0
+        bt = sams.blue_battery(base, self.state)
+        n = (4 + bt["patriot_ln"]) if bt["patriot_ln"] else 0
+        n += (3 + sams.BLUE_HAWK_TR + sams.BLUE_HAWK_LN) if bt["hawk"] else 0
+        if bt["aaa"]:
+            n += 4 if bt["aaa"] >= 2 else 3
+        if bt["aaa"] >= 2:
+            n += 3
+        return n
+
+    def _dormant_blue_fields(self, tx, ty) -> None:
+        """S89 C (setting `dormant_sites`): the defences of every blue airfield not built yet, as dormant groups (they wake on any red unit in their ring + WAKE_MARGIN_NM,
+        `_wire_dormant`). One pass at the very end of the build, after every flight, patrol and alert pair, nearest to the target first; when a field no longer fits (the
+        limit sees a dormant group at DORMANT_WEIGHT, the 500 ceiling whole) it stops with ONE warning. Fields with flights, the raided field and the covering neighbours were built
+        live before."""
+        if not (self.o.dormant_sites and self.o.base_defenses):
+            return
+        st = self.state
+        fields = sorted((b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD and b.id not in self.apt and b.airport in self.t.airports),
+                        key=lambda b: dist(b.x, b.y, tx, ty))
+        for i, b in enumerate(fields):
+            n = self._base_def_units(b)
+            if n == 0:
+                continue
+            if not self._need_ok(n, int(math.ceil(n * DORMANT_WEIGHT))):
+                self.warns.append(f"{len(fields) - i} blue fields' defences left out to stay under the unit limit (dormant groups count {int(DORMANT_WEIGHT * 100)}%)")
+                break
+            self._place_base(b, tx, ty, dormant=True)
+            self._dormant_fields.append(b.id)
+            self.apt.pop(b.id, None)          # `apt` stays "the fields the mission flies from", as before
+
+    def _place_base(self, base, tx, ty, near=None, dormant: bool = False):
         """v0.41.220: `near` = (x, y) of a raid target this field is built to cover (a neighbour of the raided field): it then gets only what reaches that point, the
-        Patriot inside PATRIOT_NM, the HAWK inside HAWK_NM, the AAA inside COVER_AAA_NM (a full field is about 30 units)."""
+        Patriot inside PATRIOT_NM, the HAWK inside HAWK_NM, the AAA inside COVER_AAA_NM (a full field is about 30 units).
+        S89 C: `dormant=True` puts every group it builds to sleep (late-activated, tagged, listed in `_dormant_blue` with its ring). Returns the groups built."""
         o = self.o
+        built = []
+        from .raids import HAWK_NM as _HN, PATRIOT_NM as _PN
+
+        def keep(g, x, y, ring):
+            if g is not None:
+                built.append(g)
+                if dormant:
+                    g.late_activation = True
+                    self._tag_dormant(g)
+                    self._dormant_blue.append((x, y, ring, g))
+            return g
         from . import fleet as _fleet
         if base.kind == BaseKind.CARRIER and _fleet.sunk(self.state):      # v0.41.257: the ship is on the bottom: no carrier group in the mission
-            return
+            return built
         if base.kind == BaseKind.AIRFIELD:
             self.apt[base.id] = self.t.airports[base.airport]
             bt = dict(sams.blue_battery(base, self.state))      # v0.41.30: doctrinal batteries, every field alike; v0.41.62: read from the field's three sites (sams.py)
@@ -1335,19 +1385,19 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     return (px, py) if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0) else dry(a0, d0)
                 x, y = site_at("pat", ang, 4500)
                 if bt["patriot_ln"]:
-                    self.base_ad.setdefault(base.id, {})["pat"] = self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
-                                  ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M, base_def=True)
+                    self.base_ad.setdefault(base.id, {})["pat"] = keep(self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
+                                  ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M, base_def=True), x, y, _PN)
                 x, y = site_at("aaa", ang + 120, 3500)
                 if bt["aaa"]:
-                    self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line, base_def=True)
+                    keep(self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line, base_def=True), x, y, BLUE_AAA_NM)
                 if bt["aaa"] >= 2:
                     x, y = site_at("aaa2", ang - 120, 3500)
-                    self._platoon(self.usa, f"BASEDEF {base.name} AAA 2", [("Vulcan", 1), ("M1097_Avenger", 2)], x, y, ang, F.Line, base_def=True)
+                    keep(self._platoon(self.usa, f"BASEDEF {base.name} AAA 2", [("Vulcan", 1), ("M1097_Avenger", 2)], x, y, ang, F.Line, base_def=True), x, y, BLUE_AAA_NM)
                 if bt["hawk"]:
                     x, y = site_at("hawk", ang + 50, 6000)
-                    self.base_ad.setdefault(base.id, {})["hawk"] = self._platoon(self.usa, f"BASEDEF {base.name} HAWK", [("Hawk_sr", 1), ("Hawk_tr", sams.BLUE_HAWK_TR), ("Hawk_pcp", 1), ("Hawk_cwar", 1),
-                                  ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M, base_def=True)
-            return
+                    self.base_ad.setdefault(base.id, {})["hawk"] = keep(self._platoon(self.usa, f"BASEDEF {base.name} HAWK", [("Hawk_sr", 1), ("Hawk_tr", sams.BLUE_HAWK_TR), ("Hawk_pcp", 1), ("Hawk_cwar", 1),
+                                  ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M, base_def=True), x, y, _HN)
+            return built
         hdg = getattr(self, '_cv_hdg', {}).get(base.id)
         if hdg is None:
             hdg = (bearing(base.x, base.y, tx, ty) + 180) % 360
@@ -3671,7 +3721,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         dormant group also has its own ring zone (`RANGE_NM` + WAKE_MARGIN_NM) and trigger, so a belt whose detectors are dead or absent still wakes. Waking a live
         group twice is harmless. Sets `self.dormant_info` (what was wired) for probes."""
         self.dormant_info = None
-        if not (self.o.dormant_sites and self._dormant_sites):
+        if not (self.o.dormant_sites and (self._dormant_sites or self._dormant_blue)):
             return
         st, pt = self.state, self._pt
         sites = lambda kind: [st.assets[i] for i in self.groups_by_asset if i in st.assets and st.assets[i].kind == kind]
@@ -3723,6 +3773,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             wake(f"S89 ring {a.id}", a.x, a.y, (ring + WAKE_MARGIN_NM) if ring else 10, [g])
             info["rings"] += 1
         info["dormant_after"] = len(self._dormant_sites)
+        info["blue"] = {"fields": list(self._dormant_fields), "groups": len(self._dormant_blue), "units": sum(len(t[3].units) for t in self._dormant_blue)}
+        for x_, y_, ring_, g_ in self._dormant_blue:                    # S89 C: blue field defences, the backstop form only (no blue EWR model): any red unit in the ring wakes the group
+            zone = self.m.triggers.add_triggerzone(pt(x_, y_), (ring_ + WAKE_MARGIN_NM) * NM, True, f"S89 blue ring {g_.name}")
+            trig = triggers.TriggerOnce(comment=f"S89 blue ring {g_.name}")
+            trig.add_condition(condition.PartOfCoalitionInZone("red", zone.id))
+            trig.add_action(action.ActivateGroup(g_.id))
+            self.m.triggerrules.triggers.append(trig)
         self.dormant_info = info
 
     def _field_zone(self, a, tx, ty):
