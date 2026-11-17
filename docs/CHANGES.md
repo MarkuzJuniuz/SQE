@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.458, Experimental: dormant soft sites
+With the dormant-sites setting on, the Shilka guards of enemy fuel farms and depots near your route also start asleep and wake like the SAM sites do; they count a tenth against the unit limit.
+
 ## v0.41.457, Experimental: dormant ground sites
 With the new setting on (off by default), SAM sites on your route start asleep and wake when a radar, a patrol or the longest-range SAM sees an enemy aircraft; sleeping sites count a tenth against the unit limit.
 
