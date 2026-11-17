@@ -1149,7 +1149,7 @@ class Session:
         self.options.full_map = bool(self.full_map)
         if self.full_map:
             self.options.max_units = 10 ** 6
-        self.options.f14_special_names = bool(getattr(self.settings, 'f14_special_names', True)); self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct); self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear')); self.options.ils_low_vis = bool(getattr(self.settings, 'ils_low_vis', True))
+        self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct); self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear')); self.options.ils_low_vis = bool(getattr(self.settings, 'ils_low_vis', True))
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
         extras = list(self.merge_candidates(pkg, unseen=True))

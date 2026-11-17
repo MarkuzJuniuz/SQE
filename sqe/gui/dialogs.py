@@ -113,8 +113,10 @@ class NewCampaignDialog(QDialog):
 
 
 class SettingsDialog(QDialog):
-    """Six tabs: General (flight timing), Campaign (what the world does), Mission build (merging, limits), DCS integration (paths, the
-    scripting patch) and Experimental (features still being tested). Every control keeps the name it always had."""
+    """Five tabs: General (takeoff buffer, marshal slack, AI fuel), Campaign (weather, Tactical Edge, AI skill, landings, ruins, carcasses),
+    Mission Build (merging and limits, then the hot-start, dormant-site, ILS, AWACS-radio and damage-call switches), DCS integration (paths,
+    the scripting patch, the ECM script) and Experimental (the home of features still being tried out: only its note today; always the last tab).
+    Every control keeps the name it always had."""
     def __init__(self, settings: S.AppSettings, parent=None):
         super().__init__(parent); self.s = settings; self.setWindowTitle("Settings"); self.setMinimumWidth(720); self.setMinimumHeight(560); self.resize(780, 700)
         lay = QVBoxLayout(self); lay.setSpacing(10)
@@ -152,48 +154,11 @@ class SettingsDialog(QDialog):
                 "natural pace (afterburner time). AI flights adjust automatically.")
         self.fuel = QCheckBox("AI fuel management (unlimited until the push, real fuel in the fight, unlimited again from egress)")
         self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); v.addWidget(self.fuel)
-        self.hotramp = QCheckBox("Hot starts at the ramp (scramble pairs)")
-        self.hotramp.setChecked(bool(getattr(settings, "hot_ramp_scrambles", False))); v.addWidget(self.hotramp)
-        hint(v, "Land fields only. On: alert pairs at land fields wait hot on the ramp and taxi out when called. Off: they wait hidden and appear on the runway (the older, steadier way). "
-                "The carrier always keeps the hidden deck start, and so does your own field.")
-        self.f14n = QCheckBox("F-14B(U): name waypoints with special-point codes (IP, ST, HB...) so DEST can select them")
-        self.f14n.setChecked(bool(settings.f14_special_names)); v.addWidget(self.f14n)
         v.addStretch(1)
 
         # ---- Experimental: features still being tested; each one can be switched off --------------------------------------
         v = page("Experimental")
         hint(v, "Features still being tried out. Each one can be switched off if it misbehaves; the defaults are the safe ones.")
-        self.awt = QCheckBox("AWACS calls need a tuned radio")           # v0.41.215 (XO)
-        self.awt.setChecked(bool(getattr(settings, "awacs_tuned", True))); v.addWidget(self.awt)
-        hint(v, "On: you hear the AWACS only while one of your radios is on its frequency (it is in your comms plan); a call that comes due while you are not tuned is held up to a minute, "
-                "then dropped, with one on-screen note. Read from the F-16C and A-10C first radio (UHF), and both radios of the F/A-18C and F-14B; the F-15C (FC3) is always counted tuned. "
-                "Off: you hear every AWACS call whatever your radio is set to.")
-        self.dmgc = QCheckBox("Show damage calls")                       # v0.41.215 (XO)
-        self.dmgc.setChecked(bool(getattr(settings, "damage_calls", True))); v.addWidget(self.dmgc)
-        hint(v, "On: the other blue aircraft (your wingmen, other flights, the tanker and the AWACS) call when they are hit and when they eject or go down (\"Mayday, mayday, ejecting\"), "
-                "each picked at random from a short list. Off: no such calls.")
-        self.hotrwy = QCheckBox("Hot starts on the runway (AI flights)")
-        self.hotrwy.setChecked(bool(getattr(settings, "hot_runway_starts", False))); v.addWidget(self.hotrwy)
-        hint(v, "Land fields other than yours. On: AI package flights wait hidden and appear on the runway in time to make their push, one runway release a minute apart. "
-                "A flight that cannot be released in time (the package is already underway at the start) still appears airborne. The carrier keeps the airborne start. Off: all AI flights appear airborne.")
-        self.hotrwy_own = QCheckBox("    ...also at my own field")
-        self.hotrwy_own.setChecked(bool(getattr(settings, "hot_runway_own_field", False)) and self.hotrwy.isChecked()); v.addWidget(self.hotrwy_own)
-        hint(v, "Needs the setting above. AI flights at your own field appear on the runway only after you have taken off, never in the last ten minutes before your planned landing, "
-                "and wait while you are on your way in to land.")
-        self.hotrwy_own.setEnabled(self.hotrwy.isChecked())
-        def _own_gate(on):
-            self.hotrwy_own.setEnabled(bool(on))
-            if not on:
-                self.hotrwy_own.setChecked(False)
-        self.hotrwy.toggled.connect(_own_gate)
-        self.ilslv = QCheckBox("Keep ILS runways active in low visibility")
-        self.ilslv.setChecked(bool(getattr(settings, "ils_low_vis", True))); v.addWidget(self.ilslv)
-        hint(v, "DCS lights the ILS only on the runway it counts as active, and the low-level wind picks that runway. When ceiling or visibility is low, the ground wind is turned to favour each field's "
-                "ILS runway; the wind aloft keeps the season's real direction. In good weather the wind is left as it is.")
-        self.dorm = QCheckBox("Dormant ground sites (wake when you come near)")
-        self.dorm.setChecked(bool(getattr(settings, "dormant_sites", False))); v.addWidget(self.dorm)
-        hint(v, "On: red SAM sites on your route, red supply guards and the defences of blue airfields without flights start asleep. A detector (an early-warning radar, a red patrol or the longest-range SAM site) or an enemy aircraft coming near wakes them; "
-                "30 seconds after no enemy is near they go back to sleep and wake again when one returns. On top of the usual mission, every other red radar (live) and SAM site (asleep) in the war is added, and they do not count toward the unit limits, so the mission can be much heavier. Off: as before, only the sites near your route and target are built, all live from the start, and blue fields without flights have no defences.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
@@ -285,6 +250,37 @@ class SettingsDialog(QDialog):
         self.fmin = StepSpin(); self.fmin.setRange(0, 120); self.fmin.setSuffix(" min after TOT"); self.fmin.setValue(int(settings.fighter_engage_minutes))
         row(v, "TARCAP / escort / sweep engage range", self.feng, self.fmin)
         hint(v, "How far AI TARCAPs, escorts, sweeps and SEAD go after a fighter, and for how long: the engage task ends this many minutes after the strike's TOT and they fly on home (alert pairs get 5 minutes more). 0 = unlimited. Your own flight is never limited (unless SQE was started with --ai-test).")
+
+        def tick(text, checked, hint_text, enabled=True):                 # one checkbox with its setting, its hint under it and its enabled state
+            cb = QCheckBox(text); cb.setChecked(bool(checked)); cb.setEnabled(enabled); v.addWidget(cb); hint(v, hint_text)
+            return cb
+        self.hotramp = tick("Hot starts at the ramp (scramble pairs)", getattr(settings, "hot_ramp_scrambles", False),
+            "Land fields only. On: alert pairs at land fields wait hot on the ramp and taxi out when called. Off: they wait hidden and appear on the runway (the older, steadier way). "
+            "The carrier always keeps the hidden deck start, and so does your own field.")
+        self.hotrwy = tick("Hot starts on the runway (AI flights)", getattr(settings, "hot_runway_starts", False),
+            "Land fields other than yours. On: AI package flights wait hidden and appear on the runway in time to make their push, one runway release a minute apart. "
+            "A flight that cannot be released in time (the package is already underway at the start) still appears airborne. The carrier keeps the airborne start. Off: all AI flights appear airborne.")
+        self.hotrwy_own = tick("    ...also at my own field", getattr(settings, "hot_runway_own_field", False) and self.hotrwy.isChecked(),
+            "Needs the setting above. AI flights at your own field appear on the runway only after you have taken off, never in the last ten minutes before your planned landing, "
+            "and wait while you are on your way in to land.", self.hotrwy.isChecked())
+        def _own_gate(on):
+            self.hotrwy_own.setEnabled(bool(on))
+            if not on:
+                self.hotrwy_own.setChecked(False)
+        self.hotrwy.toggled.connect(_own_gate)
+        self.dorm = tick("Dormant ground sites (wake when you come near)", getattr(settings, "dormant_sites", False),
+            "On: red SAM sites on your route, red supply guards and the defences of blue airfields without flights start asleep. A detector (an early-warning radar, a red patrol or the longest-range SAM site) or an enemy aircraft coming near wakes them; "
+            "30 seconds after no enemy is near they go back to sleep and wake again when one returns. On top of the usual mission, every other red radar (live) and SAM site (asleep) in the war is added, and they do not count toward the unit limits, so the mission can be much heavier. Off: as before, only the sites near your route and target are built, all live from the start, and blue fields without flights have no defences.")
+        self.ilslv = tick("Keep ILS runways active in low visibility", getattr(settings, "ils_low_vis", True),
+            "DCS lights the ILS only on the runway it counts as active, and the low-level wind picks that runway. When ceiling or visibility is low, the ground wind is turned to favour each field's "
+            "ILS runway; the wind aloft keeps the season's real direction. In good weather the wind is left as it is.")
+        self.awt = tick("AWACS calls need a tuned radio", getattr(settings, "awacs_tuned", True),           # v0.41.215 (XO)
+            "On: you hear the AWACS only while one of your radios is on its frequency (it is in your comms plan); a call that comes due while you are not tuned is held up to a minute, "
+            "then dropped, with one on-screen note. Read from the F-16C and A-10C first radio (UHF), and both radios of the F/A-18C and F-14B; the F-15C (FC3) is always counted tuned. "
+            "Off: you hear every AWACS call whatever your radio is set to.")
+        self.dmgc = tick("Show damage calls", getattr(settings, "damage_calls", True),                       # v0.41.215 (XO)
+            "On: the other blue aircraft (your wingmen, other flights, the tanker and the AWACS) call when they are hit and when they eject or go down (\"Mayday, mayday, ejecting\"), "
+            "each picked at random from a short list. Off: no such calls.")
         v.addStretch(1)
 
         # ---- DCS integration: paths and the scripting patch ---------------------------------------------------------------------
@@ -368,7 +364,6 @@ class SettingsDialog(QDialog):
         self.s.pilot_influence = bool(self.pinf.isChecked()); self.s.tempo_decay = bool(self.pinf.isChecked() and self.pdec.isChecked())
         self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
         self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value())
-        self.s.f14_special_names = self.f14n.isChecked()
         self.s.auto_patch_scripting = self.autopatch.isChecked(); self.s.patch_asked = True
         if self.s.dcs_install:                                   # take effect now, not at the next start
             ok, msg = (S.patch_mission_scripting if self.s.auto_patch_scripting else S.restore_mission_scripting)(self.s.dcs_install)

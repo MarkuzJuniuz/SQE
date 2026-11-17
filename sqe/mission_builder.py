@@ -222,7 +222,6 @@ class MissionOptions:
     fighter_engage_minutes: int = 5     # AI escorts, sweeps, SEAD stop engaging this many minutes after the TOT and fly on (alert pairs: +5). 0 = no time limit
     player_is_ai: bool = False          # test: your own flight is built as an AI flight (no player / client slot) and gets the AI behaviour too (stand-off, engage window)
     fighter_standoff: bool = True       # AI escorts and sweeps stop short of live SAM cover instead of flying into it
-    f14_special_names: bool = True
     weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
     ils_low_vis: bool = True            # S63: in low ceiling / visibility the ground wind favours each ILS runway (weather.low_visibility, weather._ground_dir)
     reactive: bool = True               # extra enemy fighters / blue alert pairs that launch during the sortie (reactive.py)
@@ -1830,7 +1829,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         return mapping.Point(x, y, self.t)
 
     def _spawn_flight(self, package, f, plan, geom, tanker_xy, hav_xy, push_s, tot_s, rtb_s, idx, manifest, despawn):
-        st, o = self.state, self.o
+        st = self.state
         spec = AIRCRAFT[f.aircraft]
         base = st.bases[f.base_id]
         past_push, act_s = False, 0
@@ -1857,7 +1856,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._crew_setup(f, spec, g, names, plan, manifest, despawn, past_push)
         self._announce(package, f, g, names, wps, push_s, manifest)
         armor, ai_sead, ai_a2g = self._roe_defaults(package, f, g)
-        special = self._f14_special_namer(wps) if (f.is_player and f.aircraft == "F-14BU" and o.f14_special_names) else None
+        special = self._f14_special_namer(wps) if (f.is_player and f.aircraft == "F-14BU") else None
         self._attach_waypoints(package, f, g, wps, first, ai_a2g, ai_sead, run_t0, push_s, tot_s, stop, hold_end, stw, armor, special)
         if f.role == Role.SEAD and package.objective.target_id:
             self._sead_grps.setdefault(package.objective.target_id, []).append(g.name)

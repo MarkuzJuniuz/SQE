@@ -103,7 +103,6 @@ class AppSettings:
     auto_patch_scripting: bool = False    # patch DCS MissionScripting.lua when SQE starts, restore it when SQE exits. Off until the user agrees on first run
     patch_asked: bool = False
     terrain_asked: bool = False           # the one-time 'scan the map?' offer has been shown
-    f14_special_names: bool = True             # F-14B(U): special-point waypoint names (untested in the cockpit)
     autoskip_stand_down: bool = False     # Phase 11 (XO): AUTOMATICALLY SKIP under Skip Turn: keep skipping turns with nothing to fly
     autoskip_night: bool = False          # ...also night turns, even when a flight is on offer
     autoskip_duration_on: bool = False    # ...stop after autoskip_hours of campaign time (unticked: no limit, a week at most)
