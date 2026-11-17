@@ -247,6 +247,10 @@ class SettingsDialog(QDialog):
         hint(v, "Wrecks and supply buildings (fuel tanks, depots) are static objects: no AI, no weapons, they never move. Each counts this share of a unit toward "
                 "the unit limit. When a mission is over the limit the furthest wrecks from your route are dropped first, before any flight is touched; buildings are "
                 "placed before wrecks and are never dropped for them. Wrecks stay where they are from day to day.")
+        self.dorm = QCheckBox("Dormant ground sites (wake when you come near)")
+        self.dorm.setChecked(bool(getattr(settings, "dormant_sites", False))); v.addWidget(self.dorm)
+        hint(v, "On: SAM sites on your route start asleep and wake when a detector (an early-warning radar, a red patrol or the longest-range SAM site) sees an enemy aircraft; "
+                "they stay awake after that. Sleeping groups count about 10% toward the unit limit, so more of the war fits. Off: every site is live from the start.")
         v.addStretch(1)
 
         # ---- Mission build: merging and limits -----------------------------------------------------------------------------------
@@ -358,6 +362,7 @@ class SettingsDialog(QDialog):
         self.s.ai_land_carrier = str(self.land_cv.currentData() or "always")
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
         self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
+        self.s.dormant_sites = bool(self.dorm.isChecked())
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.ils_low_vis = bool(self.ilslv.isChecked())
         self.s.pilot_influence = bool(self.pinf.isChecked()); self.s.tempo_decay = bool(self.pinf.isChecked() and self.pdec.isChecked())

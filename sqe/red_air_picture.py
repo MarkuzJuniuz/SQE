@@ -352,6 +352,7 @@ class RedAirPicture:
                 for kx, ky, knm in keepout:                 # tanker / AWACS / HAVCAP stay well clear as well
                     if dist(sx, sy, kx, ky) < knm * NM:
                         sx, sy = offset(kx, ky, bearing(kx, ky, sx, sy), knm * NM)
+                self._bandit_stations.append((sx, sy))       # S89 B1: a known CAP station is a wake detector (`_wire_dormant`)
                 gx, gy, galt = self._sep(sx, sy, alt, bearing(sx, sy, tx, ty))
                 g = self.m.flight_group(self.red, f"Bandit {i + 1}", cls, None, pt(gx, gy), altitude=galt, speed=spd, maintask=task.CAP, group_size=2)
                 ct = task.ControlledTask(task.OrbitAction(int(alt), int(spd)))
