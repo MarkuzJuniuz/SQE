@@ -190,6 +190,10 @@ class SettingsDialog(QDialog):
         self.ilslv.setChecked(bool(getattr(settings, "ils_low_vis", True))); v.addWidget(self.ilslv)
         hint(v, "DCS lights the ILS only on the runway it counts as active, and the low-level wind picks that runway. When ceiling or visibility is low, the ground wind is turned to favour each field's "
                 "ILS runway; the wind aloft keeps the season's real direction. In good weather the wind is left as it is.")
+        self.dorm = QCheckBox("Dormant ground sites (wake when you come near)")
+        self.dorm.setChecked(bool(getattr(settings, "dormant_sites", False))); v.addWidget(self.dorm)
+        hint(v, "On: red SAM sites on your route, red supply guards and the defences of blue airfields without flights start asleep. A detector (an early-warning radar, a red patrol or the longest-range SAM site) or an enemy aircraft coming near wakes them; "
+                "30 seconds after no enemy is near they go back to sleep and wake again when one returns. Sleeping groups count about 10% toward the unit limit, so more of the war fits. Off: every site is live from the start.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
@@ -247,10 +251,6 @@ class SettingsDialog(QDialog):
         hint(v, "Wrecks and supply buildings (fuel tanks, depots) are static objects: no AI, no weapons, they never move. Each counts this share of a unit toward "
                 "the unit limit. When a mission is over the limit the furthest wrecks from your route are dropped first, before any flight is touched; buildings are "
                 "placed before wrecks and are never dropped for them. Wrecks stay where they are from day to day.")
-        self.dorm = QCheckBox("Dormant ground sites (wake when you come near)")
-        self.dorm.setChecked(bool(getattr(settings, "dormant_sites", False))); v.addWidget(self.dorm)
-        hint(v, "On: SAM sites on your route start asleep and wake when a detector (an early-warning radar, a red patrol or the longest-range SAM site) sees an enemy aircraft; "
-                "they stay awake after that. Sleeping groups count about 10% toward the unit limit, so more of the war fits. Off: every site is live from the start.")
         v.addStretch(1)
 
         # ---- Mission build: merging and limits -----------------------------------------------------------------------------------
