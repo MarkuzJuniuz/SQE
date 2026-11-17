@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.460, Experimental: dormant sites go back to sleep
+With the dormant-sites setting on, a site that woke up goes back to sleep once no enemy aircraft has been near it for 30 seconds, and wakes again when one returns.
+
 ## v0.41.459, Experimental: dormant airfield defences
 With the dormant-sites setting on, the Patriot, HAWK and gun sites of every blue airfield that has no flight in the mission start asleep and wake when an enemy aircraft comes near; they count a tenth against the unit limit. Fields with your flights, the raided field and its covering neighbours stay awake.
 
