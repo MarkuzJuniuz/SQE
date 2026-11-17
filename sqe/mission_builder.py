@@ -53,6 +53,8 @@ RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor t
 PARKED_MAX = 8               # v0.41.297 (XO 2026-11-05: a counter-air strike has nothing to hit, the ramp is empty): at most this many parked jets (v0.41.324: real units, was 12 statics) stand on the target field's ramp. Judgment call: a statics-count cap for VR; the wing's true strength stays in the state (a static costs `carcass_weight` of a unit)
 DORMANT_WEIGHT = 0.1             # S89 (XO 2026-11-16, plan section 6): a late-activated belt costs about 10% of a live one (+0.39 of +3.83 ms for 400 units), so a tagged dormant group counts this share of its units toward `max_units`. The 500 ceiling counts it whole (a woken group stays live). Judgment call: the measured share, rounded
 WAKE_MARGIN_NM = 8              # S89 B1 (XO 2026-11-16): a dormant SAM site's wake ring is its engagement ring plus this, so the woken radars reach the player's RWR before engagement range
+DORMANT_SLEEP = True            # S89 E (plan 7.3, XO 2026-11-16): a woken dormant group goes back to AI OFF 30 s after no enemy unit is in any zone that covers it, and wakes again (AI ON) when one enters. False = stage B / C exactly (woken groups stay awake). Read at build time by `_wire_dormant`
+DORMANT_SLEEP_MAX_TRIGGERS = 400  # S89 E judgment call (XO prompt): the most continuous triggers the sleep rules may add to one mission (2 + 2 per covering zone, per group); groups further from the route than the cap allows stay awake once woken
 BLUE_AAA_NM = 3                 # S89 C (plan 7.2): a blue airfield AAA group's wake ring (the guns reach about 3 nm); judgment call, plus WAKE_MARGIN_NM
 SOFT_WAKE_NM = 10               # S89 B2 judgment call: a dormant soft site / garrison has no `RANGE_NM` (a Shilka reaches 3 nm, the rest is armour with MANPADS); its wake ring is this plus WAKE_MARGIN_NM
 BARCAP_DETECT_NM = 50           # S89 B1 judgment call: a fighter radar on a fighter-size target sees 40 to 60 nm (from memory); the same figure as tm.FIELD_SAM_DETECT_NM
@@ -3730,12 +3732,16 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         def covered(det, a):                                            # (x, y, radius nm) round a detector holds the group's asset
             return dist(det[0], det[1], a.x, a.y) <= det[2] * NM
 
+        covers, wakers = {}, {}                                         # S89 E: group id -> the zone ids that cover it / the TriggerOnce objects that wake it
+
         def wake(label, x, y, r_nm, grps):
             zone = self.m.triggers.add_triggerzone(pt(x, y), r_nm * NM, True, label)
             trig = triggers.TriggerOnce(comment=label)
             trig.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
             for g in grps:
                 trig.add_action(action.ActivateGroup(g.id))
+                covers.setdefault(g.id, []).append(zone.id)
+                wakers.setdefault(g.id, []).append(trig)
             self.m.triggerrules.triggers.append(trig)
             return zone
 
@@ -3780,7 +3786,61 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             trig.add_condition(condition.PartOfCoalitionInZone("red", zone.id))
             trig.add_action(action.ActivateGroup(g_.id))
             self.m.triggerrules.triggers.append(trig)
+            covers.setdefault(g_.id, []).append(zone.id)
+            wakers.setdefault(g_.id, []).append(trig)
+        if DORMANT_SLEEP:
+            info["sleep"] = self._wire_sleep([(g, a.x, a.y, "blue") for a, g, _r in self._dormant_sites] + [(g_, x_, y_, "red") for x_, y_, _r2, g_ in self._dormant_blue], covers, wakers)
         self.dormant_info = info
+
+    def _wire_sleep(self, groups, covers, wakers) -> dict:
+        """S89 E (plan 7.3, the rule flown in the probe `zone`): every dormant group `(group, x, y, enemy coalition)` goes back to AI OFF when no enemy unit has been inside ANY zone
+        that covers it (its ring and the detector zones that wake it; `covers`) for 30 s, and wakes again (AI ON) when one enters any of them. Flags per group: fa activated (set by
+        the group's first-wake triggers, `wakers`), fo outside-timer running, fs asleep. AllOfCoalitionOutsideZone = every enemy unit is outside (PartOf... = at least one is, wrong
+        here). Cost 2 + 2 per covering zone continuous triggers per group; groups beyond DORMANT_SLEEP_MAX_TRIGGERS (furthest from the route first) just stay awake once woken.
+        Returns what was wired, for probes."""
+        poly = list(getattr(self, "_poly", None) or [])
+
+        def route_d(x, y):
+            best = 0.0 if len(poly) < 2 else 1e18
+            for (x1, y1), (x2, y2) in zip(poly, poly[1:]):
+                dx, dy = x2 - x1, y2 - y1
+                L = dx * dx + dy * dy
+                t = 0.0 if L == 0 else max(0.0, min(1.0, ((x - x1) * dx + (y - y1) * dy) / L))
+                best = min(best, dist(x, y, x1 + t * dx, y1 + t * dy))
+            return best
+
+        def cont(comment, conds, acts):
+            t = triggers.TriggerContinious(comment=comment)
+            for c in conds:
+                t.add_condition(c)
+            for a in acts:
+                t.add_action(a)
+            self.m.triggerrules.triggers.append(t)
+
+        used = n_sl = capped = 0
+        for g, x, y, en in sorted(groups, key=lambda t: route_d(t[1], t[2])):
+            zs = covers.get(g.id, [])
+            if not zs:
+                continue
+            cost = 2 + 2 * len(zs)
+            if used + cost > DORMANT_SLEEP_MAX_TRIGGERS:
+                capped += 1
+                continue
+            used += cost
+            n_sl += 1
+            self._flag_n += 3
+            fa, fo, fs = self._flag_n - 2, self._flag_n - 1, self._flag_n
+            for tg in wakers.get(g.id, []):
+                tg.add_action(action.SetFlag(fa))
+            out_all = lambda: [condition.AllOfCoalitionOutsideZone(en, z) for z in zs]
+            cont(f"S89 outside timer start {g.name}", [condition.FlagIsTrue(fa), condition.FlagIsFalse(fs), condition.FlagIsFalse(fo)] + out_all(), [action.SetFlag(fo)])
+            cont(f"S89 sleep {g.name}", [condition.FlagIsTrue(fa), condition.FlagIsTrue(fo), condition.FlagIsFalse(fs), condition.TimeSinceFlag(fo, 30)] + out_all(),
+                 [action.GroupAIOff(g.id), action.SetFlag(fs), action.ClearFlag(fo)])
+            for k, z in enumerate(zs, 1):
+                cont(f"S89 timer reset {k} {g.name}", [condition.FlagIsTrue(fo), condition.FlagIsFalse(fs), condition.PartOfCoalitionInZone(en, z)], [action.ClearFlag(fo)])
+                cont(f"S89 wake again {k} {g.name}", [condition.FlagIsTrue(fa), condition.FlagIsTrue(fs), condition.PartOfCoalitionInZone(en, z)],
+                     [action.GroupAIOn(g.id), action.ClearFlag(fs)])
+        return {"groups": n_sl, "capped": capped, "continuous": used}
 
     def _field_zone(self, a, tx, ty):
         """v0.41.1: an alert field scrambles on what ITS radar sees: a circle round the field (not round the target), sized by how far the
