@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.456, AI close air support goes home when its target is done
+Once the column a CAS flight was sent against is destroyed (all but one of its vehicles, for a large column), the AI flight leaves for its egress point and home instead of hunting other targets nearby. A flight that strays more than 18 km from the target does the same.
+
 ## v0.41.455, the mission's unit count can weigh sleeping groups
 The mission builder can now count a group tagged as dormant at a tenth of its units toward the unit limit (and whole toward the 500 ceiling). Nothing is tagged yet, so missions are unchanged.
 
