@@ -113,9 +113,9 @@ class NewCampaignDialog(QDialog):
 
 
 class SettingsDialog(QDialog):
-    """Five tabs: General (takeoff buffer, marshal slack, AI fuel), Campaign (weather, Tactical Edge, AI skill, landings, ruins, carcasses),
-    Mission Build (merging and limits, then the hot-start, dormant-site, ILS, AWACS-radio and damage-call switches), DCS integration (paths,
-    the scripting patch, the ECM script) and Experimental (the home of features still being tried out: only its note today; always the last tab).
+    """Four tabs: General (takeoff buffer, marshal slack, AI fuel), Campaign (weather, Tactical Edge, AI skill, landings, ruins, carcasses),
+    Mission Build (merging and limits, then the hot-start, dormant-site, ILS, AWACS-radio and damage-call switches) and DCS integration (paths,
+    the scripting patch, the ECM script). A new experimental feature gets its own "Experimental" tab (added last) while it is being tried out.
     Every control keeps the name it always had."""
     def __init__(self, settings: S.AppSettings, parent=None):
         super().__init__(parent); self.s = settings; self.setWindowTitle("Settings"); self.setMinimumWidth(720); self.setMinimumHeight(560); self.resize(780, 700)
@@ -154,11 +154,6 @@ class SettingsDialog(QDialog):
                 "natural pace (afterburner time). AI flights adjust automatically.")
         self.fuel = QCheckBox("AI fuel management (unlimited until the push, real fuel in the fight, unlimited again from egress)")
         self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); v.addWidget(self.fuel)
-        v.addStretch(1)
-
-        # ---- Experimental: features still being tested; each one can be switched off --------------------------------------
-        v = page("Experimental")
-        hint(v, "Features still being tried out. Each one can be switched off if it misbehaves; the defaults are the safe ones.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
@@ -319,7 +314,6 @@ class SettingsDialog(QDialog):
         v.addStretch(1)
         self.inst.textChanged.connect(self._refresh); self.saves.textChanged.connect(self._refresh); self._refresh()
 
-        self.tabs.tabBar().moveTab(1, self.tabs.count() - 1)                  # Experimental last
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); bb.accepted.connect(self._save)
         bb.rejected.connect(self.reject); lay.addWidget(bb)
         if not settings.dcs_saves or not Path(settings.dcs_saves).exists():
