@@ -397,6 +397,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._armor_comps = {}                                          # S92b: asset id -> its rolled armor composition (see _armor_site_comp)
         self._cas_stock = {}                                            # S92: package id -> True when the AI CAS flight keeps the stock Maverick + cluster kit and attacks the column's air defence unit by unit
         self._cas_floors = {}                                           # S31a: package id -> the AI CAS attack floor in ft (0 = none)
+        self._casdone = []                                              # S93: AI CAS flights the hook sends home when their target group is done (group, target units, EGR index, target point)
         self._scrub = []                                                # v0.41.223: every package flight for the hook's package scrub (group, unit names, kind, SCRUB point)
         self._sead_grps = {}                                            # site id -> the SEAD flights' group names (all merged packages); the gate aborts when they are all down
         self._blind_site = set()
@@ -718,7 +719,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         
                          done_after=max([float(ptot)] + [float(m_["tot_s"]) for m_ in (merged or [])]), awacs=awl.upper(), splash=bool(o.splash_damage),
                          rwyq=self._rwyq, prwy=self._prwy, alerts=self._alerts, cover=self._cover, ecm_player=self._ecm_player, ecm_msg=bool(o.ecm_status),
-                         scrub=self._scrub, tune_flags=tune_flags, tune_mhz=tune_mhz, awacs_unit=f"{awl} 1-1" if any(s.slot == "AWACS" for s in package.support) else "",
+                         scrub=self._scrub, casdone=self._casdone, tune_flags=tune_flags, tune_mhz=tune_mhz, awacs_unit=f"{awl} 1-1" if any(s.slot == "AWACS" for s in package.support) else "",
                          dmg=({**self._ulabels, **{k: "*" + v for k, v in self._support_lbl.items()}} if o.damage_calls else {}), dmg_on=bool(o.damage_calls),
                          cfg={"splash_damage": bool(o.splash_damage), "ecm_script": bool(o.ecm_script), "version": __import__("sqe").__version__,
                               # v0.41.17: your wingmen leave at the boat (10 nm) once you are back, after your TOT
@@ -1764,6 +1765,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             self._sead_grps.setdefault(package.objective.target_id, []).append(g.name)
         gate = self._dead_gate(package, f, g, wps, first, stw, tot_s, base)
         self._scrub_point(package, f, g, base, wps, tot_s)
+        self._cas_done(package, f, g, armor, ai_a2g)
         self._home_leg(f, g, base, wps, idx, hold_end, stop, special)
         if gate is not None and gate.get("ai") and gate.get("dead"):
             self._gate_stop_slack(g, int(gate.get("acap") or 0))

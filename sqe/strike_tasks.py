@@ -158,6 +158,19 @@ class StrikeTasks:
         ct2.stop_after_time(t0 + 1080)
         wp.tasks.append(ct2)
 
+    def _cas_done(self, package, f, g, armor, ai_a2g):
+        """S93 (XO 2026-11-16, run 19-23-07): the target group is the CAS objective. Record an AI CAS flight for the hook, which sends it to its EGR point once the group
+        is done (or the flight strays from it): see the CAS DONE block in debrief.py. The EGR point also runs SQE_PASSED, so a flight already past it is left alone.
+        AI scripting only (a person's flight is not commanded); the route itself is unchanged."""
+        if not ai_a2g or f.role != Role.CAS or f.tag or armor is None or not getattr(armor, "units", None):
+            return
+        ei_ = next((i_ for i_, p_ in enumerate(g.points) if getattr(p_, "name", "") == "EGR"), None)
+        if ei_ is None:
+            return
+        g.points[ei_].tasks.append(task.RunScript(f"SQE_PASSED('{g.name}')"))
+        u0_ = armor.units[0].position
+        self._casdone.append({"grp": g.name, "units": [u_.name for u_ in armor.units], "to": ei_ + 1, "tx": float(u0_.x), "tz": float(u0_.y)})
+
     def _agm88_time(self, package, geom, base, P0):
         """When this package's AI HARM flights reach their HARM point in this mission (push time + the push-to-HARM-point leg on its geometry)."""
         sf = next((f for f in package.flights if f.role == Role.SEAD and not f.tag), None)

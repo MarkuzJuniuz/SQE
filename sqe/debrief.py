@@ -162,6 +162,14 @@ local function scrubJson()
   end
   return "[" .. table.concat(o, ",") .. "]"
 end
+local doneLog = {}                          -- S93: the AI CAS flights sent home because their target group was done (see the CAS DONE block at the end)
+local function doneJson()
+  local o = {}
+  for _, e in ipairs(doneLog) do
+    o[#o + 1] = string.format('{"g":"%s","t":%d,"why":"%s","left":%d,"cmd":%s}', esc(e.g), e.t, esc(e.why), e.left, e.cmd and "true" or "false")
+  end
+  return "[" .. table.concat(o, ",") .. "]"
+end
 local RWYS = { __RWYS__ }                -- v0.41.254: the fields whose runways count bomb impacts: id, reference point (x north, z east), runway headings
 local rwyHits = {}
 -- v0.41.336 (XO 2026-11-09): a closed (cratered) field shows its damage: a scripted blast at each CRATERS point {x north, z east, pw power}, a few seconds into the mission.
@@ -206,9 +214,9 @@ end
 local function dump()
   local f = io.open(OUT, "w")
   if not f then return end
-  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"scrub":%s,"tracks":%s,"rgate":%s,"rwy":%s,"imp":%s,"landings":%s,"limped":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
+  f:write(string.format('{"campaign":"__CAMPAIGN__","sortie":__SORTIE__,"package":"__PKG__","mission_ended":%s,"time":%d,"dead":%s,"ejected":%s,"landed":%s,"player":{"takeoff":%s,"landed":%s,"ka":%d,"kg":%d,"ks":%d},"kills":%s,"aborted":%s,"gates":%s,"shots":%s,"jams":%s,"deaths":%s,"alerts":%s,"cover":%s,"scrub":%s,"casdone":%s,"tracks":%s,"rgate":%s,"rwy":%s,"imp":%s,"landings":%s,"limped":%s,"cfg":%s,"splash":{"blasts":%d,"kills":%d}}',
     tostring(ended), math.floor(timer.getTime()), list(dead), list(ejected), list(landed),
-    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), scrubJson(), tracksJson(), rgateJson(), rwyJson(), impJson(), landJson(), limpJson(), CFG, splashN, splashK))
+    num(pl.takeoff), num(pl.landed), pl.ka, pl.kg, pl.ks, killsJson(), list(aborted), gatesJson(), shotsJson(), jamsJson(), deathsJson(), alertsJson(), coverJson(), scrubJson(), doneJson(), tracksJson(), rgateJson(), rwyJson(), impJson(), landJson(), limpJson(), CFG, splashN, splashK))
   f:close()
 end
 local function nameOf(obj)
@@ -1529,10 +1537,73 @@ timer.scheduleFunction(function(_, t)
   end
   return t + 5
 end, nil, timer.getTime() + 30)
+-- S93 (XO 2026-11-16, run 19-23-07: Hawg 1 killed 5 of the 6 vehicles of its column, then went on hunting the Sukhumi air defence 30 km away and all four jets were lost):
+-- the target group is the objective. An AI CAS flight goes home (resetTask, ROE return fire, SwitchWaypoint to its EGR point) as soon as the group is done (all but
+-- CAS_DONE_LEFT of its units dead) or when it strays further than CAS_LEASH_M from the target after having been inside. Not once it has passed EGR (SQE_PASSED).
+-- A held (gated) flight is released from its gate the same way a scrubbed one is. The AI only: the entries are built for AI flights.
+local CASDONE = { __CASDONE__ }
+local CAS_DONE_FRAC, CAS_LEASH_M = __CASDONEFRAC__, __CASLEASH__
+local casPassed = {}
+function SQE_PASSED(gname) casPassed[gname] = true end
+local function casLeft(init) if init >= 5 then return math.max(1, math.floor(init * CAS_DONE_FRAC)) end return 0 end
+local function casAnyPoint(g)
+  for _, u in ipairs(g:getUnits() or {}) do
+    local ok, p = pcall(function() return u:isExist() and u:getPoint() end)
+    if ok and p then return p end
+  end
+end
+local function casGo(d, why, alive)
+  d.fired = true
+  scrubbedGrp[d.g] = true
+  local ok = pcall(function()
+    local g = Group.getByName(d.g)
+    local c = g and g:getController()
+    if not c then error("no group") end
+    c:resetTask()
+    pcall(function() c:setOption(AI.Option.Air.id.ROE, AI.Option.Air.val.ROE.RETURN_FIRE) end)
+    c:setCommand({ id = "SwitchWaypoint", params = { fromWaypointIndex = 1, goToWaypointIndex = d.to } })
+  end)
+  for _, gs in ipairs(gorder) do
+    local all = #gs.gates > 0
+    for _, gt in ipairs(gs.gates) do if not scrubbedGrp[gt.grp] then all = false end end
+    if all then gs.done = true; gs.holding = false; gs.watch = false end
+  end
+  doneLog[#doneLog + 1] = { g = d.g, t = math.floor(timer.getTime()), why = why, left = alive, cmd = ok }
+  dump()
+end
+if #CASDONE > 0 then
+  timer.scheduleFunction(function(_, t)
+    local left = false
+    for _, d in ipairs(CASDONE) do
+      if not d.fired and not casPassed[d.g] and not scrubbedGrp[d.g] then
+        local g = Group.getByName(d.g)
+        if g then
+          left = true
+          local init, alive = 0, 0
+          for _, n in ipairs(d.units) do init = init + 1; if not dead[n] then alive = alive + 1 end end
+          if alive < init and alive <= casLeft(init) then
+            casGo(d, "done", alive)
+          else
+            local p = casAnyPoint(g)
+            if p then
+              local r = math.sqrt((p.x - d.tx) ^ 2 + (p.z - d.tz) ^ 2)
+              if r <= CAS_LEASH_M then d.inside = true
+              elseif d.inside then casGo(d, "leash", alive) end
+            end
+          end
+        end
+      end
+    end
+    if left then return t + 5 end
+    return nil
+  end, nil, timer.getTime() + 30)
+end
 dump()
 '''
 SCRUB_LOSS_FRAC = 0.5          # v0.41.223: a side of a package (strikers, or the covering fighters) that has lost this share of its jets scrubs the package (judgment call: XO's run, a 2-ship that lost one went home; the Gudauta CAS escort was down to two of four)
 SCRUB_STRIKE_GRACE_S = 180     # ...the strikers lost: scrub until this long after TOT (after that the strike is done or moot)
+CAS_DONE_FRAC = 0.2            # S93: an AI CAS flight goes home once its target group is down to this share of its units (5 or more units: at least 1 may be left; fewer: all dead). Judgment call (run 19-23-07: 5 of 6 dead, the sixth never died)
+CAS_LEASH_M = 18000            # S93: ...or once it strays this far from the target point after having been within it (twice CAS_ZONE_M: it was hunting air defence 30 km away)
 SCRUB_COVER_LEAD_S = 90        # ...the cover lost: scrub only until this long before TOT (strikers that have committed finish the job)
 RUNWAY_CREDIT = 0.6          # S75 (XO 2026-11-13): a runway job that closed the field reads as a win in the debrief (target_damage raised to this; same value as SUPPRESSED_CREDIT, narrative's 'great' threshold; judgment call). A runway has no health, so its damage was always 0%
 SUPPRESSED_CREDIT = 0.6       # v0.41.414 (S61, XO): a primary SAM left suppressed (radars gone) reads as a win in the debrief: target_damage is raised to this (judgment call: narrative's 'great' threshold). Asset health and the war sim are untouched
@@ -1591,7 +1662,7 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
              enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
              watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
              rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True,
-             tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None) -> str:
+             tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None, casdone: list | None = None) -> str:
     tbl = ", ".join(f'["{n}"]=true' for n in despawn_names)
     cl = ", ".join(f'{{t={float(c[0]):.0f}, text="{_lua_str(c[1])}", you={"true" if (len(c) > 2 and c[2]) else "false"}}}' for c in (calls or []))
     uf = ", ".join(f"[{_lq(k)}]={_lq(v)}" for k, v in (flights or {}).items())
@@ -1605,8 +1676,9 @@ def lua_hook(campaign_id: str, sortie: int, package_id: str, despawn_names: list
                    for r in (ruins or []))
     gt = ", ".join(f'{{t={float(x["t"]):.0f}, site={_lq(x["site"])}, grp={_lq(x["grp"])}, from={int(x["from"])}, to={int(x["to"])}, ai={"true" if x["ai"] else "false"}, dead={"true" if x.get("dead") else "false"}, you={"true" if x.get("you") else "false"}, seads={{{", ".join(_lq(n) for n in x.get("seads", []))}}}, also={{{", ".join(_lq(n) for n in x.get("also", []))}}}, gm={int(x.get("gm") or 0)}, acap={int(x.get("acap") or 0)}{_umbrella_lua(x)}{(", tx=%.1f, tz=%.1f" % (float(x["tx"]), float(x["tz"]))) if x.get("tx") is not None else ""}}}'
                    for x in (gates or []))
+    cd_ = ", ".join(f'{{g={_lq(x["grp"])}, units={lst(x["units"])}, to={int(x["to"])}, tx={float(x["tx"]):.1f}, tz={float(x["tz"]):.1f}}}' for x in (casdone or []))
     cr = ", ".join("{x=%.1f, z=%.1f, pw=%.0f}" % (c[0], c[1], c[2]) for c in (cfg or {}).get("craters", []))
-    return (LUA_HOOK.replace("__CRATERS__", cr).replace("__RWYS__", ", ".join("{id=%s, x=%.1f, z=%.1f, h={%s}}" % (_lq(r["id"]), r["x"], r["z"], ", ".join(str(int(h_)) for h_ in r["h"])) for r in (cfg or {}).get("rwys", []))).replace("__RWYLEN__", f"{RUNWAY_HALF_LEN_M:.0f}").replace("__RWYWID__", f"{RUNWAY_HALF_WIDTH_M:.0f}").replace("__SCRUB__", sc).replace("__SCRUBFRAC__", repr(float(SCRUB_LOSS_FRAC))).replace("__SCRUBGRACE__", f"{float(SCRUB_STRIKE_GRACE_S):.0f}").replace("__SCRUBLEAD__", f"{float(SCRUB_COVER_LEAD_S):.0f}")
+    return (LUA_HOOK.replace("__CRATERS__", cr).replace("__RWYS__", ", ".join("{id=%s, x=%.1f, z=%.1f, h={%s}}" % (_lq(r["id"]), r["x"], r["z"], ", ".join(str(int(h_)) for h_ in r["h"])) for r in (cfg or {}).get("rwys", []))).replace("__RWYLEN__", f"{RUNWAY_HALF_LEN_M:.0f}").replace("__RWYWID__", f"{RUNWAY_HALF_WIDTH_M:.0f}").replace("__SCRUB__", sc).replace("__SCRUBFRAC__", repr(float(SCRUB_LOSS_FRAC))).replace("__SCRUBGRACE__", f"{float(SCRUB_STRIKE_GRACE_S):.0f}").replace("__SCRUBLEAD__", f"{float(SCRUB_COVER_LEAD_S):.0f}").replace("__CASDONE__", cd_).replace("__CASDONEFRAC__", repr(float(CAS_DONE_FRAC))).replace("__CASLEASH__", f"{float(CAS_LEASH_M):.0f}")
             .replace("__GATEKM__", str(int(gate_km))).replace("__AITEST__", "true" if ai_test else "false").replace("__GATETEST__", _gate_test_lua()).replace("__GATES__", gt).replace("__RUINS__", ru).replace("__CAMPAIGN__", campaign_id).replace("__SORTIE__", str(sortie))
             .replace("__PKG__", package_id).replace("__DESPAWN__", tbl).replace("__PLAYER__", player_name)
             .replace("__PGROUP__", _lua_str(group)).replace("__SOUND__", sound).replace("__SOUND_YOU__", sound_you).replace("__CALLS__", cl).replace("__UFLT__", uf)
@@ -1644,14 +1716,14 @@ def install_hook(mission, campaign_id: str, sortie: int, package_id: str, despaw
                  enemy_air: list | None = None, sites: list | None = None, ruins: list | None = None, gates: list | None = None, ai_test: bool = False, gate_km: float = 40, jams: dict | None = None, jamw: dict | None = None,
                  watch: list | None = None, done_after: float = 0, awacs: str = "AWACS", splash: bool = False,
                  rwyq: list | None = None, prwy: str = "", alerts: list | None = None, cfg: dict | None = None, cover: list | None = None, ecm_player: str = "", ecm_msg: bool = True,
-                 tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None) -> None:
+                 tune_flags: list | None = None, tune_mhz: float = 0.0, awacs_unit: str = "", dmg: dict | None = None, dmg_on: bool = False, scrub: list | None = None, casdone: list | None = None) -> None:
     """Embed the results hook. NOTE: DoScript needs String(<the script itself>), NOT mission.string(...): the latter stores a
     translation KEY and DCS then tries to run the key's name as code ('DictKey_Translation_5: = expected')."""
     from dcs.triggers import TriggerStart
     from dcs.action import DoScript
     from dcs.translation import String
     t = TriggerStart(comment="SQE debrief hook")
-    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover, ecm_player, ecm_msg, tune_flags, tune_mhz, awacs_unit, dmg, dmg_on, scrub))))
+    t.add_action(DoScript(String(lua_hook(campaign_id, sortie, package_id, despawn_names, player_name, group, calls, wps, sound, sound_you, flights, enemy_air, sites, ruins, gates, ai_test, gate_km, jams, jamw, watch, done_after, awacs, splash, rwyq, prwy, alerts, cfg, cover, ecm_player, ecm_msg, tune_flags, tune_mhz, awacs_unit, dmg, dmg_on, scrub, casdone))))
     mission.triggerrules.triggers.append(t)
 
 
