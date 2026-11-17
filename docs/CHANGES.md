@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.457, Experimental: dormant ground sites
+With the new setting on (off by default), SAM sites on your route start asleep and wake when a radar, a patrol or the longest-range SAM sees an enemy aircraft; sleeping sites count a tenth against the unit limit.
+
 ## v0.41.456, AI close air support goes home when its target is done
 Once the column a CAS flight was sent against is destroyed (all but one of its vehicles, for a large column), the AI flight leaves for its egress point and home instead of hunting other targets nearby. A flight that strays more than 18 km from the target does the same.
 

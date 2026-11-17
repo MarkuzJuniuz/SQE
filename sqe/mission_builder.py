@@ -52,6 +52,8 @@ FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue come
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
 PARKED_MAX = 8               # v0.41.297 (XO 2026-11-05: a counter-air strike has nothing to hit, the ramp is empty): at most this many parked jets (v0.41.324: real units, was 12 statics) stand on the target field's ramp. Judgment call: a statics-count cap for VR; the wing's true strength stays in the state (a static costs `carcass_weight` of a unit)
 DORMANT_WEIGHT = 0.1             # S89 (XO 2026-11-16, plan section 6): a late-activated belt costs about 10% of a live one (+0.39 of +3.83 ms for 400 units), so a tagged dormant group counts this share of its units toward `max_units`. The 500 ceiling counts it whole (a woken group stays live). Judgment call: the measured share, rounded
+WAKE_MARGIN_NM = 8              # S89 B1 (XO 2026-11-16): a dormant SAM site's wake ring is its engagement ring plus this, so the woken radars reach the player's RWR before engagement range
+BARCAP_DETECT_NM = 50           # S89 B1 judgment call: a fighter radar on a fighter-size target sees 40 to 60 nm (from memory); the same figure as tm.FIELD_SAM_DETECT_NM
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
 SCRUB_POINT_NM = 20           # v0.41.223: a package flight's SCRUB point (where a scrubbed flight goes first) sits this far from its home field, on the bearing of its route's last point (the same shape as the stand-off ABORT point)
 BLUE_BASE_DEF_SKILL = "Excellent"   # v0.41.222 (XO 2026-10-31): blue's base Patriot / HAWK / AAA are always the top DCS skill, whatever the Blue skill setting or the level says. Why: under "level" they were left at pydcs's Average while red's sites run at the level's skill (High on L3), and XO saw them barely fire. Judgment call (no public figure for operator quality).
@@ -225,6 +227,7 @@ class MissionOptions:
     damage_calls: bool = True           # v0.41.215: damage / mayday calls from the other aircraft
     ecm_status: bool = True             # v0.41.213: the on-screen ECM messages (F-16C lamp, FC3 F10 calls); only with ecm_script
     ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
+    dormant_sites: bool = False         # S89: red SAM sites on the route start late-activated and wake by detector (see `_wire_dormant`)
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
     carcass_weight: float = 0.25        # how much of a live unit one wreck or one live static building counts toward the unit limit (v0.41.221: the buildings too; the name stays until refactor week)
     carcass_range_nm: int = 40          # only sites this close to the route get wrecks
@@ -363,6 +366,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self.lo = loadouts or LoadoutLibrary()
         self.rng = rng or random.Random()
         self._runway_busy = set()                                      # bases whose runway / catapult already holds a group at mission start
+        self._dormant_sites = []                                       # S89 B1: (asset, group, ring nm) of every route SAM site built dormant (`_spawn_opfor_ground`); `_wire_dormant` wakes them
+        self._bandit_stations = []                                     # S89 B1: (x, y) of every known red CAP station ("Bandit N", live from second 0): the BARCAP detectors
         self._dormant = set()                                          # S89: ids of the groups tagged dormant (`_tag_dormant`); `_counts` weighs them DORMANT_WEIGHT
         self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []
         self._raid_n = {"bu": 0, "eu": 0, "bg": 0, "sw": 0, "es": 0}            # S47: raid unit numbers (bomber, escort) and group numbers (bomber, sweep, escort), one count per mission so folded raids never repeat a name
@@ -742,6 +747,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             for pg in render_pages(td, ctx):
                 m.add_aircraft_kneeboard(pspec.dcs_type, pg)
             warns += list(dict.fromkeys(self.lo.warnings))
+            self._wire_dormant()
             counts = self._counts()
             self._free_locked_speeds(m)
             self._add_ship_warehouses(m)
@@ -1085,6 +1091,17 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if self.o.max_units >= 10 ** 5:                            # full-map stress test: no limit at all
             return float(10 ** 9)
         return min(self.o.max_units - u, ceil_ - u_full)     # v0.41.131: the whole mission counts again; S89: the limit sees dormant groups weighted, the ceiling whole
+
+    def _fits(self, n: int, dormant: bool = False, extra: int = 0) -> bool:
+        """S89 B1: does a site of `n` units (+2 spare, + `extra`) still fit? The limit sees a dormant site at DORMANT_WEIGHT, the ceiling sees it whole, so a belt
+        that no longer fits the ceiling is still cut (furthest first by the callers). With nothing dormant this is exactly `_units_room() >= n + 2 + extra`."""
+        from . import limits
+        if self.o.max_units >= 10 ** 5:
+            return True
+        c = self._counts()
+        ceil_ = self.o.unit_ceiling or limits.unit_ceiling()
+        w = int(math.ceil(n * DORMANT_WEIGHT)) if dormant else n
+        return self.o.max_units - c["units"] >= w + 2 + extra and ceil_ - c["units_full"] >= n + 2 + extra
 
     def _tag_dormant(self, g):
         """S89: tag a group as dormant (late-activated until a detector wakes it) so `_counts` weighs it DORMANT_WEIGHT. Tag the group, never test `late_activation`
@@ -1620,6 +1637,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             relevant = [tgt] + dfn[:2]                                                   # the two nearest defenders; more only costs VR frame rate
             relevant += [g for g in st.assets.values() if g.guards == tgt.id]            # a SAM site's dug-in garrison is part of its cluster
             relevant += fol_
+        route_ids = set()
         extra_ids_ = set()                   # v0.41.291: the SAM sites `all_sams` adds beyond the route's own (they leave RAID_SAM_RESERVE units free for the flights built after)
         if polyline:                         # every SAM site whose ring touches the route is live from the start
             cs_ = tm.corridor_sam_sites(st, polyline, tgt, **({"max_route": route_sites} if route_sites else {}))
@@ -1635,6 +1653,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         ewrs = sorted((a for a in st.assets.values() if a.kind == AssetKind.EWR and not a.destroyed),
                       key=lambda a: tm.poly_dist(a.x, a.y, polyline) if polyline else dist(a.x, a.y, tx, ty))
         relevant += [a for a in ewrs[:2] if (tm.poly_dist(a.x, a.y, polyline) if polyline else 0) < 80 * NM]
+        keep_live_ = ({tgt.id} | set(tgt.defended_by) | {g_.id for g_ in st.assets.values() if g_.guards == tgt.id} | {a_.id for a_ in fol_}) if tgt is not None else set()
+        dormant_on_ = bool(self.o.dormant_sites) and bool(polyline)      # S89 B1: the route's SAM sites sleep (never the target, its defenders, its garrison or a `fol_` site)
         seen = set()
         cut_ = False                                                    # v0.41.285: once a route site does not fit, the rest of them (further out) are left out too
         cut_names_ = []
@@ -1648,20 +1668,27 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     manifest.mark_primary(a.id, manifest.cur_pkg or package.id)
                 continue
             comp = SITES.get(a.variant) if a.kind in (AssetKind.SAM, AssetKind.EWR) else SOFT.get(a.kind)
-            if route_near is not None and a.id in route_ids and a.id not in self.groups_by_asset and (cut_ or self._units_room() < sum(n_ for _, n_ in (comp or [])) + 2 + (RAID_SAM_RESERVE if a.id in extra_ids_ else 0)):
+            sz_ = sum(n_ for _, n_ in (comp or []))
+            dorm_ = dormant_on_ and a.kind == AssetKind.SAM and a.id in route_ids and a.id not in keep_live_
+            if route_near is not None and a.id in route_ids and a.id not in self.groups_by_asset and (cut_ or not self._fits(sz_, dorm_, (RAID_SAM_RESERVE if a.id in extra_ids_ else 0))):
                 cut_ = True
                 if all_sams:
                     cut_names_.append(a.name)                            # one warning for the whole tail (v0.41.291: up to every SAM site is a candidate)
                 else:
                     self.warns.append(f"{a.name}: left out to stay under the unit limit (furthest from the intercept point first)")
                 continue
-            if comp and route_sites and self._units_room() < sum(n_ for _, n_ in comp) + 2:
+            if comp and route_sites and not self._fits(sz_, dorm_):
                 self.warns.append(f"{a.name}: left out to stay under the unit limit")        # v0.41.256: the raid's extra route sites never push the mission over it
                 continue
             if comp:
                 self._spawn_site(a, comp, manifest, primary=is_tgt)
+                g_ = self.groups_by_asset.get(a.id)
+                if dorm_ and g_ is not None:                         # S89 B1: asleep until `_wire_dormant` hands it to a detector (or its own ring)
+                    g_.late_activation = True
+                    self._tag_dormant(g_)
+                    self._dormant_sites.append((a, g_, tm.RANGE_NM.get(a.variant, 0)))
         if cut_names_:
-            self.warns.append(f"{len(cut_names_)} SAM sites left out to stay under the {self.o.max_units}-unit limit (furthest from the intercept point first): " + ", ".join(cut_names_[:6]) + (", ..." if len(cut_names_) > 6 else ""))
+            self.warns.append(f"{len(cut_names_)} SAM sites left out to stay under the {self.o.max_units}-unit limit{' (dormant groups count 10%)' if dormant_on_ else ''} (furthest from the intercept point first): " + ", ".join(cut_names_[:6]) + (", ..." if len(cut_names_) > 6 else ""))
 
     def _spawn_site(self, a, comp, manifest, primary):
         """ONE group per site: a SAM battery needs its search/track radars, launchers and command post together."""
@@ -3607,6 +3634,68 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         trig.add_condition(condition.TimeAfter(int(seconds)))
         trig.add_action(action.ActivateGroup(g.id))
         self.m.triggerrules.triggers.append(trig)
+
+    def _wire_dormant(self):
+        """S89 B1: the ONE final pass that wakes the dormant route SAM sites (setting `dormant_sites`; plan `.claude/s89-late-activation-plan.md` 7.2, XO 2026-11-16).
+        Detectors in order: (1) every live red EWR (zone `detection.EWR_COVER_NM`); where no EWR covers a group, (2) the longest-range SAM site built in this mission
+        (zone `RANGE_NM` + WAKE_MARGIN_NM) or (3) the red BARCAP stations (zone BARCAP_DETECT_NM), whichever has the LONGER zone radius. One zone and one TriggerOnce per
+        detector with an ActivateGroup per covered group; any blue unit wakes them (no `human` guard: the mission is the same for a person and the AI). Backstop: each
+        dormant group also has its own ring zone (`RANGE_NM` + WAKE_MARGIN_NM) and trigger, so a belt whose detectors are dead or absent still wakes. Waking a live
+        group twice is harmless. Sets `self.dormant_info` (what was wired) for probes."""
+        self.dormant_info = None
+        if not (self.o.dormant_sites and self._dormant_sites):
+            return
+        st, pt = self.state, self._pt
+        sites = lambda kind: [st.assets[i] for i in self.groups_by_asset if i in st.assets and st.assets[i].kind == kind]
+        info = {"detectors": [], "rings": 0, "dormant_before": len(self._dormant_sites), "sam_unslept": None}
+
+        def covered(det, a):                                            # (x, y, radius nm) round a detector holds the group's asset
+            return dist(det[0], det[1], a.x, a.y) <= det[2] * NM
+
+        def wake(label, x, y, r_nm, grps):
+            zone = self.m.triggers.add_triggerzone(pt(x, y), r_nm * NM, True, label)
+            trig = triggers.TriggerOnce(comment=label)
+            trig.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
+            for g in grps:
+                trig.add_action(action.ActivateGroup(g.id))
+            self.m.triggerrules.triggers.append(trig)
+            return zone
+
+        ewr_dets = [(a.x, a.y, detection.EWR_COVER_NM, a) for a in sites(AssetKind.EWR)]
+        left = [t for t in self._dormant_sites if not any(covered(d, t[0]) for d in ewr_dets)]     # no EWR covers these
+        extra_dets, klass = [], None
+        if left:
+            sams = [a for a in sites(AssetKind.SAM) if tm.RANGE_NM.get(a.variant, 0) > 0]
+            best = max(sams, key=lambda a: tm.RANGE_NM[a.variant]) if sams else None
+            sam_r = (tm.RANGE_NM[best.variant] + WAKE_MARGIN_NM) if best is not None else 0
+            if sam_r > 0 and sam_r > (BARCAP_DETECT_NM if self._bandit_stations else 0):
+                klass = "SAM"
+                if best.id in {t[0].id for t in self._dormant_sites}:   # the detector must be live: it wakes first (accepted: this overshoots the unit room by up to one site, 8 units)
+                    t_ = next(t for t in self._dormant_sites if t[0].id == best.id)
+                    t_[1].late_activation = False
+                    self._dormant.discard(t_[1].id)
+                    self._dormant_sites.remove(t_)
+                    info["sam_unslept"] = best.id
+                extra_dets = [(best.x, best.y, sam_r, best)]
+            elif self._bandit_stations:
+                klass = "BARCAP"
+                extra_dets = [(sx, sy, BARCAP_DETECT_NM, None) for sx, sy in self._bandit_stations]
+        order = [("EWR", d) for d in ewr_dets] + [(klass, d) for d in extra_dets]
+        for kl, d in order:
+            if kl == "EWR":
+                grps = [t for t in self._dormant_sites if covered(d, t[0])]
+            else:                                                       # the fallback detector wakes only the groups no EWR covers
+                grps = [t for t in self._dormant_sites if covered(d, t[0]) and not any(covered(e, t[0]) for e in ewr_dets)]
+            if not grps:
+                continue
+            nm_ = d[3].id if d[3] is not None else f"({d[0] / 1000:.0f},{d[1] / 1000:.0f})"
+            wake(f"S89 detector {kl} {nm_}", d[0], d[1], d[2], [t[1] for t in grps])
+            info["detectors"].append({"class": kl, "at": nm_, "radius_nm": d[2], "groups": [t[0].id for t in grps]})
+        for a, g, ring in self._dormant_sites:                          # backstop: the site's own ring
+            wake(f"S89 ring {a.id}", a.x, a.y, (ring + WAKE_MARGIN_NM) if ring else 10, [g])
+            info["rings"] += 1
+        info["dormant_after"] = len(self._dormant_sites)
+        self.dormant_info = info
 
     def _field_zone(self, a, tx, ty):
         """v0.41.1: an alert field scrambles on what ITS radar sees: a circle round the field (not round the target), sized by how far the

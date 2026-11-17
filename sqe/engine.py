@@ -1135,6 +1135,7 @@ class Session:
         self.options.player_is_ai = bool(self.ai_test)
         self.options.fighter_standoff = bool(self.settings.fighter_standoff)
         self.options.carcasses = bool(getattr(self.settings, 'carcasses', True)); self.options.carcass_weight = max(5, int(getattr(self.settings, 'carcass_weight_pct', 25))) / 100.0
+        self.options.dormant_sites = bool(getattr(self.settings, 'dormant_sites', False))
         self.options.reactive = bool(getattr(self.settings, 'reactive', True))
         self.options.ecm_script = bool(getattr(self.settings, 'ecm_script', False))
         self.options.ecm_status = bool(getattr(self.settings, 'ecm_status', True))
