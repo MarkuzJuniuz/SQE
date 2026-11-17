@@ -1,5 +1,41 @@
 # CHANGES.md
 
+## v0.41.456, AI close air support goes home when its target is done
+Once the column a CAS flight was sent against is destroyed (all but one of its vehicles, for a large column), the AI flight leaves for its egress point and home instead of hunting other targets nearby. A flight that strays more than 18 km from the target does the same.
+
+## v0.41.455, the mission's unit count can weigh sleeping groups
+The mission builder can now count a group tagged as dormant at a tenth of its units toward the unit limit (and whole toward the 500 ceiling). Nothing is tagged yet, so missions are unchanged.
+
+## v0.41.454, AI close air support counts all the air defence around its target
+The attack height now takes in the short-range air defence of neighbouring columns and of depot, fuel, command and field guards near the target and the run-in, not just the target column and the SAM sites.
+
+## v0.41.453, the sortie window keeps its parts in place
+The Sortie In Progress window now packs the title, mission card and package list at the top, with the loss totals, mission status and buttons anchored to the bottom. The package list starts empty until DCS answers, and the loss table no longer shows a scrollbar.
+
+## v0.41.452, the marshal point sits near the closest base
+Packages hold close to the nearest friendly field instead of a fixed 85 nm from the target, so the hold and the ingress are shorter and the jets burn less fuel before the fight.
+
+## v0.41.451, the tanker flies at the Hogs' refuelling height and speed
+When an A-10C is in the package, the boom tanker orbits at 15,000 ft and 270 kt instead of 22,000 ft and 350 kt, the numbers the A-10C's own route already uses for refuelling.
+
+## v0.41.450, the marshal point stays near the fight
+Packages no longer hold 200 nm away over the sea or off the map. The marshal is close to the target again, and an A-10C package gets no more than 120 nm, so the Hogs keep their fuel for the job.
+
+## v0.41.449, the sortie window gives the package list more room
+The Friendly / Enemy loss table on the Sortie In Progress window is only as tall as its two rows now, so the package list gets the space.
+
+## v0.41.448, AI close air support handles escorting air defence
+AI close air support flights hold Open Fire instead of Weapon Free. When the target column carries its own air defence (Shilka, Strela, Osa and the like), they attack from above its reach, Maverick first on the missile vehicles and cluster bombs on the guns, then the rest of the column.
+
+## v0.41.447, the About box credits use XO's list markup
+Help > About shows the creator line with the email under it, and the credits as a real bulleted list again.
+
+## v0.41.446, the About box credits line up under their heading
+The bullets in Help > About now start directly under "Credits" instead of being indented. A credit that wraps still indents under its own bullet.
+
+## v0.41.445, the About box shows the creator and lists credits one per line
+Help > About now shows the creator and contact line under the DCS notice. The credits are a bulleted list, one item each, so a long credit that wraps is clearly still one item. Natural Earth (coastlines and borders) is credited there too.
+
 ## v0.41.444, the waiting screen lists packages by TOT
 The package table on the waiting screen is now in time-over-target order, earliest first. The package you fly is no longer pinned to the top.
 

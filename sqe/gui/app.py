@@ -749,11 +749,16 @@ class MainWindow(QMainWindow):
         QMessageBox.about(self, f"About {APP_NAME}", (
             f"<h3>{APP_NAME} (SQE) v{__version__}</h3>"
             "<p>A dynamic campaign and sortie generator for DCS World. It builds light missions with few units.</p>"
-            f"<p>{html.escape(EULA_LINE)}</p>"
-            "<p><b>Credits</b><br>"
-            "pydcs (the Retribution fork) builds the mission files.<br>"
-            "PySide6 / Qt for the interface; Pillow for the kneeboard images.<br>"
-            "Ground height data: SRTM (NASA / USGS Shuttle Radar Topography Mission) via the AWS open terrain tiles, public domain.</p>"))
+            f"<p><b>{html.escape(EULA_LINE)}</b></p>"
+            "<p>Creator: MarkuzJuniuz<br />markuzjuniuz@protonmail.com</p>"
+            "<p><b>Credits</b></p>"
+            "<ul>"
+            "<li style='margin:0 0 0 -30px;'><b>Mission files:</b> pydcs (the Retribution fork)</li>"
+            "<li style='margin:0 0 0 -30px;'><b>Interface:</b> PySide6 / Qt</li>"
+            "<li style='margin:0 0 0 -30px;'><b>Kneeboard images:</b> Pillow</li>"
+            "<li style='margin:0 0 0 -30px;'><b>Ground height:</b> SRTM (NASA / USGS Shuttle Radar Topography Mission), via the AWS open terrain tiles, public domain</li>"
+            "<li style='margin:0 0 0 -30px;'><b>Map data:</b> Natural Earth (coastlines, lakes, borders), public domain</li>"
+            "</ul>"))
 
 
     def _recent(self):

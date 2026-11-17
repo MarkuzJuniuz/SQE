@@ -13,6 +13,7 @@ from dcs import mapping, task
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
 from .loadouts import JSOW_PER_JET, JDAM_JETS, PEN_PER_JET
+from . import profiles
 from .models import SEAD_AIMS, AssetKind, ObjectiveType, Role
 from .routes import AVOID_NM, FT, AGM88_LAUNCH_NM, JDAM_ALT_FT, JSOW_AXIS_DEG, JSOW_LAUNCH_NM, NM, assign_times, bearing, dist, objective_wp, offset, plan_route
 
@@ -31,6 +32,7 @@ TRACK_RADARS = {"SNR_75V", "snr s-125 tr", "Kub 1S91 str", "S-300PS 40B6M tr", "
 TOR_VARIANTS = {"SA-15"}       # point defences that cover a long-range site and shoot down HARMs, GBUs and JSOWs aimed at it
 TOR_COVER_KM = 12.0           # a Tor this close to a SEAD/DEAD target, or to the strike leg into it, is part of the job: HARMs and JSOWs go at it, the DEAD gate waits for it
 SEARCH_RADARS = {"p-19 s-125 sr", "SA-11 Buk SR 9S18M1", "S-300PS 64H6E sr", "1L13 EWR", "55G6 EWR"}
+CAS_ZONE_M = 9000              # the AI CAS engage circle around TGT (m): the column stays within about 2 km of the point (CAS_ENEMY_ADVANCE_M, CAS_PATROL_MAX_M); S92 tried 18000 and put it back (a wider circle only adds neighbouring air defence)
 KPH = 1.852
 
 
@@ -134,18 +136,40 @@ class StrikeTasks:
                     "acap": AIR_HOLD_CAS_S if f.role == Role.CAS else AIR_HOLD_STRIKE_S, "tx": tga_.x if tga_ is not None else None, "tz": tga_.y if tga_ is not None else None}
         return gate
 
-    def _cas_tasks(self, wp, w, armor, tot_s, floor_ft=0):
+    def _cas_tasks(self, wp, w, armor, tot_s, floor_ft=0, per_unit=False):
         """AI CAS: look at the fight, attack the column, then keep working the zone. Time-boxed so they eventually go home.
-        `w` is the TGT point (position and ETA); `wp` is the point the tasks go on (the IP before it since Stage C, else TGT). Weapons free is set by the caller."""
+        `w` is the TGT point (position and ETA); `wp` is the point the tasks go on (the IP before it since Stage C, else TGT). Open Fire is set by the caller (S92).
+        S92 `per_unit` (a moving column with the stock Maverick + cluster kit): the air defence travelling with the column is attacked unit by unit first, missile
+        vehicles with a Maverick (ASM), guns with cluster bombs, each at the floor altitude; then the whole group for the rest."""
         t0 = int(w.eta_s)
         if armor is not None:
+            alt_m = int(floor_ft * 0.3048) if floor_ft else None
+            if per_unit:
+                for u_, cls_, _f, _n in profiles.column_ad_units(armor):
+                    cu = task.ControlledTask(task.AttackUnit(u_.id, weapon_type=task.WeaponType.ASM if cls_ == "sam" else task.WeaponType.ClusterBombs,
+                                                             group_attack=False, altitude_enabled=bool(alt_m), altitude=alt_m or 0))
+                    cu.stop_after_time(t0 + 420)
+                    wp.tasks.append(cu)
             # S31a: over short-range air defence the attack altitude is set to the floor (AttackGroup altitude, metres), or the AI dives to its own delivery height. EngageTargetsInZone has no altitude parameter.
-            ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.Auto, group_attack=False, altitude=int(floor_ft * 0.3048) if floor_ft else None))
+            ct = task.ControlledTask(task.AttackGroup(armor.id, weapon_type=task.WeaponType.Auto, group_attack=False, altitude=alt_m))
             ct.stop_after_time(t0 + 420)
             wp.tasks.append(ct)
-        ct2 = task.ControlledTask(task.EngageTargetsInZone(mapping.Point(w.x, w.y, self.t), 9000, [task.Targets.All.GroundUnits.GroundVehicles]))
+        ct2 = task.ControlledTask(task.EngageTargetsInZone(mapping.Point(w.x, w.y, self.t), CAS_ZONE_M, [task.Targets.All.GroundUnits.GroundVehicles]))
         ct2.stop_after_time(t0 + 1080)
         wp.tasks.append(ct2)
+
+    def _cas_done(self, package, f, g, armor, ai_a2g):
+        """S93 (XO 2026-11-16, run 19-23-07): the target group is the CAS objective. Record an AI CAS flight for the hook, which sends it to its EGR point once the group
+        is done (or the flight strays from it): see the CAS DONE block in debrief.py. The EGR point also runs SQE_PASSED, so a flight already past it is left alone.
+        AI scripting only (a person's flight is not commanded); the route itself is unchanged."""
+        if not ai_a2g or f.role != Role.CAS or f.tag or armor is None or not getattr(armor, "units", None):
+            return
+        ei_ = next((i_ for i_, p_ in enumerate(g.points) if getattr(p_, "name", "") == "EGR"), None)
+        if ei_ is None:
+            return
+        g.points[ei_].tasks.append(task.RunScript(f"SQE_PASSED('{g.name}')"))
+        u0_ = armor.units[0].position
+        self._casdone.append({"grp": g.name, "units": [u_.name for u_ in armor.units], "to": ei_ + 1, "tx": float(u0_.x), "tz": float(u0_.y)})
 
     def _agm88_time(self, package, geom, base, P0):
         """When this package's AI HARM flights reach their HARM point in this mission (push time + the push-to-HARM-point leg on its geometry)."""
