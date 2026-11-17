@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.464, Experimental: dormant-sites log in dcs.log
+With the dormant-sites setting on, the mission writes a line to dcs.log whenever a site group wakes, goes back to sleep or wakes again, and a 10-second status line, so frame hitches can be matched to the event that caused them.
+
 ## v0.41.463, Experimental: the rest of red's air defence, asleep
 With the dormant-sites setting on, every red early-warning radar still alive in the war is added to the mission (they never sleep), and every red SAM site that was not in it starts asleep and wakes when a radar or an enemy aircraft comes near. The mission itself is built exactly as before; these added sites are not counted against the unit limit or the ceiling in limits.json.
 

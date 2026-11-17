@@ -3705,6 +3705,37 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         trig.add_action(action.ActivateGroup(g.id))
         self.m.triggerrules.triggers.append(trig)
 
+    @staticmethod
+    def _s89_log(kind: str, text: str):
+        """S89 (XO 2026-11-17): a trigger action that writes `S89 <kind> t=<mission seconds> <text>` to dcs.log (env.info), so a frame hitch in `S89FrameLog.lua` (`model t=`) can be matched to the wake / sleep that caused it."""
+        return action.DoScript(String('env.info(string.format("S89 %s t=%%.1f %%s", timer.getTime(), [==[%s]==]))' % (kind, text.replace("]==]", "]=]"))))
+
+    @staticmethod
+    def _s89_names(grps, cap=10) -> str:
+        n = [g.name for g in grps]
+        return ", ".join(n[:cap]) + (f" +{len(n) - cap} more" if len(n) > cap else "")
+
+    @staticmethod
+    def _s89_tick_lua(names, flags) -> str:
+        """S89: the mission-time tick script (every 10 s: how many dormant groups exist, i.e. were woken once, and how many are asleep again)."""
+        q = lambda n: "[==[" + n.replace("]==]", "]=]") + "]==]"
+        lines = ["local N={" + ",".join(q(n) for n in names) + "}",
+                 "local FS={" + ",".join("[ " + q(n) + " ]=%d" % f for n, f in flags.items()) + "}",
+                 "local function tick(_, t)",
+                 "  local ex, sl = 0, 0",
+                 "  for _, n in ipairs(N) do",
+                 "    local ok, g = pcall(Group.getByName, n)",
+                 "    if ok and g then ex = ex + 1 end",
+                 "    local f = FS[n]",
+                 "    if f and trigger.misc.getUserFlag(f) > 0 then sl = sl + 1 end",
+                 "  end",
+                 "  env.info(string.format('S89 tick t=%.0f dormant=%d existing=%d asleep_again=%d', t, #N, ex, sl))",
+                 "  return t + 10",
+                 "end",
+                 "timer.scheduleFunction(tick, nil, timer.getTime() + 10)",
+                 "env.info('S89 start dormant=' .. #N)"]
+        return "\n".join(lines)
+
     def _wire_dormant(self):
         """S89 B1: the ONE final pass that wakes the dormant route SAM sites (setting `dormant_sites`; plan `.claude/s89-late-activation-plan.md` 7.2, XO 2026-11-16).
         Detectors in order: (1) every live red EWR (zone `detection.EWR_COVER_NM`); where no EWR covers a group, (2) the longest-range SAM site built in this mission
@@ -3732,6 +3763,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 trig.add_action(action.ActivateGroup(g.id))
                 covers.setdefault(g.id, []).append(zone.id)
                 wakers.setdefault(g.id, []).append(trig)
+            trig.add_action(self._s89_log("wake", f"{label}: {len(grps)} groups: {self._s89_names(grps)}"))
             self.m.triggerrules.triggers.append(trig)
             return zone
 
@@ -3776,11 +3808,17 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             trig = triggers.TriggerOnce(comment=f"S89 blue ring {g_.name}")
             trig.add_condition(condition.PartOfCoalitionInZone("red", zone.id))
             trig.add_action(action.ActivateGroup(g_.id))
+            trig.add_action(self._s89_log("wake", f"blue ring: {g_.name}"))
             self.m.triggerrules.triggers.append(trig)
             covers.setdefault(g_.id, []).append(zone.id)
             wakers.setdefault(g_.id, []).append(trig)
         if DORMANT_SLEEP:
             info["sleep"] = self._wire_sleep([(g, a.x, a.y, "blue") for a, g, _r in self._dormant_sites] + [(g_, x_, y_, "red") for x_, y_, _r2, g_ in self._dormant_blue], covers, wakers)
+        names_ = [t[1].name for t in self._dormant_sites] + [t[3].name for t in self._dormant_blue]
+        if names_:
+            ts_ = triggers.TriggerStart(comment="S89 log tick")
+            ts_.add_action(action.DoScript(String(self._s89_tick_lua(names_, getattr(self, "_s89_sleep_flags", {}) if DORMANT_SLEEP else {}))))
+            self.m.triggerrules.triggers.append(ts_)
         self.dormant_info = info
 
     def _wire_sleep(self, groups, covers, wakers) -> dict:
@@ -3809,6 +3847,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             self.m.triggerrules.triggers.append(t)
 
         used = n_sl = capped = 0
+        sleep_flags = self._s89_sleep_flags = {}                         # group name -> its "asleep" flag, for the tick script
         for g, x, y, en in sorted(groups, key=lambda t: route_d(t[1], t[2])):
             zs = covers.get(g.id, [])
             if not zs:
@@ -3826,11 +3865,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             out_all = lambda: [condition.AllOfCoalitionOutsideZone(en, z) for z in zs]
             cont(f"S89 outside timer start {g.name}", [condition.FlagIsTrue(fa), condition.FlagIsFalse(fs), condition.FlagIsFalse(fo)] + out_all(), [action.SetFlag(fo)])
             cont(f"S89 sleep {g.name}", [condition.FlagIsTrue(fa), condition.FlagIsTrue(fo), condition.FlagIsFalse(fs), condition.TimeSinceFlag(fo, 30)] + out_all(),
-                 [action.GroupAIOff(g.id), action.SetFlag(fs), action.ClearFlag(fo)])
+                 [action.GroupAIOff(g.id), action.SetFlag(fs), action.ClearFlag(fo), self._s89_log("sleep", g.name)])
+            sleep_flags[g.name] = fs
             for k, z in enumerate(zs, 1):
                 cont(f"S89 timer reset {k} {g.name}", [condition.FlagIsTrue(fo), condition.FlagIsFalse(fs), condition.PartOfCoalitionInZone(en, z)], [action.ClearFlag(fo)])
                 cont(f"S89 wake again {k} {g.name}", [condition.FlagIsTrue(fa), condition.FlagIsTrue(fs), condition.PartOfCoalitionInZone(en, z)],
-                     [action.GroupAIOn(g.id), action.ClearFlag(fs)])
+                     [action.GroupAIOn(g.id), action.ClearFlag(fs), self._s89_log("wake again", g.name)])
         return {"groups": n_sl, "capped": capped, "continuous": used}
 
     def _field_zone(self, a, tx, ty):
