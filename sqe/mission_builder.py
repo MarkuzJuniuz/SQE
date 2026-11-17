@@ -51,7 +51,8 @@ TARCAP_LEAD_S = 120           # v0.41.115 (was 0; XO 2026-10-22: fighters in fir
 FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
 PARKED_MAX = 8               # v0.41.297 (XO 2026-11-05: a counter-air strike has nothing to hit, the ramp is empty): at most this many parked jets (v0.41.324: real units, was 12 statics) stand on the target field's ramp. Judgment call: a statics-count cap for VR; the wing's true strength stays in the state (a static costs `carcass_weight` of a unit)
-DORMANT_WEIGHT = 0.1             # S89 (XO 2026-11-16, plan section 6): a late-activated belt costs about 10% of a live one (+0.39 of +3.83 ms for 400 units), so a tagged dormant group counts this share of its units toward `max_units`. The 500 ceiling counts it whole (a woken group stays live). Judgment call: the measured share, rounded
+DORMANT_WEIGHT = 0.0             # S89 (XO 2026-11-17): the share of an ADDED group's units that `max_units` counts: 0 = the limit ignores them. Only the groups added after the mission is built as before (S89 C blue fields, S89 F red EWR / SAM extras) are tagged; the belt and supply guards of B1 / B2 count whole, exactly as with the setting off
+DORMANT_CEILING_WEIGHT = 0.0     # S89 (XO 2026-11-17): the same for the `limits.json` ceiling: the added groups are not counted against it (a probe showed 600+ units at 100+ FPS); 1.0 counts them whole again
 WAKE_MARGIN_NM = 8              # S89 B1 (XO 2026-11-16): a dormant SAM site's wake ring is its engagement ring plus this, so the woken radars reach the player's RWR before engagement range
 DORMANT_SLEEP = True            # S89 E (plan 7.3, XO 2026-11-16): a woken dormant group goes back to AI OFF 30 s after no enemy unit is in any zone that covers it, and wakes again (AI ON) when one enters. False = stage B / C exactly (woken groups stay awake). Read at build time by `_wire_dormant`
 DORMANT_SLEEP_MAX_TRIGGERS = 400  # S89 E judgment call (XO prompt): the most continuous triggers the sleep rules may add to one mission (2 + 2 per covering zone, per group); groups further from the route than the cap allows stay awake once woken
@@ -372,6 +373,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._runway_busy = set()                                      # bases whose runway / catapult already holds a group at mission start
         self._dormant_sites = []                                       # S89 B1: (asset, group, ring nm) of every route SAM site built dormant (`_spawn_opfor_ground`); `_wire_dormant` wakes them
         self._bandit_stations = []                                     # S89 B1: (x, y) of every known red CAP station ("Bandit N", live from second 0): the BARCAP detectors
+        self._dormant_red_added = []                                   # S89 F: ids of the red EWR / SAM sites `_dormant_red_extras` added (probes)
         self._dormant_fields = []                                      # S89 C: ids of the blue fields built dormant (probes)
         self._dormant_blue = []                                        # S89 C: (x, y, ring nm, group) of every blue airfield defence group built dormant (`_dormant_blue_fields`); `_wire_dormant` wakes them on red aircraft
         self._dormant = set()                                          # S89: ids of the groups tagged dormant (`_tag_dormant`); `_counts` weighs them DORMANT_WEIGHT
@@ -648,7 +650,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._spawn_parked_jets(package, manifest)
         self._dry_pass()
         self._spawn_supply_in_radius(package, tx, ty, manifest)
+        self._dormant_red_extras(tx, ty, manifest, (AssetKind.EWR,))      # S89 F: red's other early-warning radars, live (detectors never sleep; a few units, so before the blue fields)
         self._dormant_blue_fields(tx, ty)                # S89 C: after everything else, so the sleeping defences never push a flight out
+        self._dormant_red_extras(tx, ty, manifest, (AssetKind.SAM,))      # S89 F: the rest of red's SAM sites, asleep
         self._place_carcasses()
         manifest.merged = [{k: v for k, v in m_.items() if k in ("id", "number", "objective", "type", "tot_s", "rtb_s", "unseen")} for m_ in merged if not m_.get("struck")]
         bx, by = geom.push
@@ -1099,35 +1103,21 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return float(10 ** 9)
         return min(self.o.max_units - u, ceil_ - u_full)     # v0.41.131: the whole mission counts again; S89: the limit sees dormant groups weighted, the ceiling whole
 
-    def _fits(self, n: int, dormant: bool = False, extra: int = 0) -> bool:
-        """S89 B1: does a site of `n` units (+2 spare, + `extra`) still fit? The limit sees a dormant site at DORMANT_WEIGHT, the ceiling sees it whole, so a belt
-        that no longer fits the ceiling is still cut (furthest first by the callers). With nothing dormant this is exactly `_units_room() >= n + 2 + extra`."""
-        from . import limits
-        if self.o.max_units >= 10 ** 5:
-            return True
-        c = self._counts()
-        ceil_ = self.o.unit_ceiling or limits.unit_ceiling()
-        w = int(math.ceil(n * DORMANT_WEIGHT)) if dormant else n
-        return self.o.max_units - c["units"] >= w + 2 + extra and ceil_ - c["units_full"] >= n + 2 + extra
+    def _fits(self, n: int, extra: int = 0) -> bool:
+        """S89 B1: does a site of `n` units (+2 spare, + `extra`) still fit? Exactly `_units_room() >= n + 2 + extra`; the belt and the supply guards count whole, as with the setting off."""
+        return self._units_room() >= n + 2 + extra
 
-    def _make_dormant(self, a, ring_nm):
+    def _make_dormant(self, a, ring_nm, free: bool = False):
         """S89: put the group just built for asset `a` to sleep (late-activated, tagged, handed to `_wire_dormant` with its ring radius in nm). One recipe for the
         route SAM sites (B1) and the soft sites / garrisons (B2)."""
         g = self.groups_by_asset.get(a.id)
         if g is None:
             return None
         g.late_activation = True
-        self._tag_dormant(g)
+        if free:                                  # an added group (S89 F): the unit limits ignore it
+            self._tag_dormant(g)
         self._dormant_sites.append((a, g, ring_nm))
         return g
-
-    def _need_ok(self, full: int, weighted: int) -> bool:
-        """S89 B2: room for something that needs `full` units against the ceiling and `weighted` against `max_units` (a dormant guard: ceil(n * DORMANT_WEIGHT))."""
-        from . import limits
-        if self.o.max_units >= 10 ** 5:
-            return True
-        c = self._counts()
-        return self.o.max_units - c["units"] >= weighted and (self.o.unit_ceiling or limits.unit_ceiling()) - c["units_full"] >= full
 
     def _tag_dormant(self, g):
         """S89: tag a group as dormant (late-activated until a detector wakes it) so `_counts` weighs it DORMANT_WEIGHT. Tag the group, never test `late_activation`
@@ -1139,8 +1129,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _counts(self) -> dict:
         """Units for the VR budget. A dead static (wreck) and a live static (a supply site's building) are cheap, no AI and they never move, so both count
         `carcass_weight` of a unit (v0.41.221, XO 2026-10-31: the buildings used to count whole units); 'wrecks' and 'statics' are how many there are.
-        S89: 'units' weighs a group tagged by `_tag_dormant` DORMANT_WEIGHT per unit (what `max_units` limits); 'units_full' counts every unit whole (what the ceiling limits)."""
-        g = u = u_w = w = n_s = 0
+        S89: 'units' weighs a group tagged by `_tag_dormant` DORMANT_WEIGHT per unit (what `max_units` limits); 'units_full' weighs it DORMANT_CEILING_WEIGHT (what the ceiling limits); 'units_total' counts every unit whole (reporting)."""
+        g = u = u_w = u_c = w = n_s = 0
         for coal in self.m.coalition.values():
             for c in coal.countries.values():
                 for attr in ("plane_group", "helicopter_group", "vehicle_group", "ship_group", "static_group"):
@@ -1151,10 +1141,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                             else:
                                 n_s += len(grp.units); g += 1
                             continue
+                        dz_ = getattr(grp, "id", None) in self._dormant
                         g += 1; u += len(grp.units)
-                        u_w += len(grp.units) * (DORMANT_WEIGHT if getattr(grp, "id", None) in self._dormant else 1)
+                        u_w += len(grp.units) * (DORMANT_WEIGHT if dz_ else 1)
+                        u_c += len(grp.units) * (DORMANT_CEILING_WEIGHT if dz_ else 1)
         st_ = int(math.ceil((w + n_s) * self.o.carcass_weight))
-        return {"groups": g, "units": int(math.ceil(round(u_w, 6))) + st_, "units_full": u + st_, "wrecks": w, "statics": n_s}
+        return {"groups": g, "units": int(math.ceil(round(u_w, 6))) + st_, "units_full": int(math.ceil(round(u_c, 6))) + st_, "units_total": u + st_, "wrecks": w, "statics": n_s}
 
     def _spawn_supply_in_radius(self, package, tx, ty, manifest, only_raid: bool = False, max_units: int | None = None) -> None:
         """v0.41.209 (XO 2026-10-30): every live supply site (fuel farm, depot) of BOTH sides inside the merge radius round the target is in the mission, so a
@@ -1188,10 +1180,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             guard_ = ((road_sites.guard_units(a, self.d.level) if road_sites.is_road(a) else 1) if side == "red" else 0)
             need = bld_ + guard_         # v0.41.221: the buildings count like wrecks (carcass_weight), and red's Shilka guard is a whole unit
             dorm_ = dorm_on and side == "red"
-            if dorm_:                    # S89 B2: the limit sees the sleeping guard at DORMANT_WEIGHT, the ceiling whole
-                if not self._need_ok(need, bld_ + int(math.ceil(guard_ * DORMANT_WEIGHT))) or (max_units is not None and used + need > max_units):
-                    break
-            elif self._units_room() < need or (max_units is not None and used + need > max_units):
+            if self._units_room() < need or (max_units is not None and used + need > max_units):       # S89 B2: a sleeping guard counts whole, as with the setting off
                 break
             if side == "red":
                 self._spawn_site(a, SOFT.get(a.kind), manifest, primary=False)
@@ -1202,7 +1191,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             built += 1
             used += need
         if built < len(cands) and max_units is None:
-            self.warns.append(f"{len(cands) - built} supply sites inside the {o.merge_radius_nm} nm merge radius left out to stay under the {o.max_units}-unit limit{' (dormant groups count 10%)' if o.dormant_sites and not only_raid else ''} (furthest first)")
+            self.warns.append(f"{len(cands) - built} supply sites inside the {o.merge_radius_nm} nm merge radius left out to stay under the {o.max_units}-unit limit (furthest first)")
 
     def _place_carcasses(self) -> None:
         """Wrecks for every damaged or destroyed ground site near the route. Trimmed to what fits under the unit limit: the furthest
@@ -1306,36 +1295,37 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g.set_skill(getattr(Skill, bs, Skill.High))
         return g
 
-    def _base_def_units(self, base) -> int:
-        """S89 C: how many units `_place_base` builds for a full field (no `near` trim): Patriot 4 + launchers, HAWK 4 + radars + launchers, AAA 4 (or 3), AAA 2 = 3."""
-        if not self.o.base_defenses:
-            return 0
-        bt = sams.blue_battery(base, self.state)
-        n = (4 + bt["patriot_ln"]) if bt["patriot_ln"] else 0
-        n += (3 + sams.BLUE_HAWK_TR + sams.BLUE_HAWK_LN) if bt["hawk"] else 0
-        if bt["aaa"]:
-            n += 4 if bt["aaa"] >= 2 else 3
-        if bt["aaa"] >= 2:
-            n += 3
-        return n
+    def _dormant_red_extras(self, tx, ty, manifest, kinds=(AssetKind.EWR, AssetKind.SAM)) -> None:
+        """S89 F (setting `dormant_sites`, XO 2026-11-17): the mission is built as before; then every red EWR and SAM site still alive in the war that is not in it yet is added,
+        with NO unit-limit check (the added groups are tagged, `_counts` ignores them). Detectors never sleep: the EWRs are live (their zones wake the sleeping sites,
+        `_wire_dormant`), every SAM site is dormant (ring = its `RANGE_NM` + WAKE_MARGIN_NM as backstop). Nearest the route first (the order only matters for the wake lists)."""
+        if not self.o.dormant_sites:
+            return
+        st = self.state
+        poly = getattr(self, "_poly", None)
+        key = (lambda a: tm.poly_dist(a.x, a.y, poly)) if poly else (lambda a: dist(a.x, a.y, tx, ty))
+        for kind in (AssetKind.EWR, AssetKind.SAM):
+            if kind not in kinds:
+                continue
+            cands = sorted((a for a in st.assets.values() if a.kind == kind and not a.destroyed and a.id not in self.groups_by_asset and SITES.get(a.variant)), key=lambda a: (key(a), a.id))
+            for a in cands:
+                self._spawn_site(a, SITES[a.variant], manifest, primary=False)
+                if kind == AssetKind.SAM:
+                    self._make_dormant(a, tm.RANGE_NM.get(a.variant, 0), free=True)
+                else:
+                    self._tag_dormant(self.groups_by_asset.get(a.id))      # a live detector, but an added one: the unit limits ignore it
+                self._dormant_red_added.append(a.id)
 
     def _dormant_blue_fields(self, tx, ty) -> None:
         """S89 C (setting `dormant_sites`): the defences of every blue airfield not built yet, as dormant groups (they wake on any red unit in their ring + WAKE_MARGIN_NM,
-        `_wire_dormant`). One pass at the very end of the build, after every flight, patrol and alert pair, nearest to the target first; when a field no longer fits (the
-        limit sees a dormant group at DORMANT_WEIGHT, the 500 ceiling whole) it stops with ONE warning. Fields with flights, the raided field and the covering neighbours were built
-        live before."""
+        `_wire_dormant`). One pass at the very end of the build, nearest to the target first, with NO unit-limit check (the added groups are tagged and `_counts` ignores them).
+        Fields with flights, the raided field and the covering neighbours were built live before."""
         if not (self.o.dormant_sites and self.o.base_defenses):
             return
         st = self.state
         fields = sorted((b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD and b.id not in self.apt and b.airport in self.t.airports),
                         key=lambda b: dist(b.x, b.y, tx, ty))
-        for i, b in enumerate(fields):
-            n = self._base_def_units(b)
-            if n == 0:
-                continue
-            if not self._need_ok(n, int(math.ceil(n * DORMANT_WEIGHT))):
-                self.warns.append(f"{len(fields) - i} blue fields' defences left out to stay under the unit limit (dormant groups count {int(DORMANT_WEIGHT * 100)}%)")
-                break
+        for b in fields:
             self._place_base(b, tx, ty, dormant=True)
             self._dormant_fields.append(b.id)
             self.apt.pop(b.id, None)          # `apt` stays "the fields the mission flies from", as before
@@ -1752,14 +1742,14 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             sz_ = sum(n_ for _, n_ in (comp or []))
             soft_ = a.kind in (AssetKind.C2, AssetKind.AIRFIELD) or a.kind in SUPPLY_BUILDINGS or (a.kind == AssetKind.ARMOR and a.variant == "GARRISON")       # S89 B2: soft sites and garrisons (never an armour column, never an EWR)
             dorm_ = dormant_on_ and a.id not in keep_live_ and ((a.kind == AssetKind.SAM and a.id in route_ids) or soft_)
-            if route_near is not None and a.id in route_ids and a.id not in self.groups_by_asset and (cut_ or not self._fits(sz_, dorm_, (RAID_SAM_RESERVE if a.id in extra_ids_ else 0))):
+            if route_near is not None and a.id in route_ids and a.id not in self.groups_by_asset and (cut_ or not self._fits(sz_, (RAID_SAM_RESERVE if a.id in extra_ids_ else 0))):
                 cut_ = True
                 if all_sams:
                     cut_names_.append(a.name)                            # one warning for the whole tail (v0.41.291: up to every SAM site is a candidate)
                 else:
                     self.warns.append(f"{a.name}: left out to stay under the unit limit (furthest from the intercept point first)")
                 continue
-            if comp and route_sites and not self._fits(sz_, dorm_):
+            if comp and route_sites and not self._fits(sz_):
                 self.warns.append(f"{a.name}: left out to stay under the unit limit")        # v0.41.256: the raid's extra route sites never push the mission over it
                 continue
             if comp:
@@ -1768,7 +1758,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if dorm_ and g_ is not None:                         # S89 B1: asleep until `_wire_dormant` hands it to a detector (or its own ring)
                     self._make_dormant(a, SOFT_WAKE_NM if soft_ else tm.RANGE_NM.get(a.variant, 0))
         if cut_names_:
-            self.warns.append(f"{len(cut_names_)} SAM sites left out to stay under the {self.o.max_units}-unit limit{' (dormant groups count 10%)' if dormant_on_ else ''} (furthest from the intercept point first): " + ", ".join(cut_names_[:6]) + (", ..." if len(cut_names_) > 6 else ""))
+            self.warns.append(f"{len(cut_names_)} SAM sites left out to stay under the {self.o.max_units}-unit limit (furthest from the intercept point first): " + ", ".join(cut_names_[:6]) + (", ..." if len(cut_names_) > 6 else ""))
 
     def _spawn_site(self, a, comp, manifest, primary):
         """ONE group per site: a SAM battery needs its search/track radars, launchers and command post together."""
@@ -3779,6 +3769,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             wake(f"S89 ring {a.id}", a.x, a.y, (ring + WAKE_MARGIN_NM) if ring else 10, [g])
             info["rings"] += 1
         info["dormant_after"] = len(self._dormant_sites)
+        info["red_extras"] = list(self._dormant_red_added)
         info["blue"] = {"fields": list(self._dormant_fields), "groups": len(self._dormant_blue), "units": sum(len(t[3].units) for t in self._dormant_blue)}
         for x_, y_, ring_, g_ in self._dormant_blue:                    # S89 C: blue field defences, the backstop form only (no blue EWR model): any red unit in the ring wakes the group
             zone = self.m.triggers.add_triggerzone(pt(x_, y_), (ring_ + WAKE_MARGIN_NM) * NM, True, f"S89 blue ring {g_.name}")
