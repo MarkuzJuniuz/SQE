@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.465, switch for the dormant-sites log
+The dcs.log lines for waking and sleeping sites can be switched off in the code; they will be off in releases.
+
 ## v0.41.464, Experimental: dormant-sites log in dcs.log
 With the dormant-sites setting on, the mission writes a line to dcs.log whenever a site group wakes, goes back to sleep or wakes again, and a 10-second status line, so frame hitches can be matched to the event that caused them.
 
