@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.467, settings tidied
+Settings: AWACS tuned radio, damage calls, hot starts (ramp and runway), ILS in low visibility and dormant sites moved from the Experimental tab to Mission Build, and the empty Experimental tab is gone for now; the F-14B(U) special-point names are always on (the setting is gone).
+
 ## v0.41.465, switch for the dormant-sites log
 The dcs.log lines for waking and sleeping sites can be switched off in the code; they will be off in releases.
 
