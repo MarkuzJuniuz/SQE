@@ -56,6 +56,7 @@ DORMANT_CEILING_WEIGHT = 0.0     # S89 (XO 2026-11-17): the same for the `limits
 WAKE_MARGIN_NM = 8              # S89 B1 (XO 2026-11-16): a dormant SAM site's wake ring is its engagement ring plus this, so the woken radars reach the player's RWR before engagement range
 DORMANT_SLEEP = True            # S89 E (plan 7.3, XO 2026-11-16): a woken dormant group goes back to AI OFF 30 s after no enemy unit is in any zone that covers it, and wakes again (AI ON) when one enters. False = stage B / C exactly (woken groups stay awake). Read at build time by `_wire_dormant`
 DORMANT_SLEEP_MAX_TRIGGERS = 400  # S89 E judgment call (XO prompt): the most continuous triggers the sleep rules may add to one mission (2 + 2 per covering zone, per group); groups further from the route than the cap allows stay awake once woken
+S89_LOG = True                  # S89 (XO 2026-11-17): the wake / sleep log lines and the 10 s tick in dcs.log (`_s89_log`, `_s89_tick_lua`). True while we test; False in releases (about 250 scripts per mission and a log write each: players' SSDs do not need them). Read at build time. False = no log action at all
 BLUE_AAA_NM = 3                 # S89 C (plan 7.2): a blue airfield AAA group's wake ring (the guns reach about 3 nm); judgment call, plus WAKE_MARGIN_NM
 SOFT_WAKE_NM = 10               # S89 B2 judgment call: a dormant soft site / garrison has no `RANGE_NM` (a Shilka reaches 3 nm, the rest is armour with MANPADS); its wake ring is this plus WAKE_MARGIN_NM
 BARCAP_DETECT_NM = 50           # S89 B1 judgment call: a fighter radar on a fighter-size target sees 40 to 60 nm (from memory); the same figure as tm.FIELD_SAM_DETECT_NM
@@ -3706,9 +3707,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self.m.triggerrules.triggers.append(trig)
 
     @staticmethod
-    def _s89_log(kind: str, text: str):
+    def _s89_log(kind: str, text: str) -> list:
         """S89 (XO 2026-11-17): a trigger action that writes `S89 <kind> t=<mission seconds> <text>` to dcs.log (env.info), so a frame hitch in `S89FrameLog.lua` (`model t=`) can be matched to the wake / sleep that caused it."""
-        return action.DoScript(String('env.info(string.format("S89 %s t=%%.1f %%s", timer.getTime(), [==[%s]==]))' % (kind, text.replace("]==]", "]=]"))))
+        if not S89_LOG:
+            return []
+        return [action.DoScript(String('env.info(string.format("S89 %s t=%%.1f %%s", timer.getTime(), [==[%s]==]))' % (kind, text.replace("]==]", "]=]"))))]
 
     @staticmethod
     def _s89_names(grps, cap=10) -> str:
@@ -3763,7 +3766,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 trig.add_action(action.ActivateGroup(g.id))
                 covers.setdefault(g.id, []).append(zone.id)
                 wakers.setdefault(g.id, []).append(trig)
-            trig.add_action(self._s89_log("wake", f"{label}: {len(grps)} groups: {self._s89_names(grps)}"))
+            for a_ in self._s89_log("wake", f"{label}: {len(grps)} groups: {self._s89_names(grps)}"):
+                trig.add_action(a_)
             self.m.triggerrules.triggers.append(trig)
             return zone
 
@@ -3808,14 +3812,15 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             trig = triggers.TriggerOnce(comment=f"S89 blue ring {g_.name}")
             trig.add_condition(condition.PartOfCoalitionInZone("red", zone.id))
             trig.add_action(action.ActivateGroup(g_.id))
-            trig.add_action(self._s89_log("wake", f"blue ring: {g_.name}"))
+            for a_ in self._s89_log("wake", f"blue ring: {g_.name}"):
+                trig.add_action(a_)
             self.m.triggerrules.triggers.append(trig)
             covers.setdefault(g_.id, []).append(zone.id)
             wakers.setdefault(g_.id, []).append(trig)
         if DORMANT_SLEEP:
             info["sleep"] = self._wire_sleep([(g, a.x, a.y, "blue") for a, g, _r in self._dormant_sites] + [(g_, x_, y_, "red") for x_, y_, _r2, g_ in self._dormant_blue], covers, wakers)
         names_ = [t[1].name for t in self._dormant_sites] + [t[3].name for t in self._dormant_blue]
-        if names_:
+        if names_ and S89_LOG:
             ts_ = triggers.TriggerStart(comment="S89 log tick")
             ts_.add_action(action.DoScript(String(self._s89_tick_lua(names_, getattr(self, "_s89_sleep_flags", {}) if DORMANT_SLEEP else {}))))
             self.m.triggerrules.triggers.append(ts_)
@@ -3865,12 +3870,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             out_all = lambda: [condition.AllOfCoalitionOutsideZone(en, z) for z in zs]
             cont(f"S89 outside timer start {g.name}", [condition.FlagIsTrue(fa), condition.FlagIsFalse(fs), condition.FlagIsFalse(fo)] + out_all(), [action.SetFlag(fo)])
             cont(f"S89 sleep {g.name}", [condition.FlagIsTrue(fa), condition.FlagIsTrue(fo), condition.FlagIsFalse(fs), condition.TimeSinceFlag(fo, 30)] + out_all(),
-                 [action.GroupAIOff(g.id), action.SetFlag(fs), action.ClearFlag(fo), self._s89_log("sleep", g.name)])
+                 [action.GroupAIOff(g.id), action.SetFlag(fs), action.ClearFlag(fo)] + self._s89_log("sleep", g.name))
             sleep_flags[g.name] = fs
             for k, z in enumerate(zs, 1):
                 cont(f"S89 timer reset {k} {g.name}", [condition.FlagIsTrue(fo), condition.FlagIsFalse(fs), condition.PartOfCoalitionInZone(en, z)], [action.ClearFlag(fo)])
                 cont(f"S89 wake again {k} {g.name}", [condition.FlagIsTrue(fa), condition.FlagIsTrue(fs), condition.PartOfCoalitionInZone(en, z)],
-                     [action.GroupAIOn(g.id), action.ClearFlag(fs), self._s89_log("wake again", g.name)])
+                     [action.GroupAIOn(g.id), action.ClearFlag(fs)] + self._s89_log("wake again", g.name))
         return {"groups": n_sl, "capped": capped, "continuous": used}
 
     def _field_zone(self, a, tx, ty):
