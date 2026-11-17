@@ -53,6 +53,7 @@ RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor t
 PARKED_MAX = 8               # v0.41.297 (XO 2026-11-05: a counter-air strike has nothing to hit, the ramp is empty): at most this many parked jets (v0.41.324: real units, was 12 statics) stand on the target field's ramp. Judgment call: a statics-count cap for VR; the wing's true strength stays in the state (a static costs `carcass_weight` of a unit)
 DORMANT_WEIGHT = 0.1             # S89 (XO 2026-11-16, plan section 6): a late-activated belt costs about 10% of a live one (+0.39 of +3.83 ms for 400 units), so a tagged dormant group counts this share of its units toward `max_units`. The 500 ceiling counts it whole (a woken group stays live). Judgment call: the measured share, rounded
 WAKE_MARGIN_NM = 8              # S89 B1 (XO 2026-11-16): a dormant SAM site's wake ring is its engagement ring plus this, so the woken radars reach the player's RWR before engagement range
+SOFT_WAKE_NM = 10               # S89 B2 judgment call: a dormant soft site / garrison has no `RANGE_NM` (a Shilka reaches 3 nm, the rest is armour with MANPADS); its wake ring is this plus WAKE_MARGIN_NM
 BARCAP_DETECT_NM = 50           # S89 B1 judgment call: a fighter radar on a fighter-size target sees 40 to 60 nm (from memory); the same figure as tm.FIELD_SAM_DETECT_NM
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
 SCRUB_POINT_NM = 20           # v0.41.223: a package flight's SCRUB point (where a scrubbed flight goes first) sits this far from its home field, on the bearing of its route's last point (the same shape as the stand-off ABORT point)
@@ -1103,6 +1104,25 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         w = int(math.ceil(n * DORMANT_WEIGHT)) if dormant else n
         return self.o.max_units - c["units"] >= w + 2 + extra and ceil_ - c["units_full"] >= n + 2 + extra
 
+    def _make_dormant(self, a, ring_nm):
+        """S89: put the group just built for asset `a` to sleep (late-activated, tagged, handed to `_wire_dormant` with its ring radius in nm). One recipe for the
+        route SAM sites (B1) and the soft sites / garrisons (B2)."""
+        g = self.groups_by_asset.get(a.id)
+        if g is None:
+            return None
+        g.late_activation = True
+        self._tag_dormant(g)
+        self._dormant_sites.append((a, g, ring_nm))
+        return g
+
+    def _need_ok(self, full: int, weighted: int) -> bool:
+        """S89 B2: room for something that needs `full` units against the ceiling and `weighted` against `max_units` (a dormant guard: ceil(n * DORMANT_WEIGHT))."""
+        from . import limits
+        if self.o.max_units >= 10 ** 5:
+            return True
+        c = self._counts()
+        return self.o.max_units - c["units"] >= weighted and (self.o.unit_ceiling or limits.unit_ceiling()) - c["units_full"] >= full
+
     def _tag_dormant(self, g):
         """S89: tag a group as dormant (late-activated until a detector wakes it) so `_counts` weighs it DORMANT_WEIGHT. Tag the group, never test `late_activation`
         alone: flights, alert pairs and reliefs are late-activated for timing and must keep counting whole. Nothing calls this yet (stage B)."""
@@ -1156,18 +1176,27 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return
         home = min((b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD), key=lambda b: dist(b.x, b.y, tx, ty), default=None)
         built = used = 0
+        dorm_on = bool(o.dormant_sites) and not only_raid                  # S89 B2: red's guards sleep (never what a raid is about)
         for d_, aid, side, a in cands:
-            need = math.ceil(len(supply_parts(a.kind, a.variant)) * o.carcass_weight) + ((road_sites.guard_units(a, self.d.level) if road_sites.is_road(a) else 1) if side == "red" else 0)         # v0.41.221: the buildings count like wrecks (carcass_weight), and red's Shilka guard is a whole unit
-            if self._units_room() < need or (max_units is not None and used + need > max_units):
+            bld_ = math.ceil(len(supply_parts(a.kind, a.variant)) * o.carcass_weight)
+            guard_ = ((road_sites.guard_units(a, self.d.level) if road_sites.is_road(a) else 1) if side == "red" else 0)
+            need = bld_ + guard_         # v0.41.221: the buildings count like wrecks (carcass_weight), and red's Shilka guard is a whole unit
+            dorm_ = dorm_on and side == "red"
+            if dorm_:                    # S89 B2: the limit sees the sleeping guard at DORMANT_WEIGHT, the ceiling whole
+                if not self._need_ok(need, bld_ + int(math.ceil(guard_ * DORMANT_WEIGHT))) or (max_units is not None and used + need > max_units):
+                    break
+            elif self._units_room() < need or (max_units is not None and used + need > max_units):
                 break
             if side == "red":
                 self._spawn_site(a, SOFT.get(a.kind), manifest, primary=False)
+                if dorm_:
+                    self._make_dormant(a, SOFT_WAKE_NM)
             elif home is not None:
                 self._spawn_raid_target(package, home, aid, a.x, a.y, manifest)
             built += 1
             used += need
         if built < len(cands) and max_units is None:
-            self.warns.append(f"{len(cands) - built} supply sites inside the {o.merge_radius_nm} nm merge radius left out to stay under the {o.max_units}-unit limit (furthest first)")
+            self.warns.append(f"{len(cands) - built} supply sites inside the {o.merge_radius_nm} nm merge radius left out to stay under the {o.max_units}-unit limit{' (dormant groups count 10%)' if o.dormant_sites and not only_raid else ''} (furthest first)")
 
     def _place_carcasses(self) -> None:
         """Wrecks for every damaged or destroyed ground site near the route. Trimmed to what fits under the unit limit: the furthest
@@ -1669,7 +1698,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 continue
             comp = SITES.get(a.variant) if a.kind in (AssetKind.SAM, AssetKind.EWR) else SOFT.get(a.kind)
             sz_ = sum(n_ for _, n_ in (comp or []))
-            dorm_ = dormant_on_ and a.kind == AssetKind.SAM and a.id in route_ids and a.id not in keep_live_
+            soft_ = a.kind in (AssetKind.C2, AssetKind.AIRFIELD) or a.kind in SUPPLY_BUILDINGS or (a.kind == AssetKind.ARMOR and a.variant == "GARRISON")       # S89 B2: soft sites and garrisons (never an armour column, never an EWR)
+            dorm_ = dormant_on_ and a.id not in keep_live_ and ((a.kind == AssetKind.SAM and a.id in route_ids) or soft_)
             if route_near is not None and a.id in route_ids and a.id not in self.groups_by_asset and (cut_ or not self._fits(sz_, dorm_, (RAID_SAM_RESERVE if a.id in extra_ids_ else 0))):
                 cut_ = True
                 if all_sams:
@@ -1684,9 +1714,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 self._spawn_site(a, comp, manifest, primary=is_tgt)
                 g_ = self.groups_by_asset.get(a.id)
                 if dorm_ and g_ is not None:                         # S89 B1: asleep until `_wire_dormant` hands it to a detector (or its own ring)
-                    g_.late_activation = True
-                    self._tag_dormant(g_)
-                    self._dormant_sites.append((a, g_, tm.RANGE_NM.get(a.variant, 0)))
+                    self._make_dormant(a, SOFT_WAKE_NM if soft_ else tm.RANGE_NM.get(a.variant, 0))
         if cut_names_:
             self.warns.append(f"{len(cut_names_)} SAM sites left out to stay under the {self.o.max_units}-unit limit{' (dormant groups count 10%)' if dormant_on_ else ''} (furthest from the intercept point first): " + ", ".join(cut_names_[:6]) + (", ..." if len(cut_names_) > 6 else ""))
 
