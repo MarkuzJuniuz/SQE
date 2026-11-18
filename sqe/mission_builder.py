@@ -50,7 +50,7 @@ TARCAP_LEAD_S = 120           # v0.41.115 (was 0; XO 2026-10-22: fighters in fir
                               # v0.41.0's 5-minute head start, which let the SA-10 kill six waiting Eagles (judgment call). v0.41.1 had it arrive WITH the HARM shooters.
 FIELD_DETECT_NM = tm.FIELD_DETECT_NM   # an alert field scrambles when blue comes within this of the field (less for fields close to the fight)
 RUNWAY_HALF_LEN_M = 2600.0    # v0.41.48: ground groups keep out of a corridor this far either side of the airfield reference point along each runway heading (pydcs has only the heading; judgment call, long enough for the longest Caucasus strips)
-PARKED_MAX = 8               # v0.41.297 (XO 2026-11-05: a counter-air strike has nothing to hit, the ramp is empty): at most this many parked jets (v0.41.324: real units, was 12 statics) stand on the target field's ramp. Judgment call: a statics-count cap for VR; the wing's true strength stays in the state (a static costs `carcass_weight` of a unit)
+PARKED_MAX = 8               # v0.41.297 (XO 2026-11-05: a counter-air strike has nothing to hit, the ramp is empty): at most this many parked jets (v0.41.324: real units, was 12 statics) stand on the target field's ramp. Judgment call: a statics-count cap for VR; the wing's true strength stays in the state (a static costs `wreck_static_weight` of a unit)
 DORMANT_WEIGHT = 0.0             # S89 (XO 2026-11-17): the share of an ADDED group's units that `max_units` counts: 0 = the limit ignores them. Only the groups added after the mission is built as before (S89 C blue fields, S89 F red EWR / SAM extras) are tagged; the belt and supply guards of B1 / B2 count whole, exactly as with the setting off
 DORMANT_CEILING_WEIGHT = 0.0     # S89 (XO 2026-11-17): the same for the `limits.json` ceiling: the added groups are not counted against it (a probe showed 600+ units at 100+ FPS); 1.0 counts them whole again
 WAKE_MARGIN_NM = 8              # S89 B1 (XO 2026-11-16): a dormant SAM site's wake ring is its engagement ring plus this, so the woken radars reach the player's RWR before engagement range
@@ -203,8 +203,8 @@ LASER = ["1688", "1687", "1686", "1685", "1684", "1683", "1682", "1681"]
 
 @dataclass
 class MissionOptions:
-    launch_offset_s: int = 60           # takeoff buffer: you are on the cat/runway at start; the briefed takeoff is this many SECONDS in (negative = hurry)
-    hold_minutes: int = 1               # (S77: was 2) slack at MARSHAL before PUSH, minutes. Negative = you must be quicker than the natural pace
+    takeoff_buffer_s: int = 60          # takeoff buffer: you are on the cat/runway at start; the briefed takeoff is this many SECONDS in (negative = hurry)
+    marshal_slack_min: int = 1          # (S77: was 2) slack at MARSHAL before PUSH, minutes. Negative = you must be quicker than the natural pace
     cap_minutes: int = 40               # time on station for CAP flights
     hot_ramp_scrambles: bool = False    # v0.41.80: alert / scramble pairs at land fields start hot on the ramp (see _alert_group)
     hot_runway_starts: bool = False     # v0.41.96: AI package flights from land fields other than yours start on the runway (see _hot_slot)
@@ -234,13 +234,13 @@ class MissionOptions:
     ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
     dormant_sites: bool = False         # S89: red SAM sites on the route start late-activated and wake by detector (see `_wire_dormant`)
     carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
-    carcass_weight: float = 0.25        # how much of a live unit one wreck or one live static building counts toward the unit limit (v0.41.221: the buildings too; the name stays until refactor week)
+    wreck_static_weight: float = 0.25   # how much of a live unit one wreck or one live static building counts toward the unit limit (v0.41.221: the buildings too; renamed in S88 R2)
     carcass_range_nm: int = 40          # only sites this close to the route get wrecks
     full_map: bool = False              # stress test: build everything that exists (see _spawn_everything); the unit limit is off
     max_units: int = 250                # the unit limit of the BASE mission (wrecks are trimmed, furthest first, to fit under it); merged packages' units do not count (v0.41.104)
     unit_ceiling: int = 0               # most units in total, merged packages included (0 = sqe/data/limits.json, 500); a runaway guard
     merge_radius_nm: int = 15           # v0.41.209 (XO): also the radius inside which every supply site (fuel farm, depot, both sides) is built round the target: the performance knob
-    merge_enemy_pct: int = 100          # folded packages: biggest enemy-air need + this % of the others'
+    enemy_air_sum: int = 100            # folded packages: biggest enemy-air need + this % of the others' (S88 R2: no setting, no UI: 100 for everybody)
     carrier_min_enemy_nm: int = 150     # the carrier group is moved back along the line of retreat until it is at least this far from the fight
     player_is_client: bool = False
     carrier_speed_kts: int = 15
@@ -421,7 +421,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._detect_full = detection.any_full(package, extras)           # v0.41.346 (Phase 7a): red scrambles for this mission only if it saw ANY package in it (the stored verdict, `detection.cast`)
         package = self._gather_support(package, extras)
         air_pkg = copy.copy(package)
-        air_pkg.n_def = folded_n_def(package, extras, o.merge_enemy_pct)       # enemy air: the biggest package's need plus a share of the others'
+        air_pkg.n_def = folded_n_def(package, extras, o.enemy_air_sum)       # enemy air: the biggest package's need plus a share of the others'
         out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
 
         theatres.use(st.theatre)
@@ -531,7 +531,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             manifest.add("support", key_, [nm_], label=nm_.rsplit(" ", 1)[0])
 
         # ---- timeline: YOUR times. Roles are staggered around the strikers' push (sweep, SEAD, escorts go first) ---------
-        launch_s = float(o.launch_offset_s)
+        launch_s = float(o.takeoff_buffer_s)
         skip1 = {tgt_asset.id} if (tgt_asset is not None and package.objective.type == ObjectiveType.DEAD) else ()
         geom.tier = self._pick_tier(geom, pf.role, pspec.profile, tx, ty, skip1)
         self._flight_plans(geom, package, tx, ty, skip1)
@@ -551,7 +551,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         mshl = next((w for w in pw if w.action in ("HOLD", "CAPORBIT")), pw[-1])
         k = pw.index(mshl)
         leg_m = leg_seconds(mshl, pw[k + 1]) if (mshl.action == "HOLD" and k + 1 < len(pw)) else 0.0
-        player_push = math.floor((mshl.eta_s + (0 if pf.role == Role.CAP else o.hold_minutes * 60) + leg_m) / 60.0 + 0.5) * 60.0     # S77 (XO 2026-11-14): nearest minute, not up, so a 1-minute hold stays about a minute (was ceil: 1 to 2)
+        player_push = math.floor((mshl.eta_s + (0 if pf.role == Role.CAP else o.marshal_slack_min * 60) + leg_m) / 60.0 + 0.5) * 60.0     # S77 (XO 2026-11-14): nearest minute, not up, so a 1-minute hold stays about a minute (was ceil: 1 to 2)
         player_push = max(player_push, math.ceil((dep_s + 120) / 60.0) * 60.0)
         leave_s = hold_leave_s(pw, player_push)
         P0 = player_push - stagger(package, pf.role)                         # the strikers' push; everyone else is relative to it
@@ -1128,7 +1128,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
     def _counts(self) -> dict:
         """Units for the VR budget. A dead static (wreck) and a live static (a supply site's building) are cheap, no AI and they never move, so both count
-        `carcass_weight` of a unit (v0.41.221, XO 2026-10-31: the buildings used to count whole units); 'wrecks' and 'statics' are how many there are.
+        `wreck_static_weight` of a unit (v0.41.221, XO 2026-10-31: the buildings used to count whole units); 'wrecks' and 'statics' are how many there are.
         S89: 'units' weighs a group tagged by `_tag_dormant` DORMANT_WEIGHT per unit (what `max_units` limits); 'units_full' weighs it DORMANT_CEILING_WEIGHT (what the ceiling limits); 'units_total' counts every unit whole (reporting)."""
         g = u = u_w = u_c = w = n_s = 0
         for coal in self.m.coalition.values():
@@ -1145,7 +1145,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         g += 1; u += len(grp.units)
                         u_w += len(grp.units) * (DORMANT_WEIGHT if dz_ else 1)
                         u_c += len(grp.units) * (DORMANT_CEILING_WEIGHT if dz_ else 1)
-        st_ = int(math.ceil((w + n_s) * self.o.carcass_weight))
+        st_ = int(math.ceil((w + n_s) * self.o.wreck_static_weight))
         return {"groups": g, "units": int(math.ceil(round(u_w, 6))) + st_, "units_full": int(math.ceil(round(u_c, 6))) + st_, "units_total": u + st_, "wrecks": w, "statics": n_s}
 
     def _spawn_supply_in_radius(self, package, tx, ty, manifest, only_raid: bool = False, max_units: int | None = None) -> None:
@@ -1176,9 +1176,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         built = used = 0
         dorm_on = bool(o.dormant_sites) and not only_raid                  # S89 B2: red's guards sleep (never what a raid is about)
         for d_, aid, side, a in cands:
-            bld_ = math.ceil(len(supply_parts(a.kind, a.variant)) * o.carcass_weight)
+            bld_ = math.ceil(len(supply_parts(a.kind, a.variant)) * o.wreck_static_weight)
             guard_ = ((road_sites.guard_units(a, self.d.level) if road_sites.is_road(a) else 1) if side == "red" else 0)
-            need = bld_ + guard_         # v0.41.221: the buildings count like wrecks (carcass_weight), and red's Shilka guard is a whole unit
+            need = bld_ + guard_         # v0.41.221: the buildings count like wrecks (wreck_static_weight), and red's Shilka guard is a whole unit
             dorm_ = dorm_on and side == "red"
             if self._units_room() < need or (max_units is not None and used + need > max_units):       # S89 B2: a sleeping guard counts whole, as with the setting off
                 break
@@ -1199,7 +1199,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         o, st = self.o, self.state
         if not o.carcasses:
             return
-        w = max(0.05, float(o.carcass_weight))
+        w = max(0.05, float(o.wreck_static_weight))
         budget = int(max(0, self._units_room()) / w)
         if budget <= 0:
             return

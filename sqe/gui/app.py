@@ -307,8 +307,8 @@ class MissionsPage(QWidget):
         if getattr(self, "sess", None) is None or getattr(self, "_loading", False):
             return
         s = self.sess.settings
-        s.autoskip_stand_down, s.autoskip_night, s.autoskip_duration_on = self.auto_stand.isChecked(), self.auto_night.isChecked(), self.auto_dur_on.isChecked()
-        s.autoskip_hours = self.auto_dur.value()
+        s.autoskip_stand_down, s.autoskip_night, s.autoskip_crew_rest = self.auto_stand.isChecked(), self.auto_night.isChecked(), self.auto_dur_on.isChecked()
+        s.autoskip_crew_rest_hours = self.auto_dur.value()
         try:
             s.save()
         except OSError:
@@ -349,7 +349,7 @@ class MissionsPage(QWidget):
         if not getattr(self.win, "_auto_busy", False):               # Phase 11: the Autoskip boxes show the saved choice (not while it is running)
             cs = sess.settings
             self.auto_stand.setChecked(bool(cs.autoskip_stand_down)); self.auto_night.setChecked(bool(cs.autoskip_night))
-            self.auto_dur_on.setChecked(bool(cs.autoskip_duration_on)); self.auto_dur.setValue(int(cs.autoskip_hours))
+            self.auto_dur_on.setChecked(bool(cs.autoskip_crew_rest)); self.auto_dur.setValue(int(cs.autoskip_crew_rest_hours))
         self._loading = False
         mine_only = sess.settings.list_filter != "all"
         visible = [p for p in sess.packages() if (bool(sess.flyable(p)) or not mine_only)]
@@ -505,7 +505,7 @@ class MissionsPage(QWidget):
             return
         tx, ty = PackageBuilder(st).target_xy(p.objective)
         th = threat_lines(st, tx, ty)[:4]
-        nd = folded_n_def(p, ex, self.sess.settings.merge_enemy_pct)
+        nd = folded_n_def(p, ex, self.sess.options.enemy_air_sum)
         self.bl.addWidget(self._label((f"Expect about {nd} hostile fighters at the target" + (f" (includes {', '.join('#%d' % x.number for x in ex)})" if ex else "") + ".  " if nd else "") +
                                       "Threats near target: " + ("; ".join(th) if th else "none known"), None, theme.AMBER))
         self.bl.addStretch(1)

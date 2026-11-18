@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.468, setting names match the dialog
+Internal: a few setting names now match the labels in the dialog; older settings files load as before.
+
 ## v0.41.467, settings tidied
 Settings: AWACS tuned radio, damage calls, hot starts (ramp and runway), ILS in low visibility and dormant sites moved from the Experimental tab to Mission Build, and the empty Experimental tab is gone for now; the F-14B(U) special-point names are always on (the setting is gone).
 

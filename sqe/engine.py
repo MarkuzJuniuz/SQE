@@ -1003,7 +1003,7 @@ class Session:
 
     def merge_candidates(self, pkg: Package, unseen: bool = False) -> list:
         """Packages folded into a mission built around `pkg`: every package whose target lies inside the merge circle (Settings: radius, centred by merge_center),
-        starting up to `merge_fwd_min` minutes AFTER it or up to `merge_back_min` minutes BEFORE it (those are already underway when the mission starts). At most six,
+        starting up to `merge_later_min` minutes AFTER it or up to `merge_earlier_min` minutes BEFORE it (those are already underway when the mission starts). At most six,
         closest to the centre first, so the unit limit drops the furthest first. Empty when merging is off.
         v0.41.351 (XO 2026-11-10, S8): a land raid (the intercept package; its point is the raided field, supply site or garrison, `_raid_xy`) folds in like any package.
         v0.41.398 (S39): a raid also counts along its way in (`_raid_way`, its wing's field to its target). When `pkg` is a land raid, a package folds in when its point is
@@ -1013,8 +1013,8 @@ class Session:
         if self.settings.merge_mode != "area":
             return []
         hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
-        back = max(0, int(getattr(self.settings, "merge_back_min", 15)))
-        fwd = max(0, int(getattr(self.settings, "merge_fwd_min", 30)))
+        back = max(0, int(getattr(self.settings, "merge_earlier_min", 15)))
+        fwd = max(0, int(getattr(self.settings, "merge_later_min", 30)))
         R = self.merge_radius_m()
         c = self.merge_center(pkg, R)
         if c is None:
@@ -1122,8 +1122,8 @@ class Session:
             raise RuntimeError("; ".join(problems))
         pkg = next(p for p in self.packages() if p.number == package_number)
         PackageBuilder(st, self.d).assign_player(pkg, flight_id)
-        self.options.hold_minutes = int(self.settings.hold_minutes)
-        self.options.launch_offset_s = int(self.settings.takeoff_buffer_s)
+        self.options.marshal_slack_min = int(self.settings.marshal_slack_min)
+        self.options.takeoff_buffer_s = int(self.settings.takeoff_buffer_s)
         self.options.ai_unlimited_fuel = bool(self.settings.ai_unlimited_fuel)
         self.options.hot_ramp_scrambles = bool(getattr(self.settings, "hot_ramp_scrambles", False))
         self.options.hot_runway_starts = bool(getattr(self.settings, "hot_runway_starts", False))
@@ -1134,7 +1134,7 @@ class Session:
         self.options.fighter_engage_minutes = int(self.settings.fighter_engage_minutes)
         self.options.player_is_ai = bool(self.ai_test)
         self.options.fighter_standoff = bool(self.settings.fighter_standoff)
-        self.options.carcasses = bool(getattr(self.settings, 'carcasses', True)); self.options.carcass_weight = max(5, int(getattr(self.settings, 'carcass_weight_pct', 25))) / 100.0
+        self.options.carcasses = bool(getattr(self.settings, 'carcasses', True)); self.options.wreck_static_weight = max(5, int(getattr(self.settings, 'wreck_static_weight_pct', 25))) / 100.0
         self.options.dormant_sites = bool(getattr(self.settings, 'dormant_sites', False))
         self.options.reactive = bool(getattr(self.settings, 'reactive', True))
         self.options.ecm_script = bool(getattr(self.settings, 'ecm_script', False))
@@ -1144,12 +1144,12 @@ class Session:
         self.options.splash_damage = bool(getattr(self.settings, 'splash_damage', True))
         self.options.ai_land_carrier = str(getattr(self.settings, 'ai_land_carrier', "always"))
         self.options.ai_land_field = str(getattr(self.settings, 'ai_land_field', "never"))
-        self.options.max_units = int(self.settings.merge_max_units)
+        self.options.max_units = int(self.settings.max_units)
         self.options.merge_radius_nm = int(getattr(self.settings, 'merge_radius_nm', 15))
         self.options.full_map = bool(self.full_map)
         if self.full_map:
             self.options.max_units = 10 ** 6
-        self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct); self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear')); self.options.ils_low_vis = bool(getattr(self.settings, 'ils_low_vis', True))
+        self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear')); self.options.ils_low_vis = bool(getattr(self.settings, 'ils_low_vis', True))
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
         extras = list(self.merge_candidates(pkg, unseen=True))
@@ -1159,7 +1159,7 @@ class Session:
             pre = self._preroll([p for p in list(extras) + ruins if not p.extra.get("done_roll") and p.objective.type != ObjectiveType.FLEET_DEFENSE])      # a raid shows no ruins: nothing to roll
             pre.update({p.id: p.extra["done_roll"] for p in ruins if p.extra.get("done_roll")})          # v0.41.337: an earlier turn's package was resolved already: its verdict is what burns
         from . import limits
-        cap = 10 ** 6 if self.full_map else min(int(self.settings.merge_max_units), limits.unit_ceiling())          # v0.41.131: the unit limit counts the whole mission, merged packages included
+        cap = 10 ** 6 if self.full_map else min(int(self.settings.max_units), limits.unit_ceiling())          # v0.41.131: the unit limit counts the whole mission, merged packages included
         while True:
             with contextlib.redirect_stdout(io.StringIO()):      # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
                 res = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz, extras, ruins, pre)
