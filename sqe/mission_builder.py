@@ -27,6 +27,7 @@ from . import barcap, briefing as brief, callsigns, detection, profiles, relief,
 from . import seacheck as seac
 from . import pydcs_patch
 from . import threatmap as tm
+from . import f14_scheme
 from .aircraft import AIRCRAFT, F14_KEYS
 
 TUNE_PARAMS = {"F-16C": ("COMM1_FREQ",), "A-10C": ("UHF_FREQ",), "FA-18C": ("COMM1_FREQ", "COMM2_FREQ"), "F-14BU": ("COMM1_FREQ", "COMM2_FREQ"), "F-14B": ("COMM1_FREQ", "COMM2_FREQ")}   # v0.41.215: the player's radios SQE can read (XO's probes 2026-10-28 / 30); the F-15C (FC3) has none
@@ -360,6 +361,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
         self._support_lbl = {}                                          # v0.41.215: tanker / AWACS unit name -> its label, for the damage calls
         self._gates = []                                                # DEAD flights that turn back when the site's radars are still up
+        self._f14ab = None                                              # S103d: the plain F-14B player's waypoint scheme once built: {"keep": [(name, x, y)], "ntp": [(code, name, x, y)], "extra": [(code, x, y)]} (kneeboard labels)
         self._route_end = {}                                            # v0.41.223: group name -> where its route ended before the SCRUB point was added (the home leg is built from there)
         self._armor_comps = {}                                          # S92b: asset id -> its rolled armor composition (see _armor_site_comp)
         self._cas_stock = {}                                            # S92: package id -> True when the AI CAS flight keeps the stock Maverick + cluster kit and attacks the column's air defence unit by unit
@@ -640,10 +642,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             win = {"PUSH": "+/-30s", "TGT": "+/-1m", "SEAD": "+/-1m"}.get(r[0], "")
             if r[0] == "MSHL":
                 win = f"hold to {clock(leave_s)}"
-            kn_rows.append({"wp": pspec.wp_label(i), "name": r[0], "time": tstr, "alt": r[4], "kts": str(r[5]), "leg": leg, "win": win,
+            kn_rows.append({"wp": self._f14ab_label(i, r, n_route) if self._f14ab else pspec.wp_label(i), "name": r[0], "time": tstr, "alt": r[4], "kts": str(r[5]), "leg": leg, "win": win,
                             "note": r[6] if (r[0] in ("TGT", "TKR", "RTB", "DIVERT", "TAKEOFF") or (r[0] == "CAP1" and any(w_.orbit for w_ in pw))) else ""})
             if r[0] not in ("TAKEOFF", "DIVERT", "TKR", "BULLS"):
                 hook_wps.append((pspec.wp_label(i), r[0], r[1], r[2]))
+        for code, x_, y_ in (self._f14ab or {}).get("extra", []):             # S103d: the nav target points the planner has no row for (the defended point, the hostile area)
+            kn_rows.append({"wp": code, "name": code, "time": "", "alt": "", "kts": "", "leg": "", "win": "", "note": "Navigation target point"})
 
         # ---- codes, fuel, text, hook, kneeboard -----------------------------------------------------------------------------
         mode3 = self._mode3(package, pf)
@@ -664,6 +668,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             tune_flags = self._tune_triggers(pf.aircraft, tune_mhz)           # v0.41.215: [] for a jet whose radio cannot be read: always counts as tuned
         if tune_flags:
             x["tune_mhz"] = tune_mhz
+        t1_ = next((s_ for s_ in package.support if s_.slot == "TANKER1"), None)
+        if self._f14ab and t1_ is not None:               # S103d: the plain F-14B has no tanker waypoint: the briefing and the card say where it is by TACAN
+            x["tkr_line"] = f"Tanker {t1_.label}: TACAN {plan.tacan.get('TANKER1', '')}, {plan.freq('TANKER1'):.3f} MHz. It is not a waypoint: find it on the A/A TACAN."
         text = brief.build_text(st, package, tl, plan, self.rng, (tx, ty), x)
         m.set_description_text(text["full"])
         m.set_description_bluetask_text(text["blue_task"])
@@ -701,9 +708,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
             ctx = {"date": date_str, "callsign": f"{pf.callsign}-1", "role": task_label(pf, package.objective), "objective": package.objective.description,
                    "comm1": plan.comm1, "comm2": plan.comm2, "fc3": pspec.fc3, "waypoints": kn_rows, "jet": pspec.display,
-                   "numbering": (f"{pspec.first_wp_label} for the start point, then 1, 2, 3..." if pspec.first_wp_label else "waypoint 1 = start point"),
+                   "numbering": (("0 for the start point, then 1, 2, 3, HB = landing. IP / ST / DP / HA are navigation target points; every other point is on this card only" if self._f14ab else
+                                  f"{pspec.first_wp_label} for the start point, then 1, 2, 3...") if pspec.first_wp_label else "waypoint 1 = start point"),
                    "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": weather.metar(self.wx), "mode3": mode3, "laser": laser,
-                   "bullseye": latlon(bx, by, self.t), "whois": whois, "link16_off": not getattr(self.state, "link16", True), "threats": text["threats"], "n_def": air_pkg.n_def, "target_data": tdata,
+                   "tkr_line": x.get("tkr_line", ""), "bullseye": latlon(bx, by, self.t), "whois": whois, "link16_off": not getattr(self.state, "link16", True), "threats": text["threats"], "n_def": air_pkg.n_def, "target_data": tdata,
                    "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "push": m_["push"], "tot": m_["tot"], "rtb": m_["rtb"], "flights": m_["flights"],
                                "status": ("already struck, heading home; its target is in ruins" if m_.get("struck") else "airborne when you start" if m_.get("underway") else "")} for m_ in merged if not m_.get("unseen")],
                    "intel": [l_.replace(" are within reach of the target area and may be sent to reinforce.", " may reinforce.").replace(" are on cockpit alert and may launch to help.", " on alert, may launch.") for l_ in self._intel],
@@ -1301,6 +1309,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._scrub_point(package, f, g, base, wps, tot_s)
         self._cas_done(package, f, g, armor, ai_a2g)
         self._home_leg(f, g, base, wps, idx, hold_end, stop, special)
+        if self._f14ab_player(f):
+            self._f14ab_scheme(package, f, g, wps, first, geom, gate)
         if gate is not None and gate.get("ai") and gate.get("dead"):
             self._gate_stop_slack(g, int(gate.get("acap") or 0))
         if gate is not None:
@@ -2303,11 +2313,77 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _trailing_steerpoints(self, package, rows, spec):
         """DIVERT, TKR and BULLSEYE come after RTB on the player's group, like Retribution (tanker/bullseye last)."""
         pf = package.player_flight
+        if self._f14ab_player(pf):
+            return                                       # S103d: the plain F-14B has three waypoints: DIVERT, TKR and BULLS are on the card only (the tanker by its TACAN, the bullseye is in the jet)
         g = next(gr for fl, gr in self.flight_groups if fl is pf)
         pt = lambda x, y: mapping.Point(x, y, self.t)
         for name, x, y, _t, alt, kts, _n in rows:
             a = 20000 * FT if name == "TKR" else 5000 * FT
             g.add_waypoint(pt(x, y), a, (spec.profile.aar_kts if name == "TKR" else 300) * KPH, name)
+
+    # ---- S103d: the plain F-14B player's waypoint scheme --------------------------------------------------------------------
+    def _f14ab_player(self, f) -> bool:
+        """Your own flight in the plain F-14B (not the all-AI test, not the B(U), whose X-name scheme stays): the jet has three numbered waypoints."""
+        return bool(f is not None and f.is_player and not self.o.player_is_ai and f.aircraft == "F-14B")
+
+    def _f14ab_label(self, i, r, n_route):
+        """The card's WP column for row `i` (1 = TAKEOFF) of the plain F-14B player: 0 the start, 1 to 3 the kept route points, HB the landing, the nav target point's code where a point is one
+        (ST, IP), and "-" for a point that is on the card only."""
+        fk = self._f14ab
+        if i == 1:
+            return "0"
+        if i == n_route:
+            return "HB"
+        for k, (nm, x, y) in enumerate(fk["keep"], 1):
+            if r[0] == nm and abs(r[1] - x) < 1.0 and abs(r[2] - y) < 1.0:
+                return str(k)
+        for code, nm, x, y in fk["ntp"]:
+            if r[0] == nm and abs(r[1] - x) < 1.0 and abs(r[2] - y) < 1.0:
+                return code
+        return "-"
+
+    def _f14ab_scheme(self, package, f, g, wps, first, geom, gate):
+        """S103d (XO 2026-11-18, probe slot B-B): the group keeps the takeoff point, at most three route points as waypoints 1 to 3 and the landing point (the Home Base); the other route points are
+        dropped from the group and the surface target and the IP (when it is not waypoint 2) become Editor Navigation Target Points `ST` / `IP`, plus `DP` (a fighter job's defended point: the package
+        target, the fleet or the field) and `HA` (the nearest live SAM site with 10 nm reach or more within 80 nm of the target). One of each code. Which points are which: `f14_scheme.choose`.
+        The route SHAPE is the planner's (the card still lists every point). Tasks hung on a dropped point go with it (a human lead's AI wingmen keep the tasks of the kept points: the IP's attack task
+        and a station's orbit). Indices the hook keeps into this group's points (the DEAD gate, the CAS go-home entry) are re-mapped."""
+        route = list(wps[first:])
+        pts = g.points
+        if len(pts) != len(route) + 2:                       # an unexpected extra point: leave the route as it is, never guess
+            self.warns.append("F-14B: the route has points the 3-waypoint scheme did not expect; left as planned.")
+            return
+        keep, st_i, ip_i = f14_scheme.choose(route, f.role.value in f14_scheme.GROUND_ROLES)
+        kept = [1 + i for i in keep]
+        old = list(pts)
+        pts[:] = [old[0]] + [old[j] for j in kept] + [old[-1]]
+
+        def remap(j):                                        # an old index -> where it points in the shorter list (the next kept point at or after it)
+            return 1 + sum(1 for k in kept if k < j) if j < len(old) - 1 else len(pts) - 1 + (j - (len(old) - 1))
+        for gt in ([gate] if gate is not None else []) + [x_ for x_ in self._gates if x_.get("grp") == g.name]:
+            for key in ("from", "to"):
+                if gt.get(key) is not None:
+                    gt[key] = remap(int(gt[key]))
+        for c_ in self._casdone:
+            if c_.get("grp") == g.name:
+                c_["to"] = remap(int(c_["to"]))
+        ntp, extra = [], []
+        for code, i in (("IP", ip_i), ("ST", st_i)):
+            if i is not None:
+                w = route[i]
+                g.add_nav_target_point(self._pt(w.x, w.y), code)
+                ntp.append((code, w.name, w.x, w.y))
+        if f.role.value not in f14_scheme.GROUND_ROLES:
+            dp = (geom.tx, geom.ty)
+            g.add_nav_target_point(self._pt(*dp), "DP")
+            extra.append(("DP", dp[0], dp[1]))
+        sam = [(math.hypot(a.x - geom.tx, a.y - geom.ty), a) for a in self.state.assets.values()
+               if a.kind == AssetKind.SAM and not a.destroyed and tm.RANGE_NM.get(a.variant, 0) >= 10 and math.hypot(a.x - geom.tx, a.y - geom.ty) <= 80 * NM]
+        if sam:
+            a = min(sam, key=lambda t_: t_[0])[1]
+            g.add_nav_target_point(self._pt(a.x, a.y), "HA")
+            extra.append(("HA", a.x, a.y))
+        self._f14ab = {"keep": [(route[i].name, route[i].x, route[i].y) for i in keep], "ntp": ntp, "extra": extra}
 
     # ---- Link 16 / SADL: the package flies as one network ------------------------------------------------------------------
     def _datalinks(self, package) -> list:

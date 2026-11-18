@@ -166,13 +166,15 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         tower, jtac_at = f"ATC {plan.where('ATC')}", (plan.where("JTAC") or None)
     adm = [f"BINGO {x['bingo']} lb   JOKER {x['joker']} lb",
            "Recovery: " + (f"carrier Case I, TACAN 74X, ICLS 11, {tower}" if on_boat else f"home field, tower {tower.replace('ATC ', 'on ')}"),
-           f"Divert: {x['divert']}", "Tanker track is steerpoint TKR. Bullseye is the last steerpoint."]
+           f"Divert: {x['divert']}", ("The tanker and the bullseye are not waypoints in your jet: see COMMS and the card." if x.get("tkr_line") else "Tanker track is steerpoint TKR. Bullseye is the last steerpoint.")]
     if spec.fc3:
         com = ["Frequencies: " + " | ".join(f"{e.label} {e.mhz:.3f}" for e in list(plan.comm1.values()) + list(plan.comm2.values()))]
     else:
         com = ["COMM1 (UHF): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm1.items()),
                "COMM2 (VHF" + ("/UHF" if spec.service == "Navy" else "") + "): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm2.items())]
     com += [f"IFF Mode 3: {x['mode3']}    Laser code: {x['laser']}", f"Bullseye: {x['bullseye']}"]
+    if x.get("tkr_line"):
+        com.append(x["tkr_line"])
     if x.get("tune_mhz"):
         com.append(f"AWACS: its calls reach you only while a radio is tuned to {x['tune_mhz']:.3f} MHz.")
     if x.get("ecm_player") == "f10":

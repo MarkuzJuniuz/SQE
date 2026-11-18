@@ -165,6 +165,8 @@ def render_pages(outdir, ctx: dict) -> list:
     f.band("NOTES")
     num = str(ctx.get("numbering", "")).replace("...", "").rstrip(" .,")
     notes = [f"{ctx['jet']} waypoint numbers: {num}.", "PUSH +/-30 s, TOT +/-1 min.", ctx.get("zulu_note", "Times are local.")]
+    if ctx.get("tkr_line"):
+        notes.append(ctx["tkr_line"])                   # S103d: the plain F-14B has no tanker waypoint
     if ctx.get("msa"):
         notes.append(f"MSA {int(ctx['msa']):,} ft along the route.")
     for note in notes:
