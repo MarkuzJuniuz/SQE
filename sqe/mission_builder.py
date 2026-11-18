@@ -192,7 +192,8 @@ def stagger(package, role) -> int:
             return -DEAD_SEAD_LEAD_S - TARCAP_LEAD_S
     return STAGGER.get(role, 0)
 from .packages import Package, folded_n_def
-from .radio import RadioCfg, RadioLayout, RadioPlan, apply_player_presets, build_radio_plan
+from .options import MissionOptions
+from .radio import RadioCfg, RadioPlan, apply_player_presets, build_radio_plan
 from .routes import cap2_point, jsow_launch_xy, SLAM_LAUNCH_NM, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, SA10_STATION_NM, AVOID_NM, avoid_circles, AGM88_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
 from .state import CampaignState
 
@@ -202,56 +203,6 @@ MAIN_TASK = {Role.CAP: task.CAP, Role.TARCAP: task.CAP, Role.ESCORT: task.Fighte
 ARMOR_DENSITY = (0.5, 1.5)    # vehicles in a front-line column = the base mix x (0.5 + 1.5 x the sector's enemy strength): 2x at full strength, 1x at 33%
                               # killed CAP pairs 51 to 67 nm out; 70 is just past that)
 LASER = ["1688", "1687", "1686", "1685", "1684", "1683", "1682", "1681"]
-
-
-@dataclass
-class MissionOptions:
-    takeoff_buffer_s: int = 60          # takeoff buffer: you are on the cat/runway at start; the briefed takeoff is this many SECONDS in (negative = hurry)
-    marshal_slack_min: int = 1          # (S77: was 2) slack at MARSHAL before PUSH, minutes. Negative = you must be quicker than the natural pace
-    cap_minutes: int = 40               # time on station for CAP flights
-    hot_ramp_scrambles: bool = False    # v0.41.80: alert / scramble pairs at land fields start hot on the ramp (see _alert_group)
-    hot_runway_starts: bool = False     # v0.41.96: AI package flights from land fields other than yours start on the runway (see _hot_slot)
-    hot_runway_own_field: bool = False  # v0.41.99: with hot_runway_starts: also flights at the player's own field (see _hot_slot)
-    ai_unlimited_fuel: bool = True      # Retribution-style: ON until the push, OFF for the combat leg, ON again from egress
-    enemy_unlimited_fuel: bool = False
-    ai_despawn_on_land: bool = True
-    ai_skill_red: str = "level"            # v0.41.70: see difficulty.ai_skill
-    ai_skill_blue: str = "level"
-    base_defenses: bool = True
-    carrier_escorts: bool = True
-    enemy_cap_engage_nm: int = 50       # enemy patrol fighters chase no further than this (0 = unlimited); v0.41.61: fixed, no settings box
-    friendly_cap_engage_nm: int = 50    # HAVCAP / base BARCAP likewise (0 = unlimited); v0.41.61: fixed, no settings box
-    fighter_engage_nm: int = 40         # AI escorts and sweeps chase no further than this (0 = unlimited)
-    fighter_engage_minutes: int = 5     # AI escorts, sweeps, SEAD stop engaging this many minutes after the TOT and fly on (alert pairs: +5). 0 = no time limit
-    player_is_ai: bool = False          # test: your own flight is built as an AI flight (no player / client slot) and gets the AI behaviour too (stand-off, engage window)
-    fighter_standoff: bool = True       # AI escorts and sweeps stop short of live SAM cover instead of flying into it
-    weather_mode: str = "clear"         # see weather.py: clear | procedural | scattered | broken | overcast | rain | storm
-    ils_low_vis: bool = True            # S63: in low ceiling / visibility the ground wind favours each ILS runway (weather.low_visibility, weather._ground_dir)
-    reactive: bool = True               # extra enemy fighters / blue alert pairs that launch during the sortie (reactive.py)
-    ai_land_carrier: str = "always"     # v0.41.18: AI recovery short of a carrier: always | home (your deck only) | never
-    ai_land_field: str = "never"        # v0.41.18: the same for airfields
-    splash_damage: bool = True          # blasts on ground units near an air-to-ground weapon's impact (the hook)
-    awacs_tuned: bool = True            # v0.41.215: the AWACS calls need a tuned radio (the cockpit-parameter triggers, tune_triggers)
-    damage_calls: bool = True           # v0.41.215: damage / mayday calls from the other aircraft
-    ecm_status: bool = True             # v0.41.213: the on-screen ECM messages (F-16C lamp, FC3 F10 calls); only with ecm_script
-    ecm_script: bool = False            # SQE's own jamming model in the mission hook (ecm.py). Off: DCS's own ECM, the AI decides when it is locked
-    dormant_sites: bool = False         # S89: red SAM sites on the route start late-activated and wake by detector (see `_wire_dormant`)
-    carcasses: bool = True              # dead wrecks at damaged / destroyed ground sites (see carcass.py)
-    wreck_static_weight: float = 0.25   # how much of a live unit one wreck or one live static building counts toward the unit limit (v0.41.221: the buildings too; renamed in S88 R2)
-    carcass_range_nm: int = 40          # only sites this close to the route get wrecks
-    full_map: bool = False              # stress test: build everything that exists (see _spawn_everything); the unit limit is off
-    max_units: int = 250                # the unit limit of the BASE mission (wrecks are trimmed, furthest first, to fit under it); merged packages' units do not count (v0.41.104)
-    unit_ceiling: int = 0               # most units in total, merged packages included (0 = sqe/data/limits.json, 500); a runaway guard
-    merge_radius_nm: int = 15           # v0.41.209 (XO): also the radius inside which every supply site (fuel farm, depot, both sides) is built round the target: the performance knob
-    enemy_air_sum: int = 100            # folded packages: biggest enemy-air need + this % of the others' (S88 R2: no setting, no UI: 100 for everybody)
-    carrier_min_enemy_nm: int = 150     # the carrier group is moved back along the line of retreat until it is at least this far from the fight
-    player_is_client: bool = False
-    carrier_speed_kts: int = 15
-    carrier_tacan: str = "74X"
-    carrier_icls: int = 11
-    carrier_link4_mhz: int = 336
-    carrier_atc_mhz: float = 305.0
-    layout: RadioLayout = field(default_factory=RadioLayout)
 
 
 class _Veh:
