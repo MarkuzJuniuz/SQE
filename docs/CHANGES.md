@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.489, the A-10A as an Era Equipment choice
+The New Campaign dialog's A-10 row now offers the A-10A (Flaming Cliffs level, so you need FC3 to fly it) next to the A-10C. A campaign created with the A-10A has A-10A squadrons only, with the A-10C's Maverick, cluster and Mk-82 loadouts but no targeting pod and no JDAM or wind-corrected bombs: a Hog attacking from a high floor flies Mavericks and cluster bombs. The "You fly" list follows the A-10 and F-14 chosen in Era Equipment. Campaigns with the A-10C are unchanged.
+
 ## v0.41.488, Era Equipment on the New Campaign dialog
 New campaigns now carry three choices fixed at creation: the A-10 variant, the F-14 variant and Link 16 (enabled or disabled), set in an "Era Equipment" group with an Era Defaults button that follows the theatre's year. With Link 16 disabled no jet joins a package network: no station numbers, no Link 16 briefing text, no STN column on the kneeboard. Today each theatre offers the A-10C and F-14B(U); the other variants come next. Saved campaigns load as before (A-10C, F-14B(U), Link 16 on).
 

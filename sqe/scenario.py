@@ -9,7 +9,7 @@ import random
 from .difficulty import Difficulty, get as get_difficulty
 from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, RedSquadron, PlayerProfile)
 from .state import CampaignState
-from .aircraft import AIRCRAFT
+from .aircraft import AIRCRAFT, era_aircraft
 from . import ground, redroster, theatres, story
 from . import sams as _sams_mod
 from . import sites as _sites_mod
@@ -84,14 +84,14 @@ def placement(th: dict, level: int = 2, player_squadron: str | None = None, terr
     return out
 
 
-def squadron_options(aircraft: str, theatre: str = "caucasus", level: int = 2) -> list:
+def squadron_options(aircraft: str, theatre: str = "caucasus", level: int = 2, a10_variant: str | None = None, f14_variant: str | None = None) -> list:
     """(id, label) for the New Campaign squadron picker: the REAL field of each squadron (`placement`). A HAVCAP squadron is AI only and is not offered (XO: a guard is not a job type)."""
     th = theatres.load(theatre)
     names = {th["carrier"]["id"]: th["carrier"].get("short", th["carrier"]["name"]), **{f["id"]: f["name"].replace(" AB", "") for f in th["blue_fields"]}}
     sc = get_difficulty(level).friendly_scale
     out = []
     for q in th["squadrons"]:
-        if q["aircraft"] != aircraft or q.get("role") == "havcap":
+        if era_aircraft(q["aircraft"], a10_variant, f14_variant) != aircraft or q.get("role") == "havcap":      # S103b: a slot the pack gives to an A-10 flies the campaign's A-10 variant
             continue
         where = placement(th, level, q["id"])[q["id"]]                  # this squadron as the player's: it is placed first
         out.append((q["id"], f"{q['name']}  -  {_size(q['count'], sc)} aircraft at {names.get(where, where)}"))
@@ -236,7 +236,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     sc = d.friendly_scale
     n = lambda base: _size(base, sc)
     # The squadron structure is in the theatre pack (`squadrons`; 272 jets in the Caucasus, the same at every level since v0.41.353). Callsigns are unique across the whole coalition (group names must never collide).
-    st.squadrons = {q["id"]: Squadron(q["id"], q["name"], q["aircraft"], q["base"], n(q["count"]), n(q["count"]), q["callsign"], role=q.get("role", "")) for q in th["squadrons"]}
+    st.squadrons = {q["id"]: Squadron(q["id"], q["name"], era_aircraft(q["aircraft"], st.a10_variant, st.f14_variant), q["base"], n(q["count"]), n(q["count"]), q["callsign"], role=q.get("role", "")) for q in th["squadrons"]}      # S103b: the slot's airframe is the campaign's A-10 / F-14 variant
     for s in st.squadrons.values():                       # sanity: land jets on land, carrier jets on the boat
         spec, base = AIRCRAFT[s.aircraft], st.bases[s.base_id]
         if spec.home != base.kind:

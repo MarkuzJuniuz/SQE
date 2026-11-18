@@ -7,6 +7,7 @@ from . import threatmap as tm
 from . import ground, theatres, tempo, story, detection
 from . import raids, runways, sams, ecm, airwings, clock, refit
 from .raids import hit as raids_hit
+from .aircraft import HOG_KEYS
 from .difficulty import Difficulty
 from .models import SEAD_AIMS, Objective, ObjectiveType, AssetKind, Role
 from .packages import Package
@@ -509,7 +510,7 @@ def site_blind_today(state, sid: str) -> bool:
 
 def flight_weight(f) -> float:
     w = ROLE_WEIGHT[f.role]
-    if f.role == Role.CAS and f.aircraft != "A-10C" and not f.is_player:
+    if f.role == Role.CAS and f.aircraft not in HOG_KEYS and not f.is_player:
         w *= JET_CAS_FACTOR
     return w
 
