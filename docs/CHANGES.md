@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.480, dormant-sites code tidied
+Internal: tidied the dormant-sites code; no change in play.
+
 ## v0.41.479, SEAD timing helpers moved
 Internal: the SEAD timing helpers moved to their own file; no change in play.
 

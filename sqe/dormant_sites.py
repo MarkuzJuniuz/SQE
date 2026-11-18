@@ -15,6 +15,16 @@ from .models import AssetKind, BaseKind
 from .routes import NM, dist
 
 
+def _covered(det, a) -> bool:
+    """(x, y, radius nm) round a detector holds the group's asset."""
+    return dist(det[0], det[1], a.x, a.y) <= det[2] * NM
+
+
+def _route_dist(poly, x, y) -> float:
+    """Distance from (x, y) to the route polyline; 0.0 when the route has fewer than two points."""
+    return tm.poly_dist(x, y, poly) if len(poly) >= 2 else 0.0
+
+
 class DormantSites:
     def _make_dormant(self, a, ring_nm, free: bool = False):
         """S89: put the group just built for asset `a` to sleep (late-activated, tagged, handed to `_wire_dormant` with its ring radius in nm). One recipe for the
@@ -30,7 +40,7 @@ class DormantSites:
 
     def _tag_dormant(self, g):
         """S89: tag a group as dormant (late-activated until a detector wakes it) so `_counts` weighs it DORMANT_WEIGHT. Tag the group, never test `late_activation`
-        alone: flights, alert pairs and reliefs are late-activated for timing and must keep counting whole. Nothing calls this yet (stage B)."""
+        alone: flights, alert pairs and reliefs are late-activated for timing and must keep counting whole. Called by `_make_dormant` and `_dormant_red_extras`."""
         if g is not None:
             self._dormant.add(g.id)
         return g
@@ -43,7 +53,7 @@ class DormantSites:
         if not self.o.dormant_sites:
             return
         st = self.state
-        poly = getattr(self, "_poly", None)
+        poly = self._poly
         key = (lambda a: tm.poly_dist(a.x, a.y, poly)) if poly else (lambda a: dist(a.x, a.y, tx, ty))
         for kind in (AssetKind.EWR, AssetKind.SAM):
             if kind not in kinds:
@@ -81,6 +91,7 @@ class DormantSites:
 
     @staticmethod
     def _s89_names(grps, cap=10) -> str:
+        """S89: the group names for a log line, the first `cap` and a "+N more" tail."""
         n = [g.name for g in grps]
         return ", ".join(n[:cap]) + (f" +{len(n) - cap} more" if len(n) > cap else "")
 
@@ -112,37 +123,53 @@ class DormantSites:
         detector with an ActivateGroup per covered group; any blue unit wakes them (no `human` guard: the mission is the same for a person and the AI). Backstop: each
         dormant group also has its own ring zone (`RANGE_NM` + WAKE_MARGIN_NM) and trigger, so a belt whose detectors are dead or absent still wakes. Waking a live
         group twice is harmless. Sets `self.dormant_info` (what was wired) for probes."""
-        from .mission_builder import BARCAP_DETECT_NM, DORMANT_SLEEP, S89_LOG, WAKE_MARGIN_NM  # the builder's module imports this one
+        from .mission_builder import DORMANT_SLEEP  # the builder's module imports this one
         self.dormant_info = None
         if not (self.o.dormant_sites and (self._dormant_sites or self._dormant_blue)):
             return
-        st, pt = self.state, self._pt
-        sites = lambda kind: [st.assets[i] for i in self.groups_by_asset if i in st.assets and st.assets[i].kind == kind]
         info = {"detectors": [], "rings": 0, "dormant_before": len(self._dormant_sites), "sam_unslept": None}
-
-        def covered(det, a):                                            # (x, y, radius nm) round a detector holds the group's asset
-            return dist(det[0], det[1], a.x, a.y) <= det[2] * NM
-
         covers, wakers = {}, {}                                         # S89 E: group id -> the zone ids that cover it / the TriggerOnce objects that wake it
+        ewr_dets = [(a.x, a.y, detection.EWR_COVER_NM, a) for a in self._dormant_assets(AssetKind.EWR)]
+        klass, extra_dets = self._pick_fallback_detector(ewr_dets, info)
+        self._wire_detectors(ewr_dets, klass, extra_dets, covers, wakers, info)
+        self._wire_site_rings(covers, wakers, info)
+        info["dormant_after"] = len(self._dormant_sites)
+        info["red_extras"] = list(self._dormant_red_added)
+        info["blue"] = {"fields": list(self._dormant_fields), "groups": len(self._dormant_blue), "units": sum(len(t[3].units) for t in self._dormant_blue)}
+        self._wire_blue_rings(covers, wakers)
+        if DORMANT_SLEEP:
+            info["sleep"] = self._wire_sleep([(g, a.x, a.y, "blue") for a, g, _r in self._dormant_sites] + [(g_, x_, y_, "red") for x_, y_, _r2, g_ in self._dormant_blue], covers, wakers)
+        self._wire_tick_script()
+        self.dormant_info = info
 
-        def wake(label, x, y, r_nm, grps):
-            zone = self.m.triggers.add_triggerzone(pt(x, y), r_nm * NM, True, label)
-            trig = triggers.TriggerOnce(comment=label)
-            trig.add_condition(condition.PartOfCoalitionInZone("blue", zone.id))
-            for g in grps:
-                trig.add_action(action.ActivateGroup(g.id))
-                covers.setdefault(g.id, []).append(zone.id)
-                wakers.setdefault(g.id, []).append(trig)
-            for a_ in self._s89_log("wake", f"{label}: {len(grps)} groups: {self._s89_names(grps)}"):
-                trig.add_action(a_)
-            self.m.triggerrules.triggers.append(trig)
-            return zone
+    def _dormant_assets(self, kind) -> list:
+        """The assets of this kind that have a group in the mission."""
+        st = self.state
+        return [st.assets[i] for i in self.groups_by_asset if i in st.assets and st.assets[i].kind == kind]
 
-        ewr_dets = [(a.x, a.y, detection.EWR_COVER_NM, a) for a in sites(AssetKind.EWR)]
-        left = [t for t in self._dormant_sites if not any(covered(d, t[0]) for d in ewr_dets)]     # no EWR covers these
+    def _add_wake_trigger(self, label, x, y, r_m, grps, coalition, covers, wakers, log_text) -> None:
+        """One zone (radius in metres) and one TriggerOnce: any unit of `coalition` in it activates every group of `grps`. Records the zone in `covers` and the trigger in `wakers`
+        (group id -> list) for the sleep wiring, and adds the dcs.log line `log_text`. The one recipe of the detector, backstop and blue-ring wake triggers."""
+        zone = self.m.triggers.add_triggerzone(self._pt(x, y), r_m, True, label)
+        trig = triggers.TriggerOnce(comment=label)
+        trig.add_condition(condition.PartOfCoalitionInZone(coalition, zone.id))
+        for g in grps:
+            trig.add_action(action.ActivateGroup(g.id))
+            covers.setdefault(g.id, []).append(zone.id)
+            wakers.setdefault(g.id, []).append(trig)
+        for a_ in self._s89_log("wake", log_text):
+            trig.add_action(a_)
+        self.m.triggerrules.triggers.append(trig)
+
+    def _pick_fallback_detector(self, ewr_dets, info):
+        """Where no EWR covers a dormant group: the longest-range SAM site built in this mission, or the red BARCAP stations, whichever has the longer zone radius.
+        Returns `(klass, extra_dets)` (`(None, [])` when every group is covered or nothing can detect). A SAM detector that is itself dormant is woken for good
+        (the detector must be live) and recorded in `info["sam_unslept"]`."""
+        from .mission_builder import BARCAP_DETECT_NM, WAKE_MARGIN_NM  # the builder's module imports this one
+        left = [t for t in self._dormant_sites if not any(_covered(d, t[0]) for d in ewr_dets)]     # no EWR covers these
         extra_dets, klass = [], None
         if left:
-            sams = [a for a in sites(AssetKind.SAM) if tm.RANGE_NM.get(a.variant, 0) > 0]
+            sams = [a for a in self._dormant_assets(AssetKind.SAM) if tm.RANGE_NM.get(a.variant, 0) > 0]
             best = max(sams, key=lambda a: tm.RANGE_NM[a.variant]) if sams else None
             sam_r = (tm.RANGE_NM[best.variant] + WAKE_MARGIN_NM) if best is not None else 0
             if sam_r > 0 and sam_r > (BARCAP_DETECT_NM if self._bandit_stations else 0):
@@ -157,41 +184,45 @@ class DormantSites:
             elif self._bandit_stations:
                 klass = "BARCAP"
                 extra_dets = [(sx, sy, BARCAP_DETECT_NM, None) for sx, sy in self._bandit_stations]
+        return klass, extra_dets
+
+    def _wire_detectors(self, ewr_dets, klass, extra_dets, covers, wakers, info) -> None:
+        """One wake trigger per detector (the live EWRs, then the fallback detector) over the dormant groups it covers; appends each to `info["detectors"]`."""
         order = [("EWR", d) for d in ewr_dets] + [(klass, d) for d in extra_dets]
         for kl, d in order:
             if kl == "EWR":
-                grps = [t for t in self._dormant_sites if covered(d, t[0])]
+                grps = [t for t in self._dormant_sites if _covered(d, t[0])]
             else:                                                       # the fallback detector wakes only the groups no EWR covers
-                grps = [t for t in self._dormant_sites if covered(d, t[0]) and not any(covered(e, t[0]) for e in ewr_dets)]
+                grps = [t for t in self._dormant_sites if _covered(d, t[0]) and not any(_covered(e, t[0]) for e in ewr_dets)]
             if not grps:
                 continue
             nm_ = d[3].id if d[3] is not None else f"({d[0] / 1000:.0f},{d[1] / 1000:.0f})"
-            wake(f"S89 detector {kl} {nm_}", d[0], d[1], d[2], [t[1] for t in grps])
+            label = f"S89 detector {kl} {nm_}"
+            self._add_wake_trigger(label, d[0], d[1], d[2] * NM, [t[1] for t in grps], "blue", covers, wakers, f"{label}: {len(grps)} groups: {self._s89_names([t[1] for t in grps])}")
             info["detectors"].append({"class": kl, "at": nm_, "radius_nm": d[2], "groups": [t[0].id for t in grps]})
-        for a, g, ring in self._dormant_sites:                          # backstop: the site's own ring
-            wake(f"S89 ring {a.id}", a.x, a.y, (ring + WAKE_MARGIN_NM) if ring else 10, [g])
+
+    def _wire_site_rings(self, covers, wakers, info) -> None:
+        """Backstop: each dormant group's own ring (`RANGE_NM` + WAKE_MARGIN_NM, 10 nm when it has no range); counted in `info["rings"]`."""
+        from .mission_builder import WAKE_MARGIN_NM  # the builder's module imports this one
+        for a, g, ring in self._dormant_sites:
+            label = f"S89 ring {a.id}"
+            self._add_wake_trigger(label, a.x, a.y, ((ring + WAKE_MARGIN_NM) if ring else 10) * NM, [g], "blue", covers, wakers, f"{label}: 1 groups: {self._s89_names([g])}")
             info["rings"] += 1
-        info["dormant_after"] = len(self._dormant_sites)
-        info["red_extras"] = list(self._dormant_red_added)
-        info["blue"] = {"fields": list(self._dormant_fields), "groups": len(self._dormant_blue), "units": sum(len(t[3].units) for t in self._dormant_blue)}
-        for x_, y_, ring_, g_ in self._dormant_blue:                    # S89 C: blue field defences, the backstop form only (no blue EWR model): any red unit in the ring wakes the group
-            zone = self.m.triggers.add_triggerzone(pt(x_, y_), (ring_ + WAKE_MARGIN_NM) * NM, True, f"S89 blue ring {g_.name}")
-            trig = triggers.TriggerOnce(comment=f"S89 blue ring {g_.name}")
-            trig.add_condition(condition.PartOfCoalitionInZone("red", zone.id))
-            trig.add_action(action.ActivateGroup(g_.id))
-            for a_ in self._s89_log("wake", f"blue ring: {g_.name}"):
-                trig.add_action(a_)
-            self.m.triggerrules.triggers.append(trig)
-            covers.setdefault(g_.id, []).append(zone.id)
-            wakers.setdefault(g_.id, []).append(trig)
-        if DORMANT_SLEEP:
-            info["sleep"] = self._wire_sleep([(g, a.x, a.y, "blue") for a, g, _r in self._dormant_sites] + [(g_, x_, y_, "red") for x_, y_, _r2, g_ in self._dormant_blue], covers, wakers)
+
+    def _wire_blue_rings(self, covers, wakers) -> None:
+        """S89 C: blue field defences, the backstop form only (no blue EWR model): any red unit in the ring wakes the group."""
+        from .mission_builder import WAKE_MARGIN_NM  # the builder's module imports this one
+        for x_, y_, ring_, g_ in self._dormant_blue:
+            self._add_wake_trigger(f"S89 blue ring {g_.name}", x_, y_, (ring_ + WAKE_MARGIN_NM) * NM, [g_], "red", covers, wakers, f"blue ring: {g_.name}")
+
+    def _wire_tick_script(self) -> None:
+        """The `S89 log tick` start trigger (only with S89_LOG on and at least one dormant group)."""
+        from .mission_builder import DORMANT_SLEEP, S89_LOG  # the builder's module imports this one
         names_ = [t[1].name for t in self._dormant_sites] + [t[3].name for t in self._dormant_blue]
         if names_ and S89_LOG:
             ts_ = triggers.TriggerStart(comment="S89 log tick")
             ts_.add_action(action.DoScript(String(self._s89_tick_lua(names_, getattr(self, "_s89_sleep_flags", {}) if DORMANT_SLEEP else {}))))
             self.m.triggerrules.triggers.append(ts_)
-        self.dormant_info = info
 
     def _wire_sleep(self, groups, covers, wakers) -> dict:
         """S89 E (plan 7.3, the rule flown in the probe `zone`): every dormant group `(group, x, y, enemy coalition)` goes back to AI OFF when no enemy unit has been inside ANY zone
@@ -200,16 +231,7 @@ class DormantSites:
         here). Cost 2 + 2 per covering zone continuous triggers per group; groups beyond DORMANT_SLEEP_MAX_TRIGGERS (furthest from the route first) just stay awake once woken.
         Returns what was wired, for probes."""
         from .mission_builder import DORMANT_SLEEP_MAX_TRIGGERS  # the builder's module imports this one
-        poly = list(getattr(self, "_poly", None) or [])
-
-        def route_d(x, y):
-            best = 0.0 if len(poly) < 2 else 1e18
-            for (x1, y1), (x2, y2) in zip(poly, poly[1:]):
-                dx, dy = x2 - x1, y2 - y1
-                L = dx * dx + dy * dy
-                t = 0.0 if L == 0 else max(0.0, min(1.0, ((x - x1) * dx + (y - y1) * dy) / L))
-                best = min(best, dist(x, y, x1 + t * dx, y1 + t * dy))
-            return best
+        poly = list(self._poly)
 
         def cont(comment, conds, acts):
             t = triggers.TriggerContinious(comment=comment)
@@ -221,7 +243,7 @@ class DormantSites:
 
         used = n_sl = capped = 0
         sleep_flags = self._s89_sleep_flags = {}                         # group name -> its "asleep" flag, for the tick script
-        for g, x, y, en in sorted(groups, key=lambda t: route_d(t[1], t[2])):
+        for g, x, y, en in sorted(groups, key=lambda t: _route_dist(poly, t[1], t[2])):
             zs = covers.get(g.id, [])
             if not zs:
                 continue
