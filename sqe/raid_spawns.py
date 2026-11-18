@@ -41,10 +41,10 @@ RAID_GROUP_GAP_S = 60         # v0.41.108: the bomber groups of a big raid follo
 RAID_ROUTE_SAMS = 99            # v0.41.256: red SAM sites along a fleet raid's way in that are built in the mission (judgment call: the default is 2; the unit limit still binds)
 RAID_SWEEP_LEAD_S = 90        # ...and the raid's sweep escorts fly this far ahead of the first bomber group (judgment call)
 SEAD_SWEEP_LEAD_S = 60        # S66 (XO 2026-11-13): the fighter sweep ahead of a SEAD raid flies this far ahead of the SEAD flights on the same route and clock, so blue's intercepts commit to it before the Kh-31P salvo (judgment call). It stops SEAD_SWEEP_STOP_NM from the site, 20 nm short of the launch point (about 160 s at the raid's speed), so it passes its last point about 3 minutes before the salvo
-SEAD_SWEEP_STOP_NM = 60       # ...and its last point is this far from the site: outside a Patriot's 40 nm ring (raids.PATRIOT_NM) by the 20 nm margin the blue sweep uses (sweep.SWEEP_RING_MARGIN_NM); the SEAD flights go on to ARM_LAUNCH_NM (judgment call)
+SEAD_SWEEP_STOP_NM = 70       # ...and its last point is this far from the site: outside a Patriot's 40 nm ring (raids.PATRIOT_NM) by the 20 nm margin the blue sweep uses (sweep.SWEEP_RING_MARGIN_NM); the SEAD flights go on to ARM_LAUNCH_NM (judgment call)
 RAID_HOLD_MAX_S = 600         # ...and one with plenty of time appears at most 10 min before it must push
 RAID_EGRESS_NM = 30           # ...off target it turns 40 degrees off its way in and leaves this far before heading home     # a fighter on station engages only inside this circle round it (long-range shooters / the rest): no chasing
-ARM_LAUNCH_NM = 40            # v0.41.84: a red SEAD flight fires its Kh-31P this far from the SAM site (S36b: the standoff launch of the SEAD raid) (judgment call: inside the 60 nm the Kh-31 page gives, with margin for a low launch)
+ARM_LAUNCH_NM = 50            # S107 (XO 2026-11-18): 50 nm, was 40 (v0.41.84: the edge of a Patriot's 40 nm ring); the Kh-31P is the longer-ranged missile and a high launch adds to that. Public figure about 110 km (60 nm) at a high launch, launch envelope 100 m to 15 km (Wikipedia Kh-31, the Russian export catalog esp.fsvts.gov.ru; medium firmness; the DCS value was not found: its forum pages could not be read), so 50 nm keeps 10 nm of margin, like KH59_LAUNCH_NM 50 against 62 (judgment call). v0.41.84: a red SEAD flight fires its Kh-31P this far from the SAM site (S36b: the standoff launch of the SEAD raid) (judgment call: inside the 60 nm the Kh-31 page gives, with margin for a low launch)
 SEAD_ZONE_NM = 3             # S59a: the SEAD raid's fallback task engages air defence inside this circle round the targeted site (its own vehicles only, not the next battery) (judgment call)
 SEAD_GROUP_GAP_S = 4         # S59a: the bomber groups of ONE SEAD package reach the launch point this far apart (they must not collide there); every package reaches its own launch point at the same time (judgment call; replaces RAID_GROUP_GAP_S for SEAD raids only)
 SEAD_AXIS_DEG = 25           # S59a: the SEAD raid's packages launch from points this many degrees apart round the site (a multi-axis salvo splits the radar's attention; one escort force still covers them). Judgment call: a real AN/MPQ-53 searches a sector of about 90 degrees (public figure, firmness medium; DCS's model not checked)
@@ -102,6 +102,7 @@ RAID_IP_LEG_NM = 10           # the orbit leg at the intercept point, across the
 RAID_IP_LANE_PTS = 12         # waypoint budget for the bends of the dash lane round SAM circles
                               # v0.41.287 (XO 2026-11-04: "every SAM threatening the intercept line"): RAID_BLOCK_MAX (the old cap of 2 blocking sites, PR 2) is retired;
                               # every live site tm.raid_inbound_sites finds now gets its own SEAD/DEAD flight, not just the minimum needed to open a lane
+SEAD_ALT_FT = 30000          # S107 (XO 2026-11-18): the SEAD raid's whole route, escorts and sweep included (the raid shares one level): the Kh-31P's range is for a high launch; 30 000 ft is inside its 100 m to 15 km envelope and a loaded Su-24M's reach (judgment call)
 ARM_WINDOW_S = 240            # ...the ARM task runs this long (the missile's flight)
 # S48: the switch KH59_RAIDS (and the share, the hit size) live in `raids.py`: the plan reads them too, and `raids` cannot import this module. The spawner reads `raids.KH59_RAIDS` at call time.
 KH59_LAUNCH_NM = 50           # the Kh-59M raid fires from this far from the aim: inside the 115 km (62 nm) Wikipedia gives for the Kh-59M with margin for a low launch, outside HAWK_NM 25 and PATRIOT_NM 40 (judgment call; the probe, 2026-11-12: the Su-34 fired at 54.9 nm, the Su-24M at 58.6 nm, the missiles hit: 50 is safe inside the range)
@@ -1012,7 +1013,7 @@ class RaidSpawns:
         from .raids import sweep_members
         skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
         land = bool(ex.get("land"))
-        alt = ((12000 if any(t_ == "Su_25" for _a, t_, _n in bmem) else 20000) if land else 30000) * FT      # S46: the whole raid flies at its slowest, lowest member's altitude (a Su-25 in it: 12 000 ft)
+        alt = ((12000 if any(t_ == "Su_25" for _a, t_, _n in bmem) else SEAD_ALT_FT if sead_r else 20000) if land else 30000) * FT      # S107 (XO 2026-11-18): a SEAD raid flies high (the Kh-31P reaches farther from altitude). S46: the whole raid flies at its slowest, lowest member's altitude (a Su-25 in it: 12 000 ft)
         apt = self.t.airports.get(cvb.airport) if (land and cvb.airport and not aim) else None
 
         fin_ = "ARM" if (sead_r or kh59_r) else ("BASE" if bool(ex.get("land")) else ("LAUNCH" if standoff else "FLEET"))
