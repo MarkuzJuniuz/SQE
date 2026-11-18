@@ -36,6 +36,16 @@ CAS_ZONE_M = 9000              # the AI CAS engage circle around TGT (m): the co
 KPH = 1.852
 
 
+def _expend_for(each):
+    """The DCS `Expend` quantity for `each` bombs per aim point: four, two, else one."""
+    return task.Expend.Four if each >= 4 else (task.Expend.Two if each >= 2 else task.Expend.One)
+
+
+def _span(pts):
+    """The largest distance between two of the points (0.0 for none)."""
+    return max((dist(p[0], p[1], q[0], q[1]) for p in pts for q in pts), default=0.0)
+
+
 class StrikeTasks:
     def _sead_attack_tasks(self, package, f, wp, w, armor):
         """The HARM attack tasks of a SEAD flight's attack waypoint: its own site, neighbouring sites, covering Tors, the umbrella."""
@@ -433,7 +443,6 @@ class StrikeTasks:
     def _bomb_task(self, package, w):
         """The bombing task at a BOMB waypoint. v0.41.254: a runway strike (a STRIKE with aim RUNWAY) uses DCS's BombingRunway on the target field, so the
         flight lays its bombs along the strip; every other strike bombs the point."""
-        from .mission_builder import RAMP_CLUSTER_M, RAMP_AXIS_MIN_M                # the builder's module imports this one, so it is imported here, when called
         o_ = package.objective
         a_ = self.state.assets.get(o_.target_id)
         ap_ = self.t.airports.get(a_.airport) if (o_.aim == "RUNWAY" and a_ is not None and a_.airport) else None
@@ -442,52 +451,80 @@ class StrikeTasks:
         if o_.type == ObjectiveType.COUNTER_AIR and o_.aim not in ("SWEEP", "STANDOFF") and w.name != "SLAM":
             # v0.41.316 (XO 2026-11-06: cluster bombs are not aimed at single things, and the AI F-16s with CBU-103s flew over the ramp without a release): an area
             # (carpet) attack over the middle of the parked jets, as long as the ramp is wide (judgment call, clamped; DCS behaviour on static aircraft unverified)
-            pts_ = list(getattr(self, "_ramp_pts", []) or [])
-            if pts_:
-                cx_, cy_ = sum(q[0] for q in pts_) / len(pts_), sum(q[1] for q in pts_) / len(pts_)
-                span_ = max((dist(p[0], p[1], q[0], q[1]) for p in pts_ for q in pts_), default=0.0)
-            else:
-                # v0.41.328 (XO's run: the strike flights are built BEFORE the parked jets spawn, so this list is empty here and the aim fell back to the airfield point, 1.2 km short
-                # of the jets): the middle of the field's real parking slots, and the line of the slots within `RAMP_CLUSTER_M` of it for the heading
-                ra_ = self.state.assets.get(o_.target_id)
-                r_ = self._ramp_xy(ra_) if ra_ is not None else None
-                if r_ is not None:
-                    cx_, cy_ = r_
-                    ap2_ = self.t.airports.get(ra_.airport) if getattr(ra_, "airport", None) else None
-                    pts_ = [(q.position.x, q.position.y) for q in (ap2_.parking_slots if ap2_ else []) if q.airplanes and dist(q.position.x, q.position.y, cx_, cy_) <= RAMP_CLUSTER_M]
-                    span_ = max((dist(p[0], p[1], q[0], q[1]) for p in pts_ for q in pts_), default=0.0)
-                else:
-                    cx_, cy_ = w.aim or (w.x, w.y)
-                    span_ = 0.0
+            cx_, cy_, pts_, span_ = self._ramp_aim(package, w)
             # v0.41.323 (XO's L3 run: the carpet task's aim point was the ramp, but the CBU jets looped 6 to 20 km off it and dropped on the depot guards): the plain point
             # bomb task at the middle of the ramp, the same task that put the GBU-31s on their aim point. The cluster bombs' bomblets cover the ramp. `span_` is unused now.
             # v0.41.326 (XO 2026-11-06: cover more of the ramp): the pass runs ALONG the line of parked jets, so one run lays the bombs down its length. DCS takes one aim point and
             # one attack heading per task (no per-jet points, no release spacing from a script). Heading = the bearing between the two jets furthest apart (x north, y east),
             # only when the ramp is longer than `RAMP_AXIS_MIN_M` (judgment call); otherwise the plain point as before. Not seen in DCS.
-            dir_ = None
-            if pts_ and span_ >= RAMP_AXIS_MIN_M:
-                p1_, p2_ = max(((p, q) for p in pts_ for q in pts_), key=lambda pq: dist(pq[0][0], pq[0][1], pq[1][0], pq[1][1]))
-                dir_ = int(round(math.degrees(math.atan2(p2_[1] - p1_[1], p2_[0] - p1_[0])))) % 360
+            dir_ = self._ramp_heading(pts_, span_)
             bt2_ = task.Bombing(self._pt(cx_, cy_), weapon_type=task.WeaponType.Auto, expend=task.Expend.All, group_attack=True, direction=dir_)
             self._ramp_tasks.append(bt2_)
             return bt2_
         wt_ = task.WeaponType.CruiseMissile if w.name == "SLAM" else task.WeaponType.Auto         # v0.41.302: the Standoff Strike's SLAM-ER is a missile; XO's run: the default filter fired nothing
         return task.Bombing(self._pt(*(w.aim or (w.x, w.y))), weapon_type=wt_, expend=task.Expend.All, group_attack=True)       # v0.41.299: a release point (JDAM, SLAM-ER) bombs the target, not itself
 
+    def _ramp_aim(self, package, w):
+        """(cx, cy, pts, span) of a counter-air bomb task: the middle and spread of `_ramp_pts`, or of the field's real parking slots when that list is empty, or the waypoint's own aim."""
+        from .mission_builder import RAMP_CLUSTER_M                # the builder's module imports this one, so it is imported here, when called
+        o_ = package.objective
+        pts_ = list(getattr(self, "_ramp_pts", []) or [])
+        if pts_:
+            cx_, cy_ = sum(q[0] for q in pts_) / len(pts_), sum(q[1] for q in pts_) / len(pts_)
+            span_ = _span(pts_)
+        else:
+            # v0.41.328 (XO's run: the strike flights are built BEFORE the parked jets spawn, so this list is empty here and the aim fell back to the airfield point, 1.2 km short
+            # of the jets): the middle of the field's real parking slots, and the line of the slots within `RAMP_CLUSTER_M` of it for the heading
+            ra_ = self.state.assets.get(o_.target_id)
+            r_ = self._ramp_xy(ra_) if ra_ is not None else None
+            if r_ is not None:
+                cx_, cy_ = r_
+                ap2_ = self.t.airports.get(ra_.airport) if getattr(ra_, "airport", None) else None
+                pts_ = [(q.position.x, q.position.y) for q in (ap2_.parking_slots if ap2_ else []) if q.airplanes and dist(q.position.x, q.position.y, cx_, cy_) <= RAMP_CLUSTER_M]
+                span_ = _span(pts_)
+            else:
+                cx_, cy_ = w.aim or (w.x, w.y)
+                span_ = 0.0
+        return cx_, cy_, pts_, span_
+
+    @staticmethod
+    def _ramp_heading(pts, span):
+        """The attack heading along the line of parked jets (the bearing between the two furthest apart), or None when the ramp is shorter than `RAMP_AXIS_MIN_M`."""
+        from .mission_builder import RAMP_AXIS_MIN_M                # the builder's module imports this one, so it is imported here, when called
+        if pts and span >= RAMP_AXIS_MIN_M:
+            p1_, p2_ = max(((p, q) for p in pts for q in pts), key=lambda pq: dist(pq[0][0], pq[0][1], pq[1][0], pq[1][1]))
+            return int(round(math.degrees(math.atan2(p2_[1] - p1_[1], p2_[0] - p1_[0])))) % 360
+        return None
+
+    def _stop_at(self, task_, stop_s):
+        """`task_` wrapped in a ControlledTask that stops `stop_s` seconds into the mission."""
+        ct_ = task.ControlledTask(task_)
+        ct_.stop_after_time(int(stop_s))
+        return ct_
+
+    def _stopped_bombing(self, x, y, expend, stop_s):
+        """A plain Bombing task (auto weapon, group attack) at (x, y) that stops at `stop_s`."""
+        return self._stop_at(task.Bombing(self._pt(x, y), weapon_type=task.WeaponType.Auto, expend=expend, group_attack=True), stop_s)
+
+    def _gbu_total(self, f):
+        """How many GBUs the flight's jets carry in the strike loadout (`loadouts.gbu_count`)."""
+        return gbu_count(self.lo.for_role(f.aircraft, f.role, ""))
+
     def _slam_aims(self, package, w) -> list:
         """v0.41.309 (XO 2026-11-05: "how do we make the 18 just focus on their target? one hit the bunker, the rest targeted god knows what"): the aim points of a SLAM-ER
         launch: up to `SLAM_AIMS` of the target site's buildings (the first one, then the one furthest from it), a missile each. A single Bombing task on the site's centre
         sent one missile at the guard vehicles and left the rest to hunt radars under weapons free (XO's run). No buildings known: the waypoint's own aim point."""
         from .mission_builder import SLAM_AIMS                # the builder's module imports this one, so it is imported here, when called
+        aim = tuple(w.aim or (w.x, w.y))
         a_ = self.state.assets.get(package.objective.target_id)
         if a_ is not None and a_.kind == AssetKind.EWR:                  # S60: an EWR strike: both missiles of a jet on the radar vehicle itself (it is a vehicle: no buildings; the waypoint's aim is the site's centre)
             us_ = self._ewr_units(package)
-            return [(us_[0].position.x, us_[0].position.y)] * SLAM_AIMS if us_ else [tuple(w.aim or (w.x, w.y))] * SLAM_AIMS
+            return [(us_[0].position.x, us_[0].position.y)] * SLAM_AIMS if us_ else [aim] * SLAM_AIMS
         spots = list(self._bld_xy.get(package.objective.target_id) or [])
         if len(spots) > SLAM_AIMS:
             far = max(spots[1:], key=lambda s_: dist(s_[0], s_[1], spots[0][0], spots[0][1]))
             spots = [spots[0], far][:SLAM_AIMS]
-        return spots or [tuple(w.aim or (w.x, w.y))]
+        return spots or [aim]
 
     def _bomb_tasks(self, package, w) -> list:
         """The bombing tasks of a BOMB waypoint: one, except a SLAM-ER launch (`_slam_aims`: one Bombing task per aim point, one missile each, over once `SLAM_ATTACK_S` has passed)."""
@@ -517,7 +554,7 @@ class StrikeTasks:
         spots = list(self._bld_xy.get(o_.target_id) or [])
         if len(spots) < 2:
             return None
-        n_ = gbu_count(self.lo.for_role(f.aircraft, f.role, ""))
+        n_ = self._gbu_total(f)
         k_ = min(n_, len(spots))
         if k_ < 2:
             return None
@@ -527,12 +564,10 @@ class StrikeTasks:
             rest = [s_ for s_ in spots if s_ not in chosen]
             chosen.append(max(rest, key=lambda s_: min(dist(s_[0], s_[1], c_[0], c_[1]) for c_ in chosen)))
         each = n_ // k_
-        exp = task.Expend.Four if each >= 4 else (task.Expend.Two if each >= 2 else task.Expend.One)
+        exp = _expend_for(each)
         out = []
         for i_, (x_, y_) in enumerate(chosen):
-            bt_ = task.ControlledTask(task.Bombing(self._pt(x_, y_), weapon_type=task.WeaponType.Auto, expend=(task.Expend.All if i_ == k_ - 1 else exp), group_attack=True))
-            bt_.stop_after_time(int(stop_s))
-            out.append(bt_)
+            out.append(self._stopped_bombing(x_, y_, (task.Expend.All if i_ == k_ - 1 else exp), stop_s))
         return out
 
     def _runway_bomb_tasks(self, package, f, stop_s):
@@ -551,17 +586,14 @@ class StrikeTasks:
         except (IndexError, AttributeError, TypeError, ValueError):
             return None
         cx_, cy_ = ap_.position.x, ap_.position.y
-        n_ = gbu_count(self.lo.for_role(f.aircraft, f.role, "")) if f.aircraft in JDAM_JETS else 0
+        n_ = self._gbu_total(f) if f.aircraft in JDAM_JETS else 0
         k_ = max(1, min(n_, 3))
         offs_ = [(i_ - (k_ - 1) / 2.0) * RUNWAY_AIM_STEP_M for i_ in range(k_)]
         each_ = n_ // k_ if n_ else 0
-        exp_ = task.Expend.Four if each_ >= 4 else (task.Expend.Two if each_ >= 2 else task.Expend.One)
+        exp_ = _expend_for(each_)
         out = []
         for i_, d_ in enumerate(offs_):          # (x north, y east; the heading is compass degrees: along = dx cos h + dy sin h, the hook's own convention)
-            bt_ = task.ControlledTask(task.Bombing(self._pt(cx_ + d_ * math.cos(hdg_), cy_ + d_ * math.sin(hdg_)), weapon_type=task.WeaponType.Auto,
-                                                   expend=(task.Expend.All if (i_ == k_ - 1 or not n_) else exp_), group_attack=True))
-            bt_.stop_after_time(int(stop_s))
-            out.append(bt_)
+            out.append(self._stopped_bombing(cx_ + d_ * math.cos(hdg_), cy_ + d_ * math.sin(hdg_), (task.Expend.All if (i_ == k_ - 1 or not n_) else exp_), stop_s))
         return out
 
     def _ai_bomb_tasks(self, package, f, w, stop_s) -> list:
@@ -572,6 +604,4 @@ class StrikeTasks:
         sp_ = self._gbu_spread_tasks(package, f, w, stop_s)
         if sp_ is not None:
             return sp_
-        bt_ = task.ControlledTask(self._bomb_task(package, w))
-        bt_.stop_after_time(int(stop_s))
-        return [bt_]
+        return [self._stop_at(self._bomb_task(package, w), stop_s)]
