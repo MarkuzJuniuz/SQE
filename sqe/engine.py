@@ -16,6 +16,7 @@ from .loadouts import LoadoutLibrary
 from .models import AssetKind, BaseKind, Objective, ObjectiveType, Role
 from . import airwings, barcap as barcap_, clock, detection, raids, redair, refit, sams, ground, support_assets, tempo
 from .mission_builder import MissionBuilder, MissionOptions
+from .options import options_from_settings
 from .packages import AI_ONLY, ai_only, carrier_raid, Ledger, NoPlayerSlot, Package, PackageBuilder
 
 from .scenario import new_campaign
@@ -1122,34 +1123,7 @@ class Session:
             raise RuntimeError("; ".join(problems))
         pkg = next(p for p in self.packages() if p.number == package_number)
         PackageBuilder(st, self.d).assign_player(pkg, flight_id)
-        self.options.marshal_slack_min = int(self.settings.marshal_slack_min)
-        self.options.takeoff_buffer_s = int(self.settings.takeoff_buffer_s)
-        self.options.ai_unlimited_fuel = bool(self.settings.ai_unlimited_fuel)
-        self.options.hot_ramp_scrambles = bool(getattr(self.settings, "hot_ramp_scrambles", False))
-        self.options.hot_runway_starts = bool(getattr(self.settings, "hot_runway_starts", False))
-        self.options.hot_runway_own_field = self.options.hot_runway_starts and bool(getattr(self.settings, "hot_runway_own_field", False))
-        self.options.ai_skill_red = str(getattr(self.settings, "ai_skill_red", "level"))
-        self.options.ai_skill_blue = str(getattr(self.settings, "ai_skill_blue", "level"))
-        self.options.fighter_engage_nm = int(self.settings.fighter_engage_nm)
-        self.options.fighter_engage_minutes = int(self.settings.fighter_engage_minutes)
-        self.options.player_is_ai = bool(self.ai_test)
-        self.options.fighter_standoff = bool(self.settings.fighter_standoff)
-        self.options.carcasses = bool(getattr(self.settings, 'carcasses', True)); self.options.wreck_static_weight = max(5, int(getattr(self.settings, 'wreck_static_weight_pct', 25))) / 100.0
-        self.options.dormant_sites = bool(getattr(self.settings, 'dormant_sites', False))
-        self.options.reactive = bool(getattr(self.settings, 'reactive', True))
-        self.options.ecm_script = bool(getattr(self.settings, 'ecm_script', False))
-        self.options.ecm_status = bool(getattr(self.settings, 'ecm_status', True))
-        self.options.awacs_tuned = bool(getattr(self.settings, 'awacs_tuned', True))
-        self.options.damage_calls = bool(getattr(self.settings, 'damage_calls', True))
-        self.options.splash_damage = bool(getattr(self.settings, 'splash_damage', True))
-        self.options.ai_land_carrier = str(getattr(self.settings, 'ai_land_carrier', "always"))
-        self.options.ai_land_field = str(getattr(self.settings, 'ai_land_field', "never"))
-        self.options.max_units = int(self.settings.max_units)
-        self.options.merge_radius_nm = int(getattr(self.settings, 'merge_radius_nm', 15))
-        self.options.full_map = bool(self.full_map)
-        if self.full_map:
-            self.options.max_units = 10 ** 6
-        self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear')); self.options.ils_low_vis = bool(getattr(self.settings, 'ils_low_vis', True))
+        options_from_settings(self.options, self.settings, ai_test=self.ai_test, full_map=self.full_map)
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
         extras = list(self.merge_candidates(pkg, unseen=True))

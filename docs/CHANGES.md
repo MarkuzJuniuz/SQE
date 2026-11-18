@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.476, mission options in their own file
+Internal: mission option defaults and the settings-to-options mapping moved to their own file; no change in play.
+
 ## v0.41.475, ground-site and base-defence spawning moved
 Internal: ground-site and base-defence spawning moved to its own file; no change in play.
 
