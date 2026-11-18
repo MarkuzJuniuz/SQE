@@ -4,6 +4,7 @@ Use it for refactors that must NOT change behaviour (renames, splitting a long f
 
     python tools/miz_identity.py save  BASE_DIR     # on the code BEFORE the change
     python tools/miz_identity.py check BASE_DIR     # on the code AFTER the change: exit 0 = identical, 1 = differences (a diff is printed)
+    add --jobs N to either: N worker processes, one case each (default: cores minus 2, at most one per case, S109); --jobs 1 = one process, the old serial path
 
 Each case is a new campaign (aircraft, level, seed). For every objective type that has a flyable package the mission is built
 twice: as your own flight and as the all-AI test (`ai_test`), which gives your flight the full AI task set. The `mission` and
@@ -30,11 +31,14 @@ import random
 import re
 import shutil
 import tempfile
+import time
 import uuid
 import zipfile
 from pathlib import Path
 
-TMP = Path(tempfile.mkdtemp(prefix="sqe_ident_"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import parallel
+TMP = parallel.make_tmp("sqe_ident_")      # S109: in a worker process of the parallel run this is a subfolder of the parent's (APPDATA, saves and the sortie .miz never collide; the parent removes the lot)
 os.environ["APPDATA"] = str(TMP / "appdata")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import sqe
@@ -123,17 +127,19 @@ def _build(session, st, pkg, ai: bool, flight_id=None):
     return out
 
 
-def run() -> dict:
-    """{ "case/mode/package-key": {member: text-or-hash} } for every case."""
+def _session(no_standoff: bool):
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
-    # SQE_IDENT_NO_LINK16=1 builds every campaign with Link 16 disabled (S103a)
     # SQE_IDENT_NO_STANDOFF=1 builds everything with "AI TARCAPs, escorts and sweeps stop short of live SAM cover" OFF: their no-station routes (a second baseline)
-    s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, fighter_standoff=not os.environ.get("SQE_IDENT_NO_STANDOFF")))
+    return Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, fighter_standoff=not no_standoff))
+
+
+def run_case(case, s, no_link16: bool) -> dict:
+    """{ "case/mode/package-key": {member: text-or-hash} } for one case, built on the session `s` (S109: one case = one independent task)."""
     res = {}
-    for name, aircraft, level, seed, opened in CASES:
+    for name, aircraft, level, seed, opened in [case]:
         _CUR[0], _CUR[1] = name, 0
         random.seed(f"{name}:new")                             # module-level random.* calls inside SQE would otherwise differ per run
-        s.new(name, aircraft, level, seed=seed, link16=False if os.environ.get("SQE_IDENT_NO_LINK16") else None)      # S103a: =1 builds every campaign with the Link 16 switch OFF (check it against the normal baseline: only the Link 16 parts may differ)
+        s.new(name, aircraft, level, seed=seed, link16=False if no_link16 else None)      # S103a: =1 builds every campaign with the Link 16 switch OFF (check it against the normal baseline: only the Link 16 parts may differ)
         st = s.state
         if opened:
             for a in st.assets.values():
@@ -188,6 +194,32 @@ def run() -> dict:
     return res
 
 
+def _worker(args) -> dict:
+    """One case in a worker process: a fresh Session, this process's own temp folder. The module top level (uuid / builder / random pins) ran again in the worker on import."""
+    case, no_link16, no_standoff = args
+    if os.environ.get("PYTHONHASHSEED") != "0":
+        raise RuntimeError("worker started without PYTHONHASHSEED=0")
+    return run_case(case, _session(no_standoff), no_link16)
+
+
+def run(jobs=None) -> dict:
+    """{ "case/mode/package-key": {member: text-or-hash} } for every case, sorted by key. jobs=1: one process, one shared Session (the old serial path);
+    jobs=N (default one per core minus two, at most one per case): one worker process per case, the same result.
+    SQE_IDENT_NO_LINK16=1 builds every campaign with Link 16 disabled (S103a); SQE_IDENT_NO_STANDOFF=1 see _session."""
+    no_link16, no_standoff = bool(os.environ.get("SQE_IDENT_NO_LINK16")), bool(os.environ.get("SQE_IDENT_NO_STANDOFF"))
+    res = {}
+    if jobs == 1:
+        s = _session(no_standoff)
+        for case in CASES:
+            res.update(run_case(case, s, no_link16))
+        run.workers = 1
+    else:
+        for part in parallel.map_cases(_worker, [(case, no_link16, no_standoff) for case in CASES], jobs, TMP):
+            res.update(part)
+        run.workers = parallel.map_cases.workers
+    return dict(sorted(res.items()))
+
+
 def save(res: dict, base: Path):
     if base.exists():
         shutil.rmtree(base)
@@ -233,20 +265,24 @@ def diff(a: dict, b: dict, label_a="before", label_b="after", limit=60) -> int:
 def main(argv):
     if len(argv) < 2 or argv[1] not in ("save", "check", "selfcheck"):
         print(__doc__); return 2
+    jobs, argv = parallel.pop_jobs(argv)                           # S109: --jobs N (1 = the old serial path)
     print(f"SQE mission identity check, version {sqe.__version__} (isolated temp data: {TMP})")
     mode = argv[1]
+    t0 = time.time()
     try:
         if mode == "selfcheck":
-            first = run()
-            shutil.rmtree(TMP / "saves"); (TMP / "saves").mkdir()
-            second = run()
+            first = run(jobs)
+            shutil.rmtree(TMP / "saves", ignore_errors=True)
+            second = run(jobs)
             n = diff(first, second, "run 1", "run 2")
             print(f"{len(first)} missions built twice: " + ("IDENTICAL, the check is repeatable" if not n else f"{n} DIFFERENCES: the check is noisy"))
+            print(f"{run.workers} worker(s), {time.time() - t0:.0f} s")
             return 1 if n else 0
         if len(argv) < 3:
             print("need a directory"); return 2
         base = Path(argv[2])
-        res = run()
+        res = run(jobs)
+        print(f"built with {run.workers} worker(s) in {time.time() - t0:.0f} s")
         if mode == "save":
             save(res, base)
             print(f"saved {len(res)} missions to {base} (version {sqe.__version__})")

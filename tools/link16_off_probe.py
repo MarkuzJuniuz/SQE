@@ -1,9 +1,9 @@
 """S103a probe: with the campaign's Link 16 switch OFF, only the Link 16 parts of a mission differ.
 
     set PYTHONHASHSEED=0          (Windows: the tool cannot restart itself, see miz_identity.py)
-    python tools/link16_off_probe.py
+    python tools/link16_off_probe.py [--jobs N]
 
-Builds the whole `tools/miz_identity.py` case list twice in this process (about 3 to 4 minutes): once as today (Link 16 on) and once with every campaign created with
+Builds the whole `tools/miz_identity.py` case list twice (parallel since S109, one worker per case: about a minute; --jobs N, 1 = the old serial path, about 3 to 4 minutes): once as today (Link 16 on) and once with every campaign created with
 `link16=False` (the `SQE_IDENT_NO_LINK16` switch of miz_identity). Then, for every mission built, it removes the Link 16 parts from both texts and demands the rest is identical:
   - mission file: every `datalinks:` block of a unit, the `STN_L16`, `SADL_TN`, `VoiceCallsignLabel` and `VoiceCallsignNumber` properties;
   - dictionary (briefing text): the "Link 16: ..." sentence;
@@ -42,10 +42,10 @@ def strip_mission(text: str) -> str:
     return "\n".join(out)
 
 
-def main() -> int:
-    on = mi.run()
+def main(jobs=None) -> int:
+    on = mi.run(jobs)
     os.environ["SQE_IDENT_NO_LINK16"] = "1"
-    off = mi.run()
+    off = mi.run(jobs)
     n_miss = n_page = n_brief = n_l16 = bad = 0
     for key in sorted(set(on) | set(off)):
         if key not in on or key not in off:
@@ -79,4 +79,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _jobs, _ = mi.parallel.pop_jobs(sys.argv[1:])
+    sys.exit(main(_jobs))
