@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.469, hook Lua text in its own file
+Internal: the mission hook's Lua text moved to its own file; no change in play.
+
 ## v0.41.468, setting names match the dialog
 Internal: a few setting names now match the labels in the dialog; older settings files load as before.
 
