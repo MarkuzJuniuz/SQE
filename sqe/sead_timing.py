@@ -15,7 +15,8 @@ class SeadTiming:
         mission builder will use (an umbrella keep-out included). Within one mission every package pushes exactly its start difference after
         the others, so this leg is all that separates their HARM times."""
         from .models import BaseKind
-        from .routes import AGM88_LAUNCH_NM, assign_times, bearing, make_geometry, objective_wp, plan_route
+        from . import samtier
+        from .routes import assign_times, bearing, make_geometry, objective_wp, plan_route
         from . import threatmap as tm
         st = self.state
         fl = [f for f in p.flights if f.role == Role.SEAD and not f.tag and getattr(f, "base_id", None) in st.bases]
@@ -34,7 +35,7 @@ class SeadTiming:
             g = make_geometry(bx, by, tgt.x, tgt.y, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
             um = tm.umbrella_site(st, tgt)
             wps = plan_route(Role.SEAD, (bx, by), g, spec.profile, is_player=False, tanker_xy=None,
-                             keep_out=(um.x, um.y, AGM88_LAUNCH_NM) if um else None)
+                             keep_out=(um.x, um.y, samtier.get(um.variant, "harm_nm")) if um else None)
             assign_times(wps, 0.0)
             push, obj = next(w for w in wps if w.name == "PUSH"), objective_wp(wps)
             return obj.eta_s - push.eta_s

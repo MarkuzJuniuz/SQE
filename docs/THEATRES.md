@@ -34,6 +34,7 @@ You still need the map installed in DCS to fly it, and pydcs must know the terra
 | `tier_labels` | the depth labels shown for enemy assets (index 1 to 4). Required |
 | `front_names`, `front_desc` | required by the loader, no longer shown anywhere |
 | `climate` | optional. `sun_frac` and `rain_frac` (12 monthly values each: share of possible sunshine, share of days with precipitation), `wind_ms` (mean ground wind, 12 values), `fog` (chance of dawn fog, 12 values), `wind_from_deg` (12 values, the usual wind direction) with `wind_scatter_deg`, and `source` / `wind_from_source` (free text). Without it a mild generic climate is used. Drives Procedural weather |
+| `sam_tier` | optional. Names the theatre's long-range SAM systems: `umbrella` (the systems whose reach covers their neighbours: the first thing a SEAD wave has to beat) and `gate` (the medium / long-range sites that get a Standoff DEAD and gate strikes), each a list of variants such as `["SA-5", "SA-10"]`. The reach and the margins of an umbrella system are in `sqe/samtier.py`. Missing: the Caucasus tier (the SA-10 as the umbrella; gate SA-2 / 3 / 6 / 11 / 10) |
 | `title` | the operation name, shown in the app header and on the briefing's first line |
 | `stories` | required. One story per level (`"1"`, `"2"`, `"3"`): `enemy`, `enemy_long`, `background` (a list of paragraphs), `intent`, `now` (a line per posture: Offensive, Holding, Under pressure ...) and `beats` (war-log lines for events such as a base falling or retaken) |
 

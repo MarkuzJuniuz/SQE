@@ -16,6 +16,9 @@ DEFAULT = "caucasus"
 REQUIRED = ("id", "name", "dcs_terrain", "lat", "lon", "tz", "temp_c", "geo", "scan", "carrier", "blue_fields", "red_fields",
             "wing_weight", "field_tier", "squadrons", "front", "tier_labels", "front_names", "front_desc", "title", "stories")
 
+# S90 P4: the pack's `sam_tier` block names the long-range SAM systems of the theatre: {"umbrella": ["SA-5", "SA-10"], "gate": ["SA-2", "SA-3", "SA-6", "SA-5", ...]} (samtier.py holds the
+# systems' reach and margins). A pack without the block gets the Caucasus tier (the SA-10 as the umbrella).
+
 # S103a: the pack's `era` block = the year shown for the campaign (a fixed label: the month and day stay free) and the Era Equipment defaults of the campaign-create dialog. A pack without
 # the block (or with part of it) gets these values, which are Caucasus 2006 (what SQE always flew).
 ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "link16": True}
@@ -55,6 +58,8 @@ def _validate(d: dict, src) -> dict:
     d.setdefault("red_fill", {})                                   # v0.41.439: {level: {red field id: jets}}, the most jets the field holds at that level (a theatre without it parks by the DCS count only)
     d.setdefault("bomber_base", "")
     d["era"] = {**ERA_DEFAULT, **(d.get("era") or {})}
+    from . import samtier
+    samtier.check(d.get("sam_tier"), src)
     d["_dir"] = str(Path(src).parent)
     return d
 
@@ -97,6 +102,8 @@ def use(tid: str) -> dict:
     d = load(tid)
     changed = _ACTIVE is None or _ACTIVE["id"] != d["id"]
     _ACTIVE = d
+    from . import samtier
+    samtier.configure(d.get("sam_tier"))               # S90 P4: the long-range tier of this theatre (in place: every module sees it)
     if changed:
         try:
             from . import relief, roads, seacheck, terrainmask
