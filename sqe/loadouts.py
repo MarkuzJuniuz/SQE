@@ -147,13 +147,25 @@ class LoadoutLibrary:
 # ---- enemy fighter air-to-air loads, built generically from pydcs's own tables -----------------------
 _HEAVY = ["R_27ER", "R_24R", "R_77", "AIM_7", "R_33", "R_40RD"]      # v0.41.142: + the MiG-31's R-33 and R-40RD
 _SHORT = ["R_73", "R_60", "R_3S", "AIM_9"]
-ENEMY_FIGHTERS = {"MiG_29A", "MiG_29S", "Su_27", "MiG_31", "MiG_21Bis", "MiG_23MLD", "F_4E", "F_5E_3"}
+ENEMY_FIGHTERS = {"MiG_29A", "MiG_29S", "Su_27", "MiG_31", "MiG_21Bis", "MiG_23MLD", "F_4E", "F_5E_3", "MiG_25PD"}      # S90 P3a: + the MiG-25PD (Syria 2000; no Caucasus roster has it)
+# S90 P3a: a fixed air-to-air kit for a type the generic picker below fills badly. MiG_25PD: pydcs gives it four pylons (1 to 4), all R-40 (1 and 4 also take an APU-60 with an R-60M). The picker would
+# hang three R-40RD and an R-60M; the usual MiG-25PD / MiG-25P fit is two radar-guided R-40R (RD) on the inner pylons and two infrared R-40T (TD) on the outer ones (Wikipedia "Mikoyan-Gurevich
+# MiG-25", the interceptor's armament lines, and the usual photos; from memory, firmness medium). No R-60 / R-73 on it: none was needed for the mix and the 1990s fit carries only R-40s.
+ENEMY_CAP_KITS = {"MiG_25PD": {1: "R_40TD", 2: "R_40RD", 3: "R_40RD", 4: "R_40TD"}}
 
 
 def enemy_cap_loadout(cls_name: str) -> dict:
     from dcs import planes
     cls = getattr(planes, cls_name)
     out = {}
+    fixed = ENEMY_CAP_KITS.get(cls_name)
+    if fixed:                                                          # S90 P3a: a table kit (a pylon the type lacks is skipped, as the picker does)
+        for i, stem in sorted(fixed.items()):
+            P = getattr(cls, f"Pylon{i}", None)
+            w = _find(P, stem) if P is not None else None
+            if w is not None:
+                out[i] = {"CLSID": w[1]["clsid"]}
+        return out
     for i in sorted(cls.pylons):
         P = getattr(cls, f"Pylon{i}", None)
         if P is None:
@@ -193,6 +205,10 @@ def capture_from_miz(miz_path: str, out_path: str = "loadouts.json") -> dict:
 # approximate combat radius (nm) of enemy types: used to decide who can escort a raid
 ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, "MiG_23MLD": 200, "MiG_21Bis": 170,
                    "F_4E": 300, "F_5E_3": 200, "Su_24M": 300, "Su_25": 160,
+                   # S90 P3a (Syria 2000, no Caucasus roster has them; judgment calls, firmness low, from memory of the public data sheets): MiG_25PD 300 nm: the published combat radius is about 1,100 km subsonic
+                   # but an interceptor's dash at Mach 2+ burns its fuel (about 300 km at high speed); the table runs about 0.5 to 0.7 of the sheet figure, so 300 sits between the MiG-31 (450) and the MiG-29A (250).
+                   # Su_17M4 220 nm: Su-17M4 combat radius about 360 km at low level with 2,000 kg and about 650 km hi-lo-hi (Wikipedia "Sukhoi Su-17"): 220 nm lies between the two and above the Su-25 (160).
+                   "MiG_25PD": 300, "Su_17M4": 220,
                    # v0.41.355 (Phase 10a): the Tu-22M3 on a land strike. 1200 nm is the one public figure for an OFAB-250 load (cmo-db.com, Tu-22M3 loadout table: unverified method, low firmness); other
                    # sources give 2,200 to 2,500 km (about 1,200 to 1,350 nm) unrefuelled (airrecognition.com, armyrecognition.com, medium firmness). Judgment call: the Caucasus targets lie 70 to 200 nm from Mozdok, so the figure never limits a strike.
                    "Tu_22M3": 1200}
@@ -200,7 +216,7 @@ ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, 
 
 BOMBER_TYPES = ("Su_24M",)       # v0.41.361 (Phase 10d) made this a tuple of two; S106 (XO 2026-11-18) removed the Su-34, so it is the Su-24M again: the red raid bombers: the types that fly field raids, the SEAD (Kh-31P) group and the DEAD (KAB-500Kr) group. Every test that used to say "Su_24M" reads this
 ARM_PER_JET = {"Su_24M": 2}   # Kh-31P per jet in a SEAD group (Su-24M: pylons 2 and 7, all it takes)
-STRIKE_PER_JET = {}             # FAB-500 per jet on a plain raid: none capped (the Su-24M takes every pylon that takes one; the Su-34 was capped at six, S106 removed it)
+STRIKE_PER_JET = {"Su_17M4": 4}             # FAB-500 per jet on a plain raid: the Su-24M is not capped (it takes every pylon that takes one; the Su-34 was capped at six, S106 removed it). S90 P3a: the Su-17M4 takes six 500-kg bombs in pydcs (pylons 1, 3, 4, 5, 6, 8): four (outer pairs, 2,000 kg) is the usual combat load (Wikipedia "Sukhoi Su-17": 2,000 kg combat load at low level, firmness medium; judgment call)
 
 
 # S48 (XO musing 2026-11-12): the Kh-59M (AS-18 Kazoo) standoff strike missile for red's raid bombers. SOURCES (open, checked 2026-11-12; the sources are thin and disagree on range, so every figure here is a lead, not a fact):

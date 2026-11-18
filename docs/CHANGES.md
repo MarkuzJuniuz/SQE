@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.492, red types for Syria: MiG-25PD and Su-17M4
+Two new red aircraft types are in the data (kits, combat radius, intercept reach, ECM, doctrine, briefing name, parking class): the MiG-25PD interceptor and the Su-17M4 strike jet, for the Syria 2000 theatre. No Caucasus campaign uses them: nothing changes in play.
+
 ## v0.41.491, the F-14B player's three waypoints
 The plain F-14B has only three numbered waypoints, so your route in that jet now has the start point, waypoints 1 to 3 and the landing point (the Home Base); the surface target (ST), the IP when it is not waypoint 2, the defended point (DP) and the nearest SAM site (HA) are navigation target points you select in the jet. The kneeboard still lists every point of the route and marks which are waypoints and which are not; the tanker is found by its TACAN (shown in the briefing and on the card). The F-14B(U) and every other jet keep their routes.
 
