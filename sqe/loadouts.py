@@ -63,6 +63,14 @@ _D: dict = {
         # stock DCS preset: AG04: (1/0/2) 2*J84 MEDIUM STRIKE
         "STRIKE": {1: "={LAU-138 wtip - AIM-9M}", 2: "={SHOULDER AIM_54C_Mk47 L}", 3: "={F14-300gal}", 4: "={BRU-32 GBU_31_V_2B}", 7: "={BRU-32 GBU_31_V_2B}", 8: "={F14-300gal}", 9: "={F14-LANTIRN-TP}", 10: "={LAU-138 wtip - AIM-9M}"},
     },
+    "F-14B": {
+        # S103c (XO 2026-11-18): the plain F-14B. CAP and FLEET are the B(U)'s two kits (every CLSID is on the pydcs `F_14B` pylon tables too, checked 2026-11-18). STRIKE is the B(U)'s kit with the two GBU-31 (4, 7) replaced
+        # by the laser-guided GBU-10 (BRU-32, 2,000 lb Paveway II, the same weight as the GBU-31 so the load is the same); the LANTIRN pod stays on 9 (the B had it from 1996). No GPS / JDAM store: F_14B has none. NOT in
+        # JDAM_JETS. In weather that rules a laser weapon out `weather.adapt` finds no GPS bomb for the pylon and the flight is scrubbed ("no weapon it can use"): era-true, the B cannot swap to JDAM.
+        "CAP": {1: "={LAU-138 wtip - AIM-9M}", 2: "={SHOULDER AIM-7P}", 3: "={F14-300gal}", 4: "={AIM_54C_Mk47}", 5: "={AIM_54C_Mk47}", 6: "={AIM_54C_Mk47}", 7: "={AIM_54C_Mk47}", 8: "={F14-300gal}", 9: "={SHOULDER AIM-7P}", 10: "={LAU-138 wtip - AIM-9M}"},
+        "FLEET": {1: "={LAU-138 wtip - AIM-9M}", 2: "={SHOULDER AIM_54C_Mk47 L}", 3: "={F14-300gal}", 4: "={AIM_54C_Mk47}", 5: "={AIM_54C_Mk47}", 6: "={AIM_54C_Mk47}", 7: "={AIM_54C_Mk47}", 8: "={F14-300gal}", 9: "={SHOULDER AIM_54C_Mk47 R}", 10: "={LAU-138 wtip - AIM-9M}"},
+        "STRIKE": {1: "={LAU-138 wtip - AIM-9M}", 2: "={SHOULDER AIM_54C_Mk47 L}", 3: "={F14-300gal}", 4: "={BRU-32 GBU-10}", 7: "={BRU-32 GBU-10}", 8: "={F14-300gal}", 9: "={F14-LANTIRN-TP}", 10: "={LAU-138 wtip - AIM-9M}"},
+    },
     "F-15C": {
         # stock DCS preset: AIM-9*4,AIM-120*4,Fuel*3
         "CAP": {1: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 2: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 3: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 4: "={C8E06185-7CD6-4C90-959F-044679E90751}", 5: "={C8E06185-7CD6-4C90-959F-044679E90751}", 6: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 7: "={C8E06185-7CD6-4C90-959F-044679E90751}", 8: "={C8E06185-7CD6-4C90-959F-044679E90751}", 9: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 10: "={E1F29B21-F291-4589-9FD8-3272EEC69506}", 11: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}"},

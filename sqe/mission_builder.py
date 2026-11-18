@@ -27,9 +27,9 @@ from . import barcap, briefing as brief, callsigns, detection, profiles, relief,
 from . import seacheck as seac
 from . import pydcs_patch
 from . import threatmap as tm
-from .aircraft import AIRCRAFT
+from .aircraft import AIRCRAFT, F14_KEYS
 
-TUNE_PARAMS = {"F-16C": ("COMM1_FREQ",), "A-10C": ("UHF_FREQ",), "FA-18C": ("COMM1_FREQ", "COMM2_FREQ"), "F-14BU": ("COMM1_FREQ", "COMM2_FREQ")}   # v0.41.215: the player's radios SQE can read (XO's probes 2026-10-28 / 30); the F-15C (FC3) has none
+TUNE_PARAMS = {"F-16C": ("COMM1_FREQ",), "A-10C": ("UHF_FREQ",), "FA-18C": ("COMM1_FREQ", "COMM2_FREQ"), "F-14BU": ("COMM1_FREQ", "COMM2_FREQ"), "F-14B": ("COMM1_FREQ", "COMM2_FREQ")}   # v0.41.215: the player's radios SQE can read (XO's probes 2026-10-28 / 30); the F-15C (FC3) has none
 TUNE_BAND_MHZ = 0.05            # v0.41.215: tuned = within this much of the AWACS frequency (judgment call; the probe used 0.1)
 from .debrief import Manifest, install_hook
 from .difficulty import Difficulty, ai_skill
@@ -82,7 +82,7 @@ TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the s
 # station sits this much further from the fight than the Eagle's and the engage circle of a hunting TARCAP is the Phoenix's reach, not the AIM-120's. Judgment calls, no public figure fixes them:
 # the longest test Phoenix shot was 110 nm at a Mach 1.5 drone (1973, secondary sources), the AIM-120's reach is about 60 to 70% of the Phoenix's (forum estimate), and DCS's Mk47 does not
 # loft inside about 21 nm, so a station 18 nm from the shooters (TARCAP_NEAR_NM) puts the first shots inside the Phoenix's weak zone; 12 nm more puts the bandits 30 nm and more out. Firmness: low.
-STAND_BACK_NM = {"F-14BU": 12}
+STAND_BACK_NM = {"F-14BU": 12, "F-14B": 12}
 PHOENIX_ZONE_NM = 35         # the hunting TARCAP's engage circle for the Tomcat (the Eagle's is 25); = TARCAP_COVER_MAX_NM, the largest circle `_cover_circle` will build
 TARCAP_BARCAP_OVERLAP_NM = 4  # v0.41.138: the TARCAP circle reaches this far (less 2 nm of margin) inside the nearest BARCAP circle, so there is no unguarded strip between them (judgment call: a few miles so a bandit crossing from one to the other is always inside one)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
@@ -142,7 +142,7 @@ AAM_WEAPONS = 264241152       # DCS weapon flags: air-to-air missiles (a Fighter
 # Not guns and not air-to-air missiles, so a flight goes home once its air-to-ground load is gone.
 A2G_WEAPONS = 14 | 240 | 768 | 4161536 | 30720
 # Air-to-ground jets whose loadouts carry radar missiles (AIM-120, AIM-54; checked in loadouts.py): after the attack they may shoot back.
-SHOOTS_BACK = {"F-16C", "FA-18C", "F-14BU", "F-15E"}
+SHOOTS_BACK = {"F-16C", "FA-18C", "F-14BU", "F-14B", "F-15E"}
 RELIEF_BACK_NM = 12            # v0.41.78: a relief sortie appears this far behind its station (toward its base) and flies up to it (judgment call)
 SPAWN_SEP_M = 2000            # airborne flights never appear closer than this to each other (same height band, same minute)
 
@@ -1662,7 +1662,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _dress_group(self, package, f, spec, g, wps, push_s, tot_s, cs_names):
         """Loadout (weather-adapted), unit names, jammer windows, skill, bingo return, and where this package's shooters launch. -> (names, run_t0)."""
         o = self.o
-        kit_ = getattr(f, "kit", "") or ("FLEET" if (f.aircraft == "F-14BU" and f.role in (Role.CAP, Role.SWEEP) and (package.extra or {}).get("setpiece")) else "")      # v0.41.271: 6 Phoenix for the fleet-defence Tomcats
+        kit_ = getattr(f, "kit", "") or ("FLEET" if (f.aircraft in F14_KEYS and f.role in (Role.CAP, Role.SWEEP) and (package.extra or {}).get("setpiece")) else "")      # v0.41.271: 6 Phoenix for the fleet-defence Tomcats
         if not kit_ and f.role == Role.CAS and f.aircraft == "A-10C" and not f.tag and (not f.is_player or o.player_is_ai) and self._cas_floors.get(package.id, 0) > 0 and not self._cas_stock.get(package.id, True):
             kit_ = "GUIDED"                                                   # S31a part A2: an AI A-10 attacking a dug-in garrison from the high floor carries guided bombs; S92: a moving column, or a garrison with only its own air defence, keeps the stock Maverick + cluster kit; a person's flight keeps the stock CAS loadout
         load = self.lo.for_role(f.aircraft, f.role, kit_)
@@ -1689,7 +1689,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if o.ecm_script:
                 for un_ in names:
                     self._jamw[un_] = (run_t0, run_t1)
-            if f.is_player and f.aircraft == "F-14BU":
+            if f.is_player and f.aircraft in F14_KEYS:
                 u.set_property("INSAlignmentStored", True)
         g.set_skill(getattr(Skill, ai_skill(self.o, "blue", self.d), Skill.High))
         # v0.41.11: every AI flight goes home on bingo fuel; v0.41.16: your own flight too (it applies to your AI wingmen: in the v0.41.14 run they
@@ -1760,7 +1760,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 # is wanted at the sweep size for its type (25 nm long-range shooters, 15 nm the rest); the launch points still make it bigger.
                 bpts_, want_ = [], COVER_ZONE_NM
                 if stw.action == "TARCAP":
-                    want_ = PHOENIX_ZONE_NM if f.aircraft == "F-14BU" else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]      # S45: the Tomcat's circle is the Phoenix's reach
+                    want_ = PHOENIX_ZONE_NM if f.aircraft in F14_KEYS else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]      # S45: the Tomcat's circle is the Phoenix's reach
                     pkg_zone_ = package.objective.type in (ObjectiveType.CAS, ObjectiveType.STRIKE)      # v0.41.185: protects the package, does not hunt
                     if pkg_zone_:
                         want_ = min(want_, TARCAP_PKG_ZONE_NM)

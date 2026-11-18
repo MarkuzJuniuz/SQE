@@ -86,6 +86,18 @@ AIRCRAFT: dict[str, AircraftSpec] = {
                      push_kts=510, ip_kts=510, attack_kts=510, egress_kts=540, push_nm=70, ip_nm=25, egress_nm=30,
                      tgt_note="JDAM target. Release", special_points=("IP", "ST")),
         first_wp_label="0", bingo_lbs=3000, joker_lbs=4500),
+    # S103c (XO 2026-11-18): the plain F-14B, the Syria 2000 Tomcat (research 3c: LANTIRN pod and laser-guided bombs since 1996, NO GPS bombs / JDAM, no Link 16; the B(U) above adds GPS and JDAM). pydcs `F_14B`:
+    # the same ten pylons, Phoenix / Sparrow / Sidewinder, LANTIRN and GBU-10 / 12 / 16 / 24 (no GBU-31 / 38). Same roles, route profile and carrier jobs as the B(U): only the type and the STRIKE kit differ (laser
+    # bombs, `loadouts._D["F-14B"]`). Neither F-14 has a pydcs datalink, so neither is ever a Link 16 member. The player waypoint scheme is NOT here (S103d); the B(U)'s special-point naming stays B(U)-only.
+    "F-14B": AircraftSpec(
+        "F-14B", "F-14B Tomcat", "F_14B", BaseKind.CARRIER,
+        frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.TARCAP, _R.STRIKE}), RefuelMethod.BASKET, 2, 300, 450, True,
+        RouteProfile(depart_alt_ft=6000, depart_kts=330, aar_alt_ft=20000, aar_kts=350,
+                     marshal_alt_ft=24000, marshal_kts=380, cap_alt_ft=25000, cap_kts=400,
+                     alt_ft={_R.STRIKE: 25000, _R.TARCAP: 26000, _R.ESCORT: 28000, _R.SWEEP: 28000, _R.SEAD: 25000, _R.CAS: 12000},
+                     push_kts=510, ip_kts=510, attack_kts=510, egress_kts=540, push_nm=70, ip_nm=25, egress_nm=30,
+                     tgt_note="Laser-guided target. Release", special_points=("IP", "ST")),
+        first_wp_label="0", bingo_lbs=3000, joker_lbs=4500),
     "FA-18C": AircraftSpec(
         "FA-18C", "F/A-18C Hornet", "FA_18C_hornet", BaseKind.CARRIER,
         frozenset({_R.CAP, _R.SWEEP, _R.ESCORT, _R.TARCAP, _R.STRIKE, _R.SEAD, _R.CAS}), RefuelMethod.BASKET, 1, 300, 450, True,
@@ -136,10 +148,11 @@ AIRCRAFT: dict[str, AircraftSpec] = {
                      tgt_note="Release"), first_wp_label="0", fc3=True, bingo_lbs=1500, joker_lbs=2500),
 }
 # S103a (XO 2026-11-18): the A-10 and F-14 variants a campaign can be created with ("Era Equipment"), {key: label} in the order the picker shows them. The key is what the campaign
-# state saves (`a10_variant`, `f14_variant`); today it is an AIRCRAFT key. The A-10A is S103b; the F-14B is added to F14_VARIANTS by S103c. The A-10C key is today's `A_10C_2` model (DCS "A-10C II"):
+# state saves (`a10_variant`, `f14_variant`); today it is an AIRCRAFT key. The A-10A is S103b, the F-14B S103c. The A-10C key is today's `A_10C_2` model (DCS "A-10C II"):
 # a plain `A_10C` / "late" third choice is NOT offered (it would be the same jet), see the S103b queue note.
 A10_VARIANTS = {"A-10A": "A-10A (FC3)", "A-10C": "A-10C"}
-F14_VARIANTS = {"F-14BU": "F-14B(U)"}
+F14_VARIANTS = {"F-14B": "F-14B", "F-14BU": "F-14B(U)"}
+F14_KEYS = frozenset(F14_VARIANTS)             # S103c: every F-14 key: the places that meant "the F-14B(U)" test this
 HOG_KEYS = frozenset(A10_VARIANTS)             # S103b: every A-10 key: the places that meant "the A-10C" (CAS master, tanker profile, slow climber, refit time) test this
 STRIKE_CONDITIONAL = HOG_KEYS                  # v0.41.360: airframes whose STRIKE role is offered only on a clean supply strike (see the A-10C entry above)
 
