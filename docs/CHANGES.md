@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.472, raid SEAD code moved
+Internal: raid SEAD code moved to its own file; no change in play.
+
 ## v0.41.471, dormant-sites code moved
 Internal: the dormant-sites code moved to its own file; no change in play.
 
