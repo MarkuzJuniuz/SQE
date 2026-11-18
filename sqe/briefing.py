@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 from . import narrative, credit_line
 from .aircraft import AIRCRAFT
+from .words import chance_word
 from .models import AssetKind
 from .routes import dist, NM
 
@@ -119,7 +120,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                     "Tors are busy with HARMs when the JSOWs arrive. The JSOW flight comes in on its own axis, about 30 degrees off the HARM shooters', "
                     "and releases its AGM-154As on the radars, the launchers and the Tors from stand-off range. Nobody flies into the long-range SAM's "
                     "reach: release, then back out the way you came. Out of HARMs or JSOWs, go home.",
-                f"Intelligence puts the chance of suppressing the radars at about {round(_p3 * 100 / 5) * 5:.0f}%."]
+                f"Intelligence rates the chance of suppressing the radars as {chance_word(_p3)}."]
         if getattr(pf, "kit", "") == "JSOW":
             sit += ["", "You are the Standoff DEAD flight. A radar that keeps tracking is the HARMs' kill; one that shuts down to dodge them is still "
                         "where it was last seen, and that is where your JSOWs land, with the rest on the launchers and the Tors."]
@@ -138,7 +139,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                         "range. A radar that keeps tracking is the HARMs' kill; one that shuts down to dodge them is still where it was last seen, and "
                         "that is where your JSOWs land."]
         sit += ["", f"Your job is only to suppress the radars. A Close DEAD package follows about {_gap} minutes behind you and goes in only if the radars are out. "
-                    f"Intelligence puts the chance of suppressing this site at about {round(_p * 100 / 5) * 5:.0f}%" + (f", better than it was: this site has beaten us {_sf(state, obj.target_id)} time{'s' if _sf(state, obj.target_id) != 1 else ''} running and its crews and positions are known." if _sf(state, obj.target_id) else ".")]
+                    f"Intelligence rates the chance of suppressing this site as {chance_word(_p)}" + (f", better than it was: this site has beaten us {_sf(state, obj.target_id)} time{'s' if _sf(state, obj.target_id) != 1 else ''} running and its crews and positions are known." if _sf(state, obj.target_id) else ".")]
     if obj.after and obj.type.value in ("STRIKE", "CAS"):
         from .war import after_sites as _as, follow_ready as _fr
         _names = " and ".join(state.assets[i].name for i in _as(obj) if i in state.assets and not state.assets[i].destroyed) or "the covering SAM sites"

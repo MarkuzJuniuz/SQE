@@ -18,6 +18,7 @@ from __future__ import annotations
 import math
 
 from .models import BaseKind
+from .words import strength_word
 
 SUNK_DAYS = 7                  # the carrier group sails back in after this many days (XO: "1 week")
 ESCORT_DAYS = 7                # a sunk escort is replaced after the same time
@@ -101,7 +102,7 @@ def apply_debrief(state, manifest, data: dict) -> list:
     lines = ["Fleet losses: " + ", ".join(head) + ". We mourn the crews."]
     if new_esc and not sank:
         cv.defense = min(cv.defense, _cap(state))
-        lines.append(f"   the group's air defence is down to {cv.defense:.0%} until the escorts are replaced in {ESCORT_DAYS} days")
+        lines.append(f"   the group's air defence is {strength_word(cv.defense)} until the escorts are replaced in {ESCORT_DAYS} days")
     if not sank:
         return lines
     f["sunk_day"], f["returns_day"] = state.day, state.day + SUNK_DAYS

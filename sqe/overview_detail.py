@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from . import ground, posture, tempo, narrative, sams, story
 from .models import AssetKind
+from .words import edge_word
 
 EVENT_RE = re.compile(r"HAS FALLEN|has been retaken|back in our hands|counter-force|VICTORY|DEFEAT|The last objective|takeover", re.I)
 
@@ -127,11 +128,11 @@ def _when(state, o) -> str:
 
 
 def tempo_lines(state) -> list:
-    """The air tempo of each job kind: the nudge to the background jobs' odds (0 to +40 points, fades 3% a night)."""
+    """The air tempo of each job kind (Tactical Edge) as a word: how much your flown sorties help the background jobs of that kind."""
     out = []
     for k in tempo.KINDS:
         v = tempo.get(state, k) * 100
-        out.append(f"{tempo.LABEL[k][:1].upper() + tempo.LABEL[k][1:]}: {v:+.0f}%" + ("  (at the cap)" if abs(v) >= tempo.TEMPO_CAP * 100 - 0.5 else ""))
+        out.append(f"{tempo.LABEL[k][:1].upper() + tempo.LABEL[k][1:]}: {edge_word(v / 100.0, tempo.TEMPO_CAP)}")
     return out
 
 

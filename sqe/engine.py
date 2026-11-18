@@ -663,11 +663,10 @@ class Session(Merging, SeadTiming):
             sites[a.id] = o_r.id
             if a.id in have:
                 continue
-            tail = f" ({a.health:.0%} left)" if a.health < 0.85 else ""
             if long_range_site(st, a):
-                o = Objective(pid(len(new) + 1), ObjectiveType.DEAD, a.id, o_r.priority, f"Standoff DEAD: destroy {a.name}{tail}", "STANDOFF")
+                o = Objective(pid(len(new) + 1), ObjectiveType.DEAD, a.id, o_r.priority, f"Standoff DEAD: destroy {a.name}", "STANDOFF")
             else:
-                o = Objective(pid(len(new) + 1), ObjectiveType.DEAD, a.id, o_r.priority, f"SEAD: suppress {a.name}{tail}", "SEAD")
+                o = Objective(pid(len(new) + 1), ObjectiveType.DEAD, a.id, o_r.priority, f"SEAD: suppress {a.name}", "SEAD")
             new.append(o)
         if ahead is not None:                                        # the record the raid of turn `ahead` reads (a replan of this turn writes it again: it is one record, not a list that grows)
             st.raids["raid_prep"] = {"turn": ahead, "sites": sorted(sites)}

@@ -25,6 +25,7 @@ Pure planning and bookkeeping, no pydcs. Positions are DCS metres (x north, y ea
 from __future__ import annotations
 import math
 from .models import AssetKind, EnemyAsset
+from .words import strength_word
 from . import story
 from . import clock
 
@@ -540,7 +541,7 @@ def supply_round(state, d, rng) -> list:
             a, p, _v = rng.choices(cands, weights=[c[2] for c in cands])[0]
             if rng.random() < p * p_scale:
                 a.health = max(0.0, a.health - SUPPLY_ROUND_HIT)
-                lines.append(f"{'Our' if who == 'red' else 'Enemy'} {a.name} was hit in the background supply strikes ({a.health:.0%} left)")
+                lines.append(f"{'Our' if who == 'red' else 'Enemy'} {a.name} was hit in the background supply strikes ({strength_word(a.health)})")
     pick(list(state.assets.values()), SUPPLY_ROUND_BLUE, "blue")
     pick(list(getattr(state, "blue_assets", {}).values()), int(getattr(d, "red_supply_strikes", 1)) + int(rng.random() < min(1.0, getattr(d, "raid_rate", 0.3))), "red")
     return lines
