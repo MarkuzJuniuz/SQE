@@ -16,13 +16,13 @@ The Mozdok bomber wing and its escort squadron are not part of this (scenario.py
 from __future__ import annotations
 import math
 
-HEAVY = {"MiG_31", "Su_27", "Su_24M", "Su_34"}
+HEAVY = {"MiG_31", "Su_27", "Su_24M"}
 LONG_RANGE = ("MiG_31", "Su_27")
 MIG31_SHARE = {2: 0.15, 3: 0.50, 4: 0.75}             # share of a field's long-range jets that are MiG-31, by the field's tier (v0.41.163, XO 2026-10-27: flipped, the interceptor sits deep under ground control, the Su-27 holds the fringe)
-ORDER = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis", "Su_24M", "Su_34", "Su_25")      # allocation order: the fighters first (every field gets some), then the strikers fill what parking is left
+ORDER = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis", "Su_24M", "Su_25")      # allocation order: the fighters first (every field gets some), then the strikers fill what parking is left
 FIGHTERS = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis")
 LIGHT_FIGHTERS = ("MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis")                # the fighter types `consolidate` may swap (not heavy: parking caps; not MiG-31: depth gradient)
-STRIKERS = ("Su_25", "Su_24M", "Su_34")                                           # `consolidate` swaps these among themselves too (v0.41.438)
+STRIKERS = ("Su_25", "Su_24M")                                                    # `consolidate` swaps these among themselves too (v0.41.438)
 FIGHTER_FLOOR = 4                                       # every field keeps at least this many fighters (a pair of pairs): the old rule "every wing keeps a fighter squadron"
 
 # Jets per level, bombers excluded (judgment calls: the red numbers of the 2026-10-25 plan; fighters about 85% of the old count with the MiG-31s inside,
@@ -32,7 +32,7 @@ FIGHTER_FLOOR = 4                                       # every field keeps at l
 ROSTERS = {
     1: {"MiG_21Bis": 22, "MiG_23MLD": 22, "Su_25": 34, "Su_24M": 16},                       # v0.41.438 (S84, XO 2026-11-14): 54 to 76, the sponsor keeps the insurgents supplied (judgment call, no public figure); still no MiG-29A
     2: {"MiG_31": 5, "MiG_29S": 18, "MiG_29A": 26, "MiG_23MLD": 13, "Su_25": 73, "Su_24M": 29},
-    3: {"MiG_31": 11, "Su_27": 61, "MiG_29S": 27, "MiG_29A": 16, "Su_25": 24, "Su_34": 80},       # v0.41.361 (Phase 10d): L3 flies the Su-34 where it flew the Su-24M (same 60: judgment call, no public figure; L1 and L2 keep the Su-24M)
+    3: {"MiG_31": 11, "Su_27": 61, "MiG_29S": 27, "MiG_29A": 16, "Su_25": 24, "Su_24M": 80},       # S106 (XO 2026-11-18): the 80 Su-34s are 80 Su-24Ms again. v0.41.361 (Phase 10d): L3 flew the Su-34 where it flew the Su-24M (same 60: judgment call, no public figure; L1 and L2 keep the Su-24M)
 }
 
 
@@ -65,7 +65,7 @@ def consolidate(plan: dict, fields: list, cap_heavy: dict | None = None) -> None
     2 MiG-23 ...), a shape no air force flies: a Soviet / Russian squadron is about 10 to 12 jets and a regiment keeps one or two types (from memory, medium
     firmness; the 12 cap itself is a judgment call). This swaps jets between two fields so one type grows into the bigger block and the other type
     follows the opposite way: each field keeps its jet count in the group (so the fighter floor and the parking caps hold) and the roster totals do not change. A swap needs
-    the sum of squares of the blocks to rise (it always terminates), and never leaves a lone jet. v0.41.438 (S84): the strikers (Su-25 / Su-24M / Su-34) are swapped the
+    the sum of squares of the blocks to rise (it always terminates), and never leaves a lone jet. v0.41.438 (S84): the strikers (Su-25 / Su-24M) are swapped the
     same way, and a swap that would put a field over its heavy-parking cap is skipped. Groups: the light fighters, the strikers; the long-range fighters
     (Su-27, MiG-31 depth gradient) are left as they are."""
     big = 10 ** 6
@@ -155,7 +155,7 @@ def allocate(level: int, fields: list, weight: dict, tier: dict, cap_all: dict, 
             desire = {f: weight[f] * MIG31_SHARE.get(tier.get(f, 3), 0.5) for f in fields}
         elif t == "Su_27":
             desire = {f: weight[f] * (1.0 - MIG31_SHARE.get(tier.get(f, 3), 0.5)) for f in fields}
-        elif t in ("Su_24M", "Su_34"):                                             # the SEAD / DEAD / strike supply sits deeper, away from blue's reach: weight x (tier - 1)
+        elif t == "Su_24M":                                             # the SEAD / DEAD / strike supply sits deeper, away from blue's reach: weight x (tier - 1)
             desire = {f: weight[f] * max(1, tier.get(f, 3) - 1) for f in fields}
         else:
             desire = {f: float(weight[f]) for f in fields}

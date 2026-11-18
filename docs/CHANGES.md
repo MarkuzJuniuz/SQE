@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.486, the Su-34 is replaced by the Su-24M
+Red no longer flies the Su-34: at Level 3 its 80 Su-34s are 80 Su-24Ms, with the Su-24M's own loadout, range and radar warning gear. Saved campaigns that hold Su-34s load them as Su-24Ms, same numbers. Raids, SEAD and DEAD packages are otherwise unchanged. At Level 3 a Su-24M SEAD jet carries 2 Kh-31P, where a Su-34 carried 4.
+
 ## v0.41.485, Settings tidied
 Splash Damage moved to the General tab; AI Landings, Ruins and Carcasses moved to Mission Build. The two hot-runway checkboxes are now one choice, Hot Starts on the Runway: Disabled, AI Flights at a Different Field, or AI Flights Including at My Own Field. All labels in Settings are in title case.
 

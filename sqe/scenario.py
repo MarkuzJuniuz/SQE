@@ -262,7 +262,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     for aid, n_ in (th.get("red_fill") or {}).get(str(d.level), {}).items():                      # v0.41.439 (S85): the level's jets per field (about 70% of its parking at L3, the rest is room for squadrons that fall back)
         if aid in cap_all:
             cap_all[aid] = n_ if not cap_all[aid] else min(cap_all[aid], n_)
-    cap_hv = {aid: _slots(t, apt_of[aid], ["Su_24M", "Su_34", "Su_27", "MiG_31"]) for aid in ww}
+    cap_hv = {aid: _slots(t, apt_of[aid], ["Su_24M", "Su_27", "MiG_31"]) for aid in ww}
     plan_r = redroster.allocate(d.level, list(ww), ww, FIELD_TIER, cap_all, cap_hv)
     for aid, types in plan_r.items():
         sqns = [RedSquadron(i_, n_, t_, c_) for i_, n_, t_, c_ in redroster.cut(aid, st.assets[aid].name, types, d.red_squadron_max)]

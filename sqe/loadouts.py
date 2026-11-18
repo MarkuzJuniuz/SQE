@@ -178,17 +178,14 @@ def capture_from_miz(miz_path: str, out_path: str = "loadouts.json") -> dict:
 # approximate combat radius (nm) of enemy types: used to decide who can escort a raid
 ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, "MiG_23MLD": 200, "MiG_21Bis": 170,
                    "F_4E": 300, "F_5E_3": 200, "Su_24M": 300, "Su_25": 160,
-                   # v0.41.361 (Phase 10d): the Su-34 flies the Su-24M's raids at L3. Judgment call: 330 nm, a little over the Su-24M's 300 (public figures: about 1,100 km combat radius for the Su-34, 1,050 km for the Su-24M,
-                   # both "from memory", medium firmness; the table is the game's scale, not the books': the Caucasus targets lie 70 to 250 nm from red's fields, so the figure rarely limits a raid).
-                   "Su_34": 330,
                    # v0.41.355 (Phase 10a): the Tu-22M3 on a land strike. 1200 nm is the one public figure for an OFAB-250 load (cmo-db.com, Tu-22M3 loadout table: unverified method, low firmness); other
                    # sources give 2,200 to 2,500 km (about 1,200 to 1,350 nm) unrefuelled (airrecognition.com, armyrecognition.com, medium firmness). Judgment call: the Caucasus targets lie 70 to 200 nm from Mozdok, so the figure never limits a strike.
                    "Tu_22M3": 1200}
 
 
-BOMBER_TYPES = ("Su_24M", "Su_34")       # v0.41.361 (Phase 10d): the red raid bombers: the types that fly field raids, the SEAD (Kh-31P) group and the DEAD (KAB-500Kr) group. Every test that used to say "Su_24M" reads this
-ARM_PER_JET = {"Su_24M": 2, "Su_34": 4}   # Kh-31P per jet in a SEAD group (Su-24M: pylons 2 and 7, all it takes; Su-34: four of the six pylons that take one, judgment call: group sizes stay the same in jets, so a Su-34 group fires twice the missiles)
-STRIKE_PER_JET = {"Su_34": 6}             # FAB-500 per jet on a plain raid (Su-24M: every pylon that takes one; Su-34: six of eight, about 3 t: judgment call)
+BOMBER_TYPES = ("Su_24M",)       # v0.41.361 (Phase 10d) made this a tuple of two; S106 (XO 2026-11-18) removed the Su-34, so it is the Su-24M again: the red raid bombers: the types that fly field raids, the SEAD (Kh-31P) group and the DEAD (KAB-500Kr) group. Every test that used to say "Su_24M" reads this
+ARM_PER_JET = {"Su_24M": 2}   # Kh-31P per jet in a SEAD group (Su-24M: pylons 2 and 7, all it takes)
+STRIKE_PER_JET = {}             # FAB-500 per jet on a plain raid: none capped (the Su-24M takes every pylon that takes one; the Su-34 was capped at six, S106 removed it)
 
 
 # S48 (XO musing 2026-11-12): the Kh-59M (AS-18 Kazoo) standoff strike missile for red's raid bombers. SOURCES (open, checked 2026-11-12; the sources are thin and disagree on range, so every figure here is a lead, not a fact):
@@ -200,7 +197,7 @@ STRIKE_PER_JET = {"Su_34": 6}             # FAB-500 per jet on a plain raid (Su-
 #  - The DCS AI's use of it from a Bombing / AttackGroup task is NOT known: that is what the probe mission from `.private/probes/s48` is for.
 # PROBE (XO flew `.private/probes/s48`, 2026-11-12): the AI fires the Kh-59M (X_59M) from a Bombing or AttackMapObject task on a point, 2 a jet, both jets; AttackGroup and AttackUnit never fired. The Su-34 fires AT the launch waypoint, the Su-24M about 3 nm
 #  before it, and ONLY with the APK-9 datalink pod on pylon 4 (without it the Su-24M kept its ammo and flew home): KH59_POD. Missiles flew 55 to 58.6 nm and hit about 335 to 355 s later; the jets turned for home within about 25 s of the second missile.
-KH59_PER_JET = {"Su_24M": 2, "Su_34": 2}   # Kh-59M per jet: every pylon that takes one (pydcs: 2 and 7 / 4 and 9, a balanced pair); the rest stay empty (judgment call: 930 kg each, the pair is the load)
+KH59_PER_JET = {"Su_24M": 2}   # Kh-59M per jet: every pylon that takes one (pydcs: 2 and 7 / 4 and 9, a balanced pair); the rest stay empty (judgment call: 930 kg each, the pair is the load)
 KH59_POD = {"Su_24M": 4}   # the APK-9 pod (pydcs `APK_9_Datalink_Pod`, clsid {APK_9}) a type needs on this pylon before the AI fires its Kh-59M (the Su-34 needs none). It is not a weapon: `_limit` and the "unarmed" warning count only the missiles
 
 
@@ -259,7 +256,7 @@ def enemy_land_bomber_loadout(cls_name: str) -> dict:
 
 
 def enemy_arm_loadout(cls_name: str) -> dict:
-    """v0.41.84: Kh-31P anti-radiation missiles on every pylon that takes one (Su-24M: pylons 2 and 7); v0.41.361: at most ARM_PER_JET of them (Su-34: four)."""
+    """v0.41.84: Kh-31P anti-radiation missiles on every pylon that takes one (Su-24M: pylons 2 and 7); v0.41.361: at most ARM_PER_JET of them (S106: the Su-34 is gone)."""
     from dcs import planes
     cls = getattr(planes, cls_name)
     out = {}
@@ -272,7 +269,7 @@ def enemy_arm_loadout(cls_name: str) -> dict:
 
 
 def enemy_standoff_loadout(cls_name: str) -> dict:
-    """S48: Kh-59M (AS-18 Kazoo) standoff missiles for a raid on a fixed target (Su-24M, Su-34): every pylon that takes one, at most KH59_PER_JET, plus the APK-9 datalink pod where the type needs it (`KH59_POD`). Empty for a type that cannot carry one (the Su-25): the caller keeps the free-fall kit there."""
+    """S48: Kh-59M (AS-18 Kazoo) standoff missiles for a raid on a fixed target (Su-24M): every pylon that takes one, at most KH59_PER_JET, plus the APK-9 datalink pod where the type needs it (`KH59_POD`). Empty for a type that cannot carry one (the Su-25): the caller keeps the free-fall kit there."""
     from dcs import planes
     cls = getattr(planes, cls_name, None)
     out = {}

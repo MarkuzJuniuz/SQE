@@ -41,6 +41,40 @@ def _upgrade_tactical_edge(ground) -> None:
             ground.setdefault(new, val)
 
 
+def _upgrade_su34(x) -> None:
+    """S106 (XO 2026-11-18): the Su-34 is gone from red's order of battle; an old save's Su-34s become Su-24Ms, one for one. Walks the raw saved dict in place, once, on load:
+    a "Su_34" value becomes "Su_24M" (squadron aircraft, flight and raid types, a wing's `types` list, which then loses the repeat), a "Su-34" inside a text becomes "Su-24M",
+    and a count table keyed "Su_34" adds its number to the "Su_24M" key. No format bump: the jets are the same jets, only the type name changes."""
+    def fix(s):
+        return "Su_24M" if s == "Su_34" else (s.replace("Su-34", "Su-24M") if "Su-34" in s else s)
+    if isinstance(x, dict):
+        for k in list(x):
+            v = x[k]
+            if k == "Su_34":
+                del x[k]
+                if isinstance(v, (int, float)) and isinstance(x.get("Su_24M"), (int, float)):
+                    x["Su_24M"] += v
+                else:
+                    x.setdefault("Su_24M", v)
+                    v = x["Su_24M"]
+            if isinstance(v, str):
+                if k != "Su_24M" or v != "Su_24M":
+                    x[k] = fix(v)
+            else:
+                _upgrade_su34(v)
+    elif isinstance(x, list):
+        changed = False
+        for i, v in enumerate(x):
+            if isinstance(v, str):
+                n = fix(v)
+                changed = changed or n != v
+                x[i] = n
+            else:
+                _upgrade_su34(v)
+        if changed and all(isinstance(v, str) for v in x) and len(set(x)) < len(x):
+            x[:] = list(dict.fromkeys(x))
+
+
 class SaveIncompatible(Exception):
     """A campaign file this build cannot open. `kind`: "older" (saved by an earlier SQE), "newer" (a later one), "damaged" (not a readable save).
     The GUI turns it into the friendly dialog; `info()` is what the file says about itself."""
@@ -145,6 +179,7 @@ class CampaignState:
                              "runway repairs and tankers follow new rules, so it cannot be loaded; please start a new campaign.")
         if int(d.get("turn_min", 120)) != clock.TURN_MIN:         # S25: every clock in a save (turn, idle counter, craters, move_until, raid and support clocks) counts turns of its own length; a missing field is the old 2-hour clock
             raise ValueError(f"This campaign was saved with {int(d.get('turn_min', 120)) // 60}-hour turns; turns are now {clock.TURN_MIN // 60} hours, so its dates cannot be read. Please start a new campaign.")
+        _upgrade_su34(d)                                                  # S106: an old save's Su-34s are Su-24Ms now
         s = cls(name=d["name"], theatre=d.get("theatre", "caucasus"), level=d.get("level", 2),
                 campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1), turn=int(d.get("turn", 0)),
                 sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"),
