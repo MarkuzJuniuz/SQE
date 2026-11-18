@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.483, site layout and spawning code tidied
+Internal: tidied the site layout and site spawning code; no change in play.
+
 ## v0.41.482, CAS ground-fight code tidied
 Internal: tidied the CAS ground-fight code; no change in play.
 
