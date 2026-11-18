@@ -203,7 +203,7 @@ the carrier is sunk, its aircraft are moved to land fields (any that cannot be p
 * **Idle surge.** If you keep skipping turns that had a flight you could have flown, red presses harder. Each such skipped
   turn counts one; a flown sortie resets the count to zero, and a turn with nothing for you to fly (a stand-down turn) is not
   counted. The first 12 counted turns (two days' worth) are free. Past that, red's reinforcements, attack chance and raid rate
-  grow for each further day's worth of skipped turns (`red_surge`: 3% at Level 2, 8% at Level 3, none at Level 1). The Pilot Influence setting turns this off.
+  grow for each further day's worth of skipped turns (`red_surge`: 3% at Level 2, 8% at Level 3, none at Level 1). The Tactical Edge setting turns this off.
 
 ---------------------------------------------------------------------------------------------------
 

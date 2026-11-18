@@ -29,6 +29,18 @@ def _upgrade_cap_tags(*parts) -> None:
         walk(p)
 
 
+def _upgrade_tactical_edge(ground) -> None:
+    """S88 R3: the two Tactical Edge switches were app settings the engine copied into `ground` on every open, under their old names. Move an old key to its new name
+    (`pilot_influence` -> `tactical_edge`, `tempo_decay` -> `tactical_edge_decay`) on load, in place; the new key wins if both exist. A save with neither key gets the
+    readers' defaults (edge on, decay off), as before. No format bump: saving writes only the new names."""
+    if not isinstance(ground, dict):
+        return
+    for old, new in (("pilot_influence", "tactical_edge"), ("tempo_decay", "tactical_edge_decay")):
+        if old in ground:
+            val = ground.pop(old)
+            ground.setdefault(new, val)
+
+
 class SaveIncompatible(Exception):
     """A campaign file this build cannot open. `kind`: "older" (saved by an earlier SQE), "newer" (a later one), "damaged" (not a readable save).
     The GUI turns it into the friendly dialog; `info()` is what the file says about itself."""
@@ -144,6 +156,7 @@ class CampaignState:
         s.assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in d["assets"].items()}
         s.enemy_air = [wing_from_dict(w) for w in d["enemy_air"]]
         s.ground = d.get("ground") or {}
+        _upgrade_tactical_edge(s.ground)                                  # S88 R3: old saves hold the two Tactical Edge switches under their old names
         if s.ground and int(s.ground.get("v", 1)) < 3:
             raise ValueError("This campaign was saved before the Campaign Revamp supply stage (v0.41.144): the ground war and its supply sites changed, so it cannot be loaded. Please start a new campaign.")
         s.raids = d.get("raids") or {}

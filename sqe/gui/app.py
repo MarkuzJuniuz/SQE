@@ -774,18 +774,18 @@ class MainWindow(QMainWindow):
             self.settings()
             if self.session.settings.problems():
                 return
-        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"), getattr(self.session.settings, "ai_skill_red", "level"), getattr(self.session.settings, "ai_skill_blue", "level"), bool(getattr(self.session.settings, "pilot_influence", True)), prefill=prefill, edge_decay=bool(getattr(self.session.settings, "tempo_decay", False)))
+        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"), getattr(self.session.settings, "ai_skill_red", "level"), getattr(self.session.settings, "ai_skill_blue", "level"), prefill=prefill)      # S88 R3: Tactical Edge starts at the dialog's own defaults (on, decay off)
         if dlg.exec() == QDialog.Accepted:
             try:
                 v = dlg.values()
                 self.session.settings.weather_mode = v.get("weather_mode", self.session.settings.weather_mode)
-                self.session.settings.pilot_influence = bool(v.get("pilot_influence", True)); self.session.settings.tempo_decay = bool(v.get("tempo_decay", False))
                 self.session.settings.ai_skill_red = v.get("ai_skill_red", self.session.settings.ai_skill_red); self.session.settings.ai_skill_blue = v.get("ai_skill_blue", self.session.settings.ai_skill_blue)
                 try:
                     self.session.settings.save()
                 except OSError:
                     pass
-                self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus')); self.refresh_all()
+                self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus'),
+                                 tactical_edge=bool(v.get("tactical_edge", True)), tactical_edge_decay=bool(v.get("tactical_edge_decay", False))); self.refresh_all()
             except Exception:
                 QMessageBox.critical(self, "Could not create campaign", traceback.format_exc())
 
@@ -883,7 +883,7 @@ class MainWindow(QMainWindow):
         ev.accept()
 
     def settings(self):
-        if SettingsDialog(self.session.settings, self).exec() == QDialog.Accepted:
+        if SettingsDialog(self.session.settings, self, state=getattr(self.session, "state", None)).exec() == QDialog.Accepted:
             if getattr(self.session, "state", None) is not None:
                 self.session.refresh_weather(); self.session.save()      # the weather setting changes which packages fly
             self.refresh_all()

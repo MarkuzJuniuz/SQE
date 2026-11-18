@@ -23,18 +23,18 @@ def kind_of(objective_type: str) -> str:
     return {"CAS": "CAS", "STRIKE": "STRIKE", "DEAD": "DEAD"}.get(t, "AIR")
 
 
-def influence_on(state) -> bool:
-    """v0.41.160: the Pilot Influence setting (copied into the campaign by the engine). Off: your flying changes nothing in the war."""
-    return bool((getattr(state, "ground", None) or {}).get("pilot_influence", True))
+def edge_on(state) -> bool:
+    """v0.41.160: the campaign's Tactical Edge switch (`state.ground["tactical_edge"]`: set at New Campaign, edited in Settings > Campaign; S88 R3 made it per campaign). Off: your flying changes nothing in the war."""
+    return bool((getattr(state, "ground", None) or {}).get("tactical_edge", True))
 
 
 def decay_on(state) -> bool:
-    """v0.41.208 (XO): the nightly fade of the edge is a per-campaign switch (Enable Tactical Edge Decay), default OFF."""
-    return bool((getattr(state, "ground", None) or {}).get("tempo_decay", False))
+    """v0.41.208 (XO): the nightly fade of the edge is a per-campaign switch (Enable Tactical Edge Decay, `state.ground["tactical_edge_decay"]`), default OFF."""
+    return bool((getattr(state, "ground", None) or {}).get("tactical_edge_decay", False))
 
 
 def get(state, kind: str) -> float:
-    if not influence_on(state):
+    if not edge_on(state):
         return 0.0
     return max(TEMPO_MIN, min(TEMPO_CAP, float((getattr(state, "tempo", None) or {}).get(kind, 0.0))))      # older saves may hold a negative value: read as zero
 
@@ -76,8 +76,8 @@ def record(state, objective_type, tone: str, extra: dict | None = None) -> list:
     if getattr(state, "ground", None):
         state.ground["idle_turns"] = 0                               # v0.41.155 / v0.41.337: the squadron flew: red's idle surge starts over (ground.surge counts skipped flyable turns now)
         state.ground["flew_today"] = state.ground["flyable_today"] = True      # v0.41.337: the day's end block (Session._midnight) reads these: no supply round, no stand-down
-    if not influence_on(state):
-        return []                                                    # Pilot Influence off: nothing moves
+    if not edge_on(state):
+        return []                                                    # Tactical Edge off: nothing moves
     if not hasattr(state, "tempo") or state.tempo is None:
         state.tempo = {}
     out = []

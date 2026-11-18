@@ -98,10 +98,12 @@ class Session:
         return sorted(d.glob(f"*{CAMPAIGN_EXT}"), key=lambda p: p.stat().st_mtime, reverse=True) if d.exists() else []
 
     def new(self, name: str, aircraft: str, level: int, seed: int | None = None, start_date: str = "2006-06-12", night_ops: bool = True,
-            squadron: str | None = None, theatre: str = "caucasus") -> None:
+            squadron: str | None = None, theatre: str = "caucasus", tactical_edge: bool = True, tactical_edge_decay: bool = False) -> None:
         theatres.use(theatre)
         self.sync_terrain()
         self.state = new_campaign(name, aircraft, level, theatre=theatre, seed=seed, start_date=start_date, night_ops=night_ops, player_squadron=squadron)
+        self.state.ground["tactical_edge"] = bool(tactical_edge)                                          # S88 R3: the two Tactical Edge switches belong to the campaign (they were app settings copied in on every open)
+        self.state.ground["tactical_edge_decay"] = bool(tactical_edge and tactical_edge_decay)            # v0.41.208: the decay needs the edge
         safe = "".join(c if c.isalnum() or c in "-_ " else "_" for c in name).strip() or "campaign"
         self.path = self.campaigns_dir() / f"{safe}{CAMPAIGN_EXT}"
         self.plan_day()
@@ -186,9 +188,6 @@ class Session:
         ground.ensure_forward_garrisons(st)             # v0.41.102: a forward garrison for each side in every sector (older saves too)
         sams.ensure_blue_sams(st)                       # v0.41.62: blue's three air-defence sites at every airfield (older saves: from the field's `defense`)
         ground.snap_roads(st)                           # once, as soon as a road scan exists: columns and supply sites sit on a road
-        if st.ground is not None:
-            st.ground["pilot_influence"] = bool(getattr(self.settings, "pilot_influence", True))
-            st.ground["tempo_decay"] = bool(getattr(self.settings, "tempo_decay", False))      # v0.41.208
         from . import carrier_pos, fleet as _fleet
         for _ln in _fleet.step(st):                     # v0.41.257: a sunk carrier comes back as new on its day; sunk escorts are replaced
             st.note(_ln)
@@ -1163,9 +1162,6 @@ class Session:
     def _sim(self, rng=None):
         """The war simulator."""
         from .war import WarSimulator
-        if self.state is not None and self.state.ground is not None:
-            self.state.ground["pilot_influence"] = bool(getattr(self.settings, "pilot_influence", True))      # v0.41.160: the app setting rides in the campaign for the sim
-            self.state.ground["tempo_decay"] = bool(getattr(self.settings, "tempo_decay", False))             # v0.41.208
         return WarSimulator(self.d, rng)
 
     # ---- the clock: Skip and Fly take one turn (v0.41.337, campaign rules plan Phase 3) --------------------------------------
