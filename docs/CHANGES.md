@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.478, package-merging rules moved
+Internal: the package-merging rules moved to their own file; no change in play.
+
 ## v0.41.477, Tactical Edge is set per campaign
 Tactical Edge and Tactical Edge Decay are now set per campaign: the Settings > Campaign rows change the campaign that is open (greyed out when none is), and the New Campaign dialog sets the starting value. Existing campaigns keep the value they had. The old name Pilot Influence is gone from the game.
 
