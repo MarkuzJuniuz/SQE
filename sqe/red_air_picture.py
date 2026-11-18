@@ -19,7 +19,7 @@ from .models import BaseKind, ObjectiveType, Role
 from .routes import FT, NM, bearing, dist, offset
 from .strike_tasks import KPH
 
-RED_LONG_RANGE = {"Su_27", "MiG_31"}    # v0.41.29: red's long-range class (the Su-27); v0.41.142: the MiG-31 joins it on Levels 2 and 3 (XO 2026-10-24)
+RED_LONG_RANGE = {"Su_27", "MiG_31", "MiG_25PD"}    # v0.41.29: red's long-range class (the Su-27); v0.41.142: the MiG-31 joins it on Levels 2 and 3 (XO 2026-10-24)
 RED_CALLIN_ZONE_NM = 25       # ...where it engages inside this circle round the site
 RED_CALLIN_NM = 50            # ...and a patrol is called to the SAM site it guards when blue comes this close to that site
 CAP_FLEET_KEEPOUT_NM = 78      # Red's known CAP stations stay at least this far from any carrier: the ships' SM-2 reach 70 nm (measured: CAP pairs killed 51 to 67 nm out) + 8 nm margin (v0.41.76: was 90, hand-set)
@@ -29,7 +29,7 @@ A2A_ZONE_NM = {True: 25, False: 15}
 # S45 (XO 2026-11-11, the red counterpart of the F-14B(U) special case): the MiG-31 is a ground-controlled interceptor, not a dogfighter (R-33: a big, heavy missile built against bombers and cruise-missile carriers;
 # the aircraft is a heavy Mach 2.8 airframe with a limited g-limit, about 5 g from memory, public reference books, firmness low). It works from inside its own SAM cover and shoots at the R-33's range, so it keeps a larger
 # engage circle (judgment call: the R-33's published reach is about 120 km = 65 nm, the circle is a little over half of that) and gets no RED_EXTRA_NM past the SAM cover that the Su-27 gets (scramble.red_station_vs).
-RED_STANDOFF = {"MiG_31"}
+RED_STANDOFF = {"MiG_31", "MiG_25PD"}       # S90 P3a: the MiG-25PD is the same kind of ground-controlled interceptor (it keeps the MiG-31's engage circle and stays inside its SAM cover; judgment call: its R-40's reach is shorter than the R-33's, so the circle is generous)
 RED_STANDOFF_ZONE_NM = 40
 
 

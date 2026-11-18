@@ -16,13 +16,13 @@ The Mozdok bomber wing and its escort squadron are not part of this (scenario.py
 from __future__ import annotations
 import math
 
-HEAVY = {"MiG_31", "Su_27", "Su_24M"}
-LONG_RANGE = ("MiG_31", "Su_27")
+HEAVY = {"MiG_31", "Su_27", "Su_24M", "MiG_25PD"}      # S90 P3a: + the MiG-25PD (a big twin-fin interceptor, the MiG-31's parking class)
+LONG_RANGE = ("MiG_31", "Su_27", "MiG_25PD")            # S90 P3a: + the MiG-25PD (the "long-range fast" interceptor of a roster that has no MiG-31; its field share is set by the Syria roster, `allocate` gives it the uniform desire)
 MIG31_SHARE = {2: 0.15, 3: 0.50, 4: 0.75}             # share of a field's long-range jets that are MiG-31, by the field's tier (v0.41.163, XO 2026-10-27: flipped, the interceptor sits deep under ground control, the Su-27 holds the fringe)
-ORDER = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis", "Su_24M", "Su_25")      # allocation order: the fighters first (every field gets some), then the strikers fill what parking is left
-FIGHTERS = ("MiG_31", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis")
+ORDER = ("MiG_31", "MiG_25PD", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis", "Su_24M", "Su_17M4", "Su_25")      # allocation order: the fighters first (every field gets some), then the strikers fill what parking is left
+FIGHTERS = ("MiG_31", "MiG_25PD", "Su_27", "MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis")
 LIGHT_FIGHTERS = ("MiG_29S", "MiG_29A", "MiG_23MLD", "MiG_21Bis")                # the fighter types `consolidate` may swap (not heavy: parking caps; not MiG-31: depth gradient)
-STRIKERS = ("Su_25", "Su_24M")                                                    # `consolidate` swaps these among themselves too (v0.41.438)
+STRIKERS = ("Su_25", "Su_24M", "Su_17M4")                                                    # `consolidate` swaps these among themselves too (v0.41.438)
 FIGHTER_FLOOR = 4                                       # every field keeps at least this many fighters (a pair of pairs): the old rule "every wing keeps a fighter squadron"
 
 # Jets per level, bombers excluded (judgment calls: the red numbers of the 2026-10-25 plan; fighters about 85% of the old count with the MiG-31s inside,
