@@ -273,7 +273,7 @@ RELIEF_FACTOR = 2                 # the scan-built relief grid has cells this ma
 SRTM_URL = "https://s3.amazonaws.com/elevation-tiles-prod/skadi/{ns}{lat:02d}/{ns}{lat:02d}{ew}{lng:03d}.hgt.gz"      # AWS open terrain tiles (SRTM, 1 arc-second, 3601 x 3601 per degree)
 SRTM_BLOCK = 8                    # each tile is cut down 8 x 8 (about 250 m) before use: block maximum + block average, then the 2 km cells are read from that
 GRIDS = {"caucasus": (-430000.0, 190000.0, 2000.0, 250, 390),      # theatre -> (x0, y0, cell size m, nx, ny): the shipped relief grid; same frame as the scan files
-         "syria": (-320000.0, -580000.0, 2000.0, 310, 580)}        # S90: the whole DCS Syria map (x -320000..300000, y -580000..580000; pydcs Syria.bounds is -579986..579998 in y), same 2 km cell, 179,800 cells
+         "syria": (-440000.0, -580000.0, 2000.0, 370, 580)}        # S90: the whole DCS Syria map (x -440000..300000, y -580000..580000), same 2 km cell, 214,600 cells. pydcs Syria.bounds says x from -320000, but its airports go down to -420311 (Nevatim), so the south edge is -440000
 SRTM_CREDIT = "SRTM (NASA / USGS Shuttle Radar Topography Mission) via the AWS open terrain tiles, registry.opendata.aws/terrain-tiles"
 
 

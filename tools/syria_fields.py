@@ -37,9 +37,11 @@ FIELDS_TXT = OUT_DIR / "fields.txt"
 AIRFIELDS_MD = OUT_DIR / "airfields.md"
 STUB_JSON = OUT_DIR / "syria.json"
 
-# The whole DCS Syria map in DCS coordinates (x north, y east, metres). pydcs: Syria.bounds = Rectangle(top -320000, left -579986, bottom 300000, right 579998).
+# The whole DCS Syria map in DCS coordinates (x north, y east, metres). pydcs: Syria.bounds = Rectangle(top -320000, left -579986, bottom 300000, right 579998), BUT the map
+# reaches further south than that: pydcs has airports down to x -420311 (Nevatim; Muwaffaq Salti -357496, Hatzerim -415658). The first scan used -320000 and never looked at
+# Muwaffaq Salti (no road points there, 2026-11-18). The south edge is now -440000 (20 km beyond the southernmost airport; a judgment call, the true edge is not known).
 # Rounded out to whole kilometres so the 250 m scan grid and the 1 km height grid divide it.
-MAP_X0, MAP_X1, MAP_Y0, MAP_Y1 = -320000, 300000, -580000, 580000
+MAP_X0, MAP_X1, MAP_Y0, MAP_Y1 = -440000, 300000, -580000, 580000
 MAP_LAT, MAP_LON = 34.93, 35.90           # the middle of the map (pydcs: x -10000, y 0), 2026-11-18
 MAP_TZ = 2.0                              # Syria, Lebanon, Israel, Jordan, Cyprus all run UTC+2 as standard time (2000: EET)
 PROBE_AIRPORT = "Damascus"                # where the scan mission parks its Su-25T (71 slots, planes)
