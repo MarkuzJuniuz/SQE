@@ -148,7 +148,7 @@ class SettingsDialog(QDialog):
         row(v, "Takeoff buffer", self.tob)
         hint(v, "Time between mission start and the takeoff time on your kneeboard (you start on the runway or cat, engines running). "
                 "Default 60 s. Negative means the plan expects you to be rolling before the clock starts, so you must make the time up in the air.")
-        self.hold = StepSpin(); self.hold.setRange(-10, 30); self.hold.setSuffix(" min"); self.hold.setValue(int(settings.hold_minutes))
+        self.hold = StepSpin(); self.hold.setRange(-10, 30); self.hold.setSuffix(" min"); self.hold.setValue(int(settings.marshal_slack_min))
         row(v, "Marshal slack", self.hold)
         hint(v, "Time between reaching the marshal point and the PUSH. Smaller = less waiting. Negative means you must beat the "
                 "natural pace (afterburner time). AI flights adjust automatically.")
@@ -206,7 +206,7 @@ class SettingsDialog(QDialog):
                 "decided when you build the mission and applied at the debrief.")
         self.carc = QCheckBox("Carcasses: wrecks at damaged and destroyed ground sites near your route")
         self.carc.setChecked(bool(getattr(settings, "carcasses", True))); v.addWidget(self.carc)
-        self.cw = StepSpin(); self.cw.setRange(5, 100); self.cw.setSuffix(" % of a unit"); self.cw.setValue(int(getattr(settings, "carcass_weight_pct", 25)))
+        self.cw = StepSpin(); self.cw.setRange(5, 100); self.cw.setSuffix(" % of a unit"); self.cw.setValue(int(getattr(settings, "wreck_static_weight_pct", 25)))
         row(v, "Wreck and static weight", self.cw)
         hint(v, "Wrecks and supply buildings (fuel tanks, depots) are static objects: no AI, no weapons, they never move. Each counts this share of a unit toward "
                 "the unit limit. When a mission is over the limit the furthest wrecks from your route are dropped first, before any flight is touched; buildings are "
@@ -217,7 +217,7 @@ class SettingsDialog(QDialog):
         v = page("Mission Build")
         self.merge = QComboBox(); self.merge.addItem("Off (one package per mission)", "off"); self.merge.addItem("Same area (targets inside the radius)", "area")
         self.merge.setCurrentIndex(1 if settings.merge_mode == "area" else 0)
-        self.mmax = StepSpin(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.merge_max_units))
+        self.mmax = StepSpin(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.max_units))
         row(v, "Package merging", self.merge, self.mmax)
         hint(v, "Packages inside the radius that start within the time windows below fly in the same mission (AI-flown, one shared ground "
                 "world and support). The waiting window shows the unit count so you can compare performance. The unit limit counts the whole mission, merged packages included: over it, returning flights go first, then the package that starts latest (a Fighter Sweep last), then wrecks are trimmed.")
@@ -230,17 +230,14 @@ class SettingsDialog(QDialog):
         self.mraids.setChecked(bool(getattr(settings, "merge_raids_all", True))); v.addWidget(self.mraids)
         hint(v, "Raid intercepts that start inside the time windows fly in one mission, wherever the raids are going. Off: a raid folds in only when its way in passes "
                 "your target area. Missions that carry red's raids are marked in the list: red border = only red's raids, amber = your packages and red's raids together.")
-        self.mback = StepSpin(); self.mback.setRange(0, 30); self.mback.setSingleStep(5); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_back_min", 15)))
+        self.mback = StepSpin(); self.mback.setRange(0, 30); self.mback.setSingleStep(5); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_earlier_min", 15)))
         row(v, "Earlier packages", self.mback)
         hint(v, "Packages that started up to this long before yours also fly, already airborne and underway when the mission starts. "
                 "A package that has already struck is not flown to its target (see Ruins on the Campaign tab). 0 = only later packages.")
-        self.mfwd = StepSpin(); self.mfwd.setRange(0, 60); self.mfwd.setSingleStep(5); self.mfwd.setSuffix(" min after"); self.mfwd.setValue(int(getattr(settings, "merge_fwd_min", 30)))
+        self.mfwd = StepSpin(); self.mfwd.setRange(0, 60); self.mfwd.setSingleStep(5); self.mfwd.setSuffix(" min after"); self.mfwd.setValue(int(getattr(settings, "merge_later_min", 30)))
         row(v, "Later packages", self.mfwd)
         hint(v, "Packages that start up to this long after yours also fly in the same mission (late-activated, they push at their own time). "
                 "Over the unit limit, the package that starts latest is dropped first.")
-        self.mpct = StepSpin(); self.mpct.setRange(0, 100); self.mpct.setSuffix(" %"); self.mpct.setValue(int(settings.merge_enemy_pct))
-        row(v, "Enemy air sum", self.mpct)
-        hint(v, "When packages are folded in: enemy fighters = the biggest package's need + this share of every other folded package's need (100 = full sum).")
         self.feng = StepSpin(); self.feng.setRange(0, 300); self.feng.setSuffix(" nm"); self.feng.setValue(int(settings.fighter_engage_nm))
         self.fmin = StepSpin(); self.fmin.setRange(0, 120); self.fmin.setSuffix(" min after TOT"); self.fmin.setValue(int(settings.fighter_engage_minutes))
         row(v, "TARCAP / escort / sweep engage range", self.feng, self.fmin)
@@ -333,15 +330,14 @@ class SettingsDialog(QDialog):
 
     def _save(self):
         self.s.dcs_install, self.s.dcs_saves = S.native(self.inst.text()), S.native(self.saves.text())
-        self.s.hold_minutes = int(self.hold.value())
+        self.s.marshal_slack_min = int(self.hold.value())
         self.s.takeoff_buffer_s = int(self.tob.value())
         self.s.ai_unlimited_fuel = self.fuel.isChecked()
         self.s.hot_ramp_scrambles = self.hotramp.isChecked()
         self.s.hot_runway_starts = self.hotrwy.isChecked()
         self.s.hot_runway_own_field = self.hotrwy.isChecked() and self.hotrwy_own.isChecked()
-        self.s.merge_mode = self.merge.currentData(); self.s.merge_max_units = int(self.mmax.value())
-        self.s.merge_enemy_pct = int(self.mpct.value())
-        self.s.merge_back_min = int(self.mback.value()); self.s.merge_fwd_min = int(self.mfwd.value())
+        self.s.merge_mode = self.merge.currentData(); self.s.max_units = int(self.mmax.value())
+        self.s.merge_earlier_min = int(self.mback.value()); self.s.merge_later_min = int(self.mfwd.value())
         self.s.merge_radius_nm = int(self.mrad.value()); self.s.merge_raids_all = bool(self.mraids.isChecked())
         self.s.ruins = bool(self.ruins.isChecked())
         self.s.ecm_script = bool(self.ecm.isChecked())
@@ -351,7 +347,7 @@ class SettingsDialog(QDialog):
         self.s.splash_damage = bool(self.splash.isChecked())
         self.s.ai_land_carrier = str(self.land_cv.currentData() or "always")
         self.s.ai_land_field = str(self.land_af.currentData() or "never")
-        self.s.carcasses = bool(self.carc.isChecked()); self.s.carcass_weight_pct = int(self.cw.value())
+        self.s.carcasses = bool(self.carc.isChecked()); self.s.wreck_static_weight_pct = int(self.cw.value())
         self.s.dormant_sites = bool(self.dorm.isChecked())
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.ils_low_vis = bool(self.ilslv.isChecked())
