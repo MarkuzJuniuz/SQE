@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## Tools: Syria time zone and magnetic variation probe, SA-5 probe fixed
+Development tools only, no change in play. A new probe mission logs the Syria runway data to find the magnetic variation, and the SA-5 probe now switches its flights on one at a time against a 16-launcher site.
+
 ## Tools: road net scan for any theatre pack, SA-5 range probe, road coverage report
 Development tools only, no change in play. The road net scan takes a theatre pack (its airfields and long hops), there is a new SA-5 range probe mission, and `sqe_scan.py roads-report` lists the road coverage of a theatre's sectors and fields.
 
