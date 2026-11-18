@@ -43,13 +43,19 @@ class NewCampaignDialog(QDialog):
             self.th.addItem(tname, tid)
         if self.th.count() > 1:                       # the picker only appears once there is more than one theatre pack
             form.addRow("Theatre", self.th)
-        self.ac = QComboBox()
-        for k, s in AIRCRAFT.items():
-            if s.player_flyable:
-                self.ac.addItem(f"{s.display}  ({s.service}, {'carrier' if s.service == 'Navy' else 'land-based'})", k)
+        # S103a / S103b: the Era Equipment choices are made first (their group is placed lower down) because "You fly" lists only the A-10 and F-14 variants chosen there
+        self.year_lbl = QLabel("2006")                   # the year is a fixed label from the theatre pack's `era` block (month and day stay free)
+        self.a10 = QComboBox(); self.f14 = QComboBox(); self.l16 = QComboBox()
+        for cb_, tbl_ in ((self.a10, A10_VARIANTS), (self.f14, F14_VARIANTS)):
+            for k_, lab_ in tbl_.items():
+                cb_.addItem(lab_, k_)
+        self.l16.addItem("Enabled", True); self.l16.addItem("Disabled", False)
+        self.ac = QComboBox(); self.sqd = QComboBox()
+        self._era_defaults(); self._fill_aircraft()
         form.addRow("You fly", self.ac)
-        self.sqd = QComboBox(); form.addRow("Your squadron", self.sqd)
+        form.addRow("Your squadron", self.sqd)
         self.ac.currentIndexChanged.connect(self._squads); self.th.currentIndexChanged.connect(self._squads); self._squads()
+        self.a10.currentIndexChanged.connect(self._fill_aircraft); self.f14.currentIndexChanged.connect(self._fill_aircraft)
         self.lvl = QComboBox()
         for n, d in LEVELS.items():
             self.lvl.addItem(d.name, n)
@@ -67,7 +73,6 @@ class NewCampaignDialog(QDialog):
             self.month.addItem(mname, i)
         self.month.setCurrentIndex(5)
         self.day = StepSpin(); self.day.setRange(1, 28); self.day.setValue(12)
-        self.year_lbl = QLabel("2006")                   # S103a: the year is a fixed label from the theatre pack's `era` block (month and day stay free)
         row = QHBoxLayout(); row.addWidget(self.month, 1); row.addWidget(self.day); row.addWidget(self.year_lbl)
         form.addRow("Campaign starts", row)
         self.edge = QCheckBox("Tactical Edge: your sorties affect the war")
@@ -96,18 +101,13 @@ class NewCampaignDialog(QDialog):
         # The pickers list only the variants this build has (aircraft.A10_VARIANTS / F14_VARIANTS).
         eq = QGroupBox("Era Equipment"); ev = QVBoxLayout(eq); ev.setSpacing(8)
         ef = QFormLayout(); ef.setSpacing(8)
-        self.a10 = QComboBox(); self.f14 = QComboBox(); self.l16 = QComboBox()
-        for cb_, tbl_ in ((self.a10, A10_VARIANTS), (self.f14, F14_VARIANTS)):
-            for k_, lab_ in tbl_.items():
-                cb_.addItem(lab_, k_)
-        self.l16.addItem("Enabled", True); self.l16.addItem("Disabled", False)
         ef.addRow("A-10", self.a10); ef.addRow("F-14", self.f14); ef.addRow("Link 16", self.l16)
         ev.addLayout(ef)
         eb = QHBoxLayout(); self.era_btn = QPushButton("Era Defaults"); self.era_btn.clicked.connect(self._era_defaults)
         eb.addWidget(self.era_btn); eb.addStretch(1); ev.addLayout(eb)
         eh = QLabel("Fixed when the campaign is created. Defaults follow the theatre's year."); eh.setObjectName("small"); eh.setWordWrap(True); ev.addWidget(eh)
         lay.addWidget(eq)
-        self.th.currentIndexChanged.connect(self._era_defaults); self._era_defaults()
+        self.th.currentIndexChanged.connect(self._era_defaults)                  # (the defaults were applied once above, before "You fly" was filled)
         self.blurb = QLabel(); self.blurb.setWordWrap(True); self.blurb.setObjectName("dim"); lay.addWidget(self.blurb)
         self.lvl.currentIndexChanged.connect(self._b); self._b()
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel); bb.accepted.connect(self.accept)
@@ -128,10 +128,24 @@ class NewCampaignDialog(QDialog):
             cb_.setCurrentIndex(max(0, cb_.findData(e[key_])))
         self.l16.setCurrentIndex(max(0, self.l16.findData(bool(e["link16"]))))
 
+    def _fill_aircraft(self):
+        """The "You fly" list: every player-flyable jet, with only the A-10 and the F-14 chosen in Era Equipment (the other variants are not in this campaign). Keeps the selection; a choice of the
+        A-10 or F-14 family follows the variant picked."""
+        prior = self.ac.currentData()
+        a10, f14 = self.a10.currentData(), self.f14.currentData()
+        want = a10 if prior in A10_VARIANTS else f14 if prior in F14_VARIANTS else prior
+        self.ac.blockSignals(True); self.ac.clear()
+        for k, s in AIRCRAFT.items():
+            if s.player_flyable and (k not in A10_VARIANTS or k == a10) and (k not in F14_VARIANTS or k == f14):
+                self.ac.addItem(f"{s.display}  ({s.service}, {'carrier' if s.service == 'Navy' else 'land-based'})", k)
+        self.ac.setCurrentIndex(max(0, self.ac.findData(want)))
+        self.ac.blockSignals(False)
+        self._squads()
+
     def _squads(self):
         from ..scenario import squadron_options
         self.sqd.clear()
-        for sid, label in squadron_options(self.ac.currentData(), self.th.currentData() or "caucasus"):
+        for sid, label in squadron_options(self.ac.currentData(), self.th.currentData() or "caucasus", a10_variant=self.a10.currentData(), f14_variant=self.f14.currentData()):
             self.sqd.addItem(label, sid)
 
     def values(self) -> dict:

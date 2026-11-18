@@ -85,6 +85,13 @@ _D: dict = {
         "GUIDED": {1: "=ALQ_184", 3: "={GBU-31}", 4: "={GBU_54_V_1B}", 5: "={CBU_103}", 7: "={CBU_103}", 8: "={GBU_54_V_1B}", 9: "={GBU-31}", 10: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 11: "={DB434044-F5D0-4F1F-9BA9-B73027E18DD3}"},
         "STRIKE": {1: "=ALQ_184", 3: "={60CC734F-0AFA-4E2E-82B8-93B941AB11CF}", 4: "={CBU-87}", 5: "={CBU-87}", 7: "={CBU-87}", 8: "={CBU-87}", 9: "={60CC734F-0AFA-4E2E-82B8-93B941AB11CF}", 10: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 11: "={DB434044-F5D0-4F1F-9BA9-B73027E18DD3}"},
     },
+    "A-10A": {
+        # S103b (XO 2026-11-18): the A-10C's CAS and STRIKE kits above with the targeting pod (pylon 10, A111396E) left off: the Syria 2000 A-10A has no Litening pod and no JDAM (`syria-2000-research.md` section 3), and every other
+        # store of those kits (ALQ-184 on 1, LAU-88 2 x AGM-65D on 3 and 9, CBU-97 on 4 and 8, CBU-87 on 5 and 7, 2 x AIM-9M on 11; the supply strike's BRU-42 3 x Mk-82 on 3 and 9 and CBU-87 on 4, 5, 7, 8) is on the pydcs `A_10A`
+        # pylon tables with the same CLSIDs (checked 2026-11-18). No "GUIDED" kit (it is GBU-31 / GBU-54 / CBU-103: JDAM and WCMD): an A-10A attacking from a high floor flies this CAS kit, Mavericks and cluster bombs. NOT in JDAM_JETS.
+        "CAS": {1: "=ALQ_184", 3: "={E6A6262A-CA08-4B3D-B030-E1A993B98452}", 4: "={5335D97A-35A5-4643-9D9B-026C75961E52}", 5: "={CBU-87}", 7: "={CBU-87}", 8: "={5335D97A-35A5-4643-9D9B-026C75961E52}", 9: "={E6A6262A-CA08-4B3D-B030-E1A993B98453}", 11: "={DB434044-F5D0-4F1F-9BA9-B73027E18DD3}"},
+        "STRIKE": {1: "=ALQ_184", 3: "={60CC734F-0AFA-4E2E-82B8-93B941AB11CF}", 4: "={CBU-87}", 5: "={CBU-87}", 7: "={CBU-87}", 8: "={CBU-87}", 9: "={60CC734F-0AFA-4E2E-82B8-93B941AB11CF}", 11: "={DB434044-F5D0-4F1F-9BA9-B73027E18DD3}"},
+    },
 }
 _ALIAS = {Role.TARCAP: "CAP", Role.ESCORT: "CAP", Role.SWEEP: "CAP", Role.CAP: "CAP"}
 

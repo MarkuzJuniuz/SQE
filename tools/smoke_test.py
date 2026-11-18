@@ -32,7 +32,7 @@ def fresh_session(level=3, seed=7, ac="F-16C"):
     """A new campaign of its own for a check that needs a session."""
     ses = mk()
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
-    ses.new("Smoke fresh", ac, level, seed=seed)
+    ses.new("Smoke fresh", ac, level, seed=seed, a10_variant=ac if ac == "A-10A" else None)      # S103b: the A-10A needs a campaign created with it (Era Equipment)
     return ses
 
 
@@ -63,7 +63,7 @@ def _fixed_ids(name: str) -> None:
     _u.uuid4 = lambda: _u.UUID(int=rng.getrandbits(128), version=4)
 
 
-BUILD_CASES = [("F-16C", 3, 7), ("F-15C", 3, 3), ("FA-18C", 2, 11), ("A-10C", 1, 5), ("F-14BU", 2, 9)]
+BUILD_CASES = [("F-16C", 3, 7), ("F-15C", 3, 3), ("FA-18C", 2, 11), ("A-10C", 1, 5), ("F-14BU", 2, 9), ("A-10A", 1, 5)]
 _built = None
 
 

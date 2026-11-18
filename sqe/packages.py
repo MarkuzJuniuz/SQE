@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, asdict
 from . import runways, threat
 from . import threatmap as tm
 from .loadouts import CBU_JETS, ENEMY_FIGHTERS, ENEMY_RADIUS_NM, EWR_KIT_ORDER, JSOW_PER_JET, PEN_PER_JET, PEN_REACH, SLAM_PER_JET
-from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER, STRIKE_CONDITIONAL
+from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER, STRIKE_CONDITIONAL, HOG_KEYS
 from .models import AssetKind, Objective, ObjectiveType, Role, BaseKind, RefuelMethod
 from .state import CampaignState
 
@@ -17,7 +17,7 @@ CLUSTER_NM, SALVO_4_NEIGHBOURS, SALVO_8_NEIGHBOURS = 25, 2, 4     # judgment cal
 CARRIER_PLAYER_FLIGHT_MAX = 2        # catapult spots are limited; keep the player's cat-start flight small
 PLAYER_ROLE_PREFERENCE = {Role.STRIKE: 5, Role.SEAD: 4, Role.TARCAP: 3, Role.ESCORT: 2, Role.SWEEP: 2, Role.CAP: 1, Role.CAS: 0}
 JTAC_OBJECTIVES = {ObjectiveType.CAS}
-TANKER_CAP_JETS = frozenset({"A-10C"})      # S96: the jets whose refuelling profile (aar_alt_ft / aar_kts) caps the tanker's orbit height and speed (judgment call: the A-10C's own 15,000 ft / 270 kt)
+TANKER_CAP_JETS = frozenset({"A-10C", "A-10A"})      # S96: the jets whose refuelling profile (aar_alt_ft / aar_kts) caps the tanker's orbit height and speed (judgment call: the A-10C's own 15,000 ft / 270 kt)
 
 
 class NoPlayerSlot(Exception):
@@ -499,15 +499,15 @@ class PackageBuilder:
             ok = [i for i, s in enumerate(slots) if s.role in spec.roles and self._slot_ok(psq.aircraft, s) and (not s.kit or psq.aircraft in KIT_JETS.get(s.kit, ())) and (not s.only or psq.aircraft == s.only)
                   and (not is_sweep(obj) or psq.aircraft in LONG_RANGE_A2A)                    # v0.41.15: no BVR sweep in an F-16 / F/A-18
                   and self._in_range(psq.id, tx, ty) and ledger.free[psq.id] >= 2]
-            if obj.type == ObjectiveType.CAS and psq.aircraft != "A-10C" and not self._hot:
+            if obj.type == ObjectiveType.CAS and psq.aircraft not in HOG_KEYS and not self._hot:
                 # v0.41.189 (XO): a quiet CAS job is the A-10Cs' job; a Viper / Hornet pilot is offered the CAS slot only when no A-10C squadron can fly it today
-                hog_ = any(sq_.aircraft == "A-10C" and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty) for sq_ in st.squadrons.values())
+                hog_ = any(sq_.aircraft in HOG_KEYS and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty) for sq_ in st.squadrons.values())
                 if hog_:
                     ok = [i for i in ok if slots[i].role != Role.CAS]
             if not ok:
                 raise NoPlayerSlot(f"{psq.name} cannot fly any role in: {obj.description}")
             player_idx = max(ok, key=lambda i: PLAYER_ROLE_PREFERENCE[slots[i].role])
-            if obj.type == ObjectiveType.CAS and psq.aircraft != "A-10C":      # v0.41.188: a Hornet / Viper pilot picking a CAS job flies the Maverick slot, not the escort
+            if obj.type == ObjectiveType.CAS and psq.aircraft not in HOG_KEYS:      # v0.41.188: a Hornet / Viper pilot picking a CAS job flies the Maverick slot, not the escort
                 cas_ = [i for i in ok if slots[i].role == Role.CAS]
                 player_idx = cas_[0] if cas_ else player_idx
             lead_service = spec.service
@@ -625,7 +625,7 @@ class PackageBuilder:
                 k += A2A_SECONDARY_NM
             if sweep_ and sq.aircraft in SWEEP_LAST:
                 k += A2A_SECONDARY_NM         # S45: a Fighter Sweep goes into red's fighters: an F-15C first, the Tomcat only when no Eagle squadron can fly it
-            if slot.role == Role.CAS and (sq.aircraft != "A-10C") == (not getattr(self, "_hot", False)):
+            if slot.role == Role.CAS and (sq.aircraft not in HOG_KEYS) == (not getattr(self, "_hot", False)):
                 k += CAS_JET_SWAY_NM         # v0.41.188: A-10Cs where the air is clear, F-16C / F/A-18C when red fighters reach the target
             return k
         if lead_service is None:

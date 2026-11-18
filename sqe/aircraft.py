@@ -123,12 +123,35 @@ AIRCRAFT: dict[str, AircraftSpec] = {
                      marshal_kts=250, alt_ft={_R.CAS: 9000, _R.STRIKE: 9000}, push_kts=300, ip_kts=300,
                      attack_kts=300, egress_kts=330, push_nm=35, ip_nm=12, egress_nm=15,
                      tgt_note="Release"), first_wp_label="0", bingo_lbs=1500, joker_lbs=2500),
+    # S103b (XO 2026-11-18): the A-10A, the Syria 2000 Warthog (no JDAM, no Litening pod: the Precision Engagement upgrade is 2005 to 2007, `syria-2000-research.md` section 3). pydcs `A_10A`: the Flaming Cliffs
+    # level jet (FC3, like the F-15C: no cockpit presets, plain frequencies, F10 ECM switch, always counted tuned), so it is PLAYER-FLYABLE for anybody who owns FC3; the AI model is the same one. It takes
+    # the same stores as the A-10C kit minus the targeting pod (pylon 10; the A_10A pylon tables carry the ALQ-184, AGM-65D, CBU-87 / 97, BRU-42 Mk-82 and AIM-9M of that kit with the same CLSIDs). Same
+    # route profile, roles and refuelling profile as the A-10C (the airframe is the same). first_wp_label "0" is the F-15C's / A-10C's: NOT checked in an A-10A cockpit.
+    "A-10A": AircraftSpec(
+        "A-10A", "A-10A Warthog", "A_10A", BaseKind.AIRFIELD,
+        frozenset({_R.CAS, _R.STRIKE}), RefuelMethod.BOOM, 1, 230, 300, True,
+        RouteProfile(depart_alt_ft=4000, depart_kts=250, dep_nm=6, low_agl_ft=300, aar_alt_ft=15000, aar_kts=270, marshal_alt_ft=10000,
+                     marshal_kts=250, alt_ft={_R.CAS: 9000, _R.STRIKE: 9000}, push_kts=300, ip_kts=300,
+                     attack_kts=300, egress_kts=330, push_nm=35, ip_nm=12, egress_nm=15,
+                     tgt_note="Release"), first_wp_label="0", fc3=True, bingo_lbs=1500, joker_lbs=2500),
 }
 # S103a (XO 2026-11-18): the A-10 and F-14 variants a campaign can be created with ("Era Equipment"), {key: label} in the order the picker shows them. The key is what the campaign
-# state saves (`a10_variant`, `f14_variant`); today it is an AIRCRAFT key. The A-10A (S103b) and the F-14B (S103c) are added to these two tables by their own prompts.
-A10_VARIANTS = {"A-10C": "A-10C"}
+# state saves (`a10_variant`, `f14_variant`); today it is an AIRCRAFT key. The A-10A is S103b; the F-14B is added to F14_VARIANTS by S103c. The A-10C key is today's `A_10C_2` model (DCS "A-10C II"):
+# a plain `A_10C` / "late" third choice is NOT offered (it would be the same jet), see the S103b queue note.
+A10_VARIANTS = {"A-10A": "A-10A (FC3)", "A-10C": "A-10C"}
 F14_VARIANTS = {"F-14BU": "F-14B(U)"}
-STRIKE_CONDITIONAL = frozenset({"A-10C"})      # v0.41.360: airframes whose STRIKE role is offered only on a clean supply strike (see the A-10C entry above)
+HOG_KEYS = frozenset(A10_VARIANTS)             # S103b: every A-10 key: the places that meant "the A-10C" (CAS master, tanker profile, slow climber, refit time) test this
+STRIKE_CONDITIONAL = HOG_KEYS                  # v0.41.360: airframes whose STRIKE role is offered only on a clean supply strike (see the A-10C entry above)
+
+
+def era_aircraft(key: str, a10: str | None = None, f14: str | None = None) -> str:
+    """The airframe a theatre pack's squadron slot flies in a campaign with these Era Equipment choices: a slot that names an A-10 (or F-14) key flies the chosen variant, every other key is itself.
+    None = no choice (the pack's own key)."""
+    if a10 and key in A10_VARIANTS:
+        return a10
+    if f14 and key in F14_VARIANTS:
+        return f14
+    return key
 
 
 @dataclass(frozen=True)
