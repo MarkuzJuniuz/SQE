@@ -28,9 +28,9 @@ from . import seacheck as seac
 from . import pydcs_patch
 from . import threatmap as tm
 from . import f14_scheme
-from .aircraft import AIRCRAFT, F14_KEYS
+from .aircraft import AIRCRAFT, F14_KEYS, JDAM_HOGS
 
-TUNE_PARAMS = {"F-16C": ("COMM1_FREQ",), "A-10C": ("UHF_FREQ",), "FA-18C": ("COMM1_FREQ", "COMM2_FREQ"), "F-14BU": ("COMM1_FREQ", "COMM2_FREQ"), "F-14B": ("COMM1_FREQ", "COMM2_FREQ")}   # v0.41.215: the player's radios SQE can read (XO's probes 2026-10-28 / 30); the F-15C (FC3) has none
+TUNE_PARAMS = {"F-16C": ("COMM1_FREQ",), "A-10C": ("UHF_FREQ",), "A-10C2": ("UHF_FREQ",), "FA-18C": ("COMM1_FREQ", "COMM2_FREQ"), "F-14BU": ("COMM1_FREQ", "COMM2_FREQ"), "F-14B": ("COMM1_FREQ", "COMM2_FREQ")}   # v0.41.215: the player's radios SQE can read (XO's probes 2026-10-28 / 30); the F-15C (FC3) has none
 TUNE_BAND_MHZ = 0.05            # v0.41.215: tuned = within this much of the AWACS frequency (judgment call; the probe used 0.1)
 from .debrief import Manifest, install_hook
 from .difficulty import Difficulty, ai_skill
@@ -1673,7 +1673,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         """Loadout (weather-adapted), unit names, jammer windows, skill, bingo return, and where this package's shooters launch. -> (names, run_t0)."""
         o = self.o
         kit_ = getattr(f, "kit", "") or ("FLEET" if (f.aircraft in F14_KEYS and f.role in (Role.CAP, Role.SWEEP) and (package.extra or {}).get("setpiece")) else "")      # v0.41.271: 6 Phoenix for the fleet-defence Tomcats
-        if not kit_ and f.role == Role.CAS and f.aircraft == "A-10C" and not f.tag and (not f.is_player or o.player_is_ai) and self._cas_floors.get(package.id, 0) > 0 and not self._cas_stock.get(package.id, True):
+        if not kit_ and f.role == Role.CAS and f.aircraft in JDAM_HOGS and not f.tag and (not f.is_player or o.player_is_ai) and self._cas_floors.get(package.id, 0) > 0 and not self._cas_stock.get(package.id, True):
             kit_ = "GUIDED"                                                   # S31a part A2: an AI A-10 attacking a dug-in garrison from the high floor carries guided bombs; S92: a moving column, or a garrison with only its own air defence, keeps the stock Maverick + cluster kit; a person's flight keeps the stock CAS loadout
         load = self.lo.for_role(f.aircraft, f.role, kit_)
         if self.wx.mode != "clear":
