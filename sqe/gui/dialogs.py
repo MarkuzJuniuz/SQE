@@ -25,13 +25,13 @@ def _browse(parent, line: QLineEdit, title: str):
 
 EDGE_DECAY_TEXT = ("Your edge fades by 3% each night, back toward zero, when you do not keep flying that kind of job (nights with nothing for you to fly do not count). "
                    "Off: the edge you build is kept. Needs Tactical Edge on.")
-PILOT_INFLUENCE_TEXT = ("Your flying shapes the war. On: the higher-ups study your actual sorties, and what they learn is carried to every unit in the theatre: the "
+TACTICAL_EDGE_TEXT = ("Your flying shapes the war. On: the higher-ups study your actual sorties, and what they learn is carried to every unit in the theatre: the "
                         "background strikes, SEAD and air cover of the same kind succeed more often (your Tactical Edge). Stay on the ground and red seizes the initiative: it "
                         "surges, the front can crack, and you can lose the war. Off: the war runs on its own, with no effect from your flying (no red surge, no Tactical Edge).")
 
 
 class NewCampaignDialog(QDialog):
-    def __init__(self, parent=None, weather_mode: str = "clear", skill_red: str = "level", skill_blue: str = "level", pilot_influence: bool = True, prefill: dict | None = None, edge_decay: bool = False):
+    def __init__(self, parent=None, weather_mode: str = "clear", skill_red: str = "level", skill_blue: str = "level", tactical_edge: bool = True, prefill: dict | None = None, edge_decay: bool = False):
         super().__init__(parent); self.setWindowTitle("New Campaign"); self.setMinimumWidth(520)
         lay = QVBoxLayout(self); lay.setSpacing(12)
         t = QLabel("New Campaign"); t.setObjectName("title"); lay.addWidget(t)
@@ -69,13 +69,13 @@ class NewCampaignDialog(QDialog):
         self.day = StepSpin(); self.day.setRange(1, 28); self.day.setValue(12)
         row = QHBoxLayout(); row.addWidget(self.month, 1); row.addWidget(self.day); row.addWidget(QLabel("2006"))
         form.addRow("Campaign starts", row)
-        self.pinf = QCheckBox("Tactical Edge: your sorties affect the war")
-        self.pinf.setChecked(bool(pilot_influence)); self.pinf.setToolTip(PILOT_INFLUENCE_TEXT)
-        form.addRow("", self.pinf)                      # the same setting as Settings > Campaign > Tactical Edge: it can be changed there later
-        self.pdec = QCheckBox("Enable Tactical Edge Decay")
-        self.pdec.setChecked(bool(edge_decay)); self.pdec.setToolTip(EDGE_DECAY_TEXT); self.pdec.setEnabled(bool(pilot_influence))
-        self.pinf.toggled.connect(self.pdec.setEnabled); self.pdec.setStyleSheet("margin-left:22px;")      # a sub-option of Tactical Edge
-        form.addRow("", self.pdec)
+        self.edge = QCheckBox("Tactical Edge: your sorties affect the war")
+        self.edge.setChecked(bool(tactical_edge)); self.edge.setToolTip(TACTICAL_EDGE_TEXT)
+        form.addRow("", self.edge)                      # the starting value for this campaign (S88 R3): Settings > Campaign changes it for the open campaign later
+        self.edge_decay = QCheckBox("Enable Tactical Edge Decay")
+        self.edge_decay.setChecked(bool(edge_decay)); self.edge_decay.setToolTip(EDGE_DECAY_TEXT); self.edge_decay.setEnabled(bool(tactical_edge))
+        self.edge.toggled.connect(self.edge_decay.setEnabled); self.edge_decay.setStyleSheet("margin-left:22px;")      # a sub-option of Tactical Edge
+        form.addRow("", self.edge_decay)
         from .. import weather as _wxn
         self.wx = QComboBox()
         for k, val in _wxn.MODES.items():
@@ -107,7 +107,7 @@ class NewCampaignDialog(QDialog):
 
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
-                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "pilot_influence": self.pinf.isChecked(), "tempo_decay": self.pinf.isChecked() and self.pdec.isChecked(),
+                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "tactical_edge": self.edge.isChecked(), "tactical_edge_decay": self.edge.isChecked() and self.edge_decay.isChecked(),
                 "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData()),
                 "ai_skill_red": str(self.skr.currentData() or "level"), "ai_skill_blue": str(self.skb.currentData() or "level")}
 
@@ -117,8 +117,8 @@ class SettingsDialog(QDialog):
     Mission Build (merging and limits, then the hot-start, dormant-site, ILS, AWACS-radio and damage-call switches) and DCS integration (paths,
     the scripting patch, the ECM script). A new experimental feature gets its own "Experimental" tab (added last) while it is being tried out.
     Every control keeps the name it always had."""
-    def __init__(self, settings: S.AppSettings, parent=None):
-        super().__init__(parent); self.s = settings; self.setWindowTitle("Settings"); self.setMinimumWidth(720); self.setMinimumHeight(560); self.resize(780, 700)
+    def __init__(self, settings: S.AppSettings, parent=None, state=None):
+        super().__init__(parent); self.s = settings; self.state = state; self.setWindowTitle("Settings"); self.setMinimumWidth(720); self.setMinimumHeight(560); self.resize(780, 700)
         lay = QVBoxLayout(self); lay.setSpacing(10)
         t = QLabel("Settings"); t.setObjectName("title"); lay.addWidget(t)
         self.tabs = QTabWidget(); lay.addWidget(self.tabs, 1)
@@ -167,14 +167,20 @@ class SettingsDialog(QDialog):
         hint(v, "Procedural follows the theatre's climate for the month and changes slowly from day to day (never clear to storm in an afternoon); each sortie "
                 "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
                 "that cannot attack at all (or meets fog) is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
-        # v0.41.165: Pilot Influence goes AFTER the whole Weather block (combo + its description), never between them
-        self.pinf = QCheckBox("Tactical Edge (your sorties affect the war)"); self.pinf.setChecked(bool(getattr(settings, "pilot_influence", True)))
-        row(v, "Tactical Edge", self.pinf)
-        hint(v, PILOT_INFLUENCE_TEXT)
-        self.pdec = QCheckBox("Enable Tactical Edge Decay"); self.pdec.setChecked(bool(getattr(settings, "tempo_decay", False)))
-        row(v, "", self.pdec)
+        # v0.41.165: Tactical Edge goes AFTER the whole Weather block (combo + its description), never between them
+        # S88 R3 (XO 2026-11-18): the pair belongs to the OPEN campaign (`state.ground`), not to the app: greyed out when no campaign is open
+        g_ = (getattr(state, "ground", None) or {}) if state is not None else {}
+        self.edge_rows = bool(g_)
+        self.edge = QCheckBox("Tactical Edge (your sorties affect the war)"); self.edge.setChecked(bool(g_.get("tactical_edge", True)))
+        row(v, "Tactical Edge", self.edge)
+        hint(v, TACTICAL_EDGE_TEXT)
+        self.edge_decay = QCheckBox("Enable Tactical Edge Decay"); self.edge_decay.setChecked(bool(g_.get("tactical_edge_decay", False)))
+        row(v, "", self.edge_decay)
         hint(v, EDGE_DECAY_TEXT)
-        self.pinf.toggled.connect(self.pdec.setEnabled); self.pdec.setEnabled(self.pinf.isChecked()); self.pdec.setStyleSheet("margin-left:22px;")
+        self.edge.setEnabled(self.edge_rows); self.edge_decay.setEnabled(self.edge_rows and self.edge.isChecked())
+        self.edge.toggled.connect(lambda on: self.edge_decay.setEnabled(self.edge_rows and on)); self.edge_decay.setStyleSheet("margin-left:22px;")
+        if not self.edge_rows:
+            hint(v, "Open a campaign to change this; it is saved with each campaign.")
         from ..difficulty import SKILL_CHOICES as _SK
         self.skr, self.skb = QComboBox(), QComboBox()
         for cb_, key_ in ((self.skr, "ai_skill_red"), (self.skb, "ai_skill_blue")):
@@ -351,7 +357,6 @@ class SettingsDialog(QDialog):
         self.s.dormant_sites = bool(self.dorm.isChecked())
         self.s.weather_mode = str(self.wxm.currentData())
         self.s.ils_low_vis = bool(self.ilslv.isChecked())
-        self.s.pilot_influence = bool(self.pinf.isChecked()); self.s.tempo_decay = bool(self.pinf.isChecked() and self.pdec.isChecked())
         self.s.ai_skill_red = str(self.skr.currentData() or "level"); self.s.ai_skill_blue = str(self.skb.currentData() or "level")
         self.s.fighter_engage_nm = int(self.feng.value()); self.s.fighter_engage_minutes = int(self.fmin.value())
         self.s.auto_patch_scripting = self.autopatch.isChecked(); self.s.patch_asked = True
@@ -362,6 +367,8 @@ class SettingsDialog(QDialog):
         pr = self.s.problems()
         if pr:
             QMessageBox.warning(self, "Check your paths", "\n".join(pr)); return
+        if self.edge_rows:                                       # S88 R3: Tactical Edge is saved with the open campaign (the caller saves the session)
+            self.state.ground["tactical_edge"] = bool(self.edge.isChecked()); self.state.ground["tactical_edge_decay"] = bool(self.edge.isChecked() and self.edge_decay.isChecked())
         self.s.save(); self.accept()
 
 

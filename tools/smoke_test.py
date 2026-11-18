@@ -112,7 +112,21 @@ def check_saves_round_trip():
         assert (r.state.campaign_id, r.state.level, clock(r)) == (s.state.campaign_id, s.state.level, clock(s)), "campaign id, level and clock survive a reload"
         assert sorted(r.state.squadrons) == sorted(s.state.squadrons), "squadrons survive a reload"
         assert [p.number for p in r.packages()] == [p.number for p in s.packages()], "packages survive a reload"
-    print("[saves] levels 1 to 3: new campaign, save, reopen in a new session: the same campaign")
+    s = fresh_session(2, 2)                                                  # S88 R3: Tactical Edge is per campaign; a save from before holds the two switches under their old names
+    for k in ("tactical_edge", "tactical_edge_decay"):
+        s.state.ground.pop(k, None)
+    s.state.ground.update({"pilot_influence": False, "tempo_decay": True})
+    s.save()
+    r = mk()
+    r.open(s.path)
+    assert (r.state.ground.get("tactical_edge"), r.state.ground.get("tactical_edge_decay")) == (False, True), "an old save's two Tactical Edge switches load under their new names"
+    assert "pilot_influence" not in r.state.ground and "tempo_decay" not in r.state.ground, "...and the old names are gone"
+    (TMP / "appdata" / "SQE").mkdir(parents=True, exist_ok=True)           # an old settings.json with the two keys loads, and they are not kept
+    (TMP / "appdata" / "SQE" / "settings.json").write_text('{"pilot_influence": false, "tempo_decay": true}')
+    from sqe.settings import AppSettings as _AS
+    assert not hasattr(_AS.load(), "pilot_influence"), "an old settings file's Tactical Edge keys are ignored"
+    (TMP / "appdata" / "SQE" / "settings.json").unlink()
+    print("[saves] levels 1 to 3: new campaign, save, reopen in a new session: the same campaign; an old save's Tactical Edge keys are renamed on load")
 
 
 def check_incompatible_saves():

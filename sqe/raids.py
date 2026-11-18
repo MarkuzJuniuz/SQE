@@ -926,7 +926,7 @@ def overnight(state, d, rng: random.Random) -> list:
         if up_:
             p_stop = min(0.95, p_stop + blue_barcap.PATROL_STOP)
         from . import tempo as _tp
-        p_stop = min(0.95, p_stop + TEMPO_STOP_SHARE * _tp.get(state, "AIR"))      # v0.41.171: the player's air work taught the alert pairs (Pilot Influence off: 0)
+        p_stop = min(0.95, p_stop + TEMPO_STOP_SHARE * _tp.get(state, "AIR"))      # v0.41.171: the player's air work taught the alert pairs (Tactical Edge off: 0)
         lo_, hi_ = d.raid_size
         n_ = sead_jets(state, aim, d) if aim_kind(aim) == "sam" else max(2, int(round(rng.randint(int(lo_), int(hi_)) * wave_mult(state, d))))
         if n_ <= 4:                                              # a small raid is settled as one lump (all stopped or all through), as before v0.41.155

@@ -641,7 +641,7 @@ def surge(state, d) -> float:
     nothing for you to fly does not count), up to 1 + SURGE_CAP. It multiplies red's reinforcements, attack chance and raid rate."""
     step = float(getattr(d, "red_surge", 0.0))
     g = state.ground or {}
-    if step <= 0 or not g or not g.get("pilot_influence", True):      # v0.41.160: Pilot Influence off: no surge, your flying makes no difference here
+    if step <= 0 or not g or not g.get("tactical_edge", True):      # v0.41.160: Tactical Edge off: no surge, your flying makes no difference here
         return 1.0
     idle = (int(g.get("idle_turns", 0)) - SURGE_GRACE_TURNS) / TURNS_PER_DAY            # days' worth of idle past the grace
     return 1.0 + min(SURGE_CAP, max(0.0, idle) * step)
