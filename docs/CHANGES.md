@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.493, the A-10C II as an Era Equipment choice
+The A-10 row of the New Campaign dialog now offers "A-10C II (late)" next to the A-10A and the A-10C. It flies the same DCS model and the same loadouts as the A-10C for now (the real A-10C II is about 2015 or later, so it is out of era for 2000 and 2006); the default A-10C campaigns are unchanged.
+
 ## v0.41.492, red types for Syria: MiG-25PD and Su-17M4
 Two new red aircraft types are in the data (kits, combat radius, intercept reach, ECM, doctrine, briefing name, parking class): the MiG-25PD interceptor and the Su-17M4 strike jet, for the Syria 2000 theatre. No Caucasus campaign uses them: nothing changes in play.
 

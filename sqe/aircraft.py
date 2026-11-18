@@ -4,7 +4,7 @@ Service is derived from where the jet lives: carrier jets are Navy, runway jets 
 A land-based type can never be based on a carrier (checked when a scenario loads).
 """
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from dcs import planes
 from .models import Role, BaseKind, RefuelMethod
 
@@ -148,11 +148,14 @@ AIRCRAFT: dict[str, AircraftSpec] = {
                      tgt_note="Release"), first_wp_label="0", fc3=True, bingo_lbs=1500, joker_lbs=2500),
 }
 # S103a (XO 2026-11-18): the A-10 and F-14 variants a campaign can be created with ("Era Equipment"), {key: label} in the order the picker shows them. The key is what the campaign
-# state saves (`a10_variant`, `f14_variant`); today it is an AIRCRAFT key. The A-10A is S103b, the F-14B S103c. The A-10C key is today's `A_10C_2` model (DCS "A-10C II"):
-# a plain `A_10C` / "late" third choice is NOT offered (it would be the same jet), see the S103b queue note.
-A10_VARIANTS = {"A-10A": "A-10A (FC3)", "A-10C": "A-10C"}
+# state saves (`a10_variant`, `f14_variant`); today it is an AIRCRAFT key. The A-10A is S103b, the F-14B S103c, the A-10C II S103e. The A-10C key is today's `A_10C_2` model (DCS "A-10C II") and STAYS that
+# (old saves, Caucasus identity). S103e (XO 2026-11-18): "A-10C2", labelled "A-10C II (late)", is a separate choice that flies the SAME pydcs `A_10C_2` model for now: the real A-10C II is about 2015 or later,
+# out of era for 2000 and 2006, and a later job may map "A-10C" to pydcs `A_10C` (see changes-detail S103e for how the two pydcs models differ).
+A10_VARIANTS = {"A-10A": "A-10A (FC3)", "A-10C": "A-10C", "A-10C2": "A-10C II (late)"}
 F14_VARIANTS = {"F-14B": "F-14B", "F-14BU": "F-14B(U)"}
 F14_KEYS = frozenset(F14_VARIANTS)             # S103c: every F-14 key: the places that meant "the F-14B(U)" test this
+AIRCRAFT["A-10C2"] = replace(AIRCRAFT["A-10C"], key="A-10C2", display="A-10C II Warthog")        # S103e: the A-10C entry again (one source), its own key and name
+JDAM_HOGS = frozenset({"A-10C", "A-10C2"})     # S103e: the Hogs with the Precision Engagement kit (JDAM / WCMD GUIDED kit, Litening pod); the A-10A has none
 HOG_KEYS = frozenset(A10_VARIANTS)             # S103b: every A-10 key: the places that meant "the A-10C" (CAS master, tanker profile, slow climber, refit time) test this
 STRIKE_CONDITIONAL = HOG_KEYS                  # v0.41.360: airframes whose STRIKE role is offered only on a clean supply strike (see the A-10C entry above)
 

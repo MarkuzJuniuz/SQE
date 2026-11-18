@@ -233,8 +233,8 @@ def package_refs(state, flights) -> list:
     return [(state.bases[f.base_id].x, state.bases[f.base_id].y) for f in flights if not getattr(f, 'tag', '') and getattr(f, 'base_id', None) in state.bases]
 
 
-MARSHAL_SLOW_CLIMBERS = frozenset({"A-10C", "A-10A"})   # S95: the jets the ridge test (MARSHAL_LEG_MAX_FT) is for: they climb too slowly to clear a ridge on the way to the marshal
-MARSHAL_MAX_NM = {"A-10C": 120, "A-10A": 120}                # S95 (judgment call): the farthest stand-off a package with this jet gets (a Hog's fuel is the limit: S93, a 230 nm marshal cost it the sortie)
+MARSHAL_SLOW_CLIMBERS = frozenset({"A-10C", "A-10A", "A-10C2"})   # S95: the jets the ridge test (MARSHAL_LEG_MAX_FT) is for: they climb too slowly to clear a ridge on the way to the marshal
+MARSHAL_MAX_NM = {"A-10C": 120, "A-10A": 120, "A-10C2": 120}                # S95 (judgment call): the farthest stand-off a package with this jet gets (a Hog's fuel is the limit: S93, a 230 nm marshal cost it the sortie)
 
 
 def package_marshal(state, base_xy, hdg_to_target, target_xy, flights):

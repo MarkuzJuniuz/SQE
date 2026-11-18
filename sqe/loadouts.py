@@ -101,6 +101,7 @@ _D: dict = {
         "STRIKE": {1: "=ALQ_184", 3: "={60CC734F-0AFA-4E2E-82B8-93B941AB11CF}", 4: "={CBU-87}", 5: "={CBU-87}", 7: "={CBU-87}", 8: "={CBU-87}", 9: "={60CC734F-0AFA-4E2E-82B8-93B941AB11CF}", 11: "={DB434044-F5D0-4F1F-9BA9-B73027E18DD3}"},
     },
 }
+_D["A-10C2"] = _D["A-10C"]          # S103e: the A-10C II (late) choice flies the same pydcs model and the same kits (one table, not a copy of the CLSIDs)
 _ALIAS = {Role.TARCAP: "CAP", Role.ESCORT: "CAP", Role.SWEEP: "CAP", Role.CAP: "CAP"}
 
 

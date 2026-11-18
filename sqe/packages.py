@@ -17,7 +17,7 @@ CLUSTER_NM, SALVO_4_NEIGHBOURS, SALVO_8_NEIGHBOURS = 25, 2, 4     # judgment cal
 CARRIER_PLAYER_FLIGHT_MAX = 2        # catapult spots are limited; keep the player's cat-start flight small
 PLAYER_ROLE_PREFERENCE = {Role.STRIKE: 5, Role.SEAD: 4, Role.TARCAP: 3, Role.ESCORT: 2, Role.SWEEP: 2, Role.CAP: 1, Role.CAS: 0}
 JTAC_OBJECTIVES = {ObjectiveType.CAS}
-TANKER_CAP_JETS = frozenset({"A-10C", "A-10A"})      # S96: the jets whose refuelling profile (aar_alt_ft / aar_kts) caps the tanker's orbit height and speed (judgment call: the A-10C's own 15,000 ft / 270 kt)
+TANKER_CAP_JETS = frozenset({"A-10C", "A-10A", "A-10C2"})      # S96: the jets whose refuelling profile (aar_alt_ft / aar_kts) caps the tanker's orbit height and speed (judgment call: the A-10C's own 15,000 ft / 270 kt)
 
 
 class NoPlayerSlot(Exception):

@@ -19,6 +19,7 @@ POOL = {"F-16C": [("fs_480", "480th FS 'Warhawks'"), ("fs_13", "13th FS 'Panther
         "F-15C": [("fs_44", "44th FS 'Vampire Bats'"), ("fs_67", "67th FS 'Fighting Cocks'"), ("fs_12", "12th FS 'Dirty Dozen'"), ("fs_71", "71st FS 'Ironmen'")],
         "A-10C": [("as_81", "81st FS 'Panthers'"), ("as_190", "190th FS 'Skullbangers'"), ("as_357", "357th FS 'Dragons'"), ("as_103", "103rd FS 'Eagles'")]}
 POOL["A-10A"] = POOL["A-10C"]                                  # S103b: the same squadrons fly whichever A-10 the campaign has
+POOL["A-10C2"] = POOL["A-10C"]                                 # S103e
 
 
 def need(state, b) -> tuple:
