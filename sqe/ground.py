@@ -493,11 +493,12 @@ def supply_repair(state) -> list:
     g = state.ground
     prev = g.setdefault("sup_h", {})
     out = []
+    fell = set(g.get("road_fell") or [])                                      # S108: a depot the front's move destroyed for good is not rebuilt
     for side in ("red", "blue"):
         pool = state.assets if side == "red" else getattr(state, "blue_assets", {})
         rate = supply(state, side) / SUPPLY_REPAIR_DAYS
         for a in pool.values():
-            if a.kind not in SUPPLY_KINDS:
+            if a.kind not in SUPPLY_KINDS or a.id in fell:
                 continue
             before = prev.get(a.id, a.health)
             if a.health < before - 1e-6:                                    # struck today: no repair tonight
