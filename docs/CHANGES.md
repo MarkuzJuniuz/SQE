@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.475, ground-site and base-defence spawning moved
+Internal: ground-site and base-defence spawning moved to its own file; no change in play.
+
 ## v0.41.474, site layout helpers moved
 Internal: site layout helpers moved to their own file; no change in play.
 
