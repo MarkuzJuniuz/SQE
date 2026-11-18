@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QCheckBox, QSpinBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
+from PySide6.QtWidgets import (QCheckBox, QRadioButton, QButtonGroup, QSpinBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
                                QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
                                QTextBrowser, QVBoxLayout, QHeaderView, QTabWidget, QWidget, QScrollArea, QAbstractItemView)
 from .. import settings as S
@@ -113,10 +113,10 @@ class NewCampaignDialog(QDialog):
 
 
 class SettingsDialog(QDialog):
-    """Four tabs: General (takeoff buffer, marshal slack, AI fuel), Campaign (weather, Tactical Edge, AI skill, landings, ruins, carcasses),
-    Mission Build (merging and limits, then the hot-start, dormant-site, ILS, AWACS-radio and damage-call switches) and DCS integration (paths,
+    """Four tabs: General (takeoff buffer, marshal slack, AI fuel, splash damage), Campaign (weather, Tactical Edge, AI skill),
+    Mission Build (merging and limits, the hot-start, dormant-site, ILS, AWACS-radio and damage-call switches, then AI landings, ruins and carcasses) and DCS Integration (paths,
     the scripting patch, the ECM script). A new experimental feature gets its own "Experimental" tab (added last) while it is being tried out.
-    Every control keeps the name it always had."""
+    Labels are in title case, hints stay sentences. Every setting keeps the key it always had; the two hot-runway keys are one radio group."""
     def __init__(self, settings: S.AppSettings, parent=None, state=None):
         super().__init__(parent); self.s = settings; self.state = state; self.setWindowTitle("Settings"); self.setMinimumWidth(720); self.setMinimumHeight(560); self.resize(780, 700)
         lay = QVBoxLayout(self); lay.setSpacing(10)
@@ -145,15 +145,19 @@ class SettingsDialog(QDialog):
         # ---- General: how a sortie runs for you ------------------------------------------------------------------------------
         v = page("General")
         self.tob = StepSpin(); self.tob.setRange(-600, 900); self.tob.setSuffix(" s"); self.tob.setValue(int(settings.takeoff_buffer_s))
-        row(v, "Takeoff buffer", self.tob)
+        row(v, "Takeoff Buffer", self.tob)
         hint(v, "Time between mission start and the takeoff time on your kneeboard (you start on the runway or cat, engines running). "
                 "Default 60 s. Negative means the plan expects you to be rolling before the clock starts, so you must make the time up in the air.")
         self.hold = StepSpin(); self.hold.setRange(-10, 30); self.hold.setSuffix(" min"); self.hold.setValue(int(settings.marshal_slack_min))
-        row(v, "Marshal slack", self.hold)
+        row(v, "Marshal Slack", self.hold)
         hint(v, "Time between reaching the marshal point and the PUSH. Smaller = less waiting. Negative means you must beat the "
                 "natural pace (afterburner time). AI flights adjust automatically.")
-        self.fuel = QCheckBox("AI fuel management (unlimited until the push, real fuel in the fight, unlimited again from egress)")
+        self.fuel = QCheckBox("AI Fuel Management (Unlimited Until the Push, Real Fuel in the Fight, Unlimited Again From Egress)")
         self.fuel.setChecked(bool(settings.ai_unlimited_fuel)); v.addWidget(self.fuel)
+        self.splash = QCheckBox("Splash Damage: Blast Damage Around Bomb and Missile Impacts (On by Default)")
+        self.splash.setChecked(bool(getattr(settings, "splash_damage", True))); v.addWidget(self.splash)
+        hint(v, "DCS often leaves a vehicle a few metres from a bomb untouched. On: ground units near an air-to-ground weapon's impact take a blast "
+                "of their own, scaled to the warhead and weaker with distance. Kills it causes count for the shooter.")
         v.addStretch(1)
 
         # ---- Campaign: what the world does ----------------------------------------------------------------------------------------
@@ -171,7 +175,7 @@ class SettingsDialog(QDialog):
         # S88 R3 (XO 2026-11-18): the pair belongs to the OPEN campaign (`state.ground`), not to the app: greyed out when no campaign is open
         g_ = (getattr(state, "ground", None) or {}) if state is not None else {}
         self.edge_rows = bool(g_)
-        self.edge = QCheckBox("Tactical Edge (your sorties affect the war)"); self.edge.setChecked(bool(g_.get("tactical_edge", True)))
+        self.edge = QCheckBox("Tactical Edge (Your Sorties Affect the War)"); self.edge.setChecked(bool(g_.get("tactical_edge", True)))
         row(v, "Tactical Edge", self.edge)
         hint(v, TACTICAL_EDGE_TEXT)
         self.edge_decay = QCheckBox("Enable Tactical Edge Decay"); self.edge_decay.setChecked(bool(g_.get("tactical_edge_decay", False)))
@@ -192,43 +196,18 @@ class SettingsDialog(QDialog):
         hint(v, "How good the AI pilots are, one setting for each side (Red's ground units follow the Red setting; Blue's base defences are always Excellent, whatever this says). "
                 "Level default is what SQE always did: Red follows the difficulty level (Average, Good, High) and Blue's AI flights fly at High. DCS's top skill "
                 "levels can feel like cheating; lower one side if it does. It changes the AI's skill only, not how the campaign's numbers run. It applies from your next mission.")
-        self.splash = QCheckBox("Splash damage: blast damage around bomb and missile impacts (on by default)")
-        self.splash.setChecked(bool(getattr(settings, "splash_damage", True))); v.addWidget(self.splash)
-        hint(v, "DCS often leaves a vehicle a few metres from a bomb untouched. On: ground units near an air-to-ground weapon's impact take a blast "
-                "of their own, scaled to the warhead and weaker with distance. Kills it causes count for the shooter.")
-        # v0.41.18: AI landings
-        _lm = [("Always skip", "always"), ("Skip at your home deck / field", "home"), ("Land for real", "never")]
-        self.land_cv, self.land_af = QComboBox(), QComboBox()
-        for cb_, key_, dflt_ in ((self.land_cv, "ai_land_carrier", "always"), (self.land_af, "ai_land_field", "never")):
-            for lab_, val_ in _lm:
-                cb_.addItem(lab_, val_)
-            cb_.setCurrentIndex(max(0, cb_.findData(str(getattr(settings, key_, dflt_)))))
-        _row = QFormLayout(); _row.addRow("AI landings, carrier", self.land_cv); _row.addRow("AI landings, airfields", self.land_af); v.addLayout(_row)
-        hint(v, "Skip: AI flights going home are recovered short of the base (10 nm from the boat, 8 nm from a field), count as landed and leave the mission, "
-                "so DCS's landing queue never runs them dry or fills your pattern. Your own wingmen are recovered too once you are back. Land for real: DCS landings.")
-        self.ruins = QCheckBox("Ruins: show what earlier packages already hit (smoke and fire); struck flights fly home")
-        self.ruins.setChecked(bool(getattr(settings, "ruins", True))); v.addWidget(self.ruins)
-        hint(v, "Earlier packages in the same area that struck before your start leave smoking ruins (at most three sites, a few plumes each). The result is "
-                "decided when you build the mission and applied at the debrief.")
-        self.carc = QCheckBox("Carcasses: wrecks at damaged and destroyed ground sites near your route")
-        self.carc.setChecked(bool(getattr(settings, "carcasses", True))); v.addWidget(self.carc)
-        self.cw = StepSpin(); self.cw.setRange(5, 100); self.cw.setSuffix(" % of a unit"); self.cw.setValue(int(getattr(settings, "wreck_static_weight_pct", 25)))
-        row(v, "Wreck and static weight", self.cw)
-        hint(v, "Wrecks and supply buildings (fuel tanks, depots) are static objects: no AI, no weapons, they never move. Each counts this share of a unit toward "
-                "the unit limit. When a mission is over the limit the furthest wrecks from your route are dropped first, before any flight is touched; buildings are "
-                "placed before wrecks and are never dropped for them. Wrecks stay where they are from day to day.")
         v.addStretch(1)
 
         # ---- Mission build: merging and limits -----------------------------------------------------------------------------------
         v = page("Mission Build")
-        self.merge = QComboBox(); self.merge.addItem("Off (one package per mission)", "off"); self.merge.addItem("Same area (targets inside the radius)", "area")
+        self.merge = QComboBox(); self.merge.addItem("Off (One Package per Mission)", "off"); self.merge.addItem("Same Area (Targets Inside the Radius)", "area")
         self.merge.setCurrentIndex(1 if settings.merge_mode == "area" else 0)
         self.mmax = StepSpin(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.max_units))
-        row(v, "Package merging", self.merge, self.mmax)
+        row(v, "Package Merging", self.merge, self.mmax)
         hint(v, "Packages inside the radius that start within the time windows below fly in the same mission (AI-flown, one shared ground "
                 "world and support). The waiting window shows the unit count so you can compare performance. The unit limit counts the whole mission, merged packages included: over it, returning flights go first, then the package that starts latest (a Fighter Sweep last), then wrecks are trimmed.")
         self.mrad = StepSpin(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "merge_radius_nm", 15)))
-        row(v, "Merge radius", self.mrad)
+        row(v, "Merge Radius", self.mrad)
         hint(v, "Packages whose target is inside this circle fly in the same mission (within the time windows below). The circle is centred on your target, "
                 "slid inward so it never hangs over the edge of the target area; your own target stays inside it. A raid also counts along its way in, "
                 "from its airfield to its target. If the unit limit is exceeded, the package that starts latest drops first.")
@@ -237,78 +216,100 @@ class SettingsDialog(QDialog):
         hint(v, "Raid intercepts that start inside the time windows fly in one mission, wherever the raids are going. Off: a raid folds in only when its way in passes "
                 "your target area. Missions that carry red's raids are marked in the list: red border = only red's raids, amber = your packages and red's raids together.")
         self.mback = StepSpin(); self.mback.setRange(0, 30); self.mback.setSingleStep(5); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_earlier_min", 15)))
-        row(v, "Earlier packages", self.mback)
+        row(v, "Earlier Packages", self.mback)
         hint(v, "Packages that started up to this long before yours also fly, already airborne and underway when the mission starts. "
-                "A package that has already struck is not flown to its target (see Ruins on the Campaign tab). 0 = only later packages.")
+                "A package that has already struck is not flown to its target (see Ruins on this tab). 0 = only later packages.")
         self.mfwd = StepSpin(); self.mfwd.setRange(0, 60); self.mfwd.setSingleStep(5); self.mfwd.setSuffix(" min after"); self.mfwd.setValue(int(getattr(settings, "merge_later_min", 30)))
-        row(v, "Later packages", self.mfwd)
+        row(v, "Later Packages", self.mfwd)
         hint(v, "Packages that start up to this long after yours also fly in the same mission (late-activated, they push at their own time). "
                 "Over the unit limit, the package that starts latest is dropped first.")
         self.feng = StepSpin(); self.feng.setRange(0, 300); self.feng.setSuffix(" nm"); self.feng.setValue(int(settings.fighter_engage_nm))
         self.fmin = StepSpin(); self.fmin.setRange(0, 120); self.fmin.setSuffix(" min after TOT"); self.fmin.setValue(int(settings.fighter_engage_minutes))
-        row(v, "TARCAP / escort / sweep engage range", self.feng, self.fmin)
+        row(v, "TARCAP / Escort / Sweep Engage Range", self.feng, self.fmin)
         hint(v, "How far AI TARCAPs, escorts, sweeps and SEAD go after a fighter, and for how long: the engage task ends this many minutes after the strike's TOT and they fly on home (alert pairs get 5 minutes more). 0 = unlimited. Your own flight is never limited (unless SQE was started with --ai-test).")
 
         def tick(text, checked, hint_text, enabled=True):                 # one checkbox with its setting, its hint under it and its enabled state
             cb = QCheckBox(text); cb.setChecked(bool(checked)); cb.setEnabled(enabled); v.addWidget(cb); hint(v, hint_text)
             return cb
-        self.hotramp = tick("Hot starts at the ramp (scramble pairs)", getattr(settings, "hot_ramp_scrambles", False),
+        self.hotramp = tick("Hot Starts at the Ramp (Scramble Pairs)", getattr(settings, "hot_ramp_scrambles", False),
             "Land fields only. On: alert pairs at land fields wait hot on the ramp and taxi out when called. Off: they wait hidden and appear on the runway (the older, steadier way). "
             "The carrier always keeps the hidden deck start, and so does your own field.")
-        self.hotrwy = tick("Hot starts on the runway (AI flights)", getattr(settings, "hot_runway_starts", False),
-            "Land fields other than yours. On: AI package flights wait hidden and appear on the runway in time to make their push, one runway release a minute apart. "
-            "A flight that cannot be released in time (the package is already underway at the start) still appears airborne. The carrier keeps the airborne start. Off: all AI flights appear airborne.")
-        self.hotrwy_own = tick("    ...also at my own field", getattr(settings, "hot_runway_own_field", False) and self.hotrwy.isChecked(),
-            "Needs the setting above. AI flights at your own field appear on the runway only after you have taken off, never in the last ten minutes before your planned landing, "
-            "and wait while you are on your way in to land.", self.hotrwy.isChecked())
-        def _own_gate(on):
-            self.hotrwy_own.setEnabled(bool(on))
-            if not on:
-                self.hotrwy_own.setChecked(False)
-        self.hotrwy.toggled.connect(_own_gate)
-        self.dorm = tick("Dormant ground sites (wake when you come near)", getattr(settings, "dormant_sites", False),
+        hs_ = getattr(settings, "hot_runway_starts", False); ho_ = hs_ and getattr(settings, "hot_runway_own_field", False)      # the own-field flag only counts with the runway starts on
+        lb_ = QLabel("Hot Starts on the Runway"); v.addWidget(lb_)
+        self.hot_none, self.hot_other, self.hot_own = QRadioButton("Disabled"), QRadioButton("AI Flights at a Different Field"), QRadioButton("AI Flights Including at My Own Field")
+        self.hot_grp = QButtonGroup(self)
+        for rb_ in (self.hot_none, self.hot_other, self.hot_own):
+            self.hot_grp.addButton(rb_); v.addWidget(rb_)
+        (self.hot_own if ho_ else self.hot_other if hs_ else self.hot_none).setChecked(True)
+        hint(v, "Disabled: all AI flights appear airborne.\n"
+                "AI Flights at a Different Field: at land fields other than yours, AI package flights wait hidden and appear on the runway in time to make their push, one runway release a minute apart. "
+                "A flight that cannot be released in time (the package is already underway at the start) still appears airborne. The carrier keeps the airborne start.\n"
+                "AI Flights Including at My Own Field: as above, and AI flights at your own field appear on the runway only after you have taken off, never in the last ten minutes before your planned landing, "
+                "and wait while you are on your way in to land.")
+        self.dorm = tick("Dormant Ground Sites (Wake When You Come Near)", getattr(settings, "dormant_sites", False),
             "On: red SAM sites on your route, red supply guards and the defences of blue airfields without flights start asleep. A detector (an early-warning radar, a red patrol or the longest-range SAM site) or an enemy aircraft coming near wakes them; "
             "30 seconds after no enemy is near they go back to sleep and wake again when one returns. On top of the usual mission, every other red radar (live) and SAM site (asleep) in the war is added, and they do not count toward the unit limits, so the mission can be much heavier. Off: as before, only the sites near your route and target are built, all live from the start, and blue fields without flights have no defences.")
-        self.ilslv = tick("Keep ILS runways active in low visibility", getattr(settings, "ils_low_vis", True),
+        self.ilslv = tick("Keep ILS Runways Active in Low Visibility", getattr(settings, "ils_low_vis", True),
             "DCS lights the ILS only on the runway it counts as active, and the low-level wind picks that runway. When ceiling or visibility is low, the ground wind is turned to favour each field's "
             "ILS runway; the wind aloft keeps the season's real direction. In good weather the wind is left as it is.")
-        self.awt = tick("AWACS calls need a tuned radio", getattr(settings, "awacs_tuned", True),           # v0.41.215 (XO)
+        self.awt = tick("AWACS Calls Need a Tuned Radio", getattr(settings, "awacs_tuned", True),           # v0.41.215 (XO)
             "On: you hear the AWACS only while one of your radios is on its frequency (it is in your comms plan); a call that comes due while you are not tuned is held up to a minute, "
             "then dropped, with one on-screen note. Read from the F-16C and A-10C first radio (UHF), and both radios of the F/A-18C and F-14B; the F-15C (FC3) is always counted tuned. "
             "Off: you hear every AWACS call whatever your radio is set to.")
-        self.dmgc = tick("Show damage calls", getattr(settings, "damage_calls", True),                       # v0.41.215 (XO)
+        self.dmgc = tick("Show Damage Calls", getattr(settings, "damage_calls", True),                       # v0.41.215 (XO)
             "On: the other blue aircraft (your wingmen, other flights, the tanker and the AWACS) call when they are hit and when they eject or go down (\"Mayday, mayday, ejecting\"), "
             "each picked at random from a short list. Off: no such calls.")
+        # v0.41.18: AI landings
+        _lm = [("Always Skip", "always"), ("Skip at Your Home Deck / Field", "home"), ("Land for Real", "never")]
+        self.land_cv, self.land_af = QComboBox(), QComboBox()
+        for cb_, key_, dflt_ in ((self.land_cv, "ai_land_carrier", "always"), (self.land_af, "ai_land_field", "never")):
+            for lab_, val_ in _lm:
+                cb_.addItem(lab_, val_)
+            cb_.setCurrentIndex(max(0, cb_.findData(str(getattr(settings, key_, dflt_)))))
+        _row = QFormLayout(); _row.addRow("AI Landings, Carrier", self.land_cv); _row.addRow("AI Landings, Airfields", self.land_af); v.addLayout(_row)
+        hint(v, "Skip: AI flights going home are recovered short of the base (10 nm from the boat, 8 nm from a field), count as landed and leave the mission, "
+                "so DCS's landing queue never runs them dry or fills your pattern. Your own wingmen are recovered too once you are back. Land for real: DCS landings.")
+        self.ruins = QCheckBox("Ruins: Show What Earlier Packages Already Hit (Smoke and Fire); Struck Flights Fly Home")
+        self.ruins.setChecked(bool(getattr(settings, "ruins", True))); v.addWidget(self.ruins)
+        hint(v, "Earlier packages in the same area that struck before your start leave smoking ruins (at most three sites, a few plumes each). The result is "
+                "decided when you build the mission and applied at the debrief.")
+        self.carc = QCheckBox("Carcasses: Wrecks at Damaged and Destroyed Ground Sites Near Your Route")
+        self.carc.setChecked(bool(getattr(settings, "carcasses", True))); v.addWidget(self.carc)
+        self.cw = StepSpin(); self.cw.setRange(5, 100); self.cw.setSuffix(" % of a unit"); self.cw.setValue(int(getattr(settings, "wreck_static_weight_pct", 25)))
+        row(v, "Wreck and Static Weight", self.cw)
+        hint(v, "Wrecks and supply buildings (fuel tanks, depots) are static objects: no AI, no weapons, they never move. Each counts this share of a unit toward "
+                "the unit limit. When a mission is over the limit the furthest wrecks from your route are dropped first, before any flight is touched; buildings are "
+                "placed before wrecks and are never dropped for them. Wrecks stay where they are from day to day.")
         v.addStretch(1)
 
         # ---- DCS integration: paths and the scripting patch ---------------------------------------------------------------------
-        v = page("DCS integration")
+        v = page("DCS Integration")
         self.inst, self.saves = QLineEdit(S.native(settings.dcs_install)), QLineEdit(S.native(settings.dcs_saves))
         for label, line, ttl, h_ in (
-                ("DCS", self.inst, "Select the DCS World install folder", "Install folder (only needed for the MissionScripting.lua patch)"),
-                ("DCS Saves", self.saves, "Select your DCS Saved Games folder", r"e.g. C:\Users\You\Saved Games\DCS  or  ...\DCS_Server")):
+                ("DCS", self.inst, "Select the DCS World Install Folder", "Install folder (only needed for the MissionScripting.lua patch)"),
+                ("DCS Saves", self.saves, "Select Your DCS Saved Games Folder", r"e.g. C:\Users\You\Saved Games\DCS  or  ...\DCS_Server")):
             r = QHBoxLayout(); lb = QLabel(label); lb.setMinimumWidth(80); b = QPushButton("Browse")
             b.clicked.connect(lambda _=0, l=line, t_=ttl: _browse(self, l, t_))
             r.addWidget(lb); r.addWidget(line, 1); r.addWidget(b); v.addLayout(r)
             hint(v, h_)
         self.ms = QLabel(); v.addWidget(self.ms)
-        self.autopatch = QCheckBox("Enable DCS scripting access while SQE is open (patches MissionScripting.lua at start, restores it on exit)")
+        self.autopatch = QCheckBox("Enable DCS Scripting Access While SQE Is Open (Patches MissionScripting.lua at Start, Restores It on Exit)")
         self.autopatch.setChecked(bool(settings.auto_patch_scripting)); v.addWidget(self.autopatch)
         hint(v, "Results need io/lfs enabled in MissionScripting.lua. A backup is saved next to the file. "
                 "If SQE is closed before the mission ends, DCS can no longer write the results file.")
         v.addSpacing(10)
-        self.ecm = QCheckBox("ECM script (SQE's own jamming)")
+        self.ecm = QCheckBox("ECM Script (SQE's Own Jamming)")
         self.ecm.setChecked(bool(getattr(settings, "ecm_script", False))); v.addWidget(self.ecm)
         hint(v, "SQE's own jamming model; off by default. Off: jammers use DCS's own ECM. AI jets with a jammer (F-16, F/A-18, F-14, F-15C and the rest) keep it off on the way in and out "
                 "and switch it on over the attack leg only when a radar locks them. On: SQE's hook decides jamming and burn-through itself.")
-        self.ecm_msg = QCheckBox("Show ECM status")                      # v0.41.213 (XO): a sub-option of the ECM script
+        self.ecm_msg = QCheckBox("Show ECM Status")                      # v0.41.213 (XO): a sub-option of the ECM script
         self.ecm_msg.setChecked(bool(getattr(settings, "ecm_status", True))); self.ecm_msg.setEnabled(self.ecm.isChecked())
         self.ecm.toggled.connect(self.ecm_msg.setEnabled); self.ecm_msg.setStyleSheet("margin-left:22px;")
         self.ecm_msg.setToolTip("On-screen ECM messages: your F-16C's ECM lamp (\"ECM on\" / \"ECM off\") and \"Cockpit: ECM On\" / \"Cockpit: ECM Off\" for the F10 SQE ECM Switch / SQE ECM OFF calls of an FC3 jet. Off: no messages; the F10 commands still work.")
         v.addWidget(self.ecm_msg)
         v.addSpacing(10)
         self.ecm_state = QLabel(); v.addWidget(self.ecm_state)
-        self.ecm_inst = QPushButton("Install ECM script"); self.ecm_rem = QPushButton("Remove")
+        self.ecm_inst = QPushButton("Install ECM Script"); self.ecm_rem = QPushButton("Remove")
         self.ecm_inst.clicked.connect(lambda: self._ecm_do(S.install_ecm_script)); self.ecm_rem.clicked.connect(lambda: self._ecm_do(S.remove_ecm_script))
         r = QHBoxLayout(); r.addWidget(self.ecm_inst); r.addWidget(self.ecm_rem); r.addStretch(1); v.addLayout(r)
         hint(v, "Lets SQE read your F-16C's ECM lamp (about four times a second) so its jamming model knows when your jammer is on. It copies sqe_ecm_export.lua into "
@@ -327,7 +328,7 @@ class SettingsDialog(QDialog):
         st = S.ecm_script_state(self.saves.text())
         self.ecm_state.setText("ECM script: " + S.ecm_script_status(self.saves.text()))
         self.ecm_inst.setEnabled(st not in ("nofolder", "ok")); self.ecm_rem.setEnabled(st not in ("nofolder", "none"))
-        self.ecm_inst.setText("Update ECM script" if st == "old" else "Install ECM script")
+        self.ecm_inst.setText("Update ECM Script" if st == "old" else "Install ECM Script")
 
     def _ecm_do(self, fn):
         ok, msg = fn(S.native(self.saves.text()))
@@ -340,8 +341,8 @@ class SettingsDialog(QDialog):
         self.s.takeoff_buffer_s = int(self.tob.value())
         self.s.ai_unlimited_fuel = self.fuel.isChecked()
         self.s.hot_ramp_scrambles = self.hotramp.isChecked()
-        self.s.hot_runway_starts = self.hotrwy.isChecked()
-        self.s.hot_runway_own_field = self.hotrwy.isChecked() and self.hotrwy_own.isChecked()
+        self.s.hot_runway_starts = not self.hot_none.isChecked()
+        self.s.hot_runway_own_field = self.hot_own.isChecked()
         self.s.merge_mode = self.merge.currentData(); self.s.max_units = int(self.mmax.value())
         self.s.merge_earlier_min = int(self.mback.value()); self.s.merge_later_min = int(self.mfwd.value())
         self.s.merge_radius_nm = int(self.mrad.value()); self.s.merge_raids_all = bool(self.mraids.isChecked())

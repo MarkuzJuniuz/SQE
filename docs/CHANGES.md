@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.485, Settings tidied
+Splash Damage moved to the General tab; AI Landings, Ruins and Carcasses moved to Mission Build. The two hot-runway checkboxes are now one choice, Hot Starts on the Runway: Disabled, AI Flights at a Different Field, or AI Flights Including at My Own Field. All labels in Settings are in title case.
+
 ## v0.41.484, bomb-task code tidied
 Internal: tidied the bomb-task code; no change in play.
 
