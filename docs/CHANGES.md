@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.490, the F-14B as an Era Equipment choice
+The F-14 row of the Era Equipment group now offers the plain F-14B next to the F-14B(U). A campaign created with the F-14B has F-14B squadrons only: the same carrier, fleet-defence, TARCAP, escort and sweep jobs as the B(U), but its strikes carry laser-guided GBU-10 bombs with the LANTIRN pod and no JDAM (so a laser-guided strike is scrubbed in weather that rules the laser out, where a B(U) swaps to JDAM). The player waypoint scheme of the F-14B comes in a later version. Campaigns with the F-14B(U) are unchanged.
+
 ## v0.41.489, the A-10A as an Era Equipment choice
 The New Campaign dialog's A-10 row now offers the A-10A (Flaming Cliffs level, so you need FC3 to fly it) next to the A-10C. A campaign created with the A-10A has A-10A squadrons only, with the A-10C's Maverick, cluster and Mk-82 loadouts but no targeting pod and no JDAM or wind-corrected bombs: a Hog attacking from a high floor flies Mavericks and cluster bombs. The "You fly" list follows the A-10 and F-14 chosen in Era Equipment. Campaigns with the A-10C are unchanged.
 

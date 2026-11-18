@@ -21,7 +21,7 @@ INTERCEPT_NM = {"MiG_21Bis": 110, "MiG_23MLD": 130, "MiG_29A": 170, "MiG_29S": 1
 
 # The same for our alert pairs: how far from its base a squadron's alert pair is sent (nm), never more than 60% of the combat radius. Hand-set, shorter
 # than that radius for the same reason: it has to reach the area, fight and get home. Tune freely.
-BLUE_DISPATCH_NM = {"F-14BU": 150, "FA-18C": 130, "F-16C": 120, "F-15C": 160}
+BLUE_DISPATCH_NM = {"F-14BU": 150, "F-14B": 150, "FA-18C": 130, "F-16C": 120, "F-15C": 160}
 BLUE_DISPATCH_DEFAULT_NM = 110
 
 MAX_RED_FLIGHTS = 3                      # pairs added on top of the planned picture
