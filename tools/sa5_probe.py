@@ -6,17 +6,19 @@ no SQE campaign, no player flight (one parked client slot at Incirlik, only so D
   python tools/sa5_probe.py make OUT.miz        e.g. C:\\temp\\SQE_SA5_Probe.miz, then copy to <Saved Games>\\DCS\\Missions\\Probes
 
 The site (red, Syria, 12 km south-west of Tiyas at x -68100, y 149400, on land 1.5 km clear of the sea, 20 m of relief in 2 km, checked on the syria4 scan):
-  6 x S_200_Launcher ("S-200_Launcher", SA-5 Gammon, pydcs: weapon reach 255 km)
+  16 x S_200_Launcher ("S-200_Launcher", SA-5 Gammon, pydcs: weapon reach 255 km). Each launcher holds ONE missile and DCS has no reload for it; the first run (2026-11-18, 6
+         launchers) fired all six at the first jets and had nothing left for the 500 ft pair, so the site now has 16: more than the 8 jets, with room for a double shot
   1 x RPC_5N62V     ("Square Pair" tracking radar, pydcs: detection 400 km)
   1 x RLS_19J6      (ST-68U "Tin Shield" search radar, pydcs: detection 150 km)
 That is the whole SA-5 set pydcs has (the same three units the DCS Mission Editor lists under SAM SA-5). The site has no command post and no other radar: if DCS needs one
-the first run shows it (no SHOT lines although a pair is inside 150 km). Radars and launchers sit in a ring (launchers 90 m out, the two radars 25 m from the centre).
+the first run shows it (no SHOT lines although a pair is inside 150 km). Radars sit 25 m from the centre, the launchers in two rings (8 at 90 m, 8 at 150 m).
 
 Four blue F-16C pairs fly straight at the site from 180 nm, one pair per altitude, on four bearings 30 degrees apart (tracks meet only at the site, over flat desert),
-450 kt ground speed, ROE weapons hold, reaction to threat none, ECM never used, no weapons loaded. They start 12 minutes apart (35,000 ft first, 500 ft last) so one pair is past
-the site before the next arrives: the site's single tracking radar then measures one pair at a time. The high pairs fly at the AGL over the site as MSL (barometric),
+450 kt ground speed, ROE weapons hold, reaction to threat none, ECM never used, no weapons loaded. Each pair is a late-activated group that a timed trigger switches on, 12 minutes
+apart, 500 ft first and 35,000 ft last, so one pair is past the site before the next arrives (a plain group start delay did NOT hold for airborne groups in the 2026-11-18 run: all four
+pairs started at once). The site's single tracking radar then measures one pair at a time. The high pairs fly at the AGL over the site as MSL (barometric),
 the 5,000 and 500 ft pairs at radar altitude with a waypoint every 15 nm. Each flies on 40 nm past the site.
-  35,000 ft  bearing 150 from the site   20,000 ft  bearing 120   5,000 ft  bearing 180   500 ft  bearing 090 (the smoothest ground)
+  500 ft  bearing 090 from the site (the smoothest ground)   5,000 ft  bearing 180   20,000 ft  bearing 120   35,000 ft  bearing 150
 (The bearing is part of the altitude: the ground differs, so compare altitudes first and read terrain masking in only after.)
 
 The mission script (DoScript at start) writes to dcs.log with the prefix SQESA5:
@@ -25,7 +27,7 @@ The mission script (DoScript at start) writes to dcs.log with the prefix SQESA5:
   SQESA5 KILL / DEAD  t=<s> ...
   SQESA5 DETECT t=<s> target=<unit> slant_nm=<..> tgt_agl_ft=<..>   the first time the site's radar controller lists a unit of that pair (if the API gives it)
   SQESA5 TRACK  t=<s> <pair> lead slant_nm=<..> msl_ft=<..> agl_ft=<..>   every 30 s per pair while it is within 200 nm of the site
-  SQESA5 SUMMARY  at 80 minutes: per pair the first DETECT, first SHOT, last SHOT range, hits and kills.
+  SQESA5 SUMMARY  at 80 minutes (the last pair passes the site at about 62): per pair the first DETECT, first SHOT, last SHOT range, hits and kills.
 Fly the mission, sit in the slot (or watch F10 / spectator), Ctrl+Z accelerates time; after about 75 minutes send dcs.log (grep SQESA5)."""
 from __future__ import annotations
 
@@ -49,13 +51,13 @@ BEYOND_NM = 40.0                     # how far past the site the route goes
 SPEED_KT = 450.0
 STAGGER_S = 12 * 60
 # (label, altitude ft AGL over the site, bearing from the site in degrees (true, 0 = north, 90 = east), radar altitude?, waypoint spacing nm)
-PAIRS = [("35k", 35000, 150, False, 60.0), ("20k", 20000, 120, False, 60.0), ("5k", 5000, 180, True, 15.0), ("500ft", 500, 90, True, 15.0)]
+PAIRS = [("500ft", 500, 90, True, 15.0), ("5k", 5000, 180, True, 15.0), ("20k", 20000, 120, False, 60.0), ("35k", 35000, 150, False, 60.0)]      # the order they are switched on
 SITE_GROUND_M = 540.0                # ground at the site (scan relief), so the barometric altitude of the high pairs is AGL over the site
 
 SA5_LUA = r'''
 -- SQE SA-5 range probe: logs SHOT / HIT / KILL / DETECT / TRACK to dcs.log, prefix SQESA5
 local SITE = "SA5 Site"
-local PAIRS = {"35k", "20k", "5k", "500ft"}
+local PAIRS = {"500ft", "5k", "20k", "35k"}
 local T0 = timer.getTime()
 local seen, stats = {}, {}
 for _, p in ipairs(PAIRS) do stats[p] = {detect = nil, shot = 0, first_shot = nil, last_shot = nil, hit = 0, kill = 0} end
@@ -160,18 +162,21 @@ def _along(bearing_deg: float, dist_m: float) -> tuple:
 
 def _build(out: Path) -> Path:
     from dcs import planes, task, vehicles
-    from dcs.action import DoScript
+    from dcs import condition
+    from dcs.action import ActivateGroup, DoScript
     from dcs.mission import Mission, StartType
     from dcs.terrain import Syria
     from dcs.translation import String
-    from dcs.triggers import TriggerStart
+    from dcs.triggers import TriggerOnce, TriggerStart
     m = Mission(Syria())
     m.start_time = datetime.datetime(2026, 6, 21, 12, 0)
     blue, red = m.country("USA"), m.country("Syria")
     # the site: launchers in a ring round two radars
     sx, sy = SITE
     pos = [("Search", vehicles.AirDefence.RLS_19J6, sx + 25, sy), ("Track", vehicles.AirDefence.RPC_5N62V, sx - 25, sy)]
-    pos += [(f"Launcher {i + 1}", vehicles.AirDefence.S_200_Launcher, sx + 90 * math.cos(math.radians(60 * i)), sy + 90 * math.sin(math.radians(60 * i))) for i in range(6)]
+    for ring, (rad, n) in enumerate(((90, 8), (150, 8))):
+        pos += [(f"Launcher {ring * 8 + i + 1}", vehicles.AirDefence.S_200_Launcher, sx + rad * math.cos(math.radians(360 * i / n + 20 * ring)), sy + rad * math.sin(math.radians(360 * i / n + 20 * ring)))
+                for i in range(n)]
     vg = None
     for nm_, typ, x, y in pos:
         if vg is None:
@@ -186,7 +191,11 @@ def _build(out: Path) -> Path:
         alt_m = agl_ft * FT if radar_alt else agl_ft * FT + SITE_GROUND_M
         sp = _along(brg, START_NM * NM)
         g = m.flight_group(blue, f"Probe {label}", planes.F_16C_50, None, _point(m, *sp), altitude=alt_m, speed=SPEED_KT * 1.852, maintask=task.CAP, group_size=2)
-        g.start_time = i * STAGGER_S
+        g.late_activation = True
+        tr = TriggerOnce(comment=f"Switch on {label}")
+        tr.add_condition(condition.TimeAfter(10 + i * STAGGER_S))
+        tr.add_action(ActivateGroup(g.id))
+        m.triggerrules.triggers.append(tr)
         for k, u in enumerate(g.units):
             u.name = f"Probe {label} 1-{k + 1}"
             u.pylons = {}
@@ -205,7 +214,7 @@ def _build(out: Path) -> Path:
     t.add_action(DoScript(String(SA5_LUA)))
     m.triggerrules.triggers.append(t)
     m.set_sortie_text("SQE SA-5 range probe")
-    m.set_description_text("SA-5 range probe: four F-16C pairs (35,000 / 20,000 / 5,000 / 500 ft AGL, 12 minutes apart) fly at one SA-5 site from 180 nm, weapons hold, no ECM, no reaction. "
+    m.set_description_text("SA-5 range probe: four F-16C pairs (500 / 5,000 / 20,000 / 35,000 ft AGL, 12 minutes apart) fly at one SA-5 site from 180 nm, weapons hold, no ECM, no reaction. "
                            "Sit in the Incirlik slot, Ctrl+Z to speed up, after about 75 minutes send dcs.log (grep SQESA5).")
     out.parent.mkdir(parents=True, exist_ok=True)
     m.save(str(out))
