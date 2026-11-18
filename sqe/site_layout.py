@@ -18,6 +18,8 @@ from .routes import bearing, dist, offset
 
 class SiteLayout:
     def _platoon(self, country, name, comp, x, y, heading, formation, scale=1.0, spacing=None, base_def=False):
+        """One vehicle group of `comp` [(vehicle name, count)] at (x, y): counts scaled (at least 1 each), unknown vehicles skipped with a warning, None if nothing is left;
+        Blue's skill follows the Blue setting, `base_def` makes it Excellent."""
         from .mission_builder import _vt, F, BLUE_BASE_DEF_SKILL  # the builder's module imports this one
         types = []
         for vname, n in comp:
@@ -39,7 +41,26 @@ class SiteLayout:
         return g
 
     def _nearest_airfield(self, x, y):
+        """The blue airfield nearest (x, y); raises if there is none (`_home_airfield` is the forgiving one)."""
         return min((b for b in self.state.bases.values() if b.kind == BaseKind.AIRFIELD), key=lambda b: dist(b.x, b.y, x, y))
+
+    def _home_airfield(self, x, y):
+        """The blue airfield nearest (x, y), or None when the campaign has none."""
+        return min((b for b in self.state.bases.values() if b.kind == BaseKind.AIRFIELD), key=lambda b: dist(b.x, b.y, x, y), default=None)
+
+    def _red_skill(self):
+        """The AI skill red's groups and jets get: the Red setting at this difficulty, High if the name is unknown."""
+        return getattr(Skill, ai_skill(self.o, "red", self.d), Skill.High)
+
+    def _site_comp(self, a):
+        """The composition [(vehicle, count)] a site asset of this kind is built from: the variant's battery for a SAM / EWR, the soft-site list for the rest (None if it has none)."""
+        from .mission_builder import SITES, SOFT  # the builder's module imports this one
+        return SITES.get(a.variant) if a.kind in (AssetKind.SAM, AssetKind.EWR) else SOFT.get(a.kind)
+
+    def _is_soft_site(self, a):
+        """S89 B2: soft sites and garrisons (a C2, an airfield, a supply building, a dug-in garrison): never an armour column, never an EWR."""
+        from .mission_builder import SUPPLY_BUILDINGS  # the builder's module imports this one
+        return a.kind in (AssetKind.C2, AssetKind.AIRFIELD) or a.kind in SUPPLY_BUILDINGS or (a.kind == AssetKind.ARMOR and a.variant == "GARRISON")
 
     def _site_center(self, a):
         from .mission_builder import SITES, SOFT  # the builder's module imports this one
@@ -109,6 +130,7 @@ class SiteLayout:
         return (x, y)
 
     def _vary_comp(self, a, comp):
+        """A site's composition with the per-mission variation: SAM / EWR batteries of 3+ vary by one, support sites by -1..+2, a SAM may add a short-range escort, a C2 a truck."""
         r, out = self.vrng, []
         for name, n in comp:
             if a.kind in (AssetKind.SAM, AssetKind.EWR) and n >= 3:
@@ -145,6 +167,7 @@ class SiteLayout:
         return [getattr(_vt(n), "id", "") for n, c in self._armor_site_comp(a) if c > 0]
 
     def _armor_comp(self):
+        """An armour column: tanks, IFVs, APCs, a Shilka and trucks, sometimes with mobile air defence; counts rolled once, zero counts dropped."""
         r = self.vrng
         comp = [(r.choice(["T_72B", "T_72B", "T_80B", "T_80UD"]), r.randint(3, 6)), (r.choice(["BMP_2", "BMP_1", "BMP_3"]), r.randint(2, 5)),
                 (r.choice(["BTR_80", "BTR_70", "BTR_60"]), r.randint(1, 3)), ("ZSU_23_4_Shilka", r.randint(0, 2)), ("Ural_375", r.randint(0, 3))]

@@ -10,12 +10,10 @@ import copy
 import math
 
 from dcs import mapping, planes, ships, task
-from dcs.unit import Skill
 
 from . import carcass, ground, road_sites, sams
 from . import seacheck as seac
 from . import threatmap as tm
-from .difficulty import ai_skill
 from .loadouts import enemy_cap_loadout
 from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType
 from .raid_spawns import supply_parts
@@ -31,7 +29,7 @@ class SiteSpawns:
         v0.41.220 (XO 2026-10-31): a raid scramble's target gets the same circle (`self._raid_xy`; the CAP station that centres the mission is up to 40 nm out from
         it). `only_raid` measures from the raid targets only and `max_units` caps what that call builds: the first call runs BEFORE the raiders and the alert pairs,
         because the raid's own load had already used the whole unit limit and the sites round its target were the first thing left out."""
-        from .mission_builder import SUPPLY_BUILDINGS, SOFT, SOFT_WAKE_NM  # the builder's module imports this one
+        from .mission_builder import SUPPLY_BUILDINGS, SOFT_WAKE_NM  # the builder's module imports this one
         st, o = self.state, self.o
         if o.full_map:
             return
@@ -39,17 +37,18 @@ class SiteSpawns:
         centres = list(getattr(self, "_raid_xy", [])) + ([] if only_raid else [(tx, ty)])
         if not centres:
             return
+        near = lambda a: min(dist(a.x, a.y, cx, cy) for cx, cy in centres)      # distance to the nearest centre
         cands = []
         for a in st.assets.values():
             if a.kind in SUPPLY_BUILDINGS and not a.destroyed and a.id not in self.groups_by_asset:
-                cands.append((min(dist(a.x, a.y, cx, cy) for cx, cy in centres), a.id, "red", a))
+                cands.append((near(a), a.id, "red", a))
         for aid, a in st.blue_assets.items():
             if a.kind in SUPPLY_BUILDINGS and not a.destroyed and aid not in self._supply_built:
-                cands.append((min(dist(a.x, a.y, cx, cy) for cx, cy in centres), aid, "blue", a))
+                cands.append((near(a), aid, "blue", a))
         cands = sorted((c for c in cands if c[0] <= R), key=lambda c: (c[0], c[1]))
         if not cands:
             return
-        home = min((b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD), key=lambda b: dist(b.x, b.y, tx, ty), default=None)
+        home = self._home_airfield(tx, ty)
         built = used = 0
         dorm_on = bool(o.dormant_sites) and not only_raid                  # S89 B2: red's guards sleep (never what a raid is about)
         for d_, aid, side, a in cands:
@@ -60,7 +59,7 @@ class SiteSpawns:
             if self._units_room() < need or (max_units is not None and used + need > max_units):       # S89 B2: a sleeping guard counts whole, as with the setting off
                 break
             if side == "red":
-                self._spawn_site(a, SOFT.get(a.kind), manifest, primary=False)
+                self._spawn_site(a, self._site_comp(a), manifest, primary=False)
                 if dorm_:
                     self._make_dormant(a, SOFT_WAKE_NM)
             elif home is not None:
@@ -107,10 +106,7 @@ class SiteSpawns:
         """v0.41.220: `near` = (x, y) of a raid target this field is built to cover (a neighbour of the raided field): it then gets only what reaches that point, the
         Patriot inside PATRIOT_NM, the HAWK inside HAWK_NM, the AAA inside COVER_AAA_NM (a full field is about 30 units).
         S89 C: `dormant=True` puts every group it builds to sleep (late-activated, tagged, listed in `_dormant_blue` with its ring). Returns the groups built."""
-        from .mission_builder import F, BLUE_AAA_NM  # the builder's module imports this one
-        o = self.o
         built = []
-        from .raids import HAWK_NM as _HN, PATRIOT_NM as _PN
 
         def keep(g, x, y, ring):
             if g is not None:
@@ -125,45 +121,61 @@ class SiteSpawns:
             return built
         if base.kind == BaseKind.AIRFIELD:
             self.apt[base.id] = self.t.airports[base.airport]
-            bt = dict(sams.blue_battery(base, self.state))      # v0.41.30: doctrinal batteries, every field alike; v0.41.62: read from the field's three sites (sams.py)
-            if near is not None:                                 # v0.41.220: a covering neighbour builds only what reaches the raid's target
-                from .raids import HAWK_NM, PATRIOT_NM
-                from .raid_spawns import COVER_AAA_NM
-                dn_ = dist(base.x, base.y, near[0], near[1]) / NM
-                if dn_ > PATRIOT_NM:
-                    bt["patriot_ln"] = 0
-                if dn_ > HAWK_NM:
-                    bt["hawk"] = False
-                if dn_ > COVER_AAA_NM:
-                    bt["aaa"] = 0
-            if o.base_defenses and (bt["patriot_ln"] or bt["aaa"] or bt["hawk"]):
-                p = self.apt[base.id].position
-                # v0.41.7: the Patriot faces the threat (the nearest enemy fighter field; was a direction picked from the base's name: a Patriot
-                # radar covers about 120 degrees, so a raid from the wrong side met none). Short-range sites on both sides of the field, and a
-                # HAWK battery as the middle layer at your home field. A degraded field (below 0.6) keeps the Patriot with 1 launcher and one site.
-                ang = tm.nearest_threat_bearing(self.state, p.x, p.y, bearing(p.x, p.y, tx, ty))
-                dry = lambda a0, d0: next(((px, py) for k in range(12) for px, py in [offset(p.x, p.y, a0 + (30 * ((k + 1) // 2)) * (1 if k % 2 else -1), d0)]
-                                           if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0)), offset(p.x, p.y, a0, d0))           # the nearest bearing that is dry land
-                sites_ = sams.blue_sites(self.state, base)
-                def site_at(key, a0, d0):               # v0.41.64: the site's own position (doctrinal bearing + seeded jitter, sams.place_blue_site); the old search if it falls on a runway
-                    a_ = sites_.get(key)
-                    px, py = (a_.x, a_.y) if a_ is not None else sams.place_blue_site(self.state, base, key)
-                    return (px, py) if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0) else dry(a0, d0)
-                x, y = site_at("pat", ang, 4500)
-                if bt["patriot_ln"]:
-                    self.base_ad.setdefault(base.id, {})["pat"] = keep(self._platoon(self.usa, f"BASEDEF {base.name} Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
-                                  ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M, base_def=True), x, y, _PN)
-                x, y = site_at("aaa", ang + 120, 3500)
-                if bt["aaa"]:
-                    keep(self._platoon(self.usa, f"BASEDEF {base.name} AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line, base_def=True), x, y, BLUE_AAA_NM)
-                if bt["aaa"] >= 2:
-                    x, y = site_at("aaa2", ang - 120, 3500)
-                    keep(self._platoon(self.usa, f"BASEDEF {base.name} AAA 2", [("Vulcan", 1), ("M1097_Avenger", 2)], x, y, ang, F.Line, base_def=True), x, y, BLUE_AAA_NM)
-                if bt["hawk"]:
-                    x, y = site_at("hawk", ang + 50, 6000)
-                    self.base_ad.setdefault(base.id, {})["hawk"] = keep(self._platoon(self.usa, f"BASEDEF {base.name} HAWK", [("Hawk_sr", 1), ("Hawk_tr", sams.BLUE_HAWK_TR), ("Hawk_pcp", 1), ("Hawk_cwar", 1),
-                                  ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star, spacing=sams.BLUE_SPACING_M, base_def=True), x, y, _HN)
+            self._place_airfield_defences(base, tx, ty, near, keep)
             return built
+        self._place_carrier_group(base, tx, ty)                # (the carrier branch returns None, as it always has)
+
+    def _base_def_group(self, keep, base, label, comp, x, y, ang, form, ring, spacing=None):
+        """One blue base-defence group (`BASEDEF <field> <label>`, always Excellent) handed to `keep`, which records it with its ring; returns what `keep` returns."""
+        return keep(self._platoon(self.usa, f"BASEDEF {base.name} {label}", comp, x, y, ang, form, spacing=spacing, base_def=True), x, y, ring)
+
+    def _place_airfield_defences(self, base, tx, ty, near, keep):
+        """The Patriot, the AAA pair and the HAWK of one blue airfield (`bt` from `sams.blue_battery`; a covering neighbour (`near`) only gets what reaches the raid's target)."""
+        from .mission_builder import F, BLUE_AAA_NM  # the builder's module imports this one
+        from .raids import HAWK_NM, PATRIOT_NM
+        o = self.o
+        bt = dict(sams.blue_battery(base, self.state))      # v0.41.30: doctrinal batteries, every field alike; v0.41.62: read from the field's three sites (sams.py)
+        if near is not None:                                 # v0.41.220: a covering neighbour builds only what reaches the raid's target
+            from .raid_spawns import COVER_AAA_NM
+            dn_ = dist(base.x, base.y, near[0], near[1]) / NM
+            if dn_ > PATRIOT_NM:
+                bt["patriot_ln"] = 0
+            if dn_ > HAWK_NM:
+                bt["hawk"] = False
+            if dn_ > COVER_AAA_NM:
+                bt["aaa"] = 0
+        if o.base_defenses and (bt["patriot_ln"] or bt["aaa"] or bt["hawk"]):
+            p = self.apt[base.id].position
+            # v0.41.7: the Patriot faces the threat (the nearest enemy fighter field; was a direction picked from the base's name: a Patriot
+            # radar covers about 120 degrees, so a raid from the wrong side met none). Short-range sites on both sides of the field, and a
+            # HAWK battery as the middle layer at your home field. A degraded field (below 0.6) keeps the Patriot with 1 launcher and one site.
+            ang = tm.nearest_threat_bearing(self.state, p.x, p.y, bearing(p.x, p.y, tx, ty))
+            dry = lambda a0, d0: next(((px, py) for k in range(12) for px, py in [offset(p.x, p.y, a0 + (30 * ((k + 1) // 2)) * (1 if k % 2 else -1), d0)]
+                                       if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0)), offset(p.x, p.y, a0, d0))           # the nearest bearing that is dry land
+            sites_ = sams.blue_sites(self.state, base)
+            def site_at(key, a0, d0):               # v0.41.64: the site's own position (doctrinal bearing + seeded jitter, sams.place_blue_site); the old search if it falls on a runway
+                a_ = sites_.get(key)
+                px, py = (a_.x, a_.y) if a_ is not None else sams.place_blue_site(self.state, base, key)
+                return (px, py) if seac.site_ok(px, py, 300.0) and not self._on_runway(px, py, 150.0) else dry(a0, d0)
+            x, y = site_at("pat", ang, 4500)
+            if bt["patriot_ln"]:
+                self.base_ad.setdefault(base.id, {})["pat"] = self._base_def_group(keep, base, "Patriot", [("Patriot_str", 1), ("Patriot_ECS", 1), ("Patriot_cp", 1),
+                              ("Patriot_EPP", 1), ("Patriot_ln", bt["patriot_ln"])], x, y, ang, F.Star, PATRIOT_NM, spacing=sams.BLUE_SPACING_M)
+            x, y = site_at("aaa", ang + 120, 3500)
+            if bt["aaa"]:
+                self._base_def_group(keep, base, "AAA", [("Vulcan", 2), ("M1097_Avenger", 2 if bt["aaa"] >= 2 else 1)], x, y, ang, F.Line, BLUE_AAA_NM)
+            if bt["aaa"] >= 2:
+                x, y = site_at("aaa2", ang - 120, 3500)
+                self._base_def_group(keep, base, "AAA 2", [("Vulcan", 1), ("M1097_Avenger", 2)], x, y, ang, F.Line, BLUE_AAA_NM)
+            if bt["hawk"]:
+                x, y = site_at("hawk", ang + 50, 6000)
+                self.base_ad.setdefault(base.id, {})["hawk"] = self._base_def_group(keep, base, "HAWK", [("Hawk_sr", 1), ("Hawk_tr", sams.BLUE_HAWK_TR), ("Hawk_pcp", 1), ("Hawk_cwar", 1),
+                              ("Hawk_ln", sams.BLUE_HAWK_LN)], x, y, ang, F.Star, HAWK_NM, spacing=sams.BLUE_SPACING_M)
+
+    def _place_carrier_group(self, base, tx, ty):
+        """The carrier (legacy free CVN-74: no deck crew) under way with its beacon, ICLS, Link 4 and ACLS, and the cruiser and two escorts station-keeping on it."""
+        from . import fleet as _fleet
+        o = self.o
         hdg = getattr(self, '_cv_hdg', {}).get(base.id)
         if hdg is None:
             hdg = (bearing(base.x, base.y, tx, ty) + 180) % 360
@@ -191,18 +203,30 @@ class SiteSpawns:
         """Full-map stress test: no restrictions. Every live enemy site, column, garrison, support site and early-warning radar is built; every friendly
         airfield gets its defences, garrison and supply sites; every friendly sector with troops gets its column; every planned enemy patrol is
         airborne at its station. The target and your package are unchanged. A mission this size may not load well in VR: that is the point."""
-        from .mission_builder import SITES, SOFT, ENEMY_FIGHTERS  # the builder's module imports this one
-        st, d = self.state, self.d
-        for a in sorted(st.assets.values(), key=lambda a: a.id):
+        self._full_map_sites(manifest)
+        self._full_map_bases(tx, ty)
+        self._full_map_blue(package, manifest, tx, ty)
+        self._full_map_bandits(manifest)
+
+    def _full_map_sites(self, manifest):
+        """Full map, stage 1: every live enemy site not built yet, in asset-id order."""
+        for a in sorted(self.state.assets.values(), key=lambda a: a.id):
             if a.destroyed or a.id in self.groups_by_asset:
                 continue
-            comp = SITES.get(a.variant) if a.kind in (AssetKind.SAM, AssetKind.EWR) else SOFT.get(a.kind)
+            comp = self._site_comp(a)
             if comp:
                 self._spawn_site(a, comp, manifest, primary=False)
-        for b in st.bases.values():
+
+    def _full_map_bases(self, tx, ty):
+        """Full map, stage 2: the defences of every blue airfield that is not in the mission yet."""
+        for b in self.state.bases.values():
             if b.kind == BaseKind.AIRFIELD and b.id not in self.apt:
                 self._place_base(b, tx, ty)
-        home = min((b for b in st.bases.values() if b.kind == BaseKind.AIRFIELD), key=lambda b: dist(b.x, b.y, tx, ty), default=None)
+
+    def _full_map_blue(self, package, manifest, tx, ty):
+        """Full map, stage 3: every blue forward position and every sector Blue still holds with troops (built as raid targets from the home field)."""
+        st = self.state
+        home = self._home_airfield(tx, ty)
         if home is not None:
             for aim, ba in sorted(st.blue_assets.items()):
                 if ba.destroyed:
@@ -216,14 +240,18 @@ class SiteSpawns:
                 if v >= ground.MIN_FORCE and i < len(g.get("centers", [])):
                     c = g["centers"][i]
                     self._spawn_raid_target(package, home, f"sector:{i}", float(c[0]), float(c[1]), manifest)
-        skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
-        pt = lambda x, y: mapping.Point(x, y, self.t)
+
+    def _full_map_bandits(self, manifest):
+        """Full map, stage 4: every planned enemy patrol airborne at its station (a pair of Bandits per flight)."""
+        from .mission_builder import ENEMY_FIGHTERS  # the builder's module imports this one
+        st = self.state
+        skill = self._red_skill()
         for n, pf in enumerate((st.red_air or {}).get("flights", [])):
             a = st.assets.get(pf["wing"])
             if a is None or a.destroyed or pf["type"] not in ENEMY_FIGHTERS:
                 continue
             fx_, fy_, fa_ = self._sep(pf["x"], pf["y"], 22000 * FT, 0.0)
-            g = self.m.flight_group(self.red, f"FM Bandit {n + 1}", getattr(planes, pf["type"]), None, pt(fx_, fy_), altitude=fa_, speed=400 * KPH,
+            g = self.m.flight_group(self.red, f"FM Bandit {n + 1}", getattr(planes, pf["type"]), None, self._pt(fx_, fy_), altitude=fa_, speed=400 * KPH,
                                     maintask=task.CAP, group_size=2)
             g.set_skill(skill)
             load = enemy_cap_loadout(pf["type"])
@@ -232,8 +260,8 @@ class SiteSpawns:
                 u.name = f"ENM-FM-{pf['wing']}-{n}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
             manifest.add("enemy_air", pf["wing"], names, ac=pf["type"])
 
-    def _spawn_opfor_ground(self, package, tx, ty, manifest, polyline=None, route_sites=None, route_near=None, all_sams=False):
-        from .mission_builder import SITES, SOFT, SUPPLY_BUILDINGS, RAID_SAM_RESERVE, SOFT_WAKE_NM  # the builder's module imports this one
+    def _blind_sites_for(self, package):
+        """Sets `self._blind_site` (sites whose radars are already gone when the mission starts) and returns `fol_`: the live sites a STRIKE / CAS behind a SEAD waits on."""
         st, obj = self.state, package.objective
         from .war import blinded_today
         # the DEAD stage of a SEAD-first pair: if the SEAD package blinded the site (the day's verdict), its radars are already gone when the mission starts
@@ -244,6 +272,11 @@ class SiteSpawns:
             fol_ = [st.assets[x] for x in after_sites(obj) if x in st.assets and not st.assets[x].destroyed]
             staged_ = {x.objective.target_id for x in getattr(self, "_extras", []) if x.objective.type == ObjectiveType.DEAD and x.objective.aim in SEAD_AIMS}
             self._blind_site |= {a.id for a in fol_ if site_blind_today(st, a.id) and a.id not in staged_}      # a SEAD flown in this mission blinds it for real
+        return fol_
+
+    def _opfor_relevant(self, package, tx, ty, polyline, route_sites, route_near, all_sams, fol_):
+        """The sites `_spawn_opfor_ground` considers, in build order: returns (target asset or None, the list, the ids of the route's SAM sites, the ids `all_sams` added)."""
+        st, obj = self.state, package.objective
         if obj.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
             tgt, relevant = None, []            # no ground target, but enemy SAMs whose rings touch the route / station stay live
         else:
@@ -268,6 +301,15 @@ class SiteSpawns:
         ewrs = sorted((a for a in st.assets.values() if a.kind == AssetKind.EWR and not a.destroyed),
                       key=lambda a: tm.poly_dist(a.x, a.y, polyline) if polyline else dist(a.x, a.y, tx, ty))
         relevant += [a for a in ewrs[:2] if (tm.poly_dist(a.x, a.y, polyline) if polyline else 0) < 80 * NM]
+        return tgt, relevant, route_ids, extra_ids_
+
+    def _spawn_opfor_ground(self, package, tx, ty, manifest, polyline=None, route_sites=None, route_near=None, all_sams=False):
+        """Builds the red ground sites a package's mission needs: its target, the two nearest defenders and the target's garrison, the sites it waits on, every SAM site
+        whose ring touches the route (and, for `all_sams`, every live SAM site), and the two nearest EWRs; trimmed to the unit limit; the route's sites sleep with `dormant_sites`."""
+        from .mission_builder import RAID_SAM_RESERVE, SOFT_WAKE_NM  # the builder's module imports this one
+        st = self.state
+        fol_ = self._blind_sites_for(package)
+        tgt, relevant, route_ids, extra_ids_ = self._opfor_relevant(package, tx, ty, polyline, route_sites, route_near, all_sams, fol_)
         keep_live_ = ({tgt.id} | set(tgt.defended_by) | {g_.id for g_ in st.assets.values() if g_.guards == tgt.id} | {a_.id for a_ in fol_}) if tgt is not None else set()
         dormant_on_ = bool(self.o.dormant_sites) and bool(polyline)      # S89 B1: the route's SAM sites sleep (never the target, its defenders, its garrison or a `fol_` site)
         seen = set()
@@ -282,9 +324,9 @@ class SiteSpawns:
                 if is_tgt:
                     manifest.mark_primary(a.id, manifest.cur_pkg or package.id)
                 continue
-            comp = SITES.get(a.variant) if a.kind in (AssetKind.SAM, AssetKind.EWR) else SOFT.get(a.kind)
+            comp = self._site_comp(a)
             sz_ = sum(n_ for _, n_ in (comp or []))
-            soft_ = a.kind in (AssetKind.C2, AssetKind.AIRFIELD) or a.kind in SUPPLY_BUILDINGS or (a.kind == AssetKind.ARMOR and a.variant == "GARRISON")       # S89 B2: soft sites and garrisons (never an armour column, never an EWR)
+            soft_ = self._is_soft_site(a)                                  # S89 B2: soft sites and garrisons (never an armour column, never an EWR)
             dorm_ = dormant_on_ and a.id not in keep_live_ and ((a.kind == AssetKind.SAM and a.id in route_ids) or soft_)
             if route_near is not None and a.id in route_ids and a.id not in self.groups_by_asset and (cut_ or not self._fits(sz_, (RAID_SAM_RESERVE if a.id in extra_ids_ else 0))):
                 cut_ = True
@@ -306,9 +348,10 @@ class SiteSpawns:
 
     def _spawn_site(self, a, comp, manifest, primary):
         """ONE group per site: a SAM battery needs its search/track radars, launchers and command post together."""
-        from .mission_builder import F, _vt, ARMOR_DENSITY, SUPPLY_BUILDINGS, TRACK_RADARS, SEARCH_RADARS  # the builder's module imports this one
+        from .mission_builder import _vt, ARMOR_DENSITY, SUPPLY_BUILDINGS, TRACK_RADARS, SEARCH_RADARS  # the builder's module imports this one
         r = self.vrng
-        skill = getattr(Skill, ai_skill(self.o, "red", self.d), Skill.High)
+        utype = lambda u: str(getattr(u, "type", ""))
+        skill = self._red_skill()
         garrison = a.kind == AssetKind.ARMOR and a.variant == "GARRISON"
         comp = self._armor_site_comp(a) if a.kind == AssetKind.ARMOR else (
             road_sites.guard_comp(a, self.d.level) if road_sites.is_road(a) else self._vary_comp(a, comp))        # v0.41.241: a road site's guard follows its level and variant
@@ -320,14 +363,7 @@ class SiteSpawns:
             base_count += len(supply_parts(a.kind, a.variant))
             gx, gy = self._guard_spot(a.id, cx, cy)         # v0.41.376 (S10): the guard stands at the edge of the layout facing blue, not inside it
             cx, cy = gx, gy
-        if garrison:
-            fb = self._nearest_airfield(cx, cy)
-            heading, form = int(bearing(cx, cy, fb.x, fb.y)), r.choice([F.Rectangle, F.Scattered, F.Star])
-        elif a.kind == AssetKind.ARMOR:
-            fb = self._nearest_airfield(cx, cy)
-            heading, form = int(bearing(cx, cy, fb.x, fb.y)), r.choice([F.Line, F.Rectangle, F.Line])
-        else:
-            heading, form = r.randint(0, 359), r.choice([F.Star, F.Scattered, F.Rectangle])
+        heading, form = self._site_heading_form(a, garrison, cx, cy)
         column = a.kind == AssetKind.ARMOR and not garrison and ground.zone_of(self.state, a.id) is not None
         scale = (ARMOR_DENSITY[0] + ARMOR_DENSITY[1] * a.health) if column else a.health         # a front-line column is as dense as its sector is strong
         if bld:
@@ -338,7 +374,8 @@ class SiteSpawns:
         if column:
             base_count = max(1, round(len(g.units) / max(0.05, a.health)))                      # the count at full health, so losses read back as health
         if a.kind == AssetKind.SAM and (a.suppressed or a.id in self._blind_site):
-            gone = [u for u in g.units if str(getattr(u, "type", "")) in TRACK_RADARS | SEARCH_RADARS]
+            radars = TRACK_RADARS | SEARCH_RADARS
+            gone = [u for u in g.units if utype(u) in radars]
             for u in gone:
                 g.units.remove(u)
             base_count = max(1, base_count - len(gone))      # the radars were already destroyed: not damage this mission caused
@@ -356,8 +393,26 @@ class SiteSpawns:
         self.groups_by_asset[a.id] = g
         if a.kind == AssetKind.ARMOR:
             self.armor_id, self.armor_center = a.id, (cx, cy)
+        self._site_manifest(a, g, names, base_count, primary, manifest)
+
+    def _site_heading_form(self, a, garrison, cx, cy):
+        """The heading and formation of a site's group (draws from `vrng`): a column or garrison faces the nearest blue airfield, anything else points at random."""
+        from .mission_builder import F  # the builder's module imports this one
+        r = self.vrng
+        if garrison:
+            fb = self._nearest_airfield(cx, cy)
+            return int(bearing(cx, cy, fb.x, fb.y)), r.choice([F.Rectangle, F.Scattered, F.Star])
+        if a.kind == AssetKind.ARMOR:
+            fb = self._nearest_airfield(cx, cy)
+            return int(bearing(cx, cy, fb.x, fb.y)), r.choice([F.Line, F.Rectangle, F.Line])
+        return r.randint(0, 359), r.choice([F.Star, F.Scattered, F.Rectangle])
+
+    def _site_manifest(self, a, g, names, base_count, primary, manifest):
+        """The manifest row of a built site group: its unit names, the count at full health, and which of them are track / search radars."""
+        from .mission_builder import TRACK_RADARS, SEARCH_RADARS  # the builder's module imports this one
         mine = bool(primary) and (not manifest.cur_pkg or manifest.cur_pkg == self._anchor_id)
-        trk = [u.name for u in g.units if str(getattr(u, "type", "")) in TRACK_RADARS]
-        srch = [u.name for u in g.units if str(getattr(u, "type", "")) in SEARCH_RADARS]
+        utype = lambda u: str(getattr(u, "type", ""))
+        trk = [u.name for u in g.units if utype(u) in TRACK_RADARS]
+        srch = [u.name for u in g.units if utype(u) in SEARCH_RADARS]
         manifest.add("asset", a.id, names, base_count=base_count, health_before=a.health, primary=mine, label=a.name, trk=trk, srch=srch,
                      primary_pkgs=[manifest.cur_pkg] if (primary and manifest.cur_pkg) else [])

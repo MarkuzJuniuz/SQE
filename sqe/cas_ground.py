@@ -11,13 +11,11 @@ import math
 from dcs import action, condition, mapping, planes, task, triggers
 from dcs.point import PointAction
 from dcs.translation import String
-from dcs.unit import Skill
 
 from . import ground
 from . import seacheck as seac
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
-from .difficulty import ai_skill
 from .loadouts import enemy_cap_loadout, enemy_strike_loadout
 from .models import BaseKind, Role
 from .routes import FT, NM, bearing, dist, offset
@@ -303,7 +301,7 @@ class CasGround:
             return
         t0 = max(0.0, float(t_s) - 240.0)
         used = self.__dict__.setdefault("_front_air_used", {})            # jets already committed to a strike in this mission: a pair is never flown twice
-        skill_r = getattr(Skill, ai_skill(self.o, "red", self.d), Skill.High)
+        skill_r = self._red_skill()
         for s_ in strikes:
             if self._units_room() < 6:
                 self.warns.append("Front air strike left out to stay under the unit limit")
