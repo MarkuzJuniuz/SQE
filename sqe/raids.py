@@ -16,6 +16,7 @@ from __future__ import annotations
 import math
 import random
 from .models import Objective, ObjectiveType, BaseKind, Role, AssetKind
+from .words import strength_word
 from . import clock, redair, runways
 from .loadouts import BOMBER_TYPES
 
@@ -863,11 +864,11 @@ def hit(state, base_id: str, wing, rng: random.Random, through: int | None = Non
         a = state.blue_sams[aim]
         a.health = max(0.0, a.health - SEAD_SITE_HIT * k)
         _sync(state, b)
-        return [f"   {a.name} {'destroyed' if a.destroyed else f'damaged, {a.health:.0%} left'}"]
+        return [f"   {a.name} {'destroyed' if a.destroyed else strength_word(a.health)}"]
     if kind in ("supply", "garrison"):
         a = state.blue_assets[aim]
         a.health = max(0.0, a.health - ASSET_HIT * ke)
-        return [f"   {a.name} {'destroyed' if a.destroyed else f'damaged, {a.health:.0%} left'}"]
+        return [f"   {a.name} {'destroyed' if a.destroyed else strength_word(a.health)}"]
     gar = state.blue_assets.get(f"bgar_{base_id}") if getattr(state, "blue_assets", None) else None
     shield = 1.0 - GARRISON_SHIELD * (gar.health if gar is not None and not gar.destroyed else 0.0)
     gone = []
@@ -875,7 +876,7 @@ def hit(state, base_id: str, wing, rng: random.Random, through: int | None = Non
         from .sams import hit_field
         gone = hit_field(state, b, BASE_LOSS * ke * shield * (1.0 - 0.4 * ad))     # v0.41.30: batteries soak part of the damage (judgment call)
     sqs = sorted((s for s in state.squadrons.values() if s.base_id == base_id and s.available > 0), key=lambda s: -s.available)
-    lines = [f"   bombs fell on {b.name}: its defences are down to {b.defense:.0%}{' (' + ', '.join(gone) + ' destroyed)' if gone else ''}" if b.kind != BaseKind.CARRIER else f"   missiles hit {b.name}"]
+    lines = [f"   bombs fell on {b.name}: its defences are {strength_word(b.defense)}{' (' + ', '.join(gone) + ' destroyed)' if gone else ''}" if b.kind != BaseKind.CARRIER else f"   missiles hit {b.name}"]
     if sqs:
         sq = sqs[0]
         lost = min(sq.available, rng.randint(1, 1 + int(ke)))

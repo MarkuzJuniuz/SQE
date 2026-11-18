@@ -8,6 +8,7 @@ from . import ground, theatres, tempo, story, detection
 from . import raids, runways, sams, ecm, airwings, clock, refit
 from .raids import hit as raids_hit
 from .aircraft import HOG_KEYS
+from .words import strength_word
 from .difficulty import Difficulty
 from .models import SEAD_AIMS, Objective, ObjectiveType, AssetKind, Role
 from .packages import Package
@@ -216,7 +217,7 @@ class ObjectivePlanner:
                 pr = a.value * a.health + covered
                 if a.health < 0.85:                                    # SEAD blinded it or CAS thinned it, but it still stands: mop up
                     pr *= 1.5
-                    desc = f"Finish off {a.name} ({a.health:.0%} left)"
+                    desc = f"Finish off {a.name}"
                 else:
                     desc = f"SEAD and DEAD: {a.name}"
                 cand.append((pr, Objective("", ObjectiveType.DEAD, a.id, pr, desc), self._blockers(state, a)))
@@ -414,12 +415,10 @@ class ObjectivePlanner:
         for s_, o in picked:
             if o.type == ObjectiveType.DEAD and not o.aim and long_range_site(state, state.assets[o.target_id]):
                 a = state.assets[o.target_id]
-                tail = f" ({a.health:.0%} left)" if a.health < 0.85 else ""
-                out.append((s_, Objective("", ObjectiveType.DEAD, o.target_id, o.priority, f"Standoff DEAD: destroy {a.name}{tail}", "STANDOFF")))
+                out.append((s_, Objective("", ObjectiveType.DEAD, o.target_id, o.priority, f"Standoff DEAD: destroy {a.name}", "STANDOFF")))
             elif o.type == ObjectiveType.DEAD and not o.aim and sead_fail(state, o.target_id) < int(getattr(self.d, 'sead_valve', SEAD_FAIL_VALVE)):
                 a = state.assets[o.target_id]
-                tail = f" ({a.health:.0%} left)" if a.health < 0.85 else ""
-                out.append((s_, Objective("", ObjectiveType.DEAD, o.target_id, o.priority, f"SEAD: suppress {a.name}{tail}", "SEAD")))
+                out.append((s_, Objective("", ObjectiveType.DEAD, o.target_id, o.priority, f"SEAD: suppress {a.name}", "SEAD")))
                 out.append((s_, Objective("", ObjectiveType.DEAD, o.target_id, o.priority, f"Close DEAD: destroy {a.name}, once its radars are down", "DEAD")))
                 extra += 1
             else:
@@ -575,7 +574,7 @@ class WarSimulator:
         red = sum(w.available for w in wings) * (0.6 + 0.6 * d.iads) * 0.25
         p = max(0.02, min(0.98, (strength / (strength + red) if strength + red else 0.0) + tempo.get(state, "AIR")))
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
-        lines = [f"{pkg.objective.description}: {'AIR CLEARED' if ok else 'CONTESTED'} (odds {p:.0%})"]
+        lines = [f"{pkg.objective.description}: {'AIR CLEARED' if ok else 'CONTESTED'}"]
         kills = (max(1, round(sum(f.count for f in pkg.flights) * 0.4 * p)) if ok else int(rng.random() < 0.5)) if wings else 0
         for w in wings:
             if kills <= 0:
@@ -623,7 +622,7 @@ class WarSimulator:
         nb_ = int(pkg.extra.get("bombers", 4)) if pkg.extra else 4
         p = strength / (strength + 2.5 + 2.0 * d.iads + 0.4 * esc + 0.25 * max(0, nb_ - 4))     # v0.41.155 (red zerg): a mass raid is harder to stop (judgment call)
         ok = force["success"] if force and "success" in force else chance(rng, p, d.variance)
-        lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'} (odds {p:.0%})"]
+        lines = [f"{pkg.objective.description}: {'RAID STOPPED' if ok else 'RAID GOT THROUGH'}"]
         if pkg.extra.get("unseen_raid"):                                    # v0.41.348 (Phase 7b): no AWACS was up, blue's planned patrols alone met it
             lines.append("   not detected: no AWACS was on orbit, only the planned patrols met it")
             ra_ = state.raids if state.raids is not None else {}
@@ -698,7 +697,7 @@ class WarSimulator:
             blinded = bool(t.suppressed) or blinded_today(state, t.id)               # the DEAD stage: the SEAD package already went in
         lines = [f"{pkg.objective.description}:"]
         if sead:
-            lines.append(f"   SEAD: {'radars suppressed' if blinded else 'radars still emitting'} (odds {p_sead:.0%})")
+            lines.append(f"   SEAD: {'radars suppressed' if blinded else 'radars still emitting'}")
         if sead and not blinded:
             t.health = max(0.05, t.health - SEAD_WEAR)      # a failed attempt still wears the site down
         if blinded and sead:
@@ -715,10 +714,10 @@ class WarSimulator:
             if killed:
                 before = t.health
                 t.health = max(0.0, t.health - (1.0 if blinded else 0.45))
-                lines.append(f"   DEAD: {t.name} {'destroyed' if t.destroyed else f'damaged, {t.health:.0%} left'} (odds {p_dead:.0%})")
+                lines.append(f"   DEAD: {t.name} {'destroyed' if t.destroyed else 'damaged, not neutralised'}")
             else:
                 t.health = max(0.0, t.health - 0.05)
-                lines.append(f"   DEAD: attack failed (odds {p_dead:.0%})")
+                lines.append("   DEAD: no effect observed")
         success = (killed if dead else blinded)
         loss_base = d.loss_rate * 2
         lost_by = {}                                            # v0.41.337: losses by flight id, for Session's refit commit (refit.commit_turn)
@@ -797,7 +796,7 @@ class WarSimulator:
         p, strength, defense = self.odds(state, pkg)
         success = force["success"] if force and "success" in force else chance(rng, p, d.variance)
         obj = pkg.objective
-        lines = [f"{obj.description}: {'SUCCESS' if success else 'FAILED'} (odds {p:.0%})"]
+        lines = [f"{obj.description}: {'objective achieved' if success else 'no effect observed'}"]
         if obj.type != ObjectiveType.BARCAP:
             t = state.assets[obj.target_id]
             z = ground.zone_of(state, t.id) if obj.type == ObjectiveType.CAS else None
@@ -811,7 +810,7 @@ class WarSimulator:
                 lines.append("   " + runways.crater(state, t.id))             # v0.41.254: an AI-flown runway strike that succeeds craters the field
             elif success:
                 t.health = max(0.0, t.health - d.base_damage * (0.5 + p) * (ground.AIR_EFFECT if z is not None else 1.0))
-                lines.append(f"   {t.name} now at {t.health:.0%}")
+                lines.append(f"   {t.name}: {strength_word(t.health)}")
                 if obj.type == ObjectiveType.COUNTER_AIR:
                     w = state.enemy_air_at(t.id)
                     if w:

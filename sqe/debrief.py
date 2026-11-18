@@ -17,6 +17,7 @@ from .models import AssetKind
 from . import refit as _refit
 from .state import CampaignState
 from .runways import RUNWAY_HALF_LEN_M, RUNWAY_HALF_WIDTH_M
+from .words import bda_text, strength_word
 
 from .hook_lua import LUA_HOOK
 SCRUB_LOSS_FRAC = 0.5          # v0.41.223: a side of a package (strikers, or the covering fighters) that has lost this share of its jets scrubs the package (judgment call: XO's run, a 2-ship that lost one went home; the Gudauta CAS escort was down to two of four)
@@ -507,7 +508,7 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             if g.get("primary"):
                 out["target_damage"] = 1 - (a.health / before) if before > 0 else 0.0
             if dmg > 0:
-                out["lines"].append(f"{a.name}: {before:.0%} -> {a.health:.0%}")
+                out["lines"].append(f"{a.name}: {strength_word(before)} -> {strength_word(a.health)}")
             rad = list(g.get("trk") or []) + list(g.get("srch") or [])
             if a.kind.value == "SAM" and rad and all(u in lost for u in rad) and not a.destroyed:
                 a.suppressed = True; ra_["suppressed"] = True               # SEAD worked: the radars are gone, but the launchers are still there
@@ -567,7 +568,7 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
     for aid_, cap_ in site_cap.items():                     # ...the buildings that really burned count: the site is at most that healthy
         a_ = (getattr(state, "blue_assets", None) or {}).get(aid_)
         if a_ is not None and cap_ < a_.health - 1e-6:
-            out["lines"].append(f"{a_.name}: {a_.health:.0%} -> {cap_:.0%} (buildings destroyed)")
+            out["lines"].append(f"{a_.name}: {strength_word(a_.health)} -> {strength_word(cap_)} (buildings destroyed)")
             a_.health = max(0.0, cap_)
     follow_ = any((p_.get("objective") or {}).get("after") for p_ in (state.plan or []) if p_.get("id") == data.get("package"))      # v0.41.158: a strike / CAS behind a SEAD
     for ref in data.get("aborted", []) or []:
@@ -654,7 +655,7 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
         if str(m.get("objective", "")).startswith("Fighter Sweep"):
             dmg = None                                       # a sweep fights the air over the target area; the target itself is the strikers' job
         out["packages"].append({"number": m["number"], "objective": m["objective"], "damage": dmg, "lost": n_lost, "total": tot, "resolved": done})
-        out["lines"].append(f"Package #{m['number']} ({m['objective']}): " + (f"target damage {dmg:.0%}, lost {n_lost}/{tot} aircraft" if done and dmg is not None else
+        out["lines"].append(f"Package #{m['number']} ({m['objective']}): " + (f"{bda_text(dmg)}, lost {n_lost}/{tot} aircraft" if done and dmg is not None else
                             (f"flown to the end: lost {n_lost}/{tot} aircraft" if done else "you were out of the mission before its strike; it is resolved by the war simulation")))
     # SEAD first: a SEAD package that was really flown settles whether the site is blind (the DEAD stage and the failed-days count read it)
     from .war import note_sead as _note_sead

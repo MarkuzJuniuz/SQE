@@ -29,6 +29,7 @@ from . import pydcs_patch
 from . import threatmap as tm
 from . import f14_scheme
 from .aircraft import AIRCRAFT, F14_KEYS, JDAM_HOGS
+from .words import strength_word
 
 TUNE_PARAMS = {"F-16C": ("COMM1_FREQ",), "A-10C": ("UHF_FREQ",), "A-10C2": ("UHF_FREQ",), "FA-18C": ("COMM1_FREQ", "COMM2_FREQ"), "F-14BU": ("COMM1_FREQ", "COMM2_FREQ"), "F-14B": ("COMM1_FREQ", "COMM2_FREQ")}   # v0.41.215: the player's radios SQE can read (XO's probes 2026-10-28 / 30); the F-15C (FC3) has none
 TUNE_BAND_MHZ = 0.05            # v0.41.215: tuned = within this much of the AWACS frequency (judgment call; the probe used 0.1)
@@ -660,7 +661,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if package.objective.type in (ObjectiveType.STRIKE, ObjectiveType.CAS, ObjectiveType.DEAD, ObjectiveType.COUNTER_AIR):
             x["target_line"] = (f"Target position {latlon(tx, ty, self.t)}, bearing {int(bearing(pbase.x, pbase.y, tx, ty)):03d} degrees, "
                                 f"{dist(pbase.x, pbase.y, tx, ty) / NM:.0f} nm from {pbase.name}."
-                                + (f" {_ta.name} stands at {_ta.health:.0%} strength." if _ta is not None else "")
+                                + (f" {_ta.name} is {strength_word(_ta.health)}." if _ta is not None else "")
                                 + self._ramp_line(package, manifest))
         tune_flags, tune_mhz = [], 0.0
         if o.awacs_tuned and not o.player_is_ai and any(s.slot == "AWACS" for s in package.support):

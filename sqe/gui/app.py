@@ -16,6 +16,7 @@ from ..aircraft import AIRCRAFT
 from ..briefing import threat_lines
 from .. import clock
 from ..timeofday import is_night
+from ..words import strength_word
 from ..difficulty import LEVELS
 from ..engine import Session
 from ..packages import PackageBuilder, folded_n_def
@@ -173,15 +174,15 @@ class OverviewPage(QWidget):
         body += V.section("Front History", "<br>".join(e(x) for x in hist)) if hist else "<p style='margin-top:14px;color:#8fa3b8'>The front has not moved yet.</p>"
         im.apply(self.dviews["ground"], body)
         # ---- Force Index (the old Supply tab; code names stay)
-        top = V.table(("Side", "Force Index"), [("Coalition", ("bg", f"{fb}%", V.supply_band(fb))), (en, ("bg", f"{fe}%", V.supply_band(fe)))])
-        sites = V.table(("Side", "Site", "Health", "State"), [(a, b, ("bg", f"{c}%", V.pct_band(c)), V.first_cap(d)) for a, b, c, d in od.supply_rows(st)])
+        top = V.table(("Side", "Force Index"), [("Coalition", ("bg", posture.supply_word(fb / 100.0).capitalize(), V.supply_band(fb))), (en, ("bg", posture.supply_word(fe / 100.0).capitalize(), V.supply_band(fe)))])
+        sites = V.table(("Side", "Site", "Health", "State"), [(a, b, ("bg", V.first_cap(strength_word(c / 100.0)), V.pct_band(c)), V.first_cap(d)) for a, b, c, d in od.supply_rows(st)])
         self.dviews["supply"].setHtml(top + V.section("Sites", sites)
                                       + "<p style='margin-top:14px;color:#8fa3b8'>A site mends in about 6 days at full Force Index (longer when it is low), and not on a night after it was struck.</p>")
         # ---- Air defence: the transit section only when a battery is on its way
         orders = od.asks_rows(st)
-        top = V.table(("Side", "Air Defense"), [("Coalition", ("bg", f"{ab}%", V.pct_band(ab))), (en, ("bg", f"{ae}%", V.pct_band(ae)))])
+        top = V.table(("Side", "Air Defense"), [("Coalition", ("bg", V.first_cap(strength_word(ab / 100.0)), V.pct_band(ab))), (en, ("bg", V.first_cap(strength_word(ae / 100.0)), V.pct_band(ae)))])
         transit = V.section("SAM Batteries in Transit", V.table(("Side", "Battery"), [(a, V.first_cap(b)) for a, b in orders])) if orders else ""
-        sites = V.table(("Side", "Site", "Type", "Health", "State"), [(a, b, c, ("bg", f"{d}%", V.pct_band(d)), V.first_cap(x)) for a, b, c, d, x in od.air_defence_rows(st)])
+        sites = V.table(("Side", "Site", "Type", "Health", "State"), [(a, b, c, ("bg", V.first_cap(strength_word(d / 100.0)), V.pct_band(d)), V.first_cap(x)) for a, b, c, d, x in od.air_defence_rows(st)])
         self.dviews["ad"].setHtml(top + transit + V.section("Sites", sites))
         # ---- Air Operations: BARCAP cover and the tanker / AWACS guards, under their own headings
         lines = _bb.status_lines(st)
@@ -231,8 +232,8 @@ class OverviewPage(QWidget):
             en = story.enemy(st)
             self.side["red"].h.setText(en.upper())
             tb, te = posture.transit_text(st, "blue"), posture.transit_text(st, "red")
-            self.side["blue"].set(f"{fb_}%", V.COLORS[V.supply_band(fb_)], f"{ab}%", V.COLORS[V.pct_band(ab)], ("Coalition: " + tb) if tb else "")
-            self.side["red"].set(f"{fe_}%", V.COLORS[V.supply_band(fe_)], f"{ae}%", V.COLORS[V.pct_band(ae)], (en + ": " + te) if te else "")
+            self.side["blue"].set(posture.supply_word(fb_ / 100.0).capitalize(), V.COLORS[V.supply_band(fb_)], strength_word(ab / 100.0).capitalize(), V.COLORS[V.pct_band(ab)], ("Coalition: " + tb) if tb else "")
+            self.side["red"].set(posture.supply_word(fe_ / 100.0).capitalize(), V.COLORS[V.supply_band(fe_)], strength_word(ae / 100.0).capitalize(), V.COLORS[V.pct_band(ae)], (en + ": " + te) if te else "")
         else:
             for kk in ("fr", "od"):
                 self.cards[kk].set("-", "")

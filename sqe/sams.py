@@ -20,6 +20,7 @@ from __future__ import annotations
 import math
 import random
 from .models import AssetKind
+from .words import strength_word
 
 NM = 1852.0
 ORDER_DAYS_FAST, ORDER_DAYS_SLOW = 5, 7  # v0.41.337 (XO 2026-11-06, queue S3: "SAM orders 5 to 7 days"; v0.41.197 to v0.41.336 had 14): an ORDER from home (the US for blue, the motherland for red) takes 5 days at a Force Index of 1.0 and 7 at the floor. The 5 and 7 are XO's; scaling by Force Index is the plan's (judgment call)
@@ -480,7 +481,7 @@ def retreat(state, d, rng: random.Random) -> list:
         r["travel"][a.id] = state.day                                    # tomorrow it is on the road: no regeneration
         moved = math.hypot(nx - a.x, ny - a.y) / NM
         _shift(state, a, nx - a.x, ny - a.y)
-        lines.append(f"{a.name} ({a.health:.0%} left) pulled back about {moved:.0f} nm from the front to recover")
+        lines.append(f"{a.name} ({strength_word(a.health)}) pulled back about {moved:.0f} nm from the front to recover")
     return lines
 
 

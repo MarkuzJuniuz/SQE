@@ -8,6 +8,7 @@ little every night (a squadron's edge fades if you stop flying that job). Judgme
 from __future__ import annotations
 
 from .models import ObjectiveType
+from .words import edge_word
 
 KINDS = ("CAS", "STRIKE", "DEAD", "AIR")
 TEMPO_CAP = 0.40                  # v0.41.166 (XO 2026-10-27): the most the chance of a background job moves up (+40 percentage points; was +-20)
@@ -89,9 +90,9 @@ def record(state, objective_type, tone: str, extra: dict | None = None) -> list:
         new = max(TEMPO_MIN, min(TEMPO_CAP, old + step))
         state.tempo[k] = round(new, 4)
         if abs(new - old) < 1e-9:
-            out.append(f"Tactical Edge, {LABEL[k]}: unchanged at {new * 100:+.0f}%" + (" (at the cap)" if abs(new) >= TEMPO_CAP - 1e-9 and step else ""))
+            out.append(f"Tactical Edge, {LABEL[k]}: unchanged ({edge_word(new, TEMPO_CAP)})")
         else:
-            out.append(f"Tactical Edge, {LABEL[k]}: {(new - old) * 100:+.0f}% (now {new * 100:+.0f}%): the squadrons' background jobs of this kind go better"
+            out.append(f"Tactical Edge, {LABEL[k]}: {'improved' if new > old else 'reduced'} (now {edge_word(new, TEMPO_CAP)}): the squadrons' background jobs of this kind go {'better' if new > old else 'worse'}"
                        + ("" if k == pk else " (credit for what the mission did)"))
     return out
 

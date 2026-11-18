@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.494, words instead of percentages
+The war log, the debrief, the briefing and the Overview no longer print percentages or odds. A job's result reads "objective achieved", "partly achieved" or "not achieved, no effect observed"; a site or defence reads intact, reduced, heavily damaged or destroyed; the Force Index reads good, adequate, strained or critical; the briefing rates the chance of suppressing a site as good, fair or poor. The war itself is unchanged.
+
 ## v0.41.493, the A-10C II as an Era Equipment choice
 The A-10 row of the New Campaign dialog now offers "A-10C II (late)" next to the A-10A and the A-10C. It flies the same DCS model and the same loadouts as the A-10C for now (the real A-10C II is about 2015 or later, so it is out of era for 2000 and 2006); the default A-10C campaigns are unchanged.
 

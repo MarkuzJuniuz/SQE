@@ -14,6 +14,7 @@ import math
 
 from . import barcap, clock
 from .aircraft import AIRCRAFT
+from .words import cover_word
 from .models import BaseKind, ObjectiveType, Role
 
 NM = 1852.0
@@ -310,9 +311,9 @@ def status_lines(state) -> list:
     parts.sort(key=lambda t: (t[0], t[1]))
     by = {}
     for n, d, pc in parts:
-        by.setdefault(n, []).append(f"{d} {pc}%")
+        by.setdefault(n, []).append(f"{d} {cover_word(pc / 100.0)}")
     g = [f for f in bc["blue_flights"] if f["kind"] in ("HAVCAP", "TKR_HAVCAP")]
-    out = ["BARCAP cover so far today (share of 24 h with a pair up):"] + [f"   {n}: " + ", ".join(v) for n, v in by.items()]
+    out = ["BARCAP cover so far today (how much of the day a pair is up):"] + [f"   {n}: " + ", ".join(v) for n, v in by.items()]
     if not by:
         out[0] = "BARCAP cover so far today: none planned"
     if g:
