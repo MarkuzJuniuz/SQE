@@ -219,7 +219,7 @@ GUARD_NM = 150                 # v0.41.11: a patrol guards a SAM site within thi
                                # local sites and the front, Sukhumi and Gudauta, went unguarded in the v0.41.10 run)
 CALLIN_LINK_NM = 40            # v0.41.73: a patrol is linked to (and called in to) the best-rated SAM site within this of its BARCAP station (judgment call)
 GUARD_FWD_NM = 10              # ...from a station this far in front of the site, toward the nearest friendly (blue) field
-GUARD_VALUE = {"SA-10": 4.0, "SA-11": 3.0, "SA-6": 2.5, "SA-15": 2.0, "SA-19": 1.5, "SA-8": 1.5, "SA-3": 1.5, "SA-2": 1.2}
+GUARD_VALUE = {"SA-10": 4.0, "SA-5": 3.5, "SA-9": 1.0, "SA-11": 3.0, "SA-6": 2.5, "SA-15": 2.0, "SA-19": 1.5, "SA-8": 1.5, "SA-3": 1.5, "SA-2": 1.2}
 # v0.41.20: no needless banzai, red's side. "commit": red fighters go after blue only with at least this quality-weighted edge (red : blue), except
 # over their own field or a SAM site blue is attacking (then at any odds). "soft": how much a raid's pick shies from a target under a full Patriot
 # (and on Hard also from your home field's HAWK): 1.0 = not at all (Easy's careless red).

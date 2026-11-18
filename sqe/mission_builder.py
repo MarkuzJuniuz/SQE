@@ -27,6 +27,7 @@ from . import barcap, briefing as brief, callsigns, detection, profiles, relief,
 from . import seacheck as seac
 from . import pydcs_patch
 from . import threatmap as tm
+from . import samtier
 from . import f14_scheme
 from .aircraft import AIRCRAFT, F14_KEYS, JDAM_HOGS
 from .words import strength_word
@@ -100,12 +101,12 @@ CV_RECOVER_NM = 10            # v0.41.17: AI carrier flights (and your wingmen) 
 CV_RCV_NM = 30            # v0.41.127 (XO 2026-10-23: F-14s flew 65 nm home at 2,000 ft): a flight going home to the boat keeps its height to a point this far out, then descends (judgment call)
 CV_RCV_FT = 10000         # ...and crosses that point at this height (the Marshal stack is lower; judgment call)
 RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
-HOME_SAM_VARIANTS = ("SA-15", "SA-8", "SA-19", "AAA", "MANPAD")     # S33 (XO 2026-11-11): the short-range air defence an AI fighter's way home stays high over
+HOME_SAM_VARIANTS = ("SA-15", "SA-8", "SA-19", "SA-9", "AAA", "MANPAD")     # S33 (XO 2026-11-11): the short-range air defence an AI fighter's way home stays high over
 HOME_RING_MARGIN_NM = 3.0     # ...its ring (threatmap.RANGE_NM) plus this counts as touching the leg (judgment call, the same size as the CAS DEAD rule)
 HOME_FLOOR_MARGIN_FT = 4000   # ...and the leg stays this far above the highest ceiling (profiles.ENVELOPE) among the rings it crosses (judgment call: Tor 20,000 -> 24,000 ft)
 HOME_FLOOR_NAME = "HFLR"      # ...at one point named so (no other code looks for it)
 RCV_SPREAD = (0, 30, -30, 60, -60)    # ...on its own bearing (degrees off the way it comes home), by stack slot
-SA10_REACH_NM = 31            # v0.41.14: the farthest an SA-10 fired at our jets in the runs (54-57 km)
+SA10_REACH_NM = samtier.get("SA-10", "fighter_nm")            # v0.41.14: the farthest an SA-10 fired at our jets in the runs (54-57 km); S90 P4: per umbrella system in samtier.SYSTEMS
 SWEEP_AFTER_TOT_S = 120       # v0.41.13: a sweep holds until 2 min after the first package it covers is over the target
 HOMEWARD_ENGAGE_NM = 20       # v0.41.5: after its hold a TARCAP / escort / sweep still engages air within this of itself on the way home
 from .packages import LONG_RANGE_A2A     # the long-range shooters; F-16 and F/A-18 are secondary air-to-air
@@ -241,6 +242,12 @@ SITES = {
     "SA-15":  [("Tor_9A331", 2), ("ZSU_23_4_Shilka", 1)],
     "SA-19":  [("x_2S6_Tunguska", 2)],
     "SA-8":   [("Osa_9A33_ln", 2)],
+    # S90 P3b (Syria 2000). SA-5 (S-200 "Gammon"): the whole set pydcs has, the same three units the Mission Editor lists under SAM SA-5 (no command post unit exists): launchers (one
+    # missile each, no reload in DCS; a real battery has six, a site of four is a judgment call that keeps the unit cap), the 5N62V "Square Pair" tracking radar and the ST-68U "Tin Shield"
+    # search radar (both in TRACK_RADARS / SEARCH_RADARS, so the DEAD gate and the radar kill logic see them). SA-9 "Gaskin": a platoon of Strela-1 launchers (9P31 on a BRDM-2; the real
+    # platoon is four, two keep the short-range kinds' size); it has no radar, so a site is only ever "up" through its launchers.
+    "SA-5":   [("S_200_Launcher", 4), ("RPC_5N62V", 1), ("RLS_19J6", 1)],
+    "SA-9":   [("Strela_1_9P31", 2)],
     "EWR":    [("x_1L13_EWR", 1)], "EWR55": [("x_55G6_EWR", 1)],
 }
 SOFT = {
@@ -1742,9 +1749,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if stw.action == "SWEEP":
                     # v0.41.14: the circle stops short of every live SA-10's reach (31 nm measured): the v0.41.13 sweep chased a MiG to 10 nm of
                     # the Sukhumi SA-10 and lost Venom 9-2. Let red come out to it.
-                    d10_ = min([dist(stw.x, stw.y, a.x, a.y) / NM for a in st.assets.values()
-                                if a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.25] + [999.0])
-                    zone_ = (zone_[0], zone_[1], max(8.0, min(zone_[2], d10_ - SA10_REACH_NM)))
+                    d10_ = min([dist(stw.x, stw.y, a.x, a.y) / NM - samtier.get(a.variant, "fighter_nm") for a in st.assets.values()
+                                if a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.25] + [999.0 - SA10_REACH_NM])
+                    zone_ = (zone_[0], zone_[1], max(8.0, min(zone_[2], d10_)))
                 # v0.41.23: moved, not only shrunk: the circle's centre may shift (toward home or to either side) to keep its full size clear of
                 # SAMs, as long as it still takes in the station
                 # v0.41.33: a sweep's circle also takes in the red station it was sent after (sweep.station_for puts it REACH_NM away), as far
@@ -2531,9 +2538,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._cas_floor_for(geom, package, tx, ty)                                                                                  # S31a, S92
         tid_ = package.objective.target_id
         tt_ = self.state.assets.get(tid_) if tid_ else None
-        geom.jsow_keep = [(a.x, a.y, max(AGM88_LAUNCH_NM, JSOW_KEEP_HIGH_NM)) for a in self.state.assets.values()            # every live SA-10 near the target, itself included (v0.41.46: 40 nm, as the loop used to force)
+        geom.jsow_keep = [(a.x, a.y, samtier.get(a.variant, "jsow_keep_nm")) for a in self.state.assets.values()            # every live SA-10 near the target, itself included (v0.41.46: 40 nm, as the loop used to force)
                           if tt_ is not None and a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not getattr(a, "suppressed", False)
-                          and dist(a.x, a.y, tt_.x, tt_.y) <= (tm.UMBRELLA_KM / 1.852 + AGM88_LAUNCH_NM) * NM]
+                          and dist(a.x, a.y, tt_.x, tt_.y) <= (samtier.get(a.variant, "reach_km") / 1.852 + samtier.get(a.variant, "harm_nm")) * NM]
         # v0.41.46: the target site's own live SAMs too (SA-11 20 nm, SA-6 16, SA-2 26, SA-3 15: AVOID_NM, reach plus margin): the 2026-10-20 run's JSOW point sat
         # 19.6 nm from the Gudauta SA-11 it was shooting at and lost two jets to it
         if tt_ is not None:
@@ -2599,7 +2606,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         mx_, my_ = sum(q_[0] for q_ in lps_) / len(lps_), sum(q_[1] for q_ in lps_) / len(lps_)
                         while dist(ex_, ey_, mx_, my_) > near_nm_ * NM:
                             nx_, ny_ = offset(ex_, ey_, bearing(ex_, ey_, mx_, my_), 1.0 * NM)
-                            if dist(nx_, ny_, jx_, jy_) < TARCAP_BEHIND_NM * NM or not all(dist(nx_, ny_, a_.x, a_.y) > (SA10_STATION_NM * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_):
+                            if dist(nx_, ny_, jx_, jy_) < TARCAP_BEHIND_NM * NM or not all(dist(nx_, ny_, a_.x, a_.y) > (samtier.get(a_.variant, "station_nm") * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_):
                                 break
                             ex_, ey_ = nx_, ny_
                         # v0.41.119 (XO 2026-10-22: the TARCAP sat on the sea side, about 90 degrees off the way red comes, so it could not snipe): the station is then put
@@ -2608,7 +2615,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         thr_ = self._red_approach(mx_, my_)
                         if thr_ is not None:
                             ax2_ = axis_station((mx_, my_), thr_, (jx_, jy_), near_nm_, TARCAP_BEHIND_NM,
-                                                lambda x_, y_: all(dist(x_, y_, a_.x, a_.y) > (SA10_STATION_NM * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_), (ex_, ey_))
+                                                lambda x_, y_: all(dist(x_, y_, a_.x, a_.y) > (samtier.get(a_.variant, "station_nm") * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_), (ex_, ey_))
                             if ax2_ is not None:
                                 ex_, ey_ = ax2_
                 geom.stand[key] = (ex_, ey_, [], dist(ex_, ey_, tx, ty) / NM, False)
@@ -2626,7 +2633,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         n_ = int(back_nm)
         while n_ > 0:
             nx, ny = offset(x, y, brg, n_ * NM)
-            if all(dist(nx, ny, a_.x, a_.y) > (SA10_STATION_NM * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_):
+            if all(dist(nx, ny, a_.x, a_.y) > (samtier.get(a_.variant, "station_nm") * NM if a_.variant in tm.UMBRELLA_VARIANTS else r_) for a_, r_ in sites_):
                 return (nx, ny, names, dist(nx, ny, tx, ty) / NM, egr is not None and profiles.leg_clear(self.state, (nx, ny), egr, alt_ft))
             n_ -= 2
         return stn

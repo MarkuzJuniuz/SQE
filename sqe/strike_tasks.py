@@ -11,6 +11,7 @@ import random
 from dcs import mapping, task
 
 from . import threatmap as tm
+from . import samtier
 from .aircraft import AIRCRAFT
 from .loadouts import JSOW_PER_JET, JDAM_JETS, PEN_PER_JET, gbu_count
 from . import profiles
@@ -24,14 +25,14 @@ AIR_GATE_KM = 100              # v0.41.214 (XO): was 70, the hold sits outside t
 AIR_HOLD_STRIKE_S = 900        # v0.41.235 (XO 2026-11-03): was 360; 15 min, the air fight takes time on every level. ...and holds at most this long (old judgment call: the Day-2 fight of XO's 2026-10-30 run lasted about that), then goes home (v0.41.205: it used to go in all the same and was shot down)
 AIR_HOLD_CAS_S = 900           # v0.41.235 (XO 2026-11-03): was 240, the same 15 min as strikers now (XO overrides the old 'troops are waiting' shorter hold)
 DEAD_GATE_KM = 40              # the radars are checked when the DEAD flight's lead is this close to the site (km); any still up and the package turns back
-SA10_GATE_KM = 60              # ...but never inside an SA-10's reach (55 km): against an SA-10 target, or under an SA-10 umbrella, the gate (and so the hold
+SA10_GATE_KM = samtier.get("SA-10", "gate_km")              # (S90 P4: per umbrella system in samtier.SYSTEMS) ...but never inside an SA-10's reach (55 km): against an SA-10 target, or under an SA-10 umbrella, the gate (and so the hold
                                # orbit) is this far from the SA-10. v0.39.21 run: Hornet 1 held 40 km from the Sukhumi SA-6, 26 km from the SA-10, and was shot down there
 SEAD_WAVE_KM = 60              # SEAD packages in one mission whose targets are this close together reach their HARM points at the same moment (the builder's sync)
-TRACK_RADARS = {"SNR_75V", "snr s-125 tr", "Kub 1S91 str", "S-300PS 40B6M tr", "Tor 9A331"}          # fire-control / track radars (unit type names as DCS stores them).
+TRACK_RADARS = {"SNR_75V", "snr s-125 tr", "Kub 1S91 str", "S-300PS 40B6M tr", "Tor 9A331", "RPC_5N62V"}          # fire-control / track radars (unit type names as DCS stores them).
 # The Tor carries its radar on the launcher: the vehicle IS the radar, so a Tor battery is blind only when its vehicles are down.
 TOR_VARIANTS = {"SA-15"}       # point defences that cover a long-range site and shoot down HARMs, GBUs and JSOWs aimed at it
 TOR_COVER_KM = 12.0           # a Tor this close to a SEAD/DEAD target, or to the strike leg into it, is part of the job: HARMs and JSOWs go at it, the DEAD gate waits for it
-SEARCH_RADARS = {"p-19 s-125 sr", "SA-11 Buk SR 9S18M1", "S-300PS 64H6E sr", "1L13 EWR", "55G6 EWR"}
+SEARCH_RADARS = {"p-19 s-125 sr", "SA-11 Buk SR 9S18M1", "S-300PS 64H6E sr", "1L13 EWR", "55G6 EWR", "RLS_19J6"}      # S90 P3b: + the SA-5's ST-68U "Tin Shield"
 CAS_ZONE_M = 9000              # the AI CAS engage circle around TGT (m): the column stays within about 2 km of the point (CAS_ENEMY_ADVANCE_M, CAS_PATROL_MAX_M); S92 tried 18000 and put it back (a wider circle only adds neighbouring air defence)
 KPH = 1.852
 
@@ -139,9 +140,9 @@ class StrikeTasks:
             also_ = [a_.id for a_, _ in self._cover_tors(package, leg_)]          # the route check: the Tors that cover the site or the run in
             tga_ = st.assets.get(gsite_)
             um_ = tm.umbrella_site(st, tga_)
-            gm_ = SA10_GATE_KM if (tga_ is not None and tga_.variant in tm.UMBRELLA_VARIANTS) else (AIR_GATE_KM if air_only_ else DEAD_GATE_KM)
+            gm_ = samtier.get(tga_.variant, "gate_km") if (tga_ is not None and tga_.variant in tm.UMBRELLA_VARIANTS) else (AIR_GATE_KM if air_only_ else DEAD_GATE_KM)
             gate = {"t": tot_s - DEAD_GATE_BEFORE_TGT_S, "site": gsite_, "grp": g.name, "also": also_, "gm": gm_ * 1000,
-                    "ux": um_.x if um_ else None, "uz": um_.y if um_ else None, "um": SA10_GATE_KM * 1000 if um_ else None,
+                    "ux": um_.x if um_ else None, "uz": um_.y if um_ else None, "um": samtier.get(um_.variant, "gate_km") * 1000 if um_ else None,
                     "from": n0_ + max(0, ti_ - 1) + 1, "to": to_, "ai": ai_, "dead": f.role in (Role.STRIKE, Role.CAS), "you": bool(f.is_player), "pkg": package.id,
                     "acap": AIR_HOLD_CAS_S if f.role == Role.CAS else AIR_HOLD_STRIKE_S, "tx": tga_.x if tga_ is not None else None, "tz": tga_.y if tga_ is not None else None}
         return gate
@@ -203,7 +204,7 @@ class StrikeTasks:
         if package.objective.type == ObjectiveType.DEAD:
             um = tm.umbrella_site(self.state, self.state.assets.get(package.objective.target_id))
             if um:
-                out.append((um.x, um.y, AGM88_LAUNCH_NM))
+                out.append((um.x, um.y, samtier.get(um.variant, "harm_nm")))
         out += self._zone_sams(package)
         return out or None
 

@@ -18,14 +18,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from .models import AssetKind, Role
 from . import relief, threatmap as tm
+from .samtier import LONG_RANGE_NM      # S90 P4: the long-range threshold lives with the tier table
 
 NM = 1852.0
 # (lowest, highest) altitude in ft at which the system realistically engages. Hand-set.
 ENVELOPE = {"AAA": (0, 10000), "MANPAD": (0, 10000), "SA-8": (0, 16000), "SA-15": (0, 20000), "SA-19": (0, 11000), "SA-3": (300, 45000),
-            "SA-6": (300, 45000), "SA-11": (100, 70000), "SA-10": (200, 90000), "SA-2": (1500, 80000)}
+            "SA-6": (300, 45000), "SA-11": (100, 70000), "SA-10": (200, 90000), "SA-2": (1500, 80000),
+            "SA-5": (1000, 130000), "SA-9": (0, 11500)}      # S90 P3b: SA-5 floor 1,000 ft (public S-200 low limit about 300 m; XO's probe: nothing at 500 ft, 20 nm at 5,000 ft), ceiling 130,000 ft (S-200VE about 40 km); SA-9 ceiling 3.5 km (public)
 # How much each system matters when it covers the route (the long-range ones hurt most).
-WEIGHT = {"AAA": 1.0, "MANPAD": 1.0, "SA-8": 1.5, "SA-15": 2.0, "SA-19": 1.0, "SA-3": 1.5, "SA-6": 2.0, "SA-11": 2.5, "SA-10": 3.0, "SA-2": 1.5}
-RADAR = {"SA-2", "SA-3", "SA-6", "SA-10", "SA-11"}         # radar-guided: terrain masking and the radar horizon cut their reach against a LOW flight
+WEIGHT = {"AAA": 1.0, "MANPAD": 1.0, "SA-8": 1.5, "SA-15": 2.0, "SA-19": 1.0, "SA-3": 1.5, "SA-6": 2.0, "SA-11": 2.5, "SA-10": 3.0, "SA-2": 1.5, "SA-5": 3.0, "SA-9": 1.0}
+RADAR = {"SA-2", "SA-3", "SA-5", "SA-6", "SA-10", "SA-11"}         # radar-guided: terrain masking and the radar horizon cut their reach against a LOW flight
 LOW_RADAR_FACTOR = 0.5
 MIN_GAIN = 0.5                                              # a lower profile has to be at least this much safer than the role altitude
 PENALTY = {"base": 0.0, "med": 0.25, "low": 0.75}          # a lower profile costs fuel and is harder to fly
@@ -274,7 +276,6 @@ STATION_FRAC = 0.85             # against a long-range SAM: the station sits thi
                                 # v0.41.37: 0.85 of the long-range SAM reach (40 nm from SA-10)
 
 STATION_OFFSET_NM = 9.0         # ...moved this far sideways toward the nearest enemy airfield
-LONG_RANGE_NM = 30.0            # a SAM that reaches this far counts as long-range for the station rule
 
 
 def _long_range_threat(state, tgt, alt_ft):

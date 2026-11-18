@@ -21,8 +21,9 @@ from __future__ import annotations
 from .models import AssetKind, BaseKind
 from .routes import AVOID_NM, NM, bearing, dist, offset
 from . import threatmap as tm
+from . import samtier
 
-SWEEP_SA10_NM = 45.0         # judgment call: the 2026-10-16 run's S-300 hit an F-15C at 30,000 ft from 34 nm (62.9 km), past the 35 nm route rule
+SWEEP_SA10_NM = samtier.get("SA-10", "sweep_nm")         # (S90 P4: per umbrella system in samtier.SYSTEMS) judgment call: the 2026-10-16 run's S-300 hit an F-15C at 30,000 ft from 34 nm (62.9 km), past the 35 nm route rule
 SWEEP_RING_MARGIN_NM = 20.0  # judgment call: other SAM rings (threatmap.RANGE_NM) plus this (the old sweep rule was +15)
 OPEN_MARGIN_NM = 12.0        # a red flight is "in the open" this far outside every SAM's reach (routes.AVOID_NM, already reach plus a margin):
                              # judgment call, so the sweep's fight circle (SAM-clear by AVOID_NM) can take in both its station and the red one
@@ -46,7 +47,7 @@ def clear_for_sweep(state, x, y) -> bool:
     """A sweep's station: SWEEP_SA10_NM from every live SA-10, SWEEP_RING_MARGIN_NM outside every other SAM ring of 3 nm or more."""
     for a in _sams(state):
         if a.variant in tm.UMBRELLA_VARIANTS:
-            if dist(x, y, a.x, a.y) < SWEEP_SA10_NM * NM:
+            if dist(x, y, a.x, a.y) < samtier.get(a.variant, "sweep_nm") * NM:
                 return False
         elif tm.RANGE_NM.get(a.variant, 0) >= 3 and dist(x, y, a.x, a.y) < (tm.RANGE_NM[a.variant] + SWEEP_RING_MARGIN_NM) * NM:
             return False

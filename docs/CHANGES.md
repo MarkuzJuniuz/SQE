@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.495, SA-5 and SA-9 sites, and the long-range SAM tier as data
+Two new red SAM site kinds are in the data: the SA-5 (S-200, long range: launchers plus its tracking and search radars) and the SA-9 (Strela-1). The SA-5 is planned with the reach XO's probe flights measured (about 66 nm against a high flyer). The planner's "long-range system" rules, which were wired to the SA-10, now read one table, and a theatre pack can name its own long-range systems. No Caucasus campaign changes: the SA-10 rules are as they were.
+
 ## v0.41.494, words instead of percentages
 The war log, the debrief, the briefing and the Overview no longer print percentages or odds. A job's result reads "objective achieved", "partly achieved" or "not achieved, no effect observed"; a site or defence reads intact, reduced, heavily damaged or destroyed; the Force Index reads good, adequate, strained or critical; the briefing rates the chance of suppressing a site as good, fair or poor. The war itself is unchanged.
 

@@ -7,16 +7,17 @@ objectives instead, so the war advances belt by belt instead of jumping straight
 from __future__ import annotations
 import math
 from .models import AssetKind, BaseKind
+from . import samtier
+from .samtier import RANGE_NM, UMBRELLA_VARIANTS      # S90 P4: the long-range tier is data (samtier.py; a theatre pack names it); RANGE_NM is the one ring table
 from .routes import AVOID_NM, RAID_SA11_NM, RAID_THREAT_OUT_NM, dist, offset
 
 NM = 1852.0
-UMBRELLA_VARIANTS = ("SA-10",)   # long-range sites whose reach covers their neighbours: in a cluster they are the first thing a SEAD wave has to beat
-UMBRELLA_KM = 55.0               # what an SA-10 reaches in practice: it opened fire on jets at 52-56 km in every run
+UMBRELLA_KM = samtier.get("SA-10", "reach_km")     # what an SA-10 reaches in practice (it opened fire on jets at 52-56 km in every run); each umbrella system has its own: samtier.get(variant, "reach_km")
 
 
-def umbrella_site(state, target_asset, reach_km: float = UMBRELLA_KM):
+def umbrella_site(state, target_asset, reach_km: float | None = None):
     """The live long-range site whose reach covers this target (the nearest one), or None. A target that is itself an SA-10 has no umbrella
-    other than a second SA-10 nearby."""
+    other than a second SA-10 nearby. `reach_km` None = each site's own reach (samtier)."""
     if target_asset is None:
         return None
     best, bd = None, None
@@ -24,10 +25,9 @@ def umbrella_site(state, target_asset, reach_km: float = UMBRELLA_KM):
         if a.id == target_asset.id or a.variant not in UMBRELLA_VARIANTS or a.destroyed:
             continue
         d = math.hypot(a.x - target_asset.x, a.y - target_asset.y)
-        if d <= reach_km * 1000 and (bd is None or d < bd):
+        if d <= (samtier.get(a.variant, "reach_km") if reach_km is None else reach_km) * 1000 and (bd is None or d < bd):
             best, bd = a, d
     return best
-RANGE_NM = {"SA-8": 7, "AAA": 3, "MANPAD": 3, "SA-2": 25, "SA-3": 13, "SA-6": 13, "SA-11": 18, "SA-10": 48, "SA-15": 8, "SA-19": 5}
 SERIOUS_NM = 8          # shorter-ranged systems do not block routes (they only matter at the target)
 
 

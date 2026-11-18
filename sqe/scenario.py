@@ -10,7 +10,7 @@ from .difficulty import Difficulty, get as get_difficulty
 from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, RedSquadron, PlayerProfile)
 from .state import CampaignState
 from .aircraft import AIRCRAFT, era_aircraft
-from . import ground, redroster, theatres, story
+from . import ground, redroster, theatres, story, samtier
 from . import sams as _sams_mod
 from . import sites as _sites_mod
 from . import road_sites as _road_sites_mod
@@ -22,9 +22,9 @@ def THEATRES() -> dict:
 
 SAM_LABEL = {"SA-8": "SA-8 battery", "AAA": "AAA battery", "MANPAD": "MANPADS team", "SA-2": "SA-2 site", "SA-3": "SA-3 site",
              "SA-6": "SA-6 site", "SA-11": "SA-11 site", "SA-10": "SA-10 site", "SA-15": "SA-15 battery",
-             "SA-19": "SA-19 battery"}
-LONG_RANGE = {"SA-2", "SA-3", "SA-6", "SA-10", "SA-11"}
-SAM_VALUE = {"SA-8": 4, "AAA": 2, "MANPAD": 2, "SA-2": 5, "SA-3": 5, "SA-6": 6, "SA-11": 7, "SA-10": 9, "SA-15": 6, "SA-19": 5}
+             "SA-19": "SA-19 battery", "SA-5": "SA-5 site", "SA-9": "SA-9 battery"}
+LONG_RANGE = samtier.GATE_VARIANTS      # the deep, doctrinally placed sites (S90 P4: the theatre pack's `sam_tier` gate list; the Caucasus default is SA-2 / 3 / 6 / 10 / 11)
+SAM_VALUE = {"SA-8": 4, "AAA": 2, "MANPAD": 2, "SA-2": 5, "SA-3": 5, "SA-6": 6, "SA-11": 7, "SA-10": 9, "SA-15": 6, "SA-19": 5, "SA-5": 8, "SA-9": 3}
 
 
 def _size(count: int, scale: float) -> int:

@@ -34,7 +34,7 @@ def order_days(fi: float) -> float:
     return ORDER_DAYS_FAST + (ORDER_DAYS_SLOW - ORDER_DAYS_FAST) * f
 REBUILT_HEALTH = 0.5
 REBUILD_PER_DAY = 1
-MOBILE = {"SA-6", "SA-11", "SA-8", "SA-15", "SA-19"}
+MOBILE = {"SA-6", "SA-11", "SA-8", "SA-15", "SA-19", "SA-9"}
 HURT = 0.8                    # health at or below this is "hurt" enough to move
 MAX_MOVES = 2
 MAX_DRIFT_NM = 10.0
@@ -57,7 +57,7 @@ TRANSFER_DAYS = 2                   # v0.41.197 (XO 2026-10-30): a TRANSFER betw
 SAM_DEBT = {"long": 0.0, "medium": 0.0, "short": 0.0}       # v0.41.196: supply a side pays for a replacement battery (order or rebuild in place). The mechanism is built but the price is ZERO: the 12-seed L3 sim showed no benefit (1x = 0.06 / 0.03 / 0.02: red SAM days at Sukhumi 49% against 37% with no debt, blue won 6 of 12 against 10 of 12). Raise these to switch it on.
 SAM_DEBT_PAYBACK = 1.5                  # the debt of one purchase pays back in a straight line over this many times the order time (XO's choice)
 SAM_DEBT_CAP = 0.15                     # all open debt of a side together, so a side that keeps losing SA-10s cannot spiral (judgment call)
-_DEBT_LONG, _DEBT_MEDIUM = ("SA-10", "Patriot"), ("SA-11", "SA-6", "HAWK", "Hawk")
+_DEBT_LONG, _DEBT_MEDIUM = ("SA-10", "SA-5", "Patriot"), ("SA-11", "SA-6", "HAWK", "Hawk")
 ORDER_MIN_GAP_NM = 20.0       # the sender must sit this much further from the nearest enemy fighter field than the receiver
 ASKS_PER_NIGHT = 1
 RED_BORROW = False             # v0.41.269 (XO 2026-11-04): red does NOT order a battery from a deeper site. The 8-seed L3 skip-day sims: borrowing emptied the rear (no healthy SA-10 beyond the line in play by day 22, 2 left without it), so the line broke like wet paper. A destroyed site is rebuilt in place after ORDER_DAYS (blue keeps its orders). True = the old rule

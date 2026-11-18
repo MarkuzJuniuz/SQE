@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 import random
 from . import threatmap as tm
+from . import samtier
 from . import ground, theatres, tempo, story, detection
 from . import raids, runways, sams, ecm, airwings, clock, refit
 from .raids import hit as raids_hit
@@ -28,7 +29,7 @@ def _suppressor(f, pkg=None) -> bool:
     return f.role == Role.SEAD
 
 
-GATE_VARIANTS = ("SA-2", "SA-3", "SA-6", "SA-11", "SA-10")    # v0.41.19: medium / long-range SAMs: they get a Standoff DEAD, and they gate strikes
+GATE_VARIANTS = samtier.GATE_VARIANTS    # v0.41.19: medium / long-range SAMs: they get a Standoff DEAD, and they gate strikes. S90 P4: a theatre pack's `sam_tier` names them (samtier.py)
 
 
 def long_range_site(state, site) -> bool:
@@ -40,7 +41,7 @@ def long_range_site(state, site) -> bool:
     if site.variant in GATE_VARIANTS and not site.destroyed:
         return True
     live = lambda a: a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and not a.suppressed       # a suppressed SA-10 has no radars to shoot with
-    return live(site) or any(live(a) and a.id != site.id and math.hypot(a.x - site.x, a.y - site.y) <= tm.UMBRELLA_KM * 1000 for a in state.assets.values())
+    return live(site) or any(live(a) and a.id != site.id and math.hypot(a.x - site.x, a.y - site.y) <= samtier.get(a.variant, "reach_km") * 1000 for a in state.assets.values())
 
 
 def covering_sams(state, a, short: bool = False) -> list:
@@ -60,7 +61,7 @@ def covering_sams(state, a, short: bool = False) -> list:
     return out
 
 
-GATE_REACH_NM = {"SA-10": 35}    # v0.41.20: the SA-10's measured reach (54-57 km in the runs), not the 48 nm ring table, as everywhere else since v0.41.14
+GATE_REACH_NM = samtier.GATE_REACH_NM    # v0.41.20: the SA-10's measured reach (54-57 km in the runs), not the 48 nm ring table, as everywhere else since v0.41.14 (S90 P4: one entry per umbrella system, samtier.SYSTEMS)
 
 
 SHORT_GATE = ("SA-15",)     # v0.41.175: a fixed Tor site covers a CAS target with its own 8 nm ring; CAS only (a strike has no business that low), see covering_sams(short=True)
