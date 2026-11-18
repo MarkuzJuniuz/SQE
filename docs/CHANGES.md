@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## Tools: road net scan for any theatre pack, SA-5 range probe, road coverage report
+Development tools only, no change in play. The road net scan takes a theatre pack (its airfields and long hops), there is a new SA-5 range probe mission, and `sqe_scan.py roads-report` lists the road coverage of a theatre's sectors and fields.
+
 ## v0.41.487, red SEAD fires from farther out, flying high
 Red's Su-24M SEAD raids now fly at 30,000 ft and fire their Kh-31P from 50 nm out instead of 40 nm, outside a Patriot's reach. The fighter sweep ahead of them stops 70 nm out.
 

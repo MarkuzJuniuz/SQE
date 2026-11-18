@@ -6,6 +6,9 @@
                                                      read the raw scan files (SQE_terrain_*, SQE_relief_*, SQE_roads_*.json
                                                      from <Saved Games>\\SQE) and write the small site list sqe/data/theatres/<theatre>_sites.json
                                                      (--scan-relief: also the ground-height grid from the scan)
+  python tools/sqe_scan.py roads-report SCAN_DIR [--pack PACK.json | --theatre ID]
+                                                     road coverage: for every sector centre and field of the theatre, the nearest scanned road point (km) and how many
+                                                     lie within 6 km (ground.ROAD_SNAP_COLUMN_M) and 25 km; a sector with none within 6 km is flagged (S90, J6)
   python tools/sqe_scan.py srtm TILE_DIR [--compare SCAN_DIR] [--no-download] [--keep]
                                                      build the built-in ground-height grid <theatre>_relief.json (2 km cells) from open SRTM tiles
                                                      (downloads the ones TILE_DIR lacks from the AWS open terrain tiles; needs numpy: pip install numpy);
@@ -269,6 +272,33 @@ def cmd_make(a) -> None:
     print(f"wrote {p}: start it in DCS (Fly), wait for COMPLETE, then copy the three SQE_*_{theatre}.json files from <Saved Games>\\SQE")
 
 
+def cmd_roads_report(a) -> None:
+    """Road coverage table (markdown) for every sector centre and every field of the theatre, from the scan's roads file."""
+    from sqe import ground, terrainprobe, theatres
+    theatre = use_theatre(a)
+    _, _, roads = _load(Path(a.scan_dir), theatre)
+    pts = [p for b in roads._P.values() for p in b]
+    th = theatres.active()
+    t = theatres.terrain()
+    rows = [(f"sector {i + 1}", x, y) for i, (x, y) in enumerate(terrainprobe._sector_anchors(th))]      # the centres moved onto land, as the road scan and the campaign use them
+    for key in ("red_fields", "blue_fields"):
+        for f in th.get(key, []):
+            ap = t.airports[f["airport"]].position
+            rows.append((f"{key[:-7]} {f['airport']}", ap.x, ap.y))
+    near_m = ground.ROAD_SNAP_COLUMN_M
+    print(f"{theatre}: {len(pts):,} road points in {a.scan_dir}; columns snap to a road within {near_m / 1000:.0f} km" + "\n")
+    print("| place | nearest road km | points within 6 km | points within 25 km | |")
+    print("|---|---|---|---|---|")
+    bad = 0
+    for name, x, y in rows:
+        ds = [math.hypot(px - x, py - y) for px, py in pts]
+        n6, n25 = sum(d <= near_m for d in ds), sum(d <= 25000.0 for d in ds)
+        flag = "NO ROAD WITHIN 6 KM" if n6 == 0 else ""
+        bad += bool(flag)
+        print(f"| {name} | {min(ds) / 1000:.1f} | {n6} | {n25} | {flag} |")
+    print(f"\n{bad} of {len(rows)} places have no road point within {near_m / 1000:.0f} km")
+
+
 RELIEF_FACTOR = 2                 # the scan-built relief grid has cells this many times wider than the scan's (2 km)
 SRTM_URL = "https://s3.amazonaws.com/elevation-tiles-prod/skadi/{ns}{lat:02d}/{ns}{lat:02d}{ew}{lng:03d}.hgt.gz"      # AWS open terrain tiles (SRTM, 1 arc-second, 3601 x 3601 per degree)
 SRTM_BLOCK = 8                    # each tile is cut down 8 x 8 (about 250 m) before use: block maximum + block average, then the 2 km cells are read from that
@@ -500,6 +530,7 @@ def main() -> None:
     pk = "a theatre pack file outside sqe/data/theatres (e.g. .private/syria/syria.json); its id is the theatre, output goes next to it"
     m = sub.add_parser("make"); m.add_argument("out"); m.add_argument("--theatre"); m.add_argument("--pack", metavar="PACK.json", help=pk); m.set_defaults(fn=cmd_make)
     c = sub.add_parser("condense"); c.add_argument("scan_dir"); c.add_argument("--out"); c.add_argument("--theatre"); c.add_argument("--pack", metavar="PACK.json", help=pk); c.add_argument("--scan-relief", action="store_true", help="also write the relief grid from the DCS scan (the shipped one comes from SRTM, see `srtm`)"); c.set_defaults(fn=cmd_condense)
+    rr = sub.add_parser("roads-report"); rr.add_argument("scan_dir"); rr.add_argument("--theatre"); rr.add_argument("--pack", metavar="PACK.json", help=pk); rr.set_defaults(fn=cmd_roads_report)
     r = sub.add_parser("srtm"); r.add_argument("tile_dir"); r.add_argument("--out"); r.add_argument("--theatre"); r.add_argument("--pack", metavar="PACK.json", help=pk); r.add_argument("--compare", metavar="SCAN_DIR")
     r.add_argument("--plan", action="store_true", help="print the tile list and the download estimate, download nothing")
     r.add_argument("--no-download", action="store_true"); r.add_argument("--keep", action="store_true", help="keep downloaded .hgt.gz files (they are 15 MB each; the reduced copy in tile_dir/reduced is enough)"); r.set_defaults(fn=cmd_srtm)
