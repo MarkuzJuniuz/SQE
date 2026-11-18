@@ -46,7 +46,7 @@ class Difficulty:
     red_reinf: float = 5.0               # strength points Red adds a day at the zone in contact (x supply)
     blue_reinf: float = 5.0              # the same for Blue
     raid_rate: float = 0.40              # S37: no longer read by raids.py (red raids by jet budget, `raids.RAID_SHARE`); `ground.py` still reads it for the abstract supply strikes
-    raid_arm: float = 0.0                # S36b (XO 2026-11-11; was v0.41.84's chance of a SEAD pair on a bomber raid): above 0, red sends SEAD packages (Su-24M / Su-34 with Kh-31P and escorts) at blue's Patriot and HAWK sites (L1 none: no SEAD doctrine)
+    raid_arm: float = 0.0                # S36b (XO 2026-11-11; was v0.41.84's chance of a SEAD pair on a bomber raid): above 0, red sends SEAD packages (Su-24M with Kh-31P and escorts) at blue's Patriot and HAWK sites (L1 none: no SEAD doctrine)
     raid_banzai: bool = False            # v0.41.146 (Campaign Revamp B4): Level 1's insurgents raid targets under live Patriot / HAWK cover without any SEAD (judgment call: they have no SEAD doctrine, and with every one of our fields covered they could never raid at all); the cover shoots them
     raid_surprise: float = 0.35          # share of the raids that are surprises (nobody warned us)
     sam_rebuild: float = 0.04            # nightly chance (x Red supply) that a destroyed SAM site is replaced (sams.py)
@@ -90,7 +90,7 @@ LEVELS: dict[int, Difficulty] = {
                   raid_mix=(0.20, 0.15, 0.25), blue_garrison_size=0.8, blue_rebuild=0.15, sam_retreat=0.8, sead_valve=3, air_retreat=0.8, road_sites_red=30, road_sites_blue=0, road_open=0.20, road_battalion=0.08),
     3: Difficulty(3, "Level 3 - Near-Peer", "Modern fighters, long-range SAMs and an integrated air-defence network. "
                   "Every sortie is contested and attrition bites.",
-                  enemy_air_total=256, red_squadron_max=14, enemy_types=["MiG_31", "MiG_29S", "Su_27", "Su_34", "Su_25", "MiG_29A"],
+                  enemy_air_total=256, red_squadron_max=14, enemy_types=["MiG_31", "MiG_29S", "Su_27", "Su_24M", "Su_25", "MiG_29A"],
                   sam_variants=["SA-10", "SA-11", "SA-6", "SA-15", "SA-19"], sam_sites_per_cluster=4, iads=0.9,
                   enemy_skill="High", loss_rate=0.085, base_damage=0.28, variance=0.7,
                   friendly_replenish=0.06, enemy_replenish=0.07, asset_repair=0.05, sam_repair=0.08,

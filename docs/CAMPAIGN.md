@@ -33,7 +33,7 @@ You pick the level when you start a campaign. It sets how strong red is and how 
 | | Level 1, Insurgent | Level 2, Regional power | Level 3, Near-peer |
 |---|---|---|---|
 | Red airfields | 4: Sukhumi, Gudauta, Sochi, Gelendzhik | 10, the whole red coast and the north | 10, the whole red coast and the north |
-| Red aircraft at the start | 94, old types kept supplied by a sponsor (MiG-21, MiG-23, Su-25, Su-24M) | 186, mixed (MiG-31, MiG-29, MiG-23, Su-24M, Su-25, plus the Mozdok bombers and escorts) | 254, modern (MiG-31, MiG-29S, Su-27, Su-34, Su-25, plus the Mozdok bombers and escorts) |
+| Red aircraft at the start | 94, old types kept supplied by a sponsor (MiG-21, MiG-23, Su-25, Su-24M) | 186, mixed (MiG-31, MiG-29, MiG-23, Su-24M, Su-25, plus the Mozdok bombers and escorts) | 254, modern (MiG-31, MiG-29S, Su-27, Su-24M, Su-25, plus the Mozdok bombers and escorts) |
 | Red SAMs | SA-2, SA-3, AAA, MANPADS | SA-2, SA-3, SA-6, SA-11, AAA | SA-10, SA-11, SA-6, SA-15, SA-19 |
 | Air defence integration (`iads`) | 0.15 | 0.55 | 0.90 |
 | Red AI skill | Average | Good | High |
@@ -172,7 +172,7 @@ field, and Level 1 fills its four fields to about 70% (Gelendzhik about 60%). Th
 Level 1, 12 at Level 2 and 14 at Level 3 (about 10 to 12 is the Soviet and Russian norm), so a field flies one or two types in full squadrons, not
 two or three jets of everything. The Forces screen lists them with in-universe names such as "Sochi-Adler MiG-21Bis Sqn #2"; a squadron that withdraws keeps its name.
 
-A **raid** is a package that red actually plans: a Su-24M or Su-34 strike on a field, a supply site, a garrison or a
+A **raid** is a package that red actually plans: a Su-24M strike on a field, a supply site, a garrison or a
 troop column, with escorts. Whether a raid goes in depends on whether red has the jets: nothing is rolled once you click
 Fly. Some raids are **unwarned** (25%, 35% and 45% at Levels 1, 2, 3) and come with no warning. Blue sees a raid when an AWACS
 (the E-3 or the E-2C) is on orbit that turn; with none up it still sees one in a quarter of cases. A raid blue does not see

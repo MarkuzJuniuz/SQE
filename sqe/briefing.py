@@ -41,9 +41,9 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     if obj.type.value == "FLEET_DEFENSE" and pkg.extra:
         e = pkg.extra
         tb = state.bases.get(obj.target_id)
-        rtype_of = {"Su_24M": "Su-24M bombers", "Su_34": "Su-34 bombers", "Su_25": "Su-25 attack aircraft", "Tu_22M3": "Tu-22M3 bombers"}
+        rtype_of = {"Su_24M": "Su-24M bombers", "Su_25": "Su-25 attack aircraft", "Tu_22M3": "Tu-22M3 bombers"}
         rtype = rtype_of.get(e.get("raider", "Su_24M"), "attack aircraft")
-        if e.get("pool"):                                    # S46: a pooled raid names every type that flies it ("4 Su-34 bombers and 2 Su-25 attack aircraft")
+        if e.get("pool"):                                    # S46: a pooled raid names every type that flies it ("4 Su-24M bombers and 2 Su-25 attack aircraft")
             from .raids import raid_members
             by_t_ = {}
             for _a, t, n in raid_members(e):
