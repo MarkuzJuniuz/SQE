@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.470, bombing code moved
+Internal: bombing-task code moved to strike_tasks.py; no change in play.
+
 ## v0.41.469, hook Lua text in its own file
 Internal: the mission hook's Lua text moved to its own file; no change in play.
 
