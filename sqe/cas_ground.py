@@ -24,9 +24,41 @@ from .routes import FT, NM, bearing, dist, offset
 from .strike_tasks import KPH
 
 
+def _scaled(comp, sc):
+    """The company's (type, count) rows with every count scaled by `sc` (at least 1 each)."""
+    return [(n_, max(1, int(round(c_ * sc)))) for n_, c_ in comp]
+
+
+def _name_units(g, tag):
+    """Name the group's units `<tag>|1`, `<tag>|2`, ... -> the names, in order."""
+    names = []
+    for k, u in enumerate(g.units, 1):
+        u.name = f"{tag}|{k}"; names.append(u.name)
+    return names
+
+
+def _full_strength_count(names, strength):
+    """S83 / S84: the size of the friendly force at full strength (its `base_count`), so the battle's losses read back as strength by one rule."""
+    return max(len(names), round(len(names) / max(0.05, strength / ground.MAX_FORCE)))
+
+
+def _arm_group(g, load, prefix):
+    """Name a strike group's units `<prefix>1`, `<prefix>2`, ... and give each its own copy of the loadout -> the names, in order."""
+    names = []
+    for j, u in enumerate(g.units, 1):
+        u.name = f"{prefix}{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
+    return names
+
+
+def _commit(used, key):
+    """Mark a pair of jets as committed to a strike in this mission (`used` counts jets per wing or squadron)."""
+    used[key] = used.get(key, 0) + 2
+
+
 class CasGround:
     # ---- CAS: both columns drive into contact so the clash is under way at the CAS TOT (+/- 30 s) -------------------------
     def _translate(self, g, dx, dy):
+        """Move every unit and route point of the group by (dx, dy)."""
         for u in g.units:
             u.position = mapping.Point(u.position.x + dx, u.position.y + dy, self.t)
         for p in g.points:
@@ -98,11 +130,14 @@ class CasGround:
         n = max(1, int(d // step_m))
         return all(seac.is_land(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n) for i in range(n + 1))
 
+    def _blue_company_roll(self):
+        """The blue company's composition as the dice give it: Abrams 1-2, Bradley 2-3, Humvee 1-2 (three `vrng` draws, in this order). Scale it with `_scaled`."""
+        r = self.vrng
+        return [("M_1_Abrams", r.randint(1, 2)), ("M_2_Bradley", r.randint(2, 3)), ("M1043_HMMWV_Armament", r.randint(1, 2))]
+
     def _spawn_cas_support(self, package, plan, geom, manifest):
-        from .mission_builder import F, _UN  # the builder's module imports this one
         if not package.jtac:
             return
-        r = self.vrng
         z_ = ground.zone_of(self.state, package.objective.target_id or "")
         first_ = z_ is not None and z_ not in self._cas_zones     # S84: the sector's own company, the same "Blue Company N" a front battle shows; a second CAS package on one sector keeps its own name
         if z_ is not None:
@@ -113,51 +148,82 @@ class CasGround:
         cx, cy = self.site_pos.get(tid) or (geom.tx, geom.ty)
         fb = self._nearest_airfield(cx, cy)
         brg = bearing(cx, cy, fb.x, fb.y)                         # towards our side
+        t_contact, dist_run, v = self._cas_kinematics()
+        enemy = self.groups_by_asset.get(tid) if tid else None
+        static = bool(tid) and self.state.assets[tid].variant == "GARRISON"      # dug in: our troops come to it
+        if enemy is not None and not static:
+            self._drive_cas_enemy(enemy, cx, cy, brg, v, t_contact)
+        fx, fy, stop = self._cas_tf_start(cx, cy, brg, dist_run, static)
+        g, names = self._cas_task_force(package, z_, first_, tid, brg, fx, fy, stop, v, t_contact, static)
+        names.append(self._cas_jtac(package, plan, fx, fy, cx, cy, brg, v))
+        if names:
+            bs_ = ground.blue_strength(self.state, z_) if z_ is not None else 0.0
+            manifest.add("friendly_ground", tid or "", names, sector=z_,
+                         base_count=_full_strength_count(names, bs_) if z_ is not None else len(names))      # S84: its size at full strength, so the CAS battle's losses read back as strength by the same rule as a front battle's
+        if g is not None and enemy is not None:
+            self._cas_battle_rule(package, enemy, [n_ for n_ in names if n_.startswith(("TF", "BC"))], t_contact)
+            zc_ = ground.zone_of(self.state, tid or "")
+            if zc_ is not None:
+                self._spawn_front_air(zc_, enemy, g, t_contact, manifest)
+
+    def _cas_kinematics(self):
+        """-> (t_contact, dist_run, v): the contact time (guns firing as the CAS flight arrives), how far from the contact point the friendly force starts, and its advance speed in m/s."""
         tot = float(self.cas_tot or 1500.0)
         t_contact = max(300.0, tot - 15.0)                        # guns are firing as the CAS flight arrives
         dist_run = min(8.0 * t_contact + 1500.0, self.CAS_APPROACH_M)      # the friendly force starts this far from the contact point
         v = max(2.5, min(8.0, (dist_run - self.CAS_TF_STOP_M) / t_contact))   # m/s, a believable advance
-        enemy = self.groups_by_asset.get(tid) if tid else None
-        static = bool(tid) and self.state.assets[tid].variant == "GARRISON"      # dug in: our troops come to it
-        if enemy is not None and not static:
-            # v0.41.137: the column stays where the CAS flight is sent. It used to start up to 10 km back and drive 13 km to be at the CAS point
-            # at the TOT; any shortfall in DCS's real speed (slopes, a long mixed column, stopping to fight) left it kilometres from the point
-            t_arr_ = max(0.0, t_contact - self.CAS_ARRIVE_LEAD_S)
-            self._drive_road(enemy, [self._cas_land(q_) for q_ in self._patrol_via((cx, cy), brg + 180, offset(cx, cy, brg, self.CAS_ENEMY_ADVANCE_M), min(v, 3.5), t_arr_)], min(v, 3.5))   # v0.41.190: a patrol leg away from us first; v0.41.384: every point on land
-        stop_ = [self._cas_land(offset(cx, cy, brg, 2000 if static else self.CAS_TF_STOP_M))]      # v0.41.384 (S29): on land
-        bj_ = r.uniform(-6, 6)
+        return t_contact, dist_run, v
+
+    def _drive_cas_enemy(self, enemy, cx, cy, brg, v, t_contact):
+        # v0.41.137: the column stays where the CAS flight is sent. It used to start up to 10 km back and drive 13 km to be at the CAS point
+        # at the TOT; any shortfall in DCS's real speed (slopes, a long mixed column, stopping to fight) left it kilometres from the point
+        t_arr_ = max(0.0, t_contact - self.CAS_ARRIVE_LEAD_S)
+        self._drive_road(enemy, [self._cas_land(q_) for q_ in self._patrol_via((cx, cy), brg + 180, offset(cx, cy, brg, self.CAS_ENEMY_ADVANCE_M), min(v, 3.5), t_arr_)], min(v, 3.5))   # v0.41.190: a patrol leg away from us first; v0.41.384: every point on land
+
+    def _cas_tf_start(self, cx, cy, brg, dist_run, static):
+        """-> (fx, fy, stop): where the friendly task force starts (on a road, on land, and with a dry straight leg to the stop for a garrison) and its stop point."""
+        stop = self._cas_land(offset(cx, cy, brg, 2000 if static else self.CAS_TF_STOP_M))      # v0.41.384 (S29): on land
+        bj_ = self.vrng.uniform(-6, 6)
         fx, fy = offset(cx, cy, brg + bj_, dist_run)
         if not static:
             rp_ = self._road_pt(fx, fy)                           # v0.41.180: the task force starts on a road too, and meets the column along it
             if rp_ is not None:
                 fx, fy = rp_
         fx, fy = self._cas_land((fx, fy))                         # v0.41.384 (S29, XO 2026-11-11 run: a garrison near the coast put the column afloat)
-        if static and not self._leg_on_land((fx, fy), stop_[0]):
+        if static and not self._leg_on_land((fx, fy), stop):
             # v0.41.384: the straight off-road leg to the stop crosses water: try other start bearings, keep the first whose leg is dry (else the snapped start)
             for da_ in (10, -10, 20, -20, 30, -30, 45, -45, 60, -60):
                 c_ = self._cas_land(offset(cx, cy, brg + bj_ + da_, dist_run))
-                if self._leg_on_land(c_, stop_[0]):
+                if self._leg_on_land(c_, stop):
                     fx, fy = c_
                     break
-        comp = [("M_1_Abrams", r.randint(1, 2)), ("M_2_Bradley", r.randint(2, 3)), ("M1043_HMMWV_Armament", r.randint(1, 2))]
+        return fx, fy, stop
+
+    def _cas_task_force(self, package, z_, first_, tid, brg, fx, fy, stop, v, t_contact, static):
+        """Build the friendly company at (fx, fy), name its units and drive it to `stop` -> (group or None, unit names)."""
+        from .mission_builder import F  # the builder's module imports this one
+        comp = self._blue_company_roll()
         sc = ground.blue_scale(self.state, tid or "")          # the friendly force is as strong as Blue is in this sector
-        comp = [(n_, max(1, int(round(c_ * sc)))) for n_, c_ in comp]
         gname_, utag_ = (f"Blue Company {z_ + 1}", f"BC{z_ + 1}") if first_ else (f"Friendly Task Force {package.number}", f"TF{package.number}")
-        g = self._platoon(self.usa, gname_, comp, fx, fy, (int(brg) + 180) % 360, F.Rectangle)
+        g = self._platoon(self.usa, gname_, _scaled(comp, sc), fx, fy, (int(brg) + 180) % 360, F.Rectangle)
         names = []
         if g is not None:
             self._tf_names[str(package.number)] = gname_
-            for k, u in enumerate(g.units, 1):
-                u.name = f"{utag_}|{k}"; names.append(u.name)
+            names = _name_units(g, utag_)
             # v0.41.157 (XO's 15:38 run: the task force reached the column 12 minutes after the A-10s, then drove 2.5 km past it): it stops CAS_TF_STOP_M (v0.41.179: 1.5 km, was 400 m) short of the
             # contact point (static garrison: 2 km short) and holds, weapons free, so the survivors come to it; and it drives CAS_TF_SPEED_MARGIN faster than the
             # plan, because DCS runs a mixed off-road column about 30% slower (measured in that run)
             v_tf_ = min(8.0, v * self.CAS_TF_SPEED_MARGIN)
-            via_ = [self._cas_land(q_) for q_ in self._patrol_via((fx, fy), brg, stop_[0], v_tf_, max(0.0, t_contact - self.CAS_ARRIVE_LEAD_S))]   # v0.41.190: our column also drives a patrol leg (away from the enemy) first; v0.41.384: on land
+            via_ = [self._cas_land(q_) for q_ in self._patrol_via((fx, fy), brg, stop, v_tf_, max(0.0, t_contact - self.CAS_ARRIVE_LEAD_S))]   # v0.41.190: our column also drives a patrol leg (away from the enemy) first; v0.41.384: on land
             if static:
                 self._drive(g, via_, v_tf_)
             else:
                 self._drive_road(g, via_, v_tf_)
+        return g, names
+
+    def _cas_jtac(self, package, plan, fx, fy, cx, cy, brg, v):
+        """The JTAC's own Humvee beside the task force (S80: a real vehicle, visible and mortal; if it dies the flight loses its controller) -> its unit name."""
+        from .mission_builder import _UN  # the builder's module imports this one
         jx, jy = self._cas_land(offset(fx, fy, brg + 90, 120))
         jt = self.m.vehicle_group(self.usa, f"Axeman {package.number}-1", _UN.Hummer, mapping.Point(jx, jy, self.t), heading=(int(brg) + 180) % 360, group_size=1)
         jt.units[0].name = f"JTAC-{package.id}"
@@ -165,16 +231,7 @@ class CasGround:
         p0.tasks.append(task.FAC(callsign=1, frequency=int(plan.freq("JTAC") * 1e6), modulation=task.Modulation.AM, number=1))
         # S80 (XO 2026-11-14): the JTAC is a real vehicle of the company, not magic: visible and mortal. If it dies, the flight loses its controller.
         jt.add_waypoint(mapping.Point(*self._cas_land(offset(cx, cy, brg, 3800)), self.t), PointAction.OffRoad, v * 3.6)
-        names.append(jt.units[0].name)
-        if names:
-            bs_ = ground.blue_strength(self.state, z_) if z_ is not None else 0.0
-            manifest.add("friendly_ground", tid or "", names, sector=z_,
-                         base_count=max(len(names), round(len(names) / max(0.05, bs_ / ground.MAX_FORCE))) if z_ is not None else len(names))      # S84: its size at full strength, so the CAS battle's losses read back as strength by the same rule as a front battle's
-        if g is not None and enemy is not None:
-            self._cas_battle_rule(package, enemy, [n_ for n_ in names if n_.startswith(("TF", "BC"))], t_contact)
-            zc_ = ground.zone_of(self.state, tid or "")
-            if zc_ is not None:
-                self._spawn_front_air(zc_, enemy, g, t_contact, manifest)
+        return jt.units[0].name
 
     def _stage_front_battles(self, package, manifest, tx, ty, route=None, t_s=900.0):
         """S81 (XO 2026-11-14): the ground war is on the map under any flight. Each sector within the merge radius of the target where both sides still have a force
@@ -203,11 +260,10 @@ class CasGround:
         for d_, i, a in sorted(cands, key=lambda c_: c_[0]):
             if built >= self.FRONT_BATTLES_MAX:
                 break
-            r = self.vrng
             rs, bs = ground.red_strength(st, i), ground.blue_strength(st, i)
             sc = ground.blue_scale(st, a.id)
-            comp = [("M_1_Abrams", r.randint(1, 2)), ("M_2_Bradley", r.randint(2, 3)), ("M1043_HMMWV_Armament", r.randint(1, 2))]
-            need = sum(max(1, int(round(n_ * sc))) for _, n_ in comp) + (0 if a.id in self.groups_by_asset else sum(n_ for _, n_ in SOFT.get(a.kind, [])) + 2)
+            comp = _scaled(self._blue_company_roll(), sc)
+            need = sum(n_ for _, n_ in comp) + (0 if a.id in self.groups_by_asset else sum(n_ for _, n_ in SOFT.get(a.kind, [])) + 2)
             if self._units_room() < need:
                 self.warns.append(f"Front battle at {g['names'][i]} left out to stay under the unit limit")
                 continue
@@ -220,13 +276,10 @@ class CasGround:
             rx, ry = red.units[0].position.x, red.units[0].position.y
             bx, by = ground.fwd_pos(g, i, "blue", st)
             brg_rb = bearing(rx, ry, bx, by)                         # from the red column toward our company
-            comp = [(n_, max(1, int(round(c_ * sc)))) for n_, c_ in comp]
             bg = self._platoon(self.usa, f"Blue Company {i + 1}", comp, bx, by, (int(brg_rb) + 180) % 360, F.Rectangle)
             if bg is None:
                 continue
-            names = []
-            for k, u in enumerate(bg.units, 1):
-                u.name = f"BC{i + 1}|{k}"; names.append(u.name)
+            names = _name_units(bg, f"BC{i + 1}")
             hold_, stance_ = True, "hold"
             if rs > bs * self.FRONT_RATIO and fresh:
                 self._drive_road(red, [offset(rx, ry, brg_rb, self.FRONT_ADVANCE_M)], 3.5); hold_, stance_ = False, "red"
@@ -235,7 +288,7 @@ class CasGround:
             if hold_:
                 self._ground_orders(bg)
             manifest.add("friendly_ground", f"sector:{i}", names, label=g["names"][i], sector=i, stance=stance_,
-                         base_count=max(len(names), round(len(names) / max(0.05, ground.blue_strength(st, i) / ground.MAX_FORCE))))      # S83: its size at full strength, so losses read back as strength
+                         base_count=_full_strength_count(names, ground.blue_strength(st, i)))      # S83: its size at full strength, so losses read back as strength
             self._spawn_front_air(i, red, bg, t_s, manifest)
             built += 1
 
@@ -248,9 +301,6 @@ class CasGround:
         strikes = [s_ for s_ in (st.ground or {}).get("air_today", []) if s_.get("sector") == i][:2]
         if not strikes or not red_g.units or not blue_g.units:
             return
-        pt = self._pt
-        rx, ry = red_g.units[0].position.x, red_g.units[0].position.y
-        bx, by = blue_g.units[0].position.x, blue_g.units[0].position.y
         t0 = max(0.0, float(t_s) - 240.0)
         used = self.__dict__.setdefault("_front_air_used", {})            # jets already committed to a strike in this mission: a pair is never flown twice
         skill_r = getattr(Skill, ai_skill(self.o, "red", self.d), Skill.High)
@@ -259,65 +309,80 @@ class CasGround:
                 self.warns.append("Front air strike left out to stay under the unit limit")
                 return
             if s_["side"] == "red":
-                wing = st.enemy_air_at(s_["wing"])
-                at_ = s_.get("type")
-                if wing is None or not at_ or wing.available_of((at_,)) - used.get(("w", s_["wing"], at_), 0) < 2 or not hasattr(planes, at_):
-                    continue
-                sx, sy = offset(rx, ry, bearing(bx, by, rx, ry), 40 * NM)         # behind their own column, 40 nm out
-                g = self.m.flight_group(self.red, f"Red Strike {i + 1}", getattr(planes, at_), None, pt(sx, sy), altitude=12000 * FT, speed=400 * KPH,
-                                        maintask=task.CAS, group_size=2)
-                g.set_skill(skill_r)
-                used[("w", s_["wing"], at_)] = used.get(("w", s_["wing"], at_), 0) + 2
-                load = enemy_strike_loadout(at_)
-                names = []
-                for j, u in enumerate(g.units, 1):
-                    u.name = f"ENM-FS-{s_['wing']}-{i}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
-                tw = g.add_waypoint(pt(bx, by), 9000 * FT, 450 * KPH)
-                tw.tasks.append(task.AttackGroup(blue_g.id, group_attack=True))
-                apt_r = self.t.airports.get(getattr(st.assets.get(s_["wing"]), "airport", None) or "")
-                if apt_r is not None:
-                    g.land_at(apt_r)                                              # S84: home to its own field after the pass
-                else:
-                    g.add_waypoint(pt(sx, sy), 12000 * FT, 450 * KPH)
-                self._late(g, t0, "front strike")
-                manifest.add("enemy_air", s_["wing"], names, ac=at_)
-                if s_.get("esc") and s_.get("esc_type") and hasattr(planes, s_["esc_type"]) and self._units_room() >= 4:
-                    ew = st.enemy_air_at(s_["esc"])
-                    if ew is not None and ew.available_of((s_["esc_type"],)) - used.get(("w", s_["esc"], s_["esc_type"]), 0) >= 2:
-                        used[("w", s_["esc"], s_["esc_type"])] = used.get(("w", s_["esc"], s_["esc_type"]), 0) + 2
-                        eg = self.m.flight_group(self.red, f"Red Cover {i + 1}", getattr(planes, s_["esc_type"]), None, pt(*offset(rx, ry, bearing(bx, by, rx, ry), 15 * NM)),
-                                                 altitude=20000 * FT, speed=420 * KPH, maintask=task.CAP, group_size=2)
-                        eg.set_skill(skill_r)
-                        eload, en_ = enemy_cap_loadout(s_["esc_type"]), []
-                        for j, u in enumerate(eg.units, 1):
-                            u.name = f"ENM-FC-{s_['esc']}-{i}-{j}"; u.pylons = copy.deepcopy(eload); en_.append(u.name)
-                        ew_ = eg.add_waypoint(pt(*offset(bx, by, bearing(rx, ry, bx, by) + 180, 5 * NM)), 20000 * FT, 450 * KPH)
-                        ew_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(bx, by), int(25 * NM), [task.Targets.All.Air]))
-                        self._late(eg, t0, "front cover")
-                        manifest.add("enemy_air", s_["esc"], en_, ac=s_["esc_type"])
+                self._front_strike_red(s_, i, red_g, blue_g, t0, used, skill_r, manifest)
             else:
-                q = st.squadrons.get(s_.get("sq"))
-                spec = AIRCRAFT.get(q.aircraft) if q is not None else None
-                if q is None or spec is None or q.available - used.get(("q", q.id), 0) < 2 or q.base_id not in st.bases:
-                    continue
-                used[("q", q.id)] = used.get(("q", q.id), 0) + 2
-                sx, sy = offset(bx, by, bearing(rx, ry, bx, by), 40 * NM)         # behind our own company
-                g = self.m.flight_group(self.usa, f"Front Strike {i + 1}", spec.dcs_type, None, pt(sx, sy), altitude=12000 * FT, speed=400 * KPH,
-                                        maintask=task.CAS, group_size=2)
-                load = self.lo.for_role(q.aircraft, Role.CAS, "")
-                names = []
-                for j, u in enumerate(g.units, 1):
-                    u.name = f"FS{i + 1}|{j}"; u.pylons = copy.deepcopy(load); names.append(u.name)
-                tw = g.add_waypoint(pt(rx, ry), 9000 * FT, 450 * KPH)
-                tw.tasks.append(task.AttackGroup(red_g.id, group_attack=True))
-                qb_ = st.bases[q.base_id]
-                apt_b = self.apt.get(q.base_id) or (self.t.airports.get(qb_.airport) if qb_.airport else None)
-                if qb_.kind == BaseKind.AIRFIELD and apt_b is not None:
-                    g.land_at(apt_b)                                              # S84: home to its own field after the pass (a carrier squadron holds, as before)
-                else:
-                    g.add_waypoint(pt(sx, sy), 12000 * FT, 450 * KPH)
-                self._late(g, t0, "front strike")
-                manifest.add("friendly", f"front-{i}-{q.id}", names, squadron=q.id, callsign=f"Front Strike {i + 1}", player=False)
+                self._front_strike_blue(s_, i, red_g, blue_g, t0, used, manifest)
+
+    def _front_strike_red(self, s_, i, red_g, blue_g, t0, used, skill_r, manifest):
+        """One recorded red strike over sector i: a pair from its wing behind their own column, attacking the blue company, home after the pass; then its cover, if any."""
+        st, pt = self.state, self._pt
+        rx, ry = red_g.units[0].position.x, red_g.units[0].position.y
+        bx, by = blue_g.units[0].position.x, blue_g.units[0].position.y
+        wing = st.enemy_air_at(s_["wing"])
+        at_ = s_.get("type")
+        if wing is None or not at_ or wing.available_of((at_,)) - used.get(("w", s_["wing"], at_), 0) < 2 or not hasattr(planes, at_):
+            return
+        sx, sy = offset(rx, ry, bearing(bx, by, rx, ry), 40 * NM)         # behind their own column, 40 nm out
+        g = self.m.flight_group(self.red, f"Red Strike {i + 1}", getattr(planes, at_), None, pt(sx, sy), altitude=12000 * FT, speed=400 * KPH,
+                                maintask=task.CAS, group_size=2)
+        g.set_skill(skill_r)
+        _commit(used, ("w", s_["wing"], at_))
+        names = _arm_group(g, enemy_strike_loadout(at_), f"ENM-FS-{s_['wing']}-{i}-")
+        tw = g.add_waypoint(pt(bx, by), 9000 * FT, 450 * KPH)
+        tw.tasks.append(task.AttackGroup(blue_g.id, group_attack=True))
+        apt_r = self.t.airports.get(getattr(st.assets.get(s_["wing"]), "airport", None) or "")
+        if apt_r is not None:
+            g.land_at(apt_r)                                              # S84: home to its own field after the pass
+        else:
+            g.add_waypoint(pt(sx, sy), 12000 * FT, 450 * KPH)
+        self._late(g, t0, "front strike")
+        manifest.add("enemy_air", s_["wing"], names, ac=at_)
+        self._front_cover_red(s_, i, red_g, blue_g, t0, used, skill_r, manifest)
+
+    def _front_cover_red(self, s_, i, red_g, blue_g, t0, used, skill_r, manifest):
+        """The recorded escort of a red strike: a pair from its own wing, if one is serviceable and there is room, on station behind the column and engaging air targets over the battle."""
+        if not (s_.get("esc") and s_.get("esc_type") and hasattr(planes, s_["esc_type"]) and self._units_room() >= 4):
+            return
+        st, pt = self.state, self._pt
+        rx, ry = red_g.units[0].position.x, red_g.units[0].position.y
+        bx, by = blue_g.units[0].position.x, blue_g.units[0].position.y
+        ew = st.enemy_air_at(s_["esc"])
+        if ew is not None and ew.available_of((s_["esc_type"],)) - used.get(("w", s_["esc"], s_["esc_type"]), 0) >= 2:
+            _commit(used, ("w", s_["esc"], s_["esc_type"]))
+            eg = self.m.flight_group(self.red, f"Red Cover {i + 1}", getattr(planes, s_["esc_type"]), None, pt(*offset(rx, ry, bearing(bx, by, rx, ry), 15 * NM)),
+                                     altitude=20000 * FT, speed=420 * KPH, maintask=task.CAP, group_size=2)
+            eg.set_skill(skill_r)
+            en_ = _arm_group(eg, enemy_cap_loadout(s_["esc_type"]), f"ENM-FC-{s_['esc']}-{i}-")
+            ew_ = eg.add_waypoint(pt(*offset(bx, by, bearing(rx, ry, bx, by) + 180, 5 * NM)), 20000 * FT, 450 * KPH)
+            ew_.tasks.append(task.EngageTargetsInZone(mapping.Vector2(bx, by), int(25 * NM), [task.Targets.All.Air]))
+            self._late(eg, t0, "front cover")
+            manifest.add("enemy_air", s_["esc"], en_, ac=s_["esc_type"])
+
+    def _front_strike_blue(self, s_, i, red_g, blue_g, t0, used, manifest):
+        """One recorded blue strike over sector i: a pair from its squadron behind our own company, attacking the red column, home after the pass (a carrier squadron holds)."""
+        st, pt = self.state, self._pt
+        rx, ry = red_g.units[0].position.x, red_g.units[0].position.y
+        bx, by = blue_g.units[0].position.x, blue_g.units[0].position.y
+        q = st.squadrons.get(s_.get("sq"))
+        spec = AIRCRAFT.get(q.aircraft) if q is not None else None
+        if q is None or spec is None or q.available - used.get(("q", q.id), 0) < 2 or q.base_id not in st.bases:
+            return
+        _commit(used, ("q", q.id))
+        sx, sy = offset(bx, by, bearing(rx, ry, bx, by), 40 * NM)         # behind our own company
+        g = self.m.flight_group(self.usa, f"Front Strike {i + 1}", spec.dcs_type, None, pt(sx, sy), altitude=12000 * FT, speed=400 * KPH,
+                                maintask=task.CAS, group_size=2)
+        names = _arm_group(g, self.lo.for_role(q.aircraft, Role.CAS, ""), f"FS{i + 1}|")
+        tw = g.add_waypoint(pt(rx, ry), 9000 * FT, 450 * KPH)
+        tw.tasks.append(task.AttackGroup(red_g.id, group_attack=True))
+        qb_ = st.bases[q.base_id]
+        apt_b = self.apt.get(q.base_id) or (self.t.airports.get(qb_.airport) if qb_.airport else None)
+        if qb_.kind == BaseKind.AIRFIELD and apt_b is not None:
+            g.land_at(apt_b)                                              # S84: home to its own field after the pass (a carrier squadron holds, as before)
+        else:
+            g.add_waypoint(pt(sx, sy), 12000 * FT, 450 * KPH)
+        self._late(g, t0, "front strike")
+        manifest.add("friendly", f"front-{i}-{q.id}", names, squadron=q.id, callsign=f"Front Strike {i + 1}", player=False)
+
 
     def _cas_battle_rule(self, package, enemy, blue_names, t_contact):
         """S80: the CAS battle is decided by what the air power did to the red column, with no dice. CAS_DECIDE_S after the contact time a trigger counts the red
