@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.491, the F-14B player's three waypoints
+The plain F-14B has only three numbered waypoints, so your route in that jet now has the start point, waypoints 1 to 3 and the landing point (the Home Base); the surface target (ST), the IP when it is not waypoint 2, the defended point (DP) and the nearest SAM site (HA) are navigation target points you select in the jet. The kneeboard still lists every point of the route and marks which are waypoints and which are not; the tanker is found by its TACAN (shown in the briefing and on the card). The F-14B(U) and every other jet keep their routes.
+
 ## v0.41.490, the F-14B as an Era Equipment choice
 The F-14 row of the Era Equipment group now offers the plain F-14B next to the F-14B(U). A campaign created with the F-14B has F-14B squadrons only: the same carrier, fleet-defence, TARCAP, escort and sweep jobs as the B(U), but its strikes carry laser-guided GBU-10 bombs with the LANTIRN pod and no JDAM (so a laser-guided strike is scrubbed in weather that rules the laser out, where a B(U) swaps to JDAM). The player waypoint scheme of the F-14B comes in a later version. Campaigns with the F-14B(U) are unchanged.
 
