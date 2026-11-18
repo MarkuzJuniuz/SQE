@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.471, dormant-sites code moved
+Internal: the dormant-sites code moved to its own file; no change in play.
+
 ## v0.41.470, bombing code moved
 Internal: bombing-task code moved to strike_tasks.py; no change in play.
 
