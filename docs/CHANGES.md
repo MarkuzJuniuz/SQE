@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.482, CAS ground-fight code tidied
+Internal: tidied the CAS ground-fight code; no change in play.
+
 ## v0.41.481, raid SEAD code tidied
 Internal: tidied the raid SEAD code; no change in play.
 
