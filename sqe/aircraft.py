@@ -124,6 +124,10 @@ AIRCRAFT: dict[str, AircraftSpec] = {
                      attack_kts=300, egress_kts=330, push_nm=35, ip_nm=12, egress_nm=15,
                      tgt_note="Release"), first_wp_label="0", bingo_lbs=1500, joker_lbs=2500),
 }
+# S103a (XO 2026-11-18): the A-10 and F-14 variants a campaign can be created with ("Era Equipment"), {key: label} in the order the picker shows them. The key is what the campaign
+# state saves (`a10_variant`, `f14_variant`); today it is an AIRCRAFT key. The A-10A (S103b) and the F-14B (S103c) are added to these two tables by their own prompts.
+A10_VARIANTS = {"A-10C": "A-10C"}
+F14_VARIANTS = {"F-14BU": "F-14B(U)"}
 STRIKE_CONDITIONAL = frozenset({"A-10C"})      # v0.41.360: airframes whose STRIKE role is offered only on a clean supply strike (see the A-10C entry above)
 
 

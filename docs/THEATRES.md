@@ -26,6 +26,7 @@ You still need the map installed in DCS to fly it, and pydcs must know the terra
 | `wing_weight` | which enemy fields get an air wing, and how big a share |
 | `field_tier` | depth of each enemy airfield, 1 front to 4 deep. Depth is data only: it no longer gates what can be tasked |
 | `bomber_base` | enemy airfield for the strategic bomber wing (or empty) |
+| `era` | optional. `year` (the year shown for the campaign: a fixed label, month and day stay free) and the Era Equipment defaults of the New Campaign dialog: `a10_variant`, `f14_variant`, `link16` (true / false). Missing keys are Caucasus 2006: year 2006, `A-10C`, `F-14BU`, Link 16 on |
 | `squadrons` | `id`, `name`, `aircraft`, `base` (the carrier or a blue field id), `count`, `callsign` (unique across the coalition). Optional `role`: `"havcap"` = an AI-only squadron that guards the AWACS and tankers. SQE moves a squadron to a field that can park it |
 | `support_targets` | headquarters, fuel and ammunition: `parent` field, `id`, `name`, `kind` (C2, FUEL, DEPOT), `airport`, `dx`, `dy` offset in metres, `value` |
 | `road_blue_airports` | airports on the blue side of the road net: they decide which side a road supply site belongs to |

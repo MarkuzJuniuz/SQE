@@ -1,6 +1,12 @@
 {
     "id": "caucasus",
     "name": "Caucasus",
+    "era": {
+        "year": 2006,
+        "a10_variant": "A-10C",
+        "f14_variant": "F-14BU",
+        "link16": true
+    },
     "dcs_terrain": "Caucasus",
     "lat": 42.5,
     "lon": 41.5,

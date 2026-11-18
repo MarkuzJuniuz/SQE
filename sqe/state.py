@@ -95,6 +95,9 @@ class CampaignState:
     name: str
     theatre: str = "caucasus"
     level: int = 2
+    a10_variant: str = "A-10C"                     # S103a (Era Equipment): chosen when the campaign is created and never changed; an old save loads as the A-10C / F-14B(U) / Link 16 on it always was (no format change: the loader defaults the three)
+    f14_variant: str = "F-14BU"
+    link16: bool = True                            # False: no jet is a Link 16 member or donor (no STN codes, no package net, no briefing text)
     campaign_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
     day: int = 1
     turn: int = 0                                  # v0.41.334: the clock (clock.py): four-hour turns since 08:00 (S25; two-hour before) on Day 1; `day` stays equal to clock.day_of(turn). Session._tick moves it one turn at a time (v0.41.337, Phase 3)
@@ -147,6 +150,7 @@ class CampaignState:
         return {
             "format": FORMAT_VERSION, "compat": COMPAT_ERA, "app_version": __version__, "saved": datetime.now().isoformat(timespec="seconds"),
             "name": self.name, "theatre": self.theatre, "level": self.level, "campaign_id": self.campaign_id,
+            "a10_variant": self.a10_variant, "f14_variant": self.f14_variant, "link16": self.link16,
             "day": self.day, "turn": self.turn, "turn_min": clock.TURN_MIN, "sortie_counter": self.sortie_counter, "status": self.status,
             "start_date": self.start_date, "night_ops": self.night_ops, "pilot": self.pilot,
             "front": self.front, "front_days": self.front_days, "ground": self.ground,
@@ -184,6 +188,7 @@ class CampaignState:
                 campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1), turn=int(d.get("turn", 0)),
                 sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"),
                 start_date=d.get("start_date", "2004-06-12"), night_ops=True, pilot=d.get("pilot", {}),
+                a10_variant=d.get("a10_variant", "A-10C"), f14_variant=d.get("f14_variant", "F-14BU"), link16=bool(d.get("link16", True)),
                 front=d.get("front", 0), front_days=d.get("front_days", 0))
         s.player = PlayerProfile(**d["player"]) if d.get("player") else None
         s.bases = {k: Base(**{**v, "kind": BaseKind(v["kind"])}) for k, v in d["bases"].items()}

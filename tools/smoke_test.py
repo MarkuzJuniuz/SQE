@@ -121,12 +121,26 @@ def check_saves_round_trip():
     r.open(s.path)
     assert (r.state.ground.get("tactical_edge"), r.state.ground.get("tactical_edge_decay")) == (False, True), "an old save's two Tactical Edge switches load under their new names"
     assert "pilot_influence" not in r.state.ground and "tempo_decay" not in r.state.ground, "...and the old names are gone"
+    s = fresh_session(2, 2)                                                  # S103a: Era Equipment is saved with the campaign; a save from before holds none of the three and loads as A-10C / F-14B(U) / Link 16 on
+    assert (s.state.a10_variant, s.state.f14_variant, s.state.link16) == ("A-10C", "F-14BU", True), "a new Caucasus campaign has the 2006 era equipment"
+    s.state.link16 = False
+    s.save()
+    r = mk()
+    r.open(s.path)
+    assert r.state.link16 is False, "the Link 16 switch survives a reload"
+    d_ = json.loads(Path(s.path).read_text(encoding="utf-8"))
+    for k in ("a10_variant", "f14_variant", "link16"):
+        d_.pop(k)
+    Path(s.path).write_text(json.dumps(d_), encoding="utf-8")
+    r = mk()
+    r.open(s.path)
+    assert (r.state.a10_variant, r.state.f14_variant, r.state.link16) == ("A-10C", "F-14BU", True), "an old save without the era keys loads with today's equipment"
     (TMP / "appdata" / "SQE").mkdir(parents=True, exist_ok=True)           # an old settings.json with the two keys loads, and they are not kept
     (TMP / "appdata" / "SQE" / "settings.json").write_text('{"pilot_influence": false, "tempo_decay": true}')
     from sqe.settings import AppSettings as _AS
     assert not hasattr(_AS.load(), "pilot_influence"), "an old settings file's Tactical Edge keys are ignored"
     (TMP / "appdata" / "SQE" / "settings.json").unlink()
-    print("[saves] levels 1 to 3: new campaign, save, reopen in a new session: the same campaign; an old save's Tactical Edge keys are renamed on load")
+    print("[saves] levels 1 to 3: new campaign, save, reopen in a new session: the same campaign; an old save's Tactical Edge keys are renamed on load; Era Equipment saved, an old save gets the 2006 defaults")
 
 
 def check_incompatible_saves():

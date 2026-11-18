@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.488, Era Equipment on the New Campaign dialog
+New campaigns now carry three choices fixed at creation: the A-10 variant, the F-14 variant and Link 16 (enabled or disabled), set in an "Era Equipment" group with an Era Defaults button that follows the theatre's year. With Link 16 disabled no jet joins a package network: no station numbers, no Link 16 briefing text, no STN column on the kneeboard. Today each theatre offers the A-10C and F-14B(U); the other variants come next. Saved campaigns load as before (A-10C, F-14B(U), Link 16 on).
+
 ## Tools: Syria time zone and magnetic variation probe, SA-5 probe fixed
 Development tools only, no change in play. A new probe mission logs the Syria runway data to find the magnetic variation, and the SA-5 probe now switches its flights on one at a time against a 16-launcher site.
 
