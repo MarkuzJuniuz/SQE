@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.481, raid SEAD code tidied
+Internal: tidied the raid SEAD code; no change in play.
+
 ## v0.41.480, dormant-sites code tidied
 Internal: tidied the dormant-sites code; no change in play.
 
