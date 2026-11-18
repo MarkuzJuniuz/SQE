@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.484, bomb-task code tidied
+Internal: tidied the bomb-task code; no change in play.
+
 ## v0.41.483, site layout and spawning code tidied
 Internal: tidied the site layout and site spawning code; no change in play.
 
