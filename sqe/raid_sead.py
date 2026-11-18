@@ -12,27 +12,52 @@ from dcs.translation import String
 
 from . import threatmap as tm
 from .aircraft import AIRCRAFT
-from .models import AssetKind, BaseKind, ObjectiveType, Role
+from .models import AssetKind, BaseKind, Objective, ObjectiveType, Role
 from .routes import NM, Wpt, assign_times, bearing, dist, leg_seconds, make_geometry, objective_wp, offset, plan_route
+
+
+def _is_setpiece(package) -> bool:
+    """The package is the carrier-raid setpiece (`extra["setpiece"]`)."""
+    return bool((package.extra or {}).get("setpiece"))
+
+
+def _awacs_string(text) -> String:
+    """The AWACS radio call to the blue coalition (a DoScript text): `text` after "AWACS: "."""
+    return String(f'trigger.action.outTextForCoalition(coalition.side.BLUE, "AWACS: {text}", 15)')
 
 
 class RaidSead:
     def _raid_sead_any(self, package, f) -> bool:
         """A SEAD flight of the carrier-raid setpiece, yours or the AI's."""
         return (package.objective.type == ObjectiveType.FLEET_DEFENSE and f.role == Role.SEAD and not f.tag
-                and package.objective.target_id in self.state.bases and bool((package.extra or {}).get("setpiece")))
+                and package.objective.target_id in self.state.bases and _is_setpiece(package))
+
+    def _raid_sead_flights(self, package) -> list:
+        """The raid SEAD flights of the package (yours and the AI's), in the package's order."""
+        return [f for f in package.flights if self._raid_sead_any(package, f)]
+
+    def _stand_in_package(self, package, suffix, site, text, flights):
+        """A copy of `package` whose objective is a SEAD job (DEAD, "SEAD") on `site`, carrying `flights`: the stand-in the site builders and the SEAD routes work on."""
+        sp = copy.copy(package)
+        sp.objective = Objective(f"{package.objective.id}-{suffix}", ObjectiveType.DEAD, site.id, package.objective.priority, text, "SEAD")
+        sp.flights = flights
+        return sp
+
+    def _warn_no_intercept_point(self) -> None:
+        self.warns.append("Raid interceptors: no SAM-clear intercept point on the bombers' way in; they hold at their station.")
 
     def _raid_sead(self, package, f) -> bool:
         """v0.41.255: a SEAD flight of the carrier-raid setpiece (AI): it does not fly the fleet's route but its own HARM job."""
         return self._raid_sead_any(package, f) and not f.is_player
 
     def _raid_player_sead(self, package) -> bool:
+        """The player flies one of the raid's SEAD flights."""
         pf = package.player_flight
         return pf is not None and self._raid_sead_any(package, pf)
 
     def _raid_player_site(self, package, geom, pf):
         """v0.41.284: the raid site the player's SEAD flight goes for: the n-th SEAD flight takes the n-th site, as for the AI flights. None when no site reaches the raid."""
-        flights = [f_ for f_ in package.flights if self._raid_sead_any(package, f_)]
+        flights = self._raid_sead_flights(package)
         sites, _ip = self._raid_sead_sites(package, geom, self._raid_hold_xy(package, geom))
         sites = sites[:max(1, len(flights))]
         if not sites:
@@ -41,11 +66,8 @@ class RaidSead:
 
     def _raid_sead_geom(self, package, f, site):
         """The stand-in SEAD package and its geometry for one raid SEAD flight (yours or the AI's) on `site`. -> (sp, g2)."""
-        from .models import Objective
         st = self.state
-        sp = copy.copy(package)
-        sp.objective = Objective(f"{package.objective.id}-sead", ObjectiveType.DEAD, site.id, package.objective.priority, "SEAD for the raid intercept", "SEAD")
-        sp.flights = [f]
+        sp = self._stand_in_package(package, "sead", site, "SEAD for the raid intercept", [f])
         base, spec = st.bases[f.base_id], AIRCRAFT[f.aircraft]
         tx, ty = site.x, site.y
         mshl = tm.safe_marshal(st, (base.x, base.y), bearing(base.x, base.y, tx, ty), (tx, ty), refs=[(base.x, base.y)])
@@ -112,18 +134,19 @@ class RaidSead:
                 vn = vias.get((round(q[0]), round(q[1])))
                 mid.append(Wpt("BASE", q[0], q[1], dft, dkt, "Over " + vn + ", then on to the intercept point") if vn else Wpt("AVD", q[0], q[1], dft, dkt, "Around a SAM site"))
             px, py = lane[-1]
-            pb = bearing(*(lane[-2] if len(lane) > 1 else (a.x, a.y)), px, py)
+            prev = lane[-2] if len(lane) > 1 else (a.x, a.y)
+            pb = bearing(*prev, px, py)
             px, py = offset(px, py, pb + 90, lat)
-            if dist(*(lane[-2] if len(lane) > 1 else (a.x, a.y)), px, py) > 8 * NM:
+            if dist(*prev, px, py) > 8 * NM:
                 mid.append(Wpt("IP", *offset(px, py, pb + 180, 3 * NM), dft, dkt))
             tgt = Wpt("TGT", px, py, dft, 450, "Intercept point, on the bombers' way in: engage them at max range", "CAPORBIT")
             q2 = offset(ip["ip2"][0], ip["ip2"][1], pb + 90, lat)
             cap2 = Wpt("CAP2", q2[0], q2[1], dft, 450)
-            return wps[:k1] + hold_l + mid + [tgt, cap2] + wps[k1 + 2:]
-        if d > 8 * NM:
-            mid.append(Wpt("IP", *offset(x1, y1, hb + 180, 3 * NM), dft, dkt))
-        tgt = Wpt("TGT", x1, y1, dft, 450, "Intercept point: engage the bombers at max range", "CAPORBIT")
-        cap2 = Wpt("CAP2", x2, y2, dft, 450)
+        else:
+            if d > 8 * NM:
+                mid.append(Wpt("IP", *offset(x1, y1, hb + 180, 3 * NM), dft, dkt))
+            tgt = Wpt("TGT", x1, y1, dft, 450, "Intercept point: engage the bombers at max range", "CAPORBIT")
+            cap2 = Wpt("CAP2", x2, y2, dft, 450)
         return wps[:k1] + hold_l + mid + [tgt, cap2] + wps[k1 + 2:]
 
     def _rush_speeds(self, wps) -> None:
@@ -173,16 +196,13 @@ class RaidSead:
         scripted blow-up, no SEAD seats in the raid package. The live threatening sites (`_raid_blockers`: live, unsuppressed, reach on the bombers' lane) are built here, first, so the unit
         limit never trims them (`_spawn_raid` builds the other SAM sites after the flights); the interceptors' lane is still worked out as if they were out (`_raid_blockers` `ignore`): they
         fly it and take the fire. The raiders' flag is set at second 5, as the scripted result did (the SEAD was flown, or resolved, the turn before). -> the `_rsp` record (`flag`, `t_flag`, `ip`, `sites`)."""
-        from .models import Objective
         ids, ip_ = self._raid_blockers(package, geom, self._raid_hold_xy(package, geom))
         sites = [self.state.assets[i] for i in ids if i in self.state.assets]
         for st_ in sites:
-            sp = copy.copy(package)
-            sp.objective = Objective(f"{package.objective.id}-live", ObjectiveType.DEAD, st_.id, package.objective.priority, "SAM site the prep left standing", "SEAD")
-            sp.flights = []
+            sp = self._stand_in_package(package, "live", st_, "SAM site the prep left standing", [])
             self._spawn_opfor_ground(sp, st_.x, st_.y, manifest, [(st_.x, st_.y), (st_.x, st_.y)])
         if ip_ is None:
-            self.warns.append("Raid interceptors: no SAM-clear intercept point on the bombers' way in; they hold at their station.")
+            self._warn_no_intercept_point()
             if not sites:
                 return None
         self._flag_n += 1
@@ -190,7 +210,7 @@ class RaidSead:
         t2 = triggers.TriggerOnce(comment="raid: the prep stands, interceptors cross")
         t2.add_condition(condition.TimeAfter(5))
         t2.add_action(action.SetFlag(flag))
-        t2.add_action(action.DoScript(String('trigger.action.outTextForCoalition(coalition.side.BLUE, "AWACS: Raid inbound. Interceptors, cleared to push toward the launch point.", 15)')))
+        t2.add_action(action.DoScript(_awacs_string("Raid inbound. Interceptors, cleared to push toward the launch point.")))
         self.m.triggerrules.triggers.append(t2)
         return {"site": sites[0] if sites else None, "sites": sites, "agm88_s": 0.0, "flag": flag, "t_flag": 5.0, "ip": ip_}
 
@@ -216,7 +236,6 @@ class RaidSead:
         """v0.41.256, once per carrier-raid mission, before its flights are built: the SAM site the raid SEAD goes for (built live now), when the HARMs land, and the
         DASH flag the interceptors wait on. The flag is set when the site's tracking radars are all dead, or RAID_DASH_WAIT_S after the HARMs (and never before the
         interceptors are due on station). -> {"site", "agm88_s", "flag"} or None (no SEAD flight, or no site reaches the launch point)."""
-        from .mission_builder import TRACK_RADARS, RAID_DASH_WAIT_S, RAID_PLAYER_WAIT_S  # the builder's module imports this one
         c_ = self.__dict__.setdefault("_rsp", {})
         if package.id in c_:
             return c_[package.id]
@@ -224,21 +243,39 @@ class RaidSead:
         if self._raid_prep_rec(package):                                   # v0.41.357 (Phase 10b part 2): the prep of the turn before stands: no SEAD seats, no scripted result
             c_[package.id] = self._raid_prep_standing(package, geom, manifest)
             return c_[package.id]
-        f0 = next((f for f in package.flights if self._raid_sead_any(package, f)), None)
-        n_sead = sum(1 for f in package.flights if self._raid_sead_any(package, f))
-        setp_ = bool((package.extra or {}).get("setpiece"))
-        sites, ip_ = self._raid_sead_sites(package, geom, self._raid_hold_xy(package, geom)) if (f0 is not None or setp_) else ([], None)
-        sites = sites[:max(1, n_sead)] if f0 is not None else []          # v0.41.267: one flight per site; a site without a flight is left alone
+        f0, sites, ip_ = self._raid_prep_sites(package, geom)
         if not sites:
             # v0.41.290 (XO 2026-11-04: "it's a setpiece, none of the old things matter"): the interceptors' dash to the intercept point does not depend on a SEAD job. With no SAM
             # to work (or no SEAD flight) the point is kept and there is no DASH flag to wait on; before, this returned None and the interceptors held at the station over the water.
-            if setp_ and ip_ is not None:
+            if _is_setpiece(package) and ip_ is not None:
                 c_[package.id] = {"site": None, "sites": [], "agm88_s": 0.0, "flag": None, "t_flag": float(cap_tot_s) + 60.0, "ip": ip_}
                 return c_[package.id]
-            if setp_:
-                self.warns.append("Raid interceptors: no SAM-clear intercept point on the bombers' way in; they hold at their station.")
+            if _is_setpiece(package):
+                self._warn_no_intercept_point()
             return None
         site = sites[0]
+        radars, tg_s = self._raid_build_sites(package, f0, sites, cap_tot_s, manifest)
+        self._flag_n += 1
+        flag = self._flag_n
+        t_flag = self._raid_dash_triggers(package, flag, radars, tg_s, cap_tot_s)
+        if ip_ is None:                                                    # v0.41.265: where the interceptors dash to, on the bombers' way in (v0.41.267: lane worked out as if the sites above were dead)
+            self._warn_no_intercept_point()
+        c_[package.id] = {"site": site, "sites": sites, "agm88_s": tg_s, "flag": flag, "t_flag": float(t_flag), "ip": ip_}
+        return c_[package.id]
+
+    def _raid_prep_sites(self, package, geom) -> tuple:
+        """The first raid SEAD flight and the sites the SEAD works, one per SEAD flight, with the intercept result (sites ignored): -> (f0, sites, ip_).
+        `f0` is None with no SEAD flight (then no site: a setpiece still gets its intercept point)."""
+        flights = self._raid_sead_flights(package)
+        f0 = flights[0] if flights else None
+        n_sead = len(flights)
+        sites, ip_ = self._raid_sead_sites(package, geom, self._raid_hold_xy(package, geom)) if (f0 is not None or _is_setpiece(package)) else ([], None)
+        sites = sites[:max(1, n_sead)] if f0 is not None else []          # v0.41.267: one flight per site; a site without a flight is left alone
+        return f0, sites, ip_
+
+    def _raid_build_sites(self, package, f0, sites, cap_tot_s, manifest) -> tuple:
+        """Builds every site live (and, for the scripted result, blows its radars up at second 2). -> (the tracking radars of all of them, the latest HARM time)."""
+        from .mission_builder import TRACK_RADARS  # the builder's module imports this one
         base = self.state.bases[f0.base_id]
         scripted = self._raid_scripted(package)
         radars, tg_s = [], 0.0
@@ -251,8 +288,12 @@ class RaidSead:
             radars += site_radars
             if scripted:
                 self._raid_script_kills(grp, site_radars, f"scripted SEAD result {st_.id}")
-        self._flag_n += 1
-        flag = self._flag_n
+        return radars, tg_s
+
+    def _raid_dash_triggers(self, package, flag, radars, tg_s, cap_tot_s) -> int:
+        """The two triggers that set the DASH flag: all tracking radars dead, or the wait over (it also says the AWACS call). -> the second of the wait trigger (`t_flag`)."""
+        from .mission_builder import RAID_DASH_WAIT_S, RAID_PLAYER_WAIT_S  # the builder's module imports this one
+        scripted = self._raid_scripted(package)
         if radars:
             t_ = triggers.TriggerOnce(comment="raid SEAD: tracking radars dead, interceptors cross")
             for u in radars:
@@ -263,15 +304,12 @@ class RaidSead:
         t_flag = 5 if scripted else int(max(tg_s + (RAID_DASH_WAIT_S if package.player_flight is None or not self._raid_player_sead(package) else RAID_PLAYER_WAIT_S), float(cap_tot_s) + 60))          # (scripted: the radars are blown at second 2, the flag follows)
         t2.add_condition(condition.TimeAfter(t_flag))
         t2.add_action(action.SetFlag(flag))
-        say_ = String('trigger.action.outTextForCoalition(coalition.side.BLUE, "AWACS: SEAD complete. Interceptors, cleared to push toward the launch point.", 15)')
+        say_ = _awacs_string("SEAD complete. Interceptors, cleared to push toward the launch point.")
         t2.add_action(action.DoScript(say_))
         self.m.triggerrules.triggers.append(t2)
         if radars:
             t_.add_action(action.DoScript(say_))
-        if ip_ is None:                                                    # v0.41.265: where the interceptors dash to, on the bombers' way in (v0.41.267: lane worked out as if the sites above were dead)
-            self.warns.append("Raid interceptors: no SAM-clear intercept point on the bombers' way in; they hold at their station.")
-        c_[package.id] = {"site": site, "sites": sites, "agm88_s": tg_s, "flag": flag, "t_flag": float(t_flag), "ip": ip_}
-        return c_[package.id]
+        return t_flag
 
     def _spawn_raid_sead(self, package, f, plan, geom, idx, cap_tot_s, manifest, despawn):
         """v0.41.255 (XO 2026-11-03, the carrier-raid run: the Tomcats flew into the Sukhumi SA-10): the SEAD flights of the setpiece are flown as a normal
@@ -282,7 +320,7 @@ class RaidSead:
         if prep is None or not prep.get("sites"):          # (v0.41.290: a prep with no site only carries the intercept point)
             return None, None
         f.rush = True
-        ordn = [f_ for f_ in package.flights if self._raid_sead_any(package, f_)].index(f)          # v0.41.267: the n-th SEAD flight takes the n-th site
+        ordn = self._raid_sead_flights(package).index(f)          # v0.41.267: the n-th SEAD flight takes the n-th site
         sites = prep.get("sites") or [prep["site"]]
         if ordn >= len(sites):                                                                       # v0.41.284 (XO 2026-11-04: "if multiple SAMs then SEAD is sized to it"): no site, no flight
             return None, None
