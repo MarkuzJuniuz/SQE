@@ -6,10 +6,10 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QCheckBox, QRadioButton, QButtonGroup, QSpinBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
-                               QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
+                               QGroupBox, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
                                QTextBrowser, QVBoxLayout, QHeaderView, QTabWidget, QWidget, QScrollArea, QAbstractItemView)
 from .. import settings as S
-from ..aircraft import AIRCRAFT
+from ..aircraft import AIRCRAFT, A10_VARIANTS, F14_VARIANTS
 from ..difficulty import LEVELS
 from ..timeofday import is_night
 from . import theme
@@ -67,7 +67,8 @@ class NewCampaignDialog(QDialog):
             self.month.addItem(mname, i)
         self.month.setCurrentIndex(5)
         self.day = StepSpin(); self.day.setRange(1, 28); self.day.setValue(12)
-        row = QHBoxLayout(); row.addWidget(self.month, 1); row.addWidget(self.day); row.addWidget(QLabel("2006"))
+        self.year_lbl = QLabel("2006")                   # S103a: the year is a fixed label from the theatre pack's `era` block (month and day stay free)
+        row = QHBoxLayout(); row.addWidget(self.month, 1); row.addWidget(self.day); row.addWidget(self.year_lbl)
         form.addRow("Campaign starts", row)
         self.edge = QCheckBox("Tactical Edge: your sorties affect the war")
         self.edge.setChecked(bool(tactical_edge)); self.edge.setToolTip(TACTICAL_EDGE_TEXT)
@@ -91,6 +92,22 @@ class NewCampaignDialog(QDialog):
         form.addRow("AI Skill, Red", self.skr)          # the same two settings as Settings > Campaign > AI Skill: they can be changed there later
         form.addRow("AI Skill, Blue", self.skb)
         lay.addLayout(form)
+        # S103a (XO 2026-11-18): Era Equipment, fixed when the campaign is created; the defaults are the theatre's `era` values (Caucasus 2006: A-10C, F-14B(U), Link 16 enabled).
+        # The pickers list only the variants this build has (aircraft.A10_VARIANTS / F14_VARIANTS).
+        eq = QGroupBox("Era Equipment"); ev = QVBoxLayout(eq); ev.setSpacing(8)
+        ef = QFormLayout(); ef.setSpacing(8)
+        self.a10 = QComboBox(); self.f14 = QComboBox(); self.l16 = QComboBox()
+        for cb_, tbl_ in ((self.a10, A10_VARIANTS), (self.f14, F14_VARIANTS)):
+            for k_, lab_ in tbl_.items():
+                cb_.addItem(lab_, k_)
+        self.l16.addItem("Enabled", True); self.l16.addItem("Disabled", False)
+        ef.addRow("A-10", self.a10); ef.addRow("F-14", self.f14); ef.addRow("Link 16", self.l16)
+        ev.addLayout(ef)
+        eb = QHBoxLayout(); self.era_btn = QPushButton("Era Defaults"); self.era_btn.clicked.connect(self._era_defaults)
+        eb.addWidget(self.era_btn); eb.addStretch(1); ev.addLayout(eb)
+        eh = QLabel("Fixed when the campaign is created. Defaults follow the theatre's year."); eh.setObjectName("small"); eh.setWordWrap(True); ev.addWidget(eh)
+        lay.addWidget(eq)
+        self.th.currentIndexChanged.connect(self._era_defaults); self._era_defaults()
         self.blurb = QLabel(); self.blurb.setWordWrap(True); self.blurb.setObjectName("dim"); lay.addWidget(self.blurb)
         self.lvl.currentIndexChanged.connect(self._b); self._b()
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel); bb.accepted.connect(self.accept)
@@ -98,6 +115,18 @@ class NewCampaignDialog(QDialog):
 
     def _b(self):
         self.blurb.setText(LEVELS[self.lvl.currentData()].blurb)
+
+    def _era_defaults(self):
+        """Set the year label and the three Era Equipment choices to the selected theatre's `era` values (a variant this build does not have leaves that picker on its first entry)."""
+        from .. import theatres as _th
+        try:
+            e = _th.era(self.th.currentData() or "caucasus")
+        except Exception:
+            e = dict(_th.ERA_DEFAULT)
+        self.year = int(e["year"]); self.year_lbl.setText(str(self.year))
+        for cb_, key_ in ((self.a10, "a10_variant"), (self.f14, "f14_variant")):
+            cb_.setCurrentIndex(max(0, cb_.findData(e[key_])))
+        self.l16.setCurrentIndex(max(0, self.l16.findData(bool(e["link16"]))))
 
     def _squads(self):
         from ..scenario import squadron_options
@@ -107,9 +136,10 @@ class NewCampaignDialog(QDialog):
 
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
-                "start_date": f"2006-{self.month.currentData():02d}-{self.day.value():02d}", "tactical_edge": self.edge.isChecked(), "tactical_edge_decay": self.edge.isChecked() and self.edge_decay.isChecked(),
+                "start_date": f"{self.year}-{self.month.currentData():02d}-{self.day.value():02d}", "tactical_edge": self.edge.isChecked(), "tactical_edge_decay": self.edge.isChecked() and self.edge_decay.isChecked(),
                 "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData()),
-                "ai_skill_red": str(self.skr.currentData() or "level"), "ai_skill_blue": str(self.skb.currentData() or "level")}
+                "ai_skill_red": str(self.skr.currentData() or "level"), "ai_skill_blue": str(self.skb.currentData() or "level"),
+                "a10_variant": self.a10.currentData(), "f14_variant": self.f14.currentData(), "link16": bool(self.l16.currentData())}
 
 
 class SettingsDialog(QDialog):

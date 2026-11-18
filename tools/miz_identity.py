@@ -126,13 +126,14 @@ def _build(session, st, pkg, ai: bool, flight_id=None):
 def run() -> dict:
     """{ "case/mode/package-key": {member: text-or-hash} } for every case."""
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    # SQE_IDENT_NO_LINK16=1 builds every campaign with Link 16 disabled (S103a)
     # SQE_IDENT_NO_STANDOFF=1 builds everything with "AI TARCAPs, escorts and sweeps stop short of live SAM cover" OFF: their no-station routes (a second baseline)
     s = Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False, fighter_standoff=not os.environ.get("SQE_IDENT_NO_STANDOFF")))
     res = {}
     for name, aircraft, level, seed, opened in CASES:
         _CUR[0], _CUR[1] = name, 0
         random.seed(f"{name}:new")                             # module-level random.* calls inside SQE would otherwise differ per run
-        s.new(name, aircraft, level, seed=seed)
+        s.new(name, aircraft, level, seed=seed, link16=False if os.environ.get("SQE_IDENT_NO_LINK16") else None)      # S103a: =1 builds every campaign with the Link 16 switch OFF (check it against the normal baseline: only the Link 16 parts may differ)
         st = s.state
         if opened:
             for a in st.assets.values():

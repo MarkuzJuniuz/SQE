@@ -703,7 +703,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                    "comm1": plan.comm1, "comm2": plan.comm2, "fc3": pspec.fc3, "waypoints": kn_rows, "jet": pspec.display,
                    "numbering": (f"{pspec.first_wp_label} for the start point, then 1, 2, 3..." if pspec.first_wp_label else "waypoint 1 = start point"),
                    "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": weather.metar(self.wx), "mode3": mode3, "laser": laser,
-                   "bullseye": latlon(bx, by, self.t), "whois": whois, "threats": text["threats"], "n_def": air_pkg.n_def, "target_data": tdata,
+                   "bullseye": latlon(bx, by, self.t), "whois": whois, "link16_off": not getattr(self.state, "link16", True), "threats": text["threats"], "n_def": air_pkg.n_def, "target_data": tdata,
                    "others": [{"line": f"#{m_['number']} {m_['type']}: {m_['objective']}", "push": m_["push"], "tot": m_["tot"], "rtb": m_["rtb"], "flights": m_["flights"],
                                "status": ("already struck, heading home; its target is in ruins" if m_.get("struck") else "airborne when you start" if m_.get("underway") else "")} for m_ in merged if not m_.get("unseen")],
                    "intel": [l_.replace(" are within reach of the target area and may be sent to reinforce.", " may reinforce.").replace(" are on cockpit alert and may launch to help.", " on alert, may launch.") for l_ in self._intel],
@@ -2313,9 +2313,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
     def _datalinks(self, package) -> list:
         stn = {}
         whois = []
+        # S103a (XO 2026-11-18): the campaign's Link 16 switch (Era Equipment). Off = no jet is a member or donor of any SQE-built network, no STN is set and every STN in the
+        # who's-who is "-" (so the briefing has no Link 16 text). Each jet keeps the single-member network pydcs gives it, which DCS treats like any lone jet; the `datalinks`
+        # entry is NOT removed: a unit with none is not known to be "off" in DCS (it may join a default coalition network), a lone network is.
+        on = bool(getattr(self.state, "link16", True))
         for f, g in self.flight_groups:               # your own flight is one network: wingmen are members of each other (blue on the HSD/TAD)
             for u1 in g.units:
-                if getattr(u1, "datalink", None) is None:
+                if getattr(u1, "datalink", None) is None or not on:
                     continue
                 if len(g.units) > 1:
                     try:
@@ -2330,7 +2334,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             lead_stn = "-"
             for i, u in enumerate(g.units, 1):
                 dl = getattr(u, "datalink", None)
-                if dl is None:
+                if dl is None or not on:
                     continue
                 lt = dl.link_type.name
                 stn[lt] = stn.get(lt, 0) + 1
@@ -2352,7 +2356,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 continue
             for u in g.units:
                 dl = getattr(u, "datalink", None)
-                if dl is None:
+                if dl is None or not on:
                     continue
                 net = dl.network
                 for of, og in self.flight_groups:

@@ -214,13 +214,15 @@ def _disperse_red(st, terrain, plan_w: list) -> None:
 
 def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str = "caucasus",
                  seed: int | None = None, start_date: str = "2006-06-12", night_ops: bool = True,
-                 player_squadron: str | None = None) -> CampaignState:
+                 player_squadron: str | None = None, a10_variant: str | None = None, f14_variant: str | None = None, link16: bool | None = None) -> CampaignState:
     d: Difficulty = get_difficulty(level)
     rng = random.Random(seed)
     th = theatres.use(theatre)
     t = theatres.terrain()
     ap = lambda n: t.airports[n].position
-    st = CampaignState(name=name, theatre=theatre, level=d.level, start_date=start_date, night_ops=night_ops)
+    era = th["era"]                                       # S103a: Era Equipment, chosen at creation (None = the theatre's own era value) and saved with the campaign
+    st = CampaignState(name=name, theatre=theatre, level=d.level, start_date=start_date, night_ops=night_ops,
+                       a10_variant=a10_variant or era["a10_variant"], f14_variant=f14_variant or era["f14_variant"], link16=era["link16"] if link16 is None else bool(link16))
 
     # ---- friendly bases ---------------------------------------------------------------------
     cv = th["carrier"]

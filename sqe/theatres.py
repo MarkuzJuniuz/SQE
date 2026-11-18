@@ -16,6 +16,10 @@ DEFAULT = "caucasus"
 REQUIRED = ("id", "name", "dcs_terrain", "lat", "lon", "tz", "temp_c", "geo", "scan", "carrier", "blue_fields", "red_fields",
             "wing_weight", "field_tier", "squadrons", "front", "tier_labels", "front_names", "front_desc", "title", "stories")
 
+# S103a: the pack's `era` block = the year shown for the campaign (a fixed label: the month and day stay free) and the Era Equipment defaults of the campaign-create dialog. A pack without
+# the block (or with part of it) gets these values, which are Caucasus 2006 (what SQE always flew).
+ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "link16": True}
+
 _ACTIVE: dict | None = None
 _CACHE: dict = {}
 EXTRA_DIRS: list = []                 # extra pack folders (tests, or a portable install); searched after the bundled ones
@@ -50,6 +54,7 @@ def _validate(d: dict, src) -> dict:
     d.setdefault("red_keep", {})
     d.setdefault("red_fill", {})                                   # v0.41.439: {level: {red field id: jets}}, the most jets the field holds at that level (a theatre without it parks by the DCS count only)
     d.setdefault("bomber_base", "")
+    d["era"] = {**ERA_DEFAULT, **(d.get("era") or {})}
     d["_dir"] = str(Path(src).parent)
     return d
 
@@ -102,6 +107,11 @@ def use(tid: str) -> dict:
         except Exception:
             pass
     return d
+
+
+def era(tid: str | None = None) -> dict:
+    """The `era` block of a pack (the active one when no id is given), with the missing keys filled from ERA_DEFAULT."""
+    return dict(load(tid)["era"]) if tid else dict(active()["era"])
 
 
 def active() -> dict:

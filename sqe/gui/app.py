@@ -785,7 +785,8 @@ class MainWindow(QMainWindow):
                 except OSError:
                     pass
                 self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus'),
-                                 tactical_edge=bool(v.get("tactical_edge", True)), tactical_edge_decay=bool(v.get("tactical_edge_decay", False))); self.refresh_all()
+                                 tactical_edge=bool(v.get("tactical_edge", True)), tactical_edge_decay=bool(v.get("tactical_edge_decay", False)),
+                                 a10_variant=v.get("a10_variant"), f14_variant=v.get("f14_variant"), link16=v.get("link16")); self.refresh_all()
             except Exception:
                 QMessageBox.critical(self, "Could not create campaign", traceback.format_exc())
 

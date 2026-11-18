@@ -100,10 +100,12 @@ class Session(Merging, SeadTiming):
         return sorted(d.glob(f"*{CAMPAIGN_EXT}"), key=lambda p: p.stat().st_mtime, reverse=True) if d.exists() else []
 
     def new(self, name: str, aircraft: str, level: int, seed: int | None = None, start_date: str = "2006-06-12", night_ops: bool = True,
-            squadron: str | None = None, theatre: str = "caucasus", tactical_edge: bool = True, tactical_edge_decay: bool = False) -> None:
+            squadron: str | None = None, theatre: str = "caucasus", tactical_edge: bool = True, tactical_edge_decay: bool = False,
+            a10_variant: str | None = None, f14_variant: str | None = None, link16: bool | None = None) -> None:
         theatres.use(theatre)
         self.sync_terrain()
-        self.state = new_campaign(name, aircraft, level, theatre=theatre, seed=seed, start_date=start_date, night_ops=night_ops, player_squadron=squadron)
+        self.state = new_campaign(name, aircraft, level, theatre=theatre, seed=seed, start_date=start_date, night_ops=night_ops, player_squadron=squadron,
+                                  a10_variant=a10_variant, f14_variant=f14_variant, link16=link16)                  # S103a: Era Equipment (None = the theatre's era values)
         self.state.ground["tactical_edge"] = bool(tactical_edge)                                          # S88 R3: the two Tactical Edge switches belong to the campaign (they were app settings copied in on every open)
         self.state.ground["tactical_edge_decay"] = bool(tactical_edge and tactical_edge_decay)            # v0.41.208: the decay needs the edge
         safe = "".join(c if c.isalnum() or c in "-_ " else "_" for c in name).strip() or "campaign"
