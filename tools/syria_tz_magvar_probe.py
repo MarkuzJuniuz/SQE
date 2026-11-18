@@ -98,7 +98,7 @@ def analyze(log_path) -> None:
     if not rows:
         return
     for label, sign in (("course as logged", 1), ("course negated", -1)):
-        d = [((sign * c - n + 180) % 360) - 180 for _a, n, c in rows]
+        d = [((sign * c - n + 90) % 180) - 90 for _a, n, c in rows]      # folded to -90..90: the course may be for either end of the runway
         print(f"{label}: mean {statistics.mean(d):+.1f}, median {statistics.median(d):+.1f}, stdev {statistics.pstdev(d):.1f} degrees (true minus magnetic; a good reading has stdev near 3)")
     print("the sign with the small stdev is the right one; its mean is the variation (positive = east)")
 
