@@ -165,7 +165,7 @@ def bad_values() -> list:
     base = json.loads((ROOT / "sqe" / "data" / "theatres" / "caucasus.json").read_text(encoding="utf-8"))
     cases = [("red_roster", {"4": {"MiG_21Bis": 1}}), ("red_roster", {"1": {}}), ("red_roster", {"1": {"MiG_21Bis": -3}}), ("level_overrides", {"1": {"no_such_field": 1}}),
              ("level_overrides", {"9": {"bomber_wing": 1}}), ("front", {**base["front"], "air_fields": "krymsk"}), ("front", {**base["front"], "defeat_bases": 0}),
-             ("nav", {"Batumi": 5}), ("ils_runway", {"Batumi": 40}), ("mag_var_deg", "east"),
+             ("nav", {"Batumi": 5}), ("ils_runway", {"Batumi": 40}), ("mag_var_deg", "east"), ("raid_attack_types", []), ("raid_attack_types", ["Not_A_Plane"]), ("raid_bomber_types", "Su_24M"),
              ("extra_sams", [{"id": "x", "site": "SA-5", "x": 1, "y": 2, "levels": [3]}]), ("extra_sams", [{"id": "sam_a_0", "site": "SA-99", "x": 1, "y": 2, "levels": [3]}]),
              ("extra_sams", [{"id": "sam_a_0", "site": "SA-5", "levels": [3]}]), ("extra_sams", [{"id": "sam_a_0", "site": "SA-5", "x": 1, "y": 2, "levels": [4]}]),
              ("extra_sams", [{"id": "sam_a_0", "site": "SA-5", "x": 1, "y": 2, "levels": [3]}, {"id": "sam_a_0", "site": "SA-5", "x": 1, "y": 2, "levels": [3]}])]

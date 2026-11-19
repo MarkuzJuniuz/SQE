@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.498, red raid types per theatre
+Which red aircraft lead the raids on troops and supply sites, and which fly the field raids and the SEAD and stand-off raids, now comes from the theatre pack (the Caucasus keeps the Su-25 and the Su-24M). A theatre that names the Su-17M4 for the attack role sends it on the troop and supply raids with its bomb load, and never on a SEAD or stand-off raid it cannot carry. No Caucasus campaign changes.
+
 ## v0.41.497, theatre packs can set more of the war themselves
 A theatre pack can now name its own red rosters, its bomber wings per level, which red fields form the air-superiority front, how many lost airfields end the campaign, the approach-aid text and ILS runways of its fields, its magnetic variation and fixed extra SAM sites. Every key is optional and its default is what the Caucasus used, so the Caucasus campaigns are unchanged. A red airfield without an air wing no longer breaks the planner.
 

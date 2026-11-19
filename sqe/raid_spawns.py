@@ -1013,7 +1013,7 @@ class RaidSpawns:
         from .raids import sweep_members
         skill = getattr(Skill, ai_skill(self.o, "red", d), Skill.High)
         land = bool(ex.get("land"))
-        alt = ((12000 if any(t_ == "Su_25" for _a, t_, _n in bmem) else SEAD_ALT_FT if sead_r else 20000) if land else 30000) * FT      # S107 (XO 2026-11-18): a SEAD raid flies high (the Kh-31P reaches farther from altitude). S46: the whole raid flies at its slowest, lowest member's altitude (a Su-25 in it: 12 000 ft)
+        alt = ((12000 if any(t_ in _raids48.attack_types() for _a, t_, _n in bmem) else SEAD_ALT_FT if sead_r else 20000) if land else 30000) * FT      # S107 (XO 2026-11-18): a SEAD raid flies high (the Kh-31P reaches farther from altitude). S46: the whole raid flies at its slowest, lowest member's altitude (a Su-25 in it: 12 000 ft)
         apt = self.t.airports.get(cvb.airport) if (land and cvb.airport and not aim) else None
 
         fin_ = "ARM" if (sead_r or kh59_r) else ("BASE" if bool(ex.get("land")) else ("LAUNCH" if standoff else "FLEET"))

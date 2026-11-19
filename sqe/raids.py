@@ -17,13 +17,27 @@ import math
 import random
 from .models import Objective, ObjectiveType, BaseKind, Role, AssetKind
 from .words import strength_word
-from . import clock, redair, runways
+from . import clock, redair, runways, theatres
 from .loadouts import BOMBER_TYPES
 
 NM = 1852.0
 BASE_LOSS = 0.06              # airfield defence lost per bomber that gets through
 RAID_PRIORITY = 8.0
 RAIDERS = BOMBER_TYPES + ("Su_25",)  # (v0.41.361, Phase 10d: the Su-34 too) attack types a raid can fly (bombers for fields; Su-25s lead against troops and, since v0.41.359, supply sites)
+ATTACK_TYPES = ("Su_25",)      # S90 J5c: the cheap attack type(s) that lead raids on troops, garrisons and supply sites: the Caucasus value, replaced by a pack's `raid_attack_types` (`attack_types()`)
+
+
+def attack_types() -> tuple:
+    """S90 J5c: the red attack types that lead raids on troops, garrisons and supply sites (the Su-25's role): the active pack's `raid_attack_types`, else ATTACK_TYPES (the Caucasus)."""
+    return tuple(theatres.hook("raid_attack_types", ATTACK_TYPES))
+
+
+def bomber_types() -> tuple:
+    """S90 J5c: the red bomber types that fly field raids and are the ONLY ones that fly the SEAD (Kh-31P) and Kh-59M raids: the active pack's `raid_bomber_types`, else loadouts.BOMBER_TYPES (the Su-24M). A type with no
+    such store (the Su-17M4) must not be listed here: the pack loader refuses a type in both lists, and these jobs draw from this list only."""
+    return tuple(theatres.hook("raid_bomber_types", BOMBER_TYPES))
+
+
 SU25_SUPPLY = True            # v0.41.359 (campaign rules plan Phase 10c): a Su-25 pair is the first pick for a raid on an uncovered supply site; the Su-24M keeps the fields (they need its SEAD group) and is the fallback
                               # when no Su-25 wing reaches (Su-25 radius 160 nm against the Su-24M's 300). The Su-25 raid goes UNESCORTED when no blue fighter squadron can reach the site's field (`plan_raid`). Judgment call.
 POOL_RAIDS = True             # S46 (XO 2026-11-12, "pool two nearby wings, even if they're not fully identical, as long as they come in bigger numbers"): a supply / garrison / field / troop raid whose lead wing cannot fill the size drawn takes a second wing's jets too (`_pool_partners`), and so do the escorts (`_pool_escorts`); False = single-wing raids as before
@@ -82,7 +96,7 @@ def raider_wings(state, kind: str = "field", budget: bool = True, pref=None) -> 
     """[(wing, type)] of the enemy wings that can send a raid now: a pair of that type free this turn (`redair.ready_of`: ready and not in a patrol; the serviceable jets when the turn has no plan), field not
     cratered, sorties left in the day's cap (`budget`). Bombers (Su-24M) are preferred against fields, Su-25s against troops and garrisons (and, `_reach`, supply sites: `pref`
     overrides the order)."""
-    pref = pref or (("Su_25",) + BOMBER_TYPES if kind in ("garrison", "sector") else BOMBER_TYPES + ("Su_25",))      # v0.41.361 (Phase 10d): the Su-34 is a bomber type like the Su-24M (a wing with both flies the Su-24M first)
+    pref = pref or ((attack_types() + bomber_types()) if kind in ("garrison", "sector") else (bomber_types() + attack_types()))      # v0.41.361 (Phase 10d): the Su-34 is a bomber type like the Su-24M (a wing with both flies the Su-24M first)
     out = []
     for w in state.enemy_air:
         a = state.assets.get(w.base_asset_id)
@@ -127,7 +141,7 @@ def _reach(state, kind: str, x: float, y: float, budget: bool = True, only=None,
     """(distance nm, wing, type) of the nearest wing that can reach (x, y) with a raid of this kind, or None. v0.41.125: `only` restricts the aircraft type. v0.41.359 (Phase 10c, `SU25_SUPPLY`):
     a raid on a supply site is tried with the Su-25 wings first (`raider_wings` `pref`), then as before (Su-24M first)."""
     if kind == "supply" and SU25_SUPPLY and only is None and fits is None:
-        r = _reach_by(state, kind, x, y, budget, ("Su_25",), only, fits, want)
+        r = _reach_by(state, kind, x, y, budget, attack_types(), only, fits, want)
         if r is not None:
             return r
     return _reach_by(state, kind, x, y, budget, None, only, fits, want)
@@ -141,7 +155,7 @@ def _reach_by(state, kind: str, x: float, y: float, budget: bool, pref, only, fi
     full = None
     only = (only,) if isinstance(only, str) else only                          # v0.41.361 (Phase 10d): a type or a tuple of types
     if pref is None and only:                                                  # S48: a wing's type is the first of `pref` it has a pair of: with `only` the wing's allowed type must be considered, not skipped behind another (a garrison raid tries the Su-25 first)
-        pref = tuple(t for t in BOMBER_TYPES + ("Su_25",) if t in only)
+        pref = tuple(t for t in bomber_types() + attack_types() if t in only)
     for w, t in raider_wings(state, kind, budget, pref):
         if only and t not in only:
             continue
@@ -317,7 +331,7 @@ def sam_reach(state, d, x: float, y: float, budget: bool = True):
     (`raid_arm` 0) has no SEAD doctrine. The wing must have the package's jets free (`redair.ready_of`)."""
     if getattr(d, "raid_arm", 0) <= 0:
         return None
-    return _reach(state, "sam", x, y, budget, only=BOMBER_TYPES, fits=lambda w, t: redair.ready_of(state, w, (t,)) >= sead_n(d))
+    return _reach(state, "sam", x, y, budget, only=bomber_types(), fits=lambda w, t: redair.ready_of(state, w, (t,)) >= sead_n(d))
 
 
 def reach_for(state, kind: str, x: float, y: float, budget: bool = True, d=None, want: int = 0, only=None):
@@ -349,7 +363,7 @@ def _sead_fieldable(state, d, base, aim: str, wing, ac: str) -> bool:
     if not (SEAD_POOL and POOL_RAIDS):
         return False
     ax, ay = aim_xy(state, aim, base)
-    return have + sum(p["n"] for p in _pool_partners(state, "sam", wing, ax, ay, need - have, only=BOMBER_TYPES)) >= need
+    return have + sum(p["n"] for p in _pool_partners(state, "sam", wing, ax, ay, need - have, only=bomber_types())) >= need
 
 
 def sead_plan(state, d, base, aim: str, wing, ac: str):
@@ -468,7 +482,7 @@ def _pool_partners(state, kind: str, lead, ax: float, ay: float, need: int, take
     la = state.assets[lead.base_asset_id]
     skip = {lead.base_asset_id, *taken}
     cands = []
-    for w, t in raider_wings(state, kind, pref=BOMBER_TYPES if only else None):          # S48: a Kh-59M raid pools bomber types only (a Su-25 cannot carry one)
+    for w, t in raider_wings(state, kind, pref=bomber_types() if only else None):          # S48: a Kh-59M raid pools bomber types only (a Su-25 cannot carry one)
         if w.base_asset_id in skip or (only and t not in only):
             continue
         a = state.assets[w.base_asset_id]
@@ -613,7 +627,7 @@ def _plan_sead(state, d, base, aim: str, oid: str, turn: int):
     nb -= nb % 2
     pool = []
     if SEAD_POOL and POOL_RAIDS and nb < want:                                       # S59b: the lead wing is short: a nearby wing that carries the Kh-31P joins it
-        pool = _pool_partners(state, "sam", bw, ax, ay, want - nb, only=BOMBER_TYPES)
+        pool = _pool_partners(state, "sam", bw, ax, ay, want - nb, only=bomber_types())
     nb_lead = nb
     nb += sum(p["n"] for p in pool)
     from .sams import BLUE_FULL_DEF
@@ -684,7 +698,7 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int):
     share_ = KH59_SHARE.get(max(1, min(3, int(getattr(d, "level", 3)))), 0.0)
     r = None
     if KH59_RAIDS and share_ > 0 and aim_kind(aim) in KH59_KINDS and not getattr(d, "raid_banzai", False)             and random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:kh59").random() < share_:      # a NEW stream: `rnd` is not touched, so a plan that is not a Kh-59M raid is what S46 made
-        r = reach_for(state, aim_kind(aim), ax, ay, d=d, want=want, only=BOMBER_TYPES)       # the Su-25 cannot carry it: no bomber wing that can field it, the ordinary draw below
+        r = reach_for(state, aim_kind(aim), ax, ay, d=d, want=want, only=bomber_types())       # the Su-25 cannot carry it: no bomber wing that can field it, the ordinary draw below
         kh59 = r is not None
     if r is None:
         r = reach_for(state, aim_kind(aim), ax, ay, d=d, want=want)                         # S43: the wing that can field the size drawn, the nearest otherwise
@@ -702,10 +716,10 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int):
     from . import blue_barcap
     pool = []
     if POOL_RAIDS and nb < want and aim_kind(aim) in POOL_KINDS:                                      # S46: the lead wing cannot fill the size drawn: a nearby wing joins it
-        pool = _pool_partners(state, aim_kind(aim), bw, ax, ay, min(want, POOL_MAX_RAIDERS) - nb, only=BOMBER_TYPES if kh59 else None)
+        pool = _pool_partners(state, aim_kind(aim), bw, ax, ay, min(want, POOL_MAX_RAIDERS) - nb, only=bomber_types() if kh59 else None)
     nb_lead = nb
     nb += sum(p["n"] for p in pool)
-    alone_ = (raider == "Su_25" and all(p["raider"] == "Su_25" for p in pool) and aim_kind(aim) == "supply" and SU25_SUPPLY                          # v0.41.359 (Phase 10c): no blue fighter squadron can reach the site's field (blue's own patrol rule, `blue_barcap._cap_squadrons`): the Su-25s go alone
+    alone_ = (raider in attack_types() and all(p["raider"] in attack_types() for p in pool) and aim_kind(aim) == "supply" and SU25_SUPPLY                          # v0.41.359 (Phase 10c): no blue fighter squadron can reach the site's field (blue's own patrol rule, `blue_barcap._cap_squadrons`): the Su-25s go alone
               and not blue_barcap._cap_squadrons(state, base))
     want_e = 0 if alone_ else max(4 if nb >= 4 else 2, nb // 2 + (2 if nb >= 8 else 0))
     esc, esc_avail = _escort_for(state, bw, ax, ay, rnd, alone_, want_e)
