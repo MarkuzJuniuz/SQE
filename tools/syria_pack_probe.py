@@ -61,6 +61,10 @@ def one_case(task) -> dict:
         bad.append(f"{tag}: blue airframes {types} (the pack's era says A-10A and F-14B)")
     if len({q.callsign for q in sq}) != len(sq):
         bad.append(f"{tag}: blue callsigns are not unique")
+    from sqe import callsigns
+    for q in sq:                                                                      # DCS knows a callsign per airframe: a name outside the airframe's table breaks the mission build (Lobo is an F-16C name, not an F-15E one)
+        if q.callsign not in callsigns.table(q.aircraft):
+            bad.append(f"{tag}: {q.name}: callsign {q.callsign!r} is not in the {q.aircraft} table")
     per_base = {}
     for q in sq:
         per_base[q.base_id] = per_base.get(q.base_id, 0) + q.authorized
