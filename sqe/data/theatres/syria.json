@@ -699,7 +699,11 @@
    2,
    3
   ],
-  "kill": "sa5"
+  "kill": "sa5",
+  "fill": [
+   "SA-10",
+   "EWR"
+  ]
  },
  "raid_attack_types": [
   "Su_17M4"

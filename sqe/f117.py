@@ -216,3 +216,85 @@ def resolve(sim, state, pkg, force=None) -> dict:
     for ln in lines:
         state.note(ln.strip())
     return {"success": success, "odds": p, "lines": lines, "objective": pkg.objective.description, "roll": {"success": success}, "lost_by": lost_by}
+
+
+# ---- S104d: the scripted opening strike is flown by the squadron (XO 2026-11-19) ----
+OPENING_ROUTE_FACTOR = 1.3   # JUDGMENT CALL: the way home is the egress dog-leg and the varied approach, not the straight line: distance x this
+OPENING_RECOVERY_MIN = 15    # JUDGMENT CALL: descent, approach and landing after the cruise home, minutes
+
+
+def _hhmm(minute: int) -> str:
+    m = int(minute) % clock.DAY_MIN
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def opening_picks(state, os_: dict, base, n: int) -> list:
+    """The assets the leftover pairs of the opening strike go after: the pack's `fill` kinds taken in turn (an SA variant of `scenario.SAM_VALUE`, dash and case free, or "EWR" = any early-warning radar), one site
+    per pair. Within a kind: deepest first (`tier` high to low), then farthest from the squadron's base, then id (no rng). Judgment call: the F-117 went for the deep, heavily defended targets (Baghdad 1991, from
+    memory, medium firmness); the front belt is the SEAD / HARM job of the day's packages. Column air defence (`fsam_`) and sites already down are never picked."""
+    by_kind = []
+    for k in os_.get("fill") or []:
+        want = k.replace("-", "").lower()
+        c = [a for a in state.assets.values() if not a.destroyed and not a.id.startswith("fsam_")
+             and ((a.kind == AssetKind.EWR) if want == "ewr" else (a.kind == AssetKind.SAM and a.variant.replace("-", "").lower() == want))]
+        c.sort(key=lambda a: (-a.tier, -math.hypot(a.x - base.x, a.y - base.y), a.id))
+        by_kind.append(c)
+    out = []
+    while len(out) < n and any(by_kind):
+        for c in by_kind:
+            if c and len(out) < n:
+                out.append(c.pop(0))
+    return out
+
+
+def opening_sortie(state, os_: dict, hit: list) -> list:
+    """S104d: the opening strike's jets. `hit` = the sites the pack's `kill` variant took down (already health 0). The squadron's ready jets fly as pairs, one pair per target: the `kill` sites first, then `fill`
+    picks for the pairs left over (they are taken down here too); a squadron short of pairs leaves the last `kill` sites to the script alone (they are down all the same). Every pair lands at
+    `land_min = TOT + distance x OPENING_ROUTE_FACTOR / cruise + OPENING_RECOVERY_MIN` and its jets are in refit (`refit` list, the full F-117A refit, no Force Index) until `land_min + REFIT_MIN`, so
+    they are out of `available` now, "returning" until they land (`returning`), then refitting. Each struck site starts the F-117A cooldown from day 1. The record `raids["opening_strike"]` stays for the whole
+    campaign (engine's day reset keeps it). Surprise attack: no losses. -> the war-log lines after the strike line: one per struck site (with its pair) and the squadron note."""
+    from . import refit, sams
+    from .aircraft import AIRCRAFT
+    qs = [q for q in squadrons(state) if q.available >= 2 and state.bases.get(q.base_id) is not None]
+    q = sorted(qs, key=lambda q: q.id)[0] if qs else None
+    base = state.bases[q.base_id] if q else None
+    dist = (lambda a: math.hypot(a.x - base.x, a.y - base.y)) if q else (lambda a: 0.0)
+    sites = sorted(hit, key=lambda a: (-a.tier, -dist(a), a.id))
+    pairs = q.available // 2 if q else 0
+    fill = opening_picks(state, os_, base, pairs - len(sites)) if q and pairs > len(sites) else []
+    for a in fill:
+        a.health = 0.0
+    sams.track(state)
+    t0 = refit.now_min(state)
+    spec = AIRCRAFT[KEY]
+    if state.raids is None:
+        state.raids = {}
+    lines, rec, k = [], [], 0
+    for a in sites + fill:
+        cs = ""
+        if q and k < pairs:
+            k += 1
+            land = t0 + int(math.ceil(dist(a) / NM * OPENING_ROUTE_FACTOR / spec.cruise_kts * 60)) + OPENING_RECOVERY_MIN
+            rec.append({"target": a.id, "jets": 2, "land_min": land})
+            cs = f" ({q.callsign} {k}, 2 {KEY})"
+        lines.append(f"   {a.name}: destroyed{cs}")
+        state.raids.setdefault("f117_last", {})[a.id] = state.day
+    if rec:
+        ready = refit.refit_minutes(KEY, False, 1.0)
+        jets = 2 * len(rec)
+        q.refit = sorted(q.refit + [int(round(r["land_min"] + ready)) for r in rec for _ in range(r["jets"])])
+        q.available -= jets
+        state.raids["opening_strike"] = {"squadron": q.id, "pairs": rec}
+        every = "all " if q.available == 0 else ""
+        lines.append(f"{q.name}: {every}{jets} {KEY}s on their way home to {base.name}, the last down by {_hhmm(max(r['land_min'] for r in rec))} ({ready / 60:g} hours of refit after).")
+    return lines
+
+
+def returning(state, q) -> int:
+    """Jets of squadron `q` that the opening strike sent and that have not landed yet (their `land_min` is after the turn's start); 0 for any other squadron or with no record."""
+    from . import refit
+    rec = (state.raids or {}).get("opening_strike")
+    if not rec or rec.get("squadron") != q.id:
+        return 0
+    now = refit.now_min(state)
+    return sum(int(p["jets"]) for p in rec["pairs"] if int(p["land_min"]) > now)
