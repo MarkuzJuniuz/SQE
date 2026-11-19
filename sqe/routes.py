@@ -84,7 +84,7 @@ AGM88_LAUNCH_NM = 35.0      # v0.41.11: 35 (was 30): the Sukhumi SA-10 engaged H
 CARRIER_DEP_NM = 10.0      # Case III: the departure circle is 10 nm from the boat, and the flight leaves on the briefed departure radial
 
 
-def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, carrier: bool = False) -> Geometry:
+def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, carrier: bool = False, vary_deg: float = 0.0) -> Geometry:
     """mshl: where the package marshals. It is chosen by the caller BEHIND the base (away from the enemy) so the departure and
     the hold are in friendly, defended airspace; the route then runs marshal -> PUSH -> IP -> target."""
     d = dist(bx, by, tx, ty)
@@ -94,7 +94,7 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, ca
     at = lambda dd: offset(bx, by, hdg, dd)
     if mshl is None:
         mshl = offset(bx, by, hdg + 180, 15 * NM)
-    ip_xy = at(ip_d)
+    ip_xy = at(ip_d) if not vary_deg else offset(tx, ty, hdg + 180 + vary_deg, p.ip_nm * NM)       # S104c: an F-117A sortie comes in on its own bearing (`f117.approach_deg`), 0 = the straight line as every other flight
     push_nm = max(2.0, min(10.0, 0.4 * dist(*mshl, *ip_xy) / NM))
     push_xy = offset(*mshl, bearing(*mshl, tx, ty), push_nm * NM)
     cap_d = max(0.45 * d, min(60 * NM, d))
@@ -104,7 +104,7 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, ca
     dep_nm = CARRIER_DEP_NM if carrier else p.dep_nm
     dep = offset(bx, by, bearing(bx, by, *mshl), min(dep_nm * NM, 0.4 * dist(bx, by, *mshl)))
     g_ = Geometry(bx, by, tx, ty, hdg, d, mshl, push_xy, ip_xy,
-                  offset(tx, ty, hdg + 100, p.egress_nm * NM), cap1, offset(*cap1, hdg + 90, p.cap_leg_nm * NM), dep)
+                  offset(tx, ty, hdg + (100 if vary_deg >= 0 else -100), p.egress_nm * NM), cap1, offset(*cap1, hdg + 90, p.cap_leg_nm * NM), dep)
     g_.carrier = bool(carrier)
     return g_
 

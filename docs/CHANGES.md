@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.507, the Nighthawks never fly the same thing twice
+An F-117A sortie now comes in on its own approach bearing (25 to 80 degrees off the straight line, drawn fresh each night, never through a SAM ring the plain route avoids), and the same target is not struck again for a week.
+
 ## v0.41.506, the Nighthawks strike runways
 The F-117A squadron now also cuts red runways at night: on the first turn of the night, a red airfield with ready jets that no other red patrol or alert pair can reach is hit with GBU-27s, and its runway is closed like any other crater. At most one such strike a night.
 

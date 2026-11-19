@@ -23,7 +23,7 @@ from . import theatres, weather
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import barcap, briefing as brief, callsigns, detection, profiles, relief, runways
+from . import barcap, briefing as brief, callsigns, detection, f117, profiles, relief, runways
 from . import seacheck as seac
 from . import pydcs_patch
 from . import threatmap as tm
@@ -422,7 +422,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         fleet_obj = package.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE)
         tgt_asset = None if fleet_obj else st.assets[package.objective.target_id]
         mshl_xy = tm.package_marshal(st, (pbase.x, pbase.y), bearing(pbase.x, pbase.y, tx, ty), (tx, ty), package.flights)     # S77: the package's marshal, not the player's base's
-        geom = make_geometry(pbase.x, pbase.y, tx, ty, pspec.profile, mshl_xy, carrier=pbase.kind == BaseKind.CARRIER)
+        geom = make_geometry(pbase.x, pbase.y, tx, ty, pspec.profile, mshl_xy, carrier=pbase.kind == BaseKind.CARRIER,
+                             vary_deg=f117.approach_deg(st, package, (pbase.x, pbase.y), tx, ty, pspec.profile) if f117.is_job(package.objective) else 0.0)      # S104c: the F-117A never flies the same route twice
         # enemy CAP stations are planned first so the egress can stay clear of them too (they sit 20-25 nm in front of their own base)
         # v0.41.76: no fixed keep-outs round our marshal point, fields or carrier any more (v0.41.10: 45 / 130 nm): red's patrol stations are BARCAP
         # stations (barcap.py), clear of blue's SAM rings and the ships' reach (CAP_FLEET_KEEPOUT_NM, applied in `_plan_cap_stations`).
@@ -788,7 +789,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if tgt2 is None:
                 tgt2 = SimpleNamespace(id=xp.objective.target_id, x=tx2, y=ty2)
             mshl2 = tm.package_marshal(st, (base2.x, base2.y), bearing(base2.x, base2.y, tx2, ty2), (tx2, ty2), xp.flights)
-            geom2 = make_geometry(base2.x, base2.y, tx2, ty2, spec2.profile, mshl2, carrier=base2.kind == BaseKind.CARRIER)
+            geom2 = make_geometry(base2.x, base2.y, tx2, ty2, spec2.profile, mshl2, carrier=base2.kind == BaseKind.CARRIER,
+                                  vary_deg=f117.approach_deg(st, xp, (base2.x, base2.y), tx2, ty2, spec2.profile) if f117.is_job(xp.objective) else 0.0)
             skip = {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else set()
             if not raid2:
                 geom2.egr = (tm.first_safe_egress(st, tx2, ty2, geom2.hdg, skip) or
