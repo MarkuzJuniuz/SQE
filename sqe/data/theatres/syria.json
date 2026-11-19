@@ -966,5 +966,15 @@
     "fall_ab_shayrat": "Shayrat is ours. The Homs gap is open and the road into central Syria lies ahead."
    }
   }
+ },
+ "raid_bearing_deg": [
+  200,
+  220
+ ],
+ "map_box": {
+  "x0": -440000,
+  "x1": 300000,
+  "y0": -580000,
+  "y1": 580000
  }
 }

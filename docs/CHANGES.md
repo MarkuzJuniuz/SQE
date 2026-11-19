@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.503, the Syria bomber raids come from Damascus
+At Level 3 in Syria the Tu-22M3 carrier raid is a setpiece out of Damascus: the fleet-defence briefing names the field, and the raid arrives out of the open sea south-west of the task force instead of over the Syrian coast. The land strikes fly from Damascus too. A theatre pack can now set the raid's bearing and the edge of its map. The Caucasus raid is unchanged.
+
 ## v0.41.502, Syria 2000: a second theatre
 The New Campaign window now offers Syria (2000) next to the Caucasus: Operation LEVANT HORIZON. A US-led coalition flies from Incirlik, Akrotiri, Larnaca, Muwaffaq Salti and the carrier USS Dwight D. Eisenhower to hold the Hatay frontier against Syria; the war is fought along the coast road from Hatay to Bassel Al-Assad, Rene Mouawad and Shayrat. Level 1 (the Northern Coastal Command) is a short push to take Bassel Al-Assad; at Levels 2 and 3 (Syria, then Syria and its Russian backers with Tu-22M3s from Damascus) the war is won by breaking the enemy's supply. The campaign starts at midnight, with the F-117A strike on the SA-5 batteries already done, and flies the 2000 equipment by default (A-10A, F-14B, Link 16 off). The Caucasus is unchanged. A new campaign now starts in the theatre's own year.
 

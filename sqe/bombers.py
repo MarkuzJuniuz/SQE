@@ -42,6 +42,16 @@ LAND_ESCORTS = 2              # Mozdok Su-27 that ride along
 LAND_STRIKES_PER_DAY = {2: 1, 3: 2}   # land strikes a day at most, by level (judgment call: a Tu-22M3 is lost outright and comes back one per 48 h, `refit.SLOW_REPL_MIN`, so the cap is what keeps the wing alive); L1 has no bomber wing
 
 
+RAID_BEARING_DEG = (20.0, 40.0)   # the bearing from the carrier a raid arrives on, drawn between these (the old range). S90 J8: a pack's `raid_bearing_deg` [lo, hi] replaces it (Syria: out of the open sea south-west of the task force)
+
+
+def raid_bearing_range() -> tuple:
+    """(lo, hi) degrees of the carrier raid's bearing: the active pack's `raid_bearing_deg` (S90 J8), else RAID_BEARING_DEG (the Caucasus)."""
+    from . import theatres
+    v = theatres.hook("raid_bearing_deg")
+    return RAID_BEARING_DEG if v is None else (float(v[0]), float(v[1]))
+
+
 def escorts_for(n: int) -> int:
     """Escorts that go with `n` bombers: one per two, rounded up."""
     return int(math.ceil(n * ESCORT_PER_BOMBER))
@@ -192,9 +202,9 @@ def decide(state, d) -> dict:
 
 def stage_extras(state, launch: int) -> dict:
     """v0.41.356 (Phase 10b part 1): what is fixed the day a raid is staged, so the turn BEFORE the raid can plan its SEAD / Standoff DEAD prep: the bearing the raid arrives on ("brg", 20 to 40 degrees, the old
-    range) and the turn it launches in ("turn", seeded, among the launch day's planned turns that have a planned turn right before them on the same day; absent when none has). Seeded by campaign and launch day only."""
+    range; the pack's `raid_bearing_deg` where it has one, S90 J8) and the turn it launches in ("turn", seeded, among the launch day's planned turns that have a planned turn right before them on the same day; absent when none has). Seeded by campaign and launch day only."""
     rnd = random.Random(f"{state.campaign_id}:{launch}:stage")
-    out = {"brg": round(rnd.uniform(20, 40), 1)}
+    out = {"brg": round(rnd.uniform(*raid_bearing_range()), 1)}
     ok = lambda t: bool(getattr(state, "night_ops", False)) or not clock.is_night_turn(t)
     cands = [t for t in range(clock.first_turn(launch) + 1, clock.first_turn(launch + 1)) if ok(t) and ok(t - 1)]
     if cands:

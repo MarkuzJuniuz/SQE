@@ -168,7 +168,8 @@ def bad_values() -> list:
              ("nav", {"Batumi": 5}), ("ils_runway", {"Batumi": 40}), ("mag_var_deg", "east"), ("raid_attack_types", []), ("raid_attack_types", ["Not_A_Plane"]), ("raid_bomber_types", "Su_24M"),
              ("extra_sams", [{"id": "x", "site": "SA-5", "x": 1, "y": 2, "levels": [3]}]), ("extra_sams", [{"id": "sam_a_0", "site": "SA-99", "x": 1, "y": 2, "levels": [3]}]),
              ("extra_sams", [{"id": "sam_a_0", "site": "SA-5", "levels": [3]}]), ("extra_sams", [{"id": "sam_a_0", "site": "SA-5", "x": 1, "y": 2, "levels": [4]}]),
-             ("extra_sams", [{"id": "sam_a_0", "site": "SA-5", "x": 1, "y": 2, "levels": [3]}, {"id": "sam_a_0", "site": "SA-5", "x": 1, "y": 2, "levels": [3]}])]
+             ("extra_sams", [{"id": "sam_a_0", "site": "SA-5", "x": 1, "y": 2, "levels": [3]}, {"id": "sam_a_0", "site": "SA-5", "x": 1, "y": 2, "levels": [3]}]),
+             ("raid_bearing_deg", [40, 20]), ("raid_bearing_deg", "20-40"), ("raid_bearing_deg", [20]), ("map_box", {"x0": 1}), ("map_box", {"x0": 5, "x1": 1, "y0": 0, "y1": 1})]
     bad = []
     for key, val in cases:
         d = json.loads(json.dumps(base))
