@@ -353,6 +353,11 @@ class ObjectivePlanner:
         for i, (_, o) in enumerate(picked, 1):
             o.id = f"obj-t{state.turn}-{i}"                              # v0.41.338: by the turn (a day has 12 plans now)
             out.append(o)
+        if waves:                                                        # S104: the F-117A's night jobs, on top of the turn's list (none without an F-117A squadron, by day, or with night ops off)
+            from . import f117
+            for k, o in enumerate(f117.objectives(state, skip | {x.target_id for x in out}), 1):
+                o.id = f"obj-t{state.turn}-f{k}"
+                out.append(o)
         return out
 
     def _wave_pass(self, state, scored: list, take, rwy_belt: frozenset | set = frozenset()) -> int:
@@ -796,6 +801,9 @@ class WarSimulator:
             return {"success": False, "held": True, "odds": 0.0, "lines": [line], "objective": pkg.objective.description, "roll": {"success": False, "held": True}}
         if pkg.objective.type == ObjectiveType.FLEET_DEFENSE:
             return self._resolve_raid(state, pkg, force)
+        if pkg.objective.type == ObjectiveType.STRIKE and pkg.objective.aim == "F117":              # S104: the F-117A's own roll (f117.resolve)
+            from . import f117
+            return f117.resolve(self, state, pkg, force)
         if pkg.objective.type == ObjectiveType.COUNTER_AIR and pkg.objective.aim == "SWEEP":
             return self._resolve_sweep(state, pkg, force)
         if pkg.objective.type == ObjectiveType.DEAD and (any(f.role == Role.STRIKE and not _suppressor(f, pkg) for f in pkg.flights) or pkg.objective.aim in SEAD_AIMS):

@@ -136,6 +136,10 @@ def _session(no_standoff: bool):
 def run_case(case, s, no_link16: bool) -> dict:
     """{ "case/mode/package-key": {member: text-or-hash} } for one case, built on the session `s` (S109: one case = one independent task)."""
     res = {}
+    if os.environ.get("SQE_IDENT_NO_F117"):                    # S104: the Caucasus pack carries the F-117A squadron; =1 drops it from the loaded pack, so the check compares the campaigns WITHOUT it with a baseline made before the squadron existed
+        from sqe import theatres
+        th_ = theatres.load("caucasus")
+        th_["squadrons"] = [q for q in th_["squadrons"] if q["aircraft"] != "F-117A"]
     for name, aircraft, level, seed, opened in [case]:
         _CUR[0], _CUR[1] = name, 0
         random.seed(f"{name}:new")                             # module-level random.* calls inside SQE would otherwise differ per run
@@ -205,7 +209,7 @@ def _worker(args) -> dict:
 def run(jobs=None) -> dict:
     """{ "case/mode/package-key": {member: text-or-hash} } for every case, sorted by key. jobs=1: one process, one shared Session (the old serial path);
     jobs=N (default one per core minus two, at most one per case): one worker process per case, the same result.
-    SQE_IDENT_NO_LINK16=1 builds every campaign with Link 16 disabled (S103a); SQE_IDENT_NO_STANDOFF=1 see _session."""
+    SQE_IDENT_NO_LINK16=1 builds every campaign with Link 16 disabled (S103a); SQE_IDENT_NO_STANDOFF=1 see _session; SQE_IDENT_NO_F117=1 drops the F-117A squadron (S104)."""
     no_link16, no_standoff = bool(os.environ.get("SQE_IDENT_NO_LINK16")), bool(os.environ.get("SQE_IDENT_NO_STANDOFF"))
     res = {}
     if jobs == 1:

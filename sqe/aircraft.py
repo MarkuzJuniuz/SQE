@@ -125,6 +125,18 @@ AIRCRAFT: dict[str, AircraftSpec] = {
                      push_kts=520, ip_kts=520, attack_kts=520, egress_kts=550, push_nm=80,
                      tgt_note="JDAM target. Release"),
         first_wp_label="0", bingo_lbs=3500, joker_lbs=5000),
+    # S104 (XO 2026-11-17 / 18): the F-117A Nighthawk, blue's small AI-only night squadron (`sqe/f117.py`: night only, EWRs and SAM sites no red air covers). pydcs `F_117A`: Pinpoint Strike only, two bay stations (1, 2),
+    # laser-guided GBU-10 / GBU-12 / GBU-27 only (no GPS weapon: NOT in JDAM_JETS), 8,255 kg of fuel, no pylons for tanks or missiles. AI-ONLY (player_flyable False; the DCS F-117A is not a flyable module of the
+    # old AI model SQE uses, and the planner never offers its slot to a person). Role STRIKE only. Combat radius 450 nm: JUDGMENT CALL (no public combat-radius figure was found; Allied Force sorties flew from Aviano and
+    # Spangdahlem on tanker-supported legs, the table runs in game scale like the F-15E's 450). Route values: a subsonic stealth jet (about Mach 0.9, so 480 kt ground speed at 22,000 ft; no supersonic dash),
+    # the strike altitude of a laser-bomb jet; judgment calls. `no_low`: never a low-level run (the F-117 bombed from medium / high altitude at night; the LOW tier of the route planner is 500 ft AGL).
+    "F-117A": AircraftSpec(
+        "F-117A", "F-117A Nighthawk", "F_117A", BaseKind.AIRFIELD,
+        frozenset({_R.STRIKE}), RefuelMethod.BOOM, 1, 450, 480, False,
+        RouteProfile(no_low=True, aar_alt_ft=22000, aar_kts=330, marshal_alt_ft=22000, marshal_kts=330, alt_ft={_R.STRIKE: 22000},
+                     push_kts=480, ip_kts=480, attack_kts=480, egress_kts=480, push_nm=60, ip_nm=25, egress_nm=25,
+                     tgt_note="Laser-guided target. Release"),
+        first_wp_label="0", bingo_lbs=2500, joker_lbs=3500),
     # v0.41.360 (campaign rules plan Phase 10c part 2, XO): roles CAS and STRIKE. The STRIKE role is conditional: the planner gives an A-10C squadron a STRIKE slot only on a plain supply strike
     # (fuel / depot) with no live SAM over the site or its run-in and no red fighter flight that can reach it (`packages.PackageBuilder._a10_supply_strike`, `STRIKE_CONDITIONAL`). Its tgt_note was
     # "CAS: check in with JTAC" and only the STRIKE route reads it (the CAS point has its own text), so it is the release note now.

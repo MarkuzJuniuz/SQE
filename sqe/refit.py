@@ -20,7 +20,7 @@ from __future__ import annotations
 from . import clock
 
 SORTIE_MIN = 100                 # launch to landing; the same value as blue_barcap.PACKAGE_WINDOW_MIN (judgment call)
-REFIT_MIN = {"A-10C": 120, "A-10A": 120, "A-10C2": 120, "Su_25": 120, "Tu_22M3": 480, "E_3A": 480}   # rugged 2 h (A-10C, Su-25: an hour quicker than standard again since S73), high maintenance 8 h (Tu-22M3, E-3; S25, was 360): XO 2026-11-08 / 11-11, game rules ("anecdotes")
+REFIT_MIN = {"A-10C": 120, "A-10A": 120, "A-10C2": 120, "Su_25": 120, "Tu_22M3": 480, "E_3A": 480, "F-117A": 960}   # rugged 2 h (A-10C, Su-25: an hour quicker than standard again since S73), high maintenance 8 h (Tu-22M3, E-3; S25, was 360): XO 2026-11-08 / 11-11, game rules ("anecdotes")
 STANDARD_REFIT_MIN = 180         # everything else: 3 h (S73, XO 2026-11-13: back to 3 hours; S25 had cut it to 120 so a wave-1 jet was back before the next 4-hour turn, XO 2026-11-08). With a 100-min sortie a wave-1 jet is ready about 4 h 40 min after launch: for the next turn's second wave, not its first
 LIMP_MULT = 2.0                  # a limping jet's refit is doubled and scaled by Force Index: hours = base x 2 / FI (XO 2026-11-08; the shape of ground.supply_repair)
 FI_MIN = 0.2                     # clamp only: Force Index can dip under the floor through sams.debt (judgment call)
@@ -28,8 +28,15 @@ LIMP_PER_LOSS = 1.0              # war sim: each surviving jet of a flight limps
 
 REPL_PAIR = 2                    # ordinary replacements arrive as a pair (XO, queue S3)
 REPL_BASE_MIN = 1440             # ...every 24 h at Force Index 1.0, 24 / FI hours in general (XO, queue S3 / plan decision 16)
-SLOW_TYPES = ("Tu_22M3", "E_3A") # high-maintenance types: lost outright, replaced one at a time and slowly (XO 2026-11-08)
-SLOW_REPL_MIN = 2880             # one airframe per 48 hours, no Force Index scaling (XO 2026-11-08)
+# S104 (XO 2026-11-17 / 18): the F-117A is the highest-maintenance airframe: refit 960 min (16 h, double the Tu-22M3 / E-3A) and a lost one is replaced one per 5760 min (96 h, double again); it is a BLUE type, so the
+# blue branch of `replacements` reads the table too (before, only red's Tu-22M3 wing and the E-3 asset used it).
+SLOW_REPL_MIN = {"Tu_22M3": 2880, "E_3A": 2880, "F-117A": 5760}      # minutes per replacement airframe, no Force Index scaling (Tu-22M3 / E-3A: one per 48 hours, XO 2026-11-08; F-117A: one per 96 hours)
+SLOW_TYPES = tuple(SLOW_REPL_MIN)  # high-maintenance types: lost outright, replaced one at a time and slowly (XO 2026-11-08)
+
+
+def slow_repl_min(aircraft: str) -> int:
+    """Minutes between the replacement airframes of a high-maintenance type (`SLOW_REPL_MIN`)."""
+    return SLOW_REPL_MIN[aircraft]
 
 
 def fi_of(state, side: str) -> float:
@@ -136,16 +143,18 @@ def replacements(state, now_min: int) -> list:
         if not short:
             sq.repl_due = 0
             continue
+        slow_ = sq.aircraft in SLOW_TYPES                               # S104: a blue high-maintenance squadron (the F-117A): one airframe per `slow_repl_min`, no Force Index scaling
+        period_ = slow_repl_min(sq.aircraft) if slow_ else _period(fi["blue"])
         if not sq.repl_due:
-            sq.repl_due = now_min + _period(fi["blue"])
+            sq.repl_due = now_min + period_
         if now_min >= sq.repl_due:
-            k = min(REPL_PAIR, short)
+            k = 1 if slow_ else min(REPL_PAIR, short)
             if runways.is_closed(state, sq.base_id):
                 sq.held += k
                 out.append(f"{sq.name}: {k} replacement(s) arrived, but the runway at {runways._name(state, sq.base_id)} is closed; they wait")
             else:
                 _add(sq, k)
-            sq.repl_due = now_min + _period(fi["blue"])
+            sq.repl_due = now_min + period_
     for w in state.enemy_air:
         a = state.assets.get(w.base_asset_id)
         if a is None or a.destroyed:                                    # a destroyed field cannot take new jets (end_day scatters the wing)
@@ -157,13 +166,13 @@ def replacements(state, now_min: int) -> list:
                 q.repl_due = 0
                 continue
             if not q.repl_due:
-                q.repl_due = now_min + SLOW_REPL_MIN
+                q.repl_due = now_min + slow_repl_min(q.aircraft)
             if now_min >= q.repl_due:
                 if closed:
                     q.held += 1
                 else:
                     _add(q, 1)
-                q.repl_due = now_min + SLOW_REPL_MIN
+                q.repl_due = now_min + slow_repl_min(q.aircraft)
         ordinary = [q for q in w.sqns if q.aircraft not in SLOW_TYPES and not q.reserve]
         short = max(0, sum(max(0, q.authorized - q.available - len(q.refit)) for q in ordinary) - w.held)
         if not short:
