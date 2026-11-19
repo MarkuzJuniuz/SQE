@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.502, Syria 2000: a second theatre
+The New Campaign window now offers Syria (2000) next to the Caucasus: Operation LEVANT HORIZON. A US-led coalition flies from Incirlik, Akrotiri, Larnaca, Muwaffaq Salti and the carrier USS Dwight D. Eisenhower to hold the Hatay frontier against Syria; the war is fought along the coast road from Hatay to Bassel Al-Assad, Rene Mouawad and Shayrat. Level 1 (the Northern Coastal Command) is a short push to take Bassel Al-Assad; at Levels 2 and 3 (Syria, then Syria and its Russian backers with Tu-22M3s from Damascus) the war is won by breaking the enemy's supply. The campaign starts at midnight, with the F-117A strike on the SA-5 batteries already done, and flies the 2000 equipment by default (A-10A, F-14B, Link 16 off). The Caucasus is unchanged. A new campaign now starts in the theatre's own year.
+
 ## v0.41.501, a theatre can be won by the enemy's supply collapsing
 A theatre pack can name a level that is won when the enemy's Force Index stays at or below a line for a few nights running (the Syria pack: Levels 2 and 3, where nobody marches to a final objective). The Overview shows how close the collapse is (distant, approaching, close, under way). The Caucasus has no such rule and is unchanged.
 

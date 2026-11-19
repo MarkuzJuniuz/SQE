@@ -256,9 +256,10 @@ def _opening_strike(st, th: dict, d) -> str:
 
 
 def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str = "caucasus",
-                 seed: int | None = None, start_date: str = "2006-06-12", night_ops: bool = True,
+                 seed: int | None = None, start_date: str | None = None, night_ops: bool = True,
                  player_squadron: str | None = None, a10_variant: str | None = None, f14_variant: str | None = None, link16: bool | None = None) -> CampaignState:
     th = theatres.use(theatre)                            # S90 J5: the theatre first: `get_difficulty` applies the pack's level_overrides
+    start_date = start_date or f"{th['era']['year']}-06-12"            # S90 J7: no date given = the 12th of June of the theatre's era year (Caucasus 2006 = the old default, Syria 2000)
     d: Difficulty = get_difficulty(level)
     rng = random.Random(seed)
     t = theatres.terrain()
