@@ -104,6 +104,25 @@ def site_side(state, th: dict, rts: list, sides: list, x: float, y: float) -> st
     return cut_side(state, x, y) or field_side(th, x, y)
 
 
+def along(rts: list, x: float, y: float) -> list:
+    """S108: [(route index, km along that route)] for every route that passes within SNAP_M of (x, y) (the nearest point of the route to it). Used to order the depots of the two sides along a road."""
+    out = []
+    for ri, r in enumerate(rts):
+        cum, best = 0.0, None
+        for i in range(len(r) - 1):
+            ax, ay = r[i]; bx, by = r[i + 1]
+            dx, dy = bx - ax, by - ay
+            seg = math.hypot(dx, dy)
+            t = max(0.0, min(1.0, ((x - ax) * dx + (y - ay) * dy) / max(1.0, dx * dx + dy * dy)))
+            d = math.hypot(x - (ax + t * dx), y - (ay + t * dy))
+            if d <= SNAP_M and (best is None or d < best[0]):
+                best = (d, (cum + t * seg) / 1000.0)
+            cum += seg
+        if best is not None:
+            out.append((ri, best[1]))
+    return out
+
+
 def heading_at(th: dict, x: float, y: float, max_m: float = 400.0):
     """v0.41.259: the rough heading (degrees, DCS x north / y east, same turn as routes.bearing) of the road stretch nearest to (x, y) within max_m, or None (no road net or no road that
     close). The stretches are about 900 m long (a road's bends are not in them), so this is a heading for placing things beside the road, not a road centre line."""

@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.496, road depots: a cap, no interleaving, and a depot the front cuts off can fall
+The road depots (fuel points and supply dumps) of the two sides keep their distance now: none lies more than 100 km from its own side's nearest airfield, no depot of one side lies within 20 km of one of the other, and along a road the two sides' depots no longer alternate (all of one side, then all of the other). A side that cannot fill its quota that way gets fewer depots. When the front moves and re-assigns a road, a depot that would break these rules is destroyed for good instead of changing hands, and the war log says so. Campaigns where blue has no road depots (the Caucasus today) are unchanged.
+
 ## v0.41.495, SA-5 and SA-9 sites, and the long-range SAM tier as data
 Two new red SAM site kinds are in the data: the SA-5 (S-200, long range: launchers plus its tracking and search radars) and the SA-9 (Strela-1). The SA-5 is planned with the reach XO's probe flights measured (about 66 nm against a high flyer). The planner's "long-range system" rules, which were wired to the SA-10, now read one table, and a theatre pack can name its own long-range systems. No Caucasus campaign changes: the SA-10 rules are as they were.
 

@@ -83,7 +83,9 @@ def supply_rows(state) -> list:
                 continue
             h = a.health
             days = max(1, round((1.0 - h) / rate)) if rate > 0 else 99
-            if h < prev.get(a.id, h) - 1e-6:
+            if a.id in (g.get("road_fell") or []):
+                st_ = "lost, the front cut its road"
+            elif h < prev.get(a.id, h) - 1e-6:
                 st_ = "struck since last night, no repair tonight"
             elif h <= 0.05:
                 st_ = f"destroyed, about {days} day{'s' if days != 1 else ''} to rebuild"
