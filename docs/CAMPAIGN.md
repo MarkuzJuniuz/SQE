@@ -305,7 +305,7 @@ Red's raids on troops, garrisons and supply sites are led by the cheap **Su-17M4
 
 ### Blue in Syria
 
-Blue has 18 squadrons and 284 jets at every level: two F-14B squadrons and two F/A-18C squadrons on the carrier, five F-16C, three F-15C (plus the AI-only HAVCAP F-15C), three F-15E (AI only), one A-10 squadron at Incirlik and the **8th FS 'Black Sheep' (12 F-117A, AI only)**. You can fly the F-14B, F/A-18C, F-16C, F-15C and A-10. The **Era Equipment** setting (New Campaign) picks the airframes of the year: Syria 2001 defaults to the A-10A, the F-14B and no Link 16 data. The weapons follow the year: the A-10A carries no JDAM and no targeting pod (Mavericks, laser and cluster bombs), the F-14B and the F-117A drop laser-guided bombs only, while the F-16C, F/A-18C and F-15E carry JDAM, JSOW and SLAM-ER, which were new in 2001 and still in limited supply.
+Blue has 18 squadrons and 284 jets at every level: two F-14B squadrons and two F/A-18C squadrons on the carrier, five F-16C, three F-15C (plus the AI-only HAVCAP F-15C), three F-15E (AI only), one A-10 squadron at Incirlik and the **8th FS 'Black Sheep' (12 F-117A, AI only)**. You can fly the F-14B, F/A-18C, F-16C, F-15C and A-10. The **Era Equipment** setting (New Campaign) picks the airframes of the year: Syria 2001 defaults to the A-10A, the F-14B and no Link 16 data. The weapons follow the year: the A-10A carries no JDAM and no targeting pod (Mavericks, laser and cluster bombs), the F-14B and the F-117A drop laser-guided bombs only, while the F-16C, F/A-18C and F-15E carry JDAM, JSOW and SLAM-ER, all in service by 2001 but still new, and not on every jet.
 
 ### The opening night
 
