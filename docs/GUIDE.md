@@ -86,7 +86,8 @@ First launch:
 ## 4. How a turn works
 
 The campaign runs in **4-hour turns**, six a day, starting at 08:00 on Day 1. Each turn the planner lays out that turn's
-packages for both sides; whatever you do not fly is settled by the war simulation.
+packages for both sides; whatever you do not fly is settled by the war simulation. The packages launch in four waves, an hour
+apart, so the start times on the Missions tab are spread over the turn's four hours (about four clusters).
 
 1. **Missions** tab: pick a tasking, then press **FLY** on the row of the flight you want to fly (green rows). SQE writes
    `SQE_Sortie.miz` and opens the **waiting window**. Base, carrier, tanker and AWACS cover patrols are planned each turn and
