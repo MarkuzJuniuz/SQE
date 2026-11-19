@@ -1,5 +1,11 @@
 # CHANGES.md
 
+## v0.41.515, the Nighthawks fly through SAM belts
+The F-117A no longer stops at a SAM belt in front of its target: a stealth jet flies through one. It still only goes where no red air can reach, so in Syria it now hits radars, SAM sites and runways on most nights instead of almost never.
+
+## v0.41.514, the Nighthawks join the Syria campaign
+Syria now has its F-117A squadron: 8th FS 'Black Sheep', 12 jets at Incirlik, listed with the Coalition squadrons. It flies the night strikes on red's radars, SAM sites and runways that the Syria briefing already promised.
+
 ## v0.41.513, the Overview shows the right operation name
 The Overview's operation title now follows the campaign's theatre (Operation LEVANT HORIZON in Syria); it used to show the Caucasus's Operation IRON TIDE until the app was restarted.
 

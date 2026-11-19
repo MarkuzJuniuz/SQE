@@ -356,7 +356,7 @@ class PackageBuilder:
         if math.hypot(tx - b.x, ty - b.y) / NM > reach:
             return False
         obj, asset = self._ctx
-        if obj is not None and obj.type not in _FLEET and tm.blockers(self.state, (b.x, b.y), (tx, ty), asset):
+        if obj is not None and obj.type not in _FLEET and not f117.is_job(obj) and tm.blockers(self.state, (b.x, b.y), (tx, ty), asset):
             return False
         return True
 
