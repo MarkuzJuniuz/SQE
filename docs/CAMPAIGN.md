@@ -185,7 +185,7 @@ reinforcements; the rest are free for patrols and raids. Jets that fly go to ref
 
 **How red's jets are laid out.** Each level gives every red field a fixed number of jets, sized to the field's parking. At Level 3 a field is filled to
 about 70% of its parking, which leaves room for squadrons that fall back from a lost field (about 30%). Level 2 has 75% of Level 3's jets at each
-field, and Level 1 fills its four fields to about 43% of their parking. The jets are grouped into squadrons of a few types per field, up to 6 jets at
+field, and Level 1 fills its four fields to about 70% (Gelendzhik about 60%). (These are the Caucasus figures; Syria's are in section 10.) The jets are grouped into squadrons of a few types per field, up to 6 jets at
 Level 1, 12 at Level 2 and 14 at Level 3 (about 10 to 12 is the Soviet and Russian norm), so a field flies one or two types in full squadrons, not
 two or three jets of everything. The Forces screen lists them with in-universe names such as "Sochi-Adler MiG-21Bis Sqn #2"; a squadron that withdraws keeps its name.
 
@@ -297,6 +297,9 @@ Who you fight depends on the level: Level 1 is **the Northern Coastal Command** 
 | Air defence integration, red counter-attacks, ground pressure | as in section 2 (0.15 / 0.10 / 0.15) | 0.55 / 0.30 / 0.45 | 0.90 / 0.55 / 0.80 |
 | Tu-22M3 bomber wing | none | none | 16 Tu-22M3 with 12 Su-27 escorts at Damascus |
 | Victory | take Bassel Al-Assad | red's supply collapses (see below) | red's supply collapses |
+
+Red's jets fill each field's parking to about 75% at Level 1 (four small fields), about 60% at Level 2 (85% of Level 3's fill: a regional power) and about
+70% at Level 3 (Damascus is held back for the bomber wing).
 
 Red's raids on troops, garrisons and supply sites are led by the cheap **Su-17M4** attack jet. At Level 3 the Tu-22M3 wing raids the carrier along the line from the carrier through Damascus, at most 12 bombers at a time, flown as a set piece with its SEAD in the turn before, as in section 5.
 
