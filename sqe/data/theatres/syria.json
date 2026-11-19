@@ -799,7 +799,8 @@
   "Larnaca": "LARNACA  ILS 110.30 RWY22  VOR 112.80 LCA  no TACAN",
   "Paphos": "PAPHOS  ILS 108.90 RWY29  TACAN 79X PHA  VOR 117.90",
   "Muwaffaq Salti": "MUWAFFAQ SALTI  ILS 109.70 RWY26  no TACAN",
-  "Adana Sakirpasa": "ADANA  ILS 108.70 RWY05  VOR 112.70 ADA  no TACAN"
+  "Adana Sakirpasa": "ADANA  ILS 108.70 RWY05  VOR 112.70 ADA  no TACAN",
+  "Hatay": "HATAY  ILS 108.90 RWY04  VOR 112.05 HTY  no TACAN"
  },
  "ils_runway": {
   "Incirlik": 5,
@@ -807,7 +808,8 @@
   "Larnaca": 22,
   "Paphos": 29,
   "Muwaffaq Salti": 26,
-  "Adana Sakirpasa": 5
+  "Adana Sakirpasa": 5,
+  "Hatay": 4
  },
  "climate": {
   "source": "Latakia monthly normals as published in Wikipedia 'Latakia': sunshine hours (NOAA 1961-1991) and days with precipitation of 1 mm or more (1991-2020 normals, Starlings Roost Weather). sun_frac = sunshine hours / possible daylight hours at 35.5N (day length from the solar declination at mid-month); rain_frac = precipitation days / days in month; temp_c = monthly mean temperature (1991-2020), rounded. wind_ms, wind_from_deg and fog are hand-tuned judgment calls, not measured.",
