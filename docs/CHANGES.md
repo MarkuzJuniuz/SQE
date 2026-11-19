@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.512, the Damascus raid can field 12 bombers
+Syria Level 3's escort wing at Damascus is 12 Su-27 (was 8), so the land strikes no longer leave too few escorts for a full 12-bomber raid.
+
 ## v0.41.511, Auto-Skip: a rule instead of a box
 The Crew Rest frame is gone: a thin line above Crew Rest marks it and its hours field as their own group, and all the tick boxes start at the same left edge.
 
