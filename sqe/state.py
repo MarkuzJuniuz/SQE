@@ -100,6 +100,7 @@ class CampaignState:
     link16: bool = True                            # False: no jet is a Link 16 member or donor (no STN codes, no package net, no briefing text)
     campaign_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
     day: int = 1
+    start_hour: int = 8                            # S90 J5b: the hour Day 1 / turn 0 starts (the theatre pack's `start_hour`, fixed when the campaign is created; an old save has none = 8, the Caucasus clock). `clock.use` makes it the current one
     turn: int = 0                                  # v0.41.334: the clock (clock.py): four-hour turns since 08:00 (S25; two-hour before) on Day 1; `day` stays equal to clock.day_of(turn). Session._tick moves it one turn at a time (v0.41.337, Phase 3)
     sortie_counter: int = 0
     player: PlayerProfile | None = None
@@ -129,6 +130,9 @@ class CampaignState:
     fleet: dict = field(default_factory=dict)        # v0.41.257: the carrier group's losses (fleet.py): a sunk carrier's days away, sunk escorts; {} = all afloat
     blue_sams: dict = field(default_factory=dict)    # v0.41.62: Blue's air defence sites (bsam_<field>_pat / hawk / aaa): the same record as red's SAM assets (sams.py)
 
+    def __post_init__(self) -> None:
+        clock.use(self.start_hour)                     # S90 J5b: the clock's Day 1 starts at this campaign's hour from the moment it exists (created or loaded)
+
     # ---- helpers ------------------------------------------------------------------------
     def campaign_date(self):
         from datetime import date, timedelta
@@ -151,7 +155,7 @@ class CampaignState:
             "format": FORMAT_VERSION, "compat": COMPAT_ERA, "app_version": __version__, "saved": datetime.now().isoformat(timespec="seconds"),
             "name": self.name, "theatre": self.theatre, "level": self.level, "campaign_id": self.campaign_id,
             "a10_variant": self.a10_variant, "f14_variant": self.f14_variant, "link16": self.link16,
-            "day": self.day, "turn": self.turn, "turn_min": clock.TURN_MIN, "sortie_counter": self.sortie_counter, "status": self.status,
+            "day": self.day, "turn": self.turn, "start_hour": self.start_hour, "turn_min": clock.TURN_MIN, "sortie_counter": self.sortie_counter, "status": self.status,
             "start_date": self.start_date, "night_ops": self.night_ops, "pilot": self.pilot,
             "front": self.front, "front_days": self.front_days, "ground": self.ground,
             "player": asdict(self.player) if self.player else None,
@@ -185,7 +189,7 @@ class CampaignState:
             raise ValueError(f"This campaign was saved with {int(d.get('turn_min', 120)) // 60}-hour turns; turns are now {clock.TURN_MIN // 60} hours, so its dates cannot be read. Please start a new campaign.")
         _upgrade_su34(d)                                                  # S106: an old save's Su-34s are Su-24Ms now
         s = cls(name=d["name"], theatre=d.get("theatre", "caucasus"), level=d.get("level", 2),
-                campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1), turn=int(d.get("turn", 0)),
+                campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1), turn=int(d.get("turn", 0)), start_hour=int(d.get("start_hour", 8)),
                 sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"),
                 start_date=d.get("start_date", "2004-06-12"), night_ops=True, pilot=d.get("pilot", {}),
                 a10_variant=d.get("a10_variant", "A-10C"), f14_variant=d.get("f14_variant", "F-14BU"), link16=bool(d.get("link16", True)),

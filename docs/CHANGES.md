@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.500, a theatre can start its campaign at another hour
+A theatre pack can set the hour Day 1 starts (the Syria pack: midnight). The campaign remembers it, the war clock, the turn labels, the mission times and the night turns follow it, and an older save (or the Caucasus) still starts at 08:00 as before.
+
 ## v0.41.499, a scripted opening strike for a theatre
 A theatre pack can now open the campaign with a strike that has already happened: every red site of one SAM type (the Syria pack: the SA-5 batteries at Levels 2 and 3) starts destroyed and shows in the war log, then comes back by the normal rebuild rule after about a week, at half strength. The Caucasus has none and is unchanged.
 
