@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.499, a scripted opening strike for a theatre
+A theatre pack can now open the campaign with a strike that has already happened: every red site of one SAM type (the Syria pack: the SA-5 batteries at Levels 2 and 3) starts destroyed and shows in the war log, then comes back by the normal rebuild rule after about a week, at half strength. The Caucasus has none and is unchanged.
+
 ## v0.41.498, red raid types per theatre
 Which red aircraft lead the raids on troops and supply sites, and which fly the field raids and the SEAD and stand-off raids, now comes from the theatre pack (the Caucasus keeps the Su-25 and the Su-24M). A theatre that names the Su-17M4 for the attack role sends it on the troop and supply raids with its bomb load, and never on a SEAD or stand-off raid it cannot carry. No Caucasus campaign changes.
 
