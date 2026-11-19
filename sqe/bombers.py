@@ -58,7 +58,12 @@ def escorts_for(n: int) -> int:
 
 
 def max_raid(d) -> int:
-    return MAX_RAID.get(int(getattr(d, "level", 3)), MAX_RAID[3] if int(getattr(d, "level", 3)) >= 3 else 4)
+    from . import theatres
+    lv = int(getattr(d, "level", 3))
+    ov = (theatres.hook("max_raid") or {}).get(str(lv))                  # S90: a pack's `max_raid` {level: n} (Syria L3 12 of a wing of 16: the 16-jet wing could never field the Caucasus's 16 after the day's land strikes)
+    if ov is not None:
+        return int(ov)
+    return MAX_RAID.get(lv, MAX_RAID[3] if lv >= 3 else 4)
 
 
 def escorts_held(state) -> bool:

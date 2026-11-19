@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.505, Syria raids come from Syria; the campaign name follows the theatre
+The Tu-22M3 carrier raid in Syria now arrives along the real line from Damascus over the Syrian coast (the interceptors and the SEAD prep plan around the SAM belt), and the full raid is 12 of the 16 bombers so a safe raid can happen. The New Campaign window proposes the theatre's own name (Iron Tide, Levant Horizon) until you type one.
+
 ## v0.41.504, the F-117A Nighthawk
 Blue gets a small squadron of F-117A stealth fighter-bombers in the Caucasus (12 jets at Kutaisi). They are flown by the AI only, and only at night: a pair or a four-ship goes alone against a red early-warning radar or SAM site that no red fighter patrol or alert pair is close enough to reach, and drops laser-guided GBU-27s. They are the hardest airframe to keep: a 16-hour turnaround, and a lost one is replaced only after four days. The Syria 2000 pack does not have the squadron yet. Campaigns without it are unchanged.
 

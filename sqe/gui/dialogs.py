@@ -107,7 +107,8 @@ class NewCampaignDialog(QDialog):
         eb.addWidget(self.era_btn); eb.addStretch(1); ev.addLayout(eb)
         eh = QLabel("Fixed when the campaign is created. Defaults follow the theatre's year."); eh.setObjectName("small"); eh.setWordWrap(True); ev.addWidget(eh)
         lay.addWidget(eq)
-        self.th.currentIndexChanged.connect(self._era_defaults)                  # (the defaults were applied once above, before "You fly" was filled)
+        self.th.currentIndexChanged.connect(self._era_defaults)
+        self.th.currentIndexChanged.connect(self._theatre_name)                  # (the defaults were applied once above, before "You fly" was filled)
         self.blurb = QLabel(); self.blurb.setWordWrap(True); self.blurb.setObjectName("dim"); lay.addWidget(self.blurb)
         self.lvl.currentIndexChanged.connect(self._b); self._b()
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel); bb.accepted.connect(self.accept)
@@ -115,6 +116,17 @@ class NewCampaignDialog(QDialog):
 
     def _b(self):
         self.blurb.setText(LEVELS[self.lvl.currentData()].blurb)
+
+    def _theatre_name(self):
+        """The campaign name follows the theatre ("Iron Tide", "Levant Horizon": the pack's title without "Operation") while the player has not typed a name of their own."""
+        from .. import theatres as _th
+        try:
+            new = _th.load(self.th.currentData() or "caucasus")["title"].replace("Operation ", "").title()
+        except Exception:
+            return
+        if self.name.text() == getattr(self, "_auto_name", "Iron Tide"):
+            self.name.setText(new)
+        self._auto_name = new
 
     def _era_defaults(self):
         """Set the year label and the three Era Equipment choices to the selected theatre's `era` values (a variant this build does not have leaves that picker on its first entry)."""
