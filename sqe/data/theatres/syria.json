@@ -248,16 +248,16 @@
    "ab_shayrat": 42
   },
   "2": {
-   "ab_bassel": 20,
-   "ab_duhur": 9,
-   "ab_hama": 11,
-   "ab_shayrat": 33,
-   "ab_tiyas": 17,
-   "ab_palmyra": 3,
-   "ab_sayqal": 35,
-   "ab_damascus": 25,
-   "ab_dumayr": 37,
-   "ab_nasiriyah": 12
+   "ab_bassel": 23,
+   "ab_duhur": 11,
+   "ab_hama": 13,
+   "ab_shayrat": 39,
+   "ab_tiyas": 20,
+   "ab_palmyra": 4,
+   "ab_sayqal": 41,
+   "ab_damascus": 30,
+   "ab_dumayr": 43,
+   "ab_nasiriyah": 14
   },
   "3": {
    "ab_bassel": 23,
@@ -804,12 +804,12 @@
    "Su_24M": 10
   },
   "2": {
-   "MiG_21Bis": 34,
-   "MiG_23MLD": 50,
-   "MiG_29A": 22,
-   "MiG_25PD": 18,
-   "Su_17M4": 55,
-   "Su_24M": 23
+   "MiG_21Bis": 40,
+   "MiG_23MLD": 58,
+   "MiG_29A": 25,
+   "MiG_25PD": 21,
+   "Su_17M4": 67,
+   "Su_24M": 27
   },
   "3": {
    "MiG_23MLD": 36,

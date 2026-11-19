@@ -155,9 +155,12 @@
             "ab_sukhumi"
         ]
     },
+    "red_roster": {
+        "2": {"MiG_31": 6, "MiG_29S": 24, "MiG_29A": 34, "MiG_23MLD": 17, "Su_25": 100, "Su_24M": 38}
+    },
     "red_fill": {
         "1": {"ab_sukhumi": 16, "ab_gudauta": 22, "ab_sochi": 48, "ab_gelen": 8},
-        "2": {"ab_sukhumi": 12, "ab_gudauta": 16, "ab_sochi": 36, "ab_krymsk": 30, "ab_maykop": 30, "ab_nalchik": 10, "ab_beslan": 8, "ab_gelen": 7, "ab_minvody": 15},
+        "2": {"ab_sukhumi": 16, "ab_gudauta": 22, "ab_sochi": 48, "ab_krymsk": 40, "ab_maykop": 40, "ab_nalchik": 13, "ab_beslan": 11, "ab_gelen": 9, "ab_minvody": 20},
         "3": {"ab_sukhumi": 16, "ab_gudauta": 22, "ab_sochi": 48, "ab_krymsk": 40, "ab_maykop": 40, "ab_nalchik": 13, "ab_beslan": 11, "ab_gelen": 9, "ab_minvody": 20}
     },
     "wing_weight": {

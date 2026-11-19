@@ -80,7 +80,7 @@ LEVELS: dict[int, Difficulty] = {
                   raid_mix=(0.10, 0.10, 0.20), blue_garrison_size=1.0, blue_rebuild=0.20, sam_retreat=0.6, air_retreat=0.6, road_sites_red=15, road_sites_blue=0, road_open=0.10, road_battalion=0.04),
     2: Difficulty(2, "Level 2 - Regional Power", "A real air force and layered SAMs, but not a peer. "
                   "A competent campaign wins; a careless one bleeds.",
-                  enemy_air_total=128, enemy_types=["MiG_31", "MiG_29A", "MiG_29S", "MiG_23MLD", "Su_24M", "Su_25"],
+                  enemy_air_total=128, red_squadron_max=14, enemy_types=["MiG_31", "MiG_29A", "MiG_29S", "MiG_23MLD", "Su_24M", "Su_25"],
                   sam_variants=["SA-2", "SA-3", "SA-6", "SA-11", "AAA"], sam_sites_per_cluster=3, iads=0.55,
                   enemy_skill="Good", loss_rate=0.06, base_damage=0.35, variance=0.8,
                   friendly_replenish=0.08, enemy_replenish=0.05, asset_repair=0.04, sam_repair=0.06,
