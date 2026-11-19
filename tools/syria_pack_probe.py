@@ -28,7 +28,7 @@ sys.path.insert(0, str(ROOT))
 ROSTER_TOTAL = {1: 94, 2: 202, 3: 238}
 SECTORS = {1: 5, 2: 8, 3: 11}
 SA5 = {1: 0, 2: 2, 3: 3}
-BOMBERS = {1: (0, 0), 2: (0, 0), 3: (16, 8)}
+BOMBERS = {1: (0, 0), 2: (0, 0), 3: (16, 12)}
 DAYS = 12
 
 
