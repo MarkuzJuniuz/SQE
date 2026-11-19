@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.518, the Syria briefing matches the opening strike
+The Level 2 and Level 3 briefings now say the Nighthawks also took out the deep early-warning radars (Level 3: and some SA-10 sites), as the war log does.
+
 ## v0.41.517, the opening headline names the other targets
 The war-log line for the midnight strike now says the Nighthawks also hit some SA-10 sites and early-warning radars (only the kinds that were hit, no counts); the lines below it still name every site.
 
