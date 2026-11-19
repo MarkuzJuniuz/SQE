@@ -237,86 +237,128 @@ def sweep_4ships(n_def_flights: int) -> int:
     return int(math.ceil(max(0, threat.fighters_required(n_def_flights) - 4) / 4))
 
 
+def _tier_room(free: dict, tier: dict, sid: str, wave: int) -> int:
+    """Jets of one squadron a sortie of `wave` can draw from one pool: the ready ones plus the tiers of waves 2 to `wave`."""
+    return free.get(sid, 0) + sum((tier.get(sid) or [])[:max(0, int(wave) - 1)])
+
+
+def _tier_spend(free: dict, tier: dict, sid: str, n: int, wave: int) -> None:
+    """Spend n jets of one squadron for a sortie of `wave`: the LATEST tier it may use first (wave, wave - 1 ... 2), then the ready jets, so the earlier waves keep the jets they can use."""
+    ts = tier.get(sid) or []
+    left = n
+    for k in range(min(int(wave) - 1, len(ts)) - 1, -1, -1):
+        t = min(ts[k], left)
+        ts[k] -= t
+        left -= t
+        if left <= 0:
+            break
+    free[sid] = free.get(sid, 0) - max(0, left)
+
+
 class Ledger:
     """The jets each squadron can still be asked for. `free` is what the builder reads and spends (`ledger.free[sid] -= n`).
 
-    v0.41.338 (campaign rules plan Phase 4): one Ledger serves a whole TURN with two launch waves. `free` = the jets ready now (wave 1); `late` = the jets that finish
-    their refit by the second wave (`refit.ready_by(q, ready_min)` less `available`). `view(wave)` hands the builder a throw-away Ledger for one wave, and `settle` books what
-    the builder spent in it: wave 2 spends the late jets first, so the ready ones stay for wave 1. `ready_min=None` (the plain `Ledger(state)`) means no late jets."""
-    hfree = None                 # v0.41.353 (Phase 9b): the jets of the HAVCAP squadrons (`Squadron.role`), kept apart: only the AWACS / tanker guards draw them (`hroom` / `htake`); every other reader sees 0 in `free` / `late`
-    hlate = None
+    v0.41.338 (campaign rules plan Phase 4): one Ledger serves a whole TURN with launch waves. `free` = the jets ready now (wave 1). S110 (v0.41.521): the turn has four waves, an hour apart
+    (`timeofday.WAVE_OFFSETS_MIN`), and the jets that are not ready yet come in TIERS, one per later wave: `tier[sid][w - 2]` = the jets whose refit ends after wave w - 1 opens and by wave w opens
+    (`refit.ready_by`; tier 2 counts against `available`). A sortie of wave w draws `free` and the tiers 2 to w (`room`) and spends the LATEST tier first (w, then w - 1 ... then `free`), so the earlier
+    waves keep the jets they can use. `late` = the tiers added up per squadron, read-only. `view(wave)` hands the builder a throw-away Ledger for one wave, and `settle` books what the builder spent in it.
+    `t_abs=None` (the plain `Ledger(state)`) means no later tiers."""
+    hfree = None                 # v0.41.353 (Phase 9b): the jets of the HAVCAP squadrons (`Squadron.role`), kept apart: only the AWACS / tanker guards draw them (`hroom` / `htake`); every other reader sees 0 in `free` / `tier`
+    htier = None
 
-    def __init__(self, state: CampaignState, ready_min: int | None = None):
+    def __init__(self, state: CampaignState, t_abs: int | None = None):
         self.free = {sid: (0 if runways.is_closed(state, s.base_id) else s.available) for sid, s in state.squadrons.items()}      # v0.41.254: a cratered field flies nothing
-        self.late = {sid: 0 for sid in self.free}
-        if ready_min is not None:
-            from . import refit
+        self.tier = {sid: self.no_tiers() for sid in self.free}
+        if t_abs is not None:
             for sid, s in state.squadrons.items():
                 if not runways.is_closed(state, s.base_id) and s.reserve <= 0:         # a resting squadron's jets go to its reserve, not to the line
-                    self.late[sid] = max(0, refit.ready_by(s, ready_min) - s.available)
-        self.hfree, self.hlate = {}, {}
+                    self.tier[sid] = self.tiers_of(s, t_abs)
+        self.hfree, self.htier = {}, {}
         for sid, s in state.squadrons.items():
             if s.role == "havcap":                                                     # guards only: out of the pools the packages, patrols and scrambles read
-                self.hfree[sid], self.hlate[sid] = self.free[sid], self.late[sid]
-                self.free[sid], self.late[sid] = 0, 0
+                self.hfree[sid], self.htier[sid] = self.free[sid], self.tier[sid]
+                self.free[sid], self.tier[sid] = 0, self.no_tiers()
+
+    @staticmethod
+    def no_tiers() -> list:
+        from .timeofday import NWAVES
+        return [0] * (NWAVES - 1)
+
+    @staticmethod
+    def tiers_of(q, t_abs: int) -> list:
+        """The tiers of one squadron (blue Squadron or RedSquadron) for a turn that opens at `t_abs`: [jets ready by wave 2 beyond `available`, by wave 3 beyond wave 2, ...]."""
+        from . import refit
+        from .timeofday import WAVE_OFFSETS_MIN
+        out, prev = [], q.available
+        for off in WAVE_OFFSETS_MIN[1:]:
+            r = refit.ready_by(q, t_abs + off)
+            out.append(max(0, r - prev))
+            prev = max(prev, r)
+        return out
+
+    @classmethod
+    def blank(cls) -> "Ledger":
+        """An empty ledger to fill (`free[sid]` and `tier[sid]`): red's, `redair.red_ledger`."""
+        c = cls.__new__(cls)
+        c.free, c.tier, c.hfree, c.htier = {}, {}, {}, {}
+        return c
+
+    @property
+    def late(self) -> dict:
+        """READ ONLY: the jets that come ready after the turn opens (every later tier added up) per squadron. Never write it: spend through `take` / `settle`."""
+        return {sid: sum(ts) for sid, ts in self.tier.items()}
+
+    def adds(self, wave: int) -> bool:
+        """True when some squadron still has jets in the tier of this wave (a wave with none adds nothing to the room of the one before)."""
+        return any(len(ts) >= wave - 1 > 0 and ts[wave - 2] > 0 for ts in self.tier.values())
 
     def scale(self, sids, f: float) -> None:
-        """A damaged carrier deck launches fewer of its jets (carrier_hit.deck_factor): both pools shrink for these squadrons."""
+        """A damaged carrier deck launches fewer of its jets (carrier_hit.deck_factor): every pool shrinks for these squadrons."""
         for sid in sids:
             self.free[sid] = int(self.free[sid] * f)
-            self.late[sid] = int(self.late[sid] * f)
+            self.tier[sid] = [int(t * f) for t in self.tier[sid]]
 
     def room(self, sid: str, wave: int) -> int:
-        """Jets of a squadron a sortie of this wave can still draw: the ready ones, and in wave 2 also the late ones."""
-        return self.free.get(sid, 0) + (self.late.get(sid, 0) if wave == 2 else 0)
+        """Jets of a squadron a sortie of this wave can still draw: the ready ones, and the jets of every tier up to this wave."""
+        return _tier_room(self.free, self.tier, sid, wave)
 
     def take(self, sid: str, n: int, wave: int) -> bool:
-        """Spend n jets of a squadron on a standing patrol or guard of this wave (v0.41.339, Phase 4b: they are planned from the turn's ledger, before the packages). Wave 2 spends the late
-        jets first, so the ready ones stay for wave 1, as `settle` does. False (and nothing spent) when the squadron has not got them."""
+        """Spend n jets of a squadron on a standing patrol or guard of this wave (v0.41.339, Phase 4b: they are planned from the turn's ledger, before the packages). The latest tier goes first, so the
+        earlier waves keep the jets they can use, as `settle` does. False (and nothing spent) when the squadron has not got them."""
         if self.room(sid, wave) < n:
             return False
-        k = min(self.late.get(sid, 0), n) if wave == 2 else 0
-        if k:
-            self.late[sid] -= k
-        self.free[sid] = self.free.get(sid, 0) - (n - k)
+        _tier_spend(self.free, self.tier, sid, n, wave)
         return True
 
     def hroom(self, sid: str, wave: int) -> int:
         """Jets of a HAVCAP squadron a guard of this wave can still draw (0 for any other squadron)."""
-        return (self.hfree or {}).get(sid, 0) + ((self.hlate or {}).get(sid, 0) if wave == 2 else 0)
+        return _tier_room(self.hfree or {}, self.htier or {}, sid, wave)
 
     def htake(self, sid: str, n: int, wave: int) -> bool:
-        """`take` for a HAVCAP squadron's guard pair: wave 2 spends the late jets first."""
+        """`take` for a HAVCAP squadron's guard pair: the latest tier goes first."""
         if self.hroom(sid, wave) < n:
             return False
-        k = min(self.hlate.get(sid, 0), n) if wave == 2 else 0
-        if k:
-            self.hlate[sid] -= k
-        self.hfree[sid] = self.hfree.get(sid, 0) - (n - k)
+        _tier_spend(self.hfree, self.htier, sid, n, wave)
         return True
 
     def copy(self) -> "Ledger":
-        c = Ledger.__new__(Ledger)
-        c.free, c.late = dict(self.free), dict(self.late)
-        c.hfree, c.hlate = dict(self.hfree or {}), dict(self.hlate or {})
+        c = Ledger.blank()
+        c.free, c.tier = dict(self.free), {sid: list(ts) for sid, ts in self.tier.items()}
+        c.hfree, c.htier = dict(self.hfree or {}), {sid: list(ts) for sid, ts in (self.htier or {}).items()}
         return c
 
     def view(self, wave: int) -> "Ledger":
-        v = Ledger.__new__(Ledger)
-        v.free = dict(self.free) if wave == 1 else {sid: self.free[sid] + self.late[sid] for sid in self.free}
-        v.late = {sid: 0 for sid in self.free}
+        v = Ledger.blank()
+        v.free = {sid: self.room(sid, wave) for sid in self.free}
+        v.tier = {sid: self.no_tiers() for sid in self.free}
         return v
 
     def settle(self, view: "Ledger", wave: int) -> None:
-        """Book what the builder spent in `view`."""
+        """Book what the builder spent in `view`: the latest tier of the wave first."""
         for sid, left in view.free.items():
-            have = self.free[sid] if wave == 1 else self.free[sid] + self.late[sid]
-            used = have - left
-            if used <= 0:
-                continue
-            take = 0 if wave == 1 else min(used, self.late[sid])
-            self.late[sid] -= take
-            self.free[sid] -= used - take
+            used = self.room(sid, wave) - left
+            if used > 0:
+                _tier_spend(self.free, self.tier, sid, used, wave)
 
 
 class PackageBuilder:
@@ -324,7 +366,7 @@ class PackageBuilder:
         self.state, self.d = state, d
         self._tk, self._ctx = {}, (None, None)
         self.short = []                                  # v0.41.247: (role, x, y) of every slot of the day that no squadron could fill (ground.note_shortfall)
-        self.missing = 0                                 # v0.41.338: the jets the REQUIRED slots of the last `build` are short of (the turn planner moves a package with some to the second wave)
+        self.missing = 0                                 # v0.41.338: the jets the REQUIRED slots of the last `build` are short of (the turn planner moves a package with some to a later wave)
 
     def target_xy(self, obj: Objective):
         if obj.type in _FLEET:

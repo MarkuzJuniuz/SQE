@@ -78,11 +78,13 @@ At the start of each (day) turn the planner builds the turn's tasking list, in t
    day turn of Day 1 ("day 1 is brutal"; `engine.py`: `TASK_SHARE`, `PAIRS_PER_PACKAGE`, `N_MAX`, `DAY1_EXTRA`). A night turn plans a quarter (Level 1)
    or a third (Levels 2 and 3) of that. It takes the best-scoring job of each kind first, and no one kind may take more than 40% of the
    list, with the SAM wave (section 5) taken out first. The F-117A's night jobs (section 5) come on top of that list.
-   list.
 4. **Packages are built from the jets that are free.** A package is crewed from what the ledger shows (section 7). A job
    that cannot be crewed waits for the next turn.
-5. **Start times are set in two waves.** Wave 1 opens with the turn, wave 2 two hours later; packages start within about
-   25 minutes of their wave's opening.
+5. **Start times are set in four waves, an hour apart.** The waves open with the turn and 60, 120 and 180 minutes later;
+   packages start within about 25 minutes of their wave's opening. The jobs are spread over the four waves as evenly as they
+   go, the earlier waves first; packages that fold into one mission stay together in one wave, and a carrier raid and its prep
+   go in wave 1. A job goes to a later wave when its jets are not ready yet (section 7): the planner tries its wave and the later
+   ones, and keeps the one that crews it best.
 
 The jobs you can be offered are listed on the Missions tab: **Strike**, **Standoff Strike**, **OCA: Runway Strike**, **SEAD**,
 **Standoff DEAD**, **Close DEAD**, **Close Air Support** (including **Troops in Contact**), **Fighter Sweep**, and **Intercept**
@@ -229,13 +231,15 @@ the carrier is sunk, its aircraft are moved to land fields (any that cannot be p
 Each blue squadron has jets *authorised*, *available* (ready now) and some in **refit** or **reserve**.
 
 * A jet that flies a package or patrol lands and goes to **refit**: 3 hours as standard (the rugged A-10C and Su-25 take 2;
-  the Tu-22M3 and E-3 take 8, the F-117A 16). A sortie lasts about 100 minutes, so a jet from the first wave is ready for the next turn's
-  second wave, not its first. A jet that comes back damaged ("limping", under 90% health) takes twice as long to refit.
+  the Tu-22M3 and E-3 take 8, the F-117A 16). A sortie lasts about 100 minutes, so a jet that flew in a turn's first wave is ready about
+  40 to 65 minutes into the next turn (its second or third wave), one from the second wave 100 to 125 minutes in (third wave), one from
+  the third wave 160 to 185 in (fourth wave), and one from the fourth wave not before the turn after. A jet that comes back damaged ("limping", under 90% health) takes twice as long to refit.
   A jet that was shot down is gone.
 * **Replacements** arrive as a pair every 24 hours at a Force Index of 100% (slower below that, see the Force Index). The Tu-22M3 and the E-3 are replaced one airframe every
   48 hours and the F-117A one every 96 hours, regardless of the Force Index.
-* A planned turn draws its jets from the **ledger**: the jets ready now plus those that will be ready by the second wave.
-  Standing patrols and guards are taken off first, packages after, so patrols and strikes compete for the same jets. A job
+* A planned turn draws its jets from the **ledger**: the jets ready now (wave 1), and for each later wave the jets whose refit
+  ends by that wave's opening, so a package of wave 3 can use everything ready by the third wave and a package of wave 1 only the
+  jets ready now. A later wave spends its newest jets first, so the early waves keep theirs. Standing patrols and guards are taken off first, packages after, so patrols and strikes compete for the same jets. A job
   that cannot be crewed from what is left waits.
 * A squadron whose base falls moves to the nearest field with room, losing 30% of its jets, and sits out the move
   (3 or 6 turns).
@@ -247,15 +251,19 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
 ## 8. Standing cover: BARCAP, the AWACS, the tankers and their guards
 
 * **BARCAP** is blue's patrol over the areas that face red's launch points. Each turn a share of the areas that a squadron can
-  reach gets a pair (Level 3: 60% by day, 20% at night; Level 2: 40% and 16%; Level 1: 20% and 10%). A long-legged pair
-  holds the whole turn; a short-legged pair is relieved in the second wave. Strike packages carry the BARCAP that faces
+  reach gets a pair (Level 3: 60% by day, 20% at night; Level 2: 40% and 16%; Level 1: 20% and 10%). A station gets at most two pairs
+  a turn: the first goes up at the turn's start; when it leaves before the turn ends (a long-legged pair after 120 minutes, a short-legged
+  one after 30) the relief goes up in the first wave that opens as it leaves, the third wave for a long-legged pair and the second for a
+  short-legged one. Strike packages carry the BARCAP that faces
   their target while they fly; BARCAP is AI only.
 * **The AWACS and the tankers are assets, not freebies.** Blue has 4 E-3s (12 hours on orbit, 6 refit), 4 E-2Cs (4 hours on
   orbit, 6 refit), 8 KC-135s (4 hours on orbit, 3 refit) and 8 S-3Bs (2 hours, 3 refit). A package gets the AWACS and a tanker
   only if one is on orbit while it flies: a jet with a boom gets a KC-135, a probe-and-drogue jet (F-14, F/A-18C) the carrier's
   S-3B. A lost airframe is replaced slowly. Today the war sim does **not** take AWACS losses on its own (`AWACS_LOSS_ON` is off).
 * **Each of them has its own guard (HAVCAP).** One pair of fighters guards the E-3, the E-2C and the tanker for as long as the
-  asset is on orbit in the turn, flown by the HAVCAP squadron where there is one and by an ordinary fighter squadron otherwise.
+  asset is on orbit in the turn, flown by the HAVCAP squadron where there is one and by an ordinary fighter squadron otherwise. The
+  guard goes up in the last wave that opens before the asset's window starts (the first wave when the asset is up already), or in a later
+  wave when no pair is ready sooner.
   Every package that carries the asset carries its guard. The pair can refuel on the orbit.
 * **The AWACS sits on one fixed safe station** (behind the front, from the rear base: Kutaisi on the Caucasus, Paphos on Syria), not near you or your target. The tanker sits
   forward on the way home, clear of SAM rings and red's scramble circles.

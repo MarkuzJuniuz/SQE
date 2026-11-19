@@ -2,7 +2,7 @@
 
 A base BARCAP or a carrier BARCAP is planned on its own from the BARCAP areas (barcap.py): each TURN `plan_turn` puts a pair up over a share of the areas that can be up (CAP_SHARE, by level, day or
 night) and one guard pair for each AWACS / tanker that is on orbit in the turn, drawing the jets from the turn's ledger (`packages.Ledger`) BEFORE the packages are built, so patrols compete with
-packages for jets and nothing is double-booked. A pair whose airframe stays 30 minutes (a short-legged type) costs two pairs: one in the first wave and a relief in the second. The plan of the
+packages for jets and nothing is double-booked. A pair whose airframe stays 30 minutes (a short-legged type) costs two pairs: one in the first wave and a relief in the first later wave that opens as it leaves (S110: four waves an hour apart). The plan of the
 day so far is kept in `state.barcap["blue_flights"]` (every flight has its `turn`); once the packages' start times are known, `attach` gives each package the planned sortie of the area that
 faces its target and is up while it flies. Every planned pair is committed to refit at the end of its turn (`Session._sorties`): through the package it covers, else by its own flight id.
 Always AI only (XO 2026-10-21).
@@ -57,28 +57,30 @@ def _crew_havcap(ledger, sqs, wave: int):
 
 
 def _pairs(ledger, sqs, t0: int, t1: int, keep: int) -> list:
-    """The pairs one station needs in a turn [t0, t1), minutes of the day, drawn from the ledger: [(squadron, wave, start, end)]. One pair in the first wave, from the turn's start, stays as long
-    as its airframe does (a long-legged pair, 120 minutes, is relieved by a second pair in the second wave, since the turn is 240 minutes; S25). A short-legged pair (30 minutes) is relieved by a second pair that goes up in the second wave. A pair that can only be
-    crewed from the jets that are ready by the second wave goes up then."""
-    from .timeofday import WAVE2_OFFSET_MIN
+    """The pairs one station needs in a turn [t0, t1), minutes of the day, drawn from the ledger: [(squadron, wave, start, end)]. At most two pairs a station a turn. One pair in the first wave, from
+    the turn's start, stays as long as its airframe does. When that ends before the turn does (a short-legged pair, 30 minutes; a long-legged one, 120 minutes, since the turn is 240) a relief goes up
+    in the FIRST wave that opens at or after the minute the first pair is due to leave less the handover (S110: waves an hour apart; a 120-minute pair is relieved in wave 3, a 30-minute pair in wave 2),
+    crewed from that wave's room (a later wave when that one cannot crew it; with no wave left, the last one); it stays until its own endurance or the turn's end. A station that cannot be crewed in
+    wave 1 gets its pair in the first wave that can, from that wave's opening, with no relief."""
+    from .timeofday import NWAVES, wave_open
     out = []
-    sq = _crew(ledger, sqs, 1, keep)
-    if sq is not None:
-        e = barcap.endurance_min(sq.aircraft)
-        ledger.take(sq.id, 2, 1)
-        out.append((sq, 1, t0, min(t1, t0 + e)))
-        if t0 + e < t1 - barcap.HANDOVER_MIN:                             # a short leg: the second wave relieves it
-            sq2 = _crew(ledger, sqs, 2, keep)
+    first = next((w for w in range(1, NWAVES + 1) if _crew(ledger, sqs, w, keep) is not None), None)
+    if first is None:
+        return out
+    sq = _crew(ledger, sqs, first, keep)
+    e = barcap.endurance_min(sq.aircraft)
+    ledger.take(sq.id, 2, first)
+    out.append((sq, first, t0 + wave_open(first), min(t1, t0 + wave_open(first) + e)))
+    if first == 1 and t0 + e < t1 - barcap.HANDOVER_MIN:                  # the first pair leaves before the turn ends: a relief
+        due = e - barcap.HANDOVER_MIN
+        start = next((w for w in range(1, NWAVES + 1) if wave_open(w) >= due), NWAVES)
+        for w in range(start, NWAVES + 1):
+            sq2 = _crew(ledger, sqs, w, keep)
             if sq2 is not None:
                 e2 = barcap.endurance_min(sq2.aircraft)
-                ledger.take(sq2.id, 2, 2)
-                out.append((sq2, 2, t0 + WAVE2_OFFSET_MIN, min(t1, t0 + WAVE2_OFFSET_MIN + e2)))
-    else:
-        sq = _crew(ledger, sqs, 2, keep)
-        if sq is not None:
-            e = barcap.endurance_min(sq.aircraft)
-            ledger.take(sq.id, 2, 2)
-            out.append((sq, 2, t0 + WAVE2_OFFSET_MIN, min(t1, t0 + WAVE2_OFFSET_MIN + e)))
+                ledger.take(sq2.id, 2, w)
+                out.append((sq2, w, t0 + wave_open(w), min(t1, t0 + wave_open(w) + e2)))
+                break
     return out
 
 
@@ -153,8 +155,9 @@ def _guard_squadrons(state, base) -> list:
 def _plan_guards(state, ledger, flights, turn, t0, t1, wins) -> None:
     """One guard pair for each AWACS / tanker type that is on orbit in this turn (`wins`, from support_assets.plan). The tanker's guard is planned every turn it is up and takes any capable
     squadron's last pair; the AWACS's guard is planned every turn it is up too (S19, XO 2026-11-11: it sits on one fixed station, so nobody else would guard it). S71 (XO 2026-11-13): the one pair stays for the asset's whole time on orbit in the turn
-    (it can refuel on its track, like red's; a judgment call, no relay pair), so a package of either wave finds it up; it was 120 minutes, which since the 4-hour turns left the second wave without a guard."""
-    from .timeofday import WAVE2_OFFSET_MIN
+    (it can refuel on its track, like red's; a judgment call, no relay pair), so a package of any wave finds it up; it was 120 minutes, which since the 4-hour turns left the second wave without a guard.
+    S110 (four waves): the guard flies in the last wave that opens at or before its window starts; not crewed there, the next waves in order, and its start moves to that wave's opening."""
+    from .timeofday import NWAVES, wave_open
     for key, tag in GUARDS.items():
         a = (getattr(state, "support_assets", None) or {}).get(key)
         spans = [(max(s, t0), min(e, t1)) for s, e in (wins.get(key) or []) if e > t0 and s < t1]
@@ -165,16 +168,16 @@ def _plan_guards(state, ledger, flights, turn, t0, t1, wins) -> None:
         if not sqs and not hv:
             continue
         lo, hi = min(s for s, _ in spans), max(e for _, e in spans)
-        w = 1 if lo < t0 + WAVE2_OFFSET_MIN else 2
-        sq, hav = (_crew_havcap(ledger, hv, w) if hv else None), True
-        if sq is None:
-            sq, hav = _crew(ledger, sqs, w, 0), False                     # none ready (it has had its turn): the ordinary guards
-        if sq is None and w == 1:                                         # not ready at the turn's start: the second wave's jets go up when they are ready
-            lo = max(lo, t0 + WAVE2_OFFSET_MIN)
-            sq, hav = (_crew_havcap(ledger, hv, 2) if hv else None), True
+        w = max([k for k in range(1, NWAVES + 1) if t0 + wave_open(k) <= lo] or [1])
+        sq = None
+        while True:
+            sq, hav = (_crew_havcap(ledger, hv, w) if hv else None), True
             if sq is None:
-                sq, hav = _crew(ledger, sqs, 2, 0), False
-            w = 2
+                sq, hav = _crew(ledger, sqs, w, 0), False                 # none ready (it has had its turn): the ordinary guards
+            if sq is not None or w >= NWAVES:
+                break
+            w += 1                                                        # not ready in that wave: the next wave's jets go up when they are ready
+            lo = max(lo, t0 + wave_open(w))
         if sq is None or lo >= hi:
             continue
         (ledger.htake if hav else ledger.take)(sq.id, 2, w)

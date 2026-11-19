@@ -16,6 +16,7 @@ from .loadouts import LoadoutLibrary
 from .merging import Merging
 from .models import AssetKind, BaseKind, Objective, ObjectiveType, Role
 from . import airwings, barcap as barcap_, clock, detection, raids, redair, refit, sams, ground, support_assets, tempo
+from . import timeofday as _tod
 from .mission_builder import MissionBuilder, MissionOptions
 from .options import options_from_settings
 from .sead_timing import SeadTiming
@@ -230,7 +231,7 @@ class Session(Merging, SeadTiming):
 
     def _turn_rate(self, turn: int, ledger=None) -> float:
         """How many packages this turn plans (a fraction is a seeded chance of one more). With the turn's ledger (v0.41.345, scaled tasking Phase B): the free strike / SEAD / CAS pairs
-        (`room(sid, 2) // 2`, after the hold, the support windows and the standing patrols) x TASK_SHARE / PAIRS_PER_PACKAGE, kept between N_MIN and N_MAX, plus DAY1_EXTRA on Day 1; a night
+        (`room(sid, NWAVES) // 2`, after the hold, the support windows and the standing patrols) x TASK_SHARE / PAIRS_PER_PACKAGE, kept between N_MIN and N_MAX, plus DAY1_EXTRA on Day 1; a night
         turn (night ops on) plans NIGHT_FACTOR of that, no N_MIN. With no ledger (old callers, tools): PACKAGES_PER_TURN by level and day / night, as before."""
         st = self.state
         lvl = max(1, min(3, int(st.level)))
@@ -238,7 +239,7 @@ class Session(Merging, SeadTiming):
         if ledger is None:
             day_r, night_r = PACKAGES_PER_TURN[lvl]
             return night_r if night else day_r + (DAY1_EXTRA if st.day == 1 else 0)
-        pairs = sum(ledger.room(sid, 2) // 2 for sid, q in st.squadrons.items() if AIRCRAFT[q.aircraft].roles & STRIKE_ROLES)
+        pairs = sum(ledger.room(sid, _tod.NWAVES) // 2 for sid, q in st.squadrons.items() if AIRCRAFT[q.aircraft].roles & STRIKE_ROLES)
         r = pairs * TASK_SHARE[lvl] / PAIRS_PER_PACKAGE
         if night:
             return max(0.0, min(N_MAX[lvl], r) * NIGHT_FACTOR[lvl])
@@ -265,13 +266,14 @@ class Session(Merging, SeadTiming):
                     names[nm] = max(names.get(nm, 0), int(no))
         return names
 
-    def _build_wave(self, pb, o, i: int, ledger, fps: tuple, names: dict, waves: tuple = (1, 2)) -> tuple:
-        """Build one objective's package in the first wave that crews it (Phase 4): wave 1 draws on the jets that are ready now, wave 2 on those plus the jets whose refit ends by
-        the second wave. A package with a required slot short in wave 1 is tried in wave 2 and goes there when that is better; ties keep wave 1.
+    def _build_wave(self, pb, o, i: int, ledger, fps: tuple, names: dict, waves: tuple | None = None) -> tuple:
+        """Build one objective's package in the first wave that crews it (Phase 4; S110: four waves): wave 1 draws on the jets that are ready now, a later wave on those plus the jets whose refit
+        ends by its opening (`Ledger` tiers). `waves` = the waves to try in order (default all, from wave 1; a job meant for a later wave starts there). A package with a required slot short in
+        a wave is tried in the next one and goes there when that is better; ties keep the earlier wave. A wave after the first try that adds no jets (an empty tier) is skipped: nothing new to crew with.
         -> (package, wave) or (None, 0). The ledger, the shortfall list and the callsign counter are touched only by the attempt that is kept."""
         tries = []
-        if not any(ledger.late.values()):
-            waves = tuple(w for w in waves if w == 1) or waves[:1]          # nothing comes ready for the second wave: one attempt is all there is
+        waves = tuple(range(1, _tod.NWAVES + 1)) if waves is None else tuple(waves)
+        waves = tuple(w for k, w in enumerate(waves) if k == 0 or ledger.adds(w))          # nothing comes ready for that wave: no better attempt there
         n0, names0 = len(pb.short), dict(names)
         for w in waves:
             view = ledger.view(w)
@@ -304,9 +306,8 @@ class Session(Merging, SeadTiming):
 
     def plan_turn(self) -> list:
         """The tasking order of THIS TURN (v0.41.338, Phase 4; the second half of the old `plan_day`): a few jobs from `ObjectivePlanner` (PACKAGES_PER_TURN), the day's raids that
-        belong to this turn, crewed from the squadrons' ready jets in two launch waves (`Ledger`, `turn_times`). `state.plan` holds only this turn's packages. -> the packages."""
+        belong to this turn, crewed from the squadrons' ready jets in four launch waves, an hour apart (`Ledger`, `turn_times`; S110). `state.plan` holds only this turn's packages. -> the packages."""
         st = self.state
-        from . import timeofday as _tod
         turn = st.turn
         t0 = clock.minute(turn) - clock.day_start_minute(st.day)             # the turn's first minute of today
         st.raids["planned_turn"] = turn
@@ -328,7 +329,7 @@ class Session(Merging, SeadTiming):
         t_abs = clock.minute(turn)
 
         from . import carrier_hit
-        base_L = Ledger(st, ready_min=t_abs + _tod.WAVE2_OFFSET_MIN)       # the turn's jets: wave 1 = ready now, wave 2 adds what finishes its refit by the second wave
+        base_L = Ledger(st, t_abs=t_abs)                                   # the turn's jets: wave 1 = ready now, each later wave adds what finishes its refit by its opening (a tier)
         from . import reserve as _res                                       # v0.41.340 (Phase 5a): the reaction reserve comes off the fighter / multirole squadrons BEFORE the patrols and packages draw on the ledger
         if st.barcap is not None:
             st.barcap["react_hold"] = _res.apply(base_L, [q for q in st.squadrons.values() if Role.CAP in AIRCRAFT[q.aircraft].roles], int(st.level))
@@ -363,8 +364,8 @@ class Session(Merging, SeadTiming):
         sweeps = {}                                     # id(sweep package) -> the packages it goes in ahead of
 
         def preferred_waves() -> dict:
-            """Which wave each job is meant for: up to half of them (whole areas together, so packages that fold into one mission stay in one wave) in wave 1, the rest in wave 2. The carrier raid
-            and its prep go in wave 1. A job meant for wave 1 moves to wave 2 only when its jets are not ready (`_build_wave`)."""
+            """Which wave each job is meant for (S110): the jobs spread over the four waves as evenly as they go, the earlier waves first (`timeofday.split_waves`), whole areas together so packages
+            that fold into one mission stay in one wave. The carrier raid and its prep go in wave 1. A job moves to a later wave only when its jets are not ready (`_build_wave`)."""
             from types import SimpleNamespace
             from .packages import packages_linked
             fake = [SimpleNamespace(objective=o) for o in objs]
@@ -380,10 +381,12 @@ class Session(Merging, SeadTiming):
             groups: dict = {}
             for i in range(len(objs)):
                 groups.setdefault(root(i), []).append(i)
-            half, seen, out = (len(objs) + 1) // 2, 0, {}
+            quota = _tod.split_waves(len(objs))               # the wave of the k-th job in the order below: the first quota, the next ...
+            seen, out = 0, {}
             for g in sorted(groups.values(), key=lambda g: (-len(g), g[0])):
+                w_g = quota[min(seen, len(quota) - 1)] if quota else 1       # the whole group goes where its first job falls (a group may overshoot a wave's share, as before)
                 for i in g:
-                    out[i] = 1 if (seen < half or carrier_raid(st, objs[i]) or objs[i].id in prep_obj_ids) else 2
+                    out[i] = 1 if (carrier_raid(st, objs[i]) or objs[i].id in prep_obj_ids) else w_g
                 seen += len(g)
             return out
 
@@ -401,7 +404,7 @@ class Session(Merging, SeadTiming):
                     before = {sid: ledger.free.get(sid, 0) for sid in hold_left}
                     for sid, h in hold_left.items():
                         ledger.free[sid] = before[sid] + h
-                    pkg, _w = self._build_wave(pb, o, i, ledger, fps, names, waves=(1, 2) if pref[i - 1] == 1 else (2,))
+                    pkg, _w = self._build_wave(pb, o, i, ledger, fps, names, waves=tuple(range(pref[i - 1], _tod.NWAVES + 1)))
                     for sid, h in list(hold_left.items()):
                         used = before[sid] + h - ledger.free.get(sid, 0)
                         from_hold = max(0, min(used, h))
@@ -410,7 +413,7 @@ class Session(Merging, SeadTiming):
                         if from_hold:
                             used_hold[sid] = used_hold.get(sid, 0) + from_hold
                 else:
-                    pkg, _w = self._build_wave(pb, o, i, ledger, fps, names, waves=(1, 2) if pref[i - 1] == 1 else (2,))
+                    pkg, _w = self._build_wave(pb, o, i, ledger, fps, names, waves=tuple(range(pref[i - 1], _tod.NWAVES + 1)))
                 if pkg is not None:
                     out.append(pkg)
             if st.barcap is not None:
@@ -452,7 +455,7 @@ class Session(Merging, SeadTiming):
         rng = self._rng(3)
         pkgs = build_all(set(rng.sample(range(len(objs)), min(len(objs), max(1, (len(objs) + 1) // 2)))))     # your squadron is tasked on about half of them
         _L0 = make_ledger()
-        if psq and not clock.is_night_turn(turn) and mine(pkgs) < 1 and _L0.free[psq] + _L0.late[psq] >= 2:      # a day turn offers your squadron a slot when it has a ready pair
+        if psq and not clock.is_night_turn(turn) and mine(pkgs) < 1 and _L0.room(psq, _tod.NWAVES) >= 2:      # a day turn offers your squadron a slot when it has a ready pair
             pkgs = build_all(set(range(len(objs))))
             if mine(pkgs) < 1:                                  # still none (a short list is often one AI-only job, a fleet patrol): the planner's next-best jobs are offered until one fits your squadron
                 have = {(o.type, o.target_id, o.aim) for o in objs}
@@ -495,7 +498,7 @@ class Session(Merging, SeadTiming):
         self._wave_times(pkgs)                                       # v0.41.367 (S20 Phase 2): and the groups go in one after another, nearest first, SAM_WAVE_GAP_MIN apart
         self._stage_times(pkgs)                                      # a DEAD stage goes in DEAD_STAGE_GAP_MIN after the SEAD stage of the same site
         self._late_sead(pkgs)                                        # test option --late-sead: the SEAD stage goes in late, so the DEAD stage holds
-        floor = lambda p: t0 + (_tod.WAVE2_OFFSET_MIN if p.extra.get("wave", 1) == 2 else 0)      # no package starts before its wave opens (its jets are not ready earlier)
+        floor = lambda p: t0 + _tod.wave_open(p.extra.get("wave", 1))      # no package starts before its wave opens (its jets are not ready earlier)
         self._time_raid_prep(pkgs, prep_ids, floor)                  # v0.41.305: the carrier raid's SEAD / Standoff DEAD packages go in RAID_PREP_LEAD_MIN ahead of it (before the sweeps are timed from their packages)
         from . import sweep as sweep_
         dropped = set()
@@ -561,7 +564,7 @@ class Session(Merging, SeadTiming):
                 p.extra["detect"] = v_
         st.plan = [p.to_dict() for p in pkgs]
         self._cast_sead(pkgs)
-        refit.step(st, t_abs + _tod.WAVE2_OFFSET_MIN)       # the jets the second wave counted on are ready by its opening: they join `available` now, so the turn's losses and its commit come out of the same pool
+        refit.step(st, t_abs + _tod.WAVE_OFFSETS_MIN[-1])       # the jets the last wave counted on are ready by its opening: they join `available` now, so the turn's losses and its commit come out of the same pool
         st.red_air["avail0"] = {q.id: int(q.available) for w in st.enemy_air for q in w.sqns}      # red's ready jets per squadron as the turn starts: what the turn lost is the drop from here (`_red_sorties`)
         self.refresh_weather()
         return self.packages()

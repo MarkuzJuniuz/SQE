@@ -32,7 +32,7 @@ def free_for_tasking(q, level: int) -> int:
 
 
 def apply(ledger, squadrons, level: int) -> dict:
-    """Take the hold of each squadron off the ledger's ready pool (`ledger.free`; the late jets, ready only by the second wave, are not held). -> {squadron id: jets held}."""
+    """Take the hold of each squadron off the ledger's ready pool (`ledger.free`; the later tiers, jets ready only by a later wave, are not held). -> {squadron id: jets held}."""
     out = {}
     for q in squadrons:
         if q.id not in ledger.free:

@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.521, S110: four launch waves a turn, one an hour
+A turn's packages now launch in four waves an hour apart (at the turn's start and 60, 120 and 180 minutes later), not two waves two hours apart, so the start times on the Missions tab are spread over the turn's four hours. Jets that finish their refit during the turn can fly in the wave that follows. The standing patrols follow it: the relief of a base or carrier BARCAP pair goes up in the first wave that opens as the first pair leaves (a long-legged pair is relieved in the third wave, a short-legged one in the second), and an AWACS or tanker guard flies in the last wave that opens before the asset arrives. The number of packages and sorties a day is about the same (a few percent more).
+
 ## v0.41.520, Syria is June 2001
 The Syria campaign now starts on 12 June 2001 (it was 2000), so the JDAM, JSOW and SLAM-ER the Air Force and Navy jets carry there are in the right year. The guide and the map notes say 2001.
 
