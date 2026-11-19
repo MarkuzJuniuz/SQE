@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.506, the Nighthawks strike runways
+The F-117A squadron now also cuts red runways at night: on the first turn of the night, a red airfield with ready jets that no other red patrol or alert pair can reach is hit with GBU-27s, and its runway is closed like any other crater. At most one such strike a night.
+
 ## v0.41.505, Syria raids come from Syria; the campaign name follows the theatre
 The Tu-22M3 carrier raid in Syria now arrives along the real line from Damascus over the Syrian coast (the interceptors and the SEAD prep plan around the SAM belt), and the full raid is 12 of the 16 bombers so a safe raid can happen. The New Campaign window proposes the theatre's own name (Iron Tide, Levant Horizon) until you type one.
 

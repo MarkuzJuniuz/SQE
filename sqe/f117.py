@@ -39,17 +39,23 @@ def ready_jets(state) -> int:
     return sum(q.available for q in squadrons(state))
 
 
-def covered(state, x: float, y: float) -> bool:
-    """Can red air reach (x, y)? True when a red BARCAP station (today's areas) or a red airfield with a ready fighter pair lies within COVER_NM of it."""
+def is_job(obj) -> bool:
+    """Is this objective an F-117A night job: the EWR / SAM strike (aim F117) or the runway strike (aim RUNWAY, id `obj-t<turn>-f<k>`)?"""
+    return obj.type == ObjectiveType.STRIKE and (obj.aim == "F117" or (obj.aim == "RUNWAY" and obj.id.rsplit("-", 1)[-1].startswith("f")))
+
+
+def covered(state, x: float, y: float, own: str = "") -> bool:
+    """Can red air reach (x, y)? True when a red BARCAP station (today's areas) or a red airfield with a ready fighter pair lies within COVER_NM of it. `own` (a red field id, for the runway strike): that
+    field's own station and alert pair do not count (they are what the crater catches on the ground); the other fields' still do."""
     from . import barcap
     from .loadouts import ENEMY_FIGHTERS
     reach = COVER_NM * NM
     for ar in barcap.ensure(state)["red"]:
-        if math.hypot(ar["x"] - x, ar["y"] - y) < reach:
+        if ar["asset"] != own and math.hypot(ar["x"] - x, ar["y"] - y) < reach:
             return True
     for w in state.enemy_air:
         a = state.assets.get(w.base_asset_id)
-        if a is None or a.destroyed or w.available_of(ENEMY_FIGHTERS) < 2:
+        if a is None or a.destroyed or w.available_of(ENEMY_FIGHTERS) < 2 or a.id == own:
             continue
         if math.hypot(a.x - x, a.y - y) < reach:
             return True
@@ -95,6 +101,22 @@ def targets(state, skip=frozenset()) -> list:
     return out
 
 
+def runway_targets(state, skip=frozenset()) -> list:
+    """[(priority, airfield asset)] best first (XO 2026-11-19: "the Nighthawks do OCA runways if red did not schedule a patrol"): red fields with a wing that has ready jets and an open runway, no OTHER red field's patrol
+    station or alert pair within COVER_NM, and in reach with no belt in front. The field's own station and alert pair are ignored. Priority as the day jobs' runway craters (value x 0.9 x the wing's ready share)."""
+    from . import runways
+    out = []
+    for a in state.assets.values():
+        if a.kind != AssetKind.AIRFIELD or a.destroyed or a.id in skip or runways.is_closed(state, a.id):
+            continue
+        w = state.enemy_air_at(a.id)
+        if w is None or w.available <= 0 or covered(state, a.x, a.y, own=a.id) or not reachable(state, a):
+            continue
+        out.append((a.value * 0.9 * (w.available / max(1, w.authorized)), a))
+    out.sort(key=lambda t: (-t[0], t[1].id))
+    return out
+
+
 def objectives(state, skip=frozenset()) -> list:
     """This turn's F-117A jobs, [Objective] (ids are given by the caller). Night turns only, and only in a campaign with night ops on (as the Tu-22M3 raids); one job per ready pair, at most
     PACKAGES_PER_TURN."""
@@ -104,9 +126,14 @@ def objectives(state, skip=frozenset()) -> list:
     n = min(PACKAGES_PER_TURN, ready_jets(state) // 2)
     if n <= 0:
         return []
+    first_night = not clock.is_night_turn(state.turn - 1)                 # the runway strike is offered on the FIRST turn of the night only: at most one a night (a field cratered every night stays shut, and the first probe flew two a night)
+    cands = [(pr, a, "F117") for pr, a in targets(state, skip)[:n]] + ([(pr, a, "RUNWAY") for pr, a in runway_targets(state, skip)[:1]] if first_night else [])
     out = []
-    for pr, a in targets(state, skip)[:n]:
-        out.append(Objective("", ObjectiveType.STRIKE, a.id, pr, f"Night strike: {a.name} (F-117A, no red air can reach it)", "F117"))
+    for pr, a, aim in sorted(cands, key=lambda c: (-c[0], c[1].id))[:n]:
+        if aim == "RUNWAY":
+            out.append(Objective("", ObjectiveType.STRIKE, a.id, pr, f"Night OCA: Runway Strike, {a.name} (F-117A, no other red patrol can reach it)", "RUNWAY"))
+        else:
+            out.append(Objective("", ObjectiveType.STRIKE, a.id, pr, f"Night strike: {a.name} (F-117A, no red air can reach it)", "F117"))
     return out
 
 
@@ -134,7 +161,10 @@ def resolve(sim, state, pkg, force=None) -> dict:
     p = 1.0 - (1.0 - PAIR_HIT) ** pairs
     success = force["success"] if force and "success" in force else chance(rng, p, d.variance)
     lines = [f"{pkg.objective.description}: {'objective achieved' if success else 'no effect observed'}"]
-    if success:
+    if success and pkg.objective.aim == "RUNWAY":
+        from . import runways
+        lines.append("   " + runways.crater(state, t.id))
+    elif success:
         t.health = 0.0
         lines.append(f"   {t.name}: destroyed")
     ncov = cover_count(state, t)

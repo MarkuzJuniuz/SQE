@@ -4,6 +4,7 @@ import copy
 import math
 import random
 from dataclasses import dataclass, field, asdict
+from . import f117
 from . import runways, threat
 from . import threatmap as tm
 from .loadouts import CBU_JETS, ENEMY_FIGHTERS, ENEMY_RADIUS_NM, EWR_KIT_ORDER, JSOW_PER_JET, PEN_PER_JET, PEN_REACH, SLAM_PER_JET
@@ -431,7 +432,8 @@ class PackageBuilder:
             tmpl = [Slot(Role.CAS, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
         elif obj.type == ObjectiveType.STRIKE and obj.aim == "SEAD":        # v0.41.144: a supply strike under a live SA-2/3/6: same, the HARM escort is required
             tmpl = [Slot(Role.STRIKE, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
-        if obj.type == ObjectiveType.STRIKE and obj.aim == "F117":          # S104: the F-117A job: one STRIKE slot only the F-117A fills, no TARCAP / escort / SEAD (it goes where no red air reaches, see f117.py)
+        from . import f117
+        if f117.is_job(obj):                                                # S104 (and the night runway strike): the F-117A job: one STRIKE slot only the F-117A fills, no TARCAP / escort / SEAD (it goes where no red air reaches, see f117.py)
             return [Slot(Role.STRIKE, 4, only="F-117A")]
         if carrier_raid(self.state, obj):                                    # v0.41.107: the setpiece: every fighter flight in reach, about one blue fighter per raider
             k = max(2, math.ceil(SETPIECE_RATIO * n_fl))              # n_fl = raiders / 3 (set in build) -> k flights of 4, about one blue fighter per raider
@@ -475,7 +477,7 @@ class PackageBuilder:
         self._a10_strike = self._a10_supply_strike(obj, n_fl)                        # v0.41.360 (Phase 10c part 2): a clean supply strike may take A-10C squadrons
         pkg = Package(id=f"pkg{number}", number=number, objective=obj, n_def=2 * n_fl, extra=extra)
         slots = self._slots(obj, self._defended(obj), n_fl, extra)
-        if obj.type == ObjectiveType.STRIKE and obj.aim == "RUNWAY" and not for_player:
+        if obj.type == ObjectiveType.STRIKE and obj.aim == "RUNWAY" and not for_player and not f117.is_job(obj):
             # S51 (XO 2026-11-12): the runway crater goes out as F-15E standoff JSOW-Cs when an F-15E squadron reaches the field (with the PEN kit's shorter reach) and has jets free; none: the
             # plain strike as before (unlike the Standoff DEAD the kit is NOT required, no waiting for another day). Not for the player's own build: no player airframe can fly the kit, so his job and
             # route stay exactly as they were (a Viper / Hornet pilot is never moved to another slot).
