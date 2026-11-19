@@ -15,6 +15,7 @@ from . import clock as clock_mod
 from . import sams as _sams_mod
 from . import sites as _sites_mod
 from . import road_sites as _road_sites_mod
+from . import works as _works_mod
 
 def THEATRES() -> dict:
     """{id: name} of the installed theatre packs."""
@@ -377,6 +378,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     _sites_mod.apply(st, th)                                         # v0.41.199: red's SAM sites, supply sites and columns move onto the condensed site spots
     snap_assets_to_land(st)                                          # nothing is generated in the sea
     _extra_sams(st, th, d, ap, live, FIELD_TIER)                     # S90 J5: the pack's fixed extra SAM sites (none in the Caucasus); after the snap and the site spots: they stay where the pack put them
+    _works_mod.build(st, th, d)                                      # S111: the pack's `works` (Lutorin's plants; none in the Caucasus): fixed sites, after the sea check
     struck = _opening_strike(st, th, d)                              # S90 J9s: the scripted opening strike (none in the Caucasus): after every red SAM site is placed
     _road_sites_mod.build(st, th, d, {n_: (a_.position.x, a_.position.y) for n_, a_ in t.airports.items()}, rng)      # v0.41.241 (item i): supply sites along the roads, both sides (a stream of its own)
     sams = [x for x in st.assets.values() if x.kind == AssetKind.SAM]

@@ -499,6 +499,9 @@ def apply_debrief(state: CampaignState, manifest: Manifest, data: dict) -> dict:
             before = a.health
             from . import ground as _gr2
             a.health = _gr2.column_health(state, a, before, frac)
+            from . import works as _wk
+            if _wk.is_works(a):                                         # S111: a works takes only a share of what the same bombs take off a depot
+                a.health = before - (before - a.health) * _wk.damage_factor(state, a)
             if not g.get("primary") and _gr2.zone_of(state, a.id) is not None:      # S83: a red column hit only in passing loses no more than FRONT_CAP points (as blue's company), a CAS target is not capped
                 a.health = max(a.health, before - _gr2.FRONT_CAP / _gr2.MAX_FORCE)
             dmg = before - a.health

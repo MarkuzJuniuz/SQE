@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.522, S111: Lutorin's works, a way to win Syria that is not a conquest
+Syria Levels 2 and 3 now have five special targets, Lutorin's works (two near Palmyra, two in the Homs gap, one at Latakia): the plants that make the wares that keep Syria's old Soviet arsenals alive and that back its claim on Hatay. Strikes on them come ahead of the ordinary supply strikes and go out as stand-off strikes (SLAM-ER Hornets, no SEAD gate), they are rebuilt one at a time and very slowly (about three weeks at Level 2, two months at Level 3; at Level 2 the plants are hardened, so a series of strikes is needed), and the more of them stand the harder red pushes on the front. Destroying all of them wins the war (Hatay falling still loses it); the Overview has a line for them and the campaign guide and `docs/THEATRES.md` (new pack key `works`) cover it. Syria's Levels 2 and 3 also start with 20 red road supply sites, not 30 (a theatre `level_overrides` entry).
+
 ## v0.41.521, S110: four launch waves a turn, one an hour
 A turn's packages now launch in four waves an hour apart (at the turn's start and 60, 120 and 180 minutes later), not two waves two hours apart, so the start times on the Missions tab are spread over the turn's four hours. Jets that finish their refit during the turn can fly in the wave that follows. The standing patrols follow it: the relief of a base or carrier BARCAP pair goes up in the first wave that opens as the first pair leaves (a long-legged pair is relieved in the third wave, a short-legged one in the second), and an AWACS or tanker guard flies in the last wave that opens before the asset arrives. The number of packages and sorties a day is about the same (a few percent more).
 

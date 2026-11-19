@@ -425,7 +425,7 @@ def raid_income(state, d, turn: int) -> float:
     squadron stands down) and `RED_RAID_NIGHT` on a night turn. A worn-down red (fewer free attack jets) earns less by itself. (The massed-wave day, `wave_mult`, makes the raids themselves bigger, in `plan_raid`.)"""
     from . import ground as _gr
     lvl = max(1, min(3, int(getattr(d, "level", 1))))
-    return RAID_SHARE[lvl] * free_attack_jets(state, turn) * _gr.surge(state, d) * (RED_RAID_NIGHT if clock.is_night_turn(turn) else 1.0)
+    return RAID_SHARE[lvl] * free_attack_jets(state, turn) * _gr.push_factor(state, d) * (RED_RAID_NIGHT if clock.is_night_turn(turn) else 1.0)
 
 
 def _credit_start(state, d, turn: int) -> tuple:

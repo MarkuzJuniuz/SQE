@@ -33,6 +33,11 @@ NM = 1852.0
 MIN_FORCE = 3.0               # below this a side has no organised force in the zone
 MAX_FORCE = 100.0
 SUPPLY_KINDS = (AssetKind.FUEL, AssetKind.DEPOT)
+
+
+def is_supply(a) -> bool:
+    """A fuel farm or depot that counts for the Force Index. S111: the works of a theatre pack (`works.py`, `wks_` ids) are depot assets for the planner but not supply sites."""
+    return a.kind in SUPPLY_KINDS and not a.id.startswith("wks_")
 BREAK_RATIO = 0.30            # v0.41.145 (XO 2026-10-27, never hunt the last unit): a side whose force in a sector is under this share of the other's has lost the sector tonight (it withdraws); nobody has to be destroyed
 DOWN_HEALTH = 0.30            # v0.41.145: a depot, fuel farm, SAM site or garrison at or under this health counts as down (not offered as a target, no longer gates)
 AIR_EFFECT = 0.6              # share of a visible column's losses that its zone's strength takes (the column is only the lead element)
@@ -462,9 +467,9 @@ def set_supply_counts(state) -> None:
     if g is None:
         return
     ba = getattr(state, "blue_assets", None) or {}
-    g["sup_n"] = {"red": sum(1 for a in state.assets.values() if a.kind in SUPPLY_KINDS), "blue": sum(1 for a in ba.values() if a.kind in SUPPLY_KINDS)}
+    g["sup_n"] = {"red": sum(1 for a in state.assets.values() if is_supply(a)), "blue": sum(1 for a in ba.values() if is_supply(a))}
     if getattr(state, "level", 2) == 1:
-        rs = [a for a in state.assets.values() if a.kind in SUPPLY_KINDS]
+        rs = [a for a in state.assets.values() if is_supply(a)]
         g["sup_n_road"] = sum(1 for a in rs if a.id.startswith(ROAD_PREFIX))
         g["sup_n_inner"] = len(rs) - g["sup_n_road"]
         g["sup_grp"] = True
@@ -477,7 +482,7 @@ def supply(state, side: str) -> float:
     v0.41.408 (S49, XO 2026-11-12): red on Level 1 of a NEW campaign (ground["sup_grp"]) is RED_L1_INNER_W (70%) its inner sites' stock and the rest its road sites' stock (stock over the start count
     of each group; a captured site counts in the captor's group by its id), floor RED_L1_FLOOR (0.45), so hitting the inner depots really lowers it. Judgment call, XO."""
     pool = state.assets.values() if side == "red" else getattr(state, "blue_assets", {}).values()
-    sites = [a for a in pool if a.kind in SUPPLY_KINDS]
+    sites = [a for a in pool if is_supply(a)]
     n = int(((state.ground or {}).get("sup_n") or {}).get(side, len(sites)))
     fl = SUPPLY_FLOOR
     g = state.ground or {}
@@ -507,7 +512,7 @@ def supply_repair(state) -> list:
         pool = state.assets if side == "red" else getattr(state, "blue_assets", {})
         rate = supply(state, side) / SUPPLY_REPAIR_DAYS
         for a in pool.values():
-            if a.kind not in SUPPLY_KINDS or a.id in fell:
+            if not is_supply(a) or a.id in fell:                      # S111: the works have their own rebuild (works.rebuild)
                 continue
             before = prev.get(a.id, a.health)
             if a.health < before - 1e-6:                                    # struck today: no repair tonight
@@ -536,7 +541,7 @@ def supply_round(state, d, rng) -> list:
         return lines
 
     def pick(pool, attempts, who, p_scale=1.0):
-        sites = [a for a in pool if a.kind in SUPPLY_KINDS and not a.destroyed]
+        sites = [a for a in pool if is_supply(a) and not a.destroyed]      # S111: the works are struck by planned packages only
         for _ in range(attempts):
             if not sites:
                 return
@@ -726,13 +731,19 @@ def _red_cas(state, d, rng, red, blue, n, sg) -> list:
     return out
 
 
+def push_factor(state, d) -> float:
+    """Red's surge factor times the push the works add (S111, `works.edge`): what multiplies red's reinforcements, attack chance and raid rate."""
+    from . import works
+    return surge(state, d) * works.edge(state, d)
+
+
 def resolve_day(state, d, rng) -> list:
     """One day of ground fighting. Returns the overnight lines for the log."""
     g = state.ground
     pull(state)
     red, blue, n = g["red"], g["blue"], n_zones(g)
     sr, sb = supply(state, "red"), supply(state, "blue")
-    sg = surge(state, d)
+    sg = push_factor(state, d)
     g["air_today"] = []                                               # S82: the strikes of this day's fight, for the mission builder to show (see _record_strike)
     lines = _counter_arrives(state)
     forced = _forced_zone(state)
