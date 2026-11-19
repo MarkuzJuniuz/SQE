@@ -97,17 +97,14 @@ def covered(state, x: float, y: float, own: str = "") -> bool:
 
 
 def reachable(state, a) -> bool:
-    """Can a ready F-117A pair fly to `a`? Within its combat radius (no tanker bonus counted: conservative) and with no intact SAM belt of ANOTHER cluster in front of the target (the FLOT rule the packages
-    use for every strike, `threatmap.blockers`: the F-117A is NOT excused from it; stealth in DCS is simplified, so nothing is assumed)."""
-    from . import threatmap as tm
+    """Can a ready F-117A pair fly to `a`? Within its combat radius (no tanker bonus counted: conservative). XO 2026-11-20: the F-117A is excused from the FLOT rule every other strike keeps (no intact SAM belt
+    of ANOTHER cluster in front of the target, `threatmap.blockers`): a stealth jet flies through a belt. The target must still be one red air cannot cover (`covered`)."""
     from .aircraft import AIRCRAFT
     for q in squadrons(state):
         b = state.bases.get(q.base_id)
         if b is None or q.available < 2:
             continue
         if math.hypot(a.x - b.x, a.y - b.y) / NM > AIRCRAFT[KEY].combat_radius_nm:
-            continue
-        if tm.blockers(state, (b.x, b.y), (a.x, a.y), a):
             continue
         return True
     return False
