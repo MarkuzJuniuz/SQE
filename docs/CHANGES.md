@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.510, Auto-Skip tick boxes line up
+The three Auto-Skip tick boxes now share one left edge, with Crew Rest and its hours still framed together.
+
 ## v0.41.509, percentages are back on the Overview
 The Overview panes show figures again: the Force Index and Air Defense tiles and tables, the sites' health, the Tactical Edge per job kind and the Overview text lines. Debriefs, briefings, the war log and job titles keep the words.
 

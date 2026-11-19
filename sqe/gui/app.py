@@ -293,6 +293,8 @@ class MissionsPage(QWidget):
         row_h = max(w.sizeHint().height() for w in (self.auto_stand, self.auto_night, self.auto_dur_on))
         for w in (self.auto_stand, self.auto_night, self.auto_dur_on):
             w.setFixedHeight(row_h)
+        for w_ in (self.auto_stand, self.auto_night):          # S23c (XO 2026-11-19): the three tick boxes line up on the left; Crew Rest sits inside its frame (1 px border + 6 px margin), so the two above are indented by the same 7 px
+            w_.setStyleSheet("QCheckBox { margin-left: 7px; }")
         ab.addWidget(self.auto_stand); ab.addWidget(self.auto_night)
         cb.addWidget(self.auto_dur_on); cb.addWidget(self.auto_dur_row)
         ab.addWidget(self.crew_box)
