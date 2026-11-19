@@ -880,6 +880,8 @@ class WarSimulator:
                 state.note("Overnight: " + ln)
             for ln in ground.rebuild_blue(state, d, self.rng):
                 state.note("Overnight: " + ln)
+            for ln in ground.update_supply_win(state):             # S90: a pack's Force Index win, judged on the morning's figure (none in the Caucasus)
+                state.note("Overnight: " + ln)
             for bid in state.ground.get("fallen", []):
                 if bid in state.bases:
                     sams.set_field(state, state.bases[bid], 0.0)
@@ -913,6 +915,8 @@ def update_status(state: CampaignState) -> str:
         by_ground = ground.active(state) and bool(state.ground.get("victory_ids"))      # v0.41.143: victory is by ground only (jet counts no longer decide the war)
         if by_ground and ground.victory(state):
             state.status = "VICTORY"; state.note("VICTORY: the objectives are ours and the enemy has nothing left to throw at us.")
+        elif (state.ground or {}).get("supply_won"):                    # S90: a pack's Force Index win (`ground.update_supply_win`; the old air / command win below stays an alternative)
+            state.status = "VICTORY"; state.note("VICTORY: the enemy's supply has collapsed and its forces cannot go on.")
         elif not by_ground and t["c2"] <= 0.05 and t["enemy_air"] < 0.15:
             state.status = "VICTORY"; state.note("VICTORY: the enemy command structure and air arm are broken.")
         elif t["friendly_air"] < 0.15:

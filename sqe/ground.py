@@ -62,6 +62,7 @@ SUPPLY_FLOOR, SUPPLY_NONE = 0.35, 0.85
 RED_L1_FLOOR = 0.45        # v0.41.408 (S49, XO 2026-11-12): the absolute floor of red's Force Index on Level 1 of a new campaign (70% inner sites, 30% road sites; see supply; was 0.15 with 50 / 50 in the first S49 build, XO 2026-11-12: the insurgents are supplied by night, so red L1 is not trapped at the bottom). Judgment call. Blue is not resupplied across anything: its stock came by sea, and it has no road sites (road_sites_blue 0), only the fuel farms and depots it brought.
 RED_L1_INNER_W = 0.70      # v0.41.408 (S49, XO 2026-11-12): weight of red L1's inner sites in its Force Index (judgment call)
 SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (35% = about 17 days); no repair on a day it is struck
+SUPPLY_COLLAPSE_BANDS = (0.30, 0.12)   # S90: red's Force Index this far above a pack's `win_supply` line reads "distant", this far "approaching", less "close" (judgment calls, words only)
 L1_RED_SUPPLY_FLOOR = 0.70    # v0.41.141 (XO 2026-10-27, Campaign Revamp): on Level 1 the insurgents are resupplied across the border by night, so their supply never drops below this however many depots die (judgment call; a toy-model run showed it does not change who wins). Levels 2 and 3 use the shared 0.35 floor (SUPPLY_FLOOR).
 
 
@@ -1095,6 +1096,40 @@ def _update_win(state) -> list:
 
 def victory(state) -> bool:
     return bool(active(state) and state.ground.get("won"))
+
+
+def supply_win_rule(state):
+    """S90 (the Force Index win): the active pack's `win_supply` rule for this level, {"below": 0..1, "days": n}, or None (the Caucasus: no such win)."""
+    from . import theatres
+    return (theatres.active().get("win_supply") or {}).get(str(getattr(state, "level", 2))) or None
+
+
+def update_supply_win(state) -> list:
+    """Nightly (`war.end_day`, AFTER the sites mended: the morning's Force Index is the one the Overview shows): where the pack has a `win_supply` rule for the level, red's Force Index at or below `below` on `days` consecutive day checks wins the war (`g["supply_won"]`, read by
+    `war.update_status`); a day above it resets the count (`g["supply_low"]`, saved with the campaign). -> the war-log lines (the pack's `win` story beat comes with the win)."""
+    g = state.ground
+    r = supply_win_rule(state)
+    if not g or not r or g.get("supply_won"):
+        return []
+    if supply(state, "red") <= float(r["below"]):
+        g["supply_low"] = int(g.get("supply_low", 0)) + 1
+    else:
+        g["supply_low"] = 0
+    if g["supply_low"] >= int(r["days"]):
+        g["supply_won"] = True
+        return ["The enemy's supply has collapsed: it cannot keep its forces in the field"] + story.beat(state, "win")
+    return []
+
+
+def supply_collapse_word(state):
+    """How close red's supply is to the `win_supply` line, in a word (S80: no figures): distant / approaching / close / under way. None when the level has no such rule."""
+    r = supply_win_rule(state)
+    if r is None:
+        return None
+    if int((state.ground or {}).get("supply_low", 0)) > 0:
+        return "under way"
+    m = supply(state, "red") - float(r["below"])
+    return "distant" if m >= SUPPLY_COLLAPSE_BANDS[0] else "approaching" if m >= SUPPLY_COLLAPSE_BANDS[1] else "close"
 
 
 def apply_red_fall(state, rb) -> list:
