@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.520, Syria is June 2001
+The Syria campaign now starts on 12 June 2001 (it was 2000), so the JDAM, JSOW and SLAM-ER the Air Force and Navy jets carry there are in the right year. The guide and the map notes say 2001.
+
 ## v0.41.519, the campaign guide covers Syria
 `docs/CAMPAIGN.md` has a new Syria 2000 section (the war, the three levels, blue's squadrons, the opening F-117A strike, winning and losing, the SA-5s) and a section on the F-117A night squadron. The rest of the guide was checked against the code for both maps and corrected: blue's 18 squadrons and 284 jets, how many jobs a turn plans, the package shapes, the Tu-22M3 raid rhythm, refit and replacement times, the start hour and night turns, Tactical Edge.
 

@@ -20,7 +20,7 @@ It is built to give light missions: few units, only the flights your squadron's 
 that needs a hundred aircraft in the air. The war underneath is not scaled down: red and blue lose and replace real jets
 and sites.
 
-There are two maps: the Caucasus (this page's numbers, unless it says otherwise) and Syria 2000 (section 10, which lists what differs). On the Caucasus the coalition (blue) holds the south-east (Senaki, Kutaisi, Kobuleti, a carrier group at sea and
+There are two maps: the Caucasus (this page's numbers, unless it says otherwise) and Syria 2001 (section 10, which lists what differs). On the Caucasus the coalition (blue) holds the south-east (Senaki, Kutaisi, Kobuleti, a carrier group at sea and
 the rear support base at Kutaisi); red holds the north and the Black Sea coast (Sukhumi, Gudauta, Sochi, Gelendzhik,
 Krymsk, and the northern fields such as Mozdok, Beslan, Nalchik, Maykop and Mineralnye Vody). On Syria blue holds Incirlik and the Cyprus fields and fights down the Hatay coast road.
 
@@ -277,13 +277,13 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
 
 ---------------------------------------------------------------------------------------------------
 
-## 10. Syria 2000 (Operation LEVANT HORIZON)
+## 10. Syria 2001 (Operation LEVANT HORIZON)
 
 The second map. You choose the map in the New Campaign dialog; a Syria campaign needs the DCS Syria map. Everything in sections 1 to 9 works the same there (the same turns, packages, Force Index, refit and ledger); this section is what is different. The Caucasus pages above give the Caucasus numbers; the numbers here are the Syria pack's (`sqe/data/theatres/syria.json`), as of v0.41.518.
 
 ### The war
 
-It is June 2000 (the campaign starts on 12 June, at **00:00**). A US-led coalition has answered Turkey's request for help and fights its way down the **Hatay coast road** into Syria. Blue flies from **Incirlik**, from Akrotiri, Larnaca, Paphos and Muwaffaq Salti (Hatay is a recovery field only), and from the carrier **USS Dwight D. Eisenhower**, which sits north of Cyprus (160 nm from the Syrian coast). Red holds the Syrian airfields. The front is the coast road from Hatay through **Bassel Al-Assad**, **Rene Mouawad** and **Shayrat**, and the level decides how much of it is fought over: Level 1 contests Bassel Al-Assad only, Level 2 adds Rene Mouawad, Level 3 adds Shayrat. The deep rear (Hama, Abu al-Duhur, Tiyas, Palmyra, Sayqal, Damascus, Al-Dumayr, An Nasiriyah) is where the long-range air defence and the bomber wing sit.
+It is June 2001 (the campaign starts on 12 June, at **00:00**). A US-led coalition has answered Turkey's request for help and fights its way down the **Hatay coast road** into Syria. Blue flies from **Incirlik**, from Akrotiri, Larnaca, Paphos and Muwaffaq Salti (Hatay is a recovery field only), and from the carrier **USS Dwight D. Eisenhower**, which sits north of Cyprus (160 nm from the Syrian coast). Red holds the Syrian airfields. The front is the coast road from Hatay through **Bassel Al-Assad**, **Rene Mouawad** and **Shayrat**, and the level decides how much of it is fought over: Level 1 contests Bassel Al-Assad only, Level 2 adds Rene Mouawad, Level 3 adds Shayrat. The deep rear (Hama, Abu al-Duhur, Tiyas, Palmyra, Sayqal, Damascus, Al-Dumayr, An Nasiriyah) is where the long-range air defence and the bomber wing sit.
 
 Who you fight depends on the level: Level 1 is **the Northern Coastal Command** (the NCC, an insurgent force), Level 2 is **Syria**, Level 3 is **Syria and its Russian backers**.
 
@@ -305,7 +305,7 @@ Red's raids on troops, garrisons and supply sites are led by the cheap **Su-17M4
 
 ### Blue in Syria
 
-Blue has 18 squadrons and 284 jets at every level: two F-14B squadrons and two F/A-18C squadrons on the carrier, five F-16C, three F-15C (plus the AI-only HAVCAP F-15C), three F-15E (AI only), one A-10 squadron at Incirlik and the **8th FS 'Black Sheep' (12 F-117A, AI only)**. You can fly the F-14B, F/A-18C, F-16C, F-15C and A-10. The **Era Equipment** setting (New Campaign) picks the airframes of the year: Syria 2000 defaults to the A-10A, the F-14B and no Link 16 data.
+Blue has 18 squadrons and 284 jets at every level: two F-14B squadrons and two F/A-18C squadrons on the carrier, five F-16C, three F-15C (plus the AI-only HAVCAP F-15C), three F-15E (AI only), one A-10 squadron at Incirlik and the **8th FS 'Black Sheep' (12 F-117A, AI only)**. You can fly the F-14B, F/A-18C, F-16C, F-15C and A-10. The **Era Equipment** setting (New Campaign) picks the airframes of the year: Syria 2001 defaults to the A-10A, the F-14B and no Link 16 data. The weapons follow the year: the A-10A carries no JDAM and no targeting pod (Mavericks, laser and cluster bombs), the F-14B and the F-117A drop laser-guided bombs only, while the F-16C, F/A-18C and F-15E carry JDAM, JSOW and SLAM-ER, all in service by 2001 but still new, and not on every jet.
 
 ### The opening night
 
