@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.511, Auto-Skip: a rule instead of a box
+The Crew Rest frame is gone: a thin line above Crew Rest marks it and its hours field as their own group, and all the tick boxes start at the same left edge.
+
 ## v0.41.510, Auto-Skip tick boxes line up
 The three Auto-Skip tick boxes now share one left edge, with Crew Rest and its hours still framed together.
 
