@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.524, S113: Level 2 red has as many jets as Level 3, in the same big squadrons
+Red's Level 2 air force is now as large as Level 3's on both maps, with Level 2's older, weaker types kept (Syria 238 jets, was 202; Caucasus about 241 with the Mozdok bombers, was 186; the same jets at each field as Level 3) and its squadrons are up to 14 jets, as at Level 3, not 12. Idle runs end the same way, but every flight meets more red fighters. The campaign guide's jet counts, field fill and squadron-size lines are updated.
+
 ## v0.41.523, S112: Caucasus Level 3 red reinforces harder
 On the Caucasus at Level 3, red's daily ground reinforcement (`red_reinf`) is 24, not 7, a theatre `level_overrides` entry. Idle autoskips with Tactical Edge off used to be a blue win every time (20 of 20, about two months); with this the front can be pushed back and the outcome is roughly even. Syria and the other levels are unchanged. The Level 2 and Level 3 backgrounds get a line about Russia's fresh troops coming up the coast road.
 

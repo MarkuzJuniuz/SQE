@@ -3,7 +3,7 @@
 What the war is, what happens each turn, and the rules behind it. For installing and running SQE see `docs/GUIDE.md`
 (section 4 there is the short "how a turn works"); for adding a map see `docs/THEATRES.md`.
 
-Checked against the code as of v0.41.523, for both maps (the Caucasus, and Syria in section 10). The mod is still evolving, so things may change (see the last section). Numbers are
+Checked against the code as of v0.41.524, for both maps (the Caucasus, and Syria in section 10). The mod is still evolving, so things may change (see the last section). Numbers are
 tuning values in the code and change between versions: where one matters it is named, so you can find it. Several are the author's judgment calls with no public source, and
 where that is the case the code says so next to the number.
 
@@ -33,7 +33,7 @@ You pick the level when you start a campaign. It sets how strong red is and how 
 | | Level 1, Insurgent | Level 2, Regional power | Level 3, Near-peer |
 |---|---|---|---|
 | Red airfields | 4: Sukhumi, Gudauta, Sochi, Gelendzhik | 10, the whole red coast and the north | 10, the whole red coast and the north |
-| Red aircraft at the start | 94, old types kept supplied by a sponsor (MiG-21, MiG-23, Su-25, Su-24M) | 186, mixed (MiG-31, MiG-29, MiG-23, Su-24M, Su-25, plus the Mozdok bombers and escorts) | 254, modern (MiG-31, MiG-29S, Su-27, Su-24M, Su-25, plus the Mozdok bombers and escorts) |
+| Red aircraft at the start | 94, old types kept supplied by a sponsor (MiG-21, MiG-23, Su-25, Su-24M) | 241, mixed (MiG-31, MiG-29, MiG-23, Su-24M, Su-25, plus the Mozdok bombers and escorts) | 254, modern (MiG-31, MiG-29S, Su-27, Su-24M, Su-25, plus the Mozdok bombers and escorts) |
 | Red SAMs | SA-2, SA-3, AAA, MANPADS | SA-2, SA-3, SA-6, SA-11, AAA | SA-10, SA-11, SA-6, SA-15, SA-19 |
 | Air defence integration (`iads`) | 0.15 | 0.55 | 0.90 |
 | Red AI skill | Average | Good | High |
@@ -186,9 +186,9 @@ It holds back **25%** of each squadron's ready fighters as a **reaction reserve*
 reinforcements; the rest are free for patrols and raids. Jets that fly go to refit; shot-down jets are gone until replaced.
 
 **How red's jets are laid out.** Each level gives every red field a fixed number of jets, sized to the field's parking. At Level 3 a field is filled to
-about 70% of its parking, which leaves room for squadrons that fall back from a lost field (about 30%). Level 2 has 75% of Level 3's jets at each
-field, and Level 1 fills its four fields to about 70% (Gelendzhik about 60%). (These are the Caucasus figures; Syria's are in section 10.) The jets are grouped into squadrons of a few types per field, up to 6 jets at
-Level 1, 12 at Level 2 and 14 at Level 3 (about 10 to 12 is the Soviet and Russian norm), so a field flies one or two types in full squadrons, not
+about 70% of its parking, which leaves room for squadrons that fall back from a lost field (about 30%). Level 2 has the same number of jets at each
+field as Level 3 (its types are older and weaker), and Level 1 fills its four fields to about 70% (Gelendzhik about 60%). (These are the Caucasus figures; Syria's are in section 10.) The jets are grouped into squadrons of a few types per field, up to 6 jets at
+Level 1, and 14 at Levels 2 and 3 (about 10 to 12 is the Soviet and Russian norm, so these are big squadrons), so a field flies one or two types in full squadrons, not
 two or three jets of everything. The Forces screen lists them with in-universe names such as "Sochi-Adler MiG-21Bis Sqn #2"; a squadron that withdraws keeps its name.
 
 A **raid** is a package that red actually plans: a Su-24M strike on a field, a supply site, a garrison or a
@@ -300,14 +300,13 @@ Who you fight depends on the level: Level 1 is **the Northern Coastal Command** 
 | | Level 1 | Level 2 | Level 3 |
 |---|---|---|---|
 | Red airfields | 4: Bassel Al-Assad, Abu al-Duhur, Hama, Shayrat | 11, the whole coast road and the interior | 11 |
-| Red aircraft at the start | 94 (MiG-21Bis, MiG-23MLD, Su-17M4, Su-24M) | 202 (adds MiG-29A and MiG-25PD) | 238, plus the bomber wing (MiG-23MLD, MiG-29A and S, MiG-25PD, Su-27, MiG-31, Su-17M4, Su-24M) |
+| Red aircraft at the start | 94 (MiG-21Bis, MiG-23MLD, Su-17M4, Su-24M) | 238 (adds MiG-29A and MiG-25PD) | 238, plus the bomber wing (MiG-23MLD, MiG-29A and S, MiG-25PD, Su-27, MiG-31, Su-17M4, Su-24M) |
 | Red SAMs | SA-2, SA-3, AAA, MANPADS | SA-2, SA-3, SA-6, SA-11, AAA, two SA-5 batteries | SA-10, SA-11, SA-6, SA-15, SA-19, three SA-5 batteries |
 | Air defence integration, red counter-attacks, ground pressure | as in section 2 (0.15 / 0.10 / 0.15) | 0.55 / 0.30 / 0.45 | 0.90 / 0.55 / 0.80 |
 | Tu-22M3 bomber wing | none | none | 16 Tu-22M3 with 12 Su-27 escorts at Damascus |
 | Victory | take Bassel Al-Assad | destroy all of Lutorin's works, or red's supply collapses (see below) | destroy all of Lutorin's works, or red's supply collapses |
 
-Red's jets fill each field's parking to about 75% at Level 1 (four small fields), about 60% at Level 2 (85% of Level 3's fill: a regional power) and about
-70% at Level 3 (Damascus is held back for the bomber wing).
+Red's jets fill each field's parking to about 75% at Level 1 (four small fields), about 70% at Levels 2 and 3 (the same jets per field; Level 2's types are older, a regional power's. Damascus is held back for the bomber wing at Level 3).
 
 Red's raids on troops, garrisons and supply sites are led by the cheap **Su-17M4** attack jet. At Level 3 the Tu-22M3 wing raids the carrier along the line from the carrier through Damascus, at most 12 bombers at a time, flown as a set piece with its SEAD in the turn before, as in section 5.
 
