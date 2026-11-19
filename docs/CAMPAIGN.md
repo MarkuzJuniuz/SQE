@@ -3,7 +3,7 @@
 What the war is, what happens each turn, and the rules behind it. For installing and running SQE see `docs/GUIDE.md`
 (section 4 there is the short "how a turn works"); for adding a map see `docs/THEATRES.md`.
 
-Checked against the code as of v0.41.524, for both maps (the Caucasus, and Syria in section 10). The mod is still evolving, so things may change (see the last section). Numbers are
+Checked against the code as of v0.41.525, for both maps (the Caucasus, and Syria in section 10). The mod is still evolving, so things may change (see the last section). Numbers are
 tuning values in the code and change between versions: where one matters it is named, so you can find it. Several are the author's judgment calls with no public source, and
 where that is the case the code says so next to the number.
 
@@ -291,7 +291,7 @@ The second map. You choose the map in the New Campaign dialog; a Syria campaign 
 
 ### The war
 
-It is June 2001 (the campaign starts on 12 June, at **00:00**). A US-led coalition has answered Turkey's request for help and fights its way down the **Hatay coast road** into Syria. Blue flies from **Incirlik**, from Akrotiri, Larnaca, Paphos and Muwaffaq Salti (Hatay is a recovery field only), and from the carrier **USS Dwight D. Eisenhower**, which sits north of Cyprus (160 nm from the Syrian coast). Red holds the Syrian airfields. The front is the coast road from Hatay through **Bassel Al-Assad**, **Rene Mouawad** and **Shayrat**, and the level decides how much of it is fought over: Level 1 contests Bassel Al-Assad only, Level 2 adds Rene Mouawad, Level 3 adds Shayrat. The deep rear (Hama, Abu al-Duhur, Tiyas, Palmyra, Sayqal, Damascus, Al-Dumayr, An Nasiriyah) is where the long-range air defence and the bomber wing sit.
+It is June 2001 (the campaign starts on 12 June, at **00:00**). A US-led coalition has answered Turkey's request for help and fights its way down the **Hatay coast road** into Syria. Blue flies from **Incirlik**, from Akrotiri, Larnaca, Paphos and Muwaffaq Salti (Hatay is a recovery field only), and from the carrier **USS Dwight D. Eisenhower**, which sits south of Cyprus (it keeps at least 130 nm from every red airfield, closing in as they fall). Red holds the Syrian airfields. The front is the coast road from Hatay through **Bassel Al-Assad**, **Rene Mouawad** and **Shayrat**, and the level decides how much of it is fought over: Level 1 contests Bassel Al-Assad only, Level 2 adds Rene Mouawad, Level 3 adds Shayrat. The deep rear (Hama, Abu al-Duhur, Tiyas, Palmyra, Sayqal, Damascus, Al-Dumayr, An Nasiriyah) is where the long-range air defence and the bomber wing sit.
 
 Who you fight depends on the level: Level 1 is **the Northern Coastal Command** (the NCC, an insurgent force), Level 2 is **Syria**, Level 3 is **Syria and its Russian backers**.
 
