@@ -235,7 +235,7 @@ def _extra_sams(st, th: dict, d, ap, live: set, tiers: dict) -> None:
         st.assets[e["id"]] = EnemyAsset(e["id"], e.get("name") or f"{SAM_LABEL[v]} {e['id'][4:]}", AssetKind.SAM, x, y, 1.0, SAM_VALUE[v], [], None, v, tier, "")
 
 
-OPENING_STRIKE_TEXT = "At midnight F-117A Nighthawks struck the long-range {kill} batteries: every one is down."
+OPENING_STRIKE_TEXT = "At midnight F-117A Nighthawks struck the long-range {kill} batteries: every one is down{also}."      # `{also}` (the default text only): ", along with some SA-10 sites and early-warning radars" for the `fill` kinds the pairs hit
 
 
 def _opening_strike(st, th: dict, d) -> list:
@@ -253,7 +253,18 @@ def _opening_strike(st, th: dict, d) -> list:
     for a in hit:
         a.health = 0.0
     _sams_mod.track(st)
-    return [(os_.get("text") or OPENING_STRIKE_TEXT).format(kill=hit[0].variant)] + f117.opening_sortie(st, os_, hit)
+    lines = f117.opening_sortie(st, os_, hit)
+    if os_.get("text"):
+        head = os_["text"].format(kill=hit[0].variant)
+    else:
+        kinds = []                                       # the other kinds the pairs hit, in the order first hit: "some SA-10 sites and early-warning radars" (no counts in the headline, XO 2026-11-19)
+        for p in ((st.raids or {}).get("opening_strike") or {}).get("pairs", []):
+            a = st.assets[p["target"]]
+            k = "early-warning radars" if a.kind == AssetKind.EWR else SAM_LABEL.get(a.variant, a.variant) + "s"
+            if a.variant != hit[0].variant and k not in kinds:
+                kinds.append(k)
+        head = OPENING_STRIKE_TEXT.format(kill=hit[0].variant, also=f", along with some {' and '.join(kinds)}" if kinds else "")
+    return [head] + lines
 
 
 def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str = "caucasus",
