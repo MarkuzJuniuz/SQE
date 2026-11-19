@@ -801,8 +801,8 @@ class WarSimulator:
             return {"success": False, "held": True, "odds": 0.0, "lines": [line], "objective": pkg.objective.description, "roll": {"success": False, "held": True}}
         if pkg.objective.type == ObjectiveType.FLEET_DEFENSE:
             return self._resolve_raid(state, pkg, force)
-        if pkg.objective.type == ObjectiveType.STRIKE and pkg.objective.aim == "F117":              # S104: the F-117A's own roll (f117.resolve)
-            from . import f117
+        from . import f117
+        if f117.is_job(pkg.objective):                                                               # S104: the F-117A's own roll (f117.resolve): its EWR / SAM strike and its night runway strike
             return f117.resolve(self, state, pkg, force)
         if pkg.objective.type == ObjectiveType.COUNTER_AIR and pkg.objective.aim == "SWEEP":
             return self._resolve_sweep(state, pkg, force)

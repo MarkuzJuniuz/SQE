@@ -49,6 +49,7 @@ def war_case(task) -> dict:
     cov = {c: 0 for c in (60.0, 40.0, 30.0, 20.0)}
     seen = set()
     orig = f117.COVER_NM
+    rwy = 0
     for _ in range(days * 6):
         if st.status != "ACTIVE":
             break
@@ -60,18 +61,21 @@ def war_case(task) -> dict:
                 f117.COVER_NM = c
                 cov[c] += len(f117.targets(st))
             f117.COVER_NM = orig
+            rwy += len(f117.runway_targets(st))
         for p in s.packages():
-            if p.objective.aim == "F117" and p.objective.id not in seen:
-                seen.add(p.objective.id)
+            if f117.is_job(p.objective) and p.objective.id + (":RUNWAY" if p.objective.aim == "RUNWAY" else "") not in seen:
+                seen.add(p.objective.id + (":RUNWAY" if p.objective.aim == "RUNWAY" else ""))
                 planned += 1
                 flights += sum(f.count for f in p.flights if f.aircraft == "F-117A")
                 if any(f.aircraft != "F-117A" and not f.tag for f in p.flights):
                     bad.append(f"{tag}: package #{p.number} carries a non-F-117A flight: {[(f.role.value, f.aircraft) for f in p.flights]}")
-                lines.append(f"{tag}: day {st.day} turn {st.turn}: {p.objective.description}; {[(f.count, f.aircraft) for f in p.flights if not f.tag]}")
-    notes = [n for n in st.log if "F-117A" in str(n) or "Night strike" in str(n)]
-    hits = sum(1 for n in notes if "Night strike" in str(n) and "objective achieved" in str(n))
+                if p.objective.aim == "F117" or len(seen) <= 6:
+                    lines.append(f"{tag}: day {st.day} turn {st.turn}: {p.objective.description}; {[(f.count, f.aircraft) for f in p.flights if not f.tag]}")
+    notes = [n for n in st.log if "F-117A" in str(n) or "Night strike" in str(n) or "Night OCA" in str(n)]
+    hits = sum(1 for n in notes if ("Night strike" in str(n) or "Night OCA" in str(n)) and "objective achieved" in str(n))
     lost = sum(1 for n in st.log if "lost" in str(n) and "Pontiac" in str(n))
-    lines.append(f"{tag}: {night} night turns; qualifying targets summed over them at 60 / 40 / 30 / 20 nm: {cov[60.0]} / {cov[40.0]} / {cov[30.0]} / {cov[20.0]}; {planned} F-117A packages ({flights} jets), {hits} hits, lost ({lost} log lines)")
+    lines.append(f"{tag}: runway targets (no OTHER red patrol within reach, own patrol ignored) summed over the night turns: {rwy}")
+    lines.append(f"{tag}: {night} night turns; qualifying targets summed over them at 60 / 40 / 30 / 20 nm: {cov[60.0]} / {cov[40.0]} / {cov[30.0]} / {cov[20.0]}; {planned} F-117A packages incl. {sum(1 for x in seen if 'RUNWAY' in x)} runway ({flights} jets), {hits} hits, lost ({lost} log lines)")
     lines.append(f"{tag}: ready F-117As turn by turn: max {max(ready) if ready else 0}, min {min(ready) if ready else 0}, at the end {ready[-1] if ready else 0}; squadron {[(q.available, q.authorized, len(q.refit)) for q in f117.squadrons(st)]}")
     theatres.use("caucasus")
     return {"tag": tag, "bad": bad, "lines": lines}
@@ -226,6 +230,43 @@ def rules_case(task) -> dict:
         lines.append(f"rules: a forced hit on {t.name}: destroyed {t.destroyed}; every jet lost at the maximum chance: {sum(r['lost_by'].values())} of {n_f}; the squadron holds {sq.available} of 12")
         if not t.destroyed or sum(r["lost_by"].values()) != n_f or sq.available != 12 - n_f:
             bad.append("rules: the forced roll did not destroy the target / lose the jets / take them off the squadron")
+    # the night runway strike: every red wing wiped but one (it has jets, its own patrol is ignored): that field is the target, a forced hit cuts its runway
+    for w in st.enemy_air:
+        w.available = 0
+        for q in w.sqns:
+            q.available = 0
+    from sqe import runways
+    keep = next(w for w in st.enemy_air if st.assets[w.base_asset_id].kind.value == "AIRFIELD" and not runways.is_closed(st, w.base_asset_id))
+    for q in keep.sqns:
+        q.available = q.authorized
+    st.barcap = None
+    for a_ in st.assets.values():                            # no EWR / SAM job either (two of those would take both package places of the turn ahead of the runway)
+        if a_.kind.value in ("SAM", "EWR"):
+            a_.health = 0.0
+    sq.available, sq.refit = 12, []
+    rt = f117.runway_targets(st)
+    pkgs = [p for p in (s.plan_turn() or s.packages()) if f117.is_job(p.objective) and p.objective.aim == "RUNWAY"]
+    pkgs = [p for p in s.packages() if f117.is_job(p.objective) and p.objective.aim == "RUNWAY"]
+    if not rt or not pkgs:
+        bad.append(f"rules: no night runway strike planned for the one field with jets ({len(rt)} targets, {len(pkgs)} packages)")
+    else:
+        r2 = WarSimulator(s.d, __import__("random").Random(2)).resolve_abstract(st, pkgs[0], {"success": True})
+        fid = pkgs[0].objective.target_id
+        lines.append(f"rules: night runway strike on {st.assets[fid].name}: closed after a forced hit {runways.is_closed(st, fid)}; flights {[(f.role.value, f.count, f.aircraft) for f in pkgs[0].flights if not f.tag]}")
+        if not runways.is_closed(st, fid):
+            bad.append("rules: the forced runway hit did not close the field")
+        runways._craters(st).pop(fid, None)                      # open it again, then build the job as the all-AI test
+        s.ai_test = True
+        pa = st.player.aircraft
+        st.player.aircraft = "F-117A"
+        try:
+            s.fly(pkgs[0].number, pkgs[0].player_options("F-117A")[0].id)
+            import zipfile as _z
+            lines.append(f"rules: the night runway strike builds as a mission (.miz {'sound' if _z.ZipFile(s.settings.sortie_miz).testzip() is None else 'DAMAGED'})")
+        except Exception as e:
+            bad.append(f"rules: the night runway strike failed to build: {type(e).__name__}: {e}")
+        finally:
+            st.player.aircraft = pa
     # an ordinary strike never takes the F-117A
     from sqe.packages import PackageBuilder
     pb = PackageBuilder(st, s.d)
