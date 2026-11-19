@@ -46,6 +46,10 @@ def best_spot(state, max_move_km: float | None) -> tuple | None:
     xs = [a.x for a in state.assets.values()] + [b.x for b in state.bases.values()]
     ys = [a.y for a in state.assets.values()] + [b.y for b in state.bases.values()]
     x0, x1, y0, y1 = min(xs) - 250000, max(xs) + 250000, min(ys) - 250000, max(ys) + 250000
+    from . import theatres
+    mb = theatres.hook("map_box")                         # S90: a pack with a `map_box` (Syria) searches only inside it: the coastline file stops there, and beyond it every point reads "sea" (a 160 nm stand-off put the fleet inland in Turkey)
+    if mb is not None:
+        x0, x1, y0, y1 = max(x0, float(mb["x0"])), min(x1, float(mb["x1"])), max(y0, float(mb["y0"])), min(y1, float(mb["y1"]))
     cx = x0
     while cx <= x1:
         cy = y0
