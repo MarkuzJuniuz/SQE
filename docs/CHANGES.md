@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.514, the Nighthawks join the Syria campaign
+Syria now has its F-117A squadron: 8th FS 'Black Sheep', 12 jets at Incirlik, listed with the Coalition squadrons. It flies the night strikes on red's radars, SAM sites and runways that the Syria briefing already promised.
+
 ## v0.41.513, the Overview shows the right operation name
 The Overview's operation title now follows the campaign's theatre (Operation LEVANT HORIZON in Syria); it used to show the Caucasus's Operation IRON TIDE until the app was restarted.
 
