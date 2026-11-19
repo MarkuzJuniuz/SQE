@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.519, the campaign guide covers Syria
+`docs/CAMPAIGN.md` has a new Syria 2000 section (the war, the three levels, blue's squadrons, the opening F-117A strike, winning and losing, the SA-5s); the start hour and the night turns are corrected in the clock section.
+
 ## v0.41.518, the Syria briefing matches the opening strike
 The Level 2 and Level 3 briefings now say the Nighthawks also took out the deep early-warning radars (Level 3: and some SA-10 sites), as the war log does.
 

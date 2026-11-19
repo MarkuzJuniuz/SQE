@@ -3,7 +3,7 @@
 What the war is, what happens each turn, and the rules behind it. For installing and running SQE see `docs/GUIDE.md`
 (section 4 there is the short "how a turn works"); for adding a map see `docs/THEATRES.md`.
 
-Written from the code as of v0.41.430. The mod is still evolving, so things may change (see the last section). Numbers are
+Written from the code as of v0.41.430; the Syria map (section 10) as of v0.41.518. The mod is still evolving, so things may change (see the last section). Numbers are
 tuning values in the code and change between versions: where one matters it is named, so you can find it. Several are the author's judgment calls with no public source, and
 where that is the case the code says so next to the number.
 
@@ -20,15 +20,15 @@ It is built to give light missions: few units, only the flights your squadron's 
 that needs a hundred aircraft in the air. The war underneath is not scaled down: red and blue lose and replace real jets
 and sites.
 
-The map is the Caucasus. The coalition (blue) holds the south-east (Senaki, Kutaisi, Kobuleti, a carrier group at sea and
+There are two maps: the Caucasus (this page's numbers, unless it says otherwise) and Syria 2000 (section 10, which lists what differs). On the Caucasus the coalition (blue) holds the south-east (Senaki, Kutaisi, Kobuleti, a carrier group at sea and
 the rear support base at Kutaisi); red holds the north and the Black Sea coast (Sukhumi, Gudauta, Sochi, Gelendzhik,
-Krymsk, and the northern fields such as Mozdok, Beslan, Nalchik, Maykop and Mineralnye Vody).
+Krymsk, and the northern fields such as Mozdok, Beslan, Nalchik, Maykop and Mineralnye Vody). On Syria blue holds Incirlik and the Cyprus fields and fights down the Hatay coast road.
 
 ---------------------------------------------------------------------------------------------------
 
 ## 2. The three levels
 
-You pick the level when you start a campaign. It sets how strong red is and how it fights (`sqe/difficulty.py`).
+You pick the level when you start a campaign. It sets how strong red is and how it fights (`sqe/difficulty.py`). The table is the Caucasus; Syria's is in section 10.
 
 | | Level 1, Insurgent | Level 2, Regional power | Level 3, Near-peer |
 |---|---|---|---|
@@ -49,9 +49,9 @@ F/A-18C, F-16C, F-15C and A-10C; the F-15E is AI only. You can change the AI ski
 
 ## 3. The clock
 
-* A **turn is 4 hours**. Six turns a day. Day 1 starts at 08:00, so it has four turns (08, 12, 16, 20).
-* Turns that start at 20:00, 00:00 and 04:00 are **night turns**. With night operations off, nothing is planned for a
-  night turn and the war resolves it by itself.
+* A **turn is 4 hours**. Six turns a day. On the Caucasus Day 1 starts at 08:00, so it has four turns (08, 12, 16, 20); on Syria it starts at 00:00 and has all six.
+* Turns that start at 20:00, 00:00 and 04:00 are **night turns**. They are planned like any other turn; the Auto-Skip option for night
+  turns passes them for you.
 * One thing moves the clock: **Skip Turn** or a flown sortie. Either one is exactly one turn forward (a flown mission
   does not skip ahead to the end of the day).
 * The war resolves a turn's unflown packages when the clock moves. At midnight the daily steps run: supply-site repair and the Force Index,
@@ -195,7 +195,7 @@ the carrier is sunk, its aircraft are moved to land fields (any that cannot be p
 
 ## 6. Winning and losing
 
-* **Victory** is by the ground war only: you take **Sochi** (Levels 1 and 2) or **Sochi and Krymsk** (Level 3). At Levels 2 and
+* **Victory** (Caucasus; Syria's is in section 10) is by the ground war only: you take **Sochi** (Levels 1 and 2) or **Sochi and Krymsk** (Level 3). At Levels 2 and
   3 the red counter-force that arrives must also be beaten. Jet counts alone do not win the war.
 * **Defeat** is either of: the coalition's air component falls below 15% of its authorised strength, or **3 of your airfields
   have fallen**. A sunk carrier does not count as a fallen field (its aircraft land elsewhere; the carrier group sails back in after 7
@@ -260,7 +260,52 @@ Each blue squadron has jets *authorised*, *available* (ready now) and some in **
 
 ---------------------------------------------------------------------------------------------------
 
-## 10. Still evolving
+## 10. Syria 2000 (Operation LEVANT HORIZON)
+
+The second map. You choose the map in the New Campaign dialog; a Syria campaign needs the DCS Syria map. Everything in sections 1 to 9 works the same there (the same turns, packages, Force Index, refit and ledger); this section is what is different. The Caucasus pages above give the Caucasus numbers; the numbers here are the Syria pack's (`sqe/data/theatres/syria.json`), as of v0.41.518.
+
+### The war
+
+It is June 2000 (the campaign starts on 12 June, at **00:00**). A US-led coalition has answered Turkey's request for help and fights its way down the **Hatay coast road** into Syria. Blue flies from **Incirlik**, from Akrotiri, Larnaca, Paphos and Muwaffaq Salti (Hatay is a recovery field only), and from the carrier **USS Dwight D. Eisenhower**, which sits north of Cyprus (160 nm from the Syrian coast). Red holds the Syrian airfields. The front is the coast road from Hatay through **Bassel Al-Assad**, **Rene Mouawad** and **Shayrat**, and the level decides how much of it is fought over: Level 1 contests Bassel Al-Assad only, Level 2 adds Rene Mouawad, Level 3 adds Shayrat. The deep rear (Hama, Abu al-Duhur, Tiyas, Palmyra, Sayqal, Damascus, Al-Dumayr, An Nasiriyah) is where the long-range air defence and the bomber wing sit.
+
+Who you fight depends on the level: Level 1 is **the Northern Coastal Command** (the NCC, an insurgent force), Level 2 is **Syria**, Level 3 is **Syria and its Russian backers**.
+
+### The three levels in Syria
+
+| | Level 1 | Level 2 | Level 3 |
+|---|---|---|---|
+| Red airfields | 4: Bassel Al-Assad, Abu al-Duhur, Hama, Shayrat | 11, the whole coast road and the interior | 11 |
+| Red aircraft at the start | 94 (MiG-21Bis, MiG-23MLD, Su-17M4, Su-24M) | 202 (adds MiG-29A and MiG-25PD) | 238, plus the bomber wing (MiG-23MLD, MiG-29A and S, MiG-25PD, Su-27, MiG-31, Su-17M4, Su-24M) |
+| Red SAMs | SA-2, SA-3, AAA, MANPADS | SA-2, SA-3, SA-6, SA-11, AAA, two SA-5 batteries | SA-10, SA-11, SA-6, SA-15, SA-19, three SA-5 batteries |
+| Air defence integration, red counter-attacks, ground pressure | as in section 2 (0.15 / 0.10 / 0.15) | 0.55 / 0.30 / 0.45 | 0.90 / 0.55 / 0.80 |
+| Tu-22M3 bomber wing | none | none | 16 Tu-22M3 with 12 Su-27 escorts at Damascus |
+| Victory | take Bassel Al-Assad | red's supply collapses (see below) | red's supply collapses |
+
+Red's raids on troops, garrisons and supply sites are led by the cheap **Su-17M4** attack jet. At Level 3 the Tu-22M3 wing raids the carrier along the line from the carrier through Damascus, at most 12 bombers at a time, flown as a set piece with its SEAD in the turn before, as in section 5.
+
+### Blue in Syria
+
+Blue has 18 squadrons and 284 jets at every level: two F-14B squadrons and two F/A-18C squadrons on the carrier, five F-16C, three F-15C (plus the AI-only HAVCAP F-15C), three F-15E (AI only), one A-10 squadron at Incirlik and the **8th FS 'Black Sheep' (12 F-117A, AI only)**. You can fly the F-14B, F/A-18C, F-16C, F-15C and A-10. The **Era Equipment** setting (New Campaign) picks the airframes of the year: Syria 2000 defaults to the A-10A, the F-14B and no Link 16 data.
+
+### The opening night
+
+The campaign starts at midnight, in the middle of a surprise attack. At Levels 2 and 3 the 12 **F-117A Nighthawks** of the 8th FS have just struck as six pairs, one pair per target: every long-range **SA-5** battery first (Homs and Damascus, and Tiyas at Level 3), then the deepest radars (Level 2: the four deep early-warning radars) or, at Level 3, some SA-10 sites and radars. The war log names every site and the pair that hit it. The sites are rebuilt by the normal rule (5 to 7 days, at half strength), so the opening is a window, not a won air war: the rest of the network, the fighters, and the SAM belt at the front are all still up. Level 1 has no opening strike.
+
+The Nighthawks themselves start the war on their way home to Incirlik (the Overview squadron table says "returning", then "refitting"), land at about 00:40 to 00:50 and spend a 16-hour refit, so none of them is ready on the opening night. From then on the squadron flies on its own at night only: radars, SAM sites and runways that no red fighter patrol or alert pair can reach, as a pair or a four-ship with no escort. It is the highest-maintenance airframe in the game: a lost jet is replaced one per 96 hours. You do not fly it; you will see its strikes in the war log and in the sites that fall.
+
+### Winning and losing in Syria
+
+* **Level 1:** victory is the ground war, as in section 6: take **Bassel Al-Assad**.
+* **Levels 2 and 3:** no ground victory. The war is won when **red's Force Index** (its supply, section 5) has been at or below 40% for **three nights in a row**. The Overview shows how close it is in a word (distant, approaching, close, under way). That is the depots, fuel farms and road sites, not the cities: the coalition's stated intent is to break Syria's supply and air defence.
+* **Defeat:** the coalition's air component below 15% of its strength (as in section 6), or **one** airfield of yours lost (the Caucasus allows three).
+
+### Long-range air defence
+
+The SA-5 is the new problem. A battery at Shayrat reaches over the whole coast from high altitude (the planner is altitude-blind: it treats the ring as reaching every altitude), but it cannot touch a flight low down: measured in DCS, its reach is about 65 nm at high altitude, about 20 nm at 5,000 ft and nothing at 500 ft. The SA-10s (Level 3) are the same kind of problem at shorter range. Standoff jobs, HARM shooters and the Nighthawks are how the belt is opened.
+
+---------------------------------------------------------------------------------------------------
+
+## 11. Still evolving
 
 SQE is still being developed, and the rules on this page may change from one version to the next. The change log
 (`docs/CHANGES.md`) says what each version did. If something in a mission behaves differently from this page, or you
