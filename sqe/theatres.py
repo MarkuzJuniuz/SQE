@@ -31,6 +31,8 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 #   nav {airport: kneeboard line}         -> kneeboard.nav_line()                     (default kneeboard.NAV)
 #   ils_runway {airport: runway number}   -> runways.ils_runways()                    (default runways.ILS_RUNWAY)
 #   mag_var_deg number                    -> runways.mag_var_deg()                    (default runways.MAG_VAR_DEG)
+#   raid_attack_types [type, ...]         -> raids.attack_types()                     (default ("Su_25",): leads raids on troops, garrisons, supply sites)
+#   raid_bomber_types [type, ...]         -> raids.bomber_types()                     (default loadouts.BOMBER_TYPES = ("Su_24M",): field raids, SEAD and Kh-59M raids only)
 #   extra_sams [{id, site, x/y or near+bearing+dist_m, levels, ...}] -> scenario.new_campaign (fixed extra SAM sites; default none)
 
 _ACTIVE: dict | None = None
@@ -116,6 +118,16 @@ def _check_hooks(d: dict, src) -> None:
         bad("ils_runway must be an {airport name: runway number 1 to 36} object")
     if "mag_var_deg" in d and (isinstance(d["mag_var_deg"], bool) or not isinstance(d["mag_var_deg"], (int, float)) or abs(d["mag_var_deg"]) > 30):
         bad("mag_var_deg must be a number of degrees (east positive, within 30)")
+    for k in ("raid_attack_types", "raid_bomber_types"):
+        if k in d:
+            if not isinstance(d[k], list) or not d[k] or not all(isinstance(t, str) for t in d[k]):
+                bad(f"{k} must be a non-empty list of red aircraft types (pydcs class names)")
+            from dcs import planes
+            for t in d[k]:
+                if not hasattr(planes, t):
+                    bad(f"{k}: {t!r} is not a pydcs aircraft")
+    if set(d.get("raid_attack_types") or ()) & set(d.get("raid_bomber_types") or ()):
+        bad("raid_attack_types and raid_bomber_types must not share a type (the bomber list alone flies the SEAD and Kh-59M raids)")
     if "extra_sams" in d:
         if not isinstance(d["extra_sams"], list):
             bad("extra_sams must be a list")
