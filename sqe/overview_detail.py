@@ -78,7 +78,7 @@ def supply_rows(state) -> list:
     for side, label, pool in (("blue", "Coalition", getattr(state, "blue_assets", {})), ("red", story.enemy(state), state.assets)):
         rate = ground.supply(state, side) / ground.SUPPLY_REPAIR_DAYS
         for a in sorted(pool.values(), key=lambda x: x.name):
-            if a.kind not in ground.SUPPLY_KINDS:
+            if not ground.is_supply(a):
                 continue
             h = a.health
             days = max(1, round((1.0 - h) / rate)) if rate > 0 else 99

@@ -3,7 +3,7 @@
 What the war is, what happens each turn, and the rules behind it. For installing and running SQE see `docs/GUIDE.md`
 (section 4 there is the short "how a turn works"); for adding a map see `docs/THEATRES.md`.
 
-Checked against the code as of v0.41.519, for both maps (the Caucasus, and Syria in section 10). The mod is still evolving, so things may change (see the last section). Numbers are
+Checked against the code as of v0.41.523, for both maps (the Caucasus, and Syria in section 10). The mod is still evolving, so things may change (see the last section). Numbers are
 tuning values in the code and change between versions: where one matters it is named, so you can find it. Several are the author's judgment calls with no public source, and
 where that is the case the code says so next to the number.
 
@@ -140,14 +140,14 @@ Red on Level 1 is counted differently in a new campaign: 70% of the figure is it
 
 The Force Index sets the pace of nearly everything that rebuilds:
 
-* **Reinforcements** of the ground forces in each sector scale with it.
+* **Reinforcements** of the ground forces in each sector scale with it. (On the Caucasus at Level 3 red's daily reinforcement is more than three times the other levels', so the line toward Sochi and Krymsk can be pushed back.)
 * **Jet replacements:** a squadron below strength gets a replacement pair every 24 hours divided by the Force Index (every 24 hours at 100%, about 69 hours
   at the 35% floor). The Tu-22M3 and the E-3 are the exception (section 7).
 * **Site repair:** a damaged or destroyed supply site mends by the Force Index divided by 6 of a full site each night, so a destroyed one is back in 6 days
   at 100% and about 17 days at the 35% floor. A site that was struck that night does not mend.
 * **Limping jets** take twice as long to refit, scaled by the Force Index.
 
-Red's road sites are extra supply sites scattered along the roads (15 at Level 1, 30 at Levels 2 and 3), some guarded,
+Red's road sites are extra supply sites scattered along the roads (15 at Level 1, 30 at Levels 2 and 3, but 20 at Levels 2 and 3 in Syria), some guarded,
 some a parked truck only. Hitting them, and the depots and fuel farms, is how blue lowers red's Force Index.
 
 ### Air defence
@@ -304,7 +304,7 @@ Who you fight depends on the level: Level 1 is **the Northern Coastal Command** 
 | Red SAMs | SA-2, SA-3, AAA, MANPADS | SA-2, SA-3, SA-6, SA-11, AAA, two SA-5 batteries | SA-10, SA-11, SA-6, SA-15, SA-19, three SA-5 batteries |
 | Air defence integration, red counter-attacks, ground pressure | as in section 2 (0.15 / 0.10 / 0.15) | 0.55 / 0.30 / 0.45 | 0.90 / 0.55 / 0.80 |
 | Tu-22M3 bomber wing | none | none | 16 Tu-22M3 with 12 Su-27 escorts at Damascus |
-| Victory | take Bassel Al-Assad | red's supply collapses (see below) | red's supply collapses |
+| Victory | take Bassel Al-Assad | destroy all of Lutorin's works, or red's supply collapses (see below) | destroy all of Lutorin's works, or red's supply collapses |
 
 Red's jets fill each field's parking to about 75% at Level 1 (four small fields), about 60% at Level 2 (85% of Level 3's fill: a regional power) and about
 70% at Level 3 (Damascus is held back for the bomber wing).
@@ -326,8 +326,17 @@ then on the squadron flies as described in section 5. You do not fly it; you wil
 ### Winning and losing in Syria
 
 * **Level 1:** victory is the ground war, as in section 6: take **Bassel Al-Assad**.
-* **Levels 2 and 3:** no ground victory. The war is won when **red's Force Index** (its supply, section 5) has been at or below 40% for **three nights in a row**. The Overview shows how close it is in a word (distant, approaching, close, under way). That is the depots, fuel farms and road sites, not the cities: the coalition's stated intent is to break Syria's supply and air defence.
+* **Levels 2 and 3:** no ground victory. The war is won in one of two ways, neither of them a conquest. **Lutorin's works** (below): all of them destroyed at the same time. Or **red's Force Index** (its supply, section 5) at or below 40% for **three nights in a row** (the Overview shows how close it is in a word: distant, approaching, close, under way); that is the depots, fuel farms and road sites, not the cities. The coalition's stated intent is to break Syria's supply and air defence. With red's air defence as strong as it is, the works are the more likely way.
 * **Defeat:** the coalition's air component below 15% of its strength (as in section 6), or **one** airfield of yours lost (the Caucasus allows three).
+
+### Lutorin's works
+
+At Levels 2 and 3 five special plants stand in the Syrian rear: two near Palmyra, two in the Homs gap and one at Latakia. They belong to **Lutorin** (a billionaire at Level 2, the richest man in the world at Level 3, the same story), who makes a stabilizer there that gives old Soviet-era arsenals new life. It is made from a crystal that only forms in the Palmyra phosphate beds and cannot be shipped, so it can only be made in Syria; Damascus hosts the plants and his money and arms stand behind its claim on Hatay. The Overview names them in one line ("Lutorin's works: all in production", "most of them", "only a few", "all destroyed") and the war log reports each one that falls.
+
+* **They are special targets.** The planner offers a strike on a works ahead of the ordinary supply strikes. A works is a fixed plant, so it is hit with stand-off weapons: SLAM-ER Hornets released far out and low, with no SEAD or DEAD job in front of it and without the flight route being stopped by the belt, for as long as a Hornet squadron has two jets to send. With none, the usual rules apply (behind the SEAD or DEAD on the air defence that covers it). The Palmyra plants sit under the long-range umbrella, so the odds there are the worst. A works is hunted until it is destroyed (a damaged supply site is left alone to mend, a works does not mend), and it is not a supply site: it does not count in the Force Index.
+* **They are very hard to rebuild.** One team rebuilds one destroyed works at a time, and it takes weeks (about a month, at both levels). At Level 2 the plants are hardened: one strike does a tenth of the damage it would to a depot, so it takes a series of strikes to put one out, and that is what keeps Level 2 from being over in two weeks. At Level 3 one good strike puts a works out. A damaged works never repairs.
+* **They feed the war on the front.** While the works stand, the enemy's reinforcements, attacks and raids are stronger, so the more of them you destroy the weaker the push on Hatay. If every one of them is destroyed at the same moment the war is won ("the works are gone"). The other ending is the one the campaign already has: if Hatay falls, the war is lost.
+* Tactical Edge and your own flying count as for any other strike: the works are tasked like every other job, and a works you hit yourself takes damage from the buildings you really destroy.
 
 ### Long-range air defence
 

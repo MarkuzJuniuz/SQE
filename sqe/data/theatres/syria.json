@@ -694,6 +694,63 @@
    "days": 3
   }
  },
+ "works": {
+  "label": "Lutorin's works",
+  "damage": 1.0,
+  "levels": {
+   "2": {
+    "push": 2.0,
+    "rebuild_days": 30,
+    "damage": 0.1
+   },
+   "3": {
+    "push": 4.75,
+    "rebuild_days": 30
+   }
+  },
+  "sites": [
+   {
+    "id": "wks_palmyra_1",
+    "name": "Lutorin works, Palmyra west",
+    "x": -57835,
+    "y": 193843,
+    "value": 10,
+    "tier": 4
+   },
+   {
+    "id": "wks_palmyra_2",
+    "name": "Lutorin works, Palmyra north",
+    "x": -42267,
+    "y": 201149,
+    "value": 10,
+    "tier": 4
+   },
+   {
+    "id": "wks_homs_1",
+    "name": "Lutorin works, Homs gap west",
+    "x": -40043,
+    "y": 50504,
+    "value": 10,
+    "tier": 3
+   },
+   {
+    "id": "wks_homs_2",
+    "name": "Lutorin works, Homs gap east",
+    "x": -28923,
+    "y": 82457,
+    "value": 10,
+    "tier": 3
+   },
+   {
+    "id": "wks_latakia",
+    "name": "Lutorin works, Latakia port",
+    "x": 53262,
+    "y": -2155,
+    "value": 10,
+    "tier": 2
+   }
+  ]
+ },
  "opening_strike": {
   "levels": [
    2,
@@ -730,11 +787,13 @@
   "2": {
    "bomber_wing": 0,
    "bomber_escort_wing": 0,
-   "bomber_policy": "none"
+   "bomber_policy": "none",
+   "road_sites_red": 20
   },
   "3": {
    "bomber_wing": 16,
-   "bomber_escort_wing": 12
+   "bomber_escort_wing": 12,
+   "road_sites_red": 20
   }
  },
  "red_roster": {
@@ -930,9 +989,10 @@
    "enemy_long": "the Syrian Arab Republic",
    "background": [
     "Syria has closed its border with Turkey and moved its army to the Hatay frontier, a province Damascus has never fully given up. The Syrian air force flies from the coast and the central plains with MiG-23s, MiG-25 interceptors and a handful of MiG-29s, under a thick belt of SA-2, SA-3 and SA-6 batteries and a few newer SA-11s fitted by Russian advisers. Its supplies come down the coast road from Latakia and the Homs gap, and no one outside Damascus can say who is paying for the new equipment.",
+    "Aleksandr Lutorin, a Russian billionaire, has a second business that exists only in Syria. In the phosphate beds around Palmyra grows a crystal that forms nowhere else on earth and breaks down within days once it leaves the ground, so it cannot be shipped: it has to be worked beside the mine. From it his chemists make a stabilizer that gives old Soviet-era arsenals new life: missile motors, radar tubes and the propellant of batteries that should have been scrapped years ago. The West has no use for it. Everyone who still holds a Cold War arsenal pays Lutorin whatever he asks. Damascus hosts his plants, takes its share, and in return his money and his arms stand behind its claim on Hatay. Every process line was built by hand by one team of Soviet-trained engineers and cannot be ordered from a catalogue: when a line burns, the same few tired men start again.",
     "A US-led coalition has answered Turkey's request for help. The carrier USS Dwight D. Eisenhower and her air wing operate from the eastern Mediterranean; Coalition squadrons fly from Incirlik and the Turkish fields behind the front. You fly with the Navy's carrier air wing or with the Air Force, as your squadron is. The war opened at midnight, when F-117A Nighthawks took out the long-range SA-5 batteries near Homs and Damascus, and the deep early-warning radars behind them. They will be rebuilt in time, but for now the way is open."
    ],
-   "intent": "Coalition command's intent: break Syria's supply and air defence, not its cities. Hit the depots, fuel and the SAM belt along the coast road, and the front cannot be kept up. Hold Hatay, it is the line. Every day the war is planned and the packages go out. Yours is the one you fly yourself.",
+   "intent": "Coalition command's intent: break Syria's supply and air defence, not its cities. Hit the depots, fuel and the SAM belt along the coast road, and the front cannot be kept up. Hold Hatay, it is the line. Lutorin's plants are the other target: destroy them all and his arms stop coming. Every day the war is planned and the packages go out. Yours is the one you fly yourself.",
    "now": {
     "Offensive": "Our ground force at the front outweighs Syria's here, and the air campaign is keeping it that way.",
     "Consolidating": "We hold what we gained. Use the time to hit supply and air defence.",
@@ -949,7 +1009,10 @@
     "win": "Syria's supply has collapsed. Without it the army cannot hold the front and Damascus asks for talks. The war is won.",
     "lose": "Hatay has fallen. The Coalition withdraws and the campaign is lost.",
     "fall_ab_bassel": "Bassel Al-Assad is ours. The coast road south is open and the first step is taken.",
-    "fall_ab_mouawad": "Rene Mouawad is ours. The coast road as far as the Lebanese border is in coalition hands."
+    "fall_ab_mouawad": "Rene Mouawad is ours. The coast road as far as the Lebanese border is in coalition hands.",
+    "works_down": "The first of Lutorin's plants is burning. His customers are asking where their stabilizer is.",
+    "works_back": "Lutorin's engineers have a line running again, far slower than we broke it.",
+    "works_win": "The last of Lutorin's plants is gone. With nothing left to sell, his money and his arms stop, and Damascus lets go of Hatay. The war is won."
    }
   },
   "3": {
@@ -957,9 +1020,10 @@
    "enemy_long": "Syria and its Russian backers",
    "background": [
     "Syria has closed its border with Turkey and is massing along the Hatay frontier, backed by Russian advisers, Russian-supplied fighters and a modern air-defence network that Syria could never have paid for. Behind it stands one man. Aleksandr Lutorin, a Russian oligarch whose companies hold the pipelines, terminals and tanker fleets that carry the Levant's oil and gas to the Mediterranean, has bought his way into both governments. Damascus takes his money; Moscow takes his calls. Hatay and the Iskenderun coast are the last piece of the export route he does not control.",
+    "Lutorin's real treasure is not in the pipelines. In the phosphate beds around Palmyra grows a crystal that forms nowhere else on earth and breaks down within days once it leaves the ground, so it cannot be shipped: it has to be worked beside the mine. From it his chemists make a stabilizer that gives old Soviet-era arsenals new life: missile motors, radar tubes and the propellant of batteries that should have been scrapped years ago. The West has no use for it. Everyone who still holds a Cold War arsenal pays Lutorin whatever he asks. Damascus hosts his plants, takes its share, and in return his money and his arms stand behind its claim on Hatay. Every process line was built by hand by one team of Soviet-trained engineers and cannot be ordered from a catalogue: when a line burns, the same few tired men start again.",
     "A US-led coalition has answered Turkey's request for help. The carrier USS Dwight D. Eisenhower and her air wing operate from the eastern Mediterranean; Coalition squadrons fly from Incirlik and the fields behind the Turkish front. You fly with the Navy's carrier air wing or with the Air Force, as your squadron is. The war opened at midnight, when F-117A Nighthawks slipped in unseen and took out the long-range SA-5 batteries around Damascus and Homs, along with some SA-10 sites and early-warning radars. The rest of the network, and the Russian-built fighters behind it, are still up."
    ],
-   "intent": "Coalition command's intent: break Syria's supply and air defence, not its cities. Take down the SAM belt, the fuel and the depots that feed the front, and the war is over when the enemy can no longer keep it up. Hold Hatay: it is the line. Every day the war is planned and the packages go out. Yours is the one you fly yourself.",
+   "intent": "Coalition command's intent: break Syria's supply and air defence, not its cities. Take down the SAM belt, the fuel and the depots that feed the front, and the war is over when the enemy can no longer keep it up. Hold Hatay: it is the line. Lutorin's plants are the other target: destroy them all and his arms stop coming. Every day the war is planned and the packages go out. Yours is the one you fly yourself.",
    "now": {
     "Offensive": "Our ground force at the front outweighs the enemy's here, and the air campaign is keeping it that way.",
     "Consolidating": "We hold what we gained. Use the time to hit supply and air defence.",
@@ -977,7 +1041,10 @@
     "lose": "Hatay has fallen. The Coalition withdraws and the export route is Lutorin's. The campaign is lost.",
     "fall_ab_bassel": "Bassel Al-Assad is ours. The coast road south is open and the first step is taken.",
     "fall_ab_mouawad": "Rene Mouawad is ours. The coast road as far as the Lebanese border is in coalition hands.",
-    "fall_ab_shayrat": "Shayrat is ours. The Homs gap is open and the road into central Syria lies ahead."
+    "fall_ab_shayrat": "Shayrat is ours. The Homs gap is open and the road into central Syria lies ahead.",
+    "works_down": "The first of Lutorin's plants is burning. His customers are asking where their stabilizer is.",
+    "works_back": "Lutorin's engineers have a line running again, far slower than we broke it.",
+    "works_win": "The last of Lutorin's plants is gone. With nothing left to sell, his money and his arms stop, and Damascus lets go of Hatay. The war is won."
    }
   }
  },

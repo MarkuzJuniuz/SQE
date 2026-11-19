@@ -170,6 +170,10 @@ def supply_lines(state) -> list:
     w = ground.supply_collapse_word(state)               # S90: only where the pack wins on the enemy's supply collapsing
     if w:
         out.append(f"{story.enemy(state)} supply collapse: {w}")
+    from . import works
+    wl = works.line(state)                                # S111: Lutorin's works, where the pack has them
+    if wl:
+        out.append(wl)
     return out
 
 

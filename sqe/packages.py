@@ -5,7 +5,7 @@ import math
 import random
 from dataclasses import dataclass, field, asdict
 from . import f117
-from . import runways, threat
+from . import runways, threat, works
 from . import threatmap as tm
 from .loadouts import CBU_JETS, ENEMY_FIGHTERS, ENEMY_RADIUS_NM, EWR_KIT_ORDER, JSOW_PER_JET, PEN_PER_JET, PEN_REACH, SLAM_PER_JET
 from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER, STRIKE_CONDITIONAL, HOG_KEYS
@@ -398,7 +398,7 @@ class PackageBuilder:
         if math.hypot(tx - b.x, ty - b.y) / NM > reach:
             return False
         obj, asset = self._ctx
-        if obj is not None and obj.type not in _FLEET and not f117.is_job(obj) and tm.blockers(self.state, (b.x, b.y), (tx, ty), asset):
+        if obj is not None and obj.type not in _FLEET and not f117.is_job(obj) and not (obj.aim == "STANDOFF" and works.is_works(asset)) and tm.blockers(self.state, (b.x, b.y), (tx, ty), asset):      # S111: a standoff strike on a works flies low under the umbrella and is not stopped by the belt in front of it (judgment call)
             return False
         return True
 

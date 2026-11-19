@@ -32,6 +32,7 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 #   ils_runway {airport: runway number}   -> runways.ils_runways()                    (default runways.ILS_RUNWAY)
 #   mag_var_deg number                    -> runways.mag_var_deg()                    (default runways.MAG_VAR_DEG)
 #   win_supply {level: {below, days}}     -> ground.update_supply_win / war.update_status (default none: red's Force Index at or below `below` on `days` consecutive days wins the level)
+#   works {label, damage, levels {level: {push, rebuild_days}}, sites [{id wks_.., name, x, y}]} -> works.build / war / ground.push_factor (S111: Lutorin's works, special blue targets; the win when all are destroyed. Default none: the Caucasus)
 #   start_hour 0|4|8|12|16|20             -> CampaignState.start_hour, clock.use()    (default 8: Day 1 / turn 0 starts at 08:00; Syria 0)
 #   opening_strike {levels, kill, text?, fill?}  -> scenario._opening_strike          (default none: every red site of the variant `kill` starts the campaign destroyed, rebuilt by the normal rule; `fill`: what the F-117A pairs left over hit, S104d)
 #   raid_attack_types [type, ...]         -> raids.attack_types()                     (default ("Su_25",): leads raids on troops, garrisons, supply sites)
@@ -141,6 +142,29 @@ def _check_hooks(d: dict, src) -> None:
             if (not isinstance(r, dict) or set(r) != {"below", "days"} or isinstance(r["below"], bool) or not isinstance(r["below"], (int, float)) or not 0.0 < r["below"] <= 1.0
                     or isinstance(r["days"], bool) or not isinstance(r["days"], int) or r["days"] < 1):
                 bad(f"win_supply level {lv} must be {{\"below\": a number above 0 and up to 1, \"days\": a whole number of days, 1 or more}}")
+    if "works" in d:                                                  # S111: Lutorin's works (works.py)
+        w = d["works"]
+        num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+        if not isinstance(w, dict) or set(w) - {"label", "damage", "levels", "sites"}:
+            bad("works takes only label, damage, levels and sites")
+        if "label" in w and not isinstance(w["label"], str):
+            bad("works.label must be a string")
+        if "damage" in w and (not num(w["damage"]) or not 0.0 < w["damage"] <= 1.0):
+            bad("works.damage must be a number above 0 and up to 1 (the share of a depot's strike damage a works takes)")
+        levels_of("works.levels", w.get("levels"))
+        for lv, r in w["levels"].items():
+            if (not isinstance(r, dict) or not {"push", "rebuild_days"} <= set(r) or set(r) - {"push", "rebuild_days", "damage"} or not num(r["push"]) or r["push"] < 0
+                    or not num(r["rebuild_days"]) or r["rebuild_days"] <= 0 or ("damage" in r and (not num(r["damage"]) or not 0.0 < r["damage"] <= 1.0))):
+                bad(f"works.levels {lv} must be {{\"push\": a number, 0 or more, \"rebuild_days\": a number above 0, \"damage\": optional, a number above 0 and up to 1}}")
+            if "works_win" not in (((d.get("stories") or {}).get(lv) or {}).get("beats") or {}):
+                bad(f"works.levels {lv}: the level's story needs the beat works_win (the text of the win)")
+        sites = w.get("sites")
+        if not isinstance(sites, list) or not sites:
+            bad("works.sites must be a non-empty list of {id, name, x, y, value?, tier?}")
+        for s_ in sites:
+            if (not isinstance(s_, dict) or set(s_) - {"id", "name", "x", "y", "value", "tier"} or not {"id", "name", "x", "y"} <= set(s_)
+                    or not isinstance(s_["id"], str) or not s_["id"].startswith("wks_") or not isinstance(s_["name"], str) or not num(s_["x"]) or not num(s_["y"])):
+                bad("every works site needs an id starting wks_, a name, and numbers x and y (DCS metres)")
     if "start_hour" in d and (isinstance(d["start_hour"], bool) or d["start_hour"] not in (0, 4, 8, 12, 16, 20)):
         bad("start_hour must be 0, 4, 8, 12, 16 or 20 (a campaign turn is four hours: the start lies on that grid)")
     if "opening_strike" in d:

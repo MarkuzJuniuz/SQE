@@ -579,12 +579,17 @@
         "the coast and the north Caucasus",
         "the enemy deep rear"
     ],
+    "level_overrides": {
+        "3": {
+            "red_reinf": 24.0
+        }
+    },
     "stories": {
         "3": {
             "enemy": "Russia",
             "enemy_long": "Russia",
             "background": [
-                "A long dispute on the Black Sea coast has turned into open war. Russia has moved a combined-arms army group and its southern air regiments up the coast road, from Krymsk and Gelendzhik through Sochi into Abkhazia, and its columns are pushing on toward the Georgian airbase at Senaki. The army group is covered by one of the densest air-defence networks in the region and by modern fighters.",
+                "A long dispute on the Black Sea coast has turned into open war. Russia has moved a combined-arms army group and its southern air regiments up the coast road, from Krymsk and Gelendzhik through Sochi into Abkhazia, and its columns are pushing on toward the Georgian airbase at Senaki. The army group is covered by one of the densest air-defence networks in the region and by modern fighters. Russia has never been short of men for a ground war, and fresh brigades keep coming up the coast road behind the first.",
                 "A US-led coalition has answered Georgia's request for help. The carrier USS Stennis and her air wing operate from the eastern Black Sea; U.S. Air Force squadrons fly from Senaki, Kutaisi and Kobuleti. You fly with the Navy's carrier air wing or with the Air Force, as part of a joint air campaign.",
                 "The mountains close the interior, so the coast road is the only way through. The war will be settled on that road, base by base. Each airfield taken pushes the front back, brings the next one into range and puts the enemy's air defences, fuel and depots in the way. Nobody on either side is trying to march on a capital."
             ],
@@ -618,7 +623,7 @@
             "enemy": "Russia",
             "enemy_long": "Russia",
             "background": [
-                "A dispute on the Black Sea coast has turned into open war. Russia has committed a reinforced corps and older air regiments, and its columns are moving down the coast road from Sochi into Abkhazia, toward the Georgian airbase at Senaki. Its air defences are patchy but there are plenty of them, and its fighters are numerous rather than modern.",
+                "A dispute on the Black Sea coast has turned into open war. Russia has committed a reinforced corps and older air regiments, and its columns are moving down the coast road from Sochi into Abkhazia, toward the Georgian airbase at Senaki. Its air defences are patchy but there are plenty of them, and its fighters are numerous rather than modern. Russia does not lack men for a ground war, and more columns follow the first down the coast road.",
                 "A US-led coalition has answered Georgia's request for help. The carrier USS Stennis and her air wing operate from the eastern Black Sea; U.S. Air Force squadrons fly from Senaki, Kutaisi and Kobuleti. You fly with the Navy's carrier air wing or with the Air Force, as part of a joint air campaign.",
                 "The mountains close the interior, so the coast road is the only way through. The war will be settled on that road, base by base. Each airfield taken pushes the front back, brings the next one into range and puts the enemy's air defences, fuel and depots in the way. Nobody on either side is trying to march on a capital."
             ],

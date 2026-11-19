@@ -5,7 +5,7 @@ import math
 import random
 from . import threatmap as tm
 from . import samtier
-from . import ground, theatres, tempo, story, detection
+from . import ground, theatres, tempo, story, detection, works
 from . import raids, runways, sams, ecm, airwings, clock, refit
 from .raids import hit as raids_hit
 from .aircraft import HOG_KEYS
@@ -183,11 +183,18 @@ class ObjectivePlanner:
         for a in state.assets.values():
             if a.destroyed or a.id in skip:
                 continue
-            if a.health <= ground.DOWN_HEALTH and a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.SAM, AssetKind.EWR) and ground.active(state):
+            if a.health <= ground.DOWN_HEALTH and a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.SAM, AssetKind.EWR) and ground.active(state) and not works.is_works(a):
                 continue                                   # v0.41.145: down for planning (a threshold, not the last vehicle): not hunted, it mends on its own
             defenders = [x for x in a.defended_by if alive(x)]
             if a.kind in (AssetKind.C2, AssetKind.FUEL, AssetKind.DEPOT, AssetKind.EWR):
                 pr = a.value * a.health / (1 + 0.5 * len(defenders))
+                if works.is_works(a) and any(q.aircraft in SLAM_PER_JET and q.available >= 2 for q in state.squadrons.values()):
+                    # S111: Lutorin's works are fixed plants: the coalition hits them with stand-off weapons (SLAM-ER Hornets, released far out and low, under the long-range umbrella: the SA-5 cannot touch a low flight, see
+                    # docs/CAMPAIGN.md "Long-range air defence"), so no SEAD / DEAD gate in front of them while such a squadron has 2 jets. With none, the usual gate below applies. Judgment call, XO 2026-11-19 (fox 3 high).
+                    o_ = Objective("", ObjectiveType.STRIKE, a.id, pr, f"Standoff Strike: {a.name}")
+                    o_.aim = "STANDOFF"
+                    cand.append((pr, o_, []))
+                    continue
                 cov = covering_sams(state, a)
                 o_ = Objective("", ObjectiveType.STRIKE, a.id, pr, f"EWR Strike: {a.name}" if a.kind == AssetKind.EWR else f"Strike {a.name}")
                 if a.kind == AssetKind.EWR:
@@ -297,6 +304,8 @@ class ObjectivePlanner:
                     pr *= 1.4                                          # v0.41.158: and a site with a strike or CAS job waiting behind its SEAD (judgment call)
             if o.type == ObjectiveType.STRIKE and o.aim != "RUNWAY" and state.assets[o.target_id].kind in (AssetKind.FUEL, AssetKind.DEPOT):
                 pr += SUPPLY_FIRST_BONUS                           # v0.41.273: supplies before the ordinary DEAD jobs, behind the belt-clearing SEAD
+                if works.is_works(state.assets[o.target_id]):
+                    pr += works.PLAN_BONUS                         # S111: Lutorin's works come before the ordinary supply strikes
             if o.type == ObjectiveType.STRIKE and state.assets[o.target_id].kind == AssetKind.EWR:
                 e = state.assets[o.target_id]
                 pr = (EWR_STRIKE_BASE + EWR_GAP_WEIGHT * detection.gap_share(state, e)) * e.health      # v0.41.347: right after the SEAD, ahead of DEAD and supply strikes
@@ -553,6 +562,8 @@ class WarSimulator:
                 if x_ is not None and not x_.destroyed and sid not in t.defended_by:
                     sam += 1.5 * x_.health * 0.4
             sam *= 0.6 + 0.8 * self.d.iads
+            if obj.aim == "STANDOFF" and works.is_works(state.assets[obj.target_id]):
+                sam *= works.STANDOFF_SAM                  # S111: released outside the rings: the sites near a works barely count
             if has_sead:
                 sam *= 0.5
         air = _air_cover(state, self.d.iads)
@@ -824,7 +835,7 @@ class WarSimulator:
             if success and obj.aim == "RUNWAY":
                 lines.append("   " + runways.crater(state, t.id))             # v0.41.254: an AI-flown runway strike that succeeds craters the field
             elif success:
-                t.health = max(0.0, t.health - d.base_damage * (0.5 + p) * (ground.AIR_EFFECT if z is not None else 1.0))
+                t.health = max(0.0, t.health - d.base_damage * (0.5 + p) * (ground.AIR_EFFECT if z is not None else 1.0) * works.damage_factor(state, t))
                 lines.append(f"   {t.name}: {strength_word(t.health)}")
                 if obj.type == ObjectiveType.COUNTER_AIR:
                     w = state.enemy_air_at(t.id)
@@ -833,7 +844,7 @@ class WarSimulator:
                         w.available -= k
                         lines.append(f"   {k} enemy aircraft destroyed at {t.name}")
             elif obj.aim != "RUNWAY":
-                t.health = max(0.0, t.health - 0.1 * d.base_damage)
+                t.health = max(0.0, t.health - 0.1 * d.base_damage * works.damage_factor(state, t))
         elif success:
             w = max(state.enemy_air, key=lambda w: w.available, default=None)
             if w and w.available:
@@ -888,6 +899,8 @@ class WarSimulator:
                 state.note("Overnight: " + ln)
             for ln in ground.rebuild_blue(state, d, self.rng):
                 state.note("Overnight: " + ln)
+            for ln in works.rebuild(state, self.rng):              # S111: Lutorin's works: the new losses are logged, one team rebuilds one works at a time
+                state.note("Overnight: " + ln)
             for ln in ground.update_supply_win(state):             # S90: a pack's Force Index win, judged on the morning's figure (none in the Caucasus)
                 state.note("Overnight: " + ln)
             for bid in state.ground.get("fallen", []):
@@ -923,6 +936,10 @@ def update_status(state: CampaignState) -> str:
         by_ground = ground.active(state) and bool(state.ground.get("victory_ids"))      # v0.41.143: victory is by ground only (jet counts no longer decide the war)
         if by_ground and ground.victory(state):
             state.status = "VICTORY"; state.note("VICTORY: the objectives are ours and the enemy has nothing left to throw at us.")
+        elif works.gone(state):                                         # S111: every one of Lutorin's works destroyed (a pack with `works`): the coalition's win that is not a conquest
+            state.status = "VICTORY"; state.note("VICTORY: the works are gone and the enemy's patron has lost what he came for.")
+            for ln in story.beat(state, "works_win"):
+                state.note(ln)
         elif (state.ground or {}).get("supply_won"):                    # S90: a pack's Force Index win (`ground.update_supply_win`; the old air / command win below stays an alternative)
             state.status = "VICTORY"; state.note("VICTORY: the enemy's supply has collapsed and its forces cannot go on.")
         elif not by_ground and t["c2"] <= 0.05 and t["enemy_air"] < 0.15:
