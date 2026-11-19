@@ -700,12 +700,12 @@
   "levels": {
    "2": {
     "push": 2.0,
-    "rebuild_days": 20,
+    "rebuild_days": 30,
     "damage": 0.1
    },
    "3": {
-    "push": 4.5,
-    "rebuild_days": 60
+    "push": 4.75,
+    "rebuild_days": 30
    }
   },
   "sites": [
