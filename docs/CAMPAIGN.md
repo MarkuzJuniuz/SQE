@@ -3,7 +3,7 @@
 What the war is, what happens each turn, and the rules behind it. For installing and running SQE see `docs/GUIDE.md`
 (section 4 there is the short "how a turn works"); for adding a map see `docs/THEATRES.md`.
 
-Checked against the code as of v0.41.522, for both maps (the Caucasus, and Syria in section 10). The mod is still evolving, so things may change (see the last section). Numbers are
+Checked against the code as of v0.41.523, for both maps (the Caucasus, and Syria in section 10). The mod is still evolving, so things may change (see the last section). Numbers are
 tuning values in the code and change between versions: where one matters it is named, so you can find it. Several are the author's judgment calls with no public source, and
 where that is the case the code says so next to the number.
 
@@ -140,7 +140,7 @@ Red on Level 1 is counted differently in a new campaign: 70% of the figure is it
 
 The Force Index sets the pace of nearly everything that rebuilds:
 
-* **Reinforcements** of the ground forces in each sector scale with it.
+* **Reinforcements** of the ground forces in each sector scale with it. (On the Caucasus at Level 3 red's daily reinforcement is more than three times the other levels', so the line toward Sochi and Krymsk can be pushed back.)
 * **Jet replacements:** a squadron below strength gets a replacement pair every 24 hours divided by the Force Index (every 24 hours at 100%, about 69 hours
   at the 35% floor). The Tu-22M3 and the E-3 are the exception (section 7).
 * **Site repair:** a damaged or destroyed supply site mends by the Force Index divided by 6 of a full site each night, so a destroyed one is back in 6 days

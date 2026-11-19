@@ -579,6 +579,11 @@
         "the coast and the north Caucasus",
         "the enemy deep rear"
     ],
+    "level_overrides": {
+        "3": {
+            "red_reinf": 24.0
+        }
+    },
     "stories": {
         "3": {
             "enemy": "Russia",
