@@ -8,7 +8,7 @@ QSS = f"""
 QMainWindow, QDialog, QWidget#root {{ background: {BG}; }}
 QFrame#sidebar {{ background: {PANEL}; border-right: 1px solid {BORDER}; }}
 QFrame#card {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 12px; }}
-QFrame#inset {{ background: transparent; border: 1px solid {BORDER}; border-radius: 8px; }}
+QFrame#rule {{ background: {BORDER}; border: none; }}
 QLabel#title {{ font-size: 22px; font-weight: 700; }}
 QLabel#h2 {{ font-size: 15px; font-weight: 600; }}
 QLabel#dim, QLabel#small {{ color: {DIM}; }}

@@ -28,7 +28,6 @@ from . import overview_view as V
 URGENT_ROLE = Qt.UserRole + 1     # "" | "red" | "mixed": the row's mission carries no red package / only red's / red's and yours together (S39)
 URGENT_COLOR = "#d8453b"          # red border: only red's packages (raid intercepts, troops in contact, raid prep)
 MIXED_COLOR = theme.AMBER         # amber border: your packages and red's flying in one mission
-AUTO_INDENT = 22                  # S23: the Crew Rest hours control sits under its check box, indented past the check box's tick (px)
 AUTOSKIP_MAX_TURNS = 42          # an auto-skip run stops after at most a week of turns from its start (6 a day; S25, was 84 at 12 a day), a judgment call (campaign rules plan Phase 11)
 
 
@@ -284,20 +283,16 @@ class MissionsPage(QWidget):
         self.auto_dur = StepSpin(); self.auto_dur.setRange(4, 24); self.auto_dur.setSingleStep(4); self.auto_dur.setSuffix(" hrs"); self.auto_dur.setValue(12)
         # S23 fit (measured with the real Segoe UI font): the box has 160 px inside, "Crew Rest" is 90 px and the -/12 hrs/+ spin 202 px, so they cannot share a row. The spin goes on its own
         # line under Crew Rest, indented past the check box, at a fixed width (the two step buttons are 34 px each, the field gets the rest)
-        # S23b (XO 2026-11-19: "a box for the Crew Rest so it is obvious the hours field belongs to it"): the Crew Rest tick box and its hours spin sit together in their own framed box inside the card
-        self.crew_box = QFrame(); self.crew_box.setObjectName("inset")
-        cb = QVBoxLayout(self.crew_box); cb.setContentsMargins(6, 4, 6, 6); cb.setSpacing(3)
+        # S23d (XO 2026-11-19): no frame; a thin rule above Crew Rest marks it and its hours field as their own group, and every tick box starts at the same left edge
+        self.auto_rule = QFrame(); self.auto_rule.setObjectName("rule"); self.auto_rule.setFixedHeight(1)
         self.auto_dur_row = QWidget(); drow = QHBoxLayout(self.auto_dur_row); drow.setContentsMargins(0, 0, 0, 0); drow.setSpacing(0)
-        self.auto_dur.setFixedWidth(160 - 14 - 4); drow.addWidget(self.auto_dur); drow.addStretch(1)
+        self.auto_dur.setFixedWidth(160); drow.addWidget(self.auto_dur); drow.addStretch(1)
         # S21: the three option rows get one height (the check boxes' own height, like one CSS height for every row); the spin line under Crew Rest is that row's second line
         row_h = max(w.sizeHint().height() for w in (self.auto_stand, self.auto_night, self.auto_dur_on))
         for w in (self.auto_stand, self.auto_night, self.auto_dur_on):
             w.setFixedHeight(row_h)
-        for w_ in (self.auto_stand, self.auto_night):          # S23c (XO 2026-11-19): the three tick boxes line up on the left; Crew Rest sits inside its frame (1 px border + 6 px margin), so the two above are indented by the same 7 px
-            w_.setStyleSheet("QCheckBox { margin-left: 7px; }")
-        ab.addWidget(self.auto_stand); ab.addWidget(self.auto_night)
-        cb.addWidget(self.auto_dur_on); cb.addWidget(self.auto_dur_row)
-        ab.addWidget(self.crew_box)
+        ab.addWidget(self.auto_stand); ab.addWidget(self.auto_night); ab.addWidget(self.auto_rule)
+        ab.addWidget(self.auto_dur_on); ab.addWidget(self.auto_dur_row)
         for w in (self.auto_stand, self.auto_night, self.auto_dur_on):
             w.toggled.connect(self._auto_changed)
         self.auto_dur.valueChanged.connect(self._auto_changed)
