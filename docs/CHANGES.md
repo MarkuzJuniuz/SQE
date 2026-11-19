@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.525, S114: Syria's carrier sits closer, and the raid's line is looser
+The carrier on Syria now keeps 130 nm from every red airfield, not 160, and starts south of Cyprus, not in the channel north of it. The Hornets can now reach the Palmyra works without relying on a tanker (Palmyra was about 285 nm away, now about 235; the Latakia coast about 145). The Tu-22M3 raid still comes along the line from the carrier through Damascus, but scattered 12 degrees either side, not 4. Everything else is unchanged.
+
 ## v0.41.524, S113: Level 2 red has as many jets as Level 3, in the same big squadrons
 Red's Level 2 air force is now as large as Level 3's on both maps, with Level 2's older, weaker types kept (Syria 238 jets, was 202; Caucasus about 241 with the Mozdok bombers, was 186; the same jets at each field as Level 3) and its squadrons are up to 14 jets, as at Level 3, not 12. Idle runs end the same way, but every flight meets more red fighters. The campaign guide's jet counts, field fill and squadron-size lines are updated.
 
