@@ -138,7 +138,7 @@ Releases are built by `.github/workflows/release.yml` (Python 3.14).
 
 ## 6. Terrain data
 
-SQE ships relief data and site lists for the Caucasus, so no terrain scan is needed to play. `tools/sqe_scan.py` rebuilds them
+SQE ships relief data and site lists for the Caucasus and for Syria (a Syria campaign needs the DCS Syria map), so no terrain scan is needed to play. `tools/sqe_scan.py` rebuilds them
 after a DCS terrain update (for developers).
 
 ---------------------------------------------------------------------------------------------------
