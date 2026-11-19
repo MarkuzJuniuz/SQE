@@ -28,7 +28,7 @@ LOSS_BASE = 0.01          # JUDGMENT CALL: the chance a jet is shot down on a so
 LOSS_PER_SAM = 0.01       # ...plus this for every live SAM site (the target itself included) whose ring covers the target
 LOSS_MAX = 0.15
 PACKAGES_PER_TURN = 2     # JUDGMENT CALL: at most this many F-117A jobs in one night turn (a squadron of 12 with a 16 h refit puts about 3 pairs up a night)
-COOLDOWN_DAYS = 3        # JUDGMENT CALL (XO 2026-11-19: the real F-117 that was shot down kept flying the same thing on the same route): the same target is not offered again for this many days after a strike on it
+COOLDOWN_DAYS = 7        # JUDGMENT CALL (XO 2026-11-19: the real F-117 that was shot down kept flying the same thing on the same route): the same target is not offered again for this many days after a strike on it
 APPROACH_MIN_DEG, APPROACH_MAX_DEG = 25.0, 80.0      # JUDGMENT CALL: the IP is on a bearing this far (either side) off the straight line from the base, drawn per sortie
 MIN_VALUE_VARIANTS = ("SA-5", "SA-10")      # the long-range killers come first (their priority is doubled)
 
