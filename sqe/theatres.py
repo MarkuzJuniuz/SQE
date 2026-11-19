@@ -38,6 +38,7 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 #   raid_bomber_types [type, ...]         -> raids.bomber_types()                     (default loadouts.BOMBER_TYPES = ("Su_24M",): field raids, SEAD and Kh-59M raids only)
 #   extra_sams [{id, site, x/y or near+bearing+dist_m, levels, ...}] -> scenario.new_campaign (fixed extra SAM sites; default none)
 #   raid_bearing_deg [lo, hi]             -> bombers.raid_bearing_range()             (default (20, 40): the bearing from the carrier the Tu-22M3 raid arrives on; Syria 200 to 220, out of the open sea)
+#   max_raid {level: n}                   -> bombers.max_raid()                       (default bombers.MAX_RAID {2: 8, 3: 16}: the full Tu-22M3 carrier raid; Syria L3 12)
 #   map_box {x0, x1, y0, y1}              -> raid_spawns._map_edges()                 (default the terrain's own bounds: the edge of the map the raid spawns on; Syria: pydcs's bounds are wrong)
 
 _ACTIVE: dict | None = None
@@ -156,6 +157,10 @@ def _check_hooks(d: dict, src) -> None:
         v = d["raid_bearing_deg"]
         if (not isinstance(v, list) or len(v) != 2 or not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v) or not 0 <= v[0] <= v[1] <= 360):
             bad("raid_bearing_deg must be [lo, hi] in degrees, 0 <= lo <= hi <= 360")
+    if "max_raid" in d:
+        levels_of("max_raid", d["max_raid"])
+        if not all(isinstance(n_, int) and not isinstance(n_, bool) and 4 <= n_ <= 40 for n_ in d["max_raid"].values()):
+            bad("max_raid values must be whole numbers of bombers, 4 to 40")
     if "map_box" in d:
         v = d["map_box"]
         if (not isinstance(v, dict) or set(v) != {"x0", "x1", "y0", "y1"} or not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v.values()) or v["x0"] >= v["x1"] or v["y0"] >= v["y1"]):
