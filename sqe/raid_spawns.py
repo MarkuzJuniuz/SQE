@@ -77,7 +77,7 @@ RAID_EDGE = True              # v0.41.282 (XO 2026-11-04: "I give up with proced
                               # edge of the map on the raid's bearing (they came from Mozdok round the north, beyond the map), with no marshal, ramp, taxi or gate. They are activated once the
                               # SEAD flag is set AND the time has come that puts them on the intercept point RAID_MEET_LEAD_S after blue. Story, not simulation: judgment call
 RAID_EDGE_MARGIN_NM = 10      # ...the spawn is this far inside the map edge
-RAID_EDGE_MAX_NM = 330        # ...and at most this far from the carrier (judgment call: Tu-22M3 fuel for the way in plus the way home to Mozdok)
+RAID_EDGE_MAX_NM = 330        # ...and at most this far from the carrier (judgment call: Tu-22M3 fuel for the way in plus the way home to the bomber base: Mozdok 255 nm from the carrier, Damascus 127; the table radius is 1,200 nm, so any pack's base fits)
 RAID_EDGE_MIN_ACT_S = 60      # ...the earliest activation; a spawn that would need to be earlier is moved in along the route instead
 RAID_BOMBER_BATCH = 2         # bombers per runway batch (XO: 2 at a time for the big ones)
 RAID_FIGHTER_BATCH = 4        # fighters per runway batch (XO: 4 at a time)
@@ -277,20 +277,30 @@ class RaidSpawns:
         return bool(RAID_EDGE and cvb is not None and self.ship.get(cvb.id) is not None and not ex.get("land") and not (ex.get("aim") or "")
                     and ex.get("bomber_wing") and ex.get("brg") is not None)
 
+    def _map_edges(self) -> tuple:
+        """(top, bottom, left, right) of the map in DCS metres (x runs north, y east): the active pack's `map_box` {x0, x1, y0, y1} (S90 J8: pydcs's Syria bounds have top below bottom and stop short of Jordan), else the
+        terrain's own bounds with top the larger x (the Caucasus: the same numbers as before)."""
+        from . import theatres
+        mb = theatres.hook("map_box")
+        if mb is not None:
+            return float(mb["x1"]), float(mb["x0"]), float(mb["y0"]), float(mb["y1"])
+        b = self.t.bounds
+        return max(b.top, b.bottom), min(b.top, b.bottom), b.left, b.right
+
     def _raid_edge(self, dx, dy, brg):
         """The point where the ray from the carrier on `brg` leaves the map (RAID_EDGE_MARGIN_NM inside it), at most RAID_EDGE_MAX_NM out."""
-        b = self.t.bounds                                      # x runs north (bottom..top), y east (left..right)
+        top, bottom, left, right = self._map_edges()
         m = RAID_EDGE_MARGIN_NM * NM
         c, s_ = math.cos(math.radians(brg)), math.sin(math.radians(brg))
         ts = []
         if c > 1e-6:
-            ts.append((b.top - m - dx) / c)
+            ts.append((top - m - dx) / c)
         elif c < -1e-6:
-            ts.append((b.bottom + m - dx) / c)
+            ts.append((bottom + m - dx) / c)
         if s_ > 1e-6:
-            ts.append((b.right - m - dy) / s_)
+            ts.append((right - m - dy) / s_)
         elif s_ < -1e-6:
-            ts.append((b.left + m - dy) / s_)
+            ts.append((left + m - dy) / s_)
         ts = [t_ for t_ in ts if t_ > 0]
         t = min(min(ts) if ts else 0.0, RAID_EDGE_MAX_NM * NM)
         return offset(dx, dy, brg, t)

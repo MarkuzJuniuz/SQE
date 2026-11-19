@@ -37,6 +37,8 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 #   raid_attack_types [type, ...]         -> raids.attack_types()                     (default ("Su_25",): leads raids on troops, garrisons, supply sites)
 #   raid_bomber_types [type, ...]         -> raids.bomber_types()                     (default loadouts.BOMBER_TYPES = ("Su_24M",): field raids, SEAD and Kh-59M raids only)
 #   extra_sams [{id, site, x/y or near+bearing+dist_m, levels, ...}] -> scenario.new_campaign (fixed extra SAM sites; default none)
+#   raid_bearing_deg [lo, hi]             -> bombers.raid_bearing_range()             (default (20, 40): the bearing from the carrier the Tu-22M3 raid arrives on; Syria 200 to 220, out of the open sea)
+#   map_box {x0, x1, y0, y1}              -> raid_spawns._map_edges()                 (default the terrain's own bounds: the edge of the map the raid spawns on; Syria: pydcs's bounds are wrong)
 
 _ACTIVE: dict | None = None
 _CACHE: dict = {}
@@ -150,6 +152,14 @@ def _check_hooks(d: dict, src) -> None:
             bad(f"opening_strike.kill must name a SAM variant ({', '.join(scenario.SAM_VALUE)}; \"sa5\" and \"SA-5\" both work)")
         if "text" in o and (not isinstance(o["text"], str) or o["text"].count("{") != o["text"].count("{kill}")):
             bad("opening_strike.text is plain text; the only placeholder is {kill}")
+    if "raid_bearing_deg" in d:
+        v = d["raid_bearing_deg"]
+        if (not isinstance(v, list) or len(v) != 2 or not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v) or not 0 <= v[0] <= v[1] <= 360):
+            bad("raid_bearing_deg must be [lo, hi] in degrees, 0 <= lo <= hi <= 360")
+    if "map_box" in d:
+        v = d["map_box"]
+        if (not isinstance(v, dict) or set(v) != {"x0", "x1", "y0", "y1"} or not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v.values()) or v["x0"] >= v["x1"] or v["y0"] >= v["y1"]):
+            bad("map_box must be {x0, x1, y0, y1} in DCS metres with x0 < x1 (south, north) and y0 < y1 (west, east)")
     if "extra_sams" in d:
         if not isinstance(d["extra_sams"], list):
             bad("extra_sams must be a list")

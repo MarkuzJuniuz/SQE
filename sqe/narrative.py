@@ -122,7 +122,8 @@ def setpiece_text(state, pkg, yours: bool, aircraft: str = "") -> list:
     bomb, esc = ex.get("bombers", 0), ex.get("escorts", 0)
     cv = state.bases.get(pkg.objective.target_id)
     site = cv.name if cv is not None else "the task force"
-    first = (f"Radar and the E-2 have a raid forming up out of Mozdok: {bomb} Backfires with {esc} Flankers on their wing, bearing {ex.get('brg', 0):.0f} degrees onto {site}. "
+    ba_ = state.assets.get(ex.get("bomber_wing") or "")                           # S90 J8: the bomber wing's field (Mozdok in the Caucasus, Damascus in Syria)
+    first = (f"Radar and the E-2 have a raid forming up out of {ba_.name if ba_ is not None else 'Mozdok'}: {bomb} Backfires with {esc} Flankers on their wing, bearing {ex.get('brg', 0):.0f} degrees onto {site}. "
              f"Every fighter that can reach the task force is being launched to meet it.")
     if yours:
         return [first, "Kill the bombers before they reach launch range, then the escorts. One of these flights is yours; the others fly with you."]
