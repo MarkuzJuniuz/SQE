@@ -206,6 +206,7 @@ class OverviewPage(QWidget):
     def refresh(self, st):
         from .. import posture
         n, name, text = narrative.phase(st)
+        self.op.setText(narrative.TITLE)                                        # S90: the operation name of THIS campaign's theatre (it was read once when the page was built, while the Caucasus was still active)
         self.phase.setText(f"{name.upper()}")                                   # v0.41.148: the posture label (it replaced the three phases)
         self._st = st
         sit = overview_detail.situation(st)
