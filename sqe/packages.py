@@ -392,6 +392,8 @@ class PackageBuilder:
 
     def _slot_ok(self, aircraft: str, slot) -> bool:
         """v0.41.360: the airframes with a conditional STRIKE role (A-10C) fly a STRIKE slot only on a job `_a10_supply_strike` passed; every other slot is as before."""
+        if aircraft == "F-117A":                                             # S104: the F-117A flies only the slot built for it (`only`, the night job of f117.py), never an ordinary STRIKE slot
+            return slot.only == "F-117A"
         return not (slot.role == Role.STRIKE and aircraft in STRIKE_CONDITIONAL and not getattr(self, "_a10_strike", False))
 
     def _raid_threat_count(self, obj, extra) -> int:
@@ -429,6 +431,8 @@ class PackageBuilder:
             tmpl = [Slot(Role.CAS, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
         elif obj.type == ObjectiveType.STRIKE and obj.aim == "SEAD":        # v0.41.144: a supply strike under a live SA-2/3/6: same, the HARM escort is required
             tmpl = [Slot(Role.STRIKE, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
+        if obj.type == ObjectiveType.STRIKE and obj.aim == "F117":          # S104: the F-117A job: one STRIKE slot only the F-117A fills, no TARCAP / escort / SEAD (it goes where no red air reaches, see f117.py)
+            return [Slot(Role.STRIKE, 4, only="F-117A")]
         if carrier_raid(self.state, obj):                                    # v0.41.107: the setpiece: every fighter flight in reach, about one blue fighter per raider
             k = max(2, math.ceil(SETPIECE_RATIO * n_fl))              # n_fl = raiders / 3 (set in build) -> k flights of 4, about one blue fighter per raider
             n_land = SETPIECE_LAND_SHARE * (k - 2)                    # v0.41.256 (XO 2026-11-03: the USAF wing gave no help): a share of the optional flights is land-based (F-15C first)

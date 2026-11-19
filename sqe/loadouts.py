@@ -82,6 +82,11 @@ _D: dict = {
         # as STRIKE; the four conformal stations 7, 9, 11, 13 stay EMPTY (judgment call: the kit is a stand-off shot, fewer stores is less drag and the JSOWs are the load).
         "PEN": {1: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}", 2: "={9BCC2A2B-5708-4860-B1F1-053A18442067}", 3: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 17: "={40EF17B7-F508-45de-8566-6FFECC0C1AB8}", 18: "={9BCC2A2B-5708-4860-B1F1-053A18442067}", 19: "={6CEB49FC-DED8-4DED-B053-E1F033FF72D3}"},
     },
+    "F-117A": {
+        # S104 (XO 2026-11-17 / 18): the two bay stations (pydcs `F_117A` Pylon1 and Pylon2 take only GBU-10 / GBU-12 / GBU-27, all laser-guided) carry a GBU-27 Paveway III penetrator each (2,000 lb, the weapon the F-117 was
+        # built around; Desert Storm 1991 and Allied Force 1999 used it and the GBU-10). NOT a stock preset (the old AI model has none): judgment call. No GPS weapon exists for it, so NOT in JDAM_JETS: it releases on the target.
+        "STRIKE": {1: "GBU_27", 2: "GBU_27"},
+    },
     "A-10C": {
         # stock DCS preset: AGM-65D*4, CBU-97*2, CBU-87*2, TGP, ECM, AIM-9*2
         "CAS": {1: "=ALQ_184", 3: "={E6A6262A-CA08-4B3D-B030-E1A993B98452}", 4: "={5335D97A-35A5-4643-9D9B-026C75961E52}", 5: "={CBU-87}", 7: "={CBU-87}", 8: "={5335D97A-35A5-4643-9D9B-026C75961E52}", 9: "={E6A6262A-CA08-4B3D-B030-E1A993B98453}", 10: "={A111396E-D3E8-4b9c-8AC9-2432489304D5}", 11: "={DB434044-F5D0-4F1F-9BA9-B73027E18DD3}"},

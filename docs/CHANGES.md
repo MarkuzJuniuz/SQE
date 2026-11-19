@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.504, the F-117A Nighthawk
+Blue gets a small squadron of F-117A stealth fighter-bombers in the Caucasus (12 jets at Kutaisi). They are flown by the AI only, and only at night: a pair or a four-ship goes alone against a red early-warning radar or SAM site that no red fighter patrol or alert pair is close enough to reach, and drops laser-guided GBU-27s. They are the hardest airframe to keep: a 16-hour turnaround, and a lost one is replaced only after four days. The Syria 2000 pack does not have the squadron yet. Campaigns without it are unchanged.
+
 ## v0.41.503, the Syria bomber raids come from Damascus
 At Level 3 in Syria the Tu-22M3 carrier raid is a setpiece out of Damascus: the fleet-defence briefing names the field, and the raid arrives out of the open sea south-west of the task force instead of over the Syrian coast. The land strikes fly from Damascus too. A theatre pack can now set the raid's bearing and the edge of its map. The Caucasus raid is unchanged.
 

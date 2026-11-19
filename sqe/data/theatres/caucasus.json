@@ -321,6 +321,14 @@
             "base": "tbilisi",
             "count": 18,
             "callsign": "Lobo"
+        },
+        {
+            "id": "fs_8",
+            "name": "8th FS 'Black Sheep'",
+            "aircraft": "F-117A",
+            "base": "kutaisi",
+            "count": 12,
+            "callsign": "Pontiac"
         }
     ],
     "support_targets": [
