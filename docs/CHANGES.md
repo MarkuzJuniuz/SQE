@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.508, Syria raids come out of the sea; a Crew Rest box; weather lists sorted
+Syria's carrier now keeps 160 nm from red's fields (it sits north of Cyprus) and the Tu-22M3 raid arrives along the line from the carrier through Damascus, so the bombers have to launch over the sea and the interceptors get a lane clear of the SAM belt. The Auto-Skip card frames Crew Rest and its hours together. The weather lists (New Campaign and Settings) now read Procedural first, then Clear to Storm. The carrier search of a theatre with a map box stays inside it.
+
 ## v0.41.507, the Nighthawks never fly the same thing twice
 An F-117A sortie now comes in on its own approach bearing (25 to 80 degrees off the straight line, drawn fresh each night, never through a SAM ring the plain route avoids), and the same target is not struck again for a week.
 

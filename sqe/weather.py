@@ -31,7 +31,7 @@ STATES = ["CLEAR", "SCATTERED", "BROKEN", "OVERCAST", "RAIN", "STORM"]
 LABEL = {"CLEAR": "Clear", "SCATTERED": "Scattered cloud", "BROKEN": "Broken cloud", "OVERCAST": "Overcast", "RAIN": "Rain",
          "STORM": "Heavy rain and storms"}
 COVER = [0.05, 0.30, 0.70, 1.0, 1.0, 1.0]
-MODES = {"clear": "Clear (always)", "procedural": "Procedural (from the theatre's climate)", "scattered": "Scattered cloud (always)",
+MODES = {"procedural": "Procedural (from the theatre's climate)", "clear": "Clear (always)", "scattered": "Scattered cloud (always)",
          "broken": "Broken cloud (always)", "overcast": "Overcast (always)", "rain": "Rain (always)", "storm": "Heavy rain and storms (always)"}
 FT, KT = 0.3048, 1.943844
 

@@ -285,13 +285,18 @@ class MissionsPage(QWidget):
         self.auto_dur = StepSpin(); self.auto_dur.setRange(4, 24); self.auto_dur.setSingleStep(4); self.auto_dur.setSuffix(" hrs"); self.auto_dur.setValue(12)
         # S23 fit (measured with the real Segoe UI font): the box has 160 px inside, "Crew Rest" is 90 px and the -/12 hrs/+ spin 202 px, so they cannot share a row. The spin goes on its own
         # line under Crew Rest, indented past the check box, at a fixed width (the two step buttons are 34 px each, the field gets the rest)
-        self.auto_dur_row = QWidget(); drow = QHBoxLayout(self.auto_dur_row); drow.setContentsMargins(AUTO_INDENT, 0, 0, 0); drow.setSpacing(0)
-        self.auto_dur.setFixedWidth(160 - AUTO_INDENT); drow.addWidget(self.auto_dur); drow.addStretch(1)
+        # S23b (XO 2026-11-19: "a box for the Crew Rest so it is obvious the hours field belongs to it"): the Crew Rest tick box and its hours spin sit together in their own framed box inside the card
+        self.crew_box = QFrame(); self.crew_box.setObjectName("inset")
+        cb = QVBoxLayout(self.crew_box); cb.setContentsMargins(6, 4, 6, 6); cb.setSpacing(3)
+        self.auto_dur_row = QWidget(); drow = QHBoxLayout(self.auto_dur_row); drow.setContentsMargins(0, 0, 0, 0); drow.setSpacing(0)
+        self.auto_dur.setFixedWidth(160 - 14 - 4); drow.addWidget(self.auto_dur); drow.addStretch(1)
         # S21: the three option rows get one height (the check boxes' own height, like one CSS height for every row); the spin line under Crew Rest is that row's second line
         row_h = max(w.sizeHint().height() for w in (self.auto_stand, self.auto_night, self.auto_dur_on))
         for w in (self.auto_stand, self.auto_night, self.auto_dur_on):
-            w.setFixedHeight(row_h); ab.addWidget(w)
-        ab.addWidget(self.auto_dur_row)
+            w.setFixedHeight(row_h)
+        ab.addWidget(self.auto_stand); ab.addWidget(self.auto_night)
+        cb.addWidget(self.auto_dur_on); cb.addWidget(self.auto_dur_row)
+        ab.addWidget(self.crew_box)
         for w in (self.auto_stand, self.auto_night, self.auto_dur_on):
             w.toggled.connect(self._auto_changed)
         self.auto_dur.valueChanged.connect(self._auto_changed)

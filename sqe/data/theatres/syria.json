@@ -117,7 +117,7 @@
   "from_airport": "Larnaca",
   "heading": 140,
   "distance_m": 120000,
-  "carrier_standoff_nm": 80
+  "carrier_standoff_nm": 160
  },
  "road_blue_airports": [
   "Incirlik",
@@ -981,5 +981,6 @@
  },
  "max_raid": {
   "3": 12
- }
+ },
+ "raid_from_base": 4
 }

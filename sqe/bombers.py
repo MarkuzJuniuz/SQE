@@ -52,6 +52,19 @@ def raid_bearing_range() -> tuple:
     return RAID_BEARING_DEG if v is None else (float(v[0]), float(v[1]))
 
 
+def raid_bearing(state, rnd) -> float:
+    """The bearing the carrier raid arrives on, drawn with `rnd`: the pack's `raid_from_base` J (S90, XO 2026-11-19: "make them come from a vector over Damascus"): the straight line from the carrier through the bomber
+    wing's field, plus or minus J degrees; else a draw inside `raid_bearing_range()` (the Caucasus: 20 to 40, the same one `rnd.uniform` call as before)."""
+    from . import theatres
+    from .routes import bearing
+    j = theatres.hook("raid_from_base")
+    cv, bw = _carrier(state), _bomber_wing(state)
+    if j and cv is not None and bw is not None:
+        ba = state.assets[bw.base_asset_id]
+        return round((bearing(cv.x, cv.y, ba.x, ba.y) + rnd.uniform(-float(j), float(j))) % 360.0, 1)
+    return round(rnd.uniform(*raid_bearing_range()), 1)
+
+
 def escorts_for(n: int) -> int:
     """Escorts that go with `n` bombers: one per two, rounded up."""
     return int(math.ceil(n * ESCORT_PER_BOMBER))
@@ -209,7 +222,7 @@ def stage_extras(state, launch: int) -> dict:
     """v0.41.356 (Phase 10b part 1): what is fixed the day a raid is staged, so the turn BEFORE the raid can plan its SEAD / Standoff DEAD prep: the bearing the raid arrives on ("brg", 20 to 40 degrees, the old
     range; the pack's `raid_bearing_deg` where it has one, S90 J8) and the turn it launches in ("turn", seeded, among the launch day's planned turns that have a planned turn right before them on the same day; absent when none has). Seeded by campaign and launch day only."""
     rnd = random.Random(f"{state.campaign_id}:{launch}:stage")
-    out = {"brg": round(rnd.uniform(*raid_bearing_range()), 1)}
+    out = {"brg": raid_bearing(state, rnd)}
     ok = lambda t: bool(getattr(state, "night_ops", False)) or not clock.is_night_turn(t)
     cands = [t for t in range(clock.first_turn(launch) + 1, clock.first_turn(launch + 1)) if ok(t) and ok(t - 1)]
     if cands:
