@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.513, the Overview shows the right operation name
+The Overview's operation title now follows the campaign's theatre (Operation LEVANT HORIZON in Syria); it used to show the Caucasus's Operation IRON TIDE until the app was restarted.
+
 ## v0.41.512, the Damascus raid can field 12 bombers
 Syria Level 3's escort wing at Damascus is 12 Su-27 (was 8), so the land strikes no longer leave too few escorts for a full 12-bomber raid.
 
