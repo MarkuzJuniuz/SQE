@@ -234,6 +234,26 @@ def _extra_sams(st, th: dict, d, ap, live: set, tiers: dict) -> None:
         st.assets[e["id"]] = EnemyAsset(e["id"], e.get("name") or f"{SAM_LABEL[v]} {e['id'][4:]}", AssetKind.SAM, x, y, 1.0, SAM_VALUE[v], [], None, v, tier, "")
 
 
+OPENING_STRIKE_TEXT = "At midnight F-117A Nighthawks struck the long-range {kill} batteries: every one is down."
+
+
+def _opening_strike(st, th: dict, d) -> str:
+    """S90 J9s: the pack's `opening_strike` ({"levels": [2, 3], "kill": "sa5", "text": optional}): before the first mission every red site of the named variant is down, as if a mission had killed it:
+    health 0 (`destroyed`) and the day recorded in the SAM rebuild record (`sams.track`), so the normal rebuild rule (`sams.rebuild`: after 5 to 7 days by the Force Index, the level's `sam_rebuild` chance a day,
+    half strength) brings them back, and the planner, map, debrief and Overview treat them as killed in a mission. Other sites (the SA-10s) stay. -> the opening war-log line ("" when nothing happens)."""
+    os_ = th.get("opening_strike")
+    if not os_ or d.level not in os_["levels"]:
+        return ""
+    want = os_["kill"].replace("-", "").lower()
+    hit = [a for a in st.assets.values() if a.kind == AssetKind.SAM and a.variant.replace("-", "").lower() == want and not a.id.startswith("fsam_")]
+    if not hit:
+        return ""
+    for a in hit:
+        a.health = 0.0
+    _sams_mod.track(st)
+    return (os_.get("text") or OPENING_STRIKE_TEXT).format(kill=hit[0].variant)
+
+
 def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str = "caucasus",
                  seed: int | None = None, start_date: str = "2006-06-12", night_ops: bool = True,
                  player_squadron: str | None = None, a10_variant: str | None = None, f14_variant: str | None = None, link16: bool | None = None) -> CampaignState:
@@ -343,6 +363,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     _sites_mod.apply(st, th)                                         # v0.41.199: red's SAM sites, supply sites and columns move onto the condensed site spots
     snap_assets_to_land(st)                                          # nothing is generated in the sea
     _extra_sams(st, th, d, ap, live, FIELD_TIER)                     # S90 J5: the pack's fixed extra SAM sites (none in the Caucasus); after the snap and the site spots: they stay where the pack put them
+    struck = _opening_strike(st, th, d)                              # S90 J9s: the scripted opening strike (none in the Caucasus): after every red SAM site is placed
     _road_sites_mod.build(st, th, d, {n_: (a_.position.x, a_.position.y) for n_, a_ in t.airports.items()}, rng)      # v0.41.241 (item i): supply sites along the roads, both sides (a stream of its own)
     sams = [x for x in st.assets.values() if x.kind == AssetKind.SAM]
     for x in st.assets.values():
@@ -357,6 +378,8 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     me = next((q for q in mine if q.id == player_squadron), mine[0])
     st.player = PlayerProfile(aircraft=player_aircraft, squadron_id=me.id, callsign=me.callsign)
     st.note(f"Campaign '{name}' begins. You fly the {AIRCRAFT[player_aircraft].display} with {me.name}. {d.name}.")
+    if struck:
+        st.note(struck)
     for _ln in story.beat(st, "open"):
         st.note(_ln)
     return st

@@ -31,6 +31,7 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 #   nav {airport: kneeboard line}         -> kneeboard.nav_line()                     (default kneeboard.NAV)
 #   ils_runway {airport: runway number}   -> runways.ils_runways()                    (default runways.ILS_RUNWAY)
 #   mag_var_deg number                    -> runways.mag_var_deg()                    (default runways.MAG_VAR_DEG)
+#   opening_strike {levels, kill, text?}  -> scenario._opening_strike                 (default none: every red site of the variant `kill` starts the campaign destroyed, rebuilt by the normal rule)
 #   raid_attack_types [type, ...]         -> raids.attack_types()                     (default ("Su_25",): leads raids on troops, garrisons, supply sites)
 #   raid_bomber_types [type, ...]         -> raids.bomber_types()                     (default loadouts.BOMBER_TYPES = ("Su_24M",): field raids, SEAD and Kh-59M raids only)
 #   extra_sams [{id, site, x/y or near+bearing+dist_m, levels, ...}] -> scenario.new_campaign (fixed extra SAM sites; default none)
@@ -128,6 +129,17 @@ def _check_hooks(d: dict, src) -> None:
                     bad(f"{k}: {t!r} is not a pydcs aircraft")
     if set(d.get("raid_attack_types") or ()) & set(d.get("raid_bomber_types") or ()):
         bad("raid_attack_types and raid_bomber_types must not share a type (the bomber list alone flies the SEAD and Kh-59M raids)")
+    if "opening_strike" in d:
+        o = d["opening_strike"]
+        if not isinstance(o, dict) or set(o) - {"levels", "kill", "text"}:
+            bad("opening_strike takes only levels, kill and text")
+        if not isinstance(o.get("levels"), list) or not o["levels"] or not all(v in (1, 2, 3) for v in o["levels"]):
+            bad("opening_strike.levels must be a list of 1, 2, 3")
+        from . import scenario
+        if not isinstance(o.get("kill"), str) or o["kill"].replace("-", "").lower() not in {v.replace("-", "").lower() for v in scenario.SAM_VALUE}:
+            bad(f"opening_strike.kill must name a SAM variant ({', '.join(scenario.SAM_VALUE)}; \"sa5\" and \"SA-5\" both work)")
+        if "text" in o and (not isinstance(o["text"], str) or o["text"].count("{") != o["text"].count("{kill}")):
+            bad("opening_strike.text is plain text; the only placeholder is {kill}")
     if "extra_sams" in d:
         if not isinstance(d["extra_sams"], list):
             bad("extra_sams must be a list")
