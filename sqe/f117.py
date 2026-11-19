@@ -28,7 +28,41 @@ LOSS_BASE = 0.01          # JUDGMENT CALL: the chance a jet is shot down on a so
 LOSS_PER_SAM = 0.01       # ...plus this for every live SAM site (the target itself included) whose ring covers the target
 LOSS_MAX = 0.15
 PACKAGES_PER_TURN = 2     # JUDGMENT CALL: at most this many F-117A jobs in one night turn (a squadron of 12 with a 16 h refit puts about 3 pairs up a night)
+COOLDOWN_DAYS = 3        # JUDGMENT CALL (XO 2026-11-19: the real F-117 that was shot down kept flying the same thing on the same route): the same target is not offered again for this many days after a strike on it
+APPROACH_MIN_DEG, APPROACH_MAX_DEG = 25.0, 80.0      # JUDGMENT CALL: the IP is on a bearing this far (either side) off the straight line from the base, drawn per sortie
 MIN_VALUE_VARIANTS = ("SA-5", "SA-10")      # the long-range killers come first (their priority is doubled)
+
+
+def _last(state) -> dict:
+    return ((state.raids or {}).get("f117_last") or {})
+
+
+def cooling(state, target_id: str) -> bool:
+    """Was this target struck by an F-117A less than COOLDOWN_DAYS ago?"""
+    d = _last(state).get(target_id)
+    return d is not None and state.day - int(d) < COOLDOWN_DAYS
+
+
+def approach_deg(state, package, base_xy, tx, ty, profile) -> float:
+    """S104c (XO 2026-11-19: "does it do different routes every time"): the bearing (degrees off the straight base-to-target line) an F-117A sortie's IP sits on. Drawn from a Random seeded by campaign,
+    day, turn and target, so a replan or a second build of the same sortie gives the same route and another night another one. Up to 8 draws; one whose IP, or the IP-to-target leg, lies inside the ring
+    (plus 5 nm) of a live SAM site OUTSIDE the target's own cluster (15 nm round it) is thrown away; none left: 0 (the plain route, as before)."""
+    import random
+    from . import threatmap as tm
+    from .routes import offset
+    tgt = state.assets.get(package.objective.target_id)
+    skip = tm.cluster_ids(tgt)
+    rings = [(a.x, a.y, r + 5 * NM) for a, r in tm.rings(state) if a.id not in skip and math.hypot(a.x - tx, a.y - ty) > 15 * NM]      # the target's own cluster (15 nm round it) is the run-in's business, as for every strike
+    hdg = math.degrees(math.atan2(ty - base_xy[1], tx - base_xy[0])) % 360
+    rnd = random.Random(f"{state.campaign_id}:{state.day}:{state.turn}:{package.objective.target_id}:f117route")
+    def hit(ip):                                              # the rings this IP or its leg to the target lies in
+        return {i for i, (x, y, r) in enumerate(rings) if math.hypot(ip[0] - x, ip[1] - y) <= r or tm.seg_dist(x, y, ip[0], ip[1], tx, ty) <= r}
+    plain = hit(offset(tx, ty, hdg + 180, profile.ip_nm * NM))   # what the plain route already lies in (an SA-10 can cover the whole area round a target): a draw may not add a ring to that
+    for _ in range(8):
+        dev = rnd.uniform(APPROACH_MIN_DEG, APPROACH_MAX_DEG) * rnd.choice((-1.0, 1.0))
+        if hit(offset(tx, ty, hdg + 180 + dev, profile.ip_nm * NM)) <= plain:
+            return dev
+    return 0.0
 
 
 def squadrons(state) -> list:
@@ -91,6 +125,8 @@ def targets(state, skip=frozenset()) -> list:
                 continue
         elif a.kind != AssetKind.EWR:
             continue
+        if cooling(state, a.id):
+            continue
         if a.health <= ground.DOWN_HEALTH and ground.active(state):
             continue                                        # down for planning (a threshold): it mends on its own, not hunted
         if covered(state, a.x, a.y) or not reachable(state, a):
@@ -107,7 +143,7 @@ def runway_targets(state, skip=frozenset()) -> list:
     from . import runways
     out = []
     for a in state.assets.values():
-        if a.kind != AssetKind.AIRFIELD or a.destroyed or a.id in skip or runways.is_closed(state, a.id):
+        if a.kind != AssetKind.AIRFIELD or a.destroyed or a.id in skip or runways.is_closed(state, a.id) or cooling(state, a.id):
             continue
         w = state.enemy_air_at(a.id)
         if w is None or w.available <= 0 or covered(state, a.x, a.y, own=a.id) or not reachable(state, a):
@@ -160,6 +196,9 @@ def resolve(sim, state, pkg, force=None) -> dict:
     pairs = max(1, sum(f.count for f in flights) // 2)
     p = 1.0 - (1.0 - PAIR_HIT) ** pairs
     success = force["success"] if force and "success" in force else chance(rng, p, d.variance)
+    if state.raids is None:
+        state.raids = {}
+    state.raids.setdefault("f117_last", {})[t.id] = state.day                       # the cooldown clock: struck (hit or not) today
     lines = [f"{pkg.objective.description}: {'objective achieved' if success else 'no effect observed'}"]
     if success and pkg.objective.aim == "RUNWAY":
         from . import runways

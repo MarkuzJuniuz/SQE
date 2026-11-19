@@ -115,6 +115,14 @@ def package_case(task) -> dict:
     lines.append(f"{tag}: day {st.day} turn {st.turn} (night): #{pk.number} {pk.objective.description}; flights {[(f.role.value, f.count, f.aircraft, f.kit or '-', bool(f.tag)) for f in pk.flights]}")
     if [f for f in pk.flights if not f.tag and (f.role.value != "STRIKE" or f.aircraft != "F-117A")]:
         bad.append(f"{tag}: the package carries a flight other than the F-117A strike")
+    from sqe.aircraft import AIRCRAFT as _AC
+    _b = st.bases[pk.flights[0].base_id]
+    lines.append(f"{tag}: approach_deg for this sortie: {f117.approach_deg(st, pk, (_b.x, _b.y), t.x, t.y, _AC['F-117A'].profile):+.1f}")
+    if os.environ.get("F117_DEBUG"):
+        from sqe import threatmap as _tm
+        sk = _tm.cluster_ids(t)
+        near = sorted((math.hypot(a_.x - t.x, a_.y - t.y) / 1852, a_.id, a_.variant) for a_, r_ in _tm.rings(st) if a_.id not in sk)[:6]
+        lines.append(f"{tag}: nearest other live sites to the target (nm): {[(round(d), i, v) for d, i, v in near]}")
     s.ai_test = True
     old = st.player.aircraft
     fid = None
@@ -158,6 +166,16 @@ def package_case(task) -> dict:
                         if "Bombing" in str(tasks[-1]):
                             bombing += 1
                     lines.append(f"{tag}:   wp {i:2d} {dic.get(p.get('name', ''), p.get('name', ''))!s:12.12} {p.get('type')}/{p.get('action')} alt {p.get('alt', 0) * 3.28084:6.0f} ft speed {p.get('speed', 0) * 1.94384:4.0f} kt ETA {int(p.get('ETA', 0)):5d}{' locked' if p.get('ETA_locked') else ''}{' spd-locked' if p.get('speed_locked') else ''} tasks {tasks}")
+                nmz = {dic.get(p.get("name", ""), p.get("name", "")): p for p in seq}
+                if "IP" in nmz and "TGT" in nmz:
+                    bx_, by_ = st.bases[pk.flights[0].base_id].x, st.bases[pk.flights[0].base_id].y
+                    tx_, ty_ = nmz["TGT"]["x"], nmz["TGT"]["y"]
+                    line = math.degrees(math.atan2(by_ - ty_, bx_ - tx_)) % 360                  # from the target back toward the base
+                    ipb = math.degrees(math.atan2(nmz["IP"]["y"] - ty_, nmz["IP"]["x"] - tx_)) % 360
+                    off = (ipb - line + 180) % 360 - 180
+                    lines.append(f"{tag}:   the IP lies {off:+.0f} degrees off the straight line from the base, {math.hypot(nmz['IP']['x'] - tx_, nmz['IP']['y'] - ty_) / 1852:.0f} nm from the target")
+                    if abs(off) < 20:
+                        bad.append(f"{tag}: the IP is on the straight line ({off:+.0f} degrees): the route was not varied")
                 if bombing < 1:
                     bad.append(f"{tag}: no bombing task on the route")
                 L = [i for i, p in enumerate(seq) if p.get("ETA_locked")]
@@ -267,6 +285,33 @@ def rules_case(task) -> dict:
             bad.append(f"rules: the night runway strike failed to build: {type(e).__name__}: {e}")
         finally:
             st.player.aircraft = pa
+    # the cooldown: a struck target is not offered again for COOLDOWN_DAYS days
+    if pk is not None:
+        tid = pk.objective.target_id
+        f117.COVER_NM, keepc = 1e6, f117.COVER_NM
+        f117.COVER_NM = keepc
+        st.raids.setdefault("f117_last", {})[tid] = st.day
+        if not f117.cooling(st, tid):
+            bad.append("rules: a target struck today is not cooling")
+        st.day += f117.COOLDOWN_DAYS
+        if f117.cooling(st, tid):
+            bad.append("rules: the cooldown did not end after COOLDOWN_DAYS days")
+        st.day -= f117.COOLDOWN_DAYS
+        lines.append(f"rules: cooldown {f117.COOLDOWN_DAYS} days: cooling today {f117.cooling(st, tid)}, free after {f117.COOLDOWN_DAYS} days")
+    # route variety: the same sortie on ten different nights draws ten approach bearings (never the same twice in a row, all 25 to 80 degrees off the line, the same night the same answer)
+    if pk is not None:
+        b0 = st.bases[pk.flights[0].base_id]
+        t0 = st.assets[pk.objective.target_id]
+        draws = []
+        for night in range(10):
+            st.turn = st.turn + 6
+            draws.append(f117.approach_deg(st, pk, (b0.x, b0.y), t0.x, t0.y, __import__("sqe.aircraft", fromlist=["AIRCRAFT"]).AIRCRAFT["F-117A"].profile))
+            again = f117.approach_deg(st, pk, (b0.x, b0.y), t0.x, t0.y, __import__("sqe.aircraft", fromlist=["AIRCRAFT"]).AIRCRAFT["F-117A"].profile)
+            if again != draws[-1]:
+                bad.append("rules: the same night drew two different approaches")
+        lines.append(f"rules: approach bearings off the straight line on ten nights: {[round(x) for x in draws]}")
+        if len(set(round(x) for x in draws)) < 7 or any(x != 0 and not 25 <= abs(x) <= 80 for x in draws):
+            bad.append(f"rules: approach draws are not varied / out of range: {draws}")
     # an ordinary strike never takes the F-117A
     from sqe.packages import PackageBuilder
     pb = PackageBuilder(st, s.d)
