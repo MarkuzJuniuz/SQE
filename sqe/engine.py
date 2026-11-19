@@ -108,9 +108,17 @@ class Session(Merging, SeadTiming):
                                   a10_variant=a10_variant, f14_variant=f14_variant, link16=link16)                  # S103a: Era Equipment (None = the theatre's era values)
         self.state.ground["tactical_edge"] = bool(tactical_edge)                                          # S88 R3: the two Tactical Edge switches belong to the campaign (they were app settings copied in on every open)
         self.state.ground["tactical_edge_decay"] = bool(tactical_edge and tactical_edge_decay)            # v0.41.208: the decay needs the edge
+        clock.use(self.state.start_hour)
         safe = "".join(c if c.isalnum() or c in "-_ " else "_" for c in name).strip() or "campaign"
         self.path = self.campaigns_dir() / f"{safe}{CAMPAIGN_EXT}"
         self.plan_day()
+        if self.state.status == "ACTIVE" and not self.state.night_ops and clock.is_night_turn(self.state.turn):       # S90 J5b: a campaign that starts at night (Syria 00:00) with night ops off: the night turns are resolved without you, as they are every other night
+            sim = self._sim(self._rng(46 + 1000 * self.state.turn))
+            for _ in range(MAX_NIGHT_TURNS):
+                if self.state.status != "ACTIVE" or not clock.is_night_turn(self.state.turn):
+                    break
+                _res, nbook = self._resolve_turn(sim)
+                self._tick(self._sorties(nbook), sim)
         self.save()
 
     def open(self, path) -> None:
@@ -139,6 +147,7 @@ class Session(Merging, SeadTiming):
     def _open_loaded(self, loaded, path) -> None:
         self.state = loaded
         theatres.use(self.state.theatre)
+        clock.use(self.state.start_hour)                 # S90 J5b: this campaign's Day 1 hour (an old save: 8)
         self.sync_terrain()
         self.path = Path(path)
         self.settings.last_campaign = str(path)

@@ -389,6 +389,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
 
         theatres.use(st.theatre)
+        from . import clock as _clock_mod                                              # (not `clock`: this method has a local of that name)
+        _clock_mod.use(st.start_hour)                                                  # S90 J5b: this campaign's Day 1 hour (an old save: 8)
         m = Mission(theatres.terrain())
         self.m, self.t = m, m.terrain
         self.usa, self.red = m.country("USA"), m.country("Russia")

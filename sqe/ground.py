@@ -373,6 +373,7 @@ def ensure(state) -> bool:
         from . import theatres
         from .difficulty import get as get_difficulty
         th = theatres.use(state.theatre)
+        clock.use(state.start_hour)
         if not th.get("front"):
             return False
         t = theatres.terrain()

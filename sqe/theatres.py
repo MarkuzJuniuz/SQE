@@ -31,6 +31,7 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 #   nav {airport: kneeboard line}         -> kneeboard.nav_line()                     (default kneeboard.NAV)
 #   ils_runway {airport: runway number}   -> runways.ils_runways()                    (default runways.ILS_RUNWAY)
 #   mag_var_deg number                    -> runways.mag_var_deg()                    (default runways.MAG_VAR_DEG)
+#   start_hour 0|4|8|12|16|20             -> CampaignState.start_hour, clock.use()    (default 8: Day 1 / turn 0 starts at 08:00; Syria 0)
 #   opening_strike {levels, kill, text?}  -> scenario._opening_strike                 (default none: every red site of the variant `kill` starts the campaign destroyed, rebuilt by the normal rule)
 #   raid_attack_types [type, ...]         -> raids.attack_types()                     (default ("Su_25",): leads raids on troops, garrisons, supply sites)
 #   raid_bomber_types [type, ...]         -> raids.bomber_types()                     (default loadouts.BOMBER_TYPES = ("Su_24M",): field raids, SEAD and Kh-59M raids only)
@@ -129,6 +130,8 @@ def _check_hooks(d: dict, src) -> None:
                     bad(f"{k}: {t!r} is not a pydcs aircraft")
     if set(d.get("raid_attack_types") or ()) & set(d.get("raid_bomber_types") or ()):
         bad("raid_attack_types and raid_bomber_types must not share a type (the bomber list alone flies the SEAD and Kh-59M raids)")
+    if "start_hour" in d and (isinstance(d["start_hour"], bool) or d["start_hour"] not in (0, 4, 8, 12, 16, 20)):
+        bad("start_hour must be 0, 4, 8, 12, 16 or 20 (a campaign turn is four hours: the start lies on that grid)")
     if "opening_strike" in d:
         o = d["opening_strike"]
         if not isinstance(o, dict) or set(o) - {"levels", "kill", "text"}:

@@ -11,6 +11,7 @@ from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWi
 from .state import CampaignState
 from .aircraft import AIRCRAFT, era_aircraft
 from . import ground, redroster, theatres, story, samtier
+from . import clock as clock_mod
 from . import sams as _sams_mod
 from . import sites as _sites_mod
 from . import road_sites as _road_sites_mod
@@ -264,7 +265,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     ap = lambda n: t.airports[n].position
     era = th["era"]                                       # S103a: Era Equipment, chosen at creation (None = the theatre's own era value) and saved with the campaign
     st = CampaignState(name=name, theatre=theatre, level=d.level, start_date=start_date, night_ops=night_ops,
-                       a10_variant=a10_variant or era["a10_variant"], f14_variant=f14_variant or era["f14_variant"], link16=era["link16"] if link16 is None else bool(link16))
+                       start_hour=int(th.get("start_hour", clock_mod.DEFAULT_START_HOUR)), a10_variant=a10_variant or era["a10_variant"], f14_variant=f14_variant or era["f14_variant"], link16=era["link16"] if link16 is None else bool(link16))
 
     # ---- friendly bases ---------------------------------------------------------------------
     cv = th["carrier"]
