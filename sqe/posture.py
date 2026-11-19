@@ -167,7 +167,11 @@ def posture(state) -> tuple:
 
 def supply_lines(state) -> list:
     e, f = ground.supply(state, "red"), ground.supply(state, "blue")
-    return [f"Coalition Force Index: {supply_word(f)}", f"{story.enemy(state)} Force Index: {supply_word(e)}"]
+    out = [f"Coalition Force Index: {supply_word(f)}", f"{story.enemy(state)} Force Index: {supply_word(e)}"]
+    w = ground.supply_collapse_word(state)               # S90: only where the pack wins on the enemy's supply collapsing
+    if w:
+        out.append(f"{story.enemy(state)} supply collapse: {w}")
+    return out
 
 
 def _orders(state, key: str) -> list:
