@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.517, the opening headline names the other targets
+The war-log line for the midnight strike now says the Nighthawks also hit some SA-10 sites and early-warning radars (only the kinds that were hit, no counts); the lines below it still name every site.
+
 ## v0.41.516, the Nighthawks that opened the war are on their way home
 In Syria the whole F-117A squadron flies the midnight strike, six pairs: the SA-5 batteries, then the deepest SA-10 sites and early-warning radars. The jets start the war returning to Incirlik (the Overview shows them), land about 00:40 to 00:50, and refit 16 hours: none of them is ready for the first night. The war log names every site that was hit.
 

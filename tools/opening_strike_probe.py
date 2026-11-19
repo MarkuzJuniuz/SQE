@@ -92,6 +92,11 @@ def check_jets(st, tag, level, bad, lines, expect_pairs=None):
     site_lines = [x for x in st.log if "destroyed (" in x and "F-117A" in x]
     if len(site_lines) != 6 or any(sum(1 for x in site_lines if a.name in x) != 1 for a in killed):
         bad.append(f"{tag}: the log has {len(site_lines)} site lines, expected one per struck site: {site_lines}")
+    head = [x for x in st.log if "Nighthawks struck" in x]
+    has10, hasew = any(a.variant == "SA-10" for a in fill), any(a.kind == AssetKind.EWR for a in fill)
+    tail = head[0].split("every one is down")[-1] if len(head) == 1 else "?"
+    if len(head) != 1 or ("SA-10" in tail) != has10 or ("early-warning radars" in tail) != hasew or (has10 or hasew) != ("some" in tail) or any(c.isdigit() for c in tail.replace("SA-10", "")):
+        bad.append(f"{tag}: the headline tail {tail!r} does not say 'some' + the kinds hit (SA-10 {has10}, EWR {hasew}), no counts: {head}")
     note = [x for x in st.log if "on their way home" in x]
     if len(note) != 1 or "all 12" not in note[0]:
         bad.append(f"{tag}: the squadron note is missing or doubled: {note}")
@@ -143,6 +148,8 @@ def short_cases(st0, th, d, bad, lines, tag):
         want_down = len(sa5) if ready is None else max(len(sa5), ready // 2)             # no squadron: only the SA-5s; 5 ready = 2 pairs: the SA-5s, then fill up to 2 targets
         if len(down) != want_down or any(not a.destroyed for a in sa5):
             bad.append(f"{tag} {label}: {len(down)} sites down, expected {want_down} ({len(sa5)} SA-5s)")
+        if len(down) == len(sa5) and not out[0].endswith("every one is down."):
+            bad.append(f"{tag} {label}: the headline says more than the SA-5s with nothing filled: {out[0]}")
         if len(out) < 1 + len(sa5):
             bad.append(f"{tag} {label}: the log lines are {out}")
         if ready is None and (paired or (st.raids or {}).get("opening_strike")):
