@@ -3,7 +3,7 @@
     python tools/syria_pack_probe.py [--jobs N] [--seeds 5,7]
 
 For levels 1, 2 and 3 (and each seed) it creates a Syria campaign with the pack's own Era Equipment, and reports / checks (BAD lines otherwise; exit 0 = clean):
-  blue    - 272 jets, the era airframes (A-10A, F-14B), every squadron on a base that can park it (`placement`), callsigns unique;
+  blue    - 284 jets (272 + the 12 F-117As of the 8th FS, PR #623), the era airframes (A-10A, F-14B), every squadron on a base that can park it (`placement`), callsigns unique;
   red     - the jets of each level (L1 94, L2 202, L3 238 + the Damascus bomber wing 16 + 8 at L3), each field's jets against its DCS parking (all spots and the heavy spots), types inside the pack's roster;
   sites   - SAMs by variant, the fixed SA-5s (L2 two, L3 three) down on day 1 and in the rebuild record, EWRs, the support targets, every ground asset on land;
   front   - the sectors (L1 5, L2 8, L3 11), stages, the Bassel victory (L1 only), `win_supply` (L2 / L3), defeat after one lost base;
@@ -54,8 +54,8 @@ def one_case(task) -> dict:
     # ---- blue
     sq = list(st.squadrons.values())
     jets = sum(q.authorized for q in sq)
-    if jets != 272:
-        bad.append(f"{tag}: blue has {jets} jets, expected 272")
+    if jets != 284:
+        bad.append(f"{tag}: blue has {jets} jets, expected 284")
     types = sorted({q.aircraft for q in sq})
     if "A-10A" not in types or "F-14B" not in types or "A-10C" in types or "F-14BU" in types:
         bad.append(f"{tag}: blue airframes {types} (the pack's era says A-10A and F-14B)")

@@ -33,7 +33,7 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 #   mag_var_deg number                    -> runways.mag_var_deg()                    (default runways.MAG_VAR_DEG)
 #   win_supply {level: {below, days}}     -> ground.update_supply_win / war.update_status (default none: red's Force Index at or below `below` on `days` consecutive days wins the level)
 #   start_hour 0|4|8|12|16|20             -> CampaignState.start_hour, clock.use()    (default 8: Day 1 / turn 0 starts at 08:00; Syria 0)
-#   opening_strike {levels, kill, text?}  -> scenario._opening_strike                 (default none: every red site of the variant `kill` starts the campaign destroyed, rebuilt by the normal rule)
+#   opening_strike {levels, kill, text?, fill?}  -> scenario._opening_strike          (default none: every red site of the variant `kill` starts the campaign destroyed, rebuilt by the normal rule; `fill`: what the F-117A pairs left over hit, S104d)
 #   raid_attack_types [type, ...]         -> raids.attack_types()                     (default ("Su_25",): leads raids on troops, garrisons, supply sites)
 #   raid_bomber_types [type, ...]         -> raids.bomber_types()                     (default loadouts.BOMBER_TYPES = ("Su_24M",): field raids, SEAD and Kh-59M raids only)
 #   extra_sams [{id, site, x/y or near+bearing+dist_m, levels, ...}] -> scenario.new_campaign (fixed extra SAM sites; default none)
@@ -145,8 +145,8 @@ def _check_hooks(d: dict, src) -> None:
         bad("start_hour must be 0, 4, 8, 12, 16 or 20 (a campaign turn is four hours: the start lies on that grid)")
     if "opening_strike" in d:
         o = d["opening_strike"]
-        if not isinstance(o, dict) or set(o) - {"levels", "kill", "text"}:
-            bad("opening_strike takes only levels, kill and text")
+        if not isinstance(o, dict) or set(o) - {"levels", "kill", "text", "fill"}:
+            bad("opening_strike takes only levels, kill, text and fill")
         if not isinstance(o.get("levels"), list) or not o["levels"] or not all(v in (1, 2, 3) for v in o["levels"]):
             bad("opening_strike.levels must be a list of 1, 2, 3")
         from . import scenario
@@ -154,6 +154,9 @@ def _check_hooks(d: dict, src) -> None:
             bad(f"opening_strike.kill must name a SAM variant ({', '.join(scenario.SAM_VALUE)}; \"sa5\" and \"SA-5\" both work)")
         if "text" in o and (not isinstance(o["text"], str) or o["text"].count("{") != o["text"].count("{kill}")):
             bad("opening_strike.text is plain text; the only placeholder is {kill}")
+        known_ = {v.replace("-", "").lower() for v in scenario.SAM_VALUE} | {"ewr"}
+        if "fill" in o and (not isinstance(o["fill"], list) or not all(isinstance(k_, str) and k_.replace("-", "").lower() in known_ for k_ in o["fill"])):
+            bad(f"opening_strike.fill is a list of SAM variants ({', '.join(scenario.SAM_VALUE)}) or \"EWR\", in the order the F-117A pairs take them")
     if "raid_bearing_deg" in d:
         v = d["raid_bearing_deg"]
         if (not isinstance(v, list) or len(v) != 2 or not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v) or not 0 <= v[0] <= v[1] <= 360):

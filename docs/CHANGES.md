@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.516, the Nighthawks that opened the war are on their way home
+In Syria the whole F-117A squadron flies the midnight strike, six pairs: the SA-5 batteries, then the deepest SA-10 sites and early-warning radars. The jets start the war returning to Incirlik (the Overview shows them), land about 00:40 to 00:50, and refit 16 hours: none of them is ready for the first night. The war log names every site that was hit.
+
 ## v0.41.515, the Nighthawks fly through SAM belts
 The F-117A no longer stops at a SAM belt in front of its target: a stealth jet flies through one. It still only goes where no red air can reach, so in Syria it now hits radars, SAM sites and runways on most nights instead of almost never.
 

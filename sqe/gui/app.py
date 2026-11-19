@@ -549,6 +549,14 @@ class ForcesPage(QWidget):
                 out[qid] = f"{a.name if a else home} {typ.replace('_', '-')} Sqn #{n}"
         return out
 
+    @staticmethod
+    def _refit_note(st, s) -> str:
+        """S104d: \" (n returning, m refitting)\": the opening strike's F-117As are returning until they land, then refitting like any jet (`f117.returning`); \"\" when none."""
+        from .. import f117
+        ret = f117.returning(st, s)
+        parts = ([f"{ret} returning"] if ret else []) + ([f"{n} refitting"] if (n := max(0, len(s.refit) + s.reserve - ret)) else [])
+        return f" ({', '.join(parts)})" if parts else ""
+
     def refresh(self, st):
         from .. import war as _war
         t = _war.totals(st); en = story.enemy(st)
@@ -559,7 +567,7 @@ class ForcesPage(QWidget):
         sqs = list(st.squadrons.values()); self.sq.setRowCount(len(sqs))
         for i, s in enumerate(sqs):
             sp = AIRCRAFT[s.aircraft]
-            for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.on_hand} / {s.authorized}" + (f" ({n} refitting)" if (n := len(s.refit) + s.reserve) else ""))):
+            for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.on_hand} / {s.authorized}" + self._refit_note(st, s))):
                 self.sq.setItem(i, j, _item(v))
             self.sq.setCellWidget(i, 5, self._bar(s.on_hand / max(1, s.authorized), theme.BLUE))
         rows_ = [(w, q) for w in st.enemy_air for q in w.sqns]                     # v0.41.208 (XO): laid out like the Coalition squadrons: one row per squadron, its in-universe name (v0.41.436), airframe, base, serviceable and strength

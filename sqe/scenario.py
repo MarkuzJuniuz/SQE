@@ -10,7 +10,7 @@ from .difficulty import Difficulty, get as get_difficulty
 from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, RedSquadron, PlayerProfile)
 from .state import CampaignState
 from .aircraft import AIRCRAFT, era_aircraft
-from . import ground, redroster, theatres, story, samtier
+from . import ground, redroster, theatres, story, samtier, f117
 from . import clock as clock_mod
 from . import sams as _sams_mod
 from . import sites as _sites_mod
@@ -238,21 +238,22 @@ def _extra_sams(st, th: dict, d, ap, live: set, tiers: dict) -> None:
 OPENING_STRIKE_TEXT = "At midnight F-117A Nighthawks struck the long-range {kill} batteries: every one is down."
 
 
-def _opening_strike(st, th: dict, d) -> str:
+def _opening_strike(st, th: dict, d) -> list:
     """S90 J9s: the pack's `opening_strike` ({"levels": [2, 3], "kill": "sa5", "text": optional}): before the first mission every red site of the named variant is down, as if a mission had killed it:
     health 0 (`destroyed`) and the day recorded in the SAM rebuild record (`sams.track`), so the normal rebuild rule (`sams.rebuild`: after 5 to 7 days by the Force Index, the level's `sam_rebuild` chance a day,
-    half strength) brings them back, and the planner, map, debrief and Overview treat them as killed in a mission. Other sites (the SA-10s) stay. -> the opening war-log line ("" when nothing happens)."""
+    half strength) brings them back, and the planner, map, debrief and Overview treat them as killed in a mission. S104d: the squadron's ready jets fly it as pairs, one per target; the pack's `fill` (SA variants
+    and "EWR") names what the pairs left after the `kill` sites hit (`f117.opening_sortie`); the jets are out of `available` (returning, then in refit). Other sites stay. -> the opening war-log lines ([] when nothing happens)."""
     os_ = th.get("opening_strike")
     if not os_ or d.level not in os_["levels"]:
-        return ""
+        return []
     want = os_["kill"].replace("-", "").lower()
     hit = [a for a in st.assets.values() if a.kind == AssetKind.SAM and a.variant.replace("-", "").lower() == want and not a.id.startswith("fsam_")]
     if not hit:
-        return ""
+        return []
     for a in hit:
         a.health = 0.0
     _sams_mod.track(st)
-    return (os_.get("text") or OPENING_STRIKE_TEXT).format(kill=hit[0].variant)
+    return [(os_.get("text") or OPENING_STRIKE_TEXT).format(kill=hit[0].variant)] + f117.opening_sortie(st, os_, hit)
 
 
 def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str = "caucasus",
@@ -380,8 +381,8 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     me = next((q for q in mine if q.id == player_squadron), mine[0])
     st.player = PlayerProfile(aircraft=player_aircraft, squadron_id=me.id, callsign=me.callsign)
     st.note(f"Campaign '{name}' begins. You fly the {AIRCRAFT[player_aircraft].display} with {me.name}. {d.name}.")
-    if struck:
-        st.note(struck)
+    for _ln in struck:
+        st.note(_ln)
     for _ln in story.beat(st, "open"):
         st.note(_ln)
     return st
