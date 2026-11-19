@@ -179,6 +179,61 @@ def check_incompatible_saves():
     print(f"[incompatible saves] {len(cases)} bad saves refused, the open campaign stayed open; backup copied")
 
 
+def check_syria_theatre():
+    """S90 J7: the Syria pack is a second theatre. A Syria campaign is created, saved and reopened at levels 1 to 3 (the reopened one is Syria again), one mission builds at each level and its package carries the
+    flight of its first job, and the new-campaign dialog lists both theatres and follows the picked one (era defaults). The Caucasus is active again afterwards."""
+    from sqe import theatres
+    from sqe.packages import PackageBuilder
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from sqe.gui.dialogs import NewCampaignDialog
+    _fixed_ids("syria-theatre")
+    (TMP / "saves").mkdir(parents=True, exist_ok=True)
+    try:
+        assert "syria" in theatres.available() and "caucasus" in theatres.available(), "both theatre packs are listed"
+        for level, seed in ((1, 5), (2, 5), (3, 7)):
+            s = mk()
+            s.new(f"Smoke Syria {level}", "F-16C", level, seed=seed, theatre="syria")
+            s.save()
+            theatres.use("caucasus")
+            r = mk()
+            r.open(s.path)
+            assert theatres.active()["id"] == "syria" and r.state.theatre == "syria", "a reopened Syria campaign activates its theatre"
+            assert r.state.campaign_id == s.state.campaign_id, "the same campaign after a reload"
+            pk = first_flyable(r)
+            assert pk is not None, f"level {level}: nothing to fly"
+            r.fly(pk.number, r.flyable(pk)[0].id)
+            assert Path(r.state.pending["miz"]).read_bytes()[:2] == b"PK", f"level {level}: the .miz is not a zip"
+            job = PackageBuilder(r.state)._slots(pk.objective, False, 0, pk.extra)[0].role
+            assert any(f.role == job and not f.tag for f in pk.flights), f"level {level}: the package has no flight for its first job"
+        from PySide6.QtWidgets import QMessageBox
+        from sqe.gui import theme
+        from sqe.gui.app import MainWindow
+        QMessageBox.information = staticmethod(lambda *a, **k: None)
+        QMessageBox.warning = staticmethod(lambda *a, **k: None)
+        QApplication.instance().setStyleSheet(theme.QSS)
+        ses = mk()
+        ses.new("Smoke Syria window", "F-16C", 3, seed=7, theatre="syria")
+        w = MainWindow(ses)                                                      # the main window (map included) builds on a Syria campaign
+        w.refresh_all()
+        w.show()
+        for i in range(w.stack.count()):
+            w.stack.setCurrentIndex(i)
+            QApplication.instance().processEvents()
+        w.hide()
+        theatres.use("caucasus")
+        dlg = NewCampaignDialog(None, "rain")
+        ids = [dlg.th.itemData(i) for i in range(dlg.th.count())]
+        assert "syria" in ids and "caucasus" in ids, "the dialog lists both theatres"
+        dlg.th.setCurrentIndex(ids.index("syria"))
+        v = dlg.values()
+        assert v["theatre"] == "syria" and v["start_date"].startswith(str(theatres.era("syria")["year"])), "the dialog follows the picked theatre"
+    finally:
+        theatres.use("caucasus")
+    print("[syria] a Syria campaign is created, saved and reopened at levels 1 to 3; one mission builds at each; the main window shows on a Syria campaign; the dialog lists both theatres")
+
+
 def check_ecm_install():
     """The ECM export script installs itself (copy + one marked line at the end of Export.lua), removes cleanly, never touches other lines or line
     endings, backs Export.lua up once. It writes to a file outside SQE, so XO keeps it as critical."""
@@ -483,6 +538,7 @@ OPT_IN = []                                                   # checks that run 
 CHECKS = [
     check_saves_round_trip,
     check_incompatible_saves,
+    check_syria_theatre,
     check_ecm_install,
     check_fly_debrief_advance,
     check_dialogs,
