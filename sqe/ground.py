@@ -49,6 +49,13 @@ TAKEN_NEW_DAY = 16            # v0.41.247 (XO 2026-11-03): one week after the Pa
 TAKEN_NEW_SQUADRONS = 1       # per taken field (judgment call: each is up to 18 more jets for blue; raise it if blue is thin at the front)
 SHORT_DAYS = 7                # how long a day's unfilled-slot record is kept
 SHORT_MAX = 600               # v0.41.338: at most this many entries are kept in all (6 turns a day each add their own, S25; judgment call, about a week of the old one-list-a-day)
+def defeat_bases() -> int:
+    """How many fallen airfields lose the campaign: the active pack's `front.defeat_bases` (S90 J5; Syria 1), else DEFEAT_BASES."""
+    from . import theatres
+    v = (theatres.active().get("front") or {}).get("defeat_bases")
+    return DEFEAT_BASES if v is None else int(v)
+
+
 DEFEAT_BASES = 3              # Phase 9a (XO 2026-11-10, campaign rules plan decision 25): the campaign is lost when this many of our airfields have fallen; a sunk carrier no longer counts
 SUPPLY_FLOOR, SUPPLY_NONE = 0.35, 0.85
 # v0.41.334 (XO 2026-11-06 / 11-09, campaign rules plan decision 18): ONE shared Force Index floor, 0.35, for both sides (it was 0.55 for red and BLUE_SUPPLY_FLOOR 0.35 for the coalition). History of the 0.35: v0.41.174 (XO 2026-10-28) 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle); v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly. Judgment call, no public source. Level 1 red keeps L1_RED_SUPPLY_FLOOR.

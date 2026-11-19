@@ -212,12 +212,34 @@ def _disperse_red(st, terrain, plan_w: list) -> None:
         row[2] += max(0, extra)                          # nowhere to go: they stay (and spawn wherever they can)
 
 
+def _extra_sams(st, th: dict, d, ap, live: set, tiers: dict) -> None:
+    """S90 J5: the pack's `extra_sams` ([{id, site, x/y or near + bearing + dist_m, levels, parent?, tier?, jitter_m?}]): fixed SAM sites for this level, registered like any red site (the SA-5 sites of Syria:
+    the long-range tier is fixed by the theatre, not drawn per field). A site with a `parent` red field that is not in this level's roster is left out. Own random stream (only the optional `jitter_m` uses
+    it), so no other draw of the campaign moves."""
+    ex = [e for e in (th.get("extra_sams") or []) if d.level in e["levels"] and (not e.get("parent") or e["parent"] in live)]
+    if not ex:
+        return
+    r = random.Random(f"{st.campaign_id}:extra_sams")
+    for e in ex:
+        if "x" in e:
+            x, y = float(e["x"]), float(e["y"])
+        else:
+            p = ap(e["near"])
+            x, y = _offset(p.x, p.y, float(e["bearing"]), float(e["dist_m"]))
+        j = float(e.get("jitter_m", 0.0) or 0.0)
+        if j > 0:
+            x, y = _offset(x, y, r.uniform(0, 360), r.uniform(0, j))
+        v = e["site"]
+        tier = int(e.get("tier", tiers.get(e.get("parent", ""), 3)))
+        st.assets[e["id"]] = EnemyAsset(e["id"], e.get("name") or f"{SAM_LABEL[v]} {e['id'][4:]}", AssetKind.SAM, x, y, 1.0, SAM_VALUE[v], [], None, v, tier, "")
+
+
 def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str = "caucasus",
                  seed: int | None = None, start_date: str = "2006-06-12", night_ops: bool = True,
                  player_squadron: str | None = None, a10_variant: str | None = None, f14_variant: str | None = None, link16: bool | None = None) -> CampaignState:
+    th = theatres.use(theatre)                            # S90 J5: the theatre first: `get_difficulty` applies the pack's level_overrides
     d: Difficulty = get_difficulty(level)
     rng = random.Random(seed)
-    th = theatres.use(theatre)
     t = theatres.terrain()
     ap = lambda n: t.airports[n].position
     era = th["era"]                                       # S103a: Era Equipment, chosen at creation (None = the theatre's own era value) and saved with the campaign
@@ -265,7 +287,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         if aid in cap_all:
             cap_all[aid] = n_ if not cap_all[aid] else min(cap_all[aid], n_)
     cap_hv = {aid: _slots(t, apt_of[aid], ["Su_24M", "Su_27", "MiG_31"]) for aid in ww}
-    plan_r = redroster.allocate(d.level, list(ww), ww, FIELD_TIER, cap_all, cap_hv)
+    plan_r = redroster.allocate(d.level, list(ww), ww, FIELD_TIER, cap_all, cap_hv, roster=(th.get("red_roster") or {}).get(str(d.level)))          # S90 J5: the pack's roster, else redroster.ROSTERS[level]
     for aid, types in plan_r.items():
         sqns = [RedSquadron(i_, n_, t_, c_) for i_, n_, t_, c_ in redroster.cut(aid, st.assets[aid].name, types, d.red_squadron_max)]
         st.enemy_air.append(EnemyAirWing(aid, list(dict.fromkeys(q.aircraft for q in sqns)), len(sqns), sqns))
@@ -320,6 +342,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
 
     _sites_mod.apply(st, th)                                         # v0.41.199: red's SAM sites, supply sites and columns move onto the condensed site spots
     snap_assets_to_land(st)                                          # nothing is generated in the sea
+    _extra_sams(st, th, d, ap, live, FIELD_TIER)                     # S90 J5: the pack's fixed extra SAM sites (none in the Caucasus); after the snap and the site spots: they stay where the pack put them
     _road_sites_mod.build(st, th, d, {n_: (a_.position.x, a_.position.y) for n_, a_ in t.airports.items()}, rng)      # v0.41.241 (item i): supply sites along the roads, both sides (a stream of its own)
     sams = [x for x in st.assets.values() if x.kind == AssetKind.SAM]
     for x in st.assets.values():

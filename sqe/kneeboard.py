@@ -130,7 +130,10 @@ NAV = {"Batumi": "BATUMI  ILS 110.30 RWY13  TACAN 16X BTM",
 
 
 def nav_line(airport):
-    return NAV.get(airport or "", "")
+    """The kneeboard's approach-aid line of an airport: the active pack's `nav` table (S90 J5) when it has one, else NAV (the Caucasus)."""
+    from . import theatres
+    nav = theatres.active().get("nav")
+    return (NAV if nav is None else nav).get(airport or "", "")
 
 
 def render_pages(outdir, ctx: dict) -> list:

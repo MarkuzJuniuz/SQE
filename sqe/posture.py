@@ -126,7 +126,7 @@ def _warnings(state) -> list:
         out.append(("counter_on", "The enemy counter-force is attacking" + (f" for {_days(d)} more" if d else " today")))
     n_lost_ = len(g["fallen"])
     if n_lost_:
-        left_ = ground.DEFEAT_BASES - n_lost_
+        left_ = ground.defeat_bases() - n_lost_
         out.append(("lost", f"{n_lost_} of our airfields {'has' if n_lost_ == 1 else 'have'} fallen: {left_} more and the campaign is lost" if left_ > 0 else "Our airfields have fallen: the campaign is lost"))
     clock = int(g.get("clock", 0))
     if g["taken"] and clock > state.day:

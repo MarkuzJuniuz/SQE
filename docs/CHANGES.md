@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.497, theatre packs can set more of the war themselves
+A theatre pack can now name its own red rosters, its bomber wings per level, which red fields form the air-superiority front, how many lost airfields end the campaign, the approach-aid text and ILS runways of its fields, its magnetic variation and fixed extra SAM sites. Every key is optional and its default is what the Caucasus used, so the Caucasus campaigns are unchanged. A red airfield without an air wing no longer breaks the planner.
+
 ## v0.41.496, road depots: a cap, no interleaving, and a depot the front cuts off can fall
 The road depots (fuel points and supply dumps) of the two sides keep their distance now: none lies more than 100 km from its own side's nearest airfield, no depot of one side lies within 20 km of one of the other, and along a road the two sides' depots no longer alternate (all of one side, then all of the other). A side that cannot fill its quota that way gets fewer depots. When the front moves and re-assigns a road, a depot that would break these rules is destroyed for good instead of changing hands, and the war log says so. Campaigns where blue has no road depots (the Caucasus today) are unchanged.
 

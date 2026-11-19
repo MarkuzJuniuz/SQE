@@ -118,9 +118,15 @@ def field_of(a) -> str:
     return ""
 
 
+def mountain_fields() -> tuple:
+    """The fields whose belts count as the MOUNTAIN front: the active pack's `front.air_fields` (S90 J5), else MOUNTAIN_FIELDS (the Caucasus list)."""
+    v = (theatres.active().get("front") or {}).get("air_fields")
+    return MOUNTAIN_FIELDS if v is None else tuple(v)
+
+
 def axis_of(a) -> str:
-    """The two fronts (S20, XO 2026-11-11): "MOUNTAIN" = the air-superiority target in the north (the fields in MOUNTAIN_FIELDS, their belts, radars and runways); "SEA" = everything else (the ground war on the Black Sea side)."""
-    return "MOUNTAIN" if field_of(a) in MOUNTAIN_FIELDS else "SEA"
+    """The two fronts (S20, XO 2026-11-11): "MOUNTAIN" = the air-superiority target in the north (the fields in `mountain_fields()`, their belts, radars and runways); "SEA" = everything else (the ground war on the Black Sea side)."""
+    return "MOUNTAIN" if field_of(a) in mountain_fields() else "SEA"
 
 
 def wave_factor(state, a) -> float:
@@ -274,7 +280,7 @@ class ObjectivePlanner:
                 # v0.41.333 (XO 2026-11-07, "remove all counter-air / standoff versions of it"): no Counter-Air strike (CBU on the ramp) and no Standoff Counter-Air (JSOW)
                 # is offered any more; the runway crater below is the airfield attack. The Fighter Sweep (also a COUNTER_AIR objective) is untouched. The builder, packages and
                 # briefing code for the strike versions stays in place, unreachable for new plans, for a later cleanup.
-                if not runways.is_closed(state, a.id):         # v0.41.254: crater the runway (a STRIKE with aim RUNWAY); 3 bomb hits close the field for 2-5 days
+                if w is not None and not runways.is_closed(state, a.id):         # S90 J5: a field with no wing (a pack whose bomber base has `bomber_wing` 0 at a level) has no aircraft to catch: no runway job. v0.41.254: crater the runway (a STRIKE with aim RUNWAY); 3 bomb hits close the field for 2-5 days
                     prr = a.value * 0.9 * (w.available / max(1, w.authorized))
                     o_ = Objective("", ObjectiveType.STRIKE, a.id, prr, f"OCA: Runway Strike, {a.name} ({w.available} aircraft)")
                     o_.aim = "RUNWAY"
@@ -911,8 +917,8 @@ def update_status(state: CampaignState) -> str:
             state.status = "VICTORY"; state.note("VICTORY: the enemy command structure and air arm are broken.")
         elif t["friendly_air"] < 0.15:
             state.status = "DEFEAT"; state.note("DEFEAT: the coalition air component can no longer sustain operations.")
-        elif ground.fallen_count(state) >= ground.DEFEAT_BASES:
-            state.status = "DEFEAT"; state.note(f"DEFEAT: the front has collapsed; {ground.DEFEAT_BASES} of our airfields are lost.")
+        elif ground.fallen_count(state) >= ground.defeat_bases():
+            state.status = "DEFEAT"; state.note(f"DEFEAT: the front has collapsed; {ground.defeat_bases()} of our airfields are lost.")
             for ln in story.beat(state, "lose"):
                 state.note(ln)
     return state.status
