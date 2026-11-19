@@ -9,7 +9,6 @@ they can be tuned from XO's flown tests.
 from __future__ import annotations
 from . import ground, story
 from .models import AssetKind
-from .words import strength_word
 
 POINTS_PER_BATTALION = 10.0       # judgment call: a sector's strength runs 0..100, so a full sector is ten battalions (XO 2026-10-24 gave "scale 10 for L3")
 ODDS_AHEAD = 1.3                  # our force at the front sector against the enemy's: at or above this we are "holding" the odds (judgment call; the
@@ -167,7 +166,7 @@ def posture(state) -> tuple:
 
 def supply_lines(state) -> list:
     e, f = ground.supply(state, "red"), ground.supply(state, "blue")
-    out = [f"Coalition Force Index: {supply_word(f)}", f"{story.enemy(state)} Force Index: {supply_word(e)}"]
+    out = [f"Coalition Force Index: {round(100 * f)}% ({supply_word(f)})", f"{story.enemy(state)} Force Index: {round(100 * e)}% ({supply_word(e)})"]
     w = ground.supply_collapse_word(state)               # S90: only where the pack wins on the enemy's supply collapsing
     if w:
         out.append(f"{story.enemy(state)} supply collapse: {w}")
@@ -198,7 +197,7 @@ def transit_text(state, side: str) -> str:
 def air_defence_lines(state) -> list:
     out = []
     for side, label in (("blue", "Coalition"), ("red", story.enemy(state))):
-        s = f"{label} air defence: {strength_word(iads_pct(state, side))}"
+        s = f"{label} air defence: {round(100 * iads_pct(state, side))}% of sites operational"
         t = transit_text(state, side)
         out.append(s + (f"; {t}" if t else ""))
     return out

@@ -4,7 +4,6 @@ from __future__ import annotations
 import re
 from . import ground, posture, tempo, narrative, sams, story
 from .models import AssetKind
-from .words import edge_word
 
 EVENT_RE = re.compile(r"HAS FALLEN|has been retaken|back in our hands|counter-force|VICTORY|DEFEAT|The last objective|takeover", re.I)
 
@@ -134,7 +133,7 @@ def tempo_lines(state) -> list:
     out = []
     for k in tempo.KINDS:
         v = tempo.get(state, k) * 100
-        out.append(f"{tempo.LABEL[k][:1].upper() + tempo.LABEL[k][1:]}: {edge_word(v / 100.0, tempo.TEMPO_CAP)}")
+        out.append(f"{tempo.LABEL[k][:1].upper() + tempo.LABEL[k][1:]}: {v:+.0f}%" + ("  (at the cap)" if abs(v) >= tempo.TEMPO_CAP * 100 - 0.5 else ""))
     return out
 
 
