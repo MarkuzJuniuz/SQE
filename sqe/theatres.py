@@ -23,6 +23,16 @@ REQUIRED = ("id", "name", "dcs_terrain", "lat", "lon", "tz", "temp_c", "geo", "s
 # the block (or with part of it) gets these values, which are Caucasus 2006 (what SQE always flew).
 ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "link16": True}
 
+# S90 J5 (the theatre hooks): OPTIONAL pack keys. Each is read in ONE place and a pack without it gets today's Caucasus constant, so the Caucasus is byte-identical:
+#   red_roster {level: {type: jets}}      -> redroster.allocate(roster=...)           (default redroster.ROSTERS[level])
+#   level_overrides {level: {field: v}}   -> difficulty.get(level) for this theatre   (default: the level as it is)
+#   front.air_fields [field key, ...]     -> war.mountain_fields()                    (default war.MOUNTAIN_FIELDS)
+#   front.defeat_bases N                  -> ground.defeat_bases()                    (default ground.DEFEAT_BASES)
+#   nav {airport: kneeboard line}         -> kneeboard.nav_line()                     (default kneeboard.NAV)
+#   ils_runway {airport: runway number}   -> runways.ils_runways()                    (default runways.ILS_RUNWAY)
+#   mag_var_deg number                    -> runways.mag_var_deg()                    (default runways.MAG_VAR_DEG)
+#   extra_sams [{id, site, x/y or near+bearing+dist_m, levels, ...}] -> scenario.new_campaign (fixed extra SAM sites; default none)
+
 _ACTIVE: dict | None = None
 _CACHE: dict = {}
 EXTRA_DIRS: list = []                 # extra pack folders (tests, or a portable install); searched after the bundled ones
@@ -60,8 +70,79 @@ def _validate(d: dict, src) -> dict:
     d["era"] = {**ERA_DEFAULT, **(d.get("era") or {})}
     from . import samtier
     samtier.check(d.get("sam_tier"), src)
+    _check_hooks(d, src)
     d["_dir"] = str(Path(src).parent)
     return d
+
+
+def _check_hooks(d: dict, src) -> None:
+    """S90 J5: raise a clear ValueError for a bad value in one of the optional hook keys (see the table at the top). A missing key is fine."""
+    def bad(msg):
+        raise ValueError(f"theatre pack {src}: {msg}")
+
+    def levels_of(name, block):
+        if not isinstance(block, dict):
+            bad(f"{name} must be a {{level: ...}} object")
+        for k in block:
+            if str(k) not in ("1", "2", "3"):
+                bad(f"{name} has the level {k!r}: levels are \"1\", \"2\" and \"3\"")
+    if "red_roster" in d:
+        levels_of("red_roster", d["red_roster"])
+        for lv, roster in d["red_roster"].items():
+            if not isinstance(roster, dict) or not roster:
+                bad(f"red_roster level {lv} must be a non-empty {{aircraft type: jets}} object")
+            for t, n in roster.items():
+                if not isinstance(t, str) or isinstance(n, bool) or not isinstance(n, int) or n < 0:
+                    bad(f"red_roster level {lv}: {t!r}: {n!r} must be an aircraft type and a whole number of jets, 0 or more")
+    if "level_overrides" in d:
+        levels_of("level_overrides", d["level_overrides"])
+        import dataclasses
+        from .difficulty import Difficulty
+        fields = {f.name for f in dataclasses.fields(Difficulty)} - {"level"}
+        for lv, ov in d["level_overrides"].items():
+            if not isinstance(ov, dict):
+                bad(f"level_overrides level {lv} must be a {{difficulty field: value}} object")
+            for k in ov:
+                if k not in fields:
+                    bad(f"level_overrides level {lv}: {k!r} is not a Difficulty field")
+    fr = d.get("front") or {}
+    if "air_fields" in fr and (not isinstance(fr["air_fields"], list) or not all(isinstance(x, str) for x in fr["air_fields"])):
+        bad("front.air_fields must be a list of red field keys (the part of the id after ab_)")
+    if "defeat_bases" in fr and (isinstance(fr["defeat_bases"], bool) or not isinstance(fr["defeat_bases"], int) or fr["defeat_bases"] < 1):
+        bad("front.defeat_bases must be a whole number, 1 or more")
+    if "nav" in d and (not isinstance(d["nav"], dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in d["nav"].items())):
+        bad("nav must be an {airport name: kneeboard line} object")
+    if "ils_runway" in d and (not isinstance(d["ils_runway"], dict) or not all(isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 36 for k, v in d["ils_runway"].items())):
+        bad("ils_runway must be an {airport name: runway number 1 to 36} object")
+    if "mag_var_deg" in d and (isinstance(d["mag_var_deg"], bool) or not isinstance(d["mag_var_deg"], (int, float)) or abs(d["mag_var_deg"]) > 30):
+        bad("mag_var_deg must be a number of degrees (east positive, within 30)")
+    if "extra_sams" in d:
+        if not isinstance(d["extra_sams"], list):
+            bad("extra_sams must be a list")
+        from . import scenario
+        seen = set()
+        for i, e in enumerate(d["extra_sams"]):
+            if not isinstance(e, dict):
+                bad(f"extra_sams[{i}] must be an object")
+            eid = e.get("id")
+            if not isinstance(eid, str) or not eid.startswith("sam_") or "_" not in eid[4:] or eid in seen:
+                bad(f"extra_sams[{i}]: id must be a unique text of the form sam_<key>_<n> (e.g. sam_sa5h_0), got {eid!r}")
+            seen.add(eid)
+            if e.get("site") not in scenario.SAM_VALUE:
+                bad(f"extra_sams[{i}]: site {e.get('site')!r} is not a SAM variant ({', '.join(scenario.SAM_VALUE)})")
+            if not ("x" in e and "y" in e) and not ("near" in e and "bearing" in e and "dist_m" in e):
+                bad(f"extra_sams[{i}]: give x and y (DCS metres) or near (an airport name) with bearing (degrees) and dist_m")
+            for k in ("x", "y", "bearing", "dist_m", "jitter_m"):
+                if k in e and (isinstance(e[k], bool) or not isinstance(e[k], (int, float))):
+                    bad(f"extra_sams[{i}]: {k} must be a number")
+            if not isinstance(e.get("levels"), list) or not e["levels"] or not all(v in (1, 2, 3) for v in e["levels"]):
+                bad(f"extra_sams[{i}]: levels must be a list of 1, 2, 3")
+
+
+def hook(key: str, default=None):
+    """The active pack's optional hook key `key`, or `default` when the pack has none (S90 J5)."""
+    v = active().get(key)
+    return default if v is None else v
 
 
 def available() -> dict:

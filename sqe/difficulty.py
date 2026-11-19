@@ -101,8 +101,24 @@ LEVELS: dict[int, Difficulty] = {
 }
 
 
+_OVERRIDDEN: dict = {}
+
+
 def get(level: int) -> Difficulty:
-    return LEVELS[max(1, min(3, int(level)))]
+    """The level's Difficulty. S90 J5: when the ACTIVE theatre pack has `level_overrides` for this level (theatre facts such as a bomber wing), those fields are replaced on a copy; a pack without
+    them (the Caucasus) gets the level object itself."""
+    d = LEVELS[max(1, min(3, int(level)))]
+    from . import theatres
+    th = theatres.active()
+    ov = (th.get("level_overrides") or {}).get(str(d.level))
+    if not ov:
+        return d
+    key = (th["id"], d.level)
+    hit = _OVERRIDDEN.get(key)
+    if hit is None or hit[0] is not d:
+        from dataclasses import replace
+        hit = _OVERRIDDEN[key] = (d, replace(d, **ov))
+    return hit[1]
 
 
 # v0.41.70: "AI Skill", one for Red and one for Blue (XO 2026-10-21: DCS AI at the top skill cheats, so he wants a say on both sides). Set on the New Campaign
