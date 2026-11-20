@@ -3,9 +3,6 @@
 ## v0.41.531, S121: the escort of a SEAD or JSOW package covers the SEAD flights
 The F-15 / F-16 escort of a package with SEAD or JSOW flights now stands behind the shooters closest to red's fighters (usually the SEAD flights) instead of behind the JSOW flight, which could be 40 km away. A red fighter pair that comes for the SEAD flights now meets the escort.
 
-## v0.41.530, S122: developer tools look for their scan data in a new folder
-Nothing changes in the game. The developer tools that read or write the Syria scans, the airfield list and the F-14B probe now use `.claude/crew-chief-internal/` instead of `.private/`.
-
 ## v0.41.529, S120: the carrier no longer wanders so far from the front
 The carrier's station was drawn from a band that ran round the whole front, so on some Syria campaigns it started 200 nm from the coast, north-west of Cyprus. The pick now stays within 80 km of the best spot and no more than 30 nm beyond the standoff from the nearest red airfield.
 
