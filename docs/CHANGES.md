@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.529, S120: the carrier no longer wanders so far from the front
+The carrier's station was drawn from a band that ran round the whole front, so on some Syria campaigns it started 200 nm from the coast, north-west of Cyprus. The pick now stays within 80 km of the best spot and no more than 30 nm beyond the standoff from the nearest red airfield.
+
 ## v0.41.528, S119: the Caucasus gets a three-day grace before the first carrier raid
 Red now stages no Tu-22M3 carrier raid in the first three days of a Caucasus campaign: the carrier has just arrived and red has to find it first. Syria keeps its week.
 
