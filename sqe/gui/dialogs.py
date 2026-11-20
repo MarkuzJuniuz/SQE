@@ -573,7 +573,7 @@ class DayResolvedDialog(QDialog):
     S21 (XO 2026-11-11): the AFTER-ACTION REPORT of every skip, one dialog per run. `reason` (why an auto-skip stopped) is its header line.
     The report is a plain list of every simulated event, all shown at once in one QTextBrowser (it scrolls by itself, starts at the top; the animation was dropped)."""
     def __init__(self, turns: list, parent=None, reason: str = ""):
-        super().__init__(parent); self.setWindowTitle("After-action report"); self.setMinimumSize(700, 480)
+        super().__init__(parent); self.setWindowTitle("After-Action Report"); self.setMinimumSize(700, 480)
         lay = QVBoxLayout(self); lay.setSpacing(12)
         results = [r for t_ in turns for r in t_.get("results", [])]
         t = QLabel(f"{turns[0]['label']} resolved" if len(turns) == 1 else f"{turns[0]['label']} to {turns[-1]['label']}: {len(turns)} turns resolved"); t.setObjectName("title"); lay.addWidget(t)
@@ -614,15 +614,15 @@ class DebriefDialog(QDialog):
         if pi:
             pl = QLabel(f"Your log: {pi['flight_s'] // 60} min airborne, {pi['ka']} air / {pi['kg']} ground / {pi['ks']} ship kills credited to you.")
             pl.setObjectName("dim"); lay.addWidget(pl)
-        h = QLabel("Results of your sortie"); h.setObjectName("h2"); lay.addWidget(h)
+        h = QLabel("Results of Your Sortie"); h.setObjectName("h2"); lay.addWidget(h)
         tb = QTextBrowser(); tb.setMaximumHeight(130)
         tb.setHtml("<br>".join(out["lines"]) + (f"<br><span style='color:{theme.DIM}'>(Mission end event not seen: results are from the last checkpoint.)</span>" if not out["ended"] else ""))
         lay.addWidget(tb)
         if out.get("kill_log"):
-            h = QLabel("Kill log"); h.setObjectName("h2"); lay.addWidget(h)
+            h = QLabel("Kill Log"); h.setObjectName("h2"); lay.addWidget(h)
             kb = QTextBrowser(); kb.setMaximumHeight(130)
             kb.setHtml("<br>".join(k.replace("&", "&amp;").replace("<", "&lt;") for k in out["kill_log"])); lay.addWidget(kb)
-        h = QLabel("Meanwhile, elsewhere in the theatre"); h.setObjectName("h2"); lay.addWidget(h)
+        h = QLabel("Meanwhile, Elsewhere in the Theatre"); h.setObjectName("h2"); lay.addWidget(h)
         mw = QTextBrowser()
         mw.setHtml("<br>".join(("<b>" + ln + "</b>") if i == 0 else ln for r in out["meanwhile"] for i, ln in enumerate(r["lines"])) or "Nothing else was tasked.")
         lay.addWidget(mw, 1)

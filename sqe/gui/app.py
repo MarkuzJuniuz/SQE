@@ -108,10 +108,10 @@ class OverviewPage(QWidget):
                 self.dtabs.addTab(v, _tc(title, True))
         right = QVBoxLayout(); root.addLayout(right, 6)
         g = QGridLayout(); g.setSpacing(12); right.addLayout(g)
-        self.cards = {"fr": StatCard("The front", theme.AMBER), "od": StatCard("Ground odds", theme.BLUE)}
+        self.cards = {"fr": StatCard("The Front", theme.AMBER), "od": StatCard("Ground Odds", theme.BLUE)}
         self.side = {"blue": SideCard("Coalition"), "red": SideCard("Russia")}
         g.addWidget(self.cards["fr"], 0, 0); g.addWidget(self.cards["od"], 0, 1); g.addWidget(self.side["blue"], 1, 0); g.addWidget(self.side["red"], 1, 1)
-        self.today = StatCard("This turn's tasking", theme.AMBER); right.addWidget(self.today)               # v0.41.152: what the day holds for you
+        self.today = StatCard("This Turn's Tasking", theme.AMBER); right.addWidget(self.today)               # v0.41.152: what the day holds for you
         self.warn_card = card(); right.addWidget(self.warn_card)                # v0.41.148: warnings (a base about to fall, the counter-force), hidden when there are none
         wh = QLabel("WARNINGS"); wh.setObjectName("head"); self.warn_card.layout().addWidget(wh)
         self.warn = QLabel(); self.warn.setWordWrap(True); self.warn.setStyleSheet(f"color:{theme.AMBER};"); self.warn_card.layout().addWidget(self.warn)
@@ -656,7 +656,7 @@ class PilotPage(QWidget):
                       ("rescues", "Bail-outs (rescued)", theme.DIM))}
         for i, k in enumerate(self.cards):
             g.addWidget(self.cards[k], i // 3, i % 3)
-        h = QLabel("Sortie history"); h.setObjectName("h2"); lay.addWidget(h)
+        h = QLabel("Sortie History"); h.setObjectName("h2"); lay.addWidget(h)
         self.hist = _tbl(["Date", "Sortie", "Objective", "Result", "Kills", "Minutes", "Package losses"]); lay.addWidget(self.hist, 1)
 
     def refresh(self, st):
@@ -679,7 +679,7 @@ class PilotPage(QWidget):
 class LogPage(QWidget):
     def __init__(self):
         super().__init__(); lay = QVBoxLayout(self)
-        h = QLabel("War log"); h.setObjectName("h2"); lay.addWidget(h)
+        h = QLabel("War Log"); h.setObjectName("h2"); lay.addWidget(h)
         self.log = QTextBrowser(); lay.addWidget(self.log, 1)
 
     def refresh(self, st):
@@ -715,7 +715,7 @@ class MainWindow(QMainWindow):
         self.p_over.get_settings = lambda: self.session.settings
         self.p_over.get_session = lambda: self.session
         grp = QButtonGroup(self); grp.setExclusive(True)
-        for i, (name, page) in enumerate((("Overview", self.p_over), ("Missions", self.p_miss), ("Forces", self.p_forces), ("Pilot", self.p_pilot), ("War log", self.p_log))):
+        for i, (name, page) in enumerate((("Overview", self.p_over), ("Missions", self.p_miss), ("Forces", self.p_forces), ("Pilot", self.p_pilot), ("War Log", self.p_log))):
             b = QPushButton(name); b.setObjectName("nav"); b.setCheckable(True); grp.addButton(b, i); sl.addWidget(b)
             self.stack.addWidget(page); b.clicked.connect(lambda _=0, k=i: self.stack.setCurrentIndex(k))
             if i == 1:

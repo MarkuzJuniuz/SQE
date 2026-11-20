@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.538, S129: page and window headings in Title Case
+The War Log and Sortie History pages, the Overview cards and the debrief and after-action windows now use Title Case headings. War-log entries are stamped "[Day 1, 12:00]" like the header (older saves are converted on load).
+
 ## v0.41.537, S128: Title Case headers and tabs, "Syrian-Russian Forces", names with "Al"
 Table headers and tab titles throughout the app read in Title Case, and the Syrian side reads "Syrian-Russian Forces" everywhere, the odds line says "Forces'" correctly, and airfield names with a spaced "Al" (Al Qusayr, Wujah Al Hajar) keep their capital in asset names. Only the hyphen form reads "al-Duhur". Campaigns saved earlier keep names that were cut short before (e.g. "Near al").
 
