@@ -568,10 +568,10 @@
     },
     "tier_labels": [
         "",
-        "T1 front",
+        "T1 Front",
         "T2 Abkhazia",
-        "T3 coast / north",
-        "T4 deep"
+        "T3 Coast / North",
+        "T4 Deep"
     ],
     "front_names": [
         "Abkhazia front",

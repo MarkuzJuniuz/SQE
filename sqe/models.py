@@ -133,6 +133,10 @@ class EnemyAsset:
     suppressed: bool = False            # SAM: radars blinded (SEAD worked, the launchers are still there); since v0.41.338 it clears SUPPRESS_TURNS turns after the turn it was seen set (Session._tick), not overnight
     suppressed_turn: int = -1           # v0.41.338 (Phase 4): the turn the flag was first seen set (Session._tick), -1 = not suppressed; the flag expires SUPPRESS_TURNS later
 
+    def __post_init__(self):
+        from .textcase import title_case
+        self.name = title_case(self.name, keep_caps=True)             # S127: every asset name is Title Case, an old save too (state.from_dict rebuilds assets through here)
+
     @property
     def destroyed(self) -> bool:
         return self.health <= 0.05
