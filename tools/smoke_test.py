@@ -17,6 +17,9 @@ from pathlib import Path
 
 TMP = Path(tempfile.mkdtemp(prefix="sqe_test_"))
 os.environ["APPDATA"] = str(TMP / "appdata")                 # belt and braces: even a stray settings save stays in TMP
+_FONTS = Path(os.environ.get("WINDIR", "")) / "Fonts"
+if os.environ.get("WINDIR") and _FONTS.is_dir():
+    os.environ.setdefault("QT_QPA_FONTDIR", str(_FONTS))      # S99: Qt's offscreen platform finds no font folder and prints a warning per GUI worker; the workers re-import this module, so it covers them
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(1, str(Path(__file__).resolve().parent))      # hook_lua_sim sits beside this file
 import sqe
@@ -29,11 +32,11 @@ mk = lambda: Session(AppSettings(dcs_saves=str(TMP / "saves"), persist=False))  
 LUA_SKIPPED = []                                              # set when lupa is missing: the last line says so
 
 
-def fresh_session(level=3, seed=7, ac="F-16C"):
-    """A new campaign of its own for a check that needs a session."""
+def fresh_session(level=3, seed=7, ac="F-16C", theatre="caucasus"):
+    """A new campaign of its own for a check that needs a session (S126: the soak also runs on Syria; the caller puts the Caucasus back with `theatres.use("caucasus")`)."""
     ses = mk()
     (TMP / "saves").mkdir(parents=True, exist_ok=True)
-    ses.new("Smoke fresh", ac, level, seed=seed, a10_variant=ac if ac in ("A-10A", "A-10C2") else None, f14_variant=ac if ac == "F-14B" else None)      # S103b / S103c: the A-10A and the F-14B need a campaign created with them (Era Equipment)
+    ses.new("Smoke fresh", ac, level, seed=seed, a10_variant=ac if ac in ("A-10A", "A-10C2") else None, f14_variant=ac if ac == "F-14B" else None, theatre=theatre)      # S103b / S103c: the A-10A and the F-14B need a campaign created with them (Era Equipment)
     return ses
 
 
@@ -519,16 +522,17 @@ def check_hook_lua():
 
 
 # ---- 6. soak (in the default run; `--only soak` alone) ------------------------------------------------------------------------------------------------------------
-SOAK_CASES = [(1, 5), (2, 3), (3, 7)]                         # (level, seed)
+SOAK_CASES = [("caucasus", 1, 5), ("caucasus", 2, 3), ("caucasus", 3, 7), ("syria", 2, 4), ("syria", 3, 6)]      # (theatre, level, seed); S126: Syria has paths the Caucasus never runs (works rebuild, grace week, opening strike, carrier evade)
 SOAK_MAX_SKIPS = 300                                          # a loop bound, not a game rule
 SOAK_FLY_EVERY = 20                                           # every N skips the player flies a fake sortie, if anything is flyable
 SOAK_RELOAD_EVERY = 25                                        # every N skips: save, reopen, carry on with the reopened session
 SOAK_SEEDS = 1                                                # `--seeds N`: each level runs N seeds (seed, seed+1, ...)
 
 
-def soak_case(level, seed):
+def soak_case(theatre, level, seed):
     """One soak campaign: skip to the end of the war."""
-    s, n = fresh_session(level, seed), 0
+    from sqe import theatres
+    s, n = fresh_session(level, seed, theatre=theatre), 0
     try:
         while n < SOAK_MAX_SKIPS and s.state.status == "ACTIVE":
             s.skip_turn()
@@ -545,16 +549,18 @@ def soak_case(level, seed):
                 r.open(s.path)
                 s = r
     except BaseException:
-        print(f"[soak] FAILED: level {level}, seed {seed}, skip {n + 1}  (replay: --only soak, level {level} seed {seed})")
+        print(f"[soak] FAILED: {theatre} level {level}, seed {seed}, skip {n + 1}  (replay: --only soak, {theatre} level {level} seed {seed})")
         raise
-    print(f"[soak] level {level} seed {seed}: {n} skips, final status {s.state.status}")
+    finally:
+        theatres.use("caucasus")
+    print(f"[soak] {theatre} level {level} seed {seed}: {n} skips, final status {s.state.status}")
 
 
 def check_soak():
-    """Skip to the end of the war on three campaigns. The ONLY assert is "no exception": a failure prints level, seed and skip number, then re-raises."""
-    for level, seed0 in SOAK_CASES:
+    """Skip to the end of the war on five campaigns (three Caucasus, two Syria). The ONLY assert is "no exception": a failure prints theatre, level, seed and skip number, then re-raises."""
+    for theatre, level, seed0 in SOAK_CASES:
         for seed in range(seed0, seed0 + SOAK_SEEDS):
-            soak_case(level, seed)
+            soak_case(theatre, level, seed)
 
 
 OPT_IN = []                                                   # checks that run only when `--only` names them (none now)
@@ -589,7 +595,7 @@ def _timeout_for(name, override):
 
 
 def _run_task(task):
-    """In a worker (or the parent): run one task, print into a buffer, return {name: [text, seconds, error or None]} for each check (the soak: key "check_soak|level|seed"). A watchdog
+    """In a worker (or the parent): run one task, print into a buffer, return {name: [text, seconds, error or None]} for each check (the soak: key "check_soak|theatre|level|seed"). A watchdog
     per check as in the serial run; a failed check stops its task and its traceback is returned."""
     import contextlib
     import faulthandler
@@ -606,7 +612,7 @@ def _run_task(task):
         if to:
             faulthandler.dump_traceback_later(to, exit=True)
         payload = None
-        key = name if soak is None else (f"{name}|{soak[0]}|{soak[1]}" if kind == "soak" else f"{name}|{-1 if soak[0] is None else soak[0]}")
+        key = name if soak is None else (f"{name}|{soak[0]}|{soak[1]}|{soak[2]}" if kind == "soak" else f"{name}|{-1 if soak[0] is None else soak[0]}")
         try:
             with contextlib.redirect_stdout(buf):
                 _fixed_ids(key)
@@ -631,6 +637,15 @@ def _worker_init():
     atexit.register(shutil.rmtree, TMP, True)                 # a worker's own temp data goes with it
 
 
+def _key_order(k):
+    """Print order of a check's task keys: the soak's by SOAK_CASES order (theatre, then level, seed), the lock sweep's by part number."""
+    parts = k.split("|")[1:]
+    if parts and not parts[0].lstrip("-").isdigit():
+        order = [c[0] for c in SOAK_CASES]
+        return [order.index(parts[0]) if parts[0] in order else len(order)] + [int(x) for x in parts[1:]]
+    return [int(x) for x in parts]
+
+
 def run_parallel(selected, jobs, timeout):
     """Run the selected checks over worker processes and print their output in CHECKS order. -> True when every check passed."""
     import concurrent.futures
@@ -639,7 +654,7 @@ def run_parallel(selected, jobs, timeout):
     names = [fn.__name__ for fn in selected]
     tasks = [("checks", [n for n in g if n in names], None, timeout) for g in GROUPS if any(n in names for n in g)]
     if "check_soak" in names:
-        tasks += [("soak", [], (level, seed), timeout) for level, seed0 in SOAK_CASES for seed in range(seed0, seed0 + SOAK_SEEDS)]
+        tasks += [("soak", [], (theatre, level, seed), timeout) for theatre, level, seed0 in SOAK_CASES for seed in range(seed0, seed0 + SOAK_SEEDS)]
     if "check_waypoint_locks" in names:
         tasks = [("lock", [], (p,), timeout) for p in LOCK_PARTS] + tasks              # the longest check first, so its parts start at once
     workers = max(1, min(jobs, len(tasks)))
@@ -657,7 +672,7 @@ def run_parallel(selected, jobs, timeout):
     for n in names:
         keys = [k for k in results if k == n or k.startswith(n + "|")]
         parts = []
-        for k in sorted(keys, key=lambda k: [int(x) for x in k.split("|")[1:]]):
+        for k in sorted(keys, key=_key_order):
             text, secs, err, payload = results[k]
             print(text, end="")
             times.append((secs, k))
