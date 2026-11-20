@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.539, S130: no neutral airfields on the Syria map
+Every other airfield on the Syria map now takes a side from the 2001 politics: Cyprus, Turkey, Jordan and Israel are friendly; Syria, Lebanon and Iraq's H3 are enemy. A red jet can no longer land on a neutral Cyprus field next to an F-16.
+
 ## v0.41.538, S129: page and window headings in Title Case
 The War Log and Sortie History pages, the Overview cards and the debrief and after-action windows now use Title Case headings. War-log entries are stamped "[Day 1, 12:00]" like the header (older saves are converted on load).
 

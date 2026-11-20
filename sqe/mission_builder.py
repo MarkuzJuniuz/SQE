@@ -462,6 +462,14 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         for ap_ in theatres.active().get("red_extra_airports", []):
             if ap_ in self.t.airports:
                 self.t.airports[ap_].set_red()
+        # v0.41.539 (XO 2026-11-20): the other fields on the map get the side their 2001 politics give them (theatre `painted_airports`), so no neutral field is left that a red
+        # jet and an F-16 can both land on (a red attacker landed on a Cyprus field). Mission-only, no campaign asset, never over an SQE base or a field the campaign already painted
+        th_ = theatres.active()
+        sqe_aps_ = blue_aps_ | {a_.airport for a_ in st.assets.values() if a_.airport} | {f_.get("airport") for k_ in ("blue_fields", "red_fields") for f_ in th_.get(k_, [])}
+        for side_, aps_ in (th_.get("painted_airports") or {}).items():
+            for ap_ in aps_:
+                if ap_ in self.t.airports and ap_ not in sqe_aps_:
+                    (self.t.airports[ap_].set_blue if side_ == "blue" else self.t.airports[ap_].set_red)()
         # v0.41.28: a raid scramble also builds the field the raid is coming for (the XO's Kobuleti run: the raided field had no defences
         # because nothing launched from it)
         raided_ = [package.objective.target_id] if (package.objective.type == ObjectiveType.FLEET_DEFENSE and package.objective.target_id in st.bases) else []
