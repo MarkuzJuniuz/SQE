@@ -24,8 +24,8 @@ One small Caucasus mission, seven Client slots at Kutaisi (an F-14B / F-14B(U) e
   BU-B  F-14B(U)  as BU-A but a SECOND IP (IP2XIP in point 4): per the manual the jet ignores every point with a duplicated code
   BU-C  F-14B(U)  the A/B scheme (waypoints 1 to 3 + nav target points) as B-B: does the B(U) take nav target points at all?
 
-  python tools/f14b_wp_probe.py [OUT.miz] [--runway]   default .private/f14b_probe/SQE_F14B_WP_Probe.miz; --runway starts the jets on the runway instead of parked
-The README in .private/f14b_probe/ tells XO what to look at. Nothing here is verified in DCS yet."""
+  python tools/f14b_wp_probe.py [OUT.miz] [--runway]   default .claude/crew-chief-internal/f14b_probe/SQE_F14B_WP_Probe.miz; --runway starts the jets on the runway instead of parked
+The README in .claude/crew-chief-internal/f14b_probe/ tells XO what to look at. Nothing here is verified in DCS yet."""
 from __future__ import annotations
 
 import argparse
@@ -37,7 +37,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_OUT = ROOT / ".private" / "f14b_probe" / "SQE_F14B_WP_Probe.miz"
+DEFAULT_OUT = ROOT / ".claude" / "crew-chief-internal" / "f14b_probe" / "SQE_F14B_WP_Probe.miz"
 ALT_M = 6096                      # 20,000 ft
 SPEED_KPH = 350 * 1.852           # pydcs add_waypoint takes km/h
 # offsets from Kutaisi in km: (north, east); a loop east / north-east of the field. Nothing is placed there: it is only a route.
@@ -93,7 +93,7 @@ def _build(out: Path, air: bool) -> Path:
             g.add_nav_target_point(pt(*NTP[c]), c.split("#")[0])          # the Editor's "Navigation Target Point": its text comment is the code
         legend.append(f"Probe {key}: {label}, {note}")
     text = ("SQE F-14B waypoint probe. Seven slots, the same area, different naming (Heatblur: waypoints 1-3, home base = the landing point, the rest as named Navigation "
-            "Target Points FP IP ST DP HA DLWP1-3 DLST DLFP).\n" + "\n".join(legend) + "\nSee .private/f14b_probe/README.md for what to look at.")
+            "Target Points FP IP ST DP HA DLWP1-3 DLST DLFP).\n" + "\n".join(legend) + "\nSee .claude/crew-chief-internal/f14b_probe/README.md for what to look at.")
     m.set_sortie_text("SQE F-14B waypoint probe")
     m.set_description_text(text)
     out.parent.mkdir(parents=True, exist_ok=True)

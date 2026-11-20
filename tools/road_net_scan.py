@@ -11,7 +11,7 @@ How XO runs it: fly the mission once (Fly > the slot), wait for the COMPLETE mes
 dcs.log (grep SQEROADNET). If an airfield point is cut off from the road net (Batumi, Kobuleti, Gelendzhik gave nothing in the 2026-11-03 probe) the
 script retries from points 1.5 and 3.5 km round it, so a pair only fails when no road is within reach.
 
---pack PACK.json (S90): a theatre pack outside sqe/data/theatres (e.g. .private/syria/syria.json); its id is the theatre, the output goes next to it. Pack keys read
+--pack PACK.json (S90): a theatre pack outside sqe/data/theatres (e.g. .claude/crew-chief-internal/syria/syria.json); its id is the theatre, the output goes next to it. Pack keys read
 here: scan.road_anchors (pydcs airport names to use as anchors; without it every airfield of the terrain), scan.road_pairs ([[a, b], ...] long hops; without it
 EXTRA_PAIRS), scan.probe_airport (where the slot sits; without it Kutaisi). `build --pack` needs --scan-dir: the spots are tested for sea against that scan's
 terrain file, never the coastline the stub's `geo` borrows from the Caucasus."""
