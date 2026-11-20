@@ -40,22 +40,25 @@ def e(s) -> str:
     return html.escape(str(s))
 
 
-HEAD = "color:#8fa3b8;padding:1px"
+HEAD = "color:#8fa3b8;padding:2px"
+PAD = 2                                       # S132 (XO 2026-11-20): the padding of every Overview table cell, in px
+W_SITE, W_TYPE, W_HEALTH, W_STATE = 210, 70, 100, 90   # S132: column widths shared by the site tables so they line up across the Force Index and Air Defense tabs
 GRID = "#2a3644"
 
 
-def table(headers, rows, center=(), nowrap=False) -> str:
-    """A gridded table (S131, XO 2026-11-20): every header centred, even padding of 1, a thin border. rows: lists of cells; a cell is a string (escaped) or ('html', raw), e.g. a bar image
-    (centred). `center` = the column numbers whose text is centred too (Health, State, Type, the figure columns); the others stay left. `nowrap`: keep each cell on one line (the site tables, which have the room)."""
-    th = "".join(f"<th align='center' style='{HEAD}'>{e(h)}</th>" for h in headers)
-    out = [f"<table border='1' cellspacing='0' cellpadding='1' style='border-color:{GRID};border-style:solid'><tr>{th}</tr>"]
+def table(headers, rows, center=(), nowrap=False, widths=()) -> str:
+    """A gridded table (S131, XO 2026-11-20): every header centred, even padding of PAD, a thin border. rows: lists of cells; a cell is a string (escaped) or ('html', raw), e.g. a bar image
+    (centred). `center` = the column numbers whose text is centred too (Health, State, Type, the figure columns); the others stay left. `nowrap`: keep each cell on one line (the site tables, which have the room). `widths`: a column width in px per column (0 = none), so tables under each other line up (S132)."""
+    wd = lambda i: f" width='{widths[i]}'" if i < len(widths) and widths[i] else ""
+    th = "".join(f"<th align='center'{wd(i)} style='{HEAD}'>{e(h)}</th>" for i, h in enumerate(headers))
+    out = [f"<table border='1' cellspacing='0' cellpadding='{PAD}' style='border-color:{GRID};border-style:solid'><tr>{th}</tr>"]
     for r in rows:
         tds = []
         for i, c in enumerate(r):
             if isinstance(c, tuple) and c[0] == "html":
-                tds.append(f"<td align='center' style='padding:1px'>{c[1]}</td>")
+                tds.append(f"<td align='center'{wd(i)} style='padding:{PAD}px'>{c[1]}</td>")
             else:
-                tds.append(f"<td align='{'center' if i in center else 'left'}' style='padding:1px{";white-space:nowrap" if nowrap else ""}'>{e(c)}</td>")
+                tds.append(f"<td align='{'center' if i in center else 'left'}'{wd(i)} style='padding:{PAD}px{";white-space:nowrap" if nowrap else ""}'>{e(c)}</td>")
         out.append("<tr>" + "".join(tds) + "</tr>")
     return "".join(out) + "</table>"
 
@@ -63,7 +66,7 @@ def table(headers, rows, center=(), nowrap=False) -> str:
 def short_state(text: str) -> str:
     """The State column in one word (S131): blank when the site is fine, only the exceptions are said (no day counts)."""
     t = str(text).lower()
-    for k, w in (("lost", "Lost"), ("struck", "Struck"), ("destroyed", "Destroyed"), ("repairing", "Repairing"), ("rebuilding", "Rebuilding"), ("damaged", "Damaged"), ("radars blinded", "Blinded")):
+    for k, w in (("lost", "Lost"), ("struck", "Struck"), ("destroyed", "Destroyed"), ("repairing", "Repairing"), ("rebuilding", "Rebuilding"), ("damaged", "Damaged"), ("radars blinded", "Suppressed")):
         if t.startswith(k):
             return w
     return ""

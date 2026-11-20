@@ -174,25 +174,25 @@ class OverviewPage(QWidget):
         im.apply(self.dviews["ground"], body)
         # ---- Force Index (the old Supply tab; code names stay)
         im3 = V.Images()
-        top = V.table(("Side", "Force Index"), [["Coalition", im3.cbar(fb, V.supply_band(fb))], [en, im3.cbar(fe, V.supply_band(fe))]])
+        top = V.table(("Side", "Force Index"), [["Coalition", im3.cbar(fb, V.supply_band(fb))], [en, im3.cbar(fe, V.supply_band(fe))]], widths=(V.W_SITE, V.W_HEALTH))
         srows = od.supply_rows(st)
         site_html = ""
         wsum = _works.summary(st)
         if wsum:                                                                  # S131: the works first, they are red's depots too (the Force Index counts them)
-            wt = V.table(("Site", "Health", "State"), [[a.name, im3.cbar(h, V.pct_band(h)), w] for a, h, w in _works.rows(st)], center=(2,), nowrap=True)
+            wt = V.table(("Site", "Health", "State"), [[a.name, im3.cbar(h, V.pct_band(h)), w] for a, h, w in _works.rows(st)], center=(2,), nowrap=True, widths=(V.W_SITE, V.W_HEALTH, V.W_STATE))
             site_html += V.section(wsum[0], f"<p style='color:#8fa3b8;margin-top:0'>{e(wsum[1])}.</p>" + wt)
         for side, head in (("Coalition", "Coalition Sites"), (None, f"{en} Sites")):
             rs = [r for r in srows if (r[0] == "Coalition") == (side is not None)]
             if rs:
-                site_html += V.section(head, V.table(("Site", "Health", "State"), [[b, im3.cbar(c, V.pct_band(c)), V.short_state(d)] for a, b, c, d in rs], center=(2,), nowrap=True))
+                site_html += V.section(head, V.table(("Site", "Health", "State"), [[b, im3.cbar(c, V.pct_band(c)), V.short_state(d)] for a, b, c, d in rs], center=(2,), nowrap=True, widths=(V.W_SITE, V.W_HEALTH, V.W_STATE)))
         im3.apply(self.dviews["supply"], top + site_html
-                  + "<p style='margin-top:14px;color:#8fa3b8'>A site mends in about 6 days at full Force Index (longer when it is low), and not on a night after it was struck. A works mends only when it is rebuilt.</p>")
+                  + "<p style='margin-top:14px;color:#8fa3b8'>A site mends in about 6 days at full Force Index (longer when it is low), and not on a night after it was struck. Lutorin Works mends only when it is rebuilt.</p>")
         # ---- Air defence: the transit section only when a battery is on its way
         orders = od.asks_rows(st)
         im4 = V.Images()
-        top = V.table(("Side", "Air Defense"), [["Coalition", im4.cbar(ab, V.pct_band(ab))], [en, im4.cbar(ae, V.pct_band(ae))]])
+        top = V.table(("Side", "Air Defense"), [["Coalition", im4.cbar(ab, V.pct_band(ab))], [en, im4.cbar(ae, V.pct_band(ae))]], widths=(V.W_SITE, V.W_TYPE + V.W_HEALTH))
         transit = V.section("SAM Batteries in Transit", V.table(("Side", "Battery"), [(a, V.first_cap(b)) for a, b in orders])) if orders else ""
-        sites = V.table(("Site", "Type", "Health", "State"), [[b, c, im4.cbar(d, V.pct_band(d)), V.short_state(x)] for a, b, c, d, x in od.air_defence_rows(st)], center=(1, 3), nowrap=True)
+        sites = V.table(("Site", "Type", "Health", "State"), [[b, c, im4.cbar(d, V.pct_band(d)), V.short_state(x)] for a, b, c, d, x in od.air_defence_rows(st)], center=(1, 3), nowrap=True, widths=(V.W_SITE, V.W_TYPE, V.W_HEALTH, V.W_STATE))
         im4.apply(self.dviews["ad"], top + transit + V.section("Sites", sites))
         # ---- Air Operations: BARCAP cover and the tanker / AWACS guards, under their own headings
         lines = _bb.status_lines(st)
@@ -211,9 +211,9 @@ class OverviewPage(QWidget):
         trs = []
         for k in tempo.KINDS:
             v = tempo.get(st, k) * 100
-            trs.append([names[k], im2.bar(f"{v:+.0f}%", v / (tempo.TEMPO_CAP * 100), "edge"), "At the cap" if abs(v) >= tempo.TEMPO_CAP * 100 - 0.5 else ""])
+            trs.append([names[k], im2.bar(f"{v:+.0f}%", v / (tempo.TEMPO_CAP * 100), "edge"), ])
         im2.apply(self.dviews["edge"], "<p style='color:#b9c6d6'>What your flown sorties do to the odds of the same kind of job done in the background: 0 to +40 points, fading 3% a night. "
-                  "A full bar is the +40% cap.</p><p style='margin:0'>&nbsp;</p>" + V.table(("Job", "Edge", ""), trs))
+                  "A full bar is the +40% cap.</p><p style='margin:0'>&nbsp;</p>" + V.table(("Job", "Edge"), trs))
 
     def refresh(self, st):
         from .. import posture
