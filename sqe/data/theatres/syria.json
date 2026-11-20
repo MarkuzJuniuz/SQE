@@ -1061,5 +1061,6 @@
  "max_raid": {
   "3": 12
  },
- "raid_from_base": 12
+ "raid_from_base": 12,
+ "raid_grace_days": 7
 }

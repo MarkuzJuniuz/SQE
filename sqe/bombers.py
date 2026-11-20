@@ -42,6 +42,15 @@ LAND_ESCORTS = 2              # Mozdok Su-27 that ride along
 LAND_STRIKES_PER_DAY = {2: 1, 3: 2}   # land strikes a day at most, by level (judgment call: a Tu-22M3 is lost outright and comes back one per 48 h, `refit.SLOW_REPL_MIN`, so the cap is what keeps the wing alive); L1 has no bomber wing
 
 
+STAGE_GRACE_DAYS = 0              # S118 (XO 2026-11-19): red stages no carrier raid while `state.day` is at most this (the war's surprise opening: red is not already loading missiles on Day 0). A pack's `raid_grace_days` replaces it (Syria 7); the Caucasus keeps 0
+
+
+def grace_days() -> int:
+    from . import theatres
+    v = theatres.hook("raid_grace_days")
+    return STAGE_GRACE_DAYS if v is None else int(v)
+
+
 RAID_BEARING_DEG = (20.0, 40.0)   # the bearing from the carrier a raid arrives on, drawn between these (the old range). S90 J8: a pack's `raid_bearing_deg` [lo, hi] replaces it (Syria: out of the open sea south-west of the task force)
 
 
@@ -197,6 +206,8 @@ def decide(state, d) -> dict:
         return go(stage.get("mode", "safe"), n, 0.0)
     if QUIET_DAYS > 0 and stage.get("launch", -1) > state.day:
         return {**hold("quiet day before the raid"), "quiet": True}
+    if state.day <= grace_days():                                # S118: the surprise opening: nothing is staged yet (a stage that already exists, an old save, was handled above)
+        return hold("surprise opening: red is not ready")
     if n_max < MIN_RAID:
         return hold(f"only {avail} bombers and {jets} escorts: not enough for a {MIN_RAID}-ship raid with {escorts_for(MIN_RAID)} escorts")
     days = [x for x in ((state.raids or {}).get("bomber_days") or [])]
@@ -243,7 +254,7 @@ def note_stage(state, dec) -> None:
 
 def intel(state) -> dict | None:
     """S115 (XO 2026-11-20): the intelligence pickup of a staged carrier raid, from the day red stages it until the day it launches: {"head", "text", "sub", "pills", "log"} for the banner and the war log, else None.
-    The fiction: Tu-22M3s loaded with Kh-22 missiles on a ramp the coalition can see a day out; the fleet sails out of their reach (`carrier_pos.evade`) and its aircraft fly only the fleet's defence until it is over."""
+    The fiction: Tu-22M3s loaded with Kh-22 missiles on a ramp the coalition can see a day out; the fleet sails out of their reach (`carrier_pos.evade`) until it is over."""
     off = (state.raids or {}).get("bomber_off") or {}
     if QUIET_DAYS > 0 and int(off.get("day", -1)) == state.day:                       # S116: the staged raid was called off today (its field is cut or destroyed)
         text = f"{off.get('where', 'The bomber base')} {off.get('why', 'is out of action')}: the Tu-22M3 raid on the carrier is called off."
@@ -261,7 +272,7 @@ def intel(state) -> dict | None:
     quiet = int(stage.get("launch", -1)) > state.day
     head = "INTELLIGENCE \u00b7 CARRIER RAID EXPECTED"
     text = f"Tu-22M3s are loading Kh-22 missiles at {where}. The raid on the carrier is expected " + ("within a day." if quiet else "today.")
-    sub = ("Fighters from other fields cover the base while its own escorts are held for the raid. " if quiet else "") + "The fleet is sailing out of range, and its aircraft cannot reach inland until the raid is over."
+    sub = ("Fighters from other fields cover the base while its own escorts are held for the raid. " if quiet else "") + "The fleet is sailing out of range, until the raid is over."
     return {"head": head, "text": text, "sub": sub, "pills": ["Carrier sailing", "Bomber base guarded" if quiet else "Raid expected today"], "log": f"INTELLIGENCE: {text} {sub}"}
 
 

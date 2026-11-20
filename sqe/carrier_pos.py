@@ -17,7 +17,7 @@ CARRIER_STAY_KM = 30.0          # hysteresis: a better spot closer than this is 
 GRID_KM = 20.0
 BAND_KM = 80.0                  # S115 (XO 2026-11-20: "the carrier should be on a semi random spot ... to give it plausibility of not being found"): the station is drawn among the allowed spots no more than this much farther from the front than the nearest one (judgment call)
 BAND_DAYS = 3                   # S115: a new spot is drawn every this many days (a seeded draw: the same campaign gives the same spots), so the fleet does not sit on one point
-EVADE_NM = 230.0                # S115: a staged carrier raid: the fleet sails out to this far from every red airfield (the Kh-22's reach is about 216 nm; the pack's `carrier_evade_nm` replaces it) or, where the sea is too small, as far as it can get
+EVADE_NM = 215.0                # S115: a staged carrier raid: the fleet sails out to this far from every red airfield (S118: 215 = the Kh-22's reach as DCS flies it, `raid_spawns.RAID_REACH_NM` 208 nm, plus 7 nm margin, a judgment call; was 230; the pack's `carrier_evade_nm` replaces it) or, where the sea is too small, as far as it can get
 EVADE_MOVE_KM = 250.0           # S115: the most the fleet moves in the day it runs from a raid (a carrier group makes 30 kt: 3 to 4 hours for the 100 nm it needs; the normal 150 km a day is the stay-on-station pace)
 
 
