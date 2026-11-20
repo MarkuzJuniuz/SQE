@@ -35,6 +35,13 @@ MAX_FORCE = 100.0
 SUPPLY_KINDS = (AssetKind.FUEL, AssetKind.DEPOT)
 
 
+def fi_site(state, a) -> bool:
+    """A site of red's Force Index stock: a supply site, plus (S131) the works of a campaign that counts them (`ground["sup_works"]`). Their nightly repair stays `is_supply` only."""
+    if is_supply(a):
+        return True
+    return bool((getattr(state, "ground", None) or {}).get("sup_works")) and str(getattr(a, "id", "")).startswith("wks_")
+
+
 def is_supply(a) -> bool:
     """A fuel farm or depot that counts for the Force Index. S111: the works of a theatre pack (`works.py`, `wks_` ids) are depot assets for the planner but not supply sites."""
     return a.kind in SUPPLY_KINDS and not a.id.startswith("wks_")
@@ -467,7 +474,9 @@ def set_supply_counts(state) -> None:
     if g is None:
         return
     ba = getattr(state, "blue_assets", None) or {}
-    g["sup_n"] = {"red": sum(1 for a in state.assets.values() if is_supply(a)), "blue": sum(1 for a in ba.values() if is_supply(a))}
+    if g.get("works"):
+        g["sup_works"] = True                                                   # S131 (XO 2026-11-20): the works are red supply sites of the Force Index (a campaign made before it has no flag: the old count)
+    g["sup_n"] = {"red": sum(1 for a in state.assets.values() if fi_site(state, a)), "blue": sum(1 for a in ba.values() if is_supply(a))}
     if getattr(state, "level", 2) == 1:
         rs = [a for a in state.assets.values() if is_supply(a)]
         g["sup_n_road"] = sum(1 for a in rs if a.id.startswith(ROAD_PREFIX))
@@ -482,7 +491,7 @@ def supply(state, side: str) -> float:
     v0.41.408 (S49, XO 2026-11-12): red on Level 1 of a NEW campaign (ground["sup_grp"]) is RED_L1_INNER_W (70%) its inner sites' stock and the rest its road sites' stock (stock over the start count
     of each group; a captured site counts in the captor's group by its id), floor RED_L1_FLOOR (0.45), so hitting the inner depots really lowers it. Judgment call, XO."""
     pool = state.assets.values() if side == "red" else getattr(state, "blue_assets", {}).values()
-    sites = [a for a in pool if is_supply(a)]
+    sites = [a for a in pool if (fi_site(state, a) if side == "red" else is_supply(a))]
     n = int(((state.ground or {}).get("sup_n") or {}).get(side, len(sites)))
     fl = SUPPLY_FLOOR
     g = state.ground or {}

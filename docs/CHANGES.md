@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.540, S131: Lutorin Works in the Force Index, tables with grids and bars
+The five Lutorin Works now count as supply sites in red's Force Index, and red's supply at Syria Levels 2 and 3 is 25 sites in all (12 fixed sites, 8 road sites, the 5 works; it was 32 without the works), so each strike on a supply site moves the Force Index more. A works is still mended only by its own rebuild team. Level 2's works are no longer hardened (a strike does what it does to a depot, as at Level 3). The works are named "Lutorin Works" in Title Case, read "Operational" instead of "in production", and are pinned at the top of the Force Index tab (their own section, "4 of 5 Operational") and of the red assets list (type Depot). The Overview's Force Index and Air Defense tabs now show gridded tables with centred headers, health bars with the figure in the middle instead of coloured cells, and a short State word only when something is wrong (Struck, Repairing, Destroyed, Lost, Blinded); the Force Index sites are split into Coalition and Syrian-Russian Forces. The tab and task wording read "Air Defense" and "fleet defense". Campaigns saved earlier keep their old Force Index count.
+
 ## v0.41.539, S130: no neutral airfields on the Syria map
 Every other airfield and helipad on the Syria map now takes a side from the 2001 politics: Cyprus, Turkey, Jordan and Israel are friendly; Syria, Lebanon and Iraq's H3 are enemy. A red jet can no longer land on a neutral Cyprus field next to an F-16.
 
