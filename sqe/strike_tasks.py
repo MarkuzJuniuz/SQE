@@ -441,7 +441,14 @@ class StrikeTasks:
                 bt_.stop_after_time(int(eta_s + JSOW_ATTACK_S))
             wp.tasks.append(bt_)
 
-    def _bomb_task(self, package, w):
+    def _bomb_alt_m(self, w):
+        """S134 (XO 2026-11-20): the height an AI Bombing task is pinned to, the route's own (metres), so DCS's attack profile does not pick another one (run 2026-11-20_15-57-12: the runway strikers
+        broke off the run-in). None for a LOW-tier point (height above ground, not pinned) and the SLAM point."""
+        if getattr(w, "rad", False) or getattr(w, "name", "") == "SLAM" or not getattr(w, "alt_ft", 0):
+            return None
+        return int(round(w.alt_ft * FT))
+
+    def _bomb_task(self, package, w, alt_m=None):
         """The bombing task at a BOMB waypoint. v0.41.254: a runway strike (a STRIKE with aim RUNWAY) uses DCS's BombingRunway on the target field, so the
         flight lays its bombs along the strip; every other strike bombs the point."""
         o_ = package.objective
@@ -463,7 +470,7 @@ class StrikeTasks:
             self._ramp_tasks.append(bt2_)
             return bt2_
         wt_ = task.WeaponType.CruiseMissile if w.name == "SLAM" else task.WeaponType.Auto         # v0.41.302: the Standoff Strike's SLAM-ER is a missile; XO's run: the default filter fired nothing
-        return task.Bombing(self._pt(*(w.aim or (w.x, w.y))), weapon_type=wt_, expend=task.Expend.All, group_attack=True)       # v0.41.299: a release point (JDAM, SLAM-ER) bombs the target, not itself
+        return task.Bombing(self._pt(*(w.aim or (w.x, w.y))), weapon_type=wt_, expend=task.Expend.All, group_attack=True, altitude=alt_m)       # S134: alt_m only for an AI flight (`_ai_bomb_tasks`); v0.41.299: a release point (JDAM, SLAM-ER) bombs the target, not itself
 
     def _ramp_aim(self, package, w):
         """(cx, cy, pts, span) of a counter-air bomb task: the middle and spread of `_ramp_pts`, or of the field's real parking slots when that list is empty, or the waypoint's own aim."""
@@ -503,9 +510,9 @@ class StrikeTasks:
         ct_.stop_after_time(int(stop_s))
         return ct_
 
-    def _stopped_bombing(self, x, y, expend, stop_s):
-        """A plain Bombing task (auto weapon, group attack) at (x, y) that stops at `stop_s`."""
-        return self._stop_at(task.Bombing(self._pt(x, y), weapon_type=task.WeaponType.Auto, expend=expend, group_attack=True), stop_s)
+    def _stopped_bombing(self, x, y, expend, stop_s, alt_m=None):
+        """A plain Bombing task (auto weapon, group attack) at (x, y) that stops at `stop_s`; `alt_m` pins the attack height (S134)."""
+        return self._stop_at(task.Bombing(self._pt(x, y), weapon_type=task.WeaponType.Auto, expend=expend, group_attack=True, altitude=alt_m), stop_s)
 
     def _gbu_total(self, f):
         """How many GBUs the flight's jets carry in the strike loadout (`loadouts.gbu_count`)."""
@@ -543,7 +550,7 @@ class StrikeTasks:
             out.append(rf_)
         return out
 
-    def _gbu_spread_tasks(self, package, f, w, stop_s):
+    def _gbu_spread_tasks(self, package, f, w, stop_s, alt_m=None):
         """S67 (XO run 2026-11-12 22-47-24: eight GBU-31s of Viper 8 all landed within 2 to 49 m of the one aim point, one of three Tanks died): an AI JDAM striker on a supply
         site spreads its bombs over the site's buildings. One Bombing task per aim point (up to the GBUs a jet carries, `loadouts.gbu_count`; the building spots by farthest-point
         spread, the first the one nearest the site's centre), `Expend` the jet's bombs divided by the aim points, the last one `All` (the remainder). Each task stops at `stop_s`
@@ -568,10 +575,10 @@ class StrikeTasks:
         exp = _expend_for(each)
         out = []
         for i_, (x_, y_) in enumerate(chosen):
-            out.append(self._stopped_bombing(x_, y_, (task.Expend.All if i_ == k_ - 1 else exp), stop_s))
+            out.append(self._stopped_bombing(x_, y_, (task.Expend.All if i_ == k_ - 1 else exp), stop_s, alt_m))
         return out
 
-    def _runway_bomb_tasks(self, package, f, stop_s):
+    def _runway_bomb_tasks(self, package, f, stop_s, alt_m=None):
         """S70 (XO run 2026-11-13_00-15-28, the third run in a row: the AI runway strikers ran in to 7 nm of the field at 20,000 ft and turned for home without releasing; the GBU-31s all came back, the
         BombingRunway task gave up at the release point): an AI runway strike drops with plain Bombing tasks, the task every other AI strike uses, one per aim point (up to three, `RUNWAY_AIM_STEP_M`
         apart along the runway axis about the airfield reference point, which is what the hook's runway rectangle is centred on), the jet's GBUs divided between them (as `_gbu_spread_tasks`), the last
@@ -594,15 +601,16 @@ class StrikeTasks:
         exp_ = _expend_for(each_)
         out = []
         for i_, d_ in enumerate(offs_):          # (x north, y east; the heading is compass degrees: along = dx cos h + dy sin h, the hook's own convention)
-            out.append(self._stopped_bombing(cx_ + d_ * math.cos(hdg_), cy_ + d_ * math.sin(hdg_), (task.Expend.All if (i_ == k_ - 1 or not n_) else exp_), stop_s))
+            out.append(self._stopped_bombing(cx_ + d_ * math.cos(hdg_), cy_ + d_ * math.sin(hdg_), (task.Expend.All if (i_ == k_ - 1 or not n_) else exp_), stop_s, alt_m))
         return out
 
     def _ai_bomb_tasks(self, package, f, w, stop_s) -> list:
         """The AI flight's bomb tasks at a BOMB waypoint, each stopping at `stop_s`: the plain tasks along a runway (`_runway_bomb_tasks`), the spread over a supply site's buildings (`_gbu_spread_tasks`), else the single task."""
-        rw_ = self._runway_bomb_tasks(package, f, stop_s)
+        alt_ = self._bomb_alt_m(w)                                    # S134: every plain Bombing task of an AI strike is pinned to the route height
+        rw_ = self._runway_bomb_tasks(package, f, stop_s, alt_)
         if rw_ is not None:
             return rw_
-        sp_ = self._gbu_spread_tasks(package, f, w, stop_s)
+        sp_ = self._gbu_spread_tasks(package, f, w, stop_s, alt_)
         if sp_ is not None:
             return sp_
-        return [self._stop_at(self._bomb_task(package, w), stop_s)]
+        return [self._stop_at(self._bomb_task(package, w, alt_), stop_s)]

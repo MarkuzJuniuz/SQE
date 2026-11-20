@@ -1705,6 +1705,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         for i, u in enumerate(g.units):
             u.name = cs_names[i]; names.append(u.name)
             u.pylons = copy.deepcopy(load); self._note_jam(u)
+        self._jam_flight = bool(not f.tag and (self._jams.get(names[0]) or f.aircraft in NATIVE_ECM))     # S134: a jet with a jammer (the AI's or your wingmen's) keeps its run-in under a SAM launch
         run_t0 = run_t1 = None
         if f.is_player and o.ecm_script and self._jams.get(names[0]):
             # your jammer, until the hook can read your switch: the script counts it on over the attack leg only, PUSH to egress, like the AI's
@@ -1978,6 +1979,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # v0.41.322 (XO 2026-11-06: the AI F-16s with GBU-31 / CBU-103 crossed the target at 20,000 ft and never released): a waypoint's task only starts when the jet
         # reaches that waypoint, and the TGT waypoint IS the target, so the bomb task started with no run-in left. DCS forum threads on AI bombing runs (forum.dcs.world
         # topic 241006, 369730: "task on the IP, 25 to 30 nm out") put it on the approach point. So an AI striker's bomb task sits on the IP, aimed at the target.
+        passive_ = bool(getattr(self, "_jam_flight", False) and f.role == Role.STRIKE and not getattr(f, "kit", "") and not f.tag)      # S134: strike flights with a jammer (not SEAD / CAS, not the stand-off kits)
         ip_tgt_ = None
         ca_ramp_ = package.objective.type == ObjectiveType.COUNTER_AIR and package.objective.aim not in ("SWEEP", "STANDOFF")      # v0.41.325
         if ai_a2g and f.role == Role.STRIKE and not f.tag and package.objective.aim != "STANDOFF":       # S27 (runs 13-01-59 and 13-11-32: the runway strikers turned 8 to 12 km short of TGT and dropped nothing): runway strikes take the IP rule too, BombingRunway starts on the IP
@@ -2008,6 +2010,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             wp = g.add_waypoint(pt(w.x, w.y), w.alt_ft * FT, w.speed_kts * KPH, w.name)
             if w.rad:
                 wp.alt_type = "RADIO"                                 # LOW tier: height above the ground
+            if passive_ and w.name in ("PUSH", "EGR"):                # S134 (XO 2026-11-20): PUSH to EGR, jammers and countermeasures only, no break (DCS's default EvadeFire made the runway strikers dive away from the run-in); EvadeFire again at EGR. The option acts on the AI, so it only touches your AI wingmen
+                wp.tasks.append(task.OptReactOnThreat(task.OptReactOnThreat.Values.PassiveDefense if w.name == "PUSH" else task.OptReactOnThreat.Values.EvadeFire))
             if f.is_player:
                 if w.agl:
                     wp.alt, wp.alt_type = 0, "RADIO"                 # on the ground: sensors and weapons slave to the target
