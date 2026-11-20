@@ -219,7 +219,14 @@ class Session(Merging, SeadTiming):
             from . import bombers
             dec = bombers.decide(st, self.d)
             if dec["mode"] == "hold":
+                had_ = (st.raids or {}).get("bomber_stage")
                 bombers.note_stage(st, dec)
+                now_ = (st.raids or {}).get("bomber_stage")
+                if now_ is not None and now_ is not had_ and int(now_.get("launch", -1)) >= st.day:      # S115: the raid was staged just now: the intelligence pickup, and the fleet runs out of the bombers' reach
+                    st.note(bombers.intel(st)["log"])
+                    _run = carrier_pos.evade(st)
+                    if _run:
+                        st.note(_run)
             else:
                 stg_t = ((st.raids or {}).get("bomber_stage") or {})
                 stg_t = stg_t.get("turn") if stg_t.get("launch") == st.day else None      # v0.41.356 (Phase 10b part 1): the launch turn was drawn when the raid was staged (the turn before it plans the prep); an older stage has none: drawn now

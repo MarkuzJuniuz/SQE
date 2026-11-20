@@ -241,6 +241,20 @@ def note_stage(state, dec) -> None:
         state.raids["bomber_stage"] = {**dec["stage"], **stage_extras(state, int(dec["stage"]["launch"]))}
 
 
+def intel(state) -> dict | None:
+    """S115 (XO 2026-11-20): the intelligence pickup of a staged carrier raid, from the day red stages it until the day it launches: {"head", "text", "sub", "pills", "log"} for the banner and the war log, else None.
+    The fiction: Tu-22M3s loaded with Kh-22 missiles on a ramp the coalition can see a day out; the fleet sails out of their reach (`carrier_pos.evade`) and its aircraft fly only the fleet's defence until it is over."""
+    stage = (state.raids or {}).get("bomber_stage") or {}
+    if QUIET_DAYS <= 0 or int(stage.get("launch", -1)) < state.day or _carrier(state) is None:
+        return None
+    bw = _bomber_wing(state)
+    where = state.assets[bw.base_asset_id].name if bw is not None else "their base"
+    head = "INTELLIGENCE \u00b7 CARRIER RAID EXPECTED"
+    text = f"Tu-22M3s are loading Kh-22 missiles at {where}. The raid on the carrier is expected within a day."
+    sub = "The fleet is sailing out of range. Its aircraft fly the fleet's defence only until the raid is over."
+    return {"head": head, "text": text, "sub": sub, "pills": ["Carrier sailing", "Red is quiet today" if int(stage.get("launch", -1)) > state.day else "Raid expected today"], "log": f"INTELLIGENCE: {text} {sub}"}
+
+
 def is_quiet(state) -> bool:
     """Is today the quiet day before a staged raid? Red flies its patrols only: no strikes, raids or surprise raids."""
     return QUIET_DAYS > 0 and ((state.raids or {}).get("bomber_stage") or {}).get("launch", -1) > state.day

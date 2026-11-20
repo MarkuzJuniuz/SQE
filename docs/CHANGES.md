@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.526, S115: the carrier moves about, and sails out of the raid's reach when blue learns of it
+The carrier no longer sits on one fixed spot: every three days it takes a new station from a seeded pick among the spots near the best one. When a Tu-22M3 raid is staged (the day before launch) blue gets an intelligence pickup, a red banner above every page of the app plus a war-log line, and the fleet sails out to 230 nm from every red airfield (at most 250 km a day), so the raid must come out over water; it comes back to its station afterwards. No special restriction on the fleet's aircraft: the distance alone keeps them off inland targets. New pack keys `carrier_band_km` and `carrier_evade_nm`. Idle autoskip balance, Tactical Edge off: Caucasus L3 55% blue (20 runs), Syria L3 45% (24 runs). The raid redesign (a scout, degrade rather than cancel, weather-dependent satellite) is not in this version.
+
 ## v0.41.525, S114: Syria's carrier sits closer, and the raid's line is looser
 The carrier on Syria now keeps 130 nm from every red airfield, not 160, and starts south of Cyprus, not in the channel north of it. The Hornets can now reach the Palmyra works without relying on a tanker (Palmyra was about 285 nm away, now about 235; the Latakia coast about 145). The Tu-22M3 raid still comes along the line from the carrier through Damascus, but scattered 12 degrees either side, not 4. Everything else is unchanged.
 
