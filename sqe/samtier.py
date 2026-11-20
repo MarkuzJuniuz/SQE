@@ -13,7 +13,7 @@ dozen margins named SA10_*. This module is the one table behind all of it:
 A leaf module: it imports nothing from SQE, so routes / threatmap / war and the rest can all use it.
 
 SA-5 (S-200, "Gammon"): the public figure for the S-200VE is about 250 km (135 nm) and DCS's own weapon table says 255 km (pydcs), but XO's probe flights
-(`tools/sa5_probe.py`, 2026-11-18, one site, flat desert, F-16s at 450 kt, no ECM) measured what the AI site really does: first shots at 65.6 to 66.1 nm
+(`.claude/crew-chief-internal/tools/sa5_probe.py`, 2026-11-18, one site, flat desert, F-16s at 450 kt, no ECM) measured what the AI site really does: first shots at 65.6 to 66.1 nm
 against jets at 20,000 and 35,000 ft, at about 20 nm against a jet at 5,000 ft, and no engagement of a jet at 500 ft (one late shot missed). So the planner
 reach is 122 km (65.9 nm) for a high flyer. The margins are the SA-10's own offsets from ITS measured reach (avoid +5.3 nm, a fighter station +15.3 nm, a defender
 +5.3 nm, the gate +5 km, the HARM point +5.3 nm, the JSOW point +10.3 nm) laid on the SA-5's: judgment calls, not measurements. Altitude is NOT modelled

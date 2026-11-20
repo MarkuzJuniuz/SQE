@@ -1,6 +1,6 @@
 # Theatre packs
 
-Everything that belongs to one DCS map is data in a JSON file, not code. The bundled packs are the Caucasus (`sqe/data/theatres/caucasus.json`) and Syria 2001 (`syria.json`: the Hatay coast road, a midnight start, an opening strike on the SA-5 batteries). `tools/geo_from_ne.py` makes a pack's map file (`<id>_geo.json`) from the public-domain Natural Earth shapefiles.
+Everything that belongs to one DCS map is data in a JSON file, not code. The bundled packs are the Caucasus (`sqe/data/theatres/caucasus.json`) and Syria 2001 (`syria.json`: the Hatay coast road, a midnight start, an opening strike on the SA-5 batteries). `.claude/crew-chief-internal/tools/geo_from_ne.py` makes a pack's map file (`<id>_geo.json`) from the public-domain Natural Earth shapefiles.
 To add a theatre, write a pack and put it in `%APPDATA%\SQE\theatres\<id>.json` (a pack with the same id as a bundled one replaces it).
 The New Campaign window shows a Theatre picker as soon as there is more than one pack. A campaign remembers its theatre.
 

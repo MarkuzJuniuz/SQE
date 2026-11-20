@@ -15,7 +15,7 @@
                                                      --compare prints how it differs from a DCS scan. v0.41.201.
                                                      --plan prints the tile list and the download estimate and stops (nothing downloaded).
 
-Every command takes --pack PACK.json (S90): a theatre pack kept outside sqe/data/theatres, e.g. the Syria probe stub of tools/syria_fields.py. The pack's id is the
+Every command takes --pack PACK.json (S90): a theatre pack kept outside sqe/data/theatres, e.g. the Syria probe stub of .claude/crew-chief-internal/tools/syria_fields.py. The pack's id is the
 theatre; without --out the result is written next to the pack file, not into the bundled folder.
 
 v0.41.198 (XO 2026-10-30): players must not have to run scans, and the first flights had SAMs floating in the sea. The raw scan is 2.5 MB and
