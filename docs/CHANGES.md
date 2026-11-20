@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.528, S119: the Caucasus gets a three-day grace before the first carrier raid
+Red now stages no Tu-22M3 carrier raid in the first three days of a Caucasus campaign: the carrier has just arrived and red has to find it first. Syria keeps its week.
+
 ## v0.41.527, S118: a surprise opening on Syria, and the fleet sails out a little less far
 On Syria red stages no carrier raid in the first week: blue opens the war by surprise, so there is no raid warning and the carrier sits on its station until day 8 at the earliest. When a raid is staged the fleet now sails out to 215 nm from the red airfields, not 230, and the warning banner no longer claims more than that.
 
