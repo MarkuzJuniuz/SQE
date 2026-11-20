@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.542, S133: a wider After-Action Report with bulleted lines
+The After-Action Report is wide enough that its result lines no longer wrap, and each line under a package is a bullet, so a line that does wrap stays under its own bullet.
+
 ## v0.41.541, S132: Overview tables tidied, "Suppressed", Lutorin Works named as the company
 The Overview tables have a little more room in their cells, and the site tables on the Force Index and Air Defense tabs share their column widths so they line up. A site whose radars are down now says "Suppressed", not "Blinded". The Tactical Edge table lost its empty third column. Lutorin Works is called by its name everywhere (the victory line, the docs, this file), not "the works".
 
