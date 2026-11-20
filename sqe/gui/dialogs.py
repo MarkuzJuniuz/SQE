@@ -573,7 +573,7 @@ class DayResolvedDialog(QDialog):
     S21 (XO 2026-11-11): the AFTER-ACTION REPORT of every skip, one dialog per run. `reason` (why an auto-skip stopped) is its header line.
     The report is a plain list of every simulated event, all shown at once in one QTextBrowser (it scrolls by itself, starts at the top; the animation was dropped)."""
     def __init__(self, turns: list, parent=None, reason: str = ""):
-        super().__init__(parent); self.setWindowTitle("After-Action Report"); self.setMinimumSize(700, 480)
+        super().__init__(parent); self.setWindowTitle("After-Action Report"); self.setMinimumSize(980, 480)       # S133 (XO 2026-11-20): wide enough that a result line does not wrap
         lay = QVBoxLayout(self); lay.setSpacing(12)
         results = [r for t_ in turns for r in t_.get("results", [])]
         t = QLabel(f"{turns[0]['label']} resolved" if len(turns) == 1 else f"{turns[0]['label']} to {turns[-1]['label']}: {len(turns)} turns resolved"); t.setObjectName("title"); lay.addWidget(t)
@@ -592,8 +592,8 @@ class DayResolvedDialog(QDialog):
             for r in t_.get("results", []):
                 ln = r.get("lines") or [r.get("objective", "?")]
                 col = theme.GREEN if r.get("success") else theme.AMBER if (r.get("scrubbed") or r.get("held")) else theme.RED
-                detail = ("<br>" + "<br>".join("&nbsp;&nbsp;&nbsp;" + html.escape(x.strip()) for x in ln[1:])) if ln[1:] else ""     # no <br> when a result has no detail lines
-                h.append(f"<p style='margin-bottom:2px'><b style='color:{col}'>{html.escape(ln[0])}</b>{detail}</p>")
+                detail = ("<ul style='margin-top:2px;margin-bottom:0'>" + "".join(f"<li style='margin:0 0 0 -30px;'>{html.escape(x.strip())}</li>" for x in ln[1:]) + "</ul>") if ln[1:] else ""     # S133: a bullet per detail line (the bullet carries the indent, a wrapped line stays under its own bullet); nothing when a result has no detail lines
+                h.append(f"<p style='margin-bottom:0'><b style='color:{col}'>{html.escape(ln[0])}</b></p>{detail}<p style='margin:0'></p>")
         self.body.setHtml("".join(h) or "<p>Nothing was tasked.</p>")
         bb = QDialogButtonBox(QDialogButtonBox.Close); bb.rejected.connect(self.reject)
         btn = bb.button(QDialogButtonBox.Close); btn.setText("Continue"); btn.setObjectName("primary"); btn.clicked.connect(self.accept); lay.addWidget(bb)
