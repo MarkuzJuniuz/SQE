@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.535, S125: no "missile defeated" call
+SQE's jammer still defeats radar missiles, but the AI flight no longer announces "missile defeated": a pilot cannot tell whether the jammer or the evasion beat the missile.
+
 ## v0.41.534, S127: asset names read in Title Case
 Enemy and friendly asset names (Forces tables, war log, briefings) now read in Title Case, old saves included ("Tiyas SA-10 Site Garrison", "Supply Dump Near Abu al-Duhur"), the Forces table shows the type "EWR" and the depth labels read "T3 Central Syria". A supply dump named for Abu al-Duhur no longer loses "-Duhur".
 

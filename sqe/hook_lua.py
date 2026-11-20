@@ -436,7 +436,6 @@ local function jamCheck(e, shooter)
       local okx, ex = pcall(function() return w:isExist() end)
       if okx and ex then pcall(function() w:destroy() end) end
     end, nil, timer.getTime() + math.max(1.5, dm / 800 * (0.3 + 0.4 * math.random())))
-    if UFLT[tn] and throttle("jam:" .. tn, 8) then say(UFLT[tn] .. ": missile defeated.") end
   end
   dump()
 end
