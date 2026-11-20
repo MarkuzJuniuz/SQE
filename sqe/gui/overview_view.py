@@ -9,7 +9,6 @@ from PySide6.QtGui import QColor, QFont, QImage, QPainter, QTextDocument
 from . import theme
 
 GOOD, MID, BAD = "#3ddc97", "#E0A800", "#ff5d6c"
-DARK = "#04101c"
 EVEN = MID                                    # "equal" ground odds: amber
 COLORS = {"good": GOOD, "mid": MID, "bad": BAD, "edge": theme.BLUE}
 
@@ -41,24 +40,33 @@ def e(s) -> str:
     return html.escape(str(s))
 
 
-HEAD = "color:#8fa3b8;padding:0 14px 4px 0"
+HEAD = "color:#8fa3b8;padding:1px"
+GRID = "#2a3644"
 
 
-def table(headers, rows, aligns=None) -> str:
-    """rows: lists of cells; a cell is a string (escaped) or ('html', raw) or ('bg', text, band) for a coloured background."""
-    th = "".join(f"<th align='left' style='{HEAD}'>{e(h)}</th>" for h in headers)
-    out = [f"<table cellspacing='0' cellpadding='3'><tr>{th}</tr>"]
+def table(headers, rows, center=(), nowrap=False) -> str:
+    """A gridded table (S131, XO 2026-11-20): every header centred, even padding of 1, a thin border. rows: lists of cells; a cell is a string (escaped) or ('html', raw), e.g. a bar image
+    (centred). `center` = the column numbers whose text is centred too (Health, State, Type, the figure columns); the others stay left. `nowrap`: keep each cell on one line (the site tables, which have the room)."""
+    th = "".join(f"<th align='center' style='{HEAD}'>{e(h)}</th>" for h in headers)
+    out = [f"<table border='1' cellspacing='0' cellpadding='1' style='border-color:{GRID};border-style:solid'><tr>{th}</tr>"]
     for r in rows:
         tds = []
-        for c in r:
+        for i, c in enumerate(r):
             if isinstance(c, tuple) and c[0] == "html":
-                tds.append(f"<td style='padding:3px 14px 3px 0'>{c[1]}</td>")
-            elif isinstance(c, tuple) and c[0] == "bg":
-                tds.append(f"<td align='center' bgcolor='{COLORS[c[2]]}' style='padding:3px 10px'><font color='{DARK}'><b>{e(c[1])}</b></font></td>")
+                tds.append(f"<td align='center' style='padding:1px'>{c[1]}</td>")
             else:
-                tds.append(f"<td style='padding:3px 14px 3px 0'>{e(c)}</td>")
+                tds.append(f"<td align='{'center' if i in center else 'left'}' style='padding:1px{";white-space:nowrap" if nowrap else ""}'>{e(c)}</td>")
         out.append("<tr>" + "".join(tds) + "</tr>")
     return "".join(out) + "</table>"
+
+
+def short_state(text: str) -> str:
+    """The State column in one word (S131): blank when the site is fine, only the exceptions are said (no day counts)."""
+    t = str(text).lower()
+    for k, w in (("lost", "Lost"), ("struck", "Struck"), ("destroyed", "Destroyed"), ("repairing", "Repairing"), ("rebuilding", "Rebuilding"), ("damaged", "Damaged"), ("radars blinded", "Blinded")):
+        if t.startswith(k):
+            return w
+    return ""
 
 
 def section(heading: str, body: str) -> str:
@@ -81,6 +89,21 @@ def bar_image(text: str, frac: float, color: str, w: int = 120, h: int = 20) -> 
     return img
 
 
+def center_bar_image(text: str, frac: float, color: str, w: int = 88, h: int = 20) -> QImage:
+    """A progress-style bar (S131): the figure centred on it, white with a dark outline."""
+    img = QImage(w, h, QImage.Format_ARGB32); img.fill(QColor(theme.CARD))
+    p = QPainter(img); p.setRenderHint(QPainter.Antialiasing)
+    p.setPen(QColor(theme.BORDER)); p.setBrush(QColor(theme.PANEL)); p.drawRoundedRect(0, 0, w - 1, h - 1, 6, 6)
+    frac = max(0.0, min(1.0, frac))
+    if frac > 0:
+        p.setPen(QColor(0, 0, 0, 0)); p.setBrush(QColor(color)); p.drawRoundedRect(1, 1, max(8, int((w - 2) * frac)), h - 2, 5, 5)
+    f = QFont(); f.setPointSize(9); f.setBold(True); p.setFont(f)
+    p.setPen(QColor(0, 0, 0, 170)); p.drawText(1, 1, w, h, 0x84, text)                              # AlignHCenter | AlignVCenter, a dark outline under the white figure
+    p.setPen(QColor("#ffffff")); p.drawText(0, 0, w, h, 0x84, text)
+    p.end()
+    return img
+
+
 class Images:
     """Collects the bar images of one page and hands them to the QTextBrowser's document as named resources."""
     def __init__(self):
@@ -89,6 +112,12 @@ class Images:
     def bar(self, text: str, frac: float, band: str) -> tuple:
         name = f"bar{len(self.items)}"
         self.items[name] = bar_image(text, frac, COLORS[band])
+        return ("html", f"<img src='{name}'>")
+
+    def cbar(self, pct: int, band: str) -> tuple:
+        """A centred-figure bar for a 0..100 figure (Health, Force Index, Air Defense)."""
+        name = f"bar{len(self.items)}"
+        self.items[name] = center_bar_image(f"{pct}%", pct / 100.0, COLORS[band])
         return ("html", f"<img src='{name}'>")
 
     def apply(self, browser, doc_html: str) -> None:

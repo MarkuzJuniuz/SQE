@@ -1,4 +1,4 @@
-"""Lutorin's works (S111, XO 2026-11-19): the special blue targets of a pack with a `works` block (Syria Level 2 and 3), and the second way the war ends there.
+"""Lutorin Works (S111, XO 2026-11-19): the special blue targets of a pack with a `works` block (Syria Level 2 and 3), and the second way the war ends there.
 
 The story: a handful of plants that make Lutorin's wares can only exist in Syria (the stabilizer that gives old Soviet arsenals new life is made from a crystal that only forms there and
 cannot be shipped). Damascus hosts them in return for his money and his arms, and that backs its claim on Hatay. The coalition's way to win without conquering anything is to destroy
@@ -7,7 +7,7 @@ every works; red's is the one it already has, taking Hatay (a blue defeat, `grou
 How it works (everything numeric lives in the pack's `works` block, so a theatre tunes it with no code):
 * The works are `DEPOT` assets with the id prefix `wks_` and the variant FACTORY (the road-net plants' look and double guard), registered at campaign start for the levels the pack names. The planner,
   the SEAD gating and the abstract resolution treat them as supply strikes with a priority bonus (`PLAN_BONUS`); a strike removes only `damage` of what it removes from a depot, so a works takes
-  several good strikes. They are not supply sites: they stay out of the Force Index and its nightly repair, and a works is hunted until it is destroyed (no "down for planning" at 0.3 health).
+  several good strikes. They count in red's Force Index (S131, XO 2026-11-20: a works is a depot red needs, the level's `supply_total` holds the whole count, works included) but not in the nightly supply repair (`ground.supply_repair`): a works is hunted until it is destroyed (no "down for planning" at 0.3 health) and mends only by its own rebuild.
 * One rebuild team: a destroyed works is rebuilt one at a time, each taking about `rebuild_days` (a level's value; the draw is 60 to 140 percent of it), back at full health. A damaged works does not mend.
 * Red's push: the works feed the war on the Hatay front. `edge` = 1 + the level's `push` x (works standing / works built) multiplies red's surge factor in `ground.resolve_day` (reinforcements, attack
   chance) and the raid rate (`raids`), so every works lost takes strength from the push, and none left leaves red at its plain strength.
@@ -42,7 +42,7 @@ def params(state):
     lv = (b.get("levels") or {}).get(str(int(getattr(state, "level", 2))))
     if not lv:
         return None
-    return {"label": b.get("label", "The works"), "damage": float(lv.get("damage", b.get("damage", DEFAULT_DAMAGE))), "push": float(lv.get("push", 0.0)),
+    return {"label": b.get("label", "The Works"), "damage": float(lv.get("damage", b.get("damage", DEFAULT_DAMAGE))), "push": float(lv.get("push", 0.0)),
             "rebuild_days": float(lv.get("rebuild_days", 60.0))}
 
 
@@ -126,7 +126,27 @@ def rebuild(state, rng: random.Random) -> list:
     w["team"], w["left"] = None, 0.0
     w["built"] = int(w.get("built", 0)) + 1
     w["seen"] = [i for i in dead if i != a.id]
-    return out + [f"{a.name} is back in production"] + story.beat(state, "works_back")
+    return out + [f"{a.name} is operational again"] + story.beat(state, "works_back")
+
+
+def summary(state):
+    """(label, '3 of 5 Operational') for the Overview and the red assets list, or None where there are no works (S131)."""
+    p = params(state)
+    n = len(ids(state))
+    if not p or not n:
+        return None
+    return p["label"], f"{standing(state)} of {n} Operational"
+
+
+def rows(state) -> list:
+    """(asset, health %, state word) per works in the pack's order, for the Overview and the red assets list; the word is blank for a works at full health (S131)."""
+    out = []
+    w = (getattr(state, "ground", None) or {}).get("works") or {}
+    for i in ids(state):
+        a = state.assets[i]
+        word = ("Rebuilding" if w.get("team") == i else "Destroyed") if a.destroyed else ("Damaged" if a.health < 1.0 - 1e-6 else "")
+        out.append((a, round(100 * a.health), word))
+    return out
 
 
 def line(state):
@@ -136,6 +156,6 @@ def line(state):
     if not p or not n:
         return None
     s = standing(state)
-    word = ("all in production" if s == n else "most of them still in production" if s * 2 > n else "only a few still in production" if s > 0 else "all destroyed")
+    word = ("all operational" if s == n else "most of them still operational" if s * 2 > n else "only a few still operational" if s > 0 else "all destroyed")
     team = (state.ground.get("works") or {}).get("team")
     return f"{p['label']}: {word}" + (", one being rebuilt" if team and s < n else "")

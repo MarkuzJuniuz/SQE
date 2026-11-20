@@ -200,6 +200,10 @@ def build(st, th: dict, d, ap: dict, rng: random.Random | None = None) -> dict:
     spots = [tuple(p) for p in ((sites or {}).get("road") or {}).get("supply", [])]
     blue_ap = set(th.get("road_blue_airports") or [])
     want = {"red": int(getattr(d, "road_sites_red", 0)), "blue": int(getattr(d, "road_sites_blue", 0))}
+    cap = (((th.get("works") or {}).get("levels") or {}).get(str(getattr(d, "level", ""))) or {}).get("supply_total")
+    if cap and g and g.get("works"):                                  # S131 (XO 2026-11-20): red's whole supply count with the works (25 on Syria 2/3): the road sites fill what the fixed sites and the works leave
+        fixed = sum(1 for a in st.assets.values() if ground.is_supply(a))
+        want["red"] = min(want["red"], max(0, int(cap) - len(g["works"].get("ids") or []) - fixed))
     total = want["red"] + want["blue"]
     if not g or not spots or not blue_ap or total <= 0 or not ap:
         return {}

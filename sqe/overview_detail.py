@@ -137,7 +137,7 @@ def tempo_lines(state) -> list:
     return out
 
 
-TYPE_WORDS = (("CAS", "CAS"), ("STRIKE", "strike"), ("DEAD", "SEAD / DEAD"), ("COUNTER_AIR", "counter-air"), ("BARCAP", "patrol"), ("FLEET_DEFENSE", "fleet defence"), ("RAID_DEFENSE", "raid defence"))
+TYPE_WORDS = (("CAS", "CAS"), ("STRIKE", "strike"), ("DEAD", "SEAD / DEAD"), ("COUNTER_AIR", "counter-air"), ("BARCAP", "patrol"), ("FLEET_DEFENSE", "fleet defense"), ("RAID_DEFENSE", "raid defense"))
 
 
 def tasking(sess) -> tuple:

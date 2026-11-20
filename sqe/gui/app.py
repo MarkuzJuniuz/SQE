@@ -93,7 +93,7 @@ class OverviewPage(QWidget):
         gc = card(); left.addWidget(gc, 1)                                 # v0.41.149: the detail tabs (they replaced the one long sector list)
         self.dtabs = QTabWidget(); gc.layout().addWidget(self.dtabs)
         self.dviews = {}
-        for key, title in (("ground", "Ground"), ("supply", "Force Index"), ("ad", "Air defence"), ("air", "Air Operations"), ("edge", "Tactical Edge")):
+        for key, title in (("ground", "Ground"), ("supply", "Force Index"), ("ad", "Air Defense"), ("air", "Air Operations"), ("edge", "Tactical Edge")):
             v = QTextBrowser(); v.setFrameShape(QFrame.NoFrame); v.setStyleSheet("background:transparent;border:none;"); self.dviews[key] = v
             if key == "ground":                                              # v0.41.207: the base notes sit in an expandable section above the sector table
                 w = QWidget(); wl = QVBoxLayout(w); wl.setContentsMargins(0, 0, 0, 0); wl.setSpacing(4)
@@ -153,7 +153,7 @@ class OverviewPage(QWidget):
 
     def _fill_details(self, st):
         import re
-        from .. import ground, tempo, blue_barcap as _bb, bombers as _bomb
+        from .. import ground, tempo, blue_barcap as _bb, bombers as _bomb, works as _works
         od, en, e = overview_detail, story.enemy(st), V.e
         fe, fb = posture.supply_pct(st, "red"), posture.supply_pct(st, "blue")
         ae, ab = round(100 * posture.iads_pct(st, "red")), round(100 * posture.iads_pct(st, "blue"))
@@ -173,16 +173,27 @@ class OverviewPage(QWidget):
         body += V.section("Front History", "<br>".join(e(x) for x in hist)) if hist else "<p style='margin-top:14px;color:#8fa3b8'>The front has not moved yet.</p>"
         im.apply(self.dviews["ground"], body)
         # ---- Force Index (the old Supply tab; code names stay)
-        top = V.table(("Side", "Force Index"), [("Coalition", ("bg", f"{fb}%", V.supply_band(fb))), (en, ("bg", f"{fe}%", V.supply_band(fe)))])
-        sites = V.table(("Side", "Site", "Health", "State"), [(a, b, ("bg", f"{c}%", V.pct_band(c)), V.first_cap(d)) for a, b, c, d in od.supply_rows(st)])
-        self.dviews["supply"].setHtml(top + V.section("Sites", sites)
-                                      + "<p style='margin-top:14px;color:#8fa3b8'>A site mends in about 6 days at full Force Index (longer when it is low), and not on a night after it was struck.</p>")
+        im3 = V.Images()
+        top = V.table(("Side", "Force Index"), [["Coalition", im3.cbar(fb, V.supply_band(fb))], [en, im3.cbar(fe, V.supply_band(fe))]])
+        srows = od.supply_rows(st)
+        site_html = ""
+        wsum = _works.summary(st)
+        if wsum:                                                                  # S131: the works first, they are red's depots too (the Force Index counts them)
+            wt = V.table(("Site", "Health", "State"), [[a.name, im3.cbar(h, V.pct_band(h)), w] for a, h, w in _works.rows(st)], center=(2,), nowrap=True)
+            site_html += V.section(wsum[0], f"<p style='color:#8fa3b8;margin-top:0'>{e(wsum[1])}.</p>" + wt)
+        for side, head in (("Coalition", "Coalition Sites"), (None, f"{en} Sites")):
+            rs = [r for r in srows if (r[0] == "Coalition") == (side is not None)]
+            if rs:
+                site_html += V.section(head, V.table(("Site", "Health", "State"), [[b, im3.cbar(c, V.pct_band(c)), V.short_state(d)] for a, b, c, d in rs], center=(2,), nowrap=True))
+        im3.apply(self.dviews["supply"], top + site_html
+                  + "<p style='margin-top:14px;color:#8fa3b8'>A site mends in about 6 days at full Force Index (longer when it is low), and not on a night after it was struck. A works mends only when it is rebuilt.</p>")
         # ---- Air defence: the transit section only when a battery is on its way
         orders = od.asks_rows(st)
-        top = V.table(("Side", "Air Defense"), [("Coalition", ("bg", f"{ab}%", V.pct_band(ab))), (en, ("bg", f"{ae}%", V.pct_band(ae)))])
+        im4 = V.Images()
+        top = V.table(("Side", "Air Defense"), [["Coalition", im4.cbar(ab, V.pct_band(ab))], [en, im4.cbar(ae, V.pct_band(ae))]])
         transit = V.section("SAM Batteries in Transit", V.table(("Side", "Battery"), [(a, V.first_cap(b)) for a, b in orders])) if orders else ""
-        sites = V.table(("Side", "Site", "Type", "Health", "State"), [(a, b, c, ("bg", f"{d}%", V.pct_band(d)), V.first_cap(x)) for a, b, c, d, x in od.air_defence_rows(st)])
-        self.dviews["ad"].setHtml(top + transit + V.section("Sites", sites))
+        sites = V.table(("Site", "Type", "Health", "State"), [[b, c, im4.cbar(d, V.pct_band(d)), V.short_state(x)] for a, b, c, d, x in od.air_defence_rows(st)], center=(1, 3), nowrap=True)
+        im4.apply(self.dviews["ad"], top + transit + V.section("Sites", sites))
         # ---- Air Operations: BARCAP cover and the tanker / AWACS guards, under their own headings
         lines = _bb.status_lines(st)
         cover = [tuple((ln.strip().split(": ", 1) + [""])[:2]) for ln in lines if ln.startswith("   ")]
@@ -635,15 +646,34 @@ class ForcesPage(QWidget):
                         self.gw.setCellWidget(i, 3 + j, self._bar(h, col(h)))
         else:
             self.gw.setRowCount(0)
-        al = sorted(st.assets.values(), key=lambda a: (a.kind.value, a.name)); self.as_.setRowCount(len(al))
-        for i, a in enumerate(al):
+        from .. import works as _works
+        self.as_.setRowCount(0); self.as_.clearSpans()                                       # a fresh table: no stale spans, row heights or bars from the last refresh
+        wk = _works.rows(st)                                                                # S131: a pack's works are pinned at the top under their own heading (they are hard to find among the depots)
+        al = sorted((a for a in st.assets.values() if not _works.is_works(a)), key=lambda a: (a.kind.value, a.name))
+        off = (1 + len(wk)) if wk else 0
+        self.as_.setRowCount(off + len(al))
+        from .. import theatres as _th; _tl = _th.active()["tier_labels"]
+
+        def tier_of(a):
+            return _tl[min(len(_tl) - 1, max(1, a.tier))]
+
+        def hbar(a):
+            return self._bar(a.health, theme.GREEN if a.health > 0.6 else theme.AMBER if a.health > 0.25 else theme.RED)
+        if wk:
+            lbl, word = _works.summary(st)
+            self.as_.setSpan(0, 0, 1, 4)
+            hd = _item(f"{lbl}  \u00b7  {word}"); f = hd.font(); f.setBold(True); hd.setFont(f); hd.setForeground(QColor(theme.BLUE)); hd.setBackground(QColor(theme.CARD))
+            self.as_.setItem(0, 0, hd); self.as_.setRowHeight(0, 34)
+            for n, (a, _h, _w) in enumerate(wk, start=1):
+                self.as_.setItem(n, 0, _item(a.name, theme.DIM if a.destroyed else None)); self.as_.setItem(n, 1, _item("Depot")); self.as_.setItem(n, 2, _item(tier_of(a)))
+                self.as_.setCellWidget(n, 3, hbar(a))
+        for i, a in enumerate(al, start=off):
             kind = "Garrison" if a.variant == "GARRISON" else (f"SAM {a.variant}" if a.kind.value == "SAM" else ("EWR" if a.kind.value == "EWR" else a.kind.value.title()))
             if a.suppressed:
                 kind += "  (radars suppressed)"
-            from .. import theatres as _th; _tl = _th.active()["tier_labels"]; tier = _tl[min(len(_tl) - 1, max(1, a.tier))]
             self.as_.setItem(i, 0, _item(a.name, theme.DIM if a.destroyed else None)); self.as_.setItem(i, 1, _item(kind))
-            self.as_.setItem(i, 2, _item(tier))
-            self.as_.setCellWidget(i, 3, self._bar(a.health, theme.GREEN if a.health > 0.6 else theme.AMBER if a.health > 0.25 else theme.RED))
+            self.as_.setItem(i, 2, _item(tier_of(a)))
+            self.as_.setCellWidget(i, 3, hbar(a))
 
 
 class PilotPage(QWidget):

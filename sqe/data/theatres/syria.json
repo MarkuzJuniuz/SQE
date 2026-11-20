@@ -908,23 +908,24 @@
   }
  },
  "works": {
-  "label": "Lutorin's works",
+  "label": "Lutorin Works",
   "damage": 1.0,
   "levels": {
    "2": {
     "push": 2.0,
     "rebuild_days": 30,
-    "damage": 0.1
+    "supply_total": 25
    },
    "3": {
     "push": 4.75,
-    "rebuild_days": 30
+    "rebuild_days": 30,
+    "supply_total": 25
    }
   },
   "sites": [
    {
     "id": "wks_palmyra_1",
-    "name": "Lutorin works, Palmyra west",
+    "name": "Lutorin Works, Palmyra West",
     "x": -57835,
     "y": 193843,
     "value": 10,
@@ -932,7 +933,7 @@
    },
    {
     "id": "wks_palmyra_2",
-    "name": "Lutorin works, Palmyra north",
+    "name": "Lutorin Works, Palmyra North",
     "x": -42267,
     "y": 201149,
     "value": 10,
@@ -940,7 +941,7 @@
    },
    {
     "id": "wks_homs_1",
-    "name": "Lutorin works, Homs gap west",
+    "name": "Lutorin Works, Homs Gap West",
     "x": -40043,
     "y": 50504,
     "value": 10,
@@ -948,7 +949,7 @@
    },
    {
     "id": "wks_homs_2",
-    "name": "Lutorin works, Homs gap east",
+    "name": "Lutorin Works, Homs Gap East",
     "x": -28923,
     "y": 82457,
     "value": 10,
@@ -956,7 +957,7 @@
    },
    {
     "id": "wks_latakia",
-    "name": "Lutorin works, Latakia port",
+    "name": "Lutorin Works, Latakia Port",
     "x": 53262,
     "y": -2155,
     "value": 10,
