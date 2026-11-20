@@ -76,6 +76,7 @@ def _validate(d: dict, src) -> dict:
     d.setdefault("climate", dict(DEFAULT_CLIMATE))
     d.setdefault("support_targets", [])
     d.setdefault("red_keep", {})
+    d.setdefault("painted_airports", {})                           # v0.41.539: {"blue": [airport names], "red": [...]}, mission-only paint for fields that are not SQE bases (no neutral field for a jet to land on)
     d.setdefault("red_fill", {})                                   # v0.41.439: {level: {red field id: jets}}, the most jets the field holds at that level (a theatre without it parks by the DCS count only)
     d.setdefault("bomber_base", "")
     d["era"] = {**ERA_DEFAULT, **(d.get("era") or {})}

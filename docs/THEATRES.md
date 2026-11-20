@@ -22,6 +22,7 @@ You still need the map installed in DCS to fly it, and pydcs must know the terra
 | `support_base` | optional. Blue field id that hosts the AWACS and tankers |
 | `red_fields` | enemy airfields: `id` (must start with `ab_`), `name`, `airport`, `value` |
 | `red_extra_airports` | optional. Airport names that are set red in every mission although they are not campaign fields |
+| `painted_airports` | optional `{"blue": [...], "red": [...]}`: airport names (pydcs) painted friendly or enemy in every mission when they are not SQE bases, so no field is left neutral for any jet to land on. Mission-only, no campaign asset |
 | `red_keep` | for a campaign level, the only enemy airfields that exist (`{"1": ["ab_a", "ab_b"]}`) |
 | `wing_weight` | which enemy fields get an air wing, and how big a share |
 | `field_tier` | depth of each enemy airfield, 1 front to 4 deep. Depth is data only: it no longer gates what can be tasked |
