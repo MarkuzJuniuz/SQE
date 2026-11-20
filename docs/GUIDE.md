@@ -165,4 +165,4 @@ after a DCS terrain update (for developers).
 * `docs/CAMPAIGN.md`: how the campaign works and what its rules are.
 * `docs/CHANGES.md`: what changed in every version, newest first.
 * `docs/THEATRES.md`: how a map pack is built.
-* `tools/`: `smoke_test.py` and the other test and probe scripts.
+* `tools/`: `smoke_test.py` (the self-test), `hook_lua_sim.py` (its Lua check), `sqe_scan.py` (the terrain scan) and `capture_loadouts.py` (the loadout capture). Crew Chief's other test and probe scripts are not in Git.

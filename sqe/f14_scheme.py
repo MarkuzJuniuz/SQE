@@ -1,6 +1,6 @@
 """S103d: the player's waypoint scheme of the plain F-14B (the F-14A/B has THREE numbered waypoints).
 
-Heatblur's manual (Mission Editor page, "Waypoints Types (F-14A/B Only)") and XO's probe of 2026-11-18 (slot B-B, `tools/f14b_wp_probe.py`): waypoints 1 to 3 are the route points of the Mission Editor,
+Heatblur's manual (Mission Editor page, "Waypoints Types (F-14A/B Only)") and XO's probe of 2026-11-18 (slot B-B, `.claude/crew-chief-internal/tools/f14b_wp_probe.py`): waypoints 1 to 3 are the route points of the Mission Editor,
 the landing waypoint is the Home Base, and every other point is a Navigation Target Point named by a code (FP, IP, ST, DP, HA, DLWP1-3, DLST, DLFP; pydcs `group.add_nav_target_point`). Plain waypoints
 4 and up, and a second point with the same code, read wrong in the probe (slot B-A): this module only CHOOSES; `MissionBuilder._f14ab_scheme` applies the choice to the player's own group.
 
