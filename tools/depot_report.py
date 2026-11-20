@@ -17,7 +17,7 @@ For every (level, seed) it creates the campaign through `Session.new` (temp APPD
      order is not "all of one side, then all of the other" (two or more side changes: B R B R) is listed with the ordered site ids and the along-route gaps (km) between neighbours of different sides;
   4. the smallest straight-line gap between any red site and any blue site.
 Then a summary per level (sites per side, flags, interleaved routes, minimum cross-side gap). The Caucasus gives blue NO road sites (`road_sites_blue` 0 since S49), so its interleaving is empty by
-construction; `--blue N` builds the same campaigns with N blue road sites (what the game had before S49 was 5) to show what the rule would face. `--pack syria` uses the stub under `.private/syria/` when the
+construction; `--blue N` builds the same campaigns with N blue road sites (what the game had before S49 was 5) to show what the rule would face. `--pack syria` uses the stub under `.claude/crew-chief-internal/syria/` when the
 campaign builds, else prints why not. One worker process per campaign (--jobs N, default cores minus 2, --jobs 1 = one process); the output is the same either way."""
 import math
 import os
@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 FAR_KM = 150.0
-SYRIA_DIR = ROOT / ".private" / "syria"
+SYRIA_DIR = ROOT / ".claude" / "crew-chief-internal" / "syria"
 
 
 def _d(a, b) -> float:

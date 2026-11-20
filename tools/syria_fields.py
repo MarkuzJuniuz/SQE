@@ -1,10 +1,10 @@
 """Syria probe kit (S90, tools only, nothing ships): the airfield list and the probe-only pack stub.
 
-  python tools/syria_fields.py list [--out FILE]      read pydcs' Syria terrain and write .private/syria/airfields.md: every airport with an id, name,
+  python tools/syria_fields.py list [--out FILE]      read pydcs' Syria terrain and write .claude/crew-chief-internal/syria/airfields.md: every airport with an id, name,
                                                       region (by position), DCS x / y, lat / lon, runway headings, parking slots (planes / helicopters),
                                                       radio and beacon data pydcs has. Sorted by region, then north to south. XO picks the fields from it.
   python tools/syria_fields.py stub [--fields FILE] [--out FILE]
-                                                      write the probe-only pack stub .private/syria/syria.json from the chosen fields (fields.txt):
+                                                      write the probe-only pack stub .claude/crew-chief-internal/syria/syria.json from the chosen fields (fields.txt):
                                                       the scan area (the whole DCS Syria map) and discs round those airfields. Not in sqe/data/theatres,
                                                       so the campaign dialog never lists it (theatres.available() reads only the bundled and user pack folders).
 
@@ -32,7 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-OUT_DIR = ROOT / ".private" / "syria"
+OUT_DIR = ROOT / ".claude" / "crew-chief-internal" / "syria"
 FIELDS_TXT = OUT_DIR / "fields.txt"
 AIRFIELDS_MD = OUT_DIR / "airfields.md"
 STUB_JSON = OUT_DIR / "syria.json"

@@ -1,6 +1,6 @@
 """Build a theatre pack's map file (`<id>_geo.json`: land, lakes, borders) from Natural Earth shapefiles (public domain), projected to DCS x / y with pydcs.
 
-    python tools/geo_from_ne.py --pack syria --ne-dir .private/syria/ne [--tol 1500] [--out sqe/data/theatres/syria_geo.json]
+    python tools/geo_from_ne.py --pack syria --ne-dir .claude/crew-chief-internal/syria/ne [--tol 1500] [--out sqe/data/theatres/syria_geo.json]
 
 `--ne-dir` holds the unzipped Natural Earth 1:10m folders `ne_10m_land`, `ne_10m_lakes` and `ne_10m_admin_0_boundary_lines_land` (naturalearthdata.com; the zips are
 public domain, credited in the About box). The pack names the terrain (`dcs_terrain`) and the scan box (`scan.x0 / x1 / y0 / y1`): everything is clipped to the box (plus

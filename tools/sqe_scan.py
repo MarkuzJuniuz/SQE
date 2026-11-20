@@ -527,7 +527,7 @@ def cmd_srtm(a) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    pk = "a theatre pack file outside sqe/data/theatres (e.g. .private/syria/syria.json); its id is the theatre, output goes next to it"
+    pk = "a theatre pack file outside sqe/data/theatres (e.g. .claude/crew-chief-internal/syria/syria.json); its id is the theatre, output goes next to it"
     m = sub.add_parser("make"); m.add_argument("out"); m.add_argument("--theatre"); m.add_argument("--pack", metavar="PACK.json", help=pk); m.set_defaults(fn=cmd_make)
     c = sub.add_parser("condense"); c.add_argument("scan_dir"); c.add_argument("--out"); c.add_argument("--theatre"); c.add_argument("--pack", metavar="PACK.json", help=pk); c.add_argument("--scan-relief", action="store_true", help="also write the relief grid from the DCS scan (the shipped one comes from SRTM, see `srtm`)"); c.set_defaults(fn=cmd_condense)
     rr = sub.add_parser("roads-report"); rr.add_argument("scan_dir"); rr.add_argument("--theatre"); rr.add_argument("--pack", metavar="PACK.json", help=pk); rr.set_defaults(fn=cmd_roads_report)
