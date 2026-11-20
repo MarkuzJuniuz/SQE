@@ -309,24 +309,7 @@ def objective_status(state, manifest: Manifest, data: dict, pending: dict | None
 ON_TARGET_S = 300     # S87: a package reads "On target" this long after its TOT (no result yet), then "Returning". Judgment call: the attack run and the pull-off take a few minutes
 
 
-_SMALL = {"a", "an", "and", "at", "in", "of", "on", "or", "the", "to"}
-_ACRONYMS = {"TOT", "SAM", "SEAD", "DEAD", "CAS", "EWR", "AWACS", "OCA"}
-
-
-def _title(text: str, keep_caps: bool = False) -> str:
-    """S87: Title Case for the status column (XO 2026-11-14): small words stay lower case (not the first of a phrase), the acronyms (TOT, SAM, ...) and any word with a digit (SA-6, 14:20, 3) stay as written.
-    Each part of a hyphenated word is capitalised (Sukhumi-Babushara). keep_caps (the package names): a word already in capitals stays as written (FARP)."""
-    out = []
-    for i, w in enumerate(text.split(" ")):
-        core = w.rstrip(",.;:")
-        if any(c.isdigit() for c in core) or core in _ACRONYMS or (keep_caps and len(core) > 1 and core.isupper()):
-            out.append(w)
-        elif core.lower() in _SMALL and i and not out[-1].endswith((",", ";", ":")):
-            out.append(w.lower())
-        else:
-            k = len(w) - len(w.lstrip("("))
-            out.append(w[:k] + "-".join(p[:1].upper() + p[1:].lower() for p in w[k:].split("-")))
-    return " ".join(out)
+from .textcase import title_case as _title      # S127: the helper moved to textcase.py (assets use it too); _title stays as the alias
 
 
 _NAME_NOISE = re.compile(r"\s*\((?:\d+% left|\d+ aircraft|enemy [^)]*)\)")                                     # health, aircraft count, force counts: no numbers in the package name

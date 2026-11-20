@@ -636,7 +636,7 @@ class ForcesPage(QWidget):
             self.gw.setRowCount(0)
         al = sorted(st.assets.values(), key=lambda a: (a.kind.value, a.name)); self.as_.setRowCount(len(al))
         for i, a in enumerate(al):
-            kind = "Garrison" if a.variant == "GARRISON" else (f"SAM {a.variant}" if a.kind.value == "SAM" else a.kind.value.title())
+            kind = "Garrison" if a.variant == "GARRISON" else (f"SAM {a.variant}" if a.kind.value == "SAM" else ("EWR" if a.kind.value == "EWR" else a.kind.value.title()))
             if a.suppressed:
                 kind += "  (radars suppressed)"
             from .. import theatres as _th; _tl = _th.active()["tier_labels"]; tier = _tl[min(len(_tl) - 1, max(1, a.tier))]

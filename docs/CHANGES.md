@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.534, S127: asset names read in Title Case
+Enemy and friendly asset names (Forces tables, war log, briefings) now read in Title Case, old saves included ("Tiyas SA-10 Site Garrison", "Supply Dump Near Abu al-Duhur"), the Forces table shows the type "EWR" and the depth labels read "T3 Central Syria". A supply dump named for Abu al-Duhur no longer loses "-Duhur".
+
 ## v0.41.531, S121: the escort of a SEAD or JSOW package covers the SEAD flights
 The F-15 / F-16 escort of a package with SEAD or JSOW flights now stands behind the shooters closest to red's fighters (usually the SEAD flights) instead of behind the JSOW flight, which could be 40 km away. A red fighter pair that comes for the SEAD flights now meets the escort.
 

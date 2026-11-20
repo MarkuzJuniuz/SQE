@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import math
 import random
+import re
 
 from . import road_front
 from .models import AssetKind, EnemyAsset
@@ -152,7 +153,7 @@ def guard_units(a, level: int) -> int:
 
 def _place(name: str) -> str:
     """'Maykop-Khanskaya' -> 'Maykop', 'Mineralnye Vody' stays: the town a site is named for."""
-    return name.split("-")[0].strip()
+    return re.split(r"(?<!al)-", name, maxsplit=1, flags=re.I)[0].strip()      # S127: 'Abu al-Duhur' keeps its article part (was cut to 'Abu al')
 
 
 def _rng(st, parent: random.Random | None) -> random.Random:
