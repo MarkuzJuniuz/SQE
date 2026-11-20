@@ -214,7 +214,7 @@ def odds_line(state) -> str:
     def bn(n):
         return f"{n} battalion{'s' if n != 1 else ''}" if n >= 1 else "under a battalion"
     en = story.enemy(state)
-    return f"{o['sector']}: Coalition {bn(o['bn_blue'])} against {'the enemy' if en == 'Enemy' else en}'s {bn(o['bn_red'])} ({o['word']})"
+    return f"{o['sector']}: Coalition {bn(o['bn_blue'])} against {(en + chr(39) if en.endswith('s') else en + chr(39) + 's') if en != 'Enemy' else 'the enemy' + chr(39) + 's'} {bn(o['bn_red'])} ({o['word']})"
 
 
 def front_lines(state) -> list:
