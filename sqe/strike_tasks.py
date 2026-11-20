@@ -383,7 +383,7 @@ class StrikeTasks:
 
     def _ewr_standoff_tasks(self, wp, f, site, package, eta_s=None) -> None:
         """S60 (XO 2026-11-12: EWR strikes are stand-off only): the stand-off weapons of an EWR strike (the F-15E's JSOW-C or the F-16's JSOW-A) on the EWR vehicle: one Bombing task per weapon of the
-        flight (Expend One, group attack, the stop time ETA + JSOW_ATTACK_S, as the runway JSOW-Cs of S51), each aimed at the radar's position plus its own random error up to JSOW_AIM_ERR_M. Not at the
+        flight (Expend One, group attack, the stop time ETA + JSOW_ATTACK_S, as the runway JSOW-Cs of S51), each aimed at the radar vehicle's exact position (S135: no aim error; the scatter spread the JSOW-As' bomblets off a single truck, run 2026-11-20_16-47-20). Not at the
         covering Tors or the site's other vehicles (an EWR has none that matter). ROE Open Fire, designated points only (as every AI strike since v0.41.396), Return Fire once the window ends."""
         us_ = self._ewr_units(package, site)
         a_ = self.state.assets.get(package.objective.target_id)
@@ -391,14 +391,12 @@ class StrikeTasks:
         if not pts_:
             return
         per_ = (PEN_PER_JET if getattr(f, "kit", "") == "PEN" else JSOW_PER_JET).get(f.aircraft, 2)
-        rng = random.Random(f"{self.state.campaign_id}:{package.id}:{f.id}:ewr")
         wp.tasks.append(task.OptROE(task.OptROE.Values.OpenFire))
         if eta_s is not None:
             rf_ = task.ControlledTask(task.OptROE(task.OptROE.Values.ReturnFire)); rf_.start_after_time(int(eta_s + JSOW_ATTACK_S)); wp.tasks.append(rf_)
         for _ in range(max(1, f.count * per_)):
-            cx, cy = pts_[0]
-            ang, d = rng.uniform(0, 2 * math.pi), JSOW_AIM_ERR_M * math.sqrt(rng.random())
-            bt_ = task.ControlledTask(task.Bombing(mapping.Point(cx + math.cos(ang) * d, cy + math.sin(ang) * d, self.t), expend=task.Expend.One, group_attack=True))
+            cx, cy = pts_[0]                                           # S135: every weapon on the truck itself
+            bt_ = task.ControlledTask(task.Bombing(mapping.Point(cx, cy, self.t), expend=task.Expend.One, group_attack=True))
             if eta_s is not None:
                 bt_.stop_after_time(int(eta_s + JSOW_ATTACK_S))
             wp.tasks.append(bt_)
