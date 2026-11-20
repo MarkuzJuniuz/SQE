@@ -13,6 +13,7 @@ from ..aircraft import AIRCRAFT, A10_VARIANTS, F14_VARIANTS
 from ..difficulty import LEVELS
 from ..timeofday import is_night
 from . import theme
+from ..textcase import title_case as _tc          # S128
 from .. import debrief as DB
 from .widgets import StepSpin, card
 
@@ -186,7 +187,7 @@ class SettingsDialog(QDialog):
             sa.setStyleSheet("QScrollArea#tabscroll, QScrollArea#tabscroll > QWidget > QWidget#tabpage { background: transparent; border: none; }")
             sa.viewport().setAutoFillBackground(False)
             sa.setWidget(w)                                                  # long hint texts keep their full height; the tab scrolls instead of squeezing them
-            self.tabs.addTab(sa, title)
+            self.tabs.addTab(sa, _tc(title, True))
             return v
 
         def hint(v, text):

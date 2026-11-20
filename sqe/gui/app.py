@@ -21,6 +21,7 @@ from ..engine import Session
 from ..packages import PackageBuilder, folded_n_def
 from ..settings import AppSettings
 from . import theme
+from ..textcase import title_case as _tc          # S128: table headers and tab titles read in Title Case
 from .dialogs import DayResolvedDialog, DebriefDialog, NewCampaignDialog, SettingsDialog, WaitingDialog
 from .widgets import MapView, SideCard, StatCard, StepSpin, card
 from . import overview_view as V
@@ -57,7 +58,7 @@ def campaign_doc_path() -> Path | None:
 
 
 def _tbl(headers, stretch_last=True) -> QTableWidget:
-    t = QTableWidget(0, len(headers)); t.setHorizontalHeaderLabels(headers); t.verticalHeader().setVisible(False)
+    t = QTableWidget(0, len(headers)); t.setHorizontalHeaderLabels([_tc(h, True) for h in headers]); t.verticalHeader().setVisible(False)
     t.setEditTriggers(QTableWidget.NoEditTriggers); t.setSelectionBehavior(QTableWidget.SelectRows)
     t.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch); t.setAlternatingRowColors(False)
     return t
@@ -102,9 +103,9 @@ class OverviewPage(QWidget):
                 self.notes_view.setMaximumHeight(230); self.notes_view.setVisible(False)
                 self.notes_btn.clicked.connect(self._toggle_notes)
                 wl.addWidget(self.notes_btn); wl.addWidget(self.notes_view); wl.addWidget(v, 1)
-                self.dtabs.addTab(w, title)
+                self.dtabs.addTab(w, _tc(title, True))
             else:
-                self.dtabs.addTab(v, title)
+                self.dtabs.addTab(v, _tc(title, True))
         right = QVBoxLayout(); root.addLayout(right, 6)
         g = QGridLayout(); g.setSpacing(12); right.addLayout(g)
         self.cards = {"fr": StatCard("The front", theme.AMBER), "od": StatCard("Ground odds", theme.BLUE)}
@@ -139,7 +140,7 @@ class OverviewPage(QWidget):
 
     @staticmethod
     def _table(headers, rows, note: str = "") -> str:
-        th = "".join(f"<th align='left' style='color:#8fa3b8;padding-right:14px'>{html.escape(h)}</th>" for h in headers)
+        th = "".join(f"<th align='left' style='color:#8fa3b8;padding-right:14px'>{html.escape(_tc(str(h), True))}</th>" for h in headers)
         tr = "".join("<tr>" + "".join(f"<td style='padding-right:14px'>{html.escape(str(c))}</td>" for c in r) + "</tr>" for r in rows)
         return (f"<p style='color:#b9c6d6'>{html.escape(note)}</p>" if note else "") + f"<table cellspacing='2'><tr>{th}</tr>{tr}</table>"
 
@@ -526,7 +527,7 @@ class ForcesPage(QWidget):
         self.gw = _tbl(["Sector", "Enemy force", "Friendly force", "Enemy forward garrison", "Friendly forward garrison"])
         self.sup = _tbl(["Support aircraft", "Type", "Based at", "Serviceable", "Cycle", "Cover today", "Strength"])
         for t, n in ((self.sq, "Coalition squadrons"), (self.sup, "Tankers and AWACS"), (self.bs, "Coalition bases"), (self.gw, "Ground war"), (self.ea, "Enemy air wings"), (self.as_, "Enemy assets")):
-            self.tabs.addTab(t, n)
+            self.tabs.addTab(t, _tc(n, True))
 
     @staticmethod
     def _bar(frac, color):
@@ -561,9 +562,9 @@ class ForcesPage(QWidget):
         from .. import war as _war
         t = _war.totals(st); en = story.enemy(st)
         self.air_line.setText(f"Aircraft serviceable: Coalition {t['fa']} of {t['fz']}, {en} {t['ea']} of {t['ez']}.")
-        self.tabs.setTabText(4, f"{en} air wings"); self.tabs.setTabText(5, f"{en} assets")
-        self.gw.setHorizontalHeaderLabels(["Sector", f"{en} force", "Coalition force", f"{en} forward garrison", "Coalition forward garrison"])
-        self.ea.setHorizontalHeaderLabels(["Squadron", "Aircraft", "Based at", "On hand", "Strength"]); self.as_.setHorizontalHeaderLabels([f"{en} asset", "Type", "Depth", "Condition"])
+        self.tabs.setTabText(4, _tc(f"{en} air wings", True)); self.tabs.setTabText(5, _tc(f"{en} assets", True))
+        self.gw.setHorizontalHeaderLabels([_tc(h, True) for h in ["Sector", f"{en} force", "Coalition force", f"{en} forward garrison", "Coalition forward garrison"]])
+        self.ea.setHorizontalHeaderLabels(["Squadron", "Aircraft", "Based at", "On Hand", "Strength"]); self.as_.setHorizontalHeaderLabels([_tc(f"{en} asset", True), "Type", "Depth", "Condition"])
         sqs = list(st.squadrons.values()); self.sq.setRowCount(len(sqs))
         for i, s in enumerate(sqs):
             sp = AIRCRAFT[s.aircraft]

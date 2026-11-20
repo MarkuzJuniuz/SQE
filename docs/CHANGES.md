@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.537, S128: Title Case headers and tabs, "Syrian-Russian Forces", names with "Al"
+Table headers and tab titles throughout the app read in Title Case, and the Syrian side reads "Syrian-Russian Forces" everywhere, the odds line says "Forces'" correctly, and airfield names with a spaced "Al" (Al Qusayr, Wujah Al Hajar) keep their capital in asset names. Only the hyphen form reads "al-Duhur". Campaigns saved earlier keep names that were cut short before (e.g. "Near al").
+
 ## v0.41.535, S125: no "missile defeated" call
 SQE's jammer still defeats radar missiles, but the AI flight no longer announces "missile defeated": a pilot cannot tell whether the jammer or the evasion beat the missile.
 

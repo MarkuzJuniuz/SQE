@@ -1016,7 +1016,7 @@
    }
   },
   "3": {
-   "enemy": "Syrian-Russian forces",
+   "enemy": "Syrian-Russian Forces",
    "enemy_long": "Syria and its Russian backers",
    "background": [
     "Syria has closed its border with Turkey and is massing along the Hatay frontier, backed by Russian advisers, Russian-supplied fighters and a modern air-defence network that Syria could never have paid for. Behind it stands one man. Aleksandr Lutorin, a Russian oligarch whose companies hold the pipelines, terminals and tanker fleets that carry the Levant's oil and gas to the Mediterranean, has bought his way into both governments. Damascus takes his money; Moscow takes his calls. Hatay and the Iskenderun coast are the last piece of the export route he does not control.",
@@ -1028,16 +1028,16 @@
     "Offensive": "Our ground force at the front outweighs the enemy's here, and the air campaign is keeping it that way.",
     "Consolidating": "We hold what we gained. Use the time to hit supply and air defence.",
     "Holding": "The front is not moving. Close air support and supply strikes decide the next move.",
-    "Under pressure": "Syrian-Russian forces are gaining ground toward Hatay. Hold the sector in front of our airfields.",
+    "Under pressure": "Syrian-Russian Forces are gaining ground toward Hatay. Hold the sector in front of our airfields.",
     "Last stand": "Hatay is the line. If it falls, the war is lost.",
     "Defeat": "Hatay has fallen and the Coalition has no foothold left on the front. The campaign is lost."
    },
    "beats": {
     "open": "That was the opening stage of Operation LEVANT HORIZON. The coalition air campaign opens today.",
-    "retake": "{base} has been retaken by Syrian-Russian forces.",
+    "retake": "{base} has been retaken by Syrian-Russian Forces.",
     "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. If Hatay falls, the front collapses.",
     "back_blue": "{base} is ours again, though its defences are gone.",
-    "win": "The enemy's supply has collapsed. Without it the Syrian-Russian forces cannot hold the front, and Lutorin's route to the coast is shut. The war is won.",
+    "win": "The enemy's supply has collapsed. Without it the Syrian-Russian Forces cannot hold the front, and Lutorin's route to the coast is shut. The war is won.",
     "lose": "Hatay has fallen. The Coalition withdraws and the export route is Lutorin's. The campaign is lost.",
     "fall_ab_bassel": "Bassel Al-Assad is ours. The coast road south is open and the first step is taken.",
     "fall_ab_mouawad": "Rene Mouawad is ours. The coast road as far as the Lebanese border is in coalition hands.",
