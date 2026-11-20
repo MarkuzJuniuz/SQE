@@ -16,6 +16,7 @@ CARRIER_MOVE_KM = 150.0         # a carrier group makes about 30 kt: 150 km is a
 CARRIER_STAY_KM = 30.0          # hysteresis: a better spot closer than this is not worth the move
 GRID_KM = 20.0
 BAND_KM = 80.0                  # S115 (XO 2026-11-20: "the carrier should be on a semi random spot ... to give it plausibility of not being found"): the station is drawn among the allowed spots no more than this much farther from the front than the nearest one (judgment call)
+BAND_FIELD_NM = 30.0            # S120: a station is also never farther than this beyond the standoff from the nearest red airfield (a judgment call; the Hornets must be able to reach the front)
 BAND_DAYS = 3                   # S115: a new spot is drawn every this many days (a seeded draw: the same campaign gives the same spots), so the fleet does not sit on one point
 EVADE_NM = 215.0                # S115: a staged carrier raid: the fleet sails out to this far from every red airfield (S118: 215 = the Kh-22's reach as DCS flies it, `raid_spawns.RAID_REACH_NM` 208 nm, plus 7 nm margin, a judgment call; was 230; the pack's `carrier_evade_nm` replaces it) or, where the sea is too small, as far as it can get
 EVADE_MOVE_KM = 250.0           # S115: the most the fleet moves in the day it runs from a raid (a carrier group makes 30 kt: 3 to 4 hours for the 100 nm it needs; the normal 150 km a day is the stay-on-station pace)
@@ -93,7 +94,8 @@ def _all_spots(state, max_move_km, fields, stand_m):
 
 
 def band_spot(state, max_move_km: float | None) -> tuple | None:
-    """S115: a seeded draw among the allowed spots within BAND_KM of the nearest one (the pack's `carrier_band_km` replaces it), drawn once every BAND_DAYS days; -> ((x, y), whether the carrier is in the band now) or None."""
+    """S115: a seeded draw among the allowed spots within BAND_KM of the best one (the pack's `carrier_band_km` replaces it), drawn once every BAND_DAYS days; -> ((x, y), whether the carrier is in the band now) or None.
+    S120: the band is a DISC around the best spot (S115 measured the distance to the front, a ring that ran round the whole front) and no spot is more than BAND_FIELD_NM beyond the standoff from the nearest red airfield."""
     import random
     from . import theatres
     cv = next((b for b in state.bases.values() if b.kind == BaseKind.CARRIER), None)
@@ -104,12 +106,14 @@ def band_spot(state, max_move_km: float | None) -> tuple | None:
     if not allp:
         return None
     band_m = float((theatres.active().get("carrier") or {}).get("carrier_band_km", BAND_KM)) * 1000.0
-    d0 = min(s[0] for s in allp)                                     # the band is measured from the nearest allowed spot anywhere, not from what is in reach today
-    lx, ly = ground.line_xy(state.ground)
-    in_band = math.hypot(cv.x - lx, cv.y - ly) <= d0 + band_m
+    best = min(allp)                                                 # the best spot anywhere (nearest the front), not what is in reach today
+    cap_m = stand_m + BAND_FIELD_NM * NM
+    nearest_red = lambda x, y: min(math.hypot(x - fx, y - fy) for fx, fy in fields) if fields else 0.0
+    ok_band = lambda x, y: math.hypot(x - best[1], y - best[2]) <= band_m and nearest_red(x, y) <= cap_m
+    in_band = ok_band(cv.x, cv.y)
     reach = (max_move_km * 1000.0) if max_move_km is not None else 1e12
     near = [s for s in allp if math.hypot(s[1] - cv.x, s[2] - cv.y) <= reach]
-    pool = sorted((s[1], s[2]) for s in near if s[0] <= d0 + band_m)
+    pool = sorted((s[1], s[2]) for s in near if ok_band(s[1], s[2]))
     if not pool:                                                    # the band is out of reach today (back from a run): the reachable spot nearest the front, and on the next day again
         return (min(near, key=lambda s: s[0])[1:], False) if near else None
     return random.Random(f"{state.campaign_id}:{state.day // BAND_DAYS}:cv").choice(pool), in_band
