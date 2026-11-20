@@ -1,5 +1,6 @@
 """Headless core-function test (no DCS). Run:  python tools/smoke_test.py   (options: --list, --only a,b, --timeout SECONDS)
 Isolated: a temporary folder for everything, APPDATA redirected, your real settings and campaigns are never touched; the temp data is deleted at the end.
+Parallel (S124, XO 2026-11-20): the default run splits the checks over worker processes (one TMP / APPDATA each; the output is printed in the usual order); `--jobs N` sets the workers, `--jobs 1` is the old serial run. A single check runs in this process.
 Scope (XO 2026-11-06, see .claude/smoke test plan.md): (1) loads, saves, campaigns, compatibility; (2) the dialogs and the main window build; (3) missions are generated;
 (4) every package carries its required flight; (5) the .miz structure loads in DCS without errors. Assert STRUCTURE, never values: no constant, no state.day value, no waypoint, job, role or kit name, no
 game or hook text. An assert that ends with us changing this file instead of fixing SQE is invalid: remove it, do not relax it.
@@ -402,15 +403,17 @@ LOCK_CASES = [("F-16C", 3, 7, False), ("F-16C", 3, 7, True), ("F-15C", 3, 3, Tru
 LOCK_TURNS = 6                                                # a plan is one turn's tasking: walk a few turns so every kind of package turns up
 
 
-def lock_builds():
+def lock_builds(cases=None):
     """Lazy, runs once: [(label, miz_bytes)] for one package of every kind the plan offers (objective type and aim), built as the player's own flight and as the
-    all-AI test (your flight gets the full AI task set), plus the BARCAP / fleet-defence / sweep packages nobody can fly (the first flight stands in for yours)."""
+    all-AI test (your flight gets the full AI task set), plus the BARCAP / fleet-defence / sweep packages nobody can fly (the first flight stands in for yours).
+    With `cases` (a subset of LOCK_CASES, S124: one case per worker) it builds just those, uncached."""
     global _lock_built
-    if _lock_built is None:
+    if cases is not None or _lock_built is None:
         _fixed_ids("lock-sweep")
         import random
+        keep = _lock_built
         _lock_built = []
-        for ac, lv, seed, opened in LOCK_CASES:
+        for ac, lv, seed, opened in (LOCK_CASES if cases is None else cases):
             s = fresh_session(lv, seed, ac)
             if opened:
                 for a in s.state.assets.values():
@@ -442,25 +445,42 @@ def lock_builds():
                             continue
                         _lock_built.append((f"{ac} L{lv} {p.objective.type.value}/{p.objective.aim} {'all-AI' if ai else 'player'}", miz))
                 advance(s)
+        if cases is not None:                                     # a subset is not cached
+            part, _lock_built = _lock_built, keep
+            return part
     return _lock_built
 
 
 _lock_built = None
 
 
-def check_waypoint_locks():
-    """The lock rules (see `_lock_problems`) on every plane and helicopter group of the five jets' missions and of one mission per kind of package, player and all-AI."""
+def lock_part(part):
+    """The lock rules on one part of the sweep: part None = the jets' own missions (`builds()`), an int = that LOCK_CASES entry (S124: one part per worker). -> (problems, groups checked, package builds)."""
     bad, n, m = [], 0, 0
-    for ac, _s, _p, miz in builds():
-        if miz:
-            b, k = _lock_problems(_mission(miz)[1], ac)
-            bad += b; n += k
-    for label, miz in lock_builds():
+    if part is None:
+        for ac, _s, _p, miz in builds():
+            if miz:
+                b, k = _lock_problems(_mission(miz)[1], ac)
+                bad += b; n += k
+        return bad, n, m
+    for label, miz in lock_builds([LOCK_CASES[part]]):
         assert not isinstance(miz, Exception), (label, "the build raised", repr(miz))
         b, k = _lock_problems(_mission(miz)[1], label)
         bad += b; n += k; m += 1
+    return bad, n, m
+
+
+def lock_report(parts):
+    """Assert and print for the merged results of `lock_part`."""
+    bad = [x for p in parts for x in p[0]]
+    n, m = sum(p[1] for p in parts), sum(p[2] for p in parts)
     assert not bad, "; ".join(bad[:12]) + (f"; ... {len(bad) - 12} more" if len(bad) > 12 else "")
     print(f"[locks] rules A, B (and C on the player's groups) on {n} plane and helicopter groups, {m} package builds (one per kind of package, player and all-AI)")
+
+
+def check_waypoint_locks():
+    """The lock rules (see `_lock_problems`) on every plane and helicopter group of the five jets' missions and of one mission per kind of package, player and all-AI."""
+    lock_report([lock_part(p) for p in [None] + list(range(len(LOCK_CASES)))])
 
 
 def check_hook_lua():
@@ -506,30 +526,35 @@ SOAK_RELOAD_EVERY = 25                                        # every N skips: s
 SOAK_SEEDS = 1                                                # `--seeds N`: each level runs N seeds (seed, seed+1, ...)
 
 
+def soak_case(level, seed):
+    """One soak campaign: skip to the end of the war."""
+    s, n = fresh_session(level, seed), 0
+    try:
+        while n < SOAK_MAX_SKIPS and s.state.status == "ACTIVE":
+            s.skip_turn()
+            n += 1
+            if n % SOAK_FLY_EVERY == 0:
+                pk = first_flyable(s)
+                if pk is not None:
+                    s.fly(pk.number, s.flyable(pk)[0].id)
+                    _status, got = fake_debrief(s)
+                    s.apply(got)
+            if n % SOAK_RELOAD_EVERY == 0 and s.state.status == "ACTIVE":
+                s.save()
+                r = mk()
+                r.open(s.path)
+                s = r
+    except BaseException:
+        print(f"[soak] FAILED: level {level}, seed {seed}, skip {n + 1}  (replay: --only soak, level {level} seed {seed})")
+        raise
+    print(f"[soak] level {level} seed {seed}: {n} skips, final status {s.state.status}")
+
+
 def check_soak():
     """Skip to the end of the war on three campaigns. The ONLY assert is "no exception": a failure prints level, seed and skip number, then re-raises."""
     for level, seed0 in SOAK_CASES:
         for seed in range(seed0, seed0 + SOAK_SEEDS):
-            s, n = fresh_session(level, seed), 0
-            try:
-                while n < SOAK_MAX_SKIPS and s.state.status == "ACTIVE":
-                    s.skip_turn()
-                    n += 1
-                    if n % SOAK_FLY_EVERY == 0:
-                        pk = first_flyable(s)
-                        if pk is not None:
-                            s.fly(pk.number, s.flyable(pk)[0].id)
-                            _status, got = fake_debrief(s)
-                            s.apply(got)
-                    if n % SOAK_RELOAD_EVERY == 0 and s.state.status == "ACTIVE":
-                        s.save()
-                        r = mk()
-                        r.open(s.path)
-                        s = r
-            except BaseException:
-                print(f"[soak] FAILED: level {level}, seed {seed}, skip {n + 1}  (replay: --only soak, level {level} seed {seed})")
-                raise
-            print(f"[soak] level {level} seed {seed}: {n} skips, final status {s.state.status}")
+            soak_case(level, seed)
 
 
 OPT_IN = []                                                   # checks that run only when `--only` names them (none now)
@@ -552,9 +577,119 @@ CHECKS = [
 ]
 
 
+# ---- parallel run (S124) ----------------------------------------------------------------------------------------------------------------------------
+# Checks that share the five-jet build (`builds()`) stay together in one process (it is built once there); the rest run on their own, and the soak is one task per campaign.
+GROUPS = [["check_saves_round_trip"], ["check_incompatible_saves"], ["check_syria_theatre"], ["check_ecm_install"], ["check_dialogs", "check_main_window"],
+          ["check_fly_debrief_advance", "check_missions_build", "check_required_flights", "check_miz_parses", "check_hook_lua"]]
+LOCK_PARTS = [None] + list(range(len(LOCK_CASES)))              # check_waypoint_locks: one task per part
+
+
+def _timeout_for(name, override):
+    return override if override is not None else (900 if name == "check_soak" else 120)
+
+
+def _run_task(task):
+    """In a worker (or the parent): run one task, print into a buffer, return {name: [text, seconds, error or None]} for each check (the soak: key "check_soak|level|seed"). A watchdog
+    per check as in the serial run; a failed check stops its task and its traceback is returned."""
+    import contextlib
+    import faulthandler
+    import io
+    import time
+    import traceback
+    kind, names, args, timeout = task
+    out = {}
+    jobs = [(n, None) for n in names] if kind == "checks" else [("check_soak" if kind == "soak" else "check_waypoint_locks", args)]
+    for name, soak in jobs:
+        buf = io.StringIO()
+        t0, err = time.time(), None
+        to = _timeout_for(name, timeout)
+        if to:
+            faulthandler.dump_traceback_later(to, exit=True)
+        payload = None
+        key = name if soak is None else (f"{name}|{soak[0]}|{soak[1]}" if kind == "soak" else f"{name}|{-1 if soak[0] is None else soak[0]}")
+        try:
+            with contextlib.redirect_stdout(buf):
+                _fixed_ids(key)
+                if soak is None:
+                    globals()[name]()
+                elif kind == "soak":
+                    soak_case(*soak)
+                else:
+                    payload = lock_part(soak[0])
+        except BaseException:
+            err = traceback.format_exc()
+        faulthandler.cancel_dump_traceback_later()
+        out[key] = [buf.getvalue(), time.time() - t0, err, payload]
+        if err:
+            break
+    out["_lua_skipped"] = [bool(LUA_SKIPPED), 0.0, None, None]
+    return out
+
+
+def _worker_init():
+    import atexit
+    atexit.register(shutil.rmtree, TMP, True)                 # a worker's own temp data goes with it
+
+
+def run_parallel(selected, jobs, timeout):
+    """Run the selected checks over worker processes and print their output in CHECKS order. -> True when every check passed."""
+    import concurrent.futures
+    import multiprocessing
+    import time
+    names = [fn.__name__ for fn in selected]
+    tasks = [("checks", [n for n in g if n in names], None, timeout) for g in GROUPS if any(n in names for n in g)]
+    if "check_soak" in names:
+        tasks += [("soak", [], (level, seed), timeout) for level, seed0 in SOAK_CASES for seed in range(seed0, seed0 + SOAK_SEEDS)]
+    if "check_waypoint_locks" in names:
+        tasks = [("lock", [], (p,), timeout) for p in LOCK_PARTS] + tasks              # the longest check first, so its parts start at once
+    workers = max(1, min(jobs, len(tasks)))
+    print(f"running {len(tasks)} tasks on {workers} worker(s)")
+    t0 = time.time()
+    results = {}
+    try:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn"), initializer=_worker_init) as ex:
+            for res in ex.map(_run_task, tasks):
+                results.update(res)
+    except concurrent.futures.process.BrokenProcessPool:
+        print("a worker process died (a check hit its timeout or crashed the interpreter): run that check alone with --only to see the traceback")
+        return False
+    ok, times = True, []
+    for n in names:
+        keys = [k for k in results if k == n or k.startswith(n + "|")]
+        parts = []
+        for k in sorted(keys, key=lambda k: [int(x) for x in k.split("|")[1:]]):
+            text, secs, err, payload = results[k]
+            print(text, end="")
+            times.append((secs, k))
+            if err:
+                print(err)
+                ok = False
+            if payload is not None:
+                parts.append(payload)
+        if n == "check_waypoint_locks" and parts and len(parts) == len(LOCK_PARTS):      # merge the parts and report as the serial check does
+            import contextlib
+            import io
+            buf = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(buf):
+                    lock_report(parts)
+            except AssertionError:
+                import traceback
+                print(traceback.format_exc())
+                ok = False
+            print(buf.getvalue(), end="")
+        if not keys:
+            print(f"[{n}] not run: an earlier check of its group failed")
+    if results.get("_lua_skipped", [False])[0]:
+        LUA_SKIPPED.append(True)
+    print(f"{len(tasks)} tasks on {workers} worker(s), {time.time() - t0:.0f} s wall time; " + "slowest checks: " + ", ".join(f"{n} {t:.0f} s" for t, n in sorted(times, reverse=True)[:5]))
+    return ok
+
+
 def main(argv=None):
     """Run the checks in order. Options: `--list` (names only), `--only a,b` (the checks whose name contains a or b), `--timeout SECONDS` (a check that
-    runs longer dumps every thread's traceback and stops the run; default 120, 900 for the soak, 0 = off), `--seeds N` (soak: N seeds per level)."""
+    runs longer dumps every thread's traceback and stops the run; default 120, 900 for the soak, 0 = off), `--seeds N` (soak: N seeds per level),
+    `--jobs N` (worker processes, default the cores minus two; 1 = everything in this process, the old serial run)."""
     import argparse
     import faulthandler
     import time
@@ -563,6 +698,7 @@ def main(argv=None):
     ap.add_argument("--only", default="")
     ap.add_argument("--timeout", type=int, default=None)
     ap.add_argument("--seeds", type=int, default=1)
+    ap.add_argument("--jobs", type=int, default=None)
     args = ap.parse_args(argv)
     global SOAK_SEEDS
     SOAK_SEEDS = max(1, args.seeds)
@@ -573,6 +709,14 @@ def main(argv=None):
     print(f"SQE smoke test, version {sqe.__version__}  (isolated temp data: {TMP})")
     want = [w for w in args.only.split(",") if w]
     run = [fn for fn in CHECKS + OPT_IN if (want and any(w in fn.__name__ for w in want)) or (not want and fn in CHECKS)]
+    jobs = args.jobs if args.jobs is not None else max(1, (os.cpu_count() or 2) - 2)
+    if jobs > 1 and len(run) > 1:                                # S124: the default run goes over the cores
+        ok = run_parallel(run, jobs, args.timeout)
+        if not ok:
+            sys.exit(1)
+        if not want:
+            print("SMOKE TEST PASSED" + (" (Lua hook not run: lupa is not installed)" if LUA_SKIPPED else ""))
+        return
     times = []
     for fn in run:
         timeout = args.timeout if args.timeout is not None else (900 if fn is check_soak else 120)      # the soak needs its own, longer watchdog
