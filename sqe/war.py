@@ -937,7 +937,7 @@ def update_status(state: CampaignState) -> str:
         if by_ground and ground.victory(state):
             state.status = "VICTORY"; state.note("VICTORY: the objectives are ours and the enemy has nothing left to throw at us.")
         elif works.gone(state):                                         # S111: every one of Lutorin's works destroyed (a pack with `works`): the coalition's win that is not a conquest
-            state.status = "VICTORY"; state.note("VICTORY: the works are gone and the enemy's patron has lost what he came for.")
+            state.status = "VICTORY"; state.note("VICTORY: Lutorin Works is gone and the enemy's patron has lost what he came for.")
             for ln in story.beat(state, "works_win"):
                 state.note(ln)
         elif (state.ground or {}).get("supply_won"):                    # S90: a pack's Force Index win (`ground.update_supply_win`; the old air / command win below stays an alternative)
