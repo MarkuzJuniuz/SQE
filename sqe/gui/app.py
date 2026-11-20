@@ -730,6 +730,23 @@ class MainWindow(QMainWindow):
             p.setObjectName("pill"); hdr.addWidget(p)
         hdr.addStretch(1)
         self.banner = QLabel(); self.banner.setObjectName("pill"); hdr.addWidget(self.banner)
+        # S115 (XO 2026-11-20, mockup A): the intelligence banner of a staged carrier raid. One strip between the header and the page stack, so every page slides down while it shows;
+        # hidden (no space) otherwise. Plain: the look (colours, size) is XO's, in theme.py `intel*`.
+        self.intel = QFrame(); self.intel.setObjectName("intel")
+        il = QHBoxLayout(self.intel); il.setContentsMargins(18, 14, 18, 14); il.setSpacing(16)
+        chip = QLabel("!"); chip.setObjectName("intelchip"); chip.setFixedSize(46, 46); chip.setAlignment(Qt.AlignCenter); il.addWidget(chip)
+        ic = QVBoxLayout(); ic.setSpacing(3); il.addLayout(ic, 1)
+        self.intel_head, self.intel_text, self.intel_sub = QLabel(), QLabel(), QLabel()
+        self.intel_head.setObjectName("intelhead"); self.intel_text.setObjectName("inteltext"); self.intel_sub.setObjectName("intelsub")
+        for w in (self.intel_text, self.intel_sub):
+            w.setWordWrap(True)
+        for w in (self.intel_head, self.intel_text, self.intel_sub):
+            ic.addWidget(w)
+        ir = QVBoxLayout(); ir.setSpacing(6); il.addLayout(ir)
+        self.intel_pills = [QLabel(), QLabel()]
+        for p in self.intel_pills:
+            p.setObjectName("pill"); ir.addWidget(p, 0, Qt.AlignRight)
+        main.addWidget(self.intel); self.intel.hide()
         main.addWidget(self.stack, 1)
         self._menus()
         QApplication.instance().installEventFilter(self)                                    # v0.41.151: developer secret Ctrl+Space (see eventFilter)
@@ -1083,6 +1100,13 @@ class MainWindow(QMainWindow):
             pill.setText(txt)
         self.banner.setText({"ACTIVE": "Sortie pending" if st.pending else "", "VICTORY": "VICTORY", "DEFEAT": "DEFEAT"}[st.status])
         self.banner.setVisible(bool(self.banner.text()))
+        from .. import bombers as _bombers
+        it = _bombers.intel(st) if st.status == "ACTIVE" else None          # S115: the staged carrier raid's intelligence pickup (None: no banner, no space)
+        if it:
+            self.intel_head.setText(it["head"]); self.intel_text.setText(it["text"]); self.intel_sub.setText(it["sub"])
+            for p, t in zip(self.intel_pills, it["pills"]):
+                p.setText(t)
+        self.intel.setVisible(bool(it))
         self.setWindowTitle(f"{APP_NAME} - {st.name}" + ("  [AI TEST: your flight is flown by the AI]" if getattr(self.session, "ai_test", False) else "") + ("  [FULL MAP: no restrictions]" if getattr(self.session, "full_map", False) else "")
                             + (f"  [LATE SEAD: +{self.session.late_sead_min} min, from the next planned day]" if getattr(self.session, "late_sead_min", 0) else ""))
 

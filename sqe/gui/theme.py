@@ -41,6 +41,11 @@ QListWidget::item:selected {{ background: #1f3a55; border: 1px solid {BLUE}; }}
 QListWidget::item:hover {{ background: {CARD}; }}
 QHeaderView::section {{ background: {CARD}; color: {DIM}; border: none; border-bottom: 1px solid {BORDER}; padding: 6px; font-weight: 600; }}
 QTableWidget {{ gridline-color: {BORDER}; }}
+QFrame#intel {{ background: #3a1a22; border: 1px solid {RED}; border-radius: 12px; }}      /* S115: the intelligence banner of a staged carrier raid (mockup A); XO restyles */
+QLabel#intelchip {{ background: {RED}; color: #2a0a10; border-radius: 23px; font-size: 24px; font-weight: 800; }}
+QLabel#intelhead {{ color: #ff9aa5; font-size: 11px; font-weight: 800; letter-spacing: 1px; background: transparent; }}
+QLabel#inteltext {{ font-size: 16px; font-weight: 600; background: transparent; }}
+QLabel#intelsub {{ color: #f1c4cb; background: transparent; }}
 QProgressBar {{ background: {PANEL}; border: 1px solid {BORDER}; border-radius: 6px; text-align: center; height: 14px; color: {TEXT}; }}
 QProgressBar::chunk {{ background: {BLUE}; border-radius: 5px; }}
 QMenuBar {{ background: {PANEL}; }} QMenuBar::item:selected, QMenu::item:selected {{ background: #22476b; }}

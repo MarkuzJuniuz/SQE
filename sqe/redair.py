@@ -164,9 +164,13 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
     night = clock.is_night_turn(turn)
     led, held = red_ledger(state, lvl, clock.minute(turn))
     bc = barcap.ensure(state)
+    from . import bombers
+    gb = bombers.guard_base(state, lvl)                                    # S116: the quiet day before a carrier raid: no ordinary patrol from the bomber field, fighters from other fields cover it
     flights, cands = [], []
     for w in sorted(state.enemy_air, key=lambda w: w.base_asset_id):
         sqs = [q for q in w.sqns if q.id in led.free]
+        if gb and w.base_asset_id == gb[0]:
+            continue
         if sqs:
             cands += [(w, ar, sqs) for ar in bc["red"] if ar["asset"] == w.base_asset_id]
     want = RED_CAP_SHARE[lvl][1 if night else 0] * len(cands)
@@ -183,6 +187,23 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
             flights.append({"id": f"rf{turn}-{ar['id']}.{j}", "kind": "CAP", "wing": w.base_asset_id, "type": sq.aircraft, "size": 2, "start": lo, "end": hi, "x": ar["x"], "y": ar["y"],
                             "area": ar["id"], "bearing": ar["bearing"], "ax": ar["ax"], "ay": ar["ay"], "turn": turn, "wave": wave, "squadron": sq.id})
         up += 1 if got else 0
+    if gb:                                                                 # S116: the guard: gb[1] pairs over the bomber field, by day and night, from the nearest fields that have fighters ready
+        base = state.assets[gb[0]]
+        areas = [ar for ar in bc["red"] if ar["asset"] == gb[0]]
+        if areas:
+            ar = areas[0]
+            src = sorted((w for w in state.enemy_air if w.base_asset_id != gb[0] and dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y) <= bombers.GUARD_FROM_NM * NM),
+                         key=lambda w: (dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y), w.base_asset_id))
+            made = 0
+            for w in src:
+                if made >= gb[1]:
+                    break
+                sqs = [q for q in w.sqns if q.id in led.free]
+                got = blue_barcap._pairs(led, sqs, t0, t1, 0) if sqs else []
+                for j, (sq, wave, lo, hi) in enumerate(got):
+                    flights.append({"id": f"rf{turn}-{ar['id']}.g{made}.{j}", "kind": "CAP", "wing": w.base_asset_id, "type": sq.aircraft, "size": 2, "start": lo, "end": hi, "x": ar["x"], "y": ar["y"],
+                                    "area": ar["id"], "bearing": ar["bearing"], "ax": ar["ax"], "ay": ar["ay"], "turn": turn, "wave": wave, "squadron": sq.id, "guard": True})
+                made += 1 if got else 0
     g = state.ground or {}
     contested = [i for i, (r, b) in enumerate(zip(g.get("red", []), g.get("blue", []))) if r >= 15 and b >= 15]
     sw_p = 0.0 if night else SWEEPS_PER_DAY[lvl] / max(1, DAY_TURNS)         # the day's sweeps spread over its day turns by a seeded chance (judgment call)

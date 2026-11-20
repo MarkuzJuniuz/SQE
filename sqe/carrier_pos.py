@@ -15,6 +15,10 @@ CARRIER_COAST_NM = 25.0         # the same clearance mission_builder.carrier_sta
 CARRIER_MOVE_KM = 150.0         # a carrier group makes about 30 kt: 150 km is about 4 hours' steaming at 20 kt, a day's repositioning with room to spare (judgment call)
 CARRIER_STAY_KM = 30.0          # hysteresis: a better spot closer than this is not worth the move
 GRID_KM = 20.0
+BAND_KM = 80.0                  # S115 (XO 2026-11-20: "the carrier should be on a semi random spot ... to give it plausibility of not being found"): the station is drawn among the allowed spots no more than this much farther from the front than the nearest one (judgment call)
+BAND_DAYS = 3                   # S115: a new spot is drawn every this many days (a seeded draw: the same campaign gives the same spots), so the fleet does not sit on one point
+EVADE_NM = 230.0                # S115: a staged carrier raid: the fleet sails out to this far from every red airfield (the Kh-22's reach is about 216 nm; the pack's `carrier_evade_nm` replaces it) or, where the sea is too small, as far as it can get
+EVADE_MOVE_KM = 250.0           # S115: the most the fleet moves in the day it runs from a raid (a carrier group makes 30 kt: 3 to 4 hours for the 100 nm it needs; the normal 150 km a day is the stay-on-station pace)
 
 
 def standoff_nm(state) -> float:
@@ -63,6 +67,93 @@ def best_spot(state, max_move_km: float | None) -> tuple | None:
     return best
 
 
+def _all_spots(state, max_move_km, fields, stand_m):
+    """Every allowed spot within max_move_km of the carrier (None: unlimited), as (distance to the front, x, y)."""
+    cv = next((b for b in state.bases.values() if b.kind == BaseKind.CARRIER), None)
+    lx, ly = ground.line_xy(state.ground)
+    reach = (max_move_km * 1000.0) if max_move_km is not None else 1e12
+    step = GRID_KM * 1000.0
+    xs = [a.x for a in state.assets.values()] + [b.x for b in state.bases.values()]
+    ys = [a.y for a in state.assets.values()] + [b.y for b in state.bases.values()]
+    x0, x1, y0, y1 = min(xs) - 250000, max(xs) + 250000, min(ys) - 250000, max(ys) + 250000
+    from . import theatres
+    mb = theatres.hook("map_box")
+    if mb is not None:
+        x0, x1, y0, y1 = max(x0, float(mb["x0"])), min(x1, float(mb["x1"])), max(y0, float(mb["y0"])), min(y1, float(mb["y1"]))
+    out = []
+    cx = x0
+    while cx <= x1:
+        cy = y0
+        while cy <= y1:
+            if math.hypot(cx - cv.x, cy - cv.y) <= reach and _ok(cx, cy, fields, stand_m):
+                out.append((math.hypot(cx - lx, cy - ly), cx, cy))
+            cy += step
+        cx += step
+    return out
+
+
+def band_spot(state, max_move_km: float | None) -> tuple | None:
+    """S115: a seeded draw among the allowed spots within BAND_KM of the nearest one (the pack's `carrier_band_km` replaces it), drawn once every BAND_DAYS days; -> ((x, y), whether the carrier is in the band now) or None."""
+    import random
+    from . import theatres
+    cv = next((b for b in state.bases.values() if b.kind == BaseKind.CARRIER), None)
+    if cv is None or not ground.active(state):
+        return None
+    fields, stand_m = _red_fields(state), standoff_nm(state) * NM
+    allp = _all_spots(state, None, fields, stand_m)
+    if not allp:
+        return None
+    band_m = float((theatres.active().get("carrier") or {}).get("carrier_band_km", BAND_KM)) * 1000.0
+    d0 = min(s[0] for s in allp)                                     # the band is measured from the nearest allowed spot anywhere, not from what is in reach today
+    lx, ly = ground.line_xy(state.ground)
+    in_band = math.hypot(cv.x - lx, cv.y - ly) <= d0 + band_m
+    reach = (max_move_km * 1000.0) if max_move_km is not None else 1e12
+    near = [s for s in allp if math.hypot(s[1] - cv.x, s[2] - cv.y) <= reach]
+    pool = sorted((s[1], s[2]) for s in near if s[0] <= d0 + band_m)
+    if not pool:                                                    # the band is out of reach today (back from a run): the reachable spot nearest the front, and on the next day again
+        return (min(near, key=lambda s: s[0])[1:], False) if near else None
+    return random.Random(f"{state.campaign_id}:{state.day // BAND_DAYS}:cv").choice(pool), in_band
+
+
+def evade_nm(state) -> float:
+    from . import theatres
+    return float((theatres.active().get("carrier") or {}).get("carrier_evade_nm", EVADE_NM))
+
+
+def evading(state) -> bool:
+    """Is the fleet running from a staged carrier raid (today is the staging day or the launch day)?"""
+    return int((state.ground or {}).get("cv_evade", -1)) >= state.day
+
+
+def evade(state) -> str | None:
+    """S115: the day red stages a carrier raid the fleet sails out of the bombers' reach: the allowed-or-not spot within EVADE_MOVE_KM that is at least evade_nm() from every red airfield
+    (open water as usual), the nearest such spot to where it is; else the spot farthest from the nearest red airfield (a small sea). It stays there until the raid has flown (`update`
+    holds it while `evading`). -> a war-log line, or None when it is already clear or cannot move."""
+    g = state.ground
+    cv = next((b for b in state.bases.values() if b.kind == BaseKind.CARRIER), None)
+    if not g or cv is None or not ground.active(state):
+        return None
+    stage = ((state.raids or {}).get("bomber_stage") or {})
+    if int(stage.get("launch", -1)) < state.day:
+        return None
+    g["cv_evade"] = int(stage["launch"])
+    fields = _red_fields(state)
+    if not fields:
+        return None
+    need_m = evade_nm(state) * NM
+    near = lambda x, y: min(math.hypot(x - fx, y - fy) for fx, fy in fields)
+    if near(cv.x, cv.y) >= need_m:
+        return None
+    cand = [(x, y) for _, x, y in _all_spots(state, EVADE_MOVE_KM, fields, 0.0)]
+    ok = [(x, y) for x, y in cand if near(x, y) >= need_m]
+    spot = min(ok, key=lambda p: math.hypot(p[0] - cv.x, p[1] - cv.y)) if ok else (max(cand, key=lambda p: near(*p)) if cand else None)
+    if spot is None or near(*spot) <= near(cv.x, cv.y) + 1000.0:
+        return None
+    moved = math.hypot(spot[0] - cv.x, spot[1] - cv.y) / 1000.0
+    cv.x, cv.y = spot
+    return f"{cv.name} sails {moved:.0f} km out of the bombers' reach, {near(*spot) / NM:.0f} nm from the nearest red airfield."
+
+
 def update(state) -> str | None:
     """Move the fleet for the new day (once per day; a replan the same day changes nothing). -> a log line when it moved, else None."""
     g = state.ground
@@ -73,12 +164,19 @@ def update(state) -> str | None:
         return None
     first = "cv_day" not in g
     g["cv_day"] = state.day
+    if evading(state):                                        # S115: it stays out of reach until the staged raid has flown
+        return None
     spot = best_spot(state, None if first else CARRIER_MOVE_KM)
     if spot is None:
         return None
+    nearest = spot
+    drawn = band_spot(state, None if first else CARRIER_MOVE_KM)        # S115: a seeded spot in the band, not the same point every time
+    spot, in_band = drawn if drawn else (nearest, True)
     lx, ly = ground.line_xy(g)
     now_ok = _ok(cv.x, cv.y, _red_fields(state), standoff_nm(state) * NM)
-    if not first and now_ok and math.hypot(cv.x - lx, cv.y - ly) - math.hypot(spot[0] - lx, spot[1] - ly) < CARRIER_STAY_KM * 1000.0:
+    if not first and now_ok and in_band and state.day % BAND_DAYS != 0:      # it stays on its spot until the next draw (every BAND_DAYS days), unless it is out of the band (back from a run, or a field fell)
+        return None
+    if not first and now_ok and in_band and math.hypot(spot[0] - cv.x, spot[1] - cv.y) < CARRIER_STAY_KM * 1000.0:
         return None
     moved = math.hypot(spot[0] - cv.x, spot[1] - cv.y) / 1000.0
     if moved < 1.0:

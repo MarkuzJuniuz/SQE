@@ -241,6 +241,67 @@ def note_stage(state, dec) -> None:
         state.raids["bomber_stage"] = {**dec["stage"], **stage_extras(state, int(dec["stage"]["launch"]))}
 
 
+def intel(state) -> dict | None:
+    """S115 (XO 2026-11-20): the intelligence pickup of a staged carrier raid, from the day red stages it until the day it launches: {"head", "text", "sub", "pills", "log"} for the banner and the war log, else None.
+    The fiction: Tu-22M3s loaded with Kh-22 missiles on a ramp the coalition can see a day out; the fleet sails out of their reach (`carrier_pos.evade`) and its aircraft fly only the fleet's defence until it is over."""
+    off = (state.raids or {}).get("bomber_off") or {}
+    if QUIET_DAYS > 0 and int(off.get("day", -1)) == state.day:                       # S116: the staged raid was called off today (its field is cut or destroyed)
+        text = f"{off.get('where', 'The bomber base')} {off.get('why', 'is out of action')}: the Tu-22M3 raid on the carrier is called off."
+        sub = "The fleet is returning to its station."
+        return {"head": "INTELLIGENCE \u00b7 CARRIER RAID CALLED OFF", "text": text, "sub": sub, "pills": ["Raid called off", "Carrier returning"], "log": f"INTELLIGENCE: {text} {sub}"}
+    stage = (state.raids or {}).get("bomber_stage") or {}
+    if QUIET_DAYS <= 0 or int(stage.get("launch", -1)) < state.day or _carrier(state) is None:
+        return None
+    bw = _bomber_wing(state)
+    if bw is None:                                                                    # S116: cut or destroyed after it was staged: called off now, the day's start cancels the stage
+        wh, why = _bomber_field(state)
+        return {"head": "INTELLIGENCE \u00b7 CARRIER RAID CALLED OFF", "text": f"{wh} {why}: the Tu-22M3 raid on the carrier is called off.", "sub": "The fleet will return to its station.",
+                "pills": ["Raid called off", "Carrier returning"], "log": f"INTELLIGENCE: {wh} {why}: the Tu-22M3 raid on the carrier is called off."}
+    where = state.assets[bw.base_asset_id].name
+    quiet = int(stage.get("launch", -1)) > state.day
+    head = "INTELLIGENCE \u00b7 CARRIER RAID EXPECTED"
+    text = f"Tu-22M3s are loading Kh-22 missiles at {where}. The raid on the carrier is expected " + ("within a day." if quiet else "today.")
+    sub = ("Fighters from other fields cover the base while its own escorts are held for the raid. " if quiet else "") + "The fleet is sailing out of range, and its aircraft cannot reach inland until the raid is over."
+    return {"head": head, "text": text, "sub": sub, "pills": ["Carrier sailing", "Bomber base guarded" if quiet else "Raid expected today"], "log": f"INTELLIGENCE: {text} {sub}"}
+
+
+def _bomber_field(state) -> tuple:
+    """(name, why) of the Tu-22M3 wing's field when it cannot fly: "is destroyed" or "has its runway cut"; ("The bomber base", "is out of action") when there is no such wing."""
+    w = next((w for w in state.enemy_air if "Tu_22M3" in w.types), None)
+    a = state.assets.get(w.base_asset_id) if w is not None else None
+    if a is None:
+        return "The bomber base", "is out of action"
+    return a.name, ("is destroyed" if a.destroyed else "has its runway cut")
+
+
+def cancel_if_cut(state) -> str | None:
+    """S116 (XO 2026-11-20): a staged raid whose bomber field is cut or destroyed before it launches is called off: no Tu-22M3 could take off. The stage goes, the escorts are free again, the fleet may sail back (`cv_evade`
+    cleared) and today's banner says so (`raids["bomber_off"]`). -> the war-log line, else None."""
+    stage = (state.raids or {}).get("bomber_stage") or {}
+    if QUIET_DAYS <= 0 or int(stage.get("launch", -1)) < state.day or _bomber_wing(state) is not None:
+        return None
+    wh, why = _bomber_field(state)
+    state.raids.pop("bomber_stage", None)
+    state.raids["bomber_off"] = {"day": state.day, "where": wh, "why": why}
+    if state.ground is not None:
+        state.ground["cv_evade"] = -1
+    return f"INTELLIGENCE: {wh} {why}: the staged Tu-22M3 raid on the carrier is called off. The fleet is returning to its station."
+
+
+GUARD_PAIRS = {1: 0, 2: 1, 3: 2}      # S116: pairs a turn that cover the bomber base on the quiet day, from OTHER fields (the base's own escorts are held for the raid)
+GUARD_FROM_NM = 300                   # ...from fields within this of the bomber base
+
+
+def guard_base(state, level: int):
+    """S116: (bomber base asset id, pairs a turn) while the quiet day before a staged raid is on and its field can still fly, else None. Red flies no ordinary patrol from that field; fighters from nearby fields cover it by
+    day and by night (so a night F-117A strike meets them), a tell the player can read. `redair.plan_turn` reads it."""
+    if not is_quiet(state):
+        return None
+    bw = _bomber_wing(state)
+    n = GUARD_PAIRS.get(max(1, min(3, int(level))), 0)
+    return (bw.base_asset_id, n) if bw is not None and n > 0 else None
+
+
 def is_quiet(state) -> bool:
     """Is today the quiet day before a staged raid? Red flies its patrols only: no strikes, raids or surprise raids."""
     return QUIET_DAYS > 0 and ((state.raids or {}).get("bomber_stage") or {}).get("launch", -1) > state.day
@@ -250,7 +311,9 @@ def status_lines(state) -> list:
     """Overview lines: the quiet day (v0.41.148: the damaged-deck line is gone, XO wants no carrier line on the Overview)."""
     out = []
     if is_quiet(state):
-        out.append("Red air is unusually quiet today: no strikes or raids, only patrols. Something is being prepared.")
+        bw = _bomber_wing(state)
+        out.append("Red air is unusually quiet today: no strikes or raids, only patrols"
+                   + (f", and fighters from other fields are on station over {state.assets[bw.base_asset_id].name}" if bw is not None else "") + ". Something is being prepared.")
     return out                                                           # v0.41.148 (XO 2026-10-25): the carrier gets no line on the Overview
 
 

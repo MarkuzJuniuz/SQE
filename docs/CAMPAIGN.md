@@ -3,7 +3,7 @@
 What the war is, what happens each turn, and the rules behind it. For installing and running SQE see `docs/GUIDE.md`
 (section 4 there is the short "how a turn works"); for adding a map see `docs/THEATRES.md`.
 
-Checked against the code as of v0.41.525, for both maps (the Caucasus, and Syria in section 10). The mod is still evolving, so things may change (see the last section). Numbers are
+Checked against the code as of v0.41.526, for both maps (the Caucasus, and Syria in section 10). The mod is still evolving, so things may change (see the last section). Numbers are
 tuning values in the code and change between versions: where one matters it is named, so you can find it. Several are the author's judgment calls with no public source, and
 where that is the case the code says so next to the number.
 
@@ -205,6 +205,10 @@ estimates a window it judges safe or when it is desperate; at Level 2 only when 
 hurt, or Mozdok is under pressure). This raid is
 a flown set piece: the SEAD packages that clear its approach fly in the turn before.
 
+The carrier does not sit on one spot. Every three days it takes a new station (a seeded pick among the spots within 80 km of the best one: the nearest to the front that keeps the fleet's standoff from every red airfield and 25 nm off the coast), so red cannot count on finding it in the same place. When a raid is staged (the day before it launches, while the wing is loading Kh-22 missiles) blue's intelligence picks that up: a red **INTELLIGENCE** banner shows above every page, a line goes in the war log, and the fleet sails out to at least 230 nm from every red airfield (at most 250 km in the day), so the raid has to come out over open water. At that distance the fleet's aircraft cannot reach inland targets, which is why there are no inland Hornet missions on those days. Once the raid is over the fleet returns to its station.
+
+The staging day is a tell. Red's strikes, raids and surprise raids stop (as before), and the bomber field flies no ordinary patrol: its own escorts are held for the raid, and fighters from other fields within 300 nm cover it instead (two pairs a turn at Level 3, one at Level 2), by day and by night, so a night F-117A strike on the base meets them. The overview says so and the banner pill reads "Bomber base guarded". If the bomber field is cut or destroyed before the raid launches, no Tu-22M3 could take off: the staged raid is called off (banner and war-log line), the escorts are free again and the fleet sails back. A cut that is repaired before launch day does not stop it.
+
 ### Blue's air
 
 Blue has a standing patrol system of its own (next section). It also scrambles alert pairs against raids and, if
@@ -308,7 +312,7 @@ Who you fight depends on the level: Level 1 is **the Northern Coastal Command** 
 
 Red's jets fill each field's parking to about 75% at Level 1 (four small fields), about 70% at Levels 2 and 3 (the same jets per field; Level 2's types are older, a regional power's. Damascus is held back for the bomber wing at Level 3).
 
-Red's raids on troops, garrisons and supply sites are led by the cheap **Su-17M4** attack jet. At Level 3 the Tu-22M3 wing raids the carrier along the line from the carrier through Damascus, at most 12 bombers at a time, flown as a set piece with its SEAD in the turn before, as in section 5.
+Red's raids on troops, garrisons and supply sites are led by the cheap **Su-17M4** attack jet. At Level 3 the Tu-22M3 wing raids the carrier along the line from the carrier through Damascus, at most 12 bombers at a time, flown as a set piece with its SEAD in the turn before, as in section 5. The fleet's station moves and it sails out of the raid's reach on the staging day, as in section 5.
 
 ### Blue in Syria
 
