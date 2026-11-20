@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.531, S121: the escort of a SEAD or JSOW package covers the SEAD flights
+The F-15 / F-16 escort of a package with SEAD or JSOW flights now stands behind the shooters closest to red's fighters (usually the SEAD flights) instead of behind the JSOW flight, which could be 40 km away. A red fighter pair that comes for the SEAD flights now meets the escort.
+
 ## v0.41.530, S122: developer tools look for their scan data in a new folder
 Nothing changes in the game. The developer tools that read or write the Syria scans, the airfield list and the F-14B probe now use `.claude/crew-chief-internal/` instead of `.private/`.
 

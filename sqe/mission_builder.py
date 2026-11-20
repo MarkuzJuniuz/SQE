@@ -78,6 +78,7 @@ TARCAP_NEAR_STRIKE_NM = 22   # v0.41.181 (XO 2026-10-28): a STRIKE package's TAR
 TARCAP_FWD_CAS_NM = 10      # v0.41.181: engage reach past the station for a CAS / strike package's TARCAP (20 for SEAD / DEAD, unchanged); judgment call from two CAS runs where the Eagles pushed out into red's scrambles and lost 9-10 to R-27ERs
 TARCAP_FWD_STRIKE_NM = 12
 TARCAP_NEAR_NM = 18          # v0.41.168 (XO 2026-10-27: 16, the TARCAP dived into red's BARCAP swarm; 26 is a judgment call between the old 16 and the 56 nm that was too far to snipe). v0.41.118: ...then it moves in toward the middle of the shooters' launch points until it is this far from it (judgment call: AIM-54 / AIM-120 reach covers the HARM point from there; still outside the SAM rings and TARCAP_BEHIND_NM from the JSOW point)
+ESCORT_AT_EXPOSED = True     # S121 (XO 2026-11-20, run 2026-11-20_00-29-13: one red Su-27 pair shot down six SEAD F-16s while the package escort stood about 45 km away behind the JSOW flight): the package escort of a SEAD / JSOW package holds ESCORT_BEHIND_NM behind the shooters' launch point nearest red's patrols (the SEAD flights on the red side), not behind the JSOW point. False = the old station (behind the JSOW point)
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
 TARCAP_PKG_ZONE_NM = 15       # v0.41.185 (XO 2026-10-28: the CAS / strike TARCAP goes maverick): the circle of a CAS or strike TARCAP is this big and does not reach out to the BARCAP circle (judgment call)
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
@@ -2588,6 +2589,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 ax_ = bearing(tx, ty, jx_, jy_)
                 back_extra_ = STAND_BACK_NM.get(f.aircraft, 0)         # S45: the Tomcat stands further out (see STAND_BACK_NM)
                 if f.role == Role.ESCORT:                  # the package escort (before v0.41.50 the SWEEP role)
+                    if ESCORT_AT_EXPOSED:                  # S121: behind the launch point nearest red's patrols (the JSOW point when it is the only shooter or the nearest)
+                        lps2_ = self._launch_pts.get(package.id) or self._launch_points(package, geom)
+                        if lps2_:
+                            thr2_ = self._red_approach(sum(q_[0] for q_ in lps2_) / len(lps2_), sum(q_[1] for q_ in lps2_) / len(lps2_))
+                            if thr2_ is not None:
+                                jx_, jy_ = min(lps2_, key=lambda q_: dist(q_[0], q_[1], thr2_[0], thr2_[1]))
+                                ax_ = bearing(tx, ty, jx_, jy_)
                     ex_, ey_ = offset(jx_, jy_, ax_, (ESCORT_BEHIND_NM + back_extra_) * NM)
                 else:
                     # v0.41.43 (XO 2026-10-20): the TARCAP overwatches from just behind the JSOW flight (where it used to turn round with the HARM shooters),
