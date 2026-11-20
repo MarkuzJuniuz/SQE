@@ -90,6 +90,9 @@ class SaveIncompatible(Exception):
                 "squadron_id": pl.get("squadron_id")}
 
 
+_OLD_STAMP = re.compile(r"^\[day (\d+) (\d\d)(\d\d)\] ")     # S129: the war-log stamp before v0.41.538
+
+
 @dataclass
 class CampaignState:
     name: str
@@ -141,7 +144,7 @@ class CampaignState:
     def note(self, text: str) -> None:
         from . import clock
         m = clock.minute(self.turn) % clock.DAY_MIN                    # v0.41.337: [day N HHMM] (the clock's day, so a note written as the clock crosses midnight belongs to the new day)
-        self.log.append(f"[day {clock.day_of(self.turn)} {m // 60:02d}{m % 60:02d}] {text}")
+        self.log.append(f"[Day {clock.day_of(self.turn)}, {m // 60:02d}:{m % 60:02d}] {text}")          # S129: "[Day 1, 12:00]", the header's form (an old save's "[day 1 1200]" is mapped on load)
 
     def enemy_air_at(self, asset_id: str):
         return next((w for w in self.enemy_air if w.base_asset_id == asset_id), None)
@@ -214,7 +217,7 @@ class CampaignState:
         s.blue_sams = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_sams") or {}).items()}      # missing in an older save: sams.ensure_blue_sams builds them from each field's `defense`
         s.plan, s.pending = d.get("plan", []), d.get("pending")
         s.plan_done = d.get("plan_done") or []                            # missing in a save from before v0.41.337: nothing resolved yet today
-        s.history, s.log = d.get("history", []), d.get("log", [])
+        s.history, s.log = d.get("history", []), [_OLD_STAMP.sub(lambda m: f"[Day {m.group(1)}, {m.group(2)}:{m.group(3)}] ", x, count=1) if isinstance(x, str) else x for x in d.get("log", [])]
         _upgrade_cap_tags(s.plan, s.plan_done, s.barcap, s.pending)                  # S52: a save from before the rename holds "BASECAP" / "CVCAP" in flight tags and patrol kinds
         if not s.ground:                           # a campaign from before the ground war (format 4): give it one for its level
             from . import ground
