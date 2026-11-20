@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.543, S134: strike flights keep their run-in when a SAM fires
+Strike flights that carry a jammer (the AI's, and your AI wingmen) now stay on the run-in when a SAM launches at them, from the push point to the egress point: they use their jammer and countermeasures but no longer break away, which had made a runway strike turn back 6 km short of its target without dropping. The jets can now take SAM hits they used to dodge. Their bomb tasks are also pinned to the route altitude.
+
 ## v0.41.542, S133: a wider After-Action Report with bulleted lines
 The After-Action Report is wide enough that its result lines no longer wrap, and each line under a package is a bullet, so a line that does wrap stays under its own bullet.
 
