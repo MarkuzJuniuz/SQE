@@ -205,6 +205,10 @@ class Session(Merging, SeadTiming):
         from . import carrier_pos, fleet as _fleet
         for _ln in _fleet.step(st):                     # v0.41.257: a sunk carrier comes back as new on its day; sunk escorts are replaced
             st.note(_ln)
+        from . import bombers as _bmb
+        _off = _bmb.cancel_if_cut(st)                   # S116: a staged raid whose bomber field is cut or destroyed is called off (the fleet then sails back below)
+        if _off:
+            st.note(_off)
         _cv = None if _fleet.sunk(st) else carrier_pos.update(st)      # v0.41.159: the fleet repositions once a day, along the front and clear of the red airfields
         if _cv:
             st.note(_cv)
@@ -231,7 +235,7 @@ class Session(Merging, SeadTiming):
                 stg_t = ((st.raids or {}).get("bomber_stage") or {})
                 stg_t = stg_t.get("turn") if stg_t.get("launch") == st.day else None      # v0.41.356 (Phase 10b part 1): the launch turn was drawn when the raid was staged (the turn before it plans the prep); an older stage has none: drawn now
                 bomber_turn = stg_t if stg_t in turns else (pick.choice(turns) if turns else st.turn)
-        keep = {k: v for k, v in (st.raids or {}).items() if k in ("carry", "sead_fail", "bomber_days", "bomber_stage", "deck_out_to", "retask", "credit", "credit_in", "f117_last", "opening_strike")}      # S104c: + the F-117A cooldown clock (`f117.cooling`); S104d: + the opening strike's record (`f117.returning`)
+        keep = {k: v for k, v in (st.raids or {}).items() if k in ("carry", "sead_fail", "bomber_days", "bomber_stage", "bomber_off", "deck_out_to", "retask", "credit", "credit_in", "f117_last", "opening_strike")}      # S104c: + the F-117A cooldown clock (`f117.cooling`); S104d: + the opening strike's record (`f117.returning`)
         st.raids = {**keep, "day": st.day, "surprise": 0, "surprise_by": {}, "carry": [], "bomber_turn": bomber_turn, "booked": {}}      # v0.41.341 (Phase 5b): the day's raids are drawn turn by turn in `plan_turn` (`raids.turn_raids`); "surprise" adds up the unwarned ones nobody flew, settled overnight
         bc = barcap_.ensure(st)                          # the day's BARCAP areas (made once a day); the standing patrols, guards and the AWACS / tanker windows are planned turn by turn (`plan_turn`, Phase 4b)
         bc["blue_flights"], bc["blue_cover"], bc["support_flights"], bc["blue_committed"] = [], {}, {}, []

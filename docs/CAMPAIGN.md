@@ -207,6 +207,8 @@ a flown set piece: the SEAD packages that clear its approach fly in the turn bef
 
 The carrier does not sit on one spot. Every three days it takes a new station (a seeded pick among the spots within 80 km of the best one: the nearest to the front that keeps the fleet's standoff from every red airfield and 25 nm off the coast), so red cannot count on finding it in the same place. When a raid is staged (the day before it launches, while the wing is loading Kh-22 missiles) blue's intelligence picks that up: a red **INTELLIGENCE** banner shows above every page, a line goes in the war log, and the fleet sails out to at least 230 nm from every red airfield (at most 250 km in the day), so the raid has to come out over open water. At that distance the fleet's aircraft cannot reach inland targets, which is why there are no inland Hornet missions on those days. Once the raid is over the fleet returns to its station.
 
+The staging day is a tell. Red's strikes, raids and surprise raids stop (as before), and the bomber field flies no ordinary patrol: its own escorts are held for the raid, and fighters from other fields within 300 nm cover it instead (two pairs a turn at Level 3, one at Level 2), by day and by night, so a night F-117A strike on the base meets them. The overview says so and the banner pill reads "Bomber base guarded". If the bomber field is cut or destroyed before the raid launches, no Tu-22M3 could take off: the staged raid is called off (banner and war-log line), the escorts are free again and the fleet sails back. A cut that is repaired before launch day does not stop it.
+
 ### Blue's air
 
 Blue has a standing patrol system of its own (next section). It also scrambles alert pairs against raids and, if
