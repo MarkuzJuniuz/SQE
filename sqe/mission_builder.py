@@ -742,7 +742,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
             ctx = {"date": date_str, "callsign": f"{pf.callsign}-1", "role": task_label(pf, package.objective), "objective": package.objective.description,
                    "comm1": plan.comm1, "comm2": plan.comm2, "fc3": pspec.fc3, "waypoints": kn_rows, "jet": pspec.display,
-                   "numbering": (("0 for the start point, then 1, 2, 3, HB = landing. IP / ST / DP / HA are navigation target points (HA = the hostile area); every other point is on this card only" if self._f14ab else
+                   "numbering": (("0 for the start point, then 1, 2, 3, HB = landing. IP / ST / HA are navigation target points (HA = the hostile area); every other point is on this card only" if self._f14ab else
                                   f"{pspec.first_wp_label} for the start point, then 1, 2, 3...") if pspec.first_wp_label else "waypoint 1 = start point"),
                    "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": weather.metar(self.wx), "mode3": mode3, "laser": laser,
                    "tkr_line": x.get("tkr_line", ""), "bullseye": latlon(bx, by, self.t), "whois": whois, "link16_off": not getattr(self.state, "link16", True), "threats": text["threats"], "n_def": air_pkg.n_def, "target_data": tdata,
@@ -2442,9 +2442,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         return "-"
 
     def _f14ab_scheme(self, package, f, g, wps, first, geom, gate):
-        """S103d / S103e (XO 2026-11-18, probe slot B-B; XO 2026-11-20 the card order): the group keeps the takeoff point, at most three route points as waypoints 1 to 3 (MSHL, PUSH, then the IP or the
-        station) and the landing point (the Home Base); the other route points are dropped from the group and become Editor Navigation Target Points `ST` (the target), `IP` (a fighter's station, also
-        waypoint 3), `DP` (CAP2, or the EGR) and `HA` (the nearest live SAM site with 10 nm reach or more within 80 nm of the target). One of each code. Which points are which: `f14_scheme.choose`.
+        """S103d / S103e / S103f (XO 2026-11-18, probe slot B-B; XO 2026-11-21 from the Jester menu): the group keeps the takeoff point, at most three route points as waypoints 1 to 3 (MSHL, PUSH, EGR) and the
+        landing point (the Home Base); the other route points are dropped from the group. Editor Navigation Target Points: `IP` (a strike's IP, a fighter's station) and `ST` (a strike's target, a fighter's CAP2)
+        and `HA` (the nearest live SAM site with 10 nm reach or more within 80 nm of the target; not a Jester destination, kept in case the HSD shows it). One of each code. Which points are which: `f14_scheme.choose`.
         The route SHAPE is the planner's (the card still lists every point). Tasks hung on a dropped point go with it (a human lead's AI wingmen keep the tasks of the kept points: the IP's attack task
         and a station's orbit). Indices the hook keeps into this group's points (the DEAD gate, the CAS go-home entry) are re-mapped."""
         route = list(wps[first:])
@@ -2452,7 +2452,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if len(pts) != len(route) + 2:                       # an unexpected extra point: leave the route as it is, never guess
             self.warns.append("F-14B: the route has points the 3-waypoint scheme did not expect; left as planned.")
             return
-        keep, st_i, ip_i, dp_i = f14_scheme.choose(route, f.role.value in f14_scheme.GROUND_ROLES)
+        keep, st_i, ip_i = f14_scheme.choose(route, f.role.value in f14_scheme.GROUND_ROLES)
         kept = [1 + i for i in keep]
         old = list(pts)
         pts[:] = [old[0]] + [old[j] for j in kept] + [old[-1]]
@@ -2467,7 +2467,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if c_.get("grp") == g.name:
                 c_["to"] = remap(int(c_["to"]))
         ntp, extra = [], []
-        for code, i in (("IP", ip_i), ("ST", st_i), ("DP", dp_i)):
+        for code, i in (("IP", ip_i), ("ST", st_i)):
             if i is not None:
                 w = route[i]
                 g.add_nav_target_point(self._pt(w.x, w.y), code)
