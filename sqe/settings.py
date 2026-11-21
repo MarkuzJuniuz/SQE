@@ -19,7 +19,7 @@ from pathlib import Path
 
 # S88 R2 (XO 2026-11-17): settings fields renamed to match the dialog labels. old name -> new name; `merge_enemy_pct` is gone (no setting any more: an old file's key is ignored on load).
 RENAMED_FIELDS = {"carcass_weight_pct": "wreck_static_weight_pct", "hold_minutes": "marshal_slack_min", "merge_max_units": "max_units",
-                  "merge_back_min": "merge_earlier_min", "merge_fwd_min": "merge_later_min",
+                  "merge_back_min": "merge_earlier_min", "merge_fwd_min": "merge_later_min", "merge_radius_nm": "target_area_radius_nm",       # S139b: the radius is the target area's now
                   "autoskip_duration_on": "autoskip_crew_rest", "autoskip_hours": "autoskip_crew_rest_hours"}
 
 
@@ -91,10 +91,10 @@ class AppSettings:
     weather_mode: str = "clear"            # "clear" | "procedural" | a fixed weather: scattered, broken, overcast, rain, storm
     ils_low_vis: bool = True               # S63 (XO 2026-11-12): in low ceiling or visibility the ground wind is turned to favour each blue field's ILS runway (DCS lights the ILS only on the active runway, picked by the low-level wind); good weather keeps the real wind
     ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
-    merge_radius_nm: int = 15             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in (v0.41.131: 15, was 25)
-    merge_later_min: int = 30             # v0.41.131: packages that start up to this many minutes AFTER yours fly with you (5 minute steps in Settings, 0 to 60)
+    target_area_radius_nm: int = 15             # S139b (was merge_radius_nm): the target area round your target (supply sites, CAS sectors, ruins, the Missions list nesting, plan-time grouping); no longer limits what FLY merges (v0.41.131: 15, was 25)
+    merge_later_min: int = 30             # v0.41.131: packages that start up to this many minutes AFTER yours fly with you (5 minute steps in Settings, 0 to 240 since S139b)
     merge_v131: bool = False
-    merge_raids_all: bool = True          # S39: raid intercepts that start inside the time windows fly in one mission, at any distance (off: a raid folds in only when its way in passes the target area)
+    merge_raids_all: bool = True          # S39: raid intercepts that start inside the time windows are listed in one mission, at any distance (off: a raid is listed there only when its way in passes the target area); S139b: the Missions list only, FLY takes every raid in the window
     merge_earlier_min: int = 15            # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
     max_units: int = 250                  # v0.41.131: the unit limit counts the WHOLE mission again, merged packages included (ruins go first, then the latest-starting package); the 500 ceiling in sqe/data/limits.json is dormant
     reactive: bool = True                 # enemy reinforcements and blue alert pairs can launch during a sortie
@@ -171,8 +171,8 @@ class AppSettings:
                 s.reactive = True     # v0.41.135 (XO 2026-10-24): reactive dispatch is always on (the checkbox is gone)
                 s.fighter_standoff = True         # v0.41.133 (XO 2026-10-23): TARCAPs, escorts and sweeps always stop short of live SAM cover (the checkbox is gone; off made the AI go banzai)
                 if not raw.get("merge_v131"):
-                    if raw.get("merge_radius_nm") == 25:
-                        s.merge_radius_nm = 15    # still on the old default: move to the new one
+                    if raw.get("target_area_radius_nm") == 25:         # `_apply_renames` has moved an old file's merge_radius_nm here already
+                        s.target_area_radius_nm = 15    # still on the old default: move to the new one
                     s.merge_v131 = True
                 if "patch_asked" not in raw and "auto_patch_scripting" in raw:
                     s.patch_asked = True          # a settings file from before the question existed: the choice stands

@@ -11,9 +11,9 @@ from .packages import Package
 
 
 class Merging:
-    # ---- merge area: a circle around the package's target, kept inside the area where targets exist ---------------------
-    def merge_radius_m(self) -> float:
-        return max(5.0, float(getattr(self.settings, "merge_radius_nm", 15))) * 1852.0
+    # ---- target area: a circle around the package's target, kept inside the area where targets exist (S139b: the Target Area Radius, was the merge radius) ------
+    def area_radius_m(self) -> float:
+        return max(5.0, float(getattr(self.settings, "target_area_radius_nm", 15))) * 1852.0
 
     def _pkg_xy(self, p: Package):
         """The ground target of a package, or None for fleet packages (BARCAP, fleet defence), which are never folded by area."""
@@ -39,7 +39,7 @@ class Merging:
     def merge_center(self, pkg: Package, R: float | None = None):
         """The centre of the merge circle: your target, slid inward so the whole circle stays inside the box that holds every possible target
         (destroyed sites included, so it does not shrink as the war goes on). Your own target always stays inside the circle."""
-        R = self.merge_radius_m() if R is None else R
+        R = self.area_radius_m() if R is None else R
         t = self._pkg_xy(pkg) or self._raid_xy(pkg)
         if t is None:
             return None
@@ -58,7 +58,7 @@ class Merging:
         if self.settings.merge_mode != "area":
             return False
         c, t = self.merge_center(anchor), self._pkg_xy(other) or self._raid_xy(other)
-        return c is not None and t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= self.merge_radius_m()
+        return c is not None and t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= self.area_radius_m()
 
     def _raid_way(self, p: Package):
         """S39: a land raid's way in, ((x0, y0), (x1, y1)): from the bomber wing's field to the point it is going for. None for any other package (the carrier raid stays out)."""
@@ -77,9 +77,9 @@ class Merging:
         return math.hypot(pt[0] - (a[0] + u * dx), pt[1] - (a[1] + u * dy))
 
     def merge_candidates(self, pkg: Package, unseen: bool = False) -> list:
-        """Packages folded into a mission built around `pkg`: every package whose target lies inside the merge circle (Settings: radius, centred by merge_center),
-        starting up to `merge_later_min` minutes AFTER it or up to `merge_earlier_min` minutes BEFORE it (those are already underway when the mission starts). At most six,
-        closest to the centre first, so the unit limit drops the furthest first. Empty when merging is off.
+        """The target-area rule (S139b: FLY no longer uses it, see `fly_candidates`; the Missions list does, `collapse`, `gui/app.py`): the packages whose target lies inside the target-area circle
+        (Settings: Target Area Radius, centred by merge_center), starting up to `merge_later_min` minutes AFTER `pkg` or up to `merge_earlier_min` minutes BEFORE it (those are already underway
+        when the mission starts). No count cap (S139b: the unit limit is the only cap), closest to the centre first, a Fighter Sweep first. Empty when merging is off.
         v0.41.351 (XO 2026-11-10, S8): a land raid (the intercept package; its point is the raided field, supply site or garrison, `_raid_xy`) folds in like any package.
         v0.41.398 (S39): a raid also counts along its way in (`_raid_way`, its wing's field to its target). When `pkg` is a land raid, a package folds in when its point is
         inside the circle OR within the radius of the raid's way in; and with `merge_raids_all` (default) every other land raid in the time window folds in, at any distance.
@@ -90,7 +90,7 @@ class Merging:
         hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
         back = max(0, int(getattr(self.settings, "merge_earlier_min", 15)))
         fwd = max(0, int(getattr(self.settings, "merge_later_min", 30)))
-        R = self.merge_radius_m()
+        R = self.area_radius_m()
         c = self.merge_center(pkg, R)
         if c is None:
             return []
@@ -115,7 +115,7 @@ class Merging:
             if ok:
                 out.append((d, hm(p), p.number, p))
         out.sort(key=lambda r: (not (r[3].objective.type == ObjectiveType.COUNTER_AIR and r[3].objective.aim == "SWEEP"),) + r[:3])     # a Fighter Sweep first: the unit limit drops the strike packages before it
-        picked = [r[3] for r in out[:6]]
+        picked = [r[3] for r in out]
         # v0.41.270 (XO 2026-11-04): the carrier raid folds into no mission: it is red aiming for the king, a setpiece of its own (v0.41.250 folded it into any mission at its time)
         return picked
 
@@ -182,7 +182,7 @@ class Merging:
             return []
         hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
         have = {x.number for x in extras}
-        R = self.merge_radius_m()
+        R = self.area_radius_m()
         c = self.merge_center(pkg, R)
         if c is None:
             return []

@@ -494,7 +494,7 @@ class Session(Merging, SeadTiming):
                 comp[i] = comp[comp[i]]; i = comp[i]
             return i
         use_radius = self.settings.merge_mode == "area"
-        R = self.merge_radius_m()
+        R = self.area_radius_m()
         for i in range(len(pkgs)):
             for j in range(i + 1, len(pkgs)):
                 if packages_linked(st, pkgs[i], pkgs[j]) or (use_radius and self._near(pkgs[i], pkgs[j], R)):

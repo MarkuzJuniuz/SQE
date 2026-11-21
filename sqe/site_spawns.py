@@ -23,8 +23,8 @@ from .strike_tasks import KPH
 
 class SiteSpawns:
     def _spawn_supply_in_radius(self, package, tx, ty, manifest, only_raid: bool = False, max_units: int | None = None) -> None:
-        """v0.41.209 (XO 2026-10-30): every live supply site (fuel farm, depot) of BOTH sides inside the merge radius round the target is in the mission, so a
-        pilot who flies past a depot sees it. The radius is the Settings > Mission Build merge radius (the performance knob). Built last (after every flight and
+        """v0.41.209 (XO 2026-10-30): every live supply site (fuel farm, depot) of BOTH sides inside the target area radius round the target is in the mission, so a
+        pilot who flies past a depot sees it. The radius is the Settings > Mission Build Target Area Radius (the performance knob; S139b, was Merge Radius). Built last (after every flight and
         patrol), nearest first, while the unit limit has room: the rest are left out with a warning, and nothing else is pushed out for them (wrecks fit after).
         v0.41.220 (XO 2026-10-31): a raid scramble's target gets the same circle (`self._raid_xy`; the CAP station that centres the mission is up to 40 nm out from
         it). `only_raid` measures from the raid targets only and `max_units` caps what that call builds: the first call runs BEFORE the raiders and the alert pairs,
@@ -33,7 +33,7 @@ class SiteSpawns:
         st, o = self.state, self.o
         if o.full_map:
             return
-        R = max(5.0, float(o.merge_radius_nm)) * NM
+        R = max(5.0, float(o.target_area_radius_nm)) * NM
         centres = list(getattr(self, "_raid_xy", [])) + ([] if only_raid else [(tx, ty)])
         if not centres:
             return
@@ -67,7 +67,7 @@ class SiteSpawns:
             built += 1
             used += need
         if built < len(cands) and max_units is None:
-            self.warns.append(f"{len(cands) - built} supply sites inside the {o.merge_radius_nm} nm merge radius left out to stay under the {o.max_units}-unit limit (furthest first)")
+            self.warns.append(f"{len(cands) - built} supply sites inside the {o.target_area_radius_nm} nm target area radius left out to stay under the {o.max_units}-unit limit (furthest first)")
 
     def _place_carcasses(self) -> None:
         """Wrecks for every damaged or destroyed ground site near the route. Trimmed to what fits under the unit limit: the furthest

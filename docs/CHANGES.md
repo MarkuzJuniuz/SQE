@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.550, S139b: Settings and the Missions list say what merging does now
+The Merge Radius setting is now the Target Area Radius (the area round your target where supply sites and the ground war are built, earlier strikes show as ruins and packages are listed together); old settings files keep their value. Package Merging reads "On (Nearest First, Up to the Unit Limit)", Later Packages goes up to 240 minutes (one whole turn), and the hints and the Missions list notes say that every package in the time window flies with you as far as the unit limit allows, furthest dropped first. The list no longer stops at six packages.
+
 ## v0.41.549, S139a: a mission takes every package in the time window, nearest first, up to the unit limit
 When you fly, the mission now folds in every package that starts inside the time windows (Settings: Earlier / Later Packages), wherever its target is, nearest to your target first, instead of only those inside the merge radius and at most six. If the mission is over the unit limit the furthest packages are left out first; your own package and the ground war round your target get the unit budget before them (a Fighter Sweep stays while a package it covers stays). Small maps still build in one pass; a crowded one builds up to three times, which takes longer.
 
