@@ -30,10 +30,10 @@ def _units(state):
             continue
         yield "blue", sq, sq.name, False
     for w in state.enemy_air:
-        if "Tu_22M3" in w.types:
-            continue
         a = state.assets.get(w.base_asset_id)
         for q in w.sqns:
+            if q.aircraft == "Tu_22M3" or q.role == "escort":            # B1: the bomber wing's squadrons never stand down (it used to be the whole wing; a bomber field that is also a normal red wing keeps its other squadrons in the rotation)
+                continue
             yield "red", q, (a.name if a else w.base_asset_id) + f" ({q.aircraft.replace('_', '-')})", bool(a is None or a.destroyed)
 
 

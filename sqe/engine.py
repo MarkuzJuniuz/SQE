@@ -597,9 +597,13 @@ class Session(Merging, SeadTiming):
             if oid in old:
                 keep[oid] = {**old[oid], "start": _hm(p.start), "turn": turn}
             elif carrier_raid(st, p.objective) and ex.get("bomber_wing"):
-                jets = [[sid, n, "raid"] for sid, n in redair.take_ready(st, st.enemy_air_at(ex["bomber_wing"]), (ex.get("raider", "Tu_22M3"),), int(ex.get("bombers", 0)))]
+                from .raids import raid_members, escort_members
+                jets = []
+                for aid_, t_, n_ in raid_members(ex):                         # B1: a carrier raid drawn from several bomber fields books each field's share (one field: the one call it was)
+                    jets += [[sid, n, "raid"] for sid, n in redair.take_ready(st, st.enemy_air_at(aid_), (t_,), n_)]
                 if ex.get("escort_wing") and ex.get("escorts"):
-                    jets += [[sid, n, "esc"] for sid, n in redair.take_ready(st, st.enemy_air_at(ex["escort_wing"]), (ex["escort_type"],), int(ex["escorts"]))]
+                    for aid_, t_, n_ in escort_members(ex):
+                        jets += [[sid, n, "esc"] for sid, n in redair.take_ready(st, st.enemy_air_at(aid_), (t_,), n_)]
                 keep[oid] = {"jets": jets, "start": _hm(p.start), "turn": turn}
         st.raids["booked"] = keep
 

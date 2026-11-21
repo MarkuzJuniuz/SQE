@@ -511,6 +511,10 @@
   "ab_nasiriyah": 4
  },
  "bomber_base": "ab_damascus",
+ "bomber_bases": [
+  "ab_damascus",
+  "ab_tiyas"
+ ],
  "squadrons": [
   {
    "id": "vf_11",
@@ -1005,7 +1009,7 @@
    "road_sites_red": 20
   },
   "3": {
-   "bomber_wing": 16,
+   "bomber_wing": 20,
    "bomber_escort_wing": 12,
    "road_sites_red": 20
   }
@@ -1272,8 +1276,8 @@
   "y0": -580000,
   "y1": 580000
  },
- "max_raid": {
-  "3": 12
+ "land_tu": {
+  "3": 4
  },
  "raid_from_base": 12,
  "raid_grace_days": 7

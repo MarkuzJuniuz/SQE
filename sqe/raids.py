@@ -172,15 +172,16 @@ def _reach_by(state, kind: str, x: float, y: float, budget: bool, pref, only, fi
 
 
 def _tu_reach(state, x: float, y: float):
-    """(distance nm, wing, type) when the bomber wing (Mozdok) can reach (x, y) with a Tu-22M3 land strike (radius x 0.85), else None. The wing and its field are checked by `bombers._bomber_wing`."""
+    """(distance nm, wing, type) when a bomber wing (Mozdok; B1: the nearest of the bomber fields that are up) can reach (x, y) with a Tu-22M3 land strike (radius x 0.85), else None. The wings and their fields are checked by `bombers.bomber_wings`."""
     from . import bombers
     from .loadouts import ENEMY_RADIUS_NM
-    bw = bombers._bomber_wing(state)
-    if bw is None:
-        return None
-    a = state.assets[bw.base_asset_id]
-    nm = math.hypot(a.x - x, a.y - y) / NM
-    return (nm, bw, TU22) if nm <= ENEMY_RADIUS_NM[TU22] * 0.85 else None
+    best = None
+    for bw in bombers.bomber_wings(state):
+        a = state.assets[bw.base_asset_id]
+        nm = math.hypot(a.x - x, a.y - y) / NM
+        if nm <= ENEMY_RADIUS_NM[TU22] * 0.85 and (best is None or nm < best[0]):
+            best = (nm, bw, TU22)
+    return best
 
 
 def _nearest_field(state, x: float, y: float):
@@ -539,7 +540,7 @@ def is_kh59(ex) -> bool:
 def raid_members(ex: dict) -> list:
     """S46: [(base asset id of the wing, type, jets)] of a raid plan's raiders, the lead wing first then the `pool` partners (a plan without `pool` is its one wing). `bombers` is the total, the lead flies what the partners do not."""
     pool = ex.get("pool") or []
-    out = [(ex.get("bomber_wing", ""), ex.get("raider"), int(ex.get("bombers", 0)) - sum(int(p["n"]) for p in pool))]
+    out = [(ex.get("bomber_wing", ""), ex.get("raider") or TU22, int(ex.get("bombers", 0)) - sum(int(p["n"]) for p in pool))]      # B1: the carrier raid's plan has no `raider` (it is always the Tu-22M3) and may be pooled over the bomber fields
     out += [(p["wing"], p["raider"], int(p["n"])) for p in pool]
     return [m for m in out if m[2] > 0]
 
@@ -587,7 +588,7 @@ def lose_raiders(state, ex: dict, k: int, rng: random.Random) -> int:
     `wing.lose(raider, k)` as before and draws nothing from `rng`."""
     if not ex.get("pool"):
         bw = state.enemy_air_at(ex.get("bomber_wing", ""))
-        return bw.lose(ex.get("raider"), k) if bw is not None else 0
+        return bw.lose(lose_type(ex, bw), k) if bw is not None else 0
     mem = [(state.enemy_air_at(a), t, n) for a, t, n in raid_members(ex)]
     mem = [m for m in mem if m[0] is not None]
     left = [m[2] for m in mem]
@@ -599,6 +600,14 @@ def lose_raiders(state, ex: dict, k: int, rng: random.Random) -> int:
         left[i] -= 1
         cnt[i] += 1
     return sum(m[0].lose(m[1], c) for m, c in zip(mem, cnt) if c)
+
+
+def lose_type(ex: dict, wing):
+    """B1: the aircraft type a raid's losses come off first: the plan's `raider`. The carrier raid has none and `wing.lose(None, k)` takes from the strongest squadron, which is the Tu-22M3 squadron of a wing made for it (Mozdok: what it
+    always did); a bomber field that is also a normal red field (Syria: Damascus, Tiyas) has other squadrons, so the loss is the Tu-22M3's."""
+    if ex.get("raider") or wing is None:
+        return ex.get("raider")
+    return TU22 if any(q.aircraft != TU22 and q.role != "escort" for q in wing.sqns) else None
 
 
 def sead_jets(state, aim: str, d=None) -> int:
@@ -756,29 +765,50 @@ def plan_raid(state, d, base, aim: str, oid: str, turn: int):
 
 
 def plan_tu_strike(state, d, base, aim: str, oid: str, turn: int):
-    """v0.41.355 (Phase 10a): book a Tu-22M3 LAND STRIKE out of the turn's free red jets: `bombers.LAND_TU` Tu-22M3 and `bombers.LAND_ESCORTS` Su-27 of the Mozdok escort squadron, on the supply site `aim`. The same
+    """v0.41.355 (Phase 10a): book a Tu-22M3 LAND STRIKE out of the turn's free red jets: `bombers.land_tu(d)` Tu-22M3 and `bombers.land_escorts(d)` Su-27 of the bomber fields' escort squadrons, on the supply site `aim`. The same
     plan dict as `plan_raid` (`land`, `raider` Tu_22M3, `jets` ...), so the package, the war sim and the builder treat it as one more land raid. The jets the carrier raid still needs today are left alone
-    (`bombers.carrier_claim`). None when the wing cannot field it."""
+    (`bombers.carrier_claim`). None when the wings cannot field it. B1 (XO 2026-11-21): the jets come from every bomber field that is up (the S46 pool, `pool` / `esc_pool`: the first field gives what it has, the next the rest);
+    each field's day cap (`redair.can`) holds for its own share. With one bomber field it is the booking it was."""
     from . import bombers
     from .loadouts import ENEMY_FIGHTERS
-    bw = bombers._bomber_wing(state)
-    if bw is None:
+    bws = bombers.bomber_wings(state)
+    if not bws:
         return None
     ax, ay = aim_xy(state, aim, base)
-    et = next((q.aircraft for q in bw.sqns if q.role == "escort" and q.aircraft in ENEMY_FIGHTERS), None)
-    if et is None or not redair.can(state, bw.base_asset_id, bombers.LAND_TU + bombers.LAND_ESCORTS):
+    et = next((q.aircraft for bw in bws for q in bw.sqns if q.role == "escort" and q.aircraft in ENEMY_FIGHTERS), None)
+    n_tu, n_es = bombers.land_tu(d), bombers.land_escorts(d)
+    if et is None:
         return None
     c_tu, c_es = bombers.carrier_claim(state, d, turn)
-    if redair.ready_of(state, bw, (TU22,)) - c_tu < bombers.LAND_TU or redair.ready_of(state, bw, (et,)) - c_es < bombers.LAND_ESCORTS:
+    if sum(redair.ready_of(state, bw, (TU22,)) for bw in bws) - c_tu < n_tu or sum(redair.ready_of(state, bw, (et,)) for bw in bws) - c_es < n_es:
+        return None
+    room = {bw.base_asset_id: redair.budget(state, bw.base_asset_id) - redair.used(state, bw.base_asset_id) for bw in bws}          # the day's sorties each field has left
+    tu_ = bombers._fill([(bw, min(redair.ready_of(state, bw, (TU22,)), room[bw.base_asset_id])) for bw in bws], n_tu)
+    if sum(k for _w, k in tu_) < n_tu:
+        return None
+    for w, k in tu_:
+        room[w.base_asset_id] -= k
+    es_ = bombers._fill([(bw, min(redair.ready_of(state, bw, (et,)), room[bw.base_asset_id])) for bw in bws], n_es)
+    if sum(k for _w, k in es_) < n_es:
         return None
     rnd = random.Random(f"{state.campaign_id}:{turn}:{oid}:{base.id}:{aim}:tu")
-    ba = state.assets[bw.base_asset_id]
+    lead, lead_es = tu_[0][0], es_[0][0]
+    ba = state.assets[lead.base_asset_id]
     brg = math.degrees(math.atan2(ba.y - ay, ba.x - ax)) % 360
-    jets = [[sid, n, "raid"] for sid, n in redair.take_ready(state, bw, (TU22,), bombers.LAND_TU)]
-    jets += [[sid, n, "esc"] for sid, n in redair.take_ready(state, bw, (et,), bombers.LAND_ESCORTS)]
-    redair.spend(state, bw.base_asset_id, bombers.LAND_TU + bombers.LAND_ESCORTS)
-    return {"land": True, "raider": TU22, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": bombers.LAND_TU,
-            "bomber_wing": bw.base_asset_id, "escort_wing": bw.base_asset_id, "escort_type": et, "escorts": bombers.LAND_ESCORTS, "mass": False, "aim": aim, "dest": [ax, ay], "jets": jets, "tu_strike": True}
+    jets = []
+    for w, k in tu_:
+        jets += [[sid, n, "raid"] for sid, n in redair.take_ready(state, w, (TU22,), k)]
+        redair.spend(state, w.base_asset_id, k)
+    for w, k in es_:
+        jets += [[sid, n, "esc"] for sid, n in redair.take_ready(state, w, (et,), k)]
+        redair.spend(state, w.base_asset_id, k)
+    plan = {"land": True, "raider": TU22, "brg": round((brg + rnd.uniform(-12, 12)) % 360, 1), "bombers": n_tu,
+            "bomber_wing": lead.base_asset_id, "escort_wing": lead_es.base_asset_id, "escort_type": et, "escorts": n_es, "mass": False, "aim": aim, "dest": [ax, ay], "jets": jets, "tu_strike": True}
+    if len(tu_) > 1:
+        plan["pool"] = [{"wing": w.base_asset_id, "raider": TU22, "n": k} for w, k in tu_[1:]]
+    if len(es_) > 1:
+        plan["esc_pool"] = [{"wing": w.base_asset_id, "type": et, "n": k} for w, k in es_[1:]]
+    return plan
 
 
 def tu_strike(state, d, rng: random.Random, turn: int):

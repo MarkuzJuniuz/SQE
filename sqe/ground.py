@@ -1183,7 +1183,7 @@ def apply_red_fall(state, rb) -> list:
                 k = int(round(q.available * FALL_LOSS))
                 q.available = max(0, q.available - k); lost += k
                 w.sqns.remove(q); dest.sqns.append(q)
-                if q.available > 0 and q.reserve == 0 and "Tu_22M3" not in w.types:        # v0.41.243: red squadrons are out of the line while they move too
+                if q.available > 0 and q.reserve == 0 and q.aircraft != "Tu_22M3" and q.role != "escort":        # v0.41.243: red squadrons are out of the line while they move too (B1: not the bomber wing's own squadrons; per squadron, a bomber field is also a normal red wing in Syria)
                     q.reserve, q.available, q.rest_days = q.available, 0, 0
                     q.move_until = state.turn + (FALL_MOVE_TURNS[0] if math.hypot(state.assets[dest.base_asset_id].x - fx, state.assets[dest.base_asset_id].y - fy) / 1000.0 < FALL_MOVE_NEAR_KM else FALL_MOVE_TURNS[1])
             w.squadrons = len(w.sqns); dest.squadrons = len(dest.sqns)

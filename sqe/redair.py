@@ -165,11 +165,12 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
     led, held = red_ledger(state, lvl, clock.minute(turn))
     bc = barcap.ensure(state)
     from . import bombers
-    gb = bombers.guard_base(state, lvl)                                    # S116: the quiet day before a carrier raid: no ordinary patrol from the bomber field, fighters from other fields cover it
+    gb = bombers.guard_base(state, lvl)                                    # S116: the quiet day before a carrier raid: no ordinary patrol from the bomber field, fighters from other fields cover it (B1: [(field, pairs)], one per bomber field that is up)
+    gids = {g_[0] for g_ in gb}
     flights, cands = [], []
     for w in sorted(state.enemy_air, key=lambda w: w.base_asset_id):
         sqs = [q for q in w.sqns if q.id in led.free]
-        if gb and w.base_asset_id == gb[0]:
+        if w.base_asset_id in gids:
             continue
         if sqs:
             cands += [(w, ar, sqs) for ar in bc["red"] if ar["asset"] == w.base_asset_id]
@@ -187,16 +188,16 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
             flights.append({"id": f"rf{turn}-{ar['id']}.{j}", "kind": "CAP", "wing": w.base_asset_id, "type": sq.aircraft, "size": 2, "start": lo, "end": hi, "x": ar["x"], "y": ar["y"],
                             "area": ar["id"], "bearing": ar["bearing"], "ax": ar["ax"], "ay": ar["ay"], "turn": turn, "wave": wave, "squadron": sq.id})
         up += 1 if got else 0
-    if gb:                                                                 # S116: the guard: gb[1] pairs over the bomber field, by day and night, from the nearest fields that have fighters ready
-        base = state.assets[gb[0]]
-        areas = [ar for ar in bc["red"] if ar["asset"] == gb[0]]
+    for gid_, gpairs_ in gb:                                               # S116: the guard: gpairs_ pairs over each bomber field, by day and night, from the nearest fields that have fighters ready (B1: a bomber field's fighters do not guard another one: they are held too)
+        base = state.assets[gid_]
+        areas = [ar for ar in bc["red"] if ar["asset"] == gid_]
         if areas:
             ar = areas[0]
-            src = sorted((w for w in state.enemy_air if w.base_asset_id != gb[0] and dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y) <= bombers.GUARD_FROM_NM * NM),
+            src = sorted((w for w in state.enemy_air if w.base_asset_id not in gids and dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y) <= bombers.GUARD_FROM_NM * NM),
                          key=lambda w: (dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y), w.base_asset_id))
             made = 0
             for w in src:
-                if made >= gb[1]:
+                if made >= gpairs_:
                     break
                 sqs = [q for q in w.sqns if q.id in led.free]
                 got = blue_barcap._pairs(led, sqs, t0, t1, 0) if sqs else []

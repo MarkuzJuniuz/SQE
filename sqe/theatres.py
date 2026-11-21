@@ -39,7 +39,9 @@ ERA_DEFAULT = {"year": 2006, "a10_variant": "A-10C", "f14_variant": "F-14BU", "l
 #   raid_bomber_types [type, ...]         -> raids.bomber_types()                     (default loadouts.BOMBER_TYPES = ("Su_24M",): field raids, SEAD and Kh-59M raids only)
 #   extra_sams [{id, site, x/y or near+bearing+dist_m, levels, ...}] -> scenario.new_campaign (fixed extra SAM sites; default none)
 #   raid_bearing_deg [lo, hi]             -> bombers.raid_bearing_range()             (default (20, 40): the bearing from the carrier the Tu-22M3 raid arrives on; Syria 200 to 220, out of the open sea)
-#   max_raid {level: n}                   -> bombers.max_raid()                       (default bombers.MAX_RAID {2: 8, 3: 16}: the full Tu-22M3 carrier raid; Syria L3 12)
+#   max_raid {level: n}                   -> bombers.max_raid()                       (default bombers.MAX_RAID {2: 8, 3: 16}: the full Tu-22M3 carrier raid; Syria has none since B1: its 20-jet wing fields the 16)
+#   bomber_bases [red field id, ...]      -> scenario.new_campaign / bombers.bomber_base_ids()   (B1: the Tu-22M3 wing's fields, the first is the lead: the level's `bomber_wing` and `bomber_escort_wing` are split between them; default [bomber_base] (the Caucasus: Mozdok). Syria: Damascus and Tiyas)
+#   land_tu {level: n}                    -> bombers.land_tu()                        (B1: Tu-22M3 in one land strike; default bombers.LAND_TU 2; Syria L3 4)
 #   raid_from_base J                      -> bombers.raid_bearing()                   (default none: the raid's bearing is drawn in raid_bearing_deg; J degrees = it comes along the line from the carrier through the bomber field, plus or minus J: Syria 4)
 #   raid_grace_days N                     -> bombers.grace_days()                     (default 0: red stages no carrier raid while the day is at most N, the surprise opening; Syria 7)
 #   map_box {x0, x1, y0, y1}              -> raid_spawns._map_edges()                 (default the terrain's own bounds: the edge of the map the raid spawns on; Syria: pydcs's bounds are wrong)
@@ -195,6 +197,15 @@ def _check_hooks(d: dict, src) -> None:
         levels_of("max_raid", d["max_raid"])
         if not all(isinstance(n_, int) and not isinstance(n_, bool) and 4 <= n_ <= 40 for n_ in d["max_raid"].values()):
             bad("max_raid values must be whole numbers of bombers, 4 to 40")
+    if "bomber_bases" in d:
+        ids_ = [f["id"] for f in d.get("red_fields", [])]
+        if (not isinstance(d["bomber_bases"], list) or not d["bomber_bases"] or len(set(d["bomber_bases"])) != len(d["bomber_bases"])
+                or not all(isinstance(b_, str) and b_ in ids_ for b_ in d["bomber_bases"])):
+            bad("bomber_bases must be a list of different red field ids (an id from red_fields, e.g. ab_damascus), the lead first")
+    if "land_tu" in d:
+        levels_of("land_tu", d["land_tu"])
+        if not all(isinstance(n_, int) and not isinstance(n_, bool) and 2 <= n_ <= 8 for n_ in d["land_tu"].values()):
+            bad("land_tu values must be whole numbers of Tu-22M3, 2 to 8")
     if "map_box" in d:
         v = d["map_box"]
         if (not isinstance(v, dict) or set(v) != {"x0", "x1", "y0", "y1"} or not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v.values()) or v["x0"] >= v["x1"] or v["y0"] >= v["y1"]):
