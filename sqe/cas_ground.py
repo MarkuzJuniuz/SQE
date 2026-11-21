@@ -325,7 +325,7 @@ class CasGround:
                                 maintask=task.CAS, group_size=2)
         g.set_skill(skill_r)
         _commit(used, ("w", s_["wing"], at_))
-        names = _arm_group(g, enemy_strike_loadout(at_), f"ENM-FS-{s_['wing']}-{i}-")
+        names = _arm_group(g, enemy_strike_loadout(at_, "troops"), f"ENM-FS-{s_['wing']}-{i}-")          # B3: red's front-line strike goes at blue troops: the cluster-bomb kit of `loadouts.STRIKE_KITS`
         tw = g.add_waypoint(pt(bx, by), 9000 * FT, 450 * KPH)
         tw.tasks.append(task.AttackGroup(blue_g.id, group_attack=True))
         apt_r = self.t.airports.get(getattr(st.assets.get(s_["wing"]), "airport", None) or "")
