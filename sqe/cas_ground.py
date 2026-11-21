@@ -232,7 +232,7 @@ class CasGround:
         return jt.units[0].name
 
     def _stage_front_battles(self, package, manifest, tx, ty, route=None, t_s=900.0):
-        """S81 (XO 2026-11-14): the ground war is on the map under any flight. Each sector within the merge radius of the target where both sides still have a force
+        """S81 (XO 2026-11-14): the ground war is on the map under any flight. Each sector within the target area radius of the target where both sides still have a force
         (and that is no CAS package's own battle) gets the red column, the sector's real armour asset, so a strike on it counts as always, and a blue company
         sized by the sector's Blue strength, facing each other across the line; the stronger side creeps forward, weapons free. At most FRONT_BATTLES_MAX, nearest
         first, only while the unit limit has room. The blue company is scenery for the ground war: its losses are named in the debrief but do not change the
@@ -242,7 +242,7 @@ class CasGround:
         g = getattr(st, "ground", None)
         if not g or not g.get("centers") or not ground.active(st):
             return
-        R = max(5.0, float(o.merge_radius_nm)) * NM
+        R = max(5.0, float(o.target_area_radius_nm)) * NM
         cands = []
         for i in range(ground.n_zones(g)):
             if i in self._cas_zones or ground.red_strength(st, i) < ground.MIN_FORCE or ground.blue_strength(st, i) < ground.MIN_FORCE:

@@ -109,8 +109,10 @@ that was skipped.
 
 The war behind the turns (what is planned, how red fights, how the campaign is won or lost) is in `docs/CAMPAIGN.md`.
 
-Two features worth knowing: **package merging** (Settings > Mission build) folds packages whose targets are close into one
-mission, and the **unit limit** there lets you trade detail for performance. `--full-map` (alone or with the AI test) builds
+Two features worth knowing: **package merging** (Settings > Mission build) flies every package that starts inside the time
+windows (15 minutes before and 30 after yours by default) in the same mission, nearest to your target first, and the **unit
+limit** there (250 by default) lets you trade detail for performance: over it, the furthest packages are left out first. The
+**Target Area Radius** (15 nm) sets how much of the ground war round your target is built. `--full-map` (alone or with the AI test) builds
 every sortie with everything on the map, as a stress test, not for play.
 
 ---------------------------------------------------------------------------------------------------

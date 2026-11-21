@@ -257,29 +257,32 @@ class SettingsDialog(QDialog):
 
         # ---- Mission build: merging and limits -----------------------------------------------------------------------------------
         v = page("Mission Build")
-        self.merge = QComboBox(); self.merge.addItem("Off (One Package per Mission)", "off"); self.merge.addItem("Same Area (Targets Inside the Radius)", "area")
+        self.merge = QComboBox(); self.merge.addItem("Off (One Package per Mission)", "off"); self.merge.addItem("On (Nearest First, Up to the Unit Limit)", "area")
         self.merge.setCurrentIndex(1 if settings.merge_mode == "area" else 0)
         self.mmax = StepSpin(); self.mmax.setRange(60, 400); self.mmax.setSuffix(" units max"); self.mmax.setValue(int(settings.max_units))
         row(v, "Package Merging", self.merge, self.mmax)
-        hint(v, "Packages inside the radius that start within the time windows below fly in the same mission (AI-flown, one shared ground "
-                "world and support). The waiting window shows the unit count so you can compare performance. The unit limit counts the whole mission, merged packages included: over it, returning flights go first, then the package that starts latest (a Fighter Sweep last), then wrecks are trimmed.")
-        self.mrad = StepSpin(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "merge_radius_nm", 15)))
-        row(v, "Merge Radius", self.mrad)
-        hint(v, "Packages whose target is inside this circle fly in the same mission (within the time windows below). The circle is centred on your target, "
-                "slid inward so it never hangs over the edge of the target area; your own target stays inside it. A raid also counts along its way in, "
-                "from its airfield to its target. If the unit limit is exceeded, the package that starts latest drops first.")
+        hint(v, "Packages that start inside the time windows below fly in the same mission (AI-flown, one shared ground world and support), wherever their target is, "
+                "nearest to your target first. The unit limit counts the whole mission: over it, the furthest packages are left out first (a Fighter Sweep stays while a package it "
+                "covers stays). Your own package and the ground war round your target get the unit budget before the others, so a crowded mission is built up to three times and "
+                "takes longer. The waiting window shows the unit count so you can compare performance.")
+        self.mrad = StepSpin(); self.mrad.setRange(10, 150); self.mrad.setSingleStep(5); self.mrad.setSuffix(" nm"); self.mrad.setValue(int(getattr(settings, "target_area_radius_nm", 15)))
+        row(v, "Target Area Radius", self.mrad)
+        hint(v, "The area round your target where the supply sites and the ground war are built, where earlier strikes show as ruins, and whose packages are listed "
+                "together in the Missions list. The circle is centred on your target, slid inward so it never hangs over the edge of the map's targets. A bigger radius builds more "
+                "of the ground world and costs units. It no longer limits which packages fly with you: the time windows and the unit limit do.")
         self.mraids = QCheckBox("Merge raids")
         self.mraids.setChecked(bool(getattr(settings, "merge_raids_all", True))); v.addWidget(self.mraids)
-        hint(v, "Raid intercepts that start inside the time windows fly in one mission, wherever the raids are going. Off: a raid folds in only when its way in passes "
-                "your target area. Missions that carry red's raids are marked in the list: red border = only red's raids, amber = your packages and red's raids together.")
+        hint(v, "Only changes the Missions list: on, every raid that starts inside the time windows is listed inside the mission it flies with; off, a raid is listed there only "
+                "when its way in passes your target area. When you fly, every package inside the time windows, raids included, is a candidate whatever this says. Missions that "
+                "carry red's raids are marked in the list: red border = only red's raids, amber = your packages and red's raids together.")
         self.mback = StepSpin(); self.mback.setRange(0, 30); self.mback.setSingleStep(5); self.mback.setSuffix(" min before"); self.mback.setValue(int(getattr(settings, "merge_earlier_min", 15)))
         row(v, "Earlier Packages", self.mback)
         hint(v, "Packages that started up to this long before yours also fly, already airborne and underway when the mission starts. "
                 "A package that has already struck is not flown to its target (see Ruins on this tab). 0 = only later packages.")
-        self.mfwd = StepSpin(); self.mfwd.setRange(0, 60); self.mfwd.setSingleStep(5); self.mfwd.setSuffix(" min after"); self.mfwd.setValue(int(getattr(settings, "merge_later_min", 30)))
+        self.mfwd = StepSpin(); self.mfwd.setRange(0, 240); self.mfwd.setSingleStep(5); self.mfwd.setSuffix(" min after"); self.mfwd.setValue(int(getattr(settings, "merge_later_min", 30)))
         row(v, "Later Packages", self.mfwd)
-        hint(v, "Packages that start up to this long after yours also fly in the same mission (late-activated, they push at their own time). "
-                "Over the unit limit, the package that starts latest is dropped first.")
+        hint(v, "Packages that start up to this long after yours also fly in the same mission (late-activated, they push at their own time); 240 min is one whole turn, "
+                "for a fast PC. Over the unit limit, the package furthest from your target is dropped first, not the latest.")
         self.feng = StepSpin(); self.feng.setRange(0, 300); self.feng.setSuffix(" nm"); self.feng.setValue(int(settings.fighter_engage_nm))
         self.fmin = StepSpin(); self.fmin.setRange(0, 120); self.fmin.setSuffix(" min after TOT"); self.fmin.setValue(int(settings.fighter_engage_minutes))
         row(v, "TARCAP / Escort / Sweep Engage Range", self.feng, self.fmin)
@@ -402,7 +405,7 @@ class SettingsDialog(QDialog):
         self.s.hot_runway_own_field = self.hot_own.isChecked()
         self.s.merge_mode = self.merge.currentData(); self.s.max_units = int(self.mmax.value())
         self.s.merge_earlier_min = int(self.mback.value()); self.s.merge_later_min = int(self.mfwd.value())
-        self.s.merge_radius_nm = int(self.mrad.value()); self.s.merge_raids_all = bool(self.mraids.isChecked())
+        self.s.target_area_radius_nm = int(self.mrad.value()); self.s.merge_raids_all = bool(self.mraids.isChecked())
         self.s.ruins = bool(self.ruins.isChecked())
         self.s.ecm_script = bool(self.ecm.isChecked())
         self.s.ecm_status = bool(self.ecm_msg.isChecked())

@@ -421,12 +421,17 @@ class MissionsPage(QWidget):
         return l
 
     def _fly_note(self, p) -> str:
-        """What pressing FLY on this package's flight gives you: the start time and the other packages that fly with it."""
+        """What pressing FLY on this package's flight gives you: the start time, the nearby packages listed with it, and (S139b) a note that other packages in the time window fly too as far as the unit limit allows."""
         ex = self.sess.merge_candidates(p)
-        if not ex:
+        listed = {x.number for x in ex}
+        more = [x for x in self.sess.fly_candidates(p) if x.number not in listed]
+        if not ex and not more:
             return f"FLY here: the mission starts {p.start}, this package alone."
         parts = [f"#{x.number} ({'already airborne, started ' if x.start < p.start else 'starts '}{x.start})" for x in ex]
-        return f"FLY here: the mission starts {p.start} and also flies " + ", ".join(parts) + "."
+        text = f"FLY here: the mission starts {p.start}" + (" and also flies " + ", ".join(parts) if parts else "")
+        if more:
+            text += ("; " if parts else " and ") + f"{len(more)} other package{'s' if len(more) > 1 else ''} in the time window fly{'' if len(more) > 1 else 's'} too, as far as the unit limit allows (the furthest are left out first)"
+        return text + "."
 
     def _flight_table(self, p):
         st = self.sess.state
@@ -513,7 +518,7 @@ class MissionsPage(QWidget):
                ("  |  JTAC on the ground" if p.jtac else "") + ("  |  Joint Navy / Air Force package" if p.joint else ""))
         ex = self.sess.merge_candidates(p)
         if ex and yours:
-            sup += "  |  Merged mission: also flies " + ", ".join(f"#{x.number}" for x in ex)
+            sup += "  |  Merged mission: also flies " + ", ".join(f"#{x.number}" for x in ex) + " (and the other packages in the time window, as the unit limit allows)"
         self.bl.addWidget(self._label(sup, "dim"))
         if sp:
             self.bl.addStretch(1)

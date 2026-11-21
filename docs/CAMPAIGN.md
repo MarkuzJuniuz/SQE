@@ -82,7 +82,7 @@ At the start of each (day) turn the planner builds the turn's tasking list, in t
    that cannot be crewed waits for the next turn.
 5. **Start times are set in four waves, an hour apart.** The waves open with the turn and 60, 120 and 180 minutes later;
    packages start within about 25 minutes of their wave's opening. The jobs are spread over the four waves as evenly as they
-   go, the earlier waves first; packages that fold into one mission stay together in one wave, and a carrier raid and its prep
+   go, the earlier waves first; packages listed together (targets inside the Target Area Radius) stay together in one wave, and a carrier raid and its prep
    go in wave 1. A job goes to a later wave when its jets are not ready yet (section 7): the planner tries its wave and the later
    ones, and keeps the one that crews it best.
 
@@ -110,8 +110,13 @@ The TARCAP (up to 4 jets) is sized to the fighters red can field near the target
 gets an escort as well, or a separate Fighter Sweep is planned ahead of it. A **Standoff** job (a site under a long-range SAM such as the SA-10) uses JSOWs,
 SLAM-ERs or similar weapons released far outside the SAM's reach, with HARM shooters timed on the same minute.
 
-**Package merging** (Settings > Mission build) folds packages whose targets are close together into one mission, each
-still keeping its own time on target. The unit limit trades detail for performance.
+**Package merging** (Settings > Mission build): when you fly, every package that starts inside the time windows (15 minutes
+before and 30 after yours by default, Later Packages up to a whole turn) flies in the same mission, wherever its target is,
+nearest to yours first, each still keeping its own time on target. The unit limit (250 by default) trades detail for
+performance: over it the furthest packages are left out first, a Fighter Sweep stays while a package it covers stays, and
+your own package and the ground war round your target keep their share before the others. The **Target Area Radius** (15 nm)
+is that area: the supply sites and the ground war built round your target, the ruins of earlier strikes, and the packages the
+Missions list shows together.
 
 ---------------------------------------------------------------------------------------------------
 
