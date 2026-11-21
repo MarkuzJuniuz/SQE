@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.547, S138a: the escort of a strike flies with the strikers
+The AI escort of a plain strike or CAS package now pushes with the strikers and flies alongside them (DCS Escort task, at the strikers' speed) instead of holding a race-track short of the target. It fights what comes within 15 to 25 nm of the strikers until their egress point, then goes home fighting what comes at it. Packages with a stand-off (JSOW / SLAM) flight keep the station escort. `ESCORT_FOLLOWS` in `mission_builder.py` turns it off.
+
 ## v0.41.546, S137: the fighters guarding a strike fight anything that comes at the strikers
 The TARCAP and the escort of a strike or CAS package now centre their engage circle on what they protect (the strikers' run-in point, the target and the turn after it), at the fighter's full reach, so they go after any fighter that comes at the strikers, over the target too, and still never leave the package's area. Before, the circle was centred on the strikers' run-in and the fighters' station and could miss the fight over the target.
 

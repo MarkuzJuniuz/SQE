@@ -80,6 +80,7 @@ TARCAP_FWD_STRIKE_NM = 12
 TARCAP_NEAR_NM = 18          # v0.41.168 (XO 2026-10-27: 16, the TARCAP dived into red's BARCAP swarm; 26 is a judgment call between the old 16 and the 56 nm that was too far to snipe). v0.41.118: ...then it moves in toward the middle of the shooters' launch points until it is this far from it (judgment call: AIM-54 / AIM-120 reach covers the HARM point from there; still outside the SAM rings and TARCAP_BEHIND_NM from the JSOW point)
 ESCORT_AT_EXPOSED = True     # S121 (XO 2026-11-20, run 2026-11-20_00-29-13: one red Su-27 pair shot down six SEAD F-16s while the package escort stood about 45 km away behind the JSOW flight): the package escort of a SEAD / JSOW package holds ESCORT_BEHIND_NM behind the shooters' launch point nearest red's patrols (the SEAD flights on the red side), not behind the JSOW point. False = the old station (behind the JSOW point)
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
+ESCORT_FOLLOWS = True       # S138a (v0.41.547, XO 2026-11-21): the AI package escort of a plain STRIKE / CAS package flies WITH the lead striker (DCS Escort task, the strikers' push time, no station race-track) and fights what comes within its class's reach of them, up to the strikers' egress. False = the station escort (S137's tethered circle). Judgment call; XO flies it
 TARCAP_PKG_ZONE_NM = 15       # UNUSED since S137 (v0.41.546: the strike / CAS TARCAP circle is tethered round the strikers, full reach); was, v0.41.185 (XO 2026-10-28: the CAS / strike TARCAP goes maverick): the circle of a CAS or strike TARCAP is this big and does not reach out to the BARCAP circle (judgment call)
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
 # S45 (XO 2026-11-11: "make the F-14B(U) a special case ... just depend on the Phoenix's range"; he also asked for the player's Tomcat waypoints to sit further out). The Tomcat's TARCAP / escort
@@ -532,7 +533,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         player_push = max(player_push, math.ceil((dep_s + 120) / 60.0) * 60.0)
         leave_s = hold_leave_s(pw, player_push)
         P0 = player_push - stagger(package, pf.role)                         # the strikers' push; everyone else is relative to it
-        push_of = lambda f: self._push_adj.get(id(f), P0 + (0 if f.tag else stagger(package, f.role)))
+        self._follow_pkgs = {package.id}                                     # S138a: the package whose escort may follow its strikers (merged packages keep the station escort)
+        self._escort_pend = []                                               # S138a: [(escort flight, its group, lead striker flight)] the Escort task is attached once the lead's group exists
+        push_of = lambda f: self._push_adj.get(id(f), P0 + (0 if f.tag else (0 if self._escort_lead(package, f) is not None else stagger(package, f.role))))
         assign_times(pw, dep_s, player_push)
         tgt = objective_wp(pw) or pw[-1]
         ptot = tgt.eta_s + RAID_SEAD_LEAD_S if psite is not None else tgt.eta_s          # v0.41.284: the time the raid's other flights work to: the interceptors are due on station RAID_SEAD_LEAD_S after your HARMs
@@ -585,6 +588,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 self.cas_tot = tot_f
             pkg_table.append({"callsign": f.callsign, "role": task_label(f, package.objective), "push": clock(push_of(f)) if not f.tag else "-",
                               "tot": clock(tot_f) if tot_f else "-", "you": f.is_player})
+        self._resolve_escorts()
         whois = self._datalinks(package)
 
         # ---- enemy air picture (known CAP airborne from the start + alert aircraft that scramble when detected) ----
@@ -1318,6 +1322,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
 
         g, first, cs_names = self._make_group(f, spec, base, wps, act_s, csname, fno)
         names, run_t0 = self._dress_group(package, f, spec, g, wps, push_s, tot_s, cs_names)
+        lead_ = self._escort_lead(package, f)
+        if lead_ is not None:
+            self._escort_pend.append((f, g, lead_))               # S138a
         stw = next((w for w in wps if w.action in ("TARCAP", "ESCORT", "SWEEP") and w.orbit), None)
         hold_end = self._hold_end(stw, tot_s) if stw is not None else None
         self._engage_tasks(package, f, g, wps, stw, hold_end, cap_zone, stop, tot_s, geom, base)
@@ -1458,6 +1465,31 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         wps.insert(k + 1, Wpt("CAP2", xy[0], xy[1], st_.alt_ft, st_.speed_kts))
         return True
 
+    def _escort_lead(self, package, f):
+        """S138a: the striker flight this AI package escort flies with, or None (the station escort). Only the main package, a plain STRIKE / CAS one (no JSOW / SLAM flight:
+        the S121 rule keeps that escort at the exposed shooters). The lead is the first AI plain STRIKE / CAS flight, else the person's own (the mission is the same for a person)."""
+        if (not ESCORT_FOLLOWS or f.role != Role.ESCORT or f.tag or (f.is_player and not self.o.player_is_ai) or package.id not in getattr(self, "_follow_pkgs", ())
+                or package.objective.type not in (ObjectiveType.STRIKE, ObjectiveType.CAS)):
+            return None
+        if any(getattr(x, "kit", "") in (*JSOW_FLIGHT_KITS, "SLAM") for x in package.flights):
+            return None
+        sk = [x for x in package.flights if x.role in (Role.STRIKE, Role.CAS) and not x.tag]
+        return next((x for x in sk if not x.is_player or self.o.player_is_ai), None) or next((x for x in sk if x.is_player), None)
+
+    def _resolve_escorts(self):
+        """S138a: now that every flight of the package is built: give each following escort its Escort task, at its PUSH point (both flights are airborne there), on the lead
+        striker's group, within the class's reach of it (25 nm Eagle / Su-27 class, 15 nm the rest), until the striker's egress point (lastWptIndex counts from 1)."""
+        for f, g, lead in self._escort_pend:
+            lg = next((g_ for f_, g_ in self.flight_groups if f_ is lead), None)
+            pu = next((p_ for p_ in g.points if getattr(p_, "name", "") == "PUSH"), None)
+            ei = next((k for k, p_ in enumerate(lg.points) if getattr(p_, "name", "") == "EGR"), None) if lg is not None else None
+            if lg is None or pu is None or ei is None:
+                self.warns.append(f"{f.callsign}: escort could not be tied to its strikers (lead group or its PUSH / EGR point missing)")
+                continue
+            pu.tasks.insert(0, task.EscortTaskAction(group_id=lg.id, engagement_max_dist=int(A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A] * NM), lastwpt=ei + 1,
+                                                     targets=[task.Targets.All.Air.id], position={"x": -1000, "y": 300, "z": 500}))
+        self._escort_pend = []
+
     def _flight_route(self, package, f, geom, idx, push_s, tot_s):
         """Everyone else's route: plan_route, terrain, times. -> (wps, act_s, past_push, stop), or None when the flight is already back on the ground. Moved out of _spawn_flight in v0.41.54, unchanged."""
         o = self.o
@@ -1471,6 +1503,12 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          spawn=sp[0] if sp else None, spawn_alt_ft=sp[1] if sp else 0, spawn_kts=sp[2] if sp else 0,
                          jsow=getattr(f, "kit", "") in JSOW_FLIGHT_KITS, jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package), agm88_deg=self._agm88_deg(package, geom),
                          rel=self._rel_kind(package, f))
+        if self._escort_lead(package, f) is not None:
+            # S138a: the escort flies with the strikers: no station (the Escort task replaces it), out through the package egress point
+            wps = [w for w in wps if w.name not in ("CAP1", "CAP2")]
+            if not any(w.name == "EGR" for w in wps):
+                pr_ = self._flight_profile(f, package)
+                wps.append(Wpt("EGR", *geom.egr, pr_.alt_ft.get(f.role, 20000), pr_.egress_kts, "Exit with the package"))
         if getattr(f, "rush", False):
             self._rush_speeds(wps)                                    # v0.41.256: the raid SEAD
         shaped_, meet_ = False, None
@@ -1857,6 +1895,20 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if stw.action == "SWEEP":    # a sweep goes home once its air-to-air missiles are gone
                 rtb_ = task.OptRTBOnOutOfAmmo(); rtb_.params["action"]["params"]["value"] = AAM_WEAPONS
                 g.points[0].tasks.append(rtb_)
+        elif stw is None and self._escort_lead(package, f) is not None:
+            # S138a: the escort flies with its lead striker (the Escort task is attached once the striker's group exists, _resolve_escorts): no circles, no hold.
+            # Over the way home from the strikers' egress point it fights what comes within HOMEWARD_ENGAGE_NM, like the station escort; out of air-to-air missiles it goes home.
+            ew_ = next((w for w in wps if w.name == "EGR"), None)
+            if ew_ is not None:
+                hb_ = bearing(ew_.x, ew_.y, base.x, base.y)
+                hx_, hy_, hr_ = self._cover_circle([(ew_.x, ew_.y), (base.x, base.y)], ((ew_.x + base.x) / 2, (ew_.y + base.y) / 2), package,
+                                                   dist(ew_.x, ew_.y, base.x, base.y) / 2 / NM + HOMEWARD_ENGAGE_NM, hb_)
+                hw_ = task.ControlledTask(task.EngageTargetsInZone(mapping.Vector2(hx_, hy_), int(hr_ * NM), [task.Targets.All.Air]))
+                hw_.start_after_time(int(ew_.eta_s)); g.points[0].tasks.insert(1, hw_)
+            rtb_a = task.OptRTBOnOutOfAmmo(); rtb_a.params["action"]["params"]["value"] = AAM_WEAPONS
+            g.points[0].tasks.append(rtb_a)
+            g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.HalfWayRMaxNoEsc))
+            g.points[0].tasks.append(task.OptRadarUsing(task.OptRadarUsing.Values.UseForContinuousSearch))
         elif (not f.is_player or o.player_is_ai) and f.role in (Role.TARCAP, Role.ESCORT, Role.SWEEP, Role.SEAD):
             m_ = self.o.fighter_engage_minutes
             zone = None
