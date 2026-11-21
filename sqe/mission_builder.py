@@ -682,8 +682,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if r[0] not in ("TAKEOFF", "DIVERT", "TKR", "BULLS"):
                 hook_wps.append((pspec.wp_label(i), r[0], r[1], r[2]))
         for code, x_, y_ in (self._f14ab or {}).get("extra", []):             # S103e: the nav target points the planner has no row for (the hostile area), right after HB so the card reads in flight order
-            kn_rows.insert(n_route, {"wp": code, "name": "DEFENDED" if code == "DP" else "HOSTILE", "time": "", "alt": "", "kts": "", "leg": "", "win": "",
-                                     "note": "Defended point: midway between CAP1 and CAP2 (navigation target point)" if code == "DP" else "Hostile area: nearest SAM site (navigation target point)"})
+            kn_rows.insert(n_route, {"wp": code, "name": "TARGET" if code == "ST" else "HOSTILE", "time": "", "alt": "", "kts": "", "leg": "", "win": "",
+                                     "note": "Package ground target (navigation target point)" if code == "ST" else "Hostile area: nearest SAM site (navigation target point)"})
 
         # ---- codes, fuel, text, hook, kneeboard -----------------------------------------------------------------------------
         mode3 = self._mode3(package, pf)
@@ -744,7 +744,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 tdata = f"TARGET  {latlon(tx, ty, self.t)}   ({package.objective.description})"
             ctx = {"date": date_str, "callsign": f"{pf.callsign}-1", "role": task_label(pf, package.objective), "objective": package.objective.description,
                    "comm1": plan.comm1, "comm2": plan.comm2, "fc3": pspec.fc3, "waypoints": kn_rows, "jet": pspec.display,
-                   "numbering": (("0 for the start point, then 1, 2, 3, HB = landing. IP / ST / DP / HA are navigation target points (DP = midway between CAP1 and CAP2, HA = the hostile area); every other point is on this card only" if self._f14ab else
+                   "numbering": (("0 for the start point, then 1, 2, 3, HB = landing. IP / ST / DP / HA are navigation target points (DP = CAP2, ST = the package target, HA = the hostile area); every other point is on this card only" if self._f14ab else
                                   f"{pspec.first_wp_label} for the start point, then 1, 2, 3...") if pspec.first_wp_label else "waypoint 1 = start point"),
                    "bingo": f"{pspec.bingo_lbs:,}", "joker": f"{pspec.joker_lbs:,}", "weather": weather.metar(self.wx), "mode3": mode3, "laser": laser,
                    "tkr_line": x.get("tkr_line", ""), "bullseye": latlon(bx, by, self.t), "whois": whois, "link16_off": not getattr(self.state, "link16", True), "threats": text["threats"], "n_def": air_pkg.n_def, "target_data": tdata,
@@ -2454,7 +2454,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if len(pts) != len(route) + 2:                       # an unexpected extra point: leave the route as it is, never guess
             self.warns.append("F-14B: the route has points the 3-waypoint scheme did not expect; left as planned.")
             return
-        keep, st_i, ip_i = f14_scheme.choose(route, f.role.value in f14_scheme.GROUND_ROLES)
+        keep, st_i, ip_i, dp_i = f14_scheme.choose(route, f.role.value in f14_scheme.GROUND_ROLES)
         kept = [1 + i for i in keep]
         old = list(pts)
         pts[:] = [old[0]] + [old[j] for j in kept] + [old[-1]]
@@ -2469,7 +2469,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if c_.get("grp") == g.name:
                 c_["to"] = remap(int(c_["to"]))
         ntp, extra = [], []
-        for code, i in (("IP", ip_i), ("ST", st_i)):
+        for code, i in (("IP", ip_i), ("ST", st_i), ("DP", dp_i)):
             if i is not None and i not in keep:                  # a point that is already numbered waypoint 1-3 (a BARCAP's CAP1 / CAP2) is not saved a second time as IP / ST
                 w = route[i]
                 g.add_nav_target_point(self._pt(w.x, w.y), code)
@@ -2480,11 +2480,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             a = min(sam, key=lambda t_: t_[0])[1]
             g.add_nav_target_point(self._pt(a.x, a.y), "HA")
             extra.append(("HA", a.x, a.y))
-        cp = {w_.name: w_ for w_ in route if w_.name in ("CAP1", "CAP2")}
-        if len(cp) == 2:                                         # XO 2026-11-21: DP = the point midway between CAP1 and CAP2 (a TID marker; flown points stay waypoints / IP / ST)
-            dx, dy = (cp["CAP1"].x + cp["CAP2"].x) / 2, (cp["CAP1"].y + cp["CAP2"].y) / 2
-            g.add_nav_target_point(self._pt(dx, dy), "DP")
-            extra.append(("DP", dx, dy))
+        if st_i is None and dp_i is not None and f.role.value in ("TARCAP", "ESCORT") and package.objective.type in (ObjectiveType.STRIKE, ObjectiveType.DEAD, ObjectiveType.CAS):
+            g.add_nav_target_point(self._pt(geom.tx, geom.ty), "ST")            # XO 2026-11-21: a station fighter's ST is the package's ground target, a row just above HA
+            extra.append(("ST", geom.tx, geom.ty))
         self._f14ab = {"keep": [(route[i].name, route[i].x, route[i].y) for i in keep], "ntp": ntp, "extra": extra}
 
     # ---- Link 16 / SADL: the package flies as one network ------------------------------------------------------------------

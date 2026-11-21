@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.559, F-14B: a station fighter's CAP1 is waypoint 3, CAP2 is DP, ST is the package target
+In the plain F-14B a fighter job with a station (TARCAP, sweep, fleet-defence CAP, escort) now has CAP1 as waypoint 3 and CAP2 as the DP navigation point, which shows on the TID but cannot be selected. An escort whose route has an egress keeps waypoint 3 for the EGR and gets CAP1 as the IP point, flown before it. A TARCAP or escort of a strike, DEAD or CAS package also gets ST at the package's ground target, listed just above HA on the card. A BARCAP is unchanged (CAP1 and CAP2 are waypoints 1 and 2). The midway DP of v0.41.558 is gone. Strike jobs and fighters flying a strike-shaped route are unchanged. Not flown.
+
 ## v0.41.558, F-14B: a point is saved once, DP sits midway between CAP1 and CAP2
 In the plain F-14B a point that is already waypoint 1, 2 or 3 is no longer written a second time as the IP or ST navigation target point (a BARCAP's CAP1 and CAP2 were both). When the player's route has both CAP1 and CAP2 the jet also gets a DP navigation target point midway between them, which shows on the TID, and the kneeboard lists it just above HA. The pilot still flies to the waypoints, IP and ST; DP and HA are markers. Not flown.
 
