@@ -97,7 +97,7 @@ A package is a set of flights with one target. The basic shapes (from `sqe/packa
 
 | Job | Flights |
 |---|---|
-| Strike | 4 strikers, 2 SEAD if the target is under a SAM, TARCAP when red has fighters that can reach it |
+| Strike | 4 strikers, 2 SEAD if the target is under a SAM, TARCAP when red has fighters that can reach it. A plain-bomb strike (GBUs, not a stand-off kit) whose target is covered by a live fixed Tor (Level 3) takes a 4-jet SEAD escort instead (8 HARMs; a pair when only two jets are free) and waits for another day when none is free |
 | DEAD | 2 SEAD, 4 strikers, TARCAP |
 | CAS | 4 CAS, 2 SEAD if the target is under a SAM, TARCAP when red has fighters that can reach it |
 | Standoff DEAD | one HARM flight (2 jets, 4 near a big cluster), 4 JSOW jets, and a second HARM flight (2 or 4) |

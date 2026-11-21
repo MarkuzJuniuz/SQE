@@ -223,6 +223,8 @@ SWEEP_LAST = {"F-14BU", "F-14B"}
 CAS_JET_MIN_DEF_FLIGHTS = 99     # v0.41.214 (XO 2026-10-30): was 3. 99 = never "hot": the A-10C is the CAS master on every job and the jets only fly it when no A-10C squadron is free and in range (the Vipers were engaged at their wait point; the cure is the gate hold, below, not the airframe). v0.41.189 (was 3): jets take CAS first only when this many red defender flights can reach the target (judgment call; 2026-10-29 sim: with 1 nearly every L1 / L2 job counted as hot and the A-10Cs flew none)
 CAS_JET_SWAY_NM = 400            # v0.41.188: the CAS squadron of the other kind is picked only when none of the preferred kind is free within this much of it (judgment call)
 A2A_SECONDARY_NM = 400          # an F-16 / F/A-18 squadron is picked for TARCAP or escort only when no long-range shooter is within this much of it
+TOR_ESCORT_JETS = 4             # S136 (XO 2026-11-20: a Tor chews 4 HARMs, so 8; a 2-ship when only 2 are free): the SEAD escort of a plain-bomb strike under a live fixed Tor, jets (a slot of 4: `build` fills 2 when only 2 are free)
+TOR_ESCORT_RUNIN_NM = 5        # S136: a fixed Tor covers a strike target within its 8 nm ring plus this run-in (judgment call: the jet is inside the ring from the release point on)
 A10_RUNIN_NM = 8                # v0.41.360 (Phase 10c part 2): an A-10C supply strike needs the site clear of every live SAM ring (>= 5 nm range) by this much, the run-in leg (the same margin `threatmap.blockers` keeps off the route). Judgment call
 
 
@@ -428,6 +430,17 @@ class PackageBuilder:
             return False
         return not any(math.hypot(s_.x - a.x, s_.y - a.y) <= r_ + A10_RUNIN_NM * NM for s_, r_ in tm.rings(self.state, min_range=5))
 
+    def _tor_cover(self, obj) -> list:
+        """S136: the live fixed Tor sites (SA-15, not a column's `fsam_`, not already suppressed) whose 8 nm ring plus TOR_ESCORT_RUNIN_NM covers the objective's target."""
+        from . import ground
+        a = self.state.assets.get(obj.target_id)
+        if a is None:
+            return []
+        r = (tm.RANGE_NM.get("SA-15", 8) + TOR_ESCORT_RUNIN_NM) * NM
+        return [x for x in self.state.assets.values()
+                if x.kind == AssetKind.SAM and x.variant == "SA-15" and not x.id.startswith("fsam_") and not x.destroyed and not getattr(x, "suppressed", False)
+                and x.health > ground.DOWN_HEALTH and math.hypot(x.x - a.x, x.y - a.y) <= r]
+
     def _is_ewr(self, obj) -> bool:
         """S60: the objective's target is an early-warning radar."""
         a_ = self.state.assets.get(obj.target_id) if obj.type != ObjectiveType.FLEET_DEFENSE else None
@@ -538,6 +551,14 @@ class PackageBuilder:
                     break
             else:
                 raise NoPlayerSlot("no stand-off-capable squadron (F-15E, F-16C, F/A-18C) free for the EWR strike today")
+        tor_esc_ = False
+        if (obj.type == ObjectiveType.STRIKE and obj.aim in ("", "RUNWAY", "SEAD") and not f117.is_job(obj)
+                and not any(s_.kit for s_ in slots if s_.role == Role.STRIKE) and self._tor_cover(obj)):
+            # S136 (XO 2026-11-20, run 2026-11-20_15-57-12: two F-16Cs with GBU-31s ran in alone on a Tor-covered runway and turned away): a plain-bomb strike (no stand-off kit: not the EWR strike, the SLAM
+            # Standoff Strike, the F-15E's JSOW-C runway crater, the F-117A) under a live fixed Tor goes with a 4-jet SEAD escort, a 2-ship when only 2 jets are free, and waits when none is free
+            slots = [s_ for s_ in slots if s_.role != Role.SEAD] + [Slot(Role.SEAD, TOR_ESCORT_JETS)]
+            tor_esc_ = True
+            pkg.extra["tor_escort"] = True
         pp = st.player
 
         player_idx, lead_service, psq = None, None, None
@@ -598,7 +619,7 @@ class PackageBuilder:
             for sl_, sq_, n_, _ in chosen:
                 ledger.free[sq_.id] += n_
             raise NoPlayerSlot("no JSOW-capable squadron free for the Standoff DEAD today")
-        if obj.type in (ObjectiveType.CAS, ObjectiveType.STRIKE) and obj.aim == "SEAD" and not any(sl_.role == Role.SEAD for sl_, *_ in chosen):
+        if obj.type in (ObjectiveType.CAS, ObjectiveType.STRIKE) and (obj.aim == "SEAD" or tor_esc_) and not any(sl_.role == Role.SEAD for sl_, *_ in chosen):
             # v0.41.20: no HARM jets free: the CAS under a live SAM waits for another day rather than going in unescorted (no needless banzai)
             for sl_, sq_, n_, _ in chosen:
                 ledger.free[sq_.id] += n_
