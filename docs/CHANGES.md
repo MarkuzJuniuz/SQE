@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.546, S137: the fighters guarding a strike fight anything that comes at the strikers
+The TARCAP and the escort of a strike or CAS package now centre their engage circle on what they protect (the strikers' run-in point, the target and the turn after it), at the fighter's full reach, so they go after any fighter that comes at the strikers, over the target too, and still never leave the package's area. Before, the circle was centred on the strikers' run-in and the fighters' station and could miss the fight over the target.
+
 ## v0.41.545, S136: a Tor-covered strike goes with a 4-jet SEAD escort
 A strike with plain bombs (GBUs, not a stand-off weapon) whose target sits under a live fixed Tor now flies with a four-jet SEAD escort, eight HARMs to wear the Tor down, or a pair when only two SEAD jets are free; with none free the strike waits for another day. The escort aims its HARMs at the Tor. Stand-off jobs (EWR strikes, SLAM-ER strikes, the F-15E's JSOW-C runway crater) and Levels 1 and 2 (no Tors) are unchanged.
 
