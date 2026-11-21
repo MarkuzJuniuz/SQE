@@ -80,7 +80,7 @@ TARCAP_FWD_STRIKE_NM = 12
 TARCAP_NEAR_NM = 18          # v0.41.168 (XO 2026-10-27: 16, the TARCAP dived into red's BARCAP swarm; 26 is a judgment call between the old 16 and the 56 nm that was too far to snipe). v0.41.118: ...then it moves in toward the middle of the shooters' launch points until it is this far from it (judgment call: AIM-54 / AIM-120 reach covers the HARM point from there; still outside the SAM rings and TARCAP_BEHIND_NM from the JSOW point)
 ESCORT_AT_EXPOSED = True     # S121 (XO 2026-11-20, run 2026-11-20_00-29-13: one red Su-27 pair shot down six SEAD F-16s while the package escort stood about 45 km away behind the JSOW flight): the package escort of a SEAD / JSOW package holds ESCORT_BEHIND_NM behind the shooters' launch point nearest red's patrols (the SEAD flights on the red side), not behind the JSOW point. False = the old station (behind the JSOW point)
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
-TARCAP_PKG_ZONE_NM = 15       # v0.41.185 (XO 2026-10-28: the CAS / strike TARCAP goes maverick): the circle of a CAS or strike TARCAP is this big and does not reach out to the BARCAP circle (judgment call)
+TARCAP_PKG_ZONE_NM = 15       # UNUSED since S137 (v0.41.546: the strike / CAS TARCAP circle is tethered round the strikers, full reach); was, v0.41.185 (XO 2026-10-28: the CAS / strike TARCAP goes maverick): the circle of a CAS or strike TARCAP is this big and does not reach out to the BARCAP circle (judgment call)
 TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
 # S45 (XO 2026-11-11: "make the F-14B(U) a special case ... just depend on the Phoenix's range"; he also asked for the player's Tomcat waypoints to sit further out). The Tomcat's TARCAP / escort
 # station sits this much further from the fight than the Eagle's and the engage circle of a hunting TARCAP is the Phoenix's reach, not the AIM-120's. Judgment calls, no public figure fixes them:
@@ -350,6 +350,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._ramp_pts = []                 # v0.41.313: the parked static jets' positions of this mission (counter-air strike)
         self._supply_built = set()                      # v0.41.209: blue supply sites already put on the map this mission (a raid target is one)
         self._rwy_rel, self._hot = {}, None                            # v0.41.96: release times already given per runway; the hot-runway slot of the flight being built
+        self._protect_pts = {}                                         # S137: package id -> [(x, y)] the TARCAP / escort protect (strikers' IP, TGT, egress)
         self._launch_pts = {}                                          # package id -> [(x, y)] where its HARM / JSOW / strike flights launch (the cover zone)             # alert groups waiting for a runway (the hook lines them up), trigger flags, your runway
         self._air_spawns = []                                          # [(x, y, alt_m, t)]: where and when each airborne flight appears, so no two appear on top of each other
 
@@ -560,6 +561,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._hold_drawn = {}                                                # v0.41.343 (Phase 6a): red squadron id -> hold jets this build's scrambles drew (reserve.pick_red_hold)
         self._hot_calls, self._hot_flag = [], 0                              # v0.41.111: the base-BARCAP call-in (red_air_picture.py)
         self._recov = []                                                     # v0.41.25: the recovery net (see _recov_net)                                                   # v0.41.10: red patrols called in to the SAM site they guard
+        self._protect_pts[package.id] = self._protect_points(package, geom)    # S137
         self._launch_pts[package.id] = self._launch_points(package, geom)    # v0.41.42: known before any flight is built (an escort / TARCAP may be built first)
         self._barcap_zones = self._barcap_circles(package, geom)             # v0.41.138: the BARCAP circles a TARCAP's circle must meet (whatever order the flights are built in)
         striker_tots = []                                                    # v0.41.38: each ground-attack flight's own target time (strike / SEAD / CAS), for the TARCAP hold
@@ -1794,13 +1796,19 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 if stw.action == "TARCAP":
                     want_ = PHOENIX_ZONE_NM if f.aircraft in F14_KEYS else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]      # S45: the Tomcat's circle is the Phoenix's reach
                     pkg_zone_ = package.objective.type in (ObjectiveType.CAS, ObjectiveType.STRIKE)      # v0.41.185: protects the package, does not hunt
-                    if pkg_zone_:
-                        want_ = min(want_, TARCAP_PKG_ZONE_NM)
+                    # S137: a strike / CAS TARCAP is no longer capped at TARCAP_PKG_ZONE_NM: its circle is tethered round what it protects instead
                     bz_ = [] if pkg_zone_ else [z_ for z_ in getattr(self, "_barcap_zones", []) if dist(stw.x, stw.y, z_[0], z_[1]) / NM > z_[2] - TARCAP_BARCAP_OVERLAP_NM]
                     if bz_:
                         bx_, by_, br_ = min(bz_, key=lambda z_: dist(stw.x, stw.y, z_[0], z_[1]) / NM - z_[2])
                         bpts_ = [offset(bx_, by_, bearing(bx_, by_, stw.x, stw.y), max(0.0, br_ - TARCAP_BARCAP_OVERLAP_NM) * NM)]
-                zone_ = self._cover_circle(list(lp_) + [(stw.x, stw.y)] + bpts_ + fpts_, (cx_, cy_), package, want_, bearing(cx_, cy_, stw.x, stw.y),
+                # S137 (tethered aggression): round what the package protects (the strikers' IP, TGT and egress), full reach, then the station
+                pp_ = self._protect_pts.get(package.id) or []
+                if pp_ and package.objective.type in (ObjectiveType.CAS, ObjectiveType.STRIKE):
+                    cx_, cy_ = sum(p_[0] for p_ in pp_) / len(pp_), sum(p_[1] for p_ in pp_) / len(pp_)
+                    cpts_ = list(pp_) + [(stw.x, stw.y)] + bpts_ + fpts_
+                else:
+                    cpts_ = list(lp_) + [(stw.x, stw.y)] + bpts_ + fpts_
+                zone_ = self._cover_circle(cpts_, (cx_, cy_), package, want_, bearing(cx_, cy_, stw.x, stw.y),
                                            long_only=True, max_nm=TARCAP_COVER_MAX_NM)
                 cover_lo_ = True            # v0.41.42 (XO): the circle takes in the shooters first; only an SA-10 keeps it out (an SA-11 / SA-6 no longer pushes it off the launch points)
             zct_ = self._limit_engage(g, 0, hold_end, self._clear_zone(zone_, package, long_only=cover_lo_))

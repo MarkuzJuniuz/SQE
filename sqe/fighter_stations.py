@@ -128,6 +128,39 @@ class FighterStations:
                 out.append((lp_.x, lp_.y))
         return out
 
+    def _protect_points(self, package, geom) -> list:
+        """v0.41.546 (S137, XO 2026-11-21: tethered aggression): the points the package's TARCAP / escort protect, round which their engage circle is
+        centred: for every ground-attack flight (STRIKE / CAS, a person's own flight too: the mission is the same) its IP, its TGT and the point
+        after it (the egress turn). A stand-off flight (SEAD, a JSOW kit, the SLAM point) gives only its launch point: its TGT lies in the SAM belt.
+        Empty when nothing plans (the caller falls back to the launch points)."""
+        out = []
+        for f in package.flights:
+            if f.tag or f.role not in (Role.SEAD, Role.STRIKE, Role.CAS):
+                continue
+            base = self.state.bases[f.base_id]
+            try:
+                wps = plan_route(f.role, (base.x, base.y), geom, self._flight_profile(f, package), is_player=False, tanker_xy=None,
+                                 jsow=getattr(f, "kit", "") in JSOW_FLIGHT_KITS, jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package),
+                                 agm88_deg=self._agm88_deg(package, geom), rel=self._rel_kind(package, f))
+            except ValueError:
+                continue
+            lp_ = next((w for w in wps if w.action in ("SEAD", "JSOW")), None) or next((w for w in wps if w.name == "IP"), None)
+            standoff_ = f.role == Role.SEAD or getattr(f, "kit", "") in JSOW_FLIGHT_KITS or any(w.name == "SLAM" for w in wps)
+            if standoff_:
+                if lp_ is not None:
+                    out.append((lp_.x, lp_.y))
+                continue
+            ti_ = next((k for k, w in enumerate(wps) if w.name == "TGT"), None)
+            if ti_ is None:
+                if lp_ is not None:
+                    out.append((lp_.x, lp_.y))
+                continue
+            ip_ = next((w for w in wps[:ti_] if w.name == "IP"), None)
+            for w in (ip_, wps[ti_], wps[ti_ + 1] if ti_ + 1 < len(wps) else None):
+                if w is not None:
+                    out.append((w.x, w.y))
+        return out
+
     def _stagger_stations(self, geom, package, tx, ty) -> None:
         """v0.41.139 (XO 2026-10-27, the engagement circle diagram): short-range shooters (MiG-29, F-16, F/A-18 ...) closer to red, long-range
         snipers (F-15C, F-14B) behind them and to one side, so their missiles are not in the air across each other's jets. In a package that has a
