@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.557, tools/release.py: one command to release main
+`tools/release.py` releases main without hand-typed git: it checks the tree is clean, checks out main and pulls it (fast-forward only, main must equal origin/main), reads `__version__`, stops if the tag `vX.Y.Z` already exists here or on origin, stops if `docs/CHANGES.md` has no `## vX.Y.Z` entry, runs `python -m compileall -q sqe tools` and the full smoke test (it must print SMOKE TEST PASSED), then asks for `y` and tags that exact commit and pushes the tag, which starts the release build. Any problem stops it before the tag. `--dry-run` runs every check and the smoke test but does not tag or push. It never merges or pushes a branch. No game code changed. Not flown (a tool).
+
 ## v0.41.556, B3: red's raid kits follow the target
 A Su-24M raid on a runway now carries four BetAB-500ShP (rocket-boosted concrete-piercing bombs, pylons 2, 3, 6, 7, the other pylons empty), on troops or a garrison four RBK-500U (126 OAB-2.5RT each), on a supply site the FAB kit as before. The planned KAB-500S for supply sites (a Lutorin pull-forward) is NOT carried: the pinned pydcs lists it on the Su-30 and Su-34 only, so `loadouts.STRIKE_KITS` finds no Su-24M pylon for it and the FAB kit stays; it switches on by itself if pydcs ever lists it. Syria's Su-17M4 carries four BetAB-500ShP on a runway, four RBK-500 (PTAB-1M) on troops, four FAB-500 on supply sites. `enemy_strike_loadout(cls, kind)` takes the target kind from the raid spawner and from red's front-line strike (troops). Kh-59M raids, the Su-25's kit and the Tu-22M3 (Kh-22 on the carrier raid, OFAB racks on a land strike; DCS cannot fire the Kh-22 at land) are unchanged. CAMPAIGN.md and GUIDE.md say what red carries. Not flown in DCS.
 
