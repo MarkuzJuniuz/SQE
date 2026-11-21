@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.558, F-14B: a point is saved once, DP sits midway between CAP1 and CAP2
+In the plain F-14B a point that is already waypoint 1, 2 or 3 is no longer written a second time as the IP or ST navigation target point (a BARCAP's CAP1 and CAP2 were both). When the player's route has both CAP1 and CAP2 the jet also gets a DP navigation target point midway between them, which shows on the TID, and the kneeboard lists it just above HA. The pilot still flies to the waypoints, IP and ST; DP and HA are markers. Not flown.
+
 ## v0.41.557, tools/release.py: one command to release main
 `tools/release.py` releases main without hand-typed git: it checks the tree is clean, checks out main and pulls it (fast-forward only, main must equal origin/main), reads `__version__`, stops if the tag `vX.Y.Z` already exists here or on origin, stops if `docs/CHANGES.md` has no `## vX.Y.Z` entry, runs `python -m compileall -q sqe tools` and the full smoke test (it must print SMOKE TEST PASSED), then asks for `y` and tags that exact commit and pushes the tag, which starts the release build. Any problem stops it before the tag. `--dry-run` runs every check and the smoke test but does not tag or push. It never merges or pushes a branch. No game code changed. Not flown (a tool).
 
