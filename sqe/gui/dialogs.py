@@ -437,7 +437,7 @@ class WaitingDialog(QDialog):
     """FLY opens this. It polls SQE_state.json and shows live casualties for both sides."""
     def __init__(self, session, parent=None):
         super().__init__(parent); self.sess = session; self.data = None; self.manual = None
-        self.setWindowTitle("Sortie In Progress"); self.setMinimumSize(760, 560); self.resize(780, 760)
+        self.setWindowTitle("Sortie In Progress"); self.setMinimumSize(760, 400)
         p = session.state.pending; tl = p["timeline"]
         lay = QVBoxLayout(self); lay.setSpacing(12)
         t = QLabel("Sortie In Progress"); t.setObjectName("title"); lay.addWidget(t)
@@ -456,13 +456,7 @@ class WaitingDialog(QDialog):
         self.ptbl = QTableWidget(0, 2); self.ptbl.setHorizontalHeaderLabels(["Package", "Status"])         # S87: one row per package, its phase and result (set by _status_lines)
         self.ptbl.verticalHeader().setVisible(False); self.ptbl.setEditTriggers(QTableWidget.NoEditTriggers); self.ptbl.setSelectionMode(QTableWidget.NoSelection)
         self.ptbl.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch); self.ptbl.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.ptbl.setWordWrap(True); self.ptbl.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded); self.ptbl.setVerticalScrollMode(QTableWidget.ScrollPerPixel); self._fill_packages([]); lay.addWidget(self.ptbl, 100); lay.addStretch(1)       # S98b: blank until DCS answers; the package table sits right after the info card and takes its rows, a spacer takes the spare height so everything below stays anchored to the bottom (a short window squeezes the table to PKG_MIN_H and it scrolls)
-        self.tbl = QTableWidget(0, 3); self.tbl.setHorizontalHeaderLabels(["This Sortie", "Friendly", "Enemy"])
-        self.tbl.verticalHeader().setVisible(False); self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tbl.setFixedHeight(100)                                         # blank until the first state file; _fill sets the exact height
-        self.tbl.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff); self.tbl.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        lay.addWidget(self.tbl)
+        self.ptbl.setWordWrap(True); self.ptbl.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded); self.ptbl.setVerticalScrollMode(QTableWidget.ScrollPerPixel); self._fill_packages([]); lay.addWidget(self.ptbl, 100)       # S98b: blank until DCS answers; the package table sits right after the info card and takes its rows, a spacer takes the spare height so everything below stays anchored to the bottom (a short window squeezes the table to PKG_MIN_H and it scrolls)
         lay.addWidget(self.status); lay.addWidget(self.overall)          # S98b: mission status stacked just above "Last update"
         self.last = QLabel(""); self.last.setObjectName("small"); lay.addWidget(self.last)
         row = QHBoxLayout()
@@ -471,20 +465,9 @@ class WaitingDialog(QDialog):
         row.addWidget(self.b_man); row.addWidget(self.b_abort); row.addStretch(1); row.addWidget(self.b_ok); lay.addLayout(row)
         self.b_man.clicked.connect(self._manual); self.b_abort.clicked.connect(self._abort); self.b_ok.clicked.connect(self.accept)
         self.timer = QTimer(self); self.timer.timeout.connect(self._poll); self.timer.start(1000); self._dots = 0
-        self._poll()
+        self._poll(); self._fitted = True; self.layout().activate(); self.resize(self.width(), self.sizeHint().height())
 
-    def _fill(self, t):
-        rows = [(DB._title("Aircraft lost / total"), f"{t['blue_air_lost']} / {t['blue_air_total']}", f"{t['red_air_lost']} / {t['red_air_total']}"),
-                (DB._title("Ground units lost / total"), f"{t['blue_ground_lost']} / {t['blue_ground_total']}", f"{t['red_ground_lost']} / {t['red_ground_total']}")]
-        self.tbl.setRowCount(len(rows))
-        for i, r in enumerate(rows):
-            for j, v in enumerate(r):
-                it = QTableWidgetItem(v); it.setTextAlignment(Qt.AlignCenter if j else Qt.AlignLeft | Qt.AlignVCenter)
-                self.tbl.setItem(i, j, it)
-        self.tbl.resizeRowsToContents()
-        self.tbl.setFixedHeight(self.tbl.horizontalHeader().height() + sum(self.tbl.rowHeight(i) for i in range(len(rows))) + 10)       # just its rows: the spare height goes to the package table
-
-    PKG_MIN_H = 130                 # px: header and about two rows; the least the package table is squeezed to before it scrolls
+    PKG_ROWS = 5                    # the table is as tall as this many objectives; more scroll
 
     def _show_notes(self):
         """The build notes in a popup under the Notes button; a click outside closes it. No layout change."""
@@ -500,8 +483,12 @@ class WaitingDialog(QDialog):
             for j, v in enumerate((r["name"], r["text"])):
                 it = QTableWidgetItem(v); it.setTextAlignment(Qt.AlignLeft | Qt.AlignTop); self.ptbl.setItem(i, j, it)       # XO 2026-11-15: text at the top of its cell when a row wraps
         self.ptbl.resizeRowsToContents()
-        need = self.ptbl.horizontalHeader().height() + sum(self.ptbl.rowHeight(i) for i in range(len(rows))) + 20
-        self.ptbl.setMaximumHeight(need); self.ptbl.setMinimumHeight(min(need, self.PKG_MIN_H))           # as tall as its rows when the window has room; a short window squeezes it to PKG_MIN_H and it scrolls (bar only when needed)
+        hh = self.ptbl.horizontalHeader().height(); rh = [self.ptbl.rowHeight(i) for i in range(len(rows))]
+        need = hh + sum(rh[: self.PKG_ROWS]) + max(0, self.PKG_ROWS - len(rows)) * self.ptbl.verticalHeader().defaultSectionSize() + (4 if len(rows) > self.PKG_ROWS else 20)    # exactly five rows when there are more (the rest scroll, bar only when needed); room for five while fewer are listed
+        if self.ptbl.height() != need:
+            self.ptbl.setFixedHeight(need)
+            if self.isVisible() or getattr(self, "_fitted", False):
+                self.layout().activate(); self.resize(self.width(), self.sizeHint().height())          # the window is as tall as its content needs, no taller
 
     def _status_lines(self, data):
         """S77: the objective lines and the overall line, read-only from the hook's state file (nothing in the campaign changes; Accept stays the authority).
@@ -523,7 +510,7 @@ class WaitingDialog(QDialog):
         status, data, t = self.sess.poll(self.manual)
         self._dots = (self._dots + 1) % 4
         if status == "ok":
-            self.data = data; self._fill(t); self.b_ok.setEnabled(True)
+            self.data = data; self.b_ok.setEnabled(True)
             try:
                 self._status_lines(data)
             except Exception:                                   # a status line must never break the waiting window

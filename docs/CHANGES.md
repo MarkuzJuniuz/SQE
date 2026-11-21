@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.553, S132: smaller waiting window, the dormant-sites log is for debugging only
+The waiting window no longer shows the "This Sortie" table of friendly and enemy aircraft and ground units (the package objectives list shows how the sortie goes). The window is about 200 pixels shorter: the objectives table is five rows tall and scrolls when a mission has more. The wake and sleep lines and the 10-second tick that Dormant Ground Sites wrote to dcs.log are now written only when the environment variable `SQE_DEBUG` is set to `1` before SQE starts (a performance run); a normal install writes nothing.
+
 ## v0.41.552, S103f: the F-14B points are the ones Jester can select
 The plain F-14B no longer gets a DP point, which Jester cannot select. WP 1 is the marshal point, 2 the push and 3 the egress when the route has one. A fighter's station (CAP1) is the IP and the other end of its racetrack (CAP2) is ST; a strike keeps IP and ST on the target. A BARCAP has CAP1 and CAP2 as waypoints 1 and 2. HA (the hostile area) stays.
 
