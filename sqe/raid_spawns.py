@@ -969,6 +969,7 @@ class RaidSpawns:
         kh59_r = bool(_raids48.is_kh59(ex) and ex.get("land") and aim and not sead_r
                       and all(enemy_standoff_loadout(t_) for _a, t_, _n in _raids48.raid_members(ex)))       # S48 (the switch is `raids.KH59_RAIDS`, read now): every member must carry a Kh-59M (a Su-25 cannot: a pool with one is a plain raid), on a supply site / garrison aim (not the runway)
         launch_ = None
+        strike_kind = {"field": "runway", "garrison": "troops", "sector": "troops", "supply": "supply"}.get(_raids48.aim_kind(aim))          # B3: what a plain raid attacks -> its kit (`loadouts.STRIKE_KITS`): the runway (no aim), troops and garrisons, supply sites
         pk_sizes, pk_path, pk_kind, pk_off = None, None, None, None      # S59a: a SEAD raid's packages and each one's own route (the shared way in, then its own launch point); B2: each package's kind and launch delay
         sead_rep = []                                           # B2: one line per SEAD package (kind, jets, launch distance, times), kept on `self.sead_report` for the checks; nothing reads it in the mission
         dx, dy = (ex.get("dest") or (cvb.x, cvb.y))              # where the raiders are going: the field, a supply site, a garrison or a sector
@@ -1218,7 +1219,7 @@ class RaidSpawns:
             """(class, task, loadout) of a raider type. S46: one per member, a pooled raid flies each type with its own loadout. B2: a SEAD package's kit is its kind's (`kind_`: "Kh_58U" | "Kh_31P")."""
             if land:
                 return (getattr(planes, t_), (task.SEAD if sead_r else (task.GroundAttack if aim else task.RunwayAttack)),
-                        enemy_arm_loadout(t_, kind_ or "Kh_31P") if sead_r else enemy_standoff_loadout(t_) if kh59_r else (enemy_land_bomber_loadout("Tu_22M3") if t_ == "Tu_22M3" else enemy_strike_loadout(t_)))      # v0.41.355 (Phase 10a): the Tu-22M3 land strike carries OFAB-250 racks, no Kh-22, no anti-ship task
+                        enemy_arm_loadout(t_, kind_ or "Kh_31P") if sead_r else enemy_standoff_loadout(t_) if kh59_r else (enemy_land_bomber_loadout("Tu_22M3") if t_ == "Tu_22M3" else enemy_strike_loadout(t_, strike_kind)))      # v0.41.355 (Phase 10a): the Tu-22M3 land strike carries OFAB-250 racks, no Kh-22, no anti-ship task
             return planes.Tu_22M3, task.AntishipStrike, enemy_bomber_loadout("Tu_22M3")
         kits_ = {}
         def kit_of(t_, kind_=None):

@@ -92,6 +92,8 @@ apart, so the start times on the Missions tab are spread over the turn's four ho
 1. **Missions** tab: pick a tasking, then press **FLY** on the row of the flight you want to fly (green rows). SQE writes
    `SQE_Sortie.miz` and opens the **waiting window**. Base, carrier, tanker and AWACS cover patrols are planned each turn and
    are AI-only. Red raids on your fields, supply sites and troops are listed as "Intercept" jobs with a red border.
+   What a raid carries follows its target (runway-piercing bombs on a runway, cluster bombs on troops, anti-radiation missiles
+   fired from 50 to 65 nm on a SAM site); the list is in CAMPAIGN.md, section 5.
 2. Start DCS, **Mission > Open > Missions > SQE_Sortie.miz**, fly it. The kneeboard carries comms and waypoints numbered the
    way your jet's cockpit numbers them, the timeline, bingo/joker, IFF, laser code, the package who's-who, threats and bullseye.
 3. The waiting window updates live (aircraft lost, ground units destroyed, landings). When DCS reports the mission ended it
