@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.552, S103f: the F-14B points are the ones Jester can select
+The plain F-14B no longer gets a DP point, which Jester cannot select. WP 1 is the marshal point, 2 the push and 3 the egress when the route has one. A fighter's station (CAP1) is the IP and the other end of its racetrack (CAP2) is ST; a strike keeps IP and ST on the target. A BARCAP has CAP1 and CAP2 as waypoints 1 and 2. HA (the hostile area) stays.
+
 ## v0.41.551, S103e: the F-14B card reads in the order you fly it
 In the plain F-14B, waypoint 1 is now always the marshal point and 2 the push; waypoint 3 is the IP of a strike or the station of a fighter job. A fighter's station is also the IP point, CAP2 is DP, the strike's target is ST and its egress is DP, and HA is the hostile area (the nearest SAM site). The kneeboard lists them in flight order and no longer shows the climb-out point.
 
