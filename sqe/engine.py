@@ -13,9 +13,13 @@ from .aircraft import AIRCRAFT, STRIKE_CONDITIONAL
 from .debrief import Manifest, apply_debrief, read_state_file, tally
 from .difficulty import get as get_difficulty
 from .loadouts import LoadoutLibrary
+from .merging import Merging
 from .models import AssetKind, BaseKind, Objective, ObjectiveType, Role
 from . import airwings, barcap as barcap_, clock, detection, raids, redair, refit, sams, ground, support_assets, tempo
+from . import timeofday as _tod
 from .mission_builder import MissionBuilder, MissionOptions
+from .options import options_from_settings
+from .sead_timing import SeadTiming
 from .packages import AI_ONLY, ai_only, carrier_raid, Ledger, NoPlayerSlot, Package, PackageBuilder
 
 from .scenario import new_campaign
@@ -62,7 +66,7 @@ def _fmt_hm(m: int) -> str:
     return f"{m // 60:02d}:{m % 60:02d}"
 
 
-class Session:
+class Session(Merging, SeadTiming):
     def __init__(self, settings: AppSettings):
         self.settings = settings
         self.state: CampaignState | None = None
@@ -96,14 +100,26 @@ class Session:
         d = self.campaigns_dir()
         return sorted(d.glob(f"*{CAMPAIGN_EXT}"), key=lambda p: p.stat().st_mtime, reverse=True) if d.exists() else []
 
-    def new(self, name: str, aircraft: str, level: int, seed: int | None = None, start_date: str = "2006-06-12", night_ops: bool = True,
-            squadron: str | None = None, theatre: str = "caucasus") -> None:
+    def new(self, name: str, aircraft: str, level: int, seed: int | None = None, start_date: str | None = None, night_ops: bool = True,
+            squadron: str | None = None, theatre: str = "caucasus", tactical_edge: bool = True, tactical_edge_decay: bool = False,
+            a10_variant: str | None = None, f14_variant: str | None = None, link16: bool | None = None) -> None:
         theatres.use(theatre)
         self.sync_terrain()
-        self.state = new_campaign(name, aircraft, level, theatre=theatre, seed=seed, start_date=start_date, night_ops=night_ops, player_squadron=squadron)
+        self.state = new_campaign(name, aircraft, level, theatre=theatre, seed=seed, start_date=start_date, night_ops=night_ops, player_squadron=squadron,
+                                  a10_variant=a10_variant, f14_variant=f14_variant, link16=link16)                  # S103a: Era Equipment (None = the theatre's era values)
+        self.state.ground["tactical_edge"] = bool(tactical_edge)                                          # S88 R3: the two Tactical Edge switches belong to the campaign (they were app settings copied in on every open)
+        self.state.ground["tactical_edge_decay"] = bool(tactical_edge and tactical_edge_decay)            # v0.41.208: the decay needs the edge
+        clock.use(self.state.start_hour)
         safe = "".join(c if c.isalnum() or c in "-_ " else "_" for c in name).strip() or "campaign"
         self.path = self.campaigns_dir() / f"{safe}{CAMPAIGN_EXT}"
         self.plan_day()
+        if self.state.status == "ACTIVE" and not self.state.night_ops and clock.is_night_turn(self.state.turn):       # S90 J5b: a campaign that starts at night (Syria 00:00) with night ops off: the night turns are resolved without you, as they are every other night
+            sim = self._sim(self._rng(46 + 1000 * self.state.turn))
+            for _ in range(MAX_NIGHT_TURNS):
+                if self.state.status != "ACTIVE" or not clock.is_night_turn(self.state.turn):
+                    break
+                _res, nbook = self._resolve_turn(sim)
+                self._tick(self._sorties(nbook), sim)
         self.save()
 
     def open(self, path) -> None:
@@ -132,6 +148,7 @@ class Session:
     def _open_loaded(self, loaded, path) -> None:
         self.state = loaded
         theatres.use(self.state.theatre)
+        clock.use(self.state.start_hour)                 # S90 J5b: this campaign's Day 1 hour (an old save: 8)
         self.sync_terrain()
         self.path = Path(path)
         self.settings.last_campaign = str(path)
@@ -185,12 +202,13 @@ class Session:
         ground.ensure_forward_garrisons(st)             # v0.41.102: a forward garrison for each side in every sector (older saves too)
         sams.ensure_blue_sams(st)                       # v0.41.62: blue's three air-defence sites at every airfield (older saves: from the field's `defense`)
         ground.snap_roads(st)                           # once, as soon as a road scan exists: columns and supply sites sit on a road
-        if st.ground is not None:
-            st.ground["pilot_influence"] = bool(getattr(self.settings, "pilot_influence", True))
-            st.ground["tempo_decay"] = bool(getattr(self.settings, "tempo_decay", False))      # v0.41.208
         from . import carrier_pos, fleet as _fleet
         for _ln in _fleet.step(st):                     # v0.41.257: a sunk carrier comes back as new on its day; sunk escorts are replaced
             st.note(_ln)
+        from . import bombers as _bmb
+        _off = _bmb.cancel_if_cut(st)                   # S116: a staged raid whose bomber field is cut or destroyed is called off (the fleet then sails back below)
+        if _off:
+            st.note(_off)
         _cv = None if _fleet.sunk(st) else carrier_pos.update(st)      # v0.41.159: the fleet repositions once a day, along the front and clear of the red airfields
         if _cv:
             st.note(_cv)
@@ -205,19 +223,26 @@ class Session:
             from . import bombers
             dec = bombers.decide(st, self.d)
             if dec["mode"] == "hold":
+                had_ = (st.raids or {}).get("bomber_stage")
                 bombers.note_stage(st, dec)
+                now_ = (st.raids or {}).get("bomber_stage")
+                if now_ is not None and now_ is not had_ and int(now_.get("launch", -1)) >= st.day:      # S115: the raid was staged just now: the intelligence pickup, and the fleet runs out of the bombers' reach
+                    st.note(bombers.intel(st)["log"])
+                    _run = carrier_pos.evade(st)
+                    if _run:
+                        st.note(_run)
             else:
                 stg_t = ((st.raids or {}).get("bomber_stage") or {})
                 stg_t = stg_t.get("turn") if stg_t.get("launch") == st.day else None      # v0.41.356 (Phase 10b part 1): the launch turn was drawn when the raid was staged (the turn before it plans the prep); an older stage has none: drawn now
                 bomber_turn = stg_t if stg_t in turns else (pick.choice(turns) if turns else st.turn)
-        keep = {k: v for k, v in (st.raids or {}).items() if k in ("carry", "sead_fail", "bomber_days", "bomber_stage", "deck_out_to", "retask", "credit", "credit_in")}
+        keep = {k: v for k, v in (st.raids or {}).items() if k in ("carry", "sead_fail", "bomber_days", "bomber_stage", "bomber_off", "deck_out_to", "retask", "credit", "credit_in", "f117_last", "opening_strike")}      # S104c: + the F-117A cooldown clock (`f117.cooling`); S104d: + the opening strike's record (`f117.returning`)
         st.raids = {**keep, "day": st.day, "surprise": 0, "surprise_by": {}, "carry": [], "bomber_turn": bomber_turn, "booked": {}}      # v0.41.341 (Phase 5b): the day's raids are drawn turn by turn in `plan_turn` (`raids.turn_raids`); "surprise" adds up the unwarned ones nobody flew, settled overnight
         bc = barcap_.ensure(st)                          # the day's BARCAP areas (made once a day); the standing patrols, guards and the AWACS / tanker windows are planned turn by turn (`plan_turn`, Phase 4b)
         bc["blue_flights"], bc["blue_cover"], bc["support_flights"], bc["blue_committed"] = [], {}, {}, []
 
     def _turn_rate(self, turn: int, ledger=None) -> float:
         """How many packages this turn plans (a fraction is a seeded chance of one more). With the turn's ledger (v0.41.345, scaled tasking Phase B): the free strike / SEAD / CAS pairs
-        (`room(sid, 2) // 2`, after the hold, the support windows and the standing patrols) x TASK_SHARE / PAIRS_PER_PACKAGE, kept between N_MIN and N_MAX, plus DAY1_EXTRA on Day 1; a night
+        (`room(sid, NWAVES) // 2`, after the hold, the support windows and the standing patrols) x TASK_SHARE / PAIRS_PER_PACKAGE, kept between N_MIN and N_MAX, plus DAY1_EXTRA on Day 1; a night
         turn (night ops on) plans NIGHT_FACTOR of that, no N_MIN. With no ledger (old callers, tools): PACKAGES_PER_TURN by level and day / night, as before."""
         st = self.state
         lvl = max(1, min(3, int(st.level)))
@@ -225,7 +250,7 @@ class Session:
         if ledger is None:
             day_r, night_r = PACKAGES_PER_TURN[lvl]
             return night_r if night else day_r + (DAY1_EXTRA if st.day == 1 else 0)
-        pairs = sum(ledger.room(sid, 2) // 2 for sid, q in st.squadrons.items() if AIRCRAFT[q.aircraft].roles & STRIKE_ROLES)
+        pairs = sum(ledger.room(sid, _tod.NWAVES) // 2 for sid, q in st.squadrons.items() if AIRCRAFT[q.aircraft].roles & STRIKE_ROLES)
         r = pairs * TASK_SHARE[lvl] / PAIRS_PER_PACKAGE
         if night:
             return max(0.0, min(N_MAX[lvl], r) * NIGHT_FACTOR[lvl])
@@ -252,13 +277,14 @@ class Session:
                     names[nm] = max(names.get(nm, 0), int(no))
         return names
 
-    def _build_wave(self, pb, o, i: int, ledger, fps: tuple, names: dict, waves: tuple = (1, 2)) -> tuple:
-        """Build one objective's package in the first wave that crews it (Phase 4): wave 1 draws on the jets that are ready now, wave 2 on those plus the jets whose refit ends by
-        the second wave. A package with a required slot short in wave 1 is tried in wave 2 and goes there when that is better; ties keep wave 1.
+    def _build_wave(self, pb, o, i: int, ledger, fps: tuple, names: dict, waves: tuple | None = None) -> tuple:
+        """Build one objective's package in the first wave that crews it (Phase 4; S110: four waves): wave 1 draws on the jets that are ready now, a later wave on those plus the jets whose refit
+        ends by its opening (`Ledger` tiers). `waves` = the waves to try in order (default all, from wave 1; a job meant for a later wave starts there). A package with a required slot short in
+        a wave is tried in the next one and goes there when that is better; ties keep the earlier wave. A wave after the first try that adds no jets (an empty tier) is skipped: nothing new to crew with.
         -> (package, wave) or (None, 0). The ledger, the shortfall list and the callsign counter are touched only by the attempt that is kept."""
         tries = []
-        if not any(ledger.late.values()):
-            waves = tuple(w for w in waves if w == 1) or waves[:1]          # nothing comes ready for the second wave: one attempt is all there is
+        waves = tuple(range(1, _tod.NWAVES + 1)) if waves is None else tuple(waves)
+        waves = tuple(w for k, w in enumerate(waves) if k == 0 or ledger.adds(w))          # nothing comes ready for that wave: no better attempt there
         n0, names0 = len(pb.short), dict(names)
         for w in waves:
             view = ledger.view(w)
@@ -291,9 +317,8 @@ class Session:
 
     def plan_turn(self) -> list:
         """The tasking order of THIS TURN (v0.41.338, Phase 4; the second half of the old `plan_day`): a few jobs from `ObjectivePlanner` (PACKAGES_PER_TURN), the day's raids that
-        belong to this turn, crewed from the squadrons' ready jets in two launch waves (`Ledger`, `turn_times`). `state.plan` holds only this turn's packages. -> the packages."""
+        belong to this turn, crewed from the squadrons' ready jets in four launch waves, an hour apart (`Ledger`, `turn_times`; S110). `state.plan` holds only this turn's packages. -> the packages."""
         st = self.state
-        from . import timeofday as _tod
         turn = st.turn
         t0 = clock.minute(turn) - clock.day_start_minute(st.day)             # the turn's first minute of today
         st.raids["planned_turn"] = turn
@@ -315,7 +340,7 @@ class Session:
         t_abs = clock.minute(turn)
 
         from . import carrier_hit
-        base_L = Ledger(st, ready_min=t_abs + _tod.WAVE2_OFFSET_MIN)       # the turn's jets: wave 1 = ready now, wave 2 adds what finishes its refit by the second wave
+        base_L = Ledger(st, t_abs=t_abs)                                   # the turn's jets: wave 1 = ready now, each later wave adds what finishes its refit by its opening (a tier)
         from . import reserve as _res                                       # v0.41.340 (Phase 5a): the reaction reserve comes off the fighter / multirole squadrons BEFORE the patrols and packages draw on the ledger
         if st.barcap is not None:
             st.barcap["react_hold"] = _res.apply(base_L, [q for q in st.squadrons.values() if Role.CAP in AIRCRAFT[q.aircraft].roles], int(st.level))
@@ -350,8 +375,8 @@ class Session:
         sweeps = {}                                     # id(sweep package) -> the packages it goes in ahead of
 
         def preferred_waves() -> dict:
-            """Which wave each job is meant for: up to half of them (whole areas together, so packages that fold into one mission stay in one wave) in wave 1, the rest in wave 2. The carrier raid
-            and its prep go in wave 1. A job meant for wave 1 moves to wave 2 only when its jets are not ready (`_build_wave`)."""
+            """Which wave each job is meant for (S110): the jobs spread over the four waves as evenly as they go, the earlier waves first (`timeofday.split_waves`), whole areas together so packages
+            that fold into one mission stay in one wave. The carrier raid and its prep go in wave 1. A job moves to a later wave only when its jets are not ready (`_build_wave`)."""
             from types import SimpleNamespace
             from .packages import packages_linked
             fake = [SimpleNamespace(objective=o) for o in objs]
@@ -367,10 +392,12 @@ class Session:
             groups: dict = {}
             for i in range(len(objs)):
                 groups.setdefault(root(i), []).append(i)
-            half, seen, out = (len(objs) + 1) // 2, 0, {}
+            quota = _tod.split_waves(len(objs))               # the wave of the k-th job in the order below: the first quota, the next ...
+            seen, out = 0, {}
             for g in sorted(groups.values(), key=lambda g: (-len(g), g[0])):
+                w_g = quota[min(seen, len(quota) - 1)] if quota else 1       # the whole group goes where its first job falls (a group may overshoot a wave's share, as before)
                 for i in g:
-                    out[i] = 1 if (seen < half or carrier_raid(st, objs[i]) or objs[i].id in prep_obj_ids) else 2
+                    out[i] = 1 if (carrier_raid(st, objs[i]) or objs[i].id in prep_obj_ids) else w_g
                 seen += len(g)
             return out
 
@@ -388,7 +415,7 @@ class Session:
                     before = {sid: ledger.free.get(sid, 0) for sid in hold_left}
                     for sid, h in hold_left.items():
                         ledger.free[sid] = before[sid] + h
-                    pkg, _w = self._build_wave(pb, o, i, ledger, fps, names, waves=(1, 2) if pref[i - 1] == 1 else (2,))
+                    pkg, _w = self._build_wave(pb, o, i, ledger, fps, names, waves=tuple(range(pref[i - 1], _tod.NWAVES + 1)))
                     for sid, h in list(hold_left.items()):
                         used = before[sid] + h - ledger.free.get(sid, 0)
                         from_hold = max(0, min(used, h))
@@ -397,7 +424,7 @@ class Session:
                         if from_hold:
                             used_hold[sid] = used_hold.get(sid, 0) + from_hold
                 else:
-                    pkg, _w = self._build_wave(pb, o, i, ledger, fps, names, waves=(1, 2) if pref[i - 1] == 1 else (2,))
+                    pkg, _w = self._build_wave(pb, o, i, ledger, fps, names, waves=tuple(range(pref[i - 1], _tod.NWAVES + 1)))
                 if pkg is not None:
                     out.append(pkg)
             if st.barcap is not None:
@@ -439,7 +466,7 @@ class Session:
         rng = self._rng(3)
         pkgs = build_all(set(rng.sample(range(len(objs)), min(len(objs), max(1, (len(objs) + 1) // 2)))))     # your squadron is tasked on about half of them
         _L0 = make_ledger()
-        if psq and not clock.is_night_turn(turn) and mine(pkgs) < 1 and _L0.free[psq] + _L0.late[psq] >= 2:      # a day turn offers your squadron a slot when it has a ready pair
+        if psq and not clock.is_night_turn(turn) and mine(pkgs) < 1 and _L0.room(psq, _tod.NWAVES) >= 2:      # a day turn offers your squadron a slot when it has a ready pair
             pkgs = build_all(set(range(len(objs))))
             if mine(pkgs) < 1:                                  # still none (a short list is often one AI-only job, a fleet patrol): the planner's next-best jobs are offered until one fits your squadron
                 have = {(o.type, o.target_id, o.aim) for o in objs}
@@ -467,7 +494,7 @@ class Session:
                 comp[i] = comp[comp[i]]; i = comp[i]
             return i
         use_radius = self.settings.merge_mode == "area"
-        R = self.merge_radius_m()
+        R = self.area_radius_m()
         for i in range(len(pkgs)):
             for j in range(i + 1, len(pkgs)):
                 if packages_linked(st, pkgs[i], pkgs[j]) or (use_radius and self._near(pkgs[i], pkgs[j], R)):
@@ -482,7 +509,7 @@ class Session:
         self._wave_times(pkgs)                                       # v0.41.367 (S20 Phase 2): and the groups go in one after another, nearest first, SAM_WAVE_GAP_MIN apart
         self._stage_times(pkgs)                                      # a DEAD stage goes in DEAD_STAGE_GAP_MIN after the SEAD stage of the same site
         self._late_sead(pkgs)                                        # test option --late-sead: the SEAD stage goes in late, so the DEAD stage holds
-        floor = lambda p: t0 + (_tod.WAVE2_OFFSET_MIN if p.extra.get("wave", 1) == 2 else 0)      # no package starts before its wave opens (its jets are not ready earlier)
+        floor = lambda p: t0 + _tod.wave_open(p.extra.get("wave", 1))      # no package starts before its wave opens (its jets are not ready earlier)
         self._time_raid_prep(pkgs, prep_ids, floor)                  # v0.41.305: the carrier raid's SEAD / Standoff DEAD packages go in RAID_PREP_LEAD_MIN ahead of it (before the sweeps are timed from their packages)
         from . import sweep as sweep_
         dropped = set()
@@ -548,7 +575,7 @@ class Session:
                 p.extra["detect"] = v_
         st.plan = [p.to_dict() for p in pkgs]
         self._cast_sead(pkgs)
-        refit.step(st, t_abs + _tod.WAVE2_OFFSET_MIN)       # the jets the second wave counted on are ready by its opening: they join `available` now, so the turn's losses and its commit come out of the same pool
+        refit.step(st, t_abs + _tod.WAVE_OFFSETS_MIN[-1])       # the jets the last wave counted on are ready by its opening: they join `available` now, so the turn's losses and its commit come out of the same pool
         st.red_air["avail0"] = {q.id: int(q.available) for w in st.enemy_air for q in w.sqns}      # red's ready jets per squadron as the turn starts: what the turn lost is the drop from here (`_red_sorties`)
         self.refresh_weather()
         return self.packages()
@@ -575,167 +602,6 @@ class Session:
                     jets += [[sid, n, "esc"] for sid, n in redair.take_ready(st, st.enemy_air_at(ex["escort_wing"]), (ex["escort_type"],), int(ex["escorts"]))]
                 keep[oid] = {"jets": jets, "start": _hm(p.start), "turn": turn}
         st.raids["booked"] = keep
-
-    def _agm88_leg_s(self, p) -> float | None:
-        """Seconds from PUSH to the HARM point for this SEAD package's first HARM flight, from the same marshal, geometry and route the
-        mission builder will use (an umbrella keep-out included). Within one mission every package pushes exactly its start difference after
-        the others, so this leg is all that separates their HARM times."""
-        from .models import BaseKind
-        from .routes import AGM88_LAUNCH_NM, assign_times, bearing, make_geometry, objective_wp, plan_route
-        from . import threatmap as tm
-        st = self.state
-        fl = [f for f in p.flights if f.role == Role.SEAD and not f.tag and getattr(f, "base_id", None) in st.bases]
-        if not fl:
-            return None
-        f = fl[0]
-        base, spec, tgt = st.bases[f.base_id], AIRCRAFT[f.aircraft], st.assets[p.objective.target_id]
-        try:
-            bx, by = base.x, base.y
-            if base.kind == BaseKind.CARRIER:                          # the builder slides the carrier back for the sortie: time it from there
-                from .mission_builder import carrier_station
-                spot = carrier_station(st, base, tgt.x, tgt.y, self.options.carrier_min_enemy_nm)
-                if spot:
-                    bx, by = spot[0], spot[1]
-            mshl = tm.package_marshal(st, (bx, by), bearing(bx, by, tgt.x, tgt.y), (tgt.x, tgt.y), p.flights)
-            g = make_geometry(bx, by, tgt.x, tgt.y, spec.profile, mshl, carrier=base.kind == BaseKind.CARRIER)
-            um = tm.umbrella_site(st, tgt)
-            wps = plan_route(Role.SEAD, (bx, by), g, spec.profile, is_player=False, tanker_xy=None,
-                             keep_out=(um.x, um.y, AGM88_LAUNCH_NM) if um else None)
-            assign_times(wps, 0.0)
-            push, obj = next(w for w in wps if w.name == "PUSH"), objective_wp(wps)
-            return obj.eta_s - push.eta_s
-        except Exception:
-            return None
-
-    def _sead_groups(self, pkgs: list) -> list:
-        """The turn's SEAD-stage packages in connected groups: (package, its target asset, its push-to-HARM leg in seconds) lists, a package joining a group when its target is within SEAD_SYNC_KM of ANY target in it."""
-        import math
-        st = self.state
-        sead = []
-        for p in pkgs:
-            if p.objective.type != ObjectiveType.DEAD or not p.objective.target_id or p.objective.target_id not in st.assets:
-                continue
-            leg = self._agm88_leg_s(p)
-            if leg is None:
-                continue
-            sead.append((p, st.assets[p.objective.target_id], leg))
-        # v0.41.27: connected groups (a package joins if its target is close to ANY target in the group, not only the first one's): with the
-        # carrier further out, the greedy version split the Gudauta cluster and its SA-11 package went in 15 minutes ahead of the others
-        groups = []
-        for item in sead:
-            near = [g for g in groups if any(math.hypot(o[1].x - item[1].x, o[1].y - item[1].y) <= SEAD_SYNC_KM * 1000 for o in g)]
-            merged = [item]
-            for g in near:
-                merged = g + merged
-                groups.remove(g)
-            groups.append(merged)
-        return groups
-
-    def _wave_times(self, pkgs: list) -> None:
-        """v0.41.367 (S20 Phase 2): the turn's SEAD-stage groups (the same 60 km groups `_sync_sead` builds) get HARM times at least SAM_WAVE_GAP_MIN apart, the group nearest to blue's side first (`wave_factor`: the
-        belt is rolled back, Falcon BMS style). A group keeps its own simultaneous arrival. Groups are only ever moved LATER (a group already further apart than the gap stays), so no package goes in before its wave's floor;
-        the clock stays inside the day (the turn's safety net clamps the start into the turn)."""
-        if not SEAD_SYNC_ON:
-            return
-        from .war import wave_factor
-        st = self.state
-        groups = self._sead_groups(pkgs)
-        if len(groups) < 2:
-            return
-        groups.sort(key=lambda g: (-max(wave_factor(st, it[1]) for it in g), min(int(it[0].start[:2]) * 60 + int(it[0].start[3:5]) for it in g)))
-        arrive = lambda it: int(it[0].start[:2]) * 60 + int(it[0].start[3:5]) + it[2] / 60.0
-        last = None
-        for g in groups:
-            now = max(arrive(it) for it in g)
-            tgt = now if last is None else max(now, last + SAM_WAVE_GAP_MIN)
-            shift = round(tgt - now)
-            if shift:
-                for it in g:
-                    p = it[0]
-                    m = min(23 * 60 + 55, int(p.start[:2]) * 60 + int(p.start[3:5]) + shift)
-                    p.start = f"{m // 60:02d}:{m % 60:02d}"
-            last = tgt
-
-    def _sync_sead(self, pkgs: list) -> None:
-        """SEAD packages whose targets sit within SEAD_SYNC_KM of each other go in together: each one's start is moved so that its HARM time
-        lands on the latest of the group (the earlier packages wait; none goes in ahead of the others). The HARM time is the package's start plus
-        its real push-to-HARM-point leg (marshal, geometry and route as the builder makes them). v0.39.13-v0.39.20 used a straight line from the
-        base at 400 kt, which ignored where each package marshals: the carrier's wave arrived about 3 minutes after the land-based one."""
-        if not SEAD_SYNC_ON:
-            return
-        groups = self._sead_groups(pkgs)
-        for g in groups:
-            if len(g) < 2:
-                continue
-            def arrive(item):
-                p, _, leg = item
-                return int(p.start[:2]) * 60 + int(p.start[3:5]) + leg / 60.0
-            latest = max(arrive(it) for it in g)
-            for it in g:
-                shift = round(latest - arrive(it))
-                if shift:
-                    p = it[0]
-                    m = min(23 * 60 + 55, max(0, int(p.start[:2]) * 60 + int(p.start[3:5]) + shift))
-                    p.start = f"{m // 60:02d}:{m % 60:02d}"
-
-    def _drop_orphan_followers(self, pkgs: list) -> list:
-        """A follow job (STRIKE / CAS with `after`) stays only if every site it waits on still stands and has its SEAD / standoff package built."""
-        from .models import SEAD_AIMS
-        from .war import after_sites
-        st = self.state
-        have = {p.objective.target_id for p in pkgs if p.objective.type == ObjectiveType.DEAD and p.objective.aim in SEAD_AIMS}
-        keep = [p for p in pkgs if all(x in have or st.assets.get(x) is None or st.assets[x].destroyed for x in after_sites(p.objective))]
-        if len(keep) == len(pkgs):
-            return pkgs
-        for p in pkgs:
-            if p not in keep:
-                st.note(f"{p.objective.description}: dropped, the SEAD it was to follow could not be crewed")
-        return keep
-
-    def _stage_times(self, pkgs: list) -> None:
-        """Keep each DEAD-stage package DEAD_STAGE_GAP_MIN after the SEAD-stage package of the same site (waves would otherwise spread them)."""
-        from .models import SEAD_AIMS
-        from .war import DEAD_STAGE_GAP_MIN, FOLLOW_GAP_MIN, after_sites
-        sead = {p.objective.target_id: p for p in pkgs if p.objective.type == ObjectiveType.DEAD and p.objective.aim == "SEAD"}
-        for p in pkgs:
-            sp = sead.get(p.objective.target_id)
-            if p.objective.type == ObjectiveType.DEAD and p.objective.aim == "DEAD" and sp is not None:
-                m = min(23 * 60 + 55, int(sp.start[:2]) * 60 + int(sp.start[3:5]) + DEAD_STAGE_GAP_MIN)
-                p.start = f"{m // 60:02d}:{m % 60:02d}"
-        # v0.41.158: a follow job (STRIKE / CAS behind the SEAD of the long-reach sites round its target) starts FOLLOW_GAP_MIN after the latest of those packages
-        stage = {p.objective.target_id: p for p in pkgs if p.objective.type == ObjectiveType.DEAD and p.objective.aim in SEAD_AIMS}
-        hm = lambda q: int(q.start[:2]) * 60 + int(q.start[3:5])
-        for p in pkgs:
-            sps = [stage[x] for x in after_sites(p.objective) if x in stage]
-            if sps:
-                m = min(23 * 60 + 55, max(hm(q) for q in sps) + FOLLOW_GAP_MIN)
-                p.start = f"{m // 60:02d}:{m % 60:02d}"
-
-    def _late_sead(self, pkgs: list) -> None:
-        """Test option --late-sead: every SEAD-stage package starts late_sead_min later. It runs after _stage_times, so the DEAD stage keeps its
-        time and now arrives ahead of its SEAD: it reaches the gate with the radars still up and the SEAD flights still alive, which is the case
-        the hold is for. Only days planned while the option is on are affected (the plan is saved with the day)."""
-        n = int(getattr(self, "late_sead_min", 0) or 0)
-        if n <= 0:
-            return
-        for p in pkgs:
-            if p.objective.type == ObjectiveType.DEAD and p.objective.aim == "SEAD":
-                m = min(23 * 60 + 55, int(p.start[:2]) * 60 + int(p.start[3:5]) + n)
-                p.start = f"{m // 60:02d}:{m % 60:02d}"
-
-    def _cast_sead(self, pkgs: list) -> None:
-        """The dice for every SEAD package of the turn are cast now, once (seeded from the campaign, the turn and the site): the war simulation, the
-        DEAD stage's briefing and the mission builder all read the same answer. Flying the SEAD package replaces it with what really happened."""
-        import random as _r
-        from .war import WarSimulator, chance
-        st = self.state
-        st.raids.setdefault("sead", {})
-        sim = self._sim()
-        from .models import SEAD_AIMS
-        for p in pkgs:
-            if p.objective.type == ObjectiveType.DEAD and p.objective.aim in SEAD_AIMS:
-                rng = _r.Random(f"{st.campaign_id}:{st.turn}:{p.objective.target_id}:sead")
-                st.raids["sead"][p.objective.target_id] = chance(rng, sim.sead_p(st, p), self.d.variance)
 
     def idle_reasons(self) -> list:
         """Why your squadron has nothing to fly this turn, from the facts at hand (shown when the Missions list has no flight for you)."""
@@ -820,11 +686,10 @@ class Session:
             sites[a.id] = o_r.id
             if a.id in have:
                 continue
-            tail = f" ({a.health:.0%} left)" if a.health < 0.85 else ""
             if long_range_site(st, a):
-                o = Objective(pid(len(new) + 1), ObjectiveType.DEAD, a.id, o_r.priority, f"Standoff DEAD: destroy {a.name}{tail}", "STANDOFF")
+                o = Objective(pid(len(new) + 1), ObjectiveType.DEAD, a.id, o_r.priority, f"Standoff DEAD: destroy {a.name}", "STANDOFF")
             else:
-                o = Objective(pid(len(new) + 1), ObjectiveType.DEAD, a.id, o_r.priority, f"SEAD: suppress {a.name}{tail}", "SEAD")
+                o = Objective(pid(len(new) + 1), ObjectiveType.DEAD, a.id, o_r.priority, f"SEAD: suppress {a.name}", "SEAD")
             new.append(o)
         if ahead is not None:                                        # the record the raid of turn `ahead` reads (a replan of this turn writes it again: it is one record, not a list that grows)
             st.raids["raid_prep"] = {"turn": ahead, "sites": sorted(sites)}
@@ -936,157 +801,6 @@ class Session:
         from .models import AssetKind
         return any(a.kind == AssetKind.SAM and not a.destroyed and a.health > 0.25 and tm.RANGE_NM.get(a.variant, 0) >= 12 for a in self.state.assets.values())
 
-    # ---- merge area: a circle around the package's target, kept inside the area where targets exist ---------------------
-    def merge_radius_m(self) -> float:
-        return max(5.0, float(getattr(self.settings, "merge_radius_nm", 15))) * 1852.0
-
-    def _pkg_xy(self, p: Package):
-        """The ground target of a package, or None for fleet packages (BARCAP, fleet defence), which are never folded by area."""
-        if p.objective.type in (ObjectiveType.BARCAP, ObjectiveType.FLEET_DEFENSE):
-            return None
-        a = self.state.assets.get(p.objective.target_id)
-        return (a.x, a.y) if a is not None else None
-
-    def _raid_xy(self, p: Package):
-        """v0.41.28: where a land raid is going (the raided field, or the supply site / garrison it is after). Only the centre of the merge circle
-        when you fly the intercept; a raid package itself is still never folded into anyone else's mission."""
-        if p.objective.type != ObjectiveType.FLEET_DEFENSE or not p.extra.get("land"):
-            return None
-        b = self.state.bases.get(p.objective.target_id)
-        if b is None:
-            return None
-        return tuple(p.extra.get("dest") or (b.x, b.y))
-
-    def _near(self, a: Package, b: Package, R: float) -> bool:
-        pa, pb = self._pkg_xy(a), self._pkg_xy(b)
-        return pa is not None and pb is not None and math.hypot(pa[0] - pb[0], pa[1] - pb[1]) <= R
-
-    def merge_center(self, pkg: Package, R: float | None = None):
-        """The centre of the merge circle: your target, slid inward so the whole circle stays inside the box that holds every possible target
-        (destroyed sites included, so it does not shrink as the war goes on). Your own target always stays inside the circle."""
-        R = self.merge_radius_m() if R is None else R
-        t = self._pkg_xy(pkg) or self._raid_xy(pkg)
-        if t is None:
-            return None
-        A = list(self.state.assets.values())
-        x0, x1 = min(a.x for a in A), max(a.x for a in A)
-        y0, y1 = min(a.y for a in A), max(a.y for a in A)
-        cx = min(max(t[0], x0 + R), x1 - R) if (x1 - x0) >= 2 * R else (x0 + x1) / 2
-        cy = min(max(t[1], y0 + R), y1 - R) if (y1 - y0) >= 2 * R else (y0 + y1) / 2
-        d = math.hypot(t[0] - cx, t[1] - cy)
-        if d > R:                                     # never push your own target out of the circle
-            cx, cy = t[0] + (cx - t[0]) * R / d, t[1] + (cy - t[1]) * R / d
-        return cx, cy
-
-    def _inside_merge(self, anchor: Package, other: Package) -> bool:
-        """Is `other`'s target inside the merge circle around `anchor`'s?"""
-        if self.settings.merge_mode != "area":
-            return False
-        c, t = self.merge_center(anchor), self._pkg_xy(other) or self._raid_xy(other)
-        return c is not None and t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= self.merge_radius_m()
-
-    def _raid_way(self, p: Package):
-        """S39: a land raid's way in, ((x0, y0), (x1, y1)): from the bomber wing's field to the point it is going for. None for any other package (the carrier raid stays out)."""
-        t = self._raid_xy(p)
-        if t is None:
-            return None
-        w = self.state.assets.get(p.extra.get("bomber_wing"))
-        return ((w.x, w.y), t) if w is not None else (t, t)
-
-    @staticmethod
-    def _seg_dist(pt, a, b) -> float:
-        """Distance (m) from the point `pt` to the segment a-b."""
-        dx, dy = b[0] - a[0], b[1] - a[1]
-        L2 = dx * dx + dy * dy
-        u = 0.0 if L2 <= 0 else max(0.0, min(1.0, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / L2))
-        return math.hypot(pt[0] - (a[0] + u * dx), pt[1] - (a[1] + u * dy))
-
-    def merge_candidates(self, pkg: Package, unseen: bool = False) -> list:
-        """Packages folded into a mission built around `pkg`: every package whose target lies inside the merge circle (Settings: radius, centred by merge_center),
-        starting up to `merge_fwd_min` minutes AFTER it or up to `merge_back_min` minutes BEFORE it (those are already underway when the mission starts). At most six,
-        closest to the centre first, so the unit limit drops the furthest first. Empty when merging is off.
-        v0.41.351 (XO 2026-11-10, S8): a land raid (the intercept package; its point is the raided field, supply site or garrison, `_raid_xy`) folds in like any package.
-        v0.41.398 (S39): a raid also counts along its way in (`_raid_way`, its wing's field to its target). When `pkg` is a land raid, a package folds in when its point is
-        inside the circle OR within the radius of the raid's way in; and with `merge_raids_all` (default) every other land raid in the time window folds in, at any distance.
-        When `pkg` is anything else, a land raid folds in when its target is inside the circle OR its way in passes within the radius of the merge centre.
-        `unseen=True` (`fly` only) also takes the raids blue did not detect (`extra["unseen_raid"]`, not listed): they are built but never named to the player; the list and the GUI never pass it."""
-        if self.settings.merge_mode != "area":
-            return []
-        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
-        back = max(0, int(getattr(self.settings, "merge_back_min", 15)))
-        fwd = max(0, int(getattr(self.settings, "merge_fwd_min", 30)))
-        R = self.merge_radius_m()
-        c = self.merge_center(pkg, R)
-        if c is None:
-            return []
-        anchor_way = self._raid_way(pkg)
-        raids_all = bool(getattr(self.settings, "merge_raids_all", True))
-        out = []
-        pool = self.packages()
-        if unseen:
-            pool = pool + [u for u in (Package.from_dict(d) for d in self.state.plan) if u.extra.get("unseen_raid") and not u.extra.get("past")]
-        for p in pool:
-            t = self._pkg_xy(p) or self._raid_xy(p)
-            if p.number == pkg.number or t is None or not (-back <= hm(p) - hm(pkg) <= fwd) or not any(not f.tag for f in p.flights) or p.extra.get("scrub"):
-                continue
-            d = math.hypot(t[0] - c[0], t[1] - c[1])
-            way = self._raid_way(p)
-            if d <= R:
-                ok = True
-            elif anchor_way is not None:
-                ok = self._seg_dist(t, *anchor_way) <= R or (raids_all and way is not None)
-            else:
-                ok = way is not None and self._seg_dist(c, *way) <= R
-            if ok:
-                out.append((d, hm(p), p.number, p))
-        out.sort(key=lambda r: (not (r[3].objective.type == ObjectiveType.COUNTER_AIR and r[3].objective.aim == "SWEEP"),) + r[:3])     # a Fighter Sweep first: the unit limit drops the strike packages before it
-        picked = [r[3] for r in out[:6]]
-        # v0.41.270 (XO 2026-11-04): the carrier raid folds into no mission: it is red aiming for the king, a setpiece of its own (v0.41.250 folded it into any mission at its time)
-        return picked
-
-    def _drop_one(self, extras: list, anchor: Package | None = None) -> list:
-        """v0.41.131 (XO 2026-10-23): the package to give up first when the mission is over the unit limit: the one that starts LATEST; of two with the same start the
-        one later in the list (further from the centre). A Fighter Sweep (the escorts' reason to be there) and an emergency raid scramble (the in-universe \"help has been dispatched\") go last.
-        v0.41.398 (S39): with the `anchor` given, a land-raid intercept whose target is more than twice the merge radius from the anchor's merge centre goes before all of that
-        (the farthest first): the local fight stays whole."""
-        if anchor is not None:
-            c = self.merge_center(anchor)
-            R2 = 2 * self.merge_radius_m()
-            far = []
-            for i, x in enumerate(extras):
-                t = self._raid_xy(x) if c is not None else None
-                if t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) > R2:
-                    far.append((math.hypot(t[0] - c[0], t[1] - c[1]), i))
-            if far:
-                k = max(far)[1]
-                return extras[:k] + extras[k + 1:]
-        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
-        sweep = lambda p: (p.objective.type == ObjectiveType.COUNTER_AIR and p.objective.aim == "SWEEP") or p.objective.type == ObjectiveType.FLEET_DEFENSE
-        k = max(range(len(extras)), key=lambda i: (not sweep(extras[i]), hm(extras[i]), i))
-        return extras[:k] + extras[k + 1:]
-
-    def ruin_candidates(self, pkg: Package, extras: list) -> list:
-        """Earlier packages of the same day, same area, that may already have struck when your mission starts: their targets are shown as ruins.
-        Packages of this turn that start earlier, and (v0.41.337) the day's packages of earlier turns, kept in `state.plan_done` with their verdict. The closest in time first,
-        at most four looked at (the builder shows at most three)."""
-        if not getattr(self.settings, "ruins", True) or self.settings.merge_mode != "area":
-            return []
-        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
-        have = {x.number for x in extras}
-        R = self.merge_radius_m()
-        c = self.merge_center(pkg, R)
-        if c is None:
-            return []
-        def inside(p):
-            t = self._pkg_xy(p)
-            return t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) <= R
-        cands = self.packages() + [Package.from_dict(d) for d in (self.state.plan_done or [])]
-        out = [p for p in cands if p.number != pkg.number and p.number not in have and hm(p) < hm(pkg)
-               and any(not f.tag for f in p.flights) and not p.extra.get("scrub") and inside(p)
-               and not (p.objective.type == ObjectiveType.COUNTER_AIR and p.objective.aim == "SWEEP")]      # a sweep leaves nothing burning on the ground
-        out.sort(key=lambda p: (-hm(p), p.number))
-        return out[:4]
-
     def _preroll(self, pkgs: list) -> dict:
         """The war sim's verdict on these packages, rolled NOW on a throwaway copy of the state. The mission shows it as ruins, and the same
         verdict is applied for real at the debrief, so what you saw burning is what happened."""
@@ -1100,19 +814,6 @@ class Session:
                 continue
         return out
 
-    def collapse(self, pkgs: list) -> list:
-        """The Missions list: [(package, [packages shown inside it])]. A package that an earlier shown package folds in (it starts after it, same area)
-        is listed inside that package's panel instead of as a row of its own, each with its own FLY button."""
-        hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
-        absorbed, out = set(), []
-        for p in sorted(pkgs, key=lambda p: (hm(p), p.number)):
-            if p.number in absorbed:
-                continue
-            mem = [x for x in self.merge_candidates(p) if (hm(x), x.number) > (hm(p), p.number)] if self.flyable(p) else []
-            absorbed |= {x.number for x in mem}
-            out.append((p, mem))
-        return out
-
     # ---- fly ---------------------------------------------------------------------------------------
     def fly(self, package_number: int, flight_id: str | None):
         """Build the sortie for the package (and the packages the merge rules fold into it)."""
@@ -1122,53 +823,69 @@ class Session:
             raise RuntimeError("; ".join(problems))
         pkg = next(p for p in self.packages() if p.number == package_number)
         PackageBuilder(st, self.d).assign_player(pkg, flight_id)
-        self.options.hold_minutes = int(self.settings.hold_minutes)
-        self.options.launch_offset_s = int(self.settings.takeoff_buffer_s)
-        self.options.ai_unlimited_fuel = bool(self.settings.ai_unlimited_fuel)
-        self.options.hot_ramp_scrambles = bool(getattr(self.settings, "hot_ramp_scrambles", False))
-        self.options.hot_runway_starts = bool(getattr(self.settings, "hot_runway_starts", False))
-        self.options.hot_runway_own_field = self.options.hot_runway_starts and bool(getattr(self.settings, "hot_runway_own_field", False))
-        self.options.ai_skill_red = str(getattr(self.settings, "ai_skill_red", "level"))
-        self.options.ai_skill_blue = str(getattr(self.settings, "ai_skill_blue", "level"))
-        self.options.fighter_engage_nm = int(self.settings.fighter_engage_nm)
-        self.options.fighter_engage_minutes = int(self.settings.fighter_engage_minutes)
-        self.options.player_is_ai = bool(self.ai_test)
-        self.options.fighter_standoff = bool(self.settings.fighter_standoff)
-        self.options.carcasses = bool(getattr(self.settings, 'carcasses', True)); self.options.carcass_weight = max(5, int(getattr(self.settings, 'carcass_weight_pct', 25))) / 100.0
-        self.options.reactive = bool(getattr(self.settings, 'reactive', True))
-        self.options.ecm_script = bool(getattr(self.settings, 'ecm_script', False))
-        self.options.ecm_status = bool(getattr(self.settings, 'ecm_status', True))
-        self.options.awacs_tuned = bool(getattr(self.settings, 'awacs_tuned', True))
-        self.options.damage_calls = bool(getattr(self.settings, 'damage_calls', True))
-        self.options.splash_damage = bool(getattr(self.settings, 'splash_damage', True))
-        self.options.ai_land_carrier = str(getattr(self.settings, 'ai_land_carrier', "always"))
-        self.options.ai_land_field = str(getattr(self.settings, 'ai_land_field', "never"))
-        self.options.max_units = int(self.settings.merge_max_units)
-        self.options.merge_radius_nm = int(getattr(self.settings, 'merge_radius_nm', 15))
-        self.options.full_map = bool(self.full_map)
-        if self.full_map:
-            self.options.max_units = 10 ** 6
-        self.options.f14_special_names = bool(getattr(self.settings, 'f14_special_names', True)); self.options.merge_enemy_pct = int(self.settings.merge_enemy_pct); self.options.weather_mode = str(getattr(self.settings, 'weather_mode', 'clear')); self.options.ils_low_vis = bool(getattr(self.settings, 'ils_low_vis', True))
+        options_from_settings(self.options, self.settings, ai_test=self.ai_test, full_map=self.full_map)
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
-        extras = list(self.merge_candidates(pkg, unseen=True))
-        ruins = self.ruin_candidates(pkg, extras)
+        cands = list(self.fly_candidates(pkg, unseen=True))                  # S139a: every package in the time window, nearest first; the unit limit is the only cap
+        ruins = self.ruin_candidates(pkg, cands)
         pre = {}
-        if (ruins or extras) and getattr(self.settings, "ruins", True):
-            pre = self._preroll([p for p in list(extras) + ruins if not p.extra.get("done_roll") and p.objective.type != ObjectiveType.FLEET_DEFENSE])      # a raid shows no ruins: nothing to roll
+        if (ruins or cands) and getattr(self.settings, "ruins", True):
+            pre = self._preroll([p for p in list(cands) + ruins if not p.extra.get("done_roll") and p.objective.type != ObjectiveType.FLEET_DEFENSE])      # a raid shows no ruins: nothing to roll
             pre.update({p.id: p.extra["done_roll"] for p in ruins if p.extra.get("done_roll")})          # v0.41.337: an earlier turn's package was resolved already: its verdict is what burns
         from . import limits
-        cap = 10 ** 6 if self.full_map else min(int(self.settings.merge_max_units), limits.unit_ceiling())          # v0.41.131: the unit limit counts the whole mission, merged packages included
-        while True:
+        cap = 10 ** 6 if self.full_map else min(int(self.settings.max_units), limits.unit_ceiling())          # v0.41.131: the unit limit counts the whole mission, merged packages included
+        secs = []
+
+        def build(ext, rui):
+            t0 = time.time()
             with contextlib.redirect_stdout(io.StringIO()):      # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
-                res = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz, extras, ruins, pre)
-            if (not extras and not ruins) or res.counts["units"] <= cap:
+                r = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz, ext, rui, pre)
+            secs.append(round(time.time() - t0, 1))
+            return r
+
+        # S139a (XO 2026-11-20): the unit budget. Build 1 takes everything in the time window. If it fits and nothing was left out for the unit limit, that is the mission (the common
+        # small-map case). Otherwise build 2 is your package alone (+ its ruins): its units are what your target area keeps, and the packages are taken nearest first while they fit
+        # in what is left (their sizes come from build 1); build 3 is that list. The safety loop then drops the last ruin, then the furthest package, until it fits.
+        trims = lambda r: sorted(w for w in r.warnings if "left out to stay under" in w and "wrecks" not in w)      # what the unit limit cut out of the mission (the wrecks are decor and fit last)
+        extras, n_all, left_out, cut, base_trims = list(cands), len(cands), [], False, None
+        res = build(extras, ruins)
+        if extras and (res.counts["units"] > cap or res.trimmed):
+            base = build([], ruins)
+            base_trims = trims(base)
+            room, picked = cap - base.base_units, []
+            for x in extras:
+                need = res.pkg_units.get(x.id)
+                if need is None:
+                    need = sum(f.count for f in x.flights if not f.tag)
+                if need > room:
+                    break                                          # a prefix of the nearest-first list: the furthest are the ones left out
+                room -= need
+                picked.append(x)
+            if len(picked) < len(extras):                          # the same list as build 1 is build 1 again: no third build
+                res = build(picked, ruins) if picked else base
+            left_out, extras = extras[len(picked):], picked
+        while extras or ruins:
+            over = res.counts["units"] > cap
+            if not (over or (base_trims is not None and trims(res) != base_trims)):         # the target area keeps its budget: the same cuts as your package alone, no more
                 break
-            if ruins:
+            if over and ruins:
                 ruins = ruins[:-1]                               # returning flights first
+            elif not extras:
+                break
             else:
-                extras = self._drop_one(extras, pkg)               # too heavy: drop the latest-starting package (a Fighter Sweep last) and rebuild
+                nxt = self.drop_furthest(extras, pkg)               # too heavy: drop the furthest package (a Fighter Sweep stays while a package it covers stays) and rebuild
+                left_out += [x for x in extras if x.number not in {y.number for y in nxt}]
+                extras = nxt
+            cut = True
+            res = build(extras, ruins)
+        if left_out or cut:
             res.warnings.append(f"merged mission trimmed to fit the {cap}-unit limit")
+        if left_out:
+            res.warnings.append(f"{len(left_out)} of {n_all} packages in the time window left out (furthest first): " + ", ".join(f"#{x.number}" for x in left_out[:8]) + (", ..." if len(left_out) > 8 else ""))
+        if len(secs) > 1:
+            res.warnings.append(f"built in {len(secs)} passes ({', '.join(f'{s} s' for s in secs)}) to fit the unit limit")
+        self.last_fly_stats = {"cands": [x.number for x in cands], "picked": [x.number for x in extras], "left_out": [x.number for x in left_out], "builds": len(secs), "secs": secs,
+                               "base_units": res.base_units, "units": res.counts["units"], "cap": cap}
         st.sortie_counter += 1
         st.pending = {"package": package_number, "flight": pkg.player_flight.id, "manifest": res.manifest.to_dict(),
                       "built_at": time.time(), "miz": str(res.miz), "timeline": res.timeline,
@@ -1188,9 +905,6 @@ class Session:
     def _sim(self, rng=None):
         """The war simulator."""
         from .war import WarSimulator
-        if self.state is not None and self.state.ground is not None:
-            self.state.ground["pilot_influence"] = bool(getattr(self.settings, "pilot_influence", True))      # v0.41.160: the app setting rides in the campaign for the sim
-            self.state.ground["tempo_decay"] = bool(getattr(self.settings, "tempo_decay", False))             # v0.41.208
         return WarSimulator(self.d, rng)
 
     # ---- the clock: Skip and Fly take one turn (v0.41.337, campaign rules plan Phase 3) --------------------------------------

@@ -18,6 +18,8 @@ POOL = {"F-16C": [("fs_480", "480th FS 'Warhawks'"), ("fs_13", "13th FS 'Panther
                   ("fs_36", "36th FS 'Flying Fiends'"), ("fs_80", "80th FS 'Juvats'"), ("fs_555", "555th FS 'Triple Nickel'"), ("fs_510", "510th FS 'Buzzards'")],
         "F-15C": [("fs_44", "44th FS 'Vampire Bats'"), ("fs_67", "67th FS 'Fighting Cocks'"), ("fs_12", "12th FS 'Dirty Dozen'"), ("fs_71", "71st FS 'Ironmen'")],
         "A-10C": [("as_81", "81st FS 'Panthers'"), ("as_190", "190th FS 'Skullbangers'"), ("as_357", "357th FS 'Dragons'"), ("as_103", "103rd FS 'Eagles'")]}
+POOL["A-10A"] = POOL["A-10C"]                                  # S103b: the same squadrons fly whichever A-10 the campaign has
+POOL["A-10C2"] = POOL["A-10C"]                                 # S103e
 
 
 def need(state, b) -> tuple:
@@ -26,6 +28,8 @@ def need(state, b) -> tuple:
     for rec in (state.ground or {}).get("short", []):
         role, x, y = rec[1], rec[2], rec[3]                    # [day, role, x, y] before v0.41.338, [day, role, x, y, turn] since
         t = ROLE_TYPE.get(role)
+        if t == "A-10C":
+            t = getattr(state, "a10_variant", t)                    # S103b: a CAS shortfall is filled with the campaign's A-10 variant
         if t and math.hypot(x - b.x, y - b.y) / NM <= NEED_RADIUS_NM:
             counts[t] = counts.get(t, 0) + 1
     if counts:

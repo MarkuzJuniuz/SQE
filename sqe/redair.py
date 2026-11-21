@@ -3,7 +3,7 @@
 Red plans each turn on its own, from its READY fighters, as blue's standing patrols do (blue_barcap.plan_turn, Phase 4b):
 
 * CAP pairs: a share of the BARCAP areas that can be up this turn (`RED_CAP_SHARE`, day / night, seeded) gets one pair, on a station in front of its own base toward the
-  nearest friendly airfield (barcap.py). A pair of a short-legged type costs two (a second pair relieves it in the second wave).
+  nearest friendly airfield (barcap.py). A pair of a short-legged type costs two (a second pair relieves it in the first later wave that opens as it leaves).
 * Sweeps (Level 2 and 3): a pair that patrols over a contested sector of the front for 90 minutes, a seeded chance each day turn (`SWEEPS_PER_DAY` a day).
 * The pairs are drawn from a ledger of each fighter squadron's ready jets less the reaction reserve (reserve.py) BEFORE anything else, and every pair planned in a turn is
   committed to refit at the end of the turn (Session._sorties), so a red jet that flew is not ready again until its refit is over.
@@ -121,12 +121,12 @@ def spend(state, wing_id: str, n: int, fighters: bool = False) -> None:
         ra["left"][wing_id] = max(0, int(ra["left"][wing_id]) - int(n))
 
 
-def red_ledger(state, level: int, ready_min: int):
-    """Red's fighter squadrons' jets for one turn, as a `packages.Ledger` keyed by RedSquadron id: `free` = ready now less the reaction reserve, `late` = ready by `ready_min`
-    (the second wave). A cratered or destroyed field, a resting squadron and a non-fighter squadron have none. -> (ledger, {squadron id: jets held back})."""
+def red_ledger(state, level: int, t_abs: int):
+    """Red's fighter squadrons' jets for one turn (it opens at `t_abs`), as a `packages.Ledger` keyed by RedSquadron id: `free` = ready now less the reaction reserve, `tier` = the jets that come
+    ready by each later wave (S110: four waves, `Ledger.tiers_of`, the same code as blue's). A cratered or destroyed field, a resting squadron and a non-fighter squadron have none.
+    -> (ledger, {squadron id: jets held back})."""
     from .packages import Ledger
-    led = Ledger.__new__(Ledger)
-    led.free, led.late = {}, {}
+    led = Ledger.blank()
     units = []
     for w in sorted(state.enemy_air, key=lambda w: w.base_asset_id):
         a = state.assets.get(w.base_asset_id)
@@ -136,7 +136,7 @@ def red_ledger(state, level: int, ready_min: int):
             if q.aircraft not in ENEMY_FIGHTERS or q.reserve > 0:                      # v0.41.53: only a fighter squadron flies patrols; a resting one is out
                 continue
             led.free[q.id] = q.available
-            led.late[q.id] = max(0, refit.ready_by(q, ready_min) - q.available)
+            led.tier[q.id] = Ledger.tiers_of(q, t_abs)
             units.append(q)
     return led, reserve.apply(led, units, level)
 
@@ -150,11 +150,11 @@ def _today(state):
 
 def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: random.Random | None = None) -> list:
     """THIS TURN's red patrols and sweeps (v0.41.340, Phase 5a; it was one plan for the whole day). `turn` defaults to the current one; `t0` = the turn's first minute of the day;
-    `rng` is seeded by the turn. The pairs are crewed from `red_ledger` (ready jets less the reserve, then the ones ready by the second wave), one pair per BARCAP area, `RED_CAP_SHARE`
+    `rng` is seeded by the turn. The pairs are crewed from `red_ledger` (ready jets less the reserve, then the ones ready by each later wave), one pair per BARCAP area, `RED_CAP_SHARE`
     of the areas that can be up; a short-legged pair costs two. Flights are added to `state.red_air["flights"]` (earlier turns' stay; this turn's earlier plan is replaced).
     -> this turn's flights [{id, kind CAP|SWEEP, wing (base asset id), type, size, start, end (minutes of the day), x, y, area, bearing, ax, ay, turn, wave, squadron}]."""
     from . import blue_barcap
-    from .timeofday import WAVE2_OFFSET_MIN
+    from .timeofday import NWAVES, wave_open
     turn = state.turn if turn is None else turn
     t0 = clock.minute(turn) - clock.day_start_minute(state.day) if t0 is None else t0
     t1 = t0 + clock.TURN_MIN
@@ -162,11 +162,15 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
     lvl = _level(d)
     ra = _today(state)
     night = clock.is_night_turn(turn)
-    led, held = red_ledger(state, lvl, clock.minute(turn) + WAVE2_OFFSET_MIN)
+    led, held = red_ledger(state, lvl, clock.minute(turn))
     bc = barcap.ensure(state)
+    from . import bombers
+    gb = bombers.guard_base(state, lvl)                                    # S116: the quiet day before a carrier raid: no ordinary patrol from the bomber field, fighters from other fields cover it
     flights, cands = [], []
     for w in sorted(state.enemy_air, key=lambda w: w.base_asset_id):
         sqs = [q for q in w.sqns if q.id in led.free]
+        if gb and w.base_asset_id == gb[0]:
+            continue
         if sqs:
             cands += [(w, ar, sqs) for ar in bc["red"] if ar["asset"] == w.base_asset_id]
     want = RED_CAP_SHARE[lvl][1 if night else 0] * len(cands)
@@ -178,23 +182,40 @@ def plan_turn(state, d, turn: int | None = None, t0: int | None = None, rng: ran
         if up >= want:
             break
         w, ar, sqs = cands[i]
-        got = blue_barcap._pairs(led, sqs, t0, t1, 0)                        # the same crewing as blue's: a short-legged or 120-minute pair is relieved in wave 2 (the turn is 240 minutes) (no `keep`: the reserve is red's pair kept back)
+        got = blue_barcap._pairs(led, sqs, t0, t1, 0)                        # the same crewing as blue's: a short-legged or 120-minute pair is relieved in the first later wave that opens as it leaves (S110) (no `keep`: the reserve is red's pair kept back)
         for j, (sq, wave, lo, hi) in enumerate(got):
             flights.append({"id": f"rf{turn}-{ar['id']}.{j}", "kind": "CAP", "wing": w.base_asset_id, "type": sq.aircraft, "size": 2, "start": lo, "end": hi, "x": ar["x"], "y": ar["y"],
                             "area": ar["id"], "bearing": ar["bearing"], "ax": ar["ax"], "ay": ar["ay"], "turn": turn, "wave": wave, "squadron": sq.id})
         up += 1 if got else 0
+    if gb:                                                                 # S116: the guard: gb[1] pairs over the bomber field, by day and night, from the nearest fields that have fighters ready
+        base = state.assets[gb[0]]
+        areas = [ar for ar in bc["red"] if ar["asset"] == gb[0]]
+        if areas:
+            ar = areas[0]
+            src = sorted((w for w in state.enemy_air if w.base_asset_id != gb[0] and dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y) <= bombers.GUARD_FROM_NM * NM),
+                         key=lambda w: (dist(state.assets[w.base_asset_id].x, state.assets[w.base_asset_id].y, base.x, base.y), w.base_asset_id))
+            made = 0
+            for w in src:
+                if made >= gb[1]:
+                    break
+                sqs = [q for q in w.sqns if q.id in led.free]
+                got = blue_barcap._pairs(led, sqs, t0, t1, 0) if sqs else []
+                for j, (sq, wave, lo, hi) in enumerate(got):
+                    flights.append({"id": f"rf{turn}-{ar['id']}.g{made}.{j}", "kind": "CAP", "wing": w.base_asset_id, "type": sq.aircraft, "size": 2, "start": lo, "end": hi, "x": ar["x"], "y": ar["y"],
+                                    "area": ar["id"], "bearing": ar["bearing"], "ax": ar["ax"], "ay": ar["ay"], "turn": turn, "wave": wave, "squadron": sq.id, "guard": True})
+                made += 1 if got else 0
     g = state.ground or {}
     contested = [i for i, (r, b) in enumerate(zip(g.get("red", []), g.get("blue", []))) if r >= 15 and b >= 15]
     sw_p = 0.0 if night else SWEEPS_PER_DAY[lvl] / max(1, DAY_TURNS)         # the day's sweeps spread over its day turns by a seeded chance (judgment call)
     if contested and rng.random() < sw_p:
         owner = {q.id: (w, q) for w in state.enemy_air for q in w.sqns}
-        spare = [owner[sid] for sid in sorted(led.free) if led.room(sid, 2) >= 2]
+        spare = [owner[sid] for sid in sorted(led.free) if led.room(sid, NWAVES) >= 2]
         if spare:
             w, sq = spare[rng.randrange(len(spare))]
-            wave = 1 if led.room(sq.id, 1) >= 2 else 2
+            wave = next(k for k in range(1, NWAVES + 1) if led.room(sq.id, k) >= 2)         # the first wave with a free pair
             led.take(sq.id, 2, wave)
             c = g["centers"][rng.choice(contested)]
-            lo = t0 + (WAVE2_OFFSET_MIN if wave == 2 else 0) + rng.randrange(0, SWEEP_START_SPREAD_MIN + 1, 10)
+            lo = t0 + wave_open(wave) + rng.randrange(0, SWEEP_START_SPREAD_MIN + 1, 10)
             flights.append({"id": f"rf{turn}-{w.base_asset_id}-s", "kind": "SWEEP", "wing": w.base_asset_id, "type": sq.aircraft, "size": 2, "start": lo, "end": min(t1, lo + SWEEP_MIN),
                             "x": float(c[0]), "y": float(c[1]), "turn": turn, "wave": wave, "squadron": sq.id})
     ra["flights"] = [f for f in ra.get("flights", []) if f.get("turn") is not None and f["turn"] < turn] + flights      # earlier turns of the day stay; this turn's earlier plan (and an old whole-day plan, no `turn`) goes
@@ -219,12 +240,12 @@ GUARD_NM = 150                 # v0.41.11: a patrol guards a SAM site within thi
                                # local sites and the front, Sukhumi and Gudauta, went unguarded in the v0.41.10 run)
 CALLIN_LINK_NM = 40            # v0.41.73: a patrol is linked to (and called in to) the best-rated SAM site within this of its BARCAP station (judgment call)
 GUARD_FWD_NM = 10              # ...from a station this far in front of the site, toward the nearest friendly (blue) field
-GUARD_VALUE = {"SA-10": 4.0, "SA-11": 3.0, "SA-6": 2.5, "SA-15": 2.0, "SA-19": 1.5, "SA-8": 1.5, "SA-3": 1.5, "SA-2": 1.2}
+GUARD_VALUE = {"SA-10": 4.0, "SA-5": 3.5, "SA-9": 1.0, "SA-11": 3.0, "SA-6": 2.5, "SA-15": 2.0, "SA-19": 1.5, "SA-8": 1.5, "SA-3": 1.5, "SA-2": 1.2}
 # v0.41.20: no needless banzai, red's side. "commit": red fighters go after blue only with at least this quality-weighted edge (red : blue), except
 # over their own field or a SAM site blue is attacking (then at any odds). "soft": how much a raid's pick shies from a target under a full Patriot
 # (and on Hard also from your home field's HAWK): 1.0 = not at all (Easy's careless red).
 RED_DOCTRINE = {1: {"commit": 0.0, "soft": 1.0, "hawk": False}, 2: {"commit": 1.0, "soft": 0.5, "hawk": False}, 3: {"commit": 2.0, "soft": 0.25, "hawk": True}}
-RED_QUALITY = {"MiG_29A": 0.67, "MiG_29S": 0.67, "Su_27": 0.67, "MiG_31": 0.5, "MiG_21Bis": 0.5, "MiG_23MLD": 0.5, "F_4E": 0.5, "F_5E_3": 0.5}   # one blue fighter = 1.0
+RED_QUALITY = {"MiG_29A": 0.67, "MiG_29S": 0.67, "Su_27": 0.67, "MiG_31": 0.5, "MiG_21Bis": 0.5, "MiG_23MLD": 0.5, "F_4E": 0.5, "F_5E_3": 0.5, "MiG_25PD": 0.5}   # one blue fighter = 1.0. S90 P3a: the MiG-25PD 0.5 like the MiG-31: a ground-controlled interceptor (R-40: big, heavy, crude seeker; about 4 to 5 g limit; judgment call, firmness low, from memory)
 # S45 (XO 2026-11-11): the MiG-31 is 0.5, not the Su-27's 0.67: a ground-controlled interceptor whose R-33 is built for bombers and cruise-missile carriers, not a manoeuvring fighter (judgment call, firmness low: a heavy Mach 2.8 airframe, about 5 g from memory; no public kill figure)
 
 

@@ -130,7 +130,10 @@ NAV = {"Batumi": "BATUMI  ILS 110.30 RWY13  TACAN 16X BTM",
 
 
 def nav_line(airport):
-    return NAV.get(airport or "", "")
+    """The kneeboard's approach-aid line of an airport: the active pack's `nav` table (S90 J5) when it has one, else NAV (the Caucasus)."""
+    from . import theatres
+    nav = theatres.active().get("nav")
+    return (NAV if nav is None else nav).get(airport or "", "")
 
 
 def render_pages(outdir, ctx: dict) -> list:
@@ -165,6 +168,8 @@ def render_pages(outdir, ctx: dict) -> list:
     f.band("NOTES")
     num = str(ctx.get("numbering", "")).replace("...", "").rstrip(" .,")
     notes = [f"{ctx['jet']} waypoint numbers: {num}.", "PUSH +/-30 s, TOT +/-1 min.", ctx.get("zulu_note", "Times are local.")]
+    if ctx.get("tkr_line"):
+        notes.append(ctx["tkr_line"])                   # S103d: the plain F-14B has no tanker waypoint
     if ctx.get("msa"):
         notes.append(f"MSA {int(ctx['msa']):,} ft along the route.")
     for note in notes:
@@ -190,9 +195,10 @@ def render_pages(outdir, ctx: dict) -> list:
         f.line(ctx["objective"], color=DIM)
     f.band("BULLSEYE")
     f.row([(0, ctx["bullseye"])])
-    f.band("", [(0, "PACKAGE (STN = LINK 16 / SADL)"), (19, "TYPE"), (26, "TASK"), (34, "M3"), (39, "STN")])
+    l16 = not ctx.get("link16_off")                  # S103a: a campaign with Link 16 off has no STN column
+    f.band("", [(0, "PACKAGE (STN = LINK 16 / SADL)" if l16 else "PACKAGE"), (19, "TYPE"), (26, "TASK"), (34, "M3")] + ([(39, "STN")] if l16 else []))
     for r in ctx["whois"]:
-        f.row([(0, r["cs"].replace("..", "-")[:18]), (19, r["ac"]), (26, r["role"][:7]), (34, r["m3"]), (39, r["stn"][:5])], r["you"], gap=4)
+        f.row([(0, r["cs"].replace("..", "-")[:18]), (19, r["ac"]), (26, r["role"][:7]), (34, r["m3"])] + ([(39, r["stn"][:5])] if l16 else []), r["you"], gap=4)
     pages.append(f.save(outdir / "2_fuel_codes_package.png"))
 
     # ------------------------------------------------ page 3: other packages, threats, intelligence

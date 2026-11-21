@@ -42,13 +42,50 @@ LAND_ESCORTS = 2              # Mozdok Su-27 that ride along
 LAND_STRIKES_PER_DAY = {2: 1, 3: 2}   # land strikes a day at most, by level (judgment call: a Tu-22M3 is lost outright and comes back one per 48 h, `refit.SLOW_REPL_MIN`, so the cap is what keeps the wing alive); L1 has no bomber wing
 
 
+STAGE_GRACE_DAYS = 0              # S118 (XO 2026-11-19): red stages no carrier raid while `state.day` is at most this (the war's surprise opening: red is not already loading missiles on Day 0). A pack's `raid_grace_days` replaces it (Syria 7); the Caucasus keeps 0
+
+
+def grace_days() -> int:
+    from . import theatres
+    v = theatres.hook("raid_grace_days")
+    return STAGE_GRACE_DAYS if v is None else int(v)
+
+
+RAID_BEARING_DEG = (20.0, 40.0)   # the bearing from the carrier a raid arrives on, drawn between these (the old range). S90 J8: a pack's `raid_bearing_deg` [lo, hi] replaces it (Syria: out of the open sea south-west of the task force)
+
+
+def raid_bearing_range() -> tuple:
+    """(lo, hi) degrees of the carrier raid's bearing: the active pack's `raid_bearing_deg` (S90 J8), else RAID_BEARING_DEG (the Caucasus)."""
+    from . import theatres
+    v = theatres.hook("raid_bearing_deg")
+    return RAID_BEARING_DEG if v is None else (float(v[0]), float(v[1]))
+
+
+def raid_bearing(state, rnd) -> float:
+    """The bearing the carrier raid arrives on, drawn with `rnd`: the pack's `raid_from_base` J (S90, XO 2026-11-19: "make them come from a vector over Damascus"): the straight line from the carrier through the bomber
+    wing's field, plus or minus J degrees; else a draw inside `raid_bearing_range()` (the Caucasus: 20 to 40, the same one `rnd.uniform` call as before)."""
+    from . import theatres
+    from .routes import bearing
+    j = theatres.hook("raid_from_base")
+    cv, bw = _carrier(state), _bomber_wing(state)
+    if j and cv is not None and bw is not None:
+        ba = state.assets[bw.base_asset_id]
+        return round((bearing(cv.x, cv.y, ba.x, ba.y) + rnd.uniform(-float(j), float(j))) % 360.0, 1)
+    return round(rnd.uniform(*raid_bearing_range()), 1)
+
+
 def escorts_for(n: int) -> int:
     """Escorts that go with `n` bombers: one per two, rounded up."""
     return int(math.ceil(n * ESCORT_PER_BOMBER))
 
 
 def max_raid(d) -> int:
-    return MAX_RAID.get(int(getattr(d, "level", 3)), MAX_RAID[3] if int(getattr(d, "level", 3)) >= 3 else 4)
+    from . import theatres
+    lv = int(getattr(d, "level", 3))
+    ov = (theatres.hook("max_raid") or {}).get(str(lv))                  # S90: a pack's `max_raid` {level: n} (Syria L3 12 of a wing of 16: the 16-jet wing could never field the Caucasus's 16 after the day's land strikes)
+    if ov is not None:
+        return int(ov)
+    return MAX_RAID.get(lv, MAX_RAID[3] if lv >= 3 else 4)
 
 
 def escorts_held(state) -> bool:
@@ -169,6 +206,8 @@ def decide(state, d) -> dict:
         return go(stage.get("mode", "safe"), n, 0.0)
     if QUIET_DAYS > 0 and stage.get("launch", -1) > state.day:
         return {**hold("quiet day before the raid"), "quiet": True}
+    if state.day <= grace_days():                                # S118: the surprise opening: nothing is staged yet (a stage that already exists, an old save, was handled above)
+        return hold("surprise opening: red is not ready")
     if n_max < MIN_RAID:
         return hold(f"only {avail} bombers and {jets} escorts: not enough for a {MIN_RAID}-ship raid with {escorts_for(MIN_RAID)} escorts")
     days = [x for x in ((state.raids or {}).get("bomber_days") or [])]
@@ -192,9 +231,9 @@ def decide(state, d) -> dict:
 
 def stage_extras(state, launch: int) -> dict:
     """v0.41.356 (Phase 10b part 1): what is fixed the day a raid is staged, so the turn BEFORE the raid can plan its SEAD / Standoff DEAD prep: the bearing the raid arrives on ("brg", 20 to 40 degrees, the old
-    range) and the turn it launches in ("turn", seeded, among the launch day's planned turns that have a planned turn right before them on the same day; absent when none has). Seeded by campaign and launch day only."""
+    range; the pack's `raid_bearing_deg` where it has one, S90 J8) and the turn it launches in ("turn", seeded, among the launch day's planned turns that have a planned turn right before them on the same day; absent when none has). Seeded by campaign and launch day only."""
     rnd = random.Random(f"{state.campaign_id}:{launch}:stage")
-    out = {"brg": round(rnd.uniform(20, 40), 1)}
+    out = {"brg": raid_bearing(state, rnd)}
     ok = lambda t: bool(getattr(state, "night_ops", False)) or not clock.is_night_turn(t)
     cands = [t for t in range(clock.first_turn(launch) + 1, clock.first_turn(launch + 1)) if ok(t) and ok(t - 1)]
     if cands:
@@ -213,6 +252,67 @@ def note_stage(state, dec) -> None:
         state.raids["bomber_stage"] = {**dec["stage"], **stage_extras(state, int(dec["stage"]["launch"]))}
 
 
+def intel(state) -> dict | None:
+    """S115 (XO 2026-11-20): the intelligence pickup of a staged carrier raid, from the day red stages it until the day it launches: {"head", "text", "sub", "pills", "log"} for the banner and the war log, else None.
+    The fiction: Tu-22M3s loaded with Kh-22 missiles on a ramp the coalition can see a day out; the fleet sails out of their reach (`carrier_pos.evade`) until it is over."""
+    off = (state.raids or {}).get("bomber_off") or {}
+    if QUIET_DAYS > 0 and int(off.get("day", -1)) == state.day:                       # S116: the staged raid was called off today (its field is cut or destroyed)
+        text = f"{off.get('where', 'The bomber base')} {off.get('why', 'is out of action')}: the Tu-22M3 raid on the carrier is called off."
+        sub = "The fleet is returning to its station."
+        return {"head": "INTELLIGENCE \u00b7 CARRIER RAID CALLED OFF", "text": text, "sub": sub, "pills": ["Raid called off", "Carrier returning"], "log": f"INTELLIGENCE: {text} {sub}"}
+    stage = (state.raids or {}).get("bomber_stage") or {}
+    if QUIET_DAYS <= 0 or int(stage.get("launch", -1)) < state.day or _carrier(state) is None:
+        return None
+    bw = _bomber_wing(state)
+    if bw is None:                                                                    # S116: cut or destroyed after it was staged: called off now, the day's start cancels the stage
+        wh, why = _bomber_field(state)
+        return {"head": "INTELLIGENCE \u00b7 CARRIER RAID CALLED OFF", "text": f"{wh} {why}: the Tu-22M3 raid on the carrier is called off.", "sub": "The fleet will return to its station.",
+                "pills": ["Raid called off", "Carrier returning"], "log": f"INTELLIGENCE: {wh} {why}: the Tu-22M3 raid on the carrier is called off."}
+    where = state.assets[bw.base_asset_id].name
+    quiet = int(stage.get("launch", -1)) > state.day
+    head = "INTELLIGENCE \u00b7 CARRIER RAID EXPECTED"
+    text = f"Tu-22M3s are loading Kh-22 missiles at {where}. The raid on the carrier is expected " + ("within a day." if quiet else "today.")
+    sub = ("Fighters from other fields cover the base while its own escorts are held for the raid. " if quiet else "") + "The fleet is sailing out of range, until the raid is over."
+    return {"head": head, "text": text, "sub": sub, "pills": ["Carrier sailing", "Bomber base guarded" if quiet else "Raid expected today"], "log": f"INTELLIGENCE: {text} {sub}"}
+
+
+def _bomber_field(state) -> tuple:
+    """(name, why) of the Tu-22M3 wing's field when it cannot fly: "is destroyed" or "has its runway cut"; ("The bomber base", "is out of action") when there is no such wing."""
+    w = next((w for w in state.enemy_air if "Tu_22M3" in w.types), None)
+    a = state.assets.get(w.base_asset_id) if w is not None else None
+    if a is None:
+        return "The bomber base", "is out of action"
+    return a.name, ("is destroyed" if a.destroyed else "has its runway cut")
+
+
+def cancel_if_cut(state) -> str | None:
+    """S116 (XO 2026-11-20): a staged raid whose bomber field is cut or destroyed before it launches is called off: no Tu-22M3 could take off. The stage goes, the escorts are free again, the fleet may sail back (`cv_evade`
+    cleared) and today's banner says so (`raids["bomber_off"]`). -> the war-log line, else None."""
+    stage = (state.raids or {}).get("bomber_stage") or {}
+    if QUIET_DAYS <= 0 or int(stage.get("launch", -1)) < state.day or _bomber_wing(state) is not None:
+        return None
+    wh, why = _bomber_field(state)
+    state.raids.pop("bomber_stage", None)
+    state.raids["bomber_off"] = {"day": state.day, "where": wh, "why": why}
+    if state.ground is not None:
+        state.ground["cv_evade"] = -1
+    return f"INTELLIGENCE: {wh} {why}: the staged Tu-22M3 raid on the carrier is called off. The fleet is returning to its station."
+
+
+GUARD_PAIRS = {1: 0, 2: 1, 3: 2}      # S116: pairs a turn that cover the bomber base on the quiet day, from OTHER fields (the base's own escorts are held for the raid)
+GUARD_FROM_NM = 300                   # ...from fields within this of the bomber base
+
+
+def guard_base(state, level: int):
+    """S116: (bomber base asset id, pairs a turn) while the quiet day before a staged raid is on and its field can still fly, else None. Red flies no ordinary patrol from that field; fighters from nearby fields cover it by
+    day and by night (so a night F-117A strike meets them), a tell the player can read. `redair.plan_turn` reads it."""
+    if not is_quiet(state):
+        return None
+    bw = _bomber_wing(state)
+    n = GUARD_PAIRS.get(max(1, min(3, int(level))), 0)
+    return (bw.base_asset_id, n) if bw is not None and n > 0 else None
+
+
 def is_quiet(state) -> bool:
     """Is today the quiet day before a staged raid? Red flies its patrols only: no strikes, raids or surprise raids."""
     return QUIET_DAYS > 0 and ((state.raids or {}).get("bomber_stage") or {}).get("launch", -1) > state.day
@@ -222,7 +322,9 @@ def status_lines(state) -> list:
     """Overview lines: the quiet day (v0.41.148: the damaged-deck line is gone, XO wants no carrier line on the Overview)."""
     out = []
     if is_quiet(state):
-        out.append("Red air is unusually quiet today: no strikes or raids, only patrols. Something is being prepared.")
+        bw = _bomber_wing(state)
+        out.append("Red air is unusually quiet today: no strikes or raids, only patrols"
+                   + (f", and fighters from other fields are on station over {state.assets[bw.base_asset_id].name}" if bw is not None else "") + ". Something is being prepared.")
     return out                                                           # v0.41.148 (XO 2026-10-25): the carrier gets no line on the Overview
 
 

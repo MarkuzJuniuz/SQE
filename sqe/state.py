@@ -29,6 +29,52 @@ def _upgrade_cap_tags(*parts) -> None:
         walk(p)
 
 
+def _upgrade_tactical_edge(ground) -> None:
+    """S88 R3: the two Tactical Edge switches were app settings the engine copied into `ground` on every open, under their old names. Move an old key to its new name
+    (`pilot_influence` -> `tactical_edge`, `tempo_decay` -> `tactical_edge_decay`) on load, in place; the new key wins if both exist. A save with neither key gets the
+    readers' defaults (edge on, decay off), as before. No format bump: saving writes only the new names."""
+    if not isinstance(ground, dict):
+        return
+    for old, new in (("pilot_influence", "tactical_edge"), ("tempo_decay", "tactical_edge_decay")):
+        if old in ground:
+            val = ground.pop(old)
+            ground.setdefault(new, val)
+
+
+def _upgrade_su34(x) -> None:
+    """S106 (XO 2026-11-18): the Su-34 is gone from red's order of battle; an old save's Su-34s become Su-24Ms, one for one. Walks the raw saved dict in place, once, on load:
+    a "Su_34" value becomes "Su_24M" (squadron aircraft, flight and raid types, a wing's `types` list, which then loses the repeat), a "Su-34" inside a text becomes "Su-24M",
+    and a count table keyed "Su_34" adds its number to the "Su_24M" key. No format bump: the jets are the same jets, only the type name changes."""
+    def fix(s):
+        return "Su_24M" if s == "Su_34" else (s.replace("Su-34", "Su-24M") if "Su-34" in s else s)
+    if isinstance(x, dict):
+        for k in list(x):
+            v = x[k]
+            if k == "Su_34":
+                del x[k]
+                if isinstance(v, (int, float)) and isinstance(x.get("Su_24M"), (int, float)):
+                    x["Su_24M"] += v
+                else:
+                    x.setdefault("Su_24M", v)
+                    v = x["Su_24M"]
+            if isinstance(v, str):
+                if k != "Su_24M" or v != "Su_24M":
+                    x[k] = fix(v)
+            else:
+                _upgrade_su34(v)
+    elif isinstance(x, list):
+        changed = False
+        for i, v in enumerate(x):
+            if isinstance(v, str):
+                n = fix(v)
+                changed = changed or n != v
+                x[i] = n
+            else:
+                _upgrade_su34(v)
+        if changed and all(isinstance(v, str) for v in x) and len(set(x)) < len(x):
+            x[:] = list(dict.fromkeys(x))
+
+
 class SaveIncompatible(Exception):
     """A campaign file this build cannot open. `kind`: "older" (saved by an earlier SQE), "newer" (a later one), "damaged" (not a readable save).
     The GUI turns it into the friendly dialog; `info()` is what the file says about itself."""
@@ -44,13 +90,20 @@ class SaveIncompatible(Exception):
                 "squadron_id": pl.get("squadron_id")}
 
 
+_OLD_STAMP = re.compile(r"^\[day (\d+) (\d\d)(\d\d)\] ")     # S129: the war-log stamp before v0.41.538
+
+
 @dataclass
 class CampaignState:
     name: str
     theatre: str = "caucasus"
     level: int = 2
+    a10_variant: str = "A-10C"                     # S103a (Era Equipment): chosen when the campaign is created and never changed; an old save loads as the A-10C / F-14B(U) / Link 16 on it always was (no format change: the loader defaults the three)
+    f14_variant: str = "F-14BU"
+    link16: bool = True                            # False: no jet is a Link 16 member or donor (no STN codes, no package net, no briefing text)
     campaign_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
     day: int = 1
+    start_hour: int = 8                            # S90 J5b: the hour Day 1 / turn 0 starts (the theatre pack's `start_hour`, fixed when the campaign is created; an old save has none = 8, the Caucasus clock). `clock.use` makes it the current one
     turn: int = 0                                  # v0.41.334: the clock (clock.py): four-hour turns since 08:00 (S25; two-hour before) on Day 1; `day` stays equal to clock.day_of(turn). Session._tick moves it one turn at a time (v0.41.337, Phase 3)
     sortie_counter: int = 0
     player: PlayerProfile | None = None
@@ -80,6 +133,9 @@ class CampaignState:
     fleet: dict = field(default_factory=dict)        # v0.41.257: the carrier group's losses (fleet.py): a sunk carrier's days away, sunk escorts; {} = all afloat
     blue_sams: dict = field(default_factory=dict)    # v0.41.62: Blue's air defence sites (bsam_<field>_pat / hawk / aaa): the same record as red's SAM assets (sams.py)
 
+    def __post_init__(self) -> None:
+        clock.use(self.start_hour)                     # S90 J5b: the clock's Day 1 starts at this campaign's hour from the moment it exists (created or loaded)
+
     # ---- helpers ------------------------------------------------------------------------
     def campaign_date(self):
         from datetime import date, timedelta
@@ -88,7 +144,7 @@ class CampaignState:
     def note(self, text: str) -> None:
         from . import clock
         m = clock.minute(self.turn) % clock.DAY_MIN                    # v0.41.337: [day N HHMM] (the clock's day, so a note written as the clock crosses midnight belongs to the new day)
-        self.log.append(f"[day {clock.day_of(self.turn)} {m // 60:02d}{m % 60:02d}] {text}")
+        self.log.append(f"[Day {clock.day_of(self.turn)}, {m // 60:02d}:{m % 60:02d}] {text}")          # S129: "[Day 1, 12:00]", the header's form (an old save's "[day 1 1200]" is mapped on load)
 
     def enemy_air_at(self, asset_id: str):
         return next((w for w in self.enemy_air if w.base_asset_id == asset_id), None)
@@ -101,7 +157,8 @@ class CampaignState:
         return {
             "format": FORMAT_VERSION, "compat": COMPAT_ERA, "app_version": __version__, "saved": datetime.now().isoformat(timespec="seconds"),
             "name": self.name, "theatre": self.theatre, "level": self.level, "campaign_id": self.campaign_id,
-            "day": self.day, "turn": self.turn, "turn_min": clock.TURN_MIN, "sortie_counter": self.sortie_counter, "status": self.status,
+            "a10_variant": self.a10_variant, "f14_variant": self.f14_variant, "link16": self.link16,
+            "day": self.day, "turn": self.turn, "start_hour": self.start_hour, "turn_min": clock.TURN_MIN, "sortie_counter": self.sortie_counter, "status": self.status,
             "start_date": self.start_date, "night_ops": self.night_ops, "pilot": self.pilot,
             "front": self.front, "front_days": self.front_days, "ground": self.ground,
             "player": asdict(self.player) if self.player else None,
@@ -133,10 +190,12 @@ class CampaignState:
                              "runway repairs and tankers follow new rules, so it cannot be loaded; please start a new campaign.")
         if int(d.get("turn_min", 120)) != clock.TURN_MIN:         # S25: every clock in a save (turn, idle counter, craters, move_until, raid and support clocks) counts turns of its own length; a missing field is the old 2-hour clock
             raise ValueError(f"This campaign was saved with {int(d.get('turn_min', 120)) // 60}-hour turns; turns are now {clock.TURN_MIN // 60} hours, so its dates cannot be read. Please start a new campaign.")
+        _upgrade_su34(d)                                                  # S106: an old save's Su-34s are Su-24Ms now
         s = cls(name=d["name"], theatre=d.get("theatre", "caucasus"), level=d.get("level", 2),
-                campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1), turn=int(d.get("turn", 0)),
+                campaign_id=d.get("campaign_id", uuid.uuid4().hex[:10]), day=d.get("day", 1), turn=int(d.get("turn", 0)), start_hour=int(d.get("start_hour", 8)),
                 sortie_counter=d.get("sortie_counter", 0), status=d.get("status", "ACTIVE"),
                 start_date=d.get("start_date", "2004-06-12"), night_ops=True, pilot=d.get("pilot", {}),
+                a10_variant=d.get("a10_variant", "A-10C"), f14_variant=d.get("f14_variant", "F-14BU"), link16=bool(d.get("link16", True)),
                 front=d.get("front", 0), front_days=d.get("front_days", 0))
         s.player = PlayerProfile(**d["player"]) if d.get("player") else None
         s.bases = {k: Base(**{**v, "kind": BaseKind(v["kind"])}) for k, v in d["bases"].items()}
@@ -144,6 +203,7 @@ class CampaignState:
         s.assets = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in d["assets"].items()}
         s.enemy_air = [wing_from_dict(w) for w in d["enemy_air"]]
         s.ground = d.get("ground") or {}
+        _upgrade_tactical_edge(s.ground)                                  # S88 R3: old saves hold the two Tactical Edge switches under their old names
         if s.ground and int(s.ground.get("v", 1)) < 3:
             raise ValueError("This campaign was saved before the Campaign Revamp supply stage (v0.41.144): the ground war and its supply sites changed, so it cannot be loaded. Please start a new campaign.")
         s.raids = d.get("raids") or {}
@@ -157,7 +217,7 @@ class CampaignState:
         s.blue_sams = {k: EnemyAsset(**{**v, "kind": AssetKind(v["kind"])}) for k, v in (d.get("blue_sams") or {}).items()}      # missing in an older save: sams.ensure_blue_sams builds them from each field's `defense`
         s.plan, s.pending = d.get("plan", []), d.get("pending")
         s.plan_done = d.get("plan_done") or []                            # missing in a save from before v0.41.337: nothing resolved yet today
-        s.history, s.log = d.get("history", []), d.get("log", [])
+        s.history, s.log = d.get("history", []), [_OLD_STAMP.sub(lambda m: f"[Day {m.group(1)}, {m.group(2)}:{m.group(3)}] ", x, count=1) if isinstance(x, str) else x for x in d.get("log", [])]
         _upgrade_cap_tags(s.plan, s.plan_done, s.barcap, s.pending)                  # S52: a save from before the rename holds "BASECAP" / "CVCAP" in flight tags and patrol kinds
         if not s.ground:                           # a campaign from before the ground war (format 4): give it one for its level
             from . import ground

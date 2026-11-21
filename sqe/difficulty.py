@@ -46,7 +46,7 @@ class Difficulty:
     red_reinf: float = 5.0               # strength points Red adds a day at the zone in contact (x supply)
     blue_reinf: float = 5.0              # the same for Blue
     raid_rate: float = 0.40              # S37: no longer read by raids.py (red raids by jet budget, `raids.RAID_SHARE`); `ground.py` still reads it for the abstract supply strikes
-    raid_arm: float = 0.0                # S36b (XO 2026-11-11; was v0.41.84's chance of a SEAD pair on a bomber raid): above 0, red sends SEAD packages (Su-24M / Su-34 with Kh-31P and escorts) at blue's Patriot and HAWK sites (L1 none: no SEAD doctrine)
+    raid_arm: float = 0.0                # S36b (XO 2026-11-11; was v0.41.84's chance of a SEAD pair on a bomber raid): above 0, red sends SEAD packages (Su-24M with Kh-31P and escorts) at blue's Patriot and HAWK sites (L1 none: no SEAD doctrine)
     raid_banzai: bool = False            # v0.41.146 (Campaign Revamp B4): Level 1's insurgents raid targets under live Patriot / HAWK cover without any SEAD (judgment call: they have no SEAD doctrine, and with every one of our fields covered they could never raid at all); the cover shoots them
     raid_surprise: float = 0.35          # share of the raids that are surprises (nobody warned us)
     sam_rebuild: float = 0.04            # nightly chance (x Red supply) that a destroyed SAM site is replaced (sams.py)
@@ -80,7 +80,7 @@ LEVELS: dict[int, Difficulty] = {
                   raid_mix=(0.10, 0.10, 0.20), blue_garrison_size=1.0, blue_rebuild=0.20, sam_retreat=0.6, air_retreat=0.6, road_sites_red=15, road_sites_blue=0, road_open=0.10, road_battalion=0.04),
     2: Difficulty(2, "Level 2 - Regional Power", "A real air force and layered SAMs, but not a peer. "
                   "A competent campaign wins; a careless one bleeds.",
-                  enemy_air_total=128, enemy_types=["MiG_31", "MiG_29A", "MiG_29S", "MiG_23MLD", "Su_24M", "Su_25"],
+                  enemy_air_total=128, red_squadron_max=14, enemy_types=["MiG_31", "MiG_29A", "MiG_29S", "MiG_23MLD", "Su_24M", "Su_25"],
                   sam_variants=["SA-2", "SA-3", "SA-6", "SA-11", "AAA"], sam_sites_per_cluster=3, iads=0.55,
                   enemy_skill="Good", loss_rate=0.06, base_damage=0.35, variance=0.8,
                   friendly_replenish=0.08, enemy_replenish=0.05, asset_repair=0.04, sam_repair=0.06,
@@ -90,7 +90,7 @@ LEVELS: dict[int, Difficulty] = {
                   raid_mix=(0.20, 0.15, 0.25), blue_garrison_size=0.8, blue_rebuild=0.15, sam_retreat=0.8, sead_valve=3, air_retreat=0.8, road_sites_red=30, road_sites_blue=0, road_open=0.20, road_battalion=0.08),
     3: Difficulty(3, "Level 3 - Near-Peer", "Modern fighters, long-range SAMs and an integrated air-defence network. "
                   "Every sortie is contested and attrition bites.",
-                  enemy_air_total=256, red_squadron_max=14, enemy_types=["MiG_31", "MiG_29S", "Su_27", "Su_34", "Su_25", "MiG_29A"],
+                  enemy_air_total=256, red_squadron_max=14, enemy_types=["MiG_31", "MiG_29S", "Su_27", "Su_24M", "Su_25", "MiG_29A"],
                   sam_variants=["SA-10", "SA-11", "SA-6", "SA-15", "SA-19"], sam_sites_per_cluster=4, iads=0.9,
                   enemy_skill="High", loss_rate=0.085, base_damage=0.28, variance=0.7,
                   friendly_replenish=0.06, enemy_replenish=0.07, asset_repair=0.05, sam_repair=0.08,
@@ -101,8 +101,24 @@ LEVELS: dict[int, Difficulty] = {
 }
 
 
+_OVERRIDDEN: dict = {}
+
+
 def get(level: int) -> Difficulty:
-    return LEVELS[max(1, min(3, int(level)))]
+    """The level's Difficulty. S90 J5: when the ACTIVE theatre pack has `level_overrides` for this level (theatre facts such as a bomber wing), those fields are replaced on a copy; a pack without
+    them (the Caucasus) gets the level object itself."""
+    d = LEVELS[max(1, min(3, int(level)))]
+    from . import theatres
+    th = theatres.active()
+    ov = (th.get("level_overrides") or {}).get(str(d.level))
+    if not ov:
+        return d
+    key = (th["id"], d.level)
+    hit = _OVERRIDDEN.get(key)
+    if hit is None or hit[0] is not d:
+        from dataclasses import replace
+        hit = _OVERRIDDEN[key] = (d, replace(d, **ov))
+    return hit[1]
 
 
 # v0.41.70: "AI Skill", one for Red and one for Blue (XO 2026-10-21: DCS AI at the top skill cheats, so he wants a say on both sides). Set on the New Campaign

@@ -1,0 +1,1280 @@
+{
+ "id": "syria",
+ "name": "Syria",
+ "era": {
+  "year": 2001,
+  "a10_variant": "A-10A",
+  "f14_variant": "F-14B",
+  "link16": false
+ },
+ "dcs_terrain": "Syria",
+ "lat": 34.9,
+ "lon": 35.9,
+ "tz": 3.0,
+ "temp_c": [
+  12,
+  13,
+  15,
+  18,
+  22,
+  25,
+  27,
+  28,
+  26,
+  23,
+  18,
+  14
+ ],
+ "geo": "syria_geo.json",
+ "scan": {
+  "file": "SQE_terrain_syria.json",
+  "x0": -440000,
+  "x1": 300000,
+  "y0": -580000,
+  "y1": 580000,
+  "step": 250,
+  "probe_airport": "Damascus",
+  "road_radius_m": 40000,
+  "road_anchors": [
+   "Bassel Al-Assad",
+   "Tiyas",
+   "Shayrat",
+   "Palmyra",
+   "Hama",
+   "Abu al-Duhur",
+   "Sayqal",
+   "Damascus",
+   "Al-Dumayr",
+   "An Nasiriyah",
+   "Rene Mouawad",
+   "Hatay",
+   "Incirlik",
+   "Adana Sakirpasa"
+  ],
+  "road_pairs": [
+   [
+    "Hatay",
+    "Bassel Al-Assad"
+   ],
+   [
+    "Hatay",
+    "Abu al-Duhur"
+   ],
+   [
+    "Bassel Al-Assad",
+    "Rene Mouawad"
+   ],
+   [
+    "Rene Mouawad",
+    "Shayrat"
+   ],
+   [
+    "Bassel Al-Assad",
+    "Hama"
+   ],
+   [
+    "Abu al-Duhur",
+    "Hama"
+   ],
+   [
+    "Hama",
+    "Shayrat"
+   ],
+   [
+    "Shayrat",
+    "Tiyas"
+   ],
+   [
+    "Tiyas",
+    "Palmyra"
+   ],
+   [
+    "Shayrat",
+    "Damascus"
+   ],
+   [
+    "Damascus",
+    "Al-Dumayr"
+   ],
+   [
+    "Damascus",
+    "Sayqal"
+   ],
+   [
+    "Sayqal",
+    "An Nasiriyah"
+   ],
+   [
+    "Hatay",
+    "Incirlik"
+   ]
+  ]
+ },
+ "carrier": {
+  "id": "cvn69",
+  "name": "USS Dwight D. Eisenhower (CVN-69)",
+  "short": "USS Eisenhower",
+  "from_airport": "Larnaca",
+  "heading": 140,
+  "distance_m": 120000,
+  "carrier_standoff_nm": 130
+ },
+ "road_blue_airports": [
+  "Incirlik",
+  "Adana Sakirpasa",
+  "Hatay",
+  "Gaziantep",
+  "Akrotiri",
+  "Larnaca",
+  "Paphos",
+  "Muwaffaq Salti"
+ ],
+ "blue_fields": [
+  {
+   "id": "incirlik",
+   "name": "Incirlik AB",
+   "airport": "Incirlik"
+  },
+  {
+   "id": "akrotiri",
+   "name": "Akrotiri AB",
+   "airport": "Akrotiri"
+  },
+  {
+   "id": "larnaca",
+   "name": "Larnaca AB",
+   "airport": "Larnaca"
+  },
+  {
+   "id": "muwaffaq_salti",
+   "name": "Muwaffaq Salti AB",
+   "airport": "Muwaffaq Salti"
+  },
+  {
+   "id": "paphos",
+   "name": "Paphos AB",
+   "airport": "Paphos"
+  },
+  {
+   "id": "hatay",
+   "name": "Hatay",
+   "airport": "Hatay",
+   "divert": true
+  }
+ ],
+ "support_base": "paphos",
+ "red_fields": [
+  {
+   "id": "ab_bassel",
+   "name": "Bassel Al-Assad",
+   "airport": "Bassel Al-Assad",
+   "value": 8
+  },
+  {
+   "id": "ab_mouawad",
+   "name": "Rene Mouawad",
+   "airport": "Rene Mouawad",
+   "value": 5
+  },
+  {
+   "id": "ab_duhur",
+   "name": "Abu al-Duhur",
+   "airport": "Abu al-Duhur",
+   "value": 6
+  },
+  {
+   "id": "ab_hama",
+   "name": "Hama",
+   "airport": "Hama",
+   "value": 6
+  },
+  {
+   "id": "ab_shayrat",
+   "name": "Shayrat",
+   "airport": "Shayrat",
+   "value": 8
+  },
+  {
+   "id": "ab_tiyas",
+   "name": "Tiyas",
+   "airport": "Tiyas",
+   "value": 9
+  },
+  {
+   "id": "ab_palmyra",
+   "name": "Palmyra",
+   "airport": "Palmyra",
+   "value": 5
+  },
+  {
+   "id": "ab_sayqal",
+   "name": "Sayqal",
+   "airport": "Sayqal",
+   "value": 7
+  },
+  {
+   "id": "ab_damascus",
+   "name": "Damascus",
+   "airport": "Damascus",
+   "value": 9
+  },
+  {
+   "id": "ab_dumayr",
+   "name": "Al-Dumayr",
+   "airport": "Al-Dumayr",
+   "value": 7
+  },
+  {
+   "id": "ab_nasiriyah",
+   "name": "An Nasiriyah",
+   "airport": "An Nasiriyah",
+   "value": 5
+  }
+ ],
+ "red_extra_airports": [],
+ "painted_airports": {
+  "blue": [
+   "Ercan",
+   "Gecitkale",
+   "Pinarbashi",
+   "Lakatamia",
+   "Kingsfield",
+   "Adana Sakirpasa",
+   "Chukurova",
+   "Gaziantep",
+   "Kahramanmaras",
+   "Adiyaman",
+   "Sanliurfa",
+   "Diyarbakir",
+   "Gulechoba",
+   "Gazipasa",
+   "Konya",
+   "King Hussein Air College",
+   "Marka",
+   "Zarqa",
+   "Prince Hassan",
+   "King Abdullah II",
+   "Ruwayshid",
+   "H4",
+   "H4 Emergency",
+   "Ben Gurion",
+   "Eyn Shemer",
+   "Haifa",
+   "Hatzerim",
+   "Hatzor",
+   "Herzliya",
+   "Kedem",
+   "Kiryat Shmona",
+   "Megiddo",
+   "Nevatim",
+   "Palmachim",
+   "Ramat David",
+   "Rosh Pina",
+   "Tel Nof",
+   "Teyman",
+   "Sanliurfa Heliport",
+   "HC01",
+   "HC02",
+   "HC03",
+   "HC04",
+   "HC05",
+   "HC06",
+   "HI08",
+   "HI09",
+   "HI01",
+   "HI02",
+   "HI03",
+   "HI05",
+   "HI06",
+   "HI07",
+   "HI11",
+   "HI12",
+   "HI17",
+   "HI16",
+   "HI15",
+   "HI14",
+   "HI13",
+   "HT01",
+   "HS33",
+   "HMed10",
+   "HMed09",
+   "HMed08",
+   "HMed07",
+   "HMed05",
+   "HMed04",
+   "HMed01",
+   "HMed00",
+   "HMed11",
+   "H_med_orig_07",
+   "H_med_orig_06",
+   "H_med_orig_05",
+   "H_med_orig_04",
+   "H_med_orig_03",
+   "H_med_orig_02",
+   "H_med_orig_01",
+   "HStad02",
+   "HStad01",
+   "HMed30",
+   "HMed25",
+   "HMed23",
+   "HMed22",
+   "HMed20",
+   "HMed19",
+   "HMed18",
+   "HMed15",
+   "HMed13",
+   "HMed12",
+   "H_med_orig_09",
+   "HI18",
+   "HT02",
+   "HI20",
+   "HI26",
+   "HI24",
+   "HI23",
+   "HI22",
+   "HI21",
+   "HJ04",
+   "HJ03",
+   "HJ02",
+   "HS32",
+   "HOil06",
+   "HS39",
+   "HS38"
+  ],
+  "red": [
+   "Aleppo",
+   "Al Qusayr",
+   "Deir ez-Zor",
+   "Kharab Ishk",
+   "Kuweires",
+   "Minakh",
+   "Taftanaz",
+   "Tabqa",
+   "Tal Siman",
+   "Jirah",
+   "Mezzeh",
+   "Marj Ruhayyil",
+   "Marj as Sultan North",
+   "Marj as Sultan South",
+   "Khalkhalah",
+   "Qabr as Sitt",
+   "Tha'lah",
+   "T2",
+   "T3",
+   "At Tanf",
+   "Beirut-Rafic Hariri",
+   "Rayak",
+   "Wujah Al Hajar",
+   "Naqoura",
+   "H3",
+   "H3 Northwest",
+   "H3 Southwest",
+   "HS02",
+   "HS05",
+   "HS06",
+   "HS08",
+   "HS09",
+   "HS10",
+   "HS11",
+   "HS19",
+   "HS18",
+   "HS17",
+   "HS16",
+   "HS15",
+   "HS14",
+   "HS13",
+   "HS12",
+   "HS25",
+   "HS24",
+   "HS23",
+   "HS22",
+   "HS21",
+   "HS20",
+   "HMed06",
+   "HMed03",
+   "HMed02",
+   "H_med_orig_08",
+   "HStad06",
+   "HStad05",
+   "HStad04",
+   "HStad03",
+   "HS26",
+   "HS42",
+   "HL13",
+   "HL12",
+   "HS41",
+   "HS35",
+   "HL11",
+   "HL10",
+   "HL09",
+   "HL08",
+   "HL07",
+   "HS27",
+   "HL06",
+   "HMed29",
+   "HMed28",
+   "HMed27",
+   "HMed26",
+   "HMed24",
+   "HMed21",
+   "HMed17",
+   "HMed16",
+   "HMed14",
+   "HOil05",
+   "HOil04",
+   "HOil03",
+   "HOil02",
+   "HOil01",
+   "HS34",
+   "HS04",
+   "HS07",
+   "HS03",
+   "HS36",
+   "HS28",
+   "HS29",
+   "HS30",
+   "HI25",
+   "HJ01",
+   "HL05",
+   "HL04",
+   "HL03",
+   "HL02",
+   "HL01",
+   "HS31",
+   "HS40",
+   "HS37"
+  ]
+ },
+ "red_keep": {
+  "1": [
+   "ab_bassel",
+   "ab_duhur",
+   "ab_hama",
+   "ab_shayrat"
+  ]
+ },
+ "red_fill": {
+  "1": {
+   "ab_bassel": 26,
+   "ab_duhur": 12,
+   "ab_hama": 14,
+   "ab_shayrat": 42
+  },
+  "2": {
+   "ab_bassel": 23,
+   "ab_duhur": 11,
+   "ab_hama": 13,
+   "ab_shayrat": 39,
+   "ab_tiyas": 20,
+   "ab_palmyra": 4,
+   "ab_sayqal": 41,
+   "ab_damascus": 30,
+   "ab_dumayr": 43,
+   "ab_nasiriyah": 14
+  },
+  "3": {
+   "ab_bassel": 23,
+   "ab_duhur": 11,
+   "ab_hama": 13,
+   "ab_shayrat": 39,
+   "ab_tiyas": 20,
+   "ab_palmyra": 4,
+   "ab_sayqal": 41,
+   "ab_damascus": 30,
+   "ab_dumayr": 43,
+   "ab_nasiriyah": 14
+  }
+ },
+ "wing_weight": {
+  "ab_bassel": 23,
+  "ab_duhur": 11,
+  "ab_hama": 13,
+  "ab_shayrat": 39,
+  "ab_tiyas": 20,
+  "ab_palmyra": 4,
+  "ab_sayqal": 41,
+  "ab_damascus": 30,
+  "ab_dumayr": 43,
+  "ab_nasiriyah": 14
+ },
+ "field_tier": {
+  "ab_bassel": 2,
+  "ab_mouawad": 2,
+  "ab_duhur": 3,
+  "ab_hama": 3,
+  "ab_shayrat": 3,
+  "ab_tiyas": 4,
+  "ab_palmyra": 4,
+  "ab_sayqal": 4,
+  "ab_damascus": 4,
+  "ab_dumayr": 4,
+  "ab_nasiriyah": 4
+ },
+ "bomber_base": "ab_damascus",
+ "squadrons": [
+  {
+   "id": "vf_11",
+   "name": "VF-11 'Red Rippers'",
+   "aircraft": "F-14BU",
+   "base": "cvn69",
+   "count": 12,
+   "callsign": "Springfield"
+  },
+  {
+   "id": "vf_143",
+   "name": "VF-143 'Pukin' Dogs'",
+   "aircraft": "F-14BU",
+   "base": "cvn69",
+   "count": 12,
+   "callsign": "Uzi"
+  },
+  {
+   "id": "vfa_131",
+   "name": "VFA-131 'Wildcats'",
+   "aircraft": "FA-18C",
+   "base": "cvn69",
+   "count": 12,
+   "callsign": "Hornet"
+  },
+  {
+   "id": "vfa_136",
+   "name": "VFA-136 'Knighthawks'",
+   "aircraft": "FA-18C",
+   "base": "cvn69",
+   "count": 12,
+   "callsign": "Squid"
+  },
+  {
+   "id": "fs_493",
+   "name": "493rd FS 'Grim Reapers'",
+   "aircraft": "F-15C",
+   "base": "incirlik",
+   "count": 18,
+   "callsign": "Enfield"
+  },
+  {
+   "id": "fs_492",
+   "name": "492nd FS 'Bolars'",
+   "aircraft": "F-15E",
+   "base": "incirlik",
+   "count": 18,
+   "callsign": "Dude"
+  },
+  {
+   "id": "fs_494",
+   "name": "494th FS 'Panthers'",
+   "aircraft": "F-15E",
+   "base": "incirlik",
+   "count": 18,
+   "callsign": "Thud"
+  },
+  {
+   "id": "fs_22",
+   "name": "22nd FS 'Stingers'",
+   "aircraft": "F-16C",
+   "base": "incirlik",
+   "count": 18,
+   "callsign": "Viper"
+  },
+  {
+   "id": "fs_23",
+   "name": "23rd FS 'Fighting Hawks'",
+   "aircraft": "F-16C",
+   "base": "incirlik",
+   "count": 18,
+   "callsign": "Cowboy"
+  },
+  {
+   "id": "as_81",
+   "name": "81st FS 'Panthers'",
+   "aircraft": "A-10C",
+   "base": "incirlik",
+   "count": 18,
+   "callsign": "Hawg"
+  },
+  {
+   "id": "fs_555",
+   "name": "555th FS 'Triple Nickel'",
+   "aircraft": "F-16C",
+   "base": "akrotiri",
+   "count": 18,
+   "callsign": "Venom"
+  },
+  {
+   "id": "fs_71",
+   "name": "71st FS 'Ironmen'",
+   "aircraft": "F-15C",
+   "base": "akrotiri",
+   "count": 18,
+   "callsign": "Dodge"
+  },
+  {
+   "id": "fs_510",
+   "name": "510th FS 'Buzzards'",
+   "aircraft": "F-16C",
+   "base": "larnaca",
+   "count": 18,
+   "callsign": "Python"
+  },
+  {
+   "id": "fs_27",
+   "name": "27th FS 'Fighting Eagles'",
+   "aircraft": "F-15C",
+   "base": "larnaca",
+   "count": 18,
+   "callsign": "Chevy"
+  },
+  {
+   "id": "fs_194",
+   "name": "194th FS 'Griffins'",
+   "aircraft": "F-15C",
+   "base": "larnaca",
+   "count": 8,
+   "callsign": "Colt",
+   "role": "havcap"
+  },
+  {
+   "id": "fs_389",
+   "name": "389th FS 'Thunderbolts'",
+   "aircraft": "F-16C",
+   "base": "muwaffaq_salti",
+   "count": 18,
+   "callsign": "Rattler"
+  },
+  {
+   "id": "fs_391",
+   "name": "391st FS 'Bold Tigers'",
+   "aircraft": "F-15E",
+   "base": "muwaffaq_salti",
+   "count": 18,
+   "callsign": "Gunny"
+  },
+  {
+   "id": "fs_8",
+   "name": "8th FS 'Black Sheep'",
+   "aircraft": "F-117A",
+   "base": "incirlik",
+   "count": 12,
+   "callsign": "Pontiac"
+  }
+ ],
+ "support_targets": [
+  {
+   "parent": "ab_bassel",
+   "id": "fuel_bassel",
+   "name": "Bassel Al-Assad fuel farm",
+   "kind": "FUEL",
+   "airport": "Bassel Al-Assad",
+   "dx": -4000,
+   "dy": 9000,
+   "value": 5
+  },
+  {
+   "parent": "ab_bassel",
+   "id": "depot_bassel",
+   "name": "Bassel Al-Assad supply depot",
+   "kind": "DEPOT",
+   "airport": "Bassel Al-Assad",
+   "dx": 3500,
+   "dy": 11000,
+   "value": 4
+  },
+  {
+   "parent": "ab_duhur",
+   "id": "fuel_duhur",
+   "name": "Abu al-Duhur fuel farm",
+   "kind": "FUEL",
+   "airport": "Abu al-Duhur",
+   "dx": 5000,
+   "dy": 7000,
+   "value": 4
+  },
+  {
+   "parent": "ab_duhur",
+   "id": "depot_duhur",
+   "name": "Abu al-Duhur supply depot",
+   "kind": "DEPOT",
+   "airport": "Abu al-Duhur",
+   "dx": -3000,
+   "dy": 9000,
+   "value": 4
+  },
+  {
+   "parent": "ab_hama",
+   "id": "fuel_hama",
+   "name": "Hama fuel farm",
+   "kind": "FUEL",
+   "airport": "Hama",
+   "dx": -4000,
+   "dy": 8000,
+   "value": 5
+  },
+  {
+   "parent": "ab_hama",
+   "id": "depot_hama",
+   "name": "Hama supply depot",
+   "kind": "DEPOT",
+   "airport": "Hama",
+   "dx": 4000,
+   "dy": 10000,
+   "value": 4
+  },
+  {
+   "parent": "ab_shayrat",
+   "id": "fuel_shayrat",
+   "name": "Shayrat fuel farm",
+   "kind": "FUEL",
+   "airport": "Shayrat",
+   "dx": -5000,
+   "dy": 8000,
+   "value": 5
+  },
+  {
+   "parent": "ab_shayrat",
+   "id": "depot_shayrat",
+   "name": "Shayrat supply depot",
+   "kind": "DEPOT",
+   "airport": "Shayrat",
+   "dx": 4000,
+   "dy": 11000,
+   "value": 5
+  },
+  {
+   "parent": "ab_shayrat",
+   "id": "c2_shayrat",
+   "name": "Homs Gap Command Post (Shayrat)",
+   "kind": "C2",
+   "airport": "Shayrat",
+   "dx": 8000,
+   "dy": -9000,
+   "value": 8
+  },
+  {
+   "parent": "ab_tiyas",
+   "id": "fuel_tiyas",
+   "name": "Tiyas fuel farm",
+   "kind": "FUEL",
+   "airport": "Tiyas",
+   "dx": -4000,
+   "dy": 9000,
+   "value": 5
+  },
+  {
+   "parent": "ab_tiyas",
+   "id": "c2_tiyas",
+   "name": "Central Command Post (Tiyas)",
+   "kind": "C2",
+   "airport": "Tiyas",
+   "dx": 9000,
+   "dy": -8000,
+   "value": 8
+  },
+  {
+   "parent": "ab_damascus",
+   "id": "depot_damascus",
+   "name": "Damascus supply depot",
+   "kind": "DEPOT",
+   "airport": "Damascus",
+   "dx": -6000,
+   "dy": 11000,
+   "value": 6
+  },
+  {
+   "parent": "ab_damascus",
+   "id": "c2_damascus",
+   "name": "Air Defence Command (Damascus)",
+   "kind": "C2",
+   "airport": "Damascus",
+   "dx": 9000,
+   "dy": 9000,
+   "value": 9
+  },
+  {
+   "parent": "ab_sayqal",
+   "id": "fuel_sayqal",
+   "name": "Sayqal fuel farm",
+   "kind": "FUEL",
+   "airport": "Sayqal",
+   "dx": 6000,
+   "dy": -8000,
+   "value": 5
+  },
+  {
+   "parent": "ab_dumayr",
+   "id": "depot_dumayr",
+   "name": "Al-Dumayr ammunition depot",
+   "kind": "DEPOT",
+   "airport": "Al-Dumayr",
+   "dx": -7000,
+   "dy": 8000,
+   "value": 5
+  }
+ ],
+ "front": {
+  "chain": [
+   {
+    "airport": "Shayrat",
+    "red": "ab_shayrat",
+    "name": "Shayrat"
+   },
+   {
+    "airport": "Rene Mouawad",
+    "red": "ab_mouawad",
+    "name": "Rene Mouawad"
+   },
+   {
+    "airport": "Bassel Al-Assad",
+    "red": "ab_bassel",
+    "name": "Bassel Al-Assad"
+   },
+   {
+    "airport": "Hatay",
+    "blue": "hatay",
+    "name": "Hatay"
+   },
+   {
+    "airport": "Incirlik",
+    "blue": "incirlik",
+    "name": "Incirlik"
+   }
+  ],
+  "leg_zones": [
+   3,
+   3,
+   4,
+   1
+  ],
+  "rear_zones": 1,
+  "stages": {
+   "1": [
+    "ab_bassel"
+   ],
+   "2": [
+    "ab_bassel",
+    "ab_mouawad"
+   ],
+   "3": [
+    "ab_bassel",
+    "ab_mouawad",
+    "ab_shayrat"
+   ]
+  },
+  "victory": {
+   "1": [
+    "ab_bassel"
+   ]
+  },
+  "counter": {},
+  "defeat_bases": 1,
+  "air_fields": [
+   "duhur",
+   "hama",
+   "tiyas",
+   "palmyra",
+   "sayqal",
+   "damascus",
+   "dumayr",
+   "nasiriyah"
+  ]
+ },
+ "tier_labels": [
+  "",
+  "T1 Front",
+  "T2 Coast",
+  "T3 Central Syria",
+  "T4 Deep"
+ ],
+ "front_names": [
+  "Hatay front",
+  "the coast and central Syria",
+  "deep strike"
+ ],
+ "front_desc": [
+  "the Hatay frontier and the coast road",
+  "the coast and central Syria",
+  "the enemy deep rear"
+ ],
+ "title": "Operation LEVANT HORIZON",
+ "start_hour": 0,
+ "mag_var_deg": 4,
+ "win_supply": {
+  "2": {
+   "below": 0.4,
+   "days": 3
+  },
+  "3": {
+   "below": 0.4,
+   "days": 3
+  }
+ },
+ "works": {
+  "label": "Lutorin Works",
+  "damage": 1.0,
+  "levels": {
+   "2": {
+    "push": 2.0,
+    "rebuild_days": 30,
+    "supply_total": 25
+   },
+   "3": {
+    "push": 4.75,
+    "rebuild_days": 30,
+    "supply_total": 25
+   }
+  },
+  "sites": [
+   {
+    "id": "wks_palmyra_1",
+    "name": "Lutorin Works, Palmyra West",
+    "x": -57835,
+    "y": 193843,
+    "value": 10,
+    "tier": 4
+   },
+   {
+    "id": "wks_palmyra_2",
+    "name": "Lutorin Works, Palmyra North",
+    "x": -42267,
+    "y": 201149,
+    "value": 10,
+    "tier": 4
+   },
+   {
+    "id": "wks_homs_1",
+    "name": "Lutorin Works, Homs Gap West",
+    "x": -40043,
+    "y": 50504,
+    "value": 10,
+    "tier": 3
+   },
+   {
+    "id": "wks_homs_2",
+    "name": "Lutorin Works, Homs Gap East",
+    "x": -28923,
+    "y": 82457,
+    "value": 10,
+    "tier": 3
+   },
+   {
+    "id": "wks_latakia",
+    "name": "Lutorin Works, Latakia Port",
+    "x": 53262,
+    "y": -2155,
+    "value": 10,
+    "tier": 2
+   }
+  ]
+ },
+ "opening_strike": {
+  "levels": [
+   2,
+   3
+  ],
+  "kill": "sa5",
+  "fill": [
+   "SA-10",
+   "EWR"
+  ]
+ },
+ "raid_attack_types": [
+  "Su_17M4"
+ ],
+ "sam_tier": {
+  "umbrella": [
+   "SA-5",
+   "SA-10"
+  ],
+  "gate": [
+   "SA-2",
+   "SA-3",
+   "SA-6",
+   "SA-11",
+   "SA-10",
+   "SA-5"
+  ]
+ },
+ "level_overrides": {
+  "1": {
+   "bomber_wing": 0,
+   "bomber_escort_wing": 0
+  },
+  "2": {
+   "bomber_wing": 0,
+   "bomber_escort_wing": 0,
+   "bomber_policy": "none",
+   "road_sites_red": 20
+  },
+  "3": {
+   "bomber_wing": 16,
+   "bomber_escort_wing": 12,
+   "road_sites_red": 20
+  }
+ },
+ "red_roster": {
+  "1": {
+   "MiG_21Bis": 30,
+   "MiG_23MLD": 30,
+   "Su_17M4": 24,
+   "Su_24M": 10
+  },
+  "2": {
+   "MiG_21Bis": 40,
+   "MiG_23MLD": 58,
+   "MiG_29A": 25,
+   "MiG_25PD": 21,
+   "Su_17M4": 67,
+   "Su_24M": 27
+  },
+  "3": {
+   "MiG_23MLD": 36,
+   "MiG_29A": 16,
+   "MiG_29S": 26,
+   "MiG_25PD": 12,
+   "Su_27": 36,
+   "MiG_31": 8,
+   "Su_17M4": 64,
+   "Su_24M": 40
+  }
+ },
+ "extra_sams": [
+  {
+   "id": "sam_sa5homs_0",
+   "name": "Homs SA-5 battery",
+   "site": "SA-5",
+   "near": "Shayrat",
+   "bearing": 320,
+   "dist_m": 22000,
+   "levels": [
+    2,
+    3
+   ],
+   "parent": "ab_shayrat",
+   "tier": 3
+  },
+  {
+   "id": "sam_sa5dam_0",
+   "name": "Damascus SA-5 battery",
+   "site": "SA-5",
+   "near": "Damascus",
+   "bearing": 60,
+   "dist_m": 25000,
+   "levels": [
+    2,
+    3
+   ],
+   "parent": "ab_damascus",
+   "tier": 4
+  },
+  {
+   "id": "sam_sa5tiyas_0",
+   "name": "Tiyas SA-5 battery",
+   "site": "SA-5",
+   "x": -68100,
+   "y": 149400,
+   "levels": [
+    3
+   ],
+   "parent": "ab_tiyas",
+   "tier": 4
+  }
+ ],
+ "nav": {
+  "Incirlik": "INCIRLIK  ILS 109.30 RWY05 / 111.70 RWY23  TACAN 21X DAN",
+  "Akrotiri": "AKROTIRI  ILS 109.70 RWY28  TACAN 107X AKR",
+  "Larnaca": "LARNACA  ILS 110.30 RWY22  VOR 112.80 LCA  no TACAN",
+  "Paphos": "PAPHOS  ILS 108.90 RWY29  TACAN 79X PHA  VOR 117.90",
+  "Muwaffaq Salti": "MUWAFFAQ SALTI  ILS 109.70 RWY26  no TACAN",
+  "Adana Sakirpasa": "ADANA  ILS 108.70 RWY05  VOR 112.70 ADA  no TACAN",
+  "Hatay": "HATAY  ILS 108.90 RWY04  VOR 112.05 HTY  no TACAN"
+ },
+ "ils_runway": {
+  "Incirlik": 5,
+  "Akrotiri": 28,
+  "Larnaca": 22,
+  "Paphos": 29,
+  "Muwaffaq Salti": 26,
+  "Adana Sakirpasa": 5,
+  "Hatay": 4
+ },
+ "climate": {
+  "source": "Latakia monthly normals as published in Wikipedia 'Latakia': sunshine hours (NOAA 1961-1991) and days with precipitation of 1 mm or more (1991-2020 normals, Starlings Roost Weather). sun_frac = sunshine hours / possible daylight hours at 35.5N (day length from the solar declination at mid-month); rain_frac = precipitation days / days in month; temp_c = monthly mean temperature (1991-2020), rounded. wind_ms, wind_from_deg and fog are hand-tuned judgment calls, not measured.",
+  "sun_frac": [
+   0.45,
+   0.49,
+   0.55,
+   0.58,
+   0.69,
+   0.74,
+   0.74,
+   0.76,
+   0.79,
+   0.72,
+   0.63,
+   0.51
+  ],
+  "rain_frac": [
+   0.4,
+   0.37,
+   0.24,
+   0.19,
+   0.09,
+   0.02,
+   0.0,
+   0.01,
+   0.08,
+   0.19,
+   0.21,
+   0.35
+  ],
+  "wind_ms": [
+   4.0,
+   4.0,
+   4.0,
+   3.5,
+   3.5,
+   3.5,
+   3.5,
+   3.5,
+   3.0,
+   3.0,
+   3.5,
+   4.0
+  ],
+  "wind_from_deg": [
+   200,
+   200,
+   230,
+   250,
+   260,
+   260,
+   260,
+   260,
+   260,
+   250,
+   220,
+   200
+  ],
+  "wind_scatter_deg": 30,
+  "wind_from_source": "Judgment call, no table read: the Syrian coast has a west to south-west sea breeze most of the year (west-south-west in summer) and south to south-west winds with the winter storms; the monthly values and the 30 degree scatter are guesses in the style of the Caucasus table, not measurements.",
+  "fog": [
+   0.03,
+   0.03,
+   0.02,
+   0.01,
+   0.01,
+   0.01,
+   0.01,
+   0.01,
+   0.01,
+   0.01,
+   0.02,
+   0.03
+  ]
+ },
+ "stories": {
+  "1": {
+   "enemy": "the NCC",
+   "enemy_long": "the Northern Coastal Command",
+   "background": [
+    "Units of Syria's northern coast, calling themselves the Northern Coastal Command (NCC), have refused Damascus's orders and crossed toward the Hatay border. They hold the coast around Latakia and Bassel Al-Assad with the aircraft that came with them: old MiG-21s and MiG-23s, Su-17 strike jets and a few Su-24s, under SA-2 and SA-3 batteries, guns and shoulder-fired missiles. Damascus says it cannot control them; the border commanders say they are protecting Syrian land. Neither is believed.",
+    "Turkey has asked for help and a US-led coalition has answered. The carrier USS Dwight D. Eisenhower and her air wing operate from the eastern Mediterranean; Coalition squadrons fly from Incirlik and the fields behind the Turkish front. You fly with the Navy's carrier air wing or with the Air Force, as your squadron is. The aim is limited: push the NCC back from the border and take Bassel Al-Assad, so a buffer zone opens and the crisis ends in days, not months."
+   ],
+   "intent": "Coalition command's intent: keep the NCC's supply and air defences under pressure and support the ground force as it pushes the line back. Bassel Al-Assad is the objective. Hold Hatay on the way. Every day the war is planned and the packages go out. Yours is the one you fly yourself.",
+   "now": {
+    "Offensive": "The advance is moving. Our ground force at the front outweighs the NCC's here, and the air campaign is keeping it that way.",
+    "Consolidating": "We hold what we took. The next push waits for the takeover to finish; use the time to hit supply and air defence.",
+    "Holding": "The front is not moving. Close air support and supply strikes decide the next move.",
+    "Under pressure": "The NCC is gaining ground on our side of the line. Hold the sector in front of our airfields.",
+    "Last stand": "The final objective is next. Take Bassel Al-Assad and the crisis is over.",
+    "Defeat": "Hatay has fallen and the Coalition has no foothold left on the front. The campaign is lost."
+   },
+   "beats": {
+    "open": "Operation LEVANT HORIZON begins. The Northern Coastal Command holds the coast and the coalition air campaign opens today.",
+    "retake": "{base} has been retaken by the Northern Coastal Command.",
+    "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. If Hatay falls, the front collapses.",
+    "back_blue": "{base} is ours again, though its defences are gone.",
+    "win": "Bassel Al-Assad is ours. The Northern Coastal Command has lost the coast and its air base, Damascus has taken back control and the crisis is over.",
+    "lose": "Hatay has fallen. The Coalition withdraws and the campaign is lost.",
+    "fall_ab_bassel": "Bassel Al-Assad is ours. The coast is open and the buffer zone is taking shape."
+   }
+  },
+  "2": {
+   "enemy": "Syria",
+   "enemy_long": "the Syrian Arab Republic",
+   "background": [
+    "Syria has closed its border with Turkey and moved its army to the Hatay frontier, a province Damascus has never fully given up. The Syrian air force flies from the coast and the central plains with MiG-23s, MiG-25 interceptors and a handful of MiG-29s, under a thick belt of SA-2, SA-3 and SA-6 batteries and a few newer SA-11s fitted by Russian advisers. Its supplies come down the coast road from Latakia and the Homs gap, and no one outside Damascus can say who is paying for the new equipment.",
+    "Aleksandr Lutorin, a Russian billionaire, has a second business that exists only in Syria. In the phosphate beds around Palmyra grows a crystal that forms nowhere else on earth and breaks down within days once it leaves the ground, so it cannot be shipped: it has to be worked beside the mine. From it his chemists make a stabilizer that gives old Soviet-era arsenals new life: missile motors, radar tubes and the propellant of batteries that should have been scrapped years ago. The West has no use for it. Everyone who still holds a Cold War arsenal pays Lutorin whatever he asks. Damascus hosts his plants, takes its share, and in return his money and his arms stand behind its claim on Hatay. Every process line was built by hand by one team of Soviet-trained engineers and cannot be ordered from a catalogue: when a line burns, the same few tired men start again.",
+    "A US-led coalition has answered Turkey's request for help. The carrier USS Dwight D. Eisenhower and her air wing operate from the eastern Mediterranean; Coalition squadrons fly from Incirlik and the Turkish fields behind the front. You fly with the Navy's carrier air wing or with the Air Force, as your squadron is. The war opened at midnight, when F-117A Nighthawks took out the long-range SA-5 batteries near Homs and Damascus, and the deep early-warning radars behind them. They will be rebuilt in time, but for now the way is open."
+   ],
+   "intent": "Coalition command's intent: break Syria's supply and air defence, not its cities. Hit the depots, fuel and the SAM belt along the coast road, and the front cannot be kept up. Hold Hatay, it is the line. Lutorin's plants are the other target: destroy them all and his arms stop coming. Every day the war is planned and the packages go out. Yours is the one you fly yourself.",
+   "now": {
+    "Offensive": "Our ground force at the front outweighs Syria's here, and the air campaign is keeping it that way.",
+    "Consolidating": "We hold what we gained. Use the time to hit supply and air defence.",
+    "Holding": "The front is not moving. Close air support and supply strikes decide the next move.",
+    "Under pressure": "Syria is gaining ground toward Hatay. Hold the sector in front of our airfields.",
+    "Last stand": "Hatay is the line. If it falls, the war is lost.",
+    "Defeat": "Hatay has fallen and the Coalition has no foothold left on the front. The campaign is lost."
+   },
+   "beats": {
+    "open": "That was the opening stage of Operation LEVANT HORIZON. The coalition air campaign opens today.",
+    "retake": "{base} has been retaken by Syria.",
+    "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. If Hatay falls, the front collapses.",
+    "back_blue": "{base} is ours again, though its defences are gone.",
+    "win": "Syria's supply has collapsed. Without it the army cannot hold the front and Damascus asks for talks. The war is won.",
+    "lose": "Hatay has fallen. The Coalition withdraws and the campaign is lost.",
+    "fall_ab_bassel": "Bassel Al-Assad is ours. The coast road south is open and the first step is taken.",
+    "fall_ab_mouawad": "Rene Mouawad is ours. The coast road as far as the Lebanese border is in coalition hands.",
+    "works_down": "The first of Lutorin's plants is burning. His customers are asking where their stabilizer is.",
+    "works_back": "Lutorin's engineers have a line running again, far slower than we broke it.",
+    "works_win": "The last of Lutorin's plants is gone. With nothing left to sell, his money and his arms stop, and Damascus lets go of Hatay. The war is won."
+   }
+  },
+  "3": {
+   "enemy": "Syrian-Russian Forces",
+   "enemy_long": "Syria and its Russian backers",
+   "background": [
+    "Syria has closed its border with Turkey and is massing along the Hatay frontier, backed by Russian advisers, Russian-supplied fighters and a modern air-defence network that Syria could never have paid for. Behind it stands one man. Aleksandr Lutorin, a Russian oligarch whose companies hold the pipelines, terminals and tanker fleets that carry the Levant's oil and gas to the Mediterranean, has bought his way into both governments. Damascus takes his money; Moscow takes his calls. Hatay and the Iskenderun coast are the last piece of the export route he does not control.",
+    "Lutorin's real treasure is not in the pipelines. In the phosphate beds around Palmyra grows a crystal that forms nowhere else on earth and breaks down within days once it leaves the ground, so it cannot be shipped: it has to be worked beside the mine. From it his chemists make a stabilizer that gives old Soviet-era arsenals new life: missile motors, radar tubes and the propellant of batteries that should have been scrapped years ago. The West has no use for it. Everyone who still holds a Cold War arsenal pays Lutorin whatever he asks. Damascus hosts his plants, takes its share, and in return his money and his arms stand behind its claim on Hatay. Every process line was built by hand by one team of Soviet-trained engineers and cannot be ordered from a catalogue: when a line burns, the same few tired men start again.",
+    "A US-led coalition has answered Turkey's request for help. The carrier USS Dwight D. Eisenhower and her air wing operate from the eastern Mediterranean; Coalition squadrons fly from Incirlik and the fields behind the Turkish front. You fly with the Navy's carrier air wing or with the Air Force, as your squadron is. The war opened at midnight, when F-117A Nighthawks slipped in unseen and took out the long-range SA-5 batteries around Damascus and Homs, along with some SA-10 sites and early-warning radars. The rest of the network, and the Russian-built fighters behind it, are still up."
+   ],
+   "intent": "Coalition command's intent: break Syria's supply and air defence, not its cities. Take down the SAM belt, the fuel and the depots that feed the front, and the war is over when the enemy can no longer keep it up. Hold Hatay: it is the line. Lutorin's plants are the other target: destroy them all and his arms stop coming. Every day the war is planned and the packages go out. Yours is the one you fly yourself.",
+   "now": {
+    "Offensive": "Our ground force at the front outweighs the enemy's here, and the air campaign is keeping it that way.",
+    "Consolidating": "We hold what we gained. Use the time to hit supply and air defence.",
+    "Holding": "The front is not moving. Close air support and supply strikes decide the next move.",
+    "Under pressure": "Syrian-Russian Forces are gaining ground toward Hatay. Hold the sector in front of our airfields.",
+    "Last stand": "Hatay is the line. If it falls, the war is lost.",
+    "Defeat": "Hatay has fallen and the Coalition has no foothold left on the front. The campaign is lost."
+   },
+   "beats": {
+    "open": "That was the opening stage of Operation LEVANT HORIZON. The coalition air campaign opens today.",
+    "retake": "{base} has been retaken by Syrian-Russian Forces.",
+    "fallen_blue": "{base} has fallen to the enemy. Our squadrons there withdrew. If Hatay falls, the front collapses.",
+    "back_blue": "{base} is ours again, though its defences are gone.",
+    "win": "The enemy's supply has collapsed. Without it the Syrian-Russian Forces cannot hold the front, and Lutorin's route to the coast is shut. The war is won.",
+    "lose": "Hatay has fallen. The Coalition withdraws and the export route is Lutorin's. The campaign is lost.",
+    "fall_ab_bassel": "Bassel Al-Assad is ours. The coast road south is open and the first step is taken.",
+    "fall_ab_mouawad": "Rene Mouawad is ours. The coast road as far as the Lebanese border is in coalition hands.",
+    "fall_ab_shayrat": "Shayrat is ours. The Homs gap is open and the road into central Syria lies ahead.",
+    "works_down": "The first of Lutorin's plants is burning. His customers are asking where their stabilizer is.",
+    "works_back": "Lutorin's engineers have a line running again, far slower than we broke it.",
+    "works_win": "The last of Lutorin's plants is gone. With nothing left to sell, his money and his arms stop, and Damascus lets go of Hatay. The war is won."
+   }
+  }
+ },
+ "raid_bearing_deg": [
+  100,
+  130
+ ],
+ "map_box": {
+  "x0": -440000,
+  "x1": 300000,
+  "y0": -580000,
+  "y1": 580000
+ },
+ "max_raid": {
+  "3": 12
+ },
+ "raid_from_base": 12,
+ "raid_grace_days": 7
+}

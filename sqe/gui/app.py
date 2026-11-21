@@ -21,6 +21,7 @@ from ..engine import Session
 from ..packages import PackageBuilder, folded_n_def
 from ..settings import AppSettings
 from . import theme
+from ..textcase import title_case as _tc          # S128: table headers and tab titles read in Title Case
 from .dialogs import DayResolvedDialog, DebriefDialog, NewCampaignDialog, SettingsDialog, WaitingDialog
 from .widgets import MapView, SideCard, StatCard, StepSpin, card
 from . import overview_view as V
@@ -28,7 +29,6 @@ from . import overview_view as V
 URGENT_ROLE = Qt.UserRole + 1     # "" | "red" | "mixed": the row's mission carries no red package / only red's / red's and yours together (S39)
 URGENT_COLOR = "#d8453b"          # red border: only red's packages (raid intercepts, troops in contact, raid prep)
 MIXED_COLOR = theme.AMBER         # amber border: your packages and red's flying in one mission
-AUTO_INDENT = 22                  # S23: the Crew Rest hours control sits under its check box, indented past the check box's tick (px)
 AUTOSKIP_MAX_TURNS = 42          # an auto-skip run stops after at most a week of turns from its start (6 a day; S25, was 84 at 12 a day), a judgment call (campaign rules plan Phase 11)
 
 
@@ -58,7 +58,7 @@ def campaign_doc_path() -> Path | None:
 
 
 def _tbl(headers, stretch_last=True) -> QTableWidget:
-    t = QTableWidget(0, len(headers)); t.setHorizontalHeaderLabels(headers); t.verticalHeader().setVisible(False)
+    t = QTableWidget(0, len(headers)); t.setHorizontalHeaderLabels([_tc(h, True) for h in headers]); t.verticalHeader().setVisible(False)
     t.setEditTriggers(QTableWidget.NoEditTriggers); t.setSelectionBehavior(QTableWidget.SelectRows)
     t.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch); t.setAlternatingRowColors(False)
     return t
@@ -93,7 +93,7 @@ class OverviewPage(QWidget):
         gc = card(); left.addWidget(gc, 1)                                 # v0.41.149: the detail tabs (they replaced the one long sector list)
         self.dtabs = QTabWidget(); gc.layout().addWidget(self.dtabs)
         self.dviews = {}
-        for key, title in (("ground", "Ground"), ("supply", "Force Index"), ("ad", "Air defence"), ("air", "Air Operations"), ("edge", "Tactical Edge")):
+        for key, title in (("ground", "Ground"), ("supply", "Force Index"), ("ad", "Air Defense"), ("air", "Air Operations"), ("edge", "Tactical Edge")):
             v = QTextBrowser(); v.setFrameShape(QFrame.NoFrame); v.setStyleSheet("background:transparent;border:none;"); self.dviews[key] = v
             if key == "ground":                                              # v0.41.207: the base notes sit in an expandable section above the sector table
                 w = QWidget(); wl = QVBoxLayout(w); wl.setContentsMargins(0, 0, 0, 0); wl.setSpacing(4)
@@ -103,15 +103,15 @@ class OverviewPage(QWidget):
                 self.notes_view.setMaximumHeight(230); self.notes_view.setVisible(False)
                 self.notes_btn.clicked.connect(self._toggle_notes)
                 wl.addWidget(self.notes_btn); wl.addWidget(self.notes_view); wl.addWidget(v, 1)
-                self.dtabs.addTab(w, title)
+                self.dtabs.addTab(w, _tc(title, True))
             else:
-                self.dtabs.addTab(v, title)
+                self.dtabs.addTab(v, _tc(title, True))
         right = QVBoxLayout(); root.addLayout(right, 6)
         g = QGridLayout(); g.setSpacing(12); right.addLayout(g)
-        self.cards = {"fr": StatCard("The front", theme.AMBER), "od": StatCard("Ground odds", theme.BLUE)}
+        self.cards = {"fr": StatCard("The Front", theme.AMBER), "od": StatCard("Ground Odds", theme.BLUE)}
         self.side = {"blue": SideCard("Coalition"), "red": SideCard("Russia")}
         g.addWidget(self.cards["fr"], 0, 0); g.addWidget(self.cards["od"], 0, 1); g.addWidget(self.side["blue"], 1, 0); g.addWidget(self.side["red"], 1, 1)
-        self.today = StatCard("This turn's tasking", theme.AMBER); right.addWidget(self.today)               # v0.41.152: what the day holds for you
+        self.today = StatCard("This Turn's Tasking", theme.AMBER); right.addWidget(self.today)               # v0.41.152: what the day holds for you
         self.warn_card = card(); right.addWidget(self.warn_card)                # v0.41.148: warnings (a base about to fall, the counter-force), hidden when there are none
         wh = QLabel("WARNINGS"); wh.setObjectName("head"); self.warn_card.layout().addWidget(wh)
         self.warn = QLabel(); self.warn.setWordWrap(True); self.warn.setStyleSheet(f"color:{theme.AMBER};"); self.warn_card.layout().addWidget(self.warn)
@@ -140,7 +140,7 @@ class OverviewPage(QWidget):
 
     @staticmethod
     def _table(headers, rows, note: str = "") -> str:
-        th = "".join(f"<th align='left' style='color:#8fa3b8;padding-right:14px'>{html.escape(h)}</th>" for h in headers)
+        th = "".join(f"<th align='left' style='color:#8fa3b8;padding-right:14px'>{html.escape(_tc(str(h), True))}</th>" for h in headers)
         tr = "".join("<tr>" + "".join(f"<td style='padding-right:14px'>{html.escape(str(c))}</td>" for c in r) + "</tr>" for r in rows)
         return (f"<p style='color:#b9c6d6'>{html.escape(note)}</p>" if note else "") + f"<table cellspacing='2'><tr>{th}</tr>{tr}</table>"
 
@@ -153,7 +153,7 @@ class OverviewPage(QWidget):
 
     def _fill_details(self, st):
         import re
-        from .. import ground, tempo, blue_barcap as _bb, bombers as _bomb
+        from .. import ground, tempo, blue_barcap as _bb, bombers as _bomb, works as _works
         od, en, e = overview_detail, story.enemy(st), V.e
         fe, fb = posture.supply_pct(st, "red"), posture.supply_pct(st, "blue")
         ae, ab = round(100 * posture.iads_pct(st, "red")), round(100 * posture.iads_pct(st, "blue"))
@@ -173,16 +173,27 @@ class OverviewPage(QWidget):
         body += V.section("Front History", "<br>".join(e(x) for x in hist)) if hist else "<p style='margin-top:14px;color:#8fa3b8'>The front has not moved yet.</p>"
         im.apply(self.dviews["ground"], body)
         # ---- Force Index (the old Supply tab; code names stay)
-        top = V.table(("Side", "Force Index"), [("Coalition", ("bg", f"{fb}%", V.supply_band(fb))), (en, ("bg", f"{fe}%", V.supply_band(fe)))])
-        sites = V.table(("Side", "Site", "Health", "State"), [(a, b, ("bg", f"{c}%", V.pct_band(c)), V.first_cap(d)) for a, b, c, d in od.supply_rows(st)])
-        self.dviews["supply"].setHtml(top + V.section("Sites", sites)
-                                      + "<p style='margin-top:14px;color:#8fa3b8'>A site mends in about 6 days at full Force Index (longer when it is low), and not on a night after it was struck.</p>")
+        im3 = V.Images()
+        top = V.table(("Side", "Force Index"), [["Coalition", im3.cbar(fb, V.supply_band(fb))], [en, im3.cbar(fe, V.supply_band(fe))]], widths=(V.W_SITE, V.W_HEALTH))
+        srows = od.supply_rows(st)
+        site_html = ""
+        wsum = _works.summary(st)
+        if wsum:                                                                  # S131: the works first, they are red's depots too (the Force Index counts them)
+            wt = V.table(("Site", "Health", "State"), [[a.name, im3.cbar(h, V.pct_band(h)), w] for a, h, w in _works.rows(st)], center=(2,), nowrap=True, widths=(V.W_SITE, V.W_HEALTH, V.W_STATE))
+            site_html += V.section(wsum[0], f"<p style='color:#8fa3b8;margin-top:0'>{e(wsum[1])}.</p>" + wt)
+        for side, head in (("Coalition", "Coalition Sites"), (None, f"{en} Sites")):
+            rs = [r for r in srows if (r[0] == "Coalition") == (side is not None)]
+            if rs:
+                site_html += V.section(head, V.table(("Site", "Health", "State"), [[b, im3.cbar(c, V.pct_band(c)), V.short_state(d)] for a, b, c, d in rs], center=(2,), nowrap=True, widths=(V.W_SITE, V.W_HEALTH, V.W_STATE)))
+        im3.apply(self.dviews["supply"], top + site_html
+                  + "<p style='margin-top:14px;color:#8fa3b8'>A site mends in about 6 days at full Force Index (longer when it is low), and not on a night after it was struck. Lutorin Works mends only when it is rebuilt.</p>")
         # ---- Air defence: the transit section only when a battery is on its way
         orders = od.asks_rows(st)
-        top = V.table(("Side", "Air Defense"), [("Coalition", ("bg", f"{ab}%", V.pct_band(ab))), (en, ("bg", f"{ae}%", V.pct_band(ae)))])
+        im4 = V.Images()
+        top = V.table(("Side", "Air Defense"), [["Coalition", im4.cbar(ab, V.pct_band(ab))], [en, im4.cbar(ae, V.pct_band(ae))]], widths=(V.W_SITE, V.W_TYPE + V.W_HEALTH))
         transit = V.section("SAM Batteries in Transit", V.table(("Side", "Battery"), [(a, V.first_cap(b)) for a, b in orders])) if orders else ""
-        sites = V.table(("Side", "Site", "Type", "Health", "State"), [(a, b, c, ("bg", f"{d}%", V.pct_band(d)), V.first_cap(x)) for a, b, c, d, x in od.air_defence_rows(st)])
-        self.dviews["ad"].setHtml(top + transit + V.section("Sites", sites))
+        sites = V.table(("Site", "Type", "Health", "State"), [[b, c, im4.cbar(d, V.pct_band(d)), V.short_state(x)] for a, b, c, d, x in od.air_defence_rows(st)], center=(1, 3), nowrap=True, widths=(V.W_SITE, V.W_TYPE, V.W_HEALTH, V.W_STATE))
+        im4.apply(self.dviews["ad"], top + transit + V.section("Sites", sites))
         # ---- Air Operations: BARCAP cover and the tanker / AWACS guards, under their own headings
         lines = _bb.status_lines(st)
         cover = [tuple((ln.strip().split(": ", 1) + [""])[:2]) for ln in lines if ln.startswith("   ")]
@@ -200,13 +211,14 @@ class OverviewPage(QWidget):
         trs = []
         for k in tempo.KINDS:
             v = tempo.get(st, k) * 100
-            trs.append([names[k], im2.bar(f"{v:+.0f}%", v / (tempo.TEMPO_CAP * 100), "edge"), "At the cap" if abs(v) >= tempo.TEMPO_CAP * 100 - 0.5 else ""])
+            trs.append([names[k], im2.bar(f"{v:+.0f}%", v / (tempo.TEMPO_CAP * 100), "edge"), ])
         im2.apply(self.dviews["edge"], "<p style='color:#b9c6d6'>What your flown sorties do to the odds of the same kind of job done in the background: 0 to +40 points, fading 3% a night. "
-                  "A full bar is the +40% cap.</p><p style='margin:0'>&nbsp;</p>" + V.table(("Job", "Edge", ""), trs))
+                  "A full bar is the +40% cap.</p><p style='margin:0'>&nbsp;</p>" + V.table(("Job", "Edge"), trs))
 
     def refresh(self, st):
         from .. import posture
         n, name, text = narrative.phase(st)
+        self.op.setText(narrative.TITLE)                                        # S90: the operation name of THIS campaign's theatre (it was read once when the page was built, while the Caucasus was still active)
         self.phase.setText(f"{name.upper()}")                                   # v0.41.148: the posture label (it replaced the three phases)
         self._st = st
         sit = overview_detail.situation(st)
@@ -284,13 +296,16 @@ class MissionsPage(QWidget):
         self.auto_dur = StepSpin(); self.auto_dur.setRange(4, 24); self.auto_dur.setSingleStep(4); self.auto_dur.setSuffix(" hrs"); self.auto_dur.setValue(12)
         # S23 fit (measured with the real Segoe UI font): the box has 160 px inside, "Crew Rest" is 90 px and the -/12 hrs/+ spin 202 px, so they cannot share a row. The spin goes on its own
         # line under Crew Rest, indented past the check box, at a fixed width (the two step buttons are 34 px each, the field gets the rest)
-        self.auto_dur_row = QWidget(); drow = QHBoxLayout(self.auto_dur_row); drow.setContentsMargins(AUTO_INDENT, 0, 0, 0); drow.setSpacing(0)
-        self.auto_dur.setFixedWidth(160 - AUTO_INDENT); drow.addWidget(self.auto_dur); drow.addStretch(1)
+        # S23d (XO 2026-11-19): no frame; a thin rule above Crew Rest marks it and its hours field as their own group, and every tick box starts at the same left edge
+        self.auto_rule = QFrame(); self.auto_rule.setObjectName("rule"); self.auto_rule.setFixedHeight(1)
+        self.auto_dur_row = QWidget(); drow = QHBoxLayout(self.auto_dur_row); drow.setContentsMargins(0, 0, 0, 0); drow.setSpacing(0)
+        self.auto_dur.setFixedWidth(160); drow.addWidget(self.auto_dur); drow.addStretch(1)
         # S21: the three option rows get one height (the check boxes' own height, like one CSS height for every row); the spin line under Crew Rest is that row's second line
         row_h = max(w.sizeHint().height() for w in (self.auto_stand, self.auto_night, self.auto_dur_on))
         for w in (self.auto_stand, self.auto_night, self.auto_dur_on):
-            w.setFixedHeight(row_h); ab.addWidget(w)
-        ab.addWidget(self.auto_dur_row)
+            w.setFixedHeight(row_h)
+        ab.addWidget(self.auto_stand); ab.addWidget(self.auto_night); ab.addWidget(self.auto_rule)
+        ab.addWidget(self.auto_dur_on); ab.addWidget(self.auto_dur_row)
         for w in (self.auto_stand, self.auto_night, self.auto_dur_on):
             w.toggled.connect(self._auto_changed)
         self.auto_dur.valueChanged.connect(self._auto_changed)
@@ -307,8 +322,8 @@ class MissionsPage(QWidget):
         if getattr(self, "sess", None) is None or getattr(self, "_loading", False):
             return
         s = self.sess.settings
-        s.autoskip_stand_down, s.autoskip_night, s.autoskip_duration_on = self.auto_stand.isChecked(), self.auto_night.isChecked(), self.auto_dur_on.isChecked()
-        s.autoskip_hours = self.auto_dur.value()
+        s.autoskip_stand_down, s.autoskip_night, s.autoskip_crew_rest = self.auto_stand.isChecked(), self.auto_night.isChecked(), self.auto_dur_on.isChecked()
+        s.autoskip_crew_rest_hours = self.auto_dur.value()
         try:
             s.save()
         except OSError:
@@ -349,7 +364,7 @@ class MissionsPage(QWidget):
         if not getattr(self.win, "_auto_busy", False):               # Phase 11: the Autoskip boxes show the saved choice (not while it is running)
             cs = sess.settings
             self.auto_stand.setChecked(bool(cs.autoskip_stand_down)); self.auto_night.setChecked(bool(cs.autoskip_night))
-            self.auto_dur_on.setChecked(bool(cs.autoskip_duration_on)); self.auto_dur.setValue(int(cs.autoskip_hours))
+            self.auto_dur_on.setChecked(bool(cs.autoskip_crew_rest)); self.auto_dur.setValue(int(cs.autoskip_crew_rest_hours))
         self._loading = False
         mine_only = sess.settings.list_filter != "all"
         visible = [p for p in sess.packages() if (bool(sess.flyable(p)) or not mine_only)]
@@ -406,12 +421,17 @@ class MissionsPage(QWidget):
         return l
 
     def _fly_note(self, p) -> str:
-        """What pressing FLY on this package's flight gives you: the start time and the other packages that fly with it."""
+        """What pressing FLY on this package's flight gives you: the start time, the nearby packages listed with it, and (S139b) a note that other packages in the time window fly too as far as the unit limit allows."""
         ex = self.sess.merge_candidates(p)
-        if not ex:
+        listed = {x.number for x in ex}
+        more = [x for x in self.sess.fly_candidates(p) if x.number not in listed]
+        if not ex and not more:
             return f"FLY here: the mission starts {p.start}, this package alone."
         parts = [f"#{x.number} ({'already airborne, started ' if x.start < p.start else 'starts '}{x.start})" for x in ex]
-        return f"FLY here: the mission starts {p.start} and also flies " + ", ".join(parts) + "."
+        text = f"FLY here: the mission starts {p.start}" + (" and also flies " + ", ".join(parts) if parts else "")
+        if more:
+            text += ("; " if parts else " and ") + f"{len(more)} other package{'s' if len(more) > 1 else ''} in the time window fly{'' if len(more) > 1 else 's'} too, as far as the unit limit allows (the furthest are left out first)"
+        return text + "."
 
     def _flight_table(self, p):
         st = self.sess.state
@@ -498,14 +518,14 @@ class MissionsPage(QWidget):
                ("  |  JTAC on the ground" if p.jtac else "") + ("  |  Joint Navy / Air Force package" if p.joint else ""))
         ex = self.sess.merge_candidates(p)
         if ex and yours:
-            sup += "  |  Merged mission: also flies " + ", ".join(f"#{x.number}" for x in ex)
+            sup += "  |  Merged mission: also flies " + ", ".join(f"#{x.number}" for x in ex) + " (and the other packages in the time window, as the unit limit allows)"
         self.bl.addWidget(self._label(sup, "dim"))
         if sp:
             self.bl.addStretch(1)
             return
         tx, ty = PackageBuilder(st).target_xy(p.objective)
         th = threat_lines(st, tx, ty)[:4]
-        nd = folded_n_def(p, ex, self.sess.settings.merge_enemy_pct)
+        nd = folded_n_def(p, ex, self.sess.options.enemy_air_sum)
         self.bl.addWidget(self._label((f"Expect about {nd} hostile fighters at the target" + (f" (includes {', '.join('#%d' % x.number for x in ex)})" if ex else "") + ".  " if nd else "") +
                                       "Threats near target: " + ("; ".join(th) if th else "none known"), None, theme.AMBER))
         self.bl.addStretch(1)
@@ -523,7 +543,7 @@ class ForcesPage(QWidget):
         self.gw = _tbl(["Sector", "Enemy force", "Friendly force", "Enemy forward garrison", "Friendly forward garrison"])
         self.sup = _tbl(["Support aircraft", "Type", "Based at", "Serviceable", "Cycle", "Cover today", "Strength"])
         for t, n in ((self.sq, "Coalition squadrons"), (self.sup, "Tankers and AWACS"), (self.bs, "Coalition bases"), (self.gw, "Ground war"), (self.ea, "Enemy air wings"), (self.as_, "Enemy assets")):
-            self.tabs.addTab(t, n)
+            self.tabs.addTab(t, _tc(n, True))
 
     @staticmethod
     def _bar(frac, color):
@@ -546,17 +566,25 @@ class ForcesPage(QWidget):
                 out[qid] = f"{a.name if a else home} {typ.replace('_', '-')} Sqn #{n}"
         return out
 
+    @staticmethod
+    def _refit_note(st, s) -> str:
+        """S104d: \" (n returning, m refitting)\": the opening strike's F-117As are returning until they land, then refitting like any jet (`f117.returning`); \"\" when none."""
+        from .. import f117
+        ret = f117.returning(st, s)
+        parts = ([f"{ret} returning"] if ret else []) + ([f"{n} refitting"] if (n := max(0, len(s.refit) + s.reserve - ret)) else [])
+        return f" ({', '.join(parts)})" if parts else ""
+
     def refresh(self, st):
         from .. import war as _war
         t = _war.totals(st); en = story.enemy(st)
         self.air_line.setText(f"Aircraft serviceable: Coalition {t['fa']} of {t['fz']}, {en} {t['ea']} of {t['ez']}.")
-        self.tabs.setTabText(4, f"{en} air wings"); self.tabs.setTabText(5, f"{en} assets")
-        self.gw.setHorizontalHeaderLabels(["Sector", f"{en} force", "Coalition force", f"{en} forward garrison", "Coalition forward garrison"])
-        self.ea.setHorizontalHeaderLabels(["Squadron", "Aircraft", "Based at", "On hand", "Strength"]); self.as_.setHorizontalHeaderLabels([f"{en} asset", "Type", "Depth", "Condition"])
+        self.tabs.setTabText(4, _tc(f"{en} air wings", True)); self.tabs.setTabText(5, _tc(f"{en} assets", True))
+        self.gw.setHorizontalHeaderLabels([_tc(h, True) for h in ["Sector", f"{en} force", "Coalition force", f"{en} forward garrison", "Coalition forward garrison"]])
+        self.ea.setHorizontalHeaderLabels(["Squadron", "Aircraft", "Based at", "On Hand", "Strength"]); self.as_.setHorizontalHeaderLabels([_tc(f"{en} asset", True), "Type", "Depth", "Condition"])
         sqs = list(st.squadrons.values()); self.sq.setRowCount(len(sqs))
         for i, s in enumerate(sqs):
             sp = AIRCRAFT[s.aircraft]
-            for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.on_hand} / {s.authorized}" + (f" ({n} refitting)" if (n := len(s.refit) + s.reserve) else ""))):
+            for j, v in enumerate((s.name, sp.display, sp.service, st.bases[s.base_id].name, f"{s.on_hand} / {s.authorized}" + self._refit_note(st, s))):
                 self.sq.setItem(i, j, _item(v))
             self.sq.setCellWidget(i, 5, self._bar(s.on_hand / max(1, s.authorized), theme.BLUE))
         rows_ = [(w, q) for w in st.enemy_air for q in w.sqns]                     # v0.41.208 (XO): laid out like the Coalition squadrons: one row per squadron, its in-universe name (v0.41.436), airframe, base, serviceable and strength
@@ -623,15 +651,34 @@ class ForcesPage(QWidget):
                         self.gw.setCellWidget(i, 3 + j, self._bar(h, col(h)))
         else:
             self.gw.setRowCount(0)
-        al = sorted(st.assets.values(), key=lambda a: (a.kind.value, a.name)); self.as_.setRowCount(len(al))
-        for i, a in enumerate(al):
-            kind = "Garrison" if a.variant == "GARRISON" else (f"SAM {a.variant}" if a.kind.value == "SAM" else a.kind.value.title())
+        from .. import works as _works
+        self.as_.setRowCount(0); self.as_.clearSpans()                                       # a fresh table: no stale spans, row heights or bars from the last refresh
+        wk = _works.rows(st)                                                                # S131: a pack's works are pinned at the top under their own heading (they are hard to find among the depots)
+        al = sorted((a for a in st.assets.values() if not _works.is_works(a)), key=lambda a: (a.kind.value, a.name))
+        off = (1 + len(wk)) if wk else 0
+        self.as_.setRowCount(off + len(al))
+        from .. import theatres as _th; _tl = _th.active()["tier_labels"]
+
+        def tier_of(a):
+            return _tl[min(len(_tl) - 1, max(1, a.tier))]
+
+        def hbar(a):
+            return self._bar(a.health, theme.GREEN if a.health > 0.6 else theme.AMBER if a.health > 0.25 else theme.RED)
+        if wk:
+            lbl, word = _works.summary(st)
+            self.as_.setSpan(0, 0, 1, 4)
+            hd = _item(f"{lbl}  \u00b7  {word}"); f = hd.font(); f.setBold(True); hd.setFont(f); hd.setForeground(QColor(theme.BLUE)); hd.setBackground(QColor(theme.CARD))
+            self.as_.setItem(0, 0, hd); self.as_.setRowHeight(0, 34)
+            for n, (a, _h, _w) in enumerate(wk, start=1):
+                self.as_.setItem(n, 0, _item(a.name, theme.DIM if a.destroyed else None)); self.as_.setItem(n, 1, _item("Depot")); self.as_.setItem(n, 2, _item(tier_of(a)))
+                self.as_.setCellWidget(n, 3, hbar(a))
+        for i, a in enumerate(al, start=off):
+            kind = "Garrison" if a.variant == "GARRISON" else (f"SAM {a.variant}" if a.kind.value == "SAM" else ("EWR" if a.kind.value == "EWR" else a.kind.value.title()))
             if a.suppressed:
                 kind += "  (radars suppressed)"
-            from .. import theatres as _th; _tl = _th.active()["tier_labels"]; tier = _tl[min(len(_tl) - 1, max(1, a.tier))]
             self.as_.setItem(i, 0, _item(a.name, theme.DIM if a.destroyed else None)); self.as_.setItem(i, 1, _item(kind))
-            self.as_.setItem(i, 2, _item(tier))
-            self.as_.setCellWidget(i, 3, self._bar(a.health, theme.GREEN if a.health > 0.6 else theme.AMBER if a.health > 0.25 else theme.RED))
+            self.as_.setItem(i, 2, _item(tier_of(a)))
+            self.as_.setCellWidget(i, 3, hbar(a))
 
 
 class PilotPage(QWidget):
@@ -644,7 +691,7 @@ class PilotPage(QWidget):
                       ("rescues", "Bail-outs (rescued)", theme.DIM))}
         for i, k in enumerate(self.cards):
             g.addWidget(self.cards[k], i // 3, i % 3)
-        h = QLabel("Sortie history"); h.setObjectName("h2"); lay.addWidget(h)
+        h = QLabel("Sortie History"); h.setObjectName("h2"); lay.addWidget(h)
         self.hist = _tbl(["Date", "Sortie", "Objective", "Result", "Kills", "Minutes", "Package losses"]); lay.addWidget(self.hist, 1)
 
     def refresh(self, st):
@@ -667,7 +714,7 @@ class PilotPage(QWidget):
 class LogPage(QWidget):
     def __init__(self):
         super().__init__(); lay = QVBoxLayout(self)
-        h = QLabel("War log"); h.setObjectName("h2"); lay.addWidget(h)
+        h = QLabel("War Log"); h.setObjectName("h2"); lay.addWidget(h)
         self.log = QTextBrowser(); lay.addWidget(self.log, 1)
 
     def refresh(self, st):
@@ -703,7 +750,7 @@ class MainWindow(QMainWindow):
         self.p_over.get_settings = lambda: self.session.settings
         self.p_over.get_session = lambda: self.session
         grp = QButtonGroup(self); grp.setExclusive(True)
-        for i, (name, page) in enumerate((("Overview", self.p_over), ("Missions", self.p_miss), ("Forces", self.p_forces), ("Pilot", self.p_pilot), ("War log", self.p_log))):
+        for i, (name, page) in enumerate((("Overview", self.p_over), ("Missions", self.p_miss), ("Forces", self.p_forces), ("Pilot", self.p_pilot), ("War Log", self.p_log))):
             b = QPushButton(name); b.setObjectName("nav"); b.setCheckable(True); grp.addButton(b, i); sl.addWidget(b)
             self.stack.addWidget(page); b.clicked.connect(lambda _=0, k=i: self.stack.setCurrentIndex(k))
             if i == 1:
@@ -719,6 +766,23 @@ class MainWindow(QMainWindow):
             p.setObjectName("pill"); hdr.addWidget(p)
         hdr.addStretch(1)
         self.banner = QLabel(); self.banner.setObjectName("pill"); hdr.addWidget(self.banner)
+        # S115 (XO 2026-11-20, mockup A): the intelligence banner of a staged carrier raid. One strip between the header and the page stack, so every page slides down while it shows;
+        # hidden (no space) otherwise. Plain: the look (colours, size) is XO's, in theme.py `intel*`.
+        self.intel = QFrame(); self.intel.setObjectName("intel")
+        il = QHBoxLayout(self.intel); il.setContentsMargins(18, 14, 18, 14); il.setSpacing(16)
+        chip = QLabel("!"); chip.setObjectName("intelchip"); chip.setFixedSize(46, 46); chip.setAlignment(Qt.AlignCenter); il.addWidget(chip)
+        ic = QVBoxLayout(); ic.setSpacing(3); il.addLayout(ic, 1)
+        self.intel_head, self.intel_text, self.intel_sub = QLabel(), QLabel(), QLabel()
+        self.intel_head.setObjectName("intelhead"); self.intel_text.setObjectName("inteltext"); self.intel_sub.setObjectName("intelsub")
+        for w in (self.intel_text, self.intel_sub):
+            w.setWordWrap(True)
+        for w in (self.intel_head, self.intel_text, self.intel_sub):
+            ic.addWidget(w)
+        ir = QVBoxLayout(); ir.setSpacing(6); il.addLayout(ir)
+        self.intel_pills = [QLabel(), QLabel()]
+        for p in self.intel_pills:
+            p.setObjectName("pill"); ir.addWidget(p, 0, Qt.AlignRight)
+        main.addWidget(self.intel); self.intel.hide()
         main.addWidget(self.stack, 1)
         self._menus()
         QApplication.instance().installEventFilter(self)                                    # v0.41.151: developer secret Ctrl+Space (see eventFilter)
@@ -774,18 +838,19 @@ class MainWindow(QMainWindow):
             self.settings()
             if self.session.settings.problems():
                 return
-        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"), getattr(self.session.settings, "ai_skill_red", "level"), getattr(self.session.settings, "ai_skill_blue", "level"), bool(getattr(self.session.settings, "pilot_influence", True)), prefill=prefill, edge_decay=bool(getattr(self.session.settings, "tempo_decay", False)))
+        dlg = NewCampaignDialog(self, getattr(self.session.settings, "weather_mode", "clear"), getattr(self.session.settings, "ai_skill_red", "level"), getattr(self.session.settings, "ai_skill_blue", "level"), prefill=prefill)      # S88 R3: Tactical Edge starts at the dialog's own defaults (on, decay off)
         if dlg.exec() == QDialog.Accepted:
             try:
                 v = dlg.values()
                 self.session.settings.weather_mode = v.get("weather_mode", self.session.settings.weather_mode)
-                self.session.settings.pilot_influence = bool(v.get("pilot_influence", True)); self.session.settings.tempo_decay = bool(v.get("tempo_decay", False))
                 self.session.settings.ai_skill_red = v.get("ai_skill_red", self.session.settings.ai_skill_red); self.session.settings.ai_skill_blue = v.get("ai_skill_blue", self.session.settings.ai_skill_blue)
                 try:
                     self.session.settings.save()
                 except OSError:
                     pass
-                self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus')); self.refresh_all()
+                self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus'),
+                                 tactical_edge=bool(v.get("tactical_edge", True)), tactical_edge_decay=bool(v.get("tactical_edge_decay", False)),
+                                 a10_variant=v.get("a10_variant"), f14_variant=v.get("f14_variant"), link16=v.get("link16")); self.refresh_all()
             except Exception:
                 QMessageBox.critical(self, "Could not create campaign", traceback.format_exc())
 
@@ -883,7 +948,7 @@ class MainWindow(QMainWindow):
         ev.accept()
 
     def settings(self):
-        if SettingsDialog(self.session.settings, self).exec() == QDialog.Accepted:
+        if SettingsDialog(self.session.settings, self, state=getattr(self.session, "state", None)).exec() == QDialog.Accepted:
             if getattr(self.session, "state", None) is not None:
                 self.session.refresh_weather(); self.session.save()      # the weather setting changes which packages fly
             self.refresh_all()
@@ -1071,6 +1136,13 @@ class MainWindow(QMainWindow):
             pill.setText(txt)
         self.banner.setText({"ACTIVE": "Sortie pending" if st.pending else "", "VICTORY": "VICTORY", "DEFEAT": "DEFEAT"}[st.status])
         self.banner.setVisible(bool(self.banner.text()))
+        from .. import bombers as _bombers
+        it = _bombers.intel(st) if st.status == "ACTIVE" else None          # S115: the staged carrier raid's intelligence pickup (None: no banner, no space)
+        if it:
+            self.intel_head.setText(it["head"]); self.intel_text.setText(it["text"]); self.intel_sub.setText(it["sub"])
+            for p, t in zip(self.intel_pills, it["pills"]):
+                p.setText(t)
+        self.intel.setVisible(bool(it))
         self.setWindowTitle(f"{APP_NAME} - {st.name}" + ("  [AI TEST: your flight is flown by the AI]" if getattr(self.session, "ai_test", False) else "") + ("  [FULL MAP: no restrictions]" if getattr(self.session, "full_map", False) else "")
                             + (f"  [LATE SEAD: +{self.session.late_sead_min} min, from the next planned day]" if getattr(self.session, "late_sead_min", 0) else ""))
 

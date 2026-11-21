@@ -86,7 +86,8 @@ First launch:
 ## 4. How a turn works
 
 The campaign runs in **4-hour turns**, six a day, starting at 08:00 on Day 1. Each turn the planner lays out that turn's
-packages for both sides; whatever you do not fly is settled by the war simulation.
+packages for both sides; whatever you do not fly is settled by the war simulation. The packages launch in four waves, an hour
+apart, so the start times on the Missions tab are spread over the turn's four hours (about four clusters).
 
 1. **Missions** tab: pick a tasking, then press **FLY** on the row of the flight you want to fly (green rows). SQE writes
    `SQE_Sortie.miz` and opens the **waiting window**. Base, carrier, tanker and AWACS cover patrols are planned each turn and
@@ -108,8 +109,10 @@ that was skipped.
 
 The war behind the turns (what is planned, how red fights, how the campaign is won or lost) is in `docs/CAMPAIGN.md`.
 
-Two features worth knowing: **package merging** (Settings > Mission build) folds packages whose targets are close into one
-mission, and the **unit limit** there lets you trade detail for performance. `--full-map` (alone or with the AI test) builds
+Two features worth knowing: **package merging** (Settings > Mission build) flies every package that starts inside the time
+windows (15 minutes before and 30 after yours by default) in the same mission, nearest to your target first, and the **unit
+limit** there (250 by default) lets you trade detail for performance: over it, the furthest packages are left out first. The
+**Target Area Radius** (15 nm) sets how much of the ground war round your target is built. `--full-map` (alone or with the AI test) builds
 every sortie with everything on the map, as a stress test, not for play.
 
 ---------------------------------------------------------------------------------------------------
@@ -138,7 +141,7 @@ Releases are built by `.github/workflows/release.yml` (Python 3.14).
 
 ## 6. Terrain data
 
-SQE ships relief data and site lists for the Caucasus, so no terrain scan is needed to play. `tools/sqe_scan.py` rebuilds them
+SQE ships relief data and site lists for the Caucasus and for Syria (a Syria campaign needs the DCS Syria map), so no terrain scan is needed to play. `tools/sqe_scan.py` rebuilds them
 after a DCS terrain update (for developers).
 
 ---------------------------------------------------------------------------------------------------
@@ -164,4 +167,4 @@ after a DCS terrain update (for developers).
 * `docs/CAMPAIGN.md`: how the campaign works and what its rules are.
 * `docs/CHANGES.md`: what changed in every version, newest first.
 * `docs/THEATRES.md`: how a map pack is built.
-* `tools/`: `smoke_test.py` and the other test and probe scripts.
+* `tools/`: `smoke_test.py` (the self-test), `hook_lua_sim.py` (its Lua check), `sqe_scan.py` (the terrain scan) and `capture_loadouts.py` (the loadout capture). Crew Chief's other test and probe scripts are not in Git.

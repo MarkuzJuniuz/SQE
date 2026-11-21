@@ -17,11 +17,11 @@ from .routes import NM
 
 # How far from its field a type will be sent to intercept (nm). Hand-set and deliberately shorter than the published combat radius: a
 # scramble has to reach the area, fight and get home. Tune freely.
-INTERCEPT_NM = {"MiG_21Bis": 110, "MiG_23MLD": 130, "MiG_29A": 170, "MiG_29S": 170, "Su_27": 220, "MiG_31": 230, "F_4E": 150, "F_5E_3": 100}
+INTERCEPT_NM = {"MiG_21Bis": 110, "MiG_23MLD": 130, "MiG_29A": 170, "MiG_29S": 170, "Su_27": 220, "MiG_31": 230, "F_4E": 150, "F_5E_3": 100, "MiG_25PD": 160}      # S90 P3a: the MiG-25PD 160 = 0.53 of its radius 300, the MiG-31's ratio (230 of 450)
 
 # The same for our alert pairs: how far from its base a squadron's alert pair is sent (nm), never more than 60% of the combat radius. Hand-set, shorter
 # than that radius for the same reason: it has to reach the area, fight and get home. Tune freely.
-BLUE_DISPATCH_NM = {"F-14BU": 150, "FA-18C": 130, "F-16C": 120, "F-15C": 160}
+BLUE_DISPATCH_NM = {"F-14BU": 150, "F-14B": 150, "FA-18C": 130, "F-16C": 120, "F-15C": 160}
 BLUE_DISPATCH_DEFAULT_NM = 110
 
 MAX_RED_FLIGHTS = 3                      # pairs added on top of the planned picture

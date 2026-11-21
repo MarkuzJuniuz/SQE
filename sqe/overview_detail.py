@@ -78,11 +78,13 @@ def supply_rows(state) -> list:
     for side, label, pool in (("blue", "Coalition", getattr(state, "blue_assets", {})), ("red", story.enemy(state), state.assets)):
         rate = ground.supply(state, side) / ground.SUPPLY_REPAIR_DAYS
         for a in sorted(pool.values(), key=lambda x: x.name):
-            if a.kind not in ground.SUPPLY_KINDS:
+            if not ground.is_supply(a):
                 continue
             h = a.health
             days = max(1, round((1.0 - h) / rate)) if rate > 0 else 99
-            if h < prev.get(a.id, h) - 1e-6:
+            if a.id in (g.get("road_fell") or []):
+                st_ = "lost, the front cut its road"
+            elif h < prev.get(a.id, h) - 1e-6:
                 st_ = "struck since last night, no repair tonight"
             elif h <= 0.05:
                 st_ = f"destroyed, about {days} day{'s' if days != 1 else ''} to rebuild"
@@ -127,7 +129,7 @@ def _when(state, o) -> str:
 
 
 def tempo_lines(state) -> list:
-    """The air tempo of each job kind: the nudge to the background jobs' odds (0 to +40 points, fades 3% a night)."""
+    """The air tempo of each job kind (Tactical Edge) as a word: how much your flown sorties help the background jobs of that kind."""
     out = []
     for k in tempo.KINDS:
         v = tempo.get(state, k) * 100
@@ -135,7 +137,7 @@ def tempo_lines(state) -> list:
     return out
 
 
-TYPE_WORDS = (("CAS", "CAS"), ("STRIKE", "strike"), ("DEAD", "SEAD / DEAD"), ("COUNTER_AIR", "counter-air"), ("BARCAP", "patrol"), ("FLEET_DEFENSE", "fleet defence"), ("RAID_DEFENSE", "raid defence"))
+TYPE_WORDS = (("CAS", "CAS"), ("STRIKE", "strike"), ("DEAD", "SEAD / DEAD"), ("COUNTER_AIR", "counter-air"), ("BARCAP", "patrol"), ("FLEET_DEFENSE", "fleet defense"), ("RAID_DEFENSE", "raid defense"))
 
 
 def tasking(sess) -> tuple:

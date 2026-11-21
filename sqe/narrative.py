@@ -3,6 +3,7 @@ Hand-written templates (no runtime AI). Add variants to any list to widen the po
 from __future__ import annotations
 import random
 from .models import ObjectiveType
+from .words import bda_text
 from . import theatres
 
 def __getattr__(name):
@@ -121,7 +122,8 @@ def setpiece_text(state, pkg, yours: bool, aircraft: str = "") -> list:
     bomb, esc = ex.get("bombers", 0), ex.get("escorts", 0)
     cv = state.bases.get(pkg.objective.target_id)
     site = cv.name if cv is not None else "the task force"
-    first = (f"Radar and the E-2 have a raid forming up out of Mozdok: {bomb} Backfires with {esc} Flankers on their wing, bearing {ex.get('brg', 0):.0f} degrees onto {site}. "
+    ba_ = state.assets.get(ex.get("bomber_wing") or "")                           # S90 J8: the bomber wing's field (Mozdok in the Caucasus, Damascus in Syria)
+    first = (f"Radar and the E-2 have a raid forming up out of {ba_.name if ba_ is not None else 'Mozdok'}: {bomb} Backfires with {esc} Flankers on their wing, bearing {ex.get('brg', 0):.0f} degrees onto {site}. "
              f"Every fighter that can reach the task force is being launched to meet it.")
     if yours:
         return [first, "Kill the bombers before they reach launch range, then the escorts. One of these flights is yours; the others fly with you."]
@@ -202,7 +204,7 @@ def debrief_story(outcome: dict, state, rng: random.Random) -> str:
     elif any(a.get("primary") and a.get("suppressed") and not a.get("destroyed") for a in outcome.get("red_assets") or []):
         parts.append(f"{obj}: the site's radars are out; it is suppressed.")
     else:
-        parts.append(f"{obj}: damage assessment puts the target at {dmg:.0%} destroyed.")
+        parts.append(f"{obj}: {bda_text(dmg)}.")
     if outcome.get("red_air_lost") and outcome.get("objective_type") not in (ObjectiveType.BARCAP.value, ObjectiveType.FLEET_DEFENSE.value):
         parts.append(f"{outcome['red_air_lost']} enemy aircraft were also destroyed.")
     parts.append(rng.choice(_LOSS[min(lost, 2)]) if lost < 3 else f"The package lost {lost} aircraft.")

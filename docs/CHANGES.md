@@ -1,5 +1,284 @@
 # CHANGES.md
 
+## v0.41.552, S103f: the F-14B points are the ones Jester can select
+The plain F-14B no longer gets a DP point, which Jester cannot select. WP 1 is the marshal point, 2 the push and 3 the egress when the route has one. A fighter's station (CAP1) is the IP and the other end of its racetrack (CAP2) is ST; a strike keeps IP and ST on the target. A BARCAP has CAP1 and CAP2 as waypoints 1 and 2. HA (the hostile area) stays.
+
+## v0.41.551, S103e: the F-14B card reads in the order you fly it
+In the plain F-14B, waypoint 1 is now always the marshal point and 2 the push; waypoint 3 is the IP of a strike or the station of a fighter job. A fighter's station is also the IP point, CAP2 is DP, the strike's target is ST and its egress is DP, and HA is the hostile area (the nearest SAM site). The kneeboard lists them in flight order and no longer shows the climb-out point.
+
+## v0.41.550, S139b: Settings and the Missions list say what merging does now
+The Merge Radius setting is now the Target Area Radius (the area round your target where supply sites and the ground war are built, earlier strikes show as ruins and packages are listed together); old settings files keep their value. Package Merging reads "On (Nearest First, Up to the Unit Limit)", Later Packages goes up to 240 minutes (one whole turn), and the hints and the Missions list notes say that every package in the time window flies with you as far as the unit limit allows, furthest dropped first. The list no longer stops at six packages.
+
+## v0.41.549, S139a: a mission takes every package in the time window, nearest first, up to the unit limit
+When you fly, the mission now folds in every package that starts inside the time windows (Settings: Earlier / Later Packages), wherever its target is, nearest to your target first, instead of only those inside the merge radius and at most six. If the mission is over the unit limit the furthest packages are left out first; your own package and the ground war round your target get the unit budget before them (a Fighter Sweep stays while a package it covers stays). Small maps still build in one pass; a crowded one builds up to three times, which takes longer.
+
+## v0.41.548, S138b: an AI runway strike drops in one pass
+AI runway strikers (and the AI wingmen of your runway strike) now put all their bombs on one aim point at the middle of the field and leave, instead of coming round for a second run over it. A live run lost all four jets on that second pass.
+
+## v0.41.547, S138a: the escort of a strike flies with the strikers
+The AI escort of a plain strike or CAS package now pushes with the strikers and flies alongside them (DCS Escort task, at the strikers' speed) instead of holding a race-track short of the target. It fights what comes within 15 to 25 nm of the strikers until their egress point, then goes home fighting what comes at it. Packages with a stand-off (JSOW / SLAM) flight keep the station escort. `ESCORT_FOLLOWS` in `mission_builder.py` turns it off.
+
+## v0.41.546, S137: the fighters guarding a strike fight anything that comes at the strikers
+The TARCAP and the escort of a strike or CAS package now centre their engage circle on what they protect (the strikers' run-in point, the target and the turn after it), at the fighter's full reach, so they go after any fighter that comes at the strikers, over the target too, and still never leave the package's area. Before, the circle was centred on the strikers' run-in and the fighters' station and could miss the fight over the target.
+
+## v0.41.545, S136: a Tor-covered strike goes with a 4-jet SEAD escort
+A strike with plain bombs (GBUs, not a stand-off weapon) whose target sits under a live fixed Tor now flies with a four-jet SEAD escort, eight HARMs to wear the Tor down, or a pair when only two SEAD jets are free; with none free the strike waits for another day. The escort aims its HARMs at the Tor. Stand-off jobs (EWR strikes, SLAM-ER strikes, the F-15E's JSOW-C runway crater) and Levels 1 and 2 (no Tors) are unchanged.
+
+## v0.41.544, S135: stand-off weapons aim at the EWR truck itself
+The JSOWs of an EWR strike are now all aimed at the radar vehicle's exact position instead of a random point within 100 m of it, so the weapons' bomblets land on the one truck (a run showed a hit EWR that survived).
+
+## v0.41.543, S134: strike flights keep their run-in when a SAM fires
+Strike flights that carry a jammer (the AI's, and your AI wingmen) now stay on the run-in when a SAM launches at them, from the push point to the egress point: they use their jammer and countermeasures but no longer break away, which had made a runway strike turn back 6 km short of its target without dropping. The jets can now take SAM hits they used to dodge. Their bomb tasks are also pinned to the route altitude.
+
+## v0.41.542, S133: a wider After-Action Report with bulleted lines
+The After-Action Report is wide enough that its result lines no longer wrap, and each line under a package is a bullet, so a line that does wrap stays under its own bullet.
+
+## v0.41.541, S132: Overview tables tidied, "Suppressed", Lutorin Works named as the company
+The Overview tables have a little more room in their cells, and the site tables on the Force Index and Air Defense tabs share their column widths so they line up. A site whose radars are down now says "Suppressed", not "Blinded". The Tactical Edge table lost its empty third column. Lutorin Works is called by its name everywhere (the victory line, the docs, this file), not "the works".
+
+## v0.41.540, S131: Lutorin Works in the Force Index, tables with grids and bars
+The five Lutorin Works now count as supply sites in red's Force Index, and red's supply at Syria Levels 2 and 3 is 25 sites in all (12 fixed sites, 8 road sites, the 5 Lutorin Works plants; it was 32 without them), so each strike on a supply site moves the Force Index more. Lutorin Works is still mended only by its own rebuild team. At Level 2 it is no longer hardened (a strike does what it does to a depot, as at Level 3). The plants are named "Lutorin Works" in Title Case, read "Operational" instead of "in production", and are pinned at the top of the Force Index tab (their own section, "4 of 5 Operational") and of the red assets list (type Depot). The Overview's Force Index and Air Defense tabs now show gridded tables with centred headers, health bars with the figure in the middle instead of coloured cells, and a short State word only when something is wrong (Struck, Repairing, Destroyed, Lost, Blinded); the Force Index sites are split into Coalition and Syrian-Russian Forces. The tab and task wording read "Air Defense" and "fleet defense". Campaigns saved earlier keep their old Force Index count.
+
+## v0.41.539, S130: no neutral airfields on the Syria map
+Every other airfield and helipad on the Syria map now takes a side from the 2001 politics: Cyprus, Turkey, Jordan and Israel are friendly; Syria, Lebanon and Iraq's H3 are enemy. A red jet can no longer land on a neutral Cyprus field next to an F-16.
+
+## v0.41.538, S129: page and window headings in Title Case
+The War Log and Sortie History pages, the Overview cards and the debrief and after-action windows now use Title Case headings. War-log entries are stamped "[Day 1, 12:00]" like the header (older saves are converted on load).
+
+## v0.41.537, S128: Title Case headers and tabs, "Syrian-Russian Forces", names with "Al"
+Table headers and tab titles throughout the app read in Title Case, and the Syrian side reads "Syrian-Russian Forces" everywhere, the odds line says "Forces'" correctly, and airfield names with a spaced "Al" (Al Qusayr, Wujah Al Hajar) keep their capital in asset names. Only the hyphen form reads "al-Duhur". Campaigns saved earlier keep names that were cut short before (e.g. "Near al").
+
+## v0.41.535, S125: no "missile defeated" call
+SQE's jammer still defeats radar missiles, but the AI flight no longer announces "missile defeated": a pilot cannot tell whether the jammer or the evasion beat the missile.
+
+## v0.41.534, S127: asset names read in Title Case
+Enemy and friendly asset names (Forces tables, war log, briefings) now read in Title Case, old saves included ("Tiyas SA-10 Site Garrison", "Supply Dump Near Abu al-Duhur"), the Forces table shows the type "EWR" and the depth labels read "T3 Central Syria". A supply dump named for Abu al-Duhur no longer loses "-Duhur".
+
+## v0.41.531, S121: the escort of a SEAD or JSOW package covers the SEAD flights
+The F-15 / F-16 escort of a package with SEAD or JSOW flights now stands behind the shooters closest to red's fighters (usually the SEAD flights) instead of behind the JSOW flight, which could be 40 km away. A red fighter pair that comes for the SEAD flights now meets the escort.
+
+## v0.41.529, S120: the carrier no longer wanders so far from the front
+The carrier's station was drawn from a band that ran round the whole front, so on some Syria campaigns it started 200 nm from the coast, north-west of Cyprus. The pick now stays within 80 km of the best spot and no more than 30 nm beyond the standoff from the nearest red airfield.
+
+## v0.41.528, S119: the Caucasus gets a three-day grace before the first carrier raid
+Red now stages no Tu-22M3 carrier raid in the first three days of a Caucasus campaign: the carrier has just arrived and red has to find it first. Syria keeps its week.
+
+## v0.41.527, S118: a surprise opening on Syria, and the fleet sails out a little less far
+On Syria red stages no carrier raid in the first week: blue opens the war by surprise, so there is no raid warning and the carrier sits on its station until day 8 at the earliest. When a raid is staged the fleet now sails out to 215 nm from the red airfields, not 230, and the warning banner no longer claims more than that.
+
+## v0.41.526, S115 + S116: the carrier moves about, sails out of the raid's reach, and the bomber base is guarded
+The carrier no longer sits on one fixed spot: every three days it takes a new station from a seeded pick among the spots near the best one. When a Tu-22M3 raid is staged (the day before launch) blue gets an intelligence pickup, a red banner above every page of the app plus a war-log line, and the fleet sails out to 230 nm from every red airfield (at most 250 km a day), so the raid must come out over water; it comes back to its station afterwards. No special restriction on the fleet's aircraft: the distance alone keeps them off inland targets. New pack keys `carrier_band_km` and `carrier_evade_nm`. Idle autoskip balance, Tactical Edge off: Caucasus L3 55% blue (20 runs), Syria L3 45% (24 runs). S116: on the staging day the bomber field flies no ordinary patrol and fighters from other fields cover it by day and night (2 pairs a turn at L3, 1 at L2; banner pill "Bomber base guarded"); a staged raid is called off when its bomber field is cut or destroyed before launch (banner, war-log line, fleet sails back). Caucasus L3 40% blue over 40 runs with the guard (50% on the same seeds without it, within the noise), Syria L3 54% over 24. The raid redesign (a scout, degrade rather than cancel, weather-dependent satellite) is not in this version.
+
+## v0.41.525, S114: Syria's carrier sits closer, and the raid's line is looser
+The carrier on Syria now keeps 130 nm from every red airfield, not 160, and starts south of Cyprus, not in the channel north of it. The Hornets can now reach the Lutorin Works plants at Palmyra without relying on a tanker (Palmyra was about 285 nm away, now about 235; the Latakia coast about 145). The Tu-22M3 raid still comes along the line from the carrier through Damascus, but scattered 12 degrees either side, not 4. Everything else is unchanged.
+
+## v0.41.524, S113: Level 2 red has as many jets as Level 3, in the same big squadrons
+Red's Level 2 air force is now as large as Level 3's on both maps, with Level 2's older, weaker types kept (Syria 238 jets, was 202; Caucasus about 241 with the Mozdok bombers, was 186; the same jets at each field as Level 3) and its squadrons are up to 14 jets, as at Level 3, not 12. Idle runs end the same way, but every flight meets more red fighters. The campaign guide's jet counts, field fill and squadron-size lines are updated.
+
+## v0.41.523, S112: Caucasus Level 3 red reinforces harder
+On the Caucasus at Level 3, red's daily ground reinforcement (`red_reinf`) is 24, not 7, a theatre `level_overrides` entry. Idle autoskips with Tactical Edge off used to be a blue win every time (20 of 20, about two months); with this the front can be pushed back and the outcome is roughly even. Syria and the other levels are unchanged. The Level 2 and Level 3 backgrounds get a line about Russia's fresh troops coming up the coast road.
+
+## v0.41.522, S111: Lutorin Works, a way to win Syria that is not a conquest
+Syria Levels 2 and 3 now have five special targets, Lutorin Works (two near Palmyra, two in the Homs gap, one at Latakia): the plants that make the wares that keep Syria's old Soviet arsenals alive and that back its claim on Hatay. Strikes on them come ahead of the ordinary supply strikes and go out as stand-off strikes (SLAM-ER Hornets, no SEAD gate), they are rebuilt one at a time and very slowly (about a month at both levels; at Level 2 the plants are hardened, so a series of strikes is needed), and the more of them stand the harder red pushes on the front. Destroying all of them wins the war (Hatay falling still loses it); the Overview has a line for them and the campaign guide and `docs/THEATRES.md` (new pack key `works`) cover it. Syria's Levels 2 and 3 also start with 20 red road supply sites, not 30 (a theatre `level_overrides` entry).
+
+## v0.41.521, S110: four launch waves a turn, one an hour
+A turn's packages now launch in four waves an hour apart (at the turn's start and 60, 120 and 180 minutes later), not two waves two hours apart, so the start times on the Missions tab are spread over the turn's four hours. Jets that finish their refit during the turn can fly in the wave that follows. The standing patrols follow it: the relief of a base or carrier BARCAP pair goes up in the first wave that opens as the first pair leaves (a long-legged pair is relieved in the third wave, a short-legged one in the second), and an AWACS or tanker guard flies in the last wave that opens before the asset arrives. The number of packages and sorties a day is about the same (a few percent more).
+
+## v0.41.520, Syria is June 2001
+The Syria campaign now starts on 12 June 2001 (it was 2000), so the JDAM, JSOW and SLAM-ER the Air Force and Navy jets carry there are in the right year. The guide and the map notes say 2001.
+
+## v0.41.519, the campaign guide covers Syria
+`docs/CAMPAIGN.md` has a new Syria 2000 section (the war, the three levels, blue's squadrons, the opening F-117A strike, winning and losing, the SA-5s) and a section on the F-117A night squadron. The rest of the guide was checked against the code for both maps and corrected: blue's 18 squadrons and 284 jets, how many jobs a turn plans, the package shapes, the Tu-22M3 raid rhythm, refit and replacement times, the start hour and night turns, Tactical Edge.
+
+## v0.41.518, the Syria briefing matches the opening strike
+The Level 2 and Level 3 briefings now say the Nighthawks also took out the deep early-warning radars (Level 3: and some SA-10 sites), as the war log does.
+
+## v0.41.517, the opening headline names the other targets
+The war-log line for the midnight strike now says the Nighthawks also hit some SA-10 sites and early-warning radars (only the kinds that were hit, no counts); the lines below it still name every site.
+
+## v0.41.516, the Nighthawks that opened the war are on their way home
+In Syria the whole F-117A squadron flies the midnight strike, six pairs: the SA-5 batteries, then the deepest SA-10 sites and early-warning radars. The jets start the war returning to Incirlik (the Overview shows them), land about 00:40 to 00:50, and refit 16 hours: none of them is ready for the first night. The war log names every site that was hit.
+
+## v0.41.515, the Nighthawks fly through SAM belts
+The F-117A no longer stops at a SAM belt in front of its target: a stealth jet flies through one. It still only goes where no red air can reach, so in Syria it now hits radars, SAM sites and runways on most nights instead of almost never.
+
+## v0.41.514, the Nighthawks join the Syria campaign
+Syria now has its F-117A squadron: 8th FS 'Black Sheep', 12 jets at Incirlik, listed with the Coalition squadrons. It flies the night strikes on red's radars, SAM sites and runways that the Syria briefing already promised.
+
+## v0.41.513, the Overview shows the right operation name
+The Overview's operation title now follows the campaign's theatre (Operation LEVANT HORIZON in Syria); it used to show the Caucasus's Operation IRON TIDE until the app was restarted.
+
+## v0.41.512, the Damascus raid can field 12 bombers
+Syria Level 3's escort wing at Damascus is 12 Su-27 (was 8), so the land strikes no longer leave too few escorts for a full 12-bomber raid.
+
+## v0.41.511, Auto-Skip: a rule instead of a box
+The Crew Rest frame is gone: a thin line above Crew Rest marks it and its hours field as their own group, and all the tick boxes start at the same left edge.
+
+## v0.41.510, Auto-Skip tick boxes line up
+The three Auto-Skip tick boxes now share one left edge, with Crew Rest and its hours still framed together.
+
+## v0.41.509, percentages are back on the Overview
+The Overview panes show figures again: the Force Index and Air Defense tiles and tables, the sites' health, the Tactical Edge per job kind and the Overview text lines. Debriefs, briefings, the war log and job titles keep the words.
+
+## v0.41.508, Syria raids come out of the sea; a Crew Rest box; weather lists sorted
+Syria's carrier now keeps 160 nm from red's fields (it sits north of Cyprus) and the Tu-22M3 raid arrives along the line from the carrier through Damascus, so the bombers have to launch over the sea and the interceptors get a lane clear of the SAM belt. The Auto-Skip card frames Crew Rest and its hours together. The weather lists (New Campaign and Settings) now read Procedural first, then Clear to Storm. The carrier search of a theatre with a map box stays inside it.
+
+## v0.41.507, the Nighthawks never fly the same thing twice
+An F-117A sortie now comes in on its own approach bearing (25 to 80 degrees off the straight line, drawn fresh each night, never through a SAM ring the plain route avoids), and the same target is not struck again for a week.
+
+## v0.41.506, the Nighthawks strike runways
+The F-117A squadron now also cuts red runways at night: on the first turn of the night, a red airfield with ready jets that no other red patrol or alert pair can reach is hit with GBU-27s, and its runway is closed like any other crater. At most one such strike a night.
+
+## v0.41.505, Syria raids come from Syria; the campaign name follows the theatre
+The Tu-22M3 carrier raid in Syria now arrives along the real line from Damascus over the Syrian coast (the interceptors and the SEAD prep plan around the SAM belt), and the full raid is 12 of the 16 bombers so a safe raid can happen. The New Campaign window proposes the theatre's own name (Iron Tide, Levant Horizon) until you type one.
+
+## v0.41.504, the F-117A Nighthawk
+Blue gets a small squadron of F-117A stealth fighter-bombers in the Caucasus (12 jets at Kutaisi). They are flown by the AI only, and only at night: a pair or a four-ship goes alone against a red early-warning radar or SAM site that no red fighter patrol or alert pair is close enough to reach, and drops laser-guided GBU-27s. They are the hardest airframe to keep: a 16-hour turnaround, and a lost one is replaced only after four days. The Syria 2000 pack does not have the squadron yet. Campaigns without it are unchanged.
+
+## v0.41.503, the Syria bomber raids come from Damascus
+At Level 3 in Syria the Tu-22M3 carrier raid is a setpiece out of Damascus: the fleet-defence briefing names the field, and the raid arrives out of the open sea south-west of the task force instead of over the Syrian coast. The land strikes fly from Damascus too. A theatre pack can now set the raid's bearing and the edge of its map. The Caucasus raid is unchanged.
+
+## v0.41.502, Syria 2000: a second theatre
+The New Campaign window now offers Syria (2000) next to the Caucasus: Operation LEVANT HORIZON. A US-led coalition flies from Incirlik, Akrotiri, Larnaca, Muwaffaq Salti and the carrier USS Dwight D. Eisenhower to hold the Hatay frontier against Syria; the war is fought along the coast road from Hatay to Bassel Al-Assad, Rene Mouawad and Shayrat. Level 1 (the Northern Coastal Command) is a short push to take Bassel Al-Assad; at Levels 2 and 3 (Syria, then Syria and its Russian backers with Tu-22M3s from Damascus) the war is won by breaking the enemy's supply. The campaign starts at midnight, with the F-117A strike on the SA-5 batteries already done, and flies the 2000 equipment by default (A-10A, F-14B, Link 16 off). The Caucasus is unchanged. A new campaign now starts in the theatre's own year.
+
+## v0.41.501, a theatre can be won by the enemy's supply collapsing
+A theatre pack can name a level that is won when the enemy's Force Index stays at or below a line for a few nights running (the Syria pack: Levels 2 and 3, where nobody marches to a final objective). The Overview shows how close the collapse is (distant, approaching, close, under way). The Caucasus has no such rule and is unchanged.
+
+## v0.41.500, a theatre can start its campaign at another hour
+A theatre pack can set the hour Day 1 starts (the Syria pack: midnight). The campaign remembers it, the war clock, the turn labels, the mission times and the night turns follow it, and an older save (or the Caucasus) still starts at 08:00 as before.
+
+## v0.41.499, a scripted opening strike for a theatre
+A theatre pack can now open the campaign with a strike that has already happened: every red site of one SAM type (the Syria pack: the SA-5 batteries at Levels 2 and 3) starts destroyed and shows in the war log, then comes back by the normal rebuild rule after about a week, at half strength. The Caucasus has none and is unchanged.
+
+## v0.41.498, red raid types per theatre
+Which red aircraft lead the raids on troops and supply sites, and which fly the field raids and the SEAD and stand-off raids, now comes from the theatre pack (the Caucasus keeps the Su-25 and the Su-24M). A theatre that names the Su-17M4 for the attack role sends it on the troop and supply raids with its bomb load, and never on a SEAD or stand-off raid it cannot carry. No Caucasus campaign changes.
+
+## v0.41.497, theatre packs can set more of the war themselves
+A theatre pack can now name its own red rosters, its bomber wings per level, which red fields form the air-superiority front, how many lost airfields end the campaign, the approach-aid text and ILS runways of its fields, its magnetic variation and fixed extra SAM sites. Every key is optional and its default is what the Caucasus used, so the Caucasus campaigns are unchanged. A red airfield without an air wing no longer breaks the planner.
+
+## v0.41.496, road depots: a cap, no interleaving, and a depot the front cuts off can fall
+The road depots (fuel points and supply dumps) of the two sides keep their distance now: none lies more than 100 km from its own side's nearest airfield, no depot of one side lies within 20 km of one of the other, and along a road the two sides' depots no longer alternate (all of one side, then all of the other). A side that cannot fill its quota that way gets fewer depots. When the front moves and re-assigns a road, a depot that would break these rules is destroyed for good instead of changing hands, and the war log says so. Campaigns where blue has no road depots (the Caucasus today) are unchanged.
+
+## v0.41.495, SA-5 and SA-9 sites, and the long-range SAM tier as data
+Two new red SAM site kinds are in the data: the SA-5 (S-200, long range: launchers plus its tracking and search radars) and the SA-9 (Strela-1). The SA-5 is planned with the reach XO's probe flights measured (about 66 nm against a high flyer). The planner's "long-range system" rules, which were wired to the SA-10, now read one table, and a theatre pack can name its own long-range systems. No Caucasus campaign changes: the SA-10 rules are as they were.
+
+## v0.41.494, words instead of percentages
+The war log, the debrief, the briefing and the Overview no longer print percentages or odds. A job's result reads "objective achieved", "partly achieved" or "not achieved, no effect observed"; a site or defence reads intact, reduced, heavily damaged or destroyed; the Force Index reads good, adequate, strained or critical; the briefing rates the chance of suppressing a site as good, fair or poor. The war itself is unchanged.
+
+## v0.41.493, the A-10C II as an Era Equipment choice
+The A-10 row of the New Campaign dialog now offers "A-10C II (late)" next to the A-10A and the A-10C. It flies the same DCS model and the same loadouts as the A-10C for now (the real A-10C II is about 2015 or later, so it is out of era for 2000 and 2006); the default A-10C campaigns are unchanged.
+
+## v0.41.492, red types for Syria: MiG-25PD and Su-17M4
+Two new red aircraft types are in the data (kits, combat radius, intercept reach, ECM, doctrine, briefing name, parking class): the MiG-25PD interceptor and the Su-17M4 strike jet, for the Syria 2000 theatre. No Caucasus campaign uses them: nothing changes in play.
+
+## v0.41.491, the F-14B player's three waypoints
+The plain F-14B has only three numbered waypoints, so your route in that jet now has the start point, waypoints 1 to 3 and the landing point (the Home Base); the surface target (ST), the IP when it is not waypoint 2, the defended point (DP) and the nearest SAM site (HA) are navigation target points you select in the jet. The kneeboard still lists every point of the route and marks which are waypoints and which are not; the tanker is found by its TACAN (shown in the briefing and on the card). The F-14B(U) and every other jet keep their routes.
+
+## v0.41.490, the F-14B as an Era Equipment choice
+The F-14 row of the Era Equipment group now offers the plain F-14B next to the F-14B(U). A campaign created with the F-14B has F-14B squadrons only: the same carrier, fleet-defence, TARCAP, escort and sweep jobs as the B(U), but its strikes carry laser-guided GBU-10 bombs with the LANTIRN pod and no JDAM (so a laser-guided strike is scrubbed in weather that rules the laser out, where a B(U) swaps to JDAM). The player waypoint scheme of the F-14B comes in a later version. Campaigns with the F-14B(U) are unchanged.
+
+## v0.41.489, the A-10A as an Era Equipment choice
+The New Campaign dialog's A-10 row now offers the A-10A (Flaming Cliffs level, so you need FC3 to fly it) next to the A-10C. A campaign created with the A-10A has A-10A squadrons only, with the A-10C's Maverick, cluster and Mk-82 loadouts but no targeting pod and no JDAM or wind-corrected bombs: a Hog attacking from a high floor flies Mavericks and cluster bombs. The "You fly" list follows the A-10 and F-14 chosen in Era Equipment. Campaigns with the A-10C are unchanged.
+
+## v0.41.488, Era Equipment on the New Campaign dialog
+New campaigns now carry three choices fixed at creation: the A-10 variant, the F-14 variant and Link 16 (enabled or disabled), set in an "Era Equipment" group with an Era Defaults button that follows the theatre's year. With Link 16 disabled no jet joins a package network: no station numbers, no Link 16 briefing text, no STN column on the kneeboard. Today each theatre offers the A-10C and F-14B(U); the other variants come next. Saved campaigns load as before (A-10C, F-14B(U), Link 16 on).
+
+## Tools: Syria time zone and magnetic variation probe, SA-5 probe fixed
+Development tools only, no change in play. A new probe mission logs the Syria runway data to find the magnetic variation, and the SA-5 probe now switches its flights on one at a time against a 16-launcher site.
+
+## Tools: road net scan for any theatre pack, SA-5 range probe, road coverage report
+Development tools only, no change in play. The road net scan takes a theatre pack (its airfields and long hops), there is a new SA-5 range probe mission, and `sqe_scan.py roads-report` lists the road coverage of a theatre's sectors and fields.
+
+## v0.41.487, red SEAD fires from farther out, flying high
+Red's Su-24M SEAD raids now fly at 30,000 ft and fire their Kh-31P from 50 nm out instead of 40 nm, outside a Patriot's reach. The fighter sweep ahead of them stops 70 nm out.
+
+## v0.41.486, the Su-34 is replaced by the Su-24M
+Red no longer flies the Su-34: at Level 3 its 80 Su-34s are 80 Su-24Ms, with the Su-24M's own loadout, range and radar warning gear. Saved campaigns that hold Su-34s load them as Su-24Ms, same numbers. Raids, SEAD and DEAD packages are otherwise unchanged. At Level 3 a Su-24M SEAD jet carries 2 Kh-31P, where a Su-34 carried 4.
+
+## v0.41.485, Settings tidied
+Splash Damage moved to the General tab; AI Landings, Ruins and Carcasses moved to Mission Build. The two hot-runway checkboxes are now one choice, Hot Starts on the Runway: Disabled, AI Flights at a Different Field, or AI Flights Including at My Own Field. All labels in Settings are in title case.
+
+## v0.41.484, bomb-task code tidied
+Internal: tidied the bomb-task code; no change in play.
+
+## v0.41.483, site layout and spawning code tidied
+Internal: tidied the site layout and site spawning code; no change in play.
+
+## v0.41.482, CAS ground-fight code tidied
+Internal: tidied the CAS ground-fight code; no change in play.
+
+## v0.41.481, raid SEAD code tidied
+Internal: tidied the raid SEAD code; no change in play.
+
+## v0.41.480, dormant-sites code tidied
+Internal: tidied the dormant-sites code; no change in play.
+
+## v0.41.479, SEAD timing helpers moved
+Internal: the SEAD timing helpers moved to their own file; no change in play.
+
+## v0.41.478, package-merging rules moved
+Internal: the package-merging rules moved to their own file; no change in play.
+
+## v0.41.477, Tactical Edge is set per campaign
+Tactical Edge and Tactical Edge Decay are now set per campaign: the Settings > Campaign rows change the campaign that is open (greyed out when none is), and the New Campaign dialog sets the starting value. Existing campaigns keep the value they had. The old name Pilot Influence is gone from the game.
+
+## v0.41.476, mission options in their own file
+Internal: mission option defaults and the settings-to-options mapping moved to their own file; no change in play.
+
+## v0.41.475, ground-site and base-defence spawning moved
+Internal: ground-site and base-defence spawning moved to its own file; no change in play.
+
+## v0.41.474, site layout helpers moved
+Internal: site layout helpers moved to their own file; no change in play.
+
+## v0.41.473, CAS ground-fight code moved
+Internal: CAS ground-fight code moved to its own file; no change in play.
+
+## v0.41.472, raid SEAD code moved
+Internal: raid SEAD code moved to its own file; no change in play.
+
+## v0.41.471, dormant-sites code moved
+Internal: the dormant-sites code moved to its own file; no change in play.
+
+## v0.41.470, bombing code moved
+Internal: bombing-task code moved to strike_tasks.py; no change in play.
+
+## v0.41.469, hook Lua text in its own file
+Internal: the mission hook's Lua text moved to its own file; no change in play.
+
+## v0.41.468, setting names match the dialog
+Internal: a few setting names now match the labels in the dialog; older settings files load as before.
+
+## v0.41.467, settings tidied
+Settings: AWACS tuned radio, damage calls, hot starts (ramp and runway), ILS in low visibility and dormant sites moved from the Experimental tab to Mission Build, and the empty Experimental tab is gone for now; the F-14B(U) special-point names are always on (the setting is gone).
+
+## v0.41.465, switch for the dormant-sites log
+The dcs.log lines for waking and sleeping sites can be switched off in the code; they will be off in releases.
+
+## v0.41.464, Experimental: dormant-sites log in dcs.log
+With the dormant-sites setting on, the mission writes a line to dcs.log whenever a site group wakes, goes back to sleep or wakes again, and a 10-second status line, so frame hitches can be matched to the event that caused them.
+
+## v0.41.463, Experimental: the rest of red's air defence, asleep
+With the dormant-sites setting on, every red early-warning radar still alive in the war is added to the mission (they never sleep), and every red SAM site that was not in it starts asleep and wakes when a radar or an enemy aircraft comes near. The mission itself is built exactly as before; these added sites are not counted against the unit limit or the ceiling in limits.json.
+
+## v0.41.462, clearer text for the dormant-sites setting
+The Experimental tab's hint now says what the setting is off: the same sites near your route and target, all live, and no defences on blue fields without flights.
+
+## v0.41.461, dormant-sites setting moved to the Experimental tab
+The checkbox was at the bottom of the Campaign tab; it now sits on the Experimental tab with the other features still being tried out, and its text describes what it does now.
+
+## v0.41.460, Experimental: dormant sites go back to sleep
+With the dormant-sites setting on, a site that woke up goes back to sleep once no enemy aircraft has been near it for 30 seconds, and wakes again when one returns.
+
+## v0.41.459, Experimental: dormant airfield defences
+With the dormant-sites setting on, the Patriot, HAWK and gun sites of every blue airfield that has no flight in the mission start asleep and wake when an enemy aircraft comes near; they count a tenth against the unit limit. Fields with your flights, the raided field and its covering neighbours stay awake.
+
+## v0.41.458, Experimental: dormant soft sites
+With the dormant-sites setting on, the Shilka guards of enemy fuel farms and depots near your route also start asleep and wake like the SAM sites do; they count a tenth against the unit limit.
+
+## v0.41.457, Experimental: dormant ground sites
+With the new setting on (off by default), SAM sites on your route start asleep and wake when a radar, a patrol or the longest-range SAM sees an enemy aircraft; sleeping sites count a tenth against the unit limit.
+
 ## v0.41.456, AI close air support goes home when its target is done
 Once the column a CAS flight was sent against is destroyed (all but one of its vehicles, for a large column), the AI flight leaves for its egress point and home instead of hunting other targets nearby. A flight that strays more than 18 km from the target does the same.
 

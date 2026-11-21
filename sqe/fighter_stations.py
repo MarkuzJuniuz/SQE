@@ -6,10 +6,11 @@ from __future__ import annotations
 from dcs import mapping, task
 
 from . import threatmap as tm
+from . import samtier
 from .aircraft import AIRCRAFT
 from .loadouts import JSOW_FLIGHT_KITS
 from .models import AssetKind, ObjectiveType, Role
-from .routes import AVOID_NM, NM, SA10_AVOID_NM, SA10_STATION_NM, bearing, dist, offset, plan_route
+from .routes import AVOID_NM, NM, bearing, dist, offset, plan_route
 
 TARCAP_MIN = 15               # ...and holds there this long, then goes home
 ESCORT_AFTER_EGR_S = 120      # v0.41.40: an escort stays until the last striker has reached its egress point + this long (XO 2026-10-20: DEADers were left behind)
@@ -127,6 +128,39 @@ class FighterStations:
                 out.append((lp_.x, lp_.y))
         return out
 
+    def _protect_points(self, package, geom) -> list:
+        """v0.41.546 (S137, XO 2026-11-21: tethered aggression): the points the package's TARCAP / escort protect, round which their engage circle is
+        centred: for every ground-attack flight (STRIKE / CAS, a person's own flight too: the mission is the same) its IP, its TGT and the point
+        after it (the egress turn). A stand-off flight (SEAD, a JSOW kit, the SLAM point) gives only its launch point: its TGT lies in the SAM belt.
+        Empty when nothing plans (the caller falls back to the launch points)."""
+        out = []
+        for f in package.flights:
+            if f.tag or f.role not in (Role.SEAD, Role.STRIKE, Role.CAS):
+                continue
+            base = self.state.bases[f.base_id]
+            try:
+                wps = plan_route(f.role, (base.x, base.y), geom, self._flight_profile(f, package), is_player=False, tanker_xy=None,
+                                 jsow=getattr(f, "kit", "") in JSOW_FLIGHT_KITS, jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package),
+                                 agm88_deg=self._agm88_deg(package, geom), rel=self._rel_kind(package, f))
+            except ValueError:
+                continue
+            lp_ = next((w for w in wps if w.action in ("SEAD", "JSOW")), None) or next((w for w in wps if w.name == "IP"), None)
+            standoff_ = f.role == Role.SEAD or getattr(f, "kit", "") in JSOW_FLIGHT_KITS or any(w.name == "SLAM" for w in wps)
+            if standoff_:
+                if lp_ is not None:
+                    out.append((lp_.x, lp_.y))
+                continue
+            ti_ = next((k for k, w in enumerate(wps) if w.name == "TGT"), None)
+            if ti_ is None:
+                if lp_ is not None:
+                    out.append((lp_.x, lp_.y))
+                continue
+            ip_ = next((w for w in wps[:ti_] if w.name == "IP"), None)
+            for w in (ip_, wps[ti_], wps[ti_ + 1] if ti_ + 1 < len(wps) else None):
+                if w is not None:
+                    out.append((w.x, w.y))
+        return out
+
     def _stagger_stations(self, geom, package, tx, ty) -> None:
         """v0.41.139 (XO 2026-10-27, the engagement circle diagram): short-range shooters (MiG-29, F-16, F/A-18 ...) closer to red, long-range
         snipers (F-15C, F-14B) behind them and to one side, so their missiles are not in the air across each other's jets. In a package that has a
@@ -150,7 +184,7 @@ class FighterStations:
                 alt = t_.alt_ft if (t_ is not None and t_.changed) else AIRCRAFT[lf.aircraft].profile.alt_ft.get(lf.role, 20000)
                 brg = bearing(sx, sy, tx, ty)                        # toward the target; "behind" is the other way, so it is never nearer the target than the short-range station
                 sites = profiles._cover_sites(self.state, alt)
-                room = lambda x, y: min([dist(x, y, c.x, c.y) - (SA10_STATION_NM * NM if c.variant in tm.UMBRELLA_VARIANTS else r_) for c, r_ in sites] + [1e9])
+                room = lambda x, y: min([dist(x, y, c.x, c.y) - (samtier.get(c.variant, "station_nm") * NM if c.variant in tm.UMBRELLA_VARIANTS else r_) for c, r_ in sites] + [1e9])
                 for back, side in ((LRA_BACK_NM, LRA_SIDE_NM), (LRA_BACK_NM, LRA_SIDE_NM / 2), (LRA_BACK_NM / 2, LRA_SIDE_NM), (0.0, LRA_SIDE_NM), (LRA_BACK_NM, 0.0)):
                     bx, by = offset(sx, sy, brg + 180, back * NM)
                     cands = [offset(bx, by, brg + 90, side * NM), offset(bx, by, brg - 90, side * NM)] if side else [(bx, by)]
@@ -174,7 +208,7 @@ class FighterStations:
             self._rings_c = [(a, r_) for a, r_ in tm.rings(st, min_range=3) if a.variant not in tm.UMBRELLA_VARIANTS]
             self._sa10_c = [a for a in st.assets.values() if a.variant in tm.UMBRELLA_VARIANTS and not a.destroyed and a.health > 0.25]
         return (all(dist(x, y, a.x, a.y) >= r_ + 15 * NM for a, r_ in self._rings_c)
-                and all(dist(x, y, a.x, a.y) >= SA10_STATION_NM * NM for a in self._sa10_c))
+                and all(dist(x, y, a.x, a.y) >= samtier.get(a.variant, "station_nm") * NM for a in self._sa10_c))
 
     def _zone_sams(self, package, fighters: bool = False, long_only: bool = False):
         """v0.41.22: the live medium / long-range SAMs a blue circle or HARM point must stay out of. Fighters (v0.41.24): every SA-2/3/6/11/10.

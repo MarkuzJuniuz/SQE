@@ -4,10 +4,11 @@ import copy
 import math
 import random
 from dataclasses import dataclass, field, asdict
-from . import runways, threat
+from . import f117
+from . import runways, threat, works
 from . import threatmap as tm
 from .loadouts import CBU_JETS, ENEMY_FIGHTERS, ENEMY_RADIUS_NM, EWR_KIT_ORDER, JSOW_PER_JET, PEN_PER_JET, PEN_REACH, SLAM_PER_JET
-from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER, STRIKE_CONDITIONAL
+from .aircraft import AIRCRAFT, AWACS_FOR, TANKER_FOR, RECOVERY_TANKER, STRIKE_CONDITIONAL, HOG_KEYS
 from .models import AssetKind, Objective, ObjectiveType, Role, BaseKind, RefuelMethod
 from .state import CampaignState
 
@@ -17,7 +18,7 @@ CLUSTER_NM, SALVO_4_NEIGHBOURS, SALVO_8_NEIGHBOURS = 25, 2, 4     # judgment cal
 CARRIER_PLAYER_FLIGHT_MAX = 2        # catapult spots are limited; keep the player's cat-start flight small
 PLAYER_ROLE_PREFERENCE = {Role.STRIKE: 5, Role.SEAD: 4, Role.TARCAP: 3, Role.ESCORT: 2, Role.SWEEP: 2, Role.CAP: 1, Role.CAS: 0}
 JTAC_OBJECTIVES = {ObjectiveType.CAS}
-TANKER_CAP_JETS = frozenset({"A-10C"})      # S96: the jets whose refuelling profile (aar_alt_ft / aar_kts) caps the tanker's orbit height and speed (judgment call: the A-10C's own 15,000 ft / 270 kt)
+TANKER_CAP_JETS = frozenset({"A-10C", "A-10A", "A-10C2"})      # S96: the jets whose refuelling profile (aar_alt_ft / aar_kts) caps the tanker's orbit height and speed (judgment call: the A-10C's own 15,000 ft / 270 kt)
 
 
 class NoPlayerSlot(Exception):
@@ -214,14 +215,16 @@ def _next_callsign(st, sq, used: dict) -> str:
     return f"{sq.callsign} {used[sq.callsign]}"
 
 
-LONG_RANGE_A2A = {"F-15C", "F-14BU"}
+LONG_RANGE_A2A = {"F-15C", "F-14BU", "F-14B"}
 # S45 (XO 2026-11-11): the F-14B(U) is not lumped with the F-15C. Its AIM-54C is a long, heavy missile (a bomber-killer, fleet defence): it earns its keep on range, not in a close
 # fighter fight like the Eagle's AIM-120 (public sources, firmness low: the Phoenix's published reach is about 100+ nm, the longest test shot 110 nm at a Mach 1.5 drone, 1973;
 # the AIM-120's quoted reach is about 60 to 70% of that; DCS's Mk47 does not loft inside about 21 nm). It stays on the sweep list but behind every F-15C squadron (`_pick_squadron`).
-SWEEP_LAST = {"F-14BU"}
+SWEEP_LAST = {"F-14BU", "F-14B"}
 CAS_JET_MIN_DEF_FLIGHTS = 99     # v0.41.214 (XO 2026-10-30): was 3. 99 = never "hot": the A-10C is the CAS master on every job and the jets only fly it when no A-10C squadron is free and in range (the Vipers were engaged at their wait point; the cure is the gate hold, below, not the airframe). v0.41.189 (was 3): jets take CAS first only when this many red defender flights can reach the target (judgment call; 2026-10-29 sim: with 1 nearly every L1 / L2 job counted as hot and the A-10Cs flew none)
 CAS_JET_SWAY_NM = 400            # v0.41.188: the CAS squadron of the other kind is picked only when none of the preferred kind is free within this much of it (judgment call)
 A2A_SECONDARY_NM = 400          # an F-16 / F/A-18 squadron is picked for TARCAP or escort only when no long-range shooter is within this much of it
+TOR_ESCORT_JETS = 4             # S136 (XO 2026-11-20: a Tor chews 4 HARMs, so 8; a 2-ship when only 2 are free): the SEAD escort of a plain-bomb strike under a live fixed Tor, jets (a slot of 4: `build` fills 2 when only 2 are free)
+TOR_ESCORT_RUNIN_NM = 5        # S136: a fixed Tor covers a strike target within its 8 nm ring plus this run-in (judgment call: the jet is inside the ring from the release point on)
 A10_RUNIN_NM = 8                # v0.41.360 (Phase 10c part 2): an A-10C supply strike needs the site clear of every live SAM ring (>= 5 nm range) by this much, the run-in leg (the same margin `threatmap.blockers` keeps off the route). Judgment call
 
 
@@ -236,86 +239,128 @@ def sweep_4ships(n_def_flights: int) -> int:
     return int(math.ceil(max(0, threat.fighters_required(n_def_flights) - 4) / 4))
 
 
+def _tier_room(free: dict, tier: dict, sid: str, wave: int) -> int:
+    """Jets of one squadron a sortie of `wave` can draw from one pool: the ready ones plus the tiers of waves 2 to `wave`."""
+    return free.get(sid, 0) + sum((tier.get(sid) or [])[:max(0, int(wave) - 1)])
+
+
+def _tier_spend(free: dict, tier: dict, sid: str, n: int, wave: int) -> None:
+    """Spend n jets of one squadron for a sortie of `wave`: the LATEST tier it may use first (wave, wave - 1 ... 2), then the ready jets, so the earlier waves keep the jets they can use."""
+    ts = tier.get(sid) or []
+    left = n
+    for k in range(min(int(wave) - 1, len(ts)) - 1, -1, -1):
+        t = min(ts[k], left)
+        ts[k] -= t
+        left -= t
+        if left <= 0:
+            break
+    free[sid] = free.get(sid, 0) - max(0, left)
+
+
 class Ledger:
     """The jets each squadron can still be asked for. `free` is what the builder reads and spends (`ledger.free[sid] -= n`).
 
-    v0.41.338 (campaign rules plan Phase 4): one Ledger serves a whole TURN with two launch waves. `free` = the jets ready now (wave 1); `late` = the jets that finish
-    their refit by the second wave (`refit.ready_by(q, ready_min)` less `available`). `view(wave)` hands the builder a throw-away Ledger for one wave, and `settle` books what
-    the builder spent in it: wave 2 spends the late jets first, so the ready ones stay for wave 1. `ready_min=None` (the plain `Ledger(state)`) means no late jets."""
-    hfree = None                 # v0.41.353 (Phase 9b): the jets of the HAVCAP squadrons (`Squadron.role`), kept apart: only the AWACS / tanker guards draw them (`hroom` / `htake`); every other reader sees 0 in `free` / `late`
-    hlate = None
+    v0.41.338 (campaign rules plan Phase 4): one Ledger serves a whole TURN with launch waves. `free` = the jets ready now (wave 1). S110 (v0.41.521): the turn has four waves, an hour apart
+    (`timeofday.WAVE_OFFSETS_MIN`), and the jets that are not ready yet come in TIERS, one per later wave: `tier[sid][w - 2]` = the jets whose refit ends after wave w - 1 opens and by wave w opens
+    (`refit.ready_by`; tier 2 counts against `available`). A sortie of wave w draws `free` and the tiers 2 to w (`room`) and spends the LATEST tier first (w, then w - 1 ... then `free`), so the earlier
+    waves keep the jets they can use. `late` = the tiers added up per squadron, read-only. `view(wave)` hands the builder a throw-away Ledger for one wave, and `settle` books what the builder spent in it.
+    `t_abs=None` (the plain `Ledger(state)`) means no later tiers."""
+    hfree = None                 # v0.41.353 (Phase 9b): the jets of the HAVCAP squadrons (`Squadron.role`), kept apart: only the AWACS / tanker guards draw them (`hroom` / `htake`); every other reader sees 0 in `free` / `tier`
+    htier = None
 
-    def __init__(self, state: CampaignState, ready_min: int | None = None):
+    def __init__(self, state: CampaignState, t_abs: int | None = None):
         self.free = {sid: (0 if runways.is_closed(state, s.base_id) else s.available) for sid, s in state.squadrons.items()}      # v0.41.254: a cratered field flies nothing
-        self.late = {sid: 0 for sid in self.free}
-        if ready_min is not None:
-            from . import refit
+        self.tier = {sid: self.no_tiers() for sid in self.free}
+        if t_abs is not None:
             for sid, s in state.squadrons.items():
                 if not runways.is_closed(state, s.base_id) and s.reserve <= 0:         # a resting squadron's jets go to its reserve, not to the line
-                    self.late[sid] = max(0, refit.ready_by(s, ready_min) - s.available)
-        self.hfree, self.hlate = {}, {}
+                    self.tier[sid] = self.tiers_of(s, t_abs)
+        self.hfree, self.htier = {}, {}
         for sid, s in state.squadrons.items():
             if s.role == "havcap":                                                     # guards only: out of the pools the packages, patrols and scrambles read
-                self.hfree[sid], self.hlate[sid] = self.free[sid], self.late[sid]
-                self.free[sid], self.late[sid] = 0, 0
+                self.hfree[sid], self.htier[sid] = self.free[sid], self.tier[sid]
+                self.free[sid], self.tier[sid] = 0, self.no_tiers()
+
+    @staticmethod
+    def no_tiers() -> list:
+        from .timeofday import NWAVES
+        return [0] * (NWAVES - 1)
+
+    @staticmethod
+    def tiers_of(q, t_abs: int) -> list:
+        """The tiers of one squadron (blue Squadron or RedSquadron) for a turn that opens at `t_abs`: [jets ready by wave 2 beyond `available`, by wave 3 beyond wave 2, ...]."""
+        from . import refit
+        from .timeofday import WAVE_OFFSETS_MIN
+        out, prev = [], q.available
+        for off in WAVE_OFFSETS_MIN[1:]:
+            r = refit.ready_by(q, t_abs + off)
+            out.append(max(0, r - prev))
+            prev = max(prev, r)
+        return out
+
+    @classmethod
+    def blank(cls) -> "Ledger":
+        """An empty ledger to fill (`free[sid]` and `tier[sid]`): red's, `redair.red_ledger`."""
+        c = cls.__new__(cls)
+        c.free, c.tier, c.hfree, c.htier = {}, {}, {}, {}
+        return c
+
+    @property
+    def late(self) -> dict:
+        """READ ONLY: the jets that come ready after the turn opens (every later tier added up) per squadron. Never write it: spend through `take` / `settle`."""
+        return {sid: sum(ts) for sid, ts in self.tier.items()}
+
+    def adds(self, wave: int) -> bool:
+        """True when some squadron still has jets in the tier of this wave (a wave with none adds nothing to the room of the one before)."""
+        return any(len(ts) >= wave - 1 > 0 and ts[wave - 2] > 0 for ts in self.tier.values())
 
     def scale(self, sids, f: float) -> None:
-        """A damaged carrier deck launches fewer of its jets (carrier_hit.deck_factor): both pools shrink for these squadrons."""
+        """A damaged carrier deck launches fewer of its jets (carrier_hit.deck_factor): every pool shrinks for these squadrons."""
         for sid in sids:
             self.free[sid] = int(self.free[sid] * f)
-            self.late[sid] = int(self.late[sid] * f)
+            self.tier[sid] = [int(t * f) for t in self.tier[sid]]
 
     def room(self, sid: str, wave: int) -> int:
-        """Jets of a squadron a sortie of this wave can still draw: the ready ones, and in wave 2 also the late ones."""
-        return self.free.get(sid, 0) + (self.late.get(sid, 0) if wave == 2 else 0)
+        """Jets of a squadron a sortie of this wave can still draw: the ready ones, and the jets of every tier up to this wave."""
+        return _tier_room(self.free, self.tier, sid, wave)
 
     def take(self, sid: str, n: int, wave: int) -> bool:
-        """Spend n jets of a squadron on a standing patrol or guard of this wave (v0.41.339, Phase 4b: they are planned from the turn's ledger, before the packages). Wave 2 spends the late
-        jets first, so the ready ones stay for wave 1, as `settle` does. False (and nothing spent) when the squadron has not got them."""
+        """Spend n jets of a squadron on a standing patrol or guard of this wave (v0.41.339, Phase 4b: they are planned from the turn's ledger, before the packages). The latest tier goes first, so the
+        earlier waves keep the jets they can use, as `settle` does. False (and nothing spent) when the squadron has not got them."""
         if self.room(sid, wave) < n:
             return False
-        k = min(self.late.get(sid, 0), n) if wave == 2 else 0
-        if k:
-            self.late[sid] -= k
-        self.free[sid] = self.free.get(sid, 0) - (n - k)
+        _tier_spend(self.free, self.tier, sid, n, wave)
         return True
 
     def hroom(self, sid: str, wave: int) -> int:
         """Jets of a HAVCAP squadron a guard of this wave can still draw (0 for any other squadron)."""
-        return (self.hfree or {}).get(sid, 0) + ((self.hlate or {}).get(sid, 0) if wave == 2 else 0)
+        return _tier_room(self.hfree or {}, self.htier or {}, sid, wave)
 
     def htake(self, sid: str, n: int, wave: int) -> bool:
-        """`take` for a HAVCAP squadron's guard pair: wave 2 spends the late jets first."""
+        """`take` for a HAVCAP squadron's guard pair: the latest tier goes first."""
         if self.hroom(sid, wave) < n:
             return False
-        k = min(self.hlate.get(sid, 0), n) if wave == 2 else 0
-        if k:
-            self.hlate[sid] -= k
-        self.hfree[sid] = self.hfree.get(sid, 0) - (n - k)
+        _tier_spend(self.hfree, self.htier, sid, n, wave)
         return True
 
     def copy(self) -> "Ledger":
-        c = Ledger.__new__(Ledger)
-        c.free, c.late = dict(self.free), dict(self.late)
-        c.hfree, c.hlate = dict(self.hfree or {}), dict(self.hlate or {})
+        c = Ledger.blank()
+        c.free, c.tier = dict(self.free), {sid: list(ts) for sid, ts in self.tier.items()}
+        c.hfree, c.htier = dict(self.hfree or {}), {sid: list(ts) for sid, ts in (self.htier or {}).items()}
         return c
 
     def view(self, wave: int) -> "Ledger":
-        v = Ledger.__new__(Ledger)
-        v.free = dict(self.free) if wave == 1 else {sid: self.free[sid] + self.late[sid] for sid in self.free}
-        v.late = {sid: 0 for sid in self.free}
+        v = Ledger.blank()
+        v.free = {sid: self.room(sid, wave) for sid in self.free}
+        v.tier = {sid: self.no_tiers() for sid in self.free}
         return v
 
     def settle(self, view: "Ledger", wave: int) -> None:
-        """Book what the builder spent in `view`."""
+        """Book what the builder spent in `view`: the latest tier of the wave first."""
         for sid, left in view.free.items():
-            have = self.free[sid] if wave == 1 else self.free[sid] + self.late[sid]
-            used = have - left
-            if used <= 0:
-                continue
-            take = 0 if wave == 1 else min(used, self.late[sid])
-            self.late[sid] -= take
-            self.free[sid] -= used - take
+            used = self.room(sid, wave) - left
+            if used > 0:
+                _tier_spend(self.free, self.tier, sid, used, wave)
 
 
 class PackageBuilder:
@@ -323,7 +368,7 @@ class PackageBuilder:
         self.state, self.d = state, d
         self._tk, self._ctx = {}, (None, None)
         self.short = []                                  # v0.41.247: (role, x, y) of every slot of the day that no squadron could fill (ground.note_shortfall)
-        self.missing = 0                                 # v0.41.338: the jets the REQUIRED slots of the last `build` are short of (the turn planner moves a package with some to the second wave)
+        self.missing = 0                                 # v0.41.338: the jets the REQUIRED slots of the last `build` are short of (the turn planner moves a package with some to a later wave)
 
     def target_xy(self, obj: Objective):
         if obj.type in _FLEET:
@@ -355,7 +400,7 @@ class PackageBuilder:
         if math.hypot(tx - b.x, ty - b.y) / NM > reach:
             return False
         obj, asset = self._ctx
-        if obj is not None and obj.type not in _FLEET and tm.blockers(self.state, (b.x, b.y), (tx, ty), asset):
+        if obj is not None and obj.type not in _FLEET and not f117.is_job(obj) and not (obj.aim == "STANDOFF" and works.is_works(asset)) and tm.blockers(self.state, (b.x, b.y), (tx, ty), asset):      # S111: a standoff strike on a works flies low under the umbrella and is not stopped by the belt in front of it (judgment call)
             return False
         return True
 
@@ -385,6 +430,17 @@ class PackageBuilder:
             return False
         return not any(math.hypot(s_.x - a.x, s_.y - a.y) <= r_ + A10_RUNIN_NM * NM for s_, r_ in tm.rings(self.state, min_range=5))
 
+    def _tor_cover(self, obj) -> list:
+        """S136: the live fixed Tor sites (SA-15, not a column's `fsam_`, not already suppressed) whose 8 nm ring plus TOR_ESCORT_RUNIN_NM covers the objective's target."""
+        from . import ground
+        a = self.state.assets.get(obj.target_id)
+        if a is None:
+            return []
+        r = (tm.RANGE_NM.get("SA-15", 8) + TOR_ESCORT_RUNIN_NM) * NM
+        return [x for x in self.state.assets.values()
+                if x.kind == AssetKind.SAM and x.variant == "SA-15" and not x.id.startswith("fsam_") and not x.destroyed and not getattr(x, "suppressed", False)
+                and x.health > ground.DOWN_HEALTH and math.hypot(x.x - a.x, x.y - a.y) <= r]
+
     def _is_ewr(self, obj) -> bool:
         """S60: the objective's target is an early-warning radar."""
         a_ = self.state.assets.get(obj.target_id) if obj.type != ObjectiveType.FLEET_DEFENSE else None
@@ -392,6 +448,8 @@ class PackageBuilder:
 
     def _slot_ok(self, aircraft: str, slot) -> bool:
         """v0.41.360: the airframes with a conditional STRIKE role (A-10C) fly a STRIKE slot only on a job `_a10_supply_strike` passed; every other slot is as before."""
+        if aircraft == "F-117A":                                             # S104: the F-117A flies only the slot built for it (`only`, the night job of f117.py), never an ordinary STRIKE slot
+            return slot.only == "F-117A"
         return not (slot.role == Role.STRIKE and aircraft in STRIKE_CONDITIONAL and not getattr(self, "_a10_strike", False))
 
     def _raid_threat_count(self, obj, extra) -> int:
@@ -429,6 +487,9 @@ class PackageBuilder:
             tmpl = [Slot(Role.CAS, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
         elif obj.type == ObjectiveType.STRIKE and obj.aim == "SEAD":        # v0.41.144: a supply strike under a live SA-2/3/6: same, the HARM escort is required
             tmpl = [Slot(Role.STRIKE, 4), Slot(Role.SEAD, 2), Slot(Role.TARCAP, 2, False)]
+        from . import f117
+        if f117.is_job(obj):                                                # S104 (and the night runway strike): the F-117A job: one STRIKE slot only the F-117A fills, no TARCAP / escort / SEAD (it goes where no red air reaches, see f117.py)
+            return [Slot(Role.STRIKE, 4, only="F-117A")]
         if carrier_raid(self.state, obj):                                    # v0.41.107: the setpiece: every fighter flight in reach, about one blue fighter per raider
             k = max(2, math.ceil(SETPIECE_RATIO * n_fl))              # n_fl = raiders / 3 (set in build) -> k flights of 4, about one blue fighter per raider
             n_land = SETPIECE_LAND_SHARE * (k - 2)                    # v0.41.256 (XO 2026-11-03: the USAF wing gave no help): a share of the optional flights is land-based (F-15C first)
@@ -471,7 +532,7 @@ class PackageBuilder:
         self._a10_strike = self._a10_supply_strike(obj, n_fl)                        # v0.41.360 (Phase 10c part 2): a clean supply strike may take A-10C squadrons
         pkg = Package(id=f"pkg{number}", number=number, objective=obj, n_def=2 * n_fl, extra=extra)
         slots = self._slots(obj, self._defended(obj), n_fl, extra)
-        if obj.type == ObjectiveType.STRIKE and obj.aim == "RUNWAY" and not for_player:
+        if obj.type == ObjectiveType.STRIKE and obj.aim == "RUNWAY" and not for_player and not f117.is_job(obj):
             # S51 (XO 2026-11-12): the runway crater goes out as F-15E standoff JSOW-Cs when an F-15E squadron reaches the field (with the PEN kit's shorter reach) and has jets free; none: the
             # plain strike as before (unlike the Standoff DEAD the kit is NOT required, no waiting for another day). Not for the player's own build: no player airframe can fly the kit, so his job and
             # route stay exactly as they were (a Viper / Hornet pilot is never moved to another slot).
@@ -490,6 +551,14 @@ class PackageBuilder:
                     break
             else:
                 raise NoPlayerSlot("no stand-off-capable squadron (F-15E, F-16C, F/A-18C) free for the EWR strike today")
+        tor_esc_ = False
+        if (obj.type == ObjectiveType.STRIKE and obj.aim in ("", "RUNWAY", "SEAD") and not f117.is_job(obj)
+                and not any(s_.kit for s_ in slots if s_.role == Role.STRIKE) and self._tor_cover(obj)):
+            # S136 (XO 2026-11-20, run 2026-11-20_15-57-12: two F-16Cs with GBU-31s ran in alone on a Tor-covered runway and turned away): a plain-bomb strike (no stand-off kit: not the EWR strike, the SLAM
+            # Standoff Strike, the F-15E's JSOW-C runway crater, the F-117A) under a live fixed Tor goes with a 4-jet SEAD escort, a 2-ship when only 2 jets are free, and waits when none is free
+            slots = [s_ for s_ in slots if s_.role != Role.SEAD] + [Slot(Role.SEAD, TOR_ESCORT_JETS)]
+            tor_esc_ = True
+            pkg.extra["tor_escort"] = True
         pp = st.player
 
         player_idx, lead_service, psq = None, None, None
@@ -499,15 +568,15 @@ class PackageBuilder:
             ok = [i for i, s in enumerate(slots) if s.role in spec.roles and self._slot_ok(psq.aircraft, s) and (not s.kit or psq.aircraft in KIT_JETS.get(s.kit, ())) and (not s.only or psq.aircraft == s.only)
                   and (not is_sweep(obj) or psq.aircraft in LONG_RANGE_A2A)                    # v0.41.15: no BVR sweep in an F-16 / F/A-18
                   and self._in_range(psq.id, tx, ty) and ledger.free[psq.id] >= 2]
-            if obj.type == ObjectiveType.CAS and psq.aircraft != "A-10C" and not self._hot:
+            if obj.type == ObjectiveType.CAS and psq.aircraft not in HOG_KEYS and not self._hot:
                 # v0.41.189 (XO): a quiet CAS job is the A-10Cs' job; a Viper / Hornet pilot is offered the CAS slot only when no A-10C squadron can fly it today
-                hog_ = any(sq_.aircraft == "A-10C" and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty) for sq_ in st.squadrons.values())
+                hog_ = any(sq_.aircraft in HOG_KEYS and ledger.free[sq_.id] >= 2 and self._in_range(sq_.id, tx, ty) for sq_ in st.squadrons.values())
                 if hog_:
                     ok = [i for i in ok if slots[i].role != Role.CAS]
             if not ok:
                 raise NoPlayerSlot(f"{psq.name} cannot fly any role in: {obj.description}")
             player_idx = max(ok, key=lambda i: PLAYER_ROLE_PREFERENCE[slots[i].role])
-            if obj.type == ObjectiveType.CAS and psq.aircraft != "A-10C":      # v0.41.188: a Hornet / Viper pilot picking a CAS job flies the Maverick slot, not the escort
+            if obj.type == ObjectiveType.CAS and psq.aircraft not in HOG_KEYS:      # v0.41.188: a Hornet / Viper pilot picking a CAS job flies the Maverick slot, not the escort
                 cas_ = [i for i in ok if slots[i].role == Role.CAS]
                 player_idx = cas_[0] if cas_ else player_idx
             lead_service = spec.service
@@ -550,7 +619,7 @@ class PackageBuilder:
             for sl_, sq_, n_, _ in chosen:
                 ledger.free[sq_.id] += n_
             raise NoPlayerSlot("no JSOW-capable squadron free for the Standoff DEAD today")
-        if obj.type in (ObjectiveType.CAS, ObjectiveType.STRIKE) and obj.aim == "SEAD" and not any(sl_.role == Role.SEAD for sl_, *_ in chosen):
+        if obj.type in (ObjectiveType.CAS, ObjectiveType.STRIKE) and (obj.aim == "SEAD" or tor_esc_) and not any(sl_.role == Role.SEAD for sl_, *_ in chosen):
             # v0.41.20: no HARM jets free: the CAS under a live SAM waits for another day rather than going in unescorted (no needless banzai)
             for sl_, sq_, n_, _ in chosen:
                 ledger.free[sq_.id] += n_
@@ -596,7 +665,7 @@ class PackageBuilder:
         # v0.41.279 (XO 2026-11-04): back to a random 8 to 40 degrees. v0.41.275 pointed it at the bombers' field, but Mozdok lies ~213 nm from the carrier, just outside the
         # X-22's 208 nm reach: on the straight line only 30 to 50 nm of way in is left outside the ring, the SAM circles cover it, and the interceptors find no intercept point.
         # The dogleg is what gives blue the room. Probed (seed 3, L3): bearing 20 gives a lane for every interceptor, bearing 60 none.
-        return {"brg": brg_ if brg_ is not None else round(rnd.uniform(20, 40), 1), "bombers": dec["n"], "bomber_wing": bw_id,
+        return {"brg": brg_ if brg_ is not None else bombers.raid_bearing(st, rnd), "bombers": dec["n"], "bomber_wing": bw_id,
                 "escort_wing": dec["wing"], "escort_type": dec["type"], "escorts": dec["escorts"], "mode": dec["mode"]}
 
     def _pick_squadron(self, slot: Slot, tx, ty, ledger: Ledger, lead_service):
@@ -625,7 +694,7 @@ class PackageBuilder:
                 k += A2A_SECONDARY_NM
             if sweep_ and sq.aircraft in SWEEP_LAST:
                 k += A2A_SECONDARY_NM         # S45: a Fighter Sweep goes into red's fighters: an F-15C first, the Tomcat only when no Eagle squadron can fly it
-            if slot.role == Role.CAS and (sq.aircraft != "A-10C") == (not getattr(self, "_hot", False)):
+            if slot.role == Role.CAS and (sq.aircraft not in HOG_KEYS) == (not getattr(self, "_hot", False)):
                 k += CAS_JET_SWAY_NM         # v0.41.188: A-10Cs where the air is clear, F-16C / F/A-18C when red fighters reach the target
             return k
         if lead_service is None:

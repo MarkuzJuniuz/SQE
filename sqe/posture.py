@@ -125,7 +125,7 @@ def _warnings(state) -> list:
         out.append(("counter_on", "The enemy counter-force is attacking" + (f" for {_days(d)} more" if d else " today")))
     n_lost_ = len(g["fallen"])
     if n_lost_:
-        left_ = ground.DEFEAT_BASES - n_lost_
+        left_ = ground.defeat_bases() - n_lost_
         out.append(("lost", f"{n_lost_} of our airfields {'has' if n_lost_ == 1 else 'have'} fallen: {left_} more and the campaign is lost" if left_ > 0 else "Our airfields have fallen: the campaign is lost"))
     clock = int(g.get("clock", 0))
     if g["taken"] and clock > state.day:
@@ -166,7 +166,15 @@ def posture(state) -> tuple:
 
 def supply_lines(state) -> list:
     e, f = ground.supply(state, "red"), ground.supply(state, "blue")
-    return [f"Coalition Force Index: {round(100 * f)}% ({supply_word(f)})", f"{story.enemy(state)} Force Index: {round(100 * e)}% ({supply_word(e)})"]
+    out = [f"Coalition Force Index: {round(100 * f)}% ({supply_word(f)})", f"{story.enemy(state)} Force Index: {round(100 * e)}% ({supply_word(e)})"]
+    w = ground.supply_collapse_word(state)               # S90: only where the pack wins on the enemy's supply collapsing
+    if w:
+        out.append(f"{story.enemy(state)} supply collapse: {w}")
+    from . import works
+    wl = works.line(state)                                # S111: Lutorin's works, where the pack has them
+    if wl:
+        out.append(wl)
+    return out
 
 
 def _orders(state, key: str) -> list:
@@ -206,7 +214,7 @@ def odds_line(state) -> str:
     def bn(n):
         return f"{n} battalion{'s' if n != 1 else ''}" if n >= 1 else "under a battalion"
     en = story.enemy(state)
-    return f"{o['sector']}: Coalition {bn(o['bn_blue'])} against {'the enemy' if en == 'Enemy' else en}'s {bn(o['bn_red'])} ({o['word']})"
+    return f"{o['sector']}: Coalition {bn(o['bn_blue'])} against {(en + chr(39) if en.endswith('s') else en + chr(39) + 's') if en != 'Enemy' else 'the enemy' + chr(39) + 's'} {bn(o['bn_red'])} ({o['word']})"
 
 
 def front_lines(state) -> list:

@@ -18,6 +18,7 @@ import math
 
 from . import runways
 from . import threatmap as tm
+from . import samtier
 from .models import AssetKind
 from .routes import NM, bearing, dist, offset
 
@@ -35,7 +36,7 @@ def red_covered(state, x, y, extra_nm: float = 0.0) -> bool:
     for a in state.assets.values():
         if a.kind != AssetKind.SAM or a.destroyed or a.health <= 0.25 or getattr(a, "suppressed", False):
             continue
-        reach = tm.UMBRELLA_KM / 1.852 if a.variant in tm.UMBRELLA_VARIANTS else tm.RANGE_NM.get(a.variant, 0)
+        reach = samtier.get(a.variant, "reach_km") / 1.852 if a.variant in tm.UMBRELLA_VARIANTS else tm.RANGE_NM.get(a.variant, 0)
         if reach >= 3 and dist(x, y, a.x, a.y) <= (reach + extra_nm) * NM:
             return True
     return False
@@ -79,7 +80,7 @@ def raid_origin(state, pkg, tx, ty):
     return (w.x, w.y)
 
 
-STATION_SA10_NM = 35.0      # judgment call (v0.41.114): a defender sits under its own cover, so it keeps less room from red's SA-10 than a sweep (45)
+STATION_SA10_NM = samtier.get("SA-10", "scramble_nm")      # (S90 P4: per umbrella system in samtier.SYSTEMS) judgment call (v0.41.114): a defender sits under its own cover, so it keeps less room from red's SA-10 than a sweep (45)
 STATION_RING_MARGIN_NM = 3.0  # judgment call: the sweep uses 20 nm outside the other rings; 3 keeps a CAP off a point-defence SAM's ring only
 
 
@@ -113,7 +114,7 @@ def clear_for_station(state, x, y) -> bool:
     from .sweep import _sams
     for a in _sams(state):
         if a.variant in tm.UMBRELLA_VARIANTS:
-            if dist(x, y, a.x, a.y) < STATION_SA10_NM * NM:
+            if dist(x, y, a.x, a.y) < samtier.get(a.variant, "scramble_nm") * NM:
                 return False
         elif tm.RANGE_NM.get(a.variant, 0) >= 3 and dist(x, y, a.x, a.y) < (tm.RANGE_NM[a.variant] + STATION_RING_MARGIN_NM) * NM:
             return False

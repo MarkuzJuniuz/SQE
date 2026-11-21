@@ -6,6 +6,7 @@ Pure geometry, no pydcs mission objects, so the kneeboard and briefing reuse it.
 from __future__ import annotations
 import math
 from dataclasses import dataclass
+from . import samtier
 from .aircraft import RouteProfile
 from .models import Role
 
@@ -83,7 +84,7 @@ AGM88_LAUNCH_NM = 35.0      # v0.41.11: 35 (was 30): the Sukhumi SA-10 engaged H
 CARRIER_DEP_NM = 10.0      # Case III: the departure circle is 10 nm from the boat, and the flight leaves on the briefed departure radial
 
 
-def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, carrier: bool = False) -> Geometry:
+def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, carrier: bool = False, vary_deg: float = 0.0) -> Geometry:
     """mshl: where the package marshals. It is chosen by the caller BEHIND the base (away from the enemy) so the departure and
     the hold are in friendly, defended airspace; the route then runs marshal -> PUSH -> IP -> target."""
     d = dist(bx, by, tx, ty)
@@ -93,7 +94,7 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, ca
     at = lambda dd: offset(bx, by, hdg, dd)
     if mshl is None:
         mshl = offset(bx, by, hdg + 180, 15 * NM)
-    ip_xy = at(ip_d)
+    ip_xy = at(ip_d) if not vary_deg else offset(tx, ty, hdg + 180 + vary_deg, p.ip_nm * NM)       # S104c: an F-117A sortie comes in on its own bearing (`f117.approach_deg`), 0 = the straight line as every other flight
     push_nm = max(2.0, min(10.0, 0.4 * dist(*mshl, *ip_xy) / NM))
     push_xy = offset(*mshl, bearing(*mshl, tx, ty), push_nm * NM)
     cap_d = max(0.45 * d, min(60 * NM, d))
@@ -103,7 +104,7 @@ def make_geometry(bx, by, tx, ty, p: RouteProfile, mshl: tuple | None = None, ca
     dep_nm = CARRIER_DEP_NM if carrier else p.dep_nm
     dep = offset(bx, by, bearing(bx, by, *mshl), min(dep_nm * NM, 0.4 * dist(bx, by, *mshl)))
     g_ = Geometry(bx, by, tx, ty, hdg, d, mshl, push_xy, ip_xy,
-                  offset(tx, ty, hdg + 100, p.egress_nm * NM), cap1, offset(*cap1, hdg + 90, p.cap_leg_nm * NM), dep)
+                  offset(tx, ty, hdg + (100 if vary_deg >= 0 else -100), p.egress_nm * NM), cap1, offset(*cap1, hdg + 90, p.cap_leg_nm * NM), dep)
     g_.carrier = bool(carrier)
     return g_
 
@@ -307,10 +308,10 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
     return wp
 
 
-SA10_AVOID_NM = 35.0       # v0.41.11: an AI flight's route keeps this far from a live SA-10 that is not its target (the v0.41.10 run: two JSOW
+SA10_AVOID_NM = samtier.get("SA-10", "avoid_nm")       # v0.41.11 (S90 P4: the figures live in samtier.SYSTEMS, one row per umbrella system): an AI flight's route keeps this far from a live SA-10 that is not its target (the v0.41.10 run: two JSOW
                            # flights bound for Gudauta passed 31 nm from the Sukhumi SA-10 and were shot at from 57 km)
-SA10_STATION_NM = 45.0     # v0.41.194 (XO 2026-10-29: Dodge 4's TARCAP orbit swung from 39 to 30 nm of the Sukhumi SA-10 and both Eagles died): a fighter STATION keeps this far from a live SA-10 so the orbit's near end (about 5-9 nm closer than its centre) stays outside SA10_AVOID_NM. Judgment call.
-AVOID_NM = {"SA-10": SA10_AVOID_NM, "SA-11": 20.0, "SA-2": 26.0, "SA-6": 16.0, "SA-3": 15.0}    # v0.41.20: every gate SAM, by its reach plus a margin
+SA10_STATION_NM = samtier.get("SA-10", "station_nm")     # v0.41.194 (XO 2026-10-29: Dodge 4's TARCAP orbit swung from 39 to 30 nm of the Sukhumi SA-10 and both Eagles died): a fighter STATION keeps this far from a live SA-10 so the orbit's near end (about 5-9 nm closer than its centre) stays outside SA10_AVOID_NM. Judgment call.
+AVOID_NM = {"SA-10": SA10_AVOID_NM, "SA-11": 20.0, "SA-2": 26.0, "SA-6": 16.0, "SA-3": 15.0, "SA-5": samtier.get("SA-5", "avoid_nm")}    # v0.41.20: every gate SAM, by its reach plus a margin
 RAID_SA11_NM = 26.0        # v0.41.276: the carrier raid's interceptors keep this far from a live SA-11 (AVOID_NM says 20). Judgment call: in XO's 2026-11-04 run the SA-11s
                            # engaged the Tomcats at 23 to 26 nm (shots of 42 to 49 km measured by the hook). Lives here (not raid_spawns.py) so threatmap.py can share it
                            # without a circular import (v0.41.287).

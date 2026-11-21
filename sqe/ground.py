@@ -25,6 +25,7 @@ Pure planning and bookkeeping, no pydcs. Positions are DCS metres (x north, y ea
 from __future__ import annotations
 import math
 from .models import AssetKind, EnemyAsset
+from .words import strength_word
 from . import story
 from . import clock
 
@@ -32,6 +33,18 @@ NM = 1852.0
 MIN_FORCE = 3.0               # below this a side has no organised force in the zone
 MAX_FORCE = 100.0
 SUPPLY_KINDS = (AssetKind.FUEL, AssetKind.DEPOT)
+
+
+def fi_site(state, a) -> bool:
+    """A site of red's Force Index stock: a supply site, plus (S131) the works of a campaign that counts them (`ground["sup_works"]`). Their nightly repair stays `is_supply` only."""
+    if is_supply(a):
+        return True
+    return bool((getattr(state, "ground", None) or {}).get("sup_works")) and str(getattr(a, "id", "")).startswith("wks_")
+
+
+def is_supply(a) -> bool:
+    """A fuel farm or depot that counts for the Force Index. S111: the works of a theatre pack (`works.py`, `wks_` ids) are depot assets for the planner but not supply sites."""
+    return a.kind in SUPPLY_KINDS and not a.id.startswith("wks_")
 BREAK_RATIO = 0.30            # v0.41.145 (XO 2026-10-27, never hunt the last unit): a side whose force in a sector is under this share of the other's has lost the sector tonight (it withdraws); nobody has to be destroyed
 DOWN_HEALTH = 0.30            # v0.41.145: a depot, fuel farm, SAM site or garrison at or under this health counts as down (not offered as a target, no longer gates)
 AIR_EFFECT = 0.6              # share of a visible column's losses that its zone's strength takes (the column is only the lead element)
@@ -48,12 +61,20 @@ TAKEN_NEW_DAY = 16            # v0.41.247 (XO 2026-11-03): one week after the Pa
 TAKEN_NEW_SQUADRONS = 1       # per taken field (judgment call: each is up to 18 more jets for blue; raise it if blue is thin at the front)
 SHORT_DAYS = 7                # how long a day's unfilled-slot record is kept
 SHORT_MAX = 600               # v0.41.338: at most this many entries are kept in all (6 turns a day each add their own, S25; judgment call, about a week of the old one-list-a-day)
+def defeat_bases() -> int:
+    """How many fallen airfields lose the campaign: the active pack's `front.defeat_bases` (S90 J5; Syria 1), else DEFEAT_BASES."""
+    from . import theatres
+    v = (theatres.active().get("front") or {}).get("defeat_bases")
+    return DEFEAT_BASES if v is None else int(v)
+
+
 DEFEAT_BASES = 3              # Phase 9a (XO 2026-11-10, campaign rules plan decision 25): the campaign is lost when this many of our airfields have fallen; a sunk carrier no longer counts
 SUPPLY_FLOOR, SUPPLY_NONE = 0.35, 0.85
 # v0.41.334 (XO 2026-11-06 / 11-09, campaign rules plan decision 18): ONE shared Force Index floor, 0.35, for both sides (it was 0.55 for red and BLUE_SUPPLY_FLOOR 0.35 for the coalition). History of the 0.35: v0.41.174 (XO 2026-10-28) 0.35 (was 0.30; with red CAS in, flying every 3rd day on L3 was a coin flip at 0.30; 6-seed L3 sims: 0.35 wins every 3rd day 6 of 6 and still loses idle 4 of 6; 0.40 barely punishes idle); v0.41.166 (XO 2026-10-27): the coalition's stock comes by sea, a long way, so once its depots and fuel are hit it recovers slowly. Judgment call, no public source. Level 1 red keeps L1_RED_SUPPLY_FLOOR.
 RED_L1_FLOOR = 0.45        # v0.41.408 (S49, XO 2026-11-12): the absolute floor of red's Force Index on Level 1 of a new campaign (70% inner sites, 30% road sites; see supply; was 0.15 with 50 / 50 in the first S49 build, XO 2026-11-12: the insurgents are supplied by night, so red L1 is not trapped at the bottom). Judgment call. Blue is not resupplied across anything: its stock came by sea, and it has no road sites (road_sites_blue 0), only the fuel farms and depots it brought.
 RED_L1_INNER_W = 0.70      # v0.41.408 (S49, XO 2026-11-12): weight of red L1's inner sites in its Force Index (judgment call)
 SUPPLY_REPAIR_DAYS = 6.0     # v0.41.144 (XO 2026-10-24, judgment call): a supply site is fully repaired in this many days at 100% supply; slower when the owner's supply is low (35% = about 17 days); no repair on a day it is struck
+SUPPLY_COLLAPSE_BANDS = (0.30, 0.12)   # S90: red's Force Index this far above a pack's `win_supply` line reads "distant", this far "approaching", less "close" (judgment calls, words only)
 L1_RED_SUPPLY_FLOOR = 0.70    # v0.41.141 (XO 2026-10-27, Campaign Revamp): on Level 1 the insurgents are resupplied across the border by night, so their supply never drops below this however many depots die (judgment call; a toy-model run showed it does not change who wins). Levels 2 and 3 use the shared 0.35 floor (SUPPLY_FLOOR).
 
 
@@ -84,7 +105,7 @@ RED_CAS_COVER_KM = 150.0
 RED_CAS_LOSS = 0.25                      # chance a strike costs red one attack jet
 RED_CAS_ESCORT_LOSS = 0.15               # ...and an escorted strike one fighter (a fight with blue's patrols)
 BLUE_CAS_LOSS = 0.10                     # S82: chance a blue air strike costs one jet of the squadron that flew it (judgment call: red's is 0.25, blue's cover is better)
-RED_ATTACK_TYPES = ("Su_25", "Su_24M", "Su_34")      # v0.41.361 (Phase 10d): + the L3 Su-34
+RED_ATTACK_TYPES = ("Su_25", "Su_24M", "Su_17M4")      # v0.41.361 (Phase 10d) added the L3 Su-34; S106 (XO 2026-11-18) took it out again: the Su-24M flies for red at every level
 COUNTER_DELAY_DAYS = 3        # the enemy's last counter-force arrives this many days after the final base falls
 COUNTER_FORCED_DAYS = 6       # ...and attacks every day for this long
 COUNTER_FRAC = {1: 0.0, 2: 0.35, 3: 0.60}      # counter-force strength as a share of a full 100-point sector (toy model; judgment call)
@@ -365,6 +386,7 @@ def ensure(state) -> bool:
         from . import theatres
         from .difficulty import get as get_difficulty
         th = theatres.use(state.theatre)
+        clock.use(state.start_hour)
         if not th.get("front"):
             return False
         t = theatres.terrain()
@@ -452,9 +474,11 @@ def set_supply_counts(state) -> None:
     if g is None:
         return
     ba = getattr(state, "blue_assets", None) or {}
-    g["sup_n"] = {"red": sum(1 for a in state.assets.values() if a.kind in SUPPLY_KINDS), "blue": sum(1 for a in ba.values() if a.kind in SUPPLY_KINDS)}
+    if g.get("works"):
+        g["sup_works"] = True                                                   # S131 (XO 2026-11-20): the works are red supply sites of the Force Index (a campaign made before it has no flag: the old count)
+    g["sup_n"] = {"red": sum(1 for a in state.assets.values() if fi_site(state, a)), "blue": sum(1 for a in ba.values() if is_supply(a))}
     if getattr(state, "level", 2) == 1:
-        rs = [a for a in state.assets.values() if a.kind in SUPPLY_KINDS]
+        rs = [a for a in state.assets.values() if is_supply(a)]
         g["sup_n_road"] = sum(1 for a in rs if a.id.startswith(ROAD_PREFIX))
         g["sup_n_inner"] = len(rs) - g["sup_n_road"]
         g["sup_grp"] = True
@@ -467,7 +491,7 @@ def supply(state, side: str) -> float:
     v0.41.408 (S49, XO 2026-11-12): red on Level 1 of a NEW campaign (ground["sup_grp"]) is RED_L1_INNER_W (70%) its inner sites' stock and the rest its road sites' stock (stock over the start count
     of each group; a captured site counts in the captor's group by its id), floor RED_L1_FLOOR (0.45), so hitting the inner depots really lowers it. Judgment call, XO."""
     pool = state.assets.values() if side == "red" else getattr(state, "blue_assets", {}).values()
-    sites = [a for a in pool if a.kind in SUPPLY_KINDS]
+    sites = [a for a in pool if (fi_site(state, a) if side == "red" else is_supply(a))]
     n = int(((state.ground or {}).get("sup_n") or {}).get(side, len(sites)))
     fl = SUPPLY_FLOOR
     g = state.ground or {}
@@ -492,11 +516,12 @@ def supply_repair(state) -> list:
     g = state.ground
     prev = g.setdefault("sup_h", {})
     out = []
+    fell = set(g.get("road_fell") or [])                                      # S108: a depot the front's move destroyed for good is not rebuilt
     for side in ("red", "blue"):
         pool = state.assets if side == "red" else getattr(state, "blue_assets", {})
         rate = supply(state, side) / SUPPLY_REPAIR_DAYS
         for a in pool.values():
-            if a.kind not in SUPPLY_KINDS:
+            if not is_supply(a) or a.id in fell:                      # S111: the works have their own rebuild (works.rebuild)
                 continue
             before = prev.get(a.id, a.health)
             if a.health < before - 1e-6:                                    # struck today: no repair tonight
@@ -525,7 +550,7 @@ def supply_round(state, d, rng) -> list:
         return lines
 
     def pick(pool, attempts, who, p_scale=1.0):
-        sites = [a for a in pool if a.kind in SUPPLY_KINDS and not a.destroyed]
+        sites = [a for a in pool if is_supply(a) and not a.destroyed]      # S111: the works are struck by planned packages only
         for _ in range(attempts):
             if not sites:
                 return
@@ -540,7 +565,7 @@ def supply_round(state, d, rng) -> list:
             a, p, _v = rng.choices(cands, weights=[c[2] for c in cands])[0]
             if rng.random() < p * p_scale:
                 a.health = max(0.0, a.health - SUPPLY_ROUND_HIT)
-                lines.append(f"{'Our' if who == 'red' else 'Enemy'} {a.name} was hit in the background supply strikes ({a.health:.0%} left)")
+                lines.append(f"{'Our' if who == 'red' else 'Enemy'} {a.name} was hit in the background supply strikes ({strength_word(a.health)})")
     pick(list(state.assets.values()), SUPPLY_ROUND_BLUE, "blue")
     pick(list(getattr(state, "blue_assets", {}).values()), int(getattr(d, "red_supply_strikes", 1)) + int(rng.random() < min(1.0, getattr(d, "raid_rate", 0.3))), "red")
     return lines
@@ -641,7 +666,7 @@ def surge(state, d) -> float:
     nothing for you to fly does not count), up to 1 + SURGE_CAP. It multiplies red's reinforcements, attack chance and raid rate."""
     step = float(getattr(d, "red_surge", 0.0))
     g = state.ground or {}
-    if step <= 0 or not g or not g.get("pilot_influence", True):      # v0.41.160: Pilot Influence off: no surge, your flying makes no difference here
+    if step <= 0 or not g or not g.get("tactical_edge", True):      # v0.41.160: Tactical Edge off: no surge, your flying makes no difference here
         return 1.0
     idle = (int(g.get("idle_turns", 0)) - SURGE_GRACE_TURNS) / TURNS_PER_DAY            # days' worth of idle past the grace
     return 1.0 + min(SURGE_CAP, max(0.0, idle) * step)
@@ -715,13 +740,19 @@ def _red_cas(state, d, rng, red, blue, n, sg) -> list:
     return out
 
 
+def push_factor(state, d) -> float:
+    """Red's surge factor times the push the works add (S111, `works.edge`): what multiplies red's reinforcements, attack chance and raid rate."""
+    from . import works
+    return surge(state, d) * works.edge(state, d)
+
+
 def resolve_day(state, d, rng) -> list:
     """One day of ground fighting. Returns the overnight lines for the log."""
     g = state.ground
     pull(state)
     red, blue, n = g["red"], g["blue"], n_zones(g)
     sr, sb = supply(state, "red"), supply(state, "blue")
-    sg = surge(state, d)
+    sg = push_factor(state, d)
     g["air_today"] = []                                               # S82: the strikes of this day's fight, for the mission builder to show (see _record_strike)
     lines = _counter_arrives(state)
     forced = _forced_zone(state)
@@ -1085,6 +1116,40 @@ def _update_win(state) -> list:
 
 def victory(state) -> bool:
     return bool(active(state) and state.ground.get("won"))
+
+
+def supply_win_rule(state):
+    """S90 (the Force Index win): the active pack's `win_supply` rule for this level, {"below": 0..1, "days": n}, or None (the Caucasus: no such win)."""
+    from . import theatres
+    return (theatres.active().get("win_supply") or {}).get(str(getattr(state, "level", 2))) or None
+
+
+def update_supply_win(state) -> list:
+    """Nightly (`war.end_day`, AFTER the sites mended: the morning's Force Index is the one the Overview shows): where the pack has a `win_supply` rule for the level, red's Force Index at or below `below` on `days` consecutive day checks wins the war (`g["supply_won"]`, read by
+    `war.update_status`); a day above it resets the count (`g["supply_low"]`, saved with the campaign). -> the war-log lines (the pack's `win` story beat comes with the win)."""
+    g = state.ground
+    r = supply_win_rule(state)
+    if not g or not r or g.get("supply_won"):
+        return []
+    if supply(state, "red") <= float(r["below"]):
+        g["supply_low"] = int(g.get("supply_low", 0)) + 1
+    else:
+        g["supply_low"] = 0
+    if g["supply_low"] >= int(r["days"]):
+        g["supply_won"] = True
+        return ["The enemy's supply has collapsed: it cannot keep its forces in the field"] + story.beat(state, "win")
+    return []
+
+
+def supply_collapse_word(state):
+    """How close red's supply is to the `win_supply` line, in a word (S80: no figures): distant / approaching / close / under way. None when the level has no such rule."""
+    r = supply_win_rule(state)
+    if r is None:
+        return None
+    if int((state.ground or {}).get("supply_low", 0)) > 0:
+        return "under way"
+    m = supply(state, "red") - float(r["below"])
+    return "distant" if m >= SUPPLY_COLLAPSE_BANDS[0] else "approaching" if m >= SUPPLY_COLLAPSE_BANDS[1] else "close"
 
 
 def apply_red_fall(state, rb) -> list:

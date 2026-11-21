@@ -3,12 +3,14 @@ from __future__ import annotations
 import random
 from . import narrative, credit_line
 from .aircraft import AIRCRAFT
+from .words import chance_word
 from .models import AssetKind
 from .routes import dist, NM
 
 _SAM_NAME = {"SA-8": "SA-8 Gecko", "AAA": "AAA", "MANPAD": "MANPADS", "SA-2": "SA-2 Guideline", "SA-3": "SA-3 Goa", "SA-6": "SA-6 Gainful",
-             "SA-11": "SA-11 Gadfly", "SA-10": "SA-10 Grumble", "SA-15": "SA-15 Gauntlet", "SA-19": "SA-19 Grison"}
-RANGE_NM = {"SA-8": 7, "AAA": 3, "MANPAD": 3, "SA-2": 25, "SA-3": 13, "SA-6": 13, "SA-11": 18, "SA-10": 48, "SA-15": 8, "SA-19": 5}
+             "SA-11": "SA-11 Gadfly", "SA-10": "SA-10 Grumble", "SA-15": "SA-15 Gauntlet", "SA-19": "SA-19 Grison",
+             "SA-5": "SA-5 Gammon", "SA-9": "SA-9 Gaskin"}
+from .samtier import RANGE_NM      # S90 P4: the one ring table (it was a second copy here)
 
 
 def threat_lines(state, tx, ty) -> list:
@@ -41,9 +43,9 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
     if obj.type.value == "FLEET_DEFENSE" and pkg.extra:
         e = pkg.extra
         tb = state.bases.get(obj.target_id)
-        rtype_of = {"Su_24M": "Su-24M bombers", "Su_34": "Su-34 bombers", "Su_25": "Su-25 attack aircraft", "Tu_22M3": "Tu-22M3 bombers"}
+        rtype_of = {"Su_24M": "Su-24M bombers", "Su_25": "Su-25 attack aircraft", "Su_17M4": "Su-17M4 attack aircraft", "Tu_22M3": "Tu-22M3 bombers"}
         rtype = rtype_of.get(e.get("raider", "Su_24M"), "attack aircraft")
-        if e.get("pool"):                                    # S46: a pooled raid names every type that flies it ("4 Su-34 bombers and 2 Su-25 attack aircraft")
+        if e.get("pool"):                                    # S46: a pooled raid names every type that flies it ("4 Su-24M bombers and 2 Su-25 attack aircraft")
             from .raids import raid_members
             by_t_ = {}
             for _a, t, n in raid_members(e):
@@ -119,7 +121,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                     "Tors are busy with HARMs when the JSOWs arrive. The JSOW flight comes in on its own axis, about 30 degrees off the HARM shooters', "
                     "and releases its AGM-154As on the radars, the launchers and the Tors from stand-off range. Nobody flies into the long-range SAM's "
                     "reach: release, then back out the way you came. Out of HARMs or JSOWs, go home.",
-                f"Intelligence puts the chance of suppressing the radars at about {round(_p3 * 100 / 5) * 5:.0f}%."]
+                f"Intelligence rates the chance of suppressing the radars as {chance_word(_p3)}."]
         if getattr(pf, "kit", "") == "JSOW":
             sit += ["", "You are the Standoff DEAD flight. A radar that keeps tracking is the HARMs' kill; one that shuts down to dodge them is still "
                         "where it was last seen, and that is where your JSOWs land, with the rest on the launchers and the Tors."]
@@ -138,7 +140,7 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
                         "range. A radar that keeps tracking is the HARMs' kill; one that shuts down to dodge them is still where it was last seen, and "
                         "that is where your JSOWs land."]
         sit += ["", f"Your job is only to suppress the radars. A Close DEAD package follows about {_gap} minutes behind you and goes in only if the radars are out. "
-                    f"Intelligence puts the chance of suppressing this site at about {round(_p * 100 / 5) * 5:.0f}%" + (f", better than it was: this site has beaten us {_sf(state, obj.target_id)} time{'s' if _sf(state, obj.target_id) != 1 else ''} running and its crews and positions are known." if _sf(state, obj.target_id) else ".")]
+                    f"Intelligence rates the chance of suppressing this site as {chance_word(_p)}" + (f", better than it was: this site has beaten us {_sf(state, obj.target_id)} time{'s' if _sf(state, obj.target_id) != 1 else ''} running and its crews and positions are known." if _sf(state, obj.target_id) else ".")]
     if obj.after and obj.type.value in ("STRIKE", "CAS"):
         from .war import after_sites as _as, follow_ready as _fr
         _names = " and ".join(state.assets[i].name for i in _as(obj) if i in state.assets and not state.assets[i].destroyed) or "the covering SAM sites"
@@ -166,13 +168,15 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
         tower, jtac_at = f"ATC {plan.where('ATC')}", (plan.where("JTAC") or None)
     adm = [f"BINGO {x['bingo']} lb   JOKER {x['joker']} lb",
            "Recovery: " + (f"carrier Case I, TACAN 74X, ICLS 11, {tower}" if on_boat else f"home field, tower {tower.replace('ATC ', 'on ')}"),
-           f"Divert: {x['divert']}", "Tanker track is steerpoint TKR. Bullseye is the last steerpoint."]
+           f"Divert: {x['divert']}", ("The tanker and the bullseye are not waypoints in your jet: see COMMS and the card." if x.get("tkr_line") else "Tanker track is steerpoint TKR. Bullseye is the last steerpoint.")]
     if spec.fc3:
         com = ["Frequencies: " + " | ".join(f"{e.label} {e.mhz:.3f}" for e in list(plan.comm1.values()) + list(plan.comm2.values()))]
     else:
         com = ["COMM1 (UHF): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm1.items()),
                "COMM2 (VHF" + ("/UHF" if spec.service == "Navy" else "") + "): " + " | ".join(f"CH{c} {e.label} {e.mhz:.3f}" for c, e in plan.comm2.items())]
     com += [f"IFF Mode 3: {x['mode3']}    Laser code: {x['laser']}", f"Bullseye: {x['bullseye']}"]
+    if x.get("tkr_line"):
+        com.append(x["tkr_line"])
     if x.get("tune_mhz"):
         com.append(f"AWACS: its calls reach you only while a radio is tuned to {x['tune_mhz']:.3f} MHz.")
     if x.get("ecm_player") == "f10":

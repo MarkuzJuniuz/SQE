@@ -17,6 +17,20 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 
 
+# S88 R2 (XO 2026-11-17): settings fields renamed to match the dialog labels. old name -> new name; `merge_enemy_pct` is gone (no setting any more: an old file's key is ignored on load).
+RENAMED_FIELDS = {"carcass_weight_pct": "wreck_static_weight_pct", "hold_minutes": "marshal_slack_min", "merge_max_units": "max_units",
+                  "merge_back_min": "merge_earlier_min", "merge_fwd_min": "merge_later_min", "merge_radius_nm": "target_area_radius_nm",       # S139b: the radius is the target area's now
+                  "autoskip_duration_on": "autoskip_crew_rest", "autoskip_hours": "autoskip_crew_rest_hours"}
+
+
+def _apply_renames(raw: dict) -> None:
+    """Move an old key's value to its new name in a loaded settings file (in place). If both exist the new name wins and the old is dropped."""
+    for old, new in RENAMED_FIELDS.items():
+        if old in raw:
+            val = raw.pop(old)
+            raw.setdefault(new, val)
+
+
 def native(p: str) -> str:
     """One slash style everywhere: the OS's own (backslashes on Windows). Qt file dialogs and the registry mix them."""
     p = (p or "").strip()
@@ -63,7 +77,7 @@ class AppSettings:
     hot_runway_starts: bool = False       # v0.41.96: AI package flights from LAND fields other than yours start on the runway (queued by the hook) instead of airborne, when the schedule allows (v0.41.97: your own field too, after your takeoff)
     hot_runway_own_field: bool = False    # v0.41.99: sub-setting of hot_runway_starts: also AI flights at YOUR field (after your takeoff); only counts while hot_runway_starts is on
     takeoff_buffer_s: int = 60            # seconds between mission start and the briefed takeoff (negative = you must be quicker than the plan)
-    hold_minutes: int = 1                 # (S77: was 2) slack at the marshal point before PUSH (minutes; negative = hurry)
+    marshal_slack_min: int = 1            # (S77: was 2) slack at the marshal point before PUSH (minutes; negative = hurry)
     flight_filter: str = "squadron"      # who you may fly: "squadron" (only flights of YOUR squadron). "all" is for tests and tools only: a saved file never turns it on (v0.41.93)
     window_geometry: str = ""            # v0.41.151: the main window's size and position (Qt saveGeometry, base64); empty = open at the default size, centered (File > Reset window)
     situation_open: bool = True          # v0.41.149: the Overview's Situation panel is open (day 1 starts open; it remembers the last state)
@@ -73,17 +87,16 @@ class AppSettings:
     river_margin_m: int = 100             # ...and this far from rivers and shallow water (terrain scan only)
     ai_skill_red: str = "level"            # v0.41.70: "level" (the difficulty level decides) or Average / Good / High / Excellent: Red's pilots and ground units
     ai_skill_blue: str = "level"           # ...and Blue's AI flights ("level" = High); see difficulty.ai_skill
-    tempo_decay: bool = False              # v0.41.208 (XO): Enable Tactical Edge Decay: the edge fades 3% a night. Off by default. (Both Tactical Edge switches become per-campaign on refactor day, XO 2026-10-30)
-    pilot_influence: bool = True           # v0.41.160: your flying (or neglect) feeds back into the war: red surges while you stand down. Off: no surge and no tempo, so your flying or standing down changes nothing
+    # S88 R3 (XO 2026-11-18): the two Tactical Edge switches are per campaign now (`state.ground`), no longer settings; an old settings file's keys for them are ignored on load (the load filter drops unknown keys)
     weather_mode: str = "clear"            # "clear" | "procedural" | a fixed weather: scattered, broken, overcast, rain, storm
     ils_low_vis: bool = True               # S63 (XO 2026-11-12): in low ceiling or visibility the ground wind is turned to favour each blue field's ILS runway (DCS lights the ILS only on the active runway, picked by the low-level wind); good weather keeps the real wind
     ruins: bool = True                    # earlier packages' targets show as smoking ruins (and struck flights head home)
-    merge_radius_nm: int = 15             # packages whose target is inside this circle (centred on yours, kept inside the target area) can fold in (v0.41.131: 15, was 25)
-    merge_fwd_min: int = 30               # v0.41.131: packages that start up to this many minutes AFTER yours fly with you (5 minute steps in Settings, 0 to 60)
+    target_area_radius_nm: int = 15             # S139b (was merge_radius_nm): the target area round your target (supply sites, CAS sectors, ruins, the Missions list nesting, plan-time grouping); no longer limits what FLY merges (v0.41.131: 15, was 25)
+    merge_later_min: int = 30             # v0.41.131: packages that start up to this many minutes AFTER yours fly with you (5 minute steps in Settings, 0 to 240 since S139b)
     merge_v131: bool = False
-    merge_raids_all: bool = True          # S39: raid intercepts that start inside the time windows fly in one mission, at any distance (off: a raid folds in only when its way in passes the target area)
-    merge_back_min: int = 15              # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
-    merge_max_units: int = 250            # v0.41.131: the unit limit counts the WHOLE mission again, merged packages included (ruins go first, then the latest-starting package); the 500 ceiling in sqe/data/limits.json is dormant
+    merge_raids_all: bool = True          # S39: raid intercepts that start inside the time windows are listed in one mission, at any distance (off: a raid is listed there only when its way in passes the target area); S139b: the Missions list only, FLY takes every raid in the window
+    merge_earlier_min: int = 15            # packages that started up to this many minutes BEFORE yours fly with you, already underway (0 = only later ones)
+    max_units: int = 250                  # v0.41.131: the unit limit counts the WHOLE mission again, merged packages included (ruins go first, then the latest-starting package); the 500 ceiling in sqe/data/limits.json is dormant
     reactive: bool = True                 # enemy reinforcements and blue alert pairs can launch during a sortie
     ai_land_carrier: str = "always"       # v0.41.18: AI flights going home to a carrier: "always" recovered short of it | "home" only at your deck | "never" land
     ai_land_field: str = "never"          # v0.41.18: the same for airfields
@@ -93,20 +106,19 @@ class AppSettings:
     ecm_status: bool = True               # v0.41.213: show the on-screen ECM messages (needs ecm_script)
     ecm_script: bool = False              # SQE's own jamming model in the mission hook; off = DCS's own ECM, used by the AI when locked
     carcasses: bool = True                # burnt-out wrecks at damaged and destroyed ground sites near your route
-    carcass_weight_pct: int = 25          # one wreck or one live static building (a fuel farm's tank, a depot's warehouse) counts this % of a live unit toward the unit limit (v0.41.221; renamed in refactor week)
+    dormant_sites: bool = False           # S89 (Experimental): red SAM sites on your route start asleep and wake when a detector sees blue; they count 10% toward the unit limit
+    wreck_static_weight_pct: int = 25    # one wreck or one live static building (a fuel farm's tank, a depot's warehouse) counts this % of a live unit toward the unit limit (v0.41.221; renamed in refactor week)
     unit_cap_v2: bool = False             # the old default (150) has been moved to the new one (250) once
-    merge_enemy_pct: int = 100            # folded packages: enemy fighters = the biggest package's + this % of every other folded package's (100 = full sum)
     fighter_engage_nm: int = 40           # AI escorts and sweeps chase no further than this (0 = unlimited)
     fighter_engage_minutes: int = 5       # AI escorts, sweeps and SEAD stop engaging this long after the TOT and fly on (0 = no time limit)
     fighter_standoff: bool = True         # AI escorts and sweeps stop short of live SAM cover
     auto_patch_scripting: bool = False    # patch DCS MissionScripting.lua when SQE starts, restore it when SQE exits. Off until the user agrees on first run
     patch_asked: bool = False
     terrain_asked: bool = False           # the one-time 'scan the map?' offer has been shown
-    f14_special_names: bool = True             # F-14B(U): special-point waypoint names (untested in the cockpit)
     autoskip_stand_down: bool = False     # Phase 11 (XO): AUTOMATICALLY SKIP under Skip Turn: keep skipping turns with nothing to fly
     autoskip_night: bool = False          # ...also night turns, even when a flight is on offer
-    autoskip_duration_on: bool = False    # ...stop after autoskip_hours of campaign time (unticked: no limit, a week at most)
-    autoskip_hours: int = 12              # 4 to 24, step 4 (S25: a turn is four hours; `load` rounds an older value to a multiple of 4)
+    autoskip_crew_rest: bool = False      # ...stop after autoskip_crew_rest_hours of campaign time (unticked: no limit, a week at most)
+    autoskip_crew_rest_hours: int = 12  # 4 to 24, step 4 (S25: a turn is four hours; `load` rounds an older value to a multiple of 4)
     persist: bool = True          # False in tests: never write %APPDATA%\\SQE\\settings.json
 
     # ---- derived paths ------------------------------------------------------------------
@@ -150,16 +162,17 @@ class AppSettings:
         if f.exists():
             try:
                 raw = json.loads(f.read_text())
+                _apply_renames(raw)       # S88 R2: an older file's field names, before the filter and the migrations below
                 s = cls(**{k: v for k, v in raw.items() if k in cls.__dataclass_fields__ and k != "persist"})
                 if not raw.get("unit_cap_v2"):
-                    if raw.get("merge_max_units") == 150:
-                        s.merge_max_units = 250   # still on the old default: move to the new one (an explicit different value is kept)
+                    if raw.get("max_units") == 150:
+                        s.max_units = 250   # still on the old default: move to the new one (an explicit different value is kept)
                     s.unit_cap_v2 = True
                 s.reactive = True     # v0.41.135 (XO 2026-10-24): reactive dispatch is always on (the checkbox is gone)
                 s.fighter_standoff = True         # v0.41.133 (XO 2026-10-23): TARCAPs, escorts and sweeps always stop short of live SAM cover (the checkbox is gone; off made the AI go banzai)
                 if not raw.get("merge_v131"):
-                    if raw.get("merge_radius_nm") == 25:
-                        s.merge_radius_nm = 15    # still on the old default: move to the new one
+                    if raw.get("target_area_radius_nm") == 25:         # `_apply_renames` has moved an old file's merge_radius_nm here already
+                        s.target_area_radius_nm = 15    # still on the old default: move to the new one
                     s.merge_v131 = True
                 if "patch_asked" not in raw and "auto_patch_scripting" in raw:
                     s.patch_asked = True          # a settings file from before the question existed: the choice stands
@@ -174,9 +187,9 @@ class AppSettings:
         s.dcs_saves = native(s.dcs_saves or _detect_saves())
         s.last_campaign = native(s.last_campaign)
         try:
-            s.autoskip_hours = min(24, max(4, int(round(int(s.autoskip_hours) / 4.0)) * 4))      # S25: Crew Rest goes by four-hour turns; an old 2, 6, 10 ... is rounded to the nearest multiple of 4
+            s.autoskip_crew_rest_hours = min(24, max(4, int(round(int(s.autoskip_crew_rest_hours) / 4.0)) * 4))      # S25: Crew Rest goes by four-hour turns; an old 2, 6, 10 ... is rounded to the nearest multiple of 4
         except (TypeError, ValueError):
-            s.autoskip_hours = 12
+            s.autoskip_crew_rest_hours = 12
         return s
 
     def save(self) -> None:

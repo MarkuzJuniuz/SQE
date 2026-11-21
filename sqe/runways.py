@@ -140,6 +140,20 @@ CRATER_MIN_GAP_M = 120.0      # blasts at least this far apart along the runway 
 ILS_RUNWAY = {"Batumi": 13, "Kobuleti": 7, "Kutaisi": 7, "Senaki-Kolkhi": 9, "Sochi-Adler": 6, "Vaziani": 13, "Tbilisi-Lochini": 13}
 
 
+def ils_runways() -> dict:
+    """{airport: runway number of its ILS}: the active pack's `ils_runway` (S90 J5) when it has one, else ILS_RUNWAY (the Caucasus)."""
+    from . import theatres
+    v = theatres.active().get("ils_runway")
+    return ILS_RUNWAY if v is None else v
+
+
+def mag_var_deg() -> float:
+    """Magnetic variation (east positive): the active pack's `mag_var_deg` (S90 J5; Syria +4, measured), else MAG_VAR_DEG."""
+    from . import theatres
+    v = theatres.active().get("mag_var_deg")
+    return MAG_VAR_DEG if v is None else float(v)
+
+
 def _end_number(name: str) -> int:
     return int(str(name).rstrip("LCR"))
 
@@ -165,7 +179,7 @@ def crater_points(state, field_id: str, ap, rng) -> list:
         return []
     c = (state.ground or {}).get("craters", {}).get(field_id) or {}
     n = min(CRATER_BLASTS_MAX, max(CRATER_BLASTS_MIN, int(c.get("hits", 0))))
-    hdg = ap.runways[0].main.heading + MAG_VAR_DEG
+    hdg = ap.runways[0].main.heading + mag_var_deg()
     span = RUNWAY_HALF_LENGTH_M * CRATER_REACH
     cell = 2.0 * span / n
     jitter = max(0.0, (cell - CRATER_MIN_GAP_M) / 2.0)

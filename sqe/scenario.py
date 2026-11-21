@@ -9,11 +9,13 @@ import random
 from .difficulty import Difficulty, get as get_difficulty
 from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWing, RedSquadron, PlayerProfile)
 from .state import CampaignState
-from .aircraft import AIRCRAFT
-from . import ground, redroster, theatres, story
+from .aircraft import AIRCRAFT, era_aircraft
+from . import ground, redroster, theatres, story, samtier, f117
+from . import clock as clock_mod
 from . import sams as _sams_mod
 from . import sites as _sites_mod
 from . import road_sites as _road_sites_mod
+from . import works as _works_mod
 
 def THEATRES() -> dict:
     """{id: name} of the installed theatre packs."""
@@ -22,9 +24,9 @@ def THEATRES() -> dict:
 
 SAM_LABEL = {"SA-8": "SA-8 battery", "AAA": "AAA battery", "MANPAD": "MANPADS team", "SA-2": "SA-2 site", "SA-3": "SA-3 site",
              "SA-6": "SA-6 site", "SA-11": "SA-11 site", "SA-10": "SA-10 site", "SA-15": "SA-15 battery",
-             "SA-19": "SA-19 battery"}
-LONG_RANGE = {"SA-2", "SA-3", "SA-6", "SA-10", "SA-11"}
-SAM_VALUE = {"SA-8": 4, "AAA": 2, "MANPAD": 2, "SA-2": 5, "SA-3": 5, "SA-6": 6, "SA-11": 7, "SA-10": 9, "SA-15": 6, "SA-19": 5}
+             "SA-19": "SA-19 battery", "SA-5": "SA-5 site", "SA-9": "SA-9 battery"}
+LONG_RANGE = samtier.GATE_VARIANTS      # the deep, doctrinally placed sites (S90 P4: the theatre pack's `sam_tier` gate list; the Caucasus default is SA-2 / 3 / 6 / 10 / 11)
+SAM_VALUE = {"SA-8": 4, "AAA": 2, "MANPAD": 2, "SA-2": 5, "SA-3": 5, "SA-6": 6, "SA-11": 7, "SA-10": 9, "SA-15": 6, "SA-19": 5, "SA-5": 8, "SA-9": 3}
 
 
 def _size(count: int, scale: float) -> int:
@@ -84,14 +86,14 @@ def placement(th: dict, level: int = 2, player_squadron: str | None = None, terr
     return out
 
 
-def squadron_options(aircraft: str, theatre: str = "caucasus", level: int = 2) -> list:
+def squadron_options(aircraft: str, theatre: str = "caucasus", level: int = 2, a10_variant: str | None = None, f14_variant: str | None = None) -> list:
     """(id, label) for the New Campaign squadron picker: the REAL field of each squadron (`placement`). A HAVCAP squadron is AI only and is not offered (XO: a guard is not a job type)."""
     th = theatres.load(theatre)
     names = {th["carrier"]["id"]: th["carrier"].get("short", th["carrier"]["name"]), **{f["id"]: f["name"].replace(" AB", "") for f in th["blue_fields"]}}
     sc = get_difficulty(level).friendly_scale
     out = []
     for q in th["squadrons"]:
-        if q["aircraft"] != aircraft or q.get("role") == "havcap":
+        if era_aircraft(q["aircraft"], a10_variant, f14_variant) != aircraft or q.get("role") == "havcap":      # S103b: a slot the pack gives to an A-10 flies the campaign's A-10 variant
             continue
         where = placement(th, level, q["id"])[q["id"]]                  # this squadron as the player's: it is placed first
         out.append((q["id"], f"{q['name']}  -  {_size(q['count'], sc)} aircraft at {names.get(where, where)}"))
@@ -212,15 +214,72 @@ def _disperse_red(st, terrain, plan_w: list) -> None:
         row[2] += max(0, extra)                          # nowhere to go: they stay (and spawn wherever they can)
 
 
+def _extra_sams(st, th: dict, d, ap, live: set, tiers: dict) -> None:
+    """S90 J5: the pack's `extra_sams` ([{id, site, x/y or near + bearing + dist_m, levels, parent?, tier?, jitter_m?}]): fixed SAM sites for this level, registered like any red site (the SA-5 sites of Syria:
+    the long-range tier is fixed by the theatre, not drawn per field). A site with a `parent` red field that is not in this level's roster is left out. Own random stream (only the optional `jitter_m` uses
+    it), so no other draw of the campaign moves."""
+    ex = [e for e in (th.get("extra_sams") or []) if d.level in e["levels"] and (not e.get("parent") or e["parent"] in live)]
+    if not ex:
+        return
+    r = random.Random(f"{st.campaign_id}:extra_sams")
+    for e in ex:
+        if "x" in e:
+            x, y = float(e["x"]), float(e["y"])
+        else:
+            p = ap(e["near"])
+            x, y = _offset(p.x, p.y, float(e["bearing"]), float(e["dist_m"]))
+        j = float(e.get("jitter_m", 0.0) or 0.0)
+        if j > 0:
+            x, y = _offset(x, y, r.uniform(0, 360), r.uniform(0, j))
+        v = e["site"]
+        tier = int(e.get("tier", tiers.get(e.get("parent", ""), 3)))
+        st.assets[e["id"]] = EnemyAsset(e["id"], e.get("name") or f"{SAM_LABEL[v]} {e['id'][4:]}", AssetKind.SAM, x, y, 1.0, SAM_VALUE[v], [], None, v, tier, "")
+
+
+OPENING_STRIKE_TEXT = "At midnight F-117A Nighthawks struck the long-range {kill} batteries: every one is down{also}."      # `{also}` (the default text only): ", along with some SA-10 sites and early-warning radars" for the `fill` kinds the pairs hit
+
+
+def _opening_strike(st, th: dict, d) -> list:
+    """S90 J9s: the pack's `opening_strike` ({"levels": [2, 3], "kill": "sa5", "text": optional}): before the first mission every red site of the named variant is down, as if a mission had killed it:
+    health 0 (`destroyed`) and the day recorded in the SAM rebuild record (`sams.track`), so the normal rebuild rule (`sams.rebuild`: after 5 to 7 days by the Force Index, the level's `sam_rebuild` chance a day,
+    half strength) brings them back, and the planner, map, debrief and Overview treat them as killed in a mission. S104d: the squadron's ready jets fly it as pairs, one per target; the pack's `fill` (SA variants
+    and "EWR") names what the pairs left after the `kill` sites hit (`f117.opening_sortie`); the jets are out of `available` (returning, then in refit). Other sites stay. -> the opening war-log lines ([] when nothing happens)."""
+    os_ = th.get("opening_strike")
+    if not os_ or d.level not in os_["levels"]:
+        return []
+    want = os_["kill"].replace("-", "").lower()
+    hit = [a for a in st.assets.values() if a.kind == AssetKind.SAM and a.variant.replace("-", "").lower() == want and not a.id.startswith("fsam_")]
+    if not hit:
+        return []
+    for a in hit:
+        a.health = 0.0
+    _sams_mod.track(st)
+    lines = f117.opening_sortie(st, os_, hit)
+    if os_.get("text"):
+        head = os_["text"].format(kill=hit[0].variant)
+    else:
+        kinds = []                                       # the other kinds the pairs hit, in the order first hit: "some SA-10 sites and early-warning radars" (no counts in the headline, XO 2026-11-19)
+        for p in ((st.raids or {}).get("opening_strike") or {}).get("pairs", []):
+            a = st.assets[p["target"]]
+            k = "early-warning radars" if a.kind == AssetKind.EWR else SAM_LABEL.get(a.variant, a.variant) + "s"
+            if a.variant != hit[0].variant and k not in kinds:
+                kinds.append(k)
+        head = OPENING_STRIKE_TEXT.format(kill=hit[0].variant, also=f", along with some {' and '.join(kinds)}" if kinds else "")
+    return [head] + lines
+
+
 def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str = "caucasus",
-                 seed: int | None = None, start_date: str = "2006-06-12", night_ops: bool = True,
-                 player_squadron: str | None = None) -> CampaignState:
+                 seed: int | None = None, start_date: str | None = None, night_ops: bool = True,
+                 player_squadron: str | None = None, a10_variant: str | None = None, f14_variant: str | None = None, link16: bool | None = None) -> CampaignState:
+    th = theatres.use(theatre)                            # S90 J5: the theatre first: `get_difficulty` applies the pack's level_overrides
+    start_date = start_date or f"{th['era']['year']}-06-12"            # S90 J7: no date given = the 12th of June of the theatre's era year (Caucasus 2006 = the old default, Syria 2000)
     d: Difficulty = get_difficulty(level)
     rng = random.Random(seed)
-    th = theatres.use(theatre)
     t = theatres.terrain()
     ap = lambda n: t.airports[n].position
-    st = CampaignState(name=name, theatre=theatre, level=d.level, start_date=start_date, night_ops=night_ops)
+    era = th["era"]                                       # S103a: Era Equipment, chosen at creation (None = the theatre's own era value) and saved with the campaign
+    st = CampaignState(name=name, theatre=theatre, level=d.level, start_date=start_date, night_ops=night_ops,
+                       start_hour=int(th.get("start_hour", clock_mod.DEFAULT_START_HOUR)), a10_variant=a10_variant or era["a10_variant"], f14_variant=f14_variant or era["f14_variant"], link16=era["link16"] if link16 is None else bool(link16))
 
     # ---- friendly bases ---------------------------------------------------------------------
     cv = th["carrier"]
@@ -234,7 +293,7 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     sc = d.friendly_scale
     n = lambda base: _size(base, sc)
     # The squadron structure is in the theatre pack (`squadrons`; 272 jets in the Caucasus, the same at every level since v0.41.353). Callsigns are unique across the whole coalition (group names must never collide).
-    st.squadrons = {q["id"]: Squadron(q["id"], q["name"], q["aircraft"], q["base"], n(q["count"]), n(q["count"]), q["callsign"], role=q.get("role", "")) for q in th["squadrons"]}
+    st.squadrons = {q["id"]: Squadron(q["id"], q["name"], era_aircraft(q["aircraft"], st.a10_variant, st.f14_variant), q["base"], n(q["count"]), n(q["count"]), q["callsign"], role=q.get("role", "")) for q in th["squadrons"]}      # S103b: the slot's airframe is the campaign's A-10 / F-14 variant
     for s in st.squadrons.values():                       # sanity: land jets on land, carrier jets on the boat
         spec, base = AIRCRAFT[s.aircraft], st.bases[s.base_id]
         if spec.home != base.kind:
@@ -262,8 +321,8 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     for aid, n_ in (th.get("red_fill") or {}).get(str(d.level), {}).items():                      # v0.41.439 (S85): the level's jets per field (about 70% of its parking at L3, the rest is room for squadrons that fall back)
         if aid in cap_all:
             cap_all[aid] = n_ if not cap_all[aid] else min(cap_all[aid], n_)
-    cap_hv = {aid: _slots(t, apt_of[aid], ["Su_24M", "Su_34", "Su_27", "MiG_31"]) for aid in ww}
-    plan_r = redroster.allocate(d.level, list(ww), ww, FIELD_TIER, cap_all, cap_hv)
+    cap_hv = {aid: _slots(t, apt_of[aid], ["Su_24M", "Su_27", "MiG_31"]) for aid in ww}
+    plan_r = redroster.allocate(d.level, list(ww), ww, FIELD_TIER, cap_all, cap_hv, roster=(th.get("red_roster") or {}).get(str(d.level)))          # S90 J5: the pack's roster, else redroster.ROSTERS[level]
     for aid, types in plan_r.items():
         sqns = [RedSquadron(i_, n_, t_, c_) for i_, n_, t_, c_ in redroster.cut(aid, st.assets[aid].name, types, d.red_squadron_max)]
         st.enemy_air.append(EnemyAirWing(aid, list(dict.fromkeys(q.aircraft for q in sqns)), len(sqns), sqns))
@@ -318,6 +377,9 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
 
     _sites_mod.apply(st, th)                                         # v0.41.199: red's SAM sites, supply sites and columns move onto the condensed site spots
     snap_assets_to_land(st)                                          # nothing is generated in the sea
+    _extra_sams(st, th, d, ap, live, FIELD_TIER)                     # S90 J5: the pack's fixed extra SAM sites (none in the Caucasus); after the snap and the site spots: they stay where the pack put them
+    _works_mod.build(st, th, d)                                      # S111: the pack's `works` (Lutorin's plants; none in the Caucasus): fixed sites, after the sea check
+    struck = _opening_strike(st, th, d)                              # S90 J9s: the scripted opening strike (none in the Caucasus): after every red SAM site is placed
     _road_sites_mod.build(st, th, d, {n_: (a_.position.x, a_.position.y) for n_, a_ in t.airports.items()}, rng)      # v0.41.241 (item i): supply sites along the roads, both sides (a stream of its own)
     sams = [x for x in st.assets.values() if x.kind == AssetKind.SAM]
     for x in st.assets.values():
@@ -332,6 +394,8 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
     me = next((q for q in mine if q.id == player_squadron), mine[0])
     st.player = PlayerProfile(aircraft=player_aircraft, squadron_id=me.id, callsign=me.callsign)
     st.note(f"Campaign '{name}' begins. You fly the {AIRCRAFT[player_aircraft].display} with {me.name}. {d.name}.")
+    for _ln in struck:
+        st.note(_ln)
     for _ln in story.beat(st, "open"):
         st.note(_ln)
     return st

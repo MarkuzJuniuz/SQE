@@ -1,14 +1,22 @@
 """SQE terrain scan tool (command line; lives in tools/, never ships in the exe).
 
-  python tools/sqe_scan.py make OUT.miz              write the DCS scan mission (same one as Settings > Terrain scan)
+  python tools/sqe_scan.py make OUT.miz [--theatre ID | --pack PACK.json]
+                                                     write the DCS scan mission (same one as Settings > Terrain scan)
   python tools/sqe_scan.py condense SCAN_DIR [--out FILE] [--theatre caucasus] [--scan-relief]
                                                      read the raw scan files (SQE_terrain_*, SQE_relief_*, SQE_roads_*.json
                                                      from <Saved Games>\\SQE) and write the small site list sqe/data/theatres/<theatre>_sites.json
                                                      (--scan-relief: also the ground-height grid from the scan)
+  python tools/sqe_scan.py roads-report SCAN_DIR [--pack PACK.json | --theatre ID]
+                                                     road coverage: for every sector centre and field of the theatre, the nearest scanned road point (km) and how many
+                                                     lie within 6 km (ground.ROAD_SNAP_COLUMN_M) and 25 km; a sector with none within 6 km is flagged (S90, J6)
   python tools/sqe_scan.py srtm TILE_DIR [--compare SCAN_DIR] [--no-download] [--keep]
                                                      build the built-in ground-height grid <theatre>_relief.json (2 km cells) from open SRTM tiles
                                                      (downloads the ones TILE_DIR lacks from the AWS open terrain tiles; needs numpy: pip install numpy);
                                                      --compare prints how it differs from a DCS scan. v0.41.201.
+                                                     --plan prints the tile list and the download estimate and stops (nothing downloaded).
+
+Every command takes --pack PACK.json (S90): a theatre pack kept outside sqe/data/theatres, e.g. the Syria probe stub of .claude/crew-chief-internal/tools/syria_fields.py. The pack's id is the
+theatre; without --out the result is written next to the pack file, not into the bundled folder.
 
 v0.41.198 (XO 2026-10-30): players must not have to run scans, and the first flights had SAMs floating in the sea. The raw scan is 2.5 MB and
 needs DCS; the condensed file is a few tens of KB and is picked ahead of any live placement by the campaign (a later change).
@@ -46,6 +54,30 @@ FLAT_M = {"sam": 40.0, "supply": 60.0}      # ground relief (highest minus avera
 ROUGH_STEPS = {"sam": (40.0, 70.0, 110.0), "supply": (60.0, 100.0, 150.0)}   # relaxed in turn if a sector cannot fill its quota
 JUDGMENT = ("all numbers here are judgment calls: no public figure exists for where a battery or a depot may sit, they were chosen so that "
             "every sector can fill its quota while staying near roads and on flat, dry ground")
+
+
+def use_theatre(a) -> str:
+    """The theatre of this run: the id of --pack PACK.json (its folder is added to the pack search path for this process only, so nothing is listed in
+    the campaign dialog), else --theatre, else caucasus. Makes it the active theatre. Returns the id."""
+    from sqe import theatres
+    if getattr(a, "pack", None):
+        pf = Path(a.pack).resolve()
+        if not pf.is_file():
+            sys.exit(f"no pack file {pf}")
+        tid = json.loads(pf.read_text(encoding="utf-8"))["id"]
+        if a.theatre and a.theatre != tid:
+            sys.exit(f"--theatre {a.theatre} disagrees with the id {tid!r} of {pf}")
+        theatres.EXTRA_DIRS.append(str(pf.parent))
+    else:
+        tid = a.theatre or "caucasus"
+    theatres.use(tid)
+    return tid
+
+
+def default_dest(a, theatre: str, kind: str) -> Path:
+    """Where `condense` / `srtm` write when --out is not given: the bundled folder, or the pack's own folder with --pack."""
+    folder = Path(a.pack).resolve().parent if getattr(a, "pack", None) else ROOT / "sqe" / "data" / "theatres"
+    return folder / f"{theatre}_{kind}.json"
 
 
 def sector_centres() -> list:
@@ -235,14 +267,43 @@ def _road_points(roads, cx: float, cy: float, radius: float):
 
 def cmd_make(a) -> None:
     from sqe import terrainprobe
+    theatre = use_theatre(a)
     p = terrainprobe.make_probe(a.out)
-    print(f"wrote {p}: start it in DCS (Fly), wait for COMPLETE, then copy the three SQE_*_{a.theatre}.json files from <Saved Games>\\SQE")
+    print(f"wrote {p}: start it in DCS (Fly), wait for COMPLETE, then copy the three SQE_*_{theatre}.json files from <Saved Games>\\SQE")
+
+
+def cmd_roads_report(a) -> None:
+    """Road coverage table (markdown) for every sector centre and every field of the theatre, from the scan's roads file."""
+    from sqe import ground, terrainprobe, theatres
+    theatre = use_theatre(a)
+    _, _, roads = _load(Path(a.scan_dir), theatre)
+    pts = [p for b in roads._P.values() for p in b]
+    th = theatres.active()
+    t = theatres.terrain()
+    rows = [(f"sector {i + 1}", x, y) for i, (x, y) in enumerate(terrainprobe._sector_anchors(th))]      # the centres moved onto land, as the road scan and the campaign use them
+    for key in ("red_fields", "blue_fields"):
+        for f in th.get(key, []):
+            ap = t.airports[f["airport"]].position
+            rows.append((f"{key[:-7]} {f['airport']}", ap.x, ap.y))
+    near_m = ground.ROAD_SNAP_COLUMN_M
+    print(f"{theatre}: {len(pts):,} road points in {a.scan_dir}; columns snap to a road within {near_m / 1000:.0f} km" + "\n")
+    print("| place | nearest road km | points within 6 km | points within 25 km | |")
+    print("|---|---|---|---|---|")
+    bad = 0
+    for name, x, y in rows:
+        ds = [math.hypot(px - x, py - y) for px, py in pts]
+        n6, n25 = sum(d <= near_m for d in ds), sum(d <= 25000.0 for d in ds)
+        flag = "NO ROAD WITHIN 6 KM" if n6 == 0 else ""
+        bad += bool(flag)
+        print(f"| {name} | {min(ds) / 1000:.1f} | {n6} | {n25} | {flag} |")
+    print(f"\n{bad} of {len(rows)} places have no road point within {near_m / 1000:.0f} km")
 
 
 RELIEF_FACTOR = 2                 # the scan-built relief grid has cells this many times wider than the scan's (2 km)
 SRTM_URL = "https://s3.amazonaws.com/elevation-tiles-prod/skadi/{ns}{lat:02d}/{ns}{lat:02d}{ew}{lng:03d}.hgt.gz"      # AWS open terrain tiles (SRTM, 1 arc-second, 3601 x 3601 per degree)
 SRTM_BLOCK = 8                    # each tile is cut down 8 x 8 (about 250 m) before use: block maximum + block average, then the 2 km cells are read from that
-GRIDS = {"caucasus": (-430000.0, 190000.0, 2000.0, 250, 390)}      # theatre -> (x0, y0, cell size m, nx, ny): the shipped relief grid; same frame as the scan files
+GRIDS = {"caucasus": (-430000.0, 190000.0, 2000.0, 250, 390),      # theatre -> (x0, y0, cell size m, nx, ny): the shipped relief grid; same frame as the scan files
+         "syria": (-440000.0, -580000.0, 2000.0, 370, 580)}        # S90: the whole DCS Syria map (x -440000..300000, y -580000..580000), same 2 km cell, 214,600 cells. pydcs Syria.bounds says x from -320000, but its airports go down to -420311 (Nevatim), so the south edge is -440000
 SRTM_CREDIT = "SRTM (NASA / USGS Shuttle Radar Topography Mission) via the AWS open terrain tiles, registry.opendata.aws/terrain-tiles"
 
 
@@ -413,25 +474,52 @@ def compare_relief(new: dict, mask, scan_dir, theatre: str) -> list:
 
 
 def cmd_condense(a) -> None:
-    out, report = condense(a.scan_dir, a.theatre)
+    theatre = use_theatre(a)
+    out, report = condense(a.scan_dir, theatre)
     print("\n".join(report))
-    dest = Path(a.out) if a.out else ROOT / "sqe" / "data" / "theatres" / f"{a.theatre}_sites.json"
+    dest = Path(a.out) if a.out else default_dest(a, theatre, "sites")
     dest.write_text(json.dumps(out, separators=(",", ":")), encoding="utf-8")
     print(f"wrote {dest} ({dest.stat().st_size / 1024:.0f} KB)")
     if a.scan_relief:
-        rel = condense_relief(a.scan_dir, a.theatre)
-        rdest = dest.with_name(f"{a.theatre}_relief.json")
+        rel = condense_relief(a.scan_dir, theatre)
+        rdest = dest.with_name(f"{theatre}_relief.json")
         rdest.write_text(json.dumps(rel, separators=(",", ":")), encoding="utf-8")
         print(f"wrote {rdest} ({rdest.stat().st_size / 1024:.0f} KB, {rel['nx']} x {rel['ny']} cells of {rel['step']} m, from the DCS scan)")
     print(JUDGMENT)
 
 
+SRTM_TILE_MB = 15.0               # about 15 MB per downloaded 1 degree tile (XO's 2026-10-30 Caucasus run); sea tiles do not exist and cost nothing
+
+
+def srtm_plan(theatre: str, grid=None) -> list:
+    """The tiles the `srtm` command would read for the theatre's grid, without downloading: lines to print. The lat / long extent comes from the grid's outline
+    (every point along its four edges; the extremes of the projection lie there), the tile rectangle is what condense_srtm walks."""
+    import dcs.terrain
+    from dcs import mapping
+    x0, y0, step, nx, ny = grid or GRIDS[theatre]
+    T = getattr(dcs.terrain, theatre.capitalize())()
+    edge = [(i, 0) for i in range(nx + 1)] + [(i, ny) for i in range(nx + 1)] + [(0, j) for j in range(ny + 1)] + [(nx, j) for j in range(ny + 1)]
+    pts = [mapping.Point(x0 + i * step, y0 + j * step, T).latlng() for i, j in edge]
+    la0, la1 = int(math.floor(min(p.lat for p in pts))), int(math.floor(max(p.lat for p in pts)))
+    lo0, lo1 = int(math.floor(min(p.lng for p in pts))), int(math.floor(max(p.lng for p in pts)))
+    n = (la1 - la0 + 1) * (lo1 - lo0 + 1)
+    tiles = [srtm_tile_name(la, lo) for la in range(la0, la1 + 1) for lo in range(lo0, lo1 + 1)]
+    return [f"{theatre}: grid {nx} x {ny} cells of {step / 1000:.0f} km from x {x0:.0f}, y {y0:.0f} ({nx * ny} cells)",
+            f"lat {min(p.lat for p in pts):.2f} to {max(p.lat for p in pts):.2f}, long {min(p.lng for p in pts):.2f} to {max(p.lng for p in pts):.2f}",
+            f"tiles N{la0}..N{la1} x E{lo0}..E{lo1}: {n} tiles ({tiles[0]} .. {tiles[-1]}); the part that is open sea has no tile",
+            f"download: at most about {n * SRTM_TILE_MB / 1000:.1f} GB ({n} x {SRTM_TILE_MB:.0f} MB), once; the reduced copies kept afterwards are a few MB in all; nothing downloaded now"]
+
+
 def cmd_srtm(a) -> None:
-    out, rep, mask = condense_srtm(a.tile_dir, a.theatre, fetch=not a.no_download, keep=a.keep)
+    theatre = use_theatre(a)
+    if a.plan:
+        print("\n".join(srtm_plan(theatre)))
+        return
+    out, rep, mask = condense_srtm(a.tile_dir, theatre, fetch=not a.no_download, keep=a.keep)
     print("\n".join(rep))
     if a.compare:
-        print("\n".join(compare_relief(out, mask, a.compare, a.theatre)))
-    dest = Path(a.out) if a.out else ROOT / "sqe" / "data" / "theatres" / f"{a.theatre}_relief.json"
+        print("\n".join(compare_relief(out, mask, a.compare, theatre)))
+    dest = Path(a.out) if a.out else default_dest(a, theatre, "relief")
     dest.write_text(json.dumps(out, separators=(",", ":")), encoding="utf-8")
     print(f"wrote {dest} ({dest.stat().st_size / 1024:.0f} KB, {out['nx']} x {out['ny']} cells of {out['step']} m, from SRTM)")
 
@@ -439,9 +527,12 @@ def cmd_srtm(a) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    m = sub.add_parser("make"); m.add_argument("out"); m.add_argument("--theatre", default="caucasus"); m.set_defaults(fn=cmd_make)
-    c = sub.add_parser("condense"); c.add_argument("scan_dir"); c.add_argument("--out"); c.add_argument("--theatre", default="caucasus"); c.add_argument("--scan-relief", action="store_true", help="also write the relief grid from the DCS scan (the shipped one comes from SRTM, see `srtm`)"); c.set_defaults(fn=cmd_condense)
-    r = sub.add_parser("srtm"); r.add_argument("tile_dir"); r.add_argument("--out"); r.add_argument("--theatre", default="caucasus"); r.add_argument("--compare", metavar="SCAN_DIR")
+    pk = "a theatre pack file outside sqe/data/theatres (e.g. .claude/crew-chief-internal/syria/syria.json); its id is the theatre, output goes next to it"
+    m = sub.add_parser("make"); m.add_argument("out"); m.add_argument("--theatre"); m.add_argument("--pack", metavar="PACK.json", help=pk); m.set_defaults(fn=cmd_make)
+    c = sub.add_parser("condense"); c.add_argument("scan_dir"); c.add_argument("--out"); c.add_argument("--theatre"); c.add_argument("--pack", metavar="PACK.json", help=pk); c.add_argument("--scan-relief", action="store_true", help="also write the relief grid from the DCS scan (the shipped one comes from SRTM, see `srtm`)"); c.set_defaults(fn=cmd_condense)
+    rr = sub.add_parser("roads-report"); rr.add_argument("scan_dir"); rr.add_argument("--theatre"); rr.add_argument("--pack", metavar="PACK.json", help=pk); rr.set_defaults(fn=cmd_roads_report)
+    r = sub.add_parser("srtm"); r.add_argument("tile_dir"); r.add_argument("--out"); r.add_argument("--theatre"); r.add_argument("--pack", metavar="PACK.json", help=pk); r.add_argument("--compare", metavar="SCAN_DIR")
+    r.add_argument("--plan", action="store_true", help="print the tile list and the download estimate, download nothing")
     r.add_argument("--no-download", action="store_true"); r.add_argument("--keep", action="store_true", help="keep downloaded .hgt.gz files (they are 15 MB each; the reduced copy in tile_dir/reduced is enough)"); r.set_defaults(fn=cmd_srtm)
     a = ap.parse_args()
     a.fn(a)

@@ -7,6 +7,7 @@ is counted by what really reached the boat). All numbers are judgment calls: no 
 from __future__ import annotations
 
 from .models import BaseKind
+from .words import strength_word
 
 BIG_P = 0.8                   # chance a raid that gets through is the big one at Level 3
 SQN_LOSS = (0.15, 0.35)       # share of each carrier squadron's serviceable aircraft lost on deck
@@ -29,7 +30,7 @@ def big(state, d, rng):
         total += lost
         lines.append(f"   {lost} aircraft lost on deck ({sq.name}: {sq.available}/{sq.authorized} left)")
     cv.defense = max(DEFENSE_FLOOR, cv.defense - DEFENSE_HIT)
-    lines.append(f"   the group's air defence is down to {cv.defense:.0%}; no launches tomorrow and half the sorties the day after")
+    lines.append(f"   the group's air defence is {strength_word(cv.defense)}; no launches tomorrow and half the sorties the day after")
     if state.raids is None:
         state.raids = {}
     state.raids["deck_out_to"] = state.day + 2
