@@ -38,6 +38,12 @@ def bomber_types() -> tuple:
     return tuple(theatres.hook("raid_bomber_types", BOMBER_TYPES))
 
 
+def sead_types() -> tuple:
+    """B2 (XO 2026-11-21): the red types that fly SEAD packages: the pack's bomber types (the Su-24M: Kh-31P or Kh-58U) and any of its attack types that carries the Kh-58U (`loadouts.ARM58_PER_JET`: Syria's Su-17M4, always a Kh-58U package). The Caucasus's attack type is the Su-25: it carries neither, so its SEAD is the Su-24M's as before."""
+    from .loadouts import ARM58_PER_JET
+    return bomber_types() + tuple(t for t in attack_types() if t in ARM58_PER_JET and t not in bomber_types())
+
+
 SU25_SUPPLY = True            # v0.41.359 (campaign rules plan Phase 10c): a Su-25 pair is the first pick for a raid on an uncovered supply site; the Su-24M keeps the fields (they need its SEAD group) and is the fallback
                               # when no Su-25 wing reaches (Su-25 radius 160 nm against the Su-24M's 300). The Su-25 raid goes UNESCORTED when no blue fighter squadron can reach the site's field (`plan_raid`). Judgment call.
 POOL_RAIDS = True             # S46 (XO 2026-11-12, "pool two nearby wings, even if they're not fully identical, as long as they come in bigger numbers"): a supply / garrison / field / troop raid whose lead wing cannot fill the size drawn takes a second wing's jets too (`_pool_partners`), and so do the escorts (`_pool_escorts`); False = single-wing raids as before
@@ -48,12 +54,12 @@ ESC_POOL_NM = 200             # ...the partner escort wing lies within this many
 POOL_PARTNERS = 1             # ...one partner wing for the raiders, one for the escorts (judgment call; the plan's `pool` / `esc_pool` lists leave room for more)
 POOL_MAX_RAIDERS = 16         # ...a raid never flies more raiders than this (the mission builder's mass cap; DCS AI count)
 TEMPO_STOP_SHARE = 0.5        # v0.41.171 (XO 2026-10-28): half of the AIR tempo is added to the chance a surprise raider is stopped (+20 points at the +40 cap; judgment call)
-SEAD_JETS = {1: 4, 2: 4, 3: 6}   # S36b (XO 2026-11-11): the SEAD package red sends at a blue SAM site: this many Su-24M with Kh-31P (by level), escorted by SEAD_ESCORT_RATIO fighters a jet; the only way red opens a covered target. S43 (XO 2026-11-11, "red is almost always outnumbered"): Level 3 only, 4 to 6 jets, judgment call (measured: SEAD raids were 58 to 74% of all raids and 19% of them had red at least equal to blue's jets; with 6 jets and 1:1 escorts 58%)
+SEAD_JETS = {1: 4, 2: 4, 3: 8}   # B2 (XO 2026-11-21): Level 3 is 8, was 6 (JUDGMENT CALL: it restores part of the salvo the Su-34 carried before S106 removed it, 2 Kh-58U / Kh-31P a jet instead of 4; B4's balance sim checks it; the mass cap POOL_MAX_RAIDERS 16 still limits a whole raid). S36b (XO 2026-11-11): the SEAD package red sends at a blue SAM site: this many Su-24M with Kh-31P or Kh-58U (by level, B2: Syria's Su-17M4 with Kh-58U too), escorted by SEAD_ESCORT_RATIO fighters a jet; the only way red opens a covered target. S43 (XO 2026-11-11, "red is almost always outnumbered"): Level 3 only, 4 to 6 jets, judgment call (measured: SEAD raids were 58 to 74% of all raids and 19% of them had red at least equal to blue's jets; with 6 jets and 1:1 escorts 58%)
 SEAD_ESCORT_RATIO = {1: 0.5, 2: 1.0, 3: 1.0}   # S43: escorts per SEAD jet (S36b: half as many, so a 4-jet HAWK package was 6 jets against blue's 10 to 12); Level 3 a fighter for every Kh-31P jet (judgment call). S66 (XO 2026-11-13): Level 2 the same 1:1 (it was 0.5)
 SEAD_SWEEP_MAX = {1: 0, 2: 8, 3: 8}   # S66 (XO 2026-11-13): the fighter sweep that flies ahead of a SEAD raid: two 4-ships when red has the jets, one 4-ship when it has four, none below that; Level 1 none. Its only job is to take the attention of blue's intercepts so the escorts are not swamped; blue's response is not changed. JUDGMENT CALL (no source says a red-style force sweeps ahead of its SEAD by name): Western COMAO practice puts the fighter sweep first, then SEAD / jammers, then the strikers (secondary source migflug.com, firmness MEDIUM; the primary USAF texts AFDD 3-01 / AFTTP 3-3 not reached), and the Soviet first wave cleared corridors with fighters ahead of the bombers (the 1972 CIA paper cia.gov/readingroom/docs/1972-10-01d.pdf could NOT be read on 2026-11-13, firmness unverified, not quoted as a source)
 SEAD_SWEEP_MIN = 4            # ...fewer spare fighters than this and there is no sweep (the raid still flies: the sweep is never a reason not to plan one; it takes only the jets left after the escorts are booked)
 SEAD_RAID_AC_MAX = 40         # ...a SEAD raid (SEAD jets + escorts + sweep) never flies more aircraft than this: the sweep is cut first (judgment call: a full Patriot raid at Level 3 is 16 + 16 + 8)
-SEAD_PATRIOT_PACKAGES = 3     # ...a full-strength Patriot gets three such packages in one raid, anything else one. S59b (XO 2026-11-12), judgment call: a Patriot site has 8 launchers x 4 missiles and fires about two at each ARM, so one coordinated salvo of three packages, 24 Kh-31P at L1 / L2 (12 Su-24M, 2 a jet) or 64 at L3 (16 Su-34 under POOL_MAX_RAIDERS, 4 a jet), is meant to exhaust it; the HAWK fell to two packages in run 14-45-46, the Patriot did not
+SEAD_PATRIOT_PACKAGES = 3     # ...a full-strength Patriot gets three such packages in one raid, anything else one. S59b (XO 2026-11-12), judgment call: a Patriot site has 8 launchers x 4 missiles and fires about two at each ARM, so one coordinated salvo of three packages is meant to exhaust it; the HAWK fell to two packages in run 14-45-46, the Patriot did not. B2 (XO 2026-11-21): the comment was tuned for 64 Kh-31P at Level 3 from Su-34s with 4 a jet; S106 removed the Su-34, and a Su-24M or Su-17M4 carries 2 a jet (`loadouts.ARM_PER_JET`, `ARM58_PER_JET`), so three packages of 8 jets (SEAD_JETS, Level 3) are 24 jets and 48 missiles on paper, but a raid never flies more than POOL_MAX_RAIDERS 16 jets: a full Patriot is 16 jets in two packages and 32 missiles (half Kh-58U, half Kh-31P), Level 2 three packages of 4 are 12 jets and 24 missiles (Level 1 has no SEAD, `raid_arm` 0)
 SEAD_PATRIOT_MIN_PACKAGES = 2  # S59b (XO 2026-11-12, "at least 2 but ideally 3 per patriot"): a full-strength Patriot raid that cannot field this many packages (after pooling a second wing) is not planned that turn, red keeps the jets (judgment call: one package, 8 Kh-31P at L2, is shot down and wastes a third of what red could send)
 SEAD_POOL = True              # S59b: a SEAD raid whose lead wing is short takes a partner wing too (`_pool_partners`, bomber types only: the types that carry the Kh-31P, Su-24M); the escorts pool as other raids do (`POOL_ESCORTS`)
 SEAD_PATRIOT_WEIGHT = 2.0     # S64 (XO 2026-11-12, run 21-39-54: a raid went at a HAWK while its full-strength Patriot stood beside it): a full-strength Patriot weighs this much more than a HAWK in red's draw of a SEAD target (judgment call; a Patriot below full strength keeps weight 1). The draw only offers a full Patriot red can field (`_sead_fieldable`)
@@ -332,7 +338,7 @@ def sam_reach(state, d, x: float, y: float, budget: bool = True):
     (`raid_arm` 0) has no SEAD doctrine. The wing must have the package's jets free (`redair.ready_of`)."""
     if getattr(d, "raid_arm", 0) <= 0:
         return None
-    return _reach(state, "sam", x, y, budget, only=bomber_types(), fits=lambda w, t: redair.ready_of(state, w, (t,)) >= sead_n(d))
+    return _reach(state, "sam", x, y, budget, only=sead_types(), fits=lambda w, t: redair.ready_of(state, w, (t,)) >= sead_n(d))
 
 
 def reach_for(state, kind: str, x: float, y: float, budget: bool = True, d=None, want: int = 0, only=None):
@@ -364,7 +370,7 @@ def _sead_fieldable(state, d, base, aim: str, wing, ac: str) -> bool:
     if not (SEAD_POOL and POOL_RAIDS):
         return False
     ax, ay = aim_xy(state, aim, base)
-    return have + sum(p["n"] for p in _pool_partners(state, "sam", wing, ax, ay, need - have, only=bomber_types())) >= need
+    return have + sum(p["n"] for p in _pool_partners(state, "sam", wing, ax, ay, need - have, only=sead_types())) >= need
 
 
 def sead_plan(state, d, base, aim: str, wing, ac: str):
@@ -483,7 +489,7 @@ def _pool_partners(state, kind: str, lead, ax: float, ay: float, need: int, take
     la = state.assets[lead.base_asset_id]
     skip = {lead.base_asset_id, *taken}
     cands = []
-    for w, t in raider_wings(state, kind, pref=bomber_types() if only else None):          # S48: a Kh-59M raid pools bomber types only (a Su-25 cannot carry one)
+    for w, t in raider_wings(state, kind, pref=(tuple(t_ for t_ in bomber_types() + attack_types() if t_ in only) or None) if only else None):          # S48: a Kh-59M raid pools bomber types only (a Su-25 cannot carry one); B2: a SEAD raid also the attack types that carry the Kh-58U (`sead_types`), the bomber types first
         if w.base_asset_id in skip or (only and t not in only):
             continue
         a = state.assets[w.base_asset_id]
@@ -636,7 +642,7 @@ def _plan_sead(state, d, base, aim: str, oid: str, turn: int):
     nb -= nb % 2
     pool = []
     if SEAD_POOL and POOL_RAIDS and nb < want:                                       # S59b: the lead wing is short: a nearby wing that carries the Kh-31P joins it
-        pool = _pool_partners(state, "sam", bw, ax, ay, want - nb, only=bomber_types())
+        pool = _pool_partners(state, "sam", bw, ax, ay, want - nb, only=sead_types())
     nb_lead = nb
     nb += sum(p["n"] for p in pool)
     from .sams import BLUE_FULL_DEF

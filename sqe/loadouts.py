@@ -222,6 +222,7 @@ ENEMY_RADIUS_NM = {"MiG_29A": 250, "MiG_29S": 270, "Su_27": 400, "MiG_31": 450, 
 
 BOMBER_TYPES = ("Su_24M",)       # v0.41.361 (Phase 10d) made this a tuple of two; S106 (XO 2026-11-18) removed the Su-34, so it is the Su-24M again: the red raid bombers: the types that fly field raids, the SEAD (Kh-31P) group and the DEAD (KAB-500Kr) group. Every test that used to say "Su_24M" reads this
 ARM_PER_JET = {"Su_24M": 2}   # Kh-31P per jet in a SEAD group (Su-24M: pylons 2 and 7, all it takes)
+ARM58_PER_JET = {"Su_24M": 2, "Su_17M4": 2}   # B2 (XO 2026-11-21): Kh-58U per jet in a long-range SEAD package. Sources: the Kh-58U is the Su-24M's anti-radiation missile from 1991 (Wikipedia "Kh-58": 36 km low, 120 km from 10,000 m, 160 km from 15,000 m; the Kh-58E fits the Su-22M4), so it is era-true for 2001 and 2006; pydcs takes it on the Su-24M's pylons 2 and 7 and on the Su-17M4's pylons 3 and 6 (the Su-17M4 takes no Kh-31P), two a jet (all each type's pylons take). Not flown in DCS: whether the AI fires it at 65 nm and whether the Su-17M4 carries it is checked in XO's flown sorties
 STRIKE_PER_JET = {"Su_17M4": 4}             # FAB-500 per jet on a plain raid: the Su-24M is not capped (it takes every pylon that takes one; the Su-34 was capped at six, S106 removed it). S90 P3a: the Su-17M4 takes six 500-kg bombs in pydcs (pylons 1, 3, 4, 5, 6, 8): four (outer pairs, 2,000 kg) is the usual combat load (Wikipedia "Sukhoi Su-17": 2,000 kg combat load at low level, firmness medium; judgment call)
 
 
@@ -292,17 +293,19 @@ def enemy_land_bomber_loadout(cls_name: str) -> dict:
     return out
 
 
-def enemy_arm_loadout(cls_name: str) -> dict:
-    """v0.41.84: Kh-31P anti-radiation missiles on every pylon that takes one (Su-24M: pylons 2 and 7); v0.41.361: at most ARM_PER_JET of them (S106: the Su-34 is gone)."""
+def enemy_arm_loadout(cls_name: str, weapon: str = "Kh_31P") -> dict:
+    """v0.41.84: Kh-31P anti-radiation missiles on every pylon that takes one (Su-24M: pylons 2 and 7); v0.41.361: at most ARM_PER_JET of them (S106: the Su-34 is gone). B2: `weapon` "Kh_58U" gives the long-range kit
+    (Su-24M pylons 2 and 7, Su-17M4 pylons 3 and 6), at most ARM58_PER_JET a jet. Empty for a type that cannot carry the weapon (the Su-17M4 has no Kh-31P)."""
     from dcs import planes
     cls = getattr(planes, cls_name)
+    per = ARM58_PER_JET if weapon == "Kh_58U" else ARM_PER_JET
     out = {}
     for i in sorted(cls.pylons):
         P = getattr(cls, f"Pylon{i}", None)
-        w = _find(P, "Kh_31P") if P is not None else None
+        w = _find(P, weapon) if P is not None else None
         if w is not None:
             out[i] = {"CLSID": w[1]["clsid"]}
-    return _limit(out, ARM_PER_JET.get(cls_name))
+    return _limit(out, per.get(cls_name))
 
 
 def enemy_standoff_loadout(cls_name: str) -> dict:

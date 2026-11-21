@@ -61,9 +61,17 @@ def build_text(state, pkg, tl: dict, plan, rng: random.Random, tgt_xy, x: dict) 
             esc_n = " (" + " and ".join(f"{n} {t.replace('_', '-')}" for t, n in by_e_.items()) + ")" if len(by_e_) > 1 else ""      # one type: "6 fighters" as before
         from .raids import is_kh59
         kh59_ = is_kh59(e)                                   # S48: a Kh-59M raid reads like the SEAD line (it says nothing about how accurate the missiles are)
-        sit += ["", (f"Intelligence reports {rtype_n if e.get('pool') else str(e['bombers']) + ' ' + rtype} with {'Kh-31P anti-radiation missiles' if e.get('sead') else 'Kh-59M cruise missiles' if kh59_ else 'free-fall bombs'} inbound toward {what}, "
+        arm_ = ("Kh-31P anti-radiation missiles", " They will fire from about 50 nm out and turn for home; stop them before they launch.")
+        if e.get("sead") and e.get("land"):                  # B2: a SEAD raid's packages are Kh-58U (65 nm) and Kh-31P (50 nm) ones, alternating; the line names the kinds it has
+            from .difficulty import get as _gdb
+            from .raid_spawns import ARM58_LAUNCH_NM, ARM_LAUNCH_NM, sead_packages
+            from .raids import raid_members as _rm, sead_n as _sn
+            _k = set(sead_packages(_rm(e), _sn(_gdb(state.level)))[1])
+            arm_ = (("Kh-58U and Kh-31P anti-radiation missiles", f" They will fire from about {ARM58_LAUNCH_NM} nm (Kh-58U) and {ARM_LAUNCH_NM} nm (Kh-31P) out and turn for home; stop them before they launch.") if len(_k) > 1
+                    else ("Kh-58U anti-radiation missiles", f" They will fire from about {ARM58_LAUNCH_NM} nm out and turn for home; stop them before they launch."))
+        sit += ["", (f"Intelligence reports {rtype_n if e.get('pool') else str(e['bombers']) + ' ' + rtype} with {arm_[0] if e.get('sead') else 'Kh-59M cruise missiles' if kh59_ else 'free-fall bombs'} inbound toward {what}, "
                      f"approaching from a bearing of about {e['brg']:.0f} degrees."
-                     + (" They will fire from about 40 nm out and turn for home; stop them before they launch." if e.get("sead") else " They will fire from about 50 nm out and turn for home; stop them before they launch." if kh59_ else "") if e.get("land") else
+                     + (arm_[1] if e.get("sead") else " They will fire from about 50 nm out and turn for home; stop them before they launch." if kh59_ else "") if e.get("land") else
                      f"Intelligence reports {e['bombers']} Tu-22M3 bombers armed with anti-ship missiles inbound toward the fleet, "
                      f"approaching on a bearing of about {e['brg']:.0f} degrees from the carrier. They will launch from about 100 nm out and turn for home; stop them before they fire."
                      + ((" The SEAD packages went in the turn before: a SAM site they did not take down is still up and shooting. Hold on your station, outside the SAM rings, and engage what comes to you; "

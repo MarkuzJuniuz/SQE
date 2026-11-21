@@ -203,8 +203,11 @@ Fly. Some raids are **unwarned** (25%, 35% and 45% at Levels 1, 2, 3) and come w
 (the E-3 or the E-2C) is on orbit that turn; with none up it still sees one in a quarter of cases. A raid blue does not see
 is not listed as an Intercept job and is settled by the war simulation against blue's planned patrols alone.
 Red's **SEAD raids** go after blue's Patriot and HAWK sites with anti-radiation missiles: a full Patriot is attacked
-by three packages, a HAWK by two, escorted and preceded (at Levels 2 and 3) by a fighter sweep that tries to draw
-blue's fighters away.
+by three packages (two at Level 3, where a raid never flies more than 16 jets), a HAWK by two, escorted and preceded (at
+Levels 2 and 3) by a fighter sweep that tries to draw blue's fighters away. A package is 4 jets (8 at Level 3) with two
+missiles a jet. The packages alternate: the first, and every second one, fires **Kh-58U** missiles from about 65 nm out,
+the others **Kh-31P** from 50 nm, and the launch times are set so that every package's missiles reach the site together.
+On Syria the Su-17M4 flies SEAD too, always with the Kh-58U.
 
 At Levels 2 and 3 the **Tu-22M3 bomber wing** (at Mozdok on the Caucasus, split over Damascus and Tiyas in Syria) can raid the carrier, after a quiet day, and then not again for 8 days (5 when it is desperate). At Level 3 red sends it when it
 estimates a window it judges safe or when it is desperate; at Level 2 only when desperate (red's air arm or command structure is badly
