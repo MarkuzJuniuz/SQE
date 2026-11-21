@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.549, S139a: a mission takes every package in the time window, nearest first, up to the unit limit
+When you fly, the mission now folds in every package that starts inside the time windows (Settings: Earlier / Later Packages), wherever its target is, nearest to your target first, instead of only those inside the merge radius and at most six. If the mission is over the unit limit the furthest packages are left out first; your own package and the ground war round your target get the unit budget before them (a Fighter Sweep stays while a package it covers stays). Small maps still build in one pass; a crowded one builds up to three times, which takes longer.
+
 ## v0.41.548, S138b: an AI runway strike drops in one pass
 AI runway strikers (and the AI wingmen of your runway strike) now put all their bombs on one aim point at the middle of the field and leave, instead of coming round for a second run over it. A live run lost all four jets on that second pass.
 

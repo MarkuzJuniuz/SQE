@@ -119,25 +119,59 @@ class Merging:
         # v0.41.270 (XO 2026-11-04): the carrier raid folds into no mission: it is red aiming for the king, a setpiece of its own (v0.41.250 folded it into any mission at its time)
         return picked
 
-    def _drop_one(self, extras: list, anchor: Package | None = None) -> list:
-        """v0.41.131 (XO 2026-10-23): the package to give up first when the mission is over the unit limit: the one that starts LATEST; of two with the same start the
-        one later in the list (further from the centre). A Fighter Sweep (the escorts' reason to be there) and an emergency raid scramble (the in-universe \"help has been dispatched\") go last.
-        v0.41.398 (S39): with the `anchor` given, a land-raid intercept whose target is more than twice the merge radius from the anchor's merge centre goes before all of that
-        (the farthest first): the local fight stays whole."""
-        if anchor is not None:
-            c = self.merge_center(anchor)
-            R2 = 2 * self.merge_radius_m()
-            far = []
-            for i, x in enumerate(extras):
-                t = self._raid_xy(x) if c is not None else None
-                if t is not None and math.hypot(t[0] - c[0], t[1] - c[1]) > R2:
-                    far.append((math.hypot(t[0] - c[0], t[1] - c[1]), i))
-            if far:
-                k = max(far)[1]
-                return extras[:k] + extras[k + 1:]
+    def fly_candidates(self, pkg: Package, unseen: bool = False) -> list:
+        """S139a (XO 2026-11-20): the packages `fly` folds into a mission built around `pkg`: EVERY package that starts inside the time window (Settings: `merge_earlier_min` before,
+        `merge_later_min` after), at any distance and with no count limit; the unit limit is the only cap (`Session.fly` budgets and drops). The same filters as `merge_candidates`
+        (not `pkg` itself, has a point, at least one flight that is not a support tag, not scrubbed; `unseen=True` adds the raids blue did not detect). Empty when merging is off.
+        Nearest first, by distance from YOUR target point (not the slid merge centre): a land raid's distance is the smaller of its target's and its way in's (`_raid_way`); when YOU fly
+        a raid intercept it is also the smaller of the candidate's point to your way in. Ties: start time, then number. A Fighter Sweep sorts right after the furthest of the packages it
+        covers (`extra["covers"]`) that is in the list or is `pkg` (covering `pkg` is distance 0); covering none of them, it sorts by its own distance."""
+        if self.settings.merge_mode != "area":
+            return []
+        here = self._pkg_xy(pkg) or self._raid_xy(pkg)
+        if here is None:
+            return []
         hm = lambda p: int(p.start[:2]) * 60 + int(p.start[3:5])
-        sweep = lambda p: (p.objective.type == ObjectiveType.COUNTER_AIR and p.objective.aim == "SWEEP") or p.objective.type == ObjectiveType.FLEET_DEFENSE
-        k = max(range(len(extras)), key=lambda i: (not sweep(extras[i]), hm(extras[i]), i))
+        back = max(0, int(getattr(self.settings, "merge_earlier_min", 15)))
+        fwd = max(0, int(getattr(self.settings, "merge_later_min", 30)))
+        my_way = self._raid_way(pkg)
+        pool = self.packages()
+        if unseen:
+            pool = pool + [u for u in (Package.from_dict(d) for d in self.state.plan) if u.extra.get("unseen_raid") and not u.extra.get("past")]
+        rows = []
+        for p in pool:
+            t = self._pkg_xy(p) or self._raid_xy(p)
+            if p.number == pkg.number or t is None or not (-back <= hm(p) - hm(pkg) <= fwd) or not any(not f.tag for f in p.flights) or p.extra.get("scrub"):
+                continue
+            d = math.hypot(t[0] - here[0], t[1] - here[1])
+            way = self._raid_way(p)
+            if way is not None:
+                d = min(d, self._seg_dist(here, *way))
+            if my_way is not None:
+                d = min(d, self._seg_dist(t, *my_way))
+            rows.append([d, hm(p), p.number, p])
+        is_sweep = lambda p: p.objective.type == ObjectiveType.COUNTER_AIR and p.objective.aim == "SWEEP"
+        dist_of = {r[2]: r[0] for r in rows}
+        dist_of[pkg.number] = 0.0
+        for r in rows:
+            if is_sweep(r[3]):
+                cov = [dist_of[n] for n in (r[3].extra.get("covers") or []) if n in dist_of]
+                if cov:
+                    r[0] = max(cov)
+        rows.sort(key=lambda r: (r[0], is_sweep(r[3]), r[1], r[2]))
+        return [r[3] for r in rows]
+
+    @staticmethod
+    def drop_furthest(extras: list, anchor: Package | None = None) -> list:
+        """S139a: `extras` (nearest first, `fly_candidates`) without the package to give up first when the mission is over the unit limit: the last one, the furthest. A Fighter Sweep
+        stays while a package it covers (`extra["covers"]`) is still in the list or is `anchor`: the furthest package that is not such a sweep goes first. Replaces `_drop_one` (v0.41.131,
+        latest start first; v0.41.398, S39, far raids first): the distance order covers both."""
+        if not extras:
+            return extras
+        have = {x.number for x in extras} | ({anchor.number} if anchor is not None else set())
+        def kept(x):
+            return x.objective.type == ObjectiveType.COUNTER_AIR and x.objective.aim == "SWEEP" and any(n in have and n != x.number for n in (x.extra.get("covers") or []))
+        k = next((i for i in range(len(extras) - 1, -1, -1) if not kept(extras[i])), len(extras) - 1)
         return extras[:k] + extras[k + 1:]
 
     def ruin_candidates(self, pkg: Package, extras: list) -> list:
