@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.548, S138b: an AI runway strike drops in one pass
+AI runway strikers (and the AI wingmen of your runway strike) now put all their bombs on one aim point at the middle of the field and leave, instead of coming round for a second run over it. A live run lost all four jets on that second pass.
+
 ## v0.41.547, S138a: the escort of a strike flies with the strikers
 The AI escort of a plain strike or CAS package now pushes with the strikers and flies alongside them (DCS Escort task, at the strikers' speed) instead of holding a race-track short of the target. It fights what comes within 15 to 25 nm of the strikers until their egress point, then goes home fighting what comes at it. Packages with a stand-off (JSOW / SLAM) flight keep the station escort. `ESCORT_FOLLOWS` in `mission_builder.py` turns it off.
 

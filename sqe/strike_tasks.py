@@ -593,7 +593,9 @@ class StrikeTasks:
             return None
         cx_, cy_ = ap_.position.x, ap_.position.y
         n_ = self._gbu_total(f) if f.aircraft in JDAM_JETS else 0
-        k_ = max(1, min(n_, 3))
+        # S138b (XO run 2026-11-21, Syria L3 sortie 11: GBUs at t 1001-1004, then a second pass 150 s later and all four jets shot down): DCS flies each Bombing task as its own run, so
+        # several aim points meant several passes over the field. ONE aim point at the reference point, every GBU on it (`Expend.All`): one pass. `runways.HITS_TO_CLOSE` is 1.
+        k_ = 1
         offs_ = [(i_ - (k_ - 1) / 2.0) * RUNWAY_AIM_STEP_M for i_ in range(k_)]
         each_ = n_ // k_ if n_ else 0
         exp_ = _expend_for(each_)
