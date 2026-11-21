@@ -11,6 +11,7 @@ from .models import (Base, BaseKind, Squadron, EnemyAsset, AssetKind, EnemyAirWi
 from .state import CampaignState
 from .aircraft import AIRCRAFT, era_aircraft
 from . import ground, redroster, theatres, story, samtier, f117
+from . import bombers as _bombers_mod
 from . import clock as clock_mod
 from . import sams as _sams_mod
 from . import sites as _sites_mod
@@ -327,13 +328,25 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         sqns = [RedSquadron(i_, n_, t_, c_) for i_, n_, t_, c_ in redroster.cut(aid, st.assets[aid].name, types, d.red_squadron_max)]
         st.enemy_air.append(EnemyAirWing(aid, list(dict.fromkeys(q.aircraft for q in sqns)), len(sqns), sqns))
 
-    if d.bomber_wing > 0 and th["bomber_base"] in live:       # strategic bombers live far from the front (Mozdok in the Caucasus)
-        st.enemy_air.append(EnemyAirWing(th["bomber_base"], ["Tu_22M3"], 1,
-                                         [RedSquadron(f"{th['bomber_base']}_1", f"{st.assets[th['bomber_base']].name} 1", "Tu_22M3", d.bomber_wing)]))     # one squadron (judgment call)
-        if d.bomber_escort_wing > 0:                                      # v0.41.106: a dedicated Su-27 escort squadron on the same field, escort-only
-            bwing = st.enemy_air[-1]
-            bwing.sqns.append(RedSquadron(f"{th['bomber_base']}_2", f"{st.assets[th['bomber_base']].name} escorts", "Su_27", d.bomber_escort_wing, role="escort"))
-            bwing.types = ["Tu_22M3", "Su_27"]; bwing.squadrons = len(bwing.sqns)
+    # strategic bombers live far from the front (Mozdok in the Caucasus). B1 (XO 2026-11-21): a pack may name several bomber fields (`bomber_bases`, Syria: Damascus and Tiyas): the level's Tu-22M3 and escort
+    # counts are split between them as evenly as possible, the first field getting the extra jet (20 = 10 + 10, escorts 12 = 6 + 6); with one field (the Caucasus) it is the one squadron it was.
+    bfields = [b_ for b_ in _bombers_mod.bomber_base_ids(th) if b_ in live]
+    for bi_, bb_ in enumerate(bfields if d.bomber_wing > 0 else []):
+        share = lambda n_: n_ // len(bfields) + (1 if bi_ < n_ % len(bfields) else 0)
+        bname = st.assets[bb_].name
+        host = st.enemy_air_at(bb_)
+        fresh = host is None                                              # a bomber field that is also a normal red field (Syria) keeps ONE wing (every lookup by field assumes it): the Tu-22M3 and escort squadrons join it, under ids of their own (`_tu`, `_tuesc`: the field's own squadrons are `_1`, `_2` ...)
+        tu_sq = RedSquadron(f"{bb_}_1" if fresh else f"{bb_}_tu", f"{bname} 1" if fresh else f"{bname} Tu-22M3", "Tu_22M3", share(d.bomber_wing))     # one squadron a field (judgment call)
+        if fresh:
+            host = EnemyAirWing(bb_, ["Tu_22M3"], 1, [tu_sq])
+            st.enemy_air.append(host)
+        else:
+            host.sqns.append(tu_sq)
+            host.types = list(dict.fromkeys([*host.types, "Tu_22M3"]))
+        if d.bomber_escort_wing > 0 and share(d.bomber_escort_wing) > 0:  # v0.41.106: a dedicated Su-27 escort squadron on the same field, escort-only
+            host.sqns.append(RedSquadron(f"{bb_}_2" if fresh else f"{bb_}_tuesc", f"{bname} escorts", "Su_27", share(d.bomber_escort_wing), role="escort"))
+            host.types = list(dict.fromkeys([*host.types, "Su_27"]))
+        host.squadrons = len(host.sqns)
 
     # ---- air defence clusters ----------------------------------------------------------------------
     variants = d.sam_variants

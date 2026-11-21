@@ -939,7 +939,7 @@ class RaidSpawns:
         sead_r = bool(ex.get("sead"))                            # S36b (XO 2026-11-11): a SEAD raid on a blue SAM site: its "bombers" are the SEAD flights, they fire from standoff and turn home
         from . import raids as _raids48
         from .raids import raid_members, escort_members
-        bmem = raid_members(ex) if ex.get("land") else [(ex["bomber_wing"], ex.get("raider", "Tu_22M3"), int(ex["bombers"]))]     # S46: [(wing, type, jets)], the lead first; one entry for every raid that is not pooled
+        bmem = raid_members(ex) if (ex.get("land") or ex.get("pool")) else [(ex["bomber_wing"], ex.get("raider", "Tu_22M3"), int(ex["bombers"]))]     # S46: [(wing, type, jets)], the lead first; one entry for every raid that is not pooled (B1: a carrier raid drawn from several bomber fields is)
         kh59_r = bool(_raids48.is_kh59(ex) and ex.get("land") and aim and not sead_r
                       and all(enemy_standoff_loadout(t_) for _a, t_, _n in _raids48.raid_members(ex)))       # S48 (the switch is `raids.KH59_RAIDS`, read now): every member must carry a Kh-59M (a Su-25 cannot: a pool with one is a plain raid), on a supply site / garrison aim (not the runway)
         launch_ = None

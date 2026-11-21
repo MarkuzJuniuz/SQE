@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.554, B1: Syria's bomber wing is 20 over two fields, a closed bomber field is back in two turns
+The Syria Level 3 Tu-22M3 wing is 20 (it was 16), split 10 and 10 between Damascus and Tiyas, with 12 escorts split 6 and 6; the Syria `max_raid` override is gone, so the carrier raid fields the default 16. The carrier raid and the Tu-22M3 land strike draw from both fields and skip one that is cut or destroyed. Any field holding a Tu-22M3 squadron (Mozdok too) now reopens two turns after a crater instead of six; every other field keeps six. The Syria Level 3 land strike is 4 Tu-22M3 (the Caucasus stays 2 + 2). New pack keys `bomber_bases` and `land_tu` (see THEATRES.md). Tiyas parks no Tu-22M3 in DCS, so it holds its half on the wing roster only; only Damascus parks bombers. Side effect: Syria's Damascus and Tiyas Tu-22M3 and escort squadrons are now part of each field's own wing (new squadron ids and names), and the wing's replacement timer is shared with the roster squadrons there. The Caucasus campaign state is identical on the same seed apart from the repair time (checked on five seeds).
+
 ## v0.41.553, S132: smaller waiting window, the dormant-sites log is for debugging only
 The waiting window no longer shows the "This Sortie" table of friendly and enemy aircraft and ground units (the package objectives list shows how the sortie goes). The window is about 200 pixels shorter: the objectives table is five rows tall and scrolls when a mission has more. The wake and sleep lines and the 10-second tick that Dormant Ground Sites wrote to dcs.log are now written only when the environment variable `SQE_DEBUG` is set to `1` before SQE starts (a performance run); a normal install writes nothing.
 

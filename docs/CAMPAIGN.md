@@ -182,7 +182,8 @@ replacement airframe per 96 hours. Because red keeps fighters at almost every fi
 ### Runways
 
 A runway strike that lands its bombs **craters the field**: nothing launches from it, scrambles or lands there for 6
-turns (24 hours). A closed field's squadrons cannot fly from it and red's wings skip it.
+turns (24 hours); a field that holds a Tu-22M3 squadron (Mozdok, Damascus, Tiyas) is repaired in 2 turns (8 hours), because red's bomber fields are its
+best-repaired. A closed field's squadrons cannot fly from it and red's wings skip it.
 
 ### Red's air
 
@@ -205,7 +206,7 @@ Red's **SEAD raids** go after blue's Patriot and HAWK sites with anti-radiation 
 by three packages, a HAWK by two, escorted and preceded (at Levels 2 and 3) by a fighter sweep that tries to draw
 blue's fighters away.
 
-At Levels 2 and 3 the **Tu-22M3 bomber wing at Mozdok** can raid the carrier, after a quiet day, and then not again for 8 days (5 when it is desperate). At Level 3 red sends it when it
+At Levels 2 and 3 the **Tu-22M3 bomber wing** (at Mozdok on the Caucasus, split over Damascus and Tiyas in Syria) can raid the carrier, after a quiet day, and then not again for 8 days (5 when it is desperate). At Level 3 red sends it when it
 estimates a window it judges safe or when it is desperate; at Level 2 only when desperate (red's air arm or command structure is badly
 hurt, or Mozdok is under pressure). This raid is
 a flown set piece: the SEAD packages that clear its approach fly in the turn before.
@@ -312,12 +313,12 @@ Who you fight depends on the level: Level 1 is **the Northern Coastal Command** 
 | Red aircraft at the start | 94 (MiG-21Bis, MiG-23MLD, Su-17M4, Su-24M) | 238 (adds MiG-29A and MiG-25PD) | 238, plus the bomber wing (MiG-23MLD, MiG-29A and S, MiG-25PD, Su-27, MiG-31, Su-17M4, Su-24M) |
 | Red SAMs | SA-2, SA-3, AAA, MANPADS | SA-2, SA-3, SA-6, SA-11, AAA, two SA-5 batteries | SA-10, SA-11, SA-6, SA-15, SA-19, three SA-5 batteries |
 | Air defence integration, red counter-attacks, ground pressure | as in section 2 (0.15 / 0.10 / 0.15) | 0.55 / 0.30 / 0.45 | 0.90 / 0.55 / 0.80 |
-| Tu-22M3 bomber wing | none | none | 16 Tu-22M3 with 12 Su-27 escorts at Damascus |
+| Tu-22M3 bomber wing | none | none | 20 Tu-22M3 with 12 Su-27 escorts, half each at Damascus and Tiyas |
 | Victory | take Bassel Al-Assad | destroy all of Lutorin Works, or red's supply collapses (see below) | destroy all of Lutorin Works, or red's supply collapses |
 
 Red's jets fill each field's parking to about 75% at Level 1 (four small fields), about 70% at Levels 2 and 3 (the same jets per field; Level 2's types are older, a regional power's. Damascus is held back for the bomber wing at Level 3).
 
-Red's raids on troops, garrisons and supply sites are led by the cheap **Su-17M4** attack jet. At Level 3 the Tu-22M3 wing raids the carrier along the line from the carrier through Damascus, at most 12 bombers at a time, flown as a set piece with its SEAD in the turn before, as in section 5. The fleet's station moves and it sails out of the raid's reach on the staging day, as in section 5.
+Red's raids on troops, garrisons and supply sites are led by the cheap **Su-17M4** attack jet. At Level 3 the Tu-22M3 wing raids the carrier along the line from the carrier through Damascus, at most 16 bombers at a time (drawn from both bomber fields, a closed one skipped), flown as a set piece with its SEAD in the turn before, as in section 5. The fleet's station moves and it sails out of the raid's reach on the staging day, as in section 5.
 
 ### Blue in Syria
 

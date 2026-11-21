@@ -652,7 +652,8 @@ class WarSimulator:
             ra_["unseen_n"] = int(ra_.get("unseen_n", 0)) + 1
         tu_ = bool(pkg.extra.get("land")) and pkg.extra.get("raider") == raids.TU22              # v0.41.355 (Phase 10a): the Tu-22M3 land strike: a 2-ship, its own losses and hit size
         if bw is not None and ok and tu_:
-            k = bw.lose(raids.TU22, rng.randint(1, max(1, nb_)))                            # stopped: 1 or both bombers shot down (the Su-24M raid rule would take 2 to 4)
+            k_ = rng.randint(1, max(1, nb_))
+            k = raids.lose_raiders(state, pkg.extra, k_, rng) if pkg.extra.get("pool") else bw.lose(raids.TU22, k_)        # stopped: 1 or both bombers shot down (the Su-24M raid rule would take 2 to 4); B1: a strike pooled over two bomber fields loses them over both
             lines.append(f"   {k} Tu-22M3 shot down before dropping their bombs")
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
@@ -674,7 +675,7 @@ class WarSimulator:
                 raids.lose_raiders(state, pkg.extra, max(1, thr_ // 3), rng)
                 lines += raids_hit(state, pkg.objective.target_id, None, rng, thr_, pkg.objective.aim, pkg.extra.get("raider"))
         elif bw is not None:
-            bw.lose(pkg.extra.get("raider"), 1)
+            bw.lose(raids.lose_type(pkg.extra, bw), 1)                                  # B1: a bomber field that is also a normal red wing loses a Tu-22M3 (Mozdok's wing: `lose(None)` as before)
             from . import carrier_hit
             carriers = [s for s in state.squadrons.values() if state.bases[s.base_id].kind.value == "CARRIER"]
             big_ = carrier_hit.big(state, d, rng)                        # v0.41.109: Level 3, the raid nobody flew: usually a very big deal

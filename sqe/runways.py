@@ -2,7 +2,7 @@
 
 DCS closes a bombed runway for AI for about 60 minutes (probe 2026-11-03: pairs on the ramp stayed at speed 0 until 61 min after the last bomb, then took off;
 an inbound pair diverted on its own to Kutaisi), and nothing in the scripting API holds it shut. SQE ignores that and keeps its own rule: a field that took
-HITS_TO_CLOSE bomb impacts on its runway is CRATERED for CLOSE_TURNS (6 turns = 24 hours, S25; v0.41.334 had 12 two-hour turns; it was 2 to 5 days by supply). While cratered, its squadrons do not
+HITS_TO_CLOSE bomb impacts on its runway is CRATERED for CLOSE_TURNS (6 turns = 24 hours, S25; v0.41.334 had 12 two-hour turns; it was 2 to 5 days by supply); a field that holds a Tu-22M3 squadron for BOMBER_CLOSE_TURNS (2 turns = 8 hours, B1). While cratered, its squadrons do not
 fly (no packages, no scrambles, no raids, no base CAP) and nobody plans to recover there. The whole field closes, not one runway (XO). Replacement jets that
 arrive meanwhile wait, `held` (refit.py), and join when the runway reopens.
 
@@ -24,6 +24,7 @@ from . import clock
 
 HITS_TO_CLOSE = 1             # bomb impacts inside the runway rectangle that close the field (XO 2026-11-03: 3; XO 2026-11-13: 1, so a human pilot's own bomb alone closes it even if the wingmen drop nothing; judgment call, to be revisited after the next probes)
 CLOSE_TURNS = 6               # S25: was 12; a cratered field stays shut 6 four-hour turns = 24 hours, whatever the supply (XO 2026-11-08, "24 hours flat for now"; game rule, not a sourced figure)
+BOMBER_CLOSE_TURNS = 2        # B1 (XO 2026-11-21, "priority runway repair on every bomber field"): a field that holds a Tu-22M3 squadron (Mozdok; Damascus and Tiyas in Syria) is shut this many turns (8 hours), not CLOSE_TURNS. Game rule, not a sourced figure: a real crater repair takes hours (af.mil, above), and a strategic bomber base is the first one a crew team is sent to
 RUNWAY_HALF_LEN_M = 2600.0    # same corridor as mission_builder.RUNWAY_HALF_LEN_M (long enough for the longest Caucasus strip; judgment call)
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and mission_builder.RUNWAY_HALF_WIDTH_M (runway 45-60 m wide plus a margin; judgment call)
 
@@ -60,6 +61,13 @@ def hours_left(state, field_id: str) -> int:
     return turns_left(state, field_id) * clock.TURN_MIN // 60
 
 
+def close_turns(state, field_id: str) -> int:
+    """Turns a hit on this field closes it for: `BOMBER_CLOSE_TURNS` when a Tu-22M3 squadron is based there (red's bomber fields get the priority repair), else `CLOSE_TURNS`."""
+    if any(q.aircraft == "Tu_22M3" for w in state.enemy_air if w.base_asset_id == field_id for q in w.sqns):
+        return BOMBER_CLOSE_TURNS
+    return CLOSE_TURNS
+
+
 def crater(state, field_id: str, hits: int | None = None) -> str:
     """Close the field (a new hit while it is closed does NOT extend it: one repair crew, one timer). Returns the log line."""
     name = _name(state, field_id)
@@ -68,7 +76,7 @@ def crater(state, field_id: str, hits: int | None = None) -> str:
         c = _craters(state)[field_id]
         c["hits"] = int(c.get("hits", 0)) + int(hits or 0)
         return f"{name}: runway hit again, still closed"
-    _craters(state)[field_id] = {"turn": state.turn, "until": state.turn + CLOSE_TURNS, "hits": int(hits if hits is not None else HITS_TO_CLOSE), "side": side}
+    _craters(state)[field_id] = {"turn": state.turn, "until": state.turn + close_turns(state, field_id), "hits": int(hits if hits is not None else HITS_TO_CLOSE), "side": side}
     return f"{name}: runway CUT, field closed. Closed for some time; its squadrons cannot fly and new jets wait until then"
 
 
