@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.545, S136: a Tor-covered strike goes with a 4-jet SEAD escort
+A strike with plain bombs (GBUs, not a stand-off weapon) whose target sits under a live fixed Tor now flies with a four-jet SEAD escort, eight HARMs to wear the Tor down, or a pair when only two SEAD jets are free; with none free the strike waits for another day. The escort aims its HARMs at the Tor. Stand-off jobs (EWR strikes, SLAM-ER strikes, the F-15E's JSOW-C runway crater) and Levels 1 and 2 (no Tors) are unchanged.
+
 ## v0.41.544, S135: stand-off weapons aim at the EWR truck itself
 The JSOWs of an EWR strike are now all aimed at the radar vehicle's exact position instead of a random point within 100 m of it, so the weapons' bomblets land on the one truck (a run showed a hit EWR that survived).
 
