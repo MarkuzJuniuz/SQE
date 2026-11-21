@@ -11,6 +11,7 @@ import copy
 import datetime
 import hashlib
 import math
+import os
 import random
 import tempfile
 from dataclasses import dataclass, field
@@ -62,7 +63,7 @@ DORMANT_CEILING_WEIGHT = 0.0     # S89 (XO 2026-11-17): the same for the `limits
 WAKE_MARGIN_NM = 8              # S89 B1 (XO 2026-11-16): a dormant SAM site's wake ring is its engagement ring plus this, so the woken radars reach the player's RWR before engagement range
 DORMANT_SLEEP = True            # S89 E (plan 7.3, XO 2026-11-16): a woken dormant group goes back to AI OFF 30 s after no enemy unit is in any zone that covers it, and wakes again (AI ON) when one enters. False = stage B / C exactly (woken groups stay awake). Read at build time by `_wire_dormant`
 DORMANT_SLEEP_MAX_TRIGGERS = 400  # S89 E judgment call (XO prompt): the most continuous triggers the sleep rules may add to one mission (2 + 2 per covering zone, per group); groups further from the route than the cap allows stay awake once woken
-S89_LOG = True                  # S89 (XO 2026-11-17): the wake / sleep log lines and the 10 s tick in dcs.log (`_s89_log`, `_s89_tick_lua`). True while we test; False in releases (about 250 scripts per mission and a log write each: players' SSDs do not need them). Read at build time. False = no log action at all
+S89_LOG = os.environ.get("SQE_DEBUG") == "1"  # S132 (XO 2026-11-21): the wake / sleep log lines and the 10 s tick in dcs.log (`_s89_log`, `_s89_tick_lua`), only for a run with the environment variable SQE_DEBUG=1 (performance tracking); a normal install never writes them. Read at import. False = no log action at all
 BLUE_AAA_NM = 3                 # S89 C (plan 7.2): a blue airfield AAA group's wake ring (the guns reach about 3 nm); judgment call, plus WAKE_MARGIN_NM
 SOFT_WAKE_NM = 10               # S89 B2 judgment call: a dormant soft site / garrison has no `RANGE_NM` (a Shilka reaches 3 nm, the rest is armour with MANPADS); its wake ring is this plus WAKE_MARGIN_NM
 BARCAP_DETECT_NM = 50           # S89 B1 judgment call: a fighter radar on a fighter-size target sees 40 to 60 nm (from memory); the same figure as tm.FIELD_SAM_DETECT_NM
