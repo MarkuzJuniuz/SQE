@@ -826,24 +826,66 @@ class Session(Merging, SeadTiming):
         options_from_settings(self.options, self.settings, ai_test=self.ai_test, full_map=self.full_map)
         import contextlib, io, logging
         logging.getLogger("pydcs").setLevel(logging.CRITICAL)
-        extras = list(self.merge_candidates(pkg, unseen=True))
-        ruins = self.ruin_candidates(pkg, extras)
+        cands = list(self.fly_candidates(pkg, unseen=True))                  # S139a: every package in the time window, nearest first; the unit limit is the only cap
+        ruins = self.ruin_candidates(pkg, cands)
         pre = {}
-        if (ruins or extras) and getattr(self.settings, "ruins", True):
-            pre = self._preroll([p for p in list(extras) + ruins if not p.extra.get("done_roll") and p.objective.type != ObjectiveType.FLEET_DEFENSE])      # a raid shows no ruins: nothing to roll
+        if (ruins or cands) and getattr(self.settings, "ruins", True):
+            pre = self._preroll([p for p in list(cands) + ruins if not p.extra.get("done_roll") and p.objective.type != ObjectiveType.FLEET_DEFENSE])      # a raid shows no ruins: nothing to roll
             pre.update({p.id: p.extra["done_roll"] for p in ruins if p.extra.get("done_roll")})          # v0.41.337: an earlier turn's package was resolved already: its verdict is what burns
         from . import limits
         cap = 10 ** 6 if self.full_map else min(int(self.settings.max_units), limits.unit_ceiling())          # v0.41.131: the unit limit counts the whole mission, merged packages included
-        while True:
+        secs = []
+
+        def build(ext, rui):
+            t0 = time.time()
             with contextlib.redirect_stdout(io.StringIO()):      # pydcs prints noisy 'Failed to parse Lua' lines for unrelated DCS files
-                res = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz, extras, ruins, pre)
-            if (not extras and not ruins) or res.counts["units"] <= cap:
+                r = MissionBuilder(st, self.d, self.options, self.loadouts, self._rng(9)).build(pkg, self.settings.sortie_miz, ext, rui, pre)
+            secs.append(round(time.time() - t0, 1))
+            return r
+
+        # S139a (XO 2026-11-20): the unit budget. Build 1 takes everything in the time window. If it fits and nothing was left out for the unit limit, that is the mission (the common
+        # small-map case). Otherwise build 2 is your package alone (+ its ruins): its units are what your target area keeps, and the packages are taken nearest first while they fit
+        # in what is left (their sizes come from build 1); build 3 is that list. The safety loop then drops the last ruin, then the furthest package, until it fits.
+        trims = lambda r: sorted(w for w in r.warnings if "left out to stay under" in w and "wrecks" not in w)      # what the unit limit cut out of the mission (the wrecks are decor and fit last)
+        extras, n_all, left_out, cut, base_trims = list(cands), len(cands), [], False, None
+        res = build(extras, ruins)
+        if extras and (res.counts["units"] > cap or res.trimmed):
+            base = build([], ruins)
+            base_trims = trims(base)
+            room, picked = cap - base.base_units, []
+            for x in extras:
+                need = res.pkg_units.get(x.id)
+                if need is None:
+                    need = sum(f.count for f in x.flights if not f.tag)
+                if need > room:
+                    break                                          # a prefix of the nearest-first list: the furthest are the ones left out
+                room -= need
+                picked.append(x)
+            if len(picked) < len(extras):                          # the same list as build 1 is build 1 again: no third build
+                res = build(picked, ruins) if picked else base
+            left_out, extras = extras[len(picked):], picked
+        while extras or ruins:
+            over = res.counts["units"] > cap
+            if not (over or (base_trims is not None and trims(res) != base_trims)):         # the target area keeps its budget: the same cuts as your package alone, no more
                 break
-            if ruins:
+            if over and ruins:
                 ruins = ruins[:-1]                               # returning flights first
+            elif not extras:
+                break
             else:
-                extras = self._drop_one(extras, pkg)               # too heavy: drop the latest-starting package (a Fighter Sweep last) and rebuild
+                nxt = self.drop_furthest(extras, pkg)               # too heavy: drop the furthest package (a Fighter Sweep stays while a package it covers stays) and rebuild
+                left_out += [x for x in extras if x.number not in {y.number for y in nxt}]
+                extras = nxt
+            cut = True
+            res = build(extras, ruins)
+        if left_out or cut:
             res.warnings.append(f"merged mission trimmed to fit the {cap}-unit limit")
+        if left_out:
+            res.warnings.append(f"{len(left_out)} of {n_all} packages in the time window left out (furthest first): " + ", ".join(f"#{x.number}" for x in left_out[:8]) + (", ..." if len(left_out) > 8 else ""))
+        if len(secs) > 1:
+            res.warnings.append(f"built in {len(secs)} passes ({', '.join(f'{s} s' for s in secs)}) to fit the unit limit")
+        self.last_fly_stats = {"cands": [x.number for x in cands], "picked": [x.number for x in extras], "left_out": [x.number for x in left_out], "builds": len(secs), "secs": secs,
+                               "base_units": res.base_units, "units": res.counts["units"], "cap": cap}
         st.sortie_counter += 1
         st.pending = {"package": package_number, "flight": pkg.player_flight.id, "manifest": res.manifest.to_dict(),
                       "built_at": time.time(), "miz": str(res.miz), "timeline": res.timeline,

@@ -2,7 +2,7 @@
 
 unit_ceiling: the most units any mission may hold in total, merged packages included. The ordinary unit limit (Settings > Mission Build, default 250)
 counts only the BASE mission; the units that merged packages bring do not count against it, so this ceiling is the only thing that bounds them
-(together with the merge radius and the six-package limit). It is a runaway guard, not a performance setting."""
+(a FLY merges by this limit and the Settings unit limit, S139a, not by distance or a package count). It is a runaway guard, not a performance setting."""
 import json
 from pathlib import Path
 

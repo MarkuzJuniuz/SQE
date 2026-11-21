@@ -275,6 +275,9 @@ class BuildResult:
     warnings: list = field(default_factory=list)
     seed: str = ""
     merged: list = field(default_factory=list)      # extra packages folded into this mission
+    pkg_units: dict = field(default_factory=dict)   # S139a: package id -> the units that merged (or ruin) package added to the mission
+    trimmed: bool = False                           # S139a: something (a supply or SAM site, a front battle, a relief sortie, reinforcements ...) was left out to stay under the unit limit; the wrecks do not count (decor, trimmed last by design)
+    base_units: int = 0                             # S139a: the units before the wrecks (they are decor and fit into what is left): what the mission needs without them
 
 
 def home_floor_exit(path, rings):
@@ -342,6 +345,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._dormant_fields = []                                      # S89 C: ids of the blue fields built dormant (probes)
         self._dormant_blue = []                                        # S89 C: (x, y, ring nm, group) of every blue airfield defence group built dormant (`_dormant_blue_fields`); `_wire_dormant` wakes them on red aircraft
         self._dormant = set()                                          # S89: ids of the groups tagged dormant (`_tag_dormant`); `_counts` weighs them DORMANT_WEIGHT
+        self._pkg_units = {}                                           # S139a: package id -> units that merged package (or ruin) added (`_add_merged`); `Session.fly` budgets with it
+        self._units_pre_wrecks = 0                                     # S139a: `_counts()["units"]` just before the wrecks
         self._rwyq, self._flag_n, self._prwy, self._alerts = [], 9000, "", []
         self._raid_n = {"bu": 0, "eu": 0, "bg": 0, "sw": 0, "es": 0}            # S47: raid unit numbers (bomber, escort) and group numbers (bomber, sweep, escort), one count per mission so folded raids never repeat a name
         self._ecm_player = ""                           # v0.41.210: how the hook learns the player's jammer: "live" (F-16C lamp via Export.lua), "f10" (FC3 jet), "" (old attack-leg window)
@@ -635,6 +640,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._dormant_red_extras(tx, ty, manifest, (AssetKind.EWR,))      # S89 F: red's other early-warning radars, live (detectors never sleep; a few units, so before the blue fields)
         self._dormant_blue_fields(tx, ty)                # S89 C: after everything else, so the sleeping defences never push a flight out
         self._dormant_red_extras(tx, ty, manifest, (AssetKind.SAM,))      # S89 F: the rest of red's SAM sites, asleep
+        self._units_pre_wrecks = self._counts()["units"]
         self._place_carcasses()
         manifest.merged = [{k: v for k, v in m_.items() if k in ("id", "number", "objective", "type", "tot_s", "rtb_s", "unseen")} for m_ in merged if not m_.get("struck")]
         bx, by = geom.push
@@ -751,7 +757,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             self._free_locked_speeds(m)
             self._add_ship_warehouses(m)
             self._save_without_carrier_slots(m, out_path)
-        return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns, self.seed_code, merged)
+        return BuildResult(out_path, manifest, plan, player_wps, package, tl, text, counts, whois, warns, self.seed_code, merged,
+                           dict(self._pkg_units), any("left out to stay under" in w_ and "wrecks" not in w_ for w_ in warns), self._units_pre_wrecks)
 
     def _skip_landing(self, base) -> bool:
         """v0.41.18: does an AI flight going home to this base get recovered short of it instead of landing (Settings: AI landings)?"""
@@ -780,10 +787,13 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         ruin_ids = {x.id for x in ruins}
         self._merged_units = getattr(self, "_merged_units", 0)
         prev_ = self._counts()["units"]
+        prev_id = None
         for k, x in enumerate(list(extras) + [r for r in ruins if r.id not in {e.id for e in extras}]):
             now_ = self._counts()["units"]                  # what the previous package brought (flights, its sites, ruins) is exempt from the base limit
             self._merged_units += now_ - prev_
-            prev_ = now_
+            if prev_id is not None:
+                self._pkg_units[prev_id] = now_ - prev_      # S139a: what that package added (0 for a skipped one), for `Session.fly`'s unit budget
+            prev_, prev_id = now_, x.id
             xp = copy.deepcopy(x)
             xp.flights = [f for f in xp.flights if not f.tag]
             for f in xp.flights:
@@ -878,6 +888,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         "start": xp.start, "push": clock(P0x), "tot": clock(tot), "rtb": clock(rtb2), "tot_s": tot, "rtb_s": rtb2, "underway": P0x < 0, "struck": ruined, "unseen": bool((xp.extra or {}).get("unseen_raid")),
                         "flights": ", ".join(f"{f.callsign} {f.count}x{f.aircraft}" for f in xp.flights)})
         self._merged_units += self._counts()["units"] - prev_
+        if prev_id is not None:
+            self._pkg_units[prev_id] = self._counts()["units"] - prev_
         return out
 
     def _start_for(self, key) -> StartType:
