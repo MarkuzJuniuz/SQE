@@ -664,7 +664,7 @@ class WarSimulator:
             lines.append(f"   {k} attack aircraft shot down before " + ("dropping their bombs" if pkg.extra.get("land") else "launching their missiles"))
             if up_ and (ln_ := blue_barcap.patrol_fight(state, rng, psq_)):
                 lines.append(ln_)
-        elif bw is not None and (pkg.extra.get("sead") or kh59_):                  # S36b: a SEAD package that was not stopped fires its Kh-31P from standoff: most of its jets launch (judgment call: 60 to 100 %), and the site takes SEAD_SITE_HIT for each. S48: a Kh-59M raid the same: the jets go home, the hit is `raids.KH59_HIT_EQUIV` per jet
+        elif bw is not None and (pkg.extra.get("sead") or kh59_):                  # S36b: a SEAD package that was not stopped fires its Kh-31P (B2: or Kh-58U) from standoff: most of its jets launch (judgment call: 60 to 100 %), and the site takes SEAD_SITE_HIT for each. S48: a Kh-59M raid the same: the jets go home, the hit is `raids.KH59_HIT_EQUIV` per jet
             thr_ = max(2, round(nb_ * rng.uniform(0.6, 1.0)))
             lines += raids_hit(state, pkg.objective.target_id, None, rng, thr_, pkg.objective.aim, pkg.extra.get("raider"), kh59=kh59_)
         elif bw is not None and pkg.extra.get("land"):
