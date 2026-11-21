@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.551, S103e: the F-14B card reads in the order you fly it
+In the plain F-14B, waypoint 1 is now always the marshal point and 2 the push; waypoint 3 is the IP of a strike or the station of a fighter job. A fighter's station is also the IP point, CAP2 is DP, the strike's target is ST and its egress is DP, and HA is the hostile area (the nearest SAM site). The kneeboard lists them in flight order and no longer shows the climb-out point.
+
 ## v0.41.550, S139b: Settings and the Missions list say what merging does now
 The Merge Radius setting is now the Target Area Radius (the area round your target where supply sites and the ground war are built, earlier strikes show as ruins and packages are listed together); old settings files keep their value. Package Merging reads "On (Nearest First, Up to the Unit Limit)", Later Packages goes up to 240 minutes (one whole turn), and the hints and the Missions list notes say that every package in the time window flies with you as far as the unit limit allows, furthest dropped first. The list no longer stops at six packages.
 
