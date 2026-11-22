@@ -12,7 +12,7 @@ Sources and judgment calls (the numbers below are JUDGMENT CALLS unless a source
   earlier rule was 2 per bomber, after a 4 + 4 raid "didn't last long"). A raid is the FULL size or none (16 bombers + 8 escorts at L3, 8 + 4 at L2), except
   when desperate, which sends what it has. If red cannot field them, it holds.
 - Safe / desperate thresholds, cooldowns and the Mozdok weight are judgment calls, tuned on the 100-day background sims.
-- B1 (XO 2026-11-21, red-standoff-plan): a pack may name SEVERAL bomber fields (`bomber_bases`, Syria: Damascus and Tiyas). The Tu-22M3 squadron and its escort squadron of each field are part of that field's red wing (one wing per
+- B1 (XO 2026-11-21, red-standoff-plan): a pack may name SEVERAL bomber fields (`bomber_bases`, Syria: Damascus and Bassel Al-Assad; S142: each field's Tu-22M3 share is capped at its DCS stand count). The Tu-22M3 squadron and its escort squadron of each field are part of that field's red wing (one wing per
   field, like every other red field), `bomber_wings` lists the ones whose field is up, and the carrier raid and the land strike draw from all of them (the S46 pool: the first field gives what it has, the next the rest). A cut or
   destroyed field is skipped. With one bomber field (the Caucasus) every figure and every draw is what it was."""
 from __future__ import annotations
@@ -169,7 +169,7 @@ def _fill(parts, n: int) -> list:
 
 
 def names_of(state, ws) -> str:
-    """B1: the field names of these wings for a text: "Mozdok", "Damascus and Tiyas"."""
+    """B1: the field names of these wings for a text: "Mozdok", "Damascus and Bassel Al-Assad"."""
     ns = [state.assets[w.base_asset_id].name for w in ws]
     return " and ".join(ns) if len(ns) < 3 else ", ".join(ns[:-1]) + " and " + ns[-1]
 
@@ -353,7 +353,7 @@ def intel(state) -> dict | None:
 
 def _bomber_field(state) -> tuple:
     """(name, why) of the Tu-22M3 wing's field when it cannot fly: "is destroyed" or "has its runway cut"; ("The bomber base", "is out of action") when there is no such wing. B1: with several bomber fields the names are
-    joined ("Damascus and Tiyas") and the verb follows them ("are destroyed", "have their runways cut", else "are out of action")."""
+    joined ("Damascus and Bassel Al-Assad") and the verb follows them ("are destroyed", "have their runways cut", else "are out of action")."""
     ws = [w for w in state.enemy_air if "Tu_22M3" in w.types and w.base_asset_id in state.assets]
     if not ws:
         return "The bomber base", "is out of action"

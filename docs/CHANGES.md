@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.571, Syria's bombers move from Tiyas to Bassel Al-Assad
+DCS has no stand at Tiyas that fits a Tu-22M3, so the wing's second half only ever existed on paper and its raiders started from the runway. In new Syria campaigns the Tu-22M3 wing is based at Damascus and Bassel Al-Assad, and a field never holds more bombers than it has stands for: at Level 3, 14 Tu-22M3 at Damascus and 6 at Bassel Al-Assad, 6 Su-27 escorts at each. Tiyas stays an ordinary red field with its SA-5. Saved Syria campaigns keep the wings they have; the Caucasus is unchanged.
+
 ## v0.41.570, a detour takes the side away from red's fighters
 When going round a SAM ring to the left or to the right is within 10 % of the same length, the route now takes the side farther from red's nearest patrol station or fighter field (the transit legs, the legs to a station and after it, a package's shared push-to-IP detour, yours included). Routes without that choice are unchanged.
 

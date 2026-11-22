@@ -328,15 +328,36 @@ def new_campaign(name: str, player_aircraft: str, level: int = 2, theatre: str =
         sqns = [RedSquadron(i_, n_, t_, c_) for i_, n_, t_, c_ in redroster.cut(aid, st.assets[aid].name, types, d.red_squadron_max)]
         st.enemy_air.append(EnemyAirWing(aid, list(dict.fromkeys(q.aircraft for q in sqns)), len(sqns), sqns))
 
-    # strategic bombers live far from the front (Mozdok in the Caucasus). B1 (XO 2026-11-21): a pack may name several bomber fields (`bomber_bases`, Syria: Damascus and Tiyas): the level's Tu-22M3 and escort
+    # strategic bombers live far from the front (Mozdok in the Caucasus). B1 (XO 2026-11-21): a pack may name several bomber fields (`bomber_bases`, Syria: Damascus and Bassel Al-Assad): the level's Tu-22M3 and escort
     # counts are split between them as evenly as possible, the first field getting the extra jet (20 = 10 + 10, escorts 12 = 6 + 6); with one field (the Caucasus) it is the one squadron it was.
     bfields = [b_ for b_ in _bombers_mod.bomber_base_ids(th) if b_ in live]
+    # S142 (XO 2026-11-22): the Tu-22M3 share of a field is capped at the field's DCS stand count (`_slots`; Tiyas parks none): the overflow goes to the next field in list order with room, and what no field can
+    # park stays with the lead (Mozdok: 24 on 14 stands). An unknown count is uncapped. Escorts keep the even split. Syria L3: Damascus 14 + Bassel 6 Tu-22M3, 6 + 6 Su-27.
+    def _split_bombers(n_: int) -> list:
+        k_ = len(bfields)
+        if k_ == 0:
+            return []
+        out_ = [n_ // k_ + (1 if i_ < n_ % k_ else 0) for i_ in range(k_)]
+        caps_ = [_slots(t, apt_of[b_], ["Tu_22M3"]) if b_ in apt_of else None for b_ in bfields]
+        spare_ = 0
+        for i_ in range(k_):
+            if caps_[i_] is not None and out_[i_] > caps_[i_]:
+                spare_ += out_[i_] - caps_[i_]
+                out_[i_] = caps_[i_]
+        for i_ in range(k_):
+            if spare_ and (caps_[i_] is None or out_[i_] < caps_[i_]):
+                add_ = spare_ if caps_[i_] is None else min(spare_, caps_[i_] - out_[i_])
+                out_[i_] += add_
+                spare_ -= add_
+        out_[0] += spare_
+        return out_
+    tu_share = _split_bombers(d.bomber_wing) if d.bomber_wing > 0 else []
     for bi_, bb_ in enumerate(bfields if d.bomber_wing > 0 else []):
         share = lambda n_: n_ // len(bfields) + (1 if bi_ < n_ % len(bfields) else 0)
         bname = st.assets[bb_].name
         host = st.enemy_air_at(bb_)
         fresh = host is None                                              # a bomber field that is also a normal red field (Syria) keeps ONE wing (every lookup by field assumes it): the Tu-22M3 and escort squadrons join it, under ids of their own (`_tu`, `_tuesc`: the field's own squadrons are `_1`, `_2` ...)
-        tu_sq = RedSquadron(f"{bb_}_1" if fresh else f"{bb_}_tu", f"{bname} 1" if fresh else f"{bname} Tu-22M3", "Tu_22M3", share(d.bomber_wing))     # one squadron a field (judgment call)
+        tu_sq = RedSquadron(f"{bb_}_1" if fresh else f"{bb_}_tu", f"{bname} 1" if fresh else f"{bname} Tu-22M3", "Tu_22M3", tu_share[bi_])     # one squadron a field (judgment call)
         if fresh:
             host = EnemyAirWing(bb_, ["Tu_22M3"], 1, [tu_sq])
             st.enemy_air.append(host)

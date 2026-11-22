@@ -610,7 +610,7 @@ def lose_raiders(state, ex: dict, k: int, rng: random.Random) -> int:
 
 def lose_type(ex: dict, wing):
     """B1: the aircraft type a raid's losses come off first: the plan's `raider`. The carrier raid has none and `wing.lose(None, k)` takes from the strongest squadron, which is the Tu-22M3 squadron of a wing made for it (Mozdok: what it
-    always did); a bomber field that is also a normal red field (Syria: Damascus, Tiyas) has other squadrons, so the loss is the Tu-22M3's."""
+    always did); a bomber field that is also a normal red field (Syria: Damascus, Bassel Al-Assad) has other squadrons, so the loss is the Tu-22M3's."""
     if ex.get("raider") or wing is None:
         return ex.get("raider")
     return TU22 if any(q.aircraft != TU22 and q.role != "escort" for q in wing.sqns) else None
