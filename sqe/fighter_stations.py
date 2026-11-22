@@ -128,6 +128,37 @@ class FighterStations:
                 out.append((lp_.x, lp_.y))
         return out
 
+    def _station_clear(self, x, y, sites) -> bool:
+        """S141b: True when (x, y) is outside every live medium / long-range SAM ring in `sites` (`profiles._cover_sites`), an SA-10 / SA-5 at its station_nm instead of its table ring + margin
+        (v0.41.118: the TARCAP / escort station rule, so the orbit's near end stays outside the avoid ring)."""
+        return all(dist(x, y, a.x, a.y) > (samtier.get(a.variant, "station_nm") * NM if a.variant in tm.UMBRELLA_VARIANTS else r) for a, r in sites)
+
+    def _overwatch_station(self, package, geom, f, alt_ft, pp, back_nm):
+        """S141b (XO 2026-11-22: TARCAPs and station escorts guard the package): the overwatch station of a TARCAP / station escort. P = the package's protect point nearest red's approach
+        (`_red_approach` of their centre); walking from P along red's line AWAY from red, 1 nm at a time, 0 to `back_nm`, the first point outside every SAM ring (`_station_clear`, the JSOW
+        branch's own test at the flight's altitude). The flight then faces red nose-on and shoots past the package. None when there is no red approach, no point or nothing clear
+        within `back_nm` (the caller keeps today's station). Prototype: the S141 probe's `candoverwatch`."""
+        from . import profiles
+        pp = list(pp or [])
+        self._ow_why = "no protect points"                  # why it fell back (probe)
+        if not pp:
+            return None
+        cx, cy = sum(q[0] for q in pp) / len(pp), sum(q[1] for q in pp) / len(pp)
+        thr = self._red_approach(cx, cy)
+        self._ow_why = "no red approach point"
+        if thr is None:
+            return None
+        px, py = min(pp, key=lambda q: dist(q[0], q[1], thr[0], thr[1]))
+        b = bearing(thr[0], thr[1], px, py)
+        sites = profiles._cover_sites(self.state, alt_ft)
+        for n in range(0, int(back_nm) + 1):
+            x, y = offset(px, py, b, n * NM)
+            if self._station_clear(x, y, sites):
+                self._ow_why = ""
+                return (x, y)
+        self._ow_why = "nothing clear within the cap"
+        return None
+
     def _protect_points(self, package, geom) -> list:
         """v0.41.546 (S137, XO 2026-11-21: tethered aggression): the points the package's TARCAP / escort protect, round which their engage circle is
         centred: for every ground-attack flight (STRIKE / CAS, a person's own flight too: the mission is the same) its IP, its TGT and the point
