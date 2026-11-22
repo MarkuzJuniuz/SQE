@@ -209,11 +209,13 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
         far = offset(g.tx, g.ty, rel_hdg, (rel_nm + 6) * NM)
         if dist(g.tx, g.ty, *far) > dist(g.tx, g.ty, *g.ip):
             ip_xy = far
+    if human and g.all_rings and role in (Role.STRIKE, Role.SEAD):
+        ip_xy = ip_outside(g, ip_xy)                             # S140c (XO 2026-11-22): a person's IP is the point where he gets ready to shoot: outside the rings that hold the target
     # v0.41.10: deconfliction. AI flights cross PUSH and EGR on their own lane, 1.5 nm apart sideways by stack slot (at most 4.5 nm), so a
     # package's flights do not all converge on one point at one height
     lane = 0.0 if human or not stack_idx else (1 if stack_idx % 2 else -1) * min(4.5, 1.5 * ((stack_idx + 1) // 2))
     lane_xy = lambda xy: offset(xy[0], xy[1], g.hdg + 90, lane * NM) if lane else xy
-    egr_xy = lambda xy: xy if (human or not g.all_rings) else out_of_rings(xy, g.all_rings)      # S140b2: an AI flight's egress point never sits inside a live ring (a person's stays where it was)
+    egr_xy = lambda xy: out_of_rings(xy, g.all_rings) if g.all_rings else xy      # S140b2 / S140c: an egress point never sits inside a live ring (a person's route too: the mission is the same)
     wp.append(Wpt("PUSH", *lane_xy(g.push), alt, p.push_kts, "Push on time, check in with AWACS"))
     st_ = (g.stand or {}).get(key) if role in (Role.TARCAP, Role.ESCORT, Role.SWEEP) else None
     if st_ is not None and len(st_) >= 5:
@@ -235,7 +237,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
             wp.append(Wpt("CAP1", sx_, sy_, alt, p.cap_kts, f"ESCORT: hold {short_:.0f} nm short of the target{why_} until the strikers are off; do not chase", "ESCORT", orbit=True))
             if egr_ok_:
                 wp.append(Wpt("EGR", *egr_xy(g.egr), ialt, p.egress_kts, "Exit with the package", rad=irad))
-        if not human and g.all_rings:                           # S140b1: PUSH -> station round every live ring (the leg after the station is the builder's: CAP2 comes first)
+        if g.all_rings:                                         # S140b1 / S140c: PUSH -> station round every live ring, for a person's route too (the leg after the station is the builder's: CAP2 comes first)
             ci_ = next(k for k, w in enumerate(wp) if w.orbit)
             wp[:ci_ + 1] = avoid_circles(wp[:ci_ + 1], g.all_rings, p.max_points - (len(wp) - ci_ - 1), 1, edge=True, start=own_base)
         if len(wp) + 2 > p.max_points:
@@ -307,26 +309,25 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
             wp.append(Wpt("EGR", *egr_xy(offset(g.tx, g.ty, sax, snm * NM)), ialt, p.egress_kts, "Exit: back out along the approach", rad=irad))
     elif not (so and role in (Role.ESCORT, Role.SWEEP, Role.TARCAP)):         # a stand-off fighter never crosses the target area: it goes home from its hold
         wp.append(Wpt("EGR", *egr_xy(lane_xy(g.egr)), ialt + (1000 * (stack_idx % 3) if lane else 0), p.egress_kts, "Exit threat area", rad=irad))
-    if not human:
-        ip_i = next((k for k, w in enumerate(wp) if w.name == "IP"), None)
-        if g.sa10_avoid and role in (Role.STRIKE, Role.SEAD, Role.CAS):
-            # the attack legs (IP -> TGT / launch point -> EGR): the rings the flight is not sent against, as before S140b1 (a ring that holds the target is the one it comes for)
-            k0 = next((k for k, w in enumerate(wp) if w.name == "PUSH"), 1)
-            avoid_circles(wp, g.sa10_avoid, p.max_points, (k0 if ip_i is None else ip_i) + 1)
-        if g.all_rings and role in (Role.STRIKE, Role.SEAD, Role.CAS) and ip_i is not None:
-            # S140b1 (plan 2.2): the transit legs (SPAWN -> MSHL -> PUSH -> IP) go round every live ring, the flight's own target's too; a leg that starts or ends inside a ring takes its edge
-            pu_i = next((k for k, w in enumerate(wp) if w.name == "PUSH"), None)
-            if pu_i is not None and ip_i == pu_i + 1:
-                # S140b2 (plan 2.4): the PUSH -> IP detour is one path for the whole package (lane 0), every flight's copy shifted by its lane
-                pts_ = shared_leg(g, wp[pu_i], wp[ip_i], lane, p.max_points - len(wp) - 2)
-                if pts_:
-                    pa_, pb_ = wp[pu_i], wp[ip_i]
-                    wp[ip_i:ip_i] = [Wpt("AVD", x, y, max(pa_.alt_ft, pb_.alt_ft), pa_.speed_kts, "Around a SAM site", rad=pa_.rad) for x, y in pts_]
-                wp[:pu_i + 1] = avoid_circles(wp[:pu_i + 1], g.all_rings, p.max_points - (len(wp) - pu_i - 1), 1, edge=True, start=own_base)
-            else:
-                wp[:ip_i + 1] = avoid_circles(wp[:ip_i + 1], g.all_rings, p.max_points - (len(wp) - ip_i - 1), 1, edge=True, start=own_base)
-        elif g.all_rings and role in (Role.TARCAP, Role.ESCORT, Role.SWEEP):
-            avoid_circles(wp, g.all_rings, p.max_points, 1, edge=True, start=own_base)      # a fighter has no ring of its own: every leg of its route (no station here, so no orbit leg)
+    ip_i = next((k for k, w in enumerate(wp) if w.name == "IP"), None)
+    if not human and g.sa10_avoid and role in (Role.STRIKE, Role.SEAD, Role.CAS):
+        # the attack legs (IP -> TGT / launch point -> EGR): the rings the flight is not sent against, as before S140b1 (a ring that holds the target is the one it comes for)
+        k0 = next((k for k, w in enumerate(wp) if w.name == "PUSH"), 1)
+        avoid_circles(wp, g.sa10_avoid, p.max_points, (k0 if ip_i is None else ip_i) + 1)
+    if g.all_rings and role in (Role.STRIKE, Role.SEAD, Role.CAS) and ip_i is not None:
+        # S140b1 (plan 2.2): the transit legs (SPAWN -> MSHL -> PUSH -> IP) go round every live ring, the flight's own target's too; a leg that starts or ends inside a ring takes its edge
+        pu_i = next((k for k, w in enumerate(wp) if w.name == "PUSH"), None)
+        if pu_i is not None and ip_i == pu_i + 1:
+            # S140b2 (plan 2.4): the PUSH -> IP detour is one path for the whole package (lane 0), every flight's copy shifted by its lane
+            pts_ = shared_leg(g, wp[pu_i], wp[ip_i], lane, p.max_points - len(wp) - 2)
+            if pts_:
+                pa_, pb_ = wp[pu_i], wp[ip_i]
+                wp[ip_i:ip_i] = [Wpt("AVD", x, y, max(pa_.alt_ft, pb_.alt_ft), pa_.speed_kts, "Around a SAM site", rad=pa_.rad) for x, y in pts_]
+            wp[:pu_i + 1] = avoid_circles(wp[:pu_i + 1], g.all_rings, p.max_points - (len(wp) - pu_i - 1), 1, edge=True, start=own_base)
+        else:
+            wp[:ip_i + 1] = avoid_circles(wp[:ip_i + 1], g.all_rings, p.max_points - (len(wp) - ip_i - 1), 1, edge=True, start=own_base)
+    elif g.all_rings and role in (Role.TARCAP, Role.ESCORT, Role.SWEEP):
+        avoid_circles(wp, g.all_rings, p.max_points, 1, edge=True, start=own_base)      # a fighter has no ring of its own: every leg of its route (no station here, so no orbit leg)
     if len(wp) + 2 > p.max_points:
         raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")
     return wp
@@ -550,6 +551,26 @@ def avoid_circles(wp: list, circles: list, max_points: int, first: int, edge: bo
     if lead is not None:
         wp.remove(lead)
     return wp
+
+
+IP_MOVE_MAX_NM = 60.0      # S140c: a person's strike / SEAD IP moves out along the run-in at most to this far from the target; no clear point within it (or short of the PUSH): the IP stays. Judgment call, counted by the probe
+
+
+def ip_outside(g, ip_xy):
+    """S140c (XO 2026-11-22, plan 4 answer 2): a person's strike / SEAD IP lies outside every ring that holds the target (+ AVOID_MARGIN_NM): out along the run-in (bearing target -> IP) in 1 nm steps to the
+    first clear point, at most IP_MOVE_MAX_NM from the target and 5 nm short of the PUSH; else ip_xy again. TGT is not touched and nothing is tasked (Human-Flown rule: route shape only)."""
+    hold = [(cx, cy, r) for cx, cy, r in (g.all_rings or []) if math.hypot(g.tx - cx, g.ty - cy) < r * NM]
+    clear = lambda p: all(math.hypot(p[0] - cx, p[1] - cy) >= (r + AVOID_MARGIN_NM) * NM for cx, cy, r in hold)
+    if not hold or clear(ip_xy):
+        return ip_xy
+    hdg, d = bearing(g.tx, g.ty, *ip_xy), math.hypot(ip_xy[0] - g.tx, ip_xy[1] - g.ty)
+    limit = min(IP_MOVE_MAX_NM * NM, math.hypot(g.push[0] - g.tx, g.push[1] - g.ty) - 5 * NM)
+    while d + NM <= limit:
+        d += NM
+        p = offset(g.tx, g.ty, hdg, d)
+        if clear(p):
+            return p
+    return ip_xy
 
 
 EGR_MOVE_MAX_NM = 40.0     # S140b2: an AI flight's egress point inside a ring moves at most this far out of it; farther (a ring cluster with no edge near) it stays where it was. Judgment call, counted by the probe

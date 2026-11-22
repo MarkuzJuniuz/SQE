@@ -170,6 +170,8 @@ def render_pages(outdir, ctx: dict) -> list:
     notes = [f"{ctx['jet']} waypoint numbers: {num}.", "PUSH +/-30 s, TOT +/-1 min.", ctx.get("zulu_note", "Times are local.")]
     if ctx.get("tkr_line"):
         notes.append(ctx["tkr_line"])                   # S103d: the plain F-14B has no tanker waypoint
+    if ctx.get("detour_line"):
+        notes.append(ctx["detour_line"])                # S140c: the detour round the SAM rings (the AVD rows above)
     if ctx.get("msa"):
         notes.append(f"MSA {int(ctx['msa']):,} ft along the route.")
     for note in notes:
@@ -195,6 +197,12 @@ def render_pages(outdir, ctx: dict) -> list:
         f.line(ctx["objective"], color=DIM)
     f.band("BULLSEYE")
     f.row([(0, ctx["bullseye"])])
+    if ctx.get("avd_table"):                         # S140c: the plain F-14A / B holds three waypoints: the turn points round the SAM rings go in by hand, in route order (degrees, minutes, thousandths: enter the minutes and tenths)
+        f.band("ROUTE POINTS (enter by hand)")
+        for r in ctx["avd_table"][:8]:
+            f.row([(0, r["n"]), (6, r["leg"][:16]), (23, r["pos"])], gap=3)
+        if len(ctx["avd_table"]) > 8:
+            f.line(f"and {len(ctx['avd_table']) - 8} more", color=DIM, gap=4)
     l16 = not ctx.get("link16_off")                  # S103a: a campaign with Link 16 off has no STN column
     f.band("", [(0, "PACKAGE (STN = LINK 16 / SADL)" if l16 else "PACKAGE"), (19, "TYPE"), (26, "TASK"), (34, "M3")] + ([(39, "STN")] if l16 else []))
     for r in ctx["whois"]:

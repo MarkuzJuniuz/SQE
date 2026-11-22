@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.567, your own route goes round the SAM rings too
+Your route now gets the same turn points as an AI flight in your seat: where a leg to the marshal, to the IP or station, or home would cut a live SAM ring, the card lists extra waypoints named AVD (the notes line says how many nm and minutes they add), your egress point and a scramble CAP's race-track are moved out of the rings, and a strike or SEAD IP that sat inside the target's rings moves out along the run-in to the first point clear of them (target unchanged). The plain F-14B holds three waypoints, so its AVD points are listed on page 2 as "ROUTE POINTS (enter by hand)". The attack legs themselves are unchanged.
+
 ## v0.41.566, AI egress points and CAP stations out of SAM rings; one detour for a package
 An AI flight's egress point (strike, SEAD, escort) no longer sits inside a live SAM ring: it moves to the nearest point outside the rings, at most 40 nm. A scramble, raid or fleet CAP whose race-track has an end inside a ring moves that end out (the far end first, else the pair walked toward what it guards); a defended point inside a ring keeps its station. A sweep station is never inside a ring the routes keep out of. The strikers of a package share one detour from the push to the IP, each copy shifted by its lane. Your own flight is unchanged.
 

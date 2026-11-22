@@ -96,6 +96,10 @@ apart, so the start times on the Missions tab are spread over the turn's four ho
    fired from 50 to 65 nm on a SAM site); the list is in CAMPAIGN.md, section 5.
 2. Start DCS, **Mission > Open > Missions > SQE_Sortie.miz**, fly it. The kneeboard carries comms and waypoints numbered the
    way your jet's cockpit numbers them, the timeline, bingo/joker, IFF, laser code, the package who's-who, threats and bullseye.
+   Where a leg of your route would cut a live SAM ring, SQE adds turn points named **AVD** (the notes line of page 1 says how many
+   nm and minutes they add), moves your egress point out of the rings, and puts a strike or SEAD IP outside the rings that hold the
+   target. The plain F-14B holds only three waypoints, so its AVD points are on page 2 under **ROUTE POINTS (enter by hand)**, in
+   route order, as degrees and decimal minutes (enter the minutes and tenths).
 3. The waiting window updates live (aircraft lost, ground units destroyed, landings). When DCS reports the mission ended it
    turns green.
    * **Accept results** applies exactly what you see.
