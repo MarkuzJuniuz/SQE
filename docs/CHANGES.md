@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.561, TARCAPs and station escorts are on station two minutes before the first striker reaches its IP
+A TARCAP or station escort now pushes so that it reaches its station two minutes before the first ground-attack flight of its package reaches its first protect point (IP, HARM, JSOW or release point, or target), instead of two minutes ahead of the strikers' push whatever the distances. Before, a TARCAP reached its station about 37 s before the TOT and after it in 3 builds of 10. The cover is never pushed later than before, and at most 15 minutes earlier. An escort that flies with its strikers is unchanged.
+
 ## v0.41.560, AI routes go round SAM rings with as many turn points as they need
 An AI strike, SEAD or CAS route, a raid scramble's way out, a support CAP's way home and the red raids' lanes now follow the shortest path round the SAM rings they must avoid, with as many turn points as it takes, instead of one point per ring (the two new legs often still cut the ring). A gap between two rings narrower than 4 nm counts as closed. A ring that holds a leg's start or end point no longer bends that leg.
 

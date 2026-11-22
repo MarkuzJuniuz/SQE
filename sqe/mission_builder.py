@@ -127,6 +127,8 @@ RAID_DASH_WAIT_S = 180      # v0.41.256: the interceptors cross this long after 
 RAID_HEAD_S = 300         # v0.41.278 (XO 2026-11-04: "intelligence is intelligence. Must've put two and two together"): the AI interceptors of the fleet-defence raid spawn this far along their route, as if they had launched this long before the mission began. A player's flight is not moved. Judgment call: ~50 nm at the dash speed; 0 = they start at the field
 RAID_SAM_RESERVE = 50    # v0.41.291 (XO 2026-11-04: spawn every red SAM, "trim the furthest when over budget"): the carrier-defence setpiece's extra SAM sites stop this many units short of the limit, so the relief sorties, standby pairs and wrecks built after them still fit. Judgment call from probes: the old build spent 36 to 50 units after its SAMs.
 RAID_F14_HOLD = False     # v0.41.276 (XO 2026-11-04: "the interceptors should just fly fast and bend away from SAMs"): False = the fleet-defence F-14s and F-15s have no HOLD and no gate: they leave at the start, fly the SAM-bending lane at the dash speed and wait on the intercept point. True = the v0.41.256 hold-then-dash with the SEAD gate.
+COVER_ONSTATION_S = 120      # S141a (XO 2026-11-22: "on station 120 s before the first striker's IP"): a TARCAP / station escort is on its station this long before the first ground-attack flight of its package reaches its first protect point (IP, HARM / JSOW / SLAM / REL point or TGT). Doctrine: the cover is on station before the strike group enters the threat area (JP 3-01, from memory, firmness medium). Judgment call (180 was proposed).
+COVER_LEAD_MAX_S = 900        # S141a: judgment call: the cover never pushes more than this ahead of its old push (`TARCAP_LEAD_S` via `stagger`), so a far station cannot drag a TARCAP out of the marshal by half an hour
 STAGGER = {Role.SWEEP: -90, Role.ESCORT: -90, Role.SEAD: -60, Role.TARCAP: -TARCAP_LEAD_S}      # seconds relative to the strikers' push (BMS-style)
 
 
@@ -519,6 +521,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         skip1 = {tgt_asset.id} if (tgt_asset is not None and package.objective.type == ObjectiveType.DEAD) else ()
         geom.tier = self._pick_tier(geom, pf.role, pspec.profile, tx, ty, skip1)
         self._flight_plans(geom, package, tx, ty, skip1)
+        self._follow_pkgs = {package.id}                                     # S138a: the package whose escort may follow its strikers (merged packages keep the station escort); set before _cover_staggers reads it
+        self._cov_stg = self._cover_staggers(package, geom)                  # S141a: id(flight) -> the push of a TARCAP / station escort relative to the strikers' push
         pkg_p, geom_p, psite = package, geom, None           # v0.41.284: the player flying the raid SEAD gets the SEAD job on a raid site (his own stand-in package and geometry), like the AI SEAD flights
         if self._raid_player_sead(package):
             psite = self._raid_player_site(package, geom, pf)
@@ -538,10 +542,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         player_push = math.floor((mshl.eta_s + (0 if pf.role == Role.CAP else o.marshal_slack_min * 60) + leg_m) / 60.0 + 0.5) * 60.0     # S77 (XO 2026-11-14): nearest minute, not up, so a 1-minute hold stays about a minute (was ceil: 1 to 2)
         player_push = max(player_push, math.ceil((dep_s + 120) / 60.0) * 60.0)
         leave_s = hold_leave_s(pw, player_push)
-        P0 = player_push - stagger(package, pf.role)                         # the strikers' push; everyone else is relative to it
-        self._follow_pkgs = {package.id}                                     # S138a: the package whose escort may follow its strikers (merged packages keep the station escort)
+        P0 = player_push - self._cov_stg.get(id(pf), stagger(package, pf.role))      # the strikers' push; everyone else is relative to it
         self._escort_pend = []                                               # S138a: [(escort flight, its group, lead striker flight)] the Escort task is attached once the lead's group exists
-        push_of = lambda f: self._push_adj.get(id(f), P0 + (0 if f.tag else (0 if self._escort_lead(package, f) is not None else stagger(package, f.role))))
+        push_of = lambda f: self._push_adj.get(id(f), P0 + (0 if f.tag else (0 if self._escort_lead(package, f) is not None else self._cov_stg.get(id(f), stagger(package, f.role)))))
         assign_times(pw, dep_s, player_push)
         tgt = objective_wp(pw) or pw[-1]
         ptot = tgt.eta_s + RAID_SEAD_LEAD_S if psite is not None else tgt.eta_s          # v0.41.284: the time the raid's other flights work to: the interceptors are due on station RAID_SEAD_LEAD_S after your HARMs
@@ -828,13 +831,14 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             P0x = P0 + (hm(xp) - hm(anchor)) * 60.0
             geom2.tier = self._pick_tier(geom2, lead.role, spec2.profile, tx2, ty2, {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else ())
             self._flight_plans(geom2, xp, tx2, ty2, {tgt2.id} if xp.objective.type == ObjectiveType.DEAD else ())
+            cs2_ = self._cover_staggers(xp, geom2)                 # S141a
             pw2 = plan_route(lead.role, (base2.x, base2.y), geom2, spec2.profile, is_player=True, tanker_xy=None, jsow=getattr(lead, "kit", "") in JSOW_FLIGHT_KITS,
                              keep_out=self._umbrella_keep(xp))
             self._add_cap2(xp, pw2, spec2, geom2)
-            assign_times(pw2, 0.0, P0x + stagger(xp, lead.role))
+            assign_times(pw2, 0.0, P0x + cs2_.get(id(lead), stagger(xp, lead.role)))
             pu = next((w for w in pw2 if w.name == "PUSH"), None)
-            if pu is not None and P0x + stagger(xp, lead.role) < pu.eta_s:            # it pushes before it could even have reached its marshal point in this timeline: shift the whole leg after PUSH
-                sh = (P0x + stagger(xp, lead.role)) - pu.eta_s
+            if pu is not None and P0x + cs2_.get(id(lead), stagger(xp, lead.role)) < pu.eta_s:            # it pushes before it could even have reached its marshal point in this timeline: shift the whole leg after PUSH
+                sh = (P0x + cs2_.get(id(lead), stagger(xp, lead.role))) - pu.eta_s
                 for w in pw2:
                     w.eta_s += sh
             tg2 = objective_wp(pw2) or pw2[-1]
@@ -874,7 +878,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             tots = []
             cas_tot = None
             for i, f in enumerate(xp.flights):
-                psh = P0x + stagger(xp, f.role)
+                psh = P0x + cs2_.get(id(f), stagger(xp, f.role))
                 g, tot_f = self._spawn_flight(xp, f, plan2, geom2, None, None, psh, tg2.eta_s, rtb2, i, manifest, despawn)
                 if tot_f:
                     tots.append(tot_f)
@@ -1480,6 +1484,61 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             return False
         wps.insert(k + 1, Wpt("CAP2", xy[0], xy[1], st_.alt_ft, st_.speed_kts))
         return True
+
+    def _push_to_s(self, package, f, geom, names=None, station=False):
+        """S141a: the seconds from the flight's PUSH to its first point after PUSH that is named in `names` (or its station when `station`: the first orbit point
+        with the TARCAP / ESCORT action), over the route `_protect_points` plans (the same plan_route call). None when it does not plan, has no PUSH or no such point."""
+        base = self.state.bases[f.base_id]
+        try:
+            wps = plan_route(f.role, (base.x, base.y), geom, self._flight_profile(f, package), is_player=False, tanker_xy=None,
+                             jsow=getattr(f, "kit", "") in JSOW_FLIGHT_KITS, jsow_side=self._jsow_side(package, geom), keep_out=self._umbrella_keep(package),
+                             agm88_deg=self._agm88_deg(package, geom), rel=self._rel_kind(package, f))
+        except ValueError:
+            return None
+        pi_ = next((k for k, w in enumerate(wps) if w.name == "PUSH"), None)
+        if pi_ is None:
+            return None
+        t = 0.0
+        for k in range(pi_ + 1, len(wps)):
+            t += leg_seconds(wps[k - 1], wps[k])
+            w = wps[k]
+            if station:
+                if w.orbit and w.action in ("TARCAP", "ESCORT"):
+                    return t
+            elif w.name in names:
+                return t
+        return None
+
+    def _cover_staggers(self, package, geom) -> dict:
+        """S141a (XO 2026-11-22): {id(flight): push seconds relative to the strikers' push P0} for every TARCAP and every station escort (a follow escort keeps 0), timed so the
+        flight is on its station COVER_ONSTATION_S before the first ground-attack flight of its package reaches its first protect point. Before v0.41.561 a TARCAP pushed TARCAP_LEAD_S
+        ahead of the strikers' push whatever the distances were: it reached its station a median 37 s before the TOT, after it in 30 % of builds, while the strikers pass their IP
+        about 3 min before. The value is never later than `stagger` and never more than COVER_LEAD_MAX_S earlier. {} when no striker plans. Each time is the PLANNED route's, so it
+        stays an estimate (a spawn point and the climb are not in it)."""
+        first_s = None
+        for f in package.flights:
+            if f.tag or f.role not in (Role.STRIKE, Role.SEAD, Role.CAS):
+                continue
+            t_ = self._push_to_s(package, f, geom, names=("IP", "SEAD", "JSOW", "SLAM", "REL", "TGT"))
+            if t_ is None:
+                continue
+            t_ += stagger(package, f.role)
+            if first_s is None or t_ < first_s:
+                first_s = t_
+        out = {}
+        if first_s is None:
+            return out
+        for f in package.flights:
+            if f.tag or f.role not in (Role.TARCAP, Role.ESCORT) or (f.role == Role.ESCORT and self._escort_lead(package, f) is not None):
+                continue
+            ts_ = self._push_to_s(package, f, geom, station=True)
+            if ts_ is None:
+                continue
+            old_ = stagger(package, f.role)
+            val = max(min(old_, first_s - COVER_ONSTATION_S - ts_), old_ - COVER_LEAD_MAX_S)
+            out[id(f)] = val
+            self.__dict__.setdefault("_cov_info", {})[id(f)] = {"first_s": first_s, "t_station": ts_, "old": old_, "val": val, "clamped": first_s - COVER_ONSTATION_S - ts_ < old_ - COVER_LEAD_MAX_S}      # for the probe
+        return out
 
     def _escort_lead(self, package, f):
         """S138a: the striker flight this AI package escort flies with, or None (the station escort). Only the main package, a plain STRIKE / CAS one (no JSOW / SLAM flight:
