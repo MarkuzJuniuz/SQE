@@ -85,12 +85,17 @@ ESCORT_AT_EXPOSED = True     # S121 (XO 2026-11-20, run 2026-11-20_00-29-13: one
 ESCORT_BEHIND_NM = 8          # v0.41.42: a package escort in a Standoff DEAD stations itself this far behind the JSOW flight's launch point (judgment call)
 ESCORT_FOLLOWS = True       # S138a (v0.41.547, XO 2026-11-21): the AI package escort of a plain STRIKE / CAS package flies WITH the lead striker (DCS Escort task, the strikers' push time, no station race-track) and fights what comes within its class's reach of them, up to the strikers' egress. False = the station escort (S137's tethered circle). Judgment call; XO flies it
 TARCAP_PKG_ZONE_NM = 15       # UNUSED since S137 (v0.41.546: the strike / CAS TARCAP circle is tethered round the strikers, full reach); was, v0.41.185 (XO 2026-10-28: the CAS / strike TARCAP goes maverick): the circle of a CAS or strike TARCAP is this big and does not reach out to the BARCAP circle (judgment call)
-TARCAP_COVER_MAX_NM = 35      # v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
+TARCAP_COVER_MAX_NM = 45      # S157: 35 -> 45 (the F-14's cover reach). v0.41.42: the TARCAP / escort circle round the shooters' launch points is at most this big (judgment call; was 20 nm wanted, moved off every SAM)
 # S45 (XO 2026-11-11: "make the F-14B(U) a special case ... just depend on the Phoenix's range"; he also asked for the player's Tomcat waypoints to sit further out). The Tomcat's TARCAP / escort
 # station sits this much further from the fight than the Eagle's and the engage circle of a hunting TARCAP is the Phoenix's reach, not the AIM-120's. Judgment calls, no public figure fixes them:
 # the longest test Phoenix shot was 110 nm at a Mach 1.5 drone (1973, secondary sources), the AIM-120's reach is about 60 to 70% of the Phoenix's (forum estimate), and DCS's Mk47 does not
 # loft inside about 21 nm, so a station 18 nm from the shooters (TARCAP_NEAR_NM) puts the first shots inside the Phoenix's weak zone; 12 nm more puts the bandits 30 nm and more out. Firmness: low.
 STAND_BACK_NM = {"F-14BU": 12, "F-14B": 12}
+# S157 (XO 2026-11-22, test T1fix3 Syria: in 11 of 12 fights the red shooter fired from 13 to 31 nm while outside every blue engage circle, so the blue fighters
+# were not allowed to attack and kept cruising): the blue cover fighters' engage reach (station and transit circles). Red keeps A2A_ZONE_NM. Judgment calls:
+# the R-27ER first shots seen were 36 to 58 km (19 to 31 nm); 40 nm lets a long-range shooter start its attack before that.
+COVER_REACH_NM = {True: 40, False: 30}      # long-range air-to-air shooters (LONG_RANGE_A2A) / the rest
+COVER_REACH_F14_NM = 45
 PHOENIX_ZONE_NM = 35         # the hunting TARCAP's engage circle for the Tomcat (the Eagle's is 25); = TARCAP_COVER_MAX_NM, the largest circle `_cover_circle` will build
 TARCAP_BARCAP_OVERLAP_NM = 4  # v0.41.138: the TARCAP circle reaches this far (less 2 nm of margin) inside the nearest BARCAP circle, so there is no unguarded strip between them (judgment call: a few miles so a bandit crossing from one to the other is always inside one)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
@@ -160,6 +165,15 @@ A2G_WEAPONS = 14 | 240 | 768 | 4161536 | 30720
 SHOOTS_BACK = {"F-16C", "FA-18C", "F-14BU", "F-14B", "F-15E"}
 RELIEF_BACK_NM = 12            # v0.41.78: a relief sortie appears this far behind its station (toward its base) and flies up to it (judgment call)
 SPAWN_SEP_M = 2000            # airborne flights never appear closer than this to each other (same height band, same minute)
+
+
+def cover_reach_nm(aircraft) -> float:
+    """S157: how far (nm) a blue cover fighter (TARCAP, station escort, sweep) may engage: the F-14 COVER_REACH_F14_NM, a long-range shooter COVER_REACH_NM[True], the rest COVER_REACH_NM[False]."""
+    if aircraft in F14_KEYS:
+        return COVER_REACH_F14_NM
+    if aircraft in LONG_RANGE_A2A:
+        return COVER_REACH_NM[True]
+    return COVER_REACH_NM[False]
 
 
 def carrier_heading(x, y, prefer):
@@ -1913,7 +1927,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             cover_lo_ = False
             if stw.action == "SWEEP" or not self._launch_pts.get(package.id):
                 # v0.41.10: a sweep engages within 25 nm whatever it flies (the v0.41.8 F-16 sweep, 15 nm, never fired while MiGs went past it)
-                zone_ = (stw.x, stw.y, A2A_ZONE_NM[True] if stw.action == "SWEEP" else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A])
+                zone_ = (stw.x, stw.y, max(COVER_REACH_NM[True], cover_reach_nm(f.aircraft)) if stw.action == "SWEEP" else cover_reach_nm(f.aircraft))      # S157
                 if stw.action == "SWEEP":
                     # v0.41.14: the circle stops short of every live SA-10's reach (31 nm measured): the v0.41.13 sweep chased a MiG to 10 nm of
                     # the Sukhumi SA-10 and lost Venom 9-2. Let red come out to it.
@@ -1944,9 +1958,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 # v0.41.138 (XO 2026-10-27, engagement circles): the circle meets the nearest BARCAP circle (a point just inside its edge, listed after the
                 # station and before the forward point, so the shooters and the station come first and the reach toward red is what gives way). A TARCAP
                 # is wanted at the sweep size for its type (25 nm long-range shooters, 15 nm the rest); the launch points still make it bigger.
-                bpts_, want_ = [], COVER_ZONE_NM
+                bpts_, want_ = [], cover_reach_nm(f.aircraft)       # S157: an escort's circle too (was COVER_ZONE_NM 20)
                 if stw.action == "TARCAP":
-                    want_ = PHOENIX_ZONE_NM if f.aircraft in F14_KEYS else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]      # S45: the Tomcat's circle is the Phoenix's reach
+                    want_ = cover_reach_nm(f.aircraft)      # S45: the Tomcat's circle is the Phoenix's reach; S157: COVER_REACH_NM
                     pkg_zone_ = package.objective.type in (ObjectiveType.CAS, ObjectiveType.STRIKE)      # v0.41.185: protects the package, does not hunt
                     # S137: a strike / CAS TARCAP is no longer capped at TARCAP_PKG_ZONE_NM: its circle is tethered round what it protects instead
                     bz_ = [] if pkg_zone_ else [z_ for z_ in getattr(self, "_barcap_zones", []) if dist(stw.x, stw.y, z_[0], z_[1]) / NM > z_[2] - TARCAP_BARCAP_OVERLAP_NM]
@@ -1976,7 +1990,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if hold_end is not None:
                 # S156 (XO 2026-11-22): fight on the way in too. Circles along the route from PUSH to the station, live from PUSH until the hold ends
                 # (the hold's later extensions move their stop too). Before this the flight only engaged round the package and was shot from outside it.
-                reach_ = PHOENIX_ZONE_NM if f.aircraft in F14_KEYS else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]
+                reach_ = cover_reach_nm(f.aircraft)
                 push_eta_ = 0
                 for w_ in wps:
                     if w_.name == "PUSH":

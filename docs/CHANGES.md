@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.586, cover fighters reach further, fly higher and carry the AIM-120C
+AI TARCAPs, station escorts and sweeps may now attack from much further out (40 nm for the F-15C, 45 for the F-14, 30 for the F-16 and F/A-18, still kept clear of SAM rings): in testing red fired its first missile from outside the blue fighters' fight area in 11 of 12 engagements, so they were never allowed to attack first. F-15C and F-14 cover flights fly their station at 33,000 ft and a faster 460 / 440 kt, and the F-15C's air-to-air kit carries the AIM-120C instead of the AIM-120B. A TARCAP, escort or sweep you fly in an F-15C or F-14 gets the new altitude, speed and kit too.
+
 ## v0.41.585, cover fighters fight on the way in and shoot first
 AI TARCAPs, escorts that hold a station and sweeps now also fight what comes within their reach along their route from the push point to their station, not only round the package, and they fire at maximum range from the start instead of holding their shots until the station. In testing, Su-27s shot an F-15C TARCAP down from just outside its fight circle and it never fired back. Your own flight is unchanged.
 
