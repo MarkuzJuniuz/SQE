@@ -129,6 +129,7 @@ class MapView(QWidget):
         if _GEO is None or _GEO_ID != theatres.active()["id"]:
             _GEO_ID, _GEO = _load_geo()
         from ..briefing import RANGE_NM
+        from ..routes import ring_nm
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
         p.fillRect(self.rect(), QColor(SEA))
         st = self.state
@@ -155,7 +156,7 @@ class MapView(QWidget):
         if self.rings:
             for a in st.assets.values():
                 if a.kind == AssetKind.SAM and not a.destroyed and a.variant in RANGE_NM and RANGE_NM[a.variant] >= 8:
-                    c = P(a.x, a.y); r = RANGE_NM[a.variant] * 1852 * sc; h = max(0.25, min(1.0, a.health))
+                    c = P(a.x, a.y); r = ring_nm(a.variant) * 1852 * sc; h = max(0.25, min(1.0, a.health))      # S140b1: the avoid ring, as the routes keep it
                     p.setPen(QPen(QColor(255, 93, 108, int(60 + 110 * h)), 1)); p.setBrush(QBrush(QColor(255, 93, 108, int(8 + 18 * h))))
                     p.drawEllipse(c, r, r)
             from ..raids import PATRIOT_NM, HAWK_NM
