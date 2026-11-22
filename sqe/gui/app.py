@@ -93,7 +93,8 @@ class OverviewPage(QWidget):
         gc = card(); left.addWidget(gc, 1)                                 # v0.41.149: the detail tabs (they replaced the one long sector list)
         self.dtabs = QTabWidget(); gc.layout().addWidget(self.dtabs)
         self.dviews = {}
-        for key, title in (("ground", "Ground"), ("supply", "Force Index"), ("ad", "Air Defense"), ("air", "Air Operations"), ("edge", "Tactical Edge")):
+        from .. import tempo as _tp0
+        for key, title in (("ground", "Ground"), ("supply", "Force Index"), ("ad", "Air Defense"), ("air", "Air Operations")) + ((("edge", "Tactical Edge"),) if _tp0.EDGE_ENABLED else ()):        # S144b: the Tactical Edge tab is hidden while tempo.EDGE_ENABLED is off
             v = QTextBrowser(); v.setFrameShape(QFrame.NoFrame); v.setStyleSheet("background:transparent;border:none;"); self.dviews[key] = v
             if key == "ground":                                              # v0.41.207: the base notes sit in an expandable section above the sector table
                 w = QWidget(); wl = QVBoxLayout(w); wl.setContentsMargins(0, 0, 0, 0); wl.setSpacing(4)
@@ -206,14 +207,15 @@ class OverviewPage(QWidget):
         air += V.section("Red Air", "<p>" + "<br>".join(e(x) for x in extra) + "</p>") if extra else ""
         self.dviews["air"].setHtml(air or "<p style='color:#8fa3b8'>Nothing is planned yet.</p>")
         # ---- Tactical Edge: a bar per job kind, full at the +40% cap
-        im2 = V.Images()
-        names = {"CAS": "Close Air Support", "STRIKE": "Strike", "DEAD": "SEAD/DEAD", "AIR": "Air Cover and Counter-Air"}
-        trs = []
-        for k in tempo.KINDS:
-            v = tempo.get(st, k) * 100
-            trs.append([names[k], im2.bar(f"{v:+.0f}%", v / (tempo.TEMPO_CAP * 100), "edge"), ])
-        im2.apply(self.dviews["edge"], "<p style='color:#b9c6d6'>What your flown sorties do to the odds of the same kind of job done in the background: 0 to +40 points, fading 3% a night. "
-                  "A full bar is the +40% cap.</p><p style='margin:0'>&nbsp;</p>" + V.table(("Job", "Edge"), trs))
+        if tempo.EDGE_ENABLED:
+            im2 = V.Images()
+            names = {"CAS": "Close Air Support", "STRIKE": "Strike", "DEAD": "SEAD/DEAD", "AIR": "Air Cover and Counter-Air"}
+            trs = []
+            for k in tempo.KINDS:
+                v = tempo.get(st, k) * 100
+                trs.append([names[k], im2.bar(f"{v:+.0f}%", v / (tempo.TEMPO_CAP * 100), "edge"), ])
+            im2.apply(self.dviews["edge"], "<p style='color:#b9c6d6'>What your flown sorties do to the odds of the same kind of job done in the background: 0 to +40 points, fading 3% a night. "
+                      "A full bar is the +40% cap.</p><p style='margin:0'>&nbsp;</p>" + V.table(("Job", "Edge"), trs))
 
     def refresh(self, st):
         from .. import posture
@@ -849,7 +851,6 @@ class MainWindow(QMainWindow):
                 except OSError:
                     pass
                 self.session.new(v['name'], v['aircraft'], v['level'], start_date=v['start_date'], squadron=v.get('squadron'), theatre=v.get('theatre', 'caucasus'),
-                                 tactical_edge=bool(v.get("tactical_edge", True)), tactical_edge_decay=bool(v.get("tactical_edge_decay", False)),
                                  a10_variant=v.get("a10_variant"), f14_variant=v.get("f14_variant"), link16=v.get("link16")); self.refresh_all()
             except Exception:
                 QMessageBox.critical(self, "Could not create campaign", traceback.format_exc())

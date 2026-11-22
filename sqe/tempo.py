@@ -11,6 +11,7 @@ from .models import ObjectiveType
 from .words import edge_word
 
 KINDS = ("CAS", "STRIKE", "DEAD", "AIR")
+EDGE_ENABLED = False              # S144b (XO 2026-11-22): the Tactical Edge is hidden and OFF for every campaign, old saves too (the code stays dormant; True revives it, with its UI to be put back)
 TEMPO_CAP = 0.40                  # v0.41.166 (XO 2026-10-27): the most the chance of a background job moves up (+40 percentage points; was +-20)
 TEMPO_MIN = 0.0                   # ...and it never goes below zero: a bad sortie only takes back what flying built (an AI-flown sortie often grades bad, which made the numbers worse)
 STEP = {"great": 0.05, "good": 0.03, "mixed": 0.0, "bad": 0.0}      # v0.41.171 (XO 2026-10-28): a bad sortie takes nothing back; only the nightly decay lowers it (lessons learned are not unlearned)
@@ -26,12 +27,12 @@ def kind_of(objective_type: str) -> str:
 
 def edge_on(state) -> bool:
     """v0.41.160: the campaign's Tactical Edge switch (`state.ground["tactical_edge"]`: set at New Campaign, edited in Settings > Campaign; S88 R3 made it per campaign). Off: your flying changes nothing in the war."""
-    return bool((getattr(state, "ground", None) or {}).get("tactical_edge", True))
+    return EDGE_ENABLED and bool((getattr(state, "ground", None) or {}).get("tactical_edge", True))
 
 
 def decay_on(state) -> bool:
     """v0.41.208 (XO): the nightly fade of the edge is a per-campaign switch (Enable Tactical Edge Decay, `state.ground["tactical_edge_decay"]`), default OFF."""
-    return bool((getattr(state, "ground", None) or {}).get("tactical_edge_decay", False))
+    return edge_on(state) and bool((getattr(state, "ground", None) or {}).get("tactical_edge_decay", False))
 
 
 def get(state, kind: str) -> float:

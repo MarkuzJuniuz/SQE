@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.574, Tactical Edge is switched off
+The Tactical Edge (your sorties raising the odds of the AI's background jobs) and red's idle surge are off for every campaign, saved ones too, and hidden: no Tactical Edge tab on the Overview, no switches in New Campaign or Settings. The war runs on its own; skipping turns no longer makes red press harder, and flying no longer builds an edge.
+
 ## v0.41.573, an opened save shows its new SAM sites at once
 A saved campaign that was missing a blue air-defence site (Hatay's Patriot in a Syria save, v0.41.572) now gets it the moment you open it, a finished war or a day already begun included, and a state note names what was added. Before, it appeared only when the next day was planned.
 

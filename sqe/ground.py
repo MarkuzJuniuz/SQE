@@ -664,9 +664,10 @@ def surge(state, d) -> float:
     """v0.41.155 (XO 2026-10-27, "red needs a chance to win if I do not fly"): 1.0 while your squadron flies; then it grows by the level's `red_surge` for every day beyond
     SURGE_GRACE_TURNS skipped flyable turns since the last flown sortie (`g["idle_turns"]`: Session.skip_turn adds one per flyable turn skipped, a flown sortie resets it; a turn with
     nothing for you to fly does not count), up to 1 + SURGE_CAP. It multiplies red's reinforcements, attack chance and raid rate."""
+    from . import tempo
     step = float(getattr(d, "red_surge", 0.0))
     g = state.ground or {}
-    if step <= 0 or not g or not g.get("tactical_edge", True):      # v0.41.160: Tactical Edge off: no surge, your flying makes no difference here
+    if step <= 0 or not g or not tempo.edge_on(state):      # S144b: via tempo.edge_on (hidden and off); v0.41.160: Tactical Edge off: no surge, your flying makes no difference here
         return 1.0
     idle = (int(g.get("idle_turns", 0)) - SURGE_GRACE_TURNS) / TURNS_PER_DAY            # days' worth of idle past the grace
     return 1.0 + min(SURGE_CAP, max(0.0, idle) * step)

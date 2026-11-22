@@ -249,10 +249,7 @@ the carrier is sunk, its aircraft are moved to land fields (any that cannot be p
 * **Defeat** is either of: the coalition's air component falls below 15% of its authorised strength, or **3 of your airfields
   have fallen**. A sunk carrier does not count as a fallen field (its aircraft land elsewhere; the carrier group sails back in after 7
   days).
-* **Idle surge.** If you keep skipping turns that had a flight you could have flown, red presses harder. Each such skipped
-  turn counts one; a flown sortie resets the count to zero, and a turn with nothing for you to fly (a stand-down turn) is not
-  counted. The first 12 counted turns (two days' worth) are free. Past that, red's reinforcements, attack chance and raid rate
-  grow for each further day's worth of skipped turns (`red_surge`: 3% at Level 2, 8% at Level 3, none at Level 1). The **Tactical Edge** switch of a campaign (New Campaign: "your sorties affect the war") turns this off together with the Tactical Edge itself.
+* **No idle surge, no Tactical Edge.** The war runs on its own: red does not press harder when you skip turns, and your sorties do not raise the odds of the AI's jobs. Your flying counts as part of the war through what you really destroy and defend. (The code for both is kept but switched off.)
 
 ---------------------------------------------------------------------------------------------------
 
@@ -365,7 +362,7 @@ At Levels 2 and 3 five special plants stand in the Syrian rear: two near Palmyra
 * **They are special targets.** The planner offers a strike on a Lutorin Works plant ahead of the ordinary supply strikes. A plant is a fixed target, so it is hit with stand-off weapons: SLAM-ER Hornets released far out and low, with no SEAD or DEAD job in front of it and without the flight route being stopped by the belt, for as long as a Hornet squadron has two jets to send. With none, the usual rules apply (behind the SEAD or DEAD on the air defence that covers it). The Palmyra plants sit under the long-range umbrella, so the odds there are the worst. A plant is hunted until it is destroyed (a damaged supply site is left alone to mend, a plant does not mend). **They are red's depots too:** each plant counts as a supply site in the Force Index (a site of the 25 red has at Levels 2 and 3: 12 fixed sites, 8 road sites and the 5 works), so a strike on a plant lowers the Force Index as much as one on a depot, and the nightly repair that mends depots does not mend them.
 * **They are very hard to rebuild.** One team rebuilds one destroyed plant at a time, and it takes weeks (about a month, at both levels). At both levels one good strike puts a works out, as it would a depot. A damaged plant never repairs.
 * **They feed the war on the front.** While the plants stand, the enemy's reinforcements, attacks and raids are stronger, so the more of them you destroy the weaker the push on Hatay. If every one of them is destroyed at the same moment the war is won ("Lutorin Works is gone"). The other ending is the one the campaign already has: if Hatay falls, the war is lost.
-* Tactical Edge and your own flying count as for any other strike: the plants are tasked like every other job, and a plant you hit yourself takes damage from the buildings you really destroy.
+* Your own flying counts as for any other strike: the plants are tasked like every other job, and a plant you hit yourself takes damage from the buildings you really destroy.
 
 ### Long-range air defence
 

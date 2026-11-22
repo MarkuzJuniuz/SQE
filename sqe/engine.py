@@ -101,7 +101,7 @@ class Session(Merging, SeadTiming):
         return sorted(d.glob(f"*{CAMPAIGN_EXT}"), key=lambda p: p.stat().st_mtime, reverse=True) if d.exists() else []
 
     def new(self, name: str, aircraft: str, level: int, seed: int | None = None, start_date: str | None = None, night_ops: bool = True,
-            squadron: str | None = None, theatre: str = "caucasus", tactical_edge: bool = True, tactical_edge_decay: bool = False,
+            squadron: str | None = None, theatre: str = "caucasus", tactical_edge: bool = False, tactical_edge_decay: bool = False,
             a10_variant: str | None = None, f14_variant: str | None = None, link16: bool | None = None) -> None:
         theatres.use(theatre)
         self.sync_terrain()

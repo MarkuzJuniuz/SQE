@@ -76,13 +76,6 @@ class NewCampaignDialog(QDialog):
         self.day = StepSpin(); self.day.setRange(1, 28); self.day.setValue(12)
         row = QHBoxLayout(); row.addWidget(self.month, 1); row.addWidget(self.day); row.addWidget(self.year_lbl)
         form.addRow("Campaign starts", row)
-        self.edge = QCheckBox("Tactical Edge: your sorties affect the war")
-        self.edge.setChecked(bool(tactical_edge)); self.edge.setToolTip(TACTICAL_EDGE_TEXT)
-        form.addRow("", self.edge)                      # the starting value for this campaign (S88 R3): Settings > Campaign changes it for the open campaign later
-        self.edge_decay = QCheckBox("Enable Tactical Edge Decay")
-        self.edge_decay.setChecked(bool(edge_decay)); self.edge_decay.setToolTip(EDGE_DECAY_TEXT); self.edge_decay.setEnabled(bool(tactical_edge))
-        self.edge.toggled.connect(self.edge_decay.setEnabled); self.edge_decay.setStyleSheet("margin-left:22px;")      # a sub-option of Tactical Edge
-        form.addRow("", self.edge_decay)
         from .. import weather as _wxn
         self.wx = QComboBox()
         for k, val in _wxn.MODES.items():
@@ -163,14 +156,14 @@ class NewCampaignDialog(QDialog):
 
     def values(self) -> dict:
         return {"name": self.name.text().strip() or "Campaign", "aircraft": self.ac.currentData(), "level": self.lvl.currentData(),
-                "start_date": f"{self.year}-{self.month.currentData():02d}-{self.day.value():02d}", "tactical_edge": self.edge.isChecked(), "tactical_edge_decay": self.edge.isChecked() and self.edge_decay.isChecked(),
+                "start_date": f"{self.year}-{self.month.currentData():02d}-{self.day.value():02d}",
                 "squadron": self.sqd.currentData(), "theatre": self.th.currentData() or "caucasus", "weather_mode": str(self.wx.currentData()),
                 "ai_skill_red": str(self.skr.currentData() or "level"), "ai_skill_blue": str(self.skb.currentData() or "level"),
                 "a10_variant": self.a10.currentData(), "f14_variant": self.f14.currentData(), "link16": bool(self.l16.currentData())}
 
 
 class SettingsDialog(QDialog):
-    """Four tabs: General (takeoff buffer, marshal slack, AI fuel, splash damage), Campaign (weather, Tactical Edge, AI skill),
+    """Four tabs: General (takeoff buffer, marshal slack, AI fuel, splash damage), Campaign (weather, AI skill),
     Mission Build (merging and limits, the hot-start, dormant-site, ILS, AWACS-radio and damage-call switches, then AI landings, ruins and carcasses) and DCS Integration (paths,
     the scripting patch, the ECM script). A new experimental feature gets its own "Experimental" tab (added last) while it is being tried out.
     Labels are in title case, hints stay sentences. Every setting keeps the key it always had; the two hot-runway keys are one radio group."""
@@ -228,20 +221,7 @@ class SettingsDialog(QDialog):
         hint(v, "Procedural follows the theatre's climate for the month and changes slowly from day to day (never clear to storm in an afternoon); each sortie "
                 "sees the weather at its own start time. Laser and imaging weapons are swapped for GPS weapons when cloud or rain rules them out, and a package "
                 "that cannot attack at all (or meets fog) is scrubbed (the war simulation leaves its target alone). Clear is what SQE always did.")
-        # v0.41.165: Tactical Edge goes AFTER the whole Weather block (combo + its description), never between them
-        # S88 R3 (XO 2026-11-18): the pair belongs to the OPEN campaign (`state.ground`), not to the app: greyed out when no campaign is open
-        g_ = (getattr(state, "ground", None) or {}) if state is not None else {}
-        self.edge_rows = bool(g_)
-        self.edge = QCheckBox("Tactical Edge (Your Sorties Affect the War)"); self.edge.setChecked(bool(g_.get("tactical_edge", True)))
-        row(v, "Tactical Edge", self.edge)
-        hint(v, TACTICAL_EDGE_TEXT)
-        self.edge_decay = QCheckBox("Enable Tactical Edge Decay"); self.edge_decay.setChecked(bool(g_.get("tactical_edge_decay", False)))
-        row(v, "", self.edge_decay)
-        hint(v, EDGE_DECAY_TEXT)
-        self.edge.setEnabled(self.edge_rows); self.edge_decay.setEnabled(self.edge_rows and self.edge.isChecked())
-        self.edge.toggled.connect(lambda on: self.edge_decay.setEnabled(self.edge_rows and on)); self.edge_decay.setStyleSheet("margin-left:22px;")
-        if not self.edge_rows:
-            hint(v, "Open a campaign to change this; it is saved with each campaign.")
+        # S144b (XO 2026-11-22): the Tactical Edge rows are hidden (tempo.EDGE_ENABLED is off); TACTICAL_EDGE_TEXT / EDGE_DECAY_TEXT stay for a revival
         from ..difficulty import SKILL_CHOICES as _SK
         self.skr, self.skb = QComboBox(), QComboBox()
         for cb_, key_ in ((self.skr, "ai_skill_red"), (self.skb, "ai_skill_blue")):
@@ -428,8 +408,6 @@ class SettingsDialog(QDialog):
         pr = self.s.problems()
         if pr:
             QMessageBox.warning(self, "Check your paths", "\n".join(pr)); return
-        if self.edge_rows:                                       # S88 R3: Tactical Edge is saved with the open campaign (the caller saves the session)
-            self.state.ground["tactical_edge"] = bool(self.edge.isChecked()); self.state.ground["tactical_edge_decay"] = bool(self.edge.isChecked() and self.edge_decay.isChecked())
         self.s.save(); self.accept()
 
 
