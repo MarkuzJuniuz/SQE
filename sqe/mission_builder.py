@@ -383,6 +383,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self.warns = warns
         self._anchor_id = package.id
         self._fcalls, self._ulabels, self._pkg_who = [], {}, {}
+        self._bomb_tgt = {}                                             # S149: striker unit name -> (x, y) of its target point (the hook's jettison test)
         self._support_lbl = {}                                          # v0.41.215: tanker / AWACS unit name -> its label, for the damage calls
         self._gates = []                                                # DEAD flights that turn back when the site's radars are still up
         self._f14ab = None                                              # S103d: the plain F-14B player's waypoint scheme once built: {"keep": [(name, x, y)], "ntp": [(code, name, x, y)], "extra": [(code, x, y)]} (kneeboard labels)
@@ -742,7 +743,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             for gt_ in self._gates:                                    # every SEAD flight of this mission on the site, merged packages included (they spawned above)
                 gt_["seads"] = list(self._sead_grps.get(gt_["site"], []))
             install_hook(m, st.campaign_id, manifest.sortie, package.id, despawn if o.ai_despawn_on_land else [], manifest.player_unit,
-                         group=pf.callsign, calls=[(t_, x_, f"TO {pf.callsign.upper()}:" in x_.upper()) for t_, x_ in calls], wps=[], sound=sound, sound_you=sound_you, flights=self._ulabels,
+                         group=pf.callsign, calls=[(t_, x_, f"TO {pf.callsign.upper()}:" in x_.upper()) for t_, x_ in calls], wps=[], sound=sound, sound_you=sound_you, flights=self._ulabels, bomb_tgt=self._bomb_tgt,
                          enemy_air=[u for g_ in manifest.groups if g_["kind"] == "enemy_air" for u in g_["units"]],      # v0.41.324: the parked jets are real aircraft now: kills on them are attributed like any red jet
                          sites=self._hook_sites(manifest), ruins=self._ruin_sites, gates=self._gates, ai_test=bool(o.player_is_ai), gate_km=DEAD_GATE_KM, jams=(self._jams if o.ecm_script else {}), jamw=(self._jamw if o.ecm_script else {}),
                          watch=[g_.name for f_, g_ in self.flight_groups if not f_.tag and (not f_.is_player or o.player_is_ai)],      # v0.41.317: the all-AI test flight is watched too (AWACS said "no further tasking" while it was still inbound)
@@ -1391,6 +1392,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 gate["to"] = len(g.points)                              # the landing point
             self._gates.append(gate)
         tw = None if f.tag else objective_wp(wps)
+        if tw is not None and f.role in (Role.STRIKE, Role.CAS) and tw.action in ("BOMB", "CAS"):
+            for un_ in names:
+                self._bomb_tgt[un_] = (tw.x, tw.y)
         if tw is not None and f.role in (Role.STRIKE, Role.CAS) and getattr(f, "kit", "") not in JSOW_FLIGHT_KITS:
             self._striker_tgt.setdefault(package.id, []).append(float(tw.eta_s))            # S38
             self._striker_wps.setdefault(package.id, []).append([(w.x, w.y, w.eta_s) for w in wps])            # S86
