@@ -113,7 +113,8 @@ SLAM-ERs or similar weapons released far outside the SAM's reach, with HARM shoo
 **Routes round the SAM rings.** An AI flight, and you, fly round every live SAM ring on the way out to the marshal point, to the IP or the station, and home. The ring is the SAM's reach plus a margin: SA-10 35 nm,
 SA-5 71, SA-2 26, SA-11 20, SA-6 16, SA-3 15 (the map draws the same rings). A flight that starts or ends inside a ring (a base near the front, an IP inside the target's ring) leaves or enters it by the nearest edge when that cuts its time inside.
 Only the attack legs (IP to target to egress) go in as the job requires; your IP on a strike or SEAD is placed outside the rings that hold the target. The planner counts reach by the length of that route, and a job no jet can fly round the rings within
-2.4 times its combat radius (1.5 times that with a tanker) is not offered, with no message; the same limit applies to each flight when the mission is built.
+2.4 times its combat radius (1.5 times that with a tanker) is not offered, with no message; the same limit applies to each flight when the mission is built. A flight over that limit first tries a low leg straight under an SA-5 or SA-2 ring
+(500 ft below the ring's lowest engagement height; each low nm counts 1.5) in place of its detour, then a shorter hold on station, and only then is left out.
 
 **Package merging** (Settings > Mission build): when you fly, every package that starts inside the time windows (15 minutes
 before and 30 after yours by default, Later Packages up to a whole turn) flies in the same mission, wherever its target is,

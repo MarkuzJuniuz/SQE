@@ -104,6 +104,10 @@ CV_RECOVER_NM = 10            # v0.41.17: AI carrier flights (and your wingmen) 
 CV_RCV_NM = 30            # v0.41.127 (XO 2026-10-23: F-14s flew 65 nm home at 2,000 ft): a flight going home to the boat keeps its height to a point this far out, then descends (judgment call)
 CV_RCV_FT = 10000         # ...and crosses that point at this height (the Marshal stack is lower; judgment call)
 RCV_NM = 8                    # v0.41.10: an AI flight's recovery entry point, this far from its field...
+UNDER_MARGIN_FT = 500          # S140d2: a leg flown under a ring is this far under the ring system's floor height (`profiles.ENVELOPE`); XO's SA-5 probe: nothing at 500 ft, 20 nm at 5,000 ft. Judgment call
+UNDER_MIN_FT = 300             # S140d2: and never lower than this above the ground (radio altitude). Judgment call
+UNDER_BRACKET_NM = 20.0        # S140d2: the descent before the ring and the climb after it take this far (the S33 / LOW tier use 30); a leg without the room keeps its detour
+LOW_NM_FUEL = 1.5              # S140d2: a nm flown low counts this many route nm against the fuel budget (no fuel figure for a low leg exists in `profiles` or `routes`: `PENALTY["low"]` is a risk score). Judgment call
 HOME_SAM_VARIANTS = ("SA-15", "SA-8", "SA-19", "SA-9", "AAA", "MANPAD")     # S33 (XO 2026-11-11): the short-range air defence an AI fighter's way home stays high over
 HOME_RING_MARGIN_NM = 3.0     # ...its ring (threatmap.RANGE_NM) plus this counts as touching the leg (judgment call, the same size as the CAS DEAD rule)
 HOME_FLOOR_MARGIN_FT = 4000   # ...and the leg stays this far above the highest ceiling (profiles.ENVELOPE) among the rings it crosses (judgment call: Tor 20,000 -> 24,000 ft)
@@ -203,7 +207,7 @@ def stagger(package, role) -> int:
 from .packages import Package, folded_n_def
 from .options import MissionOptions
 from .radio import RadioCfg, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import FUEL_ROUTE_FACTOR, route_nm, trim_margin, cap2_point, out_of_rings, jsow_launch_xy, SLAM_LAUNCH_NM, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, SA10_STATION_NM, AVOID_NM, AVOID_MARGIN_NM, avoid_circles, safe_path_edge, AGM88_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, hold_leg_s, hold_next, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
+from .routes import _seg_hits as routes_seg_hits, FUEL_ROUTE_FACTOR, route_nm, trim_margin, cap2_point, out_of_rings, jsow_launch_xy, SLAM_LAUNCH_NM, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, SA10_STATION_NM, AVOID_NM, AVOID_MARGIN_NM, avoid_circles, safe_path_edge, AGM88_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, hold_leg_s, hold_next, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
 from .state import CampaignState
 
 F = VehicleGroup.Formation
@@ -2398,6 +2402,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         on its station (until `_hold_end`, or the stop time of a CAP) at that point's speed."""
         wps, stop = r_[0], r_[3]
         nm = route_nm(wps) + dist(wps[-1].x, wps[-1].y, base.x, base.y) / NM
+        for a_, b_ in zip(wps, wps[1:]):
+            if a_.name == "UIN" and b_.name == "UOUT":              # S140d2: a leg flown low under a ring burns more (`LOW_NM_FUEL` route nm per nm)
+                nm += (LOW_NM_FUEL - 1.0) * dist(a_.x, a_.y, b_.x, b_.y) / NM
         for w in wps:
             if w.action == "HOLD" and push_s is not None:
                 nm += max(0.0, hold_leave_s(wps, push_s) - w.eta_s) * w.speed_kts / 3600.0
@@ -2414,7 +2421,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         never left out, nor the all-AI test's stand-in for it (judgment call, flagged for XO: `_trailing_steerpoints` and the card are built from that flight): it flies as built and the warning says so. A support CAP (tag) has no ladder. -> the route tuple to use, or None."""
         if f.tag:
             return r_
-        f.hold_short = False
+        f.hold_short = f.under_ring = False
         spec = AIRCRAFT[f.aircraft]
         base = self.state.bases[f.base_id]
         tk = 1.5 if tm.tanker_station(self.state, (base.x, base.y), (geom.tx, geom.ty)) is not None else 1.0
@@ -2425,23 +2432,104 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if nm <= bud:
             return r_
         has_stn = any(w.orbit and w.action in ("TARCAP", "ESCORT", "SWEEP") for w in r_[0])
-        for rung, name in ((2, "margin"), (4, "hold")):
+        for rung, name in ((2, "margin"), (3, "under"), (4, "hold")):
             if name == "hold":
                 if not has_stn:
                     continue
                 f.hold_short = True
+            if name == "under":
+                f.under_ring = True                                  # `_leg_rules` flies a detour low under a ring where it can (it stays on for rung 4)
             with trim_margin():
                 r2 = self._flight_route(package, f, geom, idx, push_s, tot_s)
             if r2 is None:
                 continue
+            if name == "under" and not any(w.name == "UIN" for w in r2[0]):
+                continue                                            # no detour could go under: nothing new to try
             n2 = self._fuel_nm(f, base, r2, push_s, tot_s)
             if n2 <= bud:
                 log.update(rung=rung, nm=round(n2, 1))
                 return r2
-        f.hold_short = False
+        f.hold_short = f.under_ring = False
         log["rung"] = 5
         self.warns.append(f"{f.callsign}: no route round the SAM rings fits its fuel ({nm:.0f} nm of {bud:.0f}); " + ("it flies as built (the player's seat)." if f.is_player else "left out of the mission."))
         return r_ if f.is_player else None          # the player's seat (a person, or the all-AI test's stand-in) always flies: the card, the hook and the trailing points are built from it
+
+    def _under_ring(self, wps, spec):
+        """S140d2 (plan 2.8 first bullet, XO answer 4; ladder rung 3): each detour (a run of AVD points between two other points) whose straight leg crosses only rings a low flight can pass under is replaced by that straight
+        leg flown low: UDSC (cruise height, `UNDER_BRACKET_NM` before the ring) - UIN (low, 2 nm before the first ring) - UOUT (low, 2 nm after the last) - UCLB (cruise height again). Height = the lowest `profiles.ENVELOPE` floor
+        among the crossed rings minus `UNDER_MARGIN_FT` (a ring with a floor under 1,000 ft is passable only as a radar SAM whose reach halves against a low flight, `profiles.LOW_RADAR_FACTOR`: the leg must stay outside half the
+        ring); at least `UNDER_MIN_FT`. The low leg must keep out of every live short-range air-defence ring (`HOME_SAM_VARIANTS`, + `HOME_RING_MARGIN_NM`) whose ceiling is above it, needs the ground-height scan, and leaves
+        room in the airframe's point list. A run that fails any of these keeps its detour. The points are radio-altitude (they follow the ground, like the LOW tier). Route shape only: no task."""
+        if not relief.available():
+            return wps
+        st = self.state
+        live = [a for a in st.assets.values() if a.kind == AssetKind.SAM and not a.destroyed and a.health > 0.25 and not getattr(a, "suppressed", False)]
+        rv = [(a.x, a.y, AVOID_NM[a.variant], a.variant) for a in live if a.variant in AVOID_NM]
+        sr = [(a.x, a.y, (tm.RANGE_NM.get(a.variant, 0) + HOME_RING_MARGIN_NM), a.variant) for a in live if a.variant in HOME_SAM_VARIANTS and tm.RANGE_NM.get(a.variant, 0) > 0]
+        out, i = [], 0
+        while i < len(wps):
+            if wps[i].name == "AVD" and out:
+                j = i
+                while j < len(wps) and wps[j].name == "AVD":
+                    j += 1
+                low = self._low_leg(out[-1], wps[j], rv, sr) if j < len(wps) else None
+                if low is not None and len(out) + len(low) + len(wps) - j + 2 <= spec.profile.max_points:
+                    out.extend(low)
+                else:
+                    out.extend(wps[i:j])
+                i = j
+                continue
+            out.append(wps[i])
+            i += 1
+        return out
+
+    @staticmethod
+    def _low_leg(a, b, rv, sr):
+        """S140d2: the four points (UDSC, UIN, UOUT, UCLB) that fly the straight leg a -> b low under the rings it crosses, or None (see `_under_ring`)."""
+        circ = [(x, y, r) for x, y, r, _v in rv]
+        hit = routes_seg_hits((a.x, a.y), (b.x, b.y), [(x, y, r * NM) for x, y, r in circ])
+        if not hit:
+            return None
+        h_ft = 10 ** 9
+        for k in hit:
+            x, y, r, v = rv[k]
+            fl = profiles.ENVELOPE.get(v, (0, 0))[0]
+            if fl >= 1000:
+                h_ft = min(h_ft, fl - UNDER_MARGIN_FT)
+            elif v in profiles.RADAR:
+                if routes_seg_hits((a.x, a.y), (b.x, b.y), [(x, y, r * NM * profiles.LOW_RADAR_FACTOR)]):
+                    return None                                     # the low leg would still be inside the halved reach
+                h_ft = min(h_ft, UNDER_MIN_FT)
+            else:
+                return None
+        h_ft = max(UNDER_MIN_FT, h_ft if h_ft < 10 ** 9 else UNDER_MIN_FT)
+        for x, y, r, v in sr:
+            if profiles.ENVELOPE.get(v, (0, 0))[1] > h_ft and routes_seg_hits((a.x, a.y), (b.x, b.y), [(x, y, r * NM)]):
+                return None
+        L = dist(a.x, a.y, b.x, b.y)
+        ins = []
+        for x, y, r, _v in rv:
+            r_m = r * NM
+            fx, fy, vx, vy = a.x - x, a.y - y, b.x - a.x, b.y - a.y
+            q = 2 * (fx * vx + fy * vy)
+            c = fx * fx + fy * fy - r_m * r_m
+            disc = q * q - 4 * L * L * c
+            if disc > 0:
+                t0, t1 = (-q - disc ** 0.5) / (2 * L * L), (-q + disc ** 0.5) / (2 * L * L)
+                if t1 > 0 and t0 < 1:
+                    ins.append((max(0.0, t0), min(1.0, t1)))
+        if not ins:
+            return None
+        e_in, e_out = min(t for t, _ in ins) * L, max(t for _, t in ins) * L
+        d1, d2 = min(UNDER_BRACKET_NM * NM, e_in - 3 * NM), min(UNDER_BRACKET_NM * NM, L - e_out - 3 * NM)
+        if d1 < 2 * NM or d2 < 2 * NM:
+            return None                                             # no room to come down before the ring and climb after it
+        cruise = max(a.alt_ft, b.alt_ft)
+        at = lambda s: offset(a.x, a.y, bearing(a.x, a.y, b.x, b.y), s)
+        return [Wpt("UDSC", *at(e_in - 2 * NM - d1), cruise, a.speed_kts, "Descend: low under the SAM ring"),
+                Wpt("UIN", *at(e_in - 2 * NM), int(h_ft), a.speed_kts, "Low under the SAM ring", rad=True),
+                Wpt("UOUT", *at(e_out + 2 * NM), int(h_ft), a.speed_kts, "Low under the SAM ring", rad=True),
+                Wpt("UCLB", *at(e_out + 2 * NM + d2), cruise, a.speed_kts, "Climb: clear of the ring")]
 
     def _leg_rules(self, package, f, wps, spec, shaped=False, geom=None):
         """S140b1 (plan 2.2): the legs of an AI package flight that `plan_route` could not route, once the route is final (the scramble CAP's station is moved, CAP2 is in): a scramble CAP's way out to its station
@@ -2450,6 +2538,10 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         rings = self._zone_sams(package, True)
         if not rings:
             return wps
+        wps = self._leg_rules_routed(package, f, wps, spec, shaped, geom, rings)
+        return self._under_ring(wps, spec) if getattr(f, "under_ring", False) else wps
+
+    def _leg_rules_routed(self, package, f, wps, spec, shaped, geom, rings):
         mp = spec.profile.max_points
         if f.role == Role.CAP:
             k1 = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)

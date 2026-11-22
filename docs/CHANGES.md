@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.569, a flight that would not fit its fuel tries going under the ring
+Before a flight is left out for fuel (v0.41.568), its detour round a SAM ring can become a low leg straight under the ring where the ring cannot reach that low: an SA-5 (floor 1,000 ft) or SA-2 (1,500 ft) is passed 500 ft under its floor, a radar SAM whose halved low reach stays off the leg at 300 ft, never through a short-range site's ring, with a descent and a climb 20 nm either side and each low nm counted 1.5 times against the fuel. In the test runs no flight needed it yet.
+
 ## v0.41.568, a job out of safe reach is not offered
 The planner now judges whether a target is in reach by the length of the safe route round the live SAM rings (to the IP or launch point, the attack leg after it goes in as before), not by the straight line, so a job that no flight can reach without too long a detour is not offered. In 24-turn test runs that changed 11 of 4,785 squadron-target pairs on Syria and 2 of 5,759 on the Caucasus. A built flight whose route (turn points, the way home and its time on station included) is longer than 2.4 times its jet's combat radius (1.5 times that with a tanker) first drops the margin round the rings, then a TARCAP or sweep holds 5 minutes instead of 15, then it is left out of the mission; a flight never goes straight through the rings, and your own flight always flies.
 
