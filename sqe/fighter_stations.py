@@ -13,6 +13,8 @@ from .models import AssetKind, ObjectiveType, Role
 from .routes import AVOID_NM, NM, bearing, dist, offset, plan_route
 
 TARCAP_MIN = 15               # ...and holds there this long, then goes home
+HOLD_FLOOR_MIN = 5            # S140d1: ladder rung 4, a TARCAP / sweep that cannot fit its fuel holds this long instead of TARCAP_MIN (it still stays until the last striker is off). Judgment call: the cover must be on station
+                              # COVER_ONSTATION_S (120 s) before the first IP and long enough to be worth the trip; nothing in the probes reaches this rung
 ESCORT_AFTER_EGR_S = 120      # v0.41.40: an escort stays until the last striker has reached its egress point + this long (XO 2026-10-20: DEADers were left behind)
 ESCORT_AFTER_TOT_S = 180      # an escort (ESCORT role) holds its station until this long after the TOT (the last ground-attack flight off target)
 TARCAP_AFTER_TOT_S = 300      # v0.41.0: a TARCAP holds until this long after the TOT (the last ground-attack flight egressing), not a fixed 15 minutes
@@ -289,13 +291,14 @@ class FighterStations:
         return (x, y, max(floor_nm, r))
 
     @staticmethod
-    def _hold_end(stw, tot_s) -> int:
-        """TARCAP / sweep: their time on station; escort: until the last ground-attack flight is off target."""
+    def _hold_end(stw, tot_s, short: bool = False) -> int:
+        """TARCAP / sweep: their time on station; escort: until the last ground-attack flight is off target. `short` (S140d1, ladder rung 4): HOLD_FLOOR_MIN instead of TARCAP_MIN."""
         t_end = (tot_s if tot_s is not None else stw.eta_s + 600)
+        mn = HOLD_FLOOR_MIN if short else TARCAP_MIN
         if stw.action == "SWEEP":
-            return int(stw.eta_s + TARCAP_MIN * 60)
+            return int(stw.eta_s + mn * 60)
         if stw.action == "TARCAP":
-            return int(max(stw.eta_s + TARCAP_MIN * 60, t_end + TARCAP_AFTER_TOT_S))      # v0.41.38 (XO): at least TARCAP_MIN (15) min on station, then until the last striker is off + 5 min
+            return int(max(stw.eta_s + mn * 60, t_end + TARCAP_AFTER_TOT_S))      # v0.41.38 (XO): at least TARCAP_MIN (15) min on station, then until the last striker is off + 5 min
         return int(max(stw.eta_s + 120, t_end + ESCORT_AFTER_TOT_S))
 
     def _room(self, x, y, package, fighters: bool = True, long_only: bool = False) -> float:

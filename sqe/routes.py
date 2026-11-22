@@ -374,14 +374,15 @@ def _seg_hits(p, q, circles) -> list:
     return hit
 
 
-def safe_path(a, b, circles, margin_nm: float = AVOID_MARGIN_NM):
+def safe_path(a, b, circles, margin_nm: float | None = None):
     """S140a: the turn points between a and b (x, y in metres) that keep the leg out of every circle (x, y, nm): [] when the straight leg is clear,
     None when there is no way round. Shortest path over a visibility graph (Lozano-Perez and Wesley 1979, the visibility-graph method), searched with A*.
     Each circle is a polygon of AVOID_CORNERS corners whose flats lie `margin_nm` outside it; a corner inside any circle is not a node. Lazy: only the
     circles the current best path touches are obstacles, and the search repeats until the path touches none (None after AVOID_ROUNDS rounds, or when a
     path still touches a circle with every touched circle already an obstacle). A circle that holds a or b is left out of the leg (the leg has to start
     or end there; S140b handles those legs): v0.41.11 could still bend such a leg when the closest point lay mid-leg. Ties break by node index, so
-    the result is the same on every run. Ported from the probes/s140/crossings.py prototype."""
+    the result is the same on every run. Ported from the probes/s140/crossings.py prototype. S140d1: `margin_nm` None = AVOID_MARGIN_NM as it stands now (`trim_margin` lowers it for one build)."""
+    margin_nm = AVOID_MARGIN_NM if margin_nm is None else margin_nm
     live = [(cx, cy, r * NM) for cx, cy, r in circles
             if math.hypot(a[0] - cx, a[1] - cy) >= r * NM and math.hypot(b[0] - cx, b[1] - cy) >= r * NM]
     if not live:
@@ -504,11 +505,12 @@ def _inside_m(path, circles) -> float:
     return tot
 
 
-def safe_path_edge(a, b, circles, margin_nm: float = AVOID_MARGIN_NM):
+def safe_path_edge(a, b, circles, margin_nm: float | None = None):
     """S140b1 (plan 2.2, last row): `safe_path` for a leg that may start or end INSIDE a ring (a blue base near the front, an IP inside the target's ring on a transit leg). Such a ring is
     entered or left by the shortest way: the leg runs round to the point of the ring's edge (+ margin) nearest the inside end and goes straight in (or goes straight out to it, then on). A ring that
     holds both ends stays as it is (the leg lies inside it). Only when it pays: the edge route has to cut the distance flown inside rings by EDGE_GAIN_NM against the plain `safe_path` (which leaves
     the rings that hold an end out of it), else the plain one stands. The same shape as `safe_path` (the turn points, [] when none, None when there is no way round), the edge points included."""
+    margin_nm = AVOID_MARGIN_NM if margin_nm is None else margin_nm
     plain = safe_path(a, b, circles, margin_nm)
     both = {i for i, (cx, cy, r) in enumerate(circles) if math.hypot(a[0] - cx, a[1] - cy) < r * NM and math.hypot(b[0] - cx, b[1] - cy) < r * NM}
     out_a = _ring_exit(a, circles, both, margin_nm)
@@ -573,12 +575,48 @@ def ip_outside(g, ip_xy):
     return ip_xy
 
 
+FUEL_ROUTE_FACTOR = 2.4    # S140d1: a built route (every leg, turn points and the way home included, plus the minutes held at the marshal point and on a station at cruise speed) may be this many times the jet's
+                           # combat radius (x 1.5 where the planner judged a tanker fits, x PEN_REACH for the PEN kit). JUDGMENT CALL, set so nothing is dropped at today's routes: the S140 probe's worst route is
+                           # 2.17 x its combat radius (2.3 in the first probe, before the leg rules), the median 0.3 to 0.8. Raise or lower it here.
+
+
+def route_nm(pts) -> float:
+    """S140d1: the length in nm of the polyline through `pts` (objects with x, y in metres)."""
+    return sum(math.hypot(b.x - a.x, b.y - a.y) for a, b in zip(pts, pts[1:])) / NM
+
+
+def routed_nm(a, b, circles):
+    """S140d1: the length in nm of the safe path a -> b (x, y metres; `safe_path_edge` round the circles (x, y, nm)): the straight distance plus what the turn points add. None when there is no way round."""
+    pts = safe_path_edge(a, b, circles)
+    if pts is None:
+        return None
+    path = [tuple(a)] + list(pts) + [tuple(b)]
+    return sum(math.hypot(q[0] - p[0], q[1] - p[1]) for p, q in zip(path, path[1:])) / NM
+
+
+class trim_margin:
+    """S140d1 (ladder rung 2): `with trim_margin():` the turn points of every route built inside it keep `margin_nm` (default 0) outside the rings instead of AVOID_MARGIN_NM; the rings are already the reach plus a
+    margin in AVOID_NM. Restores the margin on exit."""
+    def __init__(self, margin_nm: float = 0.0):
+        self.m = margin_nm
+
+    def __enter__(self):
+        global AVOID_MARGIN_NM
+        self.old, AVOID_MARGIN_NM = AVOID_MARGIN_NM, self.m
+        return self
+
+    def __exit__(self, *a):
+        global AVOID_MARGIN_NM
+        AVOID_MARGIN_NM = self.old
+        return False
+
+
 EGR_MOVE_MAX_NM = 40.0     # S140b2: an AI flight's egress point inside a ring moves at most this far out of it; farther (a ring cluster with no edge near) it stays where it was. Judgment call, counted by the probe
 
 
-def out_of_rings(xy, circles, max_nm: float = EGR_MOVE_MAX_NM, margin_nm: float = AVOID_MARGIN_NM):
+def out_of_rings(xy, circles, max_nm: float = EGR_MOVE_MAX_NM, margin_nm: float | None = None):
     """S140b2: the point xy (x, y metres) itself when it lies in no ring (x, y, nm), else the nearest point outside every ring + margin (`_ring_exit`); xy again when that is more than max_nm away."""
-    e = _ring_exit(xy, circles, (), margin_nm)
+    e = _ring_exit(xy, circles, (), AVOID_MARGIN_NM if margin_nm is None else margin_nm)
     return e[0] if (e and math.hypot(e[0][0] - xy[0], e[0][1] - xy[1]) <= max_nm * NM) else xy
 
 
@@ -590,7 +628,7 @@ def shared_leg(g, a: Wpt, b: Wpt, lane_nm: float, room: int):
     rings = g.all_rings
     a0 = tuple(g.push)
     cache = g.shared if g.shared is not None else {}
-    key = (round(a0[0]), round(a0[1]), round(b.x), round(b.y))
+    key = (round(a0[0]), round(a0[1]), round(b.x), round(b.y), AVOID_MARGIN_NM)
     if key not in cache:
         cache[key] = safe_path_edge(a0, (b.x, b.y), rings)
     base = cache[key]

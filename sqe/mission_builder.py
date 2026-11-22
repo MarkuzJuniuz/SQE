@@ -37,7 +37,7 @@ TUNE_PARAMS = {"F-16C": ("COMM1_FREQ",), "A-10C": ("UHF_FREQ",), "A-10C2": ("UHF
 TUNE_BAND_MHZ = 0.05            # v0.41.215: tuned = within this much of the AWACS frequency (judgment call; the probe used 0.1)
 from .debrief import Manifest, install_hook
 from .difficulty import Difficulty, ai_skill
-from .fighter_stations import FighterStations, ESCORT_AFTER_TOT_S, TARCAP_AFTER_TOT_S, axis_station, ENGAGE_LEAD_S
+from .fighter_stations import FighterStations, TARCAP_MIN, ESCORT_AFTER_TOT_S, TARCAP_AFTER_TOT_S, axis_station, ENGAGE_LEAD_S
 from .support_caps import SupportCaps
 from .red_air_picture import RedAirPicture, A2A_ZONE_NM
 from .raid_spawns import RAID_MEET_LEAD_S, RAID_MPS, RAID_SUPPLY_UNITS, SUPPLY_BUILDINGS, RaidSpawns
@@ -49,7 +49,7 @@ from .site_spawns import SiteSpawns   # it reads SUPPLY_BUILDINGS, ENEMY_FIGHTER
 from .strike_tasks import StrikeTasks, DEAD_GATE_KM, SEAD_WAVE_KM, TRACK_RADARS, SEARCH_RADARS, KPH
 from . import kneeboard
 from .kneeboard import latlon, render_pages
-from .loadouts import LoadoutLibrary, ENEMY_FIGHTERS, JSOW_FLIGHT_KITS
+from .loadouts import LoadoutLibrary, ENEMY_FIGHTERS, JSOW_FLIGHT_KITS, PEN_REACH
 from .models import SEAD_AIMS, AssetKind, BaseKind, ObjectiveType, Role, tag_label, task_label
 pydcs_patch.install()           # v0.41.66: pydcs's scattered formation could loop forever and freeze a build (sqe/pydcs_patch.py)
 
@@ -203,7 +203,7 @@ def stagger(package, role) -> int:
 from .packages import Package, folded_n_def
 from .options import MissionOptions
 from .radio import RadioCfg, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import cap2_point, out_of_rings, jsow_launch_xy, SLAM_LAUNCH_NM, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, SA10_STATION_NM, AVOID_NM, AVOID_MARGIN_NM, avoid_circles, safe_path_edge, AGM88_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, hold_leg_s, hold_next, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
+from .routes import FUEL_ROUTE_FACTOR, route_nm, trim_margin, cap2_point, out_of_rings, jsow_launch_xy, SLAM_LAUNCH_NM, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, SA10_STATION_NM, AVOID_NM, AVOID_MARGIN_NM, avoid_circles, safe_path_edge, AGM88_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, hold_leg_s, hold_next, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
 from .state import CampaignState
 
 F = VehicleGroup.Formation
@@ -1348,6 +1348,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             r_ = self._flight_route(package, f, geom, idx, push_s, tot_s)
             if r_ is None:
                 return None, None                          # already back on the ground
+            r_ = self._fuel_ladder(package, f, geom, idx, push_s, tot_s, r_)
+            if r_ is None:
+                return None, None                          # S140d1: no safe route inside its fuel: left out of the mission
             wps, act_s, past_push, stop = r_
             push_s = self._push_adj.get(id(f), push_s)             # S38
 
@@ -1357,7 +1360,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if lead_ is not None:
             self._escort_pend.append((f, g, lead_))               # S138a
         stw = next((w for w in wps if w.action in ("TARCAP", "ESCORT", "SWEEP") and w.orbit), None)
-        hold_end = self._hold_end(stw, tot_s) if stw is not None else None
+        hold_end = self._hold_end(stw, tot_s, getattr(f, "hold_short", False)) if stw is not None else None
         if f.is_player and not self.o.player_is_ai and not f.tag and stw is not None and hold_end is not None:
             # S141d: a person's own station flight has no engage task, but its time on station is extended like an AI flight's (`_extend_holds`): the card shows when to leave
             self._you_hold = {"cts": [], "starts": [], "tgt": (geom.tx, geom.ty), "end": int(hold_end), "eta": int(stw.eta_s), "you": True, "gate_s": self._gate_slack_s(package),
@@ -1667,7 +1670,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 leave_ = {}
                 si_ = next((i for i, w in enumerate(wps) if w.action in ("TARCAP", "ESCORT", "SWEEP") and w.orbit), None)
                 if si_ is not None:
-                    lv_ = self._hold_end(wps[si_], tot_s)
+                    lv_ = self._hold_end(wps[si_], tot_s, getattr(f, "hold_short", False))
                     dw_ = max(0, lv_ - wps[si_].eta_s)
                     for w in wps[si_ + 1:]:
                         w.eta_s += dw_
@@ -2389,6 +2392,56 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 return 2
         self.__dict__.setdefault("_cap_in_ring", []).append(package.id)
         return 0
+
+    def _fuel_nm(self, f, base, r_, push_s, tot_s) -> float:
+        """S140d1: the route nm of a built flight (`_flight_route`'s result): every leg of its route, the straight way home to its field, the minutes held at the marshal point (until it leaves for PUSH) and
+        on its station (until `_hold_end`, or the stop time of a CAP) at that point's speed."""
+        wps, stop = r_[0], r_[3]
+        nm = route_nm(wps) + dist(wps[-1].x, wps[-1].y, base.x, base.y) / NM
+        for w in wps:
+            if w.action == "HOLD" and push_s is not None:
+                nm += max(0.0, hold_leave_s(wps, push_s) - w.eta_s) * w.speed_kts / 3600.0
+            elif w.action == "CAPORBIT":                      # a patrol orbits until its stop time (the whole mission) and goes home at bingo: counted as TARCAP_MIN minutes, not the length of the mission
+                nm += min(max(0.0, stop - w.eta_s), TARCAP_MIN * 60.0) * w.speed_kts / 3600.0
+            elif w.orbit and w.action in ("TARCAP", "ESCORT", "SWEEP"):
+                nm += max(0.0, self._hold_end(w, tot_s, getattr(f, "hold_short", False)) - w.eta_s) * w.speed_kts / 3600.0
+        return nm
+
+    def _fuel_ladder(self, package, f, geom, idx, push_s, tot_s, r_):
+        """S140d1 (plan 2.6): the fuel budget of a built route and the ladder when it does not fit. Budget = FUEL_ROUTE_FACTOR x the jet's combat radius (x 1.5 where a tanker fits, x PEN_REACH for the PEN kit).
+        Rungs, in XO's order: 1 fly as built; 2 the turn points keep no margin from the rings (`routes.trim_margin`); [S140d2 slots "under the ring" here]; 4 a TARCAP / sweep holds `HOLD_FLOOR_MIN`;
+        5 the flight is left out (None) with a `BuildResult.warnings` line, never flown through the rings. "Via the tanker" is the x1.5 of the budget (no tanker routing here). A person's own flight is
+        never left out, nor the all-AI test's stand-in for it (judgment call, flagged for XO: `_trailing_steerpoints` and the card are built from that flight): it flies as built and the warning says so. A support CAP (tag) has no ladder. -> the route tuple to use, or None."""
+        if f.tag:
+            return r_
+        f.hold_short = False
+        spec = AIRCRAFT[f.aircraft]
+        base = self.state.bases[f.base_id]
+        tk = 1.5 if tm.tanker_station(self.state, (base.x, base.y), (geom.tx, geom.ty)) is not None else 1.0
+        bud = FUEL_ROUTE_FACTOR * spec.combat_radius_nm * (PEN_REACH if getattr(f, "kit", "") == "PEN" else 1.0) * tk
+        nm = self._fuel_nm(f, base, r_, push_s, tot_s)
+        log = {"cs": f.callsign, "role": f.role.value, "nm": round(nm, 1), "bud": round(bud, 1), "rung": 1}
+        self.__dict__.setdefault("_fuel_log", []).append(log)
+        if nm <= bud:
+            return r_
+        has_stn = any(w.orbit and w.action in ("TARCAP", "ESCORT", "SWEEP") for w in r_[0])
+        for rung, name in ((2, "margin"), (4, "hold")):
+            if name == "hold":
+                if not has_stn:
+                    continue
+                f.hold_short = True
+            with trim_margin():
+                r2 = self._flight_route(package, f, geom, idx, push_s, tot_s)
+            if r2 is None:
+                continue
+            n2 = self._fuel_nm(f, base, r2, push_s, tot_s)
+            if n2 <= bud:
+                log.update(rung=rung, nm=round(n2, 1))
+                return r2
+        f.hold_short = False
+        log["rung"] = 5
+        self.warns.append(f"{f.callsign}: no route round the SAM rings fits its fuel ({nm:.0f} nm of {bud:.0f}); " + ("it flies as built (the player's seat)." if f.is_player else "left out of the mission."))
+        return r_ if f.is_player else None          # the player's seat (a person, or the all-AI test's stand-in) always flies: the card, the hook and the trailing points are built from it
 
     def _leg_rules(self, package, f, wps, spec, shaped=False, geom=None):
         """S140b1 (plan 2.2): the legs of an AI package flight that `plan_route` could not route, once the route is final (the scramble CAP's station is moved, CAP2 is in): a scramble CAP's way out to its station
