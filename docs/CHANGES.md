@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.568, a job out of safe reach is not offered
+The planner now judges whether a target is in reach by the length of the safe route round the live SAM rings (to the IP or launch point, the attack leg after it goes in as before), not by the straight line, so a job that no flight can reach without too long a detour is not offered. In 24-turn test runs that changed 11 of 4,785 squadron-target pairs on Syria and 2 of 5,759 on the Caucasus. A built flight whose route (turn points, the way home and its time on station included) is longer than 2.4 times its jet's combat radius (1.5 times that with a tanker) first drops the margin round the rings, then a TARCAP or sweep holds 5 minutes instead of 15, then it is left out of the mission; a flight never goes straight through the rings, and your own flight always flies.
+
 ## v0.41.567, your own route goes round the SAM rings too
 Your route now gets the same turn points as an AI flight in your seat: where a leg to the marshal, to the IP or station, or home would cut a live SAM ring, the card lists extra waypoints named AVD (the notes line says how many nm and minutes they add), your egress point and a scramble CAP's race-track are moved out of the rings, and a strike or SEAD IP that sat inside the target's rings moves out along the run-in to the first point clear of them (target unchanged). The plain F-14B holds three waypoints, so its AVD points are listed on page 2 as "ROUTE POINTS (enter by hand)". The attack legs themselves are unchanged.
 

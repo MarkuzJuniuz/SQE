@@ -110,6 +110,11 @@ The TARCAP (up to 4 jets) is sized to the fighters red can field near the target
 gets an escort as well, or a separate Fighter Sweep is planned ahead of it. A **Standoff** job (a site under a long-range SAM such as the SA-10) uses JSOWs,
 SLAM-ERs or similar weapons released far outside the SAM's reach, with HARM shooters timed on the same minute.
 
+**Routes round the SAM rings.** An AI flight, and you, fly round every live SAM ring on the way out to the marshal point, to the IP or the station, and home. The ring is the SAM's reach plus a margin: SA-10 35 nm,
+SA-5 71, SA-2 26, SA-11 20, SA-6 16, SA-3 15 (the map draws the same rings). A flight that starts or ends inside a ring (a base near the front, an IP inside the target's ring) leaves or enters it by the nearest edge when that cuts its time inside.
+Only the attack legs (IP to target to egress) go in as the job requires; your IP on a strike or SEAD is placed outside the rings that hold the target. The planner counts reach by the length of that route, and a job no jet can fly round the rings within
+2.4 times its combat radius (1.5 times that with a tanker) is not offered, with no message; the same limit applies to each flight when the mission is built.
+
 **Package merging** (Settings > Mission build): when you fly, every package that starts inside the time windows (15 minutes
 before and 30 after yours by default, Later Packages up to a whole turn) flies in the same mission, wherever its target is,
 nearest to yours first, each still keeping its own time on target. The unit limit (250 by default) trades detail for
