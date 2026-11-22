@@ -19,7 +19,7 @@ Pure planning, no pydcs.
 """
 from __future__ import annotations
 from .models import AssetKind, BaseKind
-from .routes import AVOID_NM, NM, bearing, dist, offset
+from .routes import AVOID_MARGIN_NM, AVOID_NM, NM, bearing, dist, offset
 from . import threatmap as tm
 from . import samtier
 
@@ -46,6 +46,8 @@ def in_open(state, x, y) -> bool:
 def clear_for_sweep(state, x, y) -> bool:
     """A sweep's station: SWEEP_SA10_NM from every live SA-10, SWEEP_RING_MARGIN_NM outside every other SAM ring of 3 nm or more."""
     for a in _sams(state):
+        if a.variant in AVOID_NM and dist(x, y, a.x, a.y) < (AVOID_NM[a.variant] + AVOID_MARGIN_NM) * NM:
+            return False                                           # S140b2: never inside the ring the routes keep out of (+ margin), whatever the sweep's own margins say
         if a.variant in tm.UMBRELLA_VARIANTS:
             if dist(x, y, a.x, a.y) < samtier.get(a.variant, "sweep_nm") * NM:
                 return False
