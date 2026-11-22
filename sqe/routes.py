@@ -62,6 +62,7 @@ class Geometry:
     carrier: bool = False   # v0.41.12: the flight's base is a carrier (only then a DEP point after take-off)
     launch_nm: float = 0.0  # v0.41.299: a Standoff Strike's launch distance from the target (SLAM_LAUNCH_NM); 0 = the JSOW rule
     sa10_avoid: list = None # [(x, y, nm)]: live medium / long-range SAMs (not the target) an AI flight's route bends around (v0.41.11; all gate SAMs since v0.41.20)
+    prefer: tuple = None    # S140e: (x, y) of red's nearest patrol station or fighter field seen from the target (`FighterStations._red_approach`): a detour with two ways of about the same length takes the side away from it
     shared: dict = None     # S140b2: {(start, end) of a lane-0 leg: its turn points}, the package's one PUSH -> IP detour (`shared_leg`); the builder gives each package's geometry one
     all_rings: list = None  # S140b1: [(x, y, nm)] EVERY live, unsuppressed SAM in AVOID_NM (the fighters' `_zone_sams` set, no skip): the rings an AI flight's transit, fighter and home legs go round
 
@@ -239,7 +240,7 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
                 wp.append(Wpt("EGR", *egr_xy(g.egr), ialt, p.egress_kts, "Exit with the package", rad=irad))
         if g.all_rings:                                         # S140b1 / S140c: PUSH -> station round every live ring, for a person's route too (the leg after the station is the builder's: CAP2 comes first)
             ci_ = next(k for k, w in enumerate(wp) if w.orbit)
-            wp[:ci_ + 1] = avoid_circles(wp[:ci_ + 1], g.all_rings, p.max_points - (len(wp) - ci_ - 1), 1, edge=True, start=own_base)
+            wp[:ci_ + 1] = avoid_circles(wp[:ci_ + 1], g.all_rings, p.max_points - (len(wp) - ci_ - 1), 1, edge=True, start=own_base, prefer=g.prefer)
         if len(wp) + 2 > p.max_points:
             raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")
         return wp
@@ -323,11 +324,11 @@ def plan_route(role: Role, own_base: tuple, g: Geometry, p: RouteProfile, *, is_
             if pts_:
                 pa_, pb_ = wp[pu_i], wp[ip_i]
                 wp[ip_i:ip_i] = [Wpt("AVD", x, y, max(pa_.alt_ft, pb_.alt_ft), pa_.speed_kts, "Around a SAM site", rad=pa_.rad) for x, y in pts_]
-            wp[:pu_i + 1] = avoid_circles(wp[:pu_i + 1], g.all_rings, p.max_points - (len(wp) - pu_i - 1), 1, edge=True, start=own_base)
+            wp[:pu_i + 1] = avoid_circles(wp[:pu_i + 1], g.all_rings, p.max_points - (len(wp) - pu_i - 1), 1, edge=True, start=own_base, prefer=g.prefer)
         else:
-            wp[:ip_i + 1] = avoid_circles(wp[:ip_i + 1], g.all_rings, p.max_points - (len(wp) - ip_i - 1), 1, edge=True, start=own_base)
+            wp[:ip_i + 1] = avoid_circles(wp[:ip_i + 1], g.all_rings, p.max_points - (len(wp) - ip_i - 1), 1, edge=True, start=own_base, prefer=g.prefer)
     elif g.all_rings and role in (Role.TARCAP, Role.ESCORT, Role.SWEEP):
-        avoid_circles(wp, g.all_rings, p.max_points, 1, edge=True, start=own_base)      # a fighter has no ring of its own: every leg of its route (no station here, so no orbit leg)
+        avoid_circles(wp, g.all_rings, p.max_points, 1, edge=True, start=own_base, prefer=g.prefer)      # a fighter has no ring of its own: every leg of its route (no station here, so no orbit leg)
     if len(wp) + 2 > p.max_points:
         raise ValueError(f"route has {len(wp) + 2} points but the airframe holds {p.max_points}")
     return wp
@@ -374,14 +375,47 @@ def _seg_hits(p, q, circles) -> list:
     return hit
 
 
-def safe_path(a, b, circles, margin_nm: float | None = None):
+AVOID_SIDE_PCT = 10.0      # S140e: going round a ring on the far side of the leg is taken when it is within this percent of the shortest path and keeps the leg farther from `prefer` (red's fighters). Judgment call (plan 2.8)
+
+
+def safe_path(a, b, circles, margin_nm: float | None = None, prefer=None):
+    """S140e: `_safe_path`, and with `prefer` ((x, y) of red's nearest patrol station or fighter field) the other side of the first ring the shortest path bends round when that path is at most AVOID_SIDE_PCT percent
+    longer and passes farther from `prefer` (ties keep the shortest). `prefer` None (the default) = `_safe_path` exactly."""
+    best = _safe_path(a, b, circles, margin_nm)
+    if prefer is None or not best:
+        return best
+    mg = AVOID_MARGIN_NM if margin_nm is None else margin_nm
+    live = [(cx, cy, r * NM) for cx, cy, r in circles
+            if math.hypot(a[0] - cx, a[1] - cy) >= r * NM and math.hypot(b[0] - cx, b[1] - cy) >= r * NM]
+    cx, cy, r = min(live, key=lambda c: abs(math.hypot(best[0][0] - c[0], best[0][1] - c[1]) - (c[2] + mg * NM)))      # the ring the first turn point belongs to
+    side = lambda p: (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]) > 0
+    alt = _safe_path(a, b, circles, margin_nm, ban=((cx, cy, r), side(best[0])))
+    if not alt:
+        return best
+    length = lambda pts: sum(math.hypot(q[0] - p[0], q[1] - p[1]) for p, q in zip([tuple(a)] + list(pts), list(pts) + [tuple(b)]))
+    if length(alt) > length(best) * (1 + AVOID_SIDE_PCT / 100.0):
+        return best
+    near = lambda pts: min(_seg_dist(p, q, prefer) for p, q in zip([tuple(a)] + list(pts), list(pts) + [tuple(b)]))
+    return alt if near(alt) > near(best) + 1.0 else best
+
+
+def _seg_dist(p, q, c) -> float:
+    """Distance from the point c to the segment p -> q."""
+    vx, vy = q[0] - p[0], q[1] - p[1]
+    L2 = vx * vx + vy * vy
+    t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((c[0] - p[0]) * vx + (c[1] - p[1]) * vy) / L2))
+    return math.hypot(p[0] + t * vx - c[0], p[1] + t * vy - c[1])
+
+
+def _safe_path(a, b, circles, margin_nm: float | None = None, ban=None):
     """S140a: the turn points between a and b (x, y in metres) that keep the leg out of every circle (x, y, nm): [] when the straight leg is clear,
     None when there is no way round. Shortest path over a visibility graph (Lozano-Perez and Wesley 1979, the visibility-graph method), searched with A*.
     Each circle is a polygon of AVOID_CORNERS corners whose flats lie `margin_nm` outside it; a corner inside any circle is not a node. Lazy: only the
     circles the current best path touches are obstacles, and the search repeats until the path touches none (None after AVOID_ROUNDS rounds, or when a
     path still touches a circle with every touched circle already an obstacle). A circle that holds a or b is left out of the leg (the leg has to start
     or end there; S140b handles those legs): v0.41.11 could still bend such a leg when the closest point lay mid-leg. Ties break by node index, so
-    the result is the same on every run. Ported from the probes/s140/crossings.py prototype. S140d1: `margin_nm` None = AVOID_MARGIN_NM as it stands now (`trim_margin` lowers it for one build)."""
+    the result is the same on every run. Ported from the probes/s140/crossings.py prototype. S140d1: `margin_nm` None = AVOID_MARGIN_NM as it stands now (`trim_margin` lowers it for one build). S140e: `ban` = ((x, y, r metres), side)
+    leaves out the corners of that ring on that side of the line a -> b (the far-side search of `safe_path`)."""
     margin_nm = AVOID_MARGIN_NM if margin_nm is None else margin_nm
     live = [(cx, cy, r * NM) for cx, cy, r in circles
             if math.hypot(a[0] - cx, a[1] - cy) >= r * NM and math.hypot(b[0] - cx, b[1] - cy) >= r * NM]
@@ -405,6 +439,8 @@ def safe_path(a, b, circles, margin_nm: float | None = None):
             for k in range(AVOID_CORNERS):
                 ang = 2 * math.pi * k / AVOID_CORNERS
                 pt = (cx + R * math.cos(ang), cy + R * math.sin(ang))
+                if ban is not None and (cx, cy, r) == ban[0] and ((b[0] - a[0]) * (pt[1] - a[1]) - (b[1] - a[1]) * (pt[0] - a[0]) > 0) == ban[1]:
+                    continue
                 if not any(math.hypot(pt[0] - ox, pt[1] - oy) < orr for ox, oy, orr in live):
                     nodes.append(pt)
         n = len(nodes)
@@ -505,19 +541,19 @@ def _inside_m(path, circles) -> float:
     return tot
 
 
-def safe_path_edge(a, b, circles, margin_nm: float | None = None):
+def safe_path_edge(a, b, circles, margin_nm: float | None = None, prefer=None):
     """S140b1 (plan 2.2, last row): `safe_path` for a leg that may start or end INSIDE a ring (a blue base near the front, an IP inside the target's ring on a transit leg). Such a ring is
     entered or left by the shortest way: the leg runs round to the point of the ring's edge (+ margin) nearest the inside end and goes straight in (or goes straight out to it, then on). A ring that
     holds both ends stays as it is (the leg lies inside it). Only when it pays: the edge route has to cut the distance flown inside rings by EDGE_GAIN_NM against the plain `safe_path` (which leaves
     the rings that hold an end out of it), else the plain one stands. The same shape as `safe_path` (the turn points, [] when none, None when there is no way round), the edge points included."""
     margin_nm = AVOID_MARGIN_NM if margin_nm is None else margin_nm
-    plain = safe_path(a, b, circles, margin_nm)
+    plain = safe_path(a, b, circles, margin_nm, prefer)
     both = {i for i, (cx, cy, r) in enumerate(circles) if math.hypot(a[0] - cx, a[1] - cy) < r * NM and math.hypot(b[0] - cx, b[1] - cy) < r * NM}
     out_a = _ring_exit(a, circles, both, margin_nm)
     out_b = _ring_exit(b, circles, both, margin_nm)
     if not out_a and not out_b:
         return plain
-    mid = safe_path(out_a[-1] if out_a else tuple(a), out_b[-1] if out_b else tuple(b), circles, margin_nm)
+    mid = safe_path(out_a[-1] if out_a else tuple(a), out_b[-1] if out_b else tuple(b), circles, margin_nm, prefer)
     if mid is None:
         return plain
     edge = out_a + mid + out_b[::-1]
@@ -527,15 +563,16 @@ def safe_path_edge(a, b, circles, margin_nm: float | None = None):
     return edge if _inside_m(pe, circles) <= _inside_m(pa, circles) - EDGE_GAIN_NM * NM else plain
 
 
-def avoid_circles(wp: list, circles: list, max_points: int, first: int, edge: bool = False, start: tuple | None = None) -> list:
+def avoid_circles(wp: list, circles: list, max_points: int, first: int, edge: bool = False, start: tuple | None = None, prefer=None) -> list:
     """v0.41.11: bend the legs from index `first` on around each circle (x, y, nm); one turn point 2 nm outside the circle, two passes at most.
     S140a: the shortest path round the circles (`safe_path`): each leg from index `first` on gets as many turn points as it needs, from the end of the
     list backwards, never past the airframe's waypoint limit. A leg with no way round, or with more turn points than the limit allows, stays as it is.
     S140b1: `edge=True` routes a leg that starts or ends inside a ring by the ring's edge too (`safe_path_edge`); the default leaves such a leg straight, as before. `start` = (x, y) of the
     airfield the flight takes off from: a route that begins with neither SPAWN nor DEP (the all-AI test's own flight: the take-off belongs to the group) gets it as its missing first point
     while the legs are routed, so the leg out to the marshal point is routed too.
+    S140e: `prefer` (x, y) = red's nearest patrol station or fighter field: a leg whose two ways round a ring are within AVOID_SIDE_PCT percent takes the side away from it.
     Changes `wp` in place and returns it."""
-    path_ = safe_path_edge if edge else safe_path
+    path_ = (lambda a, b, c: safe_path_edge(a, b, c, prefer=prefer)) if edge else (lambda a, b, c: safe_path(a, b, c, prefer=prefer))
     lead = None
     if start is not None and wp and wp[0].name not in ("SPAWN", "DEP"):
         lead = Wpt("BASE", start[0], start[1], wp[0].alt_ft, wp[0].speed_kts, rad=wp[0].rad)
@@ -630,7 +667,7 @@ def shared_leg(g, a: Wpt, b: Wpt, lane_nm: float, room: int):
     cache = g.shared if g.shared is not None else {}
     key = (round(a0[0]), round(a0[1]), round(b.x), round(b.y), AVOID_MARGIN_NM)
     if key not in cache:
-        cache[key] = safe_path_edge(a0, (b.x, b.y), rings)
+        cache[key] = safe_path_edge(a0, (b.x, b.y), rings, prefer=g.prefer)
     base = cache[key]
     if not base or not lane_nm:
         return base if (not base or len(base) <= room) else []
@@ -644,7 +681,7 @@ def shared_leg(g, a: Wpt, b: Wpt, lane_nm: float, room: int):
         pts.append((x, y))
     full0, full = [a0] + list(base) + [(b.x, b.y)], [(a.x, a.y)] + pts + [(b.x, b.y)]
     if _inside_m(full, rings) > _inside_m(full0, rings) + NM:
-        own = safe_path_edge((a.x, a.y), (b.x, b.y), rings)
+        own = safe_path_edge((a.x, a.y), (b.x, b.y), rings, prefer=g.prefer)
         return own if (own is None or len(own) <= room) else []
     return pts if len(pts) <= room else []
 
