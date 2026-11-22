@@ -249,6 +249,15 @@ local function siteDead(n)
     say(who .. ": target destroyed, " .. s.label .. ".")
   end
 end
+-- S149: the distance (m) from a striker's bomb to its flight's target point when it leaves, nil for anything but a bomb of a unit with a target point (BTGT).
+local function bombRange(e, n)
+  local bt = BTGT[n]
+  if not (bt and e.weapon and e.initiator) then return nil end
+  local okp, sp = pcall(function() return e.initiator:getPoint() end)
+  local okd, wd = pcall(function() return e.weapon:getDesc() end)
+  if okp and sp and okd and wd and wd.category == 3 then return math.sqrt((sp.x - bt.x) ^ 2 + (sp.z - bt.z) ^ 2) end
+  return nil
+end
 local function shotCall(e)
   local ok, d = pcall(function() return e.weapon:getDesc() end)
   if not ok or not d then return nil end
@@ -553,16 +562,11 @@ function H:onEvent(e)
     pcall(splashTrack, e, n)
     local lab = UFLT[n]
     local call = (lab and e.weapon) and shotCall(e) or nil
-    local bt = BTGT[n]
-    if bt and e.weapon and e.initiator then       -- S149: how far from its target point the bomb left (km, kept in the shot log); far = a jettison (a jet jumped on its run dumps its load): no "Bombs away"
-      local okp, sp = pcall(function() return e.initiator:getPoint() end)
-      local okd, wd = pcall(function() return e.weapon:getDesc() end)
-      if okp and sp and okd and wd and wd.category == 3 then
-        local dm = math.sqrt((sp.x - bt.x) ^ 2 + (sp.z - bt.z) ^ 2)
-        local last = shots[#shots]
-        if last and last.ev == "shot" and last.by == n then last.rk = dm / 1000 end
-        if dm > BOMB_FAR_M then call = nil end
-      end
+    local dm = bombRange(e, n)                    -- S149: how far from its target point the bomb left (km, kept in the shot log); far = a jettison (a jet jumped on its run dumps its load): no "Bombs away"
+    if dm then
+      local last = shots[#shots]
+      if last and last.ev == "shot" and last.by == n then last.rk = dm / 1000 end
+      if dm > BOMB_FAR_M then call = nil end
     end
     if lab and call and throttle("shot:" .. lab .. call, 6) then say(lab .. ": " .. call .. ".") end
   elseif id == world.event.S_EVENT_HIT then
@@ -653,7 +657,8 @@ if #RWYS > 0 then
   local H4 = {}
   function H4:onEvent(e)
     if e.id == world.event.S_EVENT_SHOT and e.weapon then
-      if isBombLike(e.weapon) then RWYW[#RWYW + 1] = { w = e.weapon } end
+      local dj = bombRange(e, nameOf(e.initiator))
+      if isBombLike(e.weapon) and not (dj and dj > BOMB_FAR_M) then RWYW[#RWYW + 1] = { w = e.weapon } end      -- S149: a jettisoned bomb is no runway hit (it is not followed)
     end
   end
   world.addEventHandler(H4)
