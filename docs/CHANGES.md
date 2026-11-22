@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.570, a detour takes the side away from red's fighters
+When going round a SAM ring to the left or to the right is within 10 % of the same length, the route now takes the side farther from red's nearest patrol station or fighter field (the transit legs, the legs to a station and after it, a package's shared push-to-IP detour, yours included). Routes without that choice are unchanged.
+
 ## v0.41.569, a flight that would not fit its fuel tries going under the ring
 Before a flight is left out for fuel (v0.41.568), its detour round a SAM ring can become a low leg straight under the ring where the ring cannot reach that low: an SA-5 (floor 1,000 ft) or SA-2 (1,500 ft) is passed 500 ft under its floor, a radar SAM whose halved low reach stays off the leg at 300 ft, never through a short-range site's ring, with a descent and a climb 20 nm either side and each low nm counted 1.5 times against the fuel. In the test runs no flight needed it yet.
 

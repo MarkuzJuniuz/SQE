@@ -2548,7 +2548,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             if k1 is not None and not shaped:
                 self._clear_cap_orbit(package, wps, k1, geom)          # S140b2: the station's two ends out of the rings first
                 bs_ = self.state.bases[f.base_id]
-                wps = avoid_circles(wps[:k1 + 1], rings, mp - (len(wps) - k1 - 1), 1, edge=True, start=(bs_.x, bs_.y)) + wps[k1 + 1:]
+                wps = avoid_circles(wps[:k1 + 1], rings, mp - (len(wps) - k1 - 1), 1, edge=True, start=(bs_.x, bs_.y), prefer=(geom.prefer if geom is not None else None)) + wps[k1 + 1:]
             return self._person_home(f, wps, rings, mp)
         if f.role not in (Role.TARCAP, Role.ESCORT, Role.SWEEP):
             return self._person_home(f, wps, rings, mp)
@@ -2556,7 +2556,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if ko is None and self._escort_lead(package, f) is not None:
             ko = next((i for i, w in enumerate(wps) if w.name == "PUSH"), None)
         if ko is not None and ko + 1 < len(wps):
-            avoid_circles(wps, rings, mp, ko + 1, edge=True)
+            avoid_circles(wps, rings, mp, ko + 1, edge=True, prefer=(geom.prefer if geom is not None else None))
         return self._person_home(f, wps, rings, mp)
 
     def _person_home(self, f, wps, rings, mp):
@@ -2990,6 +2990,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         um_ = tm.umbrella_site(self.state, tt_) if tt_ is not None else None             # the one the HARMs go for: the flights must come to it
         # v0.41.20: every live medium / long-range SAM (SA-2/3/6/11/10), each by its own reach (AVOID_NM). A site whose circle holds the target
         # itself is the one this package comes for (its DEAD, or the site a CAS escort's HARMs keep quiet): no bending round that one
+        geom.prefer = self._red_approach(tx, ty)                                           # S140e: red's nearest patrol station / fighter field: a detour of about the same length takes the side away from it
         geom.shared = {}                                                                   # S140b2: the package's one PUSH -> IP detour (`routes.shared_leg`)
         geom.all_rings = list(self._zone_sams(package, True))                              # S140b1: every live ring, for the transit, fighter and home legs (the target's own included)
         geom.sa10_avoid = [(a.x, a.y, AVOID_NM[a.variant]) for a in self.state.assets.values()
