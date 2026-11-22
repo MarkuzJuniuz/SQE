@@ -133,15 +133,15 @@ def jsow_launch_xy(g, jsow_side: float) -> tuple:
 CAP2_FLOOR_NM = 5.0        # Phase 8: the shortest race-track leg worth flying
 
 
-def cap2_point(sx: float, sy: float, axis_deg: float, leg_nm: float, margin, floor_nm: float = CAP2_FLOOR_NM):
+def cap2_point(sx: float, sy: float, axis_deg: float, leg_nm: float, margin, floor_nm: float = CAP2_FLOOR_NM, sides=(90.0, -90.0)):
     """Phase 8 (campaign rules plan, decision 22): the far end (CAP2) of a station's race-track. It lies `leg_nm` from the station (sx, sy), across the
-    axis (`axis_deg` plus or minus 90). `margin(x, y)` is how far inside the clear area that point is, in nm (zero or more = clear). Both sides are tried;
+    axis (`axis_deg` plus or minus 90; S141c: `sides` lists the offsets to try, both by default). `margin(x, y)` is how far inside the clear area that point is, in nm (zero or more = clear). All sides are tried;
     the one with more margin wins. When neither side is clear the leg is halved, down to `floor_nm`. -> (x, y), or None when even the floor leg is not clear.
     No job specifics here: the TARCAP / escort / sweep station and, later, the support CAPs (queue S9) all call it."""
     nm = max(float(leg_nm), floor_nm)
     while True:
         best = None
-        for side in (90.0, -90.0):
+        for side in sides:
             x, y = offset(sx, sy, axis_deg + side, nm * NM)
             m = margin(x, y)
             if m >= 0 and (best is None or m > best[0]):
