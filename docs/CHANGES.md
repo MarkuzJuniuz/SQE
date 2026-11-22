@@ -1,5 +1,11 @@
 # CHANGES.md
 
+## v0.41.585, cover fighters fight on the way in and shoot first
+AI TARCAPs, escorts that hold a station and sweeps now also fight what comes within their reach along their route from the push point to their station, not only round the package, and they fire at maximum range from the start instead of holding their shots until the station. In testing, Su-27s shot an F-15C TARCAP down from just outside its fight circle and it never fired back. Your own flight is unchanged.
+
+## v0.41.584, TARCAP race-track shortened
+A TARCAP's race-track is now 5 nm long instead of 15, so it stays close to its station: in testing the long loop took it about 36 km away for 9 minutes a lap, through most of the strike. Escorts, sweeps and the guard patrols keep their legs. A TARCAP you fly gets the shorter CAP2 too.
+
 ## v0.41.583, SEAD flights stay out of the S-300 they attack; cover on every attack axis
 An AI SEAD flight sent against an SA-10 now fires from 40 nm instead of 35, outside the reach where the S-300 opened fire in testing, and it no longer flies toward a second SA-10 its HARMs cannot reach from there (it used to cross the first one to get to it). In a package whose JSOW flight comes in on its own axis, the TARCAP now covers the most exposed axis and the escort the other, instead of both guarding the HARM shooters. Your own SEAD route is unchanged; a TARCAP or escort you fly moves with the new station.
 
