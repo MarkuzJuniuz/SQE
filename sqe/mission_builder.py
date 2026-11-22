@@ -97,6 +97,7 @@ STAND_BACK_NM = {"F-14BU": 12, "F-14B": 12}
 # the R-27ER first shots seen were 36 to 58 km (19 to 31 nm); 40 nm lets a long-range shooter start its attack before that.
 COVER_REACH_NM = {True: 40, False: 30}      # long-range air-to-air shooters (LONG_RANGE_A2A) / the rest
 COVER_REACH_F14_NM = 45
+COMMIT_ALL_MISSION_S = 10 ** 6       # S160: a commit window with no end of its own (the group's own route ends it)
 PHOENIX_ZONE_NM = 35         # the hunting TARCAP's engage circle for the Tomcat (the Eagle's is 25); = TARCAP_COVER_MAX_NM, the largest circle `_cover_circle` will build
 TARCAP_BARCAP_OVERLAP_NM = 4  # v0.41.138: the TARCAP circle reaches this far (less 2 nm of margin) inside the nearest BARCAP circle, so there is no unguarded strip between them (judgment call: a few miles so a bandit crossing from one to the other is always inside one)
 COVER_ZONE_NM = 20            # v0.41.0: a TARCAP / escort engages inside this circle round the package's launch points (where the shooters are)
@@ -665,7 +666,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._extend_holds([((tx, ty), ptot)] + own_ + [(m_["txy"], m_["tot_s"]) for m_ in merged if not m_.get("struck") and m_.get("txy")],
                            egr_events=self._striker_egr)
         self._exit_s = next((h_["end"] for h_ in self._holds if h_.get("you")), None)
-        self._add_blue_commit()                                  # S158: after the holds are extended, so each commit window ends with its hold            # S141d: when your flight leaves its station: the same time an AI flight in your seat gets
+        self._add_commit_scripts()                               # S158 / S160: after the holds are extended, so each commit window ends with its hold            # S141d: when your flight leaves its station: the same time an AI flight in your seat gets
         manifest.cur_pkg = ""
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + ([geom.cas_floor[1]] if geom.cas_floor else []) + list(self._red_intel)
         self._spawn_supply_in_radius(package, tx, ty, manifest, only_raid=True, max_units=RAID_SUPPLY_UNITS)       # v0.41.220: what a raid scramble is about is built before the raiders and the alert pairs use the unit limit
@@ -1922,6 +1923,17 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 g.points[0].tasks.append(task.OptRadarUsing(task.OptRadarUsing.Values.UseForContinuousSearch))
             rtbt_ = task.OptRTBOnOutOfAmmo(); rtbt_.params["action"]["params"]["value"] = AAM_WEAPONS
             g.points[0].tasks.append(rtbt_)
+            # S160: the support CAPs commit too; a tanker / AWACS guard only HAVCAP_REACH_NM and on a leash round its station
+            commit_end_ = stop if stop else COMMIT_ALL_MISSION_S
+            if f.tag in ("HAVCAP", "TKR_HAVCAP"):
+                station_ = None
+                for w_ in wps:
+                    if w_.name == "CAP1":
+                        station_ = (w_.x, w_.y)
+                        break
+                self._commit_register("blue", g, blue_commit.HAVCAP_REACH_NM, 0, commit_end_, station_, blue_commit.HAVCAP_LEASH_NM)
+            else:
+                self._commit_register("blue", g, cover_reach_nm(f.aircraft), 0, commit_end_)
         elif stw is not None and (not f.is_player or o.player_is_ai):
             # no chasing. A sweep engages inside a circle round its station (25 nm for the long-range shooters, 15 for the rest). A TARCAP or
             # escort covers the package: the circle is round the package's launch points (HARM / JSOW points, or the IP), COVER_ZONE_NM, and
@@ -2000,7 +2012,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         push_eta_ = int(w_.eta_s)
                         break
                 transit_ = self._transit_circles(package, wps, stw, base, reach_)
-                self._commit_flights.append({"g": g.name, "reach": reach_ * NM, "t0": push_eta_, "hold": hold_})      # S158: the commit window ends with the (extended) hold
+                self._commit_register("blue", g, reach_, push_eta_, hold_)      # S158: the commit window ends with the (extended) hold
                 self.__dict__.setdefault("_transit_info", {})[g.name] = transit_          # probe only
                 for k_, (tx_, ty_, tr_) in enumerate(transit_):
                     tw_ = task.ControlledTask(task.EngageTargetsInZone(mapping.Vector2(tx_, ty_), int(tr_ * NM), [task.Targets.All.Air]))
@@ -2070,6 +2082,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     zone = (zw.x, zw.y, min(self.o.fighter_engage_nm, SEAD_ENGAGE_NM) if (zw.orbit or f.role == Role.SEAD) else self.o.fighter_engage_nm)
             self._limit_engage(g, self.o.fighter_engage_nm if f.role != Role.SEAD else 0, (tot_s + m_ * 60) if (m_ > 0 and tot_s is not None) else None,
                                self._clear_zone(zone, package, fighters=f.role != Role.SEAD))
+            if f.role != Role.SEAD:                                 # S160: a cover flight without a station commits too
+                commit_end_ = COMMIT_ALL_MISSION_S
+                if m_ > 0 and tot_s is not None:
+                    commit_end_ = tot_s + m_ * 60
+                self._commit_register("blue", g, cover_reach_nm(f.aircraft), 0, commit_end_)
         elif self._raid_cap(package, f):
             # v0.41.28: a raid scramble follows the TARCAP rules. It engages only inside a circle that takes in its station and the place the
             # raid is going (25 nm round the long-range shooters, 15 for the rest, larger when it must reach both), moved / trimmed clear of red
@@ -2113,6 +2130,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g.points[0].tasks.append(task.OptRadarUsing(task.OptRadarUsing.Values.UseForContinuousSearch))
             rtbr_ = task.OptRTBOnOutOfAmmo(); rtbr_.params["action"]["params"]["value"] = AAM_WEAPONS
             g.points[0].tasks.append(rtbr_)
+            self._commit_register("blue", g, cover_reach_nm(f.aircraft), 0, stop if stop else COMMIT_ALL_MISSION_S)      # S160: raid / fleet interceptors commit too
 
     def _crew_setup(self, f, spec, g, names, plan, manifest, despawn, past_push):
         """Your own seat and radio presets, or an AI flight's frequency, despawn on landing and fuel."""
@@ -3157,19 +3175,44 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if not geom.sweep:
             self._stagger_stations(geom, package, tx, ty)        # v0.41.139 (XO 2026-10-27): a long-range TARCAP stands behind and to one side of a short-range escort
 
-    def _add_blue_commit(self) -> None:
-        """S158: the blue commit script (blue_commit.py) for this mission's AI cover flights, one DoScript two seconds in. Nothing when the switch is off or no flight registered."""
-        if not blue_commit.BLUE_COMMIT or not self._commit_flights:
-            return
-        flights = []
-        for entry in self._commit_flights:
-            flights.append({"g": entry["g"], "reach": entry["reach"], "t0": entry["t0"], "t1": entry["hold"]["end"]})
-        script = blue_commit.commit_lua(flights, blue_commit.red_sam_circles(self.state))
-        trig = triggers.TriggerOnce(comment="SQE blue commit")
-        trig.add_condition(condition.TimeAfter(2))
-        trig.add_action(action.DoScript(String(script)))
-        self.m.triggerrules.triggers.append(trig)
-        self._commit_info = flights                              # probe only
+    def _commit_register(self, side, g, reach_nm, t0, t1, anchor=None, leash_nm=0) -> None:
+        """S160: put an AI air-to-air group on its side's commit script (blue_commit.py). t1 is a mission time, or a hold dict whose (extended) end is used.
+        anchor (x, y) + leash_nm: the flight must stay within the leash of that point (HAVCAPs). Players are never registered (callers test it)."""
+        entry = {"side": side, "g": g.name, "reach": reach_nm * NM, "t0": t0, "t1": t1}
+        if anchor is not None and leash_nm:
+            entry["ax"] = anchor[0]
+            entry["az"] = anchor[1]
+            entry["leash"] = leash_nm * NM
+        self._commit_flights.append(entry)
+
+    def _add_commit_scripts(self) -> None:
+        """S158 / S160: one commit script per side (blue_commit.py), each a DoScript two seconds in. A side is skipped when its switch is off or nothing registered."""
+        self._commit_info = {}                                   # probe only: side -> the flight rows
+        for side in ("blue", "red"):
+            if side == "blue" and not blue_commit.BLUE_COMMIT:
+                continue
+            if side == "red" and not blue_commit.RED_COMMIT:
+                continue
+            flights = []
+            for entry in self._commit_flights:
+                if entry["side"] != side:
+                    continue
+                row = dict(entry)
+                if isinstance(row["t1"], dict):                   # a hold: its end after _extend_holds
+                    row["t1"] = row["t1"]["end"]
+                flights.append(row)
+            if not flights:
+                continue
+            if side == "blue":
+                sams = blue_commit.red_sam_circles(self.state)
+            else:
+                sams = blue_commit.blue_sam_circles(self.state)
+            script = blue_commit.commit_lua(side, flights, sams)
+            trig = triggers.TriggerOnce(comment=f"SQE {side} commit")
+            trig.add_condition(condition.TimeAfter(2))
+            trig.add_action(action.DoScript(String(script)))
+            self.m.triggerrules.triggers.append(trig)
+            self._commit_info[side] = flights
 
     def _stand_back(self, stn, tx, ty, alt_ft, egr, back_nm):
         """S45: a TARCAP / escort station (x, y, names, nm short, egress clear) moved up to `back_nm` further from the target along the target-to-station line, the

@@ -16,7 +16,7 @@ from dcs.point import PointAction
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import callsigns, reactive, scramble
+from . import blue_commit, callsigns, reactive, scramble
 from . import seacheck as seac
 from . import threatmap as tm
 from .difficulty import ai_skill
@@ -606,6 +606,7 @@ class RaidSpawns:
             g.add_waypoint(pt(ix_, iy_), alt, spd, "INTERCEPT").tasks.append(ct)
             self._land_home(g, ap)
             self._limit_engage(g, o.enemy_cap_engage_nm)
+            self._commit_register("red", g, blue_commit.red_reach_nm(pk["type"]), 0, tot_s + 3600)      # S160: a red raid-defence pair commits once airborne
             names = []
             for j, u in enumerate(g.units, 1):
                 u.name = f"ENM-{a.id}-R{k}-{j}"; u.pylons = copy.deepcopy(load); names.append(u.name); self._note_jam(u)
@@ -694,6 +695,8 @@ class RaidSpawns:
             if self.o.ai_despawn_on_land:
                 despawn.extend(names)
             committed[sq.id] = committed.get(sq.id, 0) + 2
+            from .mission_builder import cover_reach_nm          # lazy: the builder module imports this one
+            self._commit_register("blue", g, cover_reach_nm(sq.aircraft), 0, tot_s + o.cap_minutes * 60)      # S160: a blue alert pair commits once airborne
             srcs = reactive.blue_sources(st, AIRCRAFT, fight, committed, *dpt)
             self._intel.append(f"Alert fighters of {sq.name} ({self._short(base.name)}) are on cockpit alert and may launch to help.")
 

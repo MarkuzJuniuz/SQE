@@ -10,7 +10,7 @@ from dcs import action, condition, mapping, planes, task, triggers
 from dcs.translation import String
 from dcs.unit import Skill
 
-from . import reactive, redair, runways, scramble
+from . import blue_commit, reactive, redair, runways, scramble
 from . import reserve as _res
 from . import threatmap as tm
 from .difficulty import ai_skill
@@ -162,6 +162,7 @@ class RedAirPicture:
         if self.o.enemy_unlimited_fuel:
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
         manifest.add("enemy_air", w.base_asset_id, names, ac=tname, grp=g.name)
+        self._commit_register("red", g, blue_commit.red_reach_nm(tname), 0, int(max(t_arr + 300, (nxt["end"] - self._start_min) * 60)))      # S160
         self._red_intel.append(f"Relief for that patrol: a pair of {tname.replace('_', '-')} from {self._short(a.name)} on station {redair.hhmm(nxt['start'])}.")
 
     def _spawn_red_standby(self, pf, cp, i, gname, bf, wings, manifest, skill, tot_s, tx, ty, alt, spd) -> None:
@@ -203,6 +204,7 @@ class RedAirPicture:
         if self.o.enemy_unlimited_fuel:
             g.points[0].tasks.append(task.SetUnlimitedFuelCommand(True))
         manifest.add("enemy_air", w.base_asset_id, names, ac=tname, grp=g.name)
+        self._commit_register("red", g, blue_commit.red_reach_nm(tname), 0, end_s + 900)      # S160: a standby pair commits once airborne
 
     def _arm_callin(self, g, ap, st_xy, hot_xy, zone_nm, alt, spd, end_s, tot_s, bf_, cp, tx, ty, cap2=None, land=None) -> None:
         """v0.41.111: adds the hotspot leg AFTER the landing point of a patrol route: HOTSPOT (orbit, engages inside its own circle), BACK (orbit on the
@@ -466,6 +468,12 @@ class RedAirPicture:
             if not load:
                 self.warns.append(f"{tname}: no air-to-air loadout found; spawned unarmed")
             manifest.add("enemy_air", w.base_asset_id, names, ac=tname, grp=g.name)
+            # S160: a red patrol / sweep commits until its planned window ends, an alert pair until it flies home
+            if i < n_cap:
+                commit_end_ = int(max(tot_s + 300, (pf_["end"] - self._start_min) * 60))
+            else:
+                commit_end_ = int(tot_s + ALERT_STAY_AFTER_TOT_S)
+            self._commit_register("red", g, blue_commit.red_reach_nm(tname), 0, commit_end_)
             if i < n_cap and pf_["kind"] == "CAP" and getattr(self, "_detect_full", True):     # v0.41.346: an unseen package draws no standby or relief pair either
                 self._spawn_red_relief(pf_, self._cap_plan[i], i, manifest, skill, tot_s, tx, ty, alt, spd)
                 self._spawn_red_standby(pf_, self._cap_plan[i], i, g.name, bf_, wings, manifest, skill, tot_s, tx, ty, alt, spd)

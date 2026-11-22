@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.588, fighters of both sides commit on enemy fighters, and stay out of their SAM cover
+Every AI air-to-air flight now goes after an enemy fighter that comes within its reach (blue: TARCAPs, escorts, sweeps, BARCAPs, HAVCAPs, alert pairs and raid interceptors; red: patrols, alert pairs, reliefs and standbys) while an AWACS is up, or its own radar has it (red also counts its early-warning radars). A flight never flies into the other side's SAM rings: it can shoot at a jet under SAM cover from outside it and breaks off when it would enter, runs out of reach, or its time on station ends. At most two flights go for one enemy pair, and a tanker or AWACS guard stays near what it guards. Red's raid escorts and sweeps are unchanged. Your own flight is unchanged.
+
 ## v0.41.587, cover fighters commit on red fighters
 AI TARCAPs, escorts that hold a station and sweeps now go after a red fighter as soon as it comes within their reach (40 nm for the F-15C) while an AWACS is up or their own radar has it, the way red's alert fighters are sent at you. They break off when the red jet flies back under its own SAM cover, runs well out of reach, or when their time on station ends, then fly their route again. Red fighters sitting under their SAMs are left alone. Your own flight is unchanged.
 
