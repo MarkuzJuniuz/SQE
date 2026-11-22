@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.566, AI egress points and CAP stations out of SAM rings; one detour for a package
+An AI flight's egress point (strike, SEAD, escort) no longer sits inside a live SAM ring: it moves to the nearest point outside the rings, at most 40 nm. A scramble, raid or fleet CAP whose race-track has an end inside a ring moves that end out (the far end first, else the pair walked toward what it guards); a defended point inside a ring keeps its station. A sweep station is never inside a ring the routes keep out of. The strikers of a package share one detour from the push to the IP, each copy shifted by its lane. Your own flight is unchanged.
+
 ## v0.41.565, AI flights go round every live SAM ring on the way out, to their station and home
 An AI flight's route (base to marshal to push, push to its IP or station, the way home) now bends round every live SAM ring, including the ring of the site its own package attacks and the rings a fighter used to ignore near its target; a TARCAP, escort or sweep has no ring of its own. A flight that starts or ends inside a ring (a base near the front, an IP inside the target's ring) takes the ring by its nearest edge when that cuts the time inside it. The map and the briefing now draw and quote the same ring the routes keep out of (SA-10 35 nm, SA-5 71, SA-2 26, SA-11 20, SA-6 16, SA-3 15). Your own flight's route is unchanged.
 

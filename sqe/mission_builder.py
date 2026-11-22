@@ -203,7 +203,7 @@ def stagger(package, role) -> int:
 from .packages import Package, folded_n_def
 from .options import MissionOptions
 from .radio import RadioCfg, RadioPlan, apply_player_presets, build_radio_plan
-from .routes import cap2_point, jsow_launch_xy, SLAM_LAUNCH_NM, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, SA10_STATION_NM, AVOID_NM, avoid_circles, safe_path_edge, AGM88_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, hold_leg_s, hold_next, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
+from .routes import cap2_point, out_of_rings, jsow_launch_xy, SLAM_LAUNCH_NM, JSOW_KEEP_HIGH_NM, SA10_AVOID_NM, SA10_STATION_NM, AVOID_NM, AVOID_MARGIN_NM, avoid_circles, safe_path_edge, AGM88_LAUNCH_NM, OBJECTIVE_ACTIONS, NM, FT, Wpt, assign_times, bearing, dist, hold_leave_s, hold_leg_s, hold_next, in_progress, leg_seconds, make_geometry, objective_wp, offset, plan_route, terrain_clear, home_leg_ft
 from .state import CampaignState
 
 F = VehicleGroup.Formation
@@ -1609,7 +1609,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             wps = [w for i, w in enumerate(wps) if w.name not in ("CAP1", "CAP2") and not (w.name == "AVD" and pi_ is not None and i > pi_)]      # S140b1: the turn points planned for the station leg go with it; _leg_rules routes PUSH -> EGR
             if not any(w.name == "EGR" for w in wps):
                 pr_ = self._flight_profile(f, package)
-                wps.append(Wpt("EGR", *geom.egr, pr_.alt_ft.get(f.role, 20000), pr_.egress_kts, "Exit with the package"))
+                wps.append(Wpt("EGR", *out_of_rings(geom.egr, geom.all_rings or []), pr_.alt_ft.get(f.role, 20000), pr_.egress_kts, "Exit with the package"))      # S140b2: an AI escort's egress point is out of the rings
         if getattr(f, "rush", False):
             self._rush_speeds(wps)                                    # v0.41.256: the raid SEAD
         shaped_, meet_ = False, None
@@ -1631,7 +1631,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     meet_ = rc_["t_leave"] + dist(rc_["mshl"][0], rc_["mshl"][1], ip_["ip"][0], ip_["ip"][1]) / RAID_MPS - RAID_MEET_LEAD_S
         self._add_cap2(package, wps, spec, geom)          # Phase 8: before the terrain check and the times, so both count it
         if not f.tag and (not f.is_player or o.player_is_ai):
-            wps = self._leg_rules(package, f, wps, spec, shaped_)          # S140b1: the legs the plan did not route (a scramble CAP's way out, what follows a station)
+            wps = self._leg_rules(package, f, wps, spec, shaped_, geom)          # S140b1: the legs the plan did not route (a scramble CAP's way out, what follows a station)
         if not f.is_player or o.player_is_ai:
             terrain_clear(wps)                          # an AI flight climbs on its own schedule: its altitudes must clear the ridges on each leg
         if f.is_player:
@@ -2362,7 +2362,33 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             g.add_waypoint(self._pt(x, y), alt * FT, spd, "AVD")
         return pts, need
 
-    def _leg_rules(self, package, f, wps, spec, shaped=False):
+    def _clear_cap_orbit(self, package, wps, k1, geom) -> int:
+        """S140b2 (plan 2.3): a scramble / raid / fleet CAP's race-track (CAP1 + CAP2, the guarded point `geom.tx, ty`) with an end inside a live ring (+ AVOID_MARGIN_NM; `FighterStations._room`) is moved out:
+        CAP2 alone first (`cap2_point`: its leg across or along, halved to 5 nm) when CAP1 is clear, else both ends together walked toward the guarded point, 2 nm at a time (the walk `_leash_fleet_cap`
+        does for the fleet raid), until both are clear. Nothing clear within that: the points stay and the flight is noted in `self._cap_in_ring` (probe only). -> 0 unchanged / already clear, 1 CAP2 moved, 2 both."""
+        if k1 + 1 >= len(wps) or wps[k1 + 1].name != "CAP2" or geom is None:
+            return 0
+        a, b = wps[k1], wps[k1 + 1]
+        ok = lambda x, y: self._room(x, y, package) >= AVOID_MARGIN_NM
+        if ok(a.x, a.y) and ok(b.x, b.y):
+            return 0
+        leg_b, leg_d = bearing(a.x, a.y, b.x, b.y), dist(a.x, a.y, b.x, b.y)
+        if ok(a.x, a.y):
+            c2 = cap2_point(a.x, a.y, leg_b - 90.0, leg_d / NM, lambda x, y: self._room(x, y, package) - AVOID_MARGIN_NM)
+            if c2 is not None:
+                b.x, b.y = c2
+                return 1
+        home_b = bearing(a.x, a.y, geom.tx, geom.ty)
+        for step in range(1, int(dist(a.x, a.y, geom.tx, geom.ty) / (2 * NM)) + 1):
+            x, y = offset(a.x, a.y, home_b, step * 2 * NM)
+            x2, y2 = offset(x, y, leg_b, leg_d)
+            if ok(x, y) and ok(x2, y2):
+                a.x, a.y, b.x, b.y = x, y, x2, y2
+                return 2
+        self.__dict__.setdefault("_cap_in_ring", []).append(package.id)
+        return 0
+
+    def _leg_rules(self, package, f, wps, spec, shaped=False, geom=None):
         """S140b1 (plan 2.2): the legs of an AI package flight that `plan_route` could not route, once the route is final (the scramble CAP's station is moved, CAP2 is in): a scramble CAP's way out to its station
         (the orbit leg CAP1 -> CAP2 stays as it is; an F-14's crossing leg goes toward the SAMs on purpose, once the gate opens), and every leg after a TARCAP / escort / sweep orbit (CAP2, else CAP1 -> EGR),
         or from PUSH on for an escort that flies with its strikers. Every live ring (`_zone_sams(package, True)`), a leg that starts or ends inside one by its edge. -> wps"""
@@ -2373,6 +2399,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         if f.role == Role.CAP:
             k1 = next((i for i, w in enumerate(wps) if w.action == "CAPORBIT"), None)
             if k1 is not None and not shaped:
+                self._clear_cap_orbit(package, wps, k1, geom)          # S140b2: the station's two ends out of the rings first
                 bs_ = self.state.bases[f.base_id]
                 wps = avoid_circles(wps[:k1 + 1], rings, mp - (len(wps) - k1 - 1), 1, edge=True, start=(bs_.x, bs_.y)) + wps[k1 + 1:]
             return wps
@@ -2789,6 +2816,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         um_ = tm.umbrella_site(self.state, tt_) if tt_ is not None else None             # the one the HARMs go for: the flights must come to it
         # v0.41.20: every live medium / long-range SAM (SA-2/3/6/11/10), each by its own reach (AVOID_NM). A site whose circle holds the target
         # itself is the one this package comes for (its DEAD, or the site a CAS escort's HARMs keep quiet): no bending round that one
+        geom.shared = {}                                                                   # S140b2: the package's one PUSH -> IP detour (`routes.shared_leg`)
         geom.all_rings = list(self._zone_sams(package, True))                              # S140b1: every live ring, for the transit, fighter and home legs (the target's own included)
         geom.sa10_avoid = [(a.x, a.y, AVOID_NM[a.variant]) for a in self.state.assets.values()
                            if a.kind == AssetKind.SAM and a.variant in AVOID_NM and not a.destroyed and a.health > 0.25 and not getattr(a, "suppressed", False)
