@@ -185,7 +185,7 @@ def _initial(d, n, tail: int = 0) -> tuple:
     strength, REAR_FRAC of the first start value, and none of ours. `tail` (pack key `front.rear_zones`, Phase 9a: the Kutaisi - Kobuleti sector) is the number of
     sectors behind the old front: they start quiet, no red and the last blue value, so adding a base at the back does not move the front."""
     red_t = [float(x) for x in getattr(d, "ground_red", (70, 55, 15, 0, 0))]
-    blue_t = [float(x) for x in getattr(d, "ground_blue", (0, 15, 60, 70, 50))]
+    blue_t = [float(x) for x in getattr(d, "ground_blue", (0, 0, 60, 70, 50))]
     tail = max(0, min(tail, n - 1))
     m = n - tail
     rear = max(0, m - len(red_t))

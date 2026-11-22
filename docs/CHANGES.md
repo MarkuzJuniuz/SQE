@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.582, no cut-off blue company inside red's lines
+New campaigns no longer start with a small blue force inside the first sector red holds. It showed up on the front map as a detached company beside a red column, 20 km past the line, and it would not have survived there. Red's first sector now starts fully red; saved campaigns keep what they have.
+
 ## v0.41.581, a jettisoned bomb is not a runway hit
 A bomb an AI striker dumps far from its target (more than 20 km) is no longer followed for the runway-hit count, so it cannot help cut a field. Real releases count as before.
 
