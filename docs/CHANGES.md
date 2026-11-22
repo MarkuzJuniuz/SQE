@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.573, an opened save shows its new SAM sites at once
+A saved campaign that was missing a blue air-defence site (Hatay's Patriot in a Syria save, v0.41.572) now gets it the moment you open it, a finished war or a day already begun included, and a state note names what was added. Before, it appeared only when the next day was planned.
+
 ## v0.41.572, Hatay gets its Patriot
 Syria's Hatay, red's objective and 57 nm from Incirlik, is a recovery field, and recovery fields had HAWK and AAA only. It now has a Patriot battery too, in new campaigns and in saved Syria campaigns (the site appears when you load). Red's raids bend round its 40 nm ring and its SEAD packages can target it. The Caucasus recovery field is unchanged.
 
