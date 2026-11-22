@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.581, a jettisoned bomb is not a runway hit
+A bomb an AI striker dumps far from its target (more than 20 km) is no longer followed for the runway-hit count, so it cannot help cut a field. Real releases count as before.
+
 ## v0.41.580, no "Bombs away" for a jettison
 An AI striker that dumps its bombs far from its target (jumped by red on its run) no longer calls "Bombs away": the call needs the release to be within 20 km of the flight's target point. The state file's shot log now records how far from the target each bomb left.
 
