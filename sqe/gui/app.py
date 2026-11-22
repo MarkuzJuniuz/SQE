@@ -193,8 +193,13 @@ class OverviewPage(QWidget):
         im4 = V.Images()
         top = V.table(("Side", "Air Defense"), [["Coalition", im4.cbar(ab, V.pct_band(ab))], [en, im4.cbar(ae, V.pct_band(ae))]], widths=(V.W_SITE, V.W_TYPE + V.W_HEALTH))
         transit = V.section("SAM Batteries in Transit", V.table(("Side", "Battery"), [(a, V.first_cap(b)) for a, b in orders])) if orders else ""
-        sites = V.table(("Site", "Type", "Health", "State"), [[b, c, im4.cbar(d, V.pct_band(d)), V.short_state(x)] for a, b, c, d, x in od.air_defence_rows(st)], center=(1, 3), nowrap=True, widths=(V.W_SITE, V.W_TYPE, V.W_HEALTH, V.W_STATE))
-        im4.apply(self.dviews["ad"], top + transit + V.section("Sites", sites))
+        ad_html = ""
+        adrows = od.air_defence_rows(st)
+        for side, head in (("Coalition", "Coalition Sites"), (None, f"{en} Sites")):         # S147: one table per side, the same columns and widths in both (and as on the Force Index tab)
+            rs = [r for r in adrows if (r[0] == "Coalition") == (side is not None)]
+            if rs:
+                ad_html += V.section(head, V.table(("Site", "Type", "Health", "State"), [[b, c, im4.cbar(d, V.pct_band(d)), V.short_state(x)] for a, b, c, d, x in rs], center=(1, 3), nowrap=True, widths=(V.W_SITE, V.W_TYPE, V.W_HEALTH, V.W_STATE)))
+        im4.apply(self.dviews["ad"], top + transit + ad_html)
         # ---- Air Operations: BARCAP cover and the tanker / AWACS guards, under their own headings
         lines = _bb.status_lines(st)
         cover = [tuple((ln.strip().split(": ", 1) + [""])[:2]) for ln in lines if ln.startswith("   ")]

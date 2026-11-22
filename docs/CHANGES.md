@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.576, the Air Defense tab lists each side's sites on its own
+The Overview's Air Defense tab now has a "Coalition Sites" table and a table for red's sites, the same columns and widths as on the Force Index tab, instead of one mixed list.
+
 ## v0.41.575, Lutorin Works: two rebuild teams
 Red now has two teams rebuilding Lutorin Works at Level 2 and Level 3: two destroyed plants are mended at the same time (about a month each), and a third waits for a team to finish. Winning by destroying every plant at once is harder. Saved campaigns keep the days their one team had left.
 
