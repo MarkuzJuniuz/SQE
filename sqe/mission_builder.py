@@ -18,13 +18,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from dcs import action, condition, mapping, planes, task, triggers, vehicles
+from dcs.translation import String
 from dcs.mission import Mission, StartType
 from dcs.point import PointAction
 from . import theatres, weather
 from dcs.unit import Skill
 from dcs.unitgroup import VehicleGroup
 
-from . import barcap, briefing as brief, callsigns, detection, f117, profiles, relief, runways
+from . import barcap, blue_commit, briefing as brief, callsigns, detection, f117, profiles, relief, runways
 from . import seacheck as seac
 from . import pydcs_patch
 from . import threatmap as tm
@@ -590,6 +591,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._striker_tgt = {}                                               # S38: package id -> its STRIKE / CAS flights' time over target, for the SEAD's window
         self._sead_info = {}                                                 # S86: id(SEAD flight) -> the reach-crossing numbers its push was timed with (probe)
         self._push_adj = {}                                                  # S38: id(flight) -> the push time an AI SEAD actually uses (timed to the strikers, not the push)
+        self._commit_flights = []                                            # S158: AI cover flights the blue commit script watches (blue_commit.py)
         self._holds = []                                                     # v0.41.10: TARCAP / escort holds, extended to the last package over their target area
         self._you_hold = None                                                # S141d: the hold of a person's own station flight, only so the card can say when to leave (no task is attached to it)
         self._exit_s = None                                                  # S141d: when your flight leaves its station (the hold's end after _extend_holds)
@@ -662,7 +664,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             self._holds.append(self._you_hold)
         self._extend_holds([((tx, ty), ptot)] + own_ + [(m_["txy"], m_["tot_s"]) for m_ in merged if not m_.get("struck") and m_.get("txy")],
                            egr_events=self._striker_egr)
-        self._exit_s = next((h_["end"] for h_ in self._holds if h_.get("you")), None)            # S141d: when your flight leaves its station: the same time an AI flight in your seat gets
+        self._exit_s = next((h_["end"] for h_ in self._holds if h_.get("you")), None)
+        self._add_blue_commit()                                  # S158: after the holds are extended, so each commit window ends with its hold            # S141d: when your flight leaves its station: the same time an AI flight in your seat gets
         manifest.cur_pkg = ""
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + ([geom.cas_floor[1]] if geom.cas_floor else []) + list(self._red_intel)
         self._spawn_supply_in_radius(package, tx, ty, manifest, only_raid=True, max_units=RAID_SUPPLY_UNITS)       # v0.41.220: what a raid scramble is about is built before the raiders and the alert pairs use the unit limit
@@ -1997,6 +2000,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                         push_eta_ = int(w_.eta_s)
                         break
                 transit_ = self._transit_circles(package, wps, stw, base, reach_)
+                self._commit_flights.append({"g": g.name, "reach": reach_ * NM, "t0": push_eta_, "hold": hold_})      # S158: the commit window ends with the (extended) hold
                 self.__dict__.setdefault("_transit_info", {})[g.name] = transit_          # probe only
                 for k_, (tx_, ty_, tr_) in enumerate(transit_):
                     tw_ = task.ControlledTask(task.EngageTargetsInZone(mapping.Vector2(tx_, ty_), int(tr_ * NM), [task.Targets.All.Air]))
@@ -3152,6 +3156,20 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                     geom.stand[key] = (ow_[0], ow_[1], [], dist(ow_[0], ow_[1], tx, ty) / NM, profiles.leg_clear(self.state, ow_, geom.egr, alt_))     # S141b: the same tuple shape profiles.station returns
         if not geom.sweep:
             self._stagger_stations(geom, package, tx, ty)        # v0.41.139 (XO 2026-10-27): a long-range TARCAP stands behind and to one side of a short-range escort
+
+    def _add_blue_commit(self) -> None:
+        """S158: the blue commit script (blue_commit.py) for this mission's AI cover flights, one DoScript two seconds in. Nothing when the switch is off or no flight registered."""
+        if not blue_commit.BLUE_COMMIT or not self._commit_flights:
+            return
+        flights = []
+        for entry in self._commit_flights:
+            flights.append({"g": entry["g"], "reach": entry["reach"], "t0": entry["t0"], "t1": entry["hold"]["end"]})
+        script = blue_commit.commit_lua(flights, blue_commit.red_sam_circles(self.state))
+        trig = triggers.TriggerOnce(comment="SQE blue commit")
+        trig.add_condition(condition.TimeAfter(2))
+        trig.add_action(action.DoScript(String(script)))
+        self.m.triggerrules.triggers.append(trig)
+        self._commit_info = flights                              # probe only
 
     def _stand_back(self, stn, tx, ty, alt_ft, egr, back_nm):
         """S45: a TARCAP / escort station (x, y, names, nm short, egress clear) moved up to `back_nm` further from the target along the target-to-station line, the

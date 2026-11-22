@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.587, cover fighters commit on red fighters
+AI TARCAPs, escorts that hold a station and sweeps now go after a red fighter as soon as it comes within their reach (40 nm for the F-15C) while an AWACS is up or their own radar has it, the way red's alert fighters are sent at you. They break off when the red jet flies back under its own SAM cover, runs well out of reach, or when their time on station ends, then fly their route again. Red fighters sitting under their SAMs are left alone. Your own flight is unchanged.
+
 ## v0.41.586, cover fighters reach further, fly higher and carry the AIM-120C
 AI TARCAPs, station escorts and sweeps may now attack from much further out (40 nm for the F-15C, 45 for the F-14, 30 for the F-16 and F/A-18, still kept clear of SAM rings): in testing red fired its first missile from outside the blue fighters' fight area in 11 of 12 engagements, so they were never allowed to attack first. F-15C and F-14 cover flights fly their station at 33,000 ft and a faster 460 / 440 kt, and the F-15C's air-to-air kit carries the AIM-120C instead of the AIM-120B. A TARCAP, escort or sweep you fly in an F-15C or F-14 gets the new altitude, speed and kit too.
 
