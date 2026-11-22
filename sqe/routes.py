@@ -85,6 +85,9 @@ LOW_LEG_NM = 30.0          # v0.41.16: a low-level (terrain-following) attack de
 SWEEP_PUSH_NM = 15.0       # v0.41.12: a sweep's PUSH, this far from its base toward the target
 AGM88_LAUNCH_NM = 35.0      # v0.41.11: 35 (was 30): the Sukhumi SA-10 engaged HARM shooters at 54-57 km (31 nm); the AI fires from 35-38 nm anyway.
                            # an AI SEAD flight's HARM launch point: at the edge of what an SA-10 first reaches (it opened fire at about 55 km in testing); 21 nm put the launch point deep inside it
+# S153: how far out the AI fires an AGM-88C. Judgment call from the v0.41.11 note above ("the AI fires from 35-38 nm"), not measured yet.
+# A HARM task on a site farther than this from the HARM point makes the AI fly toward that site to get in range.
+AGM88_AI_REACH_NM = 40.0
 CARRIER_DEP_NM = 10.0      # Case III: the departure circle is 10 nm from the boat, and the flight leaves on the briefed departure radial
 
 
