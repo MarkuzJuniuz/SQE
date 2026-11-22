@@ -4,6 +4,7 @@ Flights arrive at the marshal point, hold (stacked 1,000 ft apart), and leave to
 Pure geometry, no pydcs mission objects, so the kneeboard and briefing reuse it.
 """
 from __future__ import annotations
+import heapq
 import math
 from dataclasses import dataclass
 from . import samtier
@@ -322,31 +323,104 @@ RAID_THREAT_OUT_NM = 165.0 # v0.41.301: was 140, moves out with the point. v0.41
                            # beyond the fighters' station (raid_spawns.RAID_LAUNCH_OUT_NM). Was the route's outer point w1, 220 nm.
 
 
-def avoid_circles(wp: list, circles: list, max_points: int, first: int) -> list:
-    """v0.41.11: bend the legs from index `first` on around each circle (x, y, nm): where a leg passes inside one, a turn point is put
-    2 nm outside it, on the side the leg already passes. Two passes at most; never past the airframe's waypoint limit."""
-    for _ in range(2):
-        changed = False
-        i = max(1, first)
-        while i < len(wp):
-            a, b = wp[i - 1], wp[i]
-            for cx, cy, r in circles:
-                ax, ay, bx, by = a.x, a.y, b.x, b.y
-                vx, vy = bx - ax, by - ay
-                L2 = vx * vx + vy * vy
-                t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((cx - ax) * vx + (cy - ay) * vy) / L2))
-                px, py = ax + t * vx, ay + t * vy
-                d = dist(px, py, cx, cy)
-                if d >= r * NM or t in (0.0, 1.0) or len(wp) + 3 > max_points:
-                    continue
-                h = bearing(cx, cy, px, py) if d > 1 else bearing(ax, ay, bx, by) + 90
-                nx, ny = offset(cx, cy, h, (r + 2) * NM)
-                wp.insert(i, Wpt("AVD", nx, ny, max(a.alt_ft, b.alt_ft), a.speed_kts, "Around a SAM site", rad=a.rad))
-                changed = True
+AVOID_MARGIN_NM = 2.0      # S140a: a turn point sits this far outside the ring it bends round. Source: today's value (v0.41.11 put its one turn point 2 nm outside the ring); kept so the rings keep the same clearance
+AVOID_CORNERS = 12         # S140a: a ring is a 12-corner polygon for the path search; its flats (not its corners) sit AVOID_MARGIN_NM outside the ring. Judgment call: 12 corners overshoot the shortest tangent by under 2 nm on a 35 nm ring
+AVOID_ROUNDS = 40          # S140a: most rounds of "search, then add the rings the best path still touches"
+AVOID_TOUCH_M = 50.0       # a segment touches a ring when its closest point is this much inside the ring edge (a corner on the polygon is margin_nm outside, so it never counts)
+
+
+def _seg_hits(p, q, circles) -> list:
+    """Indexes of the circles (x, y, r metres) that the segment p -> q touches (its closest point lies inside r - AVOID_TOUCH_M)."""
+    ax, ay = p
+    vx, vy = q[0] - ax, q[1] - ay
+    L2 = vx * vx + vy * vy
+    hit = []
+    for i, (cx, cy, r) in enumerate(circles):
+        t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((cx - ax) * vx + (cy - ay) * vy) / L2))
+        if math.hypot(ax + t * vx - cx, ay + t * vy - cy) < r - AVOID_TOUCH_M:
+            hit.append(i)
+    return hit
+
+
+def safe_path(a, b, circles, margin_nm: float = AVOID_MARGIN_NM):
+    """S140a: the turn points between a and b (x, y in metres) that keep the leg out of every circle (x, y, nm): [] when the straight leg is clear,
+    None when there is no way round. Shortest path over a visibility graph (Lozano-Perez and Wesley 1979, the visibility-graph method), searched with A*.
+    Each circle is a polygon of AVOID_CORNERS corners whose flats lie `margin_nm` outside it; a corner inside any circle is not a node. Lazy: only the
+    circles the current best path touches are obstacles, and the search repeats until the path touches none (None after AVOID_ROUNDS rounds, or when a
+    path still touches a circle with every touched circle already an obstacle). A circle that holds a or b is left out of the leg (the leg has to start
+    or end there; S140b handles those legs): v0.41.11 could still bend such a leg when the closest point lay mid-leg. Ties break by node index, so
+    the result is the same on every run. Ported from the probes/s140/crossings.py prototype."""
+    live = [(cx, cy, r * NM) for cx, cy, r in circles
+            if math.hypot(a[0] - cx, a[1] - cy) >= r * NM and math.hypot(b[0] - cx, b[1] - cy) >= r * NM]
+    if not live:
+        return []
+    path = [tuple(a), tuple(b)]
+    active: set = set()
+    for _ in range(AVOID_ROUNDS):
+        hit = set()
+        for i in range(len(path) - 1):
+            hit.update(_seg_hits(path[i], path[i + 1], live))
+        if not hit:
+            return path[1:-1]
+        if hit <= active:
+            return None
+        active |= hit
+        obs = [live[i] for i in sorted(active)]
+        nodes = [tuple(a), tuple(b)]
+        for cx, cy, r in obs:
+            R = (r + margin_nm * NM) / math.cos(math.pi / AVOID_CORNERS)
+            for k in range(AVOID_CORNERS):
+                ang = 2 * math.pi * k / AVOID_CORNERS
+                pt = (cx + R * math.cos(ang), cy + R * math.sin(ang))
+                if not any(math.hypot(pt[0] - ox, pt[1] - oy) < orr for ox, oy, orr in live):
+                    nodes.append(pt)
+        n = len(nodes)
+        best, prev, done = {0: 0.0}, {}, set()
+        heap = [(math.hypot(b[0] - a[0], b[1] - a[1]), 0)]
+        found = False
+        while heap:
+            _, u = heapq.heappop(heap)
+            if u in done:
+                continue
+            done.add(u)
+            if u == 1:
+                found = True
                 break
-            i += 1
-        if not changed:
-            break
+            ux, uy = nodes[u]
+            for v in range(n):
+                if v in done:
+                    continue
+                vx, vy = nodes[v]
+                d = best[u] + math.hypot(vx - ux, vy - uy)
+                if d >= best.get(v, 1e18):
+                    continue
+                if _seg_hits(nodes[u], nodes[v], obs):
+                    continue
+                best[v], prev[v] = d, u
+                heapq.heappush(heap, (d + math.hypot(b[0] - vx, b[1] - vy), v))
+        if not found:
+            return None
+        k, path = 1, [nodes[1]]
+        while k != 0:
+            k = prev[k]
+            path.append(nodes[k])
+        path.reverse()
+    return None
+
+
+def avoid_circles(wp: list, circles: list, max_points: int, first: int) -> list:
+    """v0.41.11: bend the legs from index `first` on around each circle (x, y, nm); one turn point 2 nm outside the circle, two passes at most.
+    S140a: the shortest path round the circles (`safe_path`): each leg from index `first` on gets as many turn points as it needs, from the end of the
+    list backwards, never past the airframe's waypoint limit. A leg with no way round, or with more turn points than the limit allows, stays as it is.
+    Changes `wp` in place and returns it."""
+    i = len(wp) - 1
+    while i >= max(1, first):
+        a, b = wp[i - 1], wp[i]
+        pts = safe_path((a.x, a.y), (b.x, b.y), circles)
+        if pts and len(wp) + len(pts) + 2 <= max_points:
+            alt = max(a.alt_ft, b.alt_ft)
+            wp[i:i] = [Wpt("AVD", x, y, alt, a.speed_kts, "Around a SAM site", rad=a.rad) for x, y in pts]
+        i -= 1
     return wp
 
 
