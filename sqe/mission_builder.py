@@ -568,6 +568,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         self._sead_info = {}                                                 # S86: id(SEAD flight) -> the reach-crossing numbers its push was timed with (probe)
         self._push_adj = {}                                                  # S38: id(flight) -> the push time an AI SEAD actually uses (timed to the strikers, not the push)
         self._holds = []                                                     # v0.41.10: TARCAP / escort holds, extended to the last package over their target area
+        self._you_hold = None                                                # S141d: the hold of a person's own station flight, only so the card can say when to leave (no task is attached to it)
+        self._exit_s = None                                                  # S141d: when your flight leaves its station (the hold's end after _extend_holds)
         self._snipe_at = {}                                                  # v0.41.10: id(group) -> the station waypoint where max-range shots begin
         self._callins = []
         self._callin_lua = False                                           # v0.41.112: SQE_CALLIN is defined in the mission (red's wiring or blue's)
@@ -633,8 +635,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
         # not just until its own station time (when the player flew the TARCAP, tgt was the TARCAP's own station: it left 7.5 min after arriving)
         own_ = [((tx, ty), max(striker_tots))] if striker_tots else []
         self._last_striker_s = max(striker_tots) if striker_tots else None
+        if self._you_hold is not None:
+            self._holds.append(self._you_hold)
         self._extend_holds([((tx, ty), ptot)] + own_ + [(m_["txy"], m_["tot_s"]) for m_ in merged if not m_.get("struck") and m_.get("txy")],
                            egr_events=self._striker_egr)
+        self._exit_s = next((h_["end"] for h_ in self._holds if h_.get("you")), None)            # S141d: when your flight leaves its station: the same time an AI flight in your seat gets
         manifest.cur_pkg = ""
         self._intel = ([geom.tier.reason] if geom.tier.reason else []) + ([geom.cas_floor[1]] if geom.cas_floor else []) + list(self._red_intel)
         self._spawn_supply_in_radius(package, tx, ty, manifest, only_raid=True, max_units=RAID_SUPPLY_UNITS)       # v0.41.220: what a raid scramble is about is built before the raiders and the alert pairs use the unit limit
@@ -681,6 +686,8 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             win = {"PUSH": "+/-30s", "TGT": "+/-1m", "SEAD": "+/-1m"}.get(r[0], "")
             if r[0] == "MSHL":
                 win = f"hold to {clock(leave_s)}"
+            elif r[0] == "CAP1" and self._exit_s is not None:
+                win = f"leave {clock(self._exit_s)}"                  # S141d: card text only
             kn_rows.append({"wp": self._f14ab_label(i, r, n_route) if self._f14ab else pspec.wp_label(i), "name": r[0], "time": tstr, "alt": r[4], "kts": str(r[5]), "leg": leg, "win": win,
                             "note": r[6] if (r[0] in ("TGT", "TKR", "RTB", "DIVERT", "TAKEOFF") or (r[0] == "CAP1" and any(w_.orbit for w_ in pw))) else ""})
             if r[0] not in ("TAKEOFF", "DIVERT", "TKR", "BULLS"):
@@ -1348,6 +1355,11 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             self._escort_pend.append((f, g, lead_))               # S138a
         stw = next((w for w in wps if w.action in ("TARCAP", "ESCORT", "SWEEP") and w.orbit), None)
         hold_end = self._hold_end(stw, tot_s) if stw is not None else None
+        if f.is_player and not self.o.player_is_ai and not f.tag and stw is not None and hold_end is not None:
+            # S141d: a person's own station flight has no engage task, but its time on station is extended like an AI flight's (`_extend_holds`): the card shows when to leave
+            self._you_hold = {"cts": [], "starts": [], "tgt": (geom.tx, geom.ty), "end": int(hold_end), "eta": int(stw.eta_s), "you": True, "gate_s": self._gate_slack_s(package),
+                              "first": stw.action == "SWEEP",
+                              "after": SWEEP_AFTER_TOT_S if stw.action == "SWEEP" else TARCAP_AFTER_TOT_S if stw.action == "TARCAP" else ESCORT_AFTER_TOT_S}
         self._engage_tasks(package, f, g, wps, stw, hold_end, cap_zone, stop, tot_s, geom, base)
         self._crew_setup(f, spec, g, names, plan, manifest, despawn, past_push)
         self._announce(package, f, g, names, wps, push_s, manifest)
@@ -1941,7 +1953,7 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                 zct_.start_after_time(int(stw.eta_s - ENGAGE_LEAD_S))      # v0.41.314 (XO 2026-11-06 run: the sweep's engage zone was live from takeoff, it ran down the Su-27s at 880 kt, 250 km out, hit bingo, went home 14 min before the TOT)
             hold_ = None
             if hold_end is not None:
-                hold_ = {"cts": [zct_], "starts": [], "tgt": (geom.tx, geom.ty), "end": int(hold_end), "eta": int(stw.eta_s),
+                hold_ = {"cts": [zct_], "starts": [], "tgt": (geom.tx, geom.ty), "end": int(hold_end), "eta": int(stw.eta_s), "you": bool(f.is_player),
                          "gate_s": self._gate_slack_s(package),     # v0.41.315: the strikers may sit at a gate this long before TOT; the cover stays for it
                          "first": stw.action == "SWEEP",           # v0.41.13: a sweep holds until the FIRST package it covers is over the target
                          "after": SWEEP_AFTER_TOT_S if stw.action == "SWEEP" else TARCAP_AFTER_TOT_S if stw.action == "TARCAP" else ESCORT_AFTER_TOT_S}
