@@ -70,7 +70,9 @@ BARCAP_DETECT_NM = 50           # S89 B1 judgment call: a fighter radar on a fig
 RUNWAY_HALF_WIDTH_M = 120.0   # ...and this far either side of the centreline (runway about 45-60 m wide plus a margin; judgment call)
 SCRUB_POINT_NM = 20           # v0.41.223: a package flight's SCRUB point (where a scrubbed flight goes first) sits this far from its home field, on the bearing of its route's last point (the same shape as the stand-off ABORT point)
 BLUE_BASE_DEF_SKILL = "Excellent"   # v0.41.222 (XO 2026-10-31): blue's base Patriot / HAWK / AAA are always the top DCS skill, whatever the Blue skill setting or the level says. Why: under "level" they were left at pydcs's Average while red's sites run at the level's skill (High on L3), and XO saw them barely fire. Judgment call (no public figure for operator quality).
-CAP_SPREAD_NM = {"TARCAP": 15, "ESCORT": 10, "SWEEP": 20,
+# S155 (XO 2026-11-22, test T1fix Caucasus): TARCAP 15 -> 5. With 15 nm the loop (DCS overshoots CAP2 by 8 to 13 km) took the TARCAP 36 km from its station for about
+# 9 minutes a lap, away through most of the strike window. 5 nm keeps it within about 15 to 20 km and about 4 minutes a lap. Judgment call; 5 is also cap2_point's floor.
+CAP_SPREAD_NM = {"TARCAP": 5, "ESCORT": 10, "SWEEP": 20,
                  "BASE_BARCAP": 25, "CARRIER_BARCAP": 30, "HAVCAP": 20, "TKR_HAVCAP": 20}   # S9 (v0.41.350): the support CAPs, used by support_caps (judgment calls, no public figure); Phase 8 (v0.41.349): the race-track leg from CAP1 (the station) to CAP2, across the threat axis. Judgment calls: no public leg length found (FAA anchor tracks of about 50 nm are civil)
 CAP2_ROOM_NM = 8             # Phase 8: CAP2 must have at least this much SAM room (nm to the nearest SAM ring), or as much as the station itself has when that is less (8 is the cover circle's own floor)
 TARCAP_BEHIND_NM = 8          # v0.41.43 (16; v0.41.115: 8, XO 2026-10-22: it sat 56 nm from red's patrols, too far to snipe): with a JSOW flight the TARCAP holds this far behind the JSOW launch point, further back (stepped) until it is outside live medium-range SAM rings (judgment call)
