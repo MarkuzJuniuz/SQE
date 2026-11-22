@@ -919,11 +919,13 @@
    "2": {
     "push": 2.0,
     "rebuild_days": 30,
+    "teams": 2,
     "supply_total": 25
    },
    "3": {
     "push": 4.75,
     "rebuild_days": 30,
+    "teams": 2,
     "supply_total": 25
    }
   },

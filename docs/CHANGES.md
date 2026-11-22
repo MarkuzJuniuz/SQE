@@ -1,5 +1,8 @@
 # CHANGES.md
 
+## v0.41.575, Lutorin Works: two rebuild teams
+Red now has two teams rebuilding Lutorin Works at Level 2 and Level 3: two destroyed plants are mended at the same time (about a month each), and a third waits for a team to finish. Winning by destroying every plant at once is harder. Saved campaigns keep the days their one team had left.
+
 ## v0.41.574, Tactical Edge is switched off
 The Tactical Edge (your sorties raising the odds of the AI's background jobs) and red's idle surge are off for every campaign, saved ones too, and hidden: no Tactical Edge tab on the Overview, no switches in New Campaign or Settings. The war runs on its own; skipping turns no longer makes red press harder, and flying no longer builds an edge.
 
