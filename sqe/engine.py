@@ -157,6 +157,11 @@ class Session(Merging, SeadTiming):
         moved = snap_assets_to_land(self.state)          # older campaigns generated some sites in the sea
         if moved:
             self.state.note(f"{moved} enemy sites that were placed in the water have been moved onto land.")
+        before = set(self.state.blue_sams or {})
+        sams_added = sams.ensure_blue_sams(self.state)   # S146: an opened save gets its missing blue sites at once (a finished or mid-day save too)
+        if sams_added:
+            for sid in sorted(set(self.state.blue_sams) - before):
+                self.state.note(f"{self.state.blue_sams[sid].name} has been added.")
         st_ = self.state
         if st_.status == "ACTIVE" and (st_.raids or {}).get("day") != st_.day:                 # the day was never begun (a new save, or one from before the day counter): begin it and plan this turn
             self.plan_day()
@@ -164,7 +169,7 @@ class Session(Merging, SeadTiming):
             self.plan_turn()
         else:
             self.refresh_weather()                       # old saves, or the weather setting changed since
-        if moved:
+        if moved or sams_added:
             self.save()
 
     def save(self, path=None) -> None:
