@@ -6,6 +6,8 @@ S160 (same script, both sides):
   when its lead enters one (shoot into the umbrella from outside, never fly into it). T1fix5: a Su-27 sat 5 to 8 nm inside a SAM circle from 55 to 19 km and
   shot down Chevy 1-1 because the old rule (target outside cover) refused the commit;
 * at most COMMIT_MAX_PER_TARGET flights on one enemy group (T1fix5: four flights piled onto one MiG-29 pair);
+* S160b (T1fix6): a break-off buffer (SAM_BREAK_BUFFER_NM) with hysteresis (commit only beyond SAM_COMMIT_BUFFER_NM), a cool-down before a recommit on the same
+  group (COMMIT_COOLDOWN_S), and a "hurt" break-off when the flight lost a jet since it committed (then COMMIT_HURT_COOLDOWN_S);
 * an optional leash round an anchor point (HAVCAPs: they must not leave the tanker / AWACS for long);
 * every air-to-air AI flight is registered (blue: station cover, support CAPs, alert pairs, raid interceptors, cover flights without a station; red: patrols,
   alert pairs, reliefs, standbys, raid-defence reinforcements). Red's raid escorts and sweeps are NOT registered (they fly Escort / FighterSweep with the bombers).
@@ -13,7 +15,7 @@ S160 (same script, both sides):
 Every COMMIT_STEP_S seconds, for each flight in its window whose lead is in the air: the nearest enemy airplane in the air within reach (and within leash +
 reach of the anchor, if leashed), seen by the side (an own AWACS, for red also an own EWR, else the flight's own radar), whose group has fewer than
 COMMIT_MAX_PER_TARGET flights on it, gets an AttackGroup pushed on top of the flight's route. Break off: target group gone ("dead": cleared, no pop), the lead
-inside an enemy SAM circle ("sam"), the target beyond COMMIT_BREAK_FACTOR x reach ("far"), the lead beyond the leash ("leash"), the window over ("window"):
+within SAM_BREAK_BUFFER_NM of an enemy SAM circle ("sam"), the flight lost a jet ("hurt"), the target beyond COMMIT_BREAK_FACTOR x reach ("far"), the lead beyond the leash ("leash"), the window over ("window"):
 popTask (only while the target lives, when the attack should be on top). Every commit / break-off goes to dcs.log as "SQECOMMIT <side> ...".
 
 Not verified in DCS: that popTask removes exactly the pushed attack; that red EWRs carry the "EWR" attribute (if not, red falls back to AWACS / own radar).
@@ -29,6 +31,10 @@ RED_COMMIT = True               # switch: red's commit script (S160, XO 2026-11-
 COMMIT_STEP_S = 10              # how often the script looks (seconds). Judgment call: about 5 km of closure a step at 1,000 kt combined
 COMMIT_BREAK_FACTOR = 1.5       # break off when the target is this many times the reach away (it is running). Judgment call
 COMMIT_MAX_PER_TARGET = 2       # S160: at most this many flights on one enemy group. Judgment call (T1fix5: four on one pair)
+SAM_BREAK_BUFFER_NM = 5.0       # S160b: break off when the lead is within this of an enemy SAM circle (T1fix6: flights broke off with the missile already in flight). Judgment call
+SAM_COMMIT_BUFFER_NM = 8.0      # S160b: commit only when the lead is more than this outside every enemy SAM circle: 3 nm of hysteresis, so a flight does not flap on the line. Judgment call
+COMMIT_COOLDOWN_S = 120         # S160b: no recommit on the same group this long after a sam / far / leash break-off (T1fix6: Enfield 1 / 2 flapped four times on Alert 12). Judgment call
+COMMIT_HURT_COOLDOWN_S = 300    # S160b: ...and this long after a flight lost a jet and broke off (reason hurt). Judgment call
 SAM_RING_MARGIN_NM = 3.0        # an enemy SAM ring counts this much bigger (scramble.STATION_RING_MARGIN_NM, the defender's margin)
 HAVCAP_REACH_NM = 25            # S160: a tanker / AWACS guard commits only this far (judgment call; its normal circle is the guard ring)
 HAVCAP_LEASH_NM = 30            # ...and never more than this from its station (judgment call: it must stay with what it guards)
@@ -93,24 +99,34 @@ def commit_lua(side, flights, sams) -> str:
     sam_rows = []
     for x, z, radius in sams:
         sam_rows.append("{%d, %d, %d}" % (int(x), int(z), int(radius)))
-    data = ("%s = {side=%s, own=%s, enemy=%s, ewr=%s, step=%d, breakf=%s, maxper=%d, flights={%s}, sams={%s}}"
+    data = ("%s = {side=%s, own=%s, enemy=%s, ewr=%s, step=%d, breakf=%s, maxper=%d, brk=%d, cmt=%d, cool=%d, hurtcool=%d, flights={%s}, sams={%s}}"
             % (table, _lua_string(side), _lua_string(own), _lua_string(enemy), ewr, COMMIT_STEP_S, repr(float(COMMIT_BREAK_FACTOR)),
-               COMMIT_MAX_PER_TARGET, ", ".join(flight_rows), ", ".join(sam_rows)))
+               COMMIT_MAX_PER_TARGET, int(SAM_BREAK_BUFFER_NM * 1852), int(SAM_COMMIT_BUFFER_NM * 1852), COMMIT_COOLDOWN_S, COMMIT_HURT_COOLDOWN_S,
+               ", ".join(flight_rows), ", ".join(sam_rows)))
     return data + "\n" + COMMIT_BODY.replace("__TABLE__", table)
 
 
 COMMIT_BODY = r"""
 local C = __TABLE__
 C.count = {}
+for _, f0 in ipairs(C.flights) do f0.cool = {} end
 local OWN = coalition.side[C.own]
 local ENEMY = coalition.side[C.enemy]
-local function inSam(p)
+local function inSam(p, buffer)
   for _, s in ipairs(C.sams) do
     local dx = p.x - s[1]
     local dz = p.z - s[2]
-    if dx * dx + dz * dz < s[3] * s[3] then return true end
+    local r = s[3] + buffer
+    if dx * dx + dz * dz < r * r then return true end
   end
   return false
+end
+local function liveCount(g)
+  local n = 0
+  for _, u in ipairs(g:getUnits()) do
+    if u and u:isExist() then n = n + 1 end
+  end
+  return n
 end
 local function dist(a, b)
   local dx = a.x - b.x
@@ -150,11 +166,12 @@ local function anchorDist(f, p)
   local dz = p.z - f.az
   return math.sqrt(dx * dx + dz * dz)
 end
+local NOWT = 0
 local function nearestEnemy(f, group, lead, seenBySide)
   local lp = lead:getPoint()
   local best, bestD = nil, nil
   for _, eg in ipairs(coalition.getGroups(ENEMY, Group.Category.AIRPLANE)) do
-    if eg and eg:isExist() and (C.count[eg:getName()] or 0) < C.maxper then
+    if eg and eg:isExist() and (C.count[eg:getName()] or 0) < C.maxper and not (f.cool[eg:getName()] and f.cool[eg:getName()] > NOWT) then
       for _, u in ipairs(eg:getUnits()) do
         if u and u:isExist() and u:inAir() then
           local p = u:getPoint()
@@ -186,7 +203,8 @@ local function targetState(f, lp)
     end
   end
   if nearest == nil then return "dead" end
-  if inSam(lp) then return "sam" end
+  if liveCount(Group.getByName(f.g)) < f.units0 then return "hurt" end
+  if inSam(lp, C.brk) then return "sam" end
   if leashed(f) and anchorDist(f, lp) > f.leash then return "leash" end
   if nearest > f.reach * C.breakf then return "far" end
   return "on"
@@ -196,13 +214,17 @@ local function breakOff(f, g, why, now)
     pcall(function() g:getController():popTask() end)
   end
   C.count[f.on] = math.max(0, (C.count[f.on] or 1) - 1)
+  if why == "sam" or why == "far" or why == "leash" then f.cool[f.on] = now + C.cool end
+  if why == "hurt" then f.cool[f.on] = now + C.hurtcool end
   env.info("SQECOMMIT " .. C.side .. " " .. f.g .. " breaks off " .. f.on .. " (" .. why .. ") at " .. math.floor(now))
   f.on = nil
 end
 local function tick(_, t)
   local now = timer.getTime()
+  NOWT = now
   local seenBySide = sideSees()
   for _, f in ipairs(C.flights) do
+    if not f.cool then f.cool = {} end
     local g = Group.getByName(f.g)
     if g and g:isExist() then
       local lead = firstUnit(g)
@@ -214,7 +236,7 @@ local function tick(_, t)
           local st = targetState(f, lp)
           if st ~= "on" then breakOff(f, g, st, now) end
         end
-        local free = not f.on and now >= f.t0 and now <= f.t1 and lead:inAir() and not inSam(lp)
+        local free = not f.on and now >= f.t0 and now <= f.t1 and lead:inAir() and not inSam(lp, C.cmt)
         if free and leashed(f) and anchorDist(f, lp) > f.leash then free = false end
         if free then
           local eg, d = nearestEnemy(f, g, lead, seenBySide)
@@ -223,6 +245,7 @@ local function tick(_, t)
             local ok = pcall(function() g:getController():pushTask(task) end)
             if ok then
               f.on = eg:getName()
+              f.units0 = liveCount(g)
               C.count[f.on] = (C.count[f.on] or 0) + 1
               env.info("SQECOMMIT " .. C.side .. " " .. f.g .. " commits on " .. f.on .. " at " .. math.floor(d / 1000) .. " km, t " .. math.floor(now))
             end
