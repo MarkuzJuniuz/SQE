@@ -1974,6 +1974,24 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
                          "after": SWEEP_AFTER_TOT_S if stw.action == "SWEEP" else TARCAP_AFTER_TOT_S if stw.action == "TARCAP" else ESCORT_AFTER_TOT_S}
                 self._holds.append(hold_)
             if hold_end is not None:
+                # S156 (XO 2026-11-22): fight on the way in too. Circles along the route from PUSH to the station, live from PUSH until the hold ends
+                # (the hold's later extensions move their stop too). Before this the flight only engaged round the package and was shot from outside it.
+                reach_ = PHOENIX_ZONE_NM if f.aircraft in F14_KEYS else A2A_ZONE_NM[f.aircraft in LONG_RANGE_A2A]
+                push_eta_ = 0
+                for w_ in wps:
+                    if w_.name == "PUSH":
+                        push_eta_ = int(w_.eta_s)
+                        break
+                transit_ = self._transit_circles(package, wps, stw, base, reach_)
+                self.__dict__.setdefault("_transit_info", {})[g.name] = transit_          # probe only
+                for k_, (tx_, ty_, tr_) in enumerate(transit_):
+                    tw_ = task.ControlledTask(task.EngageTargetsInZone(mapping.Vector2(tx_, ty_), int(tr_ * NM), [task.Targets.All.Air]))
+                    if push_eta_ > 0:
+                        tw_.start_after_time(push_eta_)
+                    tw_.stop_after_time(int(hold_end))
+                    g.points[0].tasks.insert(1 + k_, tw_)
+                    hold_["cts"].append(tw_)
+            if hold_end is not None:
                 # v0.41.5: on the way home the flight still fights what comes within HOMEWARD_ENGAGE_NM of it. In the v0.41.4 run a lone MiG-29 chased
                 # Springfield (F-14s, 5 of about 40 missiles fired) home after the hold ended and fired four R-27s while they only defended.
                 # v0.41.15: a fixed circle over the way home (station to home field), not one that moves with the jet: the v0.41.14 run, flights
@@ -2003,7 +2021,9 @@ class MissionBuilder(StrikeTasks, FighterStations, SupportCaps, RedAirPicture, R
             # launch behaviour still varies by type in DCS (forum reports), so the shot log is the check.
             # v0.41.10: on the way out, closer shots (halfway between max range and the no-escape zone): fewer, surer missiles, kept for the
             # station. Maximum range from the station on (set at that waypoint below). Out of fuel: home (v0.41.8 run: Venom 9-4 flamed out).
-            g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.HalfWayRMaxNoEsc))
+            # S156 (XO 2026-11-22, test T1fix2 Syria: Su-27s opened with R-27ERs at 40 km and the F-15Cs held their shots): maximum range from the start, no longer
+            # "half way to the no-escape zone" until the station
+            g.points[0].tasks.append(task.OptAAMissileAttackRange(task.OptAAMissileAttackRange.Values.MaxRange))
             self._snipe_at[id(g)] = stw
             g.points[0].tasks.append(task.OptRadarUsing(task.OptRadarUsing.Values.UseForContinuousSearch))
             if stw.action == "SWEEP":    # a sweep goes home once its air-to-air missiles are gone

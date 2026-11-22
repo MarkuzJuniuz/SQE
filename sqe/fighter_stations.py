@@ -3,6 +3,8 @@
 A mixin: `MissionBuilder` inherits these methods (like a C# partial class). They use `self.state`, `self.o` and the other fields the builder sets up.
 """
 from __future__ import annotations
+import math
+
 from dcs import mapping, task
 
 from . import threatmap as tm
@@ -26,6 +28,7 @@ HOLD_EXTEND_MAX_S = 1800      # ...extended at most this much past their own pac
 LRA_BACK_NM = 8               # v0.41.139 (XO 2026-10-27): in a package with a short-range and a long-range fighter flight (TARCAP + escort), the long-range one stands this far behind the short-range one (away from the target)...
 LRA_SIDE_NM = 6               # ...and this far to one side (judgment call: the sweep circles are 25 and 15 nm, so 10 nm between the two sets of jets; the lateral gap is for friendly-fire safety with active missiles in the air, DCS behaviour unverified)
 LRA_SPLIT_MIN_NM = 12         # ...but only when the two stations are closer than this (the SAM-free runs put both on one point; with SAM rings in the way they are already 30 nm apart)
+TRANSIT_CIRCLES_MAX = 4       # S156: at most this many engage circles along a cover flight's way from PUSH to its station (4 x 2 x 25 nm covers a 200 nm leg). Judgment call
 COVER_AXIS_SPLIT_NM = 10.0    # S154: flights whose launch points (or IPs) are farther apart than this are on different axes, each with its own cover. The JSOW flight flies
                               # 30 deg off the HARM axis (routes.JSOW_AXIS_DEG): at a 30 nm launch range that is about 15 nm apart; two SEAD lanes are 1.5 to 4.5 nm apart. Judgment call
 TARCAP_AXIS_SWINGS =tuple(v for k in range(0, 13) for v in ((0,) if k == 0 else (15 * k, -15 * k)))   # v0.41.119: degrees the TARCAP station may swing off the threat axis when SAM rings block it, smallest first, up to 180 (judgment call: a Sukhumi SA-10 sat on the axis in the 2026-10-22 probes, so the station takes the clear point nearest the axis; the old station is kept when that is no nearer)
@@ -212,6 +215,52 @@ class FighterStations:
         for distance, index, points in scored:
             result.append(points)
         return result
+
+    def _transit_circles(self, package, wps, stw, base, reach_nm) -> list:
+        """S156 (XO 2026-11-22, test T1fix2 Syria: two Su-27s shot the F-15C TARCAP from 43 to 28 km while staying outside every engage circle, and it never
+        fired back): engage circles along the flight's own route from PUSH to its station, so it fights what comes within its reach on the way in, not only round
+        the package. Fixed circles, not a circle that moves with the jet (a moving one chases: v0.41.15). Each is reach_nm, moved / trimmed clear of SAMs like the
+        other circles. At most TRANSIT_CIRCLES_MAX, spread evenly. -> [(x, y, radius nm)]; empty when there is no PUSH before the station."""
+        push_index = None
+        station_index = None
+        for index, w in enumerate(wps):
+            if w.name == "PUSH" and push_index is None:
+                push_index = index
+            if w is stw:
+                station_index = index
+        if push_index is None or station_index is None or station_index <= push_index:
+            return []
+        leg = wps[push_index:station_index + 1]
+        total_m = 0.0
+        for a, b in zip(leg, leg[1:]):
+            total_m += dist(a.x, a.y, b.x, b.y)
+        if total_m < 1.0:
+            return []
+        count = math.ceil(total_m / (2 * reach_nm * NM))
+        count = max(1, min(TRANSIT_CIRCLES_MAX, count))
+        circles = []
+        for k in range(count):
+            want_m = total_m * (k + 0.5) / count          # the middle of each of `count` equal stretches of the leg
+            point = self._point_along(leg, want_m)
+            back = bearing(point[0], point[1], base.x, base.y)
+            zone = self._cover_circle([point], point, package, reach_nm, back)
+            zone = self._clear_zone(zone, package)
+            if zone is not None:
+                circles.append(zone)
+        return circles
+
+    @staticmethod
+    def _point_along(points, want_m):
+        """S156: the point `want_m` metres along the line through `points` (route points with .x / .y); the last point when the line is shorter."""
+        walked = 0.0
+        for a, b in zip(points, points[1:]):
+            step = dist(a.x, a.y, b.x, b.y)
+            if step > 0 and walked + step >= want_m:
+                share = (want_m - walked) / step
+                return (a.x + (b.x - a.x) * share, a.y + (b.y - a.y) * share)
+            walked += step
+        last = points[-1]
+        return (last.x, last.y)
 
     def _protect_points_by_flight(self, package, geom) -> list:
         """S154: `_protect_points`, one list per ground-attack flight (flights with nothing to protect are left out)."""
