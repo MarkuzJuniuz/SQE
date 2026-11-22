@@ -29,6 +29,29 @@ def _upgrade_cap_tags(*parts) -> None:
         walk(p)
 
 
+_OLD_RUNWAY_TEXT = re.compile(r"^Crater the runway at (.+) \((\d+) aircraft\)$")
+
+
+def _upgrade_runway_text(*parts) -> None:
+    """S78 open point: a package planned before v0.41.435 stored its description as "Crater the runway at <field> (<n> aircraft)"; today's runway strike reads "OCA: Runway Strike,
+    <field> (<n> aircraft)" (`war.py`). Walk the plan, the resolved plan, the pending sortie and the history (their objective dicts) on load and map exactly that pattern, only under the
+    `description` key. The war log keeps what it said at the time."""
+    def walk(x):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if k == "description" and isinstance(v, str):
+                    m = _OLD_RUNWAY_TEXT.match(v)
+                    if m:
+                        x[k] = f"OCA: Runway Strike, {m.group(1)} ({m.group(2)} aircraft)"
+                else:
+                    walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    for p in parts:
+        walk(p)
+
+
 def _upgrade_tactical_edge(ground) -> None:
     """S88 R3: the two Tactical Edge switches were app settings the engine copied into `ground` on every open, under their old names. Move an old key to its new name
     (`pilot_influence` -> `tactical_edge`, `tempo_decay` -> `tactical_edge_decay`) on load, in place; the new key wins if both exist. A save with neither key gets the
@@ -218,6 +241,7 @@ class CampaignState:
         s.plan, s.pending = d.get("plan", []), d.get("pending")
         s.plan_done = d.get("plan_done") or []                            # missing in a save from before v0.41.337: nothing resolved yet today
         s.history, s.log = d.get("history", []), [_OLD_STAMP.sub(lambda m: f"[Day {m.group(1)}, {m.group(2)}:{m.group(3)}] ", x, count=1) if isinstance(x, str) else x for x in d.get("log", [])]
+        _upgrade_runway_text(s.plan, s.plan_done, s.pending, s.history)                # S78: the old runway-strike description
         _upgrade_cap_tags(s.plan, s.plan_done, s.barcap, s.pending)                  # S52: a save from before the rename holds "BASECAP" / "CVCAP" in flight tags and patrol kinds
         if not s.ground:                           # a campaign from before the ground war (format 4): give it one for its level
             from . import ground
